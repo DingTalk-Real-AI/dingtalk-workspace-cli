@@ -219,14 +219,7 @@ curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace
 
 ### ISV Skill 联调
 
-编写您自己的 Agent Skill，与 dws 内置 skill 搭配构建跨产品工作流：
-
-```
-┌─────────────┐      ┌─────────────┐      ┌──────────────────┐
-│  ISV Skill  │ ───► │  dws Skill  │ ───► │ 钉钉开放平台 API  │
-│ (您的业务)   │      │ (钉钉产品)   │      │ (强制鉴权 + 全链路审计) │
-└─────────────┘      └─────────────┘      └──────────────────┘
-```
+编写您自己的 Agent Skill，与 dws 内置 skill 搭配构建跨产品工作流：**ISV Skill → dws Skill → 钉钉开放平台 API（强制鉴权 + 全链路审计）**。
 
 **示例**：CRM Skill 调用日历 Skill 为客户创建会议，再通过待办 Skill 分配跟进任务 — AI Agent 在一次对话中完成跨系统协作。
 

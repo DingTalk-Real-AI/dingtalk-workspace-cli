@@ -219,14 +219,7 @@ curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace
 
 ### ISV Skill Integration
 
-Author your own Agent Skills and orchestrate them with dws skills for cross-product workflows:
-
-```
-┌─────────────┐      ┌─────────────┐      ┌─────────────────────────┐
-│  ISV Skill  │ ───► │  dws Skill  │ ───► │ DingTalk Open Platform  │
-│ (your biz)  │      │ (DT product)│      │ (enforced auth + full audit) │
-└─────────────┘      └─────────────┘      └─────────────────────────┘
-```
+Author your own Agent Skills and orchestrate them with dws skills for cross-product workflows: **ISV Skill → dws Skill → DingTalk Open Platform API (enforced auth + full audit)**.
 
 **Example**: A CRM Skill invokes the Calendar Skill to create a client meeting, then triggers the Todo Skill to assign follow-ups — the AI agent completes cross-system collaboration in a single conversation.
 
