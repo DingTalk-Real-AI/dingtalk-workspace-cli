@@ -16,7 +16,7 @@ cd "$ROOT"
 # Verify that all expected top-level commands exist in the built binary
 if command -v go >/dev/null 2>&1; then
   BIN_PATH="/tmp/dws-surface-check"
-  go build -ldflags="-s -w" -o "$BIN_PATH" ./cmd 2>/dev/null || { echo "build failed"; exit 1; }
+  go build -ldflags="-s -w" -o "$BIN_PATH" ./cmd 2>/dev/null || { echo "build failed";  exit 1; }
 
   # These utility commands are stable across the current open-source CLI shape.
   EXPECTED_COMMANDS="auth cache completion version"

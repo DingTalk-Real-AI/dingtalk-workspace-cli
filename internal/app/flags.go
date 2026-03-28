@@ -37,7 +37,7 @@ func bindPersistentFlags(cmd *cobra.Command, flags *GlobalFlags) {
 	cmd.PersistentFlags().StringVar(&flags.ClientSecret, "client-secret", "", "Override OAuth client secret (DingTalk AppSecret)")
 	cmd.PersistentFlags().BoolVar(&flags.Debug, "debug", false, "显示调试日志")
 	cmd.PersistentFlags().BoolVar(&flags.DryRun, "dry-run", false, "预览操作内容，不实际执行")
-	cmd.PersistentFlags().StringVarP(&flags.Format, "format", "f", "table", "输出格式: json|table|raw")
+	cmd.PersistentFlags().StringVarP(&flags.Format, "format", "f", "json", "输出格式: json|table|raw")
 	cmd.PersistentFlags().BoolVar(&flags.Mock, "mock", false, "使用 Mock 数据 (开发调试用)")
 	cmd.PersistentFlags().StringVarP(&flags.Output, "output", "o", "", "Write command output to a file")
 	_ = cmd.PersistentFlags().MarkHidden("output")

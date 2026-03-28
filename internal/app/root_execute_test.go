@@ -29,7 +29,7 @@ import (
 	mockmcp "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/mock_mcp"
 )
 
-func TestPrintExecutionErrorDefaultsToHumanReadable(t *testing.T) {
+func TestPrintExecutionErrorDefaultsToJSON(t *testing.T) {
 	t.Parallel()
 
 	root := NewRootCommand()
@@ -43,14 +43,11 @@ func TestPrintExecutionErrorDefaultsToHumanReadable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("printExecutionError() error = %v", err)
 	}
-	if stdout.Len() != 0 {
-		t.Fatalf("stdout = %q, want empty for human-readable error output", stdout.String())
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty for JSON error output", stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "Error: [VALIDATION] bad flag") {
-		t.Fatalf("stderr = %q, want human-readable header", stderr.String())
-	}
-	if !strings.Contains(stderr.String(), "Hint: Pass the required flag and retry.") {
-		t.Fatalf("stderr = %q, want hint line", stderr.String())
+	if !strings.Contains(stdout.String(), "\"category\": \"validation\"") {
+		t.Fatalf("stdout = %q, want JSON error payload", stdout.String())
 	}
 }
 
@@ -175,8 +172,8 @@ func TestVersionCommandDoesNotRequirePINOrLogin(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatalf("Execute(version) error = %v", err)
 	}
-	if !strings.Contains(out.String(), "版本:") {
-		t.Fatalf("version output missing version header:\n%s", out.String())
+	if !strings.Contains(out.String(), "\"version\"") {
+		t.Fatalf("version output missing version key:\n%s", out.String())
 	}
 }
 
@@ -216,8 +213,8 @@ func TestVersionCommandUsesCachedRegistryWithoutBlockingAgedDiscovery(t *testing
 	if elapsed := time.Since(start); elapsed >= 200*time.Millisecond {
 		t.Fatalf("Execute(version) took %v, want cached startup under 200ms", elapsed)
 	}
-	if !strings.Contains(out.String(), "版本:") {
-		t.Fatalf("version output missing version header:\n%s", out.String())
+	if !strings.Contains(out.String(), "\"version\"") {
+		t.Fatalf("version output missing version key:\n%s", out.String())
 	}
 }
 

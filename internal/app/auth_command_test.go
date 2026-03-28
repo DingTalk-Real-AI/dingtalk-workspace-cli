@@ -70,7 +70,7 @@ func TestAuthStatusRefreshFailureLeavesStoredTokenIntact(t *testing.T) {
 		t.Fatal("secure token data should remain in keychain after refresh failure")
 	}
 
-	if !bytes.Contains(out.Bytes(), []byte("已登录")) {
+	if !bytes.Contains(out.Bytes(), []byte("\"authenticated\"")) {
 		t.Fatalf("output should still report authenticated status:\n%s", out.String())
 	}
 }

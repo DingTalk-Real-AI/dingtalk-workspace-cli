@@ -394,7 +394,7 @@ func renderSharedSkill(catalog ir.Catalog) string {
 	builder.WriteString("dws auth status\n")
 	builder.WriteString("```\n\n")
 	builder.WriteString("## Global Rules\n\n")
-	builder.WriteString("- Always prefer `--format json` for agent-readable output.\n")
+	builder.WriteString("- Output defaults to JSON. Use `--format table` for human-readable output.\n")
 	builder.WriteString("- Confirm with user before any write/delete/revoke action.\n")
 	builder.WriteString("- Never fabricate IDs; always extract from command output.\n")
 	builder.WriteString("- For risky operations, run a read/list check before executing write operations.\n\n")
