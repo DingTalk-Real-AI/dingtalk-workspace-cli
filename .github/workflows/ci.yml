@@ -32,12 +32,11 @@ jobs:
       - name: Go Vet
         run: go vet ./...
 
-      # golangci-lint temporarily disabled: v1.64.8 built with Go 1.24 is incompatible with Go 1.25
-      # - name: golangci-lint
-      #   uses: golangci/golangci-lint-action@v6
-      #   with:
-      #     version: v1.64.8
-      #     args: ./...
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.11.3
+          args: --config=.golangci.yml ./...
 
   test:
     name: Test
@@ -82,14 +81,6 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          unformatted="$(find cmd internal test -name '*.go' -print0 | xargs -0r gofmt -l)"
-          test -z "$unformatted" || (printf '%s\n' "$unformatted" && exit 1)
-
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: v2.11.3
-          args: --config=.golangci.yml ./...
           go test -coverprofile=coverage.txt -covermode=atomic ./cmd/... ./internal/...
           go tool cover -func=coverage.txt
 
