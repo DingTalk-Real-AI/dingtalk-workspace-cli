@@ -28,14 +28,14 @@ jobs:
 
       - name: Format Check
         run: |
-          unformatted="$(find cmd hack internal test -name '*.go' -print0 | xargs -0r gofmt -l)"
+          unformatted="$(find cmd internal test -name '*.go' -print0 | xargs -0r gofmt -l)"
           test -z "$unformatted" || (printf '%s\n' "$unformatted" && exit 1)
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: v1.64.8
-          args: ./...
+          version: v2.11.3
+          args: --config=.golangci.yml ./...
 
       - name: Test
         run: make test

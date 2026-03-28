@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"sync"
@@ -258,7 +259,7 @@ func TestAcquireProcessLock_ContextCancellation(t *testing.T) {
 	// Goroutine 2 should return with context.Canceled
 	select {
 	case err := <-done:
-		if err != context.Canceled {
+		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("expected context.Canceled, got %v", err)
 		}
 	case <-time.After(time.Second):

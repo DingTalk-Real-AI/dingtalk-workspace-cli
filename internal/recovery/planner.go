@@ -267,7 +267,7 @@ func stableKeywords(raw string) []string {
 		return nil
 	}
 	parts := strings.FieldsFunc(normalized, func(r rune) bool {
-		return !(r >= 'a' && r <= 'z') && !(r >= '0' && r <= '9') && r != '_'
+		return (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '_'
 	})
 	out := make([]string, 0, len(parts))
 	for _, part := range parts {

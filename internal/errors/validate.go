@@ -251,7 +251,7 @@ func SafeLocalFlagPath(flagName, value string) (string, error) {
 		return value, nil
 	}
 	if _, err := SafeInputPath(value); err != nil {
-		return "", fmt.Errorf("%s: %v", flagName, err)
+		return "", fmt.Errorf("%s: %w", flagName, err)
 	}
 	return value, nil
 }

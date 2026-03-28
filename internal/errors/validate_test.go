@@ -30,7 +30,6 @@ func TestResourceName(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			err := ResourceName(tc.input)
@@ -60,7 +59,6 @@ func TestSafePath(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			err := SafePath(tc.input)
@@ -98,7 +96,6 @@ func TestSafeLocalFlagPath(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			got, err := SafeLocalFlagPath(tc.flagName, tc.value)
@@ -134,7 +131,6 @@ func TestRejectCRLF(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			err := RejectCRLF(tc.value, "--header")
@@ -164,7 +160,6 @@ func TestStripQueryFragment(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			got := StripQueryFragment(tc.input)
@@ -219,7 +214,6 @@ func TestRejectControlChars(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			err := RejectControlChars(tc.input, "--test")
