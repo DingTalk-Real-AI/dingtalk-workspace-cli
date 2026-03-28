@@ -66,7 +66,9 @@ func getDEK(service string) ([]byte, error) {
 	resCh := make(chan result, 1)
 
 	go func() {
-		defer func() { recover() }()
+		defer func() {
+			_ = recover()
+		}()
 
 		// Try to get existing DEK from system Keychain
 		encodedKey, err := keyring.Get(service, "dek")
@@ -178,7 +180,9 @@ func platformSet(service, account, data string) error {
 
 	targetPath := filepath.Join(dir, safeFileName(account))
 	tmpPath := filepath.Join(dir, safeFileName(account)+"."+uuid.New().String()+".tmp")
-	defer os.Remove(tmpPath)
+	defer func() {
+		_ = os.Remove(tmpPath)
+	}()
 
 	if err := os.WriteFile(tmpPath, encrypted, 0600); err != nil {
 		return err

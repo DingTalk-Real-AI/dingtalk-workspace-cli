@@ -594,7 +594,7 @@ func (c *Client) warnWildcardDomains() {
 		if w == nil {
 			w = os.Stderr
 		}
-		fmt.Fprintln(w, "[WARN] DWS_TRUSTED_DOMAINS=* sends bearer token to ANY HTTPS endpoint. Use only for development.")
+		_, _ = fmt.Fprintln(w, "[WARN] DWS_TRUSTED_DOMAINS=* sends bearer token to ANY HTTPS endpoint. Use only for development.")
 	})
 }
 

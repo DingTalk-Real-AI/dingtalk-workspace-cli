@@ -257,7 +257,9 @@ func (c *Client) FetchServersFromURL(ctx context.Context, fullURL string) (ListR
 	if err != nil {
 		return ListResponse{}, apperrors.NewDiscovery(fmt.Sprintf("servers request failed: %v", err))
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return ListResponse{}, apperrors.NewDiscovery(fmt.Sprintf("servers request returned HTTP %d", resp.StatusCode))
@@ -290,7 +292,9 @@ func (c *Client) fetchServersPage(ctx context.Context, limit int, cursor string)
 	if err != nil {
 		return ListResponse{}, apperrors.NewDiscovery(fmt.Sprintf("market servers request failed: %v", err))
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return ListResponse{}, apperrors.NewDiscovery(fmt.Sprintf("market servers request returned HTTP %d", resp.StatusCode))
@@ -352,7 +356,9 @@ func (c *Client) fetchDetailHTTP(ctx context.Context, targetURL string) (DetailR
 	if err != nil {
 		return DetailResponse{}, apperrors.NewDiscovery(fmt.Sprintf("market detail request failed: %v", err))
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return DetailResponse{}, apperrors.NewDiscovery(fmt.Sprintf("market detail request returned HTTP %d", resp.StatusCode))

@@ -358,8 +358,8 @@ func TestLoadDynamicCommandsDoesNotSynchronouslyFetchDetailMetadata(t *testing.T
 	driveDetailCalls := new(atomic.Int32)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/cli/discovery/apis":
+		switch r.URL.Path {
+		case "/cli/discovery/apis":
 			payload := map[string]any{
 				"metadata": map[string]any{"count": 2, "nextCursor": ""},
 				"servers": []any{
@@ -374,7 +374,7 @@ func TestLoadDynamicCommandsDoesNotSynchronouslyFetchDetailMetadata(t *testing.T
 				}
 			}
 			_ = json.NewEncoder(w).Encode(payload)
-		case r.URL.Path == "/mcp/market/detail":
+		case "/mcp/market/detail":
 			switch r.URL.Query().Get("mcpId") {
 			case "1001":
 				docDetailCalls.Add(1)
@@ -432,8 +432,8 @@ func TestLoadDynamicCommandsDoesNotSynchronouslyFetchDetailMetadataWhenRegistryT
 	driveDetailCalls := new(atomic.Int32)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/cli/discovery/apis":
+		switch r.URL.Path {
+		case "/cli/discovery/apis":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"metadata": map[string]any{"count": 2, "nextCursor": ""},
 				"servers": []any{
@@ -441,7 +441,7 @@ func TestLoadDynamicCommandsDoesNotSynchronouslyFetchDetailMetadataWhenRegistryT
 					registryServerEnvelope("drive", "drive", "2026-03-21T02:00:00Z", 1002, "list_files", "list-files"),
 				},
 			})
-		case r.URL.Path == "/mcp/market/detail":
+		case "/mcp/market/detail":
 			switch r.URL.Query().Get("mcpId") {
 			case "1001":
 				docDetailCalls.Add(1)

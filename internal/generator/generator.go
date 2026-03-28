@@ -329,17 +329,17 @@ func renderCanonicalCLI(catalog ir.Catalog) (string, error) {
 	builder.WriteString("## Products\n\n")
 
 	for _, product := range catalog.Products {
-		builder.WriteString(fmt.Sprintf("### `%s`\n\n", product.ID))
-		builder.WriteString(fmt.Sprintf("- Display name: %s\n", safeValue(product.DisplayName, product.ID)))
-		builder.WriteString(fmt.Sprintf("- Server key: `%s`\n", product.ServerKey))
-		builder.WriteString(fmt.Sprintf("- Protocol: `%s`\n", safeValue(product.NegotiatedProtocolVersion, "unknown")))
-		builder.WriteString(fmt.Sprintf("- Degraded: `%t`\n", product.Degraded))
+		_, _ = fmt.Fprintf(&builder, "### `%s`\n\n", product.ID)
+		_, _ = fmt.Fprintf(&builder, "- Display name: %s\n", safeValue(product.DisplayName, product.ID))
+		_, _ = fmt.Fprintf(&builder, "- Server key: `%s`\n", product.ServerKey)
+		_, _ = fmt.Fprintf(&builder, "- Protocol: `%s`\n", safeValue(product.NegotiatedProtocolVersion, "unknown"))
+		_, _ = fmt.Fprintf(&builder, "- Degraded: `%t`\n", product.Degraded)
 		builder.WriteString("- Tools:\n")
 		for _, tool := range product.Tools {
 			flags := renderFlags(cli.BuildFlagSpecs(tool.InputSchema, tool.FlagHints))
-			builder.WriteString(fmt.Sprintf("  - `%s`: %s\n", tool.CanonicalPath, safeValue(tool.Description, tool.Title)))
-			builder.WriteString(fmt.Sprintf("    Flags: %s\n", flags))
-			builder.WriteString(fmt.Sprintf("    Schema: `%s`\n", filepath.ToSlash(filepath.Join("docs/generated/schema", safeDocSegment(product.ID), safeDocSegment(tool.RPCName)+".json"))))
+			_, _ = fmt.Fprintf(&builder, "  - `%s`: %s\n", tool.CanonicalPath, safeValue(tool.Description, tool.Title))
+			_, _ = fmt.Fprintf(&builder, "    Flags: %s\n", flags)
+			_, _ = fmt.Fprintf(&builder, "    Schema: `%s`\n", filepath.ToSlash(filepath.Join("docs/generated/schema", safeDocSegment(product.ID), safeDocSegment(tool.RPCName)+".json")))
 		}
 		builder.WriteString("\n")
 	}

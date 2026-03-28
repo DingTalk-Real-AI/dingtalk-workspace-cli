@@ -110,7 +110,7 @@ func SaveSecureTokenData(configDir string, data *TokenData) error {
 	writeSuccess := false
 	defer func() {
 		if !writeSuccess {
-			tmpFile.Close()
+			_ = tmpFile.Close()
 			_ = os.Remove(tmpPath)
 		}
 	}()
@@ -149,7 +149,7 @@ func LoadSecureTokenData(configDir string) (*TokenData, error) {
 
 	plaintext, err := security.Decrypt(ciphertext, password)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrTokenDecryption, err)
+		return nil, fmt.Errorf("%w: %w", ErrTokenDecryption, err)
 	}
 	// Zero sensitive plaintext as soon as unmarshalling completes.
 	defer func() {

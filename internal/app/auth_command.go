@@ -129,27 +129,27 @@ func newAuthLoginCommand() *cobra.Command {
 			}
 
 			// Default table output
-			fmt.Fprintln(w)
+			_, _ = fmt.Fprintln(w)
 			if !cfg.Device && tokenData != nil && tokenData.IsAccessTokenValid() && !cfg.Force {
-				fmt.Fprintf(w, "[OK] Token 有效，无需重新登录\n")
+				_, _ = fmt.Fprintf(w, "[OK] Token 有效，无需重新登录\n")
 			} else {
-				fmt.Fprintf(w, "[OK] 登录成功！\n")
+				_, _ = fmt.Fprintf(w, "[OK] 登录成功！\n")
 			}
 			if tokenData != nil {
 				if tokenData.CorpName != "" {
-					fmt.Fprintf(w, "%-16s%s\n", "企业:", tokenData.CorpName)
+					_, _ = fmt.Fprintf(w, "%-16s%s\n", "企业:", tokenData.CorpName)
 				}
 				if tokenData.CorpID != "" {
-					fmt.Fprintf(w, "%-16s%s\n", "企业 ID:", tokenData.CorpID)
+					_, _ = fmt.Fprintf(w, "%-16s%s\n", "企业 ID:", tokenData.CorpID)
 				}
 				if tokenData.UserName != "" {
-					fmt.Fprintf(w, "%-16s%s\n", "用户:", tokenData.UserName)
+					_, _ = fmt.Fprintf(w, "%-16s%s\n", "用户:", tokenData.UserName)
 				}
 				if expiry := authLoginDisplayExpiry(tokenData); expiry != "" {
-					fmt.Fprintf(w, "%-16s%s\n", "有效期:", expiry)
+					_, _ = fmt.Fprintf(w, "%-16s%s\n", "有效期:", expiry)
 				}
 			}
-			fmt.Fprintf(w, "Token 将自动刷新，无需重复登录\n")
+			_, _ = fmt.Fprintf(w, "Token 将自动刷新，无需重复登录\n")
 			return nil
 		},
 	}

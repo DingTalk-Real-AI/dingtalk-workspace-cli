@@ -21,7 +21,7 @@ func TestError_Unwrap_WithCause(t *testing.T) {
 	t.Parallel()
 	cause := fmt.Errorf("root cause")
 	e := &Error{Category: CategoryInternal, Message: "wrapper", Cause: cause}
-	if e.Unwrap() != cause {
+	if !stderrors.Is(e, cause) {
 		t.Fatalf("expected cause, got %v", e.Unwrap())
 	}
 }
@@ -34,7 +34,7 @@ func TestWithCause_Option(t *testing.T) {
 	if !stderrors.As(e, &appErr) {
 		t.Fatal("expected *Error type")
 	}
-	if appErr.Cause != cause {
+	if !stderrors.Is(appErr.Cause, cause) {
 		t.Fatal("missing cause")
 	}
 }
@@ -53,7 +53,9 @@ func TestPrintJSON_WithCause(t *testing.T) {
 	cause := fmt.Errorf("db connection failed")
 	e := &Error{Category: CategoryInternal, Message: "save failed", Cause: cause}
 	var buf bytes.Buffer
-	PrintJSON(&buf, e)
+	if err := PrintJSON(&buf, e); err != nil {
+		t.Fatalf("PrintJSON() error = %v", err)
+	}
 	if !strings.Contains(buf.String(), "db connection failed") {
 		t.Fatalf("expected cause in JSON output: %s", buf.String())
 	}
@@ -63,7 +65,9 @@ func TestPrintJSON_WithoutCause(t *testing.T) {
 	t.Parallel()
 	e := &Error{Category: CategoryAuth, Message: "unauthorized"}
 	var buf bytes.Buffer
-	PrintJSON(&buf, e)
+	if err := PrintJSON(&buf, e); err != nil {
+		t.Fatalf("PrintJSON() error = %v", err)
+	}
 	if strings.Contains(buf.String(), `"cause"`) {
 		t.Fatalf("should not contain cause key: %s", buf.String())
 	}
@@ -85,7 +89,9 @@ func TestPrintJSON_AllFields(t *testing.T) {
 		WithCause(fmt.Errorf("root")),
 	)
 	var buf bytes.Buffer
-	PrintJSON(&buf, e)
+	if err := PrintJSON(&buf, e); err != nil {
+		t.Fatalf("PrintJSON() error = %v", err)
+	}
 	out := buf.String()
 	for _, expected := range []string{"timeout", "tools/call", "doc", "retry later", "action1", "snap.json", "-32600", "oops", "root"} {
 		if !strings.Contains(out, expected) {

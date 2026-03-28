@@ -337,8 +337,8 @@ func confirmDeletePrompt(cmd *cobra.Command, resourceType, resourceName string) 
 		return true
 	}
 
-	fmt.Fprintf(cmd.ErrOrStderr(), i18n.T("⚠️  即将删除 %s: %s\\n"), resourceType, resourceName)
-	fmt.Fprint(cmd.ErrOrStderr(), i18n.T("确认删除? (yes/no): "))
+	_, _ = fmt.Fprintf(cmd.ErrOrStderr(), i18n.T("⚠️  即将删除 %s: %s\\n"), resourceType, resourceName)
+	_, _ = fmt.Fprint(cmd.ErrOrStderr(), i18n.T("确认删除? (yes/no): "))
 
 	reader := bufio.NewReader(os.Stdin)
 	answer, _ := reader.ReadString('\n')
@@ -348,7 +348,7 @@ func confirmDeletePrompt(cmd *cobra.Command, resourceType, resourceName string) 
 		return true
 	}
 
-	fmt.Fprintln(cmd.ErrOrStderr(), i18n.T("已取消操作"))
+	_, _ = fmt.Fprintln(cmd.ErrOrStderr(), i18n.T("已取消操作"))
 	return false
 }
 
@@ -446,7 +446,9 @@ func newAITableUploadFileCommand(runner executor.Runner) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf(i18n.T("无法打开文件: %w"), err)
 			}
-			defer f.Close()
+			defer func() {
+				_ = f.Close()
+			}()
 
 			req, err := http.NewRequestWithContext(cmd.Context(), http.MethodPut, uploadURL, f)
 			if err != nil {

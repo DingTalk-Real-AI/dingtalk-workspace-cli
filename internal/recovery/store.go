@@ -107,7 +107,9 @@ func (s *Store) LoadErrorByEvent(eventID string) (*LastError, error) {
 		file = nil
 	}
 	if file != nil {
-		defer file.Close()
+		defer func() {
+			_ = file.Close()
+		}()
 		reader := bufio.NewReader(file)
 		for {
 			line, err := reader.ReadBytes('\n')
@@ -198,10 +200,14 @@ func (s *Store) appendEvent(event RecoveryEvent) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	writer := bufio.NewWriter(file)
-	defer writer.Flush()
+	defer func() {
+		_ = writer.Flush()
+	}()
 
 	data, err := json.Marshal(event)
 	if err != nil {

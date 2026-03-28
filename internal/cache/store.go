@@ -269,7 +269,7 @@ func (s *Store) saveJSON(path string, value any) error {
 	writeSuccess := false
 	defer func() {
 		if !writeSuccess {
-			tmpFile.Close()
+			_ = tmpFile.Close()
 			_ = os.Remove(tmpPath)
 		}
 	}()

@@ -1,0 +1,45 @@
+version: "2"
+
+run:
+  timeout: 5m
+  issues-exit-code: 1
+
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - copyloopvar
+    - errcheck
+    - errorlint
+    - govet
+    - ineffassign
+    - misspell
+    - staticcheck
+    - unconvert
+    - unused
+  settings:
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+        - shadow
+    staticcheck:
+      checks:
+        - all
+        - -QF1012
+        - -ST1000
+        - -ST1003
+  exclusions:
+    generated: lax
+    presets:
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

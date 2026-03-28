@@ -129,7 +129,7 @@ func (s *SecureTokenStorage) SaveToken(data *TokenData) error {
 	writeSuccess := false
 	defer func() {
 		if !writeSuccess {
-			tmpFile.Close()
+			_ = tmpFile.Close()
 			_ = os.Remove(tmpPath)
 		}
 	}()

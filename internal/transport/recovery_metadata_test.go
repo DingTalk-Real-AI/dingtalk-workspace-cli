@@ -53,7 +53,12 @@ func TestDoWithRetryRequestFailureIncludesCallMetadata(t *testing.T) {
 	})})
 	client.MaxRetries = 0
 
-	_, err := client.doWithRetry(context.Background(), "https://mcp.dingtalk.com/server", []byte(`{}`))
+	resp, err := client.doWithRetry(context.Background(), "https://mcp.dingtalk.com/server", []byte(`{}`))
+	if resp != nil && resp.Body != nil {
+		defer func() {
+			_ = resp.Body.Close()
+		}()
+	}
 	if err == nil {
 		t.Fatal("doWithRetry() error = nil, want request failure")
 	}
