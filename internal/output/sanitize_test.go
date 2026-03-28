@@ -18,8 +18,9 @@ import "testing"
 func TestSanitizeForTerminalStripsControlCharacters(t *testing.T) {
 	t.Parallel()
 
+	// ANSI escape sequences and control characters are fully stripped.
 	got := SanitizeForTerminal("hello\x1b[31mworld\x07")
-	want := "hello[31mworld"
+	want := "helloworld"
 	if got != want {
 		t.Fatalf("SanitizeForTerminal() = %q, want %q", got, want)
 	}

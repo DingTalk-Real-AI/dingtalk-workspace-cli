@@ -13,39 +13,11 @@
 
 package output
 
-// SanitizeForTerminal strips control characters and dangerous Unicode markers
-// before untrusted text is printed to a terminal or log sink.
-func SanitizeForTerminal(text string) string {
-	out := make([]rune, 0, len(text))
-	for _, r := range text {
-		if r == '\n' || r == '\t' {
-			out = append(out, r)
-			continue
-		}
-		if r < 0x20 || r == 0x7f {
-			continue
-		}
-		if isDangerousUnicode(r) {
-			continue
-		}
-		out = append(out, r)
-	}
-	return string(out)
-}
+import "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/validate"
 
-func isDangerousUnicode(r rune) bool {
-	switch {
-	case r >= '\u200B' && r <= '\u200D':
-		return true
-	case r == '\uFEFF':
-		return true
-	case r >= '\u202A' && r <= '\u202E':
-		return true
-	case r >= '\u2028' && r <= '\u2029':
-		return true
-	case r >= '\u2066' && r <= '\u2069':
-		return true
-	default:
-		return false
-	}
+// SanitizeForTerminal strips ANSI escape sequences, control characters, and
+// dangerous Unicode from text before it is printed to a terminal.
+// Delegates to the validate package which provides the canonical implementation.
+func SanitizeForTerminal(text string) string {
+	return validate.SanitizeForTerminal(text)
 }
