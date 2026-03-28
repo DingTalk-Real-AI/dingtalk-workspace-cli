@@ -28,9 +28,13 @@ import (
 
 	"io"
 
+	"log/slog"
+
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/config"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/validate"
 )
 
 const (
@@ -69,6 +73,7 @@ type Client struct {
 	SnapshotRecorder SnapshotRecorder
 	TrustedDomains   []string
 	ExecutionId      string // Request tracing ID for debugging
+	FileLogger       *slog.Logger // Structured file logger for diagnostics (nil-safe).
 	sleep            func(context.Context, time.Duration) error
 	wildcardOnce     sync.Once
 	// Stderr is the writer for warning messages. Defaults to os.Stderr.
@@ -231,6 +236,7 @@ func (c *Client) WithAuth(token string, headers map[string]string) *Client {
 		SnapshotRecorder: c.SnapshotRecorder,
 		TrustedDomains:   c.TrustedDomains,
 		ExecutionId:      c.ExecutionId,
+		FileLogger:       c.FileLogger,
 		sleep:            c.sleep,
 		Stderr:           c.Stderr,
 	}
@@ -297,6 +303,14 @@ func (c *Client) ListTools(ctx context.Context, endpoint string) (ToolsListResul
 }
 
 func (c *Client) CallTool(ctx context.Context, endpoint, tool string, arguments map[string]any) (ToolCallResult, error) {
+	// Validate tool name to prevent injection via control chars or path traversal.
+	if err := validate.RejectControlChars(tool, "tool name"); err != nil {
+		return ToolCallResult{}, apperrors.NewValidation(err.Error())
+	}
+	// Validate string arguments at the transport boundary.
+	if err := validateCallArguments(arguments); err != nil {
+		return ToolCallResult{}, apperrors.NewValidation(err.Error())
+	}
 	var payload ToolCallResult
 	if err := c.callJSONRPC(ctx, endpoint, requestEnvelope{
 		JSONRPC: "2.0",
@@ -329,6 +343,9 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 		return apperrors.NewInternal("failed to encode JSON-RPC request")
 	}
 
+	logging.LogRequest(c.FileLogger, request.Method, endpoint, c.ExecutionId, len(body))
+	callStart := time.Now()
+
 	resp, err := c.doWithRetry(ctx, endpoint, body)
 	if err != nil {
 		return err
@@ -336,6 +353,7 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 	defer resp.Body.Close()
 
 	data, err := io.ReadAll(io.LimitReader(resp.Body, config.MaxResponseBodySize))
+	logging.LogResponse(c.FileLogger, request.Method, endpoint, resp.StatusCode, len(data), time.Since(callStart), err)
 	if err != nil {
 		return apperrors.NewDiscovery(
 			"failed to read JSON-RPC response",
@@ -399,6 +417,8 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 }
 
 func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte) (*http.Response, error) {
+	// Strip any query/fragment from the endpoint to prevent parameter injection.
+	endpoint = validate.StripQueryFragment(endpoint)
 	var lastErr error
 	for attempt := 0; attempt <= c.MaxRetries; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
@@ -823,6 +843,37 @@ func runtimeActions(snapshotPath string) []string {
 		actions = append(actions, fmt.Sprintf("dws recovery plan --snapshot %s", snapshotPath))
 	}
 	return actions
+}
+
+// validateCallArguments checks string values in tool call arguments for
+// control characters and dangerous Unicode at the transport boundary.
+func validateCallArguments(args map[string]any) error {
+	for key, value := range args {
+		switch typed := value.(type) {
+		case string:
+			if err := validate.RejectControlChars(typed, key); err != nil {
+				return err
+			}
+		case map[string]any:
+			if err := validateCallArguments(typed); err != nil {
+				return err
+			}
+		case []any:
+			for i, item := range typed {
+				if s, ok := item.(string); ok {
+					if err := validate.RejectControlChars(s, fmt.Sprintf("%s[%d]", key, i)); err != nil {
+						return err
+					}
+				}
+				if m, ok := item.(map[string]any); ok {
+					if err := validateCallArguments(m); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func discoveryActions(snapshotPath string) []string {

@@ -51,6 +51,7 @@ func newCommandRunnerWithFlags(loader cli.CatalogLoader, flags *GlobalFlags) exe
 	}
 	transportClient := transport.NewClient(httpClient)
 	transportClient.ExtraHeaders = resolveIdentityHeaders()
+	transportClient.FileLogger = FileLoggerInstance()
 	return &runtimeRunner{
 		loader:             loader,
 		transport:          transportClient,
