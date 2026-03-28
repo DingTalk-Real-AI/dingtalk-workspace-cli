@@ -92,7 +92,14 @@ make build
 
 ### 步骤 2：配置重定向 URL
 
-进入应用 → **安全设置**，在「重定向 URL」中输入 `http://127.0.0.1` 并保存。
+进入应用 → **安全设置**，在「重定向 URL」中添加以下地址并保存：
+
+```
+http://127.0.0.1
+https://login.dingtalk.com
+```
+
+> `http://127.0.0.1` 用于本地浏览器登录；`https://login.dingtalk.com` 用于 `--device` 设备流登录（Docker 容器、远程服务器等无浏览器环境）。建议两个都配置。
 
 <details>
 <summary>查看截图</summary>

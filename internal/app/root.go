@@ -34,6 +34,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/recovery"
@@ -200,6 +201,7 @@ func NewRootCommand(ctx ...context.Context) *cobra.Command {
 			return configureOutputSink(cmd)
 		},
 		PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
+			CloseFileLogger()
 			return closeOutputSink(cmd)
 		},
 	}
@@ -758,7 +760,12 @@ func cleanCacheFiles(root, product string, staleOnly bool) (int, error) {
 	return removed, nil
 }
 
-// configureLogLevel sets the global slog level based on --debug and --verbose flags.
+// fileLogger holds the package-level file logger for diagnostics.
+// It is initialized by configureLogLevel and closed by CloseFileLogger.
+var fileLogger *logging.FileLogger
+
+// configureLogLevel sets the global slog level based on --debug and --verbose flags
+// and initializes the file logger for diagnostics.
 // --debug → slog.LevelDebug; --verbose → slog.LevelInfo; default → slog.LevelWarn.
 func configureLogLevel(flags *GlobalFlags) {
 	if flags == nil {
@@ -773,7 +780,27 @@ func configureLogLevel(flags *GlobalFlags) {
 	default:
 		level = slog.LevelWarn
 	}
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: level,
-	})))
+	stderrHandler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})
+
+	// Initialize file logger — writes to ~/.dws/logs/dws.log at DEBUG level
+	// regardless of stderr level. All slog calls are captured for diagnostics.
+	fileLogger = logging.Setup(defaultConfigDir())
+	fileHandler := slog.NewJSONHandler(fileLogger.Writer(), &slog.HandlerOptions{Level: slog.LevelDebug})
+
+	slog.SetDefault(slog.New(logging.NewMultiHandler(stderrHandler, fileHandler)))
+}
+
+// FileLoggerInstance returns the package-level file logger, or nil if not initialized.
+func FileLoggerInstance() *slog.Logger {
+	if fileLogger == nil {
+		return nil
+	}
+	return fileLogger.Logger
+}
+
+// CloseFileLogger flushes and closes the file logger.
+func CloseFileLogger() {
+	if fileLogger != nil {
+		fileLogger.Close()
+	}
 }

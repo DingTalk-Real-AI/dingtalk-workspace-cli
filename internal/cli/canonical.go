@@ -307,6 +307,23 @@ func newToolCommand(product ir.CanonicalProduct, tool ir.ToolDescriptor, runner 
 			if err != nil {
 				return apperrors.NewInternal("failed to read --json")
 			}
+
+			// Support @file syntax for --json: read file contents as JSON payload.
+			if content, isFile, fileErr := ReadFileArg(jsonPayload); fileErr != nil {
+				return fileErr
+			} else if isFile {
+				jsonPayload = content
+			}
+
+			// Support stdin pipe: if no --json given, read from pipe.
+			if jsonPayload == "" {
+				if stdinData, stdinErr := ReadStdinIfPiped(); stdinErr != nil {
+					return stdinErr
+				} else if stdinData != "" {
+					jsonPayload = stdinData
+				}
+			}
+
 			paramsPayload, err := cmd.Flags().GetString("params")
 			if err != nil {
 				return apperrors.NewInternal("failed to read --params")

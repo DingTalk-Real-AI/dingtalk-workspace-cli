@@ -43,14 +43,10 @@ func isVirtualMAC(mac string) bool {
 	return false
 }
 
-// GetMACAddress returns the first physical (non-loopback, non-virtual) MAC
-// address, sorted lexicographically for determinism.
-func GetMACAddress() (string, error) {
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		return "", fmt.Errorf("enumerating network interfaces: %w", err)
-	}
-	var candidates []string
+// selectMAC picks the best MAC from the given interface list.
+// Physical NICs are preferred; virtual MACs are used as fallback.
+func selectMAC(ifaces []net.Interface) (string, error) {
+	var physical, virtual []string
 	for _, iface := range ifaces {
 		if iface.Flags&net.FlagLoopback != 0 {
 			continue
@@ -61,13 +57,30 @@ func GetMACAddress() (string, error) {
 		}
 		s := strings.ToLower(hw.String())
 		if isVirtualMAC(s) {
-			continue
+			virtual = append(virtual, s)
+		} else {
+			physical = append(physical, s)
 		}
-		candidates = append(candidates, s)
 	}
-	if len(candidates) == 0 {
-		return "", fmt.Errorf("no physical NIC MAC address found")
+	if len(physical) > 0 {
+		slices.Sort(physical)
+		return physical[0], nil
 	}
-	slices.Sort(candidates)
-	return candidates[0], nil
+	if len(virtual) > 0 {
+		slices.Sort(virtual)
+		return virtual[0], nil
+	}
+	return "", fmt.Errorf("no NIC MAC address found (no network interfaces available)")
+}
+
+// GetMACAddress returns the first physical (non-loopback, non-virtual) MAC
+// address, sorted lexicographically for determinism. If no physical NIC is
+// found (e.g. inside a Docker container), it falls back to the first
+// non-loopback virtual MAC address so that token encryption still works.
+func GetMACAddress() (string, error) {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return "", fmt.Errorf("enumerating network interfaces: %w", err)
+	}
+	return selectMAC(ifaces)
 }
