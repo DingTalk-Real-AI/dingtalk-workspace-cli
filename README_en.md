@@ -92,7 +92,14 @@ Go to the [Open Platform Console](https://open-dev.dingtalk.com/fe/app?hash=%23%
 
 ### Step 2: Configure Redirect URL
 
-Go to app settings → **Security Settings**. Enter `http://127.0.0.1` as the redirect URL and save.
+Go to app settings → **Security Settings**. Add the following redirect URLs and save:
+
+```
+http://127.0.0.1
+https://login.dingtalk.com
+```
+
+> `http://127.0.0.1` is for local browser login; `https://login.dingtalk.com` is for `--device` device-flow login (Docker containers, remote servers, and other headless environments). We recommend configuring both.
 
 <details>
 <summary>View screenshot</summary>
