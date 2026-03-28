@@ -1,0 +1,57 @@
+{
+  "cli_path": [
+    "calendar",
+    "room",
+    "list-groups"
+  ],
+  "display": "钉钉日历",
+  "flags": [
+    {
+      "property_name": "pageIndex",
+      "flag_name": "pageIndex",
+      "kind": "string",
+      "description": "分页开始位置 ，不填默认 0"
+    },
+    {
+      "property_name": "pageSize",
+      "flag_name": "pageSize",
+      "kind": "string",
+      "description": "页大小，不填默认 100。超过100的，按照100来处理"
+    }
+  ],
+  "input_schema": {
+    "description": "请求",
+    "properties": {
+      "pageIndex": {
+        "description": "分页开始位置 ，不填默认 0",
+        "title": "pageIndex",
+        "type": "string"
+      },
+      "pageSize": {
+        "description": "页大小，不填默认 100。超过100的，按照100来处理",
+        "title": "pageSize",
+        "type": "string"
+      }
+    },
+    "required": [],
+    "title": "请求",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "calendar.list_meeting_room_groups",
+  "product_id": "calendar",
+  "required": null,
+  "tool": {
+    "aliases": [
+      "list_meeting_room_groups"
+    ],
+    "canonical_path": "calendar.list_meeting_room_groups",
+    "cli_name": "list-groups",
+    "description": "分页查询当前企业下的会议室分组列表，返回每个分组的名称（groupName）、唯一 ID（groupId）及其父分组 ID（parentId，0 表示根分组）。结果按组织架构权限过滤，仅包含调用者有权限查看的分组。",
+    "group": "room",
+    "rpc_name": "list_meeting_room_groups",
+    "sensitive": false,
+    "source_server_key": "279de7cc536c672c",
+    "title": "查询会议室分组列表"
+  }
+}

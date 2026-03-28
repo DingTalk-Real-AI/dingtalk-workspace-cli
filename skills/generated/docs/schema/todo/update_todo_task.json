@@ -1,0 +1,123 @@
+{
+  "cli_path": [
+    "todo",
+    "task",
+    "update"
+  ],
+  "display": "钉钉待办",
+  "flag_hints": {
+    "TodoUpdateRequest.dueTime": {
+      "alias": "due",
+      "transform": "iso8601_to_millis"
+    },
+    "TodoUpdateRequest.isDone": {
+      "alias": "done"
+    },
+    "TodoUpdateRequest.priority": {
+      "alias": "priority"
+    },
+    "TodoUpdateRequest.subject": {
+      "alias": "title"
+    },
+    "TodoUpdateRequest.taskId": {
+      "alias": "task-id",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "TodoUpdateRequest.dueTime",
+      "flag_name": "due",
+      "kind": "string",
+      "description": "待办截止时间，unix时间戳，精确到毫秒"
+    },
+    {
+      "property_name": "TodoUpdateRequest.isDone",
+      "flag_name": "done",
+      "kind": "boolean",
+      "description": "待办完成状态。true：已完成；alse：未完成"
+    },
+    {
+      "property_name": "TodoUpdateRequest.priority",
+      "flag_name": "priority",
+      "kind": "number",
+      "description": "待办优先级: 10:低，20:普通，30:较高，40:紧急"
+    },
+    {
+      "property_name": "TodoUpdateRequest.subject",
+      "flag_name": "title",
+      "kind": "string",
+      "description": "待办标题"
+    },
+    {
+      "property_name": "TodoUpdateRequest.taskId",
+      "flag_name": "task-id",
+      "kind": "string",
+      "description": "待办任务唯一标识id"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "TodoUpdateRequest": {
+        "description": "TodoUpdateRequest",
+        "properties": {
+          "dueTime": {
+            "description": "待办截止时间，unix时间戳，精确到毫秒",
+            "title": "dueTime",
+            "type": "number"
+          },
+          "isDone": {
+            "description": "待办完成状态。true：已完成；alse：未完成",
+            "title": "isDone",
+            "type": "boolean"
+          },
+          "priority": {
+            "description": "待办优先级: 10:低，20:普通，30:较高，40:紧急",
+            "title": "priority",
+            "type": "number"
+          },
+          "subject": {
+            "description": "待办标题",
+            "title": "subject",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "待办任务唯一标识id",
+            "title": "taskId",
+            "type": "string"
+          }
+        },
+        "required": [
+          "taskId"
+        ],
+        "title": "TodoUpdateRequest",
+        "type": "object"
+      }
+    },
+    "required": [
+      "TodoUpdateRequest"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "todo.update_todo_task",
+  "product_id": "todo",
+  "required": [
+    "TodoUpdateRequest.taskId"
+  ],
+  "tool": {
+    "aliases": [
+      "update_todo_task"
+    ],
+    "canonical_path": "todo.update_todo_task",
+    "cli_name": "update",
+    "description": "修改整个待办任务",
+    "group": "task",
+    "rpc_name": "update_todo_task",
+    "sensitive": false,
+    "source_server_key": "b693ef3984e8d311",
+    "title": "修改整个待办任务"
+  }
+}

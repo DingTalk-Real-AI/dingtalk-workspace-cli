@@ -1,0 +1,84 @@
+{
+  "cli_path": [
+    "devdoc",
+    "article",
+    "search"
+  ],
+  "display": "钉钉开放平台文档搜索",
+  "flag_hints": {
+    "keyword": {
+      "alias": "keyword",
+      "required": true
+    },
+    "page": {
+      "alias": "page"
+    },
+    "size": {
+      "alias": "size"
+    }
+  },
+  "flags": [
+    {
+      "property_name": "keyword",
+      "flag_name": "keyword",
+      "kind": "string",
+      "description": "搜索关键词"
+    },
+    {
+      "property_name": "page",
+      "flag_name": "page",
+      "kind": "number",
+      "description": "分页页码"
+    },
+    {
+      "property_name": "size",
+      "flag_name": "size",
+      "kind": "number",
+      "description": "分页大小"
+    }
+  ],
+  "input_schema": {
+    "description": "root",
+    "properties": {
+      "keyword": {
+        "description": "搜索关键词",
+        "title": "keyword",
+        "type": "string"
+      },
+      "page": {
+        "description": "分页页码",
+        "title": "page",
+        "type": "number"
+      },
+      "size": {
+        "description": "分页大小",
+        "title": "size",
+        "type": "number"
+      }
+    },
+    "required": [
+      "keyword"
+    ],
+    "title": "root",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "devdoc.search_open_platform_docs",
+  "product_id": "devdoc",
+  "required": [
+    "keyword"
+  ],
+  "tool": {
+    "aliases": [
+      "search_open_platform_docs"
+    ],
+    "canonical_path": "devdoc.search_open_platform_docs",
+    "cli_name": "search",
+    "description": "根据关键词搜索钉钉开放平台的开发文档，返回匹配的文档条目列表，包含标题、摘要、文档链接和相关标签。搜索结果按相关性排序。适用于开发者在集成或调试过程中快速查找 API 说明、接入指南、错误码解释等技术资料。",
+    "group": "article",
+    "rpc_name": "search_open_platform_docs",
+    "sensitive": false,
+    "source_server_key": "c1110038088c6134",
+    "title": "搜索开放平台开发文档"
+  }
+}

@@ -1,0 +1,247 @@
+{
+  "cli_path": [
+    "aitable",
+    "field",
+    "create"
+  ],
+  "display": "钉钉 AI 表格",
+  "flag_hints": {
+    "baseId": {
+      "alias": "base-id",
+      "required": true
+    },
+    "fields": {
+      "alias": "fields",
+      "transform": "json_parse",
+      "required": true
+    },
+    "tableId": {
+      "alias": "table-id",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "baseId",
+      "flag_name": "base-id",
+      "kind": "string",
+      "description": "Base ID（通过 list_bases 获取）"
+    },
+    {
+      "property_name": "fields",
+      "flag_name": "fields",
+      "kind": "json",
+      "description": "待新增字段列表，至少包含 1 个字段，单次最多 15 个。系统会按数组顺序依次创建，返回结果顺序与入参保持一致，并逐项标明成功/失败状态。"
+    },
+    {
+      "property_name": "tableId",
+      "flag_name": "table-id",
+      "kind": "string",
+      "description": "Table ID（通过 get_base 获取）"
+    }
+  ],
+  "input_schema": {
+    "description": "input",
+    "properties": {
+      "baseId": {
+        "description": "Base ID（通过 list_bases 获取）",
+        "title": "baseId",
+        "type": "string"
+      },
+      "fields": {
+        "description": "待新增字段列表，至少包含 1 个字段，单次最多 15 个。系统会按数组顺序依次创建，返回结果顺序与入参保持一致，并逐项标明成功/失败状态。",
+        "items": {
+          "properties": {
+            "aiConfig": {
+              "description": "AI 字段配置。当前内部固定按 ai-agent 处理，调用方无需传 type。",
+              "properties": {
+                "autoRecompute": {
+                  "description": "可选，是否在 prompt 引用的字段值发生变化后自动重新计算该 AI 字段。true 表示开启自动重算，引用字段更新后系统会自动刷新结果；false 表示关闭自动重算，仅在手动触发或其他业务动作要求重算时更新。",
+                  "title": "autoRecompute",
+                  "type": "boolean"
+                },
+                "computeOnEmptyRef": {
+                  "description": "可选，引用字段为空时是否继续触发 AI 计算。默认 false（引用字段为空时跳过计算）；设为 true 时，即使 prompt 中引用的字段值为空，也会触发计算。",
+                  "title": "computeOnEmptyRef",
+                  "type": "boolean"
+                },
+                "enableThinking": {
+                  "description": "可选，是否启用深度思考。",
+                  "title": "enableThinking",
+                  "type": "boolean"
+                },
+                "enableWebSearch": {
+                  "description": "可选，是否启用联网搜索。",
+                  "title": "enableWebSearch",
+                  "type": "boolean"
+                },
+                "imageConfig": {
+                  "description": "可选，图片生成配置。仅 outputType=image 时有效。",
+                  "properties": {
+                    "aiGeneratedWatermark": {
+                      "description": "是否生成 AI 水印。",
+                      "title": "aiGeneratedWatermark",
+                      "type": "boolean"
+                    },
+                    "resolution": {
+                      "description": "图片分辨率。支持 1280*1280、1024*1024、800*1200、1200*800、960*1280、1280*960、720*1280、1280*720、1344*576。",
+                      "title": "resolution",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "aiGeneratedWatermark",
+                    "resolution"
+                  ],
+                  "title": "imageConfig",
+                  "type": "object"
+                },
+                "outputType": {
+                  "description": "必填，输出字段类型。支持 text、select、multiSelect、number、currency、image、video。",
+                  "title": "outputType",
+                  "type": "string"
+                },
+                "prompt": {
+                  "description": "必填，用户编辑的 prompt 片段列表。每项 type=text 时传 value；type=fieldRef 时传 fieldId。",
+                  "items": {
+                    "properties": {
+                      "fieldId": {
+                        "description": "当 type=fieldRef 时必填，被引用字段的 fieldId。",
+                        "title": "fieldId",
+                        "type": "string"
+                      },
+                      "type": {
+                        "description": "Prompt 片段类型。支持 text、fieldRef。",
+                        "title": "type",
+                        "type": "string"
+                      },
+                      "value": {
+                        "description": "当 type=text 时必填，文本片段内容。",
+                        "title": "value",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "type": "object"
+                  },
+                  "title": "prompt",
+                  "type": "array"
+                },
+                "videoConfig": {
+                  "description": "可选，视频生成配置。仅 outputType=video 时有效。",
+                  "properties": {
+                    "aspectRatio": {
+                      "description": "视频宽高比。支持 832*480、480*832、624*624、1280*720、720*1280、960*960、1088*832、832*1088、1920*1080、1080*1920、1440*1440、1632*1248、1248*1632。",
+                      "title": "aspectRatio",
+                      "type": "string"
+                    },
+                    "duration": {
+                      "description": "可选，视频时长。支持 5 或 10。",
+                      "title": "duration",
+                      "type": "number"
+                    },
+                    "resolution": {
+                      "description": "视频分辨率。支持 480p、720p、1080p。",
+                      "title": "resolution",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "aspectRatio",
+                    "resolution"
+                  ],
+                  "title": "videoConfig",
+                  "type": "object"
+                }
+              },
+              "required": [
+                "outputType",
+                "prompt"
+              ],
+              "title": "aiConfig",
+              "type": "object"
+            },
+            "config": {
+              "description": "各 type 的 config 结构（无 config 的类型省略此字段）：\n\nformatter（number）:\n  INT|FLOAT_1|FLOAT_2|FLOAT_3|FLOAT_4|THOUSAND|THOUSAND_FLOAT|\n  PERCENT|PERCENT_FLOAT\n\nformatter（currency）: 可省略（默认 FLOAT_2）；若需指定小数位可用 INT|FLOAT_1|FLOAT_2|FLOAT_3|FLOAT_4\n\nformatter（date）:\n  YYYY-MM-DD | YYYY-MM-DD HH:mm | YYYY-MM-DD HH:mm:ss |\n  YYYY/MM/DD | YYYY/MM/DD HH:mm\n\nformatter（progress）: 固定填 \"PERCENT\"\n\ncurrencyType（currency）:\n  CNY | HKD | USD | EUR | GBP | MOP | VND | JPY | KRW | AED |\n  AUD | BRL | CAD | CHF | INR | IDR | MXN | MYR | PHP | PLN |\n  RUB | SGD | THB | TRY | TWD\n\noptions（singleSelect/multipleSelect）:\n  [{\"name\":\"选项名\"}, ...]  — id 由系统生成，创建时只需传 name\n  更新字段配置时，已有选项建议回传原 id；新增选项无需传 id\n  若更新请求携带的 id 在当前字段配置中不存在，系统会忽略该 id，并将该选项视为新增项\n\nmultiple（user/department/group/unidirectionalLink/bidirectionalLink）:\n  true（多选，默认）| false（单选）\n\nprogress: {\"formatter\":\"PERCENT\"}  — 使用系统默认范围\nprogress（自定义范围）: {\"formatter\":\"PERCENT\",\"min\":0,\"max\":1,\"customizeRange\":true}  — customizeRange 必须为 true\n\nrating: {\"min\":1,\"max\":5,\"icon\":\"star\"}  — max 范围 1~10\n\nformula（formula）: {\"formula\":\"[单价] * [数量]\"}  — 使用 AI 表格公式字符串格式，方括号内填写表内字段名\n\nunidirectionalLink: {\"linkedTableId\":\"\u003ctableId\u003e\",\"multiple\":true}\n\nbidirectionalLink: {\"linkedTableId\":\"\u003ctableId\u003e\",\"multiple\":true}\n  — 反向关联端由系统自动创建，MCP 对外协议无需额外参数",
+              "properties": {
+                "options": {
+                  "description": "选项列表。只有当字段类型为 singleSelect 或 multipleSelect 时 才需要提供",
+                  "items": {
+                    "properties": {
+                      "name": {
+                        "description": "选项名称",
+                        "title": "name",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ],
+                    "type": "object"
+                  },
+                  "title": "options",
+                  "type": "array"
+                }
+              },
+              "required": [],
+              "title": "config",
+              "type": "object"
+            },
+            "fieldName": {
+              "description": "字段名称，最大 100 字，不支持换行",
+              "title": "fieldName",
+              "type": "string"
+            },
+            "type": {
+              "description": "字段类型。AI 字段不新增独立 type，仍使用其结果落库的基础字段类型，并在 aiConfig 中声明 AI 配置。括号内为 config 键，* 表示必填，无括号表示无需 config。\n\n- text: 文本\n- number: 数字 (formatter)\n- singleSelect: 单选 (options*)\n- multipleSelect: 多选 (options*)\n- date: 日期 (formatter)\n- currency: 货币 (currencyType, formatter)\n- user: 人员 (multiple)\n- department: 部门 (multiple)\n- group: 群组 (multiple)\n- progress: 进度 (formatter, customizeRange, min, max)\n- rating: 评分 (min, max, icon)\n- checkbox: 勾选\n- attachment: 附件\n- url: 链接\n- richText: 富文本\n- telephone: 电话\n- email: 邮件\n- idCard: 身份证\n- barcode: 条码\n- geolocation: 地理位置\n- primaryDoc: 文档 (仅限第一列)\n- formula: 公式\n- unidirectionalLink: 单向关联 (linkedTableId*, multiple)\n- bidirectionalLink: 双向关联 (linkedTableId*, multiple)\n- creator: 创建人 (系统字段)\n- lastModifier: 最后编辑人 (系统字段)\n- createdTime: 创建时间 (系统字段)\n- lastModifiedTime: 最后编辑时间 (系统字段)\n\n创建 AI 字段时，字段 type 须与 aiConfig.outputType 对应：outputType=text → type=\"text\"；outputType=select → type=\"singleSelect\"；outputType=multiSelect → type=\"multipleSelect\"；outputType=number → type=\"number\"；outputType=currency → type=\"currency\"；outputType=image 或 video → type=\"attachment\"。",
+              "title": "type",
+              "type": "string"
+            }
+          },
+          "required": [
+            "fieldName",
+            "type"
+          ],
+          "type": "object"
+        },
+        "title": "fields",
+        "type": "array"
+      },
+      "tableId": {
+        "description": "Table ID（通过 get_base 获取）",
+        "title": "tableId",
+        "type": "string"
+      }
+    },
+    "required": [
+      "baseId",
+      "fields",
+      "tableId"
+    ],
+    "title": "input",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "aitable.create_fields",
+  "product_id": "aitable",
+  "required": [
+    "baseId",
+    "fields",
+    "tableId"
+  ],
+  "tool": {
+    "aliases": [
+      "create_fields"
+    ],
+    "canonical_path": "aitable.create_fields",
+    "cli_name": "create",
+    "description": "在已有表格中批量新增字段。适用于建表后补充一批字段，或一次性添加多个关联、流转等复杂类型字段。单次最多创建 15 个字段；若超过该数量，请拆分多次调用。允许部分成功，返回结果会逐项说明每个字段是否创建成功；失败项会返回 reason 说明失败原因。",
+    "group": "field",
+    "rpc_name": "create_fields",
+    "sensitive": false,
+    "source_server_key": "23eb09885b9e8f26",
+    "title": "创建字段"
+  }
+}

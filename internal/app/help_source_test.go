@@ -2,13 +2,11 @@ package app
 
 import (
 	"bytes"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/surface/cli"
 	"github.com/spf13/cobra"
 )
 
@@ -16,39 +14,64 @@ func TestRootCommandDoesNotInjectPatchedHelpCommands(t *testing.T) {
 	t.Setenv(cli.CatalogFixtureEnv, "")
 	t.Setenv(cli.CacheDirEnv, t.TempDir())
 
-	response := map[string]any{
-		"metadata": map[string]any{"count": 3, "nextCursor": ""},
-		"servers": []any{
-			discoveryServerEntry("doc", "文档管理", nil, map[string]any{
+	srv := newDiscoveryRuntimeServer(t,
+		discoveryRuntimeFixture{
+			Command:     "doc",
+			Description: "文档管理",
+			ToolOverrides: map[string]any{
 				"search_docs": map[string]any{
 					"cliName": "search",
 					"flags":   map[string]any{},
 				},
-			}),
-			discoveryServerEntry("chat", "聊天管理", map[string]any{
+			},
+			Tools: []transport.ToolDescriptor{{
+				Name:        "search_docs",
+				Title:       "搜索文档",
+				Description: "搜索文档",
+				InputSchema: map[string]any{"type": "object"},
+			}},
+		},
+		discoveryRuntimeFixture{
+			Command:     "chat",
+			Description: "聊天管理",
+			Groups: map[string]any{
 				"message": map[string]any{"description": "消息管理"},
-			}, map[string]any{
+			},
+			ToolOverrides: map[string]any{
 				"list_messages": map[string]any{
 					"cliName": "list",
 					"group":   "message",
 					"flags":   map[string]any{},
 				},
-			}),
-			discoveryServerEntry("minutes", "听记管理", map[string]any{
+			},
+			Tools: []transport.ToolDescriptor{{
+				Name:        "list_messages",
+				Title:       "消息列表",
+				Description: "消息列表",
+				InputSchema: map[string]any{"type": "object"},
+			}},
+		},
+		discoveryRuntimeFixture{
+			Command:     "minutes",
+			Description: "听记管理",
+			Groups: map[string]any{
 				"list": map[string]any{"description": "列表"},
-			}, map[string]any{
+			},
+			ToolOverrides: map[string]any{
 				"list_minutes_mine": map[string]any{
 					"cliName": "mine",
 					"group":   "list",
 					"flags":   map[string]any{},
 				},
-			}),
+			},
+			Tools: []transport.ToolDescriptor{{
+				Name:        "list_minutes_mine",
+				Title:       "我的听记",
+				Description: "我的听记",
+				InputSchema: map[string]any{"type": "object"},
+			}},
 		},
-	}
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(response)
-	}))
+	)
 	defer srv.Close()
 
 	SetDiscoveryBaseURL(srv.URL)
@@ -70,25 +93,31 @@ func TestDynamicLeafHelpDoesNotUsePatchedExamplesOrFlagText(t *testing.T) {
 	t.Setenv(cli.CatalogFixtureEnv, "")
 	t.Setenv(cli.CacheDirEnv, t.TempDir())
 
-	response := map[string]any{
-		"metadata": map[string]any{"count": 1, "nextCursor": ""},
-		"servers": []any{
-			discoveryServerEntry("aiapp", "AI应用管理", nil, map[string]any{
-				"create_ai_app": map[string]any{
-					"cliName": "create",
-					"flags": map[string]any{
-						"prompt": map[string]any{
-							"alias": "prompt",
-						},
+	srv := newDiscoveryRuntimeServer(t, discoveryRuntimeFixture{
+		Command:     "aiapp",
+		Description: "AI应用管理",
+		ToolOverrides: map[string]any{
+			"create_ai_app": map[string]any{
+				"cliName": "create",
+				"flags": map[string]any{
+					"prompt": map[string]any{
+						"alias": "prompt",
 					},
 				},
-			}),
+			},
 		},
-	}
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(response)
-	}))
+		Tools: []transport.ToolDescriptor{{
+			Name:        "create_ai_app",
+			Title:       "创建 AI 应用",
+			Description: "创建 AI 应用",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"prompt": map[string]any{"type": "string"},
+				},
+			},
+		}},
+	})
 	defer srv.Close()
 
 	SetDiscoveryBaseURL(srv.URL)
@@ -120,27 +149,40 @@ func TestRootHelpUsesMCPOnlySummary(t *testing.T) {
 	t.Setenv(cli.CatalogFixtureEnv, "")
 	t.Setenv(cli.CacheDirEnv, t.TempDir())
 
-	response := map[string]any{
-		"metadata": map[string]any{"count": 2, "nextCursor": ""},
-		"servers": []any{
-			discoveryServerEntry("aiapp", "AI应用管理", nil, map[string]any{
+	srv := newDiscoveryRuntimeServer(t,
+		discoveryRuntimeFixture{
+			Command:     "aiapp",
+			Description: "AI应用管理",
+			ToolOverrides: map[string]any{
 				"create_ai_app": map[string]any{
 					"cliName": "create",
 					"flags":   map[string]any{},
 				},
-			}),
-			discoveryServerEntry("aitable", "多维表管理", nil, map[string]any{
+			},
+			Tools: []transport.ToolDescriptor{{
+				Name:        "create_ai_app",
+				Title:       "创建 AI 应用",
+				Description: "创建 AI 应用",
+				InputSchema: map[string]any{"type": "object"},
+			}},
+		},
+		discoveryRuntimeFixture{
+			Command:     "aitable",
+			Description: "多维表管理",
+			ToolOverrides: map[string]any{
 				"list_bases": map[string]any{
 					"cliName": "list",
 					"flags":   map[string]any{},
 				},
-			}),
+			},
+			Tools: []transport.ToolDescriptor{{
+				Name:        "list_bases",
+				Title:       "列出 Base",
+				Description: "列出 Base",
+				InputSchema: map[string]any{"type": "object"},
+			}},
 		},
-	}
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(response)
-	}))
+	)
 	defer srv.Close()
 
 	SetDiscoveryBaseURL(srv.URL)
@@ -173,25 +215,31 @@ func TestRootHelpCustomizationDoesNotAffectSubcommandHelp(t *testing.T) {
 	t.Setenv(cli.CatalogFixtureEnv, "")
 	t.Setenv(cli.CacheDirEnv, t.TempDir())
 
-	response := map[string]any{
-		"metadata": map[string]any{"count": 1, "nextCursor": ""},
-		"servers": []any{
-			discoveryServerEntry("aiapp", "AI应用管理", nil, map[string]any{
-				"create_ai_app": map[string]any{
-					"cliName": "create",
-					"flags": map[string]any{
-						"prompt": map[string]any{
-							"alias": "prompt",
-						},
+	srv := newDiscoveryRuntimeServer(t, discoveryRuntimeFixture{
+		Command:     "aiapp",
+		Description: "AI应用管理",
+		ToolOverrides: map[string]any{
+			"create_ai_app": map[string]any{
+				"cliName": "create",
+				"flags": map[string]any{
+					"prompt": map[string]any{
+						"alias": "prompt",
 					},
 				},
-			}),
+			},
 		},
-	}
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(response)
-	}))
+		Tools: []transport.ToolDescriptor{{
+			Name:        "create_ai_app",
+			Title:       "创建 AI 应用",
+			Description: "创建 AI 应用",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"prompt": map[string]any{"type": "string"},
+				},
+			},
+		}},
+	})
 	defer srv.Close()
 
 	SetDiscoveryBaseURL(srv.URL)
@@ -216,42 +264,47 @@ func TestRootHelpCustomizationDoesNotAffectSubcommandHelp(t *testing.T) {
 	}
 }
 
+func TestRootHelpDeduplicatesVisibleServiceNames(t *testing.T) {
+	originalProducts := func() map[string]bool {
+		dynamicMu.RLock()
+		defer dynamicMu.RUnlock()
+
+		cloned := make(map[string]bool, len(dynamicProducts))
+		for key, value := range dynamicProducts {
+			cloned[key] = value
+		}
+		return cloned
+	}()
+
+	dynamicMu.Lock()
+	dynamicProducts = map[string]bool{"aitable": true}
+	dynamicMu.Unlock()
+	t.Cleanup(func() {
+		dynamicMu.Lock()
+		dynamicProducts = originalProducts
+		dynamicMu.Unlock()
+	})
+
+	root := &cobra.Command{Use: "dws"}
+	root.AddCommand(
+		&cobra.Command{Use: "aitable", Short: "AI 表格操作"},
+		&cobra.Command{Use: "aitable", Short: "AI 表格操作"},
+	)
+
+	var out bytes.Buffer
+	root.SetOut(&out)
+
+	renderRootHelp(root)
+
+	if got := strings.Count(out.String(), "  aitable"); got != 1 {
+		t.Fatalf("root help listed duplicate visible services %d times:\n%s", got, out.String())
+	}
+}
+
 func TestRootCommandDoesNotRegisterUpgradeCommand(t *testing.T) {
 	root := NewRootCommand()
 	if cmd := lookupCommand(root, "upgrade"); cmd != nil {
 		t.Fatalf("findCommand(upgrade) = %q, want nil", cmd.CommandPath())
-	}
-}
-
-func discoveryServerEntry(command, description string, groups, toolOverrides map[string]any) map[string]any {
-	cliMeta := map[string]any{
-		"id":            command,
-		"command":       command,
-		"description":   description,
-		"toolOverrides": toolOverrides,
-	}
-	if len(groups) > 0 {
-		cliMeta["groups"] = groups
-	}
-
-	return map[string]any{
-		"server": map[string]any{
-			"name":        command,
-			"description": description,
-			"remotes": []any{
-				map[string]any{
-					"type": "streamable-http",
-					"url":  "https://mcp.dingtalk.com/" + command,
-				},
-			},
-		},
-		"_meta": map[string]any{
-			"com.dingtalk.mcp.registry/metadata": map[string]any{
-				"status":   "active",
-				"isLatest": true,
-			},
-			"com.dingtalk.mcp.registry/cli": cliMeta,
-		},
 	}
 }
 

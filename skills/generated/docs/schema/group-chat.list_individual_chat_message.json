@@ -1,0 +1,95 @@
+{
+  "cli_path": [
+    "chat",
+    "list_individual_chat_message"
+  ],
+  "display": "钉钉群聊",
+  "flag_hints": {
+    "forward": {
+      "required": true
+    },
+    "time": {
+      "required": true
+    },
+    "userId": {
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "forward",
+      "flag_name": "forward",
+      "kind": "boolean",
+      "description": "方向，true是从老往新，false是新往老拉"
+    },
+    {
+      "property_name": "limit",
+      "flag_name": "limit",
+      "kind": "number",
+      "description": "返回数量"
+    },
+    {
+      "property_name": "time",
+      "flag_name": "time",
+      "kind": "string",
+      "description": "开始时间，格式：yyyy-MM-dd HH:mm:ss，非必填"
+    },
+    {
+      "property_name": "userId",
+      "flag_name": "userId",
+      "kind": "string",
+      "description": "单聊用户ID"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "forward": {
+        "description": "方向，true是从老往新，false是新往老拉",
+        "title": "方向，true是从老往新，false是新往老拉",
+        "type": "boolean"
+      },
+      "limit": {
+        "description": "返回数量",
+        "title": "返回数量",
+        "type": "number"
+      },
+      "time": {
+        "description": "开始时间，格式：yyyy-MM-dd HH:mm:ss，非必填",
+        "title": "开始时间，格式：yyyy-MM-dd HH:mm:ss，非必填",
+        "type": "string"
+      },
+      "userId": {
+        "description": "单聊用户ID",
+        "title": "单聊用户ID",
+        "type": "string"
+      }
+    },
+    "required": [
+      "userId",
+      "time",
+      "forward"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "group-chat.list_individual_chat_message",
+  "product_id": "group-chat",
+  "required": [
+    "forward",
+    "time",
+    "userId"
+  ],
+  "tool": {
+    "aliases": null,
+    "canonical_path": "group-chat.list_individual_chat_message",
+    "cli_name": "list_individual_chat_message",
+    "description": "拉取指定用户的单聊会话消息内容",
+    "hidden": true,
+    "rpc_name": "list_individual_chat_message",
+    "sensitive": false,
+    "source_server_key": "27f939aef74c67b5",
+    "title": "list_individual_chat_message"
+  }
+}

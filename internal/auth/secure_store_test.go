@@ -113,6 +113,24 @@ func TestSaveSecureTokenData_TmpFileCleanedOnSuccess(t *testing.T) {
 	}
 }
 
+func TestSaveSecureTokenData_DoesNotCreateTokenMarker(t *testing.T) {
+	configDir := t.TempDir()
+	data := &TokenData{
+		AccessToken:  "at_no_marker",
+		RefreshToken: "rt_no_marker",
+		ExpiresAt:    time.Now().Add(time.Hour),
+		RefreshExpAt: time.Now().Add(24 * time.Hour),
+		CorpID:       "corp1",
+	}
+	if err := SaveSecureTokenData(configDir, data); err != nil {
+		t.Fatalf("SaveSecureTokenData() error = %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(configDir, "token.json")); !os.IsNotExist(err) {
+		t.Fatalf("token.json should not be created in OSS build, stat err = %v", err)
+	}
+}
+
 func TestSaveSecureTokenData_ConcurrentSaves(t *testing.T) {
 	configDir := t.TempDir()
 	const goroutines = 10

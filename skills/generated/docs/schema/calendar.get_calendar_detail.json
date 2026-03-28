@@ -1,0 +1,57 @@
+{
+  "cli_path": [
+    "calendar",
+    "event",
+    "get"
+  ],
+  "display": "钉钉日历",
+  "flag_hints": {
+    "eventId": {
+      "alias": "id",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "eventId",
+      "flag_name": "id",
+      "alias": "event-id",
+      "kind": "string",
+      "description": "日程ID，可调用创建日程接口或查询日程列表接口获取id参数值"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "eventId": {
+        "description": "日程ID，可调用创建日程接口或查询日程列表接口获取id参数值",
+        "title": "eventId",
+        "type": "string"
+      }
+    },
+    "required": [
+      "eventId"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "calendar.get_calendar_detail",
+  "product_id": "calendar",
+  "required": [
+    "eventId"
+  ],
+  "tool": {
+    "aliases": [
+      "get_calendar_detail"
+    ],
+    "canonical_path": "calendar.get_calendar_detail",
+    "cli_name": "get",
+    "description": "获取我的日历指定日程的详细信息",
+    "group": "event",
+    "rpc_name": "get_calendar_detail",
+    "sensitive": false,
+    "source_server_key": "279de7cc536c672c",
+    "title": "查询日程详情"
+  }
+}

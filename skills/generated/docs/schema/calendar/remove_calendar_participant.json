@@ -1,0 +1,79 @@
+{
+  "cli_path": [
+    "calendar",
+    "participant",
+    "delete"
+  ],
+  "display": "钉钉日历",
+  "flag_hints": {
+    "attendeesToRemove": {
+      "alias": "users",
+      "transform": "csv_to_array",
+      "required": true
+    },
+    "eventId": {
+      "alias": "event",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "attendeesToRemove",
+      "flag_name": "users",
+      "alias": "attendees-to-remove",
+      "kind": "string_array",
+      "description": "需要被删除的日程参与者userId列表。"
+    },
+    {
+      "property_name": "eventId",
+      "flag_name": "event",
+      "alias": "event-id",
+      "kind": "string",
+      "description": "日程ID，可调用创建日程接口或查询日程列表接口获取id参数值。"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "attendeesToRemove": {
+        "description": "需要被删除的日程参与者userId列表。",
+        "items": {
+          "type": "string"
+        },
+        "title": "attendeesToRemove",
+        "type": "array"
+      },
+      "eventId": {
+        "description": "日程ID，可调用创建日程接口或查询日程列表接口获取id参数值。",
+        "title": "eventId",
+        "type": "string"
+      }
+    },
+    "required": [
+      "attendeesToRemove",
+      "eventId"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "calendar.remove_calendar_participant",
+  "product_id": "calendar",
+  "required": [
+    "attendeesToRemove",
+    "eventId"
+  ],
+  "tool": {
+    "aliases": [
+      "remove_calendar_participant"
+    ],
+    "canonical_path": "calendar.remove_calendar_participant",
+    "cli_name": "delete",
+    "description": "从已存在的指定日程中移除参与者，支持批量移除多人",
+    "group": "participant",
+    "rpc_name": "remove_calendar_participant",
+    "sensitive": true,
+    "source_server_key": "279de7cc536c672c",
+    "title": "删除日程参与人"
+  }
+}

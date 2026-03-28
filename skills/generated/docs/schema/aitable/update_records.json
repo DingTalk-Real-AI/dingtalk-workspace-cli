@@ -1,0 +1,112 @@
+{
+  "cli_path": [
+    "aitable",
+    "record",
+    "update"
+  ],
+  "display": "钉钉 AI 表格",
+  "flag_hints": {
+    "baseId": {
+      "alias": "base-id",
+      "required": true
+    },
+    "records": {
+      "alias": "records",
+      "transform": "json_parse",
+      "required": true
+    },
+    "tableId": {
+      "alias": "table-id",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "baseId",
+      "flag_name": "base-id",
+      "kind": "string",
+      "description": "Base ID，可通过 list_bases 或 search_bases 获取"
+    },
+    {
+      "property_name": "records",
+      "flag_name": "records",
+      "kind": "json",
+      "description": "待更新的记录内容列表，单次最多 100 条"
+    },
+    {
+      "property_name": "tableId",
+      "flag_name": "table-id",
+      "kind": "string",
+      "description": "Table ID，可通过 get_base 获取"
+    }
+  ],
+  "input_schema": {
+    "description": "input",
+    "properties": {
+      "baseId": {
+        "description": "Base ID，可通过 list_bases 或 search_bases 获取",
+        "title": "baseId",
+        "type": "string"
+      },
+      "records": {
+        "description": "待更新的记录内容列表，单次最多 100 条",
+        "items": {
+          "properties": {
+            "cells": {
+              "description": "字段值映射：key 为 fieldId，value 为字段新值。未传入的字段保持原值。\n\n各类型写入格式：\ntext → \"文本内容\"\nnumber/currency/progress → 123 或 123.45（数字）；progress 值范围 0~1（表示 0%~100%）\nrating → 4（数字，须在字段 min~max 范围内）\nsingleSelect → \"选项名称\"，或 {\"id\":\"opt_xxx\"} / {\"id\":\"opt_xxx\",\"name\":\"进行中\"}；对象写入时 id 为准，服务端会校验该 id 是否存在，并转换为当前 option name 后再写入；若直接传 option id 字符串会返回显式错误\nmultipleSelect → [\"选项名1\",\"选项名2\"]，或 [{\"id\":\"opt_a\",\"name\":\"标签A\"},{\"id\":\"opt_b\",\"name\":\"标签B\"}]；对象写入时每项都必须带 id，服务端会逐项校验并转换为当前 option name；若直接传 option id 字符串数组会返回显式错误\ndate → 日期字符串（如 \"2026-03-15\"、\"2026-03-15 09:00\"）或含时区的 RFC3339 字符串（如 \"2026-03-15T09:00+08:00\"）；亦支持毫秒时间戳\ncheckbox → true | false\nuser → 通常为 [{\"userId\":\"staff_001\",\"corpId\":\"dingxxxxxxxx\"}]，仅当目标用户不在当前请求组织、无法反查 userId 时回退为 [{\"userRef\":\"ur_0AaZ19\"}]\ndepartment → [{\"deptId\":\"52528700\"}]\ngroup → [{\"cid\":\"74577067501\"}]  — 注意 key 是 cid，不是 openConversationId\nurl → {\"text\":\"显示文字\",\"link\":\"https://...\"}；也兼容直接传 \"https://...\"，服务端会按 {\"text\":\"原字符串\",\"link\":\"原字符串\"} 自动补齐\nrichText → {\"markdown\":\"**加粗**\\n普通文字\\n\"}\ntelephone/email/barcode/idCard → 字符串\nattachment → 可传 [{\"fileToken\":\"ft_xxx\"}]、[{\"url\":\"https://...\"}] 或完整对象数组（会整体覆盖）。服务端会在写入前把 fileToken 展开为完整 attachment 对象；也支持把 {\"url\":\"https://...\"} 转成内部附件后再写入。URL 转存是 best-effort 异步链路，update_records 返回成功仅表示已受理转存与写入\ngeolocation → {\"address\":\"浙江省杭州市思凯路与爱橙街交叉口东南200米\",\"name\":\"阿里中心·未科D1幢\",\"location\":[\"120.007852\",\"30.271194\"]}（对象格式；location 按 [经度, 纬度] 传字符串数组；读写均使用该结构）\nunidirectionalLink/bidirectionalLink → {\"linkedRecordIds\":[\"recXXX\",\"recYYY\"]}\ncreator/lastModifier/createdTime/lastModifiedTime → 系统只读字段，禁止写入\n\n示例：\n[{\"recordId\":\"recXXX\",\"cells\":{\"fldStatusId\":{\"id\":\"opt_done\",\"name\":\"已完成\"},\"fldNumId\":99,\"fldUserId\":[{\"userId\":\"staff_001\",\"corpId\":\"dingxxxxxxxx\"}]}}]",
+              "properties": {},
+              "required": [],
+              "title": "cells",
+              "type": "object"
+            },
+            "recordId": {
+              "description": "Record ID",
+              "title": "recordId",
+              "type": "string"
+            }
+          },
+          "required": [
+            "recordId",
+            "cells"
+          ],
+          "type": "object"
+        },
+        "title": "records",
+        "type": "array"
+      },
+      "tableId": {
+        "description": "Table ID，可通过 get_base 获取",
+        "title": "tableId",
+        "type": "string"
+      }
+    },
+    "required": [
+      "baseId",
+      "records",
+      "tableId"
+    ],
+    "title": "input",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "aitable.update_records",
+  "product_id": "aitable",
+  "required": [
+    "baseId",
+    "records",
+    "tableId"
+  ],
+  "tool": {
+    "aliases": [
+      "update_records"
+    ],
+    "canonical_path": "aitable.update_records",
+    "cli_name": "update",
+    "description": "批量更新指定记录的字段值，只需传入需修改的字段，未传入的字段保持原值",
+    "group": "record",
+    "rpc_name": "update_records",
+    "sensitive": false,
+    "source_server_key": "23eb09885b9e8f26",
+    "title": "更新记录"
+  }
+}

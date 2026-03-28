@@ -1,0 +1,69 @@
+{
+  "cli_path": [
+    "attendance",
+    "summary"
+  ],
+  "display": "钉钉考勤打卡",
+  "flag_hints": {
+    "QueryUserAttendVO.queryDate": {
+      "alias": "date"
+    },
+    "QueryUserAttendVO.userId": {
+      "alias": "user"
+    }
+  },
+  "flags": [
+    {
+      "property_name": "QueryUserAttendVO.queryDate",
+      "flag_name": "date",
+      "kind": "string",
+      "description": "查询日期"
+    },
+    {
+      "property_name": "QueryUserAttendVO.userId",
+      "flag_name": "user",
+      "kind": "string",
+      "description": "用户ID"
+    }
+  ],
+  "input_schema": {
+    "description": "root",
+    "properties": {
+      "QueryUserAttendVO": {
+        "description": "QueryUserAttendVO",
+        "properties": {
+          "queryDate": {
+            "description": "查询日期",
+            "title": "queryDate",
+            "type": "string"
+          },
+          "userId": {
+            "description": "用户ID",
+            "title": "userId",
+            "type": "string"
+          }
+        },
+        "title": "QueryUserAttendVO",
+        "type": "object"
+      }
+    },
+    "title": "root",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "attendance.get_attendance_summary",
+  "product_id": "attendance",
+  "required": null,
+  "tool": {
+    "aliases": [
+      "get_attendance_summary"
+    ],
+    "canonical_path": "attendance.get_attendance_summary",
+    "cli_name": "summary",
+    "description": "获取考勤统计摘要",
+    "rpc_name": "get_attendance_summary",
+    "sensitive": false,
+    "source_server_key": "33b1011e8b8382a6",
+    "title": "get_attendance_summary"
+  }
+}

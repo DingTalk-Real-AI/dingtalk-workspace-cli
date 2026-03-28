@@ -18,24 +18,16 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/market"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/surface/cli"
 )
 
 var (
 	dynamicMu        sync.RWMutex
 	dynamicEndpoints map[string]string
 	dynamicProducts  map[string]bool
-	dynamicAliases   map[string]string
 )
-
-var legacyDirectRuntimeAliases = map[string]string{
-	"tb":                       "teambition",
-	"dingtalk-discovery":       "discovery",
-	"dingtalk-oa-plus":         "oa",
-	"dingtalk-ai-sincere-hire": "ai-sincere-hire",
-}
 
 // SetDynamicServers injects server data discovered from servers.json.
 // All product endpoints are resolved dynamically from this data.
@@ -45,9 +37,8 @@ func SetDynamicServers(servers []market.ServerDescriptor) {
 
 	endpoints := make(map[string]string)
 	products := make(map[string]bool)
-	aliases := make(map[string]string)
 	for _, server := range servers {
-		if server.CLI.Skip {
+		if !server.HasCLIMeta || server.CLI.Skip {
 			continue
 		}
 		id := strings.TrimSpace(server.CLI.ID)
@@ -66,14 +57,11 @@ func SetDynamicServers(servers []market.ServerDescriptor) {
 			if alias != "" && endpoint != "" {
 				endpoints[alias] = endpoint
 				products[alias] = true
-				// Build alias → CLI.ID mapping
-				aliases[alias] = id
 			}
 		}
 	}
 	dynamicEndpoints = endpoints
 	dynamicProducts = products
-	dynamicAliases = aliases
 }
 
 func shouldUseDirectRuntime(invocation executor.Invocation) bool {
@@ -81,7 +69,7 @@ func shouldUseDirectRuntime(invocation executor.Invocation) bool {
 		return false
 	}
 	switch invocation.Kind {
-	case "compat_invocation", "helper_invocation":
+	case "canonical_invocation", "helper_invocation":
 		return true
 	default:
 		return false
@@ -89,21 +77,19 @@ func shouldUseDirectRuntime(invocation executor.Invocation) bool {
 }
 
 func directRuntimeEndpoint(productID string) (string, bool) {
-	normalized := normalizeDirectRuntimeProductID(productID)
+	candidate := strings.TrimSpace(productID)
+	if candidate == "" {
+		return "", false
+	}
 	dynamicMu.RLock()
 	de := dynamicEndpoints
 	dynamicMu.RUnlock()
-	for _, candidate := range []string{strings.TrimSpace(productID), normalized} {
-		if candidate == "" {
-			continue
-		}
-		if override, ok := productEndpointOverride(candidate); ok {
-			return override, true
-		}
-		if de != nil {
-			if endpoint, ok := de[candidate]; ok {
-				return endpoint, true
-			}
+	if override, ok := productEndpointOverride(candidate); ok {
+		return override, true
+	}
+	if de != nil {
+		if endpoint, ok := de[candidate]; ok {
+			return endpoint, true
 		}
 	}
 	return "", false
@@ -120,20 +106,4 @@ func DirectRuntimeProductIDs() map[string]bool {
 		ids[key] = true
 	}
 	return ids
-}
-
-func normalizeDirectRuntimeProductID(productID string) string {
-	dynamicMu.RLock()
-	da := dynamicAliases
-	dynamicMu.RUnlock()
-	trimmed := strings.TrimSpace(productID)
-	if da != nil {
-		if normalizedID, ok := da[trimmed]; ok && normalizedID != "" {
-			return normalizedID
-		}
-	}
-	if normalizedID, ok := legacyDirectRuntimeAliases[trimmed]; ok {
-		return normalizedID
-	}
-	return trimmed
 }

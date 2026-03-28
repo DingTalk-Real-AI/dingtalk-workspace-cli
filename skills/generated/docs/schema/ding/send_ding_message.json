@@ -1,0 +1,121 @@
+{
+  "cli_path": [
+    "ding",
+    "message",
+    "send"
+  ],
+  "display": "DING消息",
+  "flag_hints": {
+    "content": {
+      "alias": "content",
+      "required": true
+    },
+    "receiverUserIdList": {
+      "alias": "users",
+      "transform": "csv_to_array",
+      "required": true
+    },
+    "remindType": {
+      "alias": "type",
+      "transform": "enum_map",
+      "transform_args": {
+        "_default": 1,
+        "app": 1,
+        "call": 3,
+        "sms": 2
+      },
+      "required": true
+    },
+    "robotCode": {
+      "alias": "robot-code",
+      "env_default": "DINGTALK_DING_ROBOT_CODE",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "content",
+      "flag_name": "content",
+      "kind": "string",
+      "description": "消息内容"
+    },
+    {
+      "property_name": "receiverUserIdList",
+      "flag_name": "users",
+      "alias": "receiver-user-id-list",
+      "kind": "string_array",
+      "description": "接收者用户ID列表"
+    },
+    {
+      "property_name": "remindType",
+      "flag_name": "type",
+      "alias": "remind-type",
+      "kind": "string",
+      "description": "提醒类型，1：应用内钉钉，2：短信，3：电话"
+    },
+    {
+      "property_name": "robotCode",
+      "flag_name": "robot-code",
+      "kind": "string",
+      "description": "机器人Code"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "content": {
+        "description": "消息内容",
+        "title": "消息内容",
+        "type": "string"
+      },
+      "receiverUserIdList": {
+        "description": "接收者用户ID列表",
+        "items": {
+          "type": "string"
+        },
+        "title": "接收者用户ID列表",
+        "type": "array"
+      },
+      "remindType": {
+        "description": "提醒类型，1：应用内钉钉，2：短信，3：电话",
+        "title": "提醒类型",
+        "type": "number"
+      },
+      "robotCode": {
+        "description": "机器人Code",
+        "title": "机器人Code",
+        "type": "string"
+      }
+    },
+    "required": [
+      "content",
+      "receiverUserIdList",
+      "remindType",
+      "robotCode"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "ding.send_ding_message",
+  "product_id": "ding",
+  "required": [
+    "content",
+    "receiverUserIdList",
+    "remindType",
+    "robotCode"
+  ],
+  "tool": {
+    "aliases": [
+      "send_ding_message"
+    ],
+    "canonical_path": "ding.send_ding_message",
+    "cli_name": "send",
+    "description": "使用企业内机器人发送DING消息，可发送应用内DING、短信DING、电话DING。",
+    "group": "message",
+    "rpc_name": "send_ding_message",
+    "sensitive": false,
+    "source_server_key": "9d39ee2c7636f32c",
+    "title": "发送DING消息"
+  }
+}

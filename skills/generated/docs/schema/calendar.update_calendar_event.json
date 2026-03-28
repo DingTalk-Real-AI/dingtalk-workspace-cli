@@ -1,0 +1,102 @@
+{
+  "cli_path": [
+    "calendar",
+    "event",
+    "update"
+  ],
+  "display": "钉钉日历",
+  "flag_hints": {
+    "endDateTime": {
+      "alias": "end"
+    },
+    "eventId": {
+      "alias": "id",
+      "required": true
+    },
+    "startDateTime": {
+      "alias": "start"
+    },
+    "summary": {
+      "alias": "title"
+    }
+  },
+  "flags": [
+    {
+      "property_name": "endDateTime",
+      "flag_name": "end",
+      "alias": "end-date-time",
+      "kind": "string",
+      "description": "日程结束时间，格式为ISO-8601的带时区的date-time格式，例如2025-11-14T10:00:00+08:00。"
+    },
+    {
+      "property_name": "eventId",
+      "flag_name": "id",
+      "alias": "event-id",
+      "kind": "string",
+      "description": "日程ID，可调用创建日程接口或查询日程列表接口获取id参数值"
+    },
+    {
+      "property_name": "startDateTime",
+      "flag_name": "start",
+      "alias": "start-date-time",
+      "kind": "string",
+      "description": "日程开始时间，格式为ISO-8601的带时区的date-time格式，例如2025-11-14T10:00:00+08:00。"
+    },
+    {
+      "property_name": "summary",
+      "flag_name": "title",
+      "alias": "summary",
+      "kind": "string",
+      "description": "日程标题，最大不超过2048个字符。"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "endDateTime": {
+        "description": "日程结束时间，格式为ISO-8601的带时区的date-time格式，例如2025-11-14T10:00:00+08:00。",
+        "title": "endDateTime",
+        "type": "string"
+      },
+      "eventId": {
+        "description": "日程ID，可调用创建日程接口或查询日程列表接口获取id参数值",
+        "title": "eventId",
+        "type": "string"
+      },
+      "startDateTime": {
+        "description": "日程开始时间，格式为ISO-8601的带时区的date-time格式，例如2025-11-14T10:00:00+08:00。",
+        "title": "startDateTime",
+        "type": "string"
+      },
+      "summary": {
+        "description": "日程标题，最大不超过2048个字符。",
+        "title": "summary",
+        "type": "string"
+      }
+    },
+    "required": [
+      "eventId"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "calendar.update_calendar_event",
+  "product_id": "calendar",
+  "required": [
+    "eventId"
+  ],
+  "tool": {
+    "aliases": [
+      "update_calendar_event"
+    ],
+    "canonical_path": "calendar.update_calendar_event",
+    "cli_name": "update",
+    "description": "修改现有日程的信息，支持更新标题、时间、地点等任意字段，需要组织者权限。（修改参与人需要使用给日程添加参与人或给日程删除参与人工具）",
+    "group": "event",
+    "rpc_name": "update_calendar_event",
+    "sensitive": false,
+    "source_server_key": "279de7cc536c672c",
+    "title": "修改日程"
+  }
+}

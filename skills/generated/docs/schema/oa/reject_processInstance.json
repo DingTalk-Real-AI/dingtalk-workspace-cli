@@ -1,0 +1,88 @@
+{
+  "cli_path": [
+    "oa",
+    "approval",
+    "reject"
+  ],
+  "display": "钉钉OA审批",
+  "flag_hints": {
+    "processInstanceId": {
+      "alias": "instance-id",
+      "required": true
+    },
+    "remark": {
+      "alias": "remark"
+    },
+    "taskId": {
+      "alias": "task-id",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "processInstanceId",
+      "flag_name": "instance-id",
+      "alias": "process-instance-id",
+      "kind": "string",
+      "description": "审批实例Id"
+    },
+    {
+      "property_name": "remark",
+      "flag_name": "remark",
+      "kind": "string",
+      "description": "审批意见"
+    },
+    {
+      "property_name": "taskId",
+      "flag_name": "task-id",
+      "kind": "number",
+      "description": "审批任务ID"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "processInstanceId": {
+        "description": "审批实例Id",
+        "title": "审批实例Id",
+        "type": "string"
+      },
+      "remark": {
+        "description": "审批意见",
+        "title": "审批意见",
+        "type": "string"
+      },
+      "taskId": {
+        "description": "审批任务ID",
+        "title": "审批任务Id",
+        "type": "number"
+      }
+    },
+    "required": [
+      "processInstanceId",
+      "taskId"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "oa.reject_processInstance",
+  "product_id": "oa",
+  "required": [
+    "processInstanceId",
+    "taskId"
+  ],
+  "tool": {
+    "aliases": [
+      "reject_processInstance"
+    ],
+    "canonical_path": "oa.reject_processInstance",
+    "cli_name": "reject",
+    "description": "处理某个需要我处理的实例任务，拒绝审批实例任务，所需要的参数processInstanceId可以从list_pending_approvals工具获取。",
+    "group": "approval",
+    "rpc_name": "reject_processInstance",
+    "sensitive": false,
+    "source_server_key": "2721767f4caa8a6e",
+    "title": "reject_processInstance"
+  }
+}

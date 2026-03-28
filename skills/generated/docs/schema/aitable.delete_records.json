@@ -1,0 +1,94 @@
+{
+  "cli_path": [
+    "aitable",
+    "record",
+    "delete"
+  ],
+  "display": "钉钉 AI 表格",
+  "flag_hints": {
+    "baseId": {
+      "alias": "base-id",
+      "required": true
+    },
+    "recordIds": {
+      "alias": "record-ids",
+      "transform": "csv_to_array",
+      "required": true
+    },
+    "tableId": {
+      "alias": "table-id",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "baseId",
+      "flag_name": "base-id",
+      "kind": "string",
+      "description": "Base ID，可通过 list_bases 或 search_bases 获取"
+    },
+    {
+      "property_name": "recordIds",
+      "flag_name": "record-ids",
+      "kind": "string_array",
+      "description": "待删除的记录 ID 列表，最多 100 条"
+    },
+    {
+      "property_name": "tableId",
+      "flag_name": "table-id",
+      "kind": "string",
+      "description": "Table ID，可通过 get_base 获取"
+    }
+  ],
+  "input_schema": {
+    "description": "input",
+    "properties": {
+      "baseId": {
+        "description": "Base ID，可通过 list_bases 或 search_bases 获取",
+        "title": "baseId",
+        "type": "string"
+      },
+      "recordIds": {
+        "description": "待删除的记录 ID 列表，最多 100 条",
+        "items": {
+          "type": "string"
+        },
+        "title": "recordIds",
+        "type": "array"
+      },
+      "tableId": {
+        "description": "Table ID，可通过 get_base 获取",
+        "title": "tableId",
+        "type": "string"
+      }
+    },
+    "required": [
+      "baseId",
+      "recordIds",
+      "tableId"
+    ],
+    "title": "input",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "aitable.delete_records",
+  "product_id": "aitable",
+  "required": [
+    "baseId",
+    "recordIds",
+    "tableId"
+  ],
+  "tool": {
+    "aliases": [
+      "delete_records"
+    ],
+    "canonical_path": "aitable.delete_records",
+    "cli_name": "delete",
+    "description": "在指定 Table 中批量删除记录（不可逆，数据将永久丢失）。\r\n单次最多删除 100 条；超出请拆分多次调用。\r\n调用前建议先通过 query_records 确认目标记录 ID 与内容，避免误删。",
+    "group": "record",
+    "rpc_name": "delete_records",
+    "sensitive": true,
+    "source_server_key": "23eb09885b9e8f26",
+    "title": "删除行记录"
+  }
+}

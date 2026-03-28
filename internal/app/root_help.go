@@ -59,13 +59,19 @@ func visibleMCPRootCommands(root *cobra.Command) []*cobra.Command {
 	}
 
 	commands := make([]*cobra.Command, 0)
+	seen := make(map[string]struct{})
 	for _, cmd := range root.Commands() {
 		if cmd == nil || cmd.Hidden {
 			continue
 		}
-		if !allowed[cmd.Name()] {
+		name := strings.TrimSpace(cmd.Name())
+		if !allowed[name] {
 			continue
 		}
+		if _, exists := seen[name]; exists {
+			continue
+		}
+		seen[name] = struct{}{}
 		commands = append(commands, cmd)
 	}
 	return commands

@@ -1,0 +1,57 @@
+{
+  "cli_path": [
+    "calendar",
+    "event",
+    "delete"
+  ],
+  "display": "钉钉日历",
+  "flag_hints": {
+    "eventId": {
+      "alias": "id",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "eventId",
+      "flag_name": "id",
+      "alias": "event-id",
+      "kind": "string",
+      "description": "日程ID，可调用创建日程接口或查询日程列表接口获取id参数值。"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "eventId": {
+        "description": "\t 日程ID，可调用创建日程接口或查询日程列表接口获取id参数值。",
+        "title": "eventId",
+        "type": "string"
+      }
+    },
+    "required": [
+      "eventId"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "calendar.delete_calendar_event",
+  "product_id": "calendar",
+  "required": [
+    "eventId"
+  ],
+  "tool": {
+    "aliases": [
+      "delete_calendar_event"
+    ],
+    "canonical_path": "calendar.delete_calendar_event",
+    "cli_name": "delete",
+    "description": "删除指定日程，组织者删除将通知所有参与者，参与者删除仅从自己日历移除",
+    "group": "event",
+    "rpc_name": "delete_calendar_event",
+    "sensitive": true,
+    "source_server_key": "279de7cc536c672c",
+    "title": "删除指定日程"
+  }
+}

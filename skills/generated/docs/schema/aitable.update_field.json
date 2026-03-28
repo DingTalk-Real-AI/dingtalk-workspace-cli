@@ -1,0 +1,146 @@
+{
+  "cli_path": [
+    "aitable",
+    "field",
+    "update"
+  ],
+  "display": "钉钉 AI 表格",
+  "flag_hints": {
+    "baseId": {
+      "alias": "base-id",
+      "required": true
+    },
+    "config": {
+      "alias": "config",
+      "transform": "json_parse"
+    },
+    "fieldId": {
+      "alias": "field-id",
+      "required": true
+    },
+    "newFieldName": {
+      "alias": "name"
+    },
+    "tableId": {
+      "alias": "table-id",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "baseId",
+      "flag_name": "base-id",
+      "kind": "string",
+      "description": "Base ID（可通过 list_bases 获取）"
+    },
+    {
+      "property_name": "config",
+      "flag_name": "config",
+      "kind": "json",
+      "description": "更新后的字段物理配置，结构与 create_fields.fields[].config 完全一致。\n不修改配置时省略。\n注意：更新 singleSelect/multipleSelect 的 options 时，需传入完整列表（含已有选项），系统以新列表整体覆盖，不是追加。\n注意：为避免已有单元格因 option id 变化而丢数据，更新时已有选项应尽量回传原 id；新增选项无需传 id。\n注意：如果请求中传入的 option id 在当前字段配置中不存在，系统会丢弃该 id，并按新增选项处理；若 id 合法但 name 改了，属于正常更新，会保留该 id。"
+    },
+    {
+      "property_name": "fieldId",
+      "flag_name": "field-id",
+      "kind": "string",
+      "description": "Field ID（可通过 get_tables 获取）"
+    },
+    {
+      "property_name": "newFieldName",
+      "flag_name": "name",
+      "alias": "new-field-name",
+      "kind": "string",
+      "description": "更新后的字段名称，最大100字。不修改名称时省略"
+    },
+    {
+      "property_name": "tableId",
+      "flag_name": "table-id",
+      "kind": "string",
+      "description": "Table ID（可通过 get_base 获取）"
+    }
+  ],
+  "input_schema": {
+    "description": "input",
+    "properties": {
+      "baseId": {
+        "description": "Base ID（可通过 list_bases 获取）",
+        "title": "baseId",
+        "type": "string"
+      },
+      "config": {
+        "description": "更新后的字段物理配置，结构与 create_fields.fields[].config 完全一致。\n不修改配置时省略。\n注意：更新 singleSelect/multipleSelect 的 options 时，需传入完整列表（含已有选项），系统以新列表整体覆盖，不是追加。\n注意：为避免已有单元格因 option id 变化而丢数据，更新时已有选项应尽量回传原 id；新增选项无需传 id。\n注意：如果请求中传入的 option id 在当前字段配置中不存在，系统会丢弃该 id，并按新增选项处理；若 id 合法但 name 改了，属于正常更新，会保留该 id。",
+        "properties": {
+          "options": {
+            "description": "选项列表。只有当字段类型为 singleSelect 或 multipleSelect 时 才需要提供。更新时需传入完整列表（含已有选项），系统以新列表整体覆盖；为避免已有单元格因 option id 变化而丢数据，已有选项应尽量回传原 id。",
+            "items": {
+              "properties": {
+                "id": {
+                  "description": "可选，已有选项的 ID。更新 singleSelect 或 multipleSelect 时，已有选项建议回传原 id；新增选项无需传 id。若传入的 id 在当前字段配置中不存在，系统会忽略该 id，并按新增选项处理。",
+                  "title": "id",
+                  "type": "string"
+                },
+                "name": {
+                  "description": "选项名称。若 id 合法，即使 name 与当前配置中的旧名称不同，也会保留该 id，并将名称更新为新值。",
+                  "title": "name",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "type": "object"
+            },
+            "title": "options",
+            "type": "array"
+          }
+        },
+        "required": [],
+        "title": "config",
+        "type": "object"
+      },
+      "fieldId": {
+        "description": "Field ID（可通过 get_tables 获取）",
+        "title": "fieldId",
+        "type": "string"
+      },
+      "newFieldName": {
+        "description": "更新后的字段名称，最大100字。不修改名称时省略",
+        "title": "newFieldName",
+        "type": "string"
+      },
+      "tableId": {
+        "description": "Table ID（可通过 get_base 获取）",
+        "title": "tableId",
+        "type": "string"
+      }
+    },
+    "required": [
+      "baseId",
+      "fieldId",
+      "tableId"
+    ],
+    "title": "input",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "aitable.update_field",
+  "product_id": "aitable",
+  "required": [
+    "baseId",
+    "fieldId",
+    "tableId"
+  ],
+  "tool": {
+    "aliases": [
+      "update_field"
+    ],
+    "canonical_path": "aitable.update_field",
+    "cli_name": "update",
+    "description": "更新指定字段的名称或配置。不可变更字段类型（type 不可修改）。\r\nnewFieldName、config、aiConfig 至少传入一项",
+    "group": "field",
+    "rpc_name": "update_field",
+    "sensitive": false,
+    "source_server_key": "23eb09885b9e8f26",
+    "title": "更新字段"
+  }
+}

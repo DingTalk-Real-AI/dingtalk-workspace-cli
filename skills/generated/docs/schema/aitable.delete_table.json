@@ -1,0 +1,87 @@
+{
+  "cli_path": [
+    "aitable",
+    "table",
+    "delete"
+  ],
+  "display": "钉钉 AI 表格",
+  "flag_hints": {
+    "baseId": {
+      "alias": "base-id",
+      "required": true
+    },
+    "reason": {
+      "alias": "reason"
+    },
+    "tableId": {
+      "alias": "table-id",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "baseId",
+      "flag_name": "base-id",
+      "kind": "string",
+      "description": "目标 Base ID（通过 list_bases 获取）"
+    },
+    {
+      "property_name": "reason",
+      "flag_name": "reason",
+      "kind": "string",
+      "description": "一句话描述一下删除该数据表的原因，用于审计"
+    },
+    {
+      "property_name": "tableId",
+      "flag_name": "table-id",
+      "kind": "string",
+      "description": "将被删除的 Table ID（通过 get_base / get_tables 获取）"
+    }
+  ],
+  "input_schema": {
+    "description": "input",
+    "properties": {
+      "baseId": {
+        "description": "目标 Base ID（通过 list_bases 获取）",
+        "title": "baseId",
+        "type": "string"
+      },
+      "reason": {
+        "description": "一句话描述一下删除该数据表的原因，用于审计",
+        "title": "reason",
+        "type": "string"
+      },
+      "tableId": {
+        "description": "将被删除的 Table ID（通过 get_base / get_tables 获取）",
+        "title": "tableId",
+        "type": "string"
+      }
+    },
+    "required": [
+      "baseId",
+      "tableId"
+    ],
+    "title": "input",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "aitable.delete_table",
+  "product_id": "aitable",
+  "required": [
+    "baseId",
+    "tableId"
+  ],
+  "tool": {
+    "aliases": [
+      "delete_table"
+    ],
+    "canonical_path": "aitable.delete_table",
+    "cli_name": "delete",
+    "description": "删除指定 tableId 的数据表（不可逆，数据将永久丢失），该操作为高风险写入。\r\n调用前请先通过 get_base / get_tables 确认目标表 ID 与名称。",
+    "group": "table",
+    "rpc_name": "delete_table",
+    "sensitive": true,
+    "source_server_key": "23eb09885b9e8f26",
+    "title": "删除数据表"
+  }
+}

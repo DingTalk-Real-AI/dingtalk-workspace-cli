@@ -1,0 +1,84 @@
+{
+  "cli_path": [
+    "aitable",
+    "template",
+    "search"
+  ],
+  "display": "钉钉 AI 表格",
+  "flag_hints": {
+    "cursor": {
+      "alias": "cursor"
+    },
+    "limit": {
+      "alias": "limit"
+    },
+    "query": {
+      "alias": "query",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "cursor",
+      "flag_name": "cursor",
+      "kind": "string",
+      "description": "分页游标。首次请求不传；后续请原样传入上次返回的 nextCursor"
+    },
+    {
+      "property_name": "limit",
+      "flag_name": "limit",
+      "kind": "number",
+      "description": "每页返回数量。默认 10，最大 30"
+    },
+    {
+      "property_name": "query",
+      "flag_name": "query",
+      "kind": "string",
+      "description": "模板名称关键词"
+    }
+  ],
+  "input_schema": {
+    "description": "input",
+    "properties": {
+      "cursor": {
+        "description": "分页游标。首次请求不传；后续请原样传入上次返回的 nextCursor",
+        "title": "cursor",
+        "type": "string"
+      },
+      "limit": {
+        "description": "每页返回数量。默认 10，最大 30",
+        "title": "limit",
+        "type": "number"
+      },
+      "query": {
+        "description": "模板名称关键词",
+        "title": "query",
+        "type": "string"
+      }
+    },
+    "required": [
+      "query"
+    ],
+    "title": "input",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "aitable.search_templates",
+  "product_id": "aitable",
+  "required": [
+    "query"
+  ],
+  "tool": {
+    "aliases": [
+      "search_templates"
+    ],
+    "canonical_path": "aitable.search_templates",
+    "cli_name": "search",
+    "description": "按名称关键词搜索 AI 表格模板，支持分页。\r\n返回每个模板的 templateId、name、description，以及分页信息 hasMore / nextCursor。\r\n返回的 templateId 可直接用于 create_base。\r\n模板预览链接可通过 https://docs.dingtalk.com/table/template/{templateId} 拼接得到",
+    "group": "template",
+    "rpc_name": "search_templates",
+    "sensitive": false,
+    "source_server_key": "23eb09885b9e8f26",
+    "title": "搜索模板"
+  }
+}

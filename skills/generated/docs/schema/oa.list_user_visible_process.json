@@ -1,0 +1,74 @@
+{
+  "cli_path": [
+    "oa",
+    "approval",
+    "list-forms"
+  ],
+  "display": "钉钉OA审批",
+  "flag_hints": {
+    "cursor": {
+      "alias": "cursor",
+      "required": true
+    },
+    "pageSize": {
+      "alias": "size",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "cursor",
+      "flag_name": "cursor",
+      "kind": "number",
+      "description": "分页游标，首次调用需要传0"
+    },
+    {
+      "property_name": "pageSize",
+      "flag_name": "size",
+      "alias": "page-size",
+      "kind": "number",
+      "description": "每页大小，最大值100"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "cursor": {
+        "description": "分页游标，首次调用需要传0",
+        "title": "分页游标，首次调用需要传0",
+        "type": "number"
+      },
+      "pageSize": {
+        "description": "每页大小，最大值100",
+        "title": "每页大小，最大值100",
+        "type": "number"
+      }
+    },
+    "required": [
+      "cursor",
+      "pageSize"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "oa.list_user_visible_process",
+  "product_id": "oa",
+  "required": [
+    "cursor",
+    "pageSize"
+  ],
+  "tool": {
+    "aliases": [
+      "list_user_visible_process"
+    ],
+    "canonical_path": "oa.list_user_visible_process",
+    "cli_name": "list-forms",
+    "description": "获取当前用户可见的审批表单列表，可获取审批表单的processCode。",
+    "group": "approval",
+    "rpc_name": "list_user_visible_process",
+    "sensitive": false,
+    "source_server_key": "2721767f4caa8a6e",
+    "title": "list_user_visible_process"
+  }
+}

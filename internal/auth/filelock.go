@@ -21,7 +21,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/config"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/platform/config"
 )
 
 const (

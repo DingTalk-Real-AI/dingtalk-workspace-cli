@@ -1,0 +1,109 @@
+{
+  "cli_path": [
+    "report",
+    "list"
+  ],
+  "display": "钉钉日志",
+  "flag_hints": {
+    "cursor": {
+      "alias": "cursor",
+      "required": true
+    },
+    "endTime": {
+      "alias": "end",
+      "transform": "iso8601_to_millis",
+      "required": true
+    },
+    "size": {
+      "alias": "size",
+      "required": true
+    },
+    "startTime": {
+      "alias": "start",
+      "transform": "iso8601_to_millis",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "cursor",
+      "flag_name": "cursor",
+      "kind": "number",
+      "description": "起始游标，从 0 开始，必填。"
+    },
+    {
+      "property_name": "endTime",
+      "flag_name": "end",
+      "alias": "end-time",
+      "kind": "string",
+      "description": "结束时间，毫秒时间戳，必填。"
+    },
+    {
+      "property_name": "size",
+      "flag_name": "size",
+      "kind": "number",
+      "description": "每页条数，最大 20，必填。"
+    },
+    {
+      "property_name": "startTime",
+      "flag_name": "start",
+      "alias": "start-time",
+      "kind": "string",
+      "description": "开始时间，毫秒时间戳，必填。"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "cursor": {
+        "description": "起始游标，从 0 开始，必填。",
+        "title": "分页游标，首次调用传0",
+        "type": "number"
+      },
+      "endTime": {
+        "description": "结束时间，毫秒时间戳，必填。",
+        "title": "查询的结束时间",
+        "type": "number"
+      },
+      "size": {
+        "description": "每页条数，最大 20，必填。",
+        "title": "每页的数量，最大值20",
+        "type": "number"
+      },
+      "startTime": {
+        "description": "开始时间，毫秒时间戳，必填。",
+        "title": "查询的开始时间",
+        "type": "number"
+      }
+    },
+    "required": [
+      "cursor",
+      "endTime",
+      "size",
+      "startTime"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "report.get_received_report_list",
+  "product_id": "report",
+  "required": [
+    "cursor",
+    "endTime",
+    "size",
+    "startTime"
+  ],
+  "tool": {
+    "aliases": [
+      "get_received_report_list"
+    ],
+    "canonical_path": "report.get_received_report_list",
+    "cli_name": "list",
+    "description": "查询当前人收到的日志列表",
+    "rpc_name": "get_received_report_list",
+    "sensitive": false,
+    "source_server_key": "379b7411e5ab4e32",
+    "title": "查询当前人收到的日志列表"
+  }
+}

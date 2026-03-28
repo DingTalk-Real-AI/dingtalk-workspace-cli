@@ -1,0 +1,57 @@
+{
+  "cli_path": [
+    "oa",
+    "approval",
+    "records"
+  ],
+  "display": "钉钉OA审批",
+  "flag_hints": {
+    "processInstanceId": {
+      "alias": "instance-id",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "processInstanceId",
+      "flag_name": "instance-id",
+      "alias": "process-instance-id",
+      "kind": "string",
+      "description": "审批实例Id"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "processInstanceId": {
+        "description": "审批实例Id",
+        "title": "审批实例Id",
+        "type": "string"
+      }
+    },
+    "required": [
+      "processInstanceId"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "oa.get_processInstance_records",
+  "product_id": "oa",
+  "required": [
+    "processInstanceId"
+  ],
+  "tool": {
+    "aliases": [
+      "get_processInstance_records"
+    ],
+    "canonical_path": "oa.get_processInstance_records",
+    "cli_name": "records",
+    "description": "获取某个审批实例的审批操作记录信息，获取的是该审批实例有哪些人做了什么操作，以及操作结果是什么",
+    "group": "approval",
+    "rpc_name": "get_processInstance_records",
+    "sensitive": false,
+    "source_server_key": "2721767f4caa8a6e",
+    "title": "get_processInstance_records"
+  }
+}

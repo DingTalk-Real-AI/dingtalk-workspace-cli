@@ -1,0 +1,118 @@
+{
+  "cli_path": [
+    "chat",
+    "message",
+    "list-topic-replies"
+  ],
+  "display": "钉钉群聊",
+  "flag_hints": {
+    "forward": {
+      "alias": "forward"
+    },
+    "openconversationId": {
+      "alias": "group",
+      "required": true
+    },
+    "pageSize": {
+      "alias": "limit"
+    },
+    "startTime": {
+      "alias": "time"
+    },
+    "topicId": {
+      "alias": "topic-id",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "forward",
+      "flag_name": "forward",
+      "kind": "boolean",
+      "description": "true是从老往新，false是新往老拉"
+    },
+    {
+      "property_name": "openconversationId",
+      "flag_name": "group",
+      "alias": "openconversation-id",
+      "kind": "string",
+      "description": "群会话唯一标识"
+    },
+    {
+      "property_name": "pageSize",
+      "flag_name": "limit",
+      "alias": "page-size",
+      "kind": "number",
+      "description": "返回数量"
+    },
+    {
+      "property_name": "startTime",
+      "flag_name": "time",
+      "alias": "start-time",
+      "kind": "string",
+      "description": "格式：yyyy-MM-dd HH:mm:ss，非必填"
+    },
+    {
+      "property_name": "topicId",
+      "flag_name": "topic-id",
+      "kind": "string",
+      "description": "由 dws chat message list 指令 返回"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "forward": {
+        "description": "true是从老往新，false是新往老拉",
+        "title": "方向",
+        "type": "boolean"
+      },
+      "openconversationId": {
+        "description": "群会话唯一标识",
+        "title": "群会话唯一标识",
+        "type": "string"
+      },
+      "pageSize": {
+        "description": "返回数量",
+        "title": "返回数量",
+        "type": "number"
+      },
+      "startTime": {
+        "description": "格式：yyyy-MM-dd HH:mm:ss，非必填",
+        "title": "开始时间",
+        "type": "string"
+      },
+      "topicId": {
+        "description": "由 dws chat message list 指令 返回",
+        "title": "话题ID",
+        "type": "string"
+      }
+    },
+    "required": [
+      "openconversationId",
+      "topicId"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "group-chat.list_topic_replies",
+  "product_id": "group-chat",
+  "required": [
+    "openconversationId",
+    "topicId"
+  ],
+  "tool": {
+    "aliases": [
+      "list_topic_replies"
+    ],
+    "canonical_path": "group-chat.list_topic_replies",
+    "cli_name": "list-topic-replies",
+    "description": "针对话题群中的单个话题，分页拉取话题的回复消息",
+    "group": "message",
+    "rpc_name": "list_topic_replies",
+    "sensitive": false,
+    "source_server_key": "27f939aef74c67b5",
+    "title": "list_topic_replies"
+  }
+}

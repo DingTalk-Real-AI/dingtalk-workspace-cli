@@ -1,0 +1,90 @@
+{
+  "cli_path": [
+    "aitable",
+    "field",
+    "delete"
+  ],
+  "display": "钉钉 AI 表格",
+  "flag_hints": {
+    "baseId": {
+      "alias": "base-id",
+      "required": true
+    },
+    "fieldId": {
+      "alias": "field-id",
+      "required": true
+    },
+    "tableId": {
+      "alias": "table-id",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "baseId",
+      "flag_name": "base-id",
+      "kind": "string",
+      "description": "Base ID（通过 list_bases 获取）"
+    },
+    {
+      "property_name": "fieldId",
+      "flag_name": "field-id",
+      "kind": "string",
+      "description": "待删除字段 ID（通过 get_tables 获取）"
+    },
+    {
+      "property_name": "tableId",
+      "flag_name": "table-id",
+      "kind": "string",
+      "description": "Table ID（通过 get_base 获取）"
+    }
+  ],
+  "input_schema": {
+    "description": "input",
+    "properties": {
+      "baseId": {
+        "description": "Base ID（通过 list_bases 获取）",
+        "title": "baseId",
+        "type": "string"
+      },
+      "fieldId": {
+        "description": "待删除字段 ID（通过 get_tables 获取）",
+        "title": "fieldId",
+        "type": "string"
+      },
+      "tableId": {
+        "description": "Table ID（通过 get_base 获取）",
+        "title": "tableId",
+        "type": "string"
+      }
+    },
+    "required": [
+      "baseId",
+      "fieldId",
+      "tableId"
+    ],
+    "title": "input",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "aitable.delete_field",
+  "product_id": "aitable",
+  "required": [
+    "baseId",
+    "fieldId",
+    "tableId"
+  ],
+  "tool": {
+    "aliases": [
+      "delete_field"
+    ],
+    "canonical_path": "aitable.delete_field",
+    "cli_name": "delete",
+    "description": "删除指定 Table 中的一个字段（Field），删除操作不可逆。禁止删除主字段，且禁止删除最后一个字段\r\n\r\n此操作不可逆，会永久删除字段及其所有数据。\r\n必须提供准确的 baseId、tableId 和 fieldId，不得使用名称代替 ID。\r\n若字段不存在或无权限，将返回错误。",
+    "group": "field",
+    "rpc_name": "delete_field",
+    "sensitive": true,
+    "source_server_key": "23eb09885b9e8f26",
+    "title": "删除字段"
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "cli_path": [
+    "ding",
+    "search_my_robots"
+  ],
+  "display": "DING消息",
+  "flag_hints": {
+    "currentPage": {
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "currentPage",
+      "flag_name": "currentPage",
+      "kind": "number",
+      "description": "页码，从1开始"
+    },
+    {
+      "property_name": "pageSize",
+      "flag_name": "pageSize",
+      "kind": "number",
+      "description": "每页条数，默认50"
+    },
+    {
+      "property_name": "robotName",
+      "flag_name": "robotName",
+      "kind": "string",
+      "description": "要搜索的名称"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "currentPage": {
+        "description": "页码，从1开始",
+        "title": "页码",
+        "type": "number"
+      },
+      "pageSize": {
+        "description": "每页条数，默认50",
+        "title": "每页条数",
+        "type": "number"
+      },
+      "robotName": {
+        "description": "要搜索的名称",
+        "title": "要搜索的名称",
+        "type": "string"
+      }
+    },
+    "required": [
+      "currentPage"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "ding.search_my_robots",
+  "product_id": "ding",
+  "required": [
+    "currentPage"
+  ],
+  "tool": {
+    "aliases": null,
+    "canonical_path": "ding.search_my_robots",
+    "cli_name": "search_my_robots",
+    "description": "搜索我创建的机器人",
+    "hidden": true,
+    "rpc_name": "search_my_robots",
+    "sensitive": false,
+    "source_server_key": "9d39ee2c7636f32c",
+    "title": "搜索我创建的机器人"
+  }
+}

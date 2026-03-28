@@ -24,7 +24,7 @@ func TestRootHelpHidesRecoveredModules(t *testing.T) {
 	// All of these commands should be hidden because they are not in
 	// the dynamic server discovery product list.
 	for _, module := range []string{
-		"aisearch", "contract", "recruit",
+		"aisearch", "contract", "recruit", "tb",
 		"chat", "drive", "minutes", "mail", "credit",
 		"credit-risk", "finance", "message", "notify", "doc",
 	} {

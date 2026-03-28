@@ -1,0 +1,71 @@
+{
+  "cli_path": [
+    "chat",
+    "create_internal_org_group"
+  ],
+  "display": "钉钉群聊",
+  "flag_hints": {
+    "groupMembers": {
+      "required": true
+    },
+    "groupName": {
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "groupMembers",
+      "flag_name": "groupMembers",
+      "kind": "string_array",
+      "description": "初始化添加的群聊成员。需要使用钉钉userId"
+    },
+    {
+      "property_name": "groupName",
+      "flag_name": "groupName",
+      "kind": "string",
+      "description": "群名称"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "groupMembers": {
+        "description": "初始化添加的群聊成员。需要使用钉钉userId",
+        "items": {
+          "type": "string"
+        },
+        "title": "groupMembers",
+        "type": "array"
+      },
+      "groupName": {
+        "description": "群名称",
+        "title": "groupName",
+        "type": "string"
+      }
+    },
+    "required": [
+      "groupMembers",
+      "groupName"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "group-chat.create_internal_org_group",
+  "product_id": "group-chat",
+  "required": [
+    "groupMembers",
+    "groupName"
+  ],
+  "tool": {
+    "aliases": null,
+    "canonical_path": "group-chat.create_internal_org_group",
+    "cli_name": "create_internal_org_group",
+    "description": "创建一个组织内部的群聊（仅限本企业成员加入），支持指定群名称、初始成员列表等参数。操作成功后返回是否创建成功的结果。群聊创建受组织安全策略限制（如成员必须属于同一企业）。适用于项目协作、临时沟通等需要快速建群的场景。",
+    "hidden": true,
+    "rpc_name": "create_internal_org_group",
+    "sensitive": false,
+    "source_server_key": "27f939aef74c67b5",
+    "title": "create_internal_org_group"
+  }
+}

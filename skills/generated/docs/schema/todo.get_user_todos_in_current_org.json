@@ -1,0 +1,90 @@
+{
+  "cli_path": [
+    "todo",
+    "task",
+    "list"
+  ],
+  "display": "钉钉待办",
+  "flag_hints": {
+    "pageNum": {
+      "alias": "page",
+      "required": true
+    },
+    "pageSize": {
+      "alias": "size",
+      "required": true
+    },
+    "todoStatus": {
+      "alias": "status"
+    }
+  },
+  "flags": [
+    {
+      "property_name": "pageNum",
+      "flag_name": "page",
+      "alias": "page-num",
+      "kind": "string",
+      "description": "当前页。从1开始"
+    },
+    {
+      "property_name": "pageSize",
+      "flag_name": "size",
+      "alias": "page-size",
+      "kind": "string",
+      "description": "分页大小。"
+    },
+    {
+      "property_name": "todoStatus",
+      "flag_name": "status",
+      "alias": "todo-status",
+      "kind": "string",
+      "description": "待办完成状态。true：已完成；false：未完成。"
+    }
+  ],
+  "input_schema": {
+    "description": "root",
+    "properties": {
+      "pageNum": {
+        "description": "当前页。从1开始",
+        "title": "pageNum",
+        "type": "string"
+      },
+      "pageSize": {
+        "description": "分页大小。",
+        "title": "pageSize",
+        "type": "string"
+      },
+      "todoStatus": {
+        "description": "待办完成状态。true：已完成；false：未完成。",
+        "title": "todoStatus",
+        "type": "string"
+      }
+    },
+    "required": [
+      "pageNum",
+      "pageSize"
+    ],
+    "title": "root",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "todo.get_user_todos_in_current_org",
+  "product_id": "todo",
+  "required": [
+    "pageNum",
+    "pageSize"
+  ],
+  "tool": {
+    "aliases": [
+      "get_user_todos_in_current_org"
+    ],
+    "canonical_path": "todo.get_user_todos_in_current_org",
+    "cli_name": "list",
+    "description": "获取当前用户在所属组织中的个人待办事项列表，返回每项待办的标题、截止日期、优先级（如高/中/低）、完成状态。",
+    "group": "task",
+    "rpc_name": "get_user_todos_in_current_org",
+    "sensitive": false,
+    "source_server_key": "b693ef3984e8d311",
+    "title": "查询个人待办"
+  }
+}

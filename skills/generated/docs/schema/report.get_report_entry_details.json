@@ -1,0 +1,54 @@
+{
+  "cli_path": [
+    "report",
+    "detail"
+  ],
+  "display": "钉钉日志",
+  "flag_hints": {
+    "report_id": {
+      "alias": "report-id",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "report_id",
+      "flag_name": "report-id",
+      "kind": "string",
+      "description": "日志Id，可以从查询当前用户收到的日志列表获取"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "report_id": {
+        "description": "日志Id，可以从查询当前用户收到的日志列表获取",
+        "title": "日志Id，可以从查询当前用户收到的日志列表获取",
+        "type": "string"
+      }
+    },
+    "required": [
+      "report_id"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "report.get_report_entry_details",
+  "product_id": "report",
+  "required": [
+    "report_id"
+  ],
+  "tool": {
+    "aliases": [
+      "get_report_entry_details"
+    ],
+    "canonical_path": "report.get_report_entry_details",
+    "cli_name": "detail",
+    "description": "获取指定一篇日志的详情信息",
+    "rpc_name": "get_report_entry_details",
+    "sensitive": false,
+    "source_server_key": "379b7411e5ab4e32",
+    "title": "获取指定日志的详情"
+  }
+}

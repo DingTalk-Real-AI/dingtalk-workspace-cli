@@ -1,0 +1,79 @@
+{
+  "cli_path": [
+    "calendar",
+    "room",
+    "add"
+  ],
+  "display": "钉钉日历",
+  "flag_hints": {
+    "eventId": {
+      "alias": "event",
+      "required": true
+    },
+    "roomIds": {
+      "alias": "rooms",
+      "transform": "csv_to_array",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "eventId",
+      "flag_name": "event",
+      "alias": "event-id",
+      "kind": "string",
+      "description": "日程ID，调用查询日程列表接口获取id参数值。"
+    },
+    {
+      "property_name": "roomIds",
+      "flag_name": "rooms",
+      "alias": "room-ids",
+      "kind": "string_array",
+      "description": "需要预定的会议室roomId列表，可调用查询空闲会议室接口获取，一个日程最多添加5个会议室。"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "eventId": {
+        "description": "日程ID，调用查询日程列表接口获取id参数值。",
+        "title": "eventId",
+        "type": "string"
+      },
+      "roomIds": {
+        "description": "需要预定的会议室roomId列表，可调用查询空闲会议室接口获取，一个日程最多添加5个会议室。",
+        "items": {
+          "type": "string"
+        },
+        "title": "roomIds",
+        "type": "array"
+      }
+    },
+    "required": [
+      "eventId",
+      "roomIds"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "calendar.add_meeting_room",
+  "product_id": "calendar",
+  "required": [
+    "eventId",
+    "roomIds"
+  ],
+  "tool": {
+    "aliases": [
+      "add_meeting_room"
+    ],
+    "canonical_path": "calendar.add_meeting_room",
+    "cli_name": "add",
+    "description": "添加会议室",
+    "group": "room",
+    "rpc_name": "add_meeting_room",
+    "sensitive": false,
+    "source_server_key": "279de7cc536c672c",
+    "title": "添加会议室"
+  }
+}

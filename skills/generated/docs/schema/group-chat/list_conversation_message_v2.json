@@ -1,0 +1,95 @@
+{
+  "cli_path": [
+    "chat",
+    "list_conversation_message_v2"
+  ],
+  "display": "钉钉群聊",
+  "flag_hints": {
+    "forward": {
+      "required": true
+    },
+    "openconversation_id": {
+      "required": true
+    },
+    "time": {
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "forward",
+      "flag_name": "forward",
+      "kind": "boolean",
+      "description": "方向，true是从老往新，false是新往老拉"
+    },
+    {
+      "property_name": "limit",
+      "flag_name": "limit",
+      "kind": "number",
+      "description": "返回数量"
+    },
+    {
+      "property_name": "openconversation_id",
+      "flag_name": "openconversation-id",
+      "kind": "string",
+      "description": "会话Id"
+    },
+    {
+      "property_name": "time",
+      "flag_name": "time",
+      "kind": "string",
+      "description": "开始时间，格式：yyyy-MM-dd HH:mm:ss，非必填"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "forward": {
+        "description": "方向，true是从老往新，false是新往老拉",
+        "title": "方向，true是从老往新，false是新往老拉",
+        "type": "boolean"
+      },
+      "limit": {
+        "description": "返回数量",
+        "title": "返回数量",
+        "type": "number"
+      },
+      "openconversation_id": {
+        "description": "会话Id",
+        "title": "会话Id",
+        "type": "string"
+      },
+      "time": {
+        "description": "开始时间，格式：yyyy-MM-dd HH:mm:ss，非必填",
+        "title": "开始时间，格式：yyyy-MM-dd HH:mm:ss，非必填",
+        "type": "string"
+      }
+    },
+    "required": [
+      "openconversation_id",
+      "time",
+      "forward"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "group-chat.list_conversation_message_v2",
+  "product_id": "group-chat",
+  "required": [
+    "forward",
+    "openconversation_id",
+    "time"
+  ],
+  "tool": {
+    "aliases": null,
+    "canonical_path": "group-chat.list_conversation_message_v2",
+    "cli_name": "list_conversation_message_v2",
+    "description": "拉取指定群聊的会话消息内容",
+    "hidden": true,
+    "rpc_name": "list_conversation_message_v2",
+    "sensitive": false,
+    "source_server_key": "27f939aef74c67b5",
+    "title": "list_conversation_message_v2"
+  }
+}

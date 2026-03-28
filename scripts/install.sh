@@ -73,7 +73,7 @@ download() {
   elif need_cmd wget; then
     wget -qO "$dest" "$url"
   else
-    err "Neither curl nor wget found. Please install one and retry."
+    return 1
   fi
 }
 
@@ -121,11 +121,14 @@ resolve_version() {
     elif need_cmd wget; then
       VERSION="$(wget --spider --max-redirect=0 "https://github.com/${REPO}/releases/latest" 2>&1 \
         | grep -i 'Location:' | sed 's|.*/tag/||;s/[[:space:]]*$//')"
+    else
+      return 1
     fi
     if [ -z "$VERSION" ]; then
-      err "Could not determine the latest version. Set DWS_VERSION explicitly."
+      return 1
     fi
   fi
+  return 0
 }
 
 # ── Banner ───────────────────────────────────────────────────────────────────
@@ -134,9 +137,84 @@ print_banner() {
   printf '\n'
   say "┌──────────────────────────────────────┐"
   say "│     DWS Installer                    │"
-  say "│     DingTalk Workspace CLI           │"
+  say "│     DingTalk Workspace CLI            │"
   say "└──────────────────────────────────────┘"
   printf '\n'
+}
+
+clone_source_checkout() {
+  clone_url="https://github.com/${REPO}.git"
+
+  if ! need_cmd git; then
+    say "⚠️  Missing required command: git; cannot clone source checkout."
+    CLONED_SOURCE_TMPDIR=""
+    CLONED_SOURCE_ROOT=""
+    return 1
+  fi
+
+  CLONED_SOURCE_TMPDIR="$(mktemp -d)"
+  CLONED_SOURCE_ROOT="${CLONED_SOURCE_TMPDIR}/repo"
+
+  say "Cloning source checkout from ${clone_url}"
+
+  if [ "$VERSION" = "latest" ]; then
+    if ! git clone --depth 1 "$clone_url" "$CLONED_SOURCE_ROOT" >/dev/null 2>&1; then
+      rm -rf "$CLONED_SOURCE_TMPDIR"
+      CLONED_SOURCE_TMPDIR=""
+      CLONED_SOURCE_ROOT=""
+      say "⚠️  Could not clone source checkout from ${clone_url}."
+      return 1
+    fi
+    return 0
+  fi
+
+  if ! git clone --depth 1 --branch "$VERSION" "$clone_url" "$CLONED_SOURCE_ROOT" >/dev/null 2>&1; then
+    rm -rf "$CLONED_SOURCE_TMPDIR"
+    CLONED_SOURCE_TMPDIR=""
+    CLONED_SOURCE_ROOT=""
+    say "⚠️  Could not clone source checkout ${clone_url} at ref ${VERSION}."
+    return 1
+  fi
+}
+
+cleanup_cloned_source() {
+  if [ -n "${CLONED_SOURCE_TMPDIR:-}" ] && [ -d "$CLONED_SOURCE_TMPDIR" ]; then
+    rm -rf "$CLONED_SOURCE_TMPDIR"
+  fi
+  CLONED_SOURCE_TMPDIR=""
+  CLONED_SOURCE_ROOT=""
+}
+
+acquire_source_checkout() {
+  # 1. Prefer an already-resolved local source root (set in main).
+  if [ -n "${SOURCE_ROOT:-}" ]; then
+    ACQUIRED_SOURCE_ROOT="$SOURCE_ROOT"
+    say "Using local source checkout: ${ACQUIRED_SOURCE_ROOT}"
+    return 0
+  fi
+
+  # 2. Try to resolve a local source root from the script location.
+  _resolved="$(resolve_source_root || true)"
+  if [ -n "$_resolved" ]; then
+    ACQUIRED_SOURCE_ROOT="$_resolved"
+    say "Using local source checkout: ${ACQUIRED_SOURCE_ROOT}"
+    return 0
+  fi
+
+  # 3. Reuse an already-cloned checkout.
+  if [ -n "${CLONED_SOURCE_ROOT:-}" ] && [ -d "$CLONED_SOURCE_ROOT" ]; then
+    ACQUIRED_SOURCE_ROOT="$CLONED_SOURCE_ROOT"
+    return 0
+  fi
+
+  # 4. Clone from GitHub (non-fatal on failure).
+  if clone_source_checkout; then
+    ACQUIRED_SOURCE_ROOT="$CLONED_SOURCE_ROOT"
+    return 0
+  fi
+
+  ACQUIRED_SOURCE_ROOT=""
+  return 1
 }
 
 install_binary_from_source() {
@@ -218,7 +296,15 @@ _copy_skill() {
 install_binary() {
   os="$(detect_os)"
   arch="$(detect_arch)"
-  resolve_version
+  if ! resolve_version; then
+    say "⚠️  Could not determine the latest release version."
+    if acquire_source_checkout; then
+      install_binary_from_source "$ACQUIRED_SOURCE_ROOT"
+    else
+      say "⚠️  No source checkout available; skipping binary install."
+    fi
+    return 0
+  fi
 
   archive_name="${BIN_NAME}-${os}-${arch}.tar.gz"
   download_url="https://github.com/${REPO}/releases/download/${VERSION}/${archive_name}"
@@ -228,7 +314,16 @@ install_binary() {
   tmpdir="$(mktemp -d)"
   trap 'rm -rf "$tmpdir"' EXIT INT TERM
 
-  download "$download_url" "$tmpdir/$archive_name"
+  if ! download "$download_url" "$tmpdir/$archive_name"; then
+    rm -rf "$tmpdir"
+    say "⚠️  Release binary download failed."
+    if acquire_source_checkout; then
+      install_binary_from_source "$ACQUIRED_SOURCE_ROOT"
+    else
+      say "⚠️  No source checkout available; skipping binary install."
+    fi
+    return 0
+  fi
 
   # Download and verify SHA256 checksum
   checksum_url="https://github.com/${REPO}/releases/download/${VERSION}/checksums.txt"
@@ -300,7 +395,15 @@ install_skills() {
   say ""
   say "📦 Installing agent skills from GitHub Releases..."
 
-  resolve_version
+  if ! resolve_version; then
+    say "⚠️  Could not determine the latest release version."
+    if acquire_source_checkout; then
+      install_skills_local "$ACQUIRED_SOURCE_ROOT"
+    else
+      say "⚠️  No source checkout available; skipping skills install."
+    fi
+    return 0
+  fi
   skills_archive="dws-skills.zip"
   download_url="https://github.com/${REPO}/releases/download/${VERSION}/${skills_archive}"
 
@@ -308,28 +411,24 @@ install_skills() {
   trap 'rm -rf "$tmpdir_skills"' EXIT INT TERM
 
   if ! download "$download_url" "$tmpdir_skills/$skills_archive" 2>/dev/null; then
-    say "⚠️  Release asset download failed. Trying local source..."
+    say "⚠️  Release asset download failed."
     rm -rf "$tmpdir_skills"
-    local_root="$(resolve_source_root || true)"
-    if [ -n "$local_root" ]; then
-      install_skills_local "$local_root"
-      return
+    if acquire_source_checkout; then
+      install_skills_local "$ACQUIRED_SOURCE_ROOT"
     else
-      err "Cannot download skills from GitHub and no local source checkout found."
+      say "⚠️  No source checkout available; skipping skills install."
     fi
+    return 0
   fi
 
   extract_root="$tmpdir_skills/skills"
   mkdir -p "$extract_root"
   if ! extract_zip "$tmpdir_skills/$skills_archive" "$extract_root" 2>/dev/null; then
-    say "⚠️  Could not extract release skill archive. Install unzip, or retry from a source checkout."
+    say "⚠️  Could not extract release skill archive."
     rm -rf "$tmpdir_skills"
-    local_root="$(resolve_source_root || true)"
-    if [ -n "$local_root" ]; then
-      install_skills_local "$local_root"
-      return
-    fi
-    err "Cannot extract release skill archive and no local source checkout found."
+    acquire_source_checkout
+    install_skills_local "$ACQUIRED_SOURCE_ROOT"
+    return 0
   fi
 
   skill_src="$extract_root"
@@ -337,16 +436,11 @@ install_skills() {
     skill_src="$extract_root/$SKILL_NAME"
   fi
   if [ ! -f "$skill_src/SKILL.md" ]; then
-    say "⚠️  Skills not found in release asset. Trying local source..."
+    say "⚠️  Skills not found in release asset."
     rm -rf "$tmpdir_skills"
-    local_root="$(resolve_source_root || true)"
-    if [ -n "$local_root" ]; then
-      install_skills_local "$local_root"
-      return
-    else
-      say "⚠️  No local source checkout found either. Skipping skills installation."
-      return
-    fi
+    acquire_source_checkout
+    install_skills_local "$ACQUIRED_SOURCE_ROOT"
+    return 0
   fi
 
   dest="$HOME/$AGENT_DIR/$SKILL_NAME"
@@ -359,31 +453,20 @@ install_skills() {
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 main() {
-  source_root=""
-  if [ "$SKILLS_ONLY" != "1" ] && [ "$VERSION" = "latest" ]; then
-    source_root="$(resolve_source_root || true)"
-  fi
+  SOURCE_ROOT="$(resolve_source_root || true)"
 
   print_banner
 
-  if [ -n "$source_root" ]; then
-    install_binary_from_source "$source_root"
-    if [ "$NO_SKILLS" != "1" ]; then
-      install_skills_local "$source_root"
-    fi
-  elif [ "$SKILLS_ONLY" = "1" ]; then
-    local_root="$(resolve_source_root || true)"
-    if [ -n "$local_root" ]; then
-      install_skills_local "$local_root"
-    else
-      install_skills
-    fi
+  if [ "$SKILLS_ONLY" = "1" ]; then
+    install_skills
   elif [ "$NO_SKILLS" = "1" ]; then
     install_binary
   else
     install_binary
     install_skills
   fi
+
+  cleanup_cloned_source
 
   printf '\n'
   say "🎉 Installation complete!"

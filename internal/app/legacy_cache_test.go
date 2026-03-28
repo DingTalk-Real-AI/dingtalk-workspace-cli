@@ -26,9 +26,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cache"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/cache"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/market"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/surface/cli"
 	"github.com/spf13/cobra"
 )
 

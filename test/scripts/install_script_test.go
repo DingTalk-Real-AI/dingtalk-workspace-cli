@@ -16,6 +16,7 @@ func TestInstallScriptSourceModeInstallsBinary(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
+	fakeHome := filepath.Join(root, "home")
 	installDir := filepath.Join(root, "bin")
 
 	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
@@ -44,9 +45,12 @@ done
 
 	cmd := exec.Command("sh", scriptPath)
 	cmd.Env = append(os.Environ(),
+		"HOME="+fakeHome,
 		"PATH="+stubRoot+":"+os.Getenv("PATH"),
 		"DWS_INSTALL_DIR="+installDir,
 		"DWS_INSTALL_NAME=dws-test",
+		"DWS_NO_SKILLS=1",
+		"DWS_VERSION=v0.0.0-test-does-not-exist",
 	)
 	output, err := cmd.CombinedOutput()
 
@@ -112,6 +116,8 @@ done
 		"HOME="+fakeHome,
 		"PATH="+stubRoot+":"+os.Getenv("PATH"),
 		"DWS_INSTALL_DIR="+installDir,
+		"DWS_SKILLS_ONLY=1",
+		"DWS_VERSION=v0.0.0-test-does-not-exist",
 	)
 	output, err := cmd.CombinedOutput()
 

@@ -5,7 +5,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/executor"
 )
 
 type captureRunner struct {

@@ -7,29 +7,19 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app"
 )
 
-// TestRootHelpShowsDiscoveredMCPServicesOnly was removed
-// because it depended on hardcoded product names (aiapp, aitable, teambition)
-// that are no longer guaranteed to be available. In the protocol-first
-// MCP architecture, products are discovered dynamically from MCP servers,
-// and their availability depends on the test environment's fixture data.
-
-func TestHiddenMCPHelpIsReachable(t *testing.T) {
+func TestMCPSubcommandIsHidden(t *testing.T) {
 	t.Parallel()
 
-	cmd := app.NewRootCommand()
-	var out strings.Builder
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"mcp", "--help"})
-
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
+	root := app.NewRootCommand()
+	for _, cmd := range root.Commands() {
+		if cmd.Name() == "mcp" {
+			if !cmd.Hidden {
+				t.Fatal("mcp sub-command should remain hidden on root")
+			}
+			return
+		}
 	}
-
-	got := out.String()
-	if !strings.Contains(got, "Reserved canonical runtime surface") {
-		t.Fatalf("mcp help missing canonical surface text:\n%s", got)
-	}
+	t.Fatal("mcp sub-command should remain registered for hidden/internal flows")
 }
 
 func TestSkillCommandIsNotRegisteredInPublicOSSBuild(t *testing.T) {
@@ -44,11 +34,25 @@ func TestSkillCommandIsNotRegisteredInPublicOSSBuild(t *testing.T) {
 	}
 }
 
-// TestSchemaJSONBootstrapOutput was removed
-// because it depended on a fixture file (empty_catalog.json) that
-// is no longer available. The schema command behavior has changed
-// in the protocol-first MCP architecture and requires different
-// test setup.
+func TestAuthLoginCommandIsRegisteredInPublicOSSBuild(t *testing.T) {
+	t.Parallel()
+
+	root := app.NewRootCommand()
+
+	for _, cmd := range root.Commands() {
+		if cmd.Name() != "auth" {
+			continue
+		}
+		for _, sub := range cmd.Commands() {
+			if sub.Name() == "login" {
+				return
+			}
+		}
+		t.Fatal("auth login command should be registered in OSS build")
+	}
+
+	t.Fatal("auth command should be registered on root")
+}
 
 func TestCacheStatusJSONBootstrapOutput(t *testing.T) {
 	t.Parallel()

@@ -1,0 +1,75 @@
+{
+  "cli_path": [
+    "bot",
+    "group",
+    "members",
+    "add-bot"
+  ],
+  "display": "机器人消息",
+  "flag_hints": {
+    "openConversationId": {
+      "alias": "id",
+      "required": true
+    },
+    "robotCode": {
+      "alias": "robot-code",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "openConversationId",
+      "flag_name": "id",
+      "alias": "open-conversation-id",
+      "kind": "string",
+      "description": "群会话Id，可通过关键词搜索群列表服务获取"
+    },
+    {
+      "property_name": "robotCode",
+      "flag_name": "robot-code",
+      "kind": "string",
+      "description": "机器人code，可在开发者后台查看，或者调用创建机器人服务获取"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "openConversationId": {
+        "description": "群会话Id，可通过关键词搜索群列表服务获取",
+        "title": "群会话Id，可通过关键词搜索群列表服务获取",
+        "type": "string"
+      },
+      "robotCode": {
+        "description": "机器人code，可在开发者后台查看，或者调用创建机器人服务获取",
+        "title": "机器人code，可在开发者后台查看，或者调用创建机器人服务获取",
+        "type": "string"
+      }
+    },
+    "required": [
+      "openConversationId",
+      "robotCode"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "bot.add_robot_to_group",
+  "product_id": "bot",
+  "required": [
+    "openConversationId",
+    "robotCode"
+  ],
+  "tool": {
+    "aliases": [
+      "add_robot_to_group"
+    ],
+    "canonical_path": "bot.add_robot_to_group",
+    "cli_name": "add-bot",
+    "description": "将自定义机器人添加到当前用户有管理权限的群聊中。如果没有权限则会报错",
+    "group": "group.members",
+    "rpc_name": "add_robot_to_group",
+    "sensitive": false,
+    "source_server_key": "3303015f1832b28d",
+    "title": "将企业机器人添加我有权限的群中"
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "cli_path": [
+    "attendance",
+    "record",
+    "get"
+  ],
+  "display": "钉钉考勤打卡",
+  "flag_hints": {
+    "userId": {
+      "alias": "user",
+      "required": true
+    },
+    "workDate": {
+      "alias": "date",
+      "transform": "iso8601_to_millis",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "userId",
+      "flag_name": "user",
+      "alias": "user-id",
+      "kind": "string",
+      "description": "要查询的用户的userId"
+    },
+    {
+      "property_name": "workDate",
+      "flag_name": "date",
+      "alias": "work-date",
+      "kind": "string",
+      "description": "要查询的日期的Unix时间戳，仅保留日期信息，单位毫秒。"
+    }
+  ],
+  "input_schema": {
+    "description": "root",
+    "properties": {
+      "userId": {
+        "description": "要查询的用户的userId",
+        "title": "userId",
+        "type": "string"
+      },
+      "workDate": {
+        "description": "要查询的日期的Unix时间戳，仅保留日期信息，单位毫秒。",
+        "title": "workDate",
+        "type": "number"
+      }
+    },
+    "required": [
+      "userId",
+      "workDate"
+    ],
+    "title": "root",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "attendance.get_user_attendance_record",
+  "product_id": "attendance",
+  "required": [
+    "userId",
+    "workDate"
+  ],
+  "tool": {
+    "aliases": [
+      "get_user_attendance_record"
+    ],
+    "canonical_path": "attendance.get_user_attendance_record",
+    "cli_name": "get",
+    "description": "查询指定用户在某一天的考勤详情，包括实际打卡记录（如上班/下班时间、是否正常打卡）、当日所排班次、所属考勤组信息、是否为休息日、出勤工时（如 \"0Hours\"）、加班时长等。返回数据受组织权限和隐私策略限制，仅当调用者有权限查看该用户考勤信息时才返回有效内容。适用于员工自助查询、HR 核对出勤或审批关联场景。",
+    "group": "record",
+    "rpc_name": "get_user_attendance_record",
+    "sensitive": false,
+    "source_server_key": "33b1011e8b8382a6",
+    "title": "查询指定用户某一天的考勤详情"
+  }
+}

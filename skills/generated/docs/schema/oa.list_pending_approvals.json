@@ -1,0 +1,107 @@
+{
+  "cli_path": [
+    "oa",
+    "approval",
+    "list-pending"
+  ],
+  "display": "钉钉OA审批",
+  "flag_hints": {
+    "endTime": {
+      "alias": "end",
+      "transform": "iso8601_to_millis",
+      "required": true
+    },
+    "pageNum": {
+      "alias": "page"
+    },
+    "pageSize": {
+      "alias": "size"
+    },
+    "starTime": {
+      "alias": "start",
+      "transform": "iso8601_to_millis",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "endTime",
+      "flag_name": "end",
+      "alias": "end-time",
+      "kind": "string",
+      "description": "审批单创建时间的结束时间。毫秒时间戳格式，表示时间范围的上限。"
+    },
+    {
+      "property_name": "pageNum",
+      "flag_name": "page",
+      "alias": "page-num",
+      "kind": "number",
+      "description": "分页页码，从1开始"
+    },
+    {
+      "property_name": "pageSize",
+      "flag_name": "size",
+      "alias": "page-size",
+      "kind": "number",
+      "description": "每页大小"
+    },
+    {
+      "property_name": "starTime",
+      "flag_name": "start",
+      "alias": "star-time",
+      "kind": "string",
+      "description": "审批单创建时间的开始时间。毫秒时间戳格式，表示时间范围的下限"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "endTime": {
+        "description": "审批单创建时间的结束时间。毫秒时间戳格式，表示时间范围的上限。",
+        "title": "审批单创建时间的结束时间。毫秒时间戳格式，表示时间范围的上限",
+        "type": "number"
+      },
+      "pageNum": {
+        "description": "分页页码，从1开始",
+        "title": "分页页码，从1开始",
+        "type": "number"
+      },
+      "pageSize": {
+        "description": "每页大小",
+        "title": "每页大小，最大20",
+        "type": "number"
+      },
+      "starTime": {
+        "description": "审批单创建时间的开始时间。毫秒时间戳格式，表示时间范围的下限",
+        "title": "审批单创建时间的开始时间。毫秒时间戳格式，表示时间范围的下限",
+        "type": "number"
+      }
+    },
+    "required": [
+      "endTime",
+      "starTime"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "oa.list_pending_approvals",
+  "product_id": "oa",
+  "required": [
+    "endTime",
+    "starTime"
+  ],
+  "tool": {
+    "aliases": [
+      "list_pending_approvals"
+    ],
+    "canonical_path": "oa.list_pending_approvals",
+    "cli_name": "list-pending",
+    "description": "查询当前用户待处理的审批单列表，返回每条审批单的名称、唯一编码（如审批实例 ID）、处理跳转链接（用于一键进入审批页面）等关键信息。结果仅包含用户作为审批人且尚未处理的审批事项，适用于工作台待办集成、审批提醒等场景。",
+    "group": "approval",
+    "rpc_name": "list_pending_approvals",
+    "sensitive": false,
+    "source_server_key": "2721767f4caa8a6e",
+    "title": "list_pending_approvals"
+  }
+}

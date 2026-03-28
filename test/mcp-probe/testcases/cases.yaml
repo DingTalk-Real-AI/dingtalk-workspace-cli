@@ -1,0 +1,53 @@
+# dws cli parity checker test cases
+#
+# Each case verifies that a CLI invocation produces the expected MCP tools/call request.
+# The checker intercepts the MCP call via a transparent proxy and validates:
+#   1. The correct MCP tool name was called (tool_rpc)
+#   2. The MCP arguments were captured (actual values logged for inspection)
+#
+# How to find the correct tool_rpc name:
+#   Run: dws schema --json | python3 -c "import sys,json; d=json.load(sys.stdin);
+#        [print(t['canonical_path'], '->', t['rpc_name'])
+#         for p in d['products'] for t in p.get('tools',[])]"
+#
+# Fields:
+#   name:        human-readable label for the check
+#   product:     dws product ID (e.g., "aitable", "calendar")
+#   tool_rpc:    MCP RPC tool name as reported by the server (e.g., "delete_records")
+#                NOTE: this is the raw MCP name, NOT the canonical_path prefix form
+#   cli_path:    dws subcommand path as a list (e.g., ["aitable", "record", "delete"])
+#   inputs:      CLI flag name → value pairs (kebab-case, matching --flag-name)
+#   skip:        if true, skip this case
+#   skip_reason: explanation for why the case is skipped
+
+cases:
+  - name: "aitable.record.delete — basic invocation"
+    product: "aitable"
+    # Real MCP tool name captured from proxy: "delete_records"
+    # canonical_path in schema: "aitable.delete_records"
+    tool_rpc: "delete_records"
+    cli_path: ["aitable", "record", "delete"]
+    inputs:
+      base-id: "COMPAT_TEST_BASE"
+      table-id: "COMPAT_TEST_TABLE"
+      record-ids: "rec001,rec002"
+    skip: false
+
+  - name: "aitable.table.list — list tables in a base"
+    product: "aitable"
+    # Real MCP tool name: "get_tables"
+    # canonical_path in schema: "aitable.get_tables"
+    tool_rpc: "get_tables"
+    cli_path: ["aitable", "table", "list"]
+    inputs:
+      base-id: "COMPAT_TEST_BASE"
+    skip: true
+    skip_reason: "need to confirm exact subcommand path for table list"
+
+  - name: "todo.list — list todo items"
+    product: "todo"
+    tool_rpc: "list_todos"
+    cli_path: ["todo", "list"]
+    inputs: {}
+    skip: true
+    skip_reason: "no required parameters, hard to verify argument equivalence"

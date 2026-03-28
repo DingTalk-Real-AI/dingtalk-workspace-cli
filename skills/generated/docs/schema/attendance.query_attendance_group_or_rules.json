@@ -1,0 +1,54 @@
+{
+  "cli_path": [
+    "attendance",
+    "rules"
+  ],
+  "display": "钉钉考勤打卡",
+  "flag_hints": {
+    "date": {
+      "alias": "date",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "date",
+      "flag_name": "date",
+      "kind": "string",
+      "description": "考勤日期 格式：yyyy-MM-dd HH:mm:ss"
+    }
+  ],
+  "input_schema": {
+    "description": "root",
+    "properties": {
+      "date": {
+        "description": "考勤日期 格式：yyyy-MM-dd HH:mm:ss",
+        "title": "考勤日期 格式：yyyy-MM-dd HH:mm:ss",
+        "type": "string"
+      }
+    },
+    "required": [
+      "date"
+    ],
+    "title": "root",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "attendance.query_attendance_group_or_rules",
+  "product_id": "attendance",
+  "required": [
+    "date"
+  ],
+  "tool": {
+    "aliases": [
+      "query_attendance_group_or_rules"
+    ],
+    "canonical_path": "attendance.query_attendance_group_or_rules",
+    "cli_name": "rules",
+    "description": "查询考勤组/考勤规则：\"我属于哪个考勤组\"\"我们的打卡范围是什么\"\"弹性工时是怎么算的\"",
+    "rpc_name": "query_attendance_group_or_rules",
+    "sensitive": false,
+    "source_server_key": "33b1011e8b8382a6",
+    "title": "query_attendance_group_or_rules"
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "cli_path": [
+    "aitable",
+    "table",
+    "update"
+  ],
+  "display": "钉钉 AI 表格",
+  "flag_hints": {
+    "baseId": {
+      "alias": "base-id",
+      "required": true
+    },
+    "newTableName": {
+      "alias": "name",
+      "required": true
+    },
+    "tableId": {
+      "alias": "table-id",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "baseId",
+      "flag_name": "base-id",
+      "kind": "string",
+      "description": "所属 Base ID（用于定位目标表）。"
+    },
+    {
+      "property_name": "newTableName",
+      "flag_name": "name",
+      "alias": "new-table-name",
+      "kind": "string",
+      "description": "新表名。需非空；不能包含 / \\ ? * [ ] : 等特殊字符。"
+    },
+    {
+      "property_name": "tableId",
+      "flag_name": "table-id",
+      "kind": "string",
+      "description": "目标 Table ID（通过 get_base 获取）。"
+    }
+  ],
+  "input_schema": {
+    "description": "input",
+    "properties": {
+      "baseId": {
+        "description": "所属 Base ID（用于定位目标表）。",
+        "title": "baseId",
+        "type": "string"
+      },
+      "newTableName": {
+        "description": "新表名。需非空；不能包含 / \\ ? * [ ] : 等特殊字符。",
+        "title": "newTableName",
+        "type": "string"
+      },
+      "tableId": {
+        "description": "目标 Table ID（通过 get_base 获取）。",
+        "title": "tableId",
+        "type": "string"
+      }
+    },
+    "required": [
+      "baseId",
+      "newTableName",
+      "tableId"
+    ],
+    "title": "input",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "aitable.update_table",
+  "product_id": "aitable",
+  "required": [
+    "baseId",
+    "newTableName",
+    "tableId"
+  ],
+  "tool": {
+    "aliases": [
+      "update_table"
+    ],
+    "canonical_path": "aitable.update_table",
+    "cli_name": "update",
+    "description": "重命名指定 Table（数据表）。若新名称不符合命名要求、与同一 Base 下其他表重名或无权限，将返回错误。",
+    "group": "table",
+    "rpc_name": "update_table",
+    "sensitive": false,
+    "source_server_key": "23eb09885b9e8f26",
+    "title": "更新数据表"
+  }
+}

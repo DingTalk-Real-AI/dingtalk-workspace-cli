@@ -4,8 +4,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/recovery"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/executor"
 )
 
 func captureRuntimeFailure(invocation executor.Invocation, rawErr, wrappedErr error) {

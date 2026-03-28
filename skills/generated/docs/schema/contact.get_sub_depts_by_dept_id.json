@@ -1,0 +1,52 @@
+{
+  "cli_path": [
+    "contact",
+    "get_sub_depts_by_dept_id"
+  ],
+  "display": "钉钉通讯录",
+  "flag_hints": {
+    "deptId": {
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "deptId",
+      "flag_name": "deptId",
+      "kind": "number",
+      "description": "部门Id"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "deptId": {
+        "description": "部门Id",
+        "title": "部门Id",
+        "type": "number"
+      }
+    },
+    "required": [
+      "deptId"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "contact.get_sub_depts_by_dept_id",
+  "product_id": "contact",
+  "required": [
+    "deptId"
+  ],
+  "tool": {
+    "aliases": null,
+    "canonical_path": "contact.get_sub_depts_by_dept_id",
+    "cli_name": "get_sub_depts_by_dept_id",
+    "description": "根据指定的部门 ID，获取其直接子部门列表，返回每个子部门的部门 ID、名称。结果受组织架构可见性控制：仅返回调用者有权限查看的子部门；若父部门不可见或无子部门，则返回空列表。",
+    "hidden": true,
+    "rpc_name": "get_sub_depts_by_dept_id",
+    "sensitive": false,
+    "source_server_key": "e1e13a2fc7ab1f1b",
+    "title": "获取部门的子部门"
+  }
+}

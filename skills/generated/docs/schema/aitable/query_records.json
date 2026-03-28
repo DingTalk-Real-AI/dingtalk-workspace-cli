@@ -1,0 +1,237 @@
+{
+  "cli_path": [
+    "aitable",
+    "record",
+    "query"
+  ],
+  "display": "钉钉 AI 表格",
+  "flag_hints": {
+    "baseId": {
+      "alias": "base-id",
+      "required": true
+    },
+    "cursor": {
+      "alias": "cursor"
+    },
+    "fieldIds": {
+      "alias": "field-ids",
+      "transform": "csv_to_array"
+    },
+    "filters": {
+      "alias": "filters",
+      "transform": "json_parse"
+    },
+    "keyword": {
+      "alias": "keyword"
+    },
+    "limit": {
+      "alias": "limit"
+    },
+    "recordIds": {
+      "alias": "record-ids",
+      "transform": "csv_to_array"
+    },
+    "sort": {
+      "alias": "sort",
+      "transform": "json_parse"
+    },
+    "tableId": {
+      "alias": "table-id",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "baseId",
+      "flag_name": "base-id",
+      "kind": "string",
+      "description": "Base ID（通过 list_bases / search_bases 获取）"
+    },
+    {
+      "property_name": "cursor",
+      "flag_name": "cursor",
+      "kind": "string",
+      "description": "可选。分页游标，首次查询不传。当返回结果包含 cursor 字段时，将其传入下一次请求以获取后续数据；\ncursor 为空表示已取完全部记录。"
+    },
+    {
+      "property_name": "fieldIds",
+      "flag_name": "field-ids",
+      "kind": "string_array",
+      "description": "可选。指定要返回的字段 ID 列表。省略则返回所有字段。\n建议在字段较多时按需传入，可显著减少响应体积；单次最多 100 个。"
+    },
+    {
+      "property_name": "filters",
+      "flag_name": "filters",
+      "kind": "json",
+      "description": "结构化过滤条件，不传则返回全部记录（受 limit 限制）"
+    },
+    {
+      "property_name": "keyword",
+      "flag_name": "keyword",
+      "kind": "string",
+      "description": "全文关键词。将对整表内容做文本匹配搜索，并返回符合条件的记录。"
+    },
+    {
+      "property_name": "limit",
+      "flag_name": "limit",
+      "kind": "number",
+      "description": "可选。单次返回的最大记录数，默认 100，最大 100。"
+    },
+    {
+      "property_name": "recordIds",
+      "flag_name": "record-ids",
+      "kind": "string_array",
+      "description": "可选。指定要获取的记录 ID 列表，单次最多 100 个。传入时直接按 ID 返回，忽略 filters 和 sort。\n适用于已知 recordId（如关联字段中的 linkedRecordIds）时的精准取数。"
+    },
+    {
+      "property_name": "sort",
+      "flag_name": "sort",
+      "kind": "json",
+      "description": "可选。排序条件列表，按数组顺序依次生效。\n\n每个元素：{\"fieldId\": \"\u003cfieldId\u003e\", \"direction\": \"asc\" | \"desc\"}\n\n示例（先按优先级升序，再按截止日期降序）：\n[\n  {\"fieldId\": \"fldPriorityId\", \"direction\": \"asc\"},\n  {\"fieldId\": \"fldDueDateId\",  \"direction\": \"desc\"}\n]"
+    },
+    {
+      "property_name": "tableId",
+      "flag_name": "table-id",
+      "kind": "string",
+      "description": "Table ID（通过 get_base 获取）"
+    }
+  ],
+  "input_schema": {
+    "description": "input",
+    "properties": {
+      "baseId": {
+        "description": "Base ID（通过 list_bases / search_bases 获取）",
+        "title": "baseId",
+        "type": "string"
+      },
+      "cursor": {
+        "description": "可选。分页游标，首次查询不传。当返回结果包含 cursor 字段时，将其传入下一次请求以获取后续数据；\ncursor 为空表示已取完全部记录。",
+        "title": "cursor",
+        "type": "string"
+      },
+      "fieldIds": {
+        "description": "可选。指定要返回的字段 ID 列表。省略则返回所有字段。\n建议在字段较多时按需传入，可显著减少响应体积；单次最多 100 个。",
+        "items": {
+          "type": "string"
+        },
+        "title": "fieldIds",
+        "type": "array"
+      },
+      "filters": {
+        "description": "结构化过滤条件，不传则返回全部记录（受 limit 限制）",
+        "properties": {
+          "operands": {
+            "description": "过滤条件列表，每项为一个条件对象",
+            "items": {
+              "properties": {
+                "operands": {
+                  "description": "操作数列表：第一个元素为 fieldId，第二个元素为比较值（exist/un_exist 无需第二个元素）。\n⚠️ 注意：singleSelect / multipleSelect 字段的过滤值推荐传 option ID。\noption ID 可先通过 get_fields 返回的完整字段配置获取。",
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "operands",
+                  "type": "array"
+                },
+                "operator": {
+                  "description": "比较操作符，详见下方操作符列表\n\n| 操作符 | 适用类型 | 含义 |\n|--------|----------|------|\n| `eq` | 通用 | 等于 |\n| `ne` | 通用 | 不等于 |\n| `exist` | 通用 | 有值 |\n| `un_exist` | 通用 | 为空 |\n| `lt` | 数值 | 小于 |\n| `gt` | 数值 | 大于 |\n| `lte` | 数值 | 小于等于 |\n| `gte` | 数值 | 大于等于 |\n| `contain` | 文本 | 包含 |\n| `exclusive` | 文本 | 不包含 |\n| `all_of` | 多选 | 全包含 |\n| `any_of` | 多选 | 包含任一 |\n| `none_of` | 多选 | 不包含任一 |\n| `date_eq` | 日期 | 日期等于 |\n| `before` | 日期 | 早于 |\n| `after` | 日期 | 晚于 |\n| `not_before` | 日期 | 不早于 |\n| `not_after` | 日期 | 不晚于 |\n| `from_now` | 日期 | 未来 N 天内（值为天数） |\n| `date_between` | 日期 | 区间（值为 [start, end] 时间戳数组） |",
+                  "title": "operator",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "operator",
+                "operands"
+              ],
+              "type": "object"
+            },
+            "title": "operands",
+            "type": "array"
+          },
+          "operator": {
+            "description": "多条件间的逻辑关系：`and` 或 `or`，默认 `and`",
+            "title": "operator",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operator",
+          "operands"
+        ],
+        "title": "filters",
+        "type": "object"
+      },
+      "keyword": {
+        "description": "全文关键词。将对整表内容做文本匹配搜索，并返回符合条件的记录。",
+        "title": "keyword",
+        "type": "string"
+      },
+      "limit": {
+        "description": "可选。单次返回的最大记录数，默认 100，最大 100。",
+        "title": "limit",
+        "type": "number"
+      },
+      "recordIds": {
+        "description": "可选。指定要获取的记录 ID 列表，单次最多 100 个。传入时直接按 ID 返回，忽略 filters 和 sort。\n适用于已知 recordId（如关联字段中的 linkedRecordIds）时的精准取数。",
+        "items": {
+          "type": "string"
+        },
+        "title": "recordIds",
+        "type": "array"
+      },
+      "sort": {
+        "description": "可选。排序条件列表，按数组顺序依次生效。\n\n每个元素：{\"fieldId\": \"\u003cfieldId\u003e\", \"direction\": \"asc\" | \"desc\"}\n\n示例（先按优先级升序，再按截止日期降序）：\n[\n  {\"fieldId\": \"fldPriorityId\", \"direction\": \"asc\"},\n  {\"fieldId\": \"fldDueDateId\",  \"direction\": \"desc\"}\n]",
+        "items": {
+          "properties": {
+            "direction": {
+              "description": "排序方向，默认 asc",
+              "title": "direction",
+              "type": "string"
+            },
+            "fieldId": {
+              "description": "排序字段 ID",
+              "title": "fieldId",
+              "type": "string"
+            }
+          },
+          "required": [
+            "fieldId"
+          ],
+          "type": "object"
+        },
+        "title": "sort",
+        "type": "array"
+      },
+      "tableId": {
+        "description": "Table ID（通过 get_base 获取）",
+        "title": "tableId",
+        "type": "string"
+      }
+    },
+    "required": [
+      "baseId",
+      "tableId"
+    ],
+    "title": "input",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "aitable.query_records",
+  "product_id": "aitable",
+  "required": [
+    "baseId",
+    "tableId"
+  ],
+  "tool": {
+    "aliases": [
+      "query_records"
+    ],
+    "canonical_path": "aitable.query_records",
+    "cli_name": "query",
+    "description": "查询指定表格中的记录，支持两种模式：\r\n- 按 ID 取：传入 recordIds（单次最多 100 个），直接获取指定记录。\r\n- 条件查：通过 filters 过滤、sort 排序、cursor 分页遍历全表。\r\n两种模式均可通过 fieldIds（单次最多 100 个）限制返回字段以节省 token。",
+    "group": "record",
+    "rpc_name": "query_records",
+    "sensitive": false,
+    "source_server_key": "23eb09885b9e8f26",
+    "title": "获取行记录"
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "cli_path": [
+    "aitable",
+    "table",
+    "import_data"
+  ],
+  "display": "钉钉 AI 表格",
+  "flag_hints": {
+    "importId": {
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "importId",
+      "flag_name": "importId",
+      "kind": "string",
+      "description": "prepare_import_upload 返回的 importId"
+    },
+    {
+      "property_name": "timeout",
+      "flag_name": "timeout",
+      "kind": "number",
+      "description": "可选，本次调用的最长等待时间（秒），默认且推荐使用最大值 30。最小 5，最大 30。超时后若任务仍未完成，再次传入相同 importId 继续等待"
+    }
+  ],
+  "input_schema": {
+    "description": "input",
+    "properties": {
+      "importId": {
+        "description": "prepare_import_upload 返回的 importId",
+        "title": "importId",
+        "type": "string"
+      },
+      "timeout": {
+        "description": "可选，本次调用的最长等待时间（秒），默认且推荐使用最大值 30。最小 5，最大 30。超时后若任务仍未完成，再次传入相同 importId 继续等待",
+        "title": "timeout",
+        "type": "number"
+      }
+    },
+    "required": [
+      "importId"
+    ],
+    "title": "input",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "aitable.import_data",
+  "product_id": "aitable",
+  "required": [
+    "importId"
+  ],
+  "tool": {
+    "aliases": null,
+    "canonical_path": "aitable.import_data",
+    "cli_name": "import_data",
+    "description": "将已通过 prepare_import_upload 上传完成的文件导入 AI 表格，每个 Sheet 会新建为独立的数据表（不支持追加到已有表格）。\r\n工具内部会等待导入完成，大多数情况下一次调用即可拿到最终结果。若在 timeout 内未完成，再次传入相同 importId 继续等待，无需重新提交任务，也不要重新上传同一文件。",
+    "group": "table",
+    "hidden": true,
+    "rpc_name": "import_data",
+    "sensitive": false,
+    "source_server_key": "23eb09885b9e8f26",
+    "title": "导入数据"
+  }
+}

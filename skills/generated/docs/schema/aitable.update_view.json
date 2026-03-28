@@ -1,0 +1,193 @@
+{
+  "cli_path": [
+    "aitable",
+    "table",
+    "update_view"
+  ],
+  "display": "钉钉 AI 表格",
+  "flag_hints": {
+    "baseId": {
+      "required": true
+    },
+    "tableId": {
+      "required": true
+    },
+    "viewId": {
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "baseId",
+      "flag_name": "baseId",
+      "kind": "string",
+      "description": "所属 Base 的唯一标识。"
+    },
+    {
+      "property_name": "config.fieldWidths",
+      "flag_name": "fieldWidths",
+      "kind": "json",
+      "description": "可选，列宽映射（key 为 fieldId，value 为宽度，单位像素，默认为 200 像素，合法范围由下游校验）。仅支持 Grid 视图；若目标视图不是 Grid，请不要传该字段。"
+    },
+    {
+      "property_name": "config.filter",
+      "flag_name": "filter",
+      "kind": "json",
+      "description": "可选，新的筛选规则列表，会全量覆盖当前 filter。"
+    },
+    {
+      "property_name": "config.group",
+      "flag_name": "group",
+      "kind": "json",
+      "description": "可选，新的分组规则列表，会全量覆盖当前 group。"
+    },
+    {
+      "property_name": "config.sort",
+      "flag_name": "sort",
+      "kind": "json",
+      "description": "可选，新的排序规则列表，会全量覆盖当前 sort。"
+    },
+    {
+      "property_name": "config.visibleFieldIds",
+      "flag_name": "visibleFieldIds",
+      "kind": "string_array",
+      "description": "可选，新的视图可见字段列，以及顺序（fieldId 列表）。需要传全量，不传则不修改。首列字段是每条数据的索引，必须保留在数组第一个位置，不能删除、移动或隐藏。"
+    },
+    {
+      "property_name": "newViewName",
+      "flag_name": "newViewName",
+      "kind": "string",
+      "description": "可选，新的视图名称。"
+    },
+    {
+      "property_name": "tableId",
+      "flag_name": "tableId",
+      "kind": "string",
+      "description": "所属数据表（Table）的唯一标识。"
+    },
+    {
+      "property_name": "viewDescription",
+      "flag_name": "viewDescription",
+      "kind": "json",
+      "description": "可选，新的视图描述。若不传则不修改；如需清空，可传 {\"content\": []}。"
+    },
+    {
+      "property_name": "viewId",
+      "flag_name": "viewId",
+      "kind": "string",
+      "description": "目标视图（View）的唯一标识。"
+    }
+  ],
+  "input_schema": {
+    "description": "input",
+    "properties": {
+      "baseId": {
+        "description": "所属 Base 的唯一标识。",
+        "title": "baseId",
+        "type": "string"
+      },
+      "config": {
+        "description": "可选，视图配置更新项。",
+        "properties": {
+          "fieldWidths": {
+            "description": "可选，列宽映射（key 为 fieldId，value 为宽度，单位像素，默认为 200 像素，合法范围由下游校验）。仅支持 Grid 视图；若目标视图不是 Grid，请不要传该字段。",
+            "properties": {},
+            "required": [],
+            "title": "fieldWidths",
+            "type": "object"
+          },
+          "filter": {
+            "description": "可选，新的筛选规则列表，会全量覆盖当前 filter。",
+            "items": {
+              "properties": {},
+              "required": [],
+              "type": "object"
+            },
+            "title": "filter",
+            "type": "array"
+          },
+          "group": {
+            "description": "可选，新的分组规则列表，会全量覆盖当前 group。",
+            "items": {
+              "properties": {},
+              "required": [],
+              "type": "object"
+            },
+            "title": "group",
+            "type": "array"
+          },
+          "sort": {
+            "description": "可选，新的排序规则列表，会全量覆盖当前 sort。",
+            "items": {
+              "properties": {},
+              "required": [],
+              "type": "object"
+            },
+            "title": "sort",
+            "type": "array"
+          },
+          "visibleFieldIds": {
+            "description": "可选，新的视图可见字段列，以及顺序（fieldId 列表）。需要传全量，不传则不修改。首列字段是每条数据的索引，必须保留在数组第一个位置，不能删除、移动或隐藏。",
+            "items": {
+              "type": "string"
+            },
+            "title": "visibleFieldIds",
+            "type": "array"
+          }
+        },
+        "required": [],
+        "title": "config",
+        "type": "object"
+      },
+      "newViewName": {
+        "description": "可选，新的视图名称。",
+        "title": "newViewName",
+        "type": "string"
+      },
+      "tableId": {
+        "description": "所属数据表（Table）的唯一标识。",
+        "title": "tableId",
+        "type": "string"
+      },
+      "viewDescription": {
+        "description": "可选，新的视图描述。若不传则不修改；如需清空，可传 {\"content\": []}。",
+        "properties": {},
+        "required": [],
+        "title": "viewDescription",
+        "type": "object"
+      },
+      "viewId": {
+        "description": "目标视图（View）的唯一标识。",
+        "title": "viewId",
+        "type": "string"
+      }
+    },
+    "required": [
+      "baseId",
+      "tableId",
+      "viewId"
+    ],
+    "title": "input",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "aitable.update_view",
+  "product_id": "aitable",
+  "required": [
+    "baseId",
+    "tableId",
+    "viewId"
+  ],
+  "tool": {
+    "aliases": null,
+    "canonical_path": "aitable.update_view",
+    "cli_name": "update_view",
+    "description": "更新指定视图（View）的名称、描述或配置。\r\n当前稳定支持更新：newViewName、viewDescription、visibleFieldIds、filter、sort、group；fieldWidths 仅支持 Grid 视图。\r\n首列字段是每条数据的索引，不支持删除、移动或隐藏。",
+    "group": "table",
+    "hidden": true,
+    "rpc_name": "update_view",
+    "sensitive": false,
+    "source_server_key": "23eb09885b9e8f26",
+    "title": "更新视图"
+  }
+}

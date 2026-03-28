@@ -1,0 +1,57 @@
+{
+  "cli_path": [
+    "contact",
+    "user",
+    "search"
+  ],
+  "display": "钉钉通讯录",
+  "flag_hints": {
+    "keyWord": {
+      "alias": "keyword",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "keyWord",
+      "flag_name": "keyword",
+      "alias": "key-word",
+      "kind": "string",
+      "description": "搜索关键词"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "keyWord": {
+        "description": "搜索关键词",
+        "title": "搜索关键词",
+        "type": "string"
+      }
+    },
+    "required": [
+      "keyWord"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "contact.search_user_by_key_word",
+  "product_id": "contact",
+  "required": [
+    "keyWord"
+  ],
+  "tool": {
+    "aliases": [
+      "search_user_by_key_word"
+    ],
+    "canonical_path": "contact.search_user_by_key_word",
+    "cli_name": "search",
+    "description": "搜索组织内成员，并返回成员的userId。如果需要查询详情，需要调用另外一个工具",
+    "group": "user",
+    "rpc_name": "search_user_by_key_word",
+    "sensitive": false,
+    "source_server_key": "e1e13a2fc7ab1f1b",
+    "title": "搜索成员"
+  }
+}

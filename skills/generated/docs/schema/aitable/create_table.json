@@ -1,0 +1,118 @@
+{
+  "cli_path": [
+    "aitable",
+    "table",
+    "create"
+  ],
+  "display": "钉钉 AI 表格",
+  "flag_hints": {
+    "baseId": {
+      "alias": "base-id",
+      "required": true
+    },
+    "fields": {
+      "alias": "fields",
+      "transform": "json_parse",
+      "required": true
+    },
+    "tableName": {
+      "alias": "name",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "baseId",
+      "flag_name": "base-id",
+      "kind": "string",
+      "description": "目标 Base ID（通过 list_bases 获取）"
+    },
+    {
+      "property_name": "fields",
+      "flag_name": "fields",
+      "kind": "json",
+      "description": "建表时随附创建的初始字段列表，至少包含 1 个字段，单次最多 15 个。若传空数组，系统会自动补一个名为“标题”的 primaryDoc 首列。\n建议在此处定义结构清晰的基础字段（如文本、数字、日期、单选等）；\n复杂字段（关联、流转等）建议建表完成后通过 create_fields 单独添加。\n\n每个字段对象包含：\n  fieldName（必填）: 字段名称\n  type（必填）: 字段类型，可选值与 config 结构详见本工具说明末尾的字段参考\n  config（可选）: 字段配置，结构因 type 而异，详见字段参考\n\n示例：\n[\n  {\"fieldName\":\"任务名称\",\"type\":\"text\"},\n  {\"fieldName\":\"优先级\",\"type\":\"singleSelect\",\"config\":{\"options\":[{\"name\":\"高\"},{\"name\":\"中\"},{\"name\":\"低\"}]}},\n  {\"fieldName\":\"截止日期\",\"type\":\"date\",\"config\":{\"formatter\":\"YYYY-MM-DD\"}},\n  {\"fieldName\":\"负责人\",\"type\":\"user\",\"config\":{\"multiple\":false}}\n]"
+    },
+    {
+      "property_name": "tableName",
+      "flag_name": "name",
+      "alias": "table-name",
+      "kind": "string",
+      "description": "表格名称，1~100 个字符；不能包含 / \\ ? * [ ] : 等字符。"
+    }
+  ],
+  "input_schema": {
+    "description": "input",
+    "properties": {
+      "baseId": {
+        "description": "目标 Base ID（通过 list_bases 获取）",
+        "title": "baseId",
+        "type": "string"
+      },
+      "fields": {
+        "description": "建表时随附创建的初始字段列表，至少包含 1 个字段，单次最多 15 个。若传空数组，系统会自动补一个名为“标题”的 primaryDoc 首列。\n建议在此处定义结构清晰的基础字段（如文本、数字、日期、单选等）；\n复杂字段（关联、流转等）建议建表完成后通过 create_fields 单独添加。\n\n每个字段对象包含：\n  fieldName（必填）: 字段名称\n  type（必填）: 字段类型，可选值与 config 结构详见本工具说明末尾的字段参考\n  config（可选）: 字段配置，结构因 type 而异，详见字段参考\n\n示例：\n[\n  {\"fieldName\":\"任务名称\",\"type\":\"text\"},\n  {\"fieldName\":\"优先级\",\"type\":\"singleSelect\",\"config\":{\"options\":[{\"name\":\"高\"},{\"name\":\"中\"},{\"name\":\"低\"}]}},\n  {\"fieldName\":\"截止日期\",\"type\":\"date\",\"config\":{\"formatter\":\"YYYY-MM-DD\"}},\n  {\"fieldName\":\"负责人\",\"type\":\"user\",\"config\":{\"multiple\":false}}\n]",
+        "items": {
+          "properties": {
+            "config": {
+              "description": "各 type 的 config 结构（无 config 的类型省略此字段）：\n\nformatter（number）:\n  INT|FLOAT_1|FLOAT_2|FLOAT_3|FLOAT_4|THOUSAND|THOUSAND_FLOAT|\n  PERCENT|PERCENT_FLOAT\n\nformatter（currency）: 可省略（默认 FLOAT_2）；若需指定小数位可用 INT|FLOAT_1|FLOAT_2|FLOAT_3|FLOAT_4\n\nformatter（date）:\n  YYYY-MM-DD | YYYY-MM-DD HH:mm | YYYY-MM-DD HH:mm:ss |\n  YYYY/MM/DD | YYYY/MM/DD HH:mm\n\nformatter（progress）: 固定填 \"PERCENT\"\n\ncurrencyType（currency）:\n  CNY | HKD | USD | EUR | GBP | MOP | VND | JPY | KRW | AED |\n  AUD | BRL | CAD | CHF | INR | IDR | MXN | MYR | PHP | PLN |\n  RUB | SGD | THB | TRY | TWD\n\noptions（singleSelect/multipleSelect）:\n  [{\"name\":\"选项名\"}, ...]  — id 由系统生成，创建时只需传 name\n  更新字段配置时，已有选项建议回传原 id；新增选项无需传 id\n  若更新请求携带的 id 在当前字段配置中不存在，系统会忽略该 id，并将该选项视为新增项\n\nmultiple（user/department/group/unidirectionalLink/bidirectionalLink）:\n  true（多选，默认）| false（单选）\n\nprogress: {\"formatter\":\"PERCENT\"}  — 使用系统默认范围\nprogress（自定义范围）: {\"formatter\":\"PERCENT\",\"min\":0,\"max\":1,\"customizeRange\":true}  — customizeRange 必须为 true\n\nrating: {\"min\":1,\"max\":5,\"icon\":\"star\"}  — max 范围 1~10\n\nformula（formula）: {\"formula\":\"[单价] * [数量]\"}  — 使用 AI 表格公式字符串格式，方括号内填写表内字段名\n\nunidirectionalLink: {\"linkedTableId\":\"\u003ctableId\u003e\",\"multiple\":true}\n\nbidirectionalLink: {\"linkedTableId\":\"\u003ctableId\u003e\",\"multiple\":true}\n  — 反向关联端由系统自动创建，MCP 对外协议无需额外参数",
+              "properties": {},
+              "required": [],
+              "title": "config",
+              "type": "object"
+            },
+            "fieldName": {
+              "description": "字段名称，最大 100 字，不支持换行",
+              "title": "fieldName",
+              "type": "string"
+            },
+            "type": {
+              "description": "字段类型。括号内为 config 键，* 表示必填，无括号表示无需 config。\n\n- text: 文本\n- number: 数字 (formatter)\n- singleSelect: 单选 (options*)\n- multipleSelect: 多选 (options*)\n- date: 日期 (formatter)\n- currency: 货币 (currencyType, formatter)\n- user: 人员 (multiple)\n- department: 部门 (multiple)\n- group: 群组 (multiple)\n- progress: 进度 (formatter, customizeRange, min, max)\n- rating: 评分 (min, max, icon)\n- checkbox: 勾选\n- attachment: 附件\n- url: 链接\n- richText: 富文本\n- telephone: 电话\n- email: 邮件\n- idCard: 身份证\n- barcode: 条码\n- geolocation: 地理位置\n- primaryDoc: 文档 (仅限第一列)\n- formula: 公式\n- unidirectionalLink: 单向关联 (linkedTableId*, multiple)\n- bidirectionalLink: 双向关联 (linkedTableId*, multiple)\n- creator: 创建人 (系统字段)\n- lastModifier: 最后编辑人 (系统字段)\n- createdTime: 创建时间 (系统字段)\n- lastModifiedTime: 最后编辑时间 (系统字段)",
+              "title": "type",
+              "type": "string"
+            }
+          },
+          "required": [
+            "fieldName",
+            "type"
+          ],
+          "type": "object"
+        },
+        "title": "fields",
+        "type": "array"
+      },
+      "tableName": {
+        "description": "表格名称，1~100 个字符；不能包含 / \\ ? * [ ] : 等字符。",
+        "title": "tableName",
+        "type": "string"
+      }
+    },
+    "required": [
+      "baseId",
+      "fields",
+      "tableName"
+    ],
+    "title": "input",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "aitable.create_table",
+  "product_id": "aitable",
+  "required": [
+    "baseId",
+    "fields",
+    "tableName"
+  ],
+  "tool": {
+    "aliases": [
+      "create_table"
+    ],
+    "canonical_path": "aitable.create_table",
+    "cli_name": "create",
+    "description": "在指定 Base 中新建表格，并可在创建时附带初始化一批基础字段。\r\n建表时单次最多附带 15 个字段；若 fields 为空，服务会自动补一个名为“标题”的 primaryDoc 首列。\r\n若 tableName 与当前 Base 下已有表重名，服务会自动续号为“原名 1 / 原名 2 ...”，并在 summary 中返回当前表名。\r\n如需添加更多字段，或在已有表中增加字段，请使用 create_fields。",
+    "group": "table",
+    "rpc_name": "create_table",
+    "sensitive": false,
+    "source_server_key": "23eb09885b9e8f26",
+    "title": "创建数据表"
+  }
+}

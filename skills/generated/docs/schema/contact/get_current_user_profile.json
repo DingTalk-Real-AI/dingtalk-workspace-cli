@@ -1,0 +1,33 @@
+{
+  "cli_path": [
+    "contact",
+    "user",
+    "get-self"
+  ],
+  "display": "钉钉通讯录",
+  "flags": null,
+  "input_schema": {
+    "description": "请求",
+    "properties": {},
+    "required": [],
+    "title": "请求",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "contact.get_current_user_profile",
+  "product_id": "contact",
+  "required": null,
+  "tool": {
+    "aliases": [
+      "get_current_user_profile"
+    ],
+    "canonical_path": "contact.get_current_user_profile",
+    "cli_name": "get-self",
+    "description": "获取当前登录用户的基本信息（如姓名、工号、手机号）、当前组织信息（corpId、组织名称）、直属主管信息、所属部门列表（含部门 ID 与名称）以及角色信息（如管理员类型、自定义角色标签等）。返回内容受组织隐私与权限策略控制：若某些字段（如主管、手机号）被设为不可见，则可能被过滤或省略。",
+    "group": "user",
+    "rpc_name": "get_current_user_profile",
+    "sensitive": false,
+    "source_server_key": "e1e13a2fc7ab1f1b",
+    "title": "获取当前用户详情"
+  }
+}

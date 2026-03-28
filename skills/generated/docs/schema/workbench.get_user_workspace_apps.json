@@ -1,0 +1,46 @@
+{
+  "cli_path": [
+    "workbench",
+    "app",
+    "list"
+  ],
+  "display": "钉钉工作台",
+  "flags": [
+    {
+      "property_name": "input",
+      "flag_name": "input",
+      "kind": "string",
+      "description": "字段名"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "input": {
+        "description": "字段名",
+        "title": "字段名",
+        "type": "string"
+      }
+    },
+    "required": [],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "workbench.get_user_workspace_apps",
+  "product_id": "workbench",
+  "required": null,
+  "tool": {
+    "aliases": [
+      "get_user_workspace_apps"
+    ],
+    "canonical_path": "workbench.get_user_workspace_apps",
+    "cli_name": "list",
+    "description": "获取用户所有工作台应用",
+    "group": "app",
+    "rpc_name": "get_user_workspace_apps",
+    "sensitive": false,
+    "source_server_key": "62a9cf4de3d881c9",
+    "title": "get_user_workspace_apps"
+  }
+}

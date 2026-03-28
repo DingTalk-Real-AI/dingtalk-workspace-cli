@@ -57,10 +57,14 @@ need_file ".github/PULL_REQUEST_TEMPLATE.md"
 need_file "docs/architecture.md"
 need_file "scripts/policy/open-source-audit.sh"
 
+[ ! -e "internal/hostcompat" ] || err "forbidden private compatibility directory: internal/hostcompat"
+[ ! -e "internal/app/skill_command.go" ] || err "forbidden private command source: internal/app/skill_command.go"
+
 require_no_match 'code\.alibaba-inc\.com|gitlab\.alibaba' README.md CONTRIBUTING.md scripts build .github
 require_no_match 'scripts/test\.sh|scripts/check-semantic-fixtures\.sh|scripts/run-command-benchmark\.sh|scripts/run-live-smoke\.sh|scripts/run-model-eval\.sh' scripts/README.md
 require_no_match 'scripts/check-semantic-fixtures\.py|test/semantic/cli_to_mcp|test/semantic/model_to_cli|python3 -m pytest test/semantic' CONTRIBUTING.md
 require_no_match '\.github/CODEOWNERS|Tag-triggered GitHub Release asset publishing' CHANGELOG.md
+require_no_match 'buildMode|EmbeddedMode|WriteTokenMarker|CleanTokenOnExpiry|DeleteExeRelativeTokenOnAuthErr|shouldDeleteEmbeddedTokenOnAuthError|com\.dingtalk\.scenario\.wukong|认证信息已失效，请重新执行上一条命令（最多重试两次）' internal
 
 require_heading_if_linked '[Environment Variables](#environment-variables)' '## Environment Variables'
 require_heading_if_linked '[Exit Codes](#exit-codes)' '## Exit Codes'

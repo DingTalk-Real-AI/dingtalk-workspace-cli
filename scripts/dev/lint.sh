@@ -31,5 +31,4 @@ else
   echo "staticcheck not found; install: go install honnef.co/go/tools/cmd/staticcheck@latest" >&2
   exit 1
 fi
-
 echo "All lint checks passed."

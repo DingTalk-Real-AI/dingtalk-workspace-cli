@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/market"
 )
 
 func TestDefaultFixtureValidate(t *testing.T) {

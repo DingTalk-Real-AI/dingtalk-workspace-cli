@@ -21,17 +21,19 @@ import (
 )
 
 // cleanupKeychain removes test data from keychain after test completes.
-func cleanupKeychain(t *testing.T) {
+func cleanupKeychain(t *testing.T, configDirs ...string) {
 	t.Helper()
 	t.Cleanup(func() {
+		for _, configDir := range configDirs {
+			_ = DeleteTokenData(configDir)
+		}
 		_ = keychain.Remove(keychain.Service, keychain.AccountToken)
 	})
 }
 
 func TestTokenSaveLoadAndDelete(t *testing.T) {
-	cleanupKeychain(t)
-
 	configDir := t.TempDir()
+	cleanupKeychain(t, configDir)
 	now := time.Now().UTC()
 	original := &TokenData{
 		AccessToken:    "at_test_123",
@@ -51,7 +53,7 @@ func TestTokenSaveLoadAndDelete(t *testing.T) {
 	}
 
 	// Verify data exists in keychain
-	if !TokenDataExistsKeychain() {
+	if !TokenDataExistsKeychain(configDir) {
 		t.Fatal("TokenDataExistsKeychain() should be true after save")
 	}
 
@@ -74,7 +76,7 @@ func TestTokenSaveLoadAndDelete(t *testing.T) {
 	if err := DeleteTokenData(configDir); err != nil {
 		t.Fatalf("DeleteTokenData() error = %v", err)
 	}
-	if TokenDataExistsKeychain() {
+	if TokenDataExistsKeychain(configDir) {
 		t.Fatal("TokenDataExistsKeychain() should be false after delete")
 	}
 	if _, err := LoadTokenData(configDir); err == nil {
@@ -83,9 +85,8 @@ func TestTokenSaveLoadAndDelete(t *testing.T) {
 }
 
 func TestTokenOverwrite(t *testing.T) {
-	cleanupKeychain(t)
-
 	configDir := t.TempDir()
+	cleanupKeychain(t, configDir)
 
 	// Save first version
 	data1 := &TokenData{
@@ -125,12 +126,11 @@ func TestTokenOverwrite(t *testing.T) {
 }
 
 func TestTokenDataExistsKeychain(t *testing.T) {
-	cleanupKeychain(t)
-
 	configDir := t.TempDir()
+	cleanupKeychain(t, configDir)
 
 	// Should be false before save
-	if TokenDataExistsKeychain() {
+	if TokenDataExistsKeychain(configDir) {
 		t.Fatal("TokenDataExistsKeychain() should be false before save")
 	}
 
@@ -144,8 +144,77 @@ func TestTokenDataExistsKeychain(t *testing.T) {
 	}
 
 	// Should be true after save
-	if !TokenDataExistsKeychain() {
+	if !TokenDataExistsKeychain(configDir) {
 		t.Fatal("TokenDataExistsKeychain() should be true after save")
+	}
+}
+
+func TestTokenDataIsScopedByConfigDir(t *testing.T) {
+	configDirA := t.TempDir()
+	configDirB := t.TempDir()
+	cleanupKeychain(t, configDirA, configDirB)
+
+	if err := SaveTokenData(configDirA, &TokenData{
+		AccessToken: "token-a",
+		ExpiresAt:   time.Now().Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("SaveTokenData(configDirA) error = %v", err)
+	}
+	if err := SaveTokenData(configDirB, &TokenData{
+		AccessToken: "token-b",
+		ExpiresAt:   time.Now().Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("SaveTokenData(configDirB) error = %v", err)
+	}
+
+	loadedA, err := LoadTokenData(configDirA)
+	if err != nil {
+		t.Fatalf("LoadTokenData(configDirA) error = %v", err)
+	}
+	if loadedA.AccessToken != "token-a" {
+		t.Fatalf("LoadTokenData(configDirA) access_token = %q, want token-a", loadedA.AccessToken)
+	}
+
+	loadedB, err := LoadTokenData(configDirB)
+	if err != nil {
+		t.Fatalf("LoadTokenData(configDirB) error = %v", err)
+	}
+	if loadedB.AccessToken != "token-b" {
+		t.Fatalf("LoadTokenData(configDirB) access_token = %q, want token-b", loadedB.AccessToken)
+	}
+}
+
+func TestDeleteTokenDataOnlyRemovesRequestedConfigDir(t *testing.T) {
+	configDirA := t.TempDir()
+	configDirB := t.TempDir()
+	cleanupKeychain(t, configDirA, configDirB)
+
+	if err := SaveTokenData(configDirA, &TokenData{
+		AccessToken: "token-a",
+		ExpiresAt:   time.Now().Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("SaveTokenData(configDirA) error = %v", err)
+	}
+	if err := SaveTokenData(configDirB, &TokenData{
+		AccessToken: "token-b",
+		ExpiresAt:   time.Now().Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("SaveTokenData(configDirB) error = %v", err)
+	}
+
+	if err := DeleteTokenData(configDirA); err != nil {
+		t.Fatalf("DeleteTokenData(configDirA) error = %v", err)
+	}
+	if _, err := LoadTokenData(configDirA); err == nil {
+		t.Fatal("LoadTokenData(configDirA) error = nil after delete, want failure")
+	}
+
+	loadedB, err := LoadTokenData(configDirB)
+	if err != nil {
+		t.Fatalf("LoadTokenData(configDirB) error = %v", err)
+	}
+	if loadedB.AccessToken != "token-b" {
+		t.Fatalf("LoadTokenData(configDirB) access_token = %q, want token-b", loadedB.AccessToken)
 	}
 }
 

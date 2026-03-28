@@ -1,0 +1,56 @@
+{
+  "cli_path": [
+    "todo",
+    "task",
+    "get"
+  ],
+  "display": "钉钉待办",
+  "flag_hints": {
+    "taskId": {
+      "alias": "task-id",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "taskId",
+      "flag_name": "task-id",
+      "kind": "string",
+      "description": "taskId"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "taskId": {
+        "description": "taskId",
+        "title": "taskId",
+        "type": "string"
+      }
+    },
+    "required": [
+      "taskId"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "todo.query_todo_detail",
+  "product_id": "todo",
+  "required": [
+    "taskId"
+  ],
+  "tool": {
+    "aliases": [
+      "query_todo_detail"
+    ],
+    "canonical_path": "todo.query_todo_detail",
+    "cli_name": "get",
+    "description": "查询待办详情",
+    "group": "task",
+    "rpc_name": "query_todo_detail",
+    "sensitive": false,
+    "source_server_key": "b693ef3984e8d311",
+    "title": "query_todo_detail"
+  }
+}

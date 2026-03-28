@@ -1,0 +1,84 @@
+{
+  "cli_path": [
+    "aitable",
+    "table",
+    "get_views"
+  ],
+  "display": "钉钉 AI 表格",
+  "flag_hints": {
+    "baseId": {
+      "required": true
+    },
+    "tableId": {
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "baseId",
+      "flag_name": "baseId",
+      "kind": "string",
+      "description": "所属 Base 的唯一标识。"
+    },
+    {
+      "property_name": "tableId",
+      "flag_name": "tableId",
+      "kind": "string",
+      "description": "所属数据表（Table）的唯一标识。"
+    },
+    {
+      "property_name": "viewIds",
+      "flag_name": "viewIds",
+      "kind": "string_array",
+      "description": "可选，待获取详情的视图（View）ID 列表。显式传入时单次最多 10 个；省略时默认返回当前表下全部视图。"
+    }
+  ],
+  "input_schema": {
+    "description": "input",
+    "properties": {
+      "baseId": {
+        "description": "所属 Base 的唯一标识。",
+        "title": "baseId",
+        "type": "string"
+      },
+      "tableId": {
+        "description": "所属数据表（Table）的唯一标识。",
+        "title": "tableId",
+        "type": "string"
+      },
+      "viewIds": {
+        "description": "可选，待获取详情的视图（View）ID 列表。显式传入时单次最多 10 个；省略时默认返回当前表下全部视图。",
+        "items": {
+          "type": "string"
+        },
+        "title": "viewIds",
+        "type": "array"
+      }
+    },
+    "required": [
+      "baseId",
+      "tableId"
+    ],
+    "title": "input",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "aitable.get_views",
+  "product_id": "aitable",
+  "required": [
+    "baseId",
+    "tableId"
+  ],
+  "tool": {
+    "aliases": null,
+    "canonical_path": "aitable.get_views",
+    "cli_name": "get_views",
+    "description": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。\r\n支持两种模式：\r\n- 显式选择：传入 viewIds，按入参顺序返回这些视图；单次最多 10 个。\r\n- 默认全量：省略 viewIds，返回当前表下全部视图，顺序与当前表视图目录一致。",
+    "group": "table",
+    "hidden": true,
+    "rpc_name": "get_views",
+    "sensitive": false,
+    "source_server_key": "23eb09885b9e8f26",
+    "title": "获取视图详情"
+  }
+}

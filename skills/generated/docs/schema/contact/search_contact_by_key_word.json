@@ -1,0 +1,52 @@
+{
+  "cli_path": [
+    "contact",
+    "search_contact_by_key_word"
+  ],
+  "display": "钉钉通讯录",
+  "flag_hints": {
+    "keyword": {
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "keyword",
+      "flag_name": "keyword",
+      "kind": "string",
+      "description": "搜索的关键词；按照关联性排序"
+    }
+  ],
+  "input_schema": {
+    "description": "root",
+    "properties": {
+      "keyword": {
+        "description": "搜索的关键词；按照关联性排序",
+        "title": "keyword",
+        "type": "string"
+      }
+    },
+    "required": [
+      "keyword"
+    ],
+    "title": "root",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "contact.search_contact_by_key_word",
+  "product_id": "contact",
+  "required": [
+    "keyword"
+  ],
+  "tool": {
+    "aliases": null,
+    "canonical_path": "contact.search_contact_by_key_word",
+    "cli_name": "search_contact_by_key_word",
+    "description": "根据关键词搜索好友和同事",
+    "hidden": true,
+    "rpc_name": "search_contact_by_key_word",
+    "sensitive": false,
+    "source_server_key": "e1e13a2fc7ab1f1b",
+    "title": "根据关键词搜索好友和同事"
+  }
+}

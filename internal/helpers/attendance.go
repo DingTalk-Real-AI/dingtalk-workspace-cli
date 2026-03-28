@@ -19,8 +19,8 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
-	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/platform/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/executor"
 	"github.com/spf13/cobra"
 )
 

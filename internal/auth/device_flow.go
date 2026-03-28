@@ -26,8 +26,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/config"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/platform/config"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/platform/i18n"
 	"github.com/fatih/color"
 )
 

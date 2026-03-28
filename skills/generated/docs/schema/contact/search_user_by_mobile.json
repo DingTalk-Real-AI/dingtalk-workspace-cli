@@ -1,0 +1,56 @@
+{
+  "cli_path": [
+    "contact",
+    "user",
+    "search-mobile"
+  ],
+  "display": "钉钉通讯录",
+  "flag_hints": {
+    "mobile": {
+      "alias": "mobile",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "mobile",
+      "flag_name": "mobile",
+      "kind": "string",
+      "description": "搜索的手机号"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "mobile": {
+        "description": "搜索的手机号",
+        "title": "mobile",
+        "type": "string"
+      }
+    },
+    "required": [
+      "mobile"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "contact.search_user_by_mobile",
+  "product_id": "contact",
+  "required": [
+    "mobile"
+  ],
+  "tool": {
+    "aliases": [
+      "search_user_by_mobile"
+    ],
+    "canonical_path": "contact.search_user_by_mobile",
+    "cli_name": "search-mobile",
+    "description": "通过手机号搜索获取用户名称和userId。",
+    "group": "user",
+    "rpc_name": "search_user_by_mobile",
+    "sensitive": false,
+    "source_server_key": "e1e13a2fc7ab1f1b",
+    "title": "通过手机号获取成员userId和名称"
+  }
+}

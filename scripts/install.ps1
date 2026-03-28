@@ -9,7 +9,7 @@
 #   irm https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install.ps1 | iex
 #
 # If you are launching from Win+R or cmd.exe and want the window to stay open:
-#   powershell -NoExit -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install.ps1 |  iex"
+#   powershell -NoExit -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install.ps1 | iex"
 #
 # Environment variables (all optional):
 #   DWS_INSTALL_DIR   — where to put the binary       (default: ~/.local/bin)

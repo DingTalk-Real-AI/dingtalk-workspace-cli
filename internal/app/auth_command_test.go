@@ -26,13 +26,12 @@ import (
 )
 
 func TestAuthStatusRefreshFailureLeavesStoredTokenIntact(t *testing.T) {
-	// Cleanup keychain after test
-	t.Cleanup(func() {
-		_ = keychain.Remove(keychain.Service, keychain.AccountToken)
-	})
-
 	root := t.TempDir()
 	configDir := filepath.Join(root, "config")
+	t.Cleanup(func() {
+		_ = authpkg.DeleteTokenData(configDir)
+		_ = keychain.Remove(keychain.Service, keychain.AccountToken)
+	})
 
 	t.Setenv("DWS_CONFIG_DIR", configDir)
 
@@ -66,11 +65,11 @@ func TestAuthStatusRefreshFailureLeavesStoredTokenIntact(t *testing.T) {
 	}
 
 	// Verify token data still exists in keychain after refresh failure
-	if !authpkg.TokenDataExistsKeychain() {
+	if !authpkg.TokenDataExistsKeychain(configDir) {
 		t.Fatal("secure token data should remain in keychain after refresh failure")
 	}
 
-	if !bytes.Contains(out.Bytes(), []byte("\"authenticated\"")) {
+	if !bytes.Contains(out.Bytes(), []byte("已登录")) {
 		t.Fatalf("output should still report authenticated status:\n%s", out.String())
 	}
 }

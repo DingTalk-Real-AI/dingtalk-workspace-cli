@@ -1,0 +1,74 @@
+{
+  "cli_path": [
+    "chat",
+    "list_conversation_message"
+  ],
+  "display": "钉钉群聊",
+  "flag_hints": {
+    "openconversation_id": {
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "endTime",
+      "flag_name": "endTime",
+      "kind": "string",
+      "description": "结束时间，格式：yyyy-MM-dd HH:mm:ss，非必填"
+    },
+    {
+      "property_name": "openconversation_id",
+      "flag_name": "openconversation-id",
+      "kind": "string",
+      "description": "会话Id"
+    },
+    {
+      "property_name": "startTime",
+      "flag_name": "startTime",
+      "kind": "string",
+      "description": "开始时间，格式：yyyy-MM-dd HH:mm:ss，非必填"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "endTime": {
+        "description": "结束时间，格式：yyyy-MM-dd HH:mm:ss，非必填",
+        "title": "结束时间，格式：yyyy-MM-dd HH:mm:ss，非必填",
+        "type": "string"
+      },
+      "openconversation_id": {
+        "description": "会话Id",
+        "title": "会话Id",
+        "type": "string"
+      },
+      "startTime": {
+        "description": "开始时间，格式：yyyy-MM-dd HH:mm:ss，非必填",
+        "title": "开始时间，格式：yyyy-MM-dd HH:mm:ss，非必填",
+        "type": "string"
+      }
+    },
+    "required": [
+      "openconversation_id"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "group-chat.list_conversation_message",
+  "product_id": "group-chat",
+  "required": [
+    "openconversation_id"
+  ],
+  "tool": {
+    "aliases": null,
+    "canonical_path": "group-chat.list_conversation_message",
+    "cli_name": "list_conversation_message",
+    "description": "已废弃！！！！拉取指定单聊或群聊的会话消息内容",
+    "hidden": true,
+    "rpc_name": "list_conversation_message",
+    "sensitive": false,
+    "source_server_key": "27f939aef74c67b5",
+    "title": "list_conversation_message"
+  }
+}

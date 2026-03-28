@@ -13,11 +13,23 @@
 
 package auth
 
-// allowedBrowserSchemes restricts the URL schemes that openBrowser will
-// pass to the OS open command. Without this check, a malicious MCP server
-// could return a file:// or custom-scheme URL via VerificationURIComplete
-// and trick the CLI into opening arbitrary local resources.
+import (
+	"fmt"
+	"net/url"
+)
+
 var allowedBrowserSchemes = map[string]bool{
 	"http":  true,
 	"https": true,
+}
+
+func validateBrowserURL(rawURL string) error {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+	if !allowedBrowserSchemes[parsed.Scheme] {
+		return fmt.Errorf("refused to open URL with disallowed scheme %q", parsed.Scheme)
+	}
+	return nil
 }

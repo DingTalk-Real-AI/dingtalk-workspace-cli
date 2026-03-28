@@ -100,6 +100,16 @@ echo ""
 
 START_TIME=$(date +%s)
 
+if [[ $MAX_JOBS -le 1 ]]; then
+  for suite in "${SUITES[@]}"; do
+    label="${suite%%|*}"
+    pkg="${suite##*|}"
+
+    printf "  ${CYAN}START${RESET}  %s\n" "$label"
+    run_suite_worker "$label" "$pkg"
+  done
+else
+
 # ── Dispatch all suites concurrently with a job-slot semaphore ────────────────
 declare -a PIDS=()
 declare -a PID_LABELS=()
@@ -127,6 +137,8 @@ done
 for pid in "${PIDS[@]}"; do
   wait "$pid" 2>/dev/null || true
 done
+
+fi
 
 END_TIME=$(date +%s)
 ELAPSED=$((END_TIME - START_TIME))

@@ -1,0 +1,79 @@
+{
+  "cli_path": [
+    "calendar",
+    "room",
+    "delete"
+  ],
+  "display": "钉钉日历",
+  "flag_hints": {
+    "eventId": {
+      "alias": "event",
+      "required": true
+    },
+    "roomIds": {
+      "alias": "rooms",
+      "transform": "csv_to_array",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "eventId",
+      "flag_name": "event",
+      "alias": "event-id",
+      "kind": "string",
+      "description": "日程ID，调用查询日程列表接口获取id参数值。"
+    },
+    {
+      "property_name": "roomIds",
+      "flag_name": "rooms",
+      "alias": "room-ids",
+      "kind": "string_array",
+      "description": "需要删除的会议室roomId列表"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "eventId": {
+        "description": "日程ID，调用查询日程列表接口获取id参数值。",
+        "title": "eventId",
+        "type": "string"
+      },
+      "roomIds": {
+        "description": "需要删除的会议室roomId列表",
+        "items": {
+          "type": "string"
+        },
+        "title": "roomIds",
+        "type": "array"
+      }
+    },
+    "required": [
+      "eventId",
+      "roomIds"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "calendar.delete_meeting_room",
+  "product_id": "calendar",
+  "required": [
+    "eventId",
+    "roomIds"
+  ],
+  "tool": {
+    "aliases": [
+      "delete_meeting_room"
+    ],
+    "canonical_path": "calendar.delete_meeting_room",
+    "cli_name": "delete",
+    "description": "移除日程中预约的会议室",
+    "group": "room",
+    "rpc_name": "delete_meeting_room",
+    "sensitive": true,
+    "source_server_key": "279de7cc536c672c",
+    "title": "删除会议室"
+  }
+}

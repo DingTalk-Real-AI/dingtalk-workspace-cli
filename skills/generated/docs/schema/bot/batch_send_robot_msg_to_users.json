@@ -1,0 +1,103 @@
+{
+  "cli_path": [
+    "bot",
+    "batch_send_robot_msg_to_users"
+  ],
+  "display": "机器人消息",
+  "flag_hints": {
+    "markdown": {
+      "required": true
+    },
+    "robotCode": {
+      "required": true
+    },
+    "title": {
+      "required": true
+    },
+    "userIds": {
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "markdown",
+      "flag_name": "markdown",
+      "kind": "string",
+      "description": "消息内容，Markdown格式"
+    },
+    {
+      "property_name": "robotCode",
+      "flag_name": "robotCode",
+      "kind": "string",
+      "description": "机器人Code"
+    },
+    {
+      "property_name": "title",
+      "flag_name": "title",
+      "kind": "string",
+      "description": "消息标题"
+    },
+    {
+      "property_name": "userIds",
+      "flag_name": "userIds",
+      "kind": "string_array",
+      "description": "接收用户UserID列表，最多支持20个"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "markdown": {
+        "description": "消息内容，Markdown格式",
+        "title": "消息内容，显示在对话消息正文，Markdown格式。图片使用'![]()'，文件使用'[]()'",
+        "type": "string"
+      },
+      "robotCode": {
+        "description": "机器人Code",
+        "title": "机器人Code，在开发者后台创建的机器人信息中可查看，或者调用创建机器人服务获取",
+        "type": "string"
+      },
+      "title": {
+        "description": "消息标题",
+        "title": "消息标题，显示在IM消息列表",
+        "type": "string"
+      },
+      "userIds": {
+        "description": "接收用户UserID列表，最多支持20个",
+        "items": {
+          "type": "string"
+        },
+        "title": "接收用户UserID列表，最多支持20个",
+        "type": "array"
+      }
+    },
+    "required": [
+      "userIds",
+      "title",
+      "markdown",
+      "robotCode"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "bot.batch_send_robot_msg_to_users",
+  "product_id": "bot",
+  "required": [
+    "markdown",
+    "robotCode",
+    "title",
+    "userIds"
+  ],
+  "tool": {
+    "aliases": null,
+    "canonical_path": "bot.batch_send_robot_msg_to_users",
+    "cli_name": "batch_send_robot_msg_to_users",
+    "description": "机器人批量发送单聊消息，在该机器人可使用范围内的员工，可接收到单聊消息。",
+    "hidden": true,
+    "rpc_name": "batch_send_robot_msg_to_users",
+    "sensitive": false,
+    "source_server_key": "3303015f1832b28d",
+    "title": "企业机器人批量发送单聊消息"
+  }
+}

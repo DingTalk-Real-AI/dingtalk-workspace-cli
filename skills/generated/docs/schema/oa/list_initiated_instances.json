@@ -1,0 +1,128 @@
+{
+  "cli_path": [
+    "oa",
+    "approval",
+    "list-initiated"
+  ],
+  "display": "钉钉OA审批",
+  "flag_hints": {
+    "endTime": {
+      "alias": "end",
+      "transform": "iso8601_to_millis",
+      "required": true
+    },
+    "maxResults": {
+      "alias": "max-results",
+      "required": true
+    },
+    "nextToken": {
+      "alias": "next-token",
+      "required": true
+    },
+    "processCode": {
+      "alias": "process-code",
+      "required": true
+    },
+    "startTime": {
+      "alias": "start",
+      "transform": "iso8601_to_millis",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "endTime",
+      "flag_name": "end",
+      "alias": "end-time",
+      "kind": "string",
+      "description": "审批实例开始时间，Unix时间戳，单位毫秒"
+    },
+    {
+      "property_name": "maxResults",
+      "flag_name": "max-results",
+      "kind": "number",
+      "description": "分页查询的每页大小，最大值20"
+    },
+    {
+      "property_name": "nextToken",
+      "flag_name": "next-token",
+      "kind": "number",
+      "description": "分页查询的分页游标，如果是首次查询，该参数传0，非首次调用，传上次返回的nextToken"
+    },
+    {
+      "property_name": "processCode",
+      "flag_name": "process-code",
+      "kind": "string",
+      "description": "需要查询实例列表的表单processCode"
+    },
+    {
+      "property_name": "startTime",
+      "flag_name": "start",
+      "alias": "start-time",
+      "kind": "string",
+      "description": "审批实例开始时间，Unix时间戳，单位毫秒"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "endTime": {
+        "description": "审批实例开始时间，Unix时间戳，单位毫秒",
+        "title": "审批实例开始时间，Unix时间戳，单位毫秒",
+        "type": "number"
+      },
+      "maxResults": {
+        "description": "分页查询的每页大小，最大值20",
+        "title": "分页查询的每页大小，最大值20",
+        "type": "number"
+      },
+      "nextToken": {
+        "description": "分页查询的分页游标，如果是首次查询，该参数传0，非首次调用，传上次返回的nextToken",
+        "title": "分页查询的分页游标，如果是首次查询，该参数传0，非首次调用，传上次返回的nextToken",
+        "type": "number"
+      },
+      "processCode": {
+        "description": "需要查询实例列表的表单processCode",
+        "title": "需要查询实例列表的表单processCode",
+        "type": "string"
+      },
+      "startTime": {
+        "description": "审批实例开始时间，Unix时间戳，单位毫秒",
+        "title": "审批实例开始时间，Unix时间戳，单位毫秒",
+        "type": "number"
+      }
+    },
+    "required": [
+      "endTime",
+      "maxResults",
+      "nextToken",
+      "processCode",
+      "startTime"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "oa.list_initiated_instances",
+  "product_id": "oa",
+  "required": [
+    "endTime",
+    "maxResults",
+    "nextToken",
+    "processCode",
+    "startTime"
+  ],
+  "tool": {
+    "aliases": [
+      "list_initiated_instances"
+    ],
+    "canonical_path": "oa.list_initiated_instances",
+    "cli_name": "list-initiated",
+    "description": "查询当前用户已发起的审批实例列表，查询的信息包含审批实例Id、审批实例发起时间、审批实例当前状态等基础信息",
+    "group": "approval",
+    "rpc_name": "list_initiated_instances",
+    "sensitive": false,
+    "source_server_key": "2721767f4caa8a6e",
+    "title": "list_initiated_instances"
+  }
+}

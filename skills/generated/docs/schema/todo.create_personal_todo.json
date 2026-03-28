@@ -1,0 +1,116 @@
+{
+  "cli_path": [
+    "todo",
+    "task",
+    "create"
+  ],
+  "display": "钉钉待办",
+  "flag_hints": {
+    "PersonalTodoCreateVO.dueTime": {
+      "alias": "due",
+      "transform": "iso8601_to_millis"
+    },
+    "PersonalTodoCreateVO.executorIds": {
+      "alias": "executors",
+      "transform": "csv_to_array",
+      "required": true
+    },
+    "PersonalTodoCreateVO.priority": {
+      "alias": "priority"
+    },
+    "PersonalTodoCreateVO.subject": {
+      "alias": "title",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "PersonalTodoCreateVO.dueTime",
+      "flag_name": "due",
+      "kind": "string",
+      "description": "待办截止时间，unix时间戳，精确到毫秒"
+    },
+    {
+      "property_name": "PersonalTodoCreateVO.executorIds",
+      "flag_name": "executors",
+      "kind": "string_array",
+      "description": "待办执行者。可传入多个"
+    },
+    {
+      "property_name": "PersonalTodoCreateVO.priority",
+      "flag_name": "priority",
+      "kind": "number",
+      "description": "待办优先级: 10:低，20:普通，30:较高，40:紧急"
+    },
+    {
+      "property_name": "PersonalTodoCreateVO.subject",
+      "flag_name": "title",
+      "kind": "string",
+      "description": "待办的标题"
+    }
+  ],
+  "input_schema": {
+    "description": "root",
+    "properties": {
+      "PersonalTodoCreateVO": {
+        "description": "待办信息",
+        "properties": {
+          "dueTime": {
+            "description": "待办截止时间，unix时间戳，精确到毫秒",
+            "title": "dueTime",
+            "type": "number"
+          },
+          "executorIds": {
+            "description": "待办执行者。可传入多个",
+            "items": {
+              "type": "string"
+            },
+            "title": "executorIds",
+            "type": "array"
+          },
+          "priority": {
+            "description": "待办优先级: 10:低，20:普通，30:较高，40:紧急",
+            "title": "priority",
+            "type": "number"
+          },
+          "subject": {
+            "description": "待办的标题",
+            "title": "subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "executorIds",
+          "subject"
+        ],
+        "title": "PersonalTodoCreateVO",
+        "type": "object"
+      }
+    },
+    "required": [
+      "PersonalTodoCreateVO"
+    ],
+    "title": "root",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "todo.create_personal_todo",
+  "product_id": "todo",
+  "required": [
+    "PersonalTodoCreateVO.executorIds",
+    "PersonalTodoCreateVO.subject"
+  ],
+  "tool": {
+    "aliases": [
+      "create_personal_todo"
+    ],
+    "canonical_path": "todo.create_personal_todo",
+    "cli_name": "create",
+    "description": "在当前企业组织内创建一条个人待办事项，支持设置标题、执行人列表（用户 ID）、截止时间、优先级（如高/中/低）。待办将归属于当前用户，并对有权限的协作者可见。",
+    "group": "task",
+    "rpc_name": "create_personal_todo",
+    "sensitive": false,
+    "source_server_key": "b693ef3984e8d311",
+    "title": "创建个人待办"
+  }
+}

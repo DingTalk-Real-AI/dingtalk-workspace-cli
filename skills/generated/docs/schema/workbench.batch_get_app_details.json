@@ -1,0 +1,61 @@
+{
+  "cli_path": [
+    "workbench",
+    "app",
+    "get"
+  ],
+  "display": "钉钉工作台",
+  "flag_hints": {
+    "appIds": {
+      "alias": "ids",
+      "transform": "csv_to_array",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "appIds",
+      "flag_name": "ids",
+      "alias": "app-ids",
+      "kind": "string_array",
+      "description": "应用id列表"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "appIds": {
+        "description": "应用id列表",
+        "items": {
+          "type": "string"
+        },
+        "title": "appIds",
+        "type": "array"
+      }
+    },
+    "required": [
+      "appIds"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "workbench.batch_get_app_details",
+  "product_id": "workbench",
+  "required": [
+    "appIds"
+  ],
+  "tool": {
+    "aliases": [
+      "batch_get_app_details"
+    ],
+    "canonical_path": "workbench.batch_get_app_details",
+    "cli_name": "get",
+    "description": "根据应用id批量拉取应用详情",
+    "group": "app",
+    "rpc_name": "batch_get_app_details",
+    "sensitive": false,
+    "source_server_key": "62a9cf4de3d881c9",
+    "title": "batch_get_app_details"
+  }
+}

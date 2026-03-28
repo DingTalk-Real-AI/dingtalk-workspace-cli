@@ -103,3 +103,4 @@ Step 3 → 加 --yes 执行命令
 - [references/error-codes.md](./references/error-codes.md) — 错误码 + 调试流程
 - [references/recovery-guide.md](./references/recovery-guide.md) — recovery 闭环、`RECOVERY_EVENT_ID`、`execute/finalize` 规范
 - [scripts/](./scripts/) — 各产品批量操作脚本（AI表格/日历/机器人消息/通讯录/考勤/日志/待办等）
+- [index.md](./index.md) — 所有功能的 API 文档入口，包括扩展功能

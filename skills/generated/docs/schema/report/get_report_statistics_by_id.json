@@ -1,0 +1,54 @@
+{
+  "cli_path": [
+    "report",
+    "stats"
+  ],
+  "display": "钉钉日志",
+  "flag_hints": {
+    "report_id": {
+      "alias": "report-id",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "report_id",
+      "flag_name": "report-id",
+      "kind": "string",
+      "description": "日志Id"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "report_id": {
+        "description": "日志Id",
+        "title": "日志Id",
+        "type": "string"
+      }
+    },
+    "required": [
+      "report_id"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "report.get_report_statistics_by_id",
+  "product_id": "report",
+  "required": [
+    "report_id"
+  ],
+  "tool": {
+    "aliases": [
+      "get_report_statistics_by_id"
+    ],
+    "canonical_path": "report.get_report_statistics_by_id",
+    "cli_name": "stats",
+    "description": "获取日志统计数据，包括评论数量、点赞数量、已读数等",
+    "rpc_name": "get_report_statistics_by_id",
+    "sensitive": false,
+    "source_server_key": "379b7411e5ab4e32",
+    "title": "获取指定日志的统计数据"
+  }
+}

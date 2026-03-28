@@ -1,0 +1,64 @@
+{
+  "cli_path": [
+    "aitable",
+    "base",
+    "list"
+  ],
+  "display": "钉钉 AI 表格",
+  "flag_hints": {
+    "cursor": {
+      "alias": "cursor"
+    },
+    "limit": {
+      "alias": "limit"
+    }
+  },
+  "flags": [
+    {
+      "property_name": "cursor",
+      "flag_name": "cursor",
+      "kind": "string",
+      "description": "首次不传；传入上次返回的游标继续获取下一页"
+    },
+    {
+      "property_name": "limit",
+      "flag_name": "limit",
+      "kind": "number",
+      "description": "每页数量，默认 10，最大 10"
+    }
+  ],
+  "input_schema": {
+    "description": "input",
+    "properties": {
+      "cursor": {
+        "description": "首次不传；传入上次返回的游标继续获取下一页",
+        "title": "cursor",
+        "type": "string"
+      },
+      "limit": {
+        "description": "每页数量，默认 10，最大 10",
+        "title": "limit",
+        "type": "number"
+      }
+    },
+    "title": "input",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "aitable.list_bases",
+  "product_id": "aitable",
+  "required": null,
+  "tool": {
+    "aliases": [
+      "list_bases"
+    ],
+    "canonical_path": "aitable.list_bases",
+    "cli_name": "list",
+    "description": "列出当前用户可访问的 AI 表格 Base。默认返回最近访问结果，支持分页游标续取。返回 baseId 与 baseName，后续可直接用于 get_base。\r\nAI 表格访问地址可按 baseId 拼接为：https://docs.dingtalk.com/i/nodes/{baseId}",
+    "group": "base",
+    "rpc_name": "list_bases",
+    "sensitive": false,
+    "source_server_key": "23eb09885b9e8f26",
+    "title": "获取 AI 表格列表"
+  }
+}

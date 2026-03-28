@@ -1,0 +1,86 @@
+{
+  "cli_path": [
+    "aitable",
+    "table",
+    "delete_view"
+  ],
+  "display": "钉钉 AI 表格",
+  "flag_hints": {
+    "baseId": {
+      "required": true
+    },
+    "tableId": {
+      "required": true
+    },
+    "viewId": {
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "baseId",
+      "flag_name": "baseId",
+      "kind": "string",
+      "description": "所属 Base 的唯一标识。"
+    },
+    {
+      "property_name": "tableId",
+      "flag_name": "tableId",
+      "kind": "string",
+      "description": "所属数据表（Table）的唯一标识。"
+    },
+    {
+      "property_name": "viewId",
+      "flag_name": "viewId",
+      "kind": "string",
+      "description": "要删除的视图（View）的唯一标识。"
+    }
+  ],
+  "input_schema": {
+    "description": "input",
+    "properties": {
+      "baseId": {
+        "description": "所属 Base 的唯一标识。",
+        "title": "baseId",
+        "type": "string"
+      },
+      "tableId": {
+        "description": "所属数据表（Table）的唯一标识。",
+        "title": "tableId",
+        "type": "string"
+      },
+      "viewId": {
+        "description": "要删除的视图（View）的唯一标识。",
+        "title": "viewId",
+        "type": "string"
+      }
+    },
+    "required": [
+      "baseId",
+      "tableId",
+      "viewId"
+    ],
+    "title": "input",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "aitable.delete_view",
+  "product_id": "aitable",
+  "required": [
+    "baseId",
+    "tableId",
+    "viewId"
+  ],
+  "tool": {
+    "aliases": null,
+    "canonical_path": "aitable.delete_view",
+    "cli_name": "delete_view",
+    "description": "删除指定视图（View）。该操作不可逆。\r\n已知保护：禁止删除数据表中的最后一个视图；锁定视图不允许删除。",
+    "group": "table",
+    "hidden": true,
+    "rpc_name": "delete_view",
+    "sensitive": false,
+    "source_server_key": "23eb09885b9e8f26",
+    "title": "删除视图"
+  }
+}

@@ -17,26 +17,21 @@ package auth
 
 import (
 	"fmt"
-	"net/url"
 	"os/exec"
 	"runtime"
 )
 
-func openBrowser(rawURL string) error {
-	parsed, err := url.Parse(rawURL)
-	if err != nil {
-		return fmt.Errorf("invalid URL: %w", err)
-	}
-	if !allowedBrowserSchemes[parsed.Scheme] {
-		return fmt.Errorf("refused to open URL with disallowed scheme %q", parsed.Scheme)
+func openBrowser(url string) error {
+	if err := validateBrowserURL(url); err != nil {
+		return err
 	}
 
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
-		cmd = exec.Command("open", rawURL)
+		cmd = exec.Command("open", url)
 	case "linux":
-		cmd = exec.Command("xdg-open", rawURL)
+		cmd = exec.Command("xdg-open", url)
 	default:
 		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}

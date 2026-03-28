@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/platform/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/transport"
 )
 
 func TestBuildContext_SanitizesArgsAndPreservesTypedFields(t *testing.T) {

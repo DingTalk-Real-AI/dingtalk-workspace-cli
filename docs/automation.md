@@ -20,21 +20,23 @@ repository root while preserving repo-local guidance for automation.
 
 - `cmd`: public CLI entrypoint
 - `internal/app`: root command wiring and command tree mount points
-- `internal/discovery`, `internal/market`, `internal/transport`: runtime discovery and MCP transport
-- `internal/generator`: CLI/schema/docs/skills generation pipeline
-- `internal/compat`, `internal/helpers`: legacy-compatible aliases and helper commands
+- `internal/auth`: authentication and token management
+- `internal/platform`: shared config, errors, and i18n
+- `internal/runtime`: discovery, market, transport, executor, cache, ir, and safety
+- `internal/surface`: canonical CLI command surface and output formatting
+- `internal/skillgen`: CLI/schema/docs/skills generation pipeline
 - `docs/`: public architecture and reference docs
 - `hack/`: developer-only helper commands not shipped as public binaries
 - `scripts/`: build, test, lint, packaging, and policy checks
-- `test/`: integration, contract, compatibility, and script validation suites
+- `test/`: CLI parity, integration, contract, and script validation suites
 
 ## Task Routing
 
 - Add or fix a command path: start from `internal/app` and the related module under `internal/*`
-- Discovery or protocol issues: inspect `internal/discovery`, `internal/market`, `internal/transport`
-- Generated output drift: inspect `internal/generator` and run drift checks
-- Legacy behavior mismatch: inspect `internal/compat` and `test/cli_compat`
-- Failure or degraded mode: inspect `internal/discovery`, `internal/errors`
+- Discovery or protocol issues: inspect `internal/runtime/discovery`, `internal/runtime/market`, `internal/runtime/transport`
+- Generated output drift: inspect `internal/skillgen` and run drift checks
+- CLI parity mismatch: inspect `internal/surface/cli`, `test/compat`, and `test/cli`
+- Failure or degraded mode: inspect `internal/runtime/discovery`, `internal/platform/errors`
 
 ## Generated Artifacts
 

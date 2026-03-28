@@ -1,0 +1,74 @@
+{
+  "cli_path": [
+    "aitable",
+    "table",
+    "get"
+  ],
+  "display": "钉钉 AI 表格",
+  "flag_hints": {
+    "baseId": {
+      "alias": "base-id",
+      "required": true
+    },
+    "tableIds": {
+      "alias": "table-ids",
+      "transform": "csv_to_array"
+    }
+  },
+  "flags": [
+    {
+      "property_name": "baseId",
+      "flag_name": "base-id",
+      "kind": "string",
+      "description": "所属 Base ID（通过 list_bases / search_bases 获取）"
+    },
+    {
+      "property_name": "tableIds",
+      "flag_name": "table-ids",
+      "kind": "string_array",
+      "description": "待获取详情的 Table ID 列表（通过 get_base 获取），单次最多 10 个；不传则默认返回当前 Base 下全部表。建议优先显式传入，以控制返回体大小，避免上下文突增"
+    }
+  ],
+  "input_schema": {
+    "description": "input",
+    "properties": {
+      "baseId": {
+        "description": "所属 Base ID（通过 list_bases / search_bases 获取）",
+        "title": "baseId",
+        "type": "string"
+      },
+      "tableIds": {
+        "description": "待获取详情的 Table ID 列表（通过 get_base 获取），单次最多 10 个；不传则默认返回当前 Base 下全部表。建议优先显式传入，以控制返回体大小，避免上下文突增",
+        "items": {
+          "type": "string"
+        },
+        "title": "tableIds",
+        "type": "array"
+      }
+    },
+    "required": [
+      "baseId"
+    ],
+    "title": "input",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "aitable.get_tables",
+  "product_id": "aitable",
+  "required": [
+    "baseId"
+  ],
+  "tool": {
+    "aliases": [
+      "get_tables"
+    ],
+    "canonical_path": "aitable.get_tables",
+    "cli_name": "get",
+    "description": "批量获取指定 Tables（数据表）的表级信息、字段目录与视图目录。\r\n会返回 tables 列表；每个 table 直接包含 tableId、tableName、description、fields、views；字段列表仅包含 fieldId、fieldName、type、description；views 仅包含 viewId、viewName、type。\r\n若需读取字段的完整配置，请再调用 get_fields。",
+    "group": "table",
+    "rpc_name": "get_tables",
+    "sensitive": false,
+    "source_server_key": "23eb09885b9e8f26",
+    "title": "获取数据表"
+  }
+}

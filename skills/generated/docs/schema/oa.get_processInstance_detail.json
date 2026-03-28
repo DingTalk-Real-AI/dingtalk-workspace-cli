@@ -1,0 +1,57 @@
+{
+  "cli_path": [
+    "oa",
+    "approval",
+    "detail"
+  ],
+  "display": "钉钉OA审批",
+  "flag_hints": {
+    "processInstanceId": {
+      "alias": "instance-id",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "processInstanceId",
+      "flag_name": "instance-id",
+      "alias": "process-instance-id",
+      "kind": "string",
+      "description": "审批实例Id"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "processInstanceId": {
+        "description": "审批实例Id",
+        "title": "审批实例Id",
+        "type": "string"
+      }
+    },
+    "required": [
+      "processInstanceId"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "oa.get_processInstance_detail",
+  "product_id": "oa",
+  "required": [
+    "processInstanceId"
+  ],
+  "tool": {
+    "aliases": [
+      "get_processInstance_detail"
+    ],
+    "canonical_path": "oa.get_processInstance_detail",
+    "cli_name": "detail",
+    "description": "获取指定审批实例的详情信息",
+    "group": "approval",
+    "rpc_name": "get_processInstance_detail",
+    "sensitive": false,
+    "source_server_key": "2721767f4caa8a6e",
+    "title": "get_processInstance_detail"
+  }
+}

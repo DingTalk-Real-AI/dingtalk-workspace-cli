@@ -1,0 +1,91 @@
+{
+  "cli_path": [
+    "aitable",
+    "field",
+    "get"
+  ],
+  "display": "钉钉 AI 表格",
+  "flag_hints": {
+    "baseId": {
+      "alias": "base-id",
+      "required": true
+    },
+    "fieldIds": {
+      "alias": "field-ids",
+      "transform": "csv_to_array"
+    },
+    "tableId": {
+      "alias": "table-id",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "baseId",
+      "flag_name": "base-id",
+      "kind": "string",
+      "description": "Base ID（可通过 list_bases 获取）"
+    },
+    {
+      "property_name": "fieldIds",
+      "flag_name": "field-ids",
+      "kind": "string_array",
+      "description": "待获取详情的字段 ID 列表，可通过 get_tables 获取；建议只传真正需要展开完整配置的字段，单次最多 10 个；不传则默认返回当前表下全部字段。建议优先显式传入，以控制返回体大小，避免上下文突增"
+    },
+    {
+      "property_name": "tableId",
+      "flag_name": "table-id",
+      "kind": "string",
+      "description": "Table ID（可通过 get_base 获取）"
+    }
+  ],
+  "input_schema": {
+    "description": "input",
+    "properties": {
+      "baseId": {
+        "description": "Base ID（可通过 list_bases 获取）",
+        "title": "baseId",
+        "type": "string"
+      },
+      "fieldIds": {
+        "description": "待获取详情的字段 ID 列表，可通过 get_tables 获取；建议只传真正需要展开完整配置的字段，单次最多 10 个；不传则默认返回当前表下全部字段。建议优先显式传入，以控制返回体大小，避免上下文突增",
+        "items": {
+          "type": "string"
+        },
+        "title": "fieldIds",
+        "type": "array"
+      },
+      "tableId": {
+        "description": "Table ID（可通过 get_base 获取）",
+        "title": "tableId",
+        "type": "string"
+      }
+    },
+    "required": [
+      "baseId",
+      "tableId"
+    ],
+    "title": "input",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "aitable.get_fields",
+  "product_id": "aitable",
+  "required": [
+    "baseId",
+    "tableId"
+  ],
+  "tool": {
+    "aliases": [
+      "get_fields"
+    ],
+    "canonical_path": "aitable.get_fields",
+    "cli_name": "get",
+    "description": "批量获取指定字段的详细信息，包括 fieldId、名称、类型、description 以及类型相关完整配置（如格式化、选项、AI 配置等）。\r\n传 fieldIds 时单次最多获取 10 个字段；若需更多字段，请拆分多次调用。\r\n适用于在 get_tables 拿到字段目录后，按需展开少量字段的完整配置，避免大 options 字段放大 get_tables 返回值。\r\nAI 字段的返回结果中，config 仅包含字段物理配置，aiConfig 作为同级字段单独返回，结构与 create_fields 写入参数一致。",
+    "group": "field",
+    "rpc_name": "get_fields",
+    "sensitive": false,
+    "source_server_key": "23eb09885b9e8f26",
+    "title": "获取字段详情"
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "cli_path": [
+    "oa",
+    "approval",
+    "revoke"
+  ],
+  "display": "钉钉OA审批",
+  "flag_hints": {
+    "processInstanceId": {
+      "alias": "instance-id",
+      "required": true
+    },
+    "remark": {
+      "alias": "remark"
+    }
+  },
+  "flags": [
+    {
+      "property_name": "processInstanceId",
+      "flag_name": "instance-id",
+      "alias": "process-instance-id",
+      "kind": "string",
+      "description": "需要撤销的审批实例Id"
+    },
+    {
+      "property_name": "remark",
+      "flag_name": "remark",
+      "kind": "string",
+      "description": "撤销审批的说明"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "processInstanceId": {
+        "description": "需要撤销的审批实例Id",
+        "title": "需要撤销的审批实例Id",
+        "type": "string"
+      },
+      "remark": {
+        "description": "撤销审批的说明",
+        "title": "撤销审批的说明",
+        "type": "string"
+      }
+    },
+    "required": [
+      "processInstanceId"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "oa.revoke_processInstance",
+  "product_id": "oa",
+  "required": [
+    "processInstanceId"
+  ],
+  "tool": {
+    "aliases": [
+      "revoke_processInstance"
+    ],
+    "canonical_path": "oa.revoke_processInstance",
+    "cli_name": "revoke",
+    "description": "撤销当前用户已经发起的审批实例，需要的参数processInstanceId可以从",
+    "group": "approval",
+    "rpc_name": "revoke_processInstance",
+    "sensitive": true,
+    "source_server_key": "2721767f4caa8a6e",
+    "title": "revoke_processInstance"
+  }
+}

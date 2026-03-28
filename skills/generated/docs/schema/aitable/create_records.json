@@ -1,0 +1,106 @@
+{
+  "cli_path": [
+    "aitable",
+    "record",
+    "create"
+  ],
+  "display": "钉钉 AI 表格",
+  "flag_hints": {
+    "baseId": {
+      "alias": "base-id",
+      "required": true
+    },
+    "records": {
+      "alias": "records",
+      "transform": "json_parse",
+      "required": true
+    },
+    "tableId": {
+      "alias": "table-id",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "baseId",
+      "flag_name": "base-id",
+      "kind": "string",
+      "description": "Base ID，可通过 list_bases 或 search_bases 获取"
+    },
+    {
+      "property_name": "records",
+      "flag_name": "records",
+      "kind": "json",
+      "description": "待创建的记录列表，单次最多 100 条"
+    },
+    {
+      "property_name": "tableId",
+      "flag_name": "table-id",
+      "kind": "string",
+      "description": "Table ID，可通过 get_base 获取"
+    }
+  ],
+  "input_schema": {
+    "description": "input",
+    "properties": {
+      "baseId": {
+        "description": "Base ID，可通过 list_bases 或 search_bases 获取",
+        "title": "baseId",
+        "type": "string"
+      },
+      "records": {
+        "description": "待创建的记录列表，单次最多 100 条",
+        "items": {
+          "properties": {
+            "cells": {
+              "description": "字段值映射，key 为 fieldId（通常先通过 get_tables 获取字段目录；若需某些字段完整配置再调用 get_fields），value 为写入值。\n各类型写入格式：\n\ntext → \"文本内容\"\nnumber → 123 或 123.45（也接受字符串 \"123\"）；读出通常为字符串\nsingleSelect → \"选项名称\"，或 {\"id\":\"opt_xxx\"} / {\"id\":\"opt_xxx\",\"name\":\"进行中\"}；对象写入时 id 为准，服务端会校验该 id 是否存在，并转换为当前 option name 后再写入；若直接传 option id 字符串会返回显式错误；若传入的新名称不在当前字段配置中，系统会先自动把该选项补进字段 options，再写入记录；读出为 {\"id\":\"...\",\"name\":\"...\"}\nmultipleSelect → [\"选项名1\",\"选项名2\"]，或 [{\"id\":\"opt_a\",\"name\":\"标签A\"},{\"id\":\"opt_b\",\"name\":\"标签B\"}]；对象写入时每项都必须带 id，服务端会逐项校验并转换为当前 option name；若其中某些名称不在当前字段配置中，系统会先自动补齐缺失选项，再写入记录；若直接传 option id 字符串数组会返回显式错误；读出为 [{\"id\":\"...\",\"name\":\"...\"}, ...]\ndate → 日期字符串（如 \"2026-03-15\"、\"2026-03-15 09:00\"）或含时区的 RFC3339 字符串（如 \"2026-03-15T09:00+08:00\"）；亦支持毫秒时间戳（服务端自动转换为 UTC 日期字符串）；读出为 RFC3339 字符串\nuser → 通常为 [{\"userId\":\"staff_001\",\"corpId\":\"dingxxxxxxxx\"}]，仅当目标用户不在当前请求组织、无法反查 userId 时回退为 [{\"userRef\":\"ur_0AaZ19\"}]\ndepartment → [{\"deptId\":\"52528700\"}]\ngroup → [{\"cid\":\"74577067501\"}]；注意 key 是 cid，不是 openConversationId\nurl → {\"text\":\"显示文字\",\"link\":\"https://...\"}；也兼容直接传 \"https://...\"，服务端会按 {\"text\":\"原字符串\",\"link\":\"原字符串\"} 自动补齐\nrichText → {\"markdown\":\"**加粗**\\n普通文字\\n\"}（读出有损，颜色/@人等信息丢失）\ncheckbox → true | false\nattachment → 可传 [{\"fileToken\":\"ft_xxx\"}]、[{\"url\":\"https://...\"}]\n               或 [{\"filename\":\"a.xlsx\",\"size\":92250,\"type\":\"xls\"|\"image\",\"resourceId\":\"\u003cid\u003e\",\"resourceUrl\":\"\u003cresourceUrl\u003e\"}]\n               （推荐先通过 prepare_attachment_upload 申请 uploadUrl 并完成上传，再把返回的 fileToken 写入 attachment 字段；也支持直接传 {\"url\":\"https://...\"} 让服务端代拉外链并转成内部附件。URL 转存是 best-effort 异步链路，create_records 返回成功仅表示已受理转存与写入。读出 url 常为有时效下载链接）\nidCard → \"520402196001067498\"（必须是后端认可的合法身份证号）\ngeolocation → {\"address\":\"浙江省杭州市思凯路与爱橙街交叉口东南200米\",\"name\":\"阿里中心·未科D1幢\",\"location\":[\"120.007852\",\"30.271194\"]}（对象格式；location 按 [经度, 纬度] 传字符串数组；读写均使用该结构）\nunidirectionalLink/bidirectionalLink → {\"linkedRecordIds\":[\"recXXX\",\"recYYY\"]}\ncreator / lastModifier → 系统自动回填，不建议手动写入\ncreatedTime / lastModifiedTime → 系统自动回填，不建议手动写入\n\n示例：\n{\n  \"fldTextId\": \"这是一段文本\",\n  \"fldNumId\": 123.45,\n  \"fldSelectId\": {\"id\":\"opt_status_doing\",\"name\":\"进行中\"},\n  \"fldMultiId\": [{\"id\":\"opt_tag_a\",\"name\":\"标签A\"},{\"id\":\"opt_tag_b\",\"name\":\"标签B\"}],\n  \"fldDateId\": \"2026-03-15\",\n  \"fldUserId\": [{\"userId\":\"staff_001\",\"corpId\":\"dingxxxxxxxx\"}],\n  \"fldUrlId\": {\"text\":\"钉钉官网\",\"link\":\"https://dingtalk.com\"},\n  \"fldRichTextId\": {\"markdown\":\"**加粗**\\n普通文字\\n\"},\n  \"fldGroupId\": [{\"cid\":\"74577067501\"}],\n  \"fldLinkId\": {\"linkedRecordIds\":[\"recA\",\"recB\"]}\n}",
+              "properties": {},
+              "required": [],
+              "title": "cells",
+              "type": "object"
+            }
+          },
+          "required": [
+            "cells"
+          ],
+          "type": "object"
+        },
+        "title": "records",
+        "type": "array"
+      },
+      "tableId": {
+        "description": "Table ID，可通过 get_base 获取",
+        "title": "tableId",
+        "type": "string"
+      }
+    },
+    "required": [
+      "baseId",
+      "records",
+      "tableId"
+    ],
+    "title": "input",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "aitable.create_records",
+  "product_id": "aitable",
+  "required": [
+    "baseId",
+    "records",
+    "tableId"
+  ],
+  "tool": {
+    "aliases": [
+      "create_records"
+    ],
+    "canonical_path": "aitable.create_records",
+    "cli_name": "create",
+    "description": "在指定表格中批量新增记录",
+    "group": "record",
+    "rpc_name": "create_records",
+    "sensitive": false,
+    "source_server_key": "23eb09885b9e8f26",
+    "title": "新增记录"
+  }
+}

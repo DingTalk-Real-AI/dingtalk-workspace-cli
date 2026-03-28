@@ -1,0 +1,75 @@
+{
+  "cli_path": [
+    "ding",
+    "message",
+    "recall"
+  ],
+  "display": "DING消息",
+  "flag_hints": {
+    "openDingId": {
+      "alias": "id",
+      "required": true
+    },
+    "robotCode": {
+      "alias": "robot-code",
+      "env_default": "DINGTALK_DING_ROBOT_CODE",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "openDingId",
+      "flag_name": "id",
+      "alias": "open-ding-id",
+      "kind": "string",
+      "description": "要撤回的钉钉消息ID，可通过发送DING消息接口获取"
+    },
+    {
+      "property_name": "robotCode",
+      "flag_name": "robot-code",
+      "kind": "string",
+      "description": "发送钉钉消息的机器人ID，必须与发送消息的机器人为同一个"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "openDingId": {
+        "description": "要撤回的钉钉消息ID，可通过发送DING消息接口获取",
+        "title": "钉钉消息ID",
+        "type": "string"
+      },
+      "robotCode": {
+        "description": "发送钉钉消息的机器人ID，必须与发送消息的机器人为同一个",
+        "title": "机器人Code",
+        "type": "string"
+      }
+    },
+    "required": [
+      "openDingId",
+      "robotCode"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "ding.recall_ding_message",
+  "product_id": "ding",
+  "required": [
+    "openDingId",
+    "robotCode"
+  ],
+  "tool": {
+    "aliases": [
+      "recall_ding_message"
+    ],
+    "canonical_path": "ding.recall_ding_message",
+    "cli_name": "recall",
+    "description": "撤回已发送的DING消息",
+    "group": "message",
+    "rpc_name": "recall_ding_message",
+    "sensitive": false,
+    "source_server_key": "9d39ee2c7636f32c",
+    "title": "撤回已发送的DING消息"
+  }
+}

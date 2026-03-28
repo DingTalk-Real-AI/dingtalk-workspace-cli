@@ -1,0 +1,74 @@
+{
+  "cli_path": [
+    "todo",
+    "task",
+    "done"
+  ],
+  "display": "钉钉待办",
+  "flag_hints": {
+    "isDone": {
+      "alias": "status",
+      "required": true
+    },
+    "taskId": {
+      "alias": "task-id",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "isDone",
+      "flag_name": "status",
+      "alias": "is-done",
+      "kind": "string",
+      "description": "需要修改待办完成状态结果。true：已完成；false未完成。"
+    },
+    {
+      "property_name": "taskId",
+      "flag_name": "task-id",
+      "kind": "string",
+      "description": "待办任务唯一标识id。指定需要修改哪个待办"
+    }
+  ],
+  "input_schema": {
+    "description": "root",
+    "properties": {
+      "isDone": {
+        "description": "需要修改待办完成状态结果。true：已完成；false未完成。",
+        "title": "isDone",
+        "type": "string"
+      },
+      "taskId": {
+        "description": "待办任务唯一标识id。指定需要修改哪个待办",
+        "title": "taskId",
+        "type": "string"
+      }
+    },
+    "required": [
+      "isDone",
+      "taskId"
+    ],
+    "title": "root",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "todo.update_todo_done_status",
+  "product_id": "todo",
+  "required": [
+    "isDone",
+    "taskId"
+  ],
+  "tool": {
+    "aliases": [
+      "update_todo_done_status"
+    ],
+    "canonical_path": "todo.update_todo_done_status",
+    "cli_name": "done",
+    "description": "修改执行者的待办完成状态",
+    "group": "task",
+    "rpc_name": "update_todo_done_status",
+    "sensitive": false,
+    "source_server_key": "b693ef3984e8d311",
+    "title": "修改执行者的待办完成状态"
+  }
+}

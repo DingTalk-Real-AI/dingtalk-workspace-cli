@@ -1,0 +1,63 @@
+{
+  "cli_path": [
+    "bot",
+    "search_groups_by_keyword"
+  ],
+  "display": "机器人消息",
+  "flag_hints": {
+    "keyword": {
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "cursor",
+      "flag_name": "cursor",
+      "kind": "string",
+      "description": "分页游标，从0开始"
+    },
+    {
+      "property_name": "keyword",
+      "flag_name": "keyword",
+      "kind": "string",
+      "description": "搜索关键词"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "cursor": {
+        "description": "分页游标，从0开始",
+        "title": "分页游标，从0开始",
+        "type": "string"
+      },
+      "keyword": {
+        "description": "搜索关键词",
+        "title": "搜索关键词",
+        "type": "string"
+      }
+    },
+    "required": [
+      "keyword"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "bot.search_groups_by_keyword",
+  "product_id": "bot",
+  "required": [
+    "keyword"
+  ],
+  "tool": {
+    "aliases": null,
+    "canonical_path": "bot.search_groups_by_keyword",
+    "cli_name": "search_groups_by_keyword",
+    "description": "根据关键词搜索我的群会话信息，包含群openconversationId、群名称等信息",
+    "hidden": true,
+    "rpc_name": "search_groups_by_keyword",
+    "sensitive": false,
+    "source_server_key": "3303015f1832b28d",
+    "title": "根据关键词搜索会话openconversationId"
+  }
+}

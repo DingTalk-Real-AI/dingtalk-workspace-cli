@@ -8,10 +8,10 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cache"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/discovery"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/cache"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/discovery"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/market"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/mock_mcp"
 )
 

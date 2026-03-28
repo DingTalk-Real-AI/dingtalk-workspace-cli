@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -61,15 +62,27 @@ func (t *TokenData) HasPersistentCode() bool {
 // SaveTokenData saves TokenData to the platform keychain.
 // Uses the new keychain-based storage with random master key for better security.
 func SaveTokenData(configDir string, data *TokenData) error {
-	return SaveTokenDataKeychain(data)
+	return SaveTokenDataKeychain(configDir, data)
 }
 
 // LoadTokenData reads TokenData from the platform keychain.
 // On first call, it attempts to migrate legacy .data file if present.
 func LoadTokenData(configDir string) (*TokenData, error) {
 	// Try loading from new keychain first
-	if TokenDataExistsKeychain() {
-		return LoadTokenDataKeychain()
+	if TokenDataExistsKeychain(configDir) {
+		return LoadTokenDataKeychain(configDir)
+	}
+
+	// One-time migration from the global keychain slot introduced by the
+	// unscoped storage regression.
+	if strings.TrimSpace(configDir) != "" && LegacyTokenDataExistsKeychain() {
+		data, err := LoadLegacyTokenDataKeychain()
+		if err == nil {
+			if saveErr := SaveTokenDataKeychain(configDir, data); saveErr == nil {
+				_ = DeleteLegacyTokenDataKeychain()
+			}
+			return data, nil
+		}
 	}
 
 	// Fallback: try legacy .data file and migrate
@@ -79,7 +92,7 @@ func LoadTokenData(configDir string) (*TokenData, error) {
 	}
 
 	// Migrate to keychain for future use
-	if err := SaveTokenDataKeychain(data); err == nil {
+	if err := SaveTokenDataKeychain(configDir, data); err == nil {
 		// Successfully migrated, delete legacy file
 		_ = DeleteSecureData(configDir)
 	}
@@ -90,7 +103,7 @@ func LoadTokenData(configDir string) (*TokenData, error) {
 // DeleteTokenData removes token data from both keychain and legacy storage.
 func DeleteTokenData(configDir string) error {
 	// Delete from keychain
-	keychainErr := DeleteTokenDataKeychain()
+	keychainErr := DeleteTokenDataKeychain(configDir)
 
 	// Also clean up any legacy .data file
 	legacyErr := DeleteSecureData(configDir)

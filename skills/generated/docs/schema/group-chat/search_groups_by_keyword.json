@@ -1,0 +1,75 @@
+{
+  "cli_path": [
+    "chat",
+    "search"
+  ],
+  "display": "钉钉群聊",
+  "flag_hints": {
+    "OpenSearchRequest.cursor": {
+      "alias": "cursor"
+    },
+    "OpenSearchRequest.query": {
+      "alias": "query",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "OpenSearchRequest.cursor",
+      "flag_name": "cursor",
+      "kind": "string",
+      "description": "cursor"
+    },
+    {
+      "property_name": "OpenSearchRequest.query",
+      "flag_name": "query",
+      "kind": "string",
+      "description": "query"
+    }
+  ],
+  "input_schema": {
+    "description": "root",
+    "properties": {
+      "OpenSearchRequest": {
+        "description": "OpenSearchRequest",
+        "properties": {
+          "cursor": {
+            "description": "cursor",
+            "title": "cursor",
+            "type": "string"
+          },
+          "query": {
+            "description": "query",
+            "title": "query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "OpenSearchRequest",
+        "type": "object"
+      }
+    },
+    "title": "root",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "group-chat.search_groups_by_keyword",
+  "product_id": "group-chat",
+  "required": [
+    "OpenSearchRequest.query"
+  ],
+  "tool": {
+    "aliases": [
+      "search_groups_by_keyword"
+    ],
+    "canonical_path": "group-chat.search_groups_by_keyword",
+    "cli_name": "search",
+    "description": "根据群名称关键词，搜索符合条件的群，返回群的openconversion_id、群名称等信息",
+    "rpc_name": "search_groups_by_keyword",
+    "sensitive": false,
+    "source_server_key": "27f939aef74c67b5",
+    "title": "search_groups_by_keyword"
+  }
+}

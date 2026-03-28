@@ -14,9 +14,13 @@
 package auth
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
@@ -29,7 +33,7 @@ var (
 
 // SaveTokenDataKeychain saves TokenData to the platform keychain.
 // This is the new secure storage method using random master key.
-func SaveTokenDataKeychain(data *TokenData) error {
+func SaveTokenDataKeychain(configDir string, data *TokenData) error {
 	jsonData, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal token data: %w", err)
@@ -41,15 +45,19 @@ func SaveTokenDataKeychain(data *TokenData) error {
 		}
 	}()
 
-	if err := keychain.Set(keychain.Service, keychain.AccountToken, string(jsonData)); err != nil {
+	if err := keychain.Set(keychain.Service, tokenAccount(configDir), string(jsonData)); err != nil {
 		return fmt.Errorf("save to keychain: %w", err)
 	}
 	return nil
 }
 
 // LoadTokenDataKeychain loads TokenData from the platform keychain.
-func LoadTokenDataKeychain() (*TokenData, error) {
-	jsonStr, err := keychain.Get(keychain.Service, keychain.AccountToken)
+func LoadTokenDataKeychain(configDir string) (*TokenData, error) {
+	return loadTokenDataFromKeychainAccount(tokenAccount(configDir))
+}
+
+func loadTokenDataFromKeychainAccount(account string) (*TokenData, error) {
+	jsonStr, err := keychain.Get(keychain.Service, account)
 	if err != nil {
 		return nil, fmt.Errorf("load from keychain: %w", err)
 	}
@@ -65,13 +73,38 @@ func LoadTokenDataKeychain() (*TokenData, error) {
 }
 
 // DeleteTokenDataKeychain removes TokenData from the platform keychain.
-func DeleteTokenDataKeychain() error {
-	return keychain.Remove(keychain.Service, keychain.AccountToken)
+func DeleteTokenDataKeychain(configDir string) error {
+	return keychain.Remove(keychain.Service, tokenAccount(configDir))
 }
 
 // TokenDataExistsKeychain checks if token data exists in keychain.
-func TokenDataExistsKeychain() bool {
+func TokenDataExistsKeychain(configDir string) bool {
+	return keychain.Exists(keychain.Service, tokenAccount(configDir))
+}
+
+func LoadLegacyTokenDataKeychain() (*TokenData, error) {
+	return loadTokenDataFromKeychainAccount(keychain.AccountToken)
+}
+
+func DeleteLegacyTokenDataKeychain() error {
+	return keychain.Remove(keychain.Service, keychain.AccountToken)
+}
+
+func LegacyTokenDataExistsKeychain() bool {
 	return keychain.Exists(keychain.Service, keychain.AccountToken)
+}
+
+func tokenAccount(configDir string) string {
+	normalized := strings.TrimSpace(configDir)
+	if normalized == "" {
+		return keychain.AccountToken
+	}
+	if abs, err := filepath.Abs(normalized); err == nil {
+		normalized = abs
+	}
+	normalized = filepath.Clean(normalized)
+	sum := sha256.Sum256([]byte(normalized))
+	return keychain.AccountToken + ":" + hex.EncodeToString(sum[:16])
 }
 
 // EnsureMigration performs one-time migration from legacy .data to keychain.

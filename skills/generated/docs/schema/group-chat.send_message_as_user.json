@@ -1,0 +1,120 @@
+{
+  "cli_path": [
+    "chat",
+    "send_message_as_user"
+  ],
+  "display": "钉钉群聊",
+  "flag_hints": {
+    "openConversation_id": {
+      "required": true
+    },
+    "text": {
+      "required": true
+    },
+    "title": {
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "atAll",
+      "flag_name": "atAll",
+      "kind": "boolean",
+      "description": "是否@所有人"
+    },
+    {
+      "property_name": "atUserIds",
+      "flag_name": "atUserIds",
+      "kind": "string_array",
+      "description": "需要@的userId列表"
+    },
+    {
+      "property_name": "clawType",
+      "flag_name": "clawType",
+      "kind": "string",
+      "description": "clawType"
+    },
+    {
+      "property_name": "openConversation_id",
+      "flag_name": "openConversation-id",
+      "kind": "string",
+      "description": "目标会话ID"
+    },
+    {
+      "property_name": "text",
+      "flag_name": "text",
+      "kind": "string",
+      "description": "消息正文，markdown格式"
+    },
+    {
+      "property_name": "title",
+      "flag_name": "title",
+      "kind": "string",
+      "description": "消息标题，标题内容显示在消息列表"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "atAll": {
+        "description": "是否@所有人",
+        "title": "是否@所有人",
+        "type": "boolean"
+      },
+      "atUserIds": {
+        "description": "需要@的userId列表",
+        "items": {
+          "type": "string"
+        },
+        "title": "需要@的userId列表",
+        "type": "array"
+      },
+      "clawType": {
+        "description": "clawType",
+        "title": "clawType",
+        "type": "string"
+      },
+      "openConversation_id": {
+        "description": "目标会话ID",
+        "title": "会话Id，可通过关键词搜索群会话工具获取",
+        "type": "string"
+      },
+      "text": {
+        "description": "消息正文，markdown格式",
+        "title": "消息正文，markdown格式",
+        "type": "string"
+      },
+      "title": {
+        "description": "消息标题，标题内容显示在消息列表",
+        "title": "消息标题，标题内容显示在消息列表",
+        "type": "string"
+      }
+    },
+    "required": [
+      "openConversation_id",
+      "text",
+      "title"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "group-chat.send_message_as_user",
+  "product_id": "group-chat",
+  "required": [
+    "openConversation_id",
+    "text",
+    "title"
+  ],
+  "tool": {
+    "aliases": null,
+    "canonical_path": "group-chat.send_message_as_user",
+    "cli_name": "send_message_as_user",
+    "description": "以当前用户的身份发送群消息",
+    "hidden": true,
+    "rpc_name": "send_message_as_user",
+    "sensitive": false,
+    "source_server_key": "27f939aef74c67b5",
+    "title": "send_message_as_user"
+  }
+}

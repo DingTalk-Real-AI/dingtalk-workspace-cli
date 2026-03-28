@@ -1,0 +1,72 @@
+{
+  "cli_path": [
+    "chat",
+    "group",
+    "members",
+    "list"
+  ],
+  "display": "钉钉群聊",
+  "flag_hints": {
+    "cursor": {
+      "alias": "cursor"
+    },
+    "openconversation_id": {
+      "alias": "id",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "cursor",
+      "flag_name": "cursor",
+      "kind": "string",
+      "description": "分页游标，首次从0开始"
+    },
+    {
+      "property_name": "openconversation_id",
+      "flag_name": "id",
+      "alias": "openconversation-id",
+      "kind": "string",
+      "description": "群Id，可以从根据关键词搜索群列表服务获取"
+    }
+  ],
+  "input_schema": {
+    "description": "root",
+    "properties": {
+      "cursor": {
+        "description": "分页游标，首次从0开始",
+        "title": "分页游标，首次从0开始",
+        "type": "string"
+      },
+      "openconversation_id": {
+        "description": "群Id，可以从根据关键词搜索群列表服务获取",
+        "title": "群Id，可以从根据关键词搜索群列表服务获取",
+        "type": "string"
+      }
+    },
+    "required": [
+      "openconversation_id"
+    ],
+    "title": "root",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "group-chat.get_group_members",
+  "product_id": "group-chat",
+  "required": [
+    "openconversation_id"
+  ],
+  "tool": {
+    "aliases": [
+      "get_group_members"
+    ],
+    "canonical_path": "group-chat.get_group_members",
+    "cli_name": "list",
+    "description": "查群成员列表",
+    "group": "group.members",
+    "rpc_name": "get_group_members",
+    "sensitive": false,
+    "source_server_key": "27f939aef74c67b5",
+    "title": "get_group_members"
+  }
+}

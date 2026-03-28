@@ -1,0 +1,161 @@
+{
+  "cli_path": [
+    "report",
+    "create"
+  ],
+  "display": "钉钉日志",
+  "flag_hints": {
+    "contents": {
+      "alias": "contents",
+      "transform": "json_parse",
+      "required": true
+    },
+    "ddFrom": {
+      "alias": "dd-from",
+      "required": true
+    },
+    "templateId": {
+      "alias": "template-id",
+      "required": true
+    },
+    "toChat": {
+      "alias": "to-chat",
+      "required": true
+    },
+    "toUserIds": {
+      "alias": "to-user-ids",
+      "transform": "csv_to_array"
+    }
+  },
+  "flags": [
+    {
+      "property_name": "contents",
+      "flag_name": "contents",
+      "kind": "json",
+      "description": "日志内容列表"
+    },
+    {
+      "property_name": "ddFrom",
+      "flag_name": "dd-from",
+      "kind": "string",
+      "description": "创建日志的来源，自定义值"
+    },
+    {
+      "property_name": "templateId",
+      "flag_name": "template-id",
+      "kind": "string",
+      "description": "需要发送哪个日志模板的日志，可通过获取可见日志模板服务获取"
+    },
+    {
+      "property_name": "toChat",
+      "flag_name": "to-chat",
+      "kind": "boolean",
+      "description": "是否发送到日志接收人的单聊"
+    },
+    {
+      "property_name": "toUserIds",
+      "flag_name": "to-user-ids",
+      "kind": "string_array",
+      "description": "该日志发送到的人员userId列表"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "contents": {
+        "description": "日志内容列表",
+        "items": {
+          "properties": {
+            "content": {
+              "description": "控件的值",
+              "title": "控件的值",
+              "type": "string"
+            },
+            "contentType": {
+              "description": "内容类型，文本类型的组件（type=1)：markdown,其它类型组件：origin",
+              "title": "内容类型，文本类型的组件（type=1)：markdown,其它类型组件：origin",
+              "type": "string"
+            },
+            "key": {
+              "description": "控件的标题，可通过获取模板详情获取",
+              "title": "控件的标题，可通过获取模板详情获取",
+              "type": "string"
+            },
+            "sort": {
+              "description": "控件的排序，可通过获取模板详情获取",
+              "title": "控件的排序，可通过获取模板详情获取",
+              "type": "string"
+            },
+            "type": {
+              "description": "字段type，1：文本类型，2：数字类型，3：单选类型，5：日期类型，7：多选类型",
+              "title": "字段type，1：文本类型，2：数字类型，3：单选类型，5：日期类型，7：多选类型",
+              "type": "string"
+            }
+          },
+          "required": [
+            "content",
+            "sort",
+            "key",
+            "contentType",
+            "type"
+          ],
+          "type": "object"
+        },
+        "title": "日志内容列表",
+        "type": "array"
+      },
+      "ddFrom": {
+        "description": "创建日志的来源，自定义值",
+        "title": "创建日志的来源，自定义值",
+        "type": "string"
+      },
+      "templateId": {
+        "description": "需要发送哪个日志模板的日志，可通过获取可见日志模板服务获取",
+        "title": "需要发送哪个日志模板的日志，可通过获取可见日志模板服务获取",
+        "type": "string"
+      },
+      "toChat": {
+        "description": "是否发送到日志接收人的单聊",
+        "title": "是否发送到日志接收人的单聊",
+        "type": "boolean"
+      },
+      "toUserIds": {
+        "description": "该日志发送到的人员userId列表",
+        "items": {
+          "type": "string"
+        },
+        "title": "该日志发送到的人员userId列表",
+        "type": "array"
+      }
+    },
+    "required": [
+      "contents",
+      "ddFrom",
+      "templateId",
+      "toChat"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "report.create_report",
+  "product_id": "report",
+  "required": [
+    "contents",
+    "ddFrom",
+    "templateId",
+    "toChat"
+  ],
+  "tool": {
+    "aliases": [
+      "create_report"
+    ],
+    "canonical_path": "report.create_report",
+    "cli_name": "create",
+    "description": "创建日志",
+    "rpc_name": "create_report",
+    "sensitive": false,
+    "source_server_key": "379b7411e5ab4e32",
+    "title": "创建日志"
+  }
+}

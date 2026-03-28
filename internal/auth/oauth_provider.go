@@ -24,7 +24,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/platform/i18n"
 )
 
 // oauthHTTPClient is a dedicated HTTP client for OAuth operations with

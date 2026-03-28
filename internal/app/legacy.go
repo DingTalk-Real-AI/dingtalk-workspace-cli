@@ -20,30 +20,34 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"sort"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cache"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/compat"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/config"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/platform/config"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/cache"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/market"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/surface/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/surface/compat"
 	"github.com/spf13/cobra"
 )
 
-func newLegacyPublicCommands(ctx context.Context, runner executor.Runner) []*cobra.Command {
-	var commands []*cobra.Command
-	// Generate commands dynamically from the market discovery API.
-	if dynamicCmds := loadDynamicCommands(ctx, runner); len(dynamicCmds) > 0 {
-		commands = append(commands, dynamicCmds...)
+// bootstrapDynamicServersFromCache seeds direct-runtime endpoint routing from
+// the registry snapshot already produced by canonical catalog loading.
+func bootstrapDynamicServersFromCache() {
+	if strings.TrimSpace(os.Getenv(cli.CatalogFixtureEnv)) != "" {
+		SetDynamicServers(nil)
+		return
 	}
-	commands = append(commands, helpers.NewPublicCommands(runner)...)
-	return mergeTopLevelCommands(commands)
+
+	store := cacheStoreFromEnv()
+	snapshot, _, err := store.LoadRegistry(config.DefaultPartition)
+	if err != nil || !snapshot.Complete || len(snapshot.Servers) == 0 {
+		SetDynamicServers(nil)
+		return
+	}
+	SetDynamicServers(snapshot.Servers)
 }
 
 // loadDynamicCommands loads the server registry and generates CLI commands
@@ -278,21 +282,31 @@ func fetchDetailsByServerID(ctx context.Context, client *market.Client, servers 
 	return result
 }
 
-// discoveryBaseURLOverride allows tests to redirect discovery to a local server.
-// Must be empty in production; only set during test execution.
-var discoveryBaseURLOverride string
+var (
+	discoveryBaseURLMu       sync.RWMutex
+	discoveryBaseURLOverride string
+)
 
-// SetDiscoveryBaseURL sets the base URL used for dynamic server discovery.
-// Intended for test use only.
+// SetDiscoveryBaseURL allows tests to redirect discovery to a local server.
 func SetDiscoveryBaseURL(url string) {
-	discoveryBaseURLOverride = url
+	discoveryBaseURLMu.Lock()
+	defer discoveryBaseURLMu.Unlock()
+	discoveryBaseURLOverride = strings.TrimSpace(url)
 }
 
-// DiscoveryBaseURL returns the effective base URL for discovery —
-// discoveryBaseURLOverride if set, otherwise DefaultMarketBaseURL.
+// DiscoveryBaseURL returns the configured discovery base URL. Test overrides
+// win over the environment so package-level fixtures remain deterministic even
+// when the parent process exports DWS_DISCOVERY_BASE_URL.
 func DiscoveryBaseURL() string {
+	discoveryBaseURLMu.RLock()
 	if discoveryBaseURLOverride != "" {
+		discoveryBaseURLMu.RUnlock()
 		return discoveryBaseURLOverride
+	}
+	discoveryBaseURLMu.RUnlock()
+
+	if value := strings.TrimSpace(os.Getenv("DWS_DISCOVERY_BASE_URL")); value != "" {
+		return value
 	}
 	return cli.DefaultMarketBaseURL
 }
@@ -330,35 +344,4 @@ func asyncRevalidateRegistry(parent context.Context, store *cache.Store, partiti
 	if saveErr := store.SaveRegistry(partition, cache.RegistrySnapshot{Servers: servers}); saveErr != nil {
 		slog.Debug("asyncRevalidateRegistry: save failed", "error", saveErr)
 	}
-}
-
-func newLegacyHiddenCommands(_ executor.Runner) []*cobra.Command {
-	return nil
-}
-
-func mergeTopLevelCommands(commands []*cobra.Command) []*cobra.Command {
-	byName := make(map[string]*cobra.Command, len(commands))
-	for _, cmd := range commands {
-		if cmd == nil {
-			continue
-		}
-		name := cmd.Name()
-		if name == "" {
-			continue
-		}
-		if existing, ok := byName[name]; ok {
-			cobracmd.MergeCommandTree(existing, cmd)
-			continue
-		}
-		byName[name] = cmd
-	}
-
-	out := make([]*cobra.Command, 0, len(byName))
-	for _, cmd := range byName {
-		out = append(out, cmd)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].Use < out[j].Use
-	})
-	return out
 }

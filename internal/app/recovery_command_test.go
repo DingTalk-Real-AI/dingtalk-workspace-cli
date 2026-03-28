@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/recovery"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/surface/cli"
 )
 
 func TestRecoveryPlanReadsLastSnapshotAndPrintsJSON(t *testing.T) {

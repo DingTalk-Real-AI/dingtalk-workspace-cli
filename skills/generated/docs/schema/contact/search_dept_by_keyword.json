@@ -1,0 +1,57 @@
+{
+  "cli_path": [
+    "contact",
+    "dept",
+    "search"
+  ],
+  "display": "钉钉通讯录",
+  "flag_hints": {
+    "query": {
+      "alias": "keyword",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "query",
+      "flag_name": "keyword",
+      "alias": "query",
+      "kind": "string",
+      "description": "搜索关键词"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "query": {
+        "description": "搜索关键词",
+        "title": "query",
+        "type": "string"
+      }
+    },
+    "required": [
+      "query"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "contact.search_dept_by_keyword",
+  "product_id": "contact",
+  "required": [
+    "query"
+  ],
+  "tool": {
+    "aliases": [
+      "search_dept_by_keyword"
+    ],
+    "canonical_path": "contact.search_dept_by_keyword",
+    "cli_name": "search",
+    "description": "根据关键词模糊搜索部门，返回匹配的部门列表，包含每个部门的 ID、名称。搜索范围限于调用者有权限查看的组织架构；若关键词无匹配结果或部门因可见性设置被隐藏，则相应部门不会出现在结果中。",
+    "group": "dept",
+    "rpc_name": "search_dept_by_keyword",
+    "sensitive": false,
+    "source_server_key": "e1e13a2fc7ab1f1b",
+    "title": "搜索部门"
+  }
+}

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/market"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/transport"
 )
 
 const (
@@ -92,9 +92,9 @@ func docServerFixture() ServerFixture {
 					CLIName:     "search-documents",
 					Title:       "搜索文档",
 					Description: "根据关键词搜索员工有权限访问的文档",
-					IsSensitive: false,
+					IsSensitive: boolPtr(false),
 					Category:    "查询",
-					Hidden:      false,
+					Hidden:      boolPtr(false),
 					Flags: map[string]market.CLIFlagHint{
 						"keyword":    {Shorthand: "k", Alias: "query"},
 						"maxResults": {Alias: "limit"},
@@ -105,9 +105,9 @@ func docServerFixture() ServerFixture {
 					CLIName:     "create-document",
 					Title:       "创建文档",
 					Description: "在指定位置创建钉钉文档",
-					IsSensitive: true,
+					IsSensitive: boolPtr(true),
 					Category:    "写入",
-					Hidden:      false,
+					Hidden:      boolPtr(false),
 				},
 			},
 		},
@@ -225,9 +225,9 @@ func docLegacyServerFixture() ServerFixture {
 					CLIName:     "search-documents",
 					Title:       "搜索文档",
 					Description: "旧版文档搜索",
-					IsSensitive: false,
+					IsSensitive: boolPtr(false),
 					Category:    "查询",
-					Hidden:      true,
+					Hidden:      boolPtr(true),
 				},
 			},
 		},
@@ -350,4 +350,8 @@ func mustJSONString(value any) string {
 		panic(err)
 	}
 	return string(data)
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }

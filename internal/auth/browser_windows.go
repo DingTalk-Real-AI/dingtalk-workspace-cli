@@ -16,22 +16,16 @@
 package auth
 
 import (
-	"fmt"
-	"net/url"
 	"os/exec"
 	"syscall"
 )
 
-func openBrowser(rawURL string) error {
-	parsed, err := url.Parse(rawURL)
-	if err != nil {
-		return fmt.Errorf("invalid URL: %w", err)
-	}
-	if !allowedBrowserSchemes[parsed.Scheme] {
-		return fmt.Errorf("refused to open URL with disallowed scheme %q", parsed.Scheme)
+func openBrowser(url string) error {
+	if err := validateBrowserURL(url); err != nil {
+		return err
 	}
 
-	cmd := exec.Command("rundll32", "url.dll,FileProtocolHandler", rawURL)
+	cmd := exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		HideWindow:    true,
 		CreationFlags: 0x08000000,

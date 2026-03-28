@@ -1,0 +1,143 @@
+{
+  "cli_path": [
+    "bot",
+    "message",
+    "send-by-webhook"
+  ],
+  "display": "机器人消息",
+  "flag_hints": {
+    "atMobiles": {
+      "alias": "at-mobiles",
+      "transform": "csv_to_array"
+    },
+    "atUserIds": {
+      "alias": "at-users",
+      "transform": "csv_to_array"
+    },
+    "isAtAll": {
+      "alias": "at-all"
+    },
+    "robotToken": {
+      "alias": "token",
+      "required": true
+    },
+    "text": {
+      "alias": "text",
+      "required": true
+    },
+    "title": {
+      "alias": "title",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "atMobiles",
+      "flag_name": "at-mobiles",
+      "kind": "string_array",
+      "description": "被@的群成员手机号"
+    },
+    {
+      "property_name": "atUserIds",
+      "flag_name": "at-users",
+      "alias": "at-user-ids",
+      "kind": "string_array",
+      "description": "被@的群成员userId"
+    },
+    {
+      "property_name": "isAtAll",
+      "flag_name": "at-all",
+      "alias": "is-at-all",
+      "kind": "boolean",
+      "description": "是否@所有人"
+    },
+    {
+      "property_name": "robotToken",
+      "flag_name": "token",
+      "alias": "robot-token",
+      "kind": "string",
+      "description": "自定义机器人Token，在创建自定义机器人时得到的webhook地址中的accessToken值"
+    },
+    {
+      "property_name": "text",
+      "flag_name": "text",
+      "kind": "string",
+      "description": "消息内容,Markdown格式"
+    },
+    {
+      "property_name": "title",
+      "flag_name": "title",
+      "kind": "string",
+      "description": "消息标题"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "atMobiles": {
+        "description": "被@的群成员手机号",
+        "items": {
+          "type": "string"
+        },
+        "title": "被@的群成员手机号",
+        "type": "array"
+      },
+      "atUserIds": {
+        "description": "被@的群成员userId",
+        "items": {
+          "type": "string"
+        },
+        "title": "被@的群成员userId",
+        "type": "array"
+      },
+      "isAtAll": {
+        "description": "是否@所有人",
+        "title": "是否@所有人",
+        "type": "boolean"
+      },
+      "robotToken": {
+        "description": "自定义机器人Token，在创建自定义机器人时得到的webhook地址中的accessToken值",
+        "title": "自定义机器人Token，在创建自定义机器人时得到的webhook地址中的accessToken值",
+        "type": "string"
+      },
+      "text": {
+        "description": "消息内容,Markdown格式",
+        "title": "消息内容",
+        "type": "string"
+      },
+      "title": {
+        "description": "消息标题",
+        "title": "消息标题",
+        "type": "string"
+      }
+    },
+    "required": [
+      "robotToken",
+      "text",
+      "title"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "bot.send_message_by_custom_robot",
+  "product_id": "bot",
+  "required": [
+    "robotToken",
+    "text",
+    "title"
+  ],
+  "tool": {
+    "aliases": [
+      "send_message_by_custom_robot"
+    ],
+    "canonical_path": "bot.send_message_by_custom_robot",
+    "cli_name": "send-by-webhook",
+    "description": "使用自定义机器人发送群消息，请注意自定义机器人与企业机器人的区别。",
+    "group": "message",
+    "rpc_name": "send_message_by_custom_robot",
+    "sensitive": false,
+    "source_server_key": "3303015f1832b28d",
+    "title": "自定义机器人发送群消息"
+  }
+}

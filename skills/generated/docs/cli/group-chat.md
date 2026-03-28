@@ -1,0 +1,91 @@
+# Canonical Product: group-chat
+
+Generated from shared Tool IR. Do not edit by hand.
+
+- Display name: 钉钉群聊
+- Description: 钉钉群聊MCP支持创建内部群、搜索群会话、管理群成员、修改群名称及查询话题回复等群聊管理能力。
+- Server key: `27f939aef74c67b5`
+- Endpoint: `https://mcp-gw.dingtalk.com/server/0a1609437385696b77fc4771c3ddaf5656b487f809966c0cc8d4755e7b1d3b74`
+- Protocol: `2025-03-26`
+- Degraded: `false`
+
+## Tools
+
+- `group members add`
+  - Path: `group-chat.add_group_member`
+  - CLI route: `dws chat group members add`
+  - Description: 添加群成员
+  - Flags: `--id`, `--users`
+  - Schema: `skills/generated/docs/schema/group-chat/add_group_member.json`
+- `group create`
+  - Path: `group-chat.create_internal_group`
+  - CLI route: `dws chat group create`
+  - Description: 创建一个组织内部的群聊（仅限本企业成员加入），支持指定群名称、初始成员列表等参数。操作成功后返回是否创建成功的结果。群聊创建受组织安全策略限制（如成员必须属于同一企业）。适用于项目协作、临时沟通等需要快速建群的场景。
+  - Flags: `--users`, `--name`
+  - Schema: `skills/generated/docs/schema/group-chat/create_internal_group.json`
+- `create_internal_org_group`
+  - Path: `group-chat.create_internal_org_group`
+  - CLI route: `dws chat create_internal_org_group`
+  - Description: 创建一个组织内部的群聊（仅限本企业成员加入），支持指定群名称、初始成员列表等参数。操作成功后返回是否创建成功的结果。群聊创建受组织安全策略限制（如成员必须属于同一企业）。适用于项目协作、临时沟通等需要快速建群的场景。
+  - Flags: `--groupMembers`, `--groupName`
+  - Schema: `skills/generated/docs/schema/group-chat/create_internal_org_group.json`
+- `group members list`
+  - Path: `group-chat.get_group_members`
+  - CLI route: `dws chat group members list`
+  - Description: 查群成员列表
+  - Flags: `--cursor`, `--id`
+  - Schema: `skills/generated/docs/schema/group-chat/get_group_members.json`
+- `list_conversation_message`
+  - Path: `group-chat.list_conversation_message`
+  - CLI route: `dws chat list_conversation_message`
+  - Description: 已废弃！！！！拉取指定单聊或群聊的会话消息内容
+  - Flags: `--endTime`, `--openconversation-id`, `--startTime`
+  - Schema: `skills/generated/docs/schema/group-chat/list_conversation_message.json`
+- `list_conversation_message_v2`
+  - Path: `group-chat.list_conversation_message_v2`
+  - CLI route: `dws chat list_conversation_message_v2`
+  - Description: 拉取指定群聊的会话消息内容
+  - Flags: `--forward`, `--limit`, `--openconversation-id`, `--time`
+  - Schema: `skills/generated/docs/schema/group-chat/list_conversation_message_v2.json`
+- `list_individual_chat_message`
+  - Path: `group-chat.list_individual_chat_message`
+  - CLI route: `dws chat list_individual_chat_message`
+  - Description: 拉取指定用户的单聊会话消息内容
+  - Flags: `--forward`, `--limit`, `--time`, `--userId`
+  - Schema: `skills/generated/docs/schema/group-chat/list_individual_chat_message.json`
+- `message list-topic-replies`
+  - Path: `group-chat.list_topic_replies`
+  - CLI route: `dws chat message list-topic-replies`
+  - Description: 针对话题群中的单个话题，分页拉取话题的回复消息
+  - Flags: `--forward`, `--group`, `--limit`, `--time`, `--topic-id`
+  - Schema: `skills/generated/docs/schema/group-chat/list_topic_replies.json`
+- `group members remove`
+  - Path: `group-chat.remove_group_member`
+  - CLI route: `dws chat group members remove`
+  - Description: 移除群成员
+  - Flags: `--id`, `--users`
+  - Schema: `skills/generated/docs/schema/group-chat/remove_group_member.json`
+- `search`
+  - Path: `group-chat.search_groups_by_keyword`
+  - CLI route: `dws chat search`
+  - Description: 根据群名称关键词，搜索符合条件的群，返回群的openconversion_id、群名称等信息
+  - Flags: `--cursor`, `--query`
+  - Schema: `skills/generated/docs/schema/group-chat/search_groups_by_keyword.json`
+- `send_direct_message_as_user`
+  - Path: `group-chat.send_direct_message_as_user`
+  - CLI route: `dws chat send_direct_message_as_user`
+  - Description: 以当前用户的身份给某用户发送单聊消息。
+  - Flags: `--clawType`, `--receiverUserId`, `--text`, `--title`
+  - Schema: `skills/generated/docs/schema/group-chat/send_direct_message_as_user.json`
+- `send_message_as_user`
+  - Path: `group-chat.send_message_as_user`
+  - CLI route: `dws chat send_message_as_user`
+  - Description: 以当前用户的身份发送群消息
+  - Flags: `--atAll`, `--atUserIds`, `--clawType`, `--openConversation-id`, `--text`, `--title`
+  - Schema: `skills/generated/docs/schema/group-chat/send_message_as_user.json`
+- `group rename`
+  - Path: `group-chat.update_group_name`
+  - CLI route: `dws chat group rename`
+  - Description: 更新群名称
+  - Flags: `--name`, `--id`
+  - Schema: `skills/generated/docs/schema/group-chat/update_group_name.json`

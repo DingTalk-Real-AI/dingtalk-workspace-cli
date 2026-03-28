@@ -1,0 +1,150 @@
+{
+  "cli_path": [
+    "report",
+    "sent"
+  ],
+  "display": "钉钉日志",
+  "flag_hints": {
+    "cursor": {
+      "alias": "cursor",
+      "required": true
+    },
+    "endTime": {
+      "alias": "end",
+      "transform": "iso8601_to_millis"
+    },
+    "modifiedEndTime": {
+      "alias": "modified-end",
+      "transform": "iso8601_to_millis"
+    },
+    "modifiedStartTime": {
+      "alias": "modified-start",
+      "transform": "iso8601_to_millis"
+    },
+    "report_template_name": {
+      "alias": "template-name"
+    },
+    "size": {
+      "alias": "size",
+      "required": true
+    },
+    "startTime": {
+      "alias": "start",
+      "transform": "iso8601_to_millis"
+    }
+  },
+  "flags": [
+    {
+      "property_name": "cursor",
+      "flag_name": "cursor",
+      "kind": "number",
+      "description": "分页游标，首次传0"
+    },
+    {
+      "property_name": "endTime",
+      "flag_name": "end",
+      "alias": "end-time",
+      "kind": "string",
+      "description": "日志创建的结束时间，毫秒级时间戳格式，示例：1734048000；注意：开始时间和结束时间跨度不能超过180天"
+    },
+    {
+      "property_name": "modifiedEndTime",
+      "flag_name": "modified-end",
+      "alias": "modified-end-time",
+      "kind": "string",
+      "description": "日志修改的结束时间，毫秒级时间戳格式，示例：1734048000"
+    },
+    {
+      "property_name": "modifiedStartTime",
+      "flag_name": "modified-start",
+      "alias": "modified-start-time",
+      "kind": "string",
+      "description": "日志修改的开始时间，毫秒级时间戳格式，示例：1734048000"
+    },
+    {
+      "property_name": "report_template_name",
+      "flag_name": "template-name",
+      "alias": "report-template-name",
+      "kind": "string",
+      "description": "日志模板名称，可不传，查询的是全部日志"
+    },
+    {
+      "property_name": "size",
+      "flag_name": "size",
+      "kind": "number",
+      "description": "分页大小，最大20"
+    },
+    {
+      "property_name": "startTime",
+      "flag_name": "start",
+      "alias": "start-time",
+      "kind": "string",
+      "description": "日志创建的开始时间，毫秒级时间戳格式，示例：1734048000；注意：开始时间和结束时间跨度不能超过180天"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "cursor": {
+        "description": "分页游标，首次传0",
+        "title": "分页游标，首次传0",
+        "type": "number"
+      },
+      "endTime": {
+        "description": "日志创建的结束时间，毫秒级时间戳格式，示例：1734048000；注意：开始时间和结束时间跨度不能超过180天",
+        "title": "日志创建的结束时间，毫秒级时间戳格式，示例：1734048000；注意：开始时间和结束时间跨度不能超过180天",
+        "type": "number"
+      },
+      "modifiedEndTime": {
+        "description": "日志修改的结束时间，毫秒级时间戳格式，示例：1734048000",
+        "title": "日志修改的结束时间，毫秒级时间戳格式，示例：1734048000",
+        "type": "number"
+      },
+      "modifiedStartTime": {
+        "description": "日志修改的开始时间，毫秒级时间戳格式，示例：1734048000",
+        "title": "日志修改的开始时间，毫秒级时间戳格式，示例：1734048000",
+        "type": "number"
+      },
+      "report_template_name": {
+        "description": "日志模板名称，可不传，查询的是全部日志",
+        "title": "日志模板名称，可不传，查询的是全部日志",
+        "type": "string"
+      },
+      "size": {
+        "description": "分页大小，最大20",
+        "title": "分页大小，最大20",
+        "type": "number"
+      },
+      "startTime": {
+        "description": "日志创建的开始时间，毫秒级时间戳格式，示例：1734048000；注意：开始时间和结束时间跨度不能超过180天",
+        "title": "日志创建的开始时间，毫秒级时间戳格式，示例：1734048000；注意：开始时间和结束时间跨度不能超过180天",
+        "type": "number"
+      }
+    },
+    "required": [
+      "cursor",
+      "size"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "report.get_send_report_list",
+  "product_id": "report",
+  "required": [
+    "cursor",
+    "size"
+  ],
+  "tool": {
+    "aliases": [
+      "get_send_report_list"
+    ],
+    "canonical_path": "report.get_send_report_list",
+    "cli_name": "sent",
+    "description": "查询当前人创建的日志详情列表，包含日志的内容、日志名称、创建时间等信息",
+    "rpc_name": "get_send_report_list",
+    "sensitive": false,
+    "source_server_key": "379b7411e5ab4e32",
+    "title": "查询当前人创建的日志详情列表"
+  }
+}

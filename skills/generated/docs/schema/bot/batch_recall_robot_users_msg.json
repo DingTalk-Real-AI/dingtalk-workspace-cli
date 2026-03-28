@@ -1,0 +1,78 @@
+{
+  "cli_path": [
+    "bot",
+    "message",
+    "recall-by-bot"
+  ],
+  "display": "机器人消息",
+  "flag_hints": {
+    "processQueryKeys": {
+      "alias": "keys",
+      "transform": "csv_to_array",
+      "required": true
+    },
+    "robotCode": {
+      "alias": "robot-code",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "processQueryKeys",
+      "flag_name": "keys",
+      "alias": "process-query-keys",
+      "kind": "string_array",
+      "description": "消息Id列表，机器人发送单聊消息时返回的值"
+    },
+    {
+      "property_name": "robotCode",
+      "flag_name": "robot-code",
+      "kind": "string",
+      "description": "机器人robotCode"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "processQueryKeys": {
+        "description": "消息Id列表，机器人发送单聊消息时返回的值",
+        "items": {
+          "type": "string"
+        },
+        "title": "消息Id列表，机器人发送单聊消息时返回的值",
+        "type": "array"
+      },
+      "robotCode": {
+        "description": "机器人robotCode",
+        "title": "机器人robotCode",
+        "type": "string"
+      }
+    },
+    "required": [
+      "processQueryKeys",
+      "robotCode"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "bot.batch_recall_robot_users_msg",
+  "product_id": "bot",
+  "required": [
+    "processQueryKeys",
+    "robotCode"
+  ],
+  "tool": {
+    "aliases": [
+      "batch_recall_robot_users_msg"
+    ],
+    "canonical_path": "bot.batch_recall_robot_users_msg",
+    "cli_name": "recall-by-bot",
+    "description": "批量撤回机器人发送的单聊消息。",
+    "group": "message",
+    "rpc_name": "batch_recall_robot_users_msg",
+    "sensitive": false,
+    "source_server_key": "3303015f1832b28d",
+    "title": "批量撤回企业机器人发送的单聊消息"
+  }
+}

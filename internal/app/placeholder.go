@@ -14,10 +14,20 @@
 package app
 
 import (
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
 	"github.com/spf13/cobra"
 )
 
 func newPlaceholderParent(use, short string, children ...*cobra.Command) *cobra.Command {
-	return cobracmd.NewPlaceholderParent(use, short, children...)
+	cmd := &cobra.Command{
+		Use:               use,
+		Short:             short,
+		Args:              cobra.NoArgs,
+		TraverseChildren:  true,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+	cmd.AddCommand(children...)
+	return cmd
 }

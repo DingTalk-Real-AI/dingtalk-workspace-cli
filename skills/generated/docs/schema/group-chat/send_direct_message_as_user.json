@@ -1,0 +1,95 @@
+{
+  "cli_path": [
+    "chat",
+    "send_direct_message_as_user"
+  ],
+  "display": "钉钉群聊",
+  "flag_hints": {
+    "receiverUserId": {
+      "required": true
+    },
+    "text": {
+      "required": true
+    },
+    "title": {
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "clawType",
+      "flag_name": "clawType",
+      "kind": "string",
+      "description": "clawType"
+    },
+    {
+      "property_name": "receiverUserId",
+      "flag_name": "receiverUserId",
+      "kind": "string",
+      "description": "发送到单聊的接收人userId"
+    },
+    {
+      "property_name": "text",
+      "flag_name": "text",
+      "kind": "string",
+      "description": "消息正文，markdown格式"
+    },
+    {
+      "property_name": "title",
+      "flag_name": "title",
+      "kind": "string",
+      "description": "消息标题，标题内容显示在消息列表"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "clawType": {
+        "description": "clawType",
+        "title": "clawType",
+        "type": "string"
+      },
+      "receiverUserId": {
+        "description": "发送到单聊的接收人userId",
+        "title": "发送到单聊的接收人userId",
+        "type": "string"
+      },
+      "text": {
+        "description": "消息正文，markdown格式",
+        "title": "消息正文，markdown格式",
+        "type": "string"
+      },
+      "title": {
+        "description": "消息标题，标题内容显示在消息列表",
+        "title": "消息标题，标题内容显示在消息列表",
+        "type": "string"
+      }
+    },
+    "required": [
+      "receiverUserId",
+      "text",
+      "title"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "group-chat.send_direct_message_as_user",
+  "product_id": "group-chat",
+  "required": [
+    "receiverUserId",
+    "text",
+    "title"
+  ],
+  "tool": {
+    "aliases": null,
+    "canonical_path": "group-chat.send_direct_message_as_user",
+    "cli_name": "send_direct_message_as_user",
+    "description": "以当前用户的身份给某用户发送单聊消息。",
+    "hidden": true,
+    "rpc_name": "send_direct_message_as_user",
+    "sensitive": false,
+    "source_server_key": "27f939aef74c67b5",
+    "title": "send_direct_message_as_user"
+  }
+}

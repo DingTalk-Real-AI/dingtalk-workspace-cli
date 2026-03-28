@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cache"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/discovery"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/cache"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/discovery"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/market"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/transport"
 )
 
 func TestDiscoverServersFallsBackToCachedRegistry(t *testing.T) {
@@ -352,6 +352,7 @@ func TestDiscoverServerRuntimeEnrichesToolMetadataFromDetail(t *testing.T) {
 		transport.NewClient(server.Client()),
 		cache.NewStore(t.TempDir()),
 	)
+	service.AllowLiveDetailFetch = true
 	runtimeServer, err := service.DiscoverServerRuntime(context.Background(), market.ServerDescriptor{
 		Key:      "doc",
 		Endpoint: server.URL + "/server/doc",
@@ -369,8 +370,8 @@ func TestDiscoverServerRuntimeEnrichesToolMetadataFromDetail(t *testing.T) {
 	if tool.Title != "创建文档" {
 		t.Fatalf("tool.Title = %q, want 创建文档", tool.Title)
 	}
-	if tool.Description != "在指定位置创建钉钉文档" {
-		t.Fatalf("tool.Description = %q, want detail description", tool.Description)
+	if tool.Description != "legacy" {
+		t.Fatalf("tool.Description = %q, want runtime description to be preserved", tool.Description)
 	}
 	if !tool.Sensitive {
 		t.Fatalf("tool.Sensitive = false, want true")

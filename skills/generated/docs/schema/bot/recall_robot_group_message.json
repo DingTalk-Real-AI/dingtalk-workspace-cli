@@ -1,0 +1,96 @@
+{
+  "cli_path": [
+    "bot",
+    "message",
+    "recall_robot_group_message"
+  ],
+  "display": "机器人消息",
+  "flag_hints": {
+    "openConversationId": {
+      "alias": "group",
+      "required": true
+    },
+    "processQueryKeys": {
+      "alias": "keys",
+      "transform": "csv_to_array",
+      "required": true
+    },
+    "robotCode": {
+      "alias": "robot-code",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "openConversationId",
+      "flag_name": "group",
+      "alias": "open-conversation-id",
+      "kind": "string",
+      "description": "群ID，可通过客户端调用chooseChat接口获取"
+    },
+    {
+      "property_name": "processQueryKeys",
+      "flag_name": "keys",
+      "alias": "process-query-keys",
+      "kind": "string_array",
+      "description": "消息Id列表，机器人发送消息服务返回的值"
+    },
+    {
+      "property_name": "robotCode",
+      "flag_name": "robot-code",
+      "kind": "string",
+      "description": "机器人Code"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "openConversationId": {
+        "description": "群ID，可通过客户端调用chooseChat接口获取",
+        "title": "群会话Id",
+        "type": "string"
+      },
+      "processQueryKeys": {
+        "description": "消息Id列表，机器人发送消息服务返回的值",
+        "items": {
+          "type": "string"
+        },
+        "title": "消息Id列表，机器人发送消息服务返回的值",
+        "type": "array"
+      },
+      "robotCode": {
+        "description": "机器人Code",
+        "title": "机器人robotCode",
+        "type": "string"
+      }
+    },
+    "required": [
+      "openConversationId",
+      "processQueryKeys",
+      "robotCode"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "bot.recall_robot_group_message",
+  "product_id": "bot",
+  "required": [
+    "openConversationId",
+    "processQueryKeys",
+    "robotCode"
+  ],
+  "tool": {
+    "aliases": [
+      "recall_robot_group_message"
+    ],
+    "canonical_path": "bot.recall_robot_group_message",
+    "cli_name": "recall-by-bot",
+    "description": "可批量撤回企业机器人在群内发送的消息。",
+    "group": "message",
+    "rpc_name": "recall_robot_group_message",
+    "sensitive": false,
+    "source_server_key": "3303015f1832b28d",
+    "title": "企业机器人撤回内部群消息"
+  }
+}

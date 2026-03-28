@@ -1,0 +1,70 @@
+{
+  "cli_path": [
+    "aitable",
+    "base",
+    "search"
+  ],
+  "display": "钉钉 AI 表格",
+  "flag_hints": {
+    "cursor": {
+      "alias": "cursor"
+    },
+    "query": {
+      "alias": "query",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "cursor",
+      "flag_name": "cursor",
+      "kind": "string",
+      "description": "分页游标，首次不传"
+    },
+    {
+      "property_name": "query",
+      "flag_name": "query",
+      "kind": "string",
+      "description": "Base 名称关键词，建议至少 2 个字符"
+    }
+  ],
+  "input_schema": {
+    "description": "input",
+    "properties": {
+      "cursor": {
+        "description": "分页游标，首次不传",
+        "title": "cursor",
+        "type": "string"
+      },
+      "query": {
+        "description": "Base 名称关键词，建议至少 2 个字符",
+        "title": "query",
+        "type": "string"
+      }
+    },
+    "required": [
+      "query"
+    ],
+    "title": "input",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "aitable.search_bases",
+  "product_id": "aitable",
+  "required": [
+    "query"
+  ],
+  "tool": {
+    "aliases": [
+      "search_bases"
+    ],
+    "canonical_path": "aitable.search_bases",
+    "cli_name": "search",
+    "description": "按名称关键词搜索 AI 表格 Base。返回 baseId/baseName，结果按相关性排序。返回的 baseId 可直接用于 get_base 等后续工具。\r\nAI 表格访问地址可按 baseId 拼接为：https://docs.dingtalk.com/i/nodes/{baseId}",
+    "group": "base",
+    "rpc_name": "search_bases",
+    "sensitive": false,
+    "source_server_key": "23eb09885b9e8f26",
+    "title": "搜索 AI 表格"
+  }
+}

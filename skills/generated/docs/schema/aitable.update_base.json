@@ -1,0 +1,89 @@
+{
+  "cli_path": [
+    "aitable",
+    "base",
+    "update"
+  ],
+  "display": "钉钉 AI 表格",
+  "flag_hints": {
+    "baseId": {
+      "alias": "base-id",
+      "required": true
+    },
+    "description": {
+      "alias": "desc"
+    },
+    "newBaseName": {
+      "alias": "name",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "baseId",
+      "flag_name": "base-id",
+      "kind": "string",
+      "description": "目标 Base ID"
+    },
+    {
+      "property_name": "description",
+      "flag_name": "desc",
+      "alias": "description",
+      "kind": "string",
+      "description": "备注文本"
+    },
+    {
+      "property_name": "newBaseName",
+      "flag_name": "name",
+      "alias": "new-base-name",
+      "kind": "string",
+      "description": "新名称，1-50 字符"
+    }
+  ],
+  "input_schema": {
+    "description": "input",
+    "properties": {
+      "baseId": {
+        "description": "目标 Base ID",
+        "title": "baseId",
+        "type": "string"
+      },
+      "description": {
+        "description": "备注文本",
+        "title": "description",
+        "type": "string"
+      },
+      "newBaseName": {
+        "description": "新名称，1-50 字符",
+        "title": "newBaseName",
+        "type": "string"
+      }
+    },
+    "required": [
+      "baseId",
+      "newBaseName"
+    ],
+    "title": "input",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "aitable.update_base",
+  "product_id": "aitable",
+  "required": [
+    "baseId",
+    "newBaseName"
+  ],
+  "tool": {
+    "aliases": [
+      "update_base"
+    ],
+    "canonical_path": "aitable.update_base",
+    "cli_name": "update",
+    "description": "更新 Base 名称（可选备注）。当前不支持修改主题、封面等扩展属性",
+    "group": "base",
+    "rpc_name": "update_base",
+    "sensitive": false,
+    "source_server_key": "23eb09885b9e8f26",
+    "title": "更新 AI 表格"
+  }
+}

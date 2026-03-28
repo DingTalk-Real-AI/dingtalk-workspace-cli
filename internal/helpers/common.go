@@ -14,8 +14,8 @@
 package helpers
 
 import (
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/surface/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/surface/output"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )

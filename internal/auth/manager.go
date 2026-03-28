@@ -15,8 +15,8 @@ package auth
 
 import (
 	"fmt"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/config"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/platform/config"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/platform/i18n"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -47,7 +47,6 @@ func (m *Manager) GetToken() (string, string, error) {
 		}
 		return token, "file", nil
 	}
-
 	return "", "", fmt.Errorf("%s", i18n.T("未找到认证信息，请运行 dws auth login"))
 }
 

@@ -1,0 +1,120 @@
+{
+  "cli_path": [
+    "aitable",
+    "table",
+    "export_data"
+  ],
+  "display": "钉钉 AI 表格",
+  "flag_hints": {
+    "baseId": {
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "baseId",
+      "flag_name": "baseId",
+      "kind": "string",
+      "description": "Base ID，可通过 list_bases 或 search_bases 获取"
+    },
+    {
+      "property_name": "format",
+      "flag_name": "format",
+      "kind": "string",
+      "description": "可选，导出格式。创建新任务时必填。\n支持值：excel、attachment、excel_and_attachment、excel_with_inline_images。"
+    },
+    {
+      "property_name": "scope",
+      "flag_name": "scope",
+      "kind": "string",
+      "description": "可选，导出范围。创建新任务时必填。\n支持值：all（整个 Base）、table（指定数据表）、view（指定视图）。\nscope=table 时必须传 tableId；scope=view 时必须传 tableId 和 viewId。"
+    },
+    {
+      "property_name": "tableId",
+      "flag_name": "tableId",
+      "kind": "string",
+      "description": "可选，Table ID。scope=table 或 scope=view 时必填；可通过 get_base 获取。"
+    },
+    {
+      "property_name": "taskId",
+      "flag_name": "taskId",
+      "kind": "string",
+      "description": "可选，已有导出任务 ID。传入后表示继续等待该任务；此时不要再传 scope、format、tableId、viewId。"
+    },
+    {
+      "property_name": "timeoutMs",
+      "flag_name": "timeoutMs",
+      "kind": "number",
+      "description": "可选，单次等待超时时间（毫秒）。默认 30000，最小 200，最大 30000。超时后会返回 taskId，供下一次继续等待。"
+    },
+    {
+      "property_name": "viewId",
+      "flag_name": "viewId",
+      "kind": "string",
+      "description": "可选，View ID。scope=view 时必填；可通过 list_views 或 get_views 获取。"
+    }
+  ],
+  "input_schema": {
+    "description": "input",
+    "properties": {
+      "baseId": {
+        "description": "Base ID，可通过 list_bases 或 search_bases 获取",
+        "title": "baseId",
+        "type": "string"
+      },
+      "format": {
+        "description": "可选，导出格式。创建新任务时必填。\n支持值：excel、attachment、excel_and_attachment、excel_with_inline_images。",
+        "title": "format",
+        "type": "string"
+      },
+      "scope": {
+        "description": "可选，导出范围。创建新任务时必填。\n支持值：all（整个 Base）、table（指定数据表）、view（指定视图）。\nscope=table 时必须传 tableId；scope=view 时必须传 tableId 和 viewId。",
+        "title": "scope",
+        "type": "string"
+      },
+      "tableId": {
+        "description": "可选，Table ID。scope=table 或 scope=view 时必填；可通过 get_base 获取。",
+        "title": "tableId",
+        "type": "string"
+      },
+      "taskId": {
+        "description": "可选，已有导出任务 ID。传入后表示继续等待该任务；此时不要再传 scope、format、tableId、viewId。",
+        "title": "taskId",
+        "type": "string"
+      },
+      "timeoutMs": {
+        "description": "可选，单次等待超时时间（毫秒）。默认 30000，最小 200，最大 30000。超时后会返回 taskId，供下一次继续等待。",
+        "title": "timeoutMs",
+        "type": "number"
+      },
+      "viewId": {
+        "description": "可选，View ID。scope=view 时必填；可通过 list_views 或 get_views 获取。",
+        "title": "viewId",
+        "type": "string"
+      }
+    },
+    "required": [
+      "baseId"
+    ],
+    "title": "input",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "aitable.export_data",
+  "product_id": "aitable",
+  "required": [
+    "baseId"
+  ],
+  "tool": {
+    "aliases": null,
+    "canonical_path": "aitable.export_data",
+    "cli_name": "export_data",
+    "description": "导出 AI 表格数据的统一入口。\r\n不传 taskId 时，会根据 scope / format 创建一个新的导出任务，并在 timeoutMs 时间内同步等待结果；若在等待窗口内完成，则直接返回 downloadUrl 和 fileName。\r\n传入 taskId 时，不会重新创建任务，而是继续等待该任务；若仍未完成，则继续返回同一个 taskId，供下一次调用继续等待。\r\n当前稳定支持的 scope：all、table、view；暂不开放按字段导出。\r\n当前稳定支持的 format：excel、attachment、excel_and_attachment、excel_with_inline_images。",
+    "group": "table",
+    "hidden": true,
+    "rpc_name": "export_data",
+    "sensitive": false,
+    "source_server_key": "23eb09885b9e8f26",
+    "title": "导出数据"
+  }
+}

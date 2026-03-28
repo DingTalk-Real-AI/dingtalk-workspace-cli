@@ -1,0 +1,99 @@
+{
+  "cli_path": [
+    "attendance",
+    "shift",
+    "list"
+  ],
+  "display": "钉钉考勤打卡",
+  "flag_hints": {
+    "fromDateTime": {
+      "alias": "start",
+      "transform": "iso8601_to_millis",
+      "required": true
+    },
+    "toDateTime": {
+      "alias": "end",
+      "transform": "iso8601_to_millis",
+      "required": true
+    },
+    "userIds": {
+      "alias": "users",
+      "transform": "csv_to_array",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "fromDateTime",
+      "flag_name": "start",
+      "alias": "from-date-time",
+      "kind": "string",
+      "description": "起始日期，Unix时间戳，单位毫秒。 开始时间和结束时间的间隔不能超过7天。 查询时间限制距今180天内。"
+    },
+    {
+      "property_name": "toDateTime",
+      "flag_name": "end",
+      "alias": "to-date-time",
+      "kind": "string",
+      "description": "结束日期，Unix时间戳，单位毫秒。开始时间和结束时间的间隔不能超过7天。 查询时间限制距今180天内。"
+    },
+    {
+      "property_name": "userIds",
+      "flag_name": "users",
+      "alias": "user-ids",
+      "kind": "string_array",
+      "description": "要查询的人员userId列表，多个userId用列表表示，一次最多可传50个。"
+    }
+  ],
+  "input_schema": {
+    "description": "root",
+    "properties": {
+      "fromDateTime": {
+        "description": "起始日期，Unix时间戳，单位毫秒。 开始时间和结束时间的间隔不能超过7天。 查询时间限制距今180天内。",
+        "title": "fromDateTime",
+        "type": "number"
+      },
+      "toDateTime": {
+        "description": "结束日期，Unix时间戳，单位毫秒。开始时间和结束时间的间隔不能超过7天。 查询时间限制距今180天内。",
+        "title": "toDateTime",
+        "type": "number"
+      },
+      "userIds": {
+        "description": "要查询的人员userId列表，多个userId用列表表示，一次最多可传50个。",
+        "items": {
+          "type": "string"
+        },
+        "title": "userIds",
+        "type": "array"
+      }
+    },
+    "required": [
+      "fromDateTime",
+      "toDateTime",
+      "userIds"
+    ],
+    "title": "root",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "attendance.batch_get_employee_shifts",
+  "product_id": "attendance",
+  "required": [
+    "fromDateTime",
+    "toDateTime",
+    "userIds"
+  ],
+  "tool": {
+    "aliases": [
+      "batch_get_employee_shifts"
+    ],
+    "canonical_path": "attendance.batch_get_employee_shifts",
+    "cli_name": "list",
+    "description": "批量查询多个员工在指定日期的考勤班次信息，返回每条记录包含：用户 ID（userId）、工作日期（workDate，毫秒时间戳）、打卡类型（checkType，如 OnDuty 表示上班）、计划打卡时间（planCheckTime，毫秒时间戳）以及是否为休息日（isRest，\"Y\"/\"N\"）。结果基于组织考勤配置生成，仅返回调用者有权限查看的员工数据，适用于排班核对、考勤预览等场景。",
+    "group": "shift",
+    "rpc_name": "batch_get_employee_shifts",
+    "sensitive": false,
+    "source_server_key": "33b1011e8b8382a6",
+    "title": "batch_get_employee_shifts"
+  }
+}

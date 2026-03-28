@@ -65,3 +65,55 @@ func TestGeneratedDriftCheckPassesForCleanCheckout(t *testing.T) {
 		t.Fatalf("drift output missing success marker:\n%s", string(output))
 	}
 }
+
+func TestEmbeddedHostCompatibilitySourcesAreRemoved(t *testing.T) {
+	t.Parallel()
+
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+
+	for _, rel := range []string{
+		filepath.Join("internal", "hostcompat"),
+		filepath.Join("internal", "app", "skill_command.go"),
+	} {
+		if _, err := os.Stat(filepath.Join(root, rel)); !os.IsNotExist(err) {
+			t.Fatalf("%s should not exist in OSS repository, stat err = %v", rel, err)
+		}
+	}
+
+	forbiddenSnippets := []string{
+		"buildMode",
+		"EmbeddedMode",
+		"WriteTokenMarker",
+		"CleanTokenOnExpiry",
+		"DeleteExeRelativeTokenOnAuthErr",
+		"shouldDeleteEmbeddedTokenOnAuthError",
+		"com.dingtalk.scenario.wukong",
+		"认证信息已失效，请重新执行上一条命令（最多重试两次）",
+	}
+
+	err = filepath.WalkDir(filepath.Join(root, "internal"), func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		text := string(data)
+		for _, snippet := range forbiddenSnippets {
+			if strings.Contains(text, snippet) {
+				t.Fatalf("found forbidden OSS snippet %q in %s", snippet, path)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("WalkDir(internal) error = %v", err)
+	}
+}

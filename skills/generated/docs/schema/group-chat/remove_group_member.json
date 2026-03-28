@@ -1,0 +1,80 @@
+{
+  "cli_path": [
+    "chat",
+    "group",
+    "members",
+    "remove"
+  ],
+  "display": "钉钉群聊",
+  "flag_hints": {
+    "openconversationId": {
+      "alias": "id",
+      "required": true
+    },
+    "userIdList": {
+      "alias": "users",
+      "transform": "csv_to_array",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "openconversationId",
+      "flag_name": "id",
+      "alias": "openconversation-id",
+      "kind": "string",
+      "description": "会话Id"
+    },
+    {
+      "property_name": "userIdList",
+      "flag_name": "users",
+      "alias": "user-id-list",
+      "kind": "string_array",
+      "description": "需要被移除的成员userId列表"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "openconversationId": {
+        "description": "会话Id",
+        "title": "会话Id",
+        "type": "string"
+      },
+      "userIdList": {
+        "description": "需要被移除的成员userId列表",
+        "items": {
+          "type": "string"
+        },
+        "title": "需要被移除的成员userId列表",
+        "type": "array"
+      }
+    },
+    "required": [
+      "openconversationId",
+      "userIdList"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "group-chat.remove_group_member",
+  "product_id": "group-chat",
+  "required": [
+    "openconversationId",
+    "userIdList"
+  ],
+  "tool": {
+    "aliases": [
+      "remove_group_member"
+    ],
+    "canonical_path": "group-chat.remove_group_member",
+    "cli_name": "remove",
+    "description": "移除群成员",
+    "group": "group.members",
+    "rpc_name": "remove_group_member",
+    "sensitive": true,
+    "source_server_key": "27f939aef74c67b5",
+    "title": "remove_group_member"
+  }
+}

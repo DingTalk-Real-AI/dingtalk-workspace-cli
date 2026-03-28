@@ -1,0 +1,56 @@
+{
+  "cli_path": [
+    "aitable",
+    "base",
+    "get"
+  ],
+  "display": "钉钉 AI 表格",
+  "flag_hints": {
+    "baseId": {
+      "alias": "base-id",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "baseId",
+      "flag_name": "base-id",
+      "kind": "string",
+      "description": "Base 唯一标识。优先使用 search_bases/list_bases 返回值"
+    }
+  ],
+  "input_schema": {
+    "description": "input",
+    "properties": {
+      "baseId": {
+        "description": "Base 唯一标识。优先使用 search_bases/list_bases 返回值",
+        "title": "baseId",
+        "type": "string"
+      }
+    },
+    "required": [
+      "baseId"
+    ],
+    "title": "input",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "aitable.get_base",
+  "product_id": "aitable",
+  "required": [
+    "baseId"
+  ],
+  "tool": {
+    "aliases": [
+      "get_base"
+    ],
+    "canonical_path": "aitable.get_base",
+    "cli_name": "get",
+    "description": "获取指定 Base 的资源目录级信息，返回 baseName、tables、dashboards 的 summary 信息（不含字段与记录详情）。\r\n这是当前 Base 级目录入口：后续如需 tableId 或 dashboardId，优先从这里读取；table 详情再调用 get_tables，dashboard 详情再调用 get_dashboard",
+    "group": "base",
+    "rpc_name": "get_base",
+    "sensitive": false,
+    "source_server_key": "23eb09885b9e8f26",
+    "title": "获取 AI 表格信息"
+  }
+}

@@ -1,0 +1,91 @@
+# Canonical Product: calendar
+
+Generated from shared Tool IR. Do not edit by hand.
+
+- Display name: 钉钉日历
+- Description: 支持创建日程，查询日程，约空闲会议室等能力
+- Server key: `279de7cc536c672c`
+- Endpoint: `https://mcp-gw.dingtalk.com/server/3cb83d4ac411227c44c1abde4e4bfbae0ea2c172b83a78a33ffc3821d0d1be47`
+- Protocol: `2025-03-26`
+- Degraded: `false`
+
+## Tools
+
+- `participant add`
+  - Path: `calendar.add_calendar_participant`
+  - CLI route: `dws calendar participant add`
+  - Description: 向已存在的指定日程添加参与者，支持批量添加多人，可设置参与者类型和通知方式
+  - Flags: `--users`, `--event`
+  - Schema: `skills/generated/docs/schema/calendar/add_calendar_participant.json`
+- `room add`
+  - Path: `calendar.add_meeting_room`
+  - CLI route: `dws calendar room add`
+  - Description: 添加会议室
+  - Flags: `--event`, `--rooms`
+  - Schema: `skills/generated/docs/schema/calendar/add_meeting_room.json`
+- `event create`
+  - Path: `calendar.create_calendar_event`
+  - CLI route: `dws calendar event create`
+  - Description: 创建新的日程，支持设置时间、参与者、提醒等完整功能
+  - Flags: `--desc`, `--end`, `--start`, `--title`
+  - Schema: `skills/generated/docs/schema/calendar/create_calendar_event.json`
+- `event delete`
+  - Path: `calendar.delete_calendar_event`
+  - CLI route: `dws calendar event delete`
+  - Description: 删除指定日程，组织者删除将通知所有参与者，参与者删除仅从自己日历移除
+  - Flags: `--id`
+  - Schema: `skills/generated/docs/schema/calendar/delete_calendar_event.json`
+- `room delete`
+  - Path: `calendar.delete_meeting_room`
+  - CLI route: `dws calendar room delete`
+  - Description: 移除日程中预约的会议室
+  - Flags: `--event`, `--rooms`
+  - Schema: `skills/generated/docs/schema/calendar/delete_meeting_room.json`
+- `event get`
+  - Path: `calendar.get_calendar_detail`
+  - CLI route: `dws calendar event get`
+  - Description: 获取我的日历指定日程的详细信息
+  - Flags: `--id`
+  - Schema: `skills/generated/docs/schema/calendar/get_calendar_detail.json`
+- `participant list`
+  - Path: `calendar.get_calendar_participants`
+  - CLI route: `dws calendar participant list`
+  - Description: 获取指定日程的所有参与者列表及其状态信息
+  - Flags: `--event`
+  - Schema: `skills/generated/docs/schema/calendar/get_calendar_participants.json`
+- `event list`
+  - Path: `calendar.list_calendar_events`
+  - CLI route: `dws calendar event list`
+  - Description: 仅允许查询当前用户指定时间范围内的日程列表，最多返回100条
+  - Flags: `--end`, `--start`
+  - Schema: `skills/generated/docs/schema/calendar/list_calendar_events.json`
+- `room list-groups`
+  - Path: `calendar.list_meeting_room_groups`
+  - CLI route: `dws calendar room list-groups`
+  - Description: 分页查询当前企业下的会议室分组列表，返回每个分组的名称（groupName）、唯一 ID（groupId）及其父分组 ID（parentId，0 表示根分组）。结果按组织架构权限过滤，仅包含调用者有权限查看的分组。
+  - Flags: `--pageIndex`, `--pageSize`
+  - Schema: `skills/generated/docs/schema/calendar/list_meeting_room_groups.json`
+- `room search`
+  - Path: `calendar.query_available_meeting_room`
+  - CLI route: `dws calendar room search`
+  - Description: 根据时间筛选出符合闲忙条件的会议室列表。
+  - Flags: `--end`, `--group-id`, `--available`, `--start`
+  - Schema: `skills/generated/docs/schema/calendar/query_available_meeting_room.json`
+- `busy search`
+  - Path: `calendar.query_busy_status`
+  - CLI route: `dws calendar busy search`
+  - Description: 查询指定用户在给定时间范围内的闲忙状态，返回其日历中已占用时间段的详细日程信息（如标题、开始/结束时间），不包含具体日程内容细节（如参与人、地点），以保护隐私。结果受组织可见性策略控制：仅当调用者有权限查看该用户日历时方可获取有效数据。适用于安排会议前快速确认他人可用时间。
+  - Flags: `--end`, `--start`, `--users`
+  - Schema: `skills/generated/docs/schema/calendar/query_busy_status.json`
+- `participant delete`
+  - Path: `calendar.remove_calendar_participant`
+  - CLI route: `dws calendar participant delete`
+  - Description: 从已存在的指定日程中移除参与者，支持批量移除多人
+  - Flags: `--users`, `--event`
+  - Schema: `skills/generated/docs/schema/calendar/remove_calendar_participant.json`
+- `event update`
+  - Path: `calendar.update_calendar_event`
+  - CLI route: `dws calendar event update`
+  - Description: 修改现有日程的信息，支持更新标题、时间、地点等任意字段，需要组织者权限。（修改参与人需要使用给日程添加参与人或给日程删除参与人工具）
+  - Flags: `--end`, `--id`, `--start`, `--title`
+  - Schema: `skills/generated/docs/schema/calendar/update_calendar_event.json`

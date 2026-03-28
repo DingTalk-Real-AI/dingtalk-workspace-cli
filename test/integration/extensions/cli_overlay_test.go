@@ -7,13 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cache"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/discovery"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/ir"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/cache"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/discovery"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/ir"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/market"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/surface/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/mock_mcp"
 )
 
@@ -22,6 +22,7 @@ func TestCLIMetadataDrivesCanonicalCommandShape(t *testing.T) {
 
 	fixture := mockmcp.DefaultFixture()
 	fixture.Servers = []mockmcp.ServerFixture{fixture.Servers[0]}
+	fixture.Servers[0].CLI.ID = "knowledge"
 	fixture.Servers[0].CLI.Command = "knowledge"
 	fixture.Servers[0].CLI.Group = "office"
 	fixture.Servers[0].CLI.Hidden = true
@@ -31,8 +32,8 @@ func TestCLIMetadataDrivesCanonicalCommandShape(t *testing.T) {
 			CLIName:     "make-doc",
 			Title:       "创建文档",
 			Description: "创建文档",
-			IsSensitive: true,
-			Hidden:      true,
+			IsSensitive: boolPtr(true),
+			Hidden:      boolPtr(true),
 			Flags: map[string]market.CLIFlagHint{
 				"title": {Alias: "name", Shorthand: "t"},
 			},
@@ -88,7 +89,7 @@ func TestCLIMetadataDrivesCanonicalCommandShape(t *testing.T) {
 		t.Fatalf("tool metadata = %#v, want make-doc hidden", tool)
 	}
 
-	cmd := cli.NewMCPCommand(context.Background(), cli.StaticLoader{Catalog: catalog}, executor.EchoRunner{})
+	cmd := cli.NewMCPCommand(cli.StaticLoader{Catalog: catalog}, executor.EchoRunner{})
 	module := cmd.Commands()[0]
 	if !module.Hidden || module.Name() != "knowledge" {
 		t.Fatalf("module hidden/name = (%t,%s), want (true,knowledge)", module.Hidden, module.Name())
@@ -99,7 +100,7 @@ func TestCLIMetadataDrivesCanonicalCommandShape(t *testing.T) {
 	cmd.SetOut(&out)
 	cmd.SetErr(&errOut)
 	cmd.SetIn(strings.NewReader("yes\n"))
-	cmd.SetArgs([]string{"knowledge", "make-doc", "--name", "hello"})
+	cmd.SetArgs([]string{"-f", "json", "knowledge", "make-doc", "--name", "hello"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -119,4 +120,8 @@ func TestCLIMetadataDrivesCanonicalCommandShape(t *testing.T) {
 	if payload.Invocation.Params["title"] != "hello" {
 		t.Fatalf("invocation.params.title = %#v, want hello", payload.Invocation.Params["title"])
 	}
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }

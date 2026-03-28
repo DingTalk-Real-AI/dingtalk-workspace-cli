@@ -27,18 +27,18 @@ import (
 	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cache"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/config"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/discovery"
-	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/platform/config"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/platform/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/recovery"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/cache"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/discovery"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/market"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/transport"
+	generator "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/skillgen"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/surface/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/surface/compat"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/surface/output"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -128,9 +128,11 @@ func commandRequestsJSONErrors(cmd *cobra.Command) bool {
 	if cmd == nil {
 		return false
 	}
+	if outputFormatIsJSON(cmd) {
+		return true
+	}
 	for _, flags := range []interface {
 		Lookup(string) *pflag.Flag
-		GetString(string) (string, error)
 		GetBool(string) (bool, error)
 	}{
 		cmd.Flags(),
@@ -139,11 +141,6 @@ func commandRequestsJSONErrors(cmd *cobra.Command) bool {
 	} {
 		if flags == nil {
 			continue
-		}
-		if flag := flags.Lookup("format"); flag != nil {
-			if value, err := flags.GetString("format"); err == nil && strings.EqualFold(strings.TrimSpace(value), "json") {
-				return true
-			}
 		}
 		if flag := flags.Lookup("json"); flag != nil && flag.Changed {
 			if value, err := flags.GetBool("json"); err == nil {
@@ -156,6 +153,10 @@ func commandRequestsJSONErrors(cmd *cobra.Command) bool {
 		}
 	}
 	return false
+}
+
+func outputFormatIsJSON(cmd *cobra.Command) bool {
+	return output.ResolveFormat(cmd, output.FormatTable) == output.FormatJSON
 }
 
 // NewRootCommand constructs the root CLI command. The provided context
@@ -172,8 +173,17 @@ func NewRootCommand(ctx ...context.Context) *cobra.Command {
 	loader := cli.EnvironmentLoader{
 		LookupEnv:              os.LookupEnv,
 		CatalogBaseURLOverride: DiscoveryBaseURL(),
+		ServerObserver:         SetDynamicServers,
 	}
-	runner := newCommandRunnerWithFlags(loader, flags)
+	runnerLoader := loader
+	if strings.TrimSpace(os.Getenv(cli.CatalogFixtureEnv)) == "" {
+		store := cacheStoreFromEnv()
+		regSnap, _, regErr := store.LoadRegistry("default/default")
+		if regErr != nil || !regSnap.Complete || len(regSnap.Servers) == 0 {
+			runnerLoader.RequireCompleteCatalog = true
+		}
+	}
+	runner := newCommandRunnerWithFlags(runnerLoader, flags)
 
 	root := &cobra.Command{
 		Use:               "dws",
@@ -197,23 +207,39 @@ func NewRootCommand(ctx ...context.Context) *cobra.Command {
 
 			// Configure global slog level based on --debug / --verbose flags.
 			configureLogLevel(flags)
-
 			return configureOutputSink(cmd)
 		},
 		PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
-			CloseFileLogger()
 			return closeOutputSink(cmd)
 		},
 	}
 
+	root.SetContext(rootCtx)
 	bindPersistentFlags(root, flags)
 
-	schemaCmd := newSchemaCommand(loader)
+	schemaLoader := loader
+	schemaLoader.RequireLiveCatalog = true
+	schemaCmd := newSchemaCommand(schemaLoader)
 	schemaCmd.Hidden = true
 	genSkillsCmd := newGenerateSkillsCommand()
 	genSkillsCmd.Hidden = true
 	mcpCmd := newMCPCommand(rootCtx, loader, runner)
 	mcpCmd.Hidden = true
+
+	// Register canonical product commands directly on root (no "mcp" sub-command).
+	// Catalog load failures are non-fatal: the CLI remains usable for auth,
+	// cache, and other utility commands even when discovery is unavailable.
+	if catalog, err := loader.Load(rootCtx); err != nil {
+		slog.Warn("product catalog unavailable", "error", err)
+	} else {
+		staticLoader := cli.StaticLoader{Catalog: catalog}
+		if err := cli.AddCanonicalProducts(root, staticLoader, runner); err != nil {
+			slog.Warn("product catalog unavailable", "error", err)
+		} else {
+			compat.AddCatalog(root, catalog, runner)
+		}
+	}
+	bootstrapDynamicServersFromCache()
 
 	utilityCommands := []*cobra.Command{
 		newAuthCommand(),
@@ -226,14 +252,11 @@ func NewRootCommand(ctx ...context.Context) *cobra.Command {
 		mcpCmd,
 	}
 	root.AddCommand(utilityCommands...)
-	root.AddCommand(newLegacyPublicCommands(rootCtx, runner)...)
-	root.AddCommand(newLegacyHiddenCommands(runner)...)
 
 	hideNonDirectRuntimeCommands(root)
 	configureRootHelp(root)
 	// Set custom flag error handler for better UX
 	root.SetFlagErrorFunc(flagErrorWithSuggestions)
-	root.SetContext(rootCtx)
 
 	return root
 }
@@ -329,6 +352,7 @@ func newCacheCommand() *cobra.Command {
 				transportClient,
 				store,
 			)
+			service.AllowLiveDetailFetch = true
 			servers, err := service.DiscoverServers(cmd.Context())
 			if err != nil {
 				return err
@@ -342,17 +366,32 @@ func newCacheCommand() *cobra.Command {
 				selected = servers
 			}
 
-			if err := clearRuntimeCacheForServers(store, service.CachePartition(), selected); err != nil {
-				return apperrors.NewInternal(fmt.Sprintf("failed to clear cache before refresh: %v", err))
+			// Detached background refresh must preserve previously usable cache
+			// entries until replacement discovery succeeds.
+			if strings.TrimSpace(os.Getenv("DWS_BACKGROUND_REFRESH")) == "" {
+				if err := clearRuntimeCacheForServers(store, service.CachePartition(), selected); err != nil {
+					return apperrors.NewInternal(fmt.Sprintf("failed to clear cache before refresh: %v", err))
+				}
 			}
 
 			refreshable := filterRefreshableServers(selected)
-			_, failures := service.DiscoverAllRuntime(cmd.Context(), refreshable)
+			results, failures := service.DiscoverAllRuntime(cmd.Context(), refreshable)
+			degradedFailures := 0
+			for _, runtimeServer := range results {
+				if runtimeServer.Degraded || runtimeServer.Source != "live_runtime" {
+					degradedFailures++
+				}
+			}
+			refreshedCount := len(refreshable) - len(failures) - degradedFailures
+			if refreshedCount < 0 {
+				refreshedCount = 0
+			}
+			failureCount := len(failures) + degradedFailures
 			_, err = fmt.Fprintf(
 				cmd.OutOrStdout(),
 				"[OK] 缓存刷新完成：已刷新 %d 个服务，失败 %d 个\n缓存目录: %s\n",
-				len(refreshable),
-				len(failures),
+				refreshedCount,
+				failureCount,
 				store.Root,
 			)
 			return err
@@ -403,18 +442,14 @@ func newVersionCommand() *cobra.Command {
 		Example:           "  dws version\n  dws version --format json",
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			format, err := cmd.Flags().GetString("format")
-			if err != nil {
-				return apperrors.NewInternal("failed to read format flag")
-			}
 			payload := map[string]any{
 				"version": Version(),
 				"go":      "1.24+",
 			}
-			if format == "json" {
+			if output.ResolveFormat(cmd, output.FormatTable) == output.FormatJSON {
 				return output.WriteJSON(cmd.OutOrStdout(), payload)
 			}
-			_, err = fmt.Fprintf(
+			_, err := fmt.Fprintf(
 				cmd.OutOrStdout(),
 				"版本:  %s\nGo:  %s\n",
 				Version(),
@@ -506,14 +541,14 @@ func newGenerateSkillsCommand() *cobra.Command {
 	}
 	cmd.Flags().String("output-root", ".", "Directory root for generated artifacts")
 	cmd.Flags().Bool("with-docs", true, "Write docs/schema artifacts in addition to skills")
-	cmd.Flags().String("source", string(generator.CatalogSourceFixture), "Catalog source for skill generation: fixture, env, or snapshot")
+	cmd.Flags().String("source", string(generator.CatalogSourceEnv), "Catalog source for skill generation: fixture, env, or snapshot")
 	cmd.Flags().String("fixture", "", "Optional path to a catalog fixture; used by --source fixture")
 	cmd.Flags().String("snapshot", "", "Optional path to a catalog snapshot; used by --source snapshot")
 	return cmd
 }
 
-func newMCPCommand(ctx context.Context, loader cli.CatalogLoader, runner executor.Runner) *cobra.Command {
-	return cli.NewMCPCommand(ctx, loader, runner)
+func newMCPCommand(_ context.Context, loader cli.CatalogLoader, runner executor.Runner) *cobra.Command {
+	return cli.NewMCPCommand(loader, runner)
 }
 
 // hideNonDirectRuntimeCommands marks top-level product commands as hidden
@@ -702,15 +737,7 @@ func cacheKeysForServer(server market.ServerDescriptor) []string {
 }
 
 func detailCacheKeysForServer(server market.ServerDescriptor) []string {
-	key := strings.TrimSpace(server.Key)
-	if key != "" {
-		return []string{key}
-	}
-	id := strings.TrimSpace(server.CLI.ID)
-	if id != "" {
-		return []string{id}
-	}
-	return nil
+	return cacheKeysForServer(server)
 }
 
 func cleanCacheFiles(root, product string, staleOnly bool) (int, error) {
@@ -760,12 +787,7 @@ func cleanCacheFiles(root, product string, staleOnly bool) (int, error) {
 	return removed, nil
 }
 
-// fileLogger holds the package-level file logger for diagnostics.
-// It is initialized by configureLogLevel and closed by CloseFileLogger.
-var fileLogger *logging.FileLogger
-
-// configureLogLevel sets the global slog level based on --debug and --verbose flags
-// and initializes the file logger for diagnostics.
+// configureLogLevel sets the global slog level based on --debug and --verbose flags.
 // --debug → slog.LevelDebug; --verbose → slog.LevelInfo; default → slog.LevelWarn.
 func configureLogLevel(flags *GlobalFlags) {
 	if flags == nil {
@@ -780,27 +802,7 @@ func configureLogLevel(flags *GlobalFlags) {
 	default:
 		level = slog.LevelWarn
 	}
-	stderrHandler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})
-
-	// Initialize file logger — writes to ~/.dws/logs/dws.log at DEBUG level
-	// regardless of stderr level. All slog calls are captured for diagnostics.
-	fileLogger = logging.Setup(defaultConfigDir())
-	fileHandler := slog.NewJSONHandler(fileLogger.Writer(), &slog.HandlerOptions{Level: slog.LevelDebug})
-
-	slog.SetDefault(slog.New(logging.NewMultiHandler(stderrHandler, fileHandler)))
-}
-
-// FileLoggerInstance returns the package-level file logger, or nil if not initialized.
-func FileLoggerInstance() *slog.Logger {
-	if fileLogger == nil {
-		return nil
-	}
-	return fileLogger.Logger
-}
-
-// CloseFileLogger flushes and closes the file logger.
-func CloseFileLogger() {
-	if fileLogger != nil {
-		fileLogger.Close()
-	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: level,
+	})))
 }

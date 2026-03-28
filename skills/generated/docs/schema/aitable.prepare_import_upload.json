@@ -1,0 +1,86 @@
+{
+  "cli_path": [
+    "aitable",
+    "table",
+    "prepare_import_upload"
+  ],
+  "display": "钉钉 AI 表格",
+  "flag_hints": {
+    "baseId": {
+      "required": true
+    },
+    "fileName": {
+      "required": true
+    },
+    "fileSize": {
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "baseId",
+      "flag_name": "baseId",
+      "kind": "string",
+      "description": "Base ID，可通过 list_bases 或 search_bases 获取"
+    },
+    {
+      "property_name": "fileName",
+      "flag_name": "fileName",
+      "kind": "string",
+      "description": "文件名，须带扩展名，例如 data.xlsx。扩展名将作为导入格式依据"
+    },
+    {
+      "property_name": "fileSize",
+      "flag_name": "fileSize",
+      "kind": "number",
+      "description": "文件大小（字节数）"
+    }
+  ],
+  "input_schema": {
+    "description": "input",
+    "properties": {
+      "baseId": {
+        "description": "Base ID，可通过 list_bases 或 search_bases 获取",
+        "title": "baseId",
+        "type": "string"
+      },
+      "fileName": {
+        "description": "文件名，须带扩展名，例如 data.xlsx。扩展名将作为导入格式依据",
+        "title": "fileName",
+        "type": "string"
+      },
+      "fileSize": {
+        "description": "文件大小（字节数）",
+        "title": "fileSize",
+        "type": "number"
+      }
+    },
+    "required": [
+      "baseId",
+      "fileName",
+      "fileSize"
+    ],
+    "title": "input",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "aitable.prepare_import_upload",
+  "product_id": "aitable",
+  "required": [
+    "baseId",
+    "fileName",
+    "fileSize"
+  ],
+  "tool": {
+    "aliases": null,
+    "canonical_path": "aitable.prepare_import_upload",
+    "cli_name": "prepare_import_upload",
+    "description": "为导入任务申请 OSS 直传地址。返回 uploadUrl 和 importId。\r\n客户端应通过 HTTP PUT 将原始文件字节流上传至 uploadUrl；除非 uploadUrl 对应的存储服务明确要求，否则不要额外附带 Content-Type 等自定义请求头。上传完成后将 importId 传入 import_data 即可触发导入，无需再传其他参数。",
+    "group": "table",
+    "hidden": true,
+    "rpc_name": "prepare_import_upload",
+    "sensitive": false,
+    "source_server_key": "23eb09885b9e8f26",
+    "title": "准备导入文件上传"
+  }
+}

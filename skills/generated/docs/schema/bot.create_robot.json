@@ -1,0 +1,68 @@
+{
+  "cli_path": [
+    "bot",
+    "create_robot"
+  ],
+  "display": "机器人消息",
+  "flag_hints": {
+    "desc": {
+      "required": true
+    },
+    "robot_name": {
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "desc",
+      "flag_name": "desc",
+      "kind": "string",
+      "description": "机器人描述"
+    },
+    {
+      "property_name": "robot_name",
+      "flag_name": "robot-name",
+      "kind": "string",
+      "description": "机器人名称"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "desc": {
+        "description": "机器人描述",
+        "title": "机器人描述",
+        "type": "string"
+      },
+      "robot_name": {
+        "description": "机器人名称",
+        "title": "机器人名称",
+        "type": "string"
+      }
+    },
+    "required": [
+      "robot_name",
+      "desc"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "bot.create_robot",
+  "product_id": "bot",
+  "required": [
+    "desc",
+    "robot_name"
+  ],
+  "tool": {
+    "aliases": null,
+    "canonical_path": "bot.create_robot",
+    "cli_name": "create_robot",
+    "description": "创建企业机器人，调用本服务会在当前组织创建一个企业内部应用并自动开启stream功能的机器人，该应用被创建时自动完成发布，默认可见范围是当前用户。",
+    "hidden": true,
+    "rpc_name": "create_robot",
+    "sensitive": false,
+    "source_server_key": "3303015f1832b28d",
+    "title": "创建企业机器人"
+  }
+}

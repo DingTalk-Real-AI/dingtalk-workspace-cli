@@ -1,0 +1,79 @@
+{
+  "cli_path": [
+    "calendar",
+    "participant",
+    "add"
+  ],
+  "display": "钉钉日历",
+  "flag_hints": {
+    "attendeesToAdd": {
+      "alias": "users",
+      "transform": "csv_to_array",
+      "required": true
+    },
+    "eventId": {
+      "alias": "event",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "attendeesToAdd",
+      "flag_name": "users",
+      "alias": "attendees-to-add",
+      "kind": "string_array",
+      "description": "需要添加的参与人uid列表。"
+    },
+    {
+      "property_name": "eventId",
+      "flag_name": "event",
+      "alias": "event-id",
+      "kind": "string",
+      "description": "日程ID，可调用创建日程接口或查询日程列表接口获取id参数值"
+    }
+  ],
+  "input_schema": {
+    "description": "root",
+    "properties": {
+      "attendeesToAdd": {
+        "description": "需要添加的参与人uid列表。",
+        "items": {
+          "type": "string"
+        },
+        "title": "attendeesToAdd",
+        "type": "array"
+      },
+      "eventId": {
+        "description": "日程ID，可调用创建日程接口或查询日程列表接口获取id参数值",
+        "title": "eventId",
+        "type": "string"
+      }
+    },
+    "required": [
+      "attendeesToAdd",
+      "eventId"
+    ],
+    "title": "root",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "calendar.add_calendar_participant",
+  "product_id": "calendar",
+  "required": [
+    "attendeesToAdd",
+    "eventId"
+  ],
+  "tool": {
+    "aliases": [
+      "add_calendar_participant"
+    ],
+    "canonical_path": "calendar.add_calendar_participant",
+    "cli_name": "add",
+    "description": "向已存在的指定日程添加参与者，支持批量添加多人，可设置参与者类型和通知方式",
+    "group": "participant",
+    "rpc_name": "add_calendar_participant",
+    "sensitive": false,
+    "source_server_key": "279de7cc536c672c",
+    "title": "新增日程参与人"
+  }
+}

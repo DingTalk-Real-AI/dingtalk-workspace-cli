@@ -1,0 +1,68 @@
+{
+  "cli_path": [
+    "calendar",
+    "event",
+    "list"
+  ],
+  "display": "钉钉日历",
+  "flag_hints": {
+    "endTime": {
+      "alias": "end",
+      "transform": "iso8601_to_millis"
+    },
+    "startTime": {
+      "alias": "start",
+      "transform": "iso8601_to_millis"
+    }
+  },
+  "flags": [
+    {
+      "property_name": "endTime",
+      "flag_name": "end",
+      "alias": "end-time",
+      "kind": "string",
+      "description": "日程结束时间，时间戳（毫秒级）"
+    },
+    {
+      "property_name": "startTime",
+      "flag_name": "start",
+      "alias": "start-time",
+      "kind": "string",
+      "description": "日程开始时间，时间戳（毫秒级）"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "endTime": {
+        "description": "日程结束时间，时间戳（毫秒级）",
+        "title": "endTime",
+        "type": "number"
+      },
+      "startTime": {
+        "description": "日程开始时间，时间戳（毫秒级）",
+        "title": "startTime",
+        "type": "number"
+      }
+    },
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "calendar.list_calendar_events",
+  "product_id": "calendar",
+  "required": null,
+  "tool": {
+    "aliases": [
+      "list_calendar_events"
+    ],
+    "canonical_path": "calendar.list_calendar_events",
+    "cli_name": "list",
+    "description": "仅允许查询当前用户指定时间范围内的日程列表，最多返回100条",
+    "group": "event",
+    "rpc_name": "list_calendar_events",
+    "sensitive": false,
+    "source_server_key": "279de7cc536c672c",
+    "title": "查询日程列表"
+  }
+}

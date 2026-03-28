@@ -1,0 +1,109 @@
+{
+  "cli_path": [
+    "bot",
+    "message",
+    "send-by-bot"
+  ],
+  "display": "机器人消息",
+  "flag_hints": {
+    "markdown": {
+      "alias": "text",
+      "required": true
+    },
+    "openConversationId": {
+      "alias": "group",
+      "required": true
+    },
+    "robotCode": {
+      "alias": "robot-code",
+      "required": true
+    },
+    "title": {
+      "alias": "title",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "markdown",
+      "flag_name": "text",
+      "alias": "markdown",
+      "kind": "string",
+      "description": "消息内容，Markdown格式"
+    },
+    {
+      "property_name": "openConversationId",
+      "flag_name": "group",
+      "alias": "open-conversation-id",
+      "kind": "string",
+      "description": "群聊会话ID"
+    },
+    {
+      "property_name": "robotCode",
+      "flag_name": "robot-code",
+      "kind": "string",
+      "description": "机器人Code"
+    },
+    {
+      "property_name": "title",
+      "flag_name": "title",
+      "kind": "string",
+      "description": "消息标题"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "markdown": {
+        "description": "消息内容，Markdown格式",
+        "title": "消息内容，显示在对话框内，Markdown格式，图片使用'![]()'，文件使用'[]()'",
+        "type": "string"
+      },
+      "openConversationId": {
+        "description": "群聊会话ID",
+        "title": "群聊会话Id，可调用通过关键词搜索会话群获取",
+        "type": "string"
+      },
+      "robotCode": {
+        "description": "机器人Code",
+        "title": "机器人Code，可在开发者后台查看机器人robotCode，或者调用搜索机器人获取",
+        "type": "string"
+      },
+      "title": {
+        "description": "消息标题",
+        "title": "消息标题，显示在IM对话列表",
+        "type": "string"
+      }
+    },
+    "required": [
+      "markdown",
+      "openConversationId",
+      "robotCode",
+      "title"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "bot.send_robot_group_message",
+  "product_id": "bot",
+  "required": [
+    "markdown",
+    "openConversationId",
+    "robotCode",
+    "title"
+  ],
+  "tool": {
+    "aliases": [
+      "send_robot_group_message"
+    ],
+    "canonical_path": "bot.send_robot_group_message",
+    "cli_name": "send-by-bot",
+    "description": "机器人发送群聊消息，该机器人必须已存在对应的群内。",
+    "group": "message",
+    "rpc_name": "send_robot_group_message",
+    "sensitive": false,
+    "source_server_key": "3303015f1832b28d",
+    "title": "企业机器人发送群聊消息"
+  }
+}

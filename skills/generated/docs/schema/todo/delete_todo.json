@@ -1,0 +1,56 @@
+{
+  "cli_path": [
+    "todo",
+    "task",
+    "delete"
+  ],
+  "display": "钉钉待办",
+  "flag_hints": {
+    "taskId": {
+      "alias": "task-id",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "taskId",
+      "flag_name": "task-id",
+      "kind": "string",
+      "description": "taskId"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "taskId": {
+        "description": "taskId",
+        "title": "taskId",
+        "type": "string"
+      }
+    },
+    "required": [
+      "taskId"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "todo.delete_todo",
+  "product_id": "todo",
+  "required": [
+    "taskId"
+  ],
+  "tool": {
+    "aliases": [
+      "delete_todo"
+    ],
+    "canonical_path": "todo.delete_todo",
+    "cli_name": "delete",
+    "description": "删除待办（所有执行者都删除）",
+    "group": "task",
+    "rpc_name": "delete_todo",
+    "sensitive": true,
+    "source_server_key": "b693ef3984e8d311",
+    "title": "delete_todo"
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "cli_path": [
+    "contact",
+    "dept",
+    "list-members"
+  ],
+  "display": "钉钉通讯录",
+  "flag_hints": {
+    "deptIds": {
+      "alias": "ids",
+      "transform": "csv_to_array",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "deptIds",
+      "flag_name": "ids",
+      "alias": "dept-ids",
+      "kind": "string_array",
+      "description": "需要获取部门的ID"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "deptIds": {
+        "description": "需要获取部门的ID",
+        "items": {
+          "type": "number"
+        },
+        "title": "deptIds",
+        "type": "array"
+      }
+    },
+    "required": [
+      "deptIds"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "contact.get_dept_members_by_deptId",
+  "product_id": "contact",
+  "required": [
+    "deptIds"
+  ],
+  "tool": {
+    "aliases": [
+      "get_dept_members_by_deptId"
+    ],
+    "canonical_path": "contact.get_dept_members_by_deptId",
+    "cli_name": "list-members",
+    "description": "获取指定部门下的所有成员，返回每位成员的用户 ID（userId）和显示名称（如真实姓名或昵称）。结果受组织可见性控制：若调用者无权查看某成员（例如该成员所在子部门被隐藏，或其个人信息设为私密），则该成员不会出现在返回列表中。适用于需要展示部门人员列表、选择协作成员等场景，仅支持调用者有权限访问的部门。",
+    "group": "dept",
+    "rpc_name": "get_dept_members_by_deptId",
+    "sensitive": false,
+    "source_server_key": "e1e13a2fc7ab1f1b",
+    "title": "获取部门下所有成员"
+  }
+}

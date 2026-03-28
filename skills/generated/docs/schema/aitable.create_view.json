@@ -1,0 +1,191 @@
+{
+  "cli_path": [
+    "aitable",
+    "table",
+    "create_view"
+  ],
+  "display": "钉钉 AI 表格",
+  "flag_hints": {
+    "baseId": {
+      "required": true
+    },
+    "tableId": {
+      "required": true
+    },
+    "viewType": {
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "baseId",
+      "flag_name": "baseId",
+      "kind": "string",
+      "description": "所属 Base 的唯一标识。"
+    },
+    {
+      "property_name": "config.filter",
+      "flag_name": "filter",
+      "kind": "json",
+      "description": "可选，视图筛选规则列表。"
+    },
+    {
+      "property_name": "config.group",
+      "flag_name": "group",
+      "kind": "json",
+      "description": "可选，视图分组规则列表。"
+    },
+    {
+      "property_name": "config.sort",
+      "flag_name": "sort",
+      "kind": "json",
+      "description": "可选，视图排序规则列表。"
+    },
+    {
+      "property_name": "config.visibleFieldIds",
+      "flag_name": "visibleFieldIds",
+      "kind": "string_array",
+      "description": "可选，创建后视图的可见字段列，以及顺序（fieldId 列表）。首列字段是每条数据的索引，必须保留在数组第一个位置，不能删除、移动或隐藏。"
+    },
+    {
+      "property_name": "tableId",
+      "flag_name": "tableId",
+      "kind": "string",
+      "description": "所属数据表（Table）的唯一标识。"
+    },
+    {
+      "property_name": "viewDescription",
+      "flag_name": "viewDescription",
+      "kind": "json",
+      "description": "可选，视图描述，结构与前端 ViewDTO.description 保持一致。"
+    },
+    {
+      "property_name": "viewName",
+      "flag_name": "viewName",
+      "kind": "string",
+      "description": "可选，新视图名称；未传时自动生成。"
+    },
+    {
+      "property_name": "viewSubType",
+      "flag_name": "viewSubType",
+      "kind": "string",
+      "description": "可选，视图子类型。"
+    },
+    {
+      "property_name": "viewType",
+      "flag_name": "viewType",
+      "kind": "string",
+      "description": "新视图类型。当前支持：Grid、FormDesigner、Gantt、Calendar、Kanban、Gallery。"
+    }
+  ],
+  "input_schema": {
+    "description": "input",
+    "properties": {
+      "baseId": {
+        "description": "所属 Base 的唯一标识。",
+        "title": "baseId",
+        "type": "string"
+      },
+      "config": {
+        "description": "可选，创建视图时附带的配置。",
+        "properties": {
+          "filter": {
+            "description": "可选，视图筛选规则列表。",
+            "items": {
+              "properties": {},
+              "required": [],
+              "type": "object"
+            },
+            "title": "filter",
+            "type": "array"
+          },
+          "group": {
+            "description": "可选，视图分组规则列表。",
+            "items": {
+              "properties": {},
+              "required": [],
+              "type": "object"
+            },
+            "title": "group",
+            "type": "array"
+          },
+          "sort": {
+            "description": "可选，视图排序规则列表。",
+            "items": {
+              "properties": {},
+              "required": [],
+              "type": "object"
+            },
+            "title": "sort",
+            "type": "array"
+          },
+          "visibleFieldIds": {
+            "description": "可选，创建后视图的可见字段列，以及顺序（fieldId 列表）。首列字段是每条数据的索引，必须保留在数组第一个位置，不能删除、移动或隐藏。",
+            "items": {
+              "type": "string"
+            },
+            "title": "visibleFieldIds",
+            "type": "array"
+          }
+        },
+        "required": [],
+        "title": "config",
+        "type": "object"
+      },
+      "tableId": {
+        "description": "所属数据表（Table）的唯一标识。",
+        "title": "tableId",
+        "type": "string"
+      },
+      "viewDescription": {
+        "description": "可选，视图描述，结构与前端 ViewDTO.description 保持一致。",
+        "properties": {},
+        "required": [],
+        "title": "viewDescription",
+        "type": "object"
+      },
+      "viewName": {
+        "description": "可选，新视图名称；未传时自动生成。",
+        "title": "viewName",
+        "type": "string"
+      },
+      "viewSubType": {
+        "description": "可选，视图子类型。",
+        "title": "viewSubType",
+        "type": "string"
+      },
+      "viewType": {
+        "description": "新视图类型。当前支持：Grid、FormDesigner、Gantt、Calendar、Kanban、Gallery。",
+        "title": "viewType",
+        "type": "string"
+      }
+    },
+    "required": [
+      "baseId",
+      "tableId",
+      "viewType"
+    ],
+    "title": "input",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "aitable.create_view",
+  "product_id": "aitable",
+  "required": [
+    "baseId",
+    "tableId",
+    "viewType"
+  ],
+  "tool": {
+    "aliases": null,
+    "canonical_path": "aitable.create_view",
+    "cli_name": "create_view",
+    "description": "在指定数据表（Table）下创建一个新视图（View）。\r\n当前稳定支持的 viewType：Grid、FormDesigner、Gantt、Calendar、Kanban、Gallery。\r\n若未传 viewName，则会按视图类型自动生成不重名名称。\r\n首列字段是每条数据的索引，不支持删除、移动或隐藏。",
+    "group": "table",
+    "hidden": true,
+    "rpc_name": "create_view",
+    "sensitive": false,
+    "source_server_key": "23eb09885b9e8f26",
+    "title": "创建视图"
+  }
+}

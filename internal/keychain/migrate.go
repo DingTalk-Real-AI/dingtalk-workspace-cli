@@ -19,7 +19,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/security"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/platform/security"
 )
 
 const (

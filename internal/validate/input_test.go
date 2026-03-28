@@ -115,10 +115,10 @@ func TestIsDangerousUnicode(t *testing.T) {
 
 	dangerous := []rune{
 		0x200B, 0x200C, 0x200D, // zero-width
-		0xFEFF,                 // BOM
-		0x202A, 0x202E,         // Bidi
-		0x2028, 0x2029,         // separators
-		0x2066, 0x2069,         // Bidi isolates
+		0xFEFF,         // BOM
+		0x202A, 0x202E, // Bidi
+		0x2028, 0x2029, // separators
+		0x2066, 0x2069, // Bidi isolates
 	}
 	for _, r := range dangerous {
 		if !isDangerousUnicode(r) {

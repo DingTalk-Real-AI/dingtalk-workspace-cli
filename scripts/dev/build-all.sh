@@ -33,22 +33,21 @@ echo "==> Building dws v${VERSION} (commit: ${COMMIT})"
 for platform in "${platforms[@]}"; do
     GOOS=${platform%/*}
     GOARCH=${platform#*/}
-    
+
     output_name="dws"
     archive_name="dws-${GOOS}-${GOARCH}"
-    
+
     if [ "$GOOS" = "windows" ]; then
         output_name="dws.exe"
     fi
-    
+
     echo "  • building ${GOOS}/${GOARCH}..."
     CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH go build \
         -buildmode=pie -trimpath \
         -ldflags="$LDFLAGS" \
         -o "$DIST_DIR/$output_name" \
         ./cmd
-    
-    # Create archive
+
     cd "$DIST_DIR"
     if [ "$GOOS" = "windows" ]; then
         zip -q "${archive_name}.zip" "$output_name" -j ../LICENSE ../NOTICE ../README.md ../CHANGELOG.md
@@ -59,10 +58,9 @@ for platform in "${platforms[@]}"; do
     cd ..
 done
 
-# Generate checksums
 echo "==> Calculating checksums"
 cd "$DIST_DIR"
-shasum -a 256 *.tar.gz *.zip > checksums.txt
+shasum -a 256 ./*.tar.gz ./*.zip > checksums.txt
 cd ..
 
 echo "==> Build complete! Artifacts in $DIST_DIR/"

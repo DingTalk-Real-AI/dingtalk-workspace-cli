@@ -21,8 +21,8 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/config"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/security"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/platform/config"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/platform/security"
 )
 
 const secureDataFile = ".data"

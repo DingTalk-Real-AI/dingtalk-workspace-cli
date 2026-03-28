@@ -1,0 +1,103 @@
+{
+  "cli_path": [
+    "calendar",
+    "room",
+    "search"
+  ],
+  "display": "钉钉日历",
+  "flag_hints": {
+    "endTime": {
+      "alias": "end",
+      "transform": "iso8601_to_millis",
+      "required": true
+    },
+    "groupId": {
+      "alias": "group-id"
+    },
+    "needAvailable": {
+      "alias": "available"
+    },
+    "startTime": {
+      "alias": "start",
+      "transform": "iso8601_to_millis",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "endTime",
+      "flag_name": "end",
+      "alias": "end-time",
+      "kind": "string",
+      "description": "结束时间，时间戳（毫秒级）"
+    },
+    {
+      "property_name": "groupId",
+      "flag_name": "group-id",
+      "kind": "string",
+      "description": "会议室分组ID。可选字段。若不填写，则默认查询根目录下的空闲会议室。\n建议使用方式：首次查询时请留空此字段；若因当前企业会议室数量超过100条而返回错误，请先调用分页查询当前企业下的会议室分组列表，再根据具体的分组ID分别查询各分组下的会议室数据。"
+    },
+    {
+      "property_name": "needAvailable",
+      "flag_name": "available",
+      "alias": "need-available",
+      "kind": "boolean"
+    },
+    {
+      "property_name": "startTime",
+      "flag_name": "start",
+      "alias": "start-time",
+      "kind": "string",
+      "description": "开始时间，时间戳（毫秒级）"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "endTime": {
+        "description": "结束时间，时间戳（毫秒级）",
+        "title": "endTime",
+        "type": "string"
+      },
+      "groupId": {
+        "description": "会议室分组ID。可选字段。若不填写，则默认查询根目录下的空闲会议室。\n建议使用方式：首次查询时请留空此字段；若因当前企业会议室数量超过100条而返回错误，请先调用分页查询当前企业下的会议室分组列表，再根据具体的分组ID分别查询各分组下的会议室数据。",
+        "title": "groupId",
+        "type": "string"
+      },
+      "needAvailable": {
+        "type": "boolean"
+      },
+      "startTime": {
+        "description": "开始时间，时间戳（毫秒级）",
+        "title": "startTime",
+        "type": "string"
+      }
+    },
+    "required": [
+      "endTime",
+      "startTime"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "calendar.query_available_meeting_room",
+  "product_id": "calendar",
+  "required": [
+    "endTime",
+    "startTime"
+  ],
+  "tool": {
+    "aliases": [
+      "query_available_meeting_room"
+    ],
+    "canonical_path": "calendar.query_available_meeting_room",
+    "cli_name": "search",
+    "description": "根据时间筛选出符合闲忙条件的会议室列表。",
+    "group": "room",
+    "rpc_name": "query_available_meeting_room",
+    "sensitive": false,
+    "source_server_key": "279de7cc536c672c",
+    "title": "查询空闲会议室"
+  }
+}

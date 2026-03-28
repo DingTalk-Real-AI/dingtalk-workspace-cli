@@ -23,7 +23,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/config"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/platform/config"
 )
 
 func (p *OAuthProvider) exchangeCode(ctx context.Context, code string) (*TokenData, error) {

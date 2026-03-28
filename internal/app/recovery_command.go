@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
-	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/platform/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/recovery"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/surface/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/surface/output"
 	"github.com/spf13/cobra"
 )
 

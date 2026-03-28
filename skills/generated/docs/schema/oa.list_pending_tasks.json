@@ -1,0 +1,57 @@
+{
+  "cli_path": [
+    "oa",
+    "approval",
+    "tasks"
+  ],
+  "display": "钉钉OA审批",
+  "flag_hints": {
+    "processInstanceId": {
+      "alias": "instance-id",
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "processInstanceId",
+      "flag_name": "instance-id",
+      "alias": "process-instance-id",
+      "kind": "string",
+      "description": "待我处理的审批实例Id，可通过list_pending_approvals工具获取"
+    }
+  ],
+  "input_schema": {
+    "description": "入参",
+    "properties": {
+      "processInstanceId": {
+        "description": "待我处理的审批实例Id，可通过list_pending_approvals工具获取",
+        "title": "待我处理的审批实例Id，可通过list_pending_approvals工具获取",
+        "type": "string"
+      }
+    },
+    "required": [
+      "processInstanceId"
+    ],
+    "title": "入参",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "oa.list_pending_tasks",
+  "product_id": "oa",
+  "required": [
+    "processInstanceId"
+  ],
+  "tool": {
+    "aliases": [
+      "list_pending_tasks"
+    ],
+    "canonical_path": "oa.list_pending_tasks",
+    "cli_name": "tasks",
+    "description": "查询待我审批的任务Id，获取任务Id之后，可以执行同意、拒绝审批单操作。",
+    "group": "approval",
+    "rpc_name": "list_pending_tasks",
+    "sensitive": false,
+    "source_server_key": "2721767f4caa8a6e",
+    "title": "query_pending_tasks"
+  }
+}

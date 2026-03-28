@@ -1,0 +1,52 @@
+{
+  "cli_path": [
+    "devdoc",
+    "search_open_platform_error_code"
+  ],
+  "display": "钉钉开放平台文档搜索",
+  "flag_hints": {
+    "errorCode": {
+      "required": true
+    }
+  },
+  "flags": [
+    {
+      "property_name": "errorCode",
+      "flag_name": "errorCode",
+      "kind": "string",
+      "description": "错误码"
+    }
+  ],
+  "input_schema": {
+    "description": "root",
+    "properties": {
+      "errorCode": {
+        "description": "错误码",
+        "title": "错误码",
+        "type": "string"
+      }
+    },
+    "required": [
+      "errorCode"
+    ],
+    "title": "root",
+    "type": "object"
+  },
+  "kind": "generated_schema",
+  "path": "devdoc.search_open_platform_error_code",
+  "product_id": "devdoc",
+  "required": [
+    "errorCode"
+  ],
+  "tool": {
+    "aliases": null,
+    "canonical_path": "devdoc.search_open_platform_error_code",
+    "cli_name": "search_open_platform_error_code",
+    "description": "根据错误码搜索详细说明及对应的解决方法",
+    "hidden": true,
+    "rpc_name": "search_open_platform_error_code",
+    "sensitive": false,
+    "source_server_key": "c1110038088c6134",
+    "title": "检索开放平台错误码详细说明及解决方案"
+  }
+}

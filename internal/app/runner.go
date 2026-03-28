@@ -15,6 +15,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -25,11 +26,11 @@ import (
 	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
-	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/safety"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/platform/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/safety"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtime/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/surface/cli"
 )
 
 const (
@@ -51,12 +52,10 @@ func newCommandRunnerWithFlags(loader cli.CatalogLoader, flags *GlobalFlags) exe
 	}
 	transportClient := transport.NewClient(httpClient)
 	transportClient.ExtraHeaders = resolveIdentityHeaders()
-	transportClient.FileLogger = FileLoggerInstance()
 	return &runtimeRunner{
 		loader:             loader,
 		transport:          transportClient,
 		globalFlags:        flags,
-		fallback:           executor.EchoRunner{},
 		scanner:            newRuntimeContentScanner(),
 		enforceContentScan: runtimeFlagEnabled(os.Getenv(runtimeContentScanEnforceEnv), false),
 		includeScanReport:  runtimeFlagEnabled(os.Getenv(runtimeContentScanReportOutputEnv), false),
@@ -67,7 +66,6 @@ type runtimeRunner struct {
 	loader             cli.CatalogLoader
 	transport          *transport.Client
 	globalFlags        *GlobalFlags
-	fallback           executor.Runner
 	scanner            safety.Scanner
 	enforceContentScan bool
 	includeScanReport  bool
@@ -75,7 +73,7 @@ type runtimeRunner struct {
 
 func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation) (executor.Result, error) {
 	if r.loader == nil || r.transport == nil {
-		return r.fallback.Run(ctx, invocation)
+		return executor.Result{}, apperrors.NewInternal("runtime runner not initialized: loader or transport is nil")
 	}
 
 	// Mock mode: skip catalog validation, use a placeholder endpoint.
@@ -100,10 +98,14 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 
 	product, ok := catalog.FindProduct(invocation.CanonicalProduct)
 	if !ok || strings.TrimSpace(product.Endpoint) == "" {
-		return r.fallback.Run(ctx, invocation)
+		return executor.Result{}, apperrors.NewValidation(
+			fmt.Sprintf("product %q not found in MCP catalog", invocation.CanonicalProduct),
+		)
 	}
 	if _, ok := product.FindTool(invocation.Tool); !ok {
-		return r.fallback.Run(ctx, invocation)
+		return executor.Result{}, apperrors.NewValidation(
+			fmt.Sprintf("tool %q not found in product %q", invocation.Tool, invocation.CanonicalProduct),
+		)
 	}
 	if r.globalFlags != nil && r.globalFlags.DryRun {
 		invocation.DryRun = true
@@ -117,7 +119,8 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 }
 
 func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, invocation executor.Invocation) (executor.Result, error) {
-	tc := r.transport.WithAuth(r.resolveAuthToken(ctx), resolveIdentityHeaders())
+	r.transport.AuthToken = r.resolveAuthToken(ctx)
+	r.transport.ExtraHeaders = resolveIdentityHeaders() // Read env vars at each MCP call time
 
 	if invocation.DryRun {
 		return executor.Result{
@@ -148,11 +151,18 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		}, nil
 	}
 
-	callResult, err := tc.CallTool(ctx, endpoint, invocation.Tool, invocation.Params)
+	r.transport.AuthToken = r.resolveAuthToken(ctx)
+
+	slog.Debug("tools/call: invoking", "tool", invocation.Tool, "product", invocation.CanonicalProduct, "endpoint", transport.RedactURL(endpoint), "params", truncateJSON(invocation.Params, 512))
+
+	callResult, err := r.transport.CallTool(ctx, endpoint, invocation.Tool, invocation.Params)
 	if err != nil {
+		slog.Debug("tools/call: failed", "tool", invocation.Tool, "error", err)
 		captureRuntimeFailure(invocation, err, err)
 		return executor.Result{}, err
 	}
+
+	slog.Debug("tools/call: result", "tool", invocation.Tool, "is_error", callResult.IsError, "content", truncateJSON(callResult.Content, 256))
 
 	if callResult.IsError {
 		mcpErr := apperrors.NewAPI(
@@ -205,6 +215,23 @@ func resolveRuntimeAuthToken(ctx context.Context, explicitToken string) string {
 	// it immediately instead of falling back to empty token.
 	if tokenErr != nil && errors.Is(tokenErr, authpkg.ErrTokenDecryption) {
 		slog.Error(tokenErr.Error())
+		return ""
+	}
+	// If GetAccessToken failed because token expired and refresh failed,
+	// log the error. We still try the legacy fallback below, but only if
+	// the secure store has no token data at all (i.e. the user never did
+	// an OAuth login and only has a legacy plain-text token).
+	hasSecureTokenData := false
+	if tokenErr != nil {
+		if _, loadErr := authpkg.LoadTokenData(configDir); loadErr == nil {
+			hasSecureTokenData = true
+		}
+	}
+	// If secure token data exists but GetAccessToken failed, the token is
+	// expired and refresh failed — returning the legacy plain-text token
+	// (which is the same expired token) would only cause HTTP 400 errors.
+	if hasSecureTokenData {
+		slog.Warn("access token expired and refresh failed, please run: dws auth login", "error", tokenErr)
 		return ""
 	}
 	manager := authpkg.NewManager(configDir, nil)
@@ -297,4 +324,17 @@ func extractMCPErrorMessage(result transport.ToolCallResult) string {
 		return strings.TrimSpace(msg)
 	}
 	return "MCP tool returned an error response"
+}
+
+// truncateJSON serializes a value to JSON and truncates to maxLen characters for debug logging.
+func truncateJSON(value any, maxLen int) string {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Sprintf("<marshal error: %v>", err)
+	}
+	str := string(data)
+	if len(str) <= maxLen {
+		return str
+	}
+	return fmt.Sprintf("%s...(%d more)", str[:maxLen], len(str)-maxLen)
 }
