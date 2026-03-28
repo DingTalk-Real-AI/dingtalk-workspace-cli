@@ -14,6 +14,7 @@
 package logging
 
 import (
+	"context"
 	"log/slog"
 	"time"
 )
@@ -45,10 +46,10 @@ func LogResponse(logger *slog.Logger, method, endpoint string, statusCode int, r
 	}
 	if err != nil {
 		attrs = append(attrs, slog.String("error", err.Error()))
-		logger.LogAttrs(nil, slog.LevelWarn, "jsonrpc_response", attrs...)
+		logger.LogAttrs(context.TODO(), slog.LevelWarn, "jsonrpc_response", attrs...)
 		return
 	}
-	logger.LogAttrs(nil, slog.LevelDebug, "jsonrpc_response", attrs...)
+	logger.LogAttrs(context.TODO(), slog.LevelDebug, "jsonrpc_response", attrs...)
 }
 
 // redactEndpoint removes query parameters from endpoint URLs in logs.
