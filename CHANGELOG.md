@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-03-28
+
+Backward-compatible feature and security update after the initial 1.0.0 release.
+
+### Added
+
+- JSON output support for `dws auth login` and `dws auth status`
+- Cross-platform keychain-backed secure storage and migration helpers
+- Atomic file write helpers to avoid partial config and download writes
+- Stronger path and input validation helpers for local file operations
+- Install-script coverage for local-source installs
+
+### Changed
+
+- Improved `auth login` help text, hidden compatibility flags, and interactive UX
+- Added root-level flag suggestions for common compatibility mistakes such as `--json` and legacy auth flags
+- Updated AITable upload parsing to accept nested `content` payloads
+- Refreshed bundled skills metadata for the new CLI version
+
 ## [1.0.0] - 2026-03-27
 
 First public release of DingTalk Workspace CLI.

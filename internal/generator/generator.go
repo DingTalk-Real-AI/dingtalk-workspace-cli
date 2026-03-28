@@ -41,7 +41,7 @@ type frontmatterSpec struct {
 }
 
 const (
-	skillVersion                = "1.0.0"
+	skillVersion                = "1.1.0"
 	skillCategoryService        = "service"
 	skillCategoryHelper         = "helper"
 	skillCategoryPersona        = "persona"

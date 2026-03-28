@@ -20,6 +20,21 @@
 ## 通用错误
 - 请求超时 — 网络慢或服务端响应慢 → `--timeout 60` 重试
 - 网络连接失败 — 无法连接 MCP Server → 用最简命令验证: `dws contact user get-self --format json`
+- stderr 出现 `RECOVERY_EVENT_ID=<event_id>` — runtime 失败已被 CLI 捕获 → 优先执行 `dws recovery execute --event-id <event_id> --format json`
+
+## Recovery 闭环
+
+- `dws recovery plan --last|--event-id <event_id> --format json`：读取失败快照并生成恢复计划
+- `dws recovery execute --last|--event-id <event_id> --format json`：生成带 `doc_search`、`probe_results`、`agent_task` 的分析包
+- `dws recovery finalize --event-id <event_id> --outcome recovered|failed|handoff --execution-file execution.json --format json`：回写恢复结果
+
+执行 `finalize` 时：
+
+- `execution-file` 至少应包含 `actions`、`attempts`、`result`、`error_summary`
+- 兼容旧格式：`action` + 数值型 `attempts`
+- 若 recovery bundle 已进入 unknown/agent 路线，不要把 `human_actions` 视为最终结论；必须结合完整 bundle 判断
+
+更多字段解释见 [recovery-guide.md](./recovery-guide.md)。
 
 ---
 

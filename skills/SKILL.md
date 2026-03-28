@@ -1,7 +1,7 @@
 ---
 name: dws
 description: 管理钉钉产品能力(AI表格/日历/通讯录/群聊与机器人/待办/审批/考勤/日志/DING消息/工作台/开放平台文档等)。当用户需要操作表格数据、管理日程会议、查询通讯录、管理群聊、机器人发消息、创建待办、提交审批、查看考勤、提交日报周报（钉钉日志模版）时使用。
-cli_version: ">=1.0.0"
+cli_version: ">=1.1.0"
 ---
 
 # 钉钉全产品 Skill
@@ -88,9 +88,10 @@ Step 3 → 加 --yes 执行命令
 
 ## 错误处理
 1. 遇到错误，加 `--verbose` 重试一次
-2. 仍然失败，报告完整错误信息给用户，禁止自行尝试替代方案
-3. 认证失败时，参考 [global-reference.md](./references/global-reference.md) 中的认证章节处理
-4. 各产品高频错误及排查流程见 [error-codes.md](./references/error-codes.md)
+2. 若 stderr 出现 `RECOVERY_EVENT_ID=<event_id>`，优先按 [recovery-guide.md](./references/recovery-guide.md) 执行 recovery 闭环
+3. 仍然失败，报告完整错误信息给用户，禁止自行尝试替代方案
+4. 认证失败时，参考 [global-reference.md](./references/global-reference.md) 中的认证章节处理
+5. 各产品高频错误及排查流程见 [error-codes.md](./references/error-codes.md)
 
 
 ## 详细参考 (按需读取)
@@ -100,4 +101,5 @@ Step 3 → 加 --yes 执行命令
 - [references/global-reference.md](./references/global-reference.md) — 全局标志、认证、输出格式
 - [references/field-rules.md](./references/field-rules.md) — AI表格字段类型规则
 - [references/error-codes.md](./references/error-codes.md) — 错误码 + 调试流程
+- [references/recovery-guide.md](./references/recovery-guide.md) — recovery 闭环、`RECOVERY_EVENT_ID`、`execute/finalize` 规范
 - [scripts/](./scripts/) — 各产品批量操作脚本（AI表格/日历/机器人消息/通讯录/考勤/日志/待办等）

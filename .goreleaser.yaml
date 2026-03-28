@@ -1,0 +1,71 @@
+# GoReleaser configuration for dws
+# Docs: https://goreleaser.com
+#
+# To release:
+#   git tag -a v0.1.0 -m "Release v0.1.0"
+#   git push origin v0.1.0
+#
+# To test locally (no publish):
+#   goreleaser release --snapshot --clean
+
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: ./cmd
+    binary: dws
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -buildmode=pie
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.version=v{{.Version}}
+      - -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.gitCommit={{.ShortCommit}}
+      - -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.buildTime={{.Date}}
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - formats:
+      - tar.gz
+    name_template: "dws-{{ .Os }}-{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - LICENSE
+      - NOTICE
+      - README.md
+      - CHANGELOG.md
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+
+release:
+  github:
+    owner: DingTalk-Real-AI
+    name: dingtalk-workspace-cli
+  draft: false
+  prerelease: auto
+  name_template: "v{{.Version}}"

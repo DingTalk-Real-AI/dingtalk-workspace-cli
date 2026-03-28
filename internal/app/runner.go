@@ -149,6 +149,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 
 	callResult, err := tc.CallTool(ctx, endpoint, invocation.Tool, invocation.Params)
 	if err != nil {
+		captureRuntimeFailure(invocation, err, err)
 		return executor.Result{}, err
 	}
 
@@ -160,6 +161,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 			apperrors.WithServerKey(invocation.CanonicalProduct),
 			apperrors.WithHint("MCP tool returned a business error; check tool parameters and refer to skill documentation."),
 		)
+		captureRuntimeFailure(invocation, mcpErr, mcpErr)
 		return executor.Result{}, mcpErr
 	}
 

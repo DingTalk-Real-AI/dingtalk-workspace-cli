@@ -36,6 +36,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/recovery"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -43,11 +44,14 @@ import (
 
 type outputFileContextKey struct{}
 
+const recoveryEventStderrPrefix = "RECOVERY_EVENT_ID="
+
 // Execute runs the root command and returns the process exit code.
 func Execute() int {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
+	recovery.ResetRuntimeState()
 	root := NewRootCommand(ctx)
 	executed, err := root.ExecuteC()
 	if err != nil {
@@ -60,6 +64,9 @@ func Execute() int {
 			_, _ = fmt.Fprintln(os.Stderr)
 		}
 		_ = printExecutionError(executed, os.Stdout, os.Stderr, err)
+		if last := recovery.LatestCapture(); last != nil && last.EventID != "" {
+			_, _ = fmt.Fprintf(os.Stderr, "%s%s\n", recoveryEventStderrPrefix, last.EventID)
+		}
 		return apperrors.ExitCode(err)
 	}
 	return 0
@@ -210,6 +217,7 @@ func NewRootCommand(ctx ...context.Context) *cobra.Command {
 		newAuthCommand(),
 		newCacheCommand(),
 		newCompletionCommand(root),
+		newRecoveryCommand(rootCtx, loader, flags),
 		newVersionCommand(),
 		schemaCmd,
 		genSkillsCmd,

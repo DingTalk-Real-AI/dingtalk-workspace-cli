@@ -1,0 +1,4 @@
+# Default code owners for all files
+# These users will be automatically requested for review on PRs.
+
+* @DingTalk-Real-AI/cli-maintainers

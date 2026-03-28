@@ -38,6 +38,7 @@ declare -a SUITES=(
   "cli|./test/cli/..."
   "contract|./test/contract/..."
   "integration/extensions|./test/integration/extensions/..."
+  "integration/recovery|./test/integration/recovery/..."
   "mock_mcp|./test/mock_mcp/..."
   "scripts|./test/scripts/..."
 )

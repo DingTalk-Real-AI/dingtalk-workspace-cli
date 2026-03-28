@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -407,6 +408,10 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte) 
 				apperrors.WithOperation("jsonrpc"),
 				apperrors.WithReason("request_build_failed"),
 				apperrors.WithHint(i18n.T("请检查服务 endpoint 是否为空或格式不合法。")),
+				apperrors.WithCause(&CallError{
+					Stage: CallStageRequest,
+					Cause: err,
+				}),
 			)
 		}
 		req.Header.Set("Content-Type", "application/json")
@@ -446,6 +451,10 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte) 
 					apperrors.WithOperation("jsonrpc"),
 					apperrors.WithReason("request_cancelled"),
 					apperrors.WithHint(i18n.T("请求在重试过程中被取消；请检查调用侧超时设置。")),
+					apperrors.WithCause(&CallError{
+						Stage: CallStageRequest,
+						Cause: err,
+					}),
 				)
 			}
 		}
@@ -457,6 +466,10 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte) 
 		apperrors.WithRetryable(true),
 		apperrors.WithHint(i18n.T("请检查网络连通性和 MCP 服务状态后重试。")),
 		apperrors.WithActions(discoveryActions("")...),
+		apperrors.WithCause(&CallError{
+			Stage: CallStageRequest,
+			Cause: lastErr,
+		}),
 	)
 }
 
@@ -631,6 +644,11 @@ func httpStatusError(method, endpoint string, statusCode int, snapshotPath strin
 		apperrors.WithReason(fmt.Sprintf("http_%d", statusCode)),
 		apperrors.WithRetryable(retryable(statusCode)),
 		apperrors.WithSnapshot(snapshotPath),
+		apperrors.WithCause(&CallError{
+			Stage:      CallStageHTTP,
+			HTTPStatus: statusCode,
+			Cause:      errors.New(message),
+		}),
 	}
 
 	switch {
@@ -677,6 +695,11 @@ func jsonrpcEnvelopeError(method string, rpcErr *RPCError, snapshotPath string) 
 		apperrors.WithRPCCode(rpcErr.Code),
 		apperrors.WithRPCData(rpcErr.Data),
 		apperrors.WithSnapshot(snapshotPath),
+		apperrors.WithCause(&CallError{
+			Stage:   CallStageJSONRPC,
+			RPCCode: rpcErr.Code,
+			Cause:   errors.New(message),
+		}),
 	}
 
 	if rpcErr.Code == -32602 {

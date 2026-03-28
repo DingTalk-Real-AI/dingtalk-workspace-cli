@@ -1,27 +1,25 @@
-# Python
 __pycache__/
-.pytest_cache/
-.venv*/
-*.pyc
-*.pyo
-
-# Build outputs
 dist/
 .tmp-bin/
-dws
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-
-# OS
+.worktrees/
+.pytest_cache/
+.venv*/
+var/
 .DS_Store
-Thumbs.db
+.agents/
+/.idea/
+/CLAUDE.md
+/.claude/
+/.idea/vcs.xml
+/.idea/.gitignore
+dws
+test/cli/testdata/
+tmp/
+test/cli_compat/testdata/
+.gitignore
+.worktrees/
 
-# Environment & Secrets
+# Secrets & credentials
 .env
 .env.*
 *.pem

@@ -502,19 +502,3 @@ func writeAuthLoginJSON(w io.Writer, data *authpkg.TokenData, forced bool) error
 	enc.SetIndent("", "  ")
 	return enc.Encode(resp)
 }
-
-// authLogoutResponse is the JSON response for auth logout command.
-type authLogoutResponse struct {
-	Success bool   `json:"success"`
-	Message string `json:"message"`
-}
-
-func writeAuthLogoutJSON(w io.Writer) error {
-	resp := authLogoutResponse{
-		Success: true,
-		Message: "已清除所有认证信息",
-	}
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(resp)
-}

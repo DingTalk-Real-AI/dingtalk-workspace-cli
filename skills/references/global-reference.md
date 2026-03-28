@@ -36,6 +36,23 @@ dws auth import credentials.json
 ```
 refresh_token 单设备独占，远程刷新后源设备凭证失效。
 
+## Recovery
+
+当 runtime/MCP 命令失败且 stderr 额外输出 `RECOVERY_EVENT_ID=<event_id>` 时，说明 CLI 已经持久化了失败快照，可进入 recovery 闭环：
+
+```bash
+dws recovery plan --event-id <event_id> --format json
+dws recovery execute --event-id <event_id> --format json
+dws recovery finalize --event-id <event_id> --outcome recovered|failed|handoff --execution-file execution.json --format json
+```
+
+- `plan` / `execute` 也支持 `--last`，但 `--last` 与 `--event-id` 互斥
+- recovery 文件保存在 `DWS_CONFIG_DIR/recovery/`
+- CLI 会自动清理 30 天前的 recovery 文件和事件记录
+- recovery 自己发起的文档检索与只读 probe 不会再创建新的 recovery 事件
+
+更多闭环要求见 [recovery-guide.md](./recovery-guide.md)。
+
 
 ## 全局标志
 

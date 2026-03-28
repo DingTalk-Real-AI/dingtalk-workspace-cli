@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../lark/cli"
+		},
+		{
+			"path": "../lark/docs"
+		}
+	],
+	"settings": {}
+}
