@@ -38,6 +38,7 @@ test/cli_compat/testdata/
 .worktrees/
 .agents/
 var/
+dingtalk-workspace-cli.code-workspace
 
 # Node (if applicable)
 node_modules/
