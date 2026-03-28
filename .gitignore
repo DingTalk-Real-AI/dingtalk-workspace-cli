@@ -1,27 +1,48 @@
-__pycache__/
-dist/
-.tmp-bin/
-.worktrees/
-.pytest_cache/
-.venv*/
-var/
+# OS specific
 .DS_Store
-.agents/
-/.idea/
-/CLAUDE.md
-/.claude/
-/.idea/vcs.xml
-/.idea/.gitignore
-dws
-test/cli/testdata/
-tmp/
-test/cli_compat/testdata/
-.gitignore
-.worktrees/
+Thumbs.db
 
-# Secrets & credentials
-.env
-.env.*
+# AI Tools
+/.agents/
+/.claude/
+/CLAUDE.md
+
+# Editors & local agent tooling
+/.idea/
+/.vscode/
+*.swp
+*.swo
+
+# Environment variables & secrets
+/.env
+/.env.*
+!/.env.example
 *.pem
 *.key
 credentials*
+
+# Python caches used by local scripts
+__pycache__/
+.pytest_cache/
+.venv*/
+
+# Go build outputs & local workspace artifacts
+/dws
+/dws.exe
+*.test
+/dist/
+/.tmp-bin/
+/tmp/
+/var/
+/.worktrees/
+
+# Generated test fixtures
+/test/cli/testdata/
+/test/cli_compat/testdata/
+
+# Coverage artifacts
+/coverage.txt
+/coverage.out
+/cover.out
+*.coverprofile
+/coverage/
