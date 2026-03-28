@@ -72,7 +72,7 @@ type Client struct {
 	ExtraHeaders     map[string]string
 	SnapshotRecorder SnapshotRecorder
 	TrustedDomains   []string
-	ExecutionId      string // Request tracing ID for debugging
+	ExecutionId      string       // Request tracing ID for debugging
 	FileLogger       *slog.Logger // Structured file logger for diagnostics (nil-safe).
 	sleep            func(context.Context, time.Duration) error
 	wildcardOnce     sync.Once

@@ -127,7 +127,7 @@ func TestSelectMAC_PhysicalPreferred(t *testing.T) {
 	t.Parallel()
 	ifaces := []net.Interface{
 		{Index: 1, Name: "lo", Flags: net.FlagLoopback, HardwareAddr: nil},
-		{Index: 2, Name: "eth0", Flags: net.FlagUp, HardwareAddr: net.HardwareAddr{0x02, 0x42, 0xac, 0x11, 0x00, 0x02}}, // Docker virtual
+		{Index: 2, Name: "eth0", Flags: net.FlagUp, HardwareAddr: net.HardwareAddr{0x02, 0x42, 0xac, 0x11, 0x00, 0x02}},   // Docker virtual
 		{Index: 3, Name: "enp0s3", Flags: net.FlagUp, HardwareAddr: net.HardwareAddr{0x14, 0x98, 0x77, 0xab, 0xcd, 0xef}}, // physical
 	}
 	mac, err := selectMAC(ifaces)
