@@ -25,3 +25,5 @@ test/cli_compat/testdata/
 *.pem
 *.key
 credentials*
+plans
+_docs
