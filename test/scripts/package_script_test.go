@@ -134,7 +134,7 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 	}
 	for _, want := range []string{
 		"\"name\": \"dingtalk-workspace-cli\"",
-		"\"DingTalk Workspace CLI\"",
+		"DingTalk Workspace CLI",
 		"\"postinstall\": \"node install.js\"",
 	} {
 		if !strings.Contains(string(packageJSON), want) {

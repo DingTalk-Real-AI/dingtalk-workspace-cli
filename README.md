@@ -31,10 +31,9 @@
 - [Getting Started](#getting-started)
 - [Quick Start](#quick-start)
 - [Using with Agents](#using-with-agents)
-- [New Features](#new-features)
+- [Features](#features)
 - [Key Services](#key-services)
 - [Security by Design](#security-by-design)
-- [AI Agent Skills](#ai-agent-skills)
 - [Reference & Docs](#reference--docs)
 - [Contributing](#contributing)
 
@@ -145,45 +144,37 @@ dws auth login
 ## Quick Start
 
 ```bash
-dws contact user search --keyword "Alice"          # search contacts
+dws contact user search --keyword "engineering"     # search contacts
 dws calendar event list                            # list calendar events
-dws todo task create --title "Quarterly report" --executors "<userId>"   # create a todo
+dws todo task create --title "Quarterly report" --executors "<your-userId>"   # create a todo (replace <your-userId>)
 dws todo task list --dry-run                       # preview without executing
 ```
 
 ## Using with Agents
 
-dws is designed as an AI-native CLI. Here's how to integrate it with your agent:
-
-### 1. Setup
+dws is designed as an AI-native CLI. Complete [Installation](#installation) and [Getting Started](#getting-started) first, then configure your agent:
 
 ```bash
-# Install dws
-curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install.sh | sh
-
 # Configure auth via environment variables (recommended for agents, no interactive login)
 export DWS_CLIENT_ID=<your-app-key>
 export DWS_CLIENT_SECRET=<your-app-secret>
 dws auth login
 ```
 
-### 2. Agent Invocation Patterns
+### Agent Invocation Patterns
 
 ```bash
 # Use --yes to skip confirmation prompts (required for agents)
-dws todo task create --title "Review PR" --yes
+dws todo task create --title "Review PR" --executors "<your-userId>" --yes
 
 # Use --dry-run to preview operations (safe execution)
-dws contact user search --keyword "test" --dry-run
+dws contact user search --keyword "engineering" --dry-run
 
 # Use --jq to extract precisely (save tokens)
-dws contact user search --keyword "test" --jq '.response.content'
-
-# Use --fields to return only needed fields
-dws calendar event list --fields response
+dws contact user get-self --jq '.result[0].orgEmployeeModel | {name: .orgUserName, dept: .depts[0].deptName, userId}'
 ```
 
-### 3. Schema Discovery (Agent Self-Exploration)
+### Schema Discovery
 
 Agents don't need pre-built knowledge of every command. Use `dws schema` to dynamically discover capabilities:
 
@@ -195,12 +186,42 @@ dws schema --jq '.products[] | {id, tool_count: (.tools | length)}'
 dws schema aitable.query_records --jq '.tool.input_schema'
 
 # Step 3: Construct the correct call
-dws aitable record query --base-id "xxx" --table-id "yyy" --limit 10
+dws aitable record query --base-id BASE_ID --table-id TABLE_ID --limit 10
 ```
 
-### 4. Error Tolerance
+### Agent Skills
 
-The smart correction engine is highly tolerant of common agent-generated mistakes:
+The repo ships Agent Skills (`SKILL.md` files) for every DingTalk product. After installing, tools like Claude Code / Cursor can use DingTalk capabilities directly:
+
+```bash
+# Install skills into current project
+curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install-skills.sh | sh
+```
+
+> `install.sh` installs to `$HOME/.agents/skills/dws` (global); `install-skills.sh` installs to `./.agents/skills/dws` (current project).
+
+Author your own Agent Skills and orchestrate them with dws skills for cross-product workflows: **ISV Skill → dws Skill → DingTalk Open Platform API (enforced auth + full audit)**.
+
+## Features
+
+<details>
+<summary><strong>Smart Input Correction</strong> — auto-corrects common AI model parameter mistakes <code>v1.0.1</code></summary>
+
+Built-in pipeline engine that normalizes flag names, splits sticky arguments, and fuzzy-matches typos:
+
+```bash
+# Naming convention auto-conversion (camelCase / snake_case / UPPER -> kebab-case)
+dws aitable record query --baseId BASE_ID --tableId TABLE_ID         # auto-corrected to --base-id --table-id
+
+# Sticky argument splitting
+dws contact user search --keyword "engineering" --timeout30           # auto-split to --timeout 30
+
+# Fuzzy flag name matching
+dws aitable record query --base-id BASE_ID --tabel-id TABLE_ID       # --tabel-id -> --table-id
+
+# Value normalization (boolean / number / date / enum)
+# "yes" -> true, "1,000" -> 1000, "2024/03/29" -> "2024-03-29", "ACTIVE" -> "active"
+```
 
 | Agent Output | dws Auto-Corrects To |
 |-----------|--------------|
@@ -210,53 +231,24 @@ The smart correction engine is highly tolerant of common agent-generated mistake
 | `--USER-ID` | `--user-id` |
 | `--user_name` | `--user-name` |
 
-### 5. Agent Skill Integration
+</details>
 
-After installing Agent Skills, tools like Claude Code / Cursor can use DingTalk capabilities directly:
-
-```bash
-# Install skills into current project
-curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install-skills.sh | sh
-```
-
-> See the [AI Agent Skills](#ai-agent-skills) section for details.
-
-## New Features
-
-### Smart Input Correction
-
-dws includes a built-in pipeline engine that auto-corrects common AI model parameter mistakes:
+<details>
+<summary><strong>jq Filtering & Field Selection</strong> — fine-grained output control to reduce token consumption <code>v1.0.1</code></summary>
 
 ```bash
-# Naming convention auto-conversion (camelCase / snake_case / UPPER -> kebab-case)
-dws aitable record query --baseId x --tableId y         # auto-corrected to --base-id --table-id
-
-# Sticky argument splitting
-dws contact user search --keyword "test" --timeout30     # auto-split to --timeout 30
-
-# Fuzzy flag name matching
-dws aitable record query --base-id x --tabel-id y       # --tabel-id -> --table-id
-
-# Value normalization (boolean / number / date / enum)
-# "yes" -> true, "1,000" -> 1000, "2024/03/29" -> "2024-03-29", "ACTIVE" -> "active"
-```
-
-### JSON Field Selection & jq Filtering
-
-Fine-grained output control to reduce token consumption:
-
-```bash
-# Return only specific fields
-dws aitable record query --base-id x --table-id y --fields invocation,response
-
 # Built-in jq expressions
-dws aitable record query --base-id x --table-id y --jq '.invocation.params'
+dws aitable record query --base-id BASE_ID --table-id TABLE_ID --jq '.invocation.params'
 dws schema --jq '.products[] | {id, tools: (.tools | length)}'
+
+# Return only specific fields
+dws aitable record query --base-id BASE_ID --table-id TABLE_ID --fields invocation,response
 ```
 
-### Schema Introspection
+</details>
 
-Agents can query parameter schemas before making calls:
+<details>
+<summary><strong>Schema Introspection</strong> — query parameter schemas before making calls <code>v1.0.1</code></summary>
 
 ```bash
 dws schema                                              # list all products and tools
@@ -264,6 +256,27 @@ dws schema aitable.query_records                        # view parameter schema
 dws schema aitable.query_records --jq '.tool.input_schema.required'   # view required fields
 dws schema --jq '.products[].id'                        # extract all product IDs
 ```
+
+</details>
+
+<details>
+<summary><strong>Pipe & File Input</strong> — read flag values from files or stdin <code>v1.0.1</code></summary>
+
+```bash
+# Read message body from a file
+dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
+  --title "Weekly Report" --text @report.md
+
+# Pipe content via stdin
+cat report.md | dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
+  --title "Weekly Report"
+
+# Read from stdin explicitly
+dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
+  --title "Weekly Report" --text @-
+```
+
+</details>
 
 ## Key Services
 
@@ -273,7 +286,7 @@ dws schema --jq '.products[].id'                        # extract all product ID
 | Chat | `chat` | Group management / members / bot messaging / webhook |
 | Calendar | `calendar` | Events / meeting rooms / free-busy |
 | Todo | `todo` | Task management |
-| Approval | `approval` | Processes / forms / instances |
+| Approval | `oa` | Processes / forms / instances |
 | Attendance | `attendance` | Clock-in / shifts / statistics |
 | Ding | `ding` | DING messages / send / recall |
 | Report | `report` | Reports / templates / statistics |
@@ -332,23 +345,6 @@ Run `dws --help` for the full list, or `dws <service> --help` for subcommands.
 </details>
 
 > Found a vulnerability? Report via [GitHub Security Advisories](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/security/advisories/new). See [SECURITY.md](./SECURITY.md).
-
-## AI Agent Skills
-
-The repo ships Agent Skills (`SKILL.md` files) for every DingTalk product. The install script deploys them to `~/.agents/skills/dws` automatically.
-
-```bash
-# Install skills into the current project only
-curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install-skills.sh | sh
-```
-
-> `install.sh` installs to `$HOME/.agents/skills/dws` (global); `install-skills.sh` installs to `./.agents/skills/dws` (current project).
-
-### ISV Skill Integration
-
-Author your own Agent Skills and orchestrate them with dws skills for cross-product workflows: **ISV Skill → dws Skill → DingTalk Open Platform API (enforced auth + full audit)**.
-
-**Example**: A CRM Skill invokes the Calendar Skill to create a client meeting, then triggers the Todo Skill to assign follow-ups — the AI agent completes cross-system collaboration in a single conversation.
 
 ## Reference & Docs
 

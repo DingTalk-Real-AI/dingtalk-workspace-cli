@@ -585,10 +585,23 @@ func collectOverrides(cmd *cobra.Command, specs []FlagSpec, guard *StdinGuard) (
 
 func schemaPayload(catalog ir.Catalog, args []string) (map[string]any, error) {
 	if len(args) == 0 {
+		products := make([]map[string]any, 0, len(catalog.Products))
+		for _, p := range catalog.Products {
+			tools := make([]map[string]any, 0, len(p.Tools))
+			for _, t := range p.Tools {
+				tools = append(tools, compactTool(t))
+			}
+			products = append(products, map[string]any{
+				"id":          p.ID,
+				"name":        p.DisplayName,
+				"description": p.Description,
+				"tools":       tools,
+			})
+		}
 		return map[string]any{
 			"kind":     "schema",
-			"products": catalog.Products,
-			"count":    len(catalog.Products),
+			"count":    len(products),
+			"products": products,
 		}, nil
 	}
 
@@ -597,12 +610,32 @@ func schemaPayload(catalog ir.Catalog, args []string) (map[string]any, error) {
 		return nil, apperrors.NewValidation(fmt.Sprintf("unknown canonical schema path %q", args[0]))
 	}
 	return map[string]any{
-		"kind":     "schema",
-		"path":     args[0],
-		"product":  product,
-		"tool":     tool,
-		"required": requiredFields(tool.InputSchema),
+		"kind":    "schema",
+		"path":    args[0],
+		"product": map[string]any{"id": product.ID, "name": product.DisplayName},
+		"tool":    compactTool(tool),
 	}, nil
+}
+
+// compactTool returns a lean representation of a tool for schema
+// output, keeping only the fields that AI agents and developers
+// need: name, description, parameters, and sensitivity flag.
+func compactTool(t ir.ToolDescriptor) map[string]any {
+	tool := map[string]any{
+		"name":        t.RPCName,
+		"title":       t.Title,
+		"description": t.Description,
+		"sensitive":   t.Sensitive,
+	}
+
+	if props, ok := t.InputSchema["properties"]; ok {
+		tool["parameters"] = props
+	}
+	if req := requiredFields(t.InputSchema); len(req) > 0 {
+		tool["required"] = req
+	}
+
+	return tool
 }
 
 func confirmSensitiveTool(cmd *cobra.Command, tool ir.ToolDescriptor, guard *StdinGuard) error {

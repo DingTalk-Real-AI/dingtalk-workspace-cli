@@ -24,21 +24,22 @@ import (
 )
 
 // SelectFields filters a JSON-serialisable payload to include only
-// the specified field names. It works on both objects and arrays:
-//   - Object: returns a new object with only the matching keys.
-//   - Array of objects: returns a new array where each element
-//     contains only the matching keys.
-//   - Other types: returned unchanged.
+// the specified field names, following the gh CLI convention:
 //
-// Field names are matched case-insensitively against top-level keys.
-// Nested field selection (e.g. "response.data") is not supported;
-// use --jq for complex queries.
+//  1. If the payload is an array of objects, filter each element.
+//  2. If the payload is an object containing a "data list" (a nested
+//     array under a well-known key like "value", "items", "data",
+//     "records", etc.), filter each element of that list.
+//  3. Otherwise, filter top-level keys.
+//
+// This approach lets callers write `--fields title,memberCount` and
+// get the right result regardless of the response envelope structure.
+// Field names are matched case-insensitively.
 func SelectFields(payload any, fields []string) any {
 	if len(fields) == 0 {
 		return payload
 	}
 
-	// Normalise to a generic JSON structure.
 	normalised := toGeneric(payload)
 
 	wanted := make(map[string]bool, len(fields))
@@ -47,21 +48,83 @@ func SelectFields(payload any, fields []string) any {
 	}
 
 	switch typed := normalised.(type) {
-	case map[string]any:
-		return filterMap(typed, wanted)
 	case []any:
-		result := make([]any, 0, len(typed))
-		for _, item := range typed {
-			if m, ok := item.(map[string]any); ok {
-				result = append(result, filterMap(m, wanted))
+		return filterSlice(typed, wanted)
+	case map[string]any:
+		// Try to find a nested data list and filter its elements.
+		if loc := findDataList(typed); loc != nil {
+			filtered := filterSlice(loc.list, wanted)
+			result := shallowCopyMap(typed)
+			if loc.outerKey == "" {
+				// Top-level: {items: [...]}
+				result[loc.innerKey] = filtered
 			} else {
-				result = append(result, item)
+				// Nested: {result: {value: [...]}}
+				inner := shallowCopyMap(typed[loc.outerKey].(map[string]any))
+				inner[loc.innerKey] = filtered
+				result[loc.outerKey] = inner
 			}
+			return result
 		}
-		return result
+		return filterMap(typed, wanted)
 	default:
 		return normalised
 	}
+}
+
+// dataListLocation describes where a data list was found in the
+// object tree.
+type dataListLocation struct {
+	list     []any
+	outerKey string // "" if top-level
+	innerKey string // the key containing the array
+}
+
+// findDataList walks the object tree looking for the first array of
+// objects under well-known keys. It searches both top-level and one
+// level deep (e.g. result.value, response.items).
+func findDataList(m map[string]any) *dataListLocation {
+	listKeys := []string{"value", "items", "results", "data", "list", "records", "tools", "servers", "products"}
+
+	// Top-level: {value: [...]}
+	for _, key := range listKeys {
+		if arr, ok := m[key].([]any); ok && len(arr) > 0 {
+			if _, isMap := arr[0].(map[string]any); isMap {
+				return &dataListLocation{list: arr, innerKey: key}
+			}
+		}
+	}
+
+	// One level deep: {result: {value: [...]}}
+	for _, outerKey := range []string{"result", "response", "data"} {
+		inner, ok := m[outerKey].(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, key := range listKeys {
+			if arr, ok := inner[key].([]any); ok && len(arr) > 0 {
+				if _, isMap := arr[0].(map[string]any); isMap {
+					return &dataListLocation{list: arr, outerKey: outerKey, innerKey: key}
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// filterSlice applies field filtering to each object element in a
+// slice. Non-object elements are passed through unchanged.
+func filterSlice(items []any, wanted map[string]bool) []any {
+	result := make([]any, 0, len(items))
+	for _, item := range items {
+		if m, ok := item.(map[string]any); ok {
+			result = append(result, filterMap(m, wanted))
+		} else {
+			result = append(result, item)
+		}
+	}
+	return result
 }
 
 // ApplyJQ applies a jq expression to a JSON-serialisable payload and
@@ -110,6 +173,15 @@ func ApplyJQ(w io.Writer, payload any, expr string) error {
 		}
 	}
 	return nil
+}
+
+// shallowCopyMap returns a shallow copy of the map.
+func shallowCopyMap(m map[string]any) map[string]any {
+	result := make(map[string]any, len(m))
+	for k, v := range m {
+		result[k] = v
+	}
+	return result
 }
 
 // filterMap returns a new map containing only keys that match the

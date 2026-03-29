@@ -57,7 +57,13 @@ func WriteCommandPayload(cmd *cobra.Command, payload any, fallback Format) error
 	if cmd == nil {
 		return Write(io.Discard, fallback, payload)
 	}
-	return Write(cmd.OutOrStdout(), ResolveFormat(cmd, fallback), payload)
+	return WriteFiltered(
+		cmd.OutOrStdout(),
+		ResolveFormat(cmd, fallback),
+		payload,
+		ResolveFields(cmd),
+		ResolveJQ(cmd),
+	)
 }
 
 func Write(w io.Writer, format Format, payload any) error {
@@ -146,7 +152,11 @@ func ResolveFields(cmd *cobra.Command) string {
 	if cmd == nil {
 		return ""
 	}
-	for _, flags := range []*pflag.FlagSet{cmd.Flags(), cmd.InheritedFlags()} {
+	for _, flags := range []*pflag.FlagSet{
+		cmd.Flags(),
+		cmd.InheritedFlags(),
+		rootPersistentFlags(cmd),
+	} {
 		if flags == nil {
 			continue
 		}
@@ -159,12 +169,18 @@ func ResolveFields(cmd *cobra.Command) string {
 	return ""
 }
 
-// ResolveJQ extracts the --jq flag value from the command.
+// ResolveJQ extracts the --jq flag value from the command. It checks
+// local flags, inherited flags, and root persistent flags because
+// --jq is registered as a root PersistentFlag.
 func ResolveJQ(cmd *cobra.Command) string {
 	if cmd == nil {
 		return ""
 	}
-	for _, flags := range []*pflag.FlagSet{cmd.Flags(), cmd.InheritedFlags()} {
+	for _, flags := range []*pflag.FlagSet{
+		cmd.Flags(),
+		cmd.InheritedFlags(),
+		rootPersistentFlags(cmd),
+	} {
 		if flags == nil {
 			continue
 		}
@@ -175,6 +191,13 @@ func ResolveJQ(cmd *cobra.Command) string {
 		}
 	}
 	return ""
+}
+
+func rootPersistentFlags(cmd *cobra.Command) *pflag.FlagSet {
+	if root := cmd.Root(); root != nil {
+		return root.PersistentFlags()
+	}
+	return nil
 }
 
 // WriteJSON marshals payload as indented JSON and writes it to w.

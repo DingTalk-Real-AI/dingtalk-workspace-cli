@@ -88,6 +88,7 @@ func newTodoTaskListCommand(runner executor.Runner) *cobra.Command {
 			)
 
 			if size <= todoListPageSizeMax {
+				invocation.DryRun = commandDryRun(cmd)
 				result, err := runner.Run(cmd.Context(), invocation)
 				if err != nil {
 					return err

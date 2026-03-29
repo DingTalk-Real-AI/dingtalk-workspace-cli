@@ -189,6 +189,9 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 	loader := cli.EnvironmentLoader{
 		LookupEnv:              os.LookupEnv,
 		CatalogBaseURLOverride: DiscoveryBaseURL(),
+		AuthTokenFunc: func(ctx context.Context) string {
+			return resolveRuntimeAuthToken(ctx, "")
+		},
 	}
 	runner := newCommandRunnerWithFlags(loader, flags)
 

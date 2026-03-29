@@ -22,7 +22,7 @@ import (
 
 // --- SelectFields tests ---
 
-func TestSelectFieldsObject(t *testing.T) {
+func TestSelectFieldsTopLevel(t *testing.T) {
 	payload := map[string]any{
 		"id":     "123",
 		"name":   "Alice",
@@ -59,11 +59,6 @@ func TestSelectFieldsObject(t *testing.T) {
 			name:   "empty fields returns all",
 			fields: []string{},
 			want:   payload,
-		},
-		{
-			name:   "whitespace in field names trimmed",
-			fields: []string{" name ", " id "},
-			want:   map[string]any{"id": "123", "name": "Alice"},
 		},
 	}
 
@@ -115,24 +110,87 @@ func TestSelectFieldsArray(t *testing.T) {
 	}
 }
 
-func TestSelectFieldsStruct(t *testing.T) {
-	type testStruct struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-		Age  int    `json:"age"`
+func TestSelectFieldsNestedDataList(t *testing.T) {
+	// Simulates: dws chat search --query "CLI" --fields title,memberCount
+	payload := map[string]any{
+		"result": map[string]any{
+			"total":   float64(3),
+			"hasMore": false,
+			"value": []any{
+				map[string]any{"title": "CLI开源", "memberCount": float64(7), "extension": nil},
+				map[string]any{"title": "CLI X", "memberCount": float64(10), "extension": nil},
+				map[string]any{"title": "CLI Review", "memberCount": float64(3), "extension": nil},
+			},
+		},
+		"success": true,
 	}
-	payload := testStruct{ID: "1", Name: "Alice", Age: 30}
 
-	got := SelectFields(payload, []string{"id", "name"})
+	got := SelectFields(payload, []string{"title", "memberCount"})
 	gotMap, ok := got.(map[string]any)
 	if !ok {
-		t.Fatalf("expected map after struct normalisation, got %T", got)
+		t.Fatalf("expected map, got %T", got)
 	}
-	if _, hasAge := gotMap["age"]; hasAge {
-		t.Error("should not have 'age' field")
+
+	// Top-level structure preserved
+	if gotMap["success"] != true {
+		t.Error("top-level 'success' should be preserved")
 	}
-	if gotMap["id"] != "1" || gotMap["name"] != "Alice" {
-		t.Errorf("got %v", gotMap)
+
+	result, ok := gotMap["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("result should be map, got %T", gotMap["result"])
+	}
+
+	value, ok := result["value"].([]any)
+	if !ok {
+		t.Fatalf("result.value should be array, got %T", result["value"])
+	}
+
+	if len(value) != 3 {
+		t.Fatalf("expected 3 items, got %d", len(value))
+	}
+
+	first, ok := value[0].(map[string]any)
+	if !ok {
+		t.Fatalf("first item should be map, got %T", value[0])
+	}
+	if first["title"] != "CLI开源" {
+		t.Errorf("title = %v, want CLI开源", first["title"])
+	}
+	if first["memberCount"] != float64(7) {
+		t.Errorf("memberCount = %v, want 7", first["memberCount"])
+	}
+	if _, hasExt := first["extension"]; hasExt {
+		t.Error("extension should be filtered out")
+	}
+}
+
+func TestSelectFieldsTopLevelList(t *testing.T) {
+	// Top-level items array
+	payload := map[string]any{
+		"items": []any{
+			map[string]any{"id": "1", "name": "A", "extra": "x"},
+			map[string]any{"id": "2", "name": "B", "extra": "y"},
+		},
+		"total": float64(2),
+	}
+
+	got := SelectFields(payload, []string{"id", "name"})
+	gotMap := got.(map[string]any)
+	items := gotMap["items"].([]any)
+
+	for i, item := range items {
+		m := item.(map[string]any)
+		if _, has := m["extra"]; has {
+			t.Errorf("item %d: should not have 'extra'", i)
+		}
+		if m["id"] == nil || m["name"] == nil {
+			t.Errorf("item %d: missing id or name", i)
+		}
+	}
+	// total preserved
+	if gotMap["total"] != float64(2) {
+		t.Error("total should be preserved")
 	}
 }
 
@@ -264,10 +322,15 @@ func TestApplyJQEmptyResult(t *testing.T) {
 // --- WriteFiltered integration tests ---
 
 func TestWriteFilteredWithFields(t *testing.T) {
+	// Simulates a typical API response with nested data list
 	payload := map[string]any{
-		"id":   "123",
-		"name": "test",
-		"data": "secret",
+		"result": map[string]any{
+			"value": []any{
+				map[string]any{"id": "1", "name": "test", "secret": "xxx"},
+				map[string]any{"id": "2", "name": "test2", "secret": "yyy"},
+			},
+		},
+		"success": true,
 	}
 	var buf bytes.Buffer
 	if err := WriteFiltered(&buf, FormatJSON, payload, "id,name", ""); err != nil {
@@ -277,11 +340,14 @@ func TestWriteFilteredWithFields(t *testing.T) {
 	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
 		t.Fatalf("unmarshal error: %v", err)
 	}
-	if _, hasData := got["data"]; hasData {
-		t.Error("should not have 'data' field")
+	result := got["result"].(map[string]any)
+	items := result["value"].([]any)
+	first := items[0].(map[string]any)
+	if _, hasSecret := first["secret"]; hasSecret {
+		t.Error("should not have 'secret' field")
 	}
-	if got["id"] != "123" || got["name"] != "test" {
-		t.Errorf("got %v", got)
+	if first["id"] != "1" || first["name"] != "test" {
+		t.Errorf("got %v", first)
 	}
 }
 

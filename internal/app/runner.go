@@ -171,6 +171,15 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		return executor.Result{}, err
 	}
 
+	if bizErr := detectBusinessError(callResult.Content); bizErr != "" {
+		return executor.Result{}, apperrors.NewAPI(bizErr,
+			apperrors.WithOperation("tools/call"),
+			apperrors.WithReason("business_error"),
+			apperrors.WithServerKey(invocation.CanonicalProduct),
+			apperrors.WithHint("The API returned a business-level error. Check required parameters and values."),
+		)
+	}
+
 	invocation.Implemented = true
 	response := map[string]any{
 		"endpoint": transport.RedactURL(endpoint),
@@ -277,6 +286,27 @@ func resolveIdentityHeaders() map[string]string {
 		}
 	}
 	return headers
+}
+
+// detectBusinessError checks the MCP response content for DingTalk business
+// errors (success=false + errorCode/errorMsg) that are not flagged at the MCP
+// protocol level. Returns the error message, or "" if the response is OK.
+func detectBusinessError(content map[string]any) string {
+	success, ok := content["success"]
+	if !ok {
+		return ""
+	}
+	b, ok := success.(bool)
+	if !ok || b {
+		return ""
+	}
+	if msg, ok := content["errorMsg"].(string); ok && strings.TrimSpace(msg) != "" {
+		return strings.TrimSpace(msg)
+	}
+	if code, ok := content["errorCode"].(string); ok && strings.TrimSpace(code) != "" {
+		return "business error: code " + strings.TrimSpace(code)
+	}
+	return "business error: success=false"
 }
 
 // extractMCPErrorMessage builds an error message from a ToolCallResult with
