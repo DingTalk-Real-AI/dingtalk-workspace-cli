@@ -14,6 +14,7 @@
 # Environment variables (all optional):
 #   DWS_INSTALL_DIR   — where to put the binary       (default: ~/.local/bin)
 #   DWS_VERSION       — version to install             (default: latest)
+#   DWS_ARCH          — architecture override          (amd64 or arm64)
 #   DWS_NO_SKILLS     — set to 1 to skip skills install
 #   DWS_SKILLS_ONLY   — set to 1 to install only skills
 
@@ -44,12 +45,58 @@ function Write-Err {
 }
 
 function Get-Arch {
-    $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
-    switch ($arch) {
-        "X64"   { return "amd64" }
-        "Arm64" { return "arm64" }
-        default { Write-Err "Unsupported architecture: $arch" }
+    # Allow manual override via environment variable
+    if ($env:DWS_ARCH) {
+        $override = $env:DWS_ARCH.ToLower()
+        if ($override -eq "amd64" -or $override -eq "arm64") {
+            return $override
+        }
+        Write-Err "Invalid DWS_ARCH value '$env:DWS_ARCH'. Must be 'amd64' or 'arm64'."
     }
+
+    # Method 1: Try RuntimeInformation (available in .NET Core / PowerShell 6+)
+    try {
+        $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+        if ($arch) {
+            switch ($arch.ToString()) {
+                "X64"   { return "amd64" }
+                "Arm64" { return "arm64" }
+            }
+        }
+    } catch {}
+
+    # Method 2: Check PROCESSOR_ARCHITECTURE environment variable (Windows)
+    $envArch = $env:PROCESSOR_ARCHITECTURE
+    if ($envArch) {
+        switch ($envArch.ToUpper()) {
+            "AMD64" { return "amd64" }
+            "ARM64" { return "arm64" }
+            "X86"   {
+                # 32-bit process on 64-bit OS?
+                $realArch = $env:PROCESSOR_ARCHITEW6432
+                if ($realArch) {
+                    switch ($realArch.ToUpper()) {
+                        "AMD64" { return "amd64" }
+                        "ARM64" { return "arm64" }
+                    }
+                }
+                Write-Err "32-bit Windows is not supported"
+            }
+        }
+    }
+
+    # Method 3: Try WMI query as last resort
+    try {
+        $cpu = Get-WmiObject -Class Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($cpu) {
+            switch ($cpu.Architecture) {
+                9 { return "amd64" }  # x64
+                12 { return "arm64" } # ARM64
+            }
+        }
+    } catch {}
+
+    Write-Err "Unsupported architecture: Could not detect system architecture. Please set DWS_ARCH environment variable to 'amd64' or 'arm64'."
 }
 
 function Resolve-LatestVersion {
