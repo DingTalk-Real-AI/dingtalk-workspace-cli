@@ -15,6 +15,7 @@ package auth
 
 import (
 	"os"
+	"path/filepath"
 	"sync"
 )
 
@@ -84,14 +85,19 @@ func SetClientSecret(secret string) {
 
 // ClientID returns the OAuth client ID with priority:
 // 1. Runtime override (CLI flag --client-id)
-// 2. Environment variable (DWS_CLIENT_ID)
-// 3. Default hardcoded value
+// 2. Persisted app config (from previous login)
+// 3. Environment variable (DWS_CLIENT_ID)
+// 4. Default hardcoded value
 func ClientID() string {
 	clientMu.RLock()
 	override := runtimeClientID
 	clientMu.RUnlock()
 	if override != "" {
 		return override
+	}
+	// Try loading from persisted app config
+	if id, _ := ResolveAppCredentials(getDefaultConfigDir()); id != "" {
+		return id
 	}
 	if v := os.Getenv("DWS_CLIENT_ID"); v != "" {
 		return v
@@ -101,8 +107,9 @@ func ClientID() string {
 
 // ClientSecret returns the OAuth client secret with priority:
 // 1. Runtime override (CLI flag --client-secret)
-// 2. Environment variable (DWS_CLIENT_SECRET)
-// 3. Default hardcoded value
+// 2. Persisted app config (from previous login, stored in keychain)
+// 3. Environment variable (DWS_CLIENT_SECRET)
+// 4. Default hardcoded value
 func ClientSecret() string {
 	clientMu.RLock()
 	override := runtimeClientSecret
@@ -110,8 +117,38 @@ func ClientSecret() string {
 	if override != "" {
 		return override
 	}
+	// Try loading from persisted app config (secret is in keychain)
+	if _, secret := ResolveAppCredentials(getDefaultConfigDir()); secret != "" {
+		return secret
+	}
 	if v := os.Getenv("DWS_CLIENT_SECRET"); v != "" {
 		return v
 	}
 	return DefaultClientSecret
+}
+
+// getRuntimeCredentials returns the runtime-override credentials if set.
+// Returns empty strings if no runtime overrides were provided.
+func getRuntimeCredentials() (clientID, clientSecret string) {
+	clientMu.RLock()
+	defer clientMu.RUnlock()
+	return runtimeClientID, runtimeClientSecret
+}
+
+// getEnvClientID returns the environment variable client ID if set.
+func getEnvClientID() string {
+	return os.Getenv("DWS_CLIENT_ID")
+}
+
+// getDefaultConfigDir returns the default configuration directory.
+// Priority: DWS_CONFIG_DIR env var > ~/.dws
+func getDefaultConfigDir() string {
+	if envDir := os.Getenv("DWS_CONFIG_DIR"); envDir != "" {
+		return envDir
+	}
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return ".dws"
+	}
+	return filepath.Join(homeDir, ".dws")
 }

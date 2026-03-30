@@ -9,7 +9,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Go-1.25+-green?logo=go&logoColor=white" alt="Go 1.25+">
   <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue" alt="License Apache-2.0"></a>
-  <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases"><img src="https://img.shields.io/badge/release-v1.0.3-red" alt="v1.0.3"></a>
+  <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases"><img src="https://img.shields.io/badge/release-v1.0.4-red" alt="v1.0.4"></a>
   <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/workflows/ci.yml"><img src="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src=".github/badges/coverage.svg" alt="Coverage">
 </p>
@@ -139,7 +139,23 @@ export DWS_CLIENT_SECRET=<your-app-secret>
 dws auth login
 ```
 
-> CLI 参数优先于环境变量。凭证用于钉钉 OAuth 设备流认证。
+<details>
+<summary><strong>凭证配置优先级</strong></summary>
+
+`client-id` 和 `client-secret` 支持多种配置方式，按以下优先级生效（从高到低）：
+
+| 优先级 | 配置方式 | 说明 |
+|------|----------|------|
+| 1 | CLI 参数 / 持久化配置 | `--client-id` / `--client-secret` 命令行参数；首次登录成功后自动保存，`client-secret` 存储在系统 Keychain 中 |
+| 2 | 环境变量 | `DWS_CLIENT_ID` / `DWS_CLIENT_SECRET` |
+| 3 | 默认值 | 代码中的预设值（仅开发时使用） |
+
+**推荐用法**：
+- **首次登录**：使用 `--client-id` 和 `--client-secret` 参数，登录成功后凭证会自动安全存储
+- **后续使用**：直接运行 `dws` 命令，Token 自动刷新时会从 Keychain 读取已保存的凭证
+- **CI/CD 环境**：建议使用环境变量配置
+
+</details>
 
 ## 快速开始
 

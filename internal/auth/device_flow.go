@@ -149,9 +149,16 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("换取 token 失败"), err)
 	}
+
+	// Save token data with associated client ID for refresh
+	tokenData.ClientID = p.clientID
 	if err := SaveTokenData(p.configDir, tokenData); err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("保存 token 失败"), err)
 	}
+
+	// Persist app credentials if using custom client credentials
+	oauthProvider.persistAppConfigIfNeeded()
+
 	return tokenData, nil
 }
 
