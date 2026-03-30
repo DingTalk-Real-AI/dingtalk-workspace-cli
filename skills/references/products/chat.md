@@ -6,7 +6,7 @@
 |-------|------|
 | `search` | 搜索群聊 |
 | `group create` | 创建群 |
-| `group members` | 查看群成员列表 |
+| `group members list` | 查看群成员列表 |
 | `group members add` | 添加群成员 |
 | `group members remove` | 移除群成员（⚠️ 危险操作） |
 | `group members add-bot` | 添加机器人到群 |
@@ -48,13 +48,13 @@ Flags:
 
 ---
 
-## group members — 查看群成员列表
+## group members list — 查看群成员列表
 
 ```
 Usage:
-  dws chat group members [flags]
+  dws chat group members list [flags]
 Example:
-  dws chat group members --id <openConversationId> --format json
+  dws chat group members list --id <openConversationId> --format json
 Flags:
       --id string       群会话 ID (必填)
       --cursor string   分页游标
@@ -226,7 +226,7 @@ Flags:
 
 - 用户说"搜索一个群" → `search`
 - 用户说"帮我建个群" → `group create`
-- 用户说"看看群里有谁" → `group members`
+- 用户说"看看群里有谁" → `group members list`
 - 用户说"把张三拉进群" → 先 `contact user search` 获取 userId，再 `group members add`
 - 用户说"把张三移出群" → 先 `contact user search` 获取 userId，再 `group members remove`（⚠️ 需确认）
 - 用户说"改一下群名" → `group rename`
@@ -245,7 +245,7 @@ Flags:
 # ── 工作流: 建群并添加机器人 ──
 
 # 1. 搜索同事 userId
-dws contact user search --query "张三" --format json
+dws contact user search --keyword "张三" --format json
 
 # 2. 创建群
 dws chat group create --name "项目群" --users <userId1>,<userId2> --format json

@@ -1,6 +1,6 @@
 <h1 align="center">DingTalk Workspace CLI (dws)</h1>
 
-<p align="center"><code>dws</code> — 钉钉工作台命令行工具，为人类和 AI Agent 而生。</p>
+<p align="center"><code>dws</code> — DingTalk Workspace on the command line, built for humans and AI agents.</p>
 
 <p align="center">
   <img src="https://img.alicdn.com/imgextra/i1/O1CN01oKAc2r28jOyyspcQt_!!6000000007968-2-tps-4096-1701.png" alt="DWS Product Overview" width="100%">
@@ -9,118 +9,129 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Go-1.25+-green?logo=go&logoColor=white" alt="Go 1.25+">
   <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue" alt="License Apache-2.0"></a>
-  <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases"><img src="https://img.shields.io/badge/release-v1.1.0-red" alt="v1.1.0"></a>
+  <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases"><img src="https://img.shields.io/badge/release-v1.0.3-red" alt="v1.0.3"></a>
+  <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/workflows/ci.yml"><img src="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <img src=".github/badges/coverage.svg" alt="Coverage">
 </p>
 
 <p align="center">
-  <a href="./README.md">中文版</a> · <a href="./README_en.md">English</a> · <a href="./docs/reference.md">参考手册</a> · <a href="./CHANGELOG.md">更新日志</a>
+  <a href="./README_zh.md">中文版</a> · <a href="./README.md">English</a> · <a href="./docs/reference.md">Reference</a> · <a href="./CHANGELOG.md">Changelog</a>
 </p>
 
 > [!IMPORTANT]
-> **共创阶段**：本项目涉及钉钉企业数据访问，需企业管理员授权后方可使用。当前为灰度共创阶段，请加入钉钉 DWS 共创群完成白名单配置。详见下方 [开始使用](#开始使用)。
+> **Co-creation Phase**: This project accesses DingTalk enterprise data and requires enterprise admin authorization. Please join the DingTalk DWS co-creation group to complete whitelist configuration. See [Getting Started](#getting-started) below.
 >
 > <a href="https://qr.dingtalk.com/action/joingroup?code=v1,k1,v9/YMJG9qXhvFk5juktYnQziN70rF7QHebC/JLztTVRuRVJIwrSsXmL8oFqU5ajJ&_dt_no_comment=1&origin=11"><img src="https://img.alicdn.com/imgextra/i1/O1CN01ZqtgeV1cImFmTZPAH_!!6000000003578-2-tps-398-372.png" alt="DingTalk Group QR Code" width="150"></a>
 
 <details>
-<summary><strong>目录</strong></summary>
+<summary><strong>Table of Contents</strong></summary>
 
-- [为什么选择 dws？](#why-dws)
-- [安装](#安装)
-- [开始使用](#开始使用)
-- [快速开始](#快速开始)
-- [核心服务](#核心服务)
-- [安全设计](#安全设计)
-- [AI Agent Skills](#ai-agent-skills)
-- [参考与文档](#参考与文档)
-- [贡献指南](#贡献指南)
+- [Why dws?](#why-dws)
+- [Installation](#installation)
+- [Getting Started](#getting-started)
+- [Quick Start](#quick-start)
+- [Using with Agents](#using-with-agents)
+- [Features](#features)
+- [Key Services](#key-services)
+- [Security by Design](#security-by-design)
+- [Reference & Docs](#reference--docs)
+- [Contributing](#contributing)
 
 </details>
 
 ---
 
-<h2 id="why-dws">为什么选择 dws？</h2>
+<h2 id="why-dws">Why dws?</h2>
 
-- **为人类而设计** — `--help` 查看用法，`--dry-run` 预览请求，`-f table/json/raw` 切换格式。
-- **为 AI Agent 而设计** — 结构化 JSON 响应 + 内置 Agent Skills，开箱即用。
-- **为企业管理员而设计** — 零信任架构：OAuth 设备流认证 + 域名白名单 + 权限最小化。**没有一个字节能绕过安全鉴权和审计。**
+- **For humans** — `--help` for usage, `--dry-run` to preview requests, `-f table/json/raw` for output formats.
+- **For AI agents** — structured JSON responses + built-in Agent Skills, ready out of the box.
+- **For enterprise admins** — zero-trust architecture: OAuth device-flow auth + domain allowlisting + least-privilege scoping. **Not a single byte can bypass authentication and audit.**
 
-## 安装
+## Installation
 
-**macOS / Linux：**
+**macOS / Linux:**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install.sh | sh
 ```
 
-**Windows（PowerShell）：**
+**Windows (PowerShell):**
 
 ```powershell
 irm https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install.ps1 | iex
 ```
 
 <details>
-<summary>其他安装方式</summary>
+<summary>Other install methods</summary>
 
-**预编译二进制文件**：从 [GitHub Releases](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases) 下载。
+**Pre-built binary**: download from [GitHub Releases](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases).
 
-**从源码构建**：
+**Build from source**:
 
 ```bash
 git clone https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git
 cd dingtalk-workspace-cli
-make build
+go build -o dws ./cmd       # build to current directory
+cp dws ~/.local/bin/         # install to PATH
 ```
 
-> 二进制文件默认安装到 `~/.local/bin`。如找不到 `dws`，请将其添加到 PATH：`export PATH="$HOME/.local/bin:$PATH"`
+> Requires Go 1.25+. Use `make package` to cross-compile for all platforms (macOS / Linux / Windows x amd64 / arm64).
 
 </details>
 
-## 开始使用
+## Getting Started
 
-### 步骤 1：创建钉钉应用
+### Step 1: Create a DingTalk Application
 
-进入 [开放平台应用开发后台](https://open-dev.dingtalk.com/fe/app?hash=%23%2Fcorp%2Fapp#/corp/app)，在「企业内部应用 - 钉钉应用」点击**创建应用**。
+Go to the [Open Platform Console](https://open-dev.dingtalk.com/fe/app?hash=%23%2Fcorp%2Fapp#/corp/app). Under "Internal Enterprise Apps - DingTalk Apps", click **Create App**.
 
 <details>
-<summary>查看截图</summary>
+<summary>View screenshot</summary>
 <p align="center">
-  <img src="https://img.alicdn.com/imgextra/i4/O1CN01VIkwvV1a5NQzCIFO0_!!6000000003278-2-tps-2690-1462.png" alt="创建应用" width="600">
+  <img src="https://img.alicdn.com/imgextra/i4/O1CN01VIkwvV1a5NQzCIFO0_!!6000000003278-2-tps-2690-1462.png" alt="Create Application" width="600">
 </p>
 </details>
 
-### 步骤 2：配置重定向 URL
+### Step 2: Configure Redirect URL
 
-进入应用 → **安全设置**，在「重定向 URL」中输入 `http://127.0.0.1` 并保存。
+Go to app settings → **Security Settings**. Add the following redirect URLs and save:
+
+```
+http://127.0.0.1
+https://login.dingtalk.com
+```
+
+> `http://127.0.0.1` is for local browser login; `https://login.dingtalk.com` is for `--device` device-flow login (Docker containers, remote servers, and other headless environments). We recommend configuring both.
 
 <details>
-<summary>查看截图</summary>
+<summary>View screenshot</summary>
 <p align="center">
-  <img src="https://img.alicdn.com/imgextra/i4/O1CN017xQGWb1ycrAG0uxBO_!!6000000006600-2-tps-2000-1032.png" alt="配置重定向URL" width="600">
+  <img src="https://img.alicdn.com/imgextra/i4/O1CN017xQGWb1ycrAG0uxBO_!!6000000006600-2-tps-2000-1032.png" alt="Configure Redirect URL" width="600">
 </p>
 </details>
 
-### 步骤 3：发布应用
+### Step 3: Publish the Application
 
-点击「应用发布 - 版本管理与发布」，发布版本使应用上线。
+Click "App Release - Version Management & Release" to publish and go live.
 
 <details>
-<summary>查看截图</summary>
+<summary>View screenshot</summary>
 <p align="center">
-  <img src="https://img.alicdn.com/imgextra/i4/O1CN01WOLZFz244P46B3FPu_!!6000000007337-2-tps-2000-1100.png" alt="发布应用" width="600">
+  <img src="https://img.alicdn.com/imgextra/i4/O1CN01WOLZFz244P46B3FPu_!!6000000007337-2-tps-2000-1100.png" alt="Publish Application" width="600">
 </p>
 </details>
 
-### 步骤 4：申请白名单
+### Step 4: Request Whitelist Access
 
-加入钉钉 DWS 共创群，提供 **Client ID** 和**管理员确认凭证**完成白名单配置。
+Join the DingTalk DWS co-creation group and provide your **Client ID** and **admin confirmation** to complete whitelist setup.
 
-### 步骤 5：登录认证
+### Step 5: Authenticate
 
 ```bash
 dws auth login --client-id <your-app-key> --client-secret <your-app-secret>
 ```
 
-或通过环境变量：
+Or via environment variables:
 
 ```bash
 export DWS_CLIENT_ID=<your-app-key>
@@ -128,130 +139,257 @@ export DWS_CLIENT_SECRET=<your-app-secret>
 dws auth login
 ```
 
-<details>
-<summary><strong>凭证配置优先级</strong></summary>
+> CLI flags take precedence over environment variables. Credentials are used for DingTalk's OAuth device flow.
 
-`client-id` 和 `client-secret` 支持多种配置方式，按以下优先级生效（从高到低）：
-
-| 优先级 | 配置方式 | 说明 |
-|------|----------|------|
-| 1 | CLI 参数 / 持久化配置 | `--client-id` / `--client-secret` 命令行参数；首次登录成功后自动保存，`client-secret` 存储在系统 Keychain 中 |
-| 2 | 环境变量 | `DWS_CLIENT_ID` / `DWS_CLIENT_SECRET` |
-| 3 | 默认值 | 代码中的预设值（仅开发时使用） |
-
-**推荐用法**：
-- **首次登录**：使用 `--client-id` 和 `--client-secret` 参数，登录成功后凭证会自动安全存储
-- **后续使用**：直接运行 `dws` 命令，Token 自动刷新时会从 Keychain 读取已保存的凭证
-- **CI/CD 环境**：建议使用环境变量配置
-
-</details>
-
-## 快速开始
+## Quick Start
 
 ```bash
-dws contact user search --keyword "悟空"           # 搜索联系人
-dws calendar event list                            # 查看日历日程
-dws todo task create --title "季度汇报" --executors "<userId>"   # 创建待办
-dws todo task list --dry-run                       # 预览操作但不执行
+dws contact user search --keyword "engineering"     # search contacts
+dws calendar event list                            # list calendar events
+dws todo task create --title "Quarterly report" --executors "<your-userId>"   # create a todo (replace <your-userId>)
+dws todo task list --dry-run                       # preview without executing
 ```
 
-## 核心服务
+## Using with Agents
 
-| 服务 | 命令 | 描述 |
-|---------|---------|-------------|
-| 通讯录 | `contact` | 用户 / 部门 |
-| 群聊 | `chat` | 群管理 / 群成员 / 机器人消息 / Webhook |
-| 日历 | `calendar` | 日程 / 会议室 / 闲忙 |
-| 待办 | `todo` | 任务管理 |
-| 审批 | `approval` | 流程 / 表单 / 实例 |
-| 考勤 | `attendance` | 打卡 / 排班 / 统计 |
-| DING | `ding` | DING 消息 / 发送 / 撤回 |
-| 日志 | `report` | 日志 / 模版 / 统计 |
-| 智能表格 | `aitable` | AI 表格操作 |
-| 工作台 | `workbench` | 应用查询 |
-| 开发者文档 | `devdoc` | 开放平台文档搜索 |
-
-运行 `dws --help` 查看完整列表，或 `dws <service> --help` 查看子命令。
-
-<details>
-<summary>即将推出</summary>
-
-`doc`（文档）· `mail`（邮箱）· `minutes`（AI 听记）· `drive`（钉盘）· `conference`（视频会议）· `tb`（Teambition）· `aiapp`（AI 应用）· `live`（直播）· `skill`（技能市场）
-
-</details>
-
-## 安全设计
-
-`dws` 从架构层面将安全作为一等公民，而非事后补丁。**凭证不落盘、Token 不出域、权限不越界、操作不脱审** — 每一次 API 调用都必须经过钉钉开放平台的鉴权和审计链路，无例外。
-
-<details>
-<summary><strong>开发者安全机制</strong></summary>
-
-| 机制 | 说明 |
-|------|------|
-| **Token 加密存储** | **PBKDF2（600,000 次迭代 + SHA-256）+ AES-256-GCM** 加密，密钥绑定设备物理 MAC 地址；macOS 集成系统 Keychain、Windows 集成 DPAPI 提供额外保护，跨设备无法解密 |
-| **输入安全防护** | 路径遍历防护（符号链接解析 + 工作目录约束）、CRLF 注入拦截、Unicode 视觉欺骗字符过滤，防止 AI Agent 被恶意指令诱导 |
-| **域名白名单** | `DWS_TRUSTED_DOMAINS` 默认仅信任 `*.dingtalk.com`，Bearer Token 不会发送到非白名单域 |
-| **并发安全** | 双层锁机制（进程内 + 跨进程文件锁）保障 Token 刷新原子性，适配高并发 MCP Server 场景 |
-| **数据完整性** | 所有配置写入采用原子操作（temp + fsync + rename），确保进程中断时数据不损坏 |
-| **HTTPS 强制** | 除 loopback 开发调试外，所有请求强制 TLS |
-| **Dry-run 预览** | `--dry-run` 展示调用参数但不执行，防止误操作生产数据 |
-| **凭证零落盘** | Client ID / Secret 仅在内存中使用，不写入配置文件或日志 |
-
-</details>
-
-<details>
-<summary><strong>企业管理员安全机制</strong></summary>
-
-| 机制 | 说明 |
-|------|------|
-| **OAuth 设备流认证** | 用户必须通过管理员授权的钉钉应用认证，未授权应用无法获取 Token |
-| **权限最小化** | CLI 仅能调用管理员授予该应用的 API 权限范围，无法越权 |
-| **白名单准入** | 共创阶段需管理员主动确认开通，后续支持自助审批 |
-| **操作全链路审计** | 每一次数据读写都经过钉钉开放平台 API，企业管理员可在管理后台实时追溯完整调用日志，任何异常操作无处隐藏 |
-
-</details>
-
-<details>
-<summary><strong>ISV / 企业服务商安全机制</strong></summary>
-
-| 机制 | 说明 |
-|------|------|
-| **租户数据隔离** | 以已授权应用身份调用 API，不同租户数据严格隔离 |
-| **Skill 沙箱** | Agent Skills 是 Markdown 文档（`SKILL.md`），仅提供 prompt 描述，不执行任意代码 |
-| **集成链路零盲区** | ISV Skill 与 dws Skill 联调时，每一次 API 调用都强制经过钉钉开放平台鉴权，完整调用链路可追溯，不存在绕过审计的旁路 |
-
-</details>
-
-> 发现安全漏洞？请通过 [GitHub Security Advisories](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/security/advisories/new) 报告，详见 [SECURITY.md](./SECURITY.md)。
-
-## AI Agent Skills
-
-仓库为每个钉钉产品提供 Agent Skill（`SKILL.md`），安装脚本会自动部署到 `~/.agents/skills/dws`。
+dws is designed as an AI-native CLI. Complete [Installation](#installation) and [Getting Started](#getting-started) first, then configure your agent:
 
 ```bash
-# 仅安装 skills 到当前项目
+# Configure auth via environment variables (recommended for agents, no interactive login)
+export DWS_CLIENT_ID=<your-app-key>
+export DWS_CLIENT_SECRET=<your-app-secret>
+dws auth login
+```
+
+### Agent Invocation Patterns
+
+```bash
+# Use --yes to skip confirmation prompts (required for agents)
+dws todo task create --title "Review PR" --executors "<your-userId>" --yes
+
+# Use --dry-run to preview operations (safe execution)
+dws contact user search --keyword "engineering" --dry-run
+
+# Use --jq to extract precisely (save tokens)
+dws contact user get-self --jq '.result[0].orgEmployeeModel | {name: .orgUserName, dept: .depts[0].deptName, userId}'
+```
+
+### Schema Discovery
+
+Agents don't need pre-built knowledge of every command. Use `dws schema` to dynamically discover capabilities:
+
+```bash
+# Step 1: Discover all available products
+dws schema --jq '.products[] | {id, tool_count: (.tools | length)}'
+
+# Step 2: Inspect target tool's parameter schema
+dws schema aitable.query_records --jq '.tool.parameters'
+
+# Step 3: Construct the correct call
+dws aitable record query --base-id BASE_ID --table-id TABLE_ID --limit 10
+```
+
+### Agent Skills
+
+The repo ships a complete Agent Skill system (`skills/`). After installing, AI tools like Claude Code / Cursor can operate DingTalk directly through natural language:
+
+```bash
+# Install skills into current project
 curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install-skills.sh | sh
 ```
 
-> `install.sh` 安装到 `$HOME/.agents/skills/dws`（全局）；`install-skills.sh` 安装到 `./.agents/skills/dws`（当前项目）。
+> `install.sh` installs to `$HOME/.agents/skills/dws` (global); `install-skills.sh` installs to `./.agents/skills/dws` (current project).
 
-### ISV Skill 联调
+**What's included:**
 
-编写您自己的 Agent Skill，与 dws 内置 skill 搭配构建跨产品工作流：**ISV Skill → dws Skill → 钉钉开放平台 API（强制鉴权 + 全链路审计）**。
+| Component | Path | Description |
+|-----------|------|-------------|
+| Master Skill | `SKILL.md` | Intent routing, decision tree, safety rules, error handling |
+| Product references | `references/products/*.md` | Per-product command reference (aitable, chat, calendar, etc.) |
+| Intent guide | `references/intent-guide.md` | Disambiguation for confusing scenarios (e.g. report vs todo) |
+| Global reference | `references/global-reference.md` | Auth, output formats, global flags |
+| Error codes | `references/error-codes.md` | Error codes + debugging workflows |
+| Recovery guide | `references/recovery-guide.md` | `RECOVERY_EVENT_ID` handling |
+| Ready-made scripts | `scripts/*.py` | 13 batch operation scripts (see below) |
 
-**示例**：CRM Skill 调用日历 Skill 为客户创建会议，再通过待办 Skill 分配跟进任务 — AI Agent 在一次对话中完成跨系统协作。
+<details>
+<summary><strong>Ready-made scripts</strong> — 13 Python scripts for common multi-step workflows</summary>
 
-## 参考与文档
+| Script | Description |
+|--------|-------------|
+| `calendar_schedule_meeting.py` | Create event + add participants + find & book available meeting room |
+| `calendar_free_slot_finder.py` | Find common free slots across multiple people, recommend best meeting time |
+| `calendar_today_agenda.py` | View today/tomorrow/this week's schedule |
+| `import_records.py` | Batch import records from CSV/JSON into AITable |
+| `bulk_add_fields.py` | Batch add fields to an AITable data table |
+| `upload_attachment.py` | Upload attachment to AITable attachment field |
+| `todo_batch_create.py` | Batch create todos from JSON (with priority, due date, executors) |
+| `todo_daily_summary.py` | Summarize today/this week's incomplete todos |
+| `todo_overdue_check.py` | Scan overdue todos and output overdue list |
+| `contact_dept_members.py` | Search department by name and list all members |
+| `attendance_my_record.py` | View my attendance records for today/this week/specific date |
+| `attendance_team_shift.py` | Query team shift schedules and attendance statistics |
+| `report_inbox_today.py` | View today's received reports with details |
 
-- [参考手册](./docs/reference.md) — 环境变量、退出码、输出格式、Shell 补全
-- [架构设计](./docs/architecture.md) — 发现驱动管道、IR、Transport 层
-- [更新日志](./CHANGELOG.md) — 版本历史与迁移说明
+</details>
 
-## 贡献指南
+**ISV Integration**: Author your own Agent Skills and orchestrate them with dws skills for cross-product workflows: **ISV Skill → dws Skill → DingTalk Open Platform API (enforced auth + full audit)**.
 
-参见 [CONTRIBUTING.md](./CONTRIBUTING.md) 了解构建、测试和开发工作流。
+## Features
 
-## 许可证
+<details>
+<summary><strong>Smart Input Correction</strong> — auto-corrects common AI model parameter mistakes <code>v1.0.1</code></summary>
+
+Built-in pipeline engine that normalizes flag names, splits sticky arguments, and fuzzy-matches typos:
+
+```bash
+# Naming convention auto-conversion (camelCase / snake_case / UPPER -> kebab-case)
+dws aitable record query --baseId BASE_ID --tableId TABLE_ID         # auto-corrected to --base-id --table-id
+
+# Sticky argument splitting
+dws contact user search --keyword "engineering" --timeout30           # auto-split to --timeout 30
+
+# Fuzzy flag name matching
+dws aitable record query --base-id BASE_ID --tabel-id TABLE_ID       # --tabel-id -> --table-id
+
+# Value normalization (boolean / number / date / enum)
+# "yes" -> true, "1,000" -> 1000, "2024/03/29" -> "2024-03-29", "ACTIVE" -> "active"
+```
+
+| Agent Output | dws Auto-Corrects To |
+|-----------|--------------|
+| `--userId` | `--user-id` |
+| `--limit100` | `--limit 100` |
+| `--tabel-id` | `--table-id` |
+| `--USER-ID` | `--user-id` |
+| `--user_name` | `--user-name` |
+
+</details>
+
+<details>
+<summary><strong>jq Filtering & Field Selection</strong> — fine-grained output control to reduce token consumption <code>v1.0.1</code></summary>
+
+```bash
+# Built-in jq expressions
+dws aitable record query --base-id BASE_ID --table-id TABLE_ID --jq '.invocation.params'
+dws schema --jq '.products[] | {id, tools: (.tools | length)}'
+
+# Return only specific fields
+dws aitable record query --base-id BASE_ID --table-id TABLE_ID --fields invocation,response
+```
+
+</details>
+
+<details>
+<summary><strong>Schema Introspection</strong> — query parameter schemas before making calls <code>v1.0.1</code></summary>
+
+```bash
+dws schema                                              # list all products and tools
+dws schema aitable.query_records                        # view parameter schema
+dws schema aitable.query_records --jq '.tool.required'   # view required fields
+dws schema --jq '.products[].id'                        # extract all product IDs
+```
+
+</details>
+
+<details>
+<summary><strong>Pipe & File Input</strong> — read flag values from files or stdin <code>v1.0.1</code></summary>
+
+```bash
+# Read message body from a file
+dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
+  --title "Weekly Report" --text @report.md
+
+# Pipe content via stdin
+cat report.md | dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
+  --title "Weekly Report"
+
+# Read from stdin explicitly
+dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
+  --title "Weekly Report" --text @-
+```
+
+</details>
+
+## Key Services
+
+| Service | Command | Tools | Subcommands | Description |
+|---------|---------|:-----:|-------------|-------------|
+| Contact | `contact` | 8 | `user` `dept` | Search users by name/mobile, batch query, departments, current user profile |
+| Chat | `chat` | 14 | `message` `group` `bot` `search` | Group CRUD, member management, message history, topic replies, send as user |
+| Bot | `chat bot` | 9 | — | Robot creation, group/single messaging, webhook, message recall |
+| Calendar | `calendar` | 13 | `event` `room` `participant` `busy` | Events CRUD, meeting room booking, free-busy query, participant management |
+| Todo | `todo` | 6 | `task` | Create, list, update, done, get detail, delete |
+| Approval | `oa` | 9 | `approval` | Approve/reject/revoke, pending tasks, initiated instances, process list |
+| Attendance | `attendance` | 4 | `record` `shift` `summary` `rules` | Clock-in records, shift schedules, attendance summary, group rules |
+| Ding | `ding` | 3 | `message` | Send/recall DING messages |
+| Report | `report` | 7 | `create` `list` `detail` `template` `stats` `sent` | Create reports, sent/received list, templates, statistics |
+| AITable | `aitable` | 27 | `base` `table` `record` `field` `attachment` `template` | Full CRUD for bases/tables/records/fields, views, import/export, templates |
+| Workbench | `workbench` | 2 | `app` | Batch query app details |
+| DevDoc | `devdoc` | 2 | `article` | Search platform docs and error codes |
+
+> 104 tools across 12 products. Run `dws --help` for the full list, or `dws <service> --help` for subcommands.
+
+<details>
+<summary>Coming soon</summary>
+
+`doc` (documents) · `mail` (email) · `minutes` (AI transcription) · `drive` (cloud drive) · `conference` (video) · `tb` (Teambition) · `aiapp` (AI apps) · `live` (streaming) · `skill` (marketplace)
+
+</details>
+
+<h2 id="security-by-design">Security by Design</h2>
+
+`dws` treats security as a first-class architectural concern, not an afterthought. **Credentials never touch disk, tokens never leave trusted domains, permissions never exceed grants, operations never escape audit** — every API call must pass through DingTalk Open Platform's authentication and audit chain, no exceptions.
+
+<details>
+<summary><strong>For Developers</strong></summary>
+
+| Mechanism | Details |
+|-----------|----------|
+| **Encrypted token storage** | **PBKDF2 + AES-256-GCM** encryption, keyed by device physical MAC address; cross-platform Keychain/DPAPI integration provides additional protection — tokens cannot be decrypted on another machine |
+| **Input security** | Path traversal protection (symlink resolution + working directory containment), CRLF injection blocking, Unicode visual spoofing filtering — prevents AI Agents from being tricked by malicious instructions |
+| **Domain allowlist** | `DWS_TRUSTED_DOMAINS` defaults to `*.dingtalk.com`; bearer tokens are never sent to non-allowlisted domains |
+| **HTTPS enforced** | All requests require TLS; HTTP only permitted for loopback during development |
+| **Dry-run preview** | `--dry-run` shows call parameters without executing, preventing accidental mutations |
+| **Zero credential persistence** | Client ID / Secret used in memory only — never written to config files or logs |
+
+</details>
+
+<details>
+<summary><strong>For Enterprise Admins</strong></summary>
+
+| Mechanism | Details |
+|-----------|---------|
+| **OAuth device-flow auth** | Users must authenticate through an admin-authorized DingTalk application |
+| **Least-privilege scoping** | CLI can only invoke APIs granted to the application — no privilege escalation |
+| **Allowlist gating** | Admin confirmation required during co-creation phase; self-service approval planned |
+| **Full-chain audit** | Every data read/write passes through the DingTalk Open Platform API — enterprise admins can trace complete call logs in real time; no anomalous operation can hide |
+
+</details>
+
+<details>
+<summary><strong>For ISVs</strong></summary>
+
+| Mechanism | Details |
+|-----------|---------|
+| **Tenant data isolation** | Operates under authorized app identity; cross-tenant access is impossible |
+| **Skill sandbox** | Agent Skills are Markdown documents (`SKILL.md`) — prompt descriptions only, no arbitrary code execution |
+| **Zero blind spots** | Every API call during ISV–dws skill orchestration is forced through DingTalk Open Platform authentication — full call chain is traceable with no bypass path |
+
+</details>
+
+> Found a vulnerability? Report via [GitHub Security Advisories](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/security/advisories/new). See [SECURITY.md](./SECURITY.md).
+
+## Reference & Docs
+
+- [Reference](./docs/reference.md) — environment variables, exit codes, output formats, shell completion
+- [Architecture](./docs/architecture.md) — discovery-driven pipeline, IR, transport layer
+- [Changelog](./CHANGELOG.md) — release history and migration notes
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for build instructions, testing, and development workflow.
+
+## License
 
 Apache-2.0

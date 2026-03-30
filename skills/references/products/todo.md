@@ -8,12 +8,11 @@ Usage:
   dws todo task create [flags]
 Example:
   dws todo task create --title "修复线上Bug" --executors <USER_ID_1>,<USER_ID_2> --priority 40
-  dws todo task create --title "每日站会" --executors <USER_ID> --due "2026-03-20T10:00:00+08:00" --recurrence "DTSTART:20260320T020000Z\nRRULE:FREQ=DAILY;INTERVAL=1"
+  dws todo task create --title "提交报告" --executors <USER_ID> --due "2026-03-20T10:00:00+08:00"
 Flags:
       --due string         截止时间 ISO-8601 (如 2026-03-10T18:00:00+08:00)
       --executors string   执行者 userId 列表 (必填)
       --priority string    优先级: 10低/20普通/30较高/40紧急
-      --recurrence string  循环待办 (需先设置 --due); 仅支持按天循环，格式见下方说明
       --title string       待办标题 (必填)
 ```
 
@@ -81,7 +80,6 @@ Flags:
 ## 意图判断
 
 用户说"加个待办/记一下/TODO" → `task create`
-用户说"每天重复/循环待办/按天重复" → `task create`（需 `--due` + `--recurrence`）
 用户说"看看待办/我有啥要做" → `task list`
 用户说"改个待办/修改待办标题/改优先级" → `task update`
 用户说"做完了/完成待办/标记完成" → `task done`
@@ -96,11 +94,6 @@ Flags:
 # 1. 创建待办 — 提取 todoTaskId
 dws todo task create --title "修复线上Bug" --executors userId1,userId2 \
   --priority 40 --due "2026-03-10T18:00:00+08:00" --format json
-
-# 1b. 创建按天循环的待办（必须先有 --due；recurrence 与 MCP create_personal_todo 一致）
-dws todo task create --title "每日站会" --executors userId1 \
-  --due "2026-03-20T10:00:00+08:00" \
-  --recurrence "DTSTART:20260320T020000Z\nRRULE:FREQ=DAILY;INTERVAL=1" --format json
 
 # 2. 查看未完成待办
 dws todo task list --page 1 --size 20 --status false --format json
@@ -129,7 +122,6 @@ dws todo task delete --task-id <taskId> --yes --format json
 
 - 优先级值: 10=低, 20=普通, 30=较高, 40=紧急
 - `--due` 截止时间使用 ISO-8601 格式（如 2026-03-10T18:00:00+08:00）
-- `--recurrence`：仅在与 `--due` 同时设置时有效；当前仅支持按天循环。字符串内需含换行，示例：`DTSTART:20260320T020000Z\nRRULE:FREQ=DAILY;INTERVAL=1`（DTSTART 表示首次截止时间，需与业务约定一致）
 - `task list` 的 `--status` 对应 MCP `get_user_todos_in_current_org` 的 `todoStatus` 参数
 - todo 是个人待办管理产品
 - `task update` 可同时修改标题/优先级/截止时间/完成状态

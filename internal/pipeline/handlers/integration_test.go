@@ -1,0 +1,284 @@
+// Copyright 2026 Alibaba Group
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package handlers
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
+)
+
+// TestFullPreParsePipeline exercises the complete PreParse handler
+// chain: AliasHandler → StickyHandler → ParamNameHandler. It
+// simulates a model-generated CLI invocation with multiple errors
+// and verifies the pipeline corrects all of them in one pass.
+func TestFullPreParsePipeline(t *testing.T) {
+	engine := pipeline.NewEngine()
+	engine.RegisterAll(
+		AliasHandler{},
+		StickyHandler{},
+		ParamNameHandler{},
+	)
+
+	tests := []struct {
+		name        string
+		args        []string
+		flags       []string
+		want        string
+		corrections int
+	}{
+		{
+			name:        "camelCase + sticky combined",
+			args:        []string{"--userId", "123", "--pageSize50"},
+			flags:       []string{"user-id", "page-size"},
+			want:        "--user-id 123 --page-size 50",
+			corrections: 2, // alias(userId) + sticky(pageSize50)
+		},
+		{
+			name:        "camelCase + typo combined",
+			args:        []string{"--userId", "123", "--limt", "10"},
+			flags:       []string{"user-id", "limit"},
+			want:        "--user-id 123 --limit 10",
+			corrections: 2, // alias(userId) + fuzzy(limt)
+		},
+		{
+			name:        "triple error: case + sticky + typo",
+			args:        []string{"--UserName", "alice", "--limit100", "--offse", "0"},
+			flags:       []string{"user-name", "limit", "offset"},
+			want:        "--user-name alice --limit 100 --offset 0",
+			corrections: 3,
+		},
+		{
+			name:        "snake_case + sticky",
+			args:        []string{"--user_id", "42", "--pageSize20"},
+			flags:       []string{"user-id", "page-size"},
+			want:        "--user-id 42 --page-size 20",
+			corrections: 2,
+		},
+		{
+			name:        "all correct — zero corrections",
+			args:        []string{"--user-id", "123", "--limit", "10"},
+			flags:       []string{"user-id", "limit"},
+			want:        "--user-id 123 --limit 10",
+			corrections: 0,
+		},
+		{
+			name:        "UPPER case flags",
+			args:        []string{"--USER-ID", "999"},
+			flags:       []string{"user-id"},
+			want:        "--user-id 999",
+			corrections: 1,
+		},
+		{
+			name:        "= syntax with camelCase",
+			args:        []string{"--userId=123", "--pageSize=50"},
+			flags:       []string{"user-id", "page-size"},
+			want:        "--user-id=123 --page-size=50",
+			corrections: 2,
+		},
+		{
+			name:        "camelCase sticky split with normalisation",
+			args:        []string{"--limitValue100"},
+			flags:       []string{"limit-value"},
+			want:        "--limit-value 100",
+			corrections: 1, // sticky handles both kebab-normalisation and split
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := &pipeline.Context{
+				Args:      append([]string{}, tt.args...),
+				FlagSpecs: flagSpecs(tt.flags...),
+			}
+			if err := engine.RunPhase(pipeline.PreParse, ctx); err != nil {
+				t.Fatalf("RunPhase error: %v", err)
+			}
+			got := strings.Join(ctx.Args, " ")
+			if got != tt.want {
+				t.Errorf("Args = %q, want %q", got, tt.want)
+			}
+			if len(ctx.Corrections) != tt.corrections {
+				t.Errorf("Corrections = %d, want %d", len(ctx.Corrections), tt.corrections)
+				for _, c := range ctx.Corrections {
+					t.Logf("  %s/%s: %q → %q", c.Handler, c.Kind, c.Original, c.Corrected)
+				}
+			}
+		})
+	}
+}
+
+// TestFullPostParsePipeline exercises the PostParse handler chain
+// with the ParamValueHandler normalising multiple value types in a
+// single invocation.
+func TestFullPostParsePipeline(t *testing.T) {
+	engine := pipeline.NewEngine()
+	engine.RegisterAll(ParamValueHandler{})
+
+	ctx := &pipeline.Context{
+		Command: "aitable.list_records",
+		Params: map[string]any{
+			"verbose":    "yes",
+			"limit":      "1,000",
+			"status":     "ACTIVE",
+			"created_at": "2024/03/29",
+			"name":       "test",
+		},
+		Schema: map[string]any{
+			"properties": map[string]any{
+				"verbose":    map[string]any{"type": "boolean"},
+				"limit":      map[string]any{"type": "integer"},
+				"status":     map[string]any{"type": "string", "enum": []any{"active", "inactive"}},
+				"created_at": map[string]any{"type": "string", "format": "date"},
+				"name":       map[string]any{"type": "string"},
+			},
+		},
+	}
+
+	if err := engine.RunPhase(pipeline.PostParse, ctx); err != nil {
+		t.Fatalf("RunPhase error: %v", err)
+	}
+
+	if got := ctx.Params["verbose"]; got != true {
+		t.Errorf("verbose = %v, want true", got)
+	}
+	if got := ctx.Params["limit"]; got != int64(1000) {
+		t.Errorf("limit = %v, want 1000", got)
+	}
+	if got := ctx.Params["status"]; got != "active" {
+		t.Errorf("status = %q, want %q", got, "active")
+	}
+	if got := ctx.Params["created_at"]; got != "2024-03-29" {
+		t.Errorf("created_at = %q, want %q", got, "2024-03-29")
+	}
+	// "name" is a plain string — should be untouched.
+	if got := ctx.Params["name"]; got != "test" {
+		t.Errorf("name = %q, want %q", got, "test")
+	}
+	if len(ctx.Corrections) != 4 {
+		t.Errorf("Corrections = %d, want 4", len(ctx.Corrections))
+	}
+}
+
+// TestFullPipelineEndToEnd exercises all phases in sequence:
+// PreParse → PostParse, simulating a model invocation that has
+// errors at both the argv level and the value level.
+func TestFullPipelineEndToEnd(t *testing.T) {
+	engine := pipeline.NewEngine()
+	engine.RegisterAll(
+		AliasHandler{},
+		StickyHandler{},
+		ParamNameHandler{},
+		ParamValueHandler{},
+	)
+
+	// Phase 1: PreParse — fix raw argv.
+	ctx := &pipeline.Context{
+		Args: []string{
+			"--userId", "u001",
+			"--pageSize50",
+			"--verbosetrue",
+		},
+		FlagSpecs: flagSpecs("user-id", "page-size", "verbose"),
+	}
+
+	if err := engine.RunPhase(pipeline.PreParse, ctx); err != nil {
+		t.Fatalf("PreParse error: %v", err)
+	}
+
+	want := "--user-id u001 --page-size 50 --verbose true"
+	got := strings.Join(ctx.Args, " ")
+	if got != want {
+		t.Errorf("after PreParse: Args = %q, want %q", got, want)
+	}
+
+	preParseCorrections := len(ctx.Corrections)
+	if preParseCorrections != 3 {
+		t.Errorf("PreParse corrections = %d, want 3", preParseCorrections)
+	}
+
+	// Phase 2: PostParse — simulate Cobra having parsed the corrected
+	// args into structured params, then normalise values.
+	ctx.Command = "chat.send_message"
+	ctx.Params = map[string]any{
+		"user_id":   "u001",
+		"page_size": "50",
+		"verbose":   "true",
+	}
+	ctx.Schema = map[string]any{
+		"properties": map[string]any{
+			"user_id":   map[string]any{"type": "string"},
+			"page_size": map[string]any{"type": "integer"},
+			"verbose":   map[string]any{"type": "boolean"},
+		},
+	}
+
+	if err := engine.RunPhase(pipeline.PostParse, ctx); err != nil {
+		t.Fatalf("PostParse error: %v", err)
+	}
+
+	if got := ctx.Params["verbose"]; got != true {
+		t.Errorf("verbose = %v (%T), want true (bool)", got, got)
+	}
+	// page_size "50" has no grouping separators — unchanged.
+	if got := ctx.Params["page_size"]; got != "50" {
+		t.Errorf("page_size = %v, want %q", got, "50")
+	}
+
+	totalCorrections := len(ctx.Corrections)
+	postParseCorrections := totalCorrections - preParseCorrections
+	if postParseCorrections != 1 {
+		t.Errorf("PostParse corrections = %d, want 1", postParseCorrections)
+	}
+}
+
+// TestPreParseDoesNotBreakValidArgs verifies that valid, correctly
+// formatted args pass through the pipeline without modification.
+func TestPreParseDoesNotBreakValidArgs(t *testing.T) {
+	engine := pipeline.NewEngine()
+	engine.RegisterAll(
+		AliasHandler{},
+		StickyHandler{},
+		ParamNameHandler{},
+	)
+
+	original := []string{
+		"--user-id", "123",
+		"--limit", "10",
+		"--offset", "0",
+		"--format", "json",
+		"--verbose",
+	}
+	ctx := &pipeline.Context{
+		Args:      append([]string{}, original...),
+		FlagSpecs: flagSpecs("user-id", "limit", "offset", "format", "verbose"),
+	}
+
+	if err := engine.RunPhase(pipeline.PreParse, ctx); err != nil {
+		t.Fatalf("RunPhase error: %v", err)
+	}
+
+	got := strings.Join(ctx.Args, " ")
+	want := strings.Join(original, " ")
+	if got != want {
+		t.Errorf("Args changed!\n  got:  %q\n  want: %q", got, want)
+	}
+	if len(ctx.Corrections) != 0 {
+		t.Errorf("unexpected corrections: %d", len(ctx.Corrections))
+		for _, c := range ctx.Corrections {
+			t.Logf("  %s: %q → %q", c.Handler, c.Original, c.Corrected)
+		}
+	}
+}

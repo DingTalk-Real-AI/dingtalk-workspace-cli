@@ -37,6 +37,8 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline/handlers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/recovery"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/spf13/cobra"
@@ -53,7 +55,14 @@ func Execute() int {
 	defer cancel()
 
 	recovery.ResetRuntimeState()
-	root := NewRootCommand(ctx)
+	engine := newPipelineEngine()
+	root := NewRootCommandWithEngine(ctx, engine)
+
+	// Run PreParse handlers on raw argv before Cobra parses flags.
+	// This corrects model-generated errors like --userId → --user-id
+	// and --limit100 → --limit 100.
+	pipeline.RunPreParse(root, engine)
+
 	executed, err := root.ExecuteC()
 	if err != nil {
 		if executed == nil {
@@ -165,13 +174,24 @@ func NewRootCommand(ctx ...context.Context) *cobra.Command {
 	var rootCtx context.Context
 	if len(ctx) > 0 && ctx[0] != nil {
 		rootCtx = ctx[0]
-	} else {
+	}
+	return NewRootCommandWithEngine(rootCtx, nil)
+}
+
+// NewRootCommandWithEngine constructs the root CLI command with an
+// optional pipeline engine for input correction. When engine is nil,
+// no pipeline processing is applied.
+func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) *cobra.Command {
+	if rootCtx == nil {
 		rootCtx = context.Background()
 	}
 	flags := &GlobalFlags{}
 	loader := cli.EnvironmentLoader{
 		LookupEnv:              os.LookupEnv,
 		CatalogBaseURLOverride: DiscoveryBaseURL(),
+		AuthTokenFunc: func(ctx context.Context) string {
+			return resolveRuntimeAuthToken(ctx, "")
+		},
 	}
 	runner := newCommandRunnerWithFlags(loader, flags)
 
@@ -209,10 +229,9 @@ func NewRootCommand(ctx ...context.Context) *cobra.Command {
 	bindPersistentFlags(root, flags)
 
 	schemaCmd := newSchemaCommand(loader)
-	schemaCmd.Hidden = true
 	genSkillsCmd := newGenerateSkillsCommand()
 	genSkillsCmd.Hidden = true
-	mcpCmd := newMCPCommand(rootCtx, loader, runner)
+	mcpCmd := newMCPCommand(rootCtx, loader, runner, engine)
 	mcpCmd.Hidden = true
 
 	utilityCommands := []*cobra.Command{
@@ -512,8 +531,8 @@ func newGenerateSkillsCommand() *cobra.Command {
 	return cmd
 }
 
-func newMCPCommand(ctx context.Context, loader cli.CatalogLoader, runner executor.Runner) *cobra.Command {
-	return cli.NewMCPCommand(ctx, loader, runner)
+func newMCPCommand(ctx context.Context, loader cli.CatalogLoader, runner executor.Runner, engine *pipeline.Engine) *cobra.Command {
+	return cli.NewMCPCommand(ctx, loader, runner, engine)
 }
 
 // hideNonDirectRuntimeCommands marks top-level product commands as hidden
@@ -803,4 +822,23 @@ func CloseFileLogger() {
 	if fileLogger != nil {
 		fileLogger.Close()
 	}
+}
+
+// newPipelineEngine creates and configures the pipeline engine with
+// the standard set of handlers for model input correction.
+func newPipelineEngine() *pipeline.Engine {
+	engine := pipeline.NewEngine()
+	engine.RegisterAll(
+		// PreParse handlers run in order: alias → sticky → paramname.
+		// Alias normalises case first (--userId → --user-id), then
+		// sticky splits glued values (--limit100 → --limit 100), then
+		// paramname fixes near-miss typos (--limt → --limit).
+		handlers.AliasHandler{},
+		handlers.StickyHandler{},
+		handlers.ParamNameHandler{},
+
+		// PostParse handlers normalise structured values.
+		handlers.ParamValueHandler{},
+	)
+	return engine
 }

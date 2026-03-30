@@ -236,13 +236,13 @@ Usage:
 Example:
   dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID>
   dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID> --record-ids rec1,rec2
-  dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID> --query "关键词" --limit 50
+  dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID> --keyword "关键词" --limit 50
 Flags:
       --base-id string      Base ID (必填)
       --cursor string       分页游标，首次不传
       --field-ids string    返回字段 ID 列表，逗号分隔，单次最多 100 个
       --filters string      结构化过滤条件 JSON
-      --query string      全文关键词搜索
+      --keyword string     全文关键词搜索
       --limit int           单次最大记录数，默认 100，最大 100
       --record-ids string   指定记录 ID 列表，逗号分隔，单次最多 100 个
       --sort string         排序条件 JSON 数组

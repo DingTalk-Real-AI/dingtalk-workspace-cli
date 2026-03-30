@@ -4,7 +4,36 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
-## [1.1.0] - 2026-03-28
+## [1.0.2] - 2026-03-29
+
+Deep workspace tooling upgrade: pipeline-based input correction, output filtering, enhanced stdin handling, and multi-endpoint routing.
+
+### Added
+
+- Pipeline engine (`internal/pipeline`) for pre-parse and post-parse input correction
+  - `AliasHandler`: normalises model-generated flag casing (e.g. `--userId` → `--user-id`)
+  - `StickyHandler`: splits glued flag values (e.g. `--limit100` → `--limit 100`)
+  - `ParamNameHandler`: fixes near-miss flag typos (e.g. `--limt` → `--limit`)
+  - `ParamValueHandler`: normalises structured parameter values after parsing
+- Output filtering via `--fields` and `--jq` global flags (`internal/output/filter.go`)
+  - `--fields`: comma-separated field selection for top-level keys (case-insensitive)
+  - `--jq`: jq expression filtering powered by `gojq` library
+- `StdinGuard` for safe single-read stdin across multiple flags in one invocation
+- `ResolveInputSource` unified resolver supporting `@file`, `@-` (explicit stdin), and implicit pipe fallback
+- `@file` / `@-` syntax support for all string-typed override flags in tool commands
+- Chat helper support for `@file` input to read message content from files
+- Tool-level endpoint routing (`dynamicToolEndpoints`) for multi-endpoint products
+- Comprehensive test suites for pipeline handlers, stdin guard, canonical commands, and chat input
+
+### Changed
+
+- `directRuntimeEndpoint` now accepts tool name for finer-grained endpoint resolution
+- `collectOverrides` resolves `@file` / `@-` for all string-typed flags
+- `NewRootCommand` refactored to `NewRootCommandWithEngine` with optional pipeline engine
+- `schema` command no longer hidden (visible in help output)
+- Default output format changed from `table` to `json`
+
+## [1.0.1] - 2026-03-28
 
 Backward-compatible feature and security update after the initial 1.0.0 release.
 

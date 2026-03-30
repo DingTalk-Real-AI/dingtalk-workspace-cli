@@ -35,7 +35,12 @@ import (
 //
 // Conversion rules reference: docs/mcp-to-cli-conversion.md
 func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Runner, detailsByID map[string][]market.DetailTool) []*cobra.Command {
-	var commands []*cobra.Command
+	type builtCmd struct {
+		cmd    *cobra.Command
+		parent string // cli.Parent: attach as sub-command of this top-level command
+	}
+
+	var built []builtCmd
 	for _, server := range servers {
 		cli := server.CLI
 		// §1.5: cli.skip → skip entire service
@@ -136,7 +141,41 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 			}
 		}
 
-		commands = append(commands, rootCmd)
+		built = append(built, builtCmd{cmd: rootCmd, parent: strings.TrimSpace(cli.Parent)})
+	}
+
+	// Collect top-level commands first, then attach child commands via cli.Parent.
+	topLevel := make(map[string]*cobra.Command)
+	var topOrder []string
+	var children []builtCmd
+
+	for _, b := range built {
+		if b.parent == "" {
+			name := b.cmd.Name()
+			if _, exists := topLevel[name]; !exists {
+				topOrder = append(topOrder, name)
+			}
+			topLevel[name] = b.cmd
+		} else {
+			children = append(children, b)
+		}
+	}
+	for _, child := range children {
+		if parent, ok := topLevel[child.parent]; ok {
+			parent.AddCommand(child.cmd)
+		} else {
+			// Parent not found among dynamic commands; emit as top-level.
+			name := child.cmd.Name()
+			if _, exists := topLevel[name]; !exists {
+				topOrder = append(topOrder, name)
+			}
+			topLevel[name] = child.cmd
+		}
+	}
+
+	commands := make([]*cobra.Command, 0, len(topLevel))
+	for _, name := range topOrder {
+		commands = append(commands, topLevel[name])
 	}
 	return commands
 }

@@ -24,10 +24,11 @@ import (
 )
 
 var (
-	dynamicMu        sync.RWMutex
-	dynamicEndpoints map[string]string
-	dynamicProducts  map[string]bool
-	dynamicAliases   map[string]string
+	dynamicMu            sync.RWMutex
+	dynamicEndpoints     map[string]string
+	dynamicProducts      map[string]bool
+	dynamicAliases       map[string]string
+	dynamicToolEndpoints map[string]string // tool name → endpoint
 )
 
 var legacyDirectRuntimeAliases = map[string]string{
@@ -46,6 +47,7 @@ func SetDynamicServers(servers []market.ServerDescriptor) {
 	endpoints := make(map[string]string)
 	products := make(map[string]bool)
 	aliases := make(map[string]string)
+	toolEndpoints := make(map[string]string)
 	for _, server := range servers {
 		if server.CLI.Skip {
 			continue
@@ -70,10 +72,26 @@ func SetDynamicServers(servers []market.ServerDescriptor) {
 				aliases[alias] = id
 			}
 		}
+		// Build tool → endpoint mapping from CLI tools and overrides.
+		if endpoint != "" {
+			for _, tool := range server.CLI.Tools {
+				toolName := strings.TrimSpace(tool.Name)
+				if toolName != "" {
+					toolEndpoints[toolName] = endpoint
+				}
+			}
+			for toolName := range server.CLI.ToolOverrides {
+				toolName = strings.TrimSpace(toolName)
+				if toolName != "" {
+					toolEndpoints[toolName] = endpoint
+				}
+			}
+		}
 	}
 	dynamicEndpoints = endpoints
 	dynamicProducts = products
 	dynamicAliases = aliases
+	dynamicToolEndpoints = toolEndpoints
 }
 
 func shouldUseDirectRuntime(invocation executor.Invocation) bool {
@@ -88,17 +106,34 @@ func shouldUseDirectRuntime(invocation executor.Invocation) bool {
 	}
 }
 
-func directRuntimeEndpoint(productID string) (string, bool) {
+func directRuntimeEndpoint(productID, toolName string) (string, bool) {
+	// Priority 0: env-var override always wins (DINGTALK_<PRODUCT>_MCP_URL).
 	normalized := normalizeDirectRuntimeProductID(productID)
-	dynamicMu.RLock()
-	de := dynamicEndpoints
-	dynamicMu.RUnlock()
 	for _, candidate := range []string{strings.TrimSpace(productID), normalized} {
 		if candidate == "" {
 			continue
 		}
 		if override, ok := productEndpointOverride(candidate); ok {
 			return override, true
+		}
+	}
+
+	dynamicMu.RLock()
+	de := dynamicEndpoints
+	te := dynamicToolEndpoints
+	dynamicMu.RUnlock()
+
+	// Priority 1: tool-level endpoint (resolves multi-endpoint products).
+	if tool := strings.TrimSpace(toolName); tool != "" && te != nil {
+		if endpoint, ok := te[tool]; ok {
+			return endpoint, true
+		}
+	}
+
+	// Priority 2: product-level endpoint.
+	for _, candidate := range []string{strings.TrimSpace(productID), normalized} {
+		if candidate == "" {
+			continue
 		}
 		if de != nil {
 			if endpoint, ok := de[candidate]; ok {

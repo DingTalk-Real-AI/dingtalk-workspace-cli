@@ -3,7 +3,7 @@
 ## 认证
 
 ```bash
-# 首次: 扫码登录 (浏览器自动打开)
+# 首次: OAuth 设备流登录 (钉钉扫码授权)
 dws auth login
 
 # 查看状态
@@ -11,6 +11,9 @@ dws auth status
 
 # 退出
 dws auth logout
+
+# 重置本地凭证 (Token 解密失败时使用)
+dws auth reset
 ```
 
 登录后自动管理 token 刷新，日常使用无需重复登录。
@@ -28,11 +31,13 @@ dws auth logout
 ### Headless 环境 (CI/CD)
 
 ```bash
-# 桌面: 导出凭证
-dws auth import credentials.json
+# 通过环境变量配置认证（无需交互式登录）
+export DWS_CLIENT_ID=<your-app-key>
+export DWS_CLIENT_SECRET=<your-app-secret>
+dws auth login
 
-# 服务器: 导入凭证
-dws auth import credentials.json
+# 或使用 --device 设备流登录（远程服务器/Docker）
+dws auth login --device
 ```
 refresh_token 单设备独占，远程刷新后源设备凭证失效。
 
@@ -59,12 +64,13 @@ dws recovery finalize --event-id <event_id> --outcome recovered|failed|handoff -
 | 标志 | 短名 | 说明 | 默认 |
 |------|:---:|------|------|
 | `--format` | `-f` | 输出格式: json / table / raw | json |
+| `--jq` | | jq 表达式过滤输出 (如: `.items[] \| .name`) | 无 |
+| `--fields` | | 筛选输出字段 (逗号分隔, 如: name,id,status) | 无 |
 | `--verbose` | `-v` | 详细日志 | false |
 | `--debug` | | 调试日志 | false |
 | `--yes` | `-y` | 跳过确认提示 | false |
 | `--dry-run` | | 预览操作不执行 | false |
 | `--timeout` | | HTTP 超时 (秒) | 30 |
-| `--token` | | API Token (覆盖配置) | 无 |
 | `--mock` | | Mock 数据 (开发用) | false |
 | `--client-id` | | 覆盖 OAuth Client ID | 无 |
 | `--client-secret` | | 覆盖 OAuth Client Secret | 无 |

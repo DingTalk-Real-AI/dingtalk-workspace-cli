@@ -17,9 +17,9 @@ Example:
 Usage:
   dws contact user search [flags]
 Example:
-  dws contact user search --query "张三"
+  dws contact user search --keyword "张三"
 Flags:
-      --query string   搜索关键词 (必填)
+      --keyword string   搜索关键词 (必填)
 ```
 
 #### 按手机号搜索用户
@@ -49,9 +49,9 @@ Flags:
 Usage:
   dws contact dept search [flags]
 Example:
-  dws contact dept search --query "技术部"
+  dws contact dept search --keyword "技术部"
 Flags:
-      --query string   搜索关键词 (必填)
+      --keyword string   搜索关键词 (必填)
 ```
 
 #### 查看部门成员
@@ -79,10 +79,10 @@ Flags:
 dws contact user get-self --format json
 
 # 2. 按名字搜索同事 — 提取 userId
-dws contact user search --query "张三" --format json
+dws contact user search --keyword "张三" --format json
 
 # 3. 查看部门结构 — 提取 deptId
-dws contact dept search --query "技术部" --format json
+dws contact dept search --keyword "技术部" --format json
 
 # 4. 查看部门成员
 dws contact dept list-members --ids <deptId> --format json
@@ -94,7 +94,7 @@ dws contact dept list-members --ids <deptId> --format json
 |------|------|------|
 | `user get-self/search` | `userId` | 其他产品中的 --users/--executor 参数 |
 | `user get-self/search` | `orgAuthEmail` | mail message send 的 --to/--cc (跨产品) |
-| `dept search/list-children` | `deptId` | dept list-children/list-members 的 --id/--ids |
+| `dept search` | `deptId` | dept list-members 的 --ids |
 
 ## 注意事项
 
@@ -105,4 +105,4 @@ dws contact dept list-members --ids <deptId> --format json
 
 | 脚本 | 场景 | 用法 |
 |------|------|------|
-| [contact_dept_members.py](../../scripts/contact_dept_members.py) | 按部门名称搜索并列出所有成员 | `python contact_dept_members.py --query "技术部"` |
+| [contact_dept_members.py](../../scripts/contact_dept_members.py) | 按部门名称搜索并列出所有成员 | `python contact_dept_members.py --keyword "技术部"` |

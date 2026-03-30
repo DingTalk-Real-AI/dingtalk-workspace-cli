@@ -37,3 +37,15 @@ jobs:
 
       - name: Post-release packaging
         run: ./scripts/release/post-goreleaser.sh
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Publish to npm
+        working-directory: dist/npm/dingtalk-workspace-cli
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

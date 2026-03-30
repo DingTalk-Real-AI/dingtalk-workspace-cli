@@ -88,7 +88,7 @@ func TestCLIMetadataDrivesCanonicalCommandShape(t *testing.T) {
 		t.Fatalf("tool metadata = %#v, want make-doc hidden", tool)
 	}
 
-	cmd := cli.NewMCPCommand(context.Background(), cli.StaticLoader{Catalog: catalog}, executor.EchoRunner{})
+	cmd := cli.NewMCPCommand(context.Background(), cli.StaticLoader{Catalog: catalog}, executor.EchoRunner{}, nil)
 	module := cmd.Commands()[0]
 	if !module.Hidden || module.Name() != "knowledge" {
 		t.Fatalf("module hidden/name = (%t,%s), want (true,knowledge)", module.Hidden, module.Name())

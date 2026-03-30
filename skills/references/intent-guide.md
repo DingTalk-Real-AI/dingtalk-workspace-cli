@@ -12,7 +12,7 @@
 | "帮我建一个明天下午的日程" | 日历日程 | `calendar` | — | 日历日程管理（可含参与者/会议室）|
 | "帮我看看收到的日报" | 日志收件箱 | `report` | `todo` | 钉钉日志系统（日报/周报），不是待办 |
 | "帮我创建一个待办提醒" | 个人待办 | `todo` | `report` | 个人任务提醒，不是日志汇报 |
-| "帮我提交请假审批" | 发起审批 | `approval` | — | 审批流程，不是待办或日志 |
+| "帮我提交请假审批" | 发起审批 | `oa` | — | 审批流程，不是待办或日志 |
 | "帮我建一个项目群" | 创建群聊 | `chat group create` | — | 群聊管理，不是日历日程 |
 | "把张三拉进群" | 添加群成员 | `chat group members add` | — | 先查 userId，再添加 |
 | "让机器人在群里发个通知" | 机器人群发 | `chat message send-by-bot` | `chat message send-by-webhook` | 企业内部机器人发消息，需 robotCode |
@@ -91,7 +91,7 @@
 
 ```bash
 # 1. 搜索同事 userId
-dws contact user search --query "张三" --format json
+dws contact user search --keyword "张三" --format json
 
 # 2. 创建日程
 dws calendar event create --title "会议" \
@@ -107,7 +107,7 @@ dws calendar participant add --event <EVENT_ID> --users <USER_ID> --format json
 
 ```bash
 # 1. 搜索同事 userId
-dws contact user search --query "张三" --format json
+dws contact user search --keyword "张三" --format json
 
 # 2. 创建待办
 dws todo task create --title "任务内容" --executors <USER_ID> --format json

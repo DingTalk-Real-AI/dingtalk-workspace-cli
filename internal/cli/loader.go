@@ -50,6 +50,22 @@ func (l StaticLoader) Load(_ context.Context) (ir.Catalog, error) {
 	return l.Catalog, nil
 }
 
+// CatalogLoaderFrom creates a CatalogLoader that returns a
+// pre-loaded catalog and error. This allows multiple consumers
+// (schema command, MCP command tree) to share one discovery result.
+func CatalogLoaderFrom(catalog ir.Catalog, err error) CatalogLoader {
+	return &preloadedLoader{catalog: catalog, err: err}
+}
+
+type preloadedLoader struct {
+	catalog ir.Catalog
+	err     error
+}
+
+func (l *preloadedLoader) Load(_ context.Context) (ir.Catalog, error) {
+	return l.catalog, l.err
+}
+
 type FixtureLoader struct {
 	Path string
 }
@@ -73,6 +89,9 @@ type EnvironmentLoader struct {
 	// DiscoveryTimeout overrides the default timeout for live registry discovery.
 	// Zero means use defaultDiscoveryTimeout.
 	DiscoveryTimeout time.Duration
+	// AuthTokenFunc returns an access token for MCP discovery requests
+	// (initialize, tools/list). When nil, discovery runs without auth.
+	AuthTokenFunc func(context.Context) string
 }
 
 type cachedCatalogState struct {
@@ -109,6 +128,11 @@ func (l EnvironmentLoader) Load(ctx context.Context) (ir.Catalog, error) {
 	}
 
 	transportClient := transport.NewClient(nil)
+	if l.AuthTokenFunc != nil {
+		if token := l.AuthTokenFunc(ctx); token != "" {
+			transportClient = transportClient.WithAuth(token, nil)
+		}
+	}
 
 	// Use a bounded context so discovery doesn't hang in test or CI environments.
 	timeout := defaultDiscoveryTimeout

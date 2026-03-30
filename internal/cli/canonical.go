@@ -30,6 +30,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/ir"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
 	"github.com/spf13/cobra"
 )
 
@@ -56,7 +57,7 @@ type FlagSpec struct {
 	Description  string
 }
 
-func NewMCPCommand(ctx context.Context, loader CatalogLoader, runner executor.Runner) *cobra.Command {
+func NewMCPCommand(ctx context.Context, loader CatalogLoader, runner executor.Runner, engine *pipeline.Engine) *cobra.Command {
 	catalog, loadErr := loader.Load(ctx)
 
 	longDescription := "Reserved canonical runtime surface. Tools are generated from the shared Tool IR under dws mcp."
@@ -94,17 +95,27 @@ func NewMCPCommand(ctx context.Context, loader CatalogLoader, runner executor.Ru
 		if product.CLI != nil && product.CLI.Skip {
 			continue
 		}
-		productCommand := newProductCommand(product, runner)
+		productCommand := newProductCommand(product, runner, engine)
 		cmd.AddCommand(productCommand)
-		addGroupedProductAlias(cmd, product, runner)
+		addGroupedProductAlias(cmd, product, runner, engine)
 	}
 	return cmd
 }
 
 func NewSchemaCommand(loader CatalogLoader) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:               "schema [canonical-product.tool]",
-		Short:             "Inspect canonical schema metadata",
+	return &cobra.Command{
+		Use:   "schema [product.tool]",
+		Short: "查看 MCP 工具 Schema (产品列表 / 工具参数)",
+		Long: `查看已发现的 MCP 产品和工具的 Schema 元数据。
+
+不带参数时列出所有产品及其工具数量；带 product.tool 路径时
+输出该工具的完整输入 Schema（JSON Schema 格式）。
+
+示例:
+  dws schema                         # 列出所有产品
+  dws schema aitable.query_records   # 查看 aitable query_records 的参数 Schema
+  dws schema --fields id,tools       # 只显示 id 和 tools 字段
+  dws schema --jq '.products[].id'   # 用 jq 提取所有产品 ID`,
 		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -113,24 +124,20 @@ func NewSchemaCommand(loader CatalogLoader) *cobra.Command {
 				return err
 			}
 
-			jsonOut, err := cmd.Flags().GetBool("json")
-			if err != nil {
-				return apperrors.NewInternal("failed to read schema flags")
-			}
-
 			payload, err := schemaPayload(catalog, args)
 			if err != nil {
 				return err
 			}
 
-			if jsonOut {
-				return output.WriteJSON(cmd.OutOrStdout(), payload)
-			}
-			return writeSchemaText(cmd.OutOrStdout(), payload)
+			return output.WriteFiltered(
+				cmd.OutOrStdout(),
+				output.ResolveFormat(cmd, output.FormatJSON),
+				payload,
+				output.ResolveFields(cmd),
+				output.ResolveJQ(cmd),
+			)
 		},
 	}
-	cmd.Flags().Bool("json", false, "Emit schema metadata as JSON")
-	return cmd
 }
 
 func BuildFlagSpecs(schema map[string]any, hints map[string]ir.CLIFlagHint) []FlagSpec {
@@ -169,7 +176,7 @@ func BuildFlagSpecs(schema map[string]any, hints map[string]ir.CLIFlagHint) []Fl
 	return specs
 }
 
-func newProductCommand(product ir.CanonicalProduct, runner executor.Runner) *cobra.Command {
+func newProductCommand(product ir.CanonicalProduct, runner executor.Runner, engine *pipeline.Engine) *cobra.Command {
 	shortDescription := product.DisplayName
 	if strings.TrimSpace(product.Description) != "" {
 		shortDescription = product.Description
@@ -204,12 +211,12 @@ func newProductCommand(product ir.CanonicalProduct, runner executor.Runner) *cob
 	}
 
 	for _, tool := range product.Tools {
-		cmd.AddCommand(newToolCommand(product, tool, runner))
+		cmd.AddCommand(newToolCommand(product, tool, runner, engine))
 	}
 	return cmd
 }
 
-func addGroupedProductAlias(root *cobra.Command, product ir.CanonicalProduct, runner executor.Runner) {
+func addGroupedProductAlias(root *cobra.Command, product ir.CanonicalProduct, runner executor.Runner, engine *pipeline.Engine) {
 	if root == nil || product.CLI == nil {
 		return
 	}
@@ -260,7 +267,7 @@ func addGroupedProductAlias(root *cobra.Command, product ir.CanonicalProduct, ru
 		cliCopy.Group = ""
 		aliasProduct.CLI = &cliCopy
 	}
-	productCommand := newProductCommand(aliasProduct, runner)
+	productCommand := newProductCommand(aliasProduct, runner, engine)
 	productCommand.Use = leaf
 	productCommand.Aliases = nil
 	if leaf != aliasProduct.ID {
@@ -269,7 +276,7 @@ func addGroupedProductAlias(root *cobra.Command, product ir.CanonicalProduct, ru
 	parent.AddCommand(productCommand)
 }
 
-func newToolCommand(product ir.CanonicalProduct, tool ir.ToolDescriptor, runner executor.Runner) *cobra.Command {
+func newToolCommand(product ir.CanonicalProduct, tool ir.ToolDescriptor, runner executor.Runner, engine *pipeline.Engine) *cobra.Command {
 	shortDescription := tool.Title
 	if strings.TrimSpace(tool.Description) != "" {
 		shortDescription = tool.Description
@@ -303,60 +310,125 @@ func newToolCommand(product ir.CanonicalProduct, tool ir.ToolDescriptor, runner 
 				}
 				dryRun = value
 			}
+
+			// One guard per invocation ensures stdin is read at most once.
+			guard := NewStdinGuard()
+
 			jsonPayload, err := cmd.Flags().GetString("json")
 			if err != nil {
 				return apperrors.NewInternal("failed to read --json")
 			}
 
-			// Support @file syntax for --json: read file contents as JSON payload.
-			if content, isFile, fileErr := ReadFileArg(jsonPayload); fileErr != nil {
-				return fileErr
-			} else if isFile {
-				jsonPayload = content
-			}
-
-			// Support stdin pipe: if no --json given, read from pipe.
-			if jsonPayload == "" {
-				if stdinData, stdinErr := ReadStdinIfPiped(); stdinErr != nil {
-					return stdinErr
-				} else if stdinData != "" {
-					jsonPayload = stdinData
-				}
+			// Resolve @file / @- for --json flag.
+			jsonPayload, err = ResolveInputSource(jsonPayload, "json", guard)
+			if err != nil {
+				return err
 			}
 
 			paramsPayload, err := cmd.Flags().GetString("params")
 			if err != nil {
 				return apperrors.NewInternal("failed to read --params")
 			}
-			overrides, err := collectOverrides(cmd, specs)
+
+			// Resolve @file / @- for all string-typed override flags BEFORE
+			// the implicit stdin fallback, so explicit @- in any flag takes
+			// priority over the implicit pipe read.
+			overrides, err := collectOverrides(cmd, specs, guard)
 			if err != nil {
 				return err
 			}
+
+			// Implicit stdin fallback (lowest priority): if no --json was
+			// given and no flag claimed stdin via @-, read from pipe.
+			if jsonPayload == "" && !guard.Claimed() && StdinIsPipe() {
+				if claimErr := guard.Claim("implicit stdin (pipe)"); claimErr != nil {
+					return claimErr
+				}
+				stdinData, stdinErr := ReadStdin()
+				if stdinErr != nil {
+					return stdinErr
+				}
+				jsonPayload = stdinData
+			}
+
 			params, err := executor.MergePayloads(jsonPayload, paramsPayload, overrides)
 			if err != nil {
 				return err
 			}
+
+			// PostParse: normalise parameter values (date formats,
+			// booleans, enums) using the tool's input schema.
+			if engine != nil && engine.HasHandlers(pipeline.PostParse) {
+				pctx := &pipeline.Context{
+					Command: tool.CanonicalPath,
+					Params:  params,
+					Schema:  tool.InputSchema,
+				}
+				if pipeErr := engine.RunPhase(pipeline.PostParse, pctx); pipeErr != nil {
+					return pipeErr
+				}
+				params = pctx.Params
+			}
+
 			if err := ValidateInputSchema(params, tool.InputSchema); err != nil {
 				return err
 			}
 			if !dryRun {
-				if err := confirmSensitiveTool(cmd, tool); err != nil {
+				if err := confirmSensitiveTool(cmd, tool, guard); err != nil {
 					return err
 				}
 			}
+
+			// PreRequest: last chance to inspect/mutate payload before
+			// the JSON-RPC call is dispatched.
+			if engine != nil && engine.HasHandlers(pipeline.PreRequest) {
+				pctx := &pipeline.Context{
+					Command: tool.CanonicalPath,
+					Params:  params,
+					Schema:  tool.InputSchema,
+					Payload: params,
+				}
+				if pipeErr := engine.RunPhase(pipeline.PreRequest, pctx); pipeErr != nil {
+					return pipeErr
+				}
+				params = pctx.Params
+			}
+
 			invocation := executor.NewInvocation(product, tool, params)
 			invocation.DryRun = dryRun
 			result, err := runner.Run(cmd.Context(), invocation)
 			if err != nil {
 				return err
 			}
+
+			// PostResponse: transform or enrich the response before
+			// writing it to stdout.
+			if engine != nil && engine.HasHandlers(pipeline.PostResponse) {
+				pctx := &pipeline.Context{
+					Command:  tool.CanonicalPath,
+					Params:   params,
+					Schema:   tool.InputSchema,
+					Response: result.Response,
+				}
+				if pipeErr := engine.RunPhase(pipeline.PostResponse, pctx); pipeErr != nil {
+					return pipeErr
+				}
+				result.Response = pctx.Response
+			}
+
 			if warning := lifecycleWarning(product); warning != "" {
 				if result.Response == nil {
 					result.Response = map[string]any{}
 				}
 				result.Response["warning"] = warning
 			}
-			return output.WriteJSON(cmd.OutOrStdout(), result)
+			return output.WriteFiltered(
+				cmd.OutOrStdout(),
+				output.ResolveFormat(cmd, output.FormatJSON),
+				result,
+				output.ResolveFields(cmd),
+				output.ResolveJQ(cmd),
+			)
 		},
 	}
 
@@ -416,7 +488,7 @@ func applyFlagSpecs(cmd *cobra.Command, specs []FlagSpec) {
 	}
 }
 
-func collectOverrides(cmd *cobra.Command, specs []FlagSpec) (map[string]any, error) {
+func collectOverrides(cmd *cobra.Command, specs []FlagSpec, guard *StdinGuard) (map[string]any, error) {
 	overrides := make(map[string]any)
 	for _, spec := range specs {
 		flagName := strings.TrimSpace(spec.FlagName)
@@ -434,7 +506,12 @@ func collectOverrides(cmd *cobra.Command, specs []FlagSpec) (map[string]any, err
 			if err != nil {
 				return nil, apperrors.NewInternal(fmt.Sprintf("failed to read --%s", flagName))
 			}
-			overrides[spec.PropertyName] = value
+			// Resolve @file / @- for all string-typed flags.
+			resolved, resolveErr := ResolveInputSource(value, flagName, guard)
+			if resolveErr != nil {
+				return nil, resolveErr
+			}
+			overrides[spec.PropertyName] = resolved
 		case flagJSON:
 			value, err := cmd.Flags().GetString(flagName)
 			if err != nil {
@@ -508,10 +585,23 @@ func collectOverrides(cmd *cobra.Command, specs []FlagSpec) (map[string]any, err
 
 func schemaPayload(catalog ir.Catalog, args []string) (map[string]any, error) {
 	if len(args) == 0 {
+		products := make([]map[string]any, 0, len(catalog.Products))
+		for _, p := range catalog.Products {
+			tools := make([]map[string]any, 0, len(p.Tools))
+			for _, t := range p.Tools {
+				tools = append(tools, compactTool(t))
+			}
+			products = append(products, map[string]any{
+				"id":          p.ID,
+				"name":        p.DisplayName,
+				"description": p.Description,
+				"tools":       tools,
+			})
+		}
 		return map[string]any{
 			"kind":     "schema",
-			"products": catalog.Products,
-			"count":    len(catalog.Products),
+			"count":    len(products),
+			"products": products,
 		}, nil
 	}
 
@@ -520,24 +610,35 @@ func schemaPayload(catalog ir.Catalog, args []string) (map[string]any, error) {
 		return nil, apperrors.NewValidation(fmt.Sprintf("unknown canonical schema path %q", args[0]))
 	}
 	return map[string]any{
-		"kind":     "schema",
-		"path":     args[0],
-		"product":  product,
-		"tool":     tool,
-		"required": requiredFields(tool.InputSchema),
+		"kind":    "schema",
+		"path":    args[0],
+		"product": map[string]any{"id": product.ID, "name": product.DisplayName},
+		"tool":    compactTool(tool),
 	}, nil
 }
 
-func writeSchemaText(w io.Writer, payload map[string]any) error {
-	if path, ok := payload["path"].(string); ok && path != "" {
-		_, err := fmt.Fprintf(w, "schema for %s\n", path)
-		return err
+// compactTool returns a lean representation of a tool for schema
+// output, keeping only the fields that AI agents and developers
+// need: name, description, parameters, and sensitivity flag.
+func compactTool(t ir.ToolDescriptor) map[string]any {
+	tool := map[string]any{
+		"name":        t.RPCName,
+		"title":       t.Title,
+		"description": t.Description,
+		"sensitive":   t.Sensitive,
 	}
-	_, err := fmt.Fprintln(w, "canonical schema catalog")
-	return err
+
+	if props, ok := t.InputSchema["properties"]; ok {
+		tool["parameters"] = props
+	}
+	if req := requiredFields(t.InputSchema); len(req) > 0 {
+		tool["required"] = req
+	}
+
+	return tool
 }
 
-func confirmSensitiveTool(cmd *cobra.Command, tool ir.ToolDescriptor) error {
+func confirmSensitiveTool(cmd *cobra.Command, tool ir.ToolDescriptor, guard *StdinGuard) error {
 	if !tool.Sensitive {
 		return nil
 	}
@@ -552,6 +653,13 @@ func confirmSensitiveTool(cmd *cobra.Command, tool ir.ToolDescriptor) error {
 	}
 	if yes {
 		return nil
+	}
+
+	// Stdin was consumed for data input — interactive confirmation is impossible.
+	if guard != nil && guard.Claimed() {
+		return apperrors.NewValidation(
+			"stdin used for data input; pass --yes to confirm sensitive operation",
+		)
 	}
 
 	_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "tool %s is sensitive, continue? [y/N]: ", tool.CanonicalPath)

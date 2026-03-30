@@ -324,7 +324,7 @@ func (r *recoveryRuntime) CallToolDirect(ctx context.Context, serverID, toolName
 	if r == nil || r.transport == nil {
 		return nil, fmt.Errorf("recovery runtime not initialized")
 	}
-	endpoint, err := r.resolveEndpoint(ctx, serverID)
+	endpoint, err := r.resolveEndpoint(ctx, serverID, toolName)
 	if err != nil {
 		return nil, err
 	}
@@ -344,8 +344,8 @@ func (r *recoveryRuntime) CallToolDirect(ctx context.Context, serverID, toolName
 	return &result, nil
 }
 
-func (r *recoveryRuntime) resolveEndpoint(ctx context.Context, productID string) (string, error) {
-	if endpoint, ok := directRuntimeEndpoint(productID); ok {
+func (r *recoveryRuntime) resolveEndpoint(ctx context.Context, productID, toolName string) (string, error) {
+	if endpoint, ok := directRuntimeEndpoint(productID, toolName); ok {
 		return endpoint, nil
 	}
 	if r == nil || r.loader == nil {

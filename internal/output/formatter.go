@@ -57,7 +57,13 @@ func WriteCommandPayload(cmd *cobra.Command, payload any, fallback Format) error
 	if cmd == nil {
 		return Write(io.Discard, fallback, payload)
 	}
-	return Write(cmd.OutOrStdout(), ResolveFormat(cmd, fallback), payload)
+	return WriteFiltered(
+		cmd.OutOrStdout(),
+		ResolveFormat(cmd, fallback),
+		payload,
+		ResolveFields(cmd),
+		ResolveJQ(cmd),
+	)
 }
 
 func Write(w io.Writer, format Format, payload any) error {
@@ -120,6 +126,78 @@ func normalizeFormat(raw string, fallback Format) Format {
 	default:
 		return fallback
 	}
+}
+
+// WriteFiltered applies field selection and/or jq filtering before
+// writing the payload. If jq is non-empty, the jq result is written
+// directly (bypassing format). If fields is non-empty, the payload
+// is filtered to those fields before normal output.
+func WriteFiltered(w io.Writer, format Format, payload any, fields, jq string) error {
+	payload = unwrapCompatRuntimePayload(payload)
+
+	if strings.TrimSpace(jq) != "" {
+		return ApplyJQ(w, payload, strings.TrimSpace(jq))
+	}
+
+	if strings.TrimSpace(fields) != "" {
+		fieldList := strings.Split(fields, ",")
+		payload = SelectFields(payload, fieldList)
+	}
+
+	return Write(w, format, payload)
+}
+
+// ResolveFields extracts the --fields flag value from the command.
+func ResolveFields(cmd *cobra.Command) string {
+	if cmd == nil {
+		return ""
+	}
+	for _, flags := range []*pflag.FlagSet{
+		cmd.Flags(),
+		cmd.InheritedFlags(),
+		rootPersistentFlags(cmd),
+	} {
+		if flags == nil {
+			continue
+		}
+		if f := flags.Lookup("fields"); f != nil && f.Changed {
+			if v, err := flags.GetString("fields"); err == nil {
+				return v
+			}
+		}
+	}
+	return ""
+}
+
+// ResolveJQ extracts the --jq flag value from the command. It checks
+// local flags, inherited flags, and root persistent flags because
+// --jq is registered as a root PersistentFlag.
+func ResolveJQ(cmd *cobra.Command) string {
+	if cmd == nil {
+		return ""
+	}
+	for _, flags := range []*pflag.FlagSet{
+		cmd.Flags(),
+		cmd.InheritedFlags(),
+		rootPersistentFlags(cmd),
+	} {
+		if flags == nil {
+			continue
+		}
+		if f := flags.Lookup("jq"); f != nil && f.Changed {
+			if v, err := flags.GetString("jq"); err == nil {
+				return v
+			}
+		}
+	}
+	return ""
+}
+
+func rootPersistentFlags(cmd *cobra.Command) *pflag.FlagSet {
+	if root := cmd.Root(); root != nil {
+		return root.PersistentFlags()
+	}
+	return nil
 }
 
 // WriteJSON marshals payload as indented JSON and writes it to w.

@@ -173,7 +173,7 @@ func TestMCPProtocolDocsCoverageViaEndpointGeneratedCLI(t *testing.T) {
 }
 
 func inspectToolCommand(catalog ir.Catalog, productID, toolCommand string) (map[string]struct{}, string, error) {
-	root := cli.NewMCPCommand(context.Background(), cli.StaticLoader{Catalog: catalog}, executor.EchoRunner{})
+	root := cli.NewMCPCommand(context.Background(), cli.StaticLoader{Catalog: catalog}, executor.EchoRunner{}, nil)
 
 	toolCmd, _, err := root.Find([]string{productID, toolCommand})
 	if err != nil {

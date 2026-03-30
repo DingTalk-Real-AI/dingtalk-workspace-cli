@@ -87,6 +87,7 @@ type LifecycleInfo struct {
 type CLIOverlay struct {
 	ID            string                     `json:"id"`
 	Command       string                     `json:"command"`
+	Parent        string                     `json:"parent,omitempty"`
 	Description   string                     `json:"description"`
 	Prefixes      []string                   `json:"prefixes"`
 	Aliases       []string                   `json:"aliases"`

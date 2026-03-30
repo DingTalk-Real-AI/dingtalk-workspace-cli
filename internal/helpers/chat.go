@@ -17,6 +17,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
@@ -92,12 +93,14 @@ func newChatMessageSendByBotCommand(runner executor.Runner) *cobra.Command {
 				return err
 			}
 
-			result, err := runner.Run(cmd.Context(), executor.NewHelperInvocation(
+			invocation := executor.NewHelperInvocation(
 				cobracmd.LegacyCommandPath(cmd),
 				"chat",
 				tool,
 				params,
-			))
+			)
+			invocation.DryRun = commandDryRun(cmd)
+			result, err := runner.Run(cmd.Context(), invocation)
 			if err != nil {
 				return err
 			}
@@ -229,7 +232,7 @@ func newChatGroupCreateCommand(runner executor.Runner) *cobra.Command {
 			}
 			allMembers := prependOwner(currentUserID, memberUserIDs)
 
-			result, err := runner.Run(cmd.Context(), executor.NewHelperInvocation(
+			inv := executor.NewHelperInvocation(
 				cobracmd.LegacyCommandPath(cmd),
 				"chat",
 				"create_internal_group",
@@ -237,7 +240,9 @@ func newChatGroupCreateCommand(runner executor.Runner) *cobra.Command {
 					"groupMembers": stringSliceToAny(allMembers),
 					"groupName":    name,
 				},
-			))
+			)
+			inv.DryRun = commandDryRun(cmd)
+			result, err := runner.Run(cmd.Context(), inv)
 			if err != nil {
 				return err
 			}
@@ -253,6 +258,8 @@ func newChatGroupCreateCommand(runner executor.Runner) *cobra.Command {
 }
 
 func buildChatMessageSendByBotInvocation(cmd *cobra.Command) (map[string]any, string, error) {
+	guard := cli.NewStdinGuard()
+
 	group, err := cmd.Flags().GetString("group")
 	if err != nil {
 		return nil, "", apperrors.NewInternal("failed to read --group")
@@ -265,13 +272,14 @@ func buildChatMessageSendByBotInvocation(cmd *cobra.Command) (map[string]any, st
 	if err != nil {
 		return nil, "", apperrors.NewInternal("failed to read --robot-code")
 	}
-	title, err := cmd.Flags().GetString("title")
+	title, err := resolveStringFlag(cmd, "title", guard, false)
 	if err != nil {
-		return nil, "", apperrors.NewInternal("failed to read --title")
+		return nil, "", err
 	}
-	text, err := cmd.Flags().GetString("text")
+	// --text is the primary content flag: receives stdin pipe when empty.
+	text, err := resolveStringFlag(cmd, "text", guard, true)
 	if err != nil {
-		return nil, "", apperrors.NewInternal("failed to read --text")
+		return nil, "", err
 	}
 
 	switch {
@@ -448,9 +456,11 @@ func newChatMessageRecallByBotCommand(runner executor.Runner) *cobra.Command {
 					"openConversationId": groupID,
 					"processQueryKeys":   processQueryKeys,
 				}
-				result, err := runner.Run(cmd.Context(), executor.NewHelperInvocation(
+				inv := executor.NewHelperInvocation(
 					cobracmd.LegacyCommandPath(cmd), "bot", "recall_robot_group_message", params,
-				))
+				)
+				inv.DryRun = commandDryRun(cmd)
+				result, err := runner.Run(cmd.Context(), inv)
 				if err != nil {
 					return err
 				}
@@ -460,9 +470,11 @@ func newChatMessageRecallByBotCommand(runner executor.Runner) *cobra.Command {
 				"robotCode":        robotCode,
 				"processQueryKeys": processQueryKeys,
 			}
-			result, err := runner.Run(cmd.Context(), executor.NewHelperInvocation(
+			inv := executor.NewHelperInvocation(
 				cobracmd.LegacyCommandPath(cmd), "bot", "batch_recall_robot_users_msg", params,
-			))
+			)
+			inv.DryRun = commandDryRun(cmd)
+			result, err := runner.Run(cmd.Context(), inv)
 			if err != nil {
 				return err
 			}
@@ -488,9 +500,17 @@ func newChatMessageSendByWebhookCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			guard := cli.NewStdinGuard()
 			token, _ := cmd.Flags().GetString("token")
-			title, _ := cmd.Flags().GetString("title")
-			text, _ := cmd.Flags().GetString("text")
+			title, err := resolveStringFlag(cmd, "title", guard, false)
+			if err != nil {
+				return err
+			}
+			// --text is the primary content flag: receives stdin pipe when empty.
+			text, err := resolveStringFlag(cmd, "text", guard, true)
+			if err != nil {
+				return err
+			}
 			if strings.TrimSpace(token) == "" {
 				return apperrors.NewValidation("--token is required")
 			}
@@ -514,9 +534,11 @@ func newChatMessageSendByWebhookCommand(runner executor.Runner) *cobra.Command {
 			if v, _ := cmd.Flags().GetString("at-users"); v != "" {
 				params["atUserIds"] = splitCSV(v)
 			}
-			result, err := runner.Run(cmd.Context(), executor.NewHelperInvocation(
+			invocation := executor.NewHelperInvocation(
 				cobracmd.LegacyCommandPath(cmd), "bot", "send_message_by_custom_robot", params,
-			))
+			)
+			invocation.DryRun = commandDryRun(cmd)
+			result, err := runner.Run(cmd.Context(), invocation)
 			if err != nil {
 				return err
 			}
@@ -579,9 +601,11 @@ func newChatGroupRenameCommand(runner executor.Runner) *cobra.Command {
 				"openconversation_id": groupID,
 				"group_name":          name,
 			}
-			result, err := runner.Run(cmd.Context(), executor.NewHelperInvocation(
+			inv := executor.NewHelperInvocation(
 				cobracmd.LegacyCommandPath(cmd), "chat", "update_group_name", params,
-			))
+			)
+			inv.DryRun = commandDryRun(cmd)
+			result, err := runner.Run(cmd.Context(), inv)
 			if err != nil {
 				return err
 			}
@@ -616,9 +640,11 @@ func newChatGroupMemberAddCommand(runner executor.Runner) *cobra.Command {
 				"openconversation_id": groupID,
 				"userId":              splitCSV(usersStr),
 			}
-			result, err := runner.Run(cmd.Context(), executor.NewHelperInvocation(
+			inv := executor.NewHelperInvocation(
 				cobracmd.LegacyCommandPath(cmd), "chat", "add_group_member", params,
-			))
+			)
+			inv.DryRun = commandDryRun(cmd)
+			result, err := runner.Run(cmd.Context(), inv)
 			if err != nil {
 				return err
 			}
@@ -653,9 +679,11 @@ func newChatGroupMemberRemoveCommand(runner executor.Runner) *cobra.Command {
 				"openconversationId": groupID,
 				"userIdList":         splitCSV(usersStr),
 			}
-			result, err := runner.Run(cmd.Context(), executor.NewHelperInvocation(
+			inv := executor.NewHelperInvocation(
 				cobracmd.LegacyCommandPath(cmd), "chat", "remove_group_member", params,
-			))
+			)
+			inv.DryRun = commandDryRun(cmd)
+			result, err := runner.Run(cmd.Context(), inv)
 			if err != nil {
 				return err
 			}
@@ -690,9 +718,11 @@ func newChatGroupMembersAddBotCommand(runner executor.Runner) *cobra.Command {
 				"robotCode":          robotCode,
 				"openConversationId": groupID,
 			}
-			result, err := runner.Run(cmd.Context(), executor.NewHelperInvocation(
+			inv := executor.NewHelperInvocation(
 				cobracmd.LegacyCommandPath(cmd), "bot", "add_robot_to_group", params,
-			))
+			)
+			inv.DryRun = commandDryRun(cmd)
+			result, err := runner.Run(cmd.Context(), inv)
 			if err != nil {
 				return err
 			}
