@@ -9,7 +9,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Go-1.25+-green?logo=go&logoColor=white" alt="Go 1.25+">
   <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue" alt="License Apache-2.0"></a>
-  <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases"><img src="https://img.shields.io/badge/release-v1.0.3-red" alt="v1.0.3"></a>
+  <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases"><img src="https://img.shields.io/badge/release-v1.0.4-red" alt="v1.0.4"></a>
   <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/workflows/ci.yml"><img src="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src=".github/badges/coverage.svg" alt="Coverage">
 </p>
@@ -139,7 +139,23 @@ export DWS_CLIENT_SECRET=<your-app-secret>
 dws auth login
 ```
 
-> CLI flags take precedence over environment variables. Credentials are used for DingTalk's OAuth device flow.
+<details>
+<summary><strong>Credential Configuration Priority</strong></summary>
+
+`client-id` and `client-secret` support multiple configuration methods with the following priority (highest to lowest):
+
+| Priority | Method | Description |
+|----------|--------|-------------|
+| 1 | CLI flags / Persisted config | `--client-id` / `--client-secret` command-line arguments; auto-saved after first successful login with `client-secret` stored in system Keychain |
+| 2 | Environment variables | `DWS_CLIENT_ID` / `DWS_CLIENT_SECRET` |
+| 3 | Default values | Hardcoded defaults (for development only) |
+
+**Recommended usage**:
+- **First login**: Use `--client-id` and `--client-secret` flags; credentials are securely persisted after successful login
+- **Subsequent use**: Run `dws` commands directly; token refresh automatically reads saved credentials from Keychain
+- **CI/CD environments**: Use environment variables
+
+</details>
 
 ## Quick Start
 

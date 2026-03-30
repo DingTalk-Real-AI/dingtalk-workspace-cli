@@ -32,6 +32,7 @@ type TokenData struct {
 	UserID         string    `json:"user_id,omitempty"`
 	UserName       string    `json:"user_name,omitempty"`
 	CorpName       string    `json:"corp_name,omitempty"`
+	ClientID       string    `json:"client_id,omitempty"` // Associated app client ID for refresh
 	UpdatedAt      string    `json:"updated_at,omitempty"`
 	Source         string    `json:"source,omitempty"`
 }

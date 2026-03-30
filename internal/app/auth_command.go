@@ -188,8 +188,11 @@ func newAuthLogoutCommand() *cobra.Command {
 			if err := authpkg.DeleteTokenData(configDir); err != nil {
 				return apperrors.NewInternal(fmt.Sprintf("failed to clear token data: %v", err))
 			}
+			// Clean up app credentials (app.json + keychain secret)
+			_ = authpkg.DeleteAppConfig(configDir)
 			_ = os.Remove(filepath.Join(configDir, "mcp_url"))
 			_ = os.Remove(filepath.Join(configDir, "token"))
+			_ = os.Remove(filepath.Join(configDir, "token.json"))
 			clearCompatCache()
 			w := cmd.OutOrStdout()
 			fmt.Fprintln(w, "[OK] 已清除所有认证信息")

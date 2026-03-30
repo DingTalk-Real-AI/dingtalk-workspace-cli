@@ -176,9 +176,16 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("换取 token 失败"), err)
 	}
+
+	// Save token data with associated client ID for refresh
+	tokenData.ClientID = p.clientID
 	if err := SaveTokenData(p.configDir, tokenData); err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("保存 token 失败"), err)
 	}
+
+	// Persist app credentials if using custom client credentials
+	p.persistAppConfigIfNeeded()
+
 	return tokenData, nil
 }
 
@@ -289,4 +296,31 @@ func (p *OAuthProvider) Logout() error {
 // Status returns the current auth status.
 func (p *OAuthProvider) Status() (*TokenData, error) {
 	return LoadTokenData(p.configDir)
+}
+
+// persistAppConfigIfNeeded saves app credentials if custom ones were used.
+// This ensures the client secret is available for future token refreshes.
+func (p *OAuthProvider) persistAppConfigIfNeeded() {
+	// Check if custom credentials were provided via runtime flags
+	clientID, clientSecret := getRuntimeCredentials()
+	if clientID == "" || clientSecret == "" {
+		return
+	}
+
+	// Only persist if they differ from environment/default values
+	envID := getEnvClientID()
+	if clientID == envID || clientID == DefaultClientID {
+		return
+	}
+
+	// Save app config with secret stored in keychain
+	config := &AppConfig{
+		ClientID:     clientID,
+		ClientSecret: PlainSecret(clientSecret),
+	}
+	if err := SaveAppConfig(p.configDir, config); err != nil {
+		if p.logger != nil {
+			p.logger.Warn("failed to persist app credentials", "error", err)
+		}
+	}
 }
