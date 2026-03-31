@@ -229,9 +229,8 @@ func resolveRuntimeAuthToken(ctx context.Context, explicitToken string) string {
 
 // Cached token state for process lifetime
 var (
-	cachedRuntimeToken      string
-	cachedRuntimeTokenOnce  sync.Once
-	cachedRuntimeTokenError error
+	cachedRuntimeToken     string
+	cachedRuntimeTokenOnce sync.Once
 )
 
 // getCachedRuntimeToken returns a cached access token, loading it only once per process.
@@ -253,10 +252,9 @@ func getCachedRuntimeToken(ctx context.Context) string {
 			cachedRuntimeToken = strings.TrimSpace(token)
 			return
 		}
-		// If the error is a decryption failure (corrupted data), record it
+		// If the error is a decryption failure (corrupted data), log and bail out
 		if tokenErr != nil && errors.Is(tokenErr, authpkg.ErrTokenDecryption) {
 			slog.Error(tokenErr.Error())
-			cachedRuntimeTokenError = tokenErr
 			return
 		}
 		// Try legacy manager as fallback
@@ -275,7 +273,6 @@ func getCachedRuntimeToken(ctx context.Context) string {
 func ResetRuntimeTokenCache() {
 	cachedRuntimeTokenOnce = sync.Once{}
 	cachedRuntimeToken = ""
-	cachedRuntimeTokenError = nil
 }
 
 func newRuntimeContentScanner() safety.Scanner {
