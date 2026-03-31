@@ -134,6 +134,9 @@ http://127.0.0.1,https://login.dingtalk.com
 
 ```bash
 dws auth login --client-id <your-app-key> --client-secret <your-app-secret>
+
+无浏览器的环境，可以使用 --device参数
+dws auth login --device --client-id <your-app-key> --client-secret <your-app-secret>
 ```
 
 或通过环境变量：
@@ -141,7 +144,9 @@ dws auth login --client-id <your-app-key> --client-secret <your-app-secret>
 ```bash
 export DWS_CLIENT_ID=<your-app-key>
 export DWS_CLIENT_SECRET=<your-app-secret>
-dws auth login
+dws auth login  --client-id $DWS_CLIENT_ID --client-secret $DWS_CLIENT_SECRET
+无浏览器的环境，可以使用 --device参数
+dws auth login --device --client-id $DWS_CLIENT_ID --client-secret $DWS_CLIENT_SECRET
 ```
 
 <details>
