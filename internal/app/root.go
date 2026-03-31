@@ -51,19 +51,34 @@ const recoveryEventStderrPrefix = "RECOVERY_EVENT_ID="
 
 // Execute runs the root command and returns the process exit code.
 func Execute() int {
+	totalStart := time.Now()
+	defer func() {
+		if os.Getenv("DWS_PERF_DEBUG") != "" {
+			_, _ = fmt.Fprintf(os.Stderr, "[PERF] Execute total: %v\n", time.Since(totalStart))
+		}
+	}()
+
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
+	initStart := time.Now()
 	recovery.ResetRuntimeState()
 	engine := newPipelineEngine()
 	root := NewRootCommandWithEngine(ctx, engine)
+	if os.Getenv("DWS_PERF_DEBUG") != "" {
+		_, _ = fmt.Fprintf(os.Stderr, "[PERF] command init: %v\n", time.Since(initStart))
+	}
 
 	// Run PreParse handlers on raw argv before Cobra parses flags.
 	// This corrects model-generated errors like --userId → --user-id
 	// and --limit100 → --limit 100.
 	pipeline.RunPreParse(root, engine)
 
+	execStart := time.Now()
 	executed, err := root.ExecuteC()
+	if os.Getenv("DWS_PERF_DEBUG") != "" {
+		_, _ = fmt.Fprintf(os.Stderr, "[PERF] cobra ExecuteC: %v\n", time.Since(execStart))
+	}
 	if err != nil {
 		if executed == nil {
 			executed = root

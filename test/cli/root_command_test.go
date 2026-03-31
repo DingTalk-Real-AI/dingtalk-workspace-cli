@@ -32,15 +32,20 @@ func TestHiddenMCPHelpIsReachable(t *testing.T) {
 	}
 }
 
-func TestSkillCommandIsNotRegisteredInPublicOSSBuild(t *testing.T) {
+func TestSkillCommandIsRegistered(t *testing.T) {
 	t.Parallel()
 
 	root := app.NewRootCommand()
 
+	var found bool
 	for _, cmd := range root.Commands() {
 		if cmd.Name() == "skill" {
-			t.Fatalf("skill command should not be registered in OSS build")
+			found = true
+			break
 		}
+	}
+	if !found {
+		t.Fatalf("skill command should be registered")
 	}
 }
 

@@ -421,7 +421,9 @@ func TestSkillAddRequiresAuth(t *testing.T) {
 	if err == nil {
 		t.Error("Execute() should have failed without auth")
 	}
-	if !strings.Contains(err.Error(), "not logged in") && !strings.Contains(err.Error(), "token") {
+	// Check for authentication-related error (English or Chinese)
+	errStr := err.Error()
+	if !strings.Contains(errStr, "not logged in") && !strings.Contains(errStr, "token") && !strings.Contains(errStr, "未登录") && !strings.Contains(errStr, "auth") {
 		t.Errorf("error should mention authentication, got: %v", err)
 	}
 }

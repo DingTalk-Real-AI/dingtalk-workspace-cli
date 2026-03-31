@@ -26,6 +26,7 @@ func TestClientID_RuntimeOverride(t *testing.T) {
 
 func TestClientID_EnvFallback(t *testing.T) {
 	SetClientID("")
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir()) // Use temp dir to avoid reading persisted config
 	t.Setenv("DWS_CLIENT_ID", "env-id")
 	if got := ClientID(); got != "env-id" {
 		t.Fatalf("expected env-id, got %s", got)
@@ -34,9 +35,17 @@ func TestClientID_EnvFallback(t *testing.T) {
 
 func TestClientID_Default(t *testing.T) {
 	SetClientID("")
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir()) // Use temp dir to avoid reading persisted config
 	t.Setenv("DWS_CLIENT_ID", "")
-	if got := ClientID(); got != DefaultClientID {
-		t.Fatalf("expected default, got %s", got)
+	// When DefaultClientID is a placeholder (starts with "<"), ClientID() returns empty string
+	if strings.HasPrefix(DefaultClientID, "<") {
+		if got := ClientID(); got != "" {
+			t.Fatalf("expected empty string for placeholder, got %s", got)
+		}
+	} else {
+		if got := ClientID(); got != DefaultClientID {
+			t.Fatalf("expected default, got %s", got)
+		}
 	}
 }
 
@@ -51,6 +60,7 @@ func TestClientSecret_RuntimeOverride(t *testing.T) {
 
 func TestClientSecret_EnvFallback(t *testing.T) {
 	SetClientSecret("")
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir()) // Use temp dir to avoid reading persisted config
 	t.Setenv("DWS_CLIENT_SECRET", "env-secret")
 	if got := ClientSecret(); got != "env-secret" {
 		t.Fatalf("expected env-secret, got %s", got)
@@ -59,6 +69,7 @@ func TestClientSecret_EnvFallback(t *testing.T) {
 
 func TestClientSecret_Default(t *testing.T) {
 	SetClientSecret("")
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir()) // Use temp dir to avoid reading persisted config
 	t.Setenv("DWS_CLIENT_SECRET", "")
 	if got := ClientSecret(); got != DefaultClientSecret {
 		t.Fatalf("expected default, got %s", got)

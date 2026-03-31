@@ -253,6 +253,12 @@ func PrintJSON(w io.Writer, err error) error {
 			}
 			if typed.ServerDiag.ServerErrorCode != "" {
 				errorPayload["server_error_code"] = typed.ServerDiag.ServerErrorCode
+				// Add user-friendly hint for specific server error codes
+				switch typed.ServerDiag.ServerErrorCode {
+				case "TOKEN_VERIFIED_FAILED", "CLI_ORG_NOT_AUTHORIZED":
+					errorPayload["friendly_hint"] = "该组织尚未开启 CLI 数据访问权限，请联系组织主管理员开启。"
+					errorPayload["action_url"] = "https://open-dev.dingtalk.com/fe/old#/developerSettings"
+				}
 			}
 			if typed.ServerDiag.TechnicalDetail != "" {
 				errorPayload["technical_detail"] = typed.ServerDiag.TechnicalDetail
@@ -312,6 +318,14 @@ func PrintHumanAt(w io.Writer, err error, v Verbosity) error {
 	if typed.Hint != "" {
 		lines = append(lines, fmt.Sprintf("Hint: %s", typed.Hint))
 	}
+
+	// Add user-friendly hint for specific server error codes
+	switch typed.ServerDiag.ServerErrorCode {
+	case "TOKEN_VERIFIED_FAILED", "CLI_ORG_NOT_AUTHORIZED":
+		lines = append(lines, "Hint: 该组织尚未开启 CLI 数据访问权限，请联系组织主管理员开启。")
+		lines = append(lines, "Action: 开启地址: https://open-dev.dingtalk.com/fe/old#/developerSettings")
+	}
+
 	if len(typed.Actions) > 0 {
 		for _, action := range typed.Actions {
 			if strings.TrimSpace(action) == "" {

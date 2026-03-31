@@ -16,6 +16,7 @@ package auth
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -59,7 +60,32 @@ const (
 
 	LogoutURL         = "https://login.dingtalk.com/oauth2/logout"
 	LogoutContinueURL = "https://login.dingtalk.com"
+
+	// MCP API endpoints for CLI authorization management.
+	DefaultMCPBaseURL    = "https://mcp.dingtalk.com"
+	CLIAuthEnabledPath   = "/cli/cliAuthEnabled"
+	SuperAdminPath       = "/cli/superAdmin"
+	SendCliAuthApplyPath = "/cli/sendCliAuthApply"
+	ClientIDPath         = "/cli/clientId"
+
+	// MCP OAuth endpoints (used when clientId is fetched from MCP).
+	MCPOAuthTokenPath   = "/oauth2/getToken"
+	MCPRefreshTokenPath = "/oauth2/refreshToken"
+	MCPRevokeTokenPath  = "/oauth2/revokeToken"
 )
+
+// GetMCPBaseURL returns the MCP base URL with priority:
+// 1. ~/.dws/mcp_url file content (for pre-release environment)
+// 2. Default value (https://mcp.dingtalk.com)
+func GetMCPBaseURL() string {
+	mcpURLPath := filepath.Join(getDefaultConfigDir(), "mcp_url")
+	if data, err := os.ReadFile(mcpURLPath); err == nil {
+		if url := strings.TrimSpace(string(data)); url != "" {
+			return url
+		}
+	}
+	return DefaultMCPBaseURL
+}
 
 // Runtime overrides set via CLI flags (--client-id, --client-secret).
 // These take highest priority over environment variables and defaults.
@@ -67,7 +93,52 @@ var (
 	clientMu            sync.RWMutex
 	runtimeClientID     string
 	runtimeClientSecret string
+	// clientIDFromMCP indicates whether the clientID was fetched from MCP server.
+	// When true, MCP OAuth endpoints should be used instead of direct DingTalk API.
+	clientIDFromMCP bool
 )
+
+// SetClientIDFromMCP sets the clientID fetched from MCP server and marks it as MCP-sourced.
+func SetClientIDFromMCP(id string) {
+	clientMu.Lock()
+	defer clientMu.Unlock()
+	runtimeClientID = id
+	clientIDFromMCP = true
+}
+
+// IsClientIDFromMCP returns true if the current clientID was fetched from MCP server.
+func IsClientIDFromMCP() bool {
+	clientMu.RLock()
+	defer clientMu.RUnlock()
+	return clientIDFromMCP
+}
+
+// GetUserAccessTokenURL returns the appropriate token exchange URL.
+// Uses MCP endpoint when clientID is from MCP, otherwise uses direct DingTalk API.
+func GetUserAccessTokenURL() string {
+	if IsClientIDFromMCP() {
+		return GetMCPBaseURL() + MCPOAuthTokenPath
+	}
+	return UserAccessTokenURL
+}
+
+// GetRefreshTokenURL returns the appropriate token refresh URL.
+// Uses MCP endpoint when clientID is from MCP, otherwise uses direct DingTalk API.
+func GetRefreshTokenURL() string {
+	if IsClientIDFromMCP() {
+		return GetMCPBaseURL() + MCPRefreshTokenPath
+	}
+	return UserAccessTokenURL // DingTalk uses same endpoint for refresh
+}
+
+// GetRevokeTokenURL returns the token revocation URL (MCP only).
+// Returns empty string if not using MCP mode.
+func GetRevokeTokenURL() string {
+	if IsClientIDFromMCP() {
+		return GetMCPBaseURL() + MCPRevokeTokenPath
+	}
+	return "" // Direct mode doesn't have revoke endpoint
+}
 
 // SetClientID allows runtime override of the client ID (e.g., from CLI flags).
 func SetClientID(id string) {
@@ -87,7 +158,9 @@ func SetClientSecret(secret string) {
 // 1. Runtime override (CLI flag --client-id)
 // 2. Persisted app config (from previous login)
 // 3. Environment variable (DWS_CLIENT_ID)
-// 4. Default hardcoded value
+// 4. Default hardcoded value (if not a placeholder)
+// Returns empty string if no valid client ID is available.
+// Note: MCP server fetch (priority 4 in the full flow) is handled in OAuthProvider.Login()
 func ClientID() string {
 	clientMu.RLock()
 	override := runtimeClientID
@@ -102,7 +175,11 @@ func ClientID() string {
 	if v := os.Getenv("DWS_CLIENT_ID"); v != "" {
 		return v
 	}
-	return DefaultClientID
+	// Only return default if it's not a placeholder
+	if !strings.HasPrefix(DefaultClientID, "<") {
+		return DefaultClientID
+	}
+	return ""
 }
 
 // ClientSecret returns the OAuth client secret with priority:
@@ -125,6 +202,13 @@ func ClientSecret() string {
 		return v
 	}
 	return DefaultClientSecret
+}
+
+// HasValidClientSecret returns true if a valid client secret is available.
+// A valid secret is one that is not a placeholder (e.g., <YOUR_CLIENT_SECRET>).
+func HasValidClientSecret() bool {
+	secret := ClientSecret()
+	return secret != "" && !strings.HasPrefix(secret, "<")
 }
 
 // getRuntimeCredentials returns the runtime-override credentials if set.

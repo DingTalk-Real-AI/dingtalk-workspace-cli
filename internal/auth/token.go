@@ -14,7 +14,9 @@
 package auth
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -103,10 +105,16 @@ func DeleteTokenData(configDir string) error {
 	return legacyErr
 }
 
-// RevokeTokenRemote calls the DingTalk logout endpoint to invalidate the access token.
+// RevokeTokenRemote calls the appropriate logout/revoke endpoint to invalidate the access token.
+// Uses MCP revoke endpoint when clientID is from MCP, otherwise uses DingTalk logout.
 // This should be called before deleting local token data.
 // The function is best-effort: errors are returned but callers may choose to ignore them.
 func RevokeTokenRemote(ctx context.Context) error {
+	// Use MCP revoke endpoint when clientID is from MCP
+	if IsClientIDFromMCP() {
+		return revokeTokenViaMCP(ctx)
+	}
+	// Direct mode: use DingTalk logout endpoint
 	logoutURL, err := url.Parse(LogoutURL)
 	if err != nil {
 		return fmt.Errorf("parsing logout URL: %w", err)
@@ -139,6 +147,48 @@ func RevokeTokenRemote(ctx context.Context) error {
 	// Accept 200 OK or 302 redirect as success.
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusFound {
 		return fmt.Errorf("logout endpoint returned status %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+// revokeTokenViaMCP revokes token via MCP endpoint.
+func revokeTokenViaMCP(ctx context.Context) error {
+	revokeURL := GetRevokeTokenURL()
+	if revokeURL == "" {
+		return nil // No revoke endpoint available
+	}
+
+	// Load current token to get accessToken
+	tokenData, err := LoadTokenData(getDefaultConfigDir())
+	if err != nil || tokenData == nil {
+		return nil // No token to revoke
+	}
+
+	body := map[string]string{
+		"clientId":    ClientID(),
+		"accessToken": tokenData.AccessToken,
+	}
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("marshaling revoke request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, revokeURL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return fmt.Errorf("creating revoke request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("calling revoke endpoint: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("revoke endpoint returned status %d", resp.StatusCode)
 	}
 
 	return nil

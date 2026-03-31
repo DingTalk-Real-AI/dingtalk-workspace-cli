@@ -46,6 +46,10 @@ func writeServiceResult(w http.ResponseWriter, success bool, result any, errCode
 func TestRequestDeviceCodeSuccess(t *testing.T) {
 	t.Parallel()
 
+	// Set a test client ID
+	SetClientID("test-client-id")
+	t.Cleanup(func() { SetClientID("") })
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("method = %s, want POST", r.Method)
