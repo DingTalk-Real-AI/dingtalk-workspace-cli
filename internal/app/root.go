@@ -250,6 +250,7 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 
 	utilityCommands := []*cobra.Command{
 		newAuthCommand(),
+		newSkillCommand(),
 		newCacheCommand(),
 		newCompletionCommand(root),
 		newRecoveryCommand(rootCtx, loader, flags),
@@ -273,6 +274,10 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 
 func newAuthCommand() *cobra.Command {
 	return buildAuthCommand()
+}
+
+func newSkillCommand() *cobra.Command {
+	return buildSkillCommand()
 }
 
 func newCacheCommand() *cobra.Command {

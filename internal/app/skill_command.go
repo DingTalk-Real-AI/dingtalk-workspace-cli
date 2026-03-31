@@ -1,0 +1,377 @@
+// Copyright 2026 Alibaba Group
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package app
+
+import (
+	"archive/zip"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/spf13/cobra"
+)
+
+const (
+	// skillDownloadEndpoint is the API endpoint for downloading skills.
+	skillDownloadEndpoint = "https://aihub.dingtalk.com/cli/download"
+	// skillDownloadTimeout is the timeout for skill download operations.
+	skillDownloadTimeout = 5 * time.Minute
+)
+
+// downloadSkillResponse represents the API response for skill download.
+type downloadSkillResponse struct {
+	Success   bool                 `json:"success"`
+	ErrorCode string               `json:"errorCode,omitempty"`
+	ErrorMsg  string               `json:"errorMsg,omitempty"`
+	Result    *downloadSkillResult `json:"result,omitempty"`
+}
+
+// downloadSkillResult contains the download URL and file name.
+type downloadSkillResult struct {
+	DownloadURL string `json:"downloadUrl"`
+	FileName    string `json:"fileName"`
+}
+
+// agentSkillPaths maps target names to their relative skill installation paths.
+// These paths are relative to the user's home directory.
+var agentSkillPaths = map[string]string{
+	"qoder":    ".qoder/skills",
+	"claude":   ".claude/skills",
+	"cursor":   ".cursor/skills",
+	"codex":    ".codex/skills",
+	"opencode": filepath.Join(".config", "opencode", "skills"),
+}
+
+// supportedTargets returns a comma-separated list of supported targets.
+func supportedTargets() string {
+	targets := make([]string, 0, len(agentSkillPaths)+1)
+	for target := range agentSkillPaths {
+		targets = append(targets, target)
+	}
+	targets = append(targets, ".")
+	return strings.Join(targets, ", ")
+}
+
+func buildSkillCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:               "skill",
+		Short:             "技能管理",
+		Long:              "管理钉钉技能市场的技能。支持下载和安装技能到指定 Agent 目录。",
+		Args:              cobra.NoArgs,
+		TraverseChildren:  true,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+
+	cmd.AddCommand(newSkillAddCommand())
+	return cmd
+}
+
+func newSkillAddCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "add <skillId> <target>",
+		Short: "下载并安装技能到指定目录",
+		Long: fmt.Sprintf(`从钉钉技能市场下载技能并安装到指定 Agent 目录。
+
+参数:
+  skillId   技能 ID（必填），可从钉钉技能市场获取
+  target    安装目标（必填），支持: %s
+
+安装路径:
+  qoder    -> ~/.qoder/skills/
+  claude   -> ~/.claude/skills/
+  cursor   -> ~/.cursor/skills/
+  codex    -> ~/.codex/skills/
+  opencode -> ~/.config/opencode/skills/
+  .        -> 当前目录
+
+示例:
+  dws skill add skill-123 qoder     # 安装到 ~/.qoder/skills/
+  dws skill add skill-123 claude    # 安装到 ~/.claude/skills/
+  dws skill add skill-123 .         # 安装到当前目录`, supportedTargets()),
+		Args:              cobra.ExactArgs(2),
+		DisableAutoGenTag: true,
+		RunE:              runSkillAdd,
+	}
+
+	return cmd
+}
+
+func runSkillAdd(cmd *cobra.Command, args []string) error {
+	skillID := strings.TrimSpace(args[0])
+	target := strings.TrimSpace(args[1])
+
+	if skillID == "" {
+		return apperrors.NewValidation("skillId is required")
+	}
+
+	// Resolve target path
+	destPath, err := resolveSkillTargetPath(target)
+	if err != nil {
+		return apperrors.NewValidation(fmt.Sprintf("invalid target '%s': %v. Supported targets: %s", target, err, supportedTargets()))
+	}
+
+	// Load auth token
+	configDir := defaultConfigDir()
+	tokenData, err := authpkg.LoadTokenData(configDir)
+	if err != nil || tokenData == nil || !tokenData.IsAccessTokenValid() {
+		return apperrors.NewAuth("not logged in or token expired. Please run 'dws auth login' first",
+			apperrors.WithHint("请先执行 'dws auth login' 登录"),
+			apperrors.WithActions("dws auth login"))
+	}
+
+	ctx, cancel := context.WithTimeout(cmd.Context(), skillDownloadTimeout)
+	defer cancel()
+
+	w := cmd.OutOrStdout()
+
+	// Step 1: Get download URL from API
+	fmt.Fprintf(w, "正在获取技能信息...\n")
+	downloadResp, err := fetchSkillDownloadInfo(ctx, tokenData.AccessToken, skillID)
+	if err != nil {
+		return err
+	}
+
+	if !downloadResp.Success {
+		errMsg := downloadResp.ErrorMsg
+		if errMsg == "" {
+			errMsg = downloadResp.ErrorCode
+		}
+		if errMsg == "" {
+			errMsg = "unknown error"
+		}
+		return apperrors.NewAPI(fmt.Sprintf("failed to get skill download info: %s", errMsg),
+			apperrors.WithReason(downloadResp.ErrorCode))
+	}
+
+	if downloadResp.Result == nil || downloadResp.Result.DownloadURL == "" {
+		return apperrors.NewAPI("skill download URL not found in response")
+	}
+
+	// Step 2: Download the skill zip file
+	fmt.Fprintf(w, "正在下载技能...\n")
+	tempZipPath, err := downloadSkillFile(ctx, downloadResp.Result.DownloadURL, downloadResp.Result.FileName)
+	if err != nil {
+		return err
+	}
+	defer cleanupTempFile(tempZipPath)
+
+	// Step 3: Extract zip to destination
+	fmt.Fprintf(w, "正在解压到 %s...\n", destPath)
+	if err := extractSkillZip(tempZipPath, destPath); err != nil {
+		return err
+	}
+
+	fmt.Fprintf(w, "\n[OK] 技能安装成功！\n")
+	fmt.Fprintf(w, "安装路径: %s\n", destPath)
+
+	return nil
+}
+
+// resolveSkillTargetPath resolves the target argument to an absolute path.
+func resolveSkillTargetPath(target string) (string, error) {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return "", fmt.Errorf("target is required")
+	}
+
+	// Special case: current directory
+	if target == "." {
+		return os.Getwd()
+	}
+
+	// Look up predefined agent paths
+	relPath, ok := agentSkillPaths[strings.ToLower(target)]
+	if !ok {
+		return "", fmt.Errorf("unsupported target")
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+
+	return filepath.Join(homeDir, relPath), nil
+}
+
+// fetchSkillDownloadInfo calls the download API to get the skill download URL.
+func fetchSkillDownloadInfo(ctx context.Context, accessToken, skillID string) (*downloadSkillResponse, error) {
+	url := fmt.Sprintf("%s?skillId=%s", skillDownloadEndpoint, skillID)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, apperrors.NewInternal(fmt.Sprintf("failed to create request: %v", err))
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-user-access-token", accessToken)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, apperrors.NewAPI(fmt.Sprintf("failed to call download API: %v", err),
+			apperrors.WithRetryable(true))
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, apperrors.NewAuth("authentication failed. Please run 'dws auth login' to refresh your token",
+			apperrors.WithHint("请执行 'dws auth login' 重新登录"),
+			apperrors.WithActions("dws auth login"))
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, apperrors.NewAPI(fmt.Sprintf("download API returned HTTP %d", resp.StatusCode),
+			apperrors.WithRetryable(resp.StatusCode >= 500))
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024)) // 10MB limit
+	if err != nil {
+		return nil, apperrors.NewAPI(fmt.Sprintf("failed to read response: %v", err))
+	}
+
+	var result downloadSkillResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, apperrors.NewAPI(fmt.Sprintf("failed to parse response: %v", err))
+	}
+
+	return &result, nil
+}
+
+// downloadSkillFile downloads the skill zip file to a temporary location.
+func downloadSkillFile(ctx context.Context, downloadURL, fileName string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
+	if err != nil {
+		return "", apperrors.NewInternal(fmt.Sprintf("failed to create download request: %v", err))
+	}
+
+	client := &http.Client{Timeout: skillDownloadTimeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", apperrors.NewAPI(fmt.Sprintf("failed to download skill: %v", err),
+			apperrors.WithRetryable(true))
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", apperrors.NewAPI(fmt.Sprintf("download returned HTTP %d", resp.StatusCode),
+			apperrors.WithRetryable(resp.StatusCode >= 500))
+	}
+
+	// Create temp file
+	if fileName == "" {
+		fileName = "skill.zip"
+	}
+	tempFile, err := os.CreateTemp("", "dws-skill-*.zip")
+	if err != nil {
+		return "", apperrors.NewInternal(fmt.Sprintf("failed to create temp file: %v", err))
+	}
+	tempPath := tempFile.Name()
+
+	// Copy response body to temp file
+	_, err = io.Copy(tempFile, resp.Body)
+	closeErr := tempFile.Close()
+	if err != nil {
+		os.Remove(tempPath)
+		return "", apperrors.NewAPI(fmt.Sprintf("failed to save downloaded file: %v", err))
+	}
+	if closeErr != nil {
+		os.Remove(tempPath)
+		return "", apperrors.NewInternal(fmt.Sprintf("failed to close temp file: %v", closeErr))
+	}
+
+	return tempPath, nil
+}
+
+// extractSkillZip extracts a zip file to the destination directory.
+func extractSkillZip(zipPath, destDir string) error {
+	// Ensure destination directory exists
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return apperrors.NewInternal(fmt.Sprintf("failed to create destination directory: %v", err))
+	}
+
+	reader, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return apperrors.NewInternal(fmt.Sprintf("failed to open zip file: %v", err))
+	}
+	defer reader.Close()
+
+	for _, file := range reader.File {
+		if err := extractZipFile(file, destDir); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// extractZipFile extracts a single file from the zip archive.
+func extractZipFile(file *zip.File, destDir string) error {
+	// Sanitize file path to prevent zip slip attacks
+	filePath := filepath.Join(destDir, file.Name)
+	if !strings.HasPrefix(filepath.Clean(filePath), filepath.Clean(destDir)+string(os.PathSeparator)) {
+		return apperrors.NewValidation(fmt.Sprintf("invalid file path in zip: %s", file.Name))
+	}
+
+	if file.FileInfo().IsDir() {
+		// Use 0755 to ensure we have write permission for creating files inside
+		return os.MkdirAll(filePath, 0755)
+	}
+
+	// Ensure parent directory exists with write permission
+	if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
+		return apperrors.NewInternal(fmt.Sprintf("failed to create directory: %v", err))
+	}
+
+	// Extract file
+	srcFile, err := file.Open()
+	if err != nil {
+		return apperrors.NewInternal(fmt.Sprintf("failed to open file in zip: %v", err))
+	}
+	defer srcFile.Close()
+
+	// Use file mode from zip but ensure at least 0644 for files
+	fileMode := file.Mode()
+	if fileMode&0600 == 0 {
+		fileMode = 0644
+	}
+	destFile, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fileMode)
+	if err != nil {
+		return apperrors.NewInternal(fmt.Sprintf("failed to create file: %v", err))
+	}
+	defer destFile.Close()
+
+	if _, err := io.Copy(destFile, srcFile); err != nil {
+		return apperrors.NewInternal(fmt.Sprintf("failed to extract file: %v", err))
+	}
+
+	return nil
+}
+
+// cleanupTempFile removes a temporary file, ignoring errors.
+func cleanupTempFile(path string) {
+	if path != "" {
+		os.Remove(path)
+	}
+}
