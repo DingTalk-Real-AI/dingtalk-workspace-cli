@@ -19,7 +19,7 @@
 </p>
 
 > [!IMPORTANT]
-> **共创阶段**：本项目涉及钉钉企业数据访问，需企业管理员授权后方可使用。当前为灰度共创阶段，请加入钉钉 DWS 共创群完成白名单配置。详见下方 [开始使用](#开始使用)。
+> **共创阶段**：本项目涉及钉钉企业数据访问，需企业管理员授权后方可使用。欢迎加入钉钉 DWS 共创群获取支持与最新动态。详见下方 [开始使用](#开始使用)。
 >
 > <a href="https://qr.dingtalk.com/action/joingroup?code=v1,k1,v9/YMJG9qXhvFk5juktYnQziN70rF7QHebC/JLztTVRuRVJIwrSsXmL8oFqU5ajJ&_dt_no_comment=1&origin=11"><img src="https://img.alicdn.com/imgextra/i4/O1CN01Rijgk81gKqVSKMzdx_!!6000000004124-2-tps-654-644.png" alt="DingTalk Group QR Code" width="150"></a>
 
@@ -87,78 +87,57 @@ cp dws ~/.local/bin/         # 安装到 PATH
 
 ## 开始使用
 
-### 步骤 1：创建钉钉应用
-
-进入 [开放平台应用开发后台](https://open-dev.dingtalk.com/fe/app?hash=%23%2Fcorp%2Fapp#/corp/app)，在「企业内部应用 - 钉钉应用」点击**创建应用**。
-
-<details>
-<summary>查看截图</summary>
-<p align="center">
-  <img src="https://img.alicdn.com/imgextra/i4/O1CN01VIkwvV1a5NQzCIFO0_!!6000000003278-2-tps-2690-1462.png" alt="创建应用" width="600">
-</p>
-</details>
-
-### 步骤 2：配置重定向 URL
-
-进入应用 → **安全设置**，在「重定向 URL」中添加以下地址并保存：
-
-```
-http://127.0.0.1,https://login.dingtalk.com
+```bash
+dws auth login
 ```
 
-> `http://127.0.0.1` 用于本地浏览器登录；`https://login.dingtalk.com` 用于 `--device` 设备流登录（Docker 容器、远程服务器等无浏览器环境）。建议两个都配置。
+浏览器自动打开 — 选择组织并授权即可。
+
+<p align="center">
+  <img src="https://img.alicdn.com/imgextra/i2/O1CN01c6blXk28YrsF8rqDt_!!6000000007945-2-tps-2244-762.png" alt="授权成功" width="600">
+</p>
+
+> 如果组织尚未开启 CLI 访问权限，系统会引导你向管理员发送申请。审批通过后重新执行 `dws auth login` 即可。
 
 <details>
-<summary>查看截图</summary>
+<summary><strong>组织未开启 CLI 访问权限？</strong></summary>
+
+1. 选择组织后，点击「立即申请」通知管理员
+2. 管理员收到申请卡片，一键审批
+3. 审批通过后，重新执行 `dws auth login`
+
 <p align="center">
-  <img src="https://img.alicdn.com/imgextra/i4/O1CN017xQGWb1ycrAG0uxBO_!!6000000006600-2-tps-2000-1032.png" alt="配置重定向URL" width="600">
+  <img src="https://img.alicdn.com/imgextra/i2/O1CN01wtsYuQ1CTbboVTlsD_!!6000000000082-2-tps-2696-1544.png" alt="申请权限" width="600">
 </p>
+
 </details>
-
-### 步骤 3：发布应用
-
-点击「应用发布 - 版本管理与发布」，发布版本使应用上线。
 
 <details>
-<summary>查看截图</summary>
+<summary><strong>管理员：为组织开启 CLI 访问权限</strong></summary>
+
+进入 [开发者平台](https://open-dev.dingtalk.com) →「CLI 访问管理」→ 开启。
+
 <p align="center">
-  <img src="https://img.alicdn.com/imgextra/i4/O1CN01WOLZFz244P46B3FPu_!!6000000007337-2-tps-2000-1100.png" alt="发布应用" width="600">
+  <img src="https://img.alicdn.com/imgextra/i4/O1CN01M8K7Wj1rZ0WikrZby_!!6000000005644-2-tps-2940-1596.png" alt="CLI访问管理" width="600">
 </p>
+
 </details>
 
-### 步骤 4：申请白名单
+<details>
+<summary><strong>自建应用模式（CI/CD、ISV 集成）</strong></summary>
 
-加入钉钉 DWS 共创群，提供 **Client ID** 和**管理员确认凭证**完成白名单配置。
+企业自主管控场景，可创建自有钉钉应用：
 
-### 步骤 5：登录认证
+1. [开放平台应用开发后台](https://open-dev.dingtalk.com/fe/app#/corp/app) → 创建应用
+2. 安全设置 → 添加重定向 URL：`http://127.0.0.1,https://login.dingtalk.com`
+3. 发布应用
+4. 登录：
 
 ```bash
 dws auth login --client-id <your-app-key> --client-secret <your-app-secret>
 ```
 
-或通过环境变量：
-
-```bash
-export DWS_CLIENT_ID=<your-app-key>
-export DWS_CLIENT_SECRET=<your-app-secret>
-dws auth login
-```
-
-<details>
-<summary><strong>凭证配置优先级</strong></summary>
-
-`client-id` 和 `client-secret` 支持多种配置方式，按以下优先级生效（从高到低）：
-
-| 优先级 | 配置方式 | 说明 |
-|------|----------|------|
-| 1 | CLI 参数 / 持久化配置 | `--client-id` / `--client-secret` 命令行参数；首次登录成功后自动保存，`client-secret` 存储在系统 Keychain 中 |
-| 2 | 环境变量 | `DWS_CLIENT_ID` / `DWS_CLIENT_SECRET` |
-| 3 | 默认值 | 代码中的预设值（仅开发时使用） |
-
-**推荐用法**：
-- **首次登录**：使用 `--client-id` 和 `--client-secret` 参数，登录成功后凭证会自动安全存储
-- **后续使用**：直接运行 `dws` 命令，Token 自动刷新时会从 Keychain 读取已保存的凭证
-- **CI/CD 环境**：建议使用环境变量配置
+首次登录后凭证安全存储（Keychain），后续自动刷新 Token。
 
 </details>
 
@@ -174,13 +153,6 @@ dws todo task list --dry-run                       # 预览操作但不执行
 ## 在 Agent 中使用
 
 dws 是为 AI Agent 设计的 CLI 工具。请先完成[安装](#安装)和[开始使用](#开始使用)，然后配置 Agent 环境：
-
-```bash
-# 通过环境变量配置认证（Agent 推荐方式，无需交互式登录）
-export DWS_CLIENT_ID=<your-app-key>
-export DWS_CLIENT_SECRET=<your-app-secret>
-dws auth login
-```
 
 ### Agent 调用模式
 
@@ -334,22 +306,22 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 
 ## 核心服务
 
-| 服务 | 命令 | 工具数 | 子命令 | 描述 |
+| 服务 | 命令 | 命令数 | 子命令 | 描述 |
 |------|------|:------:|--------|------|
-| 通讯录 | `contact` | 8 | `user` `dept` | 按姓名/手机号搜索、批量查询、部门树、当前用户信息 |
-| 群聊 | `chat` | 14 | `message` `group` `bot` `search` | 群增删改查、成员管理、话题回复、以用户身份发消息 |
-| 机器人 | `chat bot` | 9 | — | 机器人创建、群聊/单聊消息、Webhook、消息撤回 |
+| 通讯录 | `contact` | 6 | `user` `dept` | 按姓名/手机号搜索、批量查询、部门树、当前用户信息 |
+| 群聊 | `chat` | 10 | `message` `group` `search` | 群增删改查、成员管理、机器人消息、Webhook |
+| 机器人 | `chat bot` | 6 | `bot` `group` `message` `search` | 机器人创建/搜索、群聊/单聊消息、Webhook、消息撤回 |
 | 日历 | `calendar` | 13 | `event` `room` `participant` `busy` | 日程增删改查、会议室预订、闲忙查询、参与者管理 |
 | 待办 | `todo` | 6 | `task` | 创建、列表、修改、完成、详情、删除 |
 | 审批 | `oa` | 9 | `approval` | 同意/拒绝/撤销、待我审批、我发起的、流程列表 |
 | 考勤 | `attendance` | 4 | `record` `shift` `summary` `rules` | 打卡记录、排班查询、考勤摘要、考勤组规则 |
-| DING | `ding` | 3 | `message` | 发送/撤回 DING 消息 |
+| DING | `ding` | 2 | `message` | 发送/撤回 DING 消息 |
 | 日志 | `report` | 7 | `create` `list` `detail` `template` `stats` `sent` | 创建日志、收发列表、模版、统计 |
-| 智能表格 | `aitable` | 27 | `base` `table` `record` `field` `attachment` `template` | 多维表/数据表/记录/字段全量 CRUD、视图、导入导出、模板 |
+| 智能表格 | `aitable` | 20 | `base` `table` `record` `field` `attachment` `template` | 多维表/数据表/记录/字段全量 CRUD、模板 |
 | 工作台 | `workbench` | 2 | `app` | 批量查询应用详情 |
-| 开发者文档 | `devdoc` | 2 | `article` | 搜索开放平台文档与错误码 |
+| 开发者文档 | `devdoc` | 1 | `article` | 搜索开放平台文档与错误码 |
 
-> 12 个产品，104 个工具。运行 `dws --help` 查看完整列表，或 `dws <service> --help` 查看子命令。
+> 12 个产品，86 个命令。运行 `dws --help` 查看完整列表，或 `dws <service> --help` 查看子命令。
 
 <details>
 <summary>即将推出</summary>

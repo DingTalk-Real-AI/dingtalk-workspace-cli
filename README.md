@@ -19,7 +19,7 @@
 </p>
 
 > [!IMPORTANT]
-> **Co-creation Phase**: This project accesses DingTalk enterprise data and requires enterprise admin authorization. Please join the DingTalk DWS co-creation group to complete whitelist configuration. See [Getting Started](#getting-started) below.
+> **Co-creation Phase**: This project accesses DingTalk enterprise data and requires enterprise admin authorization. Join the DingTalk DWS co-creation group for support and updates. See [Getting Started](#getting-started) below.
 >
 > <a href="https://qr.dingtalk.com/action/joingroup?code=v1,k1,v9/YMJG9qXhvFk5juktYnQziN70rF7QHebC/JLztTVRuRVJIwrSsXmL8oFqU5ajJ&_dt_no_comment=1&origin=11"><img src="https://img.alicdn.com/imgextra/i4/O1CN01Rijgk81gKqVSKMzdx_!!6000000004124-2-tps-654-644.png" alt="DingTalk Group QR Code" width="150"></a>
 
@@ -87,78 +87,57 @@ cp dws ~/.local/bin/         # install to PATH
 
 ## Getting Started
 
-### Step 1: Create a DingTalk Application
-
-Go to the [Open Platform Console](https://open-dev.dingtalk.com/fe/app?hash=%23%2Fcorp%2Fapp#/corp/app). Under "Internal Enterprise Apps - DingTalk Apps", click **Create App**.
-
-<details>
-<summary>View screenshot</summary>
-<p align="center">
-  <img src="https://img.alicdn.com/imgextra/i4/O1CN01VIkwvV1a5NQzCIFO0_!!6000000003278-2-tps-2690-1462.png" alt="Create Application" width="600">
-</p>
-</details>
-
-### Step 2: Configure Redirect URL
-
-Go to app settings → **Security Settings**. Add the following redirect URLs and save:
-
-```
-http://127.0.0.1,https://login.dingtalk.com
+```bash
+dws auth login
 ```
 
-> `http://127.0.0.1` is for local browser login; `https://login.dingtalk.com` is for `--device` device-flow login (Docker containers, remote servers, and other headless environments). We recommend configuring both.
+The browser opens automatically — select your organization and authorize. That's it.
+
+<p align="center">
+  <img src="https://img.alicdn.com/imgextra/i2/O1CN01c6blXk28YrsF8rqDt_!!6000000007945-2-tps-2244-762.png" alt="Authorization Successful" width="600">
+</p>
+
+> If your organization hasn't enabled CLI access, you'll be prompted to send an access request to your admin. Once approved, re-run `dws auth login`.
 
 <details>
-<summary>View screenshot</summary>
+<summary><strong>Organization hasn't enabled CLI access?</strong></summary>
+
+1. After selecting your organization, click "Apply Now" to notify the admin
+2. The admin receives a request card and can approve with one click
+3. Once approved, re-run `dws auth login`
+
 <p align="center">
-  <img src="https://img.alicdn.com/imgextra/i4/O1CN017xQGWb1ycrAG0uxBO_!!6000000006600-2-tps-2000-1032.png" alt="Configure Redirect URL" width="600">
+  <img src="https://img.alicdn.com/imgextra/i2/O1CN01wtsYuQ1CTbboVTlsD_!!6000000000082-2-tps-2696-1544.png" alt="Apply for Access" width="600">
 </p>
+
 </details>
-
-### Step 3: Publish the Application
-
-Click "App Release - Version Management & Release" to publish and go live.
 
 <details>
-<summary>View screenshot</summary>
+<summary><strong>Admin: Enable CLI access for your organization</strong></summary>
+
+Go to [Developer Platform](https://open-dev.dingtalk.com) → "CLI Access Management" → Enable.
+
 <p align="center">
-  <img src="https://img.alicdn.com/imgextra/i4/O1CN01WOLZFz244P46B3FPu_!!6000000007337-2-tps-2000-1100.png" alt="Publish Application" width="600">
+  <img src="https://img.alicdn.com/imgextra/i4/O1CN01M8K7Wj1rZ0WikrZby_!!6000000005644-2-tps-2940-1596.png" alt="CLI Access Management" width="600">
 </p>
+
 </details>
 
-### Step 4: Request Whitelist Access
+<details>
+<summary><strong>Custom App mode (CI/CD, ISV integration)</strong></summary>
 
-Join the DingTalk DWS co-creation group and provide your **Client ID** and **admin confirmation** to complete whitelist setup.
+For enterprise-managed scenarios, create your own DingTalk app:
 
-### Step 5: Authenticate
+1. [Open Platform Console](https://open-dev.dingtalk.com/fe/app#/corp/app) → Create App
+2. Security Settings → Add redirect URLs: `http://127.0.0.1,https://login.dingtalk.com`
+3. Publish the app
+4. Login:
 
 ```bash
 dws auth login --client-id <your-app-key> --client-secret <your-app-secret>
 ```
 
-Or via environment variables:
-
-```bash
-export DWS_CLIENT_ID=<your-app-key>
-export DWS_CLIENT_SECRET=<your-app-secret>
-dws auth login
-```
-
-<details>
-<summary><strong>Credential Configuration Priority</strong></summary>
-
-`client-id` and `client-secret` support multiple configuration methods with the following priority (highest to lowest):
-
-| Priority | Method | Description |
-|----------|--------|-------------|
-| 1 | CLI flags / Persisted config | `--client-id` / `--client-secret` command-line arguments; auto-saved after first successful login with `client-secret` stored in system Keychain |
-| 2 | Environment variables | `DWS_CLIENT_ID` / `DWS_CLIENT_SECRET` |
-| 3 | Default values | Hardcoded defaults (for development only) |
-
-**Recommended usage**:
-- **First login**: Use `--client-id` and `--client-secret` flags; credentials are securely persisted after successful login
-- **Subsequent use**: Run `dws` commands directly; token refresh automatically reads saved credentials from Keychain
-- **CI/CD environments**: Use environment variables
+Credentials are securely persisted after first login (Keychain). Subsequent runs auto-refresh tokens.
 
 </details>
 
@@ -174,13 +153,6 @@ dws todo task list --dry-run                       # preview without executing
 ## Using with Agents
 
 dws is designed as an AI-native CLI. Complete [Installation](#installation) and [Getting Started](#getting-started) first, then configure your agent:
-
-```bash
-# Configure auth via environment variables (recommended for agents, no interactive login)
-export DWS_CLIENT_ID=<your-app-key>
-export DWS_CLIENT_SECRET=<your-app-secret>
-dws auth login
-```
 
 ### Agent Invocation Patterns
 
@@ -334,22 +306,22 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 
 ## Key Services
 
-| Service | Command | Tools | Subcommands | Description |
-|---------|---------|:-----:|-------------|-------------|
-| Contact | `contact` | 8 | `user` `dept` | Search users by name/mobile, batch query, departments, current user profile |
-| Chat | `chat` | 14 | `message` `group` `bot` `search` | Group CRUD, member management, topic replies, send as user |
-| Bot | `chat bot` | 9 | — | Robot creation, group/single messaging, webhook, message recall |
+| Service | Command | Commands | Subcommands | Description |
+|---------|---------|:--------:|-------------|-------------|
+| Contact | `contact` | 6 | `user` `dept` | Search users by name/mobile, batch query, departments, current user profile |
+| Chat | `chat` | 10 | `message` `group` `search` | Group CRUD, member management, bot messaging, webhook |
+| Bot | `chat bot` | 6 | `bot` `group` `message` `search` | Robot creation/search, group/single messaging, webhook, message recall |
 | Calendar | `calendar` | 13 | `event` `room` `participant` `busy` | Events CRUD, meeting room booking, free-busy query, participant management |
 | Todo | `todo` | 6 | `task` | Create, list, update, done, get detail, delete |
 | Approval | `oa` | 9 | `approval` | Approve/reject/revoke, pending tasks, initiated instances, process list |
 | Attendance | `attendance` | 4 | `record` `shift` `summary` `rules` | Clock-in records, shift schedules, attendance summary, group rules |
-| Ding | `ding` | 3 | `message` | Send/recall DING messages |
+| Ding | `ding` | 2 | `message` | Send/recall DING messages |
 | Report | `report` | 7 | `create` `list` `detail` `template` `stats` `sent` | Create reports, sent/received list, templates, statistics |
-| AITable | `aitable` | 27 | `base` `table` `record` `field` `attachment` `template` | Full CRUD for bases/tables/records/fields, views, import/export, templates |
+| AITable | `aitable` | 20 | `base` `table` `record` `field` `attachment` `template` | Full CRUD for bases/tables/records/fields, templates |
 | Workbench | `workbench` | 2 | `app` | Batch query app details |
-| DevDoc | `devdoc` | 2 | `article` | Search platform docs and error codes |
+| DevDoc | `devdoc` | 1 | `article` | Search platform docs and error codes |
 
-> 104 tools across 12 products. Run `dws --help` for the full list, or `dws <service> --help` for subcommands.
+> 86 commands across 12 products. Run `dws --help` for the full list, or `dws <service> --help` for subcommands.
 
 <details>
 <summary>Coming soon</summary>
