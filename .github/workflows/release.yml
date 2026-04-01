@@ -38,6 +38,12 @@ jobs:
       - name: Post-release packaging
         run: ./scripts/release/post-goreleaser.sh
 
+      - name: Upload skills package to release
+        run: |
+          gh release upload "${{ github.ref_name }}" dist/dws-skills.zip --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
