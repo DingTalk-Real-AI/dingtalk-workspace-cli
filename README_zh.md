@@ -88,14 +88,11 @@ cp dws ~/.local/bin/         # 安装到 PATH
 ## 开始使用
 
 ```bash
-dws auth login
+dws auth login            # 自动唤起浏览器
+dws auth login --device   # 无浏览器环境（Docker、SSH、CI）
 ```
 
-浏览器自动打开 — 选择组织并授权即可。
-
-<p align="center">
-  <img src="https://img.alicdn.com/imgextra/i2/O1CN01c6blXk28YrsF8rqDt_!!6000000007945-2-tps-2244-762.png" alt="授权成功" width="600">
-</p>
+选择组织并授权即可。
 
 > 如果组织尚未开启 CLI 访问权限，系统会引导你向管理员发送申请。审批通过后重新执行 `dws auth login` 即可。
 

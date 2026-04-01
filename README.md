@@ -88,14 +88,11 @@ cp dws ~/.local/bin/         # install to PATH
 ## Getting Started
 
 ```bash
-dws auth login
+dws auth login            # browser opens automatically
+dws auth login --device   # for headless environments (Docker, SSH, CI)
 ```
 
-The browser opens automatically — select your organization and authorize. That's it.
-
-<p align="center">
-  <img src="https://img.alicdn.com/imgextra/i2/O1CN01c6blXk28YrsF8rqDt_!!6000000007945-2-tps-2244-762.png" alt="Authorization Successful" width="600">
-</p>
+Select your organization and authorize. That's it.
 
 > If your organization hasn't enabled CLI access, you'll be prompted to send an access request to your admin. Once approved, re-run `dws auth login`.
 
