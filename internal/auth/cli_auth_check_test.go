@@ -154,7 +154,9 @@ func TestCheckCLIAuthEnabled_TransientThenSuccess(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(CLIAuthStatus{
 			Success: true,
-			Result:  struct{ CLIAuthEnabled bool `json:"cliAuthEnabled"` }{CLIAuthEnabled: true},
+			Result: struct {
+				CLIAuthEnabled bool `json:"cliAuthEnabled"`
+			}{CLIAuthEnabled: true},
 		})
 	}))
 	defer srv.Close()
@@ -188,7 +190,9 @@ func TestCheckCLIAuthEnabled_Enabled(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(CLIAuthStatus{
 			Success: true,
-			Result:  struct{ CLIAuthEnabled bool `json:"cliAuthEnabled"` }{CLIAuthEnabled: true},
+			Result: struct {
+				CLIAuthEnabled bool `json:"cliAuthEnabled"`
+			}{CLIAuthEnabled: true},
 		})
 	}))
 	defer srv.Close()
@@ -211,7 +215,9 @@ func TestCheckCLIAuthEnabled_Disabled(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(CLIAuthStatus{
 			Success: true,
-			Result:  struct{ CLIAuthEnabled bool `json:"cliAuthEnabled"` }{CLIAuthEnabled: false},
+			Result: struct {
+				CLIAuthEnabled bool `json:"cliAuthEnabled"`
+			}{CLIAuthEnabled: false},
 		})
 	}))
 	defer srv.Close()
@@ -256,7 +262,9 @@ func TestOAuthCallback_CLIAuthEnabled_ShowsSuccessPage(t *testing.T) {
 	var statusErr error
 	authStatus := &CLIAuthStatus{
 		Success: true,
-		Result:  struct{ CLIAuthEnabled bool `json:"cliAuthEnabled"` }{CLIAuthEnabled: true},
+		Result: struct {
+			CLIAuthEnabled bool `json:"cliAuthEnabled"`
+		}{CLIAuthEnabled: true},
 	}
 
 	cliAuthEnabled := statusErr == nil && authStatus.Success && authStatus.Result.CLIAuthEnabled
@@ -272,7 +280,9 @@ func TestOAuthCallback_CLIAuthDisabledByServer_ShowsNotEnabledPage(t *testing.T)
 	var statusErr error
 	authStatus := &CLIAuthStatus{
 		Success: true,
-		Result:  struct{ CLIAuthEnabled bool `json:"cliAuthEnabled"` }{CLIAuthEnabled: false},
+		Result: struct {
+			CLIAuthEnabled bool `json:"cliAuthEnabled"`
+		}{CLIAuthEnabled: false},
 	}
 
 	cliAuthEnabled := statusErr == nil && authStatus.Success && authStatus.Result.CLIAuthEnabled
@@ -386,7 +396,9 @@ func TestDeviceFlow_LoginOnce_CLIAuthDisabled_ShowsError(t *testing.T) {
 		case strings.HasSuffix(r.URL.Path, CLIAuthEnabledPath):
 			json.NewEncoder(w).Encode(CLIAuthStatus{
 				Success: true,
-				Result:  struct{ CLIAuthEnabled bool `json:"cliAuthEnabled"` }{CLIAuthEnabled: false},
+				Result: struct {
+					CLIAuthEnabled bool `json:"cliAuthEnabled"`
+				}{CLIAuthEnabled: false},
 			})
 
 		case strings.HasSuffix(r.URL.Path, SuperAdminPath):
@@ -456,7 +468,9 @@ func TestDeviceFlow_LoginOnce_CLIAuthEnabled_Success(t *testing.T) {
 		case strings.HasSuffix(r.URL.Path, CLIAuthEnabledPath):
 			json.NewEncoder(w).Encode(CLIAuthStatus{
 				Success: true,
-				Result:  struct{ CLIAuthEnabled bool `json:"cliAuthEnabled"` }{CLIAuthEnabled: true},
+				Result: struct {
+					CLIAuthEnabled bool `json:"cliAuthEnabled"`
+				}{CLIAuthEnabled: true},
 			})
 
 		default:
