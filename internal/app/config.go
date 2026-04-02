@@ -16,6 +16,8 @@ package app
 import (
 	"os"
 	"path/filepath"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
 // Build-time variables injected via ldflags when available.
@@ -28,7 +30,9 @@ func defaultConfigDir() string {
 	if envDir := os.Getenv("DWS_CONFIG_DIR"); envDir != "" {
 		return envDir
 	}
-
+	if fn := edition.Get().ConfigDir; fn != nil {
+		return fn()
+	}
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return exeRelativeConfigDir()

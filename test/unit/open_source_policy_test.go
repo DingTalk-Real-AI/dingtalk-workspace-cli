@@ -30,6 +30,11 @@ func TestOpenSourceTreeOmitsEmbeddedHostMarkers(t *testing.T) {
 		"WriteToken" + "Marker",
 		"Token" + "Marker",
 		"tokenJSON" + "File",
+		"REWIND_" + "REQUEST_ID",
+		"REWIND_" + "SESSION_ID",
+		"REWIND_" + "MESSAGE_ID",
+		"MergeWukong" + "MCPHeaders",
+		"buildMode ==" + " \"real\"",
 	}
 
 	var matches []string
@@ -39,7 +44,7 @@ func TestOpenSourceTreeOmitsEmbeddedHostMarkers(t *testing.T) {
 		}
 		if d.IsDir() {
 			switch d.Name() {
-			case ".git", ".worktrees", "node_modules", "dist":
+			case ".git", ".worktrees", "node_modules", "dist", "plans":
 				return filepath.SkipDir
 			}
 			return nil

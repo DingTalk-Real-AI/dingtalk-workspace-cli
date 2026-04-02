@@ -23,7 +23,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/config"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
 func (p *OAuthProvider) exchangeCode(ctx context.Context, code string) (*TokenData, error) {
@@ -32,9 +32,11 @@ func (p *OAuthProvider) exchangeCode(ctx context.Context, code string) (*TokenDa
 		return p.exchangeCodeViaMCP(ctx, code)
 	}
 	// Direct mode with client secret
+	clientID := ClientID()
+	clientSecret := ClientSecret()
 	body := map[string]string{
-		"clientId":     ClientID(),
-		"clientSecret": ClientSecret(),
+		"clientId":     clientID,
+		"clientSecret": clientSecret,
 		"code":         code,
 		"grantType":    "authorization_code",
 	}
@@ -42,15 +44,28 @@ func (p *OAuthProvider) exchangeCode(ctx context.Context, code string) (*TokenDa
 	if err != nil {
 		return nil, err
 	}
-	return p.parseTokenResponse(resp)
+	data, err := p.parseTokenResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+	// Snapshot credentials used for this token (for refresh)
+	data.ClientID = clientID
+	data.Source = resolveCredentialSource()
+	// Save clientSecret for future refresh (even if env changes)
+	if err := SaveClientSecret(clientID, clientSecret); err != nil {
+		// Log warning but don't fail login
+		fmt.Fprintf(p.Output, "Warning: failed to save client secret: %v\n", err)
+	}
+	return data, nil
 }
 
 // exchangeCodeViaMCP exchanges auth code for token via MCP proxy.
 // This is used when client secret is not available (server-side secret management).
 func (p *OAuthProvider) exchangeCodeViaMCP(ctx context.Context, code string) (*TokenData, error) {
+	clientID := ClientID()
 	url := GetMCPBaseURL() + MCPOAuthTokenPath
 	body := map[string]string{
-		"clientId":  ClientID(),
+		"clientId":  clientID,
 		"authCode":  code,
 		"grantType": "authorization_code",
 	}
@@ -58,18 +73,43 @@ func (p *OAuthProvider) exchangeCodeViaMCP(ctx context.Context, code string) (*T
 	if err != nil {
 		return nil, err
 	}
-	return p.parseMCPTokenResponse(resp)
+	data, err := p.parseMCPTokenResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+	// Snapshot credentials used for this token (for refresh)
+	data.ClientID = clientID
+	data.Source = "mcp"
+	// MCP mode doesn't need to save clientSecret (server-side managed)
+	return data, nil
 }
 
 func (p *OAuthProvider) refreshWithRefreshToken(ctx context.Context, data *TokenData) (*TokenData, error) {
-	// Use MCP mode if clientID is from MCP server
-	if IsClientIDFromMCP() {
+	// Use stored Source to determine refresh path (not current runtime state)
+	// This ensures refresh works even if environment variables changed since login
+	if data.Source == "mcp" {
 		return p.refreshViaMCP(ctx, data)
 	}
-	// Direct mode with client secret
+
+	// Direct mode: use stored clientId and load saved clientSecret
+	clientID := data.ClientID
+	if clientID == "" {
+		// Fallback for legacy tokens without stored clientId
+		clientID = ClientID()
+	}
+	clientSecret := LoadClientSecret(clientID)
+	if clientSecret == "" {
+		// Fallback: try current environment
+		clientSecret = ClientSecret()
+	}
+
+	if clientID == "" || clientSecret == "" {
+		return nil, fmt.Errorf("无法刷新 token: 缺少 clientId 或 clientSecret，请重新登录")
+	}
+
 	body := map[string]string{
-		"clientId":     ClientID(),
-		"clientSecret": ClientSecret(),
+		"clientId":     clientID,
+		"clientSecret": clientSecret,
 		"refreshToken": data.RefreshToken,
 		"grantType":    "refresh_token",
 	}
@@ -81,6 +121,9 @@ func (p *OAuthProvider) refreshWithRefreshToken(ctx context.Context, data *Token
 	if err != nil {
 		return nil, err
 	}
+	// Preserve original credentials info
+	updated.ClientID = data.ClientID
+	updated.Source = data.Source
 	updated.PersistentCode = data.PersistentCode
 	updated.CorpID = data.CorpID
 	updated.UserID = data.UserID
@@ -95,9 +138,20 @@ func (p *OAuthProvider) refreshWithRefreshToken(ctx context.Context, data *Token
 
 // refreshViaMCP refreshes token via MCP proxy.
 func (p *OAuthProvider) refreshViaMCP(ctx context.Context, data *TokenData) (*TokenData, error) {
+	// Use stored clientId from token data
+	clientID := data.ClientID
+	if clientID == "" {
+		// Fallback for legacy tokens
+		clientID = ClientID()
+	}
+
+	if clientID == "" {
+		return nil, fmt.Errorf("无法刷新 token: 缺少 clientId，请重新登录")
+	}
+
 	url := GetMCPBaseURL() + MCPRefreshTokenPath
 	body := map[string]string{
-		"clientId":     ClientID(),
+		"clientId":     clientID,
 		"refreshToken": data.RefreshToken,
 		"grantType":    "refresh_token",
 	}
@@ -109,6 +163,9 @@ func (p *OAuthProvider) refreshViaMCP(ctx context.Context, data *TokenData) (*To
 	if err != nil {
 		return nil, err
 	}
+	// Preserve original credentials info
+	updated.ClientID = data.ClientID
+	updated.Source = data.Source
 	updated.PersistentCode = data.PersistentCode
 	updated.CorpID = data.CorpID
 	updated.UserID = data.UserID
@@ -239,190 +296,628 @@ func buildAuthURL(clientID, redirectURI string) string {
 	return AuthorizeURL + "?" + params.Encode()
 }
 
-const successHTML = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>钉钉 CLI</title>
-<style>body{font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#f5f5f5}
-.card{background:#fff;border-radius:12px;padding:40px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.08)}
-h1{color:#1677ff;margin:0 0 8px}p{color:#666;margin:0}</style></head>
-<body><div class="card"><h1>✅ 授权成功</h1><p>请返回终端继续操作。此页面可以关闭。</p></div></body></html>`
-
-const notEnabledHTML = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>钉钉 CLI</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
-  display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;padding:20px}
-.container{text-align:center;max-width:400px;width:100%}
-.lock-icon{width:80px;height:100px;margin:0 auto 32px;position:relative}
-.lock-body{width:60px;height:50px;background:linear-gradient(135deg,#1890ff 0%,#69c0ff 100%);
-  border-radius:8px;position:absolute;bottom:0;left:50%;transform:translateX(-50%);
-  box-shadow:0 8px 24px rgba(24,144,255,0.3)}
-.lock-body::before{content:"";position:absolute;width:12px;height:12px;background:#fff;
-  border-radius:50%;top:50%;left:50%;transform:translate(-50%,-50%)}
-.lock-body::after{content:"";position:absolute;width:4px;height:12px;background:#fff;
-  top:50%;left:50%;transform:translateX(-50%);margin-top:4px;border-radius:2px}
-.lock-shackle{width:36px;height:36px;border:6px solid #1890ff;border-bottom:none;
-  border-radius:20px 20px 0 0;position:absolute;top:8px;left:50%;transform:translateX(-50%)}
-h1{font-size:22px;font-weight:600;color:#181c1f;margin-bottom:16px;line-height:1.4}
-p{font-size:15px;color:#5f6368;line-height:1.6;margin-bottom:24px}
-.form-group{text-align:left;margin-bottom:24px}
-.form-label{font-size:14px;color:#181c1f;margin-bottom:8px;display:block}
-.select-wrapper{position:relative}
-select{width:100%;padding:12px 40px 12px 16px;font-size:15px;border:1px solid #d9d9d9;
-  border-radius:8px;background:#fff;appearance:none;cursor:pointer;color:#181c1f}
-select:focus{outline:none;border-color:#1890ff;box-shadow:0 0 0 2px rgba(24,144,255,0.1)}
-.select-arrow{position:absolute;right:16px;top:50%;transform:translateY(-50%);pointer-events:none;
-  border:5px solid transparent;border-top:6px solid #5f6368}
-.btn{display:block;width:100%;padding:14px 24px;background:linear-gradient(135deg,#1890ff 0%,#40a9ff 100%);
-  color:#fff;font-size:16px;font-weight:500;border-radius:24px;border:none;cursor:pointer;
-  box-shadow:0 4px 16px rgba(24,144,255,0.3);transition:all 0.2s}
-.btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(24,144,255,0.4)}
-.btn:disabled{background:#d9d9d9;box-shadow:none;cursor:not-allowed;transform:none}
-.link{color:#1890ff;font-size:14px;text-decoration:none;margin-top:16px;display:inline-block}
-.link:hover{text-decoration:underline}
-.success-msg{display:none;width:100%;min-height:36px;gap:12px;padding:8px 12px;margin-top:20px;
-  background:linear-gradient(0deg,rgba(0,102,255,0.12) 0%,rgba(0,102,255,0.12) 100%),linear-gradient(0deg,#FFFFFF 0%,#FFFFFF 100%);
-  border-radius:12px;align-items:flex-start;justify-content:flex-start}
-.success-msg-icon{width:16px;height:16px;flex-shrink:0;margin-top:3px}
-.success-msg-text{flex:1;color:#181C1F;font-size:14px;line-height:22px}
-.error-msg{color:#ff4d4f;font-size:14px;margin-top:8px;display:none}
-.loading{display:inline-block;width:16px;height:16px;border:2px solid #fff;border-top-color:transparent;
-  border-radius:50%;animation:spin 0.8s linear infinite;margin-right:8px;vertical-align:middle}
-@keyframes spin{to{transform:rotate(360deg)}}
-</style></head>
-<body><div class="container">
-<div class="lock-icon"><div class="lock-shackle"></div><div class="lock-body"></div></div>
-<h1>该组织尚未开启 CLI 数据访问权限</h1>
-<p>你所选择的组织管理员尚未开启「允许成员通过 CLI 访问其个人数据」的权限。</p>
-<div class="form-group">
-  <label class="form-label">你将使用以下账号授权登录</label>
-  <div class="select-wrapper">
-    <select id="adminSelect"><option value="">加载中...</option></select>
-    <div class="select-arrow"></div>
-  </div>
-  <div id="errorMsg" class="error-msg"></div>
-</div>
-<button id="applyBtn" class="btn" disabled>立即申请</button>
-<a id="backLink" class="link" href="#">返回选择其他组织</a>
-<div id="successMsg" class="success-msg">
-  <svg class="success-msg-icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M8 1.33333C4.32 1.33333 1.33333 4.32 1.33333 8C1.33333 11.68 4.32 14.6667 8 14.6667C11.68 14.6667 14.6667 11.68 14.6667 8C14.6667 4.32 11.68 1.33333 8 1.33333ZM8 13.3333C5.05333 13.3333 2.66667 10.9467 2.66667 8C2.66667 5.05333 5.05333 2.66667 8 2.66667C10.9467 2.66667 13.3333 5.05333 13.3333 8C13.3333 10.9467 10.9467 13.3333 8 13.3333ZM7.33333 9.33333H8.66667V10.6667H7.33333V9.33333ZM7.33333 5.33333H8.66667V8H7.33333V5.33333Z" fill="#0066FF"/>
-  </svg>
-  <span class="success-msg-text">已向管理员发送权限申请，正在等待审核<br/>审核通过后，请返回终端继续操作</span>
-</div>
-</div>
-<script>
-const select=document.getElementById('adminSelect'),btn=document.getElementById('applyBtn'),
-  successMsg=document.getElementById('successMsg'),errorMsg=document.getElementById('errorMsg'),
-  backLink=document.getElementById('backLink');
-let admins=[],clientId='',applySent=false,selectedAdminId='',pollTimer=null;
-
-// Load status first, then load admins
-async function init(){
-  try{
-    const statusRes=await fetch('/api/status');
-    const status=await statusRes.json();
-    clientId=status.clientId||'';
-    applySent=status.applySent||false;
-    selectedAdminId=status.selectedAdminId||'';
-    // Set back link URL
-    if(clientId){
-      const port=location.port;
-      const redirectUri=encodeURIComponent('http://127.0.0.1:'+port+'/callback');
-      backLink.href='https://login.dingtalk.com/oauth2/auth?client_id='+clientId+
-        '&prompt=consent&redirect_uri='+redirectUri+'&response_type=code&scope=openid+corpid';
-    }
-    // Restore state if apply was sent
-    if(applySent){
-      setAppliedState();
-    }
-  }catch(e){console.error('Failed to load status',e);}
-  loadAdmins();
-}
-
-function setAppliedState(){
-  btn.style.display='none';
-  select.disabled=true;
-  successMsg.style.display='flex';
-  backLink.style.pointerEvents='none';
-  backLink.style.color='#999';
-  backLink.onclick=function(e){e.preventDefault();return false;};
-  // Start polling for auth status
-  startPolling();
-}
-
-function startPolling(){
-  if(pollTimer)return;
-  pollTimer=setInterval(checkAuthStatus,5000);
-  // Also check immediately
-  checkAuthStatus();
-}
-
-async function checkAuthStatus(){
-  try{
-    const res=await fetch('/api/cliAuthEnabled');
-    const data=await res.json();
-    if(data.success&&data.result&&data.result.cliAuthEnabled){
-      // Auth enabled! Redirect to success page
-      stopPolling();
-      location.href='/success';
-    }
-  }catch(e){console.error('Poll error',e);
-}
-}
-
-function stopPolling(){
-  if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
-}
-
-async function loadAdmins(){
-  try{
-    const res=await fetch('/api/superAdmin');
-    const data=await res.json();
-    if(data.success&&data.result&&data.result.length>0){
-      admins=data.result;
-      select.innerHTML='<option value="">请选择</option>'+
-        admins.map(a=>'<option value="'+a.staffId+'">'+a.name+'</option>').join('');
-      // Restore selected admin if available
-      if(selectedAdminId){
-        select.value=selectedAdminId;
+const successHTML = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>钉钉 CLI</title>
+    <style>
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        margin: 0;
+        background: #f5f5f5;
+        padding: 20px;
       }
-      btn.disabled=!select.value;
-    }else{
-      select.innerHTML='<option value="">暂无可选管理员</option>';
-      showError(data.errorMsg||'获取管理员列表失败');
-    }
-  }catch(e){
-    select.innerHTML='<option value="">加载失败</option>';
-    showError('网络错误，请重试');
-  }
-}
-function showError(msg){errorMsg.textContent=msg;errorMsg.style.display='block';}
-function hideError(){errorMsg.style.display='none';}
-select.onchange=function(){btn.disabled=!this.value;hideError();};
-btn.onclick=async function(){
-  if(!select.value)return;
-  btn.disabled=true;
-  btn.innerHTML='<span class="loading"></span>申请中...';
-  hideError();
-  try{
-    const res=await fetch('/api/sendApply?adminStaffId='+encodeURIComponent(select.value));
-    const data=await res.json();
-    if(data.success&&data.result){
-      setAppliedState();
-    }else{
-      showError(data.errorMsg||'申请失败，请重试');
-      btn.disabled=false;
-      btn.textContent='立即申请';
-    }
-  }catch(e){
-    showError('网络错误，请重试');
-    btn.disabled=false;
-    btn.textContent='立即申请';
-  }
-};
-init();
-</script></body></html>`
+      .card {
+        height: 600px;
+        width: 480px;
+        border-radius: 16px;
+        background: #ffffff;
+        box-sizing: border-box;
+        border: 1px solid #f2f2f6;
+        box-shadow: 0px 2px 4px 0px rgba(0, 0, 0, 0.12);
+        padding: 32px 24px 24px;
+        text-align: center;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+      }
+      .lock-icon {
+        width: 120px;
+        height: 120px;
+        margin: 0 auto;
+        object-fit: contain;
+        display: block;
+      }
+      h1 {
+        margin: 8px 0 0;
+        font-family:
+          "PingFang SC",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          "Helvetica Neue",
+          Arial,
+          sans-serif;
+        font-size: 18px;
+        font-weight: 600;
+        line-height: 44px;
+        text-align: center;
+        letter-spacing: normal;
+        color: #181c1f;
+      }
+      p {
+        margin: 0;
+        font-family:
+          "PingFang SC",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          "Helvetica Neue",
+          Arial,
+          sans-serif;
+        font-size: 14px;
+        font-weight: normal;
+        line-height: 21px;
+        text-align: center;
+        letter-spacing: normal;
+        color: rgba(24, 28, 31, 0.6);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <img
+        class="lock-icon"
+        src="https://img.alicdn.com/imgextra/i4/O1CN01fS3xxz1vbzZSGjbe0_!!6000000006192-2-tps-480-480.png"
+        alt="lock icon"
+      />
+      <h1>授权成功</h1>
+      <p>请返回终端继续操作。此页面可以关闭。</p>
+    </div>
+  </body>
+</html>`
+
+const notEnabledHTML = `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>钉钉 CLI</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        background: #fff;
+        padding: 20px;
+      }
+      .container {
+        text-align: center;
+        width: 100%;
+        max-width: 400px;
+        border-radius: 16px;
+        background: #ffffff;
+        border: 1px solid #f2f2f6;
+        box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.12);
+        padding: 32px 24px 24px;
+      }
+      .lock-icon {
+        width: 120px;
+        height: 120px;
+        margin: 0 auto;
+        object-fit: contain;
+        display: block;
+      }
+      h1 {
+        font-family:
+          "PingFang SC",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          "Helvetica Neue",
+          Arial,
+          sans-serif;
+        font-size: 18px;
+        font-weight: 600;
+        line-height: 44px;
+        text-align: center;
+        color: #181c1f;
+      }
+      p {
+        font-family:
+          "PingFang SC",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          "Helvetica Neue",
+          Arial,
+          sans-serif;
+        font-size: 14px;
+        font-weight: 400;
+        line-height: 21px;
+        text-align: center;
+        color: rgba(24, 28, 31, 0.6);
+        margin-bottom: 24px;
+      }
+      .form-group {
+        text-align: left;
+        margin-bottom: 24px;
+      }
+      .form-label {
+        font-family:
+          "PingFang SC",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          "Helvetica Neue",
+          Arial,
+          sans-serif;
+        font-size: 14px;
+        font-weight: 400;
+        line-height: 14px;
+        color: rgba(24, 28, 31, 0.6);
+        margin-top: 38px;
+        margin-bottom: 8px;
+        display: block;
+      }
+      .select-wrapper {
+        position: relative;
+      }
+      .custom-select-trigger {
+        width: 100%;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 16px;
+        gap: 12px;
+        border-radius: 8px;
+        background: #ffffff;
+        border: 1px solid rgba(126, 134, 142, 0.24);
+        cursor: pointer;
+        color: #181c1f;
+        text-align: left;
+      }
+      .custom-select-text {
+        flex: 1;
+        font-size: 14px;
+        line-height: 24px;
+        color: rgba(24, 28, 31, 0.48);
+      }
+      .custom-select.has-value .custom-select-text {
+        color: #181c1f;
+      }
+      .custom-select-arrow {
+        width: 16px;
+        height: 16px;
+        flex-shrink: 0;
+        background-image: url("https://img.alicdn.com/imgextra/i1/O1CN01MzGSB21oZ3iyQ8H5e_!!6000000005238-55-tps-16-16.svg");
+        background-repeat: no-repeat;
+        background-size: 16px 16px;
+        background-position: center;
+        opacity: 0.5;
+      }
+      .custom-select-menu {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: calc(100% + 8px);
+        background: #ffffff;
+        border-radius: 10px;
+        padding: 8px 12px;
+        list-style: none;
+        margin: 0;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+        display: none;
+        z-index: 20;
+      }
+      .custom-select.open .custom-select-menu {
+        display: block;
+      }
+      .custom-select-option {
+        width: 100%;
+        height: 40px;
+        border: none;
+        background: transparent;
+        text-align: left;
+        padding: 8px 12px;
+        border-radius: 8px;
+        font-size: 14px;
+        line-height: 24px;
+        color: #181c1f;
+        cursor: pointer;
+      }
+      .custom-select-option:hover {
+        background: rgba(126, 134, 142, 0.16);
+      }
+      .custom-select-option.is-active {
+        background: #e8eaee;
+      }
+      .btn {
+        width: 100%;
+        height: 40px;
+        border-radius: 1000px;
+        background: #0066ff;
+        border: none;
+        cursor: pointer;
+        font-family:
+          "PingFang SC",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          "Helvetica Neue",
+          Arial,
+          sans-serif;
+        font-size: 16px;
+        font-weight: 500;
+        line-height: 24px;
+        color: #ffffff;
+      }
+      .btn:hover {
+        background: #0b6cff;
+      }
+      .btn:disabled {
+        background: #d9d9d9;
+        cursor: not-allowed;
+      }
+      .link {
+        color: #1890ff;
+        font-size: 14px;
+        text-decoration: none;
+        margin-top: 16px;
+        display: inline-block;
+      }
+      .success-msg {
+        display: none;
+        width: 100%;
+        height: 60px;
+        gap: 12px;
+        padding: 16px 20px;
+        margin-top: 50px;
+        margin-bottom: 16px;
+        background: #eaf1ff;
+        border-radius: 12px;
+        align-items: center;
+      }
+      .success-msg-icon {
+        width: 24px;
+        height: 24px;
+        flex-shrink: 0;
+      }
+      .success-msg-text {
+        flex: 1;
+        font-size: 14px;
+        line-height: 22px;
+        color: #181c1f;
+      }
+      .error-msg {
+        color: #ff4d4f;
+        font-size: 14px;
+        margin-top: 8px;
+        display: none;
+      }
+      .loading {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 2px solid #fff;
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin-right: 8px;
+        vertical-align: middle;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <img
+        class="lock-icon"
+        src="https://img.alicdn.com/imgextra/i4/O1CN01fS3xxz1vbzZSGjbe0_!!6000000006192-2-tps-480-480.png"
+        alt="lock icon"
+      />
+      <h1>该组织尚未开启 CLI 数据访问权限</h1>
+      <p>
+        你所选择的组织管理员尚未开启<br />「允许成员通过 CLI
+        访问其个人数据」的权限。
+      </p>
+
+      <div class="form-group">
+        <label class="form-label">选择一位主管理员发送开通申请</label>
+        <div class="select-wrapper">
+          <div class="custom-select" id="adminSelect">
+            <button
+              type="button"
+              class="custom-select-trigger"
+              aria-haspopup="listbox"
+              aria-expanded="false"
+            >
+              <span class="custom-select-text">加载中...</span>
+              <span class="custom-select-arrow"></span>
+            </button>
+            <ul class="custom-select-menu" role="listbox" id="adminMenu"></ul>
+            <input type="hidden" name="adminStaffId" value="" />
+          </div>
+        </div>
+        <div id="errorMsg" class="error-msg"></div>
+      </div>
+
+      <div id="successMsg" class="success-msg">
+        <svg
+          class="success-msg-icon"
+          viewBox="0 0 16 16"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M8 1.33333C4.32 1.33333 1.33333 4.32 1.33333 8C1.33333 11.68 4.32 14.6667 8 14.6667C11.68 14.6667 14.6667 11.68 14.6667 8C14.6667 4.32 11.68 1.33333 8 1.33333ZM8 13.3333C5.05333 13.3333 2.66667 10.9467 2.66667 8C2.66667 5.05333 5.05333 2.66667 8 2.66667C10.9467 2.66667 13.3333 5.05333 13.3333 8C13.3333 10.9467 10.9467 13.3333 8 13.3333ZM7.33333 9.33333H8.66667V10.6667H7.33333V9.33333ZM7.33333 5.33333H8.66667V8H7.33333V5.33333Z"
+            fill="#0066FF"
+          />
+        </svg>
+        <span class="success-msg-text"
+          >已向管理员发送权限申请，正在等待审核<br />审核通过后，请返回终端继续操作</span
+        >
+      </div>
+
+      <button id="applyBtn" class="btn" disabled>立即申请</button>
+      <a id="backLink" class="link" href="#">返回选择其他组织</a>
+    </div>
+
+    <script>
+      const adminSelect = document.getElementById("adminSelect");
+      const trigger = adminSelect.querySelector(".custom-select-trigger");
+      const text = adminSelect.querySelector(".custom-select-text");
+      const menu = document.getElementById("adminMenu");
+      const hiddenInput = adminSelect.querySelector('input[name="adminStaffId"]');
+      const btn = document.getElementById("applyBtn");
+      const successMsg = document.getElementById("successMsg");
+      const errorMsg = document.getElementById("errorMsg");
+      const backLink = document.getElementById("backLink");
+
+      let admins = [];
+      let clientId = "";
+      let applySent = false;
+      let selectedAdminId = "";
+      let pollTimer = null;
+
+      function closeMenu() {
+        adminSelect.classList.remove("open");
+        trigger.setAttribute("aria-expanded", "false");
+      }
+
+      function openMenu() {
+        adminSelect.classList.add("open");
+        trigger.setAttribute("aria-expanded", "true");
+      }
+
+      function showError(msg) {
+        errorMsg.textContent = msg;
+        errorMsg.style.display = "block";
+      }
+
+      function hideError() {
+        errorMsg.style.display = "none";
+      }
+
+      function setSelected(staffId, name) {
+        hiddenInput.value = staffId || "";
+        text.textContent = name || "请选择";
+        if (staffId) {
+          adminSelect.classList.add("has-value");
+        } else {
+          adminSelect.classList.remove("has-value");
+        }
+        btn.disabled = applySent || !staffId;
+      }
+
+      function renderAdminOptions(list) {
+        menu.innerHTML = "";
+        list.forEach(function (admin) {
+          const li = document.createElement("li");
+          const option = document.createElement("button");
+          option.type = "button";
+          option.className = "custom-select-option";
+          option.setAttribute("data-value", admin.staffId);
+          option.textContent = admin.name;
+
+          if (selectedAdminId && admin.staffId === selectedAdminId) {
+            option.classList.add("is-active");
+          }
+
+          option.addEventListener("click", function () {
+            selectedAdminId = admin.staffId;
+            const all = menu.querySelectorAll(".custom-select-option");
+            all.forEach(function (item) {
+              item.classList.remove("is-active");
+            });
+            option.classList.add("is-active");
+            setSelected(admin.staffId, admin.name);
+            closeMenu();
+            hideError();
+          });
+
+          li.appendChild(option);
+          menu.appendChild(li);
+        });
+      }
+
+      function setAppliedState() {
+        btn.disabled = true;
+        btn.textContent = "立即申请";
+        trigger.disabled = true;
+        adminSelect.classList.remove("open");
+        successMsg.style.display = "flex";
+        backLink.style.pointerEvents = "none";
+        backLink.style.color = "#999";
+        backLink.onclick = function (e) {
+          e.preventDefault();
+          return false;
+        };
+        startPolling();
+      }
+
+      function startPolling() {
+        if (pollTimer) return;
+        pollTimer = setInterval(checkAuthStatus, 5000);
+        checkAuthStatus();
+      }
+
+      function stopPolling() {
+        if (pollTimer) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+        }
+      }
+
+      async function checkAuthStatus() {
+        try {
+          const res = await fetch("/api/cliAuthEnabled");
+          const data = await res.json();
+          if (data.success && data.result && data.result.cliAuthEnabled) {
+            stopPolling();
+            location.href = "/success";
+          }
+        } catch (e) {
+          console.error("Poll error", e);
+        }
+      }
+
+      async function loadAdmins() {
+        try {
+          const res = await fetch("/api/superAdmin");
+          const data = await res.json();
+          if (data.success && data.result && data.result.length > 0) {
+            admins = data.result;
+            renderAdminOptions(admins);
+
+            if (selectedAdminId) {
+              const selected = admins.find(function (a) {
+                return a.staffId === selectedAdminId;
+              });
+              if (selected) {
+                setSelected(selected.staffId, selected.name);
+              } else {
+                setSelected("", "请选择");
+              }
+            } else {
+              setSelected("", "请选择");
+            }
+          } else {
+            setSelected("", "暂无可选管理员");
+            trigger.disabled = true;
+            showError((data && data.errorMsg) || "获取管理员列表失败");
+          }
+        } catch (e) {
+          setSelected("", "加载失败");
+          trigger.disabled = true;
+          showError("网络错误，请重试");
+        }
+      }
+
+      async function init() {
+        try {
+          const statusRes = await fetch("/api/status");
+          const status = await statusRes.json();
+          clientId = status.clientId || "";
+          applySent = status.applySent || false;
+          selectedAdminId = status.selectedAdminId || "";
+
+          if (clientId) {
+            const port = location.port;
+            const redirectUri = encodeURIComponent(
+              "http://127.0.0.1:" + port + "/callback"
+            );
+            backLink.href =
+              "https://login.dingtalk.com/oauth2/auth?client_id=" +
+              clientId +
+              "&prompt=consent&redirect_uri=" +
+              redirectUri +
+              "&response_type=code&scope=openid+corpid";
+          }
+
+          if (applySent) {
+            setAppliedState();
+          }
+        } catch (e) {
+          console.error("Failed to load status", e);
+        }
+
+        await loadAdmins();
+      }
+
+      trigger.addEventListener("click", function () {
+        if (trigger.disabled) return;
+        if (adminSelect.classList.contains("open")) {
+          closeMenu();
+        } else {
+          openMenu();
+        }
+      });
+
+      document.addEventListener("click", function (event) {
+        if (!adminSelect.contains(event.target)) {
+          closeMenu();
+        }
+      });
+
+      btn.onclick = async function () {
+        const value = hiddenInput.value;
+        if (!value) return;
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading"></span>申请中...';
+        hideError();
+        try {
+          const res = await fetch(
+            "/api/sendApply?adminStaffId=" + encodeURIComponent(value)
+          );
+          const data = await res.json();
+          if (data.success && data.result) {
+            setAppliedState();
+          } else {
+            showError(data.errorMsg || "申请失败，请重试");
+            btn.disabled = false;
+            btn.textContent = "立即申请";
+          }
+        } catch (e) {
+          showError("网络错误，请重试");
+          btn.disabled = false;
+          btn.textContent = "立即申请";
+        }
+      };
+
+      init();
+    </script>
+  </body>
+</html>`
 
 // CLIAuthStatus represents the response from /cli/cliAuthEnabled API.
 type CLIAuthStatus struct {
@@ -456,8 +951,34 @@ type SendApplyResponse struct {
 	Result    bool   `json:"result"`
 }
 
+// mcpRequestMaxRetries is the maximum number of attempts for MCP API calls
+// (e.g. /cli/cliAuthEnabled, /cli/clientId, /cli/superAdmin, /cli/sendCliAuthApply)
+// to tolerate transient network errors before propagating the failure.
+const mcpRequestMaxRetries = 3
+
 // CheckCLIAuthEnabled checks if CLI authorization is enabled for the current corp.
+// It retries up to mcpRequestMaxRetries times on transient errors to avoid
+// false negatives caused by momentary network issues.
 func (p *OAuthProvider) CheckCLIAuthEnabled(ctx context.Context, accessToken string) (*CLIAuthStatus, error) {
+	var lastErr error
+	for attempt := 0; attempt < mcpRequestMaxRetries; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(time.Duration(attempt) * time.Second):
+			}
+		}
+		status, err := p.doCheckCLIAuthEnabled(ctx, accessToken)
+		if err == nil {
+			return status, nil
+		}
+		lastErr = err
+	}
+	return nil, fmt.Errorf("check CLI auth status failed after %d attempts: %w", mcpRequestMaxRetries, lastErr)
+}
+
+func (p *OAuthProvider) doCheckCLIAuthEnabled(ctx context.Context, accessToken string) (*CLIAuthStatus, error) {
 	url := GetMCPBaseURL() + CLIAuthEnabledPath
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -488,7 +1009,27 @@ func (p *OAuthProvider) CheckCLIAuthEnabled(ctx context.Context, accessToken str
 }
 
 // GetSuperAdmins fetches the list of corp super admins.
+// It retries up to mcpRequestMaxRetries times on transient errors.
 func GetSuperAdmins(ctx context.Context, accessToken string) (*SuperAdminResponse, error) {
+	var lastErr error
+	for attempt := 0; attempt < mcpRequestMaxRetries; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(time.Duration(attempt) * time.Second):
+			}
+		}
+		result, err := doGetSuperAdmins(ctx, accessToken)
+		if err == nil {
+			return result, nil
+		}
+		lastErr = err
+	}
+	return nil, fmt.Errorf("get super admins failed after %d attempts: %w", mcpRequestMaxRetries, lastErr)
+}
+
+func doGetSuperAdmins(ctx context.Context, accessToken string) (*SuperAdminResponse, error) {
 	url := GetMCPBaseURL() + SuperAdminPath
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -515,7 +1056,27 @@ func GetSuperAdmins(ctx context.Context, accessToken string) (*SuperAdminRespons
 }
 
 // SendCliAuthApply sends a CLI auth apply request to the specified admin.
+// It retries up to mcpRequestMaxRetries times on transient errors.
 func SendCliAuthApply(ctx context.Context, accessToken, adminStaffID string) (*SendApplyResponse, error) {
+	var lastErr error
+	for attempt := 0; attempt < mcpRequestMaxRetries; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(time.Duration(attempt) * time.Second):
+			}
+		}
+		result, err := doSendCliAuthApply(ctx, accessToken, adminStaffID)
+		if err == nil {
+			return result, nil
+		}
+		lastErr = err
+	}
+	return nil, fmt.Errorf("send CLI auth apply failed after %d attempts: %w", mcpRequestMaxRetries, lastErr)
+}
+
+func doSendCliAuthApply(ctx context.Context, accessToken, adminStaffID string) (*SendApplyResponse, error) {
 	url := GetMCPBaseURL() + SendCliAuthApplyPath + "?adminStaffId=" + adminStaffID
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -551,7 +1112,27 @@ type ClientIDResponse struct {
 
 // FetchClientIDFromMCP fetches the CLI client ID from MCP server.
 // This is used when no client ID is provided via flags, config, or env vars.
+// It retries up to mcpRequestMaxRetries times on transient errors.
 func FetchClientIDFromMCP(ctx context.Context) (string, error) {
+	var lastErr error
+	for attempt := 0; attempt < mcpRequestMaxRetries; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(time.Duration(attempt) * time.Second):
+			}
+		}
+		id, err := doFetchClientIDFromMCP(ctx)
+		if err == nil {
+			return id, nil
+		}
+		lastErr = err
+	}
+	return "", fmt.Errorf("fetch client ID failed after %d attempts: %w", mcpRequestMaxRetries, lastErr)
+}
+
+func doFetchClientIDFromMCP(ctx context.Context) (string, error) {
 	url := GetMCPBaseURL() + ClientIDPath
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

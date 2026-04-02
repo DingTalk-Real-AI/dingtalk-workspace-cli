@@ -53,14 +53,23 @@ detect_arch() {
 }
 
 resolve_version() {
+  # Priority 1: Use DWS_PACKAGE_VERSION environment variable (set by CI)
   if [ -n "$PACKAGE_VERSION" ]; then
-    printf '%s\n' "$PACKAGE_VERSION"
+    # Strip leading 'v' if present for semver compatibility
+    printf '%s\n' "$PACKAGE_VERSION" | sed 's/^v//'
     return
   fi
 
+  # Priority 2: Get version from git tag (for local snapshot builds with tag)
+  if git describe --tags --exact-match HEAD >/dev/null 2>&1; then
+    git describe --tags --exact-match HEAD | sed 's/^v//'
+    return
+  fi
+
+  # Priority 3: Read from version.go (for local development without tag)
   version_line="$(sed -n 's/^var version = "v\{0,1\}\([^"]*\)".*/\1/p' "$ROOT/internal/app/version.go" | head -1)"
-  if [ -z "$version_line" ]; then
-    err "could not resolve package version from internal/app/version.go"
+  if [ -z "$version_line" ] || [ "$version_line" = "dev" ]; then
+    err "could not resolve package version - set DWS_PACKAGE_VERSION or create a git tag"
   fi
   printf '%s\n' "$version_line"
 }

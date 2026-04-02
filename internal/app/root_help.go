@@ -5,6 +5,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
 
@@ -53,7 +54,16 @@ func visibleMCPRootCommands(root *cobra.Command) []*cobra.Command {
 		return nil
 	}
 
-	allowed := DirectRuntimeProductIDs()
+	var allowed map[string]bool
+	if fn := edition.Get().VisibleProducts; fn != nil {
+		products := fn()
+		allowed = make(map[string]bool, len(products))
+		for _, p := range products {
+			allowed[p] = true
+		}
+	} else {
+		allowed = DirectRuntimeProductIDs()
+	}
 	if len(allowed) == 0 {
 		return nil
 	}

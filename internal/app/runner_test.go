@@ -45,7 +45,7 @@ func TestRuntimeRunnerIncludesContentScanReportWhenEnabled(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"mcp", "doc", "search_documents", "--json", `{"keyword":"design"}`})
+	cmd.SetArgs([]string{"mcp", "doc", "search_documents", "--json", `{"keyword":"design"}`, "--token", "test-token"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
@@ -90,7 +90,7 @@ func TestRuntimeRunnerBlocksUnsafeContentWhenEnforced(t *testing.T) {
 	cmd := NewRootCommand()
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
-	cmd.SetArgs([]string{"mcp", "doc", "search_documents", "--json", `{"keyword":"design"}`})
+	cmd.SetArgs([]string{"mcp", "doc", "search_documents", "--json", `{"keyword":"design"}`, "--token", "test-token"})
 
 	err := cmd.Execute()
 	if err == nil {
@@ -121,7 +121,7 @@ func TestCanonicalCommandUsesRuntimeRunnerWhenEnabled(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"mcp", "doc", "create_document", "--json", `{"title":"Quarterly"}`, "--yes"})
+	cmd.SetArgs([]string{"mcp", "doc", "create_document", "--json", `{"title":"Quarterly"}`, "--yes", "--token", "test-token"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
@@ -252,6 +252,37 @@ func TestRuntimeRunnerInjectsAuthTokenFromFlag(t *testing.T) {
 	}
 	if got := payload.Response.Content["documentId"]; got != "doc-flag-token" {
 		t.Fatalf("response.content.documentId = %#v, want doc-flag-token", got)
+	}
+}
+
+// TestRuntimeRunnerRejectsUnauthenticatedRequest verifies that requests without
+// a valid token are rejected with a clear error before making any network call.
+func TestRuntimeRunnerRejectsUnauthenticatedRequest(t *testing.T) {
+	setupRuntimeCommandTest(t)
+	server := mockmcp.DefaultServer()
+	defer server.Close()
+
+	t.Setenv(cli.CatalogFixtureEnv, writeDocCatalogFixture(t, server.RemoteURL("/server/doc"), false))
+
+	cmd := NewRootCommand()
+	var stdout, stderr bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	// No --token flag, should be rejected
+	cmd.SetArgs([]string{"mcp", "doc", "search_documents", "--json", `{"keyword":"design"}`})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("Execute() error = nil, want authentication error")
+	}
+
+	// Verify we get a clear auth error, not a cryptic HTTP 400
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "未登录") {
+		t.Fatalf("Execute() error = %v, want error containing '未登录'", err)
+	}
+	if !strings.Contains(errMsg, "auth login") {
+		t.Fatalf("Execute() error = %v, want error containing 'auth login'", err)
 	}
 }
 
@@ -415,7 +446,7 @@ func TestCanonicalSensitiveToolAcceptsInteractiveConfirmation(t *testing.T) {
 	cmd.SetOut(&out)
 	cmd.SetErr(&errOut)
 	cmd.SetIn(strings.NewReader("yes\n"))
-	cmd.SetArgs([]string{"mcp", "doc", "create_document", "--json", `{"title":"Quarterly"}`})
+	cmd.SetArgs([]string{"mcp", "doc", "create_document", "--json", `{"title":"Quarterly"}`, "--token", "test-token"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
@@ -465,7 +496,7 @@ func TestRuntimeRunnerUsesProductEndpointOverride(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"mcp", "doc", "search_documents", "--json", `{"keyword":"design"}`})
+	cmd.SetArgs([]string{"mcp", "doc", "search_documents", "--json", `{"keyword":"design"}`, "--token", "test-token"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
@@ -628,7 +659,7 @@ func TestRuntimeRunnerReturnsErrorWhenMCPIsErrorTrue(t *testing.T) {
 	cmd := NewRootCommand()
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
-	cmd.SetArgs([]string{"mcp", "doc", "search_documents", "--json", `{"keyword":"design"}`})
+	cmd.SetArgs([]string{"mcp", "doc", "search_documents", "--json", `{"keyword":"design"}`, "--token", "test-token"})
 
 	err := cmd.Execute()
 	if err == nil {

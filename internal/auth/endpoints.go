@@ -140,6 +140,27 @@ func GetRevokeTokenURL() string {
 	return "" // Direct mode doesn't have revoke endpoint
 }
 
+// resolveCredentialSource determines the source of the current credentials.
+// Returns one of: "flag", "env", "app", "default".
+// This is used to track where credentials came from for token refresh.
+func resolveCredentialSource() string {
+	clientMu.RLock()
+	hasRuntimeOverride := runtimeClientID != "" || runtimeClientSecret != ""
+	clientMu.RUnlock()
+
+	if hasRuntimeOverride {
+		return "flag"
+	}
+	// Check if loaded from app config
+	if id, _ := ResolveAppCredentials(getDefaultConfigDir()); id != "" {
+		return "app"
+	}
+	if os.Getenv("DWS_CLIENT_ID") != "" || os.Getenv("DWS_CLIENT_SECRET") != "" {
+		return "env"
+	}
+	return "default"
+}
+
 // SetClientID allows runtime override of the client ID (e.g., from CLI flags).
 func SetClientID(id string) {
 	clientMu.Lock()

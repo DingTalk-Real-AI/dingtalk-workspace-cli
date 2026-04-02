@@ -11,13 +11,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package output
+package editiontest_test
 
-import "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/validate"
+import (
+	"testing"
 
-// SanitizeForTerminal strips ANSI escape sequences, control characters, and
-// dangerous Unicode from text before it is printed to a terminal.
-// Delegates to the validate package which provides the canonical implementation.
-func SanitizeForTerminal(text string) string {
-	return validate.SanitizeForTerminal(text)
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/editiontest"
+)
+
+func TestOpenSourceDefaultHooksContract(t *testing.T) {
+	editiontest.RunContractTests(t, edition.Get())
 }

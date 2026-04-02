@@ -25,7 +25,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/config"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
 const identityFile = "identity.json"
@@ -82,8 +83,11 @@ func (id *Identity) Headers() map[string]string {
 	if id.Source != "" {
 		h["x-dws-source"] = id.Source
 	}
-	// Constant headers for MCP gateway tracking
-	h["x-dingtalk-scenario-code"] = "com.dingtalk.cli"
+	scenarioCode := "com.dingtalk.cli"
+	if sc := edition.Get().ScenarioCode; sc != "" {
+		scenarioCode = sc
+	}
+	h["x-dingtalk-scenario-code"] = scenarioCode
 	h["x-dingtalk-source"] = "github"
 	return h
 }

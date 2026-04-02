@@ -1,6 +1,6 @@
 GO ?= go
 
-.PHONY: all help build rebuild test lint fmt policy package release publish-homebrew-formula setup-hooks
+.PHONY: all help build rebuild test lint fmt policy edition-test package release publish-homebrew-formula setup-hooks
 
 all: setup-hooks fmt lint build test rebuild
 
@@ -33,6 +33,9 @@ fmt:
 policy:
 	@./scripts/policy/check-open-source-assets.sh
 	@./scripts/policy/check-command-surface.sh --strict
+
+edition-test:
+	$(GO) test -v -count=1 ./pkg/editiontest/...
 
 package:
 	@./scripts/dev/build-all.sh

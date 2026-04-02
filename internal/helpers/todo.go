@@ -14,15 +14,14 @@
 package helpers
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/spf13/cobra"
 )
 
@@ -88,7 +87,7 @@ func newTodoTaskCreateCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			title := flagOrFallback(cmd, "title", "subject", "content")
+			title := cmdutil.FlagOrFallback(cmd, "title", "subject", "content")
 			if strings.TrimSpace(title) == "" {
 				return apperrors.NewValidation("--title is required")
 			}
@@ -103,7 +102,7 @@ func newTodoTaskCreateCommand(runner executor.Runner) *cobra.Command {
 				"executorIds": executorIds,
 			}
 			if v, _ := cmd.Flags().GetString("due"); v != "" {
-				ms, err := parseISOTimeToMillis("due", v)
+				ms, err := cmdutil.ParseISOTimeToMillis("due", v)
 				if err != nil {
 					return err
 				}
@@ -270,7 +269,7 @@ func newTodoTaskUpdateCommand(runner executor.Runner) *cobra.Command {
 				inner["subject"] = v
 			}
 			if v, _ := cmd.Flags().GetString("due"); v != "" {
-				ms, err := parseISOTimeToMillis("due", v)
+				ms, err := cmdutil.ParseISOTimeToMillis("due", v)
 				if err != nil {
 					return err
 				}
@@ -444,16 +443,6 @@ func newTodoTaskDeleteCommand(runner executor.Runner) *cobra.Command {
 
 // ── helpers ────────────────────────────────────────────────
 
-// flagOrFallback returns the first non-empty value among the given flag names.
-func flagOrFallback(cmd *cobra.Command, names ...string) string {
-	for _, name := range names {
-		if v, _ := cmd.Flags().GetString(name); strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
-}
-
 // parseExecutorIds splits "id1,id2" into []string for the MCP executorIds array.
 func parseExecutorIds(s string) []string {
 	s = strings.TrimSpace(s)
@@ -468,25 +457,6 @@ func parseExecutorIds(s string) []string {
 		}
 	}
 	return ids
-}
-
-// parseISOTimeToMillis parses an ISO-8601 datetime string and returns Unix
-// milliseconds. It supports timezone offsets (e.g. +08:00) and UTC "Z" suffix.
-func parseISOTimeToMillis(flagName, value string) (int64, error) {
-	formats := []string{
-		time.RFC3339,
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02T15:04:05",
-		"2006-01-02 15:04:05",
-	}
-	for _, layout := range formats {
-		if t, err := time.Parse(layout, value); err == nil {
-			return t.UnixMilli(), nil
-		}
-	}
-	return 0, apperrors.NewValidation(
-		fmt.Sprintf("--%s format error, use ISO-8601 e.g. 2026-03-10T18:00:00+08:00", flagName),
-	)
 }
 
 // ── list pagination helpers ────────────────────────────────

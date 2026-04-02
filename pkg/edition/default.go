@@ -11,13 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package output
+package edition
 
-import "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/validate"
-
-// SanitizeForTerminal strips ANSI escape sequences, control characters, and
-// dangerous Unicode from text before it is printed to a terminal.
-// Delegates to the validate package which provides the canonical implementation.
-func SanitizeForTerminal(text string) string {
-	return validate.SanitizeForTerminal(text)
+// defaultHooks returns the open-source edition defaults.
+// All function hooks are nil, which the internal code interprets as
+// "use standard open-source behaviour".
+func defaultHooks() *Hooks {
+	return &Hooks{
+		Name: "open",
+	}
 }

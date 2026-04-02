@@ -26,8 +26,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/fatih/color"
 )
 
@@ -167,14 +167,15 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 		return nil, fmt.Errorf("%s: %w", i18n.T("换取 token 失败"), err)
 	}
 
-	// Check if CLI auth is enabled for this organization
+	// Check if CLI auth is enabled for this organization (fail-closed: block on error)
 	dfPrintStep(p.output(), 4, i18n.T("检查组织 CLI 授权状态..."), 0)
 	authStatus, authErr := oauthProvider.CheckCLIAuthEnabled(ctx, tokenData.AccessToken)
 	if authErr != nil {
-		if p.logger != nil {
-			p.logger.Warn("failed to check CLI auth status", "error", authErr)
-		}
-		// Continue anyway - fail open for better UX
+		_, _ = fmt.Fprintln(p.output(), "")
+		_, _ = fmt.Fprintln(p.output(), dfRed(i18n.T("⚠️  无法检查 CLI 数据访问权限状态")))
+		_, _ = fmt.Fprintln(p.output(), i18n.T("   请检查网络连接后重试。"))
+		_, _ = fmt.Fprintln(p.output(), "")
+		return nil, fmt.Errorf("%s: %w", i18n.T("检查 CLI 授权状态失败"), authErr)
 	} else if authStatus.Success && !authStatus.Result.CLIAuthEnabled {
 		// CLI auth is disabled - show detailed error with admin info
 		_, _ = fmt.Fprintln(p.output(), "")

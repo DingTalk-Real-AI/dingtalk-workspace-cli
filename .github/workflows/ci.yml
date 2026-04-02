@@ -141,3 +141,41 @@ jobs:
 
       - name: Generated Drift
         run: ./scripts/policy/check-generated-drift.sh
+
+  edition-tests:
+    name: Edition Contract Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run edition contract tests
+        run: go test -v -count=1 ./pkg/editiontest/...
+
+  notify-downstream:
+    name: Notify Wukong Overlay
+    needs: [test, policy, edition-tests]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Trigger downstream CI
+        run: |
+          # Trigger internal GitLab CI pipeline via webhook.
+          # WUKONG_TRIGGER_TOKEN is a repository secret.
+          if [ -n "${{ secrets.WUKONG_TRIGGER_TOKEN }}" ]; then
+            curl --fail --silent --show-error \
+              -X POST \
+              -F "token=${{ secrets.WUKONG_TRIGGER_TOKEN }}" \
+              -F "ref=main" \
+              -F "variables[UPSTREAM_SHA]=${{ github.sha }}" \
+              "${{ secrets.WUKONG_TRIGGER_URL }}"
+            echo "Downstream CI triggered."
+          else
+            echo "No WUKONG_TRIGGER_TOKEN configured, skipping downstream notification."
+          fi

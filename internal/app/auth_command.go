@@ -24,8 +24,9 @@ import (
 	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/config"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
 
@@ -48,7 +49,9 @@ func buildAuthCommand() *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(newAuthLoginCommand())
+	if !edition.Get().HideAuthLogin {
+		cmd.AddCommand(newAuthLoginCommand())
+	}
 	cmd.AddCommand(
 		newAuthLogoutCommand(),
 		newAuthStatusCommand(),
@@ -185,8 +188,18 @@ func newAuthLogoutCommand() *cobra.Command {
 			defer cancel()
 			_ = authpkg.RevokeTokenRemote(revokeCtx)
 
+			// Load token data to get associated clientId before deletion
+			var storedClientID string
+			if tokenData, err := authpkg.LoadTokenData(configDir); err == nil && tokenData != nil {
+				storedClientID = tokenData.ClientID
+			}
+
 			if err := authpkg.DeleteTokenData(configDir); err != nil {
 				return apperrors.NewInternal(fmt.Sprintf("failed to clear token data: %v", err))
+			}
+			// Clean up associated client secret from keychain
+			if storedClientID != "" {
+				_ = authpkg.DeleteClientSecret(storedClientID)
 			}
 			// Clean up app credentials (app.json + keychain secret)
 			_ = authpkg.DeleteAppConfig(configDir)
@@ -196,7 +209,9 @@ func newAuthLogoutCommand() *cobra.Command {
 			clearCompatCache()
 			w := cmd.OutOrStdout()
 			fmt.Fprintln(w, "[OK] 已清除所有认证信息")
-			fmt.Fprintln(w, "请运行 dws auth login 重新登录")
+			if !edition.Get().IsEmbedded {
+				fmt.Fprintln(w, "请运行 dws auth login 重新登录")
+			}
 			return nil
 		},
 	}
@@ -226,6 +241,8 @@ func newAuthStatusCommand() *cobra.Command {
 							tokenData = updatedData
 							refreshed = true
 						}
+					} else if edition.Get().AutoPurgeToken {
+						_ = authpkg.DeleteTokenData(configDir)
 					}
 				}
 				if authStatusAuthenticated(tokenData) {
@@ -253,7 +270,9 @@ func newAuthStatusCommand() *cobra.Command {
 				}
 			} else {
 				fmt.Fprintf(w, "%-16s%s\n", "状态:", "未登录")
-				fmt.Fprintln(w, "运行 dws auth login 进行登录")
+				if !edition.Get().IsEmbedded {
+					fmt.Fprintln(w, "运行 dws auth login 进行登录")
+				}
 			}
 			return nil
 		},
@@ -331,7 +350,9 @@ func newAuthResetCommand() *cobra.Command {
 			clearCompatCache()
 			w := cmd.OutOrStdout()
 			fmt.Fprintln(w, "[OK] 认证信息已重置")
-			fmt.Fprintln(w, "请运行 dws auth login 重新登录")
+			if !edition.Get().IsEmbedded {
+				fmt.Fprintln(w, "请运行 dws auth login 重新登录")
+			}
 			return nil
 		},
 	}

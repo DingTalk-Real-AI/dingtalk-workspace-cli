@@ -105,3 +105,45 @@ func EnsureMigration(configDir string, logger *slog.Logger) {
 func IsMigrationDone() bool {
 	return migrationDone
 }
+
+// Client credential storage functions.
+// These store the clientSecret associated with a specific clientId,
+// allowing token refresh to work even if environment variables change.
+
+const clientSecretPrefix = "client-secret:"
+
+// SaveClientSecret stores the client secret for a specific client ID.
+// This is called during login to snapshot the credentials used.
+func SaveClientSecret(clientID, clientSecret string) error {
+	if clientID == "" || clientSecret == "" {
+		return nil // Nothing to save
+	}
+	account := clientSecretPrefix + clientID
+	if err := keychain.Set(keychain.Service, account, clientSecret); err != nil {
+		return fmt.Errorf("save client secret: %w", err)
+	}
+	return nil
+}
+
+// LoadClientSecret retrieves the stored client secret for a specific client ID.
+// Returns empty string if not found.
+func LoadClientSecret(clientID string) string {
+	if clientID == "" {
+		return ""
+	}
+	account := clientSecretPrefix + clientID
+	secret, err := keychain.Get(keychain.Service, account)
+	if err != nil {
+		return ""
+	}
+	return secret
+}
+
+// DeleteClientSecret removes the stored client secret for a specific client ID.
+func DeleteClientSecret(clientID string) error {
+	if clientID == "" {
+		return nil
+	}
+	account := clientSecretPrefix + clientID
+	return keychain.Remove(keychain.Service, account)
+}

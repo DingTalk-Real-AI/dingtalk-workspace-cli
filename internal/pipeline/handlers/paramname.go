@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 )
 
 // ParamNameHandler performs fuzzy correction on flag names that are
@@ -101,7 +102,7 @@ func tryFuzzyMatch(arg string, known map[string]bool, candidates []string) (stri
 	ambiguous := false
 
 	for _, candidate := range candidates {
-		dist := levenshtein(bare, candidate)
+		dist := cmdutil.LevenshteinDist(bare, candidate)
 		if dist < bestDist {
 			bestDist = dist
 			bestMatch = candidate
@@ -116,49 +117,4 @@ func tryFuzzyMatch(arg string, known map[string]bool, candidates []string) (stri
 	}
 
 	return "--" + bestMatch + suffix, true
-}
-
-// levenshtein computes the edit distance between two strings using
-// the standard dynamic programming approach with O(min(m,n)) space.
-func levenshtein(a, b string) int {
-	if a == b {
-		return 0
-	}
-
-	la, lb := len(a), len(b)
-	if la == 0 {
-		return lb
-	}
-	if lb == 0 {
-		return la
-	}
-
-	// Ensure a is the shorter string for O(min) space.
-	if la > lb {
-		a, b = b, a
-		la, lb = lb, la
-	}
-
-	prev := make([]int, la+1)
-	curr := make([]int, la+1)
-	for i := range prev {
-		prev[i] = i
-	}
-
-	for j := 1; j <= lb; j++ {
-		curr[0] = j
-		for i := 1; i <= la; i++ {
-			cost := 1
-			if a[i-1] == b[j-1] {
-				cost = 0
-			}
-			curr[i] = min(
-				prev[i]+1,      // deletion
-				curr[i-1]+1,    // insertion
-				prev[i-1]+cost, // substitution
-			)
-		}
-		prev, curr = curr, prev
-	}
-	return prev[la]
 }

@@ -30,21 +30,50 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/compat"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
 
 func newLegacyPublicCommands(ctx context.Context, runner executor.Runner) []*cobra.Command {
+	if fn := edition.Get().StaticServers; fn != nil {
+		injectStaticServers(fn())
+		// Static servers provided by the edition hook — skip Market discovery
+		// entirely. The overlay registers its own product commands via
+		// RegisterExtraCommands; we only add the open-source helpers here.
+		commands := helpers.NewPublicCommands(runner)
+		return mergeTopLevelCommands(commands)
+	}
+
 	var commands []*cobra.Command
-	// Generate commands dynamically from the market discovery API.
 	if dynamicCmds := loadDynamicCommands(ctx, runner); len(dynamicCmds) > 0 {
 		commands = append(commands, dynamicCmds...)
 	}
 	commands = append(commands, helpers.NewPublicCommands(runner)...)
 	return mergeTopLevelCommands(commands)
+}
+
+// injectStaticServers converts edition.ServerInfo entries into
+// market.ServerDescriptor and feeds them into SetDynamicServers so the
+// direct-runtime endpoint resolver can find them.
+func injectStaticServers(servers []edition.ServerInfo) {
+	descriptors := make([]market.ServerDescriptor, 0, len(servers))
+	for _, s := range servers {
+		descriptors = append(descriptors, market.ServerDescriptor{
+			Key:         s.ID,
+			DisplayName: s.Name,
+			Endpoint:    s.Endpoint,
+			CLI: market.CLIOverlay{
+				ID:       s.ID,
+				Command:  s.ID,
+				Prefixes: s.Prefixes,
+			},
+		})
+	}
+	SetDynamicServers(descriptors)
 }
 
 // loadDynamicCommands loads the server registry and generates CLI commands

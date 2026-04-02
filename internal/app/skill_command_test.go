@@ -590,15 +590,6 @@ func TestSkillAddCommandHelp(t *testing.T) {
 	}
 }
 
-// mockRoundTripper is a helper for mocking HTTP responses in tests
-type mockSkillRoundTripper struct {
-	roundTripFunc func(*http.Request) (*http.Response, error)
-}
-
-func (m *mockSkillRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	return m.roundTripFunc(req)
-}
-
 func TestDownloadSkillFileSuccess(t *testing.T) {
 	// Create a mock server that returns a zip file
 	expectedContent := []byte("fake zip content")

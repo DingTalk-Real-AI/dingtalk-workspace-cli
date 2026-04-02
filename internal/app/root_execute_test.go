@@ -172,8 +172,8 @@ func TestVersionCommandDoesNotRequirePINOrLogin(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatalf("Execute(version) error = %v", err)
 	}
-	if !strings.Contains(out.String(), "\"version\"") {
-		t.Fatalf("version output missing version key:\n%s", out.String())
+	if !strings.Contains(out.String(), "Version:") {
+		t.Fatalf("version output missing Version line:\n%s", out.String())
 	}
 }
 
@@ -213,8 +213,8 @@ func TestVersionCommandUsesCachedRegistryWithoutBlockingAgedDiscovery(t *testing
 	if elapsed := time.Since(start); elapsed >= 200*time.Millisecond {
 		t.Fatalf("Execute(version) took %v, want cached startup under 200ms", elapsed)
 	}
-	if !strings.Contains(out.String(), "\"version\"") {
-		t.Fatalf("version output missing version key:\n%s", out.String())
+	if !strings.Contains(out.String(), "Version:") {
+		t.Fatalf("version output missing Version line:\n%s", out.String())
 	}
 }
 

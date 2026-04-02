@@ -131,10 +131,11 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 	// Shared state for API handlers (protected by mutex)
 	var (
 		callbackToken           *TokenData
-		callbackProcessed       bool
+		callbackProcessedCode   string // The auth code that has been successfully processed
 		callbackAuthDisabled    bool
 		callbackApplySent       bool   // Whether apply request was sent
 		callbackSelectedAdminId string // Selected admin ID for apply
+		callbackCodeInProgress  string // Code currently being processed (to prevent concurrent exchange)
 		callbackTokenMu         sync.Mutex
 	)
 
@@ -146,23 +147,48 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 			code = r.URL.Query().Get("code")
 		}
 
-		// Check if this is a page refresh (no code) and callback was already processed
+		// Check state and handle page refresh or concurrent requests
 		callbackTokenMu.Lock()
-		if code == "" && callbackProcessed {
+		processedCode := callbackProcessedCode
+		processedAuthDisabled := callbackAuthDisabled
+		codeInProgress := callbackCodeInProgress
+		hasToken := callbackToken != nil
+
+		// Case 1: This code was already successfully processed - show cached page
+		if code != "" && code == processedCode {
+			callbackTokenMu.Unlock()
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			if callbackAuthDisabled {
+			if processedAuthDisabled {
 				_, _ = fmt.Fprint(w, notEnabledHTML)
 			} else {
 				_, _ = fmt.Fprint(w, successHTML)
 			}
-			callbackTokenMu.Unlock()
 			return
 		}
-		// Reset state for new authorization (user switched org)
-		if code != "" && callbackProcessed {
-			callbackProcessed = false
-			callbackApplySent = false
-			callbackSelectedAdminId = ""
+
+		// Case 2: This code is being processed by another request - show wait page
+		if code != "" && code == codeInProgress {
+			callbackTokenMu.Unlock()
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = fmt.Fprint(w, `<html><head><meta http-equiv="refresh" content="1"></head><body><p>正在处理授权，请稍候...</p></body></html>`)
+			return
+		}
+
+		// Case 3: No code but we have a processed token - show cached page
+		if code == "" && hasToken {
+			callbackTokenMu.Unlock()
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			if processedAuthDisabled {
+				_, _ = fmt.Fprint(w, notEnabledHTML)
+			} else {
+				_, _ = fmt.Fprint(w, successHTML)
+			}
+			return
+		}
+
+		// Case 4: New code - mark as in-progress and process
+		if code != "" {
+			callbackCodeInProgress = code
 		}
 		callbackTokenMu.Unlock()
 
@@ -176,20 +202,13 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 			return
 		}
 
-		// Exchange code for token immediately in callback
+		// Exchange code for token
 		tokenData, exchangeErr := p.exchangeCode(ctx, code)
 		if exchangeErr != nil {
-			// Check if we already have a processed state (authCode reused on refresh)
+			// Clear in-progress state on error
 			callbackTokenMu.Lock()
-			if callbackProcessed {
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				if callbackAuthDisabled {
-					_, _ = fmt.Fprint(w, notEnabledHTML)
-				} else {
-					_, _ = fmt.Fprint(w, successHTML)
-				}
-				callbackTokenMu.Unlock()
-				return
+			if callbackCodeInProgress == code {
+				callbackCodeInProgress = ""
 			}
 			callbackTokenMu.Unlock()
 
@@ -202,20 +221,31 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 			return
 		}
 
-		// Check CLI auth enabled status
-		authStatus, statusErr := p.CheckCLIAuthEnabled(ctx, tokenData.AccessToken)
-		cliAuthDisabled := statusErr == nil && authStatus.Success && !authStatus.Result.CLIAuthEnabled
-
-		// Store token and state for API handlers and refresh handling
+		// Mark as processed immediately after successful exchange
 		callbackTokenMu.Lock()
+		previouslyProcessed := callbackProcessedCode != ""
 		callbackToken = tokenData
-		callbackProcessed = true
-		callbackAuthDisabled = cliAuthDisabled
+		callbackProcessedCode = code // Remember this code was successfully processed
+		callbackCodeInProgress = ""  // Clear in-progress state
+		// Reset apply state for new authorization (user switched org)
+		if previouslyProcessed {
+			callbackApplySent = false
+			callbackSelectedAdminId = ""
+		}
+		callbackTokenMu.Unlock()
+
+		// Check CLI auth enabled status (fail-closed: treat errors as disabled)
+		authStatus, statusErr := p.CheckCLIAuthEnabled(ctx, tokenData.AccessToken)
+		cliAuthEnabled := statusErr == nil && authStatus.Success && authStatus.Result.CLIAuthEnabled
+
+		// Update CLI auth disabled state
+		callbackTokenMu.Lock()
+		callbackAuthDisabled = !cliAuthEnabled
 		callbackTokenMu.Unlock()
 
 		// Display appropriate HTML based on CLI auth status
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if cliAuthDisabled {
+		if !cliAuthEnabled {
 			_, _ = fmt.Fprint(w, notEnabledHTML)
 		} else {
 			_, _ = fmt.Fprint(w, successHTML)
@@ -226,7 +256,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		}
 		// Notify main goroutine with full result
 		select {
-		case resultCh <- callbackResult{token: tokenData, cliAuthDisabled: cliAuthDisabled}:
+		case resultCh <- callbackResult{token: tokenData, cliAuthDisabled: !cliAuthEnabled}:
 		default:
 		}
 	})

@@ -22,11 +22,11 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cache"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/discovery"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/ir"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
 const (

@@ -29,7 +29,6 @@ import (
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cache"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/discovery"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
@@ -41,6 +40,8 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline/handlers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/recovery"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -52,7 +53,9 @@ const recoveryEventStderrPrefix = "RECOVERY_EVENT_ID="
 // Execute runs the root command and returns the process exit code.
 func Execute() int {
 	totalStart := time.Now()
+	timing := NewTimingCollector()
 	defer func() {
+		timing.PrintIfEnabled()
 		if os.Getenv("DWS_PERF_DEBUG") != "" {
 			_, _ = fmt.Fprintf(os.Stderr, "[PERF] Execute total: %v\n", time.Since(totalStart))
 		}
@@ -61,12 +64,17 @@ func Execute() int {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
+	// Attach timing collector to context for use by child components
+	ctx = WithTimingCollector(ctx, timing)
+
 	initStart := time.Now()
 	recovery.ResetRuntimeState()
 	engine := newPipelineEngine()
 	root := NewRootCommandWithEngine(ctx, engine)
+	initDuration := time.Since(initStart)
+	timing.Record("cmd_init", initDuration)
 	if os.Getenv("DWS_PERF_DEBUG") != "" {
-		_, _ = fmt.Fprintf(os.Stderr, "[PERF] command init: %v\n", time.Since(initStart))
+		_, _ = fmt.Fprintf(os.Stderr, "[PERF] command init: %v\n", initDuration)
 	}
 
 	// Run PreParse handlers on raw argv before Cobra parses flags.
@@ -76,8 +84,10 @@ func Execute() int {
 
 	execStart := time.Now()
 	executed, err := root.ExecuteC()
+	execDuration := time.Since(execStart)
+	timing.Record("cobra_exec", execDuration)
 	if os.Getenv("DWS_PERF_DEBUG") != "" {
-		_, _ = fmt.Fprintf(os.Stderr, "[PERF] cobra ExecuteC: %v\n", time.Since(execStart))
+		_, _ = fmt.Fprintf(os.Stderr, "[PERF] cobra ExecuteC: %v\n", execDuration)
 	}
 	if err != nil {
 		if executed == nil {
@@ -136,14 +146,14 @@ func printExecutionError(root *cobra.Command, stdout, stderr io.Writer, err erro
 }
 
 // resolveVerbosity derives the error verbosity level from the root command's flags.
-func resolveVerbosity(root *cobra.Command) apperrors.Verbosity {
-	if root == nil {
+func resolveVerbosity(cmd *cobra.Command) apperrors.Verbosity {
+	if cmd == nil {
 		return apperrors.VerbosityNormal
 	}
-	if debug, err := root.PersistentFlags().GetBool("debug"); err == nil && debug {
+	if debug, err := cmd.Flags().GetBool("debug"); err == nil && debug {
 		return apperrors.VerbosityDebug
 	}
-	if verbose, err := root.PersistentFlags().GetBool("verbose"); err == nil && verbose {
+	if verbose, err := cmd.Flags().GetBool("verbose"); err == nil && verbose {
 		return apperrors.VerbosityVerbose
 	}
 	return apperrors.VerbosityNormal
@@ -278,6 +288,12 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 	root.AddCommand(utilityCommands...)
 	root.AddCommand(newLegacyPublicCommands(rootCtx, runner)...)
 	root.AddCommand(newLegacyHiddenCommands(runner)...)
+
+	if fn := edition.Get().RegisterExtraCommands; fn != nil {
+		caller := newToolCallerAdapter(runner, flags)
+		fn(root, caller)
+		deduplicateCommands(root)
+	}
 
 	hideNonDirectRuntimeCommands(root)
 	configureRootHelp(root)
@@ -457,24 +473,51 @@ func newVersionCommand() *cobra.Command {
 		Example:           "  dws version\n  dws version --format json",
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			format, err := cmd.Flags().GetString("format")
-			if err != nil {
-				return apperrors.NewInternal("failed to read format flag")
+			wantJSON := cmd.Flags().Changed("format")
+			if wantJSON {
+				format, _ := cmd.Flags().GetString("format")
+				wantJSON = (format == "json")
 			}
-			payload := map[string]any{
-				"version": Version(),
-				"go":      "1.24+",
+
+			editionName := edition.Get().Name
+			if editionName == "" {
+				editionName = "open"
 			}
-			if format == "json" {
+			ver := RawVersion()
+			bt := BuildTime()
+			gc := GitCommit()
+			goVer := "1.24+"
+
+			arch := "MCP Dynamic Aggregation"
+
+			if wantJSON {
+				payload := map[string]any{
+					"version":      ver,
+					"edition":      editionName,
+					"architecture": arch,
+					"go":           goVer,
+				}
+				if bt != "unknown" {
+					payload["build"] = bt
+				}
+				if gc != "unknown" {
+					payload["commit"] = gc
+				}
 				return output.WriteJSON(cmd.OutOrStdout(), payload)
 			}
-			_, err = fmt.Fprintf(
-				cmd.OutOrStdout(),
-				"版本:  %s\nGo:  %s\n",
-				Version(),
-				"1.24+",
-			)
-			return err
+
+			w := cmd.OutOrStdout()
+			fmt.Fprintf(w, "%-16s%s\n", "Version:", ver)
+			fmt.Fprintf(w, "%-16s%s\n", "Edition:", editionName)
+			if bt != "unknown" {
+				fmt.Fprintf(w, "%-16s%s\n", "Build:", bt)
+			}
+			if gc != "unknown" {
+				fmt.Fprintf(w, "%-16s%s\n", "Commit:", gc)
+			}
+			fmt.Fprintf(w, "%-16s%s\n", "Architecture:", arch)
+			fmt.Fprintf(w, "%-16s%s\n", "Go:", goVer)
+			return nil
 		},
 	}
 }
@@ -571,17 +614,30 @@ func newMCPCommand(ctx context.Context, loader cli.CatalogLoader, runner executo
 }
 
 // hideNonDirectRuntimeCommands marks top-level product commands as hidden
-// unless they correspond to a product discovered via dynamic server discovery.
+// unless they correspond to a product discovered via dynamic server discovery
+// or listed in the edition's VisibleProducts hook.
 // Public utility commands (auth, cache, completion, version) are always kept
 // visible; explicitly hidden commands stay hidden.
 func hideNonDirectRuntimeCommands(root *cobra.Command) {
-	allowedProducts := DirectRuntimeProductIDs()
+	var allowedProducts map[string]bool
+	if fn := edition.Get().VisibleProducts; fn != nil {
+		products := fn()
+		allowedProducts = make(map[string]bool, len(products))
+		for _, p := range products {
+			allowedProducts[p] = true
+		}
+	} else {
+		allowedProducts = DirectRuntimeProductIDs()
+	}
 	staticCommands := map[string]bool{
 		"auth":       true,
 		"cache":      true,
 		"completion": true,
 		"version":    true,
 		"help":       true,
+		"recovery":   true,
+		"schema":     true,
+		"mcp":        true,
 	}
 	for _, cmd := range root.Commands() {
 		name := cmd.Name()
@@ -595,6 +651,24 @@ func hideNonDirectRuntimeCommands(root *cobra.Command) {
 			continue
 		}
 		cmd.Hidden = true
+	}
+}
+
+// deduplicateCommands removes duplicate top-level commands, keeping the last
+// registered one. This ensures overlay commands take precedence over
+// open-source defaults when both register the same product name.
+func deduplicateCommands(root *cobra.Command) {
+	seen := make(map[string]*cobra.Command)
+	var dups []*cobra.Command
+	for _, cmd := range root.Commands() {
+		name := cmd.Name()
+		if prev, ok := seen[name]; ok {
+			dups = append(dups, prev)
+		}
+		seen[name] = cmd
+	}
+	for _, dup := range dups {
+		root.RemoveCommand(dup)
 	}
 }
 

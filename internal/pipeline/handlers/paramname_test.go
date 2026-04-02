@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 )
 
 func TestLevenshtein(t *testing.T) {
@@ -40,12 +41,11 @@ func TestLevenshtein(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.a+"→"+tt.b, func(t *testing.T) {
-			got := levenshtein(tt.a, tt.b)
+			got := cmdutil.LevenshteinDist(tt.a, tt.b)
 			if got != tt.want {
-				t.Errorf("levenshtein(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
+				t.Errorf("LevenshteinDist(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
 			}
-			// Verify symmetry.
-			gotRev := levenshtein(tt.b, tt.a)
+			gotRev := cmdutil.LevenshteinDist(tt.b, tt.a)
 			if gotRev != got {
 				t.Errorf("asymmetric: (%q,%q)=%d but (%q,%q)=%d", tt.a, tt.b, got, tt.b, tt.a, gotRev)
 			}
