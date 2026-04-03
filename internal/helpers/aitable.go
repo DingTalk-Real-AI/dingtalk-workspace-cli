@@ -66,7 +66,14 @@ func (aitableHandler) Command(runner executor.Runner) *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	base.AddCommand(newAitableBaseDeleteCommand(runner))
+	base.AddCommand(
+		newAitableBaseListCommand(runner),
+		newAitableBaseSearchCommand(runner),
+		newAitableBaseGetCommand(runner),
+		newAitableBaseCreateCommand(runner),
+		newAitableBaseUpdateCommand(runner),
+		newAitableBaseDeleteCommand(runner),
+	)
 
 	table := &cobra.Command{
 		Use:               "table",
@@ -78,7 +85,12 @@ func (aitableHandler) Command(runner executor.Runner) *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	table.AddCommand(newAitableTableDeleteCommand(runner))
+	table.AddCommand(
+		newAitableTableGetCommand(runner),
+		newAitableTableCreateCommand(runner),
+		newAitableTableUpdateCommand(runner),
+		newAitableTableDeleteCommand(runner),
+	)
 
 	field := &cobra.Command{
 		Use:               "field",
@@ -90,7 +102,12 @@ func (aitableHandler) Command(runner executor.Runner) *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	field.AddCommand(newAitableFieldDeleteCommand(runner))
+	field.AddCommand(
+		newAitableFieldGetCommand(runner),
+		newAitableFieldCreateCommand(runner),
+		newAitableFieldUpdateCommand(runner),
+		newAitableFieldDeleteCommand(runner),
+	)
 
 	record := &cobra.Command{
 		Use:               "record",
@@ -102,7 +119,24 @@ func (aitableHandler) Command(runner executor.Runner) *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	record.AddCommand(newAitableRecordDeleteCommand(runner))
+	record.AddCommand(
+		newAitableRecordQueryCommand(runner),
+		newAitableRecordCreateCommand(runner),
+		newAitableRecordUpdateCommand(runner),
+		newAitableRecordDeleteCommand(runner),
+	)
+
+	template := &cobra.Command{
+		Use:               "template",
+		Short:             i18n.T("模板搜索"),
+		Args:              cobra.NoArgs,
+		TraverseChildren:  true,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+	template.AddCommand(newAitableTemplateSearchCommand(runner))
 
 	attachment := &cobra.Command{
 		Use:               "attachment",
@@ -114,9 +148,12 @@ func (aitableHandler) Command(runner executor.Runner) *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	attachment.AddCommand(newAITableUploadFileCommand(runner))
+	attachment.AddCommand(
+		newAITableAttachmentUploadCommand(runner),
+		newAITableUploadFileCommand(runner),
+	)
 
-	root.AddCommand(base, table, field, record, attachment)
+	root.AddCommand(base, table, field, record, template, attachment)
 	return root
 }
 

@@ -148,45 +148,70 @@ func WriteFiltered(w io.Writer, format Format, payload any, fields, jq string) e
 }
 
 // ResolveFields extracts the --fields flag value from the command.
+// It ensures that we do not mistakenly grab a business parameter also named "fields"
+// by matching the flag's usage string against the global root definition.
 func ResolveFields(cmd *cobra.Command) string {
 	if cmd == nil {
 		return ""
 	}
+	rootFlags := rootPersistentFlags(cmd)
+	if rootFlags == nil {
+		return ""
+	}
+	globalFlag := rootFlags.Lookup("fields")
+	if globalFlag == nil {
+		return ""
+	}
+
 	for _, flags := range []*pflag.FlagSet{
 		cmd.Flags(),
 		cmd.InheritedFlags(),
-		rootPersistentFlags(cmd),
+		rootFlags,
 	} {
 		if flags == nil {
 			continue
 		}
 		if f := flags.Lookup("fields"); f != nil && f.Changed {
-			if v, err := flags.GetString("fields"); err == nil {
-				return v
+			// To avoid collision with business flags (e.g. table create --fields),
+			// verify this flag shares the same usage string as the global one.
+			if f.Usage == globalFlag.Usage {
+				if v, err := flags.GetString("fields"); err == nil {
+					return v
+				}
 			}
 		}
 	}
 	return ""
 }
 
-// ResolveJQ extracts the --jq flag value from the command. It checks
-// local flags, inherited flags, and root persistent flags because
-// --jq is registered as a root PersistentFlag.
+// ResolveJQ extracts the --jq flag value from the command. It ensures
+// that we only grab the global output filter, not a similarly named business parameter.
 func ResolveJQ(cmd *cobra.Command) string {
 	if cmd == nil {
 		return ""
 	}
+	rootFlags := rootPersistentFlags(cmd)
+	if rootFlags == nil {
+		return ""
+	}
+	globalFlag := rootFlags.Lookup("jq")
+	if globalFlag == nil {
+		return ""
+	}
+
 	for _, flags := range []*pflag.FlagSet{
 		cmd.Flags(),
 		cmd.InheritedFlags(),
-		rootPersistentFlags(cmd),
+		rootFlags,
 	} {
 		if flags == nil {
 			continue
 		}
 		if f := flags.Lookup("jq"); f != nil && f.Changed {
-			if v, err := flags.GetString("jq"); err == nil {
-				return v
+			if f.Usage == globalFlag.Usage {
+				if v, err := flags.GetString("jq"); err == nil {
+					return v
+				}
 			}
 		}
 	}
