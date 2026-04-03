@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -92,6 +93,10 @@ type EnvironmentLoader struct {
 	// AuthTokenFunc returns an access token for MCP discovery requests
 	// (initialize, tools/list). When nil, discovery runs without auth.
 	AuthTokenFunc func(context.Context) string
+	// LoggerFunc returns a structured logger for discovery diagnostics.
+	// Called lazily because the file logger may not be initialized at
+	// construction time (it's set up during PersistentPreRunE).
+	LoggerFunc func() *slog.Logger
 }
 
 type cachedCatalogState struct {
@@ -147,6 +152,9 @@ func (l EnvironmentLoader) Load(ctx context.Context) (ir.Catalog, error) {
 		transportClient,
 		store,
 	)
+	if l.LoggerFunc != nil {
+		service.Logger = l.LoggerFunc()
+	}
 	response, err := service.MarketClient.FetchServers(discoverCtx, 200)
 	if err != nil {
 		// Graceful degradation: return empty catalog on discovery failure.

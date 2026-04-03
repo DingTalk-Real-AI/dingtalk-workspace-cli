@@ -16,7 +16,6 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -89,13 +88,6 @@ func injectStaticServers(servers []edition.ServerInfo) {
 // Tests may override discoveryBaseURLOverride to redirect to a local server;
 // in that case the registry cache is always bypassed.
 func loadDynamicCommands(ctx context.Context, runner executor.Runner) []*cobra.Command {
-	totalStart := time.Now()
-	defer func() {
-		if os.Getenv("DWS_PERF_DEBUG") != "" {
-			_, _ = fmt.Fprintf(os.Stderr, "[PERF] loadDynamicCommands total: %v\n", time.Since(totalStart))
-		}
-	}()
-
 	store := cacheStoreFromEnv()
 	partition := config.DefaultPartition
 
@@ -108,18 +100,13 @@ func loadDynamicCommands(ctx context.Context, runner executor.Runner) []*cobra.C
 	// --- Cache-first server registry ---
 	cacheLoadStart := time.Now()
 	snapshot, freshness, cacheErr := store.LoadRegistry(partition)
-	if os.Getenv("DWS_PERF_DEBUG") != "" {
-		_, _ = fmt.Fprintf(os.Stderr, "[PERF] cache load: %v (err=%v)\n", time.Since(cacheLoadStart), cacheErr)
-	}
+	RecordTiming(ctx, "registry_cache", time.Since(cacheLoadStart))
 
 	var servers []market.ServerDescriptor
 	now := store.Now().UTC()
 	usingCachedRegistry := useCache && cacheErr == nil && len(snapshot.Servers) > 0
 
 	if usingCachedRegistry {
-		if os.Getenv("DWS_PERF_DEBUG") != "" {
-			_, _ = fmt.Fprintf(os.Stderr, "[PERF] using cached registry: servers=%d, freshness=%s\n", len(snapshot.Servers), freshness)
-		}
 		servers = snapshot.Servers
 		// Only trigger async revalidation in production (no URL override).
 		// Tests set discoveryBaseURLOverride and control cache expiry directly,
@@ -135,15 +122,10 @@ func loadDynamicCommands(ctx context.Context, runner executor.Runner) []*cobra.C
 		if discoveryBaseURLOverride != "" {
 			baseURL = discoveryBaseURLOverride
 		}
-		if os.Getenv("DWS_PERF_DEBUG") != "" {
-			_, _ = fmt.Fprintf(os.Stderr, "[PERF] fetching from market API: %s\n", baseURL)
-		}
 		fetchStart := time.Now()
 		client := market.NewClient(baseURL, ipv4OnlyHTTPClient())
 		resp, fetchErr := client.FetchServers(ctx, config.DefaultFetchServersLimit)
-		if os.Getenv("DWS_PERF_DEBUG") != "" {
-			_, _ = fmt.Fprintf(os.Stderr, "[PERF] market API fetch: %v (err=%v)\n", time.Since(fetchStart), fetchErr)
-		}
+		RecordTiming(ctx, "market_fetch", time.Since(fetchStart))
 		if fetchErr != nil {
 			slog.Debug("loadDynamicCommands: market API fetch failed", "error", fetchErr)
 			// Degrade to stale cache if available (production only).
@@ -155,18 +137,13 @@ func loadDynamicCommands(ctx context.Context, runner executor.Runner) []*cobra.C
 			}
 		} else {
 			servers = market.NormalizeServers(resp, "market")
-			if os.Getenv("DWS_PERF_DEBUG") != "" {
-				_, _ = fmt.Fprintf(os.Stderr, "[PERF] normalized servers: %d\n", len(servers))
-			}
 			// Persist fresh data (only in non-test mode).
 			if useCache {
 				saveStart := time.Now()
 				if saveErr := store.SaveRegistry(partition, cache.RegistrySnapshot{Servers: servers}); saveErr != nil {
 					slog.Debug("loadDynamicCommands: failed to save registry cache", "error", saveErr)
 				}
-				if os.Getenv("DWS_PERF_DEBUG") != "" {
-					_, _ = fmt.Fprintf(os.Stderr, "[PERF] cache save: %v\n", time.Since(saveStart))
-				}
+				RecordTiming(ctx, "cache_save", time.Since(saveStart))
 			}
 		}
 	}
@@ -179,15 +156,11 @@ func loadDynamicCommands(ctx context.Context, runner executor.Runner) []*cobra.C
 
 	detailStart := time.Now()
 	detailsByID := loadCachedDetailsFast(store, servers)
-	if os.Getenv("DWS_PERF_DEBUG") != "" {
-		_, _ = fmt.Fprintf(os.Stderr, "[PERF] load details: %v\n", time.Since(detailStart))
-	}
+	RecordTiming(ctx, "tool_metadata", time.Since(detailStart))
 
 	buildStart := time.Now()
 	cmds := compat.BuildDynamicCommands(servers, runner, detailsByID)
-	if os.Getenv("DWS_PERF_DEBUG") != "" {
-		_, _ = fmt.Fprintf(os.Stderr, "[PERF] build commands: %v (count=%d)\n", time.Since(buildStart), len(cmds))
-	}
+	RecordTiming(ctx, "build_commands", time.Since(buildStart))
 
 	return cmds
 }

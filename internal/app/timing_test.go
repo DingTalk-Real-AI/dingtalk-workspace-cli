@@ -87,8 +87,8 @@ func TestTimingCollector_Print(t *testing.T) {
 	tc.Print(&buf)
 
 	output := buf.String()
-	if !strings.Contains(output, "[Timing]") {
-		t.Error("output should contain [Timing] header")
+	if !strings.Contains(output, "[Perf]") {
+		t.Error("output should contain [Perf] header")
 	}
 	if !strings.Contains(output, "auth_token") {
 		t.Error("output should contain 'auth_token'")
@@ -103,8 +103,8 @@ func TestTimingCollector_Print(t *testing.T) {
 
 func TestTimingCollector_PrintIfEnabled(t *testing.T) {
 	// Set environment variable
-	os.Setenv(PerfTimingEnv, "1")
-	defer os.Unsetenv(PerfTimingEnv)
+	os.Setenv(PerfDebugEnv, "1")
+	defer os.Unsetenv(PerfDebugEnv)
 
 	tc := NewTimingCollector()
 	tc.Record("test_op", 10*time.Millisecond)
@@ -156,18 +156,18 @@ func TestStartTiming_NoCollector(t *testing.T) {
 	stop()
 }
 
-func TestIsPerfTimingEnabled(t *testing.T) {
+func TestIsPerfDebugEnabled(t *testing.T) {
 	// Clear the env var first
-	os.Unsetenv(PerfTimingEnv)
+	os.Unsetenv(PerfDebugEnv)
 
-	if IsPerfTimingEnabled() {
-		t.Error("IsPerfTimingEnabled should return false when env var is not set")
+	if IsPerfDebugEnabled() {
+		t.Error("IsPerfDebugEnabled should return false when env var is not set")
 	}
 
-	os.Setenv(PerfTimingEnv, "1")
-	defer os.Unsetenv(PerfTimingEnv)
+	os.Setenv(PerfDebugEnv, "1")
+	defer os.Unsetenv(PerfDebugEnv)
 
-	if !IsPerfTimingEnabled() {
-		t.Error("IsPerfTimingEnabled should return true when env var is set")
+	if !IsPerfDebugEnabled() {
+		t.Error("IsPerfDebugEnabled should return true when env var is set")
 	}
 }

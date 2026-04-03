@@ -52,7 +52,7 @@ func TestLogResponseSuccess(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	LogResponse(logger, "tools/call", "https://mcp.dingtalk.com/api", 200, 1024, 150*time.Millisecond, nil)
+	LogResponse(logger, "tools/call", "https://mcp.dingtalk.com/api", "exec-1", 200, 1024, 150*time.Millisecond, nil)
 
 	out := buf.String()
 	if !strings.Contains(out, "jsonrpc_response") {
@@ -72,7 +72,7 @@ func TestLogResponseError(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	LogResponse(logger, "initialize", "https://mcp.dingtalk.com", 500, 0, 2*time.Second, errors.New("connection refused"))
+	LogResponse(logger, "initialize", "https://mcp.dingtalk.com", "exec-2", 500, 0, 2*time.Second, errors.New("connection refused"))
 
 	out := buf.String()
 	if !strings.Contains(out, "WARN") {
@@ -87,12 +87,12 @@ func TestLogRequestNilLogger(t *testing.T) {
 	t.Parallel()
 	// Should not panic
 	LogRequest(nil, "test", "http://localhost", "", 0)
-	LogResponse(nil, "test", "http://localhost", 200, 0, 0, nil)
+	LogResponse(nil, "test", "http://localhost", "", 200, 0, 0, nil)
 	LogRequestBody(nil, "tools/call", "exec-1", "tool", nil)
 	LogResponseBody(nil, "tools/call", "exec-1", 200, nil, "")
 	LogRetryAttempt(nil, "tools/call", "exec-1", 0, 2, 429, 0, nil)
 	LogErrorClassified(nil, "tools/call", "exec-1", "api", "timeout", 0, 0, true, "")
-	LogCommandStart(nil, "exec-1", "dws test", "doc", "list", "1.0.0", false)
+	LogCommandStart(nil, "exec-1", "doc", "list", "https://mcp.example.com", "1.0.0", false, 0)
 	LogCommandEnd(nil, "exec-1", "doc", "list", true, 0, "", "")
 }
 

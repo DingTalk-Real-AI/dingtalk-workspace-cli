@@ -16,6 +16,7 @@ package logging
 import (
 	"context"
 	"log/slog"
+	"runtime"
 	"time"
 )
 
@@ -52,14 +53,15 @@ func LogRequestBody(logger *slog.Logger, method, executionId string, toolName st
 	)
 }
 
-// LogResponse logs a JSON-RPC response at Debug level.
-func LogResponse(logger *slog.Logger, method, endpoint string, statusCode int, respSize int, duration time.Duration, err error) {
+// LogResponse logs a JSON-RPC response at Debug level (Warn on error).
+func LogResponse(logger *slog.Logger, method, endpoint, executionId string, statusCode int, respSize int, duration time.Duration, err error) {
 	if logger == nil {
 		return
 	}
 	attrs := []slog.Attr{
 		slog.String("method", method),
 		slog.String("endpoint", redactEndpoint(endpoint)),
+		slog.String("execution_id", executionId),
 		slog.Int("status", statusCode),
 		slog.Int("resp_size", respSize),
 		slog.String("duration", duration.Truncate(time.Millisecond).String()),
@@ -137,18 +139,24 @@ func LogErrorClassified(logger *slog.Logger, method, executionId, category, reas
 }
 
 // LogCommandStart logs the beginning of a command execution.
-func LogCommandStart(logger *slog.Logger, executionId, command, product, tool, version string, authPresent bool) {
+func LogCommandStart(logger *slog.Logger, executionId, product, tool, endpoint, version string, authPresent bool, timeoutSec int) {
 	if logger == nil {
 		return
 	}
-	logger.Info("command_start",
+	attrs := []slog.Attr{
 		slog.String("execution_id", executionId),
-		slog.String("command", command),
 		slog.String("product", product),
 		slog.String("tool", tool),
+		slog.String("endpoint", redactEndpoint(endpoint)),
 		slog.String("cli_version", version),
+		slog.String("os", runtime.GOOS),
+		slog.String("arch", runtime.GOARCH),
 		slog.Bool("auth_token_present", authPresent),
-	)
+	}
+	if timeoutSec > 0 {
+		attrs = append(attrs, slog.Int("timeout_sec", timeoutSec))
+	}
+	logger.LogAttrs(context.TODO(), slog.LevelInfo, "command_start", attrs...)
 }
 
 // LogCommandEnd logs the end of a command execution.

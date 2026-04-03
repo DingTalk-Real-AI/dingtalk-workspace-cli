@@ -16,19 +16,19 @@ package transport
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"sync"
 	"time"
-
-	"io"
-
-	"log/slog"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
@@ -45,9 +45,9 @@ const (
 	defaultHTTPTimeout = 30 * time.Second
 
 	// Default retry parameters for JSON-RPC calls.
-	defaultMaxRetries    = 2
-	defaultRetryDelay    = 10 * time.Millisecond
-	defaultRetryMaxDelay = 80 * time.Millisecond
+	defaultMaxRetries    = 1
+	defaultRetryDelay    = 500 * time.Millisecond
+	defaultRetryMaxDelay = 5 * time.Second
 
 	// Security headers
 	HeaderSource      = "X-Cli-Source"
@@ -188,15 +188,40 @@ func (r *ToolCallResult) UnmarshalJSON(data []byte) error {
 	return fmt.Errorf("unsupported tools/call content shape")
 }
 
+// defaultTransport returns a tuned http.Transport for MCP JSON-RPC calls.
+// Compared to http.DefaultTransport it adds ResponseHeaderTimeout to detect
+// "accepted but never responded" servers faster, and explicit TLS/dial timeouts.
+func defaultTransport() *http.Transport {
+	return &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   10 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12},
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 20 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   10,
+		IdleConnTimeout:       90 * time.Second,
+		ForceAttemptHTTP2:     true,
+	}
+}
+
 func NewClient(httpClient *http.Client) *Client {
 	if httpClient == nil {
 		httpClient = &http.Client{
 			Timeout:       defaultHTTPTimeout,
+			Transport:     defaultTransport(),
 			CheckRedirect: safeRedirectPolicy,
 		}
-	} else if httpClient.CheckRedirect == nil {
-		// Wrap existing client with safe redirect policy
-		httpClient.CheckRedirect = safeRedirectPolicy
+	} else {
+		if httpClient.Transport == nil {
+			httpClient.Transport = defaultTransport()
+		}
+		if httpClient.CheckRedirect == nil {
+			httpClient.CheckRedirect = safeRedirectPolicy
+		}
 	}
 	return &Client{
 		HTTPClient:    httpClient,
@@ -362,7 +387,7 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 	headerTraceID := ExtractTraceIDFromHeaders(resp.Header)
 
 	data, err := io.ReadAll(io.LimitReader(resp.Body, config.MaxResponseBodySize))
-	logging.LogResponse(c.FileLogger, request.Method, endpoint, resp.StatusCode, len(data), time.Since(callStart), err)
+	logging.LogResponse(c.FileLogger, request.Method, endpoint, c.ExecutionId, resp.StatusCode, len(data), time.Since(callStart), err)
 	if err != nil {
 		return apperrors.NewDiscovery(
 			"failed to read JSON-RPC response",
@@ -469,6 +494,9 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte) 
 		resp, err := c.HTTPClient.Do(req)
 		if err != nil {
 			lastErr = err
+			if isTimeoutError(err) {
+				break
+			}
 		} else if !retryable(resp.StatusCode) || attempt == c.MaxRetries {
 			return resp, nil
 		} else {
@@ -499,12 +527,16 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte) 
 			}
 		}
 	}
+	reason, hint := classifyRequestFailure(lastErr)
+	logging.LogErrorClassified(c.FileLogger, "jsonrpc", c.ExecutionId,
+		string(apperrors.CategoryDiscovery), reason, 0, 0,
+		!isTimeoutError(lastErr), "")
 	return nil, apperrors.NewDiscovery(
 		fmt.Sprintf("request to %s failed: %v", RedactURL(endpoint), lastErr),
 		apperrors.WithOperation("jsonrpc"),
-		apperrors.WithReason("request_failed"),
-		apperrors.WithRetryable(true),
-		apperrors.WithHint(i18n.T("请检查网络连通性和 MCP 服务状态后重试。")),
+		apperrors.WithReason(reason),
+		apperrors.WithRetryable(!isTimeoutError(lastErr)),
+		apperrors.WithHint(hint),
 		apperrors.WithActions(discoveryActions("")...),
 		apperrors.WithCause(&CallError{
 			Stage: CallStageRequest,
@@ -515,6 +547,64 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte) 
 
 func retryable(statusCode int) bool {
 	return statusCode == http.StatusTooManyRequests || statusCode >= http.StatusInternalServerError
+}
+
+// isTimeoutError returns true for errors caused by context deadline or HTTP
+// client timeout. These are typically deterministic (server overloaded or
+// unreachable) and retrying immediately is unlikely to help.
+func isTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	if errors.Is(err, context.Canceled) {
+		return true
+	}
+	if os.IsTimeout(err) {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "Client.Timeout exceeded") ||
+		strings.Contains(msg, "TLS handshake timeout")
+}
+
+// classifyRequestFailure returns a machine-readable reason and a user-facing
+// hint tailored to the specific failure type, so users get actionable guidance
+// instead of opaque Go error strings.
+func classifyRequestFailure(err error) (reason, hint string) {
+	if err == nil {
+		return "request_failed", i18n.T("请检查网络连通性和 MCP 服务状态后重试。")
+	}
+	msg := err.Error()
+
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return "request_timeout",
+			i18n.T("请求超时（上下文截止时间已到）。可通过 --timeout 增大超时时间，或检查网络连接。")
+	case errors.Is(err, context.Canceled):
+		return "request_cancelled",
+			i18n.T("请求已取消。如果非手动取消，请检查调用侧超时设置。")
+	case strings.Contains(msg, "Client.Timeout exceeded"):
+		return "http_client_timeout",
+			i18n.T("HTTP 请求超时（等待服务端响应超时）。可通过 --timeout 增大超时时间，或检查服务端是否正常。")
+	case strings.Contains(msg, "TLS handshake timeout"):
+		return "tls_timeout",
+			i18n.T("TLS 握手超时。请检查网络连接或代理设置。")
+	case strings.Contains(msg, "connection refused"):
+		return "connection_refused",
+			i18n.T("连接被拒绝。请确认服务端已启动并正在监听。")
+	case strings.Contains(msg, "no such host"):
+		return "dns_resolution_failed",
+			i18n.T("DNS 解析失败。请检查域名拼写和网络 DNS 配置。")
+	case strings.Contains(msg, "i/o timeout"):
+		return "io_timeout",
+			i18n.T("网络 I/O 超时。可通过 --timeout 增大超时时间，或检查网络连接。")
+	default:
+		return "request_failed",
+			i18n.T("请检查网络连通性和 MCP 服务状态后重试。")
+	}
 }
 
 func respRetryAfter(resp *http.Response) string {

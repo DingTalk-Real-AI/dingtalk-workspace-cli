@@ -28,6 +28,8 @@ var (
 	ugBoldGrn = color.New(color.Bold, color.FgGreen).SprintFunc()
 )
 
+const defaultListLimit = 10
+
 func newUpgradeCommand() *cobra.Command {
 	var (
 		flagCheck      bool
@@ -36,6 +38,7 @@ func newUpgradeCommand() *cobra.Command {
 		flagRollback   bool
 		flagForce      bool
 		flagSkipSkills bool
+		flagAll        bool
 	)
 
 	cmd := &cobra.Command{
@@ -47,7 +50,8 @@ func newUpgradeCommand() *cobra.Command {
 升级前会自动备份当前版本，可通过 --rollback 回滚。`,
 		Example: `  dws upgrade                    # 交互式升级到最新版本
   dws upgrade --check            # 仅检查是否有新版本
-  dws upgrade --list             # 列出所有可用版本
+  dws upgrade --list             # 列出最近版本
+  dws upgrade --list --all       # 列出所有版本
   dws upgrade --version v1.0.5   # 升级到指定版本
   dws upgrade --rollback         # 回滚到上一版本
   dws upgrade -y                 # 跳过确认直接升级`,
@@ -57,7 +61,11 @@ func newUpgradeCommand() *cobra.Command {
 			format := resolveUpgradeFormat(cmd)
 
 			if flagList {
-				return runUpgradeList(cmd, format)
+				limit := defaultListLimit
+				if flagAll {
+					limit = 0
+				}
+				return runUpgradeList(cmd, format, limit)
 			}
 			if flagRollback {
 				return runUpgradeRollback(yes)
@@ -75,7 +83,8 @@ func newUpgradeCommand() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&flagCheck, "check", false, "仅检查是否有新版本")
-	cmd.Flags().BoolVar(&flagList, "list", false, "列出所有可用版本")
+	cmd.Flags().BoolVar(&flagList, "list", false, "列出可用版本")
+	cmd.Flags().BoolVar(&flagAll, "all", false, "与 --list 搭配，显示所有版本")
 	cmd.Flags().StringVar(&flagVersion, "version", "", "升级到指定版本")
 	cmd.Flags().BoolVar(&flagRollback, "rollback", false, "回滚到上一版本")
 	cmd.Flags().BoolVar(&flagForce, "force", false, "强制重新安装当前版本")
@@ -146,7 +155,9 @@ func runUpgradeCheck(cmd *cobra.Command, format string) error {
 
 // --- dws upgrade --list ---
 
-func runUpgradeList(cmd *cobra.Command, format string) error {
+// runUpgradeList displays available versions. When limit > 0, only the most
+// recent `limit` versions are shown; pass 0 to show all (--all flag).
+func runUpgradeList(cmd *cobra.Command, format string, limit int) error {
 	client := upgrade.NewClient()
 
 	if format != "json" {
@@ -156,6 +167,13 @@ func runUpgradeList(cmd *cobra.Command, format string) error {
 	versions, err := client.FetchAllReleases()
 	if err != nil {
 		return fmt.Errorf("获取版本列表失败: %w", err)
+	}
+
+	totalCount := len(versions)
+	truncated := false
+	if limit > 0 && len(versions) > limit {
+		versions = versions[:limit]
+		truncated = true
 	}
 
 	currentVer := strings.TrimPrefix(version, "v")
@@ -171,13 +189,19 @@ func runUpgradeList(cmd *cobra.Command, format string) error {
 				"changelog":  parseChangelogEntries(v.Changelog, 10),
 			})
 		}
-		return writeJSON(cmd.OutOrStdout(), map[string]any{
+		result := map[string]any{
 			"current_version": ensureV(version),
 			"versions":        items,
-		})
+			"total":           totalCount,
+		}
+		if truncated {
+			result["truncated"] = true
+			result["shown"] = limit
+		}
+		return writeJSON(cmd.OutOrStdout(), result)
 	}
 
-	if len(versions) == 0 {
+	if totalCount == 0 {
 		fmt.Printf("  %s\n", ugYellow("未找到任何版本"))
 		return nil
 	}
@@ -203,7 +227,10 @@ func runUpgradeList(cmd *cobra.Command, format string) error {
 
 	fmt.Println()
 	fmt.Printf("  %s %s\n", ugBold("当前版本:"), ugBoldGrn(ensureV(version)))
-	fmt.Printf("  %s\n", ugDim("提示: 使用 dws upgrade --version v1.0.5 安装指定版本"))
+	if truncated {
+		fmt.Printf("  %s\n", ugDim(fmt.Sprintf("显示最近 %d 个版本（共 %d 个），使用 --list --all 查看全部", limit, totalCount)))
+	}
+	fmt.Printf("  %s\n", ugDim("提示: 使用 dws upgrade --version v1.0.7 安装指定版本"))
 	return nil
 }
 

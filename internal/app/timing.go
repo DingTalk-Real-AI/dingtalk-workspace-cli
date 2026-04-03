@@ -23,8 +23,8 @@ import (
 	"time"
 )
 
-// Environment variable to enable performance timing output.
-const PerfTimingEnv = "DWS_PERF_TIMING"
+// PerfDebugEnv is the environment variable to enable performance timing output.
+const PerfDebugEnv = "DWS_PERF_DEBUG"
 
 // timingContextKey is the context key for TimingCollector.
 type timingContextKey struct{}
@@ -107,32 +107,46 @@ func (tc *TimingCollector) Entries() []TimingEntry {
 	return result
 }
 
+// formatDuration returns a human-friendly duration string.
+// Sub-µs → "0µs", sub-ms → microsecond precision (e.g. "142µs"), else → ms.
+func formatDuration(d time.Duration) string {
+	switch {
+	case d < time.Microsecond:
+		return "0µs"
+	case d < time.Millisecond:
+		return d.Truncate(time.Microsecond).String()
+	default:
+		return d.Truncate(time.Millisecond).String()
+	}
+}
+
 // Print writes a summary of all timing entries to the given writer.
 func (tc *TimingCollector) Print(w io.Writer) {
 	if tc == nil || w == nil {
 		return
 	}
 	entries := tc.Entries()
+	total := tc.Total()
 	if len(entries) == 0 {
-		fmt.Fprintf(w, "\n[Timing] Total: %v (no detailed entries)\n", tc.Total().Truncate(time.Millisecond))
+		fmt.Fprintf(w, "\n[Perf] Total: %v (no detailed entries)\n", formatDuration(total))
 		return
 	}
 
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "[Timing] Execution breakdown:")
+	fmt.Fprintln(w, "[Perf] Execution breakdown:")
 	for _, e := range entries {
-		fmt.Fprintf(w, "  %-30s %v\n", e.Name, e.Duration.Truncate(time.Millisecond))
+		fmt.Fprintf(w, "  %-30s %v\n", e.Name, formatDuration(e.Duration))
 	}
 	fmt.Fprintf(w, "  %-30s %v\n", "──────────────────────────────", "──────────")
-	fmt.Fprintf(w, "  %-30s %v\n", "Total", tc.Total().Truncate(time.Millisecond))
+	fmt.Fprintf(w, "  %-30s %v\n", "Total", formatDuration(total))
 }
 
-// PrintIfEnabled prints timing info to stderr if DWS_PERF_TIMING is set.
+// PrintIfEnabled prints timing info to stderr if DWS_PERF_DEBUG is set.
 func (tc *TimingCollector) PrintIfEnabled() {
 	if tc == nil {
 		return
 	}
-	if os.Getenv(PerfTimingEnv) == "" {
+	if os.Getenv(PerfDebugEnv) == "" {
 		return
 	}
 	tc.Print(os.Stderr)
@@ -171,7 +185,7 @@ func StartTiming(ctx context.Context, name string) func() {
 	return tc.StartTimer(name)
 }
 
-// IsPerfTimingEnabled returns true if performance timing output is enabled.
-func IsPerfTimingEnabled() bool {
-	return os.Getenv(PerfTimingEnv) != ""
+// IsPerfDebugEnabled returns true if performance debug output is enabled.
+func IsPerfDebugEnabled() bool {
+	return os.Getenv(PerfDebugEnv) != ""
 }

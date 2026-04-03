@@ -21,6 +21,8 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cache"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
@@ -152,27 +154,110 @@ func (s *Service) DiscoverServerRuntime(ctx context.Context, server market.Serve
 	}, nil
 }
 
+const perServerDiscoveryTimeout = 5 * time.Second
+
 func (s *Service) DiscoverAllRuntime(ctx context.Context, servers []market.ServerDescriptor) ([]RuntimeServer, []RuntimeFailure) {
-	results := make([]RuntimeServer, 0, len(servers))
-	failures := make([]RuntimeFailure, 0)
-	for _, server := range servers {
-		if server.CLI.Skip {
-			continue
+	type discoveryResult struct {
+		server  RuntimeServer
+		failure *RuntimeFailure
+	}
+
+	filtered := make([]market.ServerDescriptor, 0, len(servers))
+	for _, srv := range servers {
+		if !srv.CLI.Skip {
+			filtered = append(filtered, srv)
 		}
-		runtimeServer, err := s.DiscoverServerRuntime(ctx, server)
-		if err != nil {
-			if errors.Is(err, errCLIServerSkipped) {
-				continue
+	}
+	if len(filtered) == 0 {
+		return nil, nil
+	}
+
+	ch := make(chan discoveryResult, len(filtered))
+	var wg sync.WaitGroup
+	for _, srv := range filtered {
+		wg.Add(1)
+		go func(server market.ServerDescriptor) {
+			defer wg.Done()
+			serverCtx, cancel := context.WithTimeout(ctx, perServerDiscoveryTimeout)
+			defer cancel()
+			start := time.Now()
+			rs, err := s.DiscoverServerRuntime(serverCtx, server)
+			elapsed := time.Since(start)
+			if err != nil {
+				if errors.Is(err, errCLIServerSkipped) {
+					return
+				}
+				if s.Logger != nil {
+					s.Logger.Warn("server_discovery_failed",
+						slog.String("server_key", server.Key),
+						slog.String("duration", elapsed.Truncate(time.Millisecond).String()),
+						slog.String("error", err.Error()),
+						slog.Bool("is_timeout", errors.Is(err, context.DeadlineExceeded)),
+					)
+				}
+				// Per-server sub-context timed out but parent is still alive:
+				// try cache fallback instead of reporting a hard failure.
+				if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
+					if cached, cacheErr := s.loadServerFromCache(server); cacheErr == nil {
+						if s.Logger != nil {
+							s.Logger.Info("server_discovery_cache_fallback",
+								slog.String("server_key", server.Key),
+								slog.String("source", cached.Source),
+							)
+						}
+						ch <- discoveryResult{server: cached}
+						return
+					}
+				}
+				ch <- discoveryResult{failure: &RuntimeFailure{ServerKey: server.Key, Err: err}}
+				return
 			}
-			failures = append(failures, RuntimeFailure{
-				ServerKey: server.Key,
-				Err:       err,
-			})
-			continue
+			if s.Logger != nil {
+				s.Logger.Debug("server_discovery_ok",
+					slog.String("server_key", server.Key),
+					slog.String("duration", elapsed.Truncate(time.Millisecond).String()),
+					slog.String("source", rs.Source),
+				)
+			}
+			ch <- discoveryResult{server: rs}
+		}(srv)
+	}
+	go func() {
+		wg.Wait()
+		close(ch)
+	}()
+
+	results := make([]RuntimeServer, 0, len(filtered))
+	failures := make([]RuntimeFailure, 0)
+	for dr := range ch {
+		if dr.failure != nil {
+			failures = append(failures, *dr.failure)
+		} else {
+			results = append(results, dr.server)
 		}
-		results = append(results, runtimeServer)
 	}
 	return results, failures
+}
+
+// loadServerFromCache tries to load a server's tools from cache, returning a
+// degraded RuntimeServer. Used as fallback when a per-server discovery timeout
+// fires but the parent context is still alive.
+func (s *Service) loadServerFromCache(server market.ServerDescriptor) (RuntimeServer, error) {
+	partition := s.partition()
+	snapshot, freshness, err := s.Cache.LoadTools(partition, server.Key)
+	if err != nil {
+		return RuntimeServer{}, err
+	}
+	server.NegotiatedProtocolVersion = snapshot.ProtocolVersion
+	server.Source = string(freshness) + "_cache"
+	server.Degraded = true
+	return RuntimeServer{
+		Server:                    server,
+		NegotiatedProtocolVersion: snapshot.ProtocolVersion,
+		Tools:                     snapshot.Tools,
+		Source:                    string(freshness) + "_cache",
+		Degraded:                  true,
+	}, nil
 }
 
 func (s *Service) DiscoverDetail(ctx context.Context, server market.ServerDescriptor) (market.DetailResponse, error) {

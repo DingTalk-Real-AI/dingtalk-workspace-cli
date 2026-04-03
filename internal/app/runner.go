@@ -15,6 +15,8 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -29,6 +31,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/safety"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -76,13 +79,6 @@ type runtimeRunner struct {
 }
 
 func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation) (executor.Result, error) {
-	totalStart := time.Now()
-	defer func() {
-		if os.Getenv("DWS_PERF_DEBUG") != "" {
-			_, _ = fmt.Fprintf(os.Stderr, "[PERF] runtimeRunner.Run total: %v\n", time.Since(totalStart))
-		}
-	}()
-
 	if r.loader == nil || r.transport == nil {
 		return r.fallback.Run(ctx, invocation)
 	}
@@ -95,6 +91,11 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 		}
 		return r.executeInvocation(ctx, endpoint, invocation)
 	}
+
+	// Prefetch the Keychain token in the background. Keychain access costs
+	// ~70ms on macOS; starting it here lets the load overlap with endpoint
+	// resolution and catalog loading below.
+	go getCachedRuntimeToken(ctx)
 
 	if shouldUseDirectRuntime(invocation) {
 		if endpoint, ok := directRuntimeEndpoint(invocation.CanonicalProduct, invocation.Tool); ok {
@@ -127,20 +128,44 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 	return r.executeInvocation(ctx, endpoint, invocation)
 }
 
-func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, invocation executor.Invocation) (executor.Result, error) {
+func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, invocation executor.Invocation) (result executor.Result, retErr error) {
+	invokeStart := time.Now()
+	execID := generateExecutionID()
+	r.transport.ExecutionId = execID
+
 	// Lazy bind FileLogger: it may be nil at construction time because
 	// configureLogLevel runs later in PersistentPreRunE.
 	if r.transport.FileLogger == nil {
 		r.transport.FileLogger = FileLoggerInstance()
 	}
 
-	authStart := time.Now()
+	fl := r.transport.FileLogger
+
+	defer func() {
+		var errCat, errReason string
+		if retErr != nil {
+			var typed *apperrors.Error
+			if errors.As(retErr, &typed) {
+				errCat = string(typed.Category)
+				errReason = typed.Reason
+			} else {
+				errCat = "unknown"
+				errReason = retErr.Error()
+			}
+		}
+		logging.LogCommandEnd(fl, execID,
+			invocation.CanonicalProduct, invocation.Tool,
+			retErr == nil, time.Since(invokeStart), errCat, errReason)
+	}()
+
 	authToken := r.resolveAuthToken(ctx)
-	authDuration := time.Since(authStart)
-	RecordTiming(ctx, "auth_token", authDuration)
-	if os.Getenv("DWS_PERF_DEBUG") != "" {
-		_, _ = fmt.Fprintf(os.Stderr, "[PERF] resolveAuthToken: %v\n", authDuration)
+
+	var timeoutSec int
+	if r.globalFlags != nil {
+		timeoutSec = r.globalFlags.Timeout
 	}
+	logging.LogCommandStart(fl, execID,
+		invocation.CanonicalProduct, invocation.Tool, endpoint, version, authToken != "", timeoutSec)
 
 	if invocation.DryRun {
 		return executor.Result{
@@ -184,13 +209,16 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 
 	tc := r.transport.WithAuth(authToken, resolveIdentityHeaders())
 
-	callStart := time.Now()
-	callResult, err := tc.CallTool(ctx, endpoint, invocation.Tool, invocation.Params)
-	callDuration := time.Since(callStart)
-	RecordTiming(ctx, "mcp_call", callDuration)
-	if os.Getenv("DWS_PERF_DEBUG") != "" {
-		_, _ = fmt.Fprintf(os.Stderr, "[PERF] MCP CallTool: %v\n", callDuration)
+	callCtx := ctx
+	if r.globalFlags != nil && r.globalFlags.Timeout > 0 {
+		var cancel context.CancelFunc
+		callCtx, cancel = context.WithTimeout(ctx, time.Duration(r.globalFlags.Timeout)*time.Second)
+		defer cancel()
 	}
+
+	callStart := time.Now()
+	callResult, err := tc.CallTool(callCtx, endpoint, invocation.Tool, invocation.Params)
+	RecordTiming(ctx, "mcp_call", time.Since(callStart))
 	if err != nil {
 		if isAuthError(err) {
 			if fn := edition.Get().OnAuthError; fn != nil {
@@ -271,13 +299,7 @@ var (
 func getCachedRuntimeToken(ctx context.Context) string {
 	cachedRuntimeTokenOnce.Do(func() {
 		loadStart := time.Now()
-		defer func() {
-			loadDuration := time.Since(loadStart)
-			RecordTiming(ctx, "keychain_load", loadDuration)
-			if os.Getenv("DWS_PERF_DEBUG") != "" {
-				_, _ = fmt.Fprintf(os.Stderr, "[PERF] getCachedRuntimeToken (first load): %v\n", loadDuration)
-			}
-		}()
+		defer func() { RecordTiming(ctx, "auth_keychain", time.Since(loadStart)) }()
 
 		configDir := defaultConfigDir()
 		provider := authpkg.NewOAuthProvider(configDir, slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -301,6 +323,15 @@ func getCachedRuntimeToken(ctx context.Context) string {
 		}
 	})
 	return cachedRuntimeToken
+}
+
+// generateExecutionID returns a random 16-char hex string used to correlate
+// all log entries (command_start, jsonrpc_request, command_end, etc.) belonging
+// to a single command invocation.
+func generateExecutionID() string {
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 // ResetRuntimeTokenCache clears the cached token, forcing a reload on next access.
