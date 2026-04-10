@@ -207,7 +207,7 @@ func TestHttpStatusError(t *testing.T) {
 		http.StatusInternalServerError,
 	}
 	for _, code := range codes {
-		err := httpStatusError("tools/call", "https://api.example.com/mcp", code, "", "")
+		err := httpStatusError("tools/call", "https://api.example.com/mcp", code, nil, "", "")
 		if err == nil {
 			t.Fatalf("expected error for status %d", code)
 		}

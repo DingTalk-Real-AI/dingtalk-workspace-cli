@@ -10,7 +10,7 @@ import (
 )
 
 func TestHTTPStatusErrorIncludesCallMetadata(t *testing.T) {
-	err := httpStatusError("tools/call", "https://mcp.dingtalk.com/server", http.StatusTooManyRequests, "", "")
+	err := httpStatusError("tools/call", "https://mcp.dingtalk.com/server", http.StatusTooManyRequests, nil, "", "")
 
 	var callErr *CallError
 	if !errors.As(err, &callErr) {

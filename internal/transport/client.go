@@ -45,7 +45,9 @@ const (
 	defaultHTTPTimeout = 30 * time.Second
 
 	// Default retry parameters for JSON-RPC calls.
-	defaultMaxRetries    = 1
+	// Increased from 1 to 2 (3 total attempts) to improve resilience against
+	// transient EOF errors during batch operations and brief 429 rate-limiting.
+	defaultMaxRetries    = 2
 	defaultRetryDelay    = 500 * time.Millisecond
 	defaultRetryMaxDelay = 5 * time.Second
 
@@ -389,11 +391,25 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 	data, err := io.ReadAll(io.LimitReader(resp.Body, config.MaxResponseBodySize))
 	logging.LogResponse(c.FileLogger, request.Method, endpoint, c.ExecutionId, resp.StatusCode, len(data), time.Since(callStart), err)
 	if err != nil {
+		// Detect EOF during response body read — this typically happens when
+		// the server closes the connection mid-transfer (e.g. under high load
+		// during batch operations). Mark as retryable so the retry loop can
+		// recover automatically.
+		isEOF := errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)
+		reason := reasonForMethod(request.Method, "response_read_failed")
+		hint := i18n.T("检查服务连通性后重试；如持续失败，请确认 MCP 服务响应正常。")
+		retryable := false
+		if isEOF {
+			reason = reasonForMethod(request.Method, "response_eof")
+			hint = i18n.T("连接被服务端提前关闭（EOF）；批量操作时可能因响应过大触发，建议稍后重试或减少单批数据量。")
+			retryable = true
+		}
 		return apperrors.NewDiscovery(
 			"failed to read JSON-RPC response",
 			apperrors.WithOperation(request.Method),
-			apperrors.WithReason(reasonForMethod(request.Method, "response_read_failed")),
-			apperrors.WithHint(i18n.T("检查服务连通性后重试；如持续失败，请确认 MCP 服务响应正常。")),
+			apperrors.WithReason(reason),
+			apperrors.WithRetryable(retryable),
+			apperrors.WithHint(hint),
 			apperrors.WithActions(discoveryActions("")...),
 			apperrors.WithTraceID(headerTraceID),
 		)
@@ -405,7 +421,7 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		logging.LogResponseBody(c.FileLogger, request.Method, c.ExecutionId, resp.StatusCode, data, headerTraceID)
-		return httpStatusError(request.Method, endpoint, resp.StatusCode, snapshotPath, headerTraceID)
+		return httpStatusError(request.Method, endpoint, resp.StatusCode, data, snapshotPath, headerTraceID)
 	}
 
 	if !expectResponse {
@@ -545,6 +561,38 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte) 
 	)
 }
 
+// extractBodyPreview extracts a human-readable preview from an HTTP response body.
+// It first attempts to parse the body as JSON and extract common error description
+// fields (message, msg, error, detail, etc.). If JSON parsing fails or no known
+// field is found, it falls back to the raw body truncated to maxLen bytes.
+// Returns an empty string when body is nil or empty, so callers can safely
+// append it to hints without extra nil checks.
+func extractBodyPreview(body []byte, maxLen int) string {
+	trimmed := bytes.TrimSpace(body)
+	if len(trimmed) == 0 {
+		return ""
+	}
+
+	// Try to extract a descriptive field from a JSON object response.
+	var obj map[string]any
+	if json.Unmarshal(trimmed, &obj) == nil {
+		for _, key := range []string{"message", "msg", "error", "detail", "description", "errorMessage"} {
+			if v, ok := obj[key].(string); ok && strings.TrimSpace(v) != "" {
+				if len(v) > maxLen {
+					return v[:maxLen] + "..."
+				}
+				return v
+			}
+		}
+	}
+
+	// Fallback: return raw body truncated to maxLen.
+	if len(trimmed) > maxLen {
+		return string(trimmed[:maxLen]) + "..."
+	}
+	return string(trimmed)
+}
+
 func retryable(statusCode int) bool {
 	return statusCode == http.StatusTooManyRequests || statusCode >= http.StatusInternalServerError
 }
@@ -601,6 +649,14 @@ func classifyRequestFailure(err error) (reason, hint string) {
 	case strings.Contains(msg, "i/o timeout"):
 		return "io_timeout",
 			i18n.T("网络 I/O 超时。可通过 --timeout 增大超时时间，或检查网络连接。")
+
+	// EOF during the HTTP request phase: the server closed the connection
+	// before sending a complete response. Common under high server load or
+	// when batch requests produce very large responses.
+	case errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||
+		msg == "EOF" || strings.Contains(msg, "unexpected EOF"):
+		return "connection_eof",
+			i18n.T("连接被服务端提前关闭（EOF）；可能因服务端重启或负载过高触发，建议稍后重试。")
 	default:
 		return "request_failed",
 			i18n.T("请检查网络连通性和 MCP 服务状态后重试。")
@@ -767,7 +823,11 @@ func sanitizeBearerToken(raw string) string {
 	return token
 }
 
-func httpStatusError(method, endpoint string, statusCode int, snapshotPath, headerTraceID string) error {
+// httpStatusError builds a structured error for non-2xx HTTP responses.
+// The responseBody parameter carries the raw server response so that a
+// human-readable preview can be appended to the hint, giving users
+// actionable context (e.g. which parameter was rejected).
+func httpStatusError(method, endpoint string, statusCode int, responseBody []byte, snapshotPath, headerTraceID string) error {
 	message := fmt.Sprintf("request to %s returned HTTP %d", RedactURL(endpoint), statusCode)
 	opts := []apperrors.Option{
 		apperrors.WithOperation(method),
@@ -796,9 +856,29 @@ func httpStatusError(method, endpoint string, statusCode int, snapshotPath, head
 			apperrors.WithActions(authActions(snapshotPath)...),
 		)
 		return apperrors.NewAuth(message, opts...)
-	case statusCode >= http.StatusBadRequest && statusCode < http.StatusInternalServerError:
+
+	// Dedicated 429 handling: provide clear rate-limiting guidance instead of
+	// the generic "check params" hint that the old 4xx catch-all produced.
+	case statusCode == http.StatusTooManyRequests:
+		hint := i18n.T("请求频率过高，服务端触发限流；建议稍后重试，短时高频场景请降低调用频率或增加请求间隔。")
+		if preview := extractBodyPreview(responseBody, 200); preview != "" {
+			hint += " " + i18n.T("服务端响应") + ": " + preview
+		}
 		opts = append(opts,
-			apperrors.WithHint(i18n.T("请求被上游服务拒绝；请检查参数、认证和权限配置。")),
+			apperrors.WithHint(hint),
+			apperrors.WithActions(runtimeActions(snapshotPath)...),
+		)
+		return apperrors.NewAPI(message, opts...)
+
+	// Generic 4xx: append server response body preview to hint so users
+	// can see *why* the request was rejected (fixes "HTTP 400 no details").
+	case statusCode >= http.StatusBadRequest && statusCode < http.StatusInternalServerError:
+		hint := i18n.T("请求被上游服务拒绝；请检查参数、认证和权限配置。")
+		if preview := extractBodyPreview(responseBody, 200); preview != "" {
+			hint += " " + i18n.T("服务端响应") + ": " + preview
+		}
+		opts = append(opts,
+			apperrors.WithHint(hint),
 			apperrors.WithActions(runtimeActions(snapshotPath)...),
 		)
 		if method != "tools/call" {
@@ -850,6 +930,18 @@ func jsonrpcEnvelopeError(method string, rpcErr *RPCError, snapshotPath, headerT
 			apperrors.WithActions(runtimeActions(snapshotPath)...),
 		)
 		return apperrors.NewValidation(message, opts...)
+	}
+
+	// DingTalk business error code 2064 indicates cluster high load / rate
+	// limiting. Provide a dedicated hint and mark as retryable so users know
+	// this is a transient server-side throttle, not a client-side bug.
+	if rpcErr.Code == 2064 || diag.ServerErrorCode == "2064" {
+		opts = append(opts,
+			apperrors.WithHint(i18n.T("集群负载较高（错误码 2064），服务端触发限流；请稍后重试，短时高频场景建议增加请求间隔或启用指数退避策略。")),
+			apperrors.WithRetryable(true),
+			apperrors.WithActions(runtimeActions(snapshotPath)...),
+		)
+		return apperrors.NewAPI(message, opts...)
 	}
 
 	if looksAuthRPCError(rpcErr) {
