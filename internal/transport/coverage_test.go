@@ -294,7 +294,7 @@ func TestCallTool_RetriesOn502(t *testing.T) {
 func TestHttpStatusError_AllCodes(t *testing.T) {
 	t.Parallel()
 	for _, code := range []int{400, 401, 403, 404, 429, 500, 502, 503} {
-		err := httpStatusError("tools/call", "https://api.example.com", code, "", "")
+		err := httpStatusError("tools/call", "https://api.example.com", code, nil, "", "")
 		if err == nil {
 			t.Fatalf("expected error for status %d", code)
 		}
@@ -303,7 +303,7 @@ func TestHttpStatusError_AllCodes(t *testing.T) {
 
 func TestHttpStatusError_WithSnapshot(t *testing.T) {
 	t.Parallel()
-	err := httpStatusError("initialize", "https://api.example.com", 500, "/tmp/snap.json", "")
+	err := httpStatusError("initialize", "https://api.example.com", 500, nil, "/tmp/snap.json", "")
 	if err == nil {
 		t.Fatal("expected error")
 	}

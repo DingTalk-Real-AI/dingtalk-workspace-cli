@@ -441,11 +441,17 @@ func newAitableRecordQueryCommand(runner executor.Runner) *cobra.Command {
 				params["fieldIds"] = parseAitableCSVValues(fieldIDs)
 			}
 			if filtersRaw := aitableStringFlag(cmd, "filters"); filtersRaw != "" {
-				filters, err := parseAitableJSONObject(filtersRaw, "filters")
-				if err != nil {
-					return err
+				// Support both JSON array (e.g. [{"field":"f","operator":"is","value":"v"}])
+				// and JSON object formats — try array first, then fall back to object.
+				// This preserves backward compatibility with existing object-format users
+				// while also accepting the array format that AITable API supports.
+				if arrayVal, arrayErr := parseAitableJSONArray(filtersRaw, "filters"); arrayErr == nil {
+					params["filters"] = arrayVal
+				} else if objVal, objErr := parseAitableJSONObject(filtersRaw, "filters"); objErr == nil {
+					params["filters"] = objVal
+				} else {
+					return apperrors.NewValidation("--filters JSON parse failed: expected a JSON array or object")
 				}
-				params["filters"] = filters
 			}
 			if sortRaw := aitableStringFlag(cmd, "sort"); sortRaw != "" {
 				sortValue, err := parseAitableJSONArray(sortRaw, "sort")
