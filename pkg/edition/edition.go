@@ -77,6 +77,13 @@ type Hooks struct {
 	OnAuthError   func(configDir string, err error) error
 	TokenProvider func(ctx context.Context, fallback func() (string, error)) (string, error)
 
+	// --- token persistence (overlay-only) ---
+	// When non-nil, these override the default keychain-based token storage.
+	// The data parameter is JSON-serialized TokenData.
+	SaveToken   func(configDir string, data []byte) error
+	LoadToken   func(configDir string) ([]byte, error)
+	DeleteToken func(configDir string) error
+
 	// --- auth credentials (overlay-only) ---
 	AuthClientID      string // non-empty overrides DefaultClientID
 	AuthClientFromMCP bool   // true routes OAuth through MCP endpoints

@@ -94,50 +94,59 @@ func DeleteTokenMarker(configDir string) error {
 	return os.Remove(filepath.Join(configDir, tokenJSONFile))
 }
 
-// SaveTokenData saves TokenData to the platform keychain.
-// In embedded mode, it also writes a token.json marker file so the host
-// application can detect authentication state without accessing the keychain.
+// SaveTokenData persists TokenData. When an edition hook (SaveToken) is
+// registered, it delegates entirely to the hook; otherwise it falls back
+// to the default keychain-based storage.
 func SaveTokenData(configDir string, data *TokenData) error {
-	if err := SaveTokenDataKeychain(data); err != nil {
-		return err
+	if h := edition.Get(); h.SaveToken != nil {
+		jsonData, err := json.MarshalIndent(data, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshaling token data for hook: %w", err)
+		}
+		return h.SaveToken(configDir, jsonData)
 	}
-	if edition.Get().IsEmbedded {
-		_ = WriteTokenMarker(configDir)
-	}
-	return nil
+	return SaveTokenDataKeychain(data)
 }
 
-// LoadTokenData reads TokenData from the platform keychain.
-// On first call, it attempts to migrate legacy .data file if present.
+// LoadTokenData reads TokenData. When an edition hook (LoadToken) is
+// registered, it delegates entirely to the hook; otherwise it falls back
+// to keychain with legacy .data migration.
 func LoadTokenData(configDir string) (*TokenData, error) {
-	// Try loading from new keychain first
+	if h := edition.Get(); h.LoadToken != nil {
+		jsonData, err := h.LoadToken(configDir)
+		if err != nil {
+			return nil, err
+		}
+		var td TokenData
+		if err := json.Unmarshal(jsonData, &td); err != nil {
+			return nil, fmt.Errorf("parsing token data from hook: %w", err)
+		}
+		return &td, nil
+	}
+
+	// Default: keychain with legacy .data migration
 	if TokenDataExistsKeychain() {
 		return LoadTokenDataKeychain()
 	}
-
-	// Fallback: try legacy .data file and migrate
 	data, err := LoadSecureTokenData(configDir)
 	if err != nil {
 		return nil, err
 	}
-
-	// Migrate to keychain for future use
 	if err := SaveTokenDataKeychain(data); err == nil {
-		// Successfully migrated, delete legacy file
 		_ = DeleteSecureData(configDir)
 	}
-
 	return data, nil
 }
 
-// DeleteTokenData removes token data from both keychain and legacy storage.
-// In embedded mode, it also removes the token.json marker file.
+// DeleteTokenData removes token data. When an edition hook (DeleteToken) is
+// registered, it delegates entirely to the hook; otherwise it falls back
+// to keychain + legacy cleanup.
 func DeleteTokenData(configDir string) error {
+	if h := edition.Get(); h.DeleteToken != nil {
+		return h.DeleteToken(configDir)
+	}
 	keychainErr := DeleteTokenDataKeychain()
 	legacyErr := DeleteSecureData(configDir)
-	if edition.Get().IsEmbedded {
-		_ = DeleteTokenMarker(configDir)
-	}
 	if keychainErr != nil {
 		return keychainErr
 	}
