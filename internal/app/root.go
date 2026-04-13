@@ -983,15 +983,23 @@ func loadPlugins(engine *pipeline.Engine, runner executor.Runner) []*cobra.Comma
 	allPlugins := append(managedPlugins, userPlugins...)
 	allPlugins = append(allPlugins, devPlugins...)
 
-	// 3. Inject streamable-http servers into dynamic server registry
+	// 3. Discover tools from streamable-http servers and build CLI commands
+	var pluginCmds []*cobra.Command
+	tc := transport.NewClient(nil)
 	for _, p := range allPlugins {
 		for _, srv := range p.ToServerDescriptors() {
 			AppendDynamicServer(srv)
+
+			// For plugin-owned streamable-http servers, also discover tools
+			// and build CLI commands (Market servers rely on the detail API).
+			if srv.HasCLIMeta {
+				cmds := registerHTTPServer(p, srv, tc, runner)
+				pluginCmds = append(pluginCmds, cmds...)
+			}
 		}
 	}
 
 	// 4. Start stdio MCP servers, discover tools, and build CLI commands
-	var pluginCmds []*cobra.Command
 	for _, p := range allPlugins {
 		for _, sc := range p.StdioClients() {
 			// Use background context so the subprocess lives for the CLI
@@ -1036,6 +1044,58 @@ func loadPlugins(engine *pipeline.Engine, runner executor.Runner) []*cobra.Comma
 	}
 
 	return pluginCmds
+}
+
+// registerHTTPServer discovers tools from a streamable-http MCP server and
+// builds CLI commands. Used for plugin-owned HTTP servers that provide CLI metadata.
+func registerHTTPServer(p *plugin.Plugin, srv market.ServerDescriptor, tc *transport.Client, runner executor.Runner) []*cobra.Command {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if _, err := tc.Initialize(ctx, srv.Endpoint); err != nil {
+		slog.Debug("plugin: http server offline, skipping tool discovery",
+			"plugin", p.Manifest.Name, "server", srv.Key)
+		return nil
+	}
+
+	toolsResult, err := tc.ListTools(ctx, srv.Endpoint)
+	if err != nil {
+		slog.Debug("plugin: http ListTools failed",
+			"plugin", p.Manifest.Name, "server", srv.Key, "error", err)
+		return nil
+	}
+
+	if len(toolsResult.Tools) == 0 {
+		return nil
+	}
+
+	detailsByID := make(map[string][]market.DetailTool)
+	var detailTools []market.DetailTool
+	for _, tool := range toolsResult.Tools {
+		schemaJSON := ""
+		if tool.InputSchema != nil {
+			if data, marshalErr := json.Marshal(tool.InputSchema); marshalErr == nil {
+				schemaJSON = string(data)
+			}
+		}
+		detailTools = append(detailTools, market.DetailTool{
+			ToolName:    tool.Name,
+			ToolTitle:   tool.Title,
+			ToolDesc:    tool.Description,
+			IsSensitive: tool.Sensitive,
+			ToolRequest: schemaJSON,
+		})
+	}
+	detailsByID[strings.TrimSpace(srv.CLI.ID)] = detailTools
+
+	cmds := compat.BuildDynamicCommands(
+		[]market.ServerDescriptor{srv}, runner, detailsByID)
+
+	slog.Debug("plugin: http server registered",
+		"plugin", p.Manifest.Name, "server", srv.Key,
+		"tools", len(toolsResult.Tools), "commands", len(cmds))
+
+	return cmds
 }
 
 // registerStdioServer initializes a stdio MCP server, discovers its tools

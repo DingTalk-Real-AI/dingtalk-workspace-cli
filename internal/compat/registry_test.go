@@ -146,3 +146,102 @@ func TestCollectBindingsParsesJSONFlagValue(t *testing.T) {
 		t.Fatalf("config.options = %#v, want array of 1", config["options"])
 	}
 }
+
+func TestCollectSchemaFlagsPicksUpUnboundFlags(t *testing.T) {
+	t.Parallel()
+
+	// Simulate a plugin command with schema-generated flags but no bindings.
+	cmd := &cobra.Command{Use: "greet"}
+	cmd.Flags().String("name", "", "Name of person")
+	cmd.Flags().String("language", "en", "Language")
+	cmd.Flags().Int("count", 0, "Repeat count")
+	cmd.Flags().Bool("loud", false, "Loud mode")
+	cmd.Flags().String("json", "", "")
+	cmd.Flags().String("params", "", "")
+
+	// User sets --name and --count but not --language
+	_ = cmd.Flags().Set("name", "Alice")
+	_ = cmd.Flags().Set("count", "3")
+	_ = cmd.Flags().Set("loud", "true")
+
+	params := make(map[string]any)
+	collectSchemaFlags(cmd, nil, params)
+
+	if params["name"] != "Alice" {
+		t.Errorf("name = %v, want Alice", params["name"])
+	}
+	if params["count"] != 3 {
+		t.Errorf("count = %v, want 3", params["count"])
+	}
+	if params["loud"] != true {
+		t.Errorf("loud = %v, want true", params["loud"])
+	}
+	// language was not set by user, should not appear
+	if _, exists := params["language"]; exists {
+		t.Errorf("language should not be in params (not set by user)")
+	}
+	// json/params are reserved, should not appear
+	if _, exists := params["json"]; exists {
+		t.Error("json should be skipped")
+	}
+}
+
+func TestCollectSchemaFlagsSkipsBoundFlags(t *testing.T) {
+	t.Parallel()
+
+	bindings := []FlagBinding{
+		{FlagName: "dept-id", Property: "deptId", Kind: ValueString},
+	}
+
+	cmd := &cobra.Command{Use: "test"}
+	ApplyBindings(cmd, bindings)
+	// Also add a schema-generated flag
+	cmd.Flags().String("title", "", "Title")
+
+	_ = cmd.Flags().Set("dept-id", "D001")
+	_ = cmd.Flags().Set("title", "Hello")
+
+	params := make(map[string]any)
+	collectSchemaFlags(cmd, bindings, params)
+
+	// dept-id is bound, should NOT be collected by collectSchemaFlags
+	if _, exists := params["dept_id"]; exists {
+		t.Error("dept-id should be skipped (already has binding)")
+	}
+	// title is unbound, should be collected
+	if params["title"] != "Hello" {
+		t.Errorf("title = %v, want Hello", params["title"])
+	}
+}
+
+func TestCollectSchemaFlagsSkipsGlobalFlags(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("name", "", "Name")
+	cmd.Flags().Bool("debug", false, "Debug")
+	cmd.Flags().Bool("verbose", false, "Verbose")
+	cmd.Flags().Bool("dry-run", false, "Dry run")
+	cmd.Flags().String("format", "json", "Format")
+	cmd.Flags().String("json", "", "")
+	cmd.Flags().String("params", "", "")
+
+	_ = cmd.Flags().Set("name", "Bob")
+	_ = cmd.Flags().Set("debug", "true")
+	_ = cmd.Flags().Set("verbose", "true")
+	_ = cmd.Flags().Set("dry-run", "true")
+	_ = cmd.Flags().Set("format", "table")
+
+	params := make(map[string]any)
+	collectSchemaFlags(cmd, nil, params)
+
+	if params["name"] != "Bob" {
+		t.Errorf("name = %v, want Bob", params["name"])
+	}
+	// Global flags should be skipped
+	for _, skip := range []string{"debug", "verbose", "dry_run", "format"} {
+		if _, exists := params[skip]; exists {
+			t.Errorf("%s should be skipped (global flag)", skip)
+		}
+	}
+}

@@ -167,10 +167,20 @@ func (l *Loader) loadPlugin(dir string, isManaged bool) *Plugin {
 	}
 }
 
-// loadSettings reads ~/.dws/settings.json.
+// settingsPath returns the path to settings.json.
+// Uses PluginsDir's parent (~/.dws/) for production, PluginsDir itself for tests.
+func (l *Loader) settingsPath() string {
+	// If PluginsDir ends with "plugins", go up one level to ~/.dws/
+	if filepath.Base(l.PluginsDir) == "plugins" {
+		return filepath.Join(filepath.Dir(l.PluginsDir), "settings.json")
+	}
+	// For test temp dirs, use PluginsDir directly
+	return filepath.Join(l.PluginsDir, "settings.json")
+}
+
+// loadSettings reads settings.json from the parent of PluginsDir.
 func (l *Loader) loadSettings() *Settings {
-	home, _ := os.UserHomeDir()
-	settingsPath := filepath.Join(home, ".dws", "settings.json")
+	settingsPath := l.settingsPath()
 	data, err := os.ReadFile(settingsPath)
 	if err != nil {
 		return &Settings{}
@@ -242,6 +252,22 @@ func (l *Loader) ListInstalled() []PluginInfo {
 			}
 			l.collectUserPluginInfos(filepath.Join(userDir, entry.Name()), entry.Name(), settings, &result)
 		}
+	}
+
+	// Dev plugins
+	for name, dir := range settings.DevPlugins {
+		m, err := ParseManifest(filepath.Join(dir, "plugin.json"))
+		if err != nil {
+			continue
+		}
+		result = append(result, PluginInfo{
+			Name:        name,
+			Version:     m.Version,
+			Type:        "dev",
+			Enabled:     true,
+			Path:        dir,
+			Description: m.Description,
+		})
 	}
 
 	return result
@@ -476,8 +502,7 @@ func (l *Loader) setPluginEnabled(name string, enabled bool) {
 }
 
 func (l *Loader) saveSettings(s *Settings) {
-	home, _ := os.UserHomeDir()
-	settingsPath := filepath.Join(home, ".dws", "settings.json")
+	settingsPath := l.settingsPath()
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		slog.Debug("plugin: failed to marshal settings", "error", err)
