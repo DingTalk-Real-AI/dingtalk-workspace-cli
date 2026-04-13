@@ -16,9 +16,64 @@ package plugin
 import (
 	"encoding/json"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 )
+
+// StdioServerClient pairs a transport.StdioClient with its server key.
+type StdioServerClient struct {
+	Key    string
+	Client *transport.StdioClient
+}
+
+// StdioClients returns StdioClient instances for all stdio-type MCP
+// servers declared by this plugin.
+func (p *Plugin) StdioClients() []StdioServerClient {
+	var clients []StdioServerClient
+	for key, srv := range p.Manifest.MCPServers {
+		if srv.Type != "stdio" {
+			continue
+		}
+
+		command := srv.Command
+		if command == "" {
+			slog.Warn("plugin: stdio server missing command",
+				"plugin", p.Manifest.Name, "server", key)
+			continue
+		}
+
+		// Expand ${DWS_PLUGIN_ROOT} in command and args.
+		command = expandPluginVars(command, p.Root)
+		args := make([]string, len(srv.Args))
+		for i, a := range srv.Args {
+			args[i] = expandPluginVars(a, p.Root)
+		}
+
+		env := make(map[string]string)
+		for k, v := range srv.Env {
+			env[k] = expandPluginVars(v, p.Root)
+		}
+		env["DWS_PLUGIN_ROOT"] = p.Root
+		env["DWS_PLUGIN_DATA"] = filepath.Join(filepath.Dir(filepath.Dir(p.Root)), "data", p.Manifest.Name)
+
+		sc := transport.NewStdioClient(command, args, env)
+		clients = append(clients, StdioServerClient{Key: key, Client: sc})
+	}
+	return clients
+}
+
+// expandPluginVars replaces ${DWS_PLUGIN_ROOT} with the actual plugin
+// root path and ${DWS_PLUGIN_DATA} with the data directory.
+func expandPluginVars(s, root string) string {
+	s = strings.ReplaceAll(s, "${DWS_PLUGIN_ROOT}", root)
+	dataDir := filepath.Join(filepath.Dir(filepath.Dir(root)), "data")
+	s = strings.ReplaceAll(s, "${DWS_PLUGIN_DATA}", dataDir)
+	return os.Expand(s, os.Getenv)
+}
 
 // ToServerDescriptors converts a loaded plugin's MCP servers into
 // market.ServerDescriptor values suitable for SetDynamicServers.

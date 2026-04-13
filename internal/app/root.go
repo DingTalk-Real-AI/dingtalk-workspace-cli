@@ -952,6 +952,18 @@ func CloseFileLogger() {
 func loadPlugins(engine *pipeline.Engine) {
 	pluginLoader := plugin.NewLoader(RawVersion())
 
+	// 0. Check for managed plugin updates (non-blocking, best-effort).
+	updater := plugin.NewUpdater(pluginLoader.PluginsDir, RawVersion())
+	accessToken, tokenErr := loadSkillAccessToken()
+	if tokenErr == nil && accessToken != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		updated := updater.CheckAndUpdate(ctx, accessToken, os.Stderr)
+		cancel()
+		if len(updated) > 0 {
+			slog.Debug("plugin: updated managed plugins", "names", updated)
+		}
+	}
+
 	// 1. Load official plugins (always enabled)
 	managedPlugins := pluginLoader.LoadManaged()
 
@@ -967,7 +979,22 @@ func loadPlugins(engine *pipeline.Engine) {
 		}
 	}
 
-	// 4. Register plugin hooks into pipeline engine
+	// 4. Start stdio MCP servers and register them
+	for _, p := range allPlugins {
+		for _, sc := range p.StdioClients() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			if err := sc.Client.Start(ctx); err != nil {
+				slog.Warn("plugin: failed to start stdio server",
+					"plugin", p.Manifest.Name, "server", sc.Key, "error", err)
+				cancel()
+				continue
+			}
+			cancel()
+			registerStdioServer(p, sc)
+		}
+	}
+
+	// 5. Register plugin hooks into pipeline engine
 	if engine != nil {
 		for _, p := range allPlugins {
 			hooksCfg, err := p.LoadHooks()
@@ -991,6 +1018,22 @@ func loadPlugins(engine *pipeline.Engine) {
 			"user", len(userPlugins),
 		)
 	}
+}
+
+// registerStdioServer registers a stdio MCP server's tools into the
+// dynamic server registry after performing initialize + tools/list.
+func registerStdioServer(p *plugin.Plugin, sc plugin.StdioServerClient) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if _, err := sc.Client.Initialize(ctx); err != nil {
+		slog.Warn("plugin: stdio initialize failed",
+			"plugin", p.Manifest.Name, "server", sc.Key, "error", err)
+		return
+	}
+
+	slog.Debug("plugin: stdio server initialized",
+		"plugin", p.Manifest.Name, "server", sc.Key)
 }
 
 // newPipelineEngine creates and configures the pipeline engine with
