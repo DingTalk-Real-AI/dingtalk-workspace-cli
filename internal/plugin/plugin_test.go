@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -318,6 +319,84 @@ func TestIsPluginEnabled(t *testing.T) {
 	}
 	if !isPluginEnabled(nil, "anything") {
 		t.Error("nil settings should default to enabled")
+	}
+}
+
+func TestParseGitURL(t *testing.T) {
+	tests := []struct {
+		name      string
+		url       string
+		wantWS    string
+		wantRepo  string
+		wantErr   bool
+	}{
+		{
+			name:     "https with .git",
+			url:      "https://github.com/PeterGuy326/hello-plugin.git",
+			wantWS:   "PeterGuy326",
+			wantRepo: "hello-plugin",
+		},
+		{
+			name:     "https without .git",
+			url:      "https://github.com/DingTalk-Real-AI/conference",
+			wantWS:   "DingTalk-Real-AI",
+			wantRepo: "conference",
+		},
+		{
+			name:     "ssh format",
+			url:      "git@github.com:DingTalk-Real-AI/conference.git",
+			wantWS:   "DingTalk-Real-AI",
+			wantRepo: "conference",
+		},
+		{
+			name:    "invalid - no repo",
+			url:     "https://github.com/onlyone",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ws, repo, err := parseGitURL(tt.url)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("parseGitURL() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr {
+				if ws != tt.wantWS {
+					t.Errorf("workspace = %q, want %q", ws, tt.wantWS)
+				}
+				if repo != tt.wantRepo {
+					t.Errorf("repo = %q, want %q", repo, tt.wantRepo)
+				}
+			}
+		})
+	}
+}
+
+func TestPromptUpdate(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"empty = yes", "\n", true},
+		{"y = yes", "y\n", true},
+		{"Y = yes", "Y\n", true},
+		{"yes = yes", "yes\n", true},
+		{"n = no", "n\n", false},
+		{"no = no", "no\n", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf strings.Builder
+			r := strings.NewReader(tt.input)
+			got := promptUpdate(&buf, r, "test-plugin", "1.0.0", "2.0.0", "")
+			if got != tt.want {
+				t.Errorf("promptUpdate() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 

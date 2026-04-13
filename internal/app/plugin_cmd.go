@@ -24,7 +24,7 @@ import (
 )
 
 func newPluginCommand() *cobra.Command {
-	pluginCmd := newPlaceholderParent("plugin", "插件管理")
+	pluginCmd := newPlaceholderParent("plugin", "Manage plugins")
 
 	pluginCmd.AddCommand(
 		newPluginListCommand(),
@@ -42,7 +42,7 @@ func newPluginCommand() *cobra.Command {
 func newPluginListCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "list",
-		Short:             "列出已安装插件",
+		Short:             "List installed plugins",
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			loader := plugin.NewLoader(RawVersion())
@@ -54,37 +54,29 @@ func newPluginListCommand() *cobra.Command {
 			}
 
 			if len(plugins) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "暂无已安装插件")
+				fmt.Fprintln(cmd.OutOrStdout(), "No plugins installed.")
 				return nil
 			}
 
 			w := cmd.OutOrStdout()
-			fmt.Fprintf(w, "%-30s %-10s %-10s %-8s %s\n",
-				"插件名", "版本", "类型", "状态", "描述")
-			fmt.Fprintln(w, strings.Repeat("─", 80))
+			fmt.Fprintf(w, "%-35s %-12s %-10s %-10s %s\n",
+				"NAME", "VERSION", "TYPE", "STATUS", "DESCRIPTION")
+			fmt.Fprintln(w, strings.Repeat("-", 85))
 			for _, p := range plugins {
-				pType := "三方"
-				if p.Type == "managed" {
-					pType = "官方"
-				}
-				status := "启用"
-				if !p.Enabled {
-					status = "禁用"
-				}
-				fmt.Fprintf(w, "%-30s %-10s %-10s %-8s %s\n",
-					p.Name, p.Version, pType, status, p.Description)
+				fmt.Fprintf(w, "%-35s %-12s %-10s %-10s %s\n",
+					p.Name, p.Version, p.Type, statusStr(p.Enabled), p.Description)
 			}
 			return nil
 		},
 	}
-	cmd.Flags().Bool("json", false, "以 JSON 格式输出")
+	cmd.Flags().Bool("json", false, "Output in JSON format")
 	return cmd
 }
 
 func newPluginInstallCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "install",
-		Short: "安装插件",
+		Short: "Install a plugin",
 		Example: `  dws plugin install --dir ./conference
   dws plugin install --git https://github.com/DingTalk-Real-AI/conference.git`,
 		DisableAutoGenTag: true,
@@ -93,32 +85,38 @@ func newPluginInstallCommand() *cobra.Command {
 			gitURL, _ := cmd.Flags().GetString("git")
 
 			if dirPath == "" && gitURL == "" {
-				return apperrors.NewValidation("请指定安装来源：--dir <目录> 或 --git <仓库地址>")
-			}
-
-			if gitURL != "" {
-				return apperrors.NewValidation("git 安装暂未实现，请使用 --dir 从本地目录安装")
+				return apperrors.NewValidation("specify install source: --dir <path> or --git <url>")
 			}
 
 			loader := plugin.NewLoader(RawVersion())
-			p, err := loader.InstallFromDir(dirPath)
-			if err != nil {
-				return apperrors.NewInternal(fmt.Sprintf("安装失败: %v", err))
+
+			if gitURL != "" {
+				p, err := loader.InstallFromGit(gitURL)
+				if err != nil {
+					return apperrors.NewInternal(fmt.Sprintf("install failed: %v", err))
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "Installed %s (%s)\n", p.Manifest.Name, p.Manifest.Version)
+				return nil
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "✅ 插件 %s (%s) 安装成功\n", p.Manifest.Name, p.Manifest.Version)
+			p, err := loader.InstallFromDir(dirPath)
+			if err != nil {
+				return apperrors.NewInternal(fmt.Sprintf("install failed: %v", err))
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "Installed %s (%s)\n", p.Manifest.Name, p.Manifest.Version)
 			return nil
 		},
 	}
-	cmd.Flags().String("dir", "", "从本地目录安装插件")
-	cmd.Flags().String("git", "", "从 Git 仓库安装插件")
+	cmd.Flags().String("dir", "", "Install from a local directory")
+	cmd.Flags().String("git", "", "Install from a Git repository")
 	return cmd
 }
 
 func newPluginInfoCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:               "info <插件名>",
-		Short:             "查看插件详情",
+		Use:               "info <name>",
+		Short:             "Show plugin details",
 		Args:              cobra.ExactArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -129,26 +127,26 @@ func newPluginInfoCommand() *cobra.Command {
 			for _, p := range plugins {
 				if p.Name == name {
 					w := cmd.OutOrStdout()
-					fmt.Fprintf(w, "插件名:    %s\n", p.Name)
-					fmt.Fprintf(w, "版本:      %s\n", p.Version)
-					fmt.Fprintf(w, "类型:      %s\n", p.Type)
-					fmt.Fprintf(w, "状态:      %s\n", enabledStr(p.Enabled))
-					fmt.Fprintf(w, "路径:      %s\n", p.Path)
+					fmt.Fprintf(w, "Name:         %s\n", p.Name)
+					fmt.Fprintf(w, "Version:      %s\n", p.Version)
+					fmt.Fprintf(w, "Type:         %s\n", p.Type)
+					fmt.Fprintf(w, "Status:       %s\n", statusStr(p.Enabled))
+					fmt.Fprintf(w, "Path:         %s\n", p.Path)
 					if p.Description != "" {
-						fmt.Fprintf(w, "描述:      %s\n", p.Description)
+						fmt.Fprintf(w, "Description:  %s\n", p.Description)
 					}
 					return nil
 				}
 			}
-			return apperrors.NewValidation(fmt.Sprintf("插件 %q 未安装", name))
+			return apperrors.NewValidation(fmt.Sprintf("plugin %q not found", name))
 		},
 	}
 }
 
 func newPluginEnableCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:               "enable <插件名>",
-		Short:             "启用插件",
+		Use:               "enable <name>",
+		Short:             "Enable a plugin",
 		Args:              cobra.ExactArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -156,7 +154,7 @@ func newPluginEnableCommand() *cobra.Command {
 			if err := loader.SetEnabled(args[0], true); err != nil {
 				return apperrors.NewValidation(err.Error())
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "✅ 插件 %s 已启用\n", args[0])
+			fmt.Fprintf(cmd.OutOrStdout(), "Plugin %s enabled.\n", args[0])
 			return nil
 		},
 	}
@@ -164,8 +162,8 @@ func newPluginEnableCommand() *cobra.Command {
 
 func newPluginDisableCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:               "disable <插件名>",
-		Short:             "禁用插件（官方插件可禁用但不可卸载）",
+		Use:               "disable <name>",
+		Short:             "Disable a plugin (managed plugins can be disabled but not removed)",
 		Args:              cobra.ExactArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -173,7 +171,7 @@ func newPluginDisableCommand() *cobra.Command {
 			if err := loader.SetEnabled(args[0], false); err != nil {
 				return apperrors.NewValidation(err.Error())
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "✅ 插件 %s 已禁用\n", args[0])
+			fmt.Fprintf(cmd.OutOrStdout(), "Plugin %s disabled.\n", args[0])
 			return nil
 		},
 	}
@@ -181,8 +179,8 @@ func newPluginDisableCommand() *cobra.Command {
 
 func newPluginRemoveCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:               "remove <插件名>",
-		Short:             "卸载三方插件（官方插件禁止卸载）",
+		Use:               "remove <name>",
+		Short:             "Remove a user plugin (managed plugins cannot be removed)",
 		Args:              cobra.ExactArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -191,38 +189,38 @@ func newPluginRemoveCommand() *cobra.Command {
 			if err := loader.RemovePlugin(args[0], keepData); err != nil {
 				return apperrors.NewValidation(err.Error())
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "✅ 插件 %s 已卸载\n", args[0])
+			fmt.Fprintf(cmd.OutOrStdout(), "Plugin %s removed.\n", args[0])
 			return nil
 		},
 	}
-	cmd.Flags().Bool("keep-data", false, "保留插件数据目录")
+	cmd.Flags().Bool("keep-data", false, "Keep plugin data directory")
 	return cmd
 }
 
 func newPluginValidateCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:               "validate <目录>",
-		Short:             "校验 plugin.json",
+		Use:               "validate <dir>",
+		Short:             "Validate a plugin.json",
 		Args:              cobra.ExactArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := args[0]
 			m, err := plugin.ParseManifest(dir + "/plugin.json")
 			if err != nil {
-				return apperrors.NewValidation(fmt.Sprintf("解析失败: %v", err))
+				return apperrors.NewValidation(fmt.Sprintf("parse failed: %v", err))
 			}
 			if err := m.Validate(RawVersion()); err != nil {
-				return apperrors.NewValidation(fmt.Sprintf("校验失败: %v", err))
+				return apperrors.NewValidation(fmt.Sprintf("validation failed: %v", err))
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "✅ plugin.json 校验通过: %s (%s)\n", m.Name, m.Version)
+			fmt.Fprintf(cmd.OutOrStdout(), "Valid: %s (%s)\n", m.Name, m.Version)
 			return nil
 		},
 	}
 }
 
-func enabledStr(enabled bool) string {
+func statusStr(enabled bool) string {
 	if enabled {
-		return "启用"
+		return "enabled"
 	}
-	return "禁用"
+	return "disabled"
 }

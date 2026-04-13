@@ -17,9 +17,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
 // Loader scans plugin directories and returns loaded, validated plugins.
@@ -307,6 +311,102 @@ func (l *Loader) InstallFromDir(srcDir string) (*Plugin, error) {
 		Root:      destDir,
 		IsManaged: false,
 	}, nil
+}
+
+// InstallFromGit clones a git repository and installs the plugin.
+// The workspace is extracted from the git URL (e.g. github.com/{workspace}/{name}).
+func (l *Loader) InstallFromGit(gitURL string) (*Plugin, error) {
+	workspace, repoName, err := parseGitURL(gitURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid git URL: %w", err)
+	}
+
+	// Clone to temp directory.
+	tmpDir, err := os.MkdirTemp("", "dws-plugin-git-*")
+	if err != nil {
+		return nil, fmt.Errorf("create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cloneDir := filepath.Join(tmpDir, repoName)
+	cmd := exec.Command("git", "clone", "--depth", "1", gitURL, cloneDir)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("git clone failed: %w", err)
+	}
+
+	// Parse and validate manifest.
+	manifest, err := ParseManifest(filepath.Join(cloneDir, "plugin.json"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid plugin: %w", err)
+	}
+	if err := manifest.Validate(l.CLIVersion); err != nil {
+		return nil, fmt.Errorf("plugin validation failed: %w", err)
+	}
+
+	// Determine install path based on workspace.
+	var destDir string
+	var isManaged bool
+	if workspace == config.OfficialPluginWorkspace {
+		destDir = filepath.Join(l.PluginsDir, config.PluginManagedDir, manifest.Name)
+		isManaged = true
+	} else {
+		destDir = filepath.Join(l.PluginsDir, config.PluginUserDir, workspace, manifest.Name)
+		isManaged = false
+	}
+
+	// Remove .git directory before copying.
+	_ = os.RemoveAll(filepath.Join(cloneDir, ".git"))
+
+	if err := copyDir(cloneDir, destDir); err != nil {
+		return nil, fmt.Errorf("install failed: %w", err)
+	}
+
+	if !isManaged {
+		qualifiedName := workspace + "/" + manifest.Name
+		l.setPluginEnabled(qualifiedName, true)
+	}
+
+	return &Plugin{
+		Manifest:  *manifest,
+		Root:      destDir,
+		IsManaged: isManaged,
+	}, nil
+}
+
+// parseGitURL extracts workspace and repo name from a git URL.
+// Supports: https://github.com/org/repo.git, git@github.com:org/repo.git
+func parseGitURL(gitURL string) (workspace, repoName string, err error) {
+	gitURL = strings.TrimSpace(gitURL)
+
+	// Handle SSH format: git@github.com:org/repo.git
+	if strings.HasPrefix(gitURL, "git@") {
+		parts := strings.SplitN(gitURL, ":", 2)
+		if len(parts) != 2 {
+			return "", "", fmt.Errorf("cannot parse SSH URL %q", gitURL)
+		}
+		path := strings.TrimSuffix(parts[1], ".git")
+		segments := strings.Split(path, "/")
+		if len(segments) < 2 {
+			return "", "", fmt.Errorf("SSH URL %q must have org/repo format", gitURL)
+		}
+		return segments[len(segments)-2], segments[len(segments)-1], nil
+	}
+
+	// Handle HTTPS format.
+	u, err := url.Parse(gitURL)
+	if err != nil {
+		return "", "", fmt.Errorf("cannot parse URL %q: %w", gitURL, err)
+	}
+
+	path := strings.TrimSuffix(strings.Trim(u.Path, "/"), ".git")
+	segments := strings.Split(path, "/")
+	if len(segments) < 2 {
+		return "", "", fmt.Errorf("URL %q must have org/repo format", gitURL)
+	}
+
+	return segments[len(segments)-2], segments[len(segments)-1], nil
 }
 
 // RemovePlugin removes a user plugin. Returns an error if it's managed.
