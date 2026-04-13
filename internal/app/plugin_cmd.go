@@ -15,6 +15,8 @@ package app
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -34,6 +36,8 @@ func newPluginCommand() *cobra.Command {
 		newPluginDisableCommand(),
 		newPluginRemoveCommand(),
 		newPluginValidateCommand(),
+		newPluginCreateCommand(),
+		newPluginDevCommand(),
 	)
 
 	return pluginCmd
@@ -216,6 +220,188 @@ func newPluginValidateCommand() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func newPluginCreateCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "create <name>",
+		Short: "Scaffold a new plugin directory",
+		Example: `  dws plugin create my-tool
+  dws plugin create my-tool --type managed --description "My awesome tool"`,
+		Args:              cobra.ExactArgs(1),
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := args[0]
+			desc, _ := cmd.Flags().GetString("description")
+			pluginType, _ := cmd.Flags().GetString("type")
+
+			if pluginType == "" {
+				pluginType = "user"
+			}
+			if pluginType != "managed" && pluginType != "user" {
+				return apperrors.NewValidation("type must be 'managed' or 'user'")
+			}
+
+			// Validate name format
+			m := &plugin.Manifest{Name: name, Version: "0.1.0", Type: pluginType}
+			if err := m.Validate(""); err != nil {
+				return apperrors.NewValidation(fmt.Sprintf("invalid plugin name: %v", err))
+			}
+
+			dir := filepath.Join(".", name)
+			if _, err := os.Stat(dir); err == nil {
+				return apperrors.NewValidation(fmt.Sprintf("directory %q already exists", dir))
+			}
+
+			// Create directory structure
+			dirs := []string{
+				dir,
+				filepath.Join(dir, "skills", name),
+				filepath.Join(dir, "hooks"),
+			}
+			for _, d := range dirs {
+				if err := os.MkdirAll(d, 0o755); err != nil {
+					return apperrors.NewInternal(fmt.Sprintf("failed to create directory: %v", err))
+				}
+			}
+
+			// Write plugin.json
+			pluginJSON := fmt.Sprintf(`{
+  "name": %q,
+  "version": "0.1.0",
+  "description": %q,
+  "type": %q,
+  "minCLIVersion": %q,
+  "mcpServers": {
+    %q: {
+      "type": "stdio",
+      "command": "${DWS_PLUGIN_ROOT}/bin/%s",
+      "args": []
+    }
+  },
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json"
+}
+`, name, desc, pluginType, RawVersion(), name, name)
+
+			if err := os.WriteFile(filepath.Join(dir, "plugin.json"), []byte(pluginJSON), 0o644); err != nil {
+				return apperrors.NewInternal(fmt.Sprintf("failed to write plugin.json: %v", err))
+			}
+
+			// Write SKILL.md template
+			skillMD := fmt.Sprintf(`---
+name: %s
+description: %s
+cli_version: ">=%s"
+---
+
+# %s
+
+## Intent Recognition
+
+Use this skill when the user mentions:
+- TODO: add your intent keywords here
+
+## Command Decision Tree
+
+| User Intent | Command | Required Parameters |
+|-------------|---------|---------------------|
+| TODO | `+"`dws %s <sub-command>`"+` | `+"`--param`"+` |
+
+## Parameter Rules
+
+### TODO: parameter type
+- Format description
+- Conversion rules
+`, name, desc, RawVersion(), name, name)
+
+			if err := os.WriteFile(filepath.Join(dir, "skills", name, "SKILL.md"), []byte(skillMD), 0o644); err != nil {
+				return apperrors.NewInternal(fmt.Sprintf("failed to write SKILL.md: %v", err))
+			}
+
+			// Write hooks.json template
+			hooksJSON := `{
+  "hooks": []
+}
+`
+			if err := os.WriteFile(filepath.Join(dir, "hooks", "hooks.json"), []byte(hooksJSON), 0o644); err != nil {
+				return apperrors.NewInternal(fmt.Sprintf("failed to write hooks.json: %v", err))
+			}
+
+			w := cmd.OutOrStdout()
+			fmt.Fprintf(w, "Created plugin scaffold at ./%s/\n", name)
+			fmt.Fprintf(w, "  %s/\n", name)
+			fmt.Fprintf(w, "  ├── plugin.json\n")
+			fmt.Fprintf(w, "  ├── skills/%s/SKILL.md\n", name)
+			fmt.Fprintf(w, "  └── hooks/hooks.json\n")
+			fmt.Fprintln(w)
+			fmt.Fprintf(w, "Next steps:\n")
+			fmt.Fprintf(w, "  1. Edit plugin.json to configure your MCP servers\n")
+			fmt.Fprintf(w, "  2. Edit skills/%s/SKILL.md to describe your commands\n", name)
+			fmt.Fprintf(w, "  3. Run: dws plugin validate ./%s\n", name)
+			fmt.Fprintf(w, "  4. Run: dws plugin dev ./%s\n", name)
+			return nil
+		},
+	}
+	cmd.Flags().String("description", "", "Plugin description")
+	cmd.Flags().String("type", "user", "Plugin type: managed or user")
+	return cmd
+}
+
+func newPluginDevCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "dev <dir>",
+		Short: "Register a local directory as a dev plugin",
+		Long: `Registers a plugin from a local source directory for development.
+The plugin is loaded directly from the source directory on next CLI invocation,
+without copying files to ~/.dws/plugins/. Use 'dws plugin dev --off <name>'
+to unregister.`,
+		Example: `  dws plugin dev ./my-tool
+  dws plugin dev --off my-tool`,
+		Args:              cobra.ExactArgs(1),
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			off, _ := cmd.Flags().GetBool("off")
+			loader := plugin.NewLoader(RawVersion())
+
+			if off {
+				// Unregister dev plugin
+				name := args[0]
+				if err := loader.UnregisterDevPlugin(name); err != nil {
+					return apperrors.NewValidation(err.Error())
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "Dev plugin %q unregistered.\n", name)
+				return nil
+			}
+
+			// Register dev plugin
+			dir := args[0]
+			absDir, err := filepath.Abs(dir)
+			if err != nil {
+				return apperrors.NewValidation(fmt.Sprintf("invalid path: %v", err))
+			}
+
+			// Validate the plugin first
+			m, err := plugin.ParseManifest(filepath.Join(absDir, "plugin.json"))
+			if err != nil {
+				return apperrors.NewValidation(fmt.Sprintf("invalid plugin at %s: %v", dir, err))
+			}
+			if err := m.Validate(RawVersion()); err != nil {
+				return apperrors.NewValidation(fmt.Sprintf("validation failed: %v", err))
+			}
+
+			if err := loader.RegisterDevPlugin(m.Name, absDir); err != nil {
+				return apperrors.NewInternal(fmt.Sprintf("failed to register: %v", err))
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "Dev plugin %q registered from %s\n", m.Name, absDir)
+			fmt.Fprintf(cmd.OutOrStdout(), "It will be loaded on next dws invocation.\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "To unregister: dws plugin dev --off %s\n", m.Name)
+			return nil
+		},
+	}
+	cmd.Flags().Bool("off", false, "Unregister a dev plugin")
+	return cmd
 }
 
 func statusStr(enabled bool) string {

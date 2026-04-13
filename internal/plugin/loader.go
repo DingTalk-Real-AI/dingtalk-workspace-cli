@@ -51,6 +51,7 @@ type Settings struct {
 	EnabledPlugins   map[string]bool              `json:"enabledPlugins,omitempty"`
 	PluginConfigs    map[string]map[string]any     `json:"pluginConfigs,omitempty"`
 	PluginAutoUpdate bool                          `json:"pluginAutoUpdate,omitempty"`
+	DevPlugins       map[string]string             `json:"devPlugins,omitempty"` // name → absolute path
 }
 
 // LoadManaged scans ~/.dws/plugins/managed/ and returns all valid
@@ -484,6 +485,115 @@ func (l *Loader) saveSettings(s *Settings) {
 	}
 	_ = os.MkdirAll(filepath.Dir(settingsPath), 0o700)
 	_ = os.WriteFile(settingsPath, data, 0o600)
+}
+
+// LoadDev loads dev plugins registered via `dws plugin dev`.
+// Dev plugins are loaded from their source directories without copying.
+func (l *Loader) LoadDev() []*Plugin {
+	settings := l.loadSettings()
+	if len(settings.DevPlugins) == 0 {
+		return nil
+	}
+
+	var plugins []*Plugin
+	for name, dir := range settings.DevPlugins {
+		if _, err := os.Stat(filepath.Join(dir, "plugin.json")); err != nil {
+			slog.Debug("plugin: dev plugin directory missing, skipping",
+				"name", name, "dir", dir)
+			continue
+		}
+		p := l.loadPlugin(dir, false)
+		if p != nil {
+			plugins = append(plugins, p)
+			slog.Debug("plugin: loaded dev plugin", "name", name, "dir", dir)
+		}
+	}
+	return plugins
+}
+
+// RegisterDevPlugin registers a source directory as a dev plugin.
+func (l *Loader) RegisterDevPlugin(name, absDir string) error {
+	settings := l.loadSettings()
+	if settings.DevPlugins == nil {
+		settings.DevPlugins = make(map[string]string)
+	}
+	settings.DevPlugins[name] = absDir
+	l.saveSettings(settings)
+	return nil
+}
+
+// UnregisterDevPlugin removes a dev plugin registration.
+func (l *Loader) UnregisterDevPlugin(name string) error {
+	settings := l.loadSettings()
+	if settings.DevPlugins == nil || settings.DevPlugins[name] == "" {
+		return fmt.Errorf("dev plugin %q is not registered", name)
+	}
+	delete(settings.DevPlugins, name)
+	l.saveSettings(settings)
+	return nil
+}
+
+// SyncSkills copies plugin SKILL.md files into all detected agent
+// skill directories (e.g. ~/.claude/skills/dws/, ~/.cursor/skills/dws/).
+// This makes plugin skills available to AI agents without CLI releases.
+func SyncSkills(plugins []*Plugin) {
+	if len(plugins) == 0 {
+		return
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		slog.Debug("plugin: cannot get home dir for skill sync", "error", err)
+		return
+	}
+
+	// Known agent skill directories (subset of upgrade/paths.go knownSkillDirs).
+	agentDirs := []string{
+		".agents/skills",
+		".claude/skills",
+		".cursor/skills",
+		".qoder/skills",
+		".codex/skills",
+	}
+
+	for _, p := range plugins {
+		skillsDir := p.SkillsDir()
+		if _, err := os.Stat(skillsDir); err != nil {
+			continue
+		}
+
+		// Walk the plugin's skills directory and copy files to each agent dir.
+		entries, err := os.ReadDir(skillsDir)
+		if err != nil {
+			continue
+		}
+
+		for _, agentDir := range agentDirs {
+			agentBase := filepath.Join(homeDir, agentDir)
+			// Only sync to agents that are actually installed (parent dir exists).
+			parentGate := filepath.Dir(agentBase)
+			if _, err := os.Stat(parentGate); os.IsNotExist(err) {
+				continue
+			}
+
+			for _, entry := range entries {
+				src := filepath.Join(skillsDir, entry.Name())
+				// Place plugin skills under dws/plugins/{plugin-name}/
+				dest := filepath.Join(agentBase, "dws", "plugins", p.Manifest.Name, entry.Name())
+				if entry.IsDir() {
+					_ = copyDir(src, dest)
+				} else {
+					_ = os.MkdirAll(filepath.Dir(dest), 0o755)
+					data, readErr := os.ReadFile(src)
+					if readErr == nil {
+						_ = os.WriteFile(dest, data, 0o644)
+					}
+				}
+			}
+		}
+	}
+
+	slog.Debug("plugin: skill sync completed", "plugins", len(plugins))
 }
 
 // copyDir recursively copies src to dst.

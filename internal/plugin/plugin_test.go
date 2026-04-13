@@ -400,6 +400,98 @@ func TestPromptUpdate(t *testing.T) {
 	}
 }
 
+func TestDevPluginRegistration(t *testing.T) {
+	dir := t.TempDir()
+	loader := &Loader{PluginsDir: dir, CLIVersion: "1.0.0"}
+
+	// Create a dev plugin directory
+	devDir := filepath.Join(t.TempDir(), "my-dev-plugin")
+	if err := os.MkdirAll(devDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{"name":"my-dev-plugin","version":"0.1.0","type":"user"}`
+	if err := os.WriteFile(filepath.Join(devDir, "plugin.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Register dev plugin
+	if err := loader.RegisterDevPlugin("my-dev-plugin", devDir); err != nil {
+		t.Fatalf("RegisterDevPlugin: %v", err)
+	}
+
+	// Load dev plugins
+	plugins := loader.LoadDev()
+	if len(plugins) != 1 {
+		t.Fatalf("expected 1 dev plugin, got %d", len(plugins))
+	}
+	if plugins[0].Manifest.Name != "my-dev-plugin" {
+		t.Errorf("name = %q, want my-dev-plugin", plugins[0].Manifest.Name)
+	}
+	if plugins[0].Root != devDir {
+		t.Errorf("root = %q, want %q (should load from source dir, not copy)", plugins[0].Root, devDir)
+	}
+
+	// Unregister
+	if err := loader.UnregisterDevPlugin("my-dev-plugin"); err != nil {
+		t.Fatalf("UnregisterDevPlugin: %v", err)
+	}
+
+	// Should be empty now
+	plugins = loader.LoadDev()
+	if len(plugins) != 0 {
+		t.Errorf("expected 0 dev plugins after unregister, got %d", len(plugins))
+	}
+}
+
+func TestUnregisterDevPluginNotFound(t *testing.T) {
+	dir := t.TempDir()
+	loader := &Loader{PluginsDir: dir, CLIVersion: "1.0.0"}
+
+	err := loader.UnregisterDevPlugin("nonexistent")
+	if err == nil {
+		t.Error("expected error when unregistering nonexistent dev plugin")
+	}
+}
+
+func TestSyncSkills(t *testing.T) {
+	// Create a plugin with skills
+	pluginDir := t.TempDir()
+	skillsDir := filepath.Join(pluginDir, "skills", "test-plugin")
+	if err := os.MkdirAll(skillsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	skillContent := "# Test Plugin Skill"
+	if err := os.WriteFile(filepath.Join(skillsDir, "SKILL.md"), []byte(skillContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p := &Plugin{
+		Manifest: Manifest{
+			Name:   "test-plugin",
+			Skills: "./skills/test-plugin",
+		},
+		Root: pluginDir,
+	}
+
+	// Create a mock agent directory
+	home, _ := os.UserHomeDir()
+	agentDir := filepath.Join(home, ".agents", "skills")
+	// Only run if .agents exists (don't create in CI)
+	if _, err := os.Stat(filepath.Dir(agentDir)); err == nil {
+		SyncSkills([]*Plugin{p})
+
+		synced := filepath.Join(agentDir, "dws", "plugins", "test-plugin", "SKILL.md")
+		if _, err := os.Stat(synced); err == nil {
+			data, _ := os.ReadFile(synced)
+			if string(data) != skillContent {
+				t.Errorf("synced content = %q, want %q", string(data), skillContent)
+			}
+			// Cleanup
+			os.RemoveAll(filepath.Join(agentDir, "dws", "plugins", "test-plugin"))
+		}
+	}
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstring(s, substr))
 }

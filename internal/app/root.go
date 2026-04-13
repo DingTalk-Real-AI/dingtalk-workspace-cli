@@ -977,7 +977,11 @@ func loadPlugins(engine *pipeline.Engine, runner executor.Runner) []*cobra.Comma
 	// 2. Load user plugins (per settings.json)
 	userPlugins := pluginLoader.LoadUser()
 
+	// 3. Load dev plugins (registered via `dws plugin dev`)
+	devPlugins := pluginLoader.LoadDev()
+
 	allPlugins := append(managedPlugins, userPlugins...)
+	allPlugins = append(allPlugins, devPlugins...)
 
 	// 3. Inject streamable-http servers into dynamic server registry
 	for _, p := range allPlugins {
@@ -1020,10 +1024,14 @@ func loadPlugins(engine *pipeline.Engine, runner executor.Runner) []*cobra.Comma
 		}
 	}
 
+	// 7. Sync plugin skills to agent directories
+	plugin.SyncSkills(allPlugins)
+
 	if len(allPlugins) > 0 {
 		slog.Debug("plugins loaded",
 			"managed", len(managedPlugins),
 			"user", len(userPlugins),
+			"dev", len(devPlugins),
 		)
 	}
 
