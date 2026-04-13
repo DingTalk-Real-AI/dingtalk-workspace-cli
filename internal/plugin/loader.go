@@ -1,0 +1,412 @@
+// Copyright 2026 Alibaba Group
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package plugin
+
+import (
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+// Loader scans plugin directories and returns loaded, validated plugins.
+type Loader struct {
+	// PluginsDir is the root directory for all plugins.
+	// Defaults to ~/.dws/plugins/.
+	PluginsDir string
+
+	// CLIVersion is the current CLI version, used for
+	// minCLIVersion compatibility checks.
+	CLIVersion string
+}
+
+// NewLoader creates a Loader with default paths.
+func NewLoader(cliVersion string) *Loader {
+	home, _ := os.UserHomeDir()
+	return &Loader{
+		PluginsDir: filepath.Join(home, ".dws", "plugins"),
+		CLIVersion: cliVersion,
+	}
+}
+
+// Settings holds user preferences for plugin management.
+type Settings struct {
+	EnabledPlugins   map[string]bool              `json:"enabledPlugins,omitempty"`
+	PluginConfigs    map[string]map[string]any     `json:"pluginConfigs,omitempty"`
+	PluginAutoUpdate bool                          `json:"pluginAutoUpdate,omitempty"`
+}
+
+// LoadManaged scans ~/.dws/plugins/managed/ and returns all valid
+// official plugins. Managed plugins are always enabled.
+func (l *Loader) LoadManaged() []*Plugin {
+	managedDir := filepath.Join(l.PluginsDir, "managed")
+	return l.scanDir(managedDir, true)
+}
+
+// LoadUser scans ~/.dws/plugins/user/ and returns enabled user plugins.
+func (l *Loader) LoadUser() []*Plugin {
+	userDir := filepath.Join(l.PluginsDir, "user")
+	settings := l.loadSettings()
+
+	var plugins []*Plugin
+	// User plugins may be nested: user/{workspace}/{name}/
+	entries, err := os.ReadDir(userDir)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			slog.Debug("plugin: cannot read user dir", "path", userDir, "error", err)
+		}
+		return nil
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		entryPath := filepath.Join(userDir, entry.Name())
+
+		// Check if this is a direct plugin directory (has plugin.json)
+		if _, err := os.Stat(filepath.Join(entryPath, "plugin.json")); err == nil {
+			p := l.loadPlugin(entryPath, false)
+			if p != nil && isPluginEnabled(settings, p.Manifest.Name) {
+				plugins = append(plugins, p)
+			}
+			continue
+		}
+
+		// Otherwise treat as workspace directory: user/{workspace}/{name}/
+		subEntries, err := os.ReadDir(entryPath)
+		if err != nil {
+			continue
+		}
+		for _, sub := range subEntries {
+			if !sub.IsDir() {
+				continue
+			}
+			subPath := filepath.Join(entryPath, sub.Name())
+			p := l.loadPlugin(subPath, false)
+			if p != nil {
+				qualifiedName := entry.Name() + "/" + p.Manifest.Name
+				if isPluginEnabled(settings, qualifiedName) {
+					plugins = append(plugins, p)
+				}
+			}
+		}
+	}
+	return plugins
+}
+
+// LoadAll loads both managed and user plugins.
+func (l *Loader) LoadAll() []*Plugin {
+	managed := l.LoadManaged()
+	user := l.LoadUser()
+	return append(managed, user...)
+}
+
+// scanDir reads a directory of plugin subdirectories and loads each one.
+func (l *Loader) scanDir(dir string, isManaged bool) []*Plugin {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			slog.Debug("plugin: cannot read dir", "path", dir, "error", err)
+		}
+		return nil
+	}
+
+	var plugins []*Plugin
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		pluginDir := filepath.Join(dir, entry.Name())
+		p := l.loadPlugin(pluginDir, isManaged)
+		if p != nil {
+			plugins = append(plugins, p)
+		}
+	}
+	return plugins
+}
+
+// loadPlugin reads and validates a single plugin directory.
+func (l *Loader) loadPlugin(dir string, isManaged bool) *Plugin {
+	manifestPath := filepath.Join(dir, "plugin.json")
+	manifest, err := ParseManifest(manifestPath)
+	if err != nil {
+		slog.Warn("plugin: failed to parse manifest",
+			"path", manifestPath, "error", err)
+		return nil
+	}
+
+	if err := manifest.Validate(l.CLIVersion); err != nil {
+		slog.Warn("plugin: validation failed",
+			"plugin", manifest.Name, "error", err)
+		return nil
+	}
+
+	return &Plugin{
+		Manifest:  *manifest,
+		Root:      dir,
+		IsManaged: isManaged,
+	}
+}
+
+// loadSettings reads ~/.dws/settings.json.
+func (l *Loader) loadSettings() *Settings {
+	home, _ := os.UserHomeDir()
+	settingsPath := filepath.Join(home, ".dws", "settings.json")
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		return &Settings{}
+	}
+	var s Settings
+	if err := json.Unmarshal(data, &s); err != nil {
+		slog.Debug("plugin: failed to parse settings.json", "error", err)
+		return &Settings{}
+	}
+	return &s
+}
+
+func isPluginEnabled(s *Settings, name string) bool {
+	if s == nil || s.EnabledPlugins == nil {
+		return true // default: enabled
+	}
+	enabled, exists := s.EnabledPlugins[name]
+	if !exists {
+		return true // not in list = enabled
+	}
+	return enabled
+}
+
+// InstalledPlugins returns the list of all installed plugins with their
+// status info. Used by `dws plugin list`.
+type PluginInfo struct {
+	Name      string `json:"name"`
+	Version   string `json:"version"`
+	Type      string `json:"type"` // "managed" or "user"
+	Enabled   bool   `json:"enabled"`
+	Path      string `json:"path"`
+	Description string `json:"description,omitempty"`
+}
+
+// ListInstalled returns info about all installed plugins.
+func (l *Loader) ListInstalled() []PluginInfo {
+	var result []PluginInfo
+	settings := l.loadSettings()
+
+	// Managed plugins
+	managedDir := filepath.Join(l.PluginsDir, "managed")
+	if entries, err := os.ReadDir(managedDir); err == nil {
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			dir := filepath.Join(managedDir, entry.Name())
+			m, err := ParseManifest(filepath.Join(dir, "plugin.json"))
+			if err != nil {
+				continue
+			}
+			result = append(result, PluginInfo{
+				Name:        m.Name,
+				Version:     m.Version,
+				Type:        "managed",
+				Enabled:     true, // managed plugins always enabled
+				Path:        dir,
+				Description: m.Description,
+			})
+		}
+	}
+
+	// User plugins
+	userDir := filepath.Join(l.PluginsDir, "user")
+	if entries, err := os.ReadDir(userDir); err == nil {
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			l.collectUserPluginInfos(filepath.Join(userDir, entry.Name()), entry.Name(), settings, &result)
+		}
+	}
+
+	return result
+}
+
+func (l *Loader) collectUserPluginInfos(dir, prefix string, settings *Settings, result *[]PluginInfo) {
+	// Direct plugin
+	if m, err := ParseManifest(filepath.Join(dir, "plugin.json")); err == nil {
+		qualName := prefix
+		*result = append(*result, PluginInfo{
+			Name:        qualName,
+			Version:     m.Version,
+			Type:        "user",
+			Enabled:     isPluginEnabled(settings, qualName),
+			Path:        dir,
+			Description: m.Description,
+		})
+		return
+	}
+	// Workspace: dir is a workspace, iterate sub-plugins
+	subEntries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, sub := range subEntries {
+		if !sub.IsDir() {
+			continue
+		}
+		subDir := filepath.Join(dir, sub.Name())
+		m, err := ParseManifest(filepath.Join(subDir, "plugin.json"))
+		if err != nil {
+			continue
+		}
+		qualName := prefix + "/" + m.Name
+		*result = append(*result, PluginInfo{
+			Name:        qualName,
+			Version:     m.Version,
+			Type:        "user",
+			Enabled:     isPluginEnabled(settings, qualName),
+			Path:        subDir,
+			Description: m.Description,
+		})
+	}
+}
+
+// InstallFromDir copies a plugin from a source directory to the user
+// plugins directory.
+func (l *Loader) InstallFromDir(srcDir string) (*Plugin, error) {
+	manifestPath := filepath.Join(srcDir, "plugin.json")
+	manifest, err := ParseManifest(manifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("invalid plugin: %w", err)
+	}
+	if err := manifest.Validate(l.CLIVersion); err != nil {
+		return nil, fmt.Errorf("plugin validation failed: %w", err)
+	}
+
+	destDir := filepath.Join(l.PluginsDir, "user", manifest.Name)
+	if err := copyDir(srcDir, destDir); err != nil {
+		return nil, fmt.Errorf("install failed: %w", err)
+	}
+
+	// Enable by default in settings
+	l.setPluginEnabled(manifest.Name, true)
+
+	return &Plugin{
+		Manifest:  *manifest,
+		Root:      destDir,
+		IsManaged: false,
+	}, nil
+}
+
+// RemovePlugin removes a user plugin. Returns an error if it's managed.
+func (l *Loader) RemovePlugin(name string, keepData bool) error {
+	// Check managed first — official plugins cannot be removed.
+	managedDir := filepath.Join(l.PluginsDir, "managed", name)
+	if _, err := os.Stat(managedDir); err == nil {
+		return fmt.Errorf("%s 是官方插件（DingTalk-Real-AI/%s），不支持卸载。\n   如需停用，请使用：dws plugin disable %s", name, name, name)
+	}
+
+	pluginDir := l.findUserPluginDir(name)
+	if pluginDir == "" {
+		return fmt.Errorf("plugin %q not found", name)
+	}
+
+	if err := os.RemoveAll(pluginDir); err != nil {
+		return fmt.Errorf("failed to remove plugin: %w", err)
+	}
+
+	if !keepData {
+		dataDir := filepath.Join(l.PluginsDir, "data", name)
+		_ = os.RemoveAll(dataDir)
+	}
+
+	l.setPluginEnabled(name, false)
+	return nil
+}
+
+// SetEnabled enables or disables a plugin in settings.json.
+func (l *Loader) SetEnabled(name string, enabled bool) error {
+	// Verify plugin exists
+	if l.findUserPluginDir(name) == "" {
+		managedDir := filepath.Join(l.PluginsDir, "managed", name)
+		if _, err := os.Stat(managedDir); err != nil {
+			return fmt.Errorf("plugin %q not found", name)
+		}
+	}
+	l.setPluginEnabled(name, enabled)
+	return nil
+}
+
+func (l *Loader) findUserPluginDir(name string) string {
+	// Try direct: user/{name}/
+	dir := filepath.Join(l.PluginsDir, "user", name)
+	if _, err := os.Stat(filepath.Join(dir, "plugin.json")); err == nil {
+		return dir
+	}
+	// Try workspace: user/{workspace}/{plugin}/
+	parts := strings.SplitN(name, "/", 2)
+	if len(parts) == 2 {
+		dir = filepath.Join(l.PluginsDir, "user", parts[0], parts[1])
+		if _, err := os.Stat(filepath.Join(dir, "plugin.json")); err == nil {
+			return dir
+		}
+	}
+	return ""
+}
+
+func (l *Loader) setPluginEnabled(name string, enabled bool) {
+	settings := l.loadSettings()
+	if settings.EnabledPlugins == nil {
+		settings.EnabledPlugins = make(map[string]bool)
+	}
+	settings.EnabledPlugins[name] = enabled
+	l.saveSettings(settings)
+}
+
+func (l *Loader) saveSettings(s *Settings) {
+	home, _ := os.UserHomeDir()
+	settingsPath := filepath.Join(home, ".dws", "settings.json")
+	data, err := json.MarshalIndent(s, "", "  ")
+	if err != nil {
+		slog.Debug("plugin: failed to marshal settings", "error", err)
+		return
+	}
+	_ = os.MkdirAll(filepath.Dir(settingsPath), 0o700)
+	_ = os.WriteFile(settingsPath, data, 0o600)
+}
+
+// copyDir recursively copies src to dst.
+func copyDir(src, dst string) error {
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		return err
+	}
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if info.IsDir() {
+			return os.MkdirAll(target, info.Mode())
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, info.Mode())
+	})
+}

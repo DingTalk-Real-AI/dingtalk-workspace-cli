@@ -39,6 +39,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline/handlers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/recovery"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
@@ -283,11 +284,16 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 		newRecoveryCommand(rootCtx, loader, flags),
 		newUpgradeCommand(),
 		newVersionCommand(),
+		newPluginCommand(),
 		schemaCmd,
 		genSkillsCmd,
 		mcpCmd,
 	}
 	root.AddCommand(utilityCommands...)
+
+	// --- Plugin loading: inject plugin MCP servers before legacy commands ---
+	loadPlugins(engine)
+
 	root.AddCommand(newLegacyPublicCommands(rootCtx, runner)...)
 	root.AddCommand(newLegacyHiddenCommands(runner)...)
 
@@ -638,6 +644,7 @@ func hideNonDirectRuntimeCommands(root *cobra.Command) {
 		"doctor":     true,
 		"completion": true,
 		"skill":      true,
+		"plugin":     true,
 		"version":    true,
 		"help":       true,
 		"recovery":   true,
@@ -935,6 +942,54 @@ func FileLoggerInstance() *slog.Logger {
 func CloseFileLogger() {
 	if fileLogger != nil {
 		fileLogger.Close()
+	}
+}
+
+// loadPlugins scans plugin directories, injects their MCP servers into
+// the dynamic server registry, and registers their pipeline hooks.
+// This runs before legacy command construction so that plugin servers
+// are available for EnvironmentLoader.Load().
+func loadPlugins(engine *pipeline.Engine) {
+	pluginLoader := plugin.NewLoader(RawVersion())
+
+	// 1. Load official plugins (always enabled)
+	managedPlugins := pluginLoader.LoadManaged()
+
+	// 2. Load user plugins (per settings.json)
+	userPlugins := pluginLoader.LoadUser()
+
+	allPlugins := append(managedPlugins, userPlugins...)
+
+	// 3. Inject MCP servers into dynamic server registry
+	for _, p := range allPlugins {
+		for _, srv := range p.ToServerDescriptors() {
+			AppendDynamicServer(srv)
+		}
+	}
+
+	// 4. Register plugin hooks into pipeline engine
+	if engine != nil {
+		for _, p := range allPlugins {
+			hooksCfg, err := p.LoadHooks()
+			if err != nil {
+				slog.Warn("plugin: failed to load hooks",
+					"plugin", p.Manifest.Name, "error", err)
+				continue
+			}
+			if hooksCfg == nil {
+				continue
+			}
+			for _, entry := range hooksCfg.Hooks {
+				engine.Register(plugin.NewHookAdapter(p.Manifest.Name, entry))
+			}
+		}
+	}
+
+	if len(allPlugins) > 0 {
+		slog.Debug("plugins loaded",
+			"managed", len(managedPlugins),
+			"user", len(userPlugins),
+		)
 	}
 }
 
