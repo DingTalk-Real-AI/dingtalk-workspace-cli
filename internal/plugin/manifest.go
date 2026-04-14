@@ -50,8 +50,8 @@ type MCPServer struct {
 	Command  string            `json:"command,omitempty"`  // required for stdio
 	Args     []string          `json:"args,omitempty"`
 	Env      map[string]string `json:"env,omitempty"`
-	Headers  map[string]string `json:"headers,omitempty"`  // custom HTTP headers (e.g. Authorization for third-party APIs)
-	CLI      json.RawMessage   `json:"cli,omitempty"`      // CLIOverlay, passed through
+	Headers  map[string]string `json:"headers,omitempty"` // custom HTTP headers (e.g. Authorization for third-party APIs)
+	CLI      json.RawMessage   `json:"cli,omitempty"`     // CLIOverlay, passed through
 }
 
 // ConfigItem describes a user-configurable setting for a plugin.

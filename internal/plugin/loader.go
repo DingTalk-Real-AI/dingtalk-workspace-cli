@@ -48,10 +48,10 @@ func NewLoader(cliVersion string) *Loader {
 
 // Settings holds user preferences for plugin management.
 type Settings struct {
-	EnabledPlugins   map[string]bool              `json:"enabledPlugins,omitempty"`
-	PluginConfigs    map[string]map[string]any     `json:"pluginConfigs,omitempty"`
-	PluginAutoUpdate bool                          `json:"pluginAutoUpdate,omitempty"`
-	DevPlugins       map[string]string             `json:"devPlugins,omitempty"` // name → absolute path
+	EnabledPlugins   map[string]bool           `json:"enabledPlugins,omitempty"`
+	PluginConfigs    map[string]map[string]any `json:"pluginConfigs,omitempty"`
+	PluginAutoUpdate bool                      `json:"pluginAutoUpdate,omitempty"`
+	DevPlugins       map[string]string         `json:"devPlugins,omitempty"` // name → absolute path
 }
 
 // LoadManaged scans ~/.dws/plugins/managed/ and returns all valid
@@ -207,11 +207,11 @@ func isPluginEnabled(s *Settings, name string) bool {
 // InstalledPlugins returns the list of all installed plugins with their
 // status info. Used by `dws plugin list`.
 type PluginInfo struct {
-	Name      string `json:"name"`
-	Version   string `json:"version"`
-	Type      string `json:"type"` // "managed" or "user"
-	Enabled   bool   `json:"enabled"`
-	Path      string `json:"path"`
+	Name        string `json:"name"`
+	Version     string `json:"version"`
+	Type        string `json:"type"` // "managed" or "user"
+	Enabled     bool   `json:"enabled"`
+	Path        string `json:"path"`
 	Description string `json:"description,omitempty"`
 }
 

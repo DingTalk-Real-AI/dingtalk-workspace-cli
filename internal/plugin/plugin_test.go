@@ -425,8 +425,8 @@ func TestRemoveManagedPluginBlocked(t *testing.T) {
 func TestIsPluginEnabled(t *testing.T) {
 	s := &Settings{
 		EnabledPlugins: map[string]bool{
-			"my-plugin":  true,
-			"disabled":   false,
+			"my-plugin": true,
+			"disabled":  false,
 		},
 	}
 
@@ -446,11 +446,11 @@ func TestIsPluginEnabled(t *testing.T) {
 
 func TestParseGitURL(t *testing.T) {
 	tests := []struct {
-		name      string
-		url       string
-		wantWS    string
-		wantRepo  string
-		wantErr   bool
+		name     string
+		url      string
+		wantWS   string
+		wantRepo string
+		wantErr  bool
 	}{
 		{
 			name:     "https with .git",
