@@ -115,6 +115,15 @@ func (p *Plugin) ToServerDescriptors() []market.ServerDescriptor {
 			source = "plugin-managed"
 		}
 
+		// Resolve headers: expand environment variable references (e.g. ${DASHSCOPE_API_KEY}).
+		var resolvedHeaders map[string]string
+		if len(srv.Headers) > 0 {
+			resolvedHeaders = make(map[string]string, len(srv.Headers))
+			for headerKey, headerVal := range srv.Headers {
+				resolvedHeaders[headerKey] = expandPluginVars(headerVal, p.Root)
+			}
+		}
+
 		descriptors = append(descriptors, market.ServerDescriptor{
 			Key:         key,
 			DisplayName: p.Manifest.Name + "/" + key,
@@ -123,6 +132,7 @@ func (p *Plugin) ToServerDescriptors() []market.ServerDescriptor {
 			Source:      source,
 			CLI:         overlay,
 			HasCLIMeta:  len(srv.CLI) > 0,
+			AuthHeaders: resolvedHeaders,
 		})
 	}
 	return descriptors

@@ -20,11 +20,13 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/signal"
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -959,6 +961,12 @@ func CloseFileLogger() {
 func loadPlugins(engine *pipeline.Engine, runner executor.Runner) []*cobra.Command {
 	pluginLoader := plugin.NewLoader(RawVersion())
 
+	// 0a. Inject plugin config values from settings.json as environment
+	// variables so that expandPluginVars can resolve ${KEY} references
+	// in plugin.json headers, endpoints, etc. User-set env vars take
+	// precedence (InjectPluginConfigEnv skips already-set keys).
+	pluginLoader.InjectPluginConfigEnv()
+
 	// 0. Check for managed plugin updates (non-blocking, best-effort).
 	updater := plugin.NewUpdater(pluginLoader.PluginsDir, RawVersion())
 	accessToken, tokenErr := loadSkillAccessToken()
@@ -983,19 +991,56 @@ func loadPlugins(engine *pipeline.Engine, runner executor.Runner) []*cobra.Comma
 	allPlugins := append(managedPlugins, userPlugins...)
 	allPlugins = append(allPlugins, devPlugins...)
 
-	// 3. Discover tools from streamable-http servers and build CLI commands
+	// 3. Discover tools from streamable-http servers and build CLI commands.
+	//    Third-party servers with auth headers are discovered in parallel
+	//    to avoid sequential 10s timeouts when multiple remote servers exist.
 	var pluginCmds []*cobra.Command
 	tc := transport.NewClient(nil)
+
+	// Collect all server descriptors and register auth first (fast, no I/O).
+	type pluginServer struct {
+		plugin *plugin.Plugin
+		srv    market.ServerDescriptor
+	}
+	var httpServers []pluginServer
+
 	for _, p := range allPlugins {
 		for _, srv := range p.ToServerDescriptors() {
 			AppendDynamicServer(srv)
 
-			// For plugin-owned streamable-http servers, also discover tools
-			// and build CLI commands (Market servers rely on the detail API).
-			if srv.HasCLIMeta {
-				cmds := registerHTTPServer(p, srv, tc, runner)
-				pluginCmds = append(pluginCmds, cmds...)
+			if len(srv.AuthHeaders) > 0 {
+				registerPluginAuthFromHeaders(srv)
 			}
+
+			if srv.HasCLIMeta {
+				httpServers = append(httpServers, pluginServer{plugin: p, srv: srv})
+			}
+		}
+	}
+
+	// Discover tools from HTTP servers in parallel when there are multiple
+	// servers with auth headers (third-party services with higher latency).
+	if len(httpServers) > 1 {
+		type discoveryResult struct {
+			commands []*cobra.Command
+		}
+		results := make([]discoveryResult, len(httpServers))
+		var wg sync.WaitGroup
+		for i, ps := range httpServers {
+			wg.Add(1)
+			go func(idx int, ps pluginServer) {
+				defer wg.Done()
+				results[idx].commands = registerHTTPServer(ps.plugin, ps.srv, tc, runner)
+			}(i, ps)
+		}
+		wg.Wait()
+		for _, r := range results {
+			pluginCmds = append(pluginCmds, r.commands...)
+		}
+	} else {
+		for _, ps := range httpServers {
+			cmds := registerHTTPServer(ps.plugin, ps.srv, tc, runner)
+			pluginCmds = append(pluginCmds, cmds...)
 		}
 	}
 
@@ -1048,17 +1093,35 @@ func loadPlugins(engine *pipeline.Engine, runner executor.Runner) []*cobra.Comma
 
 // registerHTTPServer discovers tools from a streamable-http MCP server and
 // builds CLI commands. Used for plugin-owned HTTP servers that provide CLI metadata.
+//
+// When the server descriptor carries AuthHeaders (from plugin.json "headers"),
+// a dedicated transport.Client is created with the plugin's Bearer token and
+// trusted domains so that third-party MCP servers requiring independent
+// authentication (e.g. Alibaba Cloud Bailian) can be discovered at startup.
 func registerHTTPServer(p *plugin.Plugin, srv market.ServerDescriptor, tc *transport.Client, runner executor.Runner) []*cobra.Command {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	// Use a longer timeout for servers with custom auth headers (third-party
+	// services may have higher latency than local/DingTalk endpoints).
+	timeout := 2 * time.Second
+	if len(srv.AuthHeaders) > 0 {
+		timeout = 10 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	if _, err := tc.Initialize(ctx, srv.Endpoint); err != nil {
+	// If the plugin provides custom auth headers, create a dedicated client
+	// so the Bearer token is sent to the third-party endpoint.
+	discoveryClient := tc
+	if len(srv.AuthHeaders) > 0 {
+		discoveryClient = buildPluginAuthClient(tc, srv)
+	}
+
+	if _, err := discoveryClient.Initialize(ctx, srv.Endpoint); err != nil {
 		slog.Debug("plugin: http server offline, skipping tool discovery",
 			"plugin", p.Manifest.Name, "server", srv.Key)
 		return nil
 	}
 
-	toolsResult, err := tc.ListTools(ctx, srv.Endpoint)
+	toolsResult, err := discoveryClient.ListTools(ctx, srv.Endpoint)
 	if err != nil {
 		slog.Debug("plugin: http ListTools failed",
 			"plugin", p.Manifest.Name, "server", srv.Key, "error", err)
@@ -1088,6 +1151,18 @@ func registerHTTPServer(p *plugin.Plugin, srv market.ServerDescriptor, tc *trans
 	}
 	detailsByID[strings.TrimSpace(srv.CLI.ID)] = detailTools
 
+	// If the server has no ToolOverrides (e.g. third-party MCP servers that
+	// only declare cli.id and cli.command), auto-generate one override per
+	// discovered tool so BuildDynamicCommands can create leaf commands.
+	if len(srv.CLI.ToolOverrides) == 0 && len(toolsResult.Tools) > 0 {
+		srv.CLI.ToolOverrides = make(map[string]market.CLIToolOverride, len(toolsResult.Tools))
+		for _, tool := range toolsResult.Tools {
+			srv.CLI.ToolOverrides[tool.Name] = market.CLIToolOverride{
+				CLIName: deriveToolCLIName(tool.Name),
+			}
+		}
+	}
+
 	cmds := compat.BuildDynamicCommands(
 		[]market.ServerDescriptor{srv}, runner, detailsByID)
 
@@ -1096,6 +1171,79 @@ func registerHTTPServer(p *plugin.Plugin, srv market.ServerDescriptor, tc *trans
 		"tools", len(toolsResult.Tools), "commands", len(cmds))
 
 	return cmds
+}
+
+// deriveToolCLIName converts an MCP tool name (e.g. "web_search" or
+// "maps.search_poi") into a kebab-case CLI command name ("search" or
+// "search-poi"). It strips common prefixes and replaces underscores/dots
+// with hyphens.
+func deriveToolCLIName(toolName string) string {
+	// Use the last segment after "." as the base name.
+	if idx := strings.LastIndex(toolName, "."); idx >= 0 {
+		toolName = toolName[idx+1:]
+	}
+	// Replace underscores with hyphens for kebab-case.
+	return strings.ReplaceAll(toolName, "_", "-")
+}
+
+// buildPluginAuthClient creates a transport.Client copy with the plugin's
+// Bearer token and trusted domains injected. This allows third-party MCP
+// servers that require independent authentication to be discovered at startup.
+func buildPluginAuthClient(base *transport.Client, srv market.ServerDescriptor) *transport.Client {
+	authToken := ""
+	extraHeaders := make(map[string]string)
+	for key, value := range srv.AuthHeaders {
+		if strings.EqualFold(key, "Authorization") {
+			authToken = strings.TrimPrefix(value, "Bearer ")
+			authToken = strings.TrimSpace(authToken)
+		} else {
+			extraHeaders[key] = value
+		}
+	}
+	if authToken == "" {
+		return base
+	}
+	client := base.WithAuth(authToken, extraHeaders)
+	// Trust the endpoint's hostname so the token is actually sent.
+	if parsed, err := url.Parse(srv.Endpoint); err == nil {
+		host := parsed.Hostname()
+		client.TrustedDomains = []string{host, "*." + host}
+	}
+	return client
+}
+
+// registerPluginAuthFromHeaders extracts authentication credentials from
+// a server descriptor's AuthHeaders and registers them in the global
+// PluginAuth registry. The runner uses this registry at execution time
+// to inject the correct Bearer token for third-party MCP servers.
+func registerPluginAuthFromHeaders(srv market.ServerDescriptor) {
+	authToken := ""
+	extraHeaders := make(map[string]string)
+	for key, value := range srv.AuthHeaders {
+		if strings.EqualFold(key, "Authorization") {
+			authToken = strings.TrimPrefix(value, "Bearer ")
+			authToken = strings.TrimSpace(authToken)
+		} else {
+			extraHeaders[key] = value
+		}
+	}
+	if authToken == "" {
+		return
+	}
+	var trustedDomains []string
+	if parsed, err := url.Parse(srv.Endpoint); err == nil {
+		host := parsed.Hostname()
+		trustedDomains = []string{host, "*." + host}
+	}
+	productID := strings.TrimSpace(srv.CLI.ID)
+	if productID == "" {
+		productID = srv.Key
+	}
+	RegisterPluginAuth(productID, &PluginAuth{
+		Token:          authToken,
+		ExtraHeaders:   extraHeaders,
+		TrustedDomains: trustedDomains,
+	})
 }
 
 // registerStdioServer initializes a stdio MCP server, discovers its tools

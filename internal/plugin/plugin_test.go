@@ -226,6 +226,128 @@ func TestPluginToServerDescriptors(t *testing.T) {
 	}
 }
 
+func TestPluginToServerDescriptorsWithHeaders(t *testing.T) {
+	cliOverlay, _ := json.Marshal(map[string]any{
+		"id":      "web-search",
+		"command": "web-search",
+	})
+
+	// Set an environment variable to test expansion
+	t.Setenv("TEST_API_KEY", "sk-test-12345")
+
+	p := &Plugin{
+		Manifest: Manifest{
+			Name:        "my-plugin",
+			Description: "Test plugin with headers",
+			MCPServers: map[string]*MCPServer{
+				"web-search": {
+					Type:     "streamable-http",
+					Endpoint: "https://api.example.com/mcp/v1",
+					CLI:      cliOverlay,
+					Headers: map[string]string{
+						"Authorization": "Bearer ${TEST_API_KEY}",
+						"X-Custom":      "static-value",
+					},
+				},
+			},
+		},
+		Root: "/tmp/plugins/my-plugin",
+	}
+
+	descriptors := p.ToServerDescriptors()
+	if len(descriptors) != 1 {
+		t.Fatalf("got %d descriptors, want 1", len(descriptors))
+	}
+
+	d := descriptors[0]
+	if d.Key != "web-search" {
+		t.Errorf("key = %q, want web-search", d.Key)
+	}
+	if len(d.AuthHeaders) != 2 {
+		t.Fatalf("AuthHeaders len = %d, want 2", len(d.AuthHeaders))
+	}
+	// Environment variable should be expanded
+	if d.AuthHeaders["Authorization"] != "Bearer sk-test-12345" {
+		t.Errorf("AuthHeaders[Authorization] = %q, want 'Bearer sk-test-12345'", d.AuthHeaders["Authorization"])
+	}
+	if d.AuthHeaders["X-Custom"] != "static-value" {
+		t.Errorf("AuthHeaders[X-Custom] = %q, want static-value", d.AuthHeaders["X-Custom"])
+	}
+	if d.Source != "plugin" {
+		t.Errorf("source = %q, want plugin (non-managed)", d.Source)
+	}
+}
+
+func TestPluginToServerDescriptorsNoHeaders(t *testing.T) {
+	cliOverlay, _ := json.Marshal(map[string]any{
+		"id":      "conference",
+		"command": "conference",
+	})
+
+	p := &Plugin{
+		Manifest: Manifest{
+			Name: "conference",
+			MCPServers: map[string]*MCPServer{
+				"conference": {
+					Type:     "streamable-http",
+					Endpoint: "https://mcp.conference.dingtalk.com",
+					CLI:      cliOverlay,
+				},
+			},
+		},
+		Root: "/tmp/plugins/conference",
+	}
+
+	descriptors := p.ToServerDescriptors()
+	if len(descriptors) != 1 {
+		t.Fatalf("got %d descriptors, want 1", len(descriptors))
+	}
+	if descriptors[0].AuthHeaders != nil {
+		t.Errorf("AuthHeaders = %v, want nil for server without headers", descriptors[0].AuthHeaders)
+	}
+}
+
+func TestParseManifestWithHeaders(t *testing.T) {
+	dir := t.TempDir()
+	manifestPath := filepath.Join(dir, "plugin.json")
+	content := `{
+		"name": "api-plugin",
+		"version": "1.0.0",
+		"mcpServers": {
+			"api-server": {
+				"type": "streamable-http",
+				"endpoint": "https://api.example.com/mcp",
+				"headers": {
+					"Authorization": "Bearer ${MY_API_KEY}",
+					"X-Custom-Header": "custom-value"
+				}
+			}
+		}
+	}`
+	if err := os.WriteFile(manifestPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m, err := ParseManifest(manifestPath)
+	if err != nil {
+		t.Fatalf("ParseManifest: %v", err)
+	}
+
+	srv := m.MCPServers["api-server"]
+	if srv == nil {
+		t.Fatal("api-server not found in MCPServers")
+	}
+	if len(srv.Headers) != 2 {
+		t.Fatalf("Headers len = %d, want 2", len(srv.Headers))
+	}
+	if srv.Headers["Authorization"] != "Bearer ${MY_API_KEY}" {
+		t.Errorf("Headers[Authorization] = %q, want raw template", srv.Headers["Authorization"])
+	}
+	if srv.Headers["X-Custom-Header"] != "custom-value" {
+		t.Errorf("Headers[X-Custom-Header] = %q, want custom-value", srv.Headers["X-Custom-Header"])
+	}
+}
+
 func TestLoaderScanEmpty(t *testing.T) {
 	dir := t.TempDir()
 	loader := &Loader{
@@ -303,8 +425,8 @@ func TestRemoveManagedPluginBlocked(t *testing.T) {
 func TestIsPluginEnabled(t *testing.T) {
 	s := &Settings{
 		EnabledPlugins: map[string]bool{
-			"my-plugin":  true,
-			"disabled":   false,
+			"my-plugin": true,
+			"disabled":  false,
 		},
 	}
 
@@ -324,11 +446,11 @@ func TestIsPluginEnabled(t *testing.T) {
 
 func TestParseGitURL(t *testing.T) {
 	tests := []struct {
-		name      string
-		url       string
-		wantWS    string
-		wantRepo  string
-		wantErr   bool
+		name     string
+		url      string
+		wantWS   string
+		wantRepo string
+		wantErr  bool
 	}{
 		{
 			name:     "https with .git",

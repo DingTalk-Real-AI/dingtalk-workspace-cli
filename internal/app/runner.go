@@ -207,7 +207,17 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 			retErr == nil, time.Since(invokeStart), errCat, errReason)
 	}()
 
-	authToken := r.resolveAuthToken(ctx)
+	// Check if this product has plugin-level auth credentials registered.
+	// If so, use the plugin's token instead of the default DingTalk OAuth token.
+	// This allows third-party MCP servers (e.g. Bailian) to use their own API keys.
+	pluginAuth, hasPluginAuth := LookupPluginAuth(invocation.CanonicalProduct)
+
+	authToken := ""
+	if hasPluginAuth {
+		authToken = pluginAuth.Token
+	} else {
+		authToken = r.resolveAuthToken(ctx)
+	}
 
 	var timeoutSec int
 	if r.globalFlags != nil {
@@ -256,7 +266,15 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		)
 	}
 
-	tc := r.transport.WithAuth(authToken, resolveIdentityHeaders())
+	var tc *transport.Client
+	if hasPluginAuth {
+		// Use plugin-level auth: inject the plugin's token and trust its domains.
+		tc = r.transport.WithAuth(authToken, pluginAuth.ExtraHeaders)
+		tc.TrustedDomains = pluginAuth.TrustedDomains
+	} else {
+		// Default path: use DingTalk OAuth token with identity headers.
+		tc = r.transport.WithAuth(authToken, resolveIdentityHeaders())
+	}
 
 	callCtx := ctx
 	if r.globalFlags != nil && r.globalFlags.Timeout > 0 {

@@ -48,10 +48,10 @@ func NewLoader(cliVersion string) *Loader {
 
 // Settings holds user preferences for plugin management.
 type Settings struct {
-	EnabledPlugins   map[string]bool              `json:"enabledPlugins,omitempty"`
-	PluginConfigs    map[string]map[string]any     `json:"pluginConfigs,omitempty"`
-	PluginAutoUpdate bool                          `json:"pluginAutoUpdate,omitempty"`
-	DevPlugins       map[string]string             `json:"devPlugins,omitempty"` // name → absolute path
+	EnabledPlugins   map[string]bool           `json:"enabledPlugins,omitempty"`
+	PluginConfigs    map[string]map[string]any `json:"pluginConfigs,omitempty"`
+	PluginAutoUpdate bool                      `json:"pluginAutoUpdate,omitempty"`
+	DevPlugins       map[string]string         `json:"devPlugins,omitempty"` // name → absolute path
 }
 
 // LoadManaged scans ~/.dws/plugins/managed/ and returns all valid
@@ -207,11 +207,11 @@ func isPluginEnabled(s *Settings, name string) bool {
 // InstalledPlugins returns the list of all installed plugins with their
 // status info. Used by `dws plugin list`.
 type PluginInfo struct {
-	Name      string `json:"name"`
-	Version   string `json:"version"`
-	Type      string `json:"type"` // "managed" or "user"
-	Enabled   bool   `json:"enabled"`
-	Path      string `json:"path"`
+	Name        string `json:"name"`
+	Version     string `json:"version"`
+	Type        string `json:"type"` // "managed" or "user"
+	Enabled     bool   `json:"enabled"`
+	Path        string `json:"path"`
 	Description string `json:"description,omitempty"`
 }
 
@@ -510,6 +510,103 @@ func (l *Loader) saveSettings(s *Settings) {
 	}
 	_ = os.MkdirAll(filepath.Dir(settingsPath), 0o700)
 	_ = os.WriteFile(settingsPath, data, 0o600)
+}
+
+// GetPluginConfig returns the value of a config key for a plugin.
+// It checks pluginConfigs in settings.json first, then falls back to
+// the userConfig default in the plugin's manifest.
+func (l *Loader) GetPluginConfig(pluginName, key string) (string, bool) {
+	settings := l.loadSettings()
+	if settings.PluginConfigs != nil {
+		if pluginCfg, ok := settings.PluginConfigs[pluginName]; ok {
+			if val, ok := pluginCfg[key]; ok {
+				if s, ok := val.(string); ok {
+					return s, true
+				}
+			}
+		}
+	}
+	return "", false
+}
+
+// SetPluginConfig persists a config key-value pair for a plugin.
+func (l *Loader) SetPluginConfig(pluginName, key, value string) {
+	settings := l.loadSettings()
+	if settings.PluginConfigs == nil {
+		settings.PluginConfigs = make(map[string]map[string]any)
+	}
+	if settings.PluginConfigs[pluginName] == nil {
+		settings.PluginConfigs[pluginName] = make(map[string]any)
+	}
+	settings.PluginConfigs[pluginName][key] = value
+	l.saveSettings(settings)
+}
+
+// UnsetPluginConfig removes a config key for a plugin.
+func (l *Loader) UnsetPluginConfig(pluginName, key string) bool {
+	settings := l.loadSettings()
+	if settings.PluginConfigs == nil {
+		return false
+	}
+	pluginCfg, ok := settings.PluginConfigs[pluginName]
+	if !ok {
+		return false
+	}
+	if _, exists := pluginCfg[key]; !exists {
+		return false
+	}
+	delete(pluginCfg, key)
+	if len(pluginCfg) == 0 {
+		delete(settings.PluginConfigs, pluginName)
+	}
+	l.saveSettings(settings)
+	return true
+}
+
+// ListPluginConfig returns all config key-value pairs for a plugin.
+func (l *Loader) ListPluginConfig(pluginName string) map[string]string {
+	settings := l.loadSettings()
+	result := make(map[string]string)
+	if settings.PluginConfigs == nil {
+		return result
+	}
+	pluginCfg, ok := settings.PluginConfigs[pluginName]
+	if !ok {
+		return result
+	}
+	for k, v := range pluginCfg {
+		if s, ok := v.(string); ok {
+			result[k] = s
+		}
+	}
+	return result
+}
+
+// InjectPluginConfigEnv reads pluginConfigs from settings.json and sets
+// environment variables for each configured key. This allows
+// expandPluginVars (which calls os.Expand) to resolve ${KEY} references
+// in plugin.json headers, endpoints, etc.
+//
+// Environment variables already set by the user take precedence — only
+// keys not already present in the environment are injected.
+func (l *Loader) InjectPluginConfigEnv() {
+	settings := l.loadSettings()
+	if len(settings.PluginConfigs) == 0 {
+		return
+	}
+	for _, pluginCfg := range settings.PluginConfigs {
+		for key, val := range pluginCfg {
+			strVal, ok := val.(string)
+			if !ok || strVal == "" {
+				continue
+			}
+			// Do not override existing environment variables.
+			if _, exists := os.LookupEnv(key); exists {
+				continue
+			}
+			_ = os.Setenv(key, strVal)
+		}
+	}
 }
 
 // LoadDev loads dev plugins registered via `dws plugin dev`.
