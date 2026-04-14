@@ -961,6 +961,12 @@ func CloseFileLogger() {
 func loadPlugins(engine *pipeline.Engine, runner executor.Runner) []*cobra.Command {
 	pluginLoader := plugin.NewLoader(RawVersion())
 
+	// 0a. Inject plugin config values from settings.json as environment
+	// variables so that expandPluginVars can resolve ${KEY} references
+	// in plugin.json headers, endpoints, etc. User-set env vars take
+	// precedence (InjectPluginConfigEnv skips already-set keys).
+	pluginLoader.InjectPluginConfigEnv()
+
 	// 0. Check for managed plugin updates (non-blocking, best-effort).
 	updater := plugin.NewUpdater(pluginLoader.PluginsDir, RawVersion())
 	accessToken, tokenErr := loadSkillAccessToken()

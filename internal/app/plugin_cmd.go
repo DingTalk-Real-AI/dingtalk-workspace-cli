@@ -38,6 +38,7 @@ func newPluginCommand() *cobra.Command {
 		newPluginValidateCommand(),
 		newPluginCreateCommand(),
 		newPluginDevCommand(),
+		newPluginConfigCommand(),
 	)
 
 	return pluginCmd
@@ -402,6 +403,205 @@ to unregister.`,
 	}
 	cmd.Flags().Bool("off", false, "Unregister a dev plugin")
 	return cmd
+}
+
+func newPluginConfigCommand() *cobra.Command {
+	configCmd := newPlaceholderParent("config", "Manage plugin configuration")
+	configCmd.AddCommand(
+		newPluginConfigSetCommand(),
+		newPluginConfigGetCommand(),
+		newPluginConfigListCommand(),
+		newPluginConfigUnsetCommand(),
+	)
+	return configCmd
+}
+
+func newPluginConfigSetCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "set <plugin-name> <key> <value>",
+		Short: "Set a plugin config value",
+		Long: `Persistently set a configuration value for a plugin.
+The value is stored in ~/.dws/settings.json and automatically injected
+as an environment variable when the plugin is loaded.
+
+Environment variables set by the user (e.g. via export) take precedence
+over values stored in settings.json.`,
+		Example: `  dws plugin config set demo-devtool DASHSCOPE_API_KEY sk-xxx
+  dws plugin config set my-plugin API_ENDPOINT https://api.example.com`,
+		Args:              cobra.ExactArgs(3),
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			pluginName, key, value := args[0], args[1], args[2]
+			loader := plugin.NewLoader(RawVersion())
+
+			// Validate that the plugin exists.
+			plugins := loader.ListInstalled()
+			found := false
+			for _, p := range plugins {
+				if p.Name == pluginName {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return apperrors.NewValidation(fmt.Sprintf("plugin %q not found; use 'dws plugin list' to see installed plugins", pluginName))
+			}
+
+			loader.SetPluginConfig(pluginName, key, value)
+			fmt.Fprintf(cmd.OutOrStdout(), "Config saved: %s.%s\n", pluginName, key)
+			return nil
+		},
+	}
+}
+
+func newPluginConfigGetCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:               "get <plugin-name> <key>",
+		Short:             "Get a plugin config value",
+		Args:              cobra.ExactArgs(2),
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			pluginName, key := args[0], args[1]
+			loader := plugin.NewLoader(RawVersion())
+
+			val, ok := loader.GetPluginConfig(pluginName, key)
+			if !ok {
+				return apperrors.NewValidation(fmt.Sprintf("config key %q not set for plugin %q", key, pluginName))
+			}
+
+			fmt.Fprintln(cmd.OutOrStdout(), val)
+			return nil
+		},
+	}
+}
+
+func newPluginConfigListCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:               "list <plugin-name>",
+		Short:             "List all config values for a plugin",
+		Args:              cobra.ExactArgs(1),
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			pluginName := args[0]
+			loader := plugin.NewLoader(RawVersion())
+
+			wantJSON, _ := cmd.Flags().GetBool("json")
+			configs := loader.ListPluginConfig(pluginName)
+
+			// Also load the plugin manifest to show declared userConfig keys.
+			declaredKeys := loadDeclaredUserConfig(loader, pluginName)
+
+			if wantJSON {
+				result := make(map[string]any)
+				for k, v := range configs {
+					sensitive := false
+					if ci, ok := declaredKeys[k]; ok {
+						sensitive = ci.Sensitive
+					}
+					if sensitive {
+						result[k] = maskSensitiveValue(v)
+					} else {
+						result[k] = v
+					}
+				}
+				// Include declared but unset keys.
+				for k, ci := range declaredKeys {
+					if _, set := configs[k]; !set {
+						entry := map[string]any{
+							"value":       nil,
+							"description": ci.Description,
+							"required":    ci.Default == "",
+						}
+						result[k] = entry
+					}
+				}
+				return output.WriteJSON(cmd.OutOrStdout(), map[string]any{
+					"kind":   "plugin_config",
+					"plugin": pluginName,
+					"config": result,
+				})
+			}
+
+			w := cmd.OutOrStdout()
+			if len(configs) == 0 && len(declaredKeys) == 0 {
+				fmt.Fprintf(w, "No configuration for plugin %q.\n", pluginName)
+				return nil
+			}
+
+			fmt.Fprintf(w, "Configuration for %s:\n\n", pluginName)
+
+			// Show set values.
+			for k, v := range configs {
+				sensitive := false
+				if ci, ok := declaredKeys[k]; ok {
+					sensitive = ci.Sensitive
+				}
+				displayVal := v
+				if sensitive {
+					displayVal = maskSensitiveValue(v)
+				}
+				fmt.Fprintf(w, "  %s = %s\n", k, displayVal)
+			}
+
+			// Show declared but unset keys.
+			for k, ci := range declaredKeys {
+				if _, set := configs[k]; !set {
+					desc := ""
+					if ci.Description != "" {
+						desc = "  # " + ci.Description
+					}
+					fmt.Fprintf(w, "  %s = (not set)%s\n", k, desc)
+				}
+			}
+			return nil
+		},
+	}
+	cmd.Flags().Bool("json", false, "Output in JSON format")
+	return cmd
+}
+
+func newPluginConfigUnsetCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:               "unset <plugin-name> <key>",
+		Short:             "Remove a plugin config value",
+		Args:              cobra.ExactArgs(2),
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			pluginName, key := args[0], args[1]
+			loader := plugin.NewLoader(RawVersion())
+
+			if !loader.UnsetPluginConfig(pluginName, key) {
+				return apperrors.NewValidation(fmt.Sprintf("config key %q not set for plugin %q", key, pluginName))
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "Config removed: %s.%s\n", pluginName, key)
+			return nil
+		},
+	}
+}
+
+// loadDeclaredUserConfig loads the userConfig section from a plugin's manifest.
+func loadDeclaredUserConfig(loader *plugin.Loader, pluginName string) map[string]plugin.ConfigItem {
+	plugins := loader.ListInstalled()
+	for _, p := range plugins {
+		if p.Name == pluginName {
+			m, err := plugin.ParseManifest(filepath.Join(p.Path, "plugin.json"))
+			if err != nil {
+				return nil
+			}
+			return m.UserConfig
+		}
+	}
+	return nil
+}
+
+// maskSensitiveValue masks a sensitive value, showing only the first 4
+// and last 2 characters for values longer than 8 characters.
+func maskSensitiveValue(value string) string {
+	if len(value) <= 8 {
+		return strings.Repeat("*", len(value))
+	}
+	return value[:4] + strings.Repeat("*", len(value)-6) + value[len(value)-2:]
 }
 
 func statusStr(enabled bool) string {
