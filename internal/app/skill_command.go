@@ -29,11 +29,8 @@ import (
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
-<<<<<<< HEAD
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
-=======
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
->>>>>>> upstream/main
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
 
