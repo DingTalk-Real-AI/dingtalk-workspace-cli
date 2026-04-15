@@ -107,6 +107,7 @@ type CLIGroupDef struct {
 // CLIToolOverride maps an MCP tool to a CLI command with flag aliases and transforms.
 type CLIToolOverride struct {
 	CLIName      string                     `json:"cliName"`
+	Description  string                     `json:"description,omitempty"`
 	Group        string                     `json:"group,omitempty"`
 	IsSensitive  bool                       `json:"isSensitive,omitempty"`
 	Hidden       bool                       `json:"hidden,omitempty"`
