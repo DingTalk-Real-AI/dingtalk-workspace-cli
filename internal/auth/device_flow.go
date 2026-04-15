@@ -66,6 +66,13 @@ func (p *DeviceFlowProvider) SetBaseURL(baseURL string) {
 	p.baseURL = strings.TrimRight(baseURL, "/")
 }
 
+// SetScope overrides the OAuth scope for the device flow.
+func (p *DeviceFlowProvider) SetScope(scope string) {
+	if p != nil {
+		p.scope = scope
+	}
+}
+
 func (p *DeviceFlowProvider) output() io.Writer {
 	if p != nil && p.Output != nil {
 		return p.Output

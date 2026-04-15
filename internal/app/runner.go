@@ -298,6 +298,12 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 				}
 			}
 		}
+		// PAT scope error: offer human-readable output and retry after authorization
+		if isPatScopeError(err) {
+			scopeErr := extractPatScopeError(err)
+			captureRuntimeFailure(invocation, err, err)
+			return retryWithPatAuthRetry(ctx, r, invocation, scopeErr, defaultConfigDir(), os.Stderr)
+		}
 		captureRuntimeFailure(invocation, err, err)
 		return executor.Result{}, err
 	}
@@ -319,6 +325,12 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 			apperrors.WithHint("MCP tool returned a business error; check tool parameters and refer to skill documentation."),
 			apperrors.WithServerDiag(diag),
 		)
+		// PAT scope error in business response: offer human-readable output and retry
+		if isPatScopeError(mcpErr) {
+			scopeErr := extractPatScopeError(mcpErr)
+			captureRuntimeFailure(invocation, mcpErr, mcpErr)
+			return retryWithPatAuthRetry(ctx, r, invocation, scopeErr, defaultConfigDir(), os.Stderr)
+		}
 		captureRuntimeFailure(invocation, mcpErr, mcpErr)
 		return executor.Result{}, mcpErr
 	}
