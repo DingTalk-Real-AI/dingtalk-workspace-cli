@@ -1339,7 +1339,21 @@ func registerStdioServer(p *plugin.Plugin, sc plugin.StdioServerClient, runner e
 		Command: serverID,
 	}
 	if srv, ok := p.Manifest.MCPServers[sc.Key]; ok && len(srv.CLI) > 0 {
-		if err := json.Unmarshal(srv.CLI, &overlay); err != nil {
+		cliData := srv.CLI
+		// If cli is a JSON string, treat it as a relative file path to an overlay file.
+		if len(cliData) > 0 && cliData[0] == '"' {
+			var cliPath string
+			if err := json.Unmarshal(cliData, &cliPath); err == nil && cliPath != "" {
+				absPath := filepath.Join(p.Root, cliPath)
+				if fileData, readErr := os.ReadFile(absPath); readErr == nil {
+					cliData = fileData
+				} else {
+					slog.Warn("plugin: failed to read CLI overlay file",
+						"plugin", p.Manifest.Name, "path", absPath, "error", readErr)
+				}
+			}
+		}
+		if err := json.Unmarshal(cliData, &overlay); err != nil {
 			slog.Warn("plugin: failed to parse CLI overlay for stdio server",
 				"plugin", p.Manifest.Name, "server", sc.Key, "error", err)
 		}

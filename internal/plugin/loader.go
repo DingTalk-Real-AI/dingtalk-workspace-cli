@@ -14,6 +14,7 @@
 package plugin
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -21,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
@@ -329,6 +331,9 @@ func (l *Loader) InstallFromDir(srcDir string) (*Plugin, error) {
 	if err := copyDir(srcDir, destDir); err != nil {
 		return nil, fmt.Errorf("install failed: %w", err)
 	}
+
+	// Remove stale files in destDir that no longer exist in srcDir.
+	removeStaleFiles(srcDir, destDir)
 
 	// Run build if configured (compile server to binary).
 	if manifest.Build != nil {
@@ -758,7 +763,12 @@ func runBuild(pluginDir string, build *BuildConfig) error {
 
 	slog.Info("plugin: building", "dir", pluginDir, "command", build.Command)
 
-	cmd := exec.Command("sh", "-c", build.Command)
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("cmd", "/C", build.Command)
+	} else {
+		cmd = exec.Command("sh", "-c", build.Command)
+	}
 	cmd.Dir = pluginDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -787,8 +797,12 @@ func runBuild(pluginDir string, build *BuildConfig) error {
 	return nil
 }
 
-// copyDir recursively copies src to dst.
+// copyDir recursively copies src to dst, skipping files whose content
+// is identical to the destination. This avoids overwriting locked
+// executables (e.g. a running stdio plugin on Windows).
+// Symlinks are skipped for security (prevents path traversal attacks).
 func copyDir(src, dst string) error {
+	cleanDst := filepath.Clean(dst) + string(os.PathSeparator)
 	if err := os.MkdirAll(dst, 0o755); err != nil {
 		return err
 	}
@@ -796,11 +810,19 @@ func copyDir(src, dst string) error {
 		if err != nil {
 			return err
 		}
+		// Skip symlinks to prevent path traversal.
+		if info.Mode()&os.ModeSymlink != 0 {
+			return nil
+		}
 		rel, err := filepath.Rel(src, path)
 		if err != nil {
 			return err
 		}
 		target := filepath.Join(dst, rel)
+		// Guard against path traversal via crafted relative paths.
+		if target != cleanDst[:len(cleanDst)-1] && !strings.HasPrefix(target, cleanDst) {
+			return fmt.Errorf("path traversal detected: %s", rel)
+		}
 		if info.IsDir() {
 			return os.MkdirAll(target, info.Mode())
 		}
@@ -808,6 +830,52 @@ func copyDir(src, dst string) error {
 		if err != nil {
 			return err
 		}
+		// Skip if destination already has identical content (cheap size check first).
+		if targetInfo, statErr := os.Stat(target); statErr == nil && targetInfo.Size() == int64(len(data)) {
+			if existing, readErr := os.ReadFile(target); readErr == nil && bytes.Equal(existing, data) {
+				return nil
+			}
+		}
 		return os.WriteFile(target, data, info.Mode())
+	})
+}
+
+// removeStaleFiles deletes files under dst that do not exist in src.
+// Best-effort: errors are logged but do not fail the install.
+func removeStaleFiles(src, dst string) {
+	srcSet := make(map[string]struct{})
+	_ = filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		rel, relErr := filepath.Rel(src, path)
+		if relErr != nil {
+			return nil
+		}
+		srcSet[rel] = struct{}{}
+		return nil
+	})
+
+	_ = filepath.Walk(dst, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		rel, relErr := filepath.Rel(dst, path)
+		if relErr != nil {
+			return nil
+		}
+		if rel == "." {
+			return nil
+		}
+		if _, exists := srcSet[rel]; !exists {
+			if info.IsDir() {
+				_ = os.RemoveAll(path)
+				return filepath.SkipDir
+			}
+			if removeErr := os.Remove(path); removeErr != nil {
+				slog.Debug("plugin: failed to remove stale file", "path", path, "error", removeErr)
+			}
+		}
+		return nil
 	})
 }
