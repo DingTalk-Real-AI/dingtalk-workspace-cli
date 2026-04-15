@@ -124,7 +124,7 @@ func (m *Manifest) Validate(cliVersion string) error {
 	if m.Type != "" && m.Type != "managed" && m.Type != "user" {
 		return fmt.Errorf("invalid plugin type %q: must be \"managed\" or \"user\"", m.Type)
 	}
-	if m.MinCLIVersion != "" && cliVersion != "" {
+	if m.MinCLIVersion != "" && cliVersion != "" && cliVersion != "dev" {
 		if compareSemver(cliVersion, m.MinCLIVersion) < 0 {
 			return fmt.Errorf("plugin requires CLI >= %s, current is %s", m.MinCLIVersion, cliVersion)
 		}
