@@ -459,7 +459,7 @@ func (l *Loader) RemovePlugin(name string, keepData bool) error {
 	// Check managed first — official plugins cannot be removed.
 	managedDir := filepath.Join(l.PluginsDir, "managed", name)
 	if _, err := os.Stat(managedDir); err == nil {
-		return fmt.Errorf("%s 是官方插件（DingTalk-Real-AI/%s），不支持卸载。\n   如需停用，请使用：dws plugin disable %s", name, name, name)
+		return fmt.Errorf("%s is a managed plugin (DingTalk-Real-AI/%s) and cannot be removed.\n   To disable it, run: dws plugin disable %s", name, name, name)
 	}
 
 	pluginDir := l.findUserPluginDir(name)

@@ -417,8 +417,8 @@ func TestRemoveManagedPluginBlocked(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when removing managed plugin")
 	}
-	if !contains(err.Error(), "官方插件") {
-		t.Errorf("error message should mention 官方插件, got: %v", err)
+	if !contains(err.Error(), "managed plugin") {
+		t.Errorf("error message should mention managed plugin, got: %v", err)
 	}
 }
 

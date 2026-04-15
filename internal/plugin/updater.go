@@ -119,6 +119,57 @@ func (u *Updater) CheckAndUpdate(ctx context.Context, accessToken string, w io.W
 	return updated
 }
 
+// EnsureManaged checks that every plugin in config.DefaultManagedPlugins
+// exists locally under ~/.dws/plugins/managed/. Missing plugins are
+// downloaded from the remote API and extracted automatically.
+// This runs once on first launch (or after a user deletes the managed dir).
+func (u *Updater) EnsureManaged(ctx context.Context, accessToken string, w io.Writer) []string {
+	if len(config.DefaultManagedPlugins) == 0 {
+		return nil
+	}
+
+	managedDir := filepath.Join(u.PluginsDir, config.PluginManagedDir)
+
+	var installed []string
+	for _, shortName := range config.DefaultManagedPlugins {
+		pluginDir := filepath.Join(managedDir, shortName)
+
+		// Already exists locally — skip.
+		if _, err := os.Stat(filepath.Join(pluginDir, "plugin.json")); err == nil {
+			continue
+		}
+
+		qualifiedName := config.OfficialPluginWorkspace + "/" + shortName
+		fmt.Fprintf(w, "📦 Pulling built-in plugin %s ...\n", qualifiedName)
+
+		remote, err := u.checkRemoteVersion(ctx, accessToken, qualifiedName)
+		if err != nil {
+			slog.Warn("plugin: failed to fetch remote info for default plugin",
+				"plugin", qualifiedName, "error", err)
+			fmt.Fprintf(w, "  ⚠️  Failed to fetch %s info: %v\n", qualifiedName, err)
+			continue
+		}
+		if remote == nil || remote.DownloadURL == "" {
+			slog.Warn("plugin: no download URL for default plugin",
+				"plugin", qualifiedName)
+			fmt.Fprintf(w, "  ⚠️  No version available for %s\n", qualifiedName)
+			continue
+		}
+
+		if err := u.downloadAndInstall(ctx, remote.DownloadURL, pluginDir); err != nil {
+			slog.Warn("plugin: failed to install default plugin",
+				"plugin", qualifiedName, "error", err)
+			fmt.Fprintf(w, "  ❌ Failed to install %s: %v\n", qualifiedName, err)
+			continue
+		}
+
+		fmt.Fprintf(w, "  ✅ Installed %s (%s)\n", qualifiedName, remote.Version)
+		installed = append(installed, qualifiedName)
+	}
+
+	return installed
+}
+
 // checkAndUpdateOne checks and potentially updates a single managed plugin.
 func (u *Updater) checkAndUpdateOne(
 	ctx context.Context,
@@ -160,11 +211,11 @@ func (u *Updater) checkAndUpdateOne(
 	if err := u.downloadAndInstall(ctx, remote.DownloadURL, pluginDir); err != nil {
 		slog.Warn("plugin: failed to download and install update",
 			"plugin", pluginName, "error", err)
-		fmt.Fprintf(w, "  更新失败: %v\n", err)
+		fmt.Fprintf(w, "  Update failed: %v\n", err)
 		return ""
 	}
 
-	fmt.Fprintf(w, "  ✅ %s 已更新到 %s\n", pluginName, remote.Version)
+	fmt.Fprintf(w, "  ✅ Updated %s to %s\n", pluginName, remote.Version)
 	return pluginName
 }
 
@@ -362,7 +413,7 @@ func promptUpdate(w io.Writer, r io.Reader, pluginName, oldVer, newVer, changelo
 	if changelog != "" {
 		fmt.Fprintf(w, "\n   %s", changelog)
 	}
-	fmt.Fprintf(w, "\n   是否更新？[Y/n] ")
+	fmt.Fprintf(w, "\n   Update? [Y/n] ")
 
 	scanner := bufio.NewScanner(r)
 	if !scanner.Scan() {

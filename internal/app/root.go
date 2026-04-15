@@ -1027,10 +1027,18 @@ func loadPlugins(engine *pipeline.Engine, runner executor.Runner) []*cobra.Comma
 	// precedence (InjectPluginConfigEnv skips already-set keys).
 	pluginLoader.InjectPluginConfigEnv()
 
-	// 0. Check for managed plugin updates (non-blocking, best-effort).
+	// 0a. Ensure default managed plugins are installed (first-run bootstrap).
 	updater := plugin.NewUpdater(pluginLoader.PluginsDir, RawVersion())
 	accessToken, tokenErr := loadSkillAccessToken()
 	if tokenErr == nil && accessToken != "" {
+		bootstrapCtx, bootstrapCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		installed := updater.EnsureManaged(bootstrapCtx, accessToken, os.Stderr)
+		bootstrapCancel()
+		if len(installed) > 0 {
+			slog.Debug("plugin: bootstrapped managed plugins", "names", installed)
+		}
+
+		// 0b. Check for managed plugin updates (non-blocking, best-effort).
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		updated := updater.CheckAndUpdate(ctx, accessToken, os.Stderr)
 		cancel()

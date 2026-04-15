@@ -133,3 +133,11 @@ const (
 	// official plugins. Plugins under this workspace are auto-pulled.
 	OfficialPluginWorkspace = "DingTalk-Real-AI"
 )
+
+// DefaultManagedPlugins lists the official plugins that should be
+// automatically pulled on first run if not already present locally.
+// Each entry is the short plugin name (without the workspace prefix);
+// the full qualified name is OfficialPluginWorkspace + "/" + name.
+var DefaultManagedPlugins = []string{
+	"conference",
+}
