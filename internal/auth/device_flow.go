@@ -41,29 +41,36 @@ const (
 )
 
 type DeviceFlowProvider struct {
-	configDir  string
-	clientID   string
-	scope      string
-	baseURL    string
-	logger     *slog.Logger
-	Output     io.Writer
-	httpClient *http.Client
+	configDir       string
+	clientID        string
+	scope           string
+	baseURL         string
+	terminalBaseURL string
+	logger          *slog.Logger
+	Output          io.Writer
+	httpClient      *http.Client
 }
 
 func NewDeviceFlowProvider(configDir string, logger *slog.Logger) *DeviceFlowProvider {
 	return &DeviceFlowProvider{
-		configDir:  configDir,
-		clientID:   ClientID(),
-		scope:      DefaultScopes,
-		baseURL:    DefaultDeviceBaseURL,
-		logger:     logger,
-		Output:     os.Stderr,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		configDir:        configDir,
+		clientID:         ClientID(),
+		scope:            DefaultScopes,
+		baseURL:          DefaultDeviceBaseURL,
+		terminalBaseURL:  DefaultTerminalBaseURL,
+		logger:           logger,
+		Output:           os.Stderr,
+		httpClient:       &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
 func (p *DeviceFlowProvider) SetBaseURL(baseURL string) {
 	p.baseURL = strings.TrimRight(baseURL, "/")
+}
+
+// SetTerminalBaseURL sets the terminal API base URL for device flow polling.
+func (p *DeviceFlowProvider) SetTerminalBaseURL(baseURL string) {
+	p.terminalBaseURL = strings.TrimRight(baseURL, "/")
 }
 
 // SetScope overrides the OAuth scope for the device flow.
@@ -87,12 +94,27 @@ type DeviceAuthResponse struct {
 	VerificationURIComplete string `json:"verificationUriComplete"`
 	ExpiresIn               int    `json:"expiresIn"`
 	Interval                int    `json:"interval"`
+	FlowID                  string `json:"flowId"`
 }
 
 type DeviceTokenResponse struct {
 	AuthCode    string `json:"authCode"`
 	RedirectURL string `json:"redirectUrl"`
 	Error       string `json:"error"`
+}
+
+// DevicePollResponse represents the response from the terminal API poll endpoint.
+type DevicePollResponse struct {
+	Success bool           `json:"success"`
+	Code    string         `json:"code,omitempty"`
+	Message string         `json:"message,omitempty"`
+	Data    DevicePollData `json:"data"`
+}
+
+type DevicePollData struct {
+	Status   string `json:"status"`
+	AuthCode string `json:"authCode,omitempty"`
+	FlowID   string `json:"flowId,omitempty"`
 }
 
 type serviceResult struct {
@@ -314,6 +336,24 @@ func (p *DeviceFlowProvider) pollDeviceToken(ctx context.Context, deviceCode str
 	return &resp, nil
 }
 
+// pollDeviceStatus polls the terminal API for device authorization status.
+func (p *DeviceFlowProvider) pollDeviceStatus(ctx context.Context, flowID string) (*DevicePollResponse, error) {
+	endpoint := fmt.Sprintf("%s%s?flowId=%s", p.terminalBaseURL, DevicePollPath, url.QueryEscape(flowID))
+	body, err := p.doGet(ctx, endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp DevicePollResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("%s: %w", i18n.T("解析响应失败"), err)
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("%s: [%s] %s", i18n.T("服务端返回错误"), resp.Code, resp.Message)
+	}
+	return &resp, nil
+}
+
 func (p *DeviceFlowProvider) waitForAuthorization(ctx context.Context, auth *DeviceAuthResponse) (*DeviceTokenResponse, error) {
 	startTime := time.Now()
 	interval := time.Duration(auth.Interval) * time.Second
@@ -337,7 +377,7 @@ func (p *DeviceFlowProvider) waitForAuthorization(ctx context.Context, auth *Dev
 		elapsedSec := int(time.Since(startTime).Seconds())
 		dfPrintPollStatus(p.output(), pollCount, elapsedSec)
 
-		resp, err := p.pollDeviceToken(ctx, auth.DeviceCode)
+		pollResp, err := p.pollDeviceStatus(ctx, auth.FlowID)
 		if err != nil {
 			dfPrintPollResult(p.output(), "network_error", i18n.T("网络错误，继续重试..."))
 			if p.logger != nil {
@@ -346,27 +386,20 @@ func (p *DeviceFlowProvider) waitForAuthorization(ctx context.Context, auth *Dev
 			continue
 		}
 
-		if resp.Error == "" {
+		switch pollResp.Data.Status {
+		case "APPROVED":
 			dfPrintPollResult(p.output(), "authorized", i18n.T("授权成功!"))
-			return resp, nil
-		}
-		switch resp.Error {
-		case "authorization_pending":
+			return &DeviceTokenResponse{AuthCode: pollResp.Data.AuthCode}, nil
+		case "PENDING":
 			dfPrintPollResult(p.output(), "pending", i18n.T("等待用户授权..."))
-		case "slow_down":
-			interval += 5 * time.Second
-			if interval > maxPollInterval*time.Second {
-				interval = maxPollInterval * time.Second
-			}
-			dfPrintPollResult(p.output(), "slow_down", fmt.Sprintf(i18n.T("轮询过快，间隔增加至 %ds"), int(interval.Seconds())))
-		case "access_denied":
+		case "REJECTED":
 			_, _ = fmt.Fprintln(p.output(), "")
 			return nil, errors.New(i18n.T("用户拒绝了授权请求"))
-		case "expired_token":
+		case "EXPIRED":
 			_, _ = fmt.Fprintln(p.output(), "")
 			return nil, errors.New(i18n.T("设备授权码已过期"))
 		default:
-			dfPrintPollResult(p.output(), "unknown", fmt.Sprintf(i18n.T("未知错误: %s"), resp.Error))
+			dfPrintPollResult(p.output(), "unknown", fmt.Sprintf(i18n.T("未知状态: %s"), pollResp.Data.Status))
 		}
 	}
 }
@@ -377,6 +410,29 @@ func (p *DeviceFlowProvider) postForm(ctx context.Context, endpoint string, para
 		return nil, fmt.Errorf("%s: %w", i18n.T("创建请求失败"), err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", i18n.T("发送请求失败"), err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, config.MaxResponseBodySize))
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", i18n.T("读取响应失败"), err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateBody(body, 200))
+	}
+	return body, nil
+}
+
+// doGet performs an HTTP GET request and returns the response body.
+func (p *DeviceFlowProvider) doGet(ctx context.Context, endpoint string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", i18n.T("创建请求失败"), err)
+	}
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {

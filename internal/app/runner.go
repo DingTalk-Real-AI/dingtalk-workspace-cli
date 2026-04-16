@@ -317,6 +317,16 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	if callResult.IsError {
 		diag := transport.ExtractServerDiagnosticsFromMap(callResult.Content)
 		logBusinessError(r.transport.FileLogger, "mcp_tool_error", invocation, callResult.Content, diag)
+
+		// ClassifyToolResult hook: let the overlay intercept known error
+		// patterns (PAT permission, gateway-auth) before generic handling.
+		if classify := edition.Get().ClassifyToolResult; classify != nil {
+			if hookErr := classify(callResult.Content); hookErr != nil {
+				captureRuntimeFailure(invocation, hookErr, hookErr)
+				return executor.Result{}, hookErr
+			}
+		}
+
 		mcpErr := apperrors.NewAPI(
 			extractMCPErrorMessage(callResult),
 			apperrors.WithOperation("tools/call"),

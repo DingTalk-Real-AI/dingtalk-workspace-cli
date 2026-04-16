@@ -41,6 +41,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline/handlers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin"
@@ -314,6 +315,10 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 	if len(pluginCmds) > 0 {
 		addPluginCommandsSafe(root, pluginCmds)
 	}
+
+	// PAT authorization commands (open-source core)
+	patCaller := newToolCallerAdapter(runner, flags)
+	pat.RegisterCommands(root, patCaller)
 
 	if fn := edition.Get().RegisterExtraCommands; fn != nil {
 		caller := newToolCallerAdapter(runner, flags)

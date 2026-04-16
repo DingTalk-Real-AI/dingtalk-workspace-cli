@@ -304,12 +304,18 @@ func TestDeviceFlow_LoginOnce_CLIAuthError_FailClosed(t *testing.T) {
 				VerificationURI: "https://example.com/verify",
 				ExpiresIn:       60,
 				Interval:        1,
+				FlowID:          "test-flow-id",
 			}, "", "")
 
-		case strings.HasSuffix(r.URL.Path, DeviceTokenPath):
-			writeServiceResult(w, true, DeviceTokenResponse{
-				AuthCode: "test-auth-code",
-			}, "", "")
+		case strings.HasSuffix(r.URL.Path, DevicePollPath):
+			// New terminal API: return APPROVED status
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": true,
+				"data": map[string]string{
+					"status":   "APPROVED",
+					"authCode": "test-auth-code",
+				},
+			})
 
 		case strings.HasSuffix(r.URL.Path, MCPOAuthTokenPath):
 			json.NewEncoder(w).Encode(map[string]any{
@@ -330,13 +336,14 @@ func TestDeviceFlow_LoginOnce_CLIAuthError_FailClosed(t *testing.T) {
 
 	configDir := setupMCPConfigDir(t, srv.URL)
 	provider := &DeviceFlowProvider{
-		configDir:  configDir,
-		clientID:   "test-client-id",
-		scope:      DefaultScopes,
-		baseURL:    srv.URL,
-		logger:     newDeviceFlowTestLogger(),
-		Output:     io.Discard,
-		httpClient: srv.Client(),
+		configDir:       configDir,
+		clientID:        "test-client-id",
+		scope:           DefaultScopes,
+		baseURL:         srv.URL,
+		terminalBaseURL: srv.URL,
+		logger:          newDeviceFlowTestLogger(),
+		Output:          io.Discard,
+		httpClient:      srv.Client(),
 	}
 
 	_, err := provider.loginOnce(context.Background(), 1)
@@ -368,12 +375,18 @@ func TestDeviceFlow_LoginOnce_CLIAuthDisabled_ShowsError(t *testing.T) {
 				VerificationURI: "https://example.com/verify",
 				ExpiresIn:       60,
 				Interval:        1,
+				FlowID:          "test-flow-id",
 			}, "", "")
 
-		case strings.HasSuffix(r.URL.Path, DeviceTokenPath):
-			writeServiceResult(w, true, DeviceTokenResponse{
-				AuthCode: "test-auth-code",
-			}, "", "")
+		case strings.HasSuffix(r.URL.Path, DevicePollPath):
+			// New terminal API: return APPROVED status
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": true,
+				"data": map[string]string{
+					"status":   "APPROVED",
+					"authCode": "test-auth-code",
+				},
+			})
 
 		case strings.HasSuffix(r.URL.Path, MCPOAuthTokenPath):
 			json.NewEncoder(w).Encode(map[string]any{
@@ -403,13 +416,14 @@ func TestDeviceFlow_LoginOnce_CLIAuthDisabled_ShowsError(t *testing.T) {
 
 	configDir := setupMCPConfigDir(t, srv.URL)
 	provider := &DeviceFlowProvider{
-		configDir:  configDir,
-		clientID:   "test-client-id",
-		scope:      DefaultScopes,
-		baseURL:    srv.URL,
-		logger:     newDeviceFlowTestLogger(),
-		Output:     io.Discard,
-		httpClient: srv.Client(),
+		configDir:       configDir,
+		clientID:        "test-client-id",
+		scope:           DefaultScopes,
+		baseURL:         srv.URL,
+		terminalBaseURL: srv.URL,
+		logger:          newDeviceFlowTestLogger(),
+		Output:          io.Discard,
+		httpClient:      srv.Client(),
 	}
 
 	_, err := provider.loginOnce(context.Background(), 1)
@@ -438,12 +452,18 @@ func TestDeviceFlow_LoginOnce_CLIAuthEnabled_Success(t *testing.T) {
 				VerificationURI: "https://example.com/verify",
 				ExpiresIn:       60,
 				Interval:        1,
+				FlowID:          "test-flow-id",
 			}, "", "")
 
-		case strings.HasSuffix(r.URL.Path, DeviceTokenPath):
-			writeServiceResult(w, true, DeviceTokenResponse{
-				AuthCode: "test-auth-code",
-			}, "", "")
+		case strings.HasSuffix(r.URL.Path, DevicePollPath):
+			// New terminal API: return APPROVED status
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": true,
+				"data": map[string]string{
+					"status":   "APPROVED",
+					"authCode": "test-auth-code",
+				},
+			})
 
 		case strings.HasSuffix(r.URL.Path, MCPOAuthTokenPath):
 			json.NewEncoder(w).Encode(map[string]any{
@@ -467,13 +487,14 @@ func TestDeviceFlow_LoginOnce_CLIAuthEnabled_Success(t *testing.T) {
 
 	configDir := setupMCPConfigDir(t, srv.URL)
 	provider := &DeviceFlowProvider{
-		configDir:  configDir,
-		clientID:   "test-client-id",
-		scope:      DefaultScopes,
-		baseURL:    srv.URL,
-		logger:     newDeviceFlowTestLogger(),
-		Output:     io.Discard,
-		httpClient: srv.Client(),
+		configDir:       configDir,
+		clientID:        "test-client-id",
+		scope:           DefaultScopes,
+		baseURL:         srv.URL,
+		terminalBaseURL: srv.URL,
+		logger:          newDeviceFlowTestLogger(),
+		Output:          io.Discard,
+		httpClient:      srv.Client(),
 	}
 
 	token, err := provider.loginOnce(context.Background(), 1)

@@ -83,6 +83,10 @@ const (
 	// DeviceGrantType is the grant_type value defined by RFC 8628.
 	DeviceGrantType = "urn:ietf:params:oauth:grant-type:device_code"
 
+	// Terminal API endpoints for device flow polling (new approach).
+	DefaultTerminalBaseURL = "https://open-dev.dingtalk.com"
+	DevicePollPath         = "/api/dingtalk-workspace-cli/oauth/device/poll"
+
 	LogoutURL         = "https://login.dingtalk.com/oauth2/logout"
 	LogoutContinueURL = "https://login.dingtalk.com"
 

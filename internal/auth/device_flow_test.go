@@ -20,6 +20,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -89,22 +90,42 @@ func TestWaitForAuthorizationSucceedsAfterPending(t *testing.T) {
 
 	var calls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// New terminal API uses GET method
+		if r.Method != http.MethodGet {
+			t.Fatalf("method = %s, want GET", r.Method)
+		}
+		if !strings.Contains(r.URL.RawQuery, "flowId=") {
+			t.Fatal("flowId query parameter should be present")
+		}
 		if calls.Add(1) <= 2 {
-			writeServiceResult(w, true, DeviceTokenResponse{Error: "authorization_pending"}, "", "")
+			// Return PENDING status
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": true,
+				"data":    map[string]string{"status": "PENDING"},
+			})
 			return
 		}
-		writeServiceResult(w, true, DeviceTokenResponse{AuthCode: "final-auth-code"}, "", "")
+		// Return APPROVED status with authCode
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"data": map[string]string{
+				"status":   "APPROVED",
+				"authCode": "final-auth-code",
+			},
+		})
 	}))
 	defer server.Close()
 
 	provider := NewDeviceFlowProvider(t.TempDir(), newDeviceFlowTestLogger())
 	provider.Output = io.Discard
-	provider.SetBaseURL(server.URL)
+	provider.SetTerminalBaseURL(server.URL)
 
 	resp, err := provider.waitForAuthorization(context.Background(), &DeviceAuthResponse{
-		DeviceCode: "dc-1",
-		ExpiresIn:  10,
-		Interval:   1,
+		FlowID:    "test-flow-id",
+		ExpiresIn: 10,
+		Interval:  1,
 	})
 	if err != nil {
 		t.Fatalf("waitForAuthorization() error = %v", err)
@@ -121,21 +142,26 @@ func TestWaitForAuthorizationHonorsContextCancellation(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeServiceResult(w, true, DeviceTokenResponse{Error: "authorization_pending"}, "", "")
+		// New terminal API uses GET method
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"data":    map[string]string{"status": "PENDING"},
+		})
 	}))
 	defer server.Close()
 
 	provider := NewDeviceFlowProvider(t.TempDir(), newDeviceFlowTestLogger())
 	provider.Output = io.Discard
-	provider.SetBaseURL(server.URL)
+	provider.SetTerminalBaseURL(server.URL)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
 	defer cancel()
 
 	if _, err := provider.waitForAuthorization(ctx, &DeviceAuthResponse{
-		DeviceCode: "dc-2",
-		ExpiresIn:  60,
-		Interval:   1,
+		FlowID:    "test-flow-id-2",
+		ExpiresIn: 60,
+		Interval:  1,
 	}); err == nil {
 		t.Fatal("waitForAuthorization() error = nil, want context cancellation")
 	}
