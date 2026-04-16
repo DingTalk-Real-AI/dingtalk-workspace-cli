@@ -86,7 +86,7 @@ const (
 
 	// Terminal API endpoints for device flow polling (new approach).
 	DefaultTerminalBaseURL = "https://pre-open-dev.dingtalk.com"
-	DevicePollPath         = "/api/dingtalk-workspace-cli/oauth/device/poll"
+	DevicePollPath         = "/cli/oauth/device/poll"
 
 	// DeveloperSettingsPath is the path to the organization developer settings page.
 	DeveloperSettingsPath = "/fe/old#/developerSettings"

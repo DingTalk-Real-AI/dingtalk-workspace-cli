@@ -429,7 +429,7 @@ func handlePatAuthCheck(
 	pollCtx, cancel := context.WithTimeout(ctx, patPollTimeout)
 	defer cancel()
 
-	status, err := pollPatDeviceFlow(pollCtx, patData.Data.FlowID, output)
+	status, err := pollPatDeviceFlow(pollCtx, patData.Data.FlowID, configDir, output)
 	if err != nil {
 		fmt.Fprintf(output, "%s 轮询授权状态失败: %v\n", redFn("✗"), err)
 		return executor.Result{}, patErr
@@ -473,9 +473,15 @@ func handlePatAuthCheck(
 // pollPatDeviceFlow polls the PAT device flow status endpoint until a terminal
 // state (APPROVED/REJECTED/EXPIRED) is reached or the context is cancelled.
 // Returns the final status string.
-func pollPatDeviceFlow(ctx context.Context, flowID string, output io.Writer) (string, error) {
+func pollPatDeviceFlow(ctx context.Context, flowID string, configDir string, output io.Writer) (string, error) {
 	pollURL := fmt.Sprintf("%s%s?flowId=%s",
 		authpkg.DefaultTerminalBaseURL, authpkg.DevicePollPath, url.QueryEscape(flowID))
+
+	// Load user access token for the poll request header.
+	var accessToken string
+	if tokenData, err := authpkg.LoadTokenData(configDir); err == nil && tokenData != nil {
+		accessToken = tokenData.AccessToken
+	}
 
 	ticker := time.NewTicker(patPollInterval)
 	defer ticker.Stop()
@@ -494,6 +500,9 @@ func pollPatDeviceFlow(ctx context.Context, flowID string, output io.Writer) (st
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, pollURL, nil)
 			if err != nil {
 				continue
+			}
+			if accessToken != "" {
+				req.Header.Set("x-user-access-token", accessToken)
 			}
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
