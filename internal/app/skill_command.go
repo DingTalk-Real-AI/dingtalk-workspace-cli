@@ -30,6 +30,7 @@ import (
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
 
@@ -339,11 +340,20 @@ func loadSkillAccessToken() (string, error) {
 	configDir := defaultConfigDir()
 	tokenData, err := authpkg.LoadTokenData(configDir)
 	if err != nil || tokenData == nil || !tokenData.IsAccessTokenValid() {
-		return "", apperrors.NewAuth("not logged in or token expired. Please run 'dws auth login' first",
-			apperrors.WithHint("请先执行 'dws auth login' 登录"),
-			apperrors.WithActions("dws auth login"))
+		return "", skillAuthError()
 	}
 	return tokenData.AccessToken, nil
+}
+
+func skillAuthError() error {
+	if edition.Get().IsEmbedded {
+		return apperrors.NewAuth("认证信息已失效",
+			apperrors.WithReason("not_authenticated"),
+			apperrors.WithHint("请先完成钉钉账号登录后重试"))
+	}
+	return apperrors.NewAuth("not logged in or token expired. Please run 'dws auth login' first",
+		apperrors.WithHint("请先执行 'dws auth login' 登录"),
+		apperrors.WithActions("dws auth login"))
 }
 
 func skillAPIHost() string {
@@ -400,9 +410,7 @@ func fetchSkillDownloadInfo(ctx context.Context, accessToken, skillID string) (*
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, apperrors.NewAuth("authentication failed. Please run 'dws auth login' to refresh your token",
-			apperrors.WithHint("请执行 'dws auth login' 重新登录"),
-			apperrors.WithActions("dws auth login"))
+		return nil, skillAuthError()
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -476,9 +484,7 @@ func filenameFromDisposition(cd string) string {
 func parseLegacySkillAPIError(resp *http.Response) error {
 	switch resp.StatusCode {
 	case http.StatusUnauthorized:
-		return apperrors.NewAuth("authentication failed. Please run 'dws auth login' to refresh your token",
-			apperrors.WithHint("请执行 'dws auth login' 重新登录"),
-			apperrors.WithActions("dws auth login"))
+		return skillAuthError()
 	case http.StatusBadRequest:
 		return apperrors.NewValidation("request parameters are invalid")
 	case http.StatusNotFound:

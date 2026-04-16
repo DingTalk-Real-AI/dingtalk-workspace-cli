@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -25,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	mockmcp "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/mock_mcp"
 )
 
@@ -642,6 +644,95 @@ func contentScanServer() *mockmcp.Server {
 		},
 	}
 	return mockmcp.MustNewServer(fixture)
+}
+
+func TestClassifyToolResultHookPreemptsBusinessError(t *testing.T) {
+	setupRuntimeCommandTest(t)
+	t.Setenv("DWS_ALLOW_HTTP_ENDPOINTS", "1")
+	t.Setenv("DWS_TRUSTED_DOMAINS", "*")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		method, _ := req["method"].(string)
+		switch method {
+		case "initialize":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"jsonrpc": "2.0",
+				"id":      req["id"],
+				"result": map[string]any{
+					"protocolVersion": "2025-03-26",
+					"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
+					"serverInfo":      map[string]any{"name": "doc", "version": "1.0.0"},
+				},
+			})
+		case "notifications/initialized":
+			w.WriteHeader(http.StatusNoContent)
+		case "tools/list":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"jsonrpc": "2.0",
+				"id":      req["id"],
+				"result": map[string]any{
+					"tools": []map[string]any{{
+						"name":        "search_documents",
+						"title":       "Search",
+						"description": "Search documents",
+						"inputSchema": map[string]any{"type": "object"},
+					}},
+				},
+			})
+		case "tools/call":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"jsonrpc": "2.0",
+				"id":      req["id"],
+				"result": map[string]any{
+					"content": map[string]any{
+						"success": false,
+						"code":    "PAT_LOW_RISK_NO_PERMISSION",
+						"data":    map[string]any{"requiredScopes": []any{}},
+					},
+				},
+			})
+		}
+	}))
+	defer server.Close()
+
+	hookCalled := false
+	sentinelMsg := "hook-intercepted-PAT"
+	edition.Override(&edition.Hooks{
+		ClassifyToolResult: func(content map[string]any) error {
+			if code, ok := content["code"].(string); ok && strings.Contains(code, "PAT") {
+				hookCalled = true
+				return fmt.Errorf("%s", sentinelMsg)
+			}
+			return nil
+		},
+	})
+	t.Cleanup(func() { edition.Override(&edition.Hooks{}) })
+
+	t.Setenv(cli.CatalogFixtureEnv, writeDocCatalogFixture(t, server.URL, false))
+
+	cmd := NewRootCommand()
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetArgs([]string{"mcp", "doc", "search_documents", "--json", `{"keyword":"design"}`, "--token", "test-token"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("Execute() error = nil, want hook sentinel error")
+	}
+	if !hookCalled {
+		t.Fatal("ClassifyToolResult hook was not called")
+	}
+	if !strings.Contains(err.Error(), sentinelMsg) {
+		t.Fatalf("error = %q, want hook sentinel %q (not generic business error)", err.Error(), sentinelMsg)
+	}
+	if strings.Contains(err.Error(), "business_error") || strings.Contains(err.Error(), "mcp_tool_error") {
+		t.Fatalf("error = %q, should NOT contain generic framework error category", err.Error())
+	}
 }
 
 func TestRuntimeRunnerReturnsErrorWhenMCPIsErrorTrue(t *testing.T) {
