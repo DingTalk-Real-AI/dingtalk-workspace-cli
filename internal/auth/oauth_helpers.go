@@ -60,6 +60,19 @@ func (p *OAuthProvider) exchangeCode(ctx context.Context, code string) (*TokenDa
 	return data, nil
 }
 
+// ExchangeCodeForToken exchanges an authorization code for token data using
+// the currently configured client credentials.  This is a convenience wrapper
+// around OAuthProvider.exchangeCode for callers outside the auth package.
+func ExchangeCodeForToken(ctx context.Context, configDir, code string) (*TokenData, error) {
+	p := &OAuthProvider{
+		configDir:  configDir,
+		clientID:   ClientID(),
+		Output:     io.Discard,
+		httpClient: oauthHTTPClient,
+	}
+	return p.exchangeCode(ctx, code)
+}
+
 // exchangeCodeViaMCP exchanges auth code for token via MCP proxy.
 // This is used when client secret is not available (server-side secret management).
 func (p *OAuthProvider) exchangeCodeViaMCP(ctx context.Context, code string) (*TokenData, error) {

@@ -308,10 +308,19 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		return executor.Result{}, err
 	}
 
+	// ---- Edition hook gets first dibs (preserves overlay PATError passthrough) ----
 	if fn := edition.Get().ClassifyToolResult; fn != nil {
 		if editionErr := fn(callResult.Content); editionErr != nil {
+			if patCheck := apperrors.AsPatAuthCheckError(editionErr); patCheck != nil {
+				return handlePatAuthCheck(ctx, r, invocation, patCheck, defaultConfigDir(), os.Stderr)
+			}
 			return executor.Result{}, editionErr
 		}
+	}
+
+	// ---- Structured PAT auth check (open-source fallback) ----
+	if patCheck := apperrors.ClassifyPatAuthCheck(callResult.Content); patCheck != nil {
+		return handlePatAuthCheck(ctx, r, invocation, patCheck, defaultConfigDir(), os.Stderr)
 	}
 
 	if callResult.IsError {

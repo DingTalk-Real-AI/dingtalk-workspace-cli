@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -47,13 +48,13 @@ func init() {
 
 const (
 	// AuthorizeURL is the DingTalk OAuth authorization page.
-	AuthorizeURL = "https://login.dingtalk.com/oauth2/auth"
+	AuthorizeURL = "https://pre-login.dingtalk.com/oauth2/auth"
 
 	// UserAccessTokenURL exchanges an authorization code for user tokens.
-	UserAccessTokenURL = "https://api.dingtalk.com/v1.0/oauth2/userAccessToken"
+	UserAccessTokenURL = "https://pre-api.dingtalk.com/v1.0/oauth2/userAccessToken"
 
 	// UserInfoURL fetches the authenticated user's profile.
-	UserInfoURL = "https://api.dingtalk.com/v1.0/contact/users/me"
+	UserInfoURL = "https://pre-api.dingtalk.com/v1.0/contact/users/me"
 
 	// DefaultClientID is the CLI's built-in OAuth client ID (DingTalk AppKey).
 	// TODO: Replace <YOUR_CLIENT_ID> with your actual DingTalk AppKey before building.
@@ -72,7 +73,7 @@ const (
 	// Device Authorization Grant (RFC 8628) endpoints.
 
 	// DefaultDeviceBaseURL is the login server base URL for device flow.
-	DefaultDeviceBaseURL = "https://login.dingtalk.com"
+	DefaultDeviceBaseURL = "https://pre-login.dingtalk.com"
 
 	// DeviceCodePath requests a device_code and user_code.
 	DeviceCodePath = "/oauth2/device/code.json"
@@ -84,14 +85,17 @@ const (
 	DeviceGrantType = "urn:ietf:params:oauth:grant-type:device_code"
 
 	// Terminal API endpoints for device flow polling (new approach).
-	DefaultTerminalBaseURL = "https://open-dev.dingtalk.com"
+	DefaultTerminalBaseURL = "https://pre-open-dev.dingtalk.com"
 	DevicePollPath         = "/api/dingtalk-workspace-cli/oauth/device/poll"
 
-	LogoutURL         = "https://login.dingtalk.com/oauth2/logout"
-	LogoutContinueURL = "https://login.dingtalk.com"
+	// DeveloperSettingsPath is the path to the organization developer settings page.
+	DeveloperSettingsPath = "/fe/old#/developerSettings"
+
+	LogoutURL         = "https://pre-login.dingtalk.com/oauth2/logout"
+	LogoutContinueURL = "https://pre-login.dingtalk.com"
 
 	// MCP API endpoints for CLI authorization management.
-	DefaultMCPBaseURL    = "https://mcp.dingtalk.com"
+	DefaultMCPBaseURL    = "https://pre-mcp.dingtalk.com"
 	CLIAuthEnabledPath   = "/cli/cliAuthEnabled"
 	SuperAdminPath       = "/cli/superAdmin"
 	SendCliAuthApplyPath = "/cli/sendCliAuthApply"
@@ -102,6 +106,19 @@ const (
 	MCPRefreshTokenPath = "/oauth2/refreshToken"
 	MCPRevokeTokenPath  = "/oauth2/revokeToken"
 )
+
+// GetTerminalBaseURL returns the terminal base URL with priority:
+// 1. ~/.dws/terminal_url file content (for pre-release environment)
+// 2. Default value (https://open-dev.dingtalk.com)
+func GetTerminalBaseURL() string {
+	return config.GetTerminalBaseURL()
+}
+
+// GetDeveloperSettingsURL returns the full URL to the organization developer
+// settings page, derived from the terminal base URL.
+func GetDeveloperSettingsURL() string {
+	return config.GetDeveloperSettingsURL()
+}
 
 // GetMCPBaseURL returns the MCP base URL with priority:
 // 1. ~/.dws/mcp_url file content (for pre-release environment)

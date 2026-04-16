@@ -19,5 +19,12 @@ package edition
 func defaultHooks() *Hooks {
 	return &Hooks{
 		Name: "open",
+		MergeHeaders: func(base map[string]string) map[string]string {
+			if base == nil {
+				base = make(map[string]string)
+			}
+			base["claw-type"] = "openClaw"
+			return base
+		},
 	}
 }

@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
 // Category represents a stable error class with a documented exit code.
@@ -276,7 +278,7 @@ func PrintJSON(w io.Writer, err error) error {
 				switch typed.ServerDiag.ServerErrorCode {
 				case "TOKEN_VERIFIED_FAILED", "CLI_ORG_NOT_AUTHORIZED":
 					errorPayload["friendly_hint"] = "该组织尚未开启 CLI 数据访问权限，请联系组织主管理员开启。"
-					errorPayload["action_url"] = "https://open-dev.dingtalk.com/fe/old#/developerSettings"
+					errorPayload["action_url"] = config.GetDeveloperSettingsURL()
 				}
 			}
 			if typed.ServerDiag.TechnicalDetail != "" {
@@ -342,7 +344,7 @@ func PrintHumanAt(w io.Writer, err error, v Verbosity) error {
 	switch typed.ServerDiag.ServerErrorCode {
 	case "TOKEN_VERIFIED_FAILED", "CLI_ORG_NOT_AUTHORIZED":
 		lines = append(lines, "Hint: 该组织尚未开启 CLI 数据访问权限，请联系组织主管理员开启。")
-		lines = append(lines, "Action: 开启地址: https://open-dev.dingtalk.com/fe/old#/developerSettings")
+		lines = append(lines, "Action: 开启地址: "+config.GetDeveloperSettingsURL())
 	}
 
 	if len(typed.Actions) > 0 {

@@ -15,11 +15,16 @@ package app
 
 import (
 	"context"
-	stderrors "errors"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
+	"os"
+	"os/exec"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
@@ -333,4 +338,212 @@ func TriggerPatDeviceFlow(ctx context.Context, configDir, missingScope string, o
 	ResetRuntimeTokenCache()
 
 	return nil
+}
+
+// ---- handlePatAuthCheck (runner.go entry point) -----------------------------
+
+const (
+	// patPollInterval is how often we poll the device flow status endpoint.
+	patPollInterval = 2 * time.Second
+	// patPollTimeout is the maximum time to wait for user authorization via device flow.
+	patPollTimeout = 10 * time.Minute
+)
+
+// handlePatAuthCheck is called by runner.executeInvocation when a PAT
+// authorization error is detected.  It injects the server-assigned clientId
+// as x-robot-uid header, prints authorization details, opens the browser,
+// polls the device flow endpoint until the user authorizes, and retries the
+// original invocation on success.
+func handlePatAuthCheck(
+	ctx context.Context,
+	r *runtimeRunner,
+	invocation executor.Invocation,
+	patErr *apperrors.PATError,
+	configDir string,
+	output io.Writer,
+) (executor.Result, error) {
+	// Parse authorization details from PATError.RawJSON.
+	var patData struct {
+		Code string `json:"code"`
+		Data struct {
+			Desc         string `json:"desc"`
+			FlowID       string `json:"flowId"`
+			URI          string `json:"uri"`
+			ClientID     string `json:"clientId"`
+			ClientSecret string `json:"clientSecret"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(patErr.RawJSON), &patData); err != nil {
+		return executor.Result{}, patErr
+	}
+
+	// Inject clientId/clientSecret from PAT response as runtime credentials
+	// so that subsequent device flow auth uses the server-assigned app identity.
+	if patData.Data.ClientID != "" {
+		authpkg.SetClientIDFromMCP(patData.Data.ClientID)
+		if patData.Data.ClientSecret != "" {
+			authpkg.SetClientSecret(patData.Data.ClientSecret)
+		}
+	}
+
+	// Inject clientId as x-robot-uid header so the MCP gateway treats it as
+	// the agent instance identity for subsequent requests.
+	if patData.Data.ClientID != "" && r.transport != nil {
+		if r.transport.ExtraHeaders == nil {
+			r.transport.ExtraHeaders = make(map[string]string)
+		}
+		r.transport.ExtraHeaders["x-robot-uid"] = patData.Data.ClientID
+		// Also propagate to ROBOT_UID env so child processes inherit it.
+		_ = os.Setenv("ROBOT_UID", patData.Data.ClientID)
+	}
+
+	bold := color.New(color.Bold).SprintFunc()
+	cyan := color.New(color.FgCyan).SprintFunc()
+	greenFn := color.New(color.FgGreen).SprintFunc()
+	yellowFn := color.New(color.FgYellow).SprintFunc()
+	redFn := color.New(color.FgRed).SprintFunc()
+	dim := color.New(color.Faint).SprintFunc()
+
+	fmt.Fprintln(output)
+	fmt.Fprintf(output, "%s %s\n", greenFn("▶"), bold("需要 PAT 授权"))
+	if patData.Data.Desc != "" {
+		fmt.Fprintf(output, "  %s %s\n", dim("ℹ"), patData.Data.Desc)
+	}
+	if patData.Data.URI != "" {
+		fmt.Fprintf(output, "  %s %s\n\n", dim("🔗"), cyan(patData.Data.URI))
+		// Best-effort browser open.
+		_ = tryOpenBrowser(patData.Data.URI)
+	}
+
+	// If no flowId, we can't poll — fall back to returning PATError for host-app.
+	if patData.Data.FlowID == "" {
+		fmt.Fprintln(output)
+		return executor.Result{}, patErr
+	}
+
+	// Poll the device flow status until user authorizes, rejects, or timeout.
+	fmt.Fprintf(output, "%s %s\n", yellowFn("⏳"), bold("等待用户授权..."))
+	fmt.Fprintf(output, "  %s 请在浏览器中完成授权，超时时间: %s\n", dim("ℹ"), patPollTimeout)
+	fmt.Fprintln(output)
+
+	pollCtx, cancel := context.WithTimeout(ctx, patPollTimeout)
+	defer cancel()
+
+	status, err := pollPatDeviceFlow(pollCtx, patData.Data.FlowID, output)
+	if err != nil {
+		fmt.Fprintf(output, "%s 轮询授权状态失败: %v\n", redFn("✗"), err)
+		return executor.Result{}, patErr
+	}
+
+	switch status {
+	case "APPROVED":
+		fmt.Fprintf(output, "%s %s\n", greenFn("✓"), bold("授权成功!"))
+		fmt.Fprintln(output)
+
+		// Clear token cache so the new credentials take effect.
+		ResetRuntimeTokenCache()
+
+		// Retry the original invocation.
+		fmt.Fprintf(output, "%s %s\n", greenFn("▶"), bold("授权完成，正在重试..."))
+		fmt.Fprintln(output)
+		return r.Run(ctx, invocation)
+
+	case "REJECTED":
+		fmt.Fprintf(output, "%s %s\n", redFn("✗"), bold("用户已拒绝授权"))
+		return executor.Result{}, apperrors.NewAuth(
+			"用户已拒绝授权",
+			apperrors.WithReason("pat_auth_rejected"),
+			apperrors.WithHint("用户在浏览器中拒绝了授权请求，请重新执行命令。"),
+		)
+
+	case "EXPIRED":
+		fmt.Fprintf(output, "%s %s\n", redFn("✗"), bold("授权超时"))
+		return executor.Result{}, apperrors.NewAuth(
+			"授权超时",
+			apperrors.WithReason("pat_auth_expired"),
+			apperrors.WithHint("授权链接已过期，请重新执行命令。"),
+		)
+
+	default:
+		fmt.Fprintf(output, "%s 未知授权状态: %s\n", redFn("✗"), status)
+		return executor.Result{}, patErr
+	}
+}
+
+// pollPatDeviceFlow polls the PAT device flow status endpoint until a terminal
+// state (APPROVED/REJECTED/EXPIRED) is reached or the context is cancelled.
+// Returns the final status string.
+func pollPatDeviceFlow(ctx context.Context, flowID string, output io.Writer) (string, error) {
+	pollURL := fmt.Sprintf("%s%s?flowId=%s",
+		authpkg.DefaultTerminalBaseURL, authpkg.DevicePollPath, url.QueryEscape(flowID))
+
+	ticker := time.NewTicker(patPollInterval)
+	defer ticker.Stop()
+
+	dim := color.New(color.Faint).SprintFunc()
+	pollCount := 0
+
+	for {
+		select {
+		case <-ctx.Done():
+			return "EXPIRED", nil
+		case <-ticker.C:
+			pollCount++
+			fmt.Fprintf(output, "\r%s [%d] 等待授权中...          ", dim("⟳"), pollCount)
+
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, pollURL, nil)
+			if err != nil {
+				continue
+			}
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				continue // transient network error, keep polling
+			}
+
+			var pollResp struct {
+				Success bool   `json:"success"`
+				Code    string `json:"code,omitempty"`
+				Message string `json:"message,omitempty"`
+				Data    struct {
+					Status string `json:"status"`
+				} `json:"data"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&pollResp); err != nil {
+				resp.Body.Close()
+				continue
+			}
+			resp.Body.Close()
+
+			status := pollResp.Data.Status
+			switch status {
+			case "APPROVED", "REJECTED", "EXPIRED":
+				fmt.Fprintln(output) // clear the polling line
+				return status, nil
+			case "PENDING":
+				// keep polling
+			default:
+				if status == "" && !pollResp.Success {
+					// Server error or flow not found — treat as expired
+					fmt.Fprintln(output)
+					return "EXPIRED", nil
+				}
+			}
+		}
+	}
+}
+
+// tryOpenBrowser opens url in the default browser; errors are silently ignored.
+func tryOpenBrowser(url string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "linux":
+		cmd = exec.Command("xdg-open", url)
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "start", url)
+	default:
+		return nil
+	}
+	return cmd.Start()
 }

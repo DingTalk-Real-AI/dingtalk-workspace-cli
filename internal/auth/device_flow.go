@@ -33,11 +33,14 @@ import (
 
 const (
 	// defaultPollInterval is the default seconds between device token polls.
-	defaultPollInterval = 5
+	// The server-side Redis TTL is 10 minutes; a 2-second interval keeps the
+	// user-perceived latency low while staying well within rate limits.
+	defaultPollInterval = 2
 	// maxPollInterval caps the polling interval to prevent DoS via slow_down.
 	maxPollInterval = 30
 	// maxPollTotalWait caps the total wait time for device authorization.
-	maxPollTotalWait = 15 * time.Minute
+	// Aligned with the server-side Redis TTL (10 minutes).
+	maxPollTotalWait = 10 * time.Minute
 )
 
 type DeviceFlowProvider struct {
@@ -53,14 +56,14 @@ type DeviceFlowProvider struct {
 
 func NewDeviceFlowProvider(configDir string, logger *slog.Logger) *DeviceFlowProvider {
 	return &DeviceFlowProvider{
-		configDir:        configDir,
-		clientID:         ClientID(),
-		scope:            DefaultScopes,
-		baseURL:          DefaultDeviceBaseURL,
-		terminalBaseURL:  DefaultTerminalBaseURL,
-		logger:           logger,
-		Output:           os.Stderr,
-		httpClient:       &http.Client{Timeout: 30 * time.Second},
+		configDir:       configDir,
+		clientID:        ClientID(),
+		scope:           DefaultScopes,
+		baseURL:         DefaultDeviceBaseURL,
+		terminalBaseURL: GetTerminalBaseURL(),
+		logger:          logger,
+		Output:          os.Stderr,
+		httpClient:      &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
@@ -337,6 +340,11 @@ func (p *DeviceFlowProvider) pollDeviceToken(ctx context.Context, deviceCode str
 }
 
 // pollDeviceStatus polls the terminal API for device authorization status.
+//
+// Note: The server returns success=false for REJECTED and EXPIRED terminal
+// states (with a valid data.Status value).  These are normal business outcomes,
+// not transport errors, so we return the response to the caller and let the
+// status-switch handle them.
 func (p *DeviceFlowProvider) pollDeviceStatus(ctx context.Context, flowID string) (*DevicePollResponse, error) {
 	endpoint := fmt.Sprintf("%s%s?flowId=%s", p.terminalBaseURL, DevicePollPath, url.QueryEscape(flowID))
 	body, err := p.doGet(ctx, endpoint)
@@ -348,7 +356,9 @@ func (p *DeviceFlowProvider) pollDeviceStatus(ctx context.Context, flowID string
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("解析响应失败"), err)
 	}
-	if !resp.Success {
+	// REJECTED/EXPIRED carry success=false but have a valid data.Status;
+	// only treat as a real server error when data.Status is empty.
+	if !resp.Success && resp.Data.Status == "" {
 		return nil, fmt.Errorf("%s: [%s] %s", i18n.T("服务端返回错误"), resp.Code, resp.Message)
 	}
 	return &resp, nil
@@ -568,4 +578,63 @@ func isInvalidGrantError(err error) bool {
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "invalid_grant") || (strings.Contains(msg, "code") && strings.Contains(msg, "expired"))
+}
+
+// FlowApprovalResult is returned when PollFlowApproval succeeds.
+type FlowApprovalResult struct {
+	AuthCode string // non-empty when the server returns an auth code
+}
+
+// PollFlowApproval polls the terminal API for a flow's approval status.
+// It blocks until APPROVED, REJECTED, EXPIRED, context cancellation, or
+// the maximum poll wait is exceeded.  On success it returns the optional
+// auth code so the caller can exchange it for a token.
+func PollFlowApproval(ctx context.Context, flowID string, output io.Writer) (*FlowApprovalResult, error) {
+	p := &DeviceFlowProvider{
+		terminalBaseURL: GetTerminalBaseURL(),
+		httpClient:      &http.Client{Timeout: 30 * time.Second},
+		Output:          output,
+	}
+
+	interval := time.Duration(defaultPollInterval) * time.Second
+	start := time.Now()
+	pollCount := 0
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(interval):
+		}
+
+		if time.Since(start) >= maxPollTotalWait {
+			return nil, fmt.Errorf("%s", i18n.T("授权等待超时，请重试"))
+		}
+
+		pollCount++
+		elapsedSec := int(time.Since(start).Seconds())
+		dfPrintPollStatus(output, pollCount, elapsedSec)
+
+		resp, err := p.pollDeviceStatus(ctx, flowID)
+		if err != nil {
+			dfPrintPollResult(output, "network_error", i18n.T("网络错误，继续重试..."))
+			continue
+		}
+
+		switch resp.Data.Status {
+		case "APPROVED":
+			dfPrintPollResult(output, "authorized", i18n.T("授权成功!"))
+			return &FlowApprovalResult{AuthCode: resp.Data.AuthCode}, nil
+		case "PENDING":
+			dfPrintPollResult(output, "pending", i18n.T("等待用户授权..."))
+		case "REJECTED":
+			_, _ = fmt.Fprintln(output, "")
+			return nil, fmt.Errorf("%s", i18n.T("用户拒绝了授权请求"))
+		case "EXPIRED":
+			_, _ = fmt.Fprintln(output, "")
+			return nil, fmt.Errorf("%s", i18n.T("设备授权码已过期"))
+		default:
+			dfPrintPollResult(output, "unknown", fmt.Sprintf(i18n.T("未知状态: %s"), resp.Data.Status))
+		}
+	}
 }

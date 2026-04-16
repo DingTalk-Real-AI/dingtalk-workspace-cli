@@ -15,6 +15,7 @@ package errors
 
 import (
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"strings"
 )
@@ -45,6 +46,12 @@ var patNoPermissionCodes = map[string]bool{
 	"PAT_LOW_RISK_NO_PERMISSION":    true,
 	"PAT_MEDIUM_RISK_NO_PERMISSION": true,
 	"PAT_HIGH_RISK_NO_PERMISSION":   true,
+}
+
+// patAuthRequiredCodes are error codes that trigger the PAT authorization
+// flow (e.g. the server auto-created a CLI app and returned auth details).
+var patAuthRequiredCodes = map[string]bool{
+	"AGENT_CODE_NOT_EXISTS": true,
 }
 
 // IsPATError reports whether err is a *PATError.
@@ -230,6 +237,33 @@ func cleanPATJSON(body map[string]any, code string) string {
 		return fmt.Sprintf(`{"success":false,"code":"%s"}`, code)
 	}
 	return string(b)
+}
+
+// ---- Runner adapter functions ------------------------------------------------
+// These match the function signatures referenced by runner.go's PAT check
+// framework (ClassifyPatAuthCheck / AsPatAuthCheckError).
+
+// ClassifyPatAuthCheck is the open-source fallback that checks a tool-call
+// Content map for PAT permission codes and auth-required codes.  Returns a
+// non-nil *PATError when the content carries a recognised PAT/auth error.
+func ClassifyPatAuthCheck(content map[string]any) *PATError {
+	for _, key := range []string{"code", "errorCode"} {
+		if code, ok := content[key].(string); ok {
+			if patNoPermissionCodes[code] || patAuthRequiredCodes[code] {
+				return &PATError{RawJSON: cleanPATJSON(content, code)}
+			}
+		}
+	}
+	return nil
+}
+
+// AsPatAuthCheckError extracts a *PATError from an error chain.
+func AsPatAuthCheckError(err error) *PATError {
+	var patErr *PATError
+	if stderrors.As(err, &patErr) {
+		return patErr
+	}
+	return nil
 }
 
 func stripClassFields(v any) any {
