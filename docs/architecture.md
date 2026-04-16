@@ -10,6 +10,7 @@
 4. `internal/cli` and `internal/app` mount that catalog into the public Cobra command tree.
 5. `internal/transport` executes MCP JSON-RPC calls and `internal/output` formats responses.
 
+
 ## Repository Structure
 
 - `cmd`: CLI entrypoint
