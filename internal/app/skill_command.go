@@ -30,6 +30,7 @@ import (
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
 
@@ -74,7 +75,7 @@ type findSkillsResponse struct {
 	Result    []CliSkillDTO `json:"result,omitempty"`
 }
 
-// CliSkillDTO mirrors the old cli response payload for `skill find`.
+// CliSkillDTO mirrors the old cli response payload for `skill search`.
 type CliSkillDTO struct {
 	SkillID string `json:"skillId"`
 	Name    string `json:"name"`
@@ -116,10 +117,11 @@ func buildSkillCommand() *cobra.Command {
 	}
 
 	cmd.AddCommand(
-		newSkillAddCommand(),
+		newSkillInstallCommand(),
 		newSkillGetCommand(),
-		newSkillFindCommand(),
-		newSkillSearchHintCommand(),
+		newSkillSearchCommand(),
+		newSkillFindHintCommand(),
+		newSkillAddHintCommand(),
 	)
 	return cmd
 }
@@ -138,36 +140,37 @@ func newSkillGetCommand() *cobra.Command {
 	return cmd
 }
 
-func newSkillFindCommand() *cobra.Command {
+func newSkillSearchCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:               "find",
+		Use:               "search",
 		Short:             "从钉钉技能市场搜索技能",
 		Long:              "从钉钉技能市场搜索技能，根据关键词返回匹配的技能列表。",
-		Example:           "  dws skill find --context 关键词",
+		Example:           "  dws skill search --query 关键词",
 		DisableAutoGenTag: true,
 		RunE:              runSkillFind,
 	}
-	cmd.Flags().String("context", "", "搜索关键词（必填）")
-	_ = cmd.MarkFlagRequired("context")
+	cmd.Flags().String("query", "", "搜索关键词（必填）")
+	_ = cmd.MarkFlagRequired("query")
+	cmd.Flags().String("scopes", "", "查询范围，空格分隔。备选值：DingtalkMarket（钉钉市场）、OrgInternal（企业内部）。为空默认查市场技能")
 	return cmd
 }
 
-func newSkillSearchHintCommand() *cobra.Command {
+func newSkillFindHintCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:               "search",
-		Short:             "兼容旧用法，提示使用 skill find",
+		Use:               "find",
+		Short:             "兼容旧用法，提示使用 skill search",
 		Hidden:            true,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "use: dws skill find --context <关键词>")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "use: dws skill search --query <关键词>")
 			return nil
 		},
 	}
 }
 
-func newSkillAddCommand() *cobra.Command {
+func newSkillInstallCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "add <skillId> <target>",
+		Use:   "install <skillId> <target>",
 		Short: "下载并安装技能到指定目录",
 		Long: fmt.Sprintf(`从钉钉技能市场下载技能并安装到指定 Agent 目录。
 
@@ -184,15 +187,28 @@ func newSkillAddCommand() *cobra.Command {
   .        -> 当前目录
 
 示例:
-  dws skill add skill-123 qoder     # 安装到 ~/.qoder/skills/
-  dws skill add skill-123 claude    # 安装到 ~/.claude/skills/
-  dws skill add skill-123 .         # 安装到当前目录`, supportedTargets()),
+  dws skill install skill-123 qoder     # 安装到 ~/.qoder/skills/
+  dws skill install skill-123 claude    # 安装到 ~/.claude/skills/
+  dws skill install skill-123 .         # 安装到当前目录`, supportedTargets()),
 		Args:              cobra.ExactArgs(2),
 		DisableAutoGenTag: true,
 		RunE:              runSkillAdd,
 	}
 
 	return cmd
+}
+
+func newSkillAddHintCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:               "add",
+		Short:             "兼容旧用法，提示使用 skill install",
+		Hidden:            true,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "use: dws skill install <skillId> <target>")
+			return nil
+		},
+	}
 }
 
 func runSkillGet(cmd *cobra.Command, args []string) error {
@@ -215,13 +231,17 @@ func runSkillGet(cmd *cobra.Command, args []string) error {
 }
 
 func runSkillFind(cmd *cobra.Command, args []string) error {
-	keyword, _ := cmd.Flags().GetString("context")
+	keyword, _ := cmd.Flags().GetString("query")
+	scopes, _ := cmd.Flags().GetString("scopes")
 	accessToken, err := loadSkillAccessToken()
 	if err != nil {
 		return err
 	}
 
 	apiURL := fmt.Sprintf("%s/cli/find-skills?keyword=%s", skillAPIHost(), url.QueryEscape(strings.TrimSpace(keyword)))
+	if scopes != "" {
+		apiURL += "&scopes=" + url.QueryEscape(scopes)
+	}
 	req, err := http.NewRequestWithContext(cmd.Context(), http.MethodGet, apiURL, nil)
 	if err != nil {
 		return apperrors.NewInternal(fmt.Sprintf("failed to create request: %v", err))
@@ -339,11 +359,20 @@ func loadSkillAccessToken() (string, error) {
 	configDir := defaultConfigDir()
 	tokenData, err := authpkg.LoadTokenData(configDir)
 	if err != nil || tokenData == nil || !tokenData.IsAccessTokenValid() {
-		return "", apperrors.NewAuth("not logged in or token expired. Please run 'dws auth login' first",
-			apperrors.WithHint("请先执行 'dws auth login' 登录"),
-			apperrors.WithActions("dws auth login"))
+		return "", skillAuthError()
 	}
 	return tokenData.AccessToken, nil
+}
+
+func skillAuthError() error {
+	if edition.Get().IsEmbedded {
+		return apperrors.NewAuth("认证信息已失效",
+			apperrors.WithReason("not_authenticated"),
+			apperrors.WithHint("请先完成钉钉账号登录后重试"))
+	}
+	return apperrors.NewAuth("not logged in or token expired. Please run 'dws auth login' first",
+		apperrors.WithHint("请先执行 'dws auth login' 登录"),
+		apperrors.WithActions("dws auth login"))
 }
 
 func skillAPIHost() string {
@@ -400,9 +429,7 @@ func fetchSkillDownloadInfo(ctx context.Context, accessToken, skillID string) (*
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, apperrors.NewAuth("authentication failed. Please run 'dws auth login' to refresh your token",
-			apperrors.WithHint("请执行 'dws auth login' 重新登录"),
-			apperrors.WithActions("dws auth login"))
+		return nil, skillAuthError()
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -476,9 +503,7 @@ func filenameFromDisposition(cd string) string {
 func parseLegacySkillAPIError(resp *http.Response) error {
 	switch resp.StatusCode {
 	case http.StatusUnauthorized:
-		return apperrors.NewAuth("authentication failed. Please run 'dws auth login' to refresh your token",
-			apperrors.WithHint("请执行 'dws auth login' 重新登录"),
-			apperrors.WithActions("dws auth login"))
+		return skillAuthError()
 	case http.StatusBadRequest:
 		return apperrors.NewValidation("request parameters are invalid")
 	case http.StatusNotFound:

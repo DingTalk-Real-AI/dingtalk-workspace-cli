@@ -319,7 +319,7 @@ func TestExtractSkillZipPreventZipSlip(t *testing.T) {
 	}
 }
 
-func TestSkillAddCommandValidation(t *testing.T) {
+func TestSkillInstallCommandValidation(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    []string
@@ -328,19 +328,19 @@ func TestSkillAddCommandValidation(t *testing.T) {
 	}{
 		{
 			name:    "missing arguments",
-			args:    []string{"skill", "add"},
+			args:    []string{"skill", "install"},
 			wantErr: true,
 			errMsg:  "accepts 2 arg(s)",
 		},
 		{
 			name:    "missing target",
-			args:    []string{"skill", "add", "skill-123"},
+			args:    []string{"skill", "install", "skill-123"},
 			wantErr: true,
 			errMsg:  "accepts 2 arg(s)",
 		},
 		{
 			name:    "too many arguments",
-			args:    []string{"skill", "add", "skill-123", "qoder", "extra"},
+			args:    []string{"skill", "install", "skill-123", "qoder", "extra"},
 			wantErr: true,
 			errMsg:  "accepts 2 arg(s)",
 		},
@@ -366,7 +366,7 @@ func TestSkillAddCommandValidation(t *testing.T) {
 	}
 }
 
-func TestSkillAddInvalidTarget(t *testing.T) {
+func TestSkillInstallInvalidTarget(t *testing.T) {
 	// Setup: Create config directory with valid token
 	tempDir := t.TempDir()
 	configDir := filepath.Join(tempDir, "config")
@@ -384,7 +384,7 @@ func TestSkillAddInvalidTarget(t *testing.T) {
 	}
 
 	cmd := NewRootCommand()
-	cmd.SetArgs([]string{"skill", "add", "skill-123", "invalid-target"})
+	cmd.SetArgs([]string{"skill", "install", "skill-123", "invalid-target"})
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -399,7 +399,7 @@ func TestSkillAddInvalidTarget(t *testing.T) {
 	}
 }
 
-func TestSkillAddRequiresAuth(t *testing.T) {
+func TestSkillInstallRequiresAuth(t *testing.T) {
 	// Setup: Create config directory without token
 	tempDir := t.TempDir()
 	configDir := filepath.Join(tempDir, "config")
@@ -411,7 +411,7 @@ func TestSkillAddRequiresAuth(t *testing.T) {
 	}
 
 	cmd := NewRootCommand()
-	cmd.SetArgs([]string{"skill", "add", "skill-123", "qoder"})
+	cmd.SetArgs([]string{"skill", "install", "skill-123", "qoder"})
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -563,16 +563,16 @@ func TestSkillCommandHelp(t *testing.T) {
 	if !strings.Contains(output, "技能") {
 		t.Errorf("help should mention '技能', got: %s", output)
 	}
-	for _, subcmd := range []string{"add", "find", "get"} {
+	for _, subcmd := range []string{"install", "search", "get"} {
 		if !strings.Contains(output, subcmd) {
 			t.Errorf("help should mention %q subcommand, got: %s", subcmd, output)
 		}
 	}
 }
 
-func TestSkillAddCommandHelp(t *testing.T) {
+func TestSkillInstallCommandHelp(t *testing.T) {
 	cmd := NewRootCommand()
-	cmd.SetArgs([]string{"skill", "add", "--help"})
+	cmd.SetArgs([]string{"skill", "install", "--help"})
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -609,9 +609,9 @@ func TestSkillGetCommandValidation(t *testing.T) {
 	}
 }
 
-func TestSkillFindCommandValidation(t *testing.T) {
+func TestSkillSearchCommandValidation(t *testing.T) {
 	cmd := NewRootCommand()
-	cmd.SetArgs([]string{"skill", "find"})
+	cmd.SetArgs([]string{"skill", "search"})
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -626,9 +626,9 @@ func TestSkillFindCommandValidation(t *testing.T) {
 	}
 }
 
-func TestSkillSearchHintCommand(t *testing.T) {
+func TestSkillFindHintCommand(t *testing.T) {
 	cmd := NewRootCommand()
-	cmd.SetArgs([]string{"skill", "search"})
+	cmd.SetArgs([]string{"skill", "find"})
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -637,7 +637,7 @@ func TestSkillSearchHintCommand(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if !strings.Contains(out.String(), "dws skill find --context") {
+	if !strings.Contains(out.String(), "dws skill search --query") {
 		t.Fatalf("output = %q, want legacy hint", out.String())
 	}
 }

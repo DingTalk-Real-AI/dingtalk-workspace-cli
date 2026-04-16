@@ -121,6 +121,7 @@ func newAuthLoginCommand() *cobra.Command {
 				}
 			}
 
+			ResetRuntimeTokenCache()
 			clearCompatCache()
 
 			w := cmd.OutOrStdout()
@@ -206,6 +207,7 @@ func newAuthLogoutCommand() *cobra.Command {
 			_ = os.Remove(filepath.Join(configDir, "mcp_url"))
 			_ = os.Remove(filepath.Join(configDir, "token"))
 			_ = os.Remove(filepath.Join(configDir, "token.json"))
+			ResetRuntimeTokenCache()
 			clearCompatCache()
 			w := cmd.OutOrStdout()
 			fmt.Fprintln(w, "[OK] 已清除所有认证信息")
@@ -308,6 +310,7 @@ func newAuthExchangeCommand() *cobra.Command {
 			if err != nil {
 				return apperrors.NewAuth(fmt.Sprintf("failed to exchange authorization code: %v", err))
 			}
+			ResetRuntimeTokenCache()
 			clearCompatCache()
 
 			w := cmd.OutOrStdout()
@@ -347,6 +350,7 @@ func newAuthResetCommand() *cobra.Command {
 			}
 			_ = os.Remove(filepath.Join(configDir, "mcp_url"))
 			_ = os.Remove(filepath.Join(configDir, "token"))
+			ResetRuntimeTokenCache()
 			clearCompatCache()
 			w := cmd.OutOrStdout()
 			fmt.Fprintln(w, "[OK] 认证信息已重置")

@@ -95,9 +95,13 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 
 			bindings, normalizer := buildOverrideBindings(override)
 
-			// Resolve Short/Long from Detail API toolTitle/toolDesc; fallback to generic.
+			// Resolve Short/Long from Detail API toolTitle/toolDesc;
+			// fallback to overlay description; then to generic cmdName/cliName.
 			short := fmt.Sprintf("%s/%s", cmdName, cliName)
 			long := ""
+			if desc := strings.TrimSpace(override.Description); desc != "" {
+				short = desc
+			}
 			if dt, ok := detailIndex[toolName]; ok {
 				if title := strings.TrimSpace(dt.ToolTitle); title != "" {
 					short = title

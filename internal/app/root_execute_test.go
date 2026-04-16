@@ -29,6 +29,14 @@ import (
 	mockmcp "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/mock_mcp"
 )
 
+// patLikeError simulates an edition-specific PAT error that implements both
+// ExitCoder (exit code 4) and RawStderrError (raw JSON to stderr).
+type patLikeError struct{ raw string }
+
+func (e *patLikeError) Error() string     { return e.raw }
+func (e *patLikeError) ExitCode() int     { return 4 }
+func (e *patLikeError) RawStderr() string { return e.raw }
+
 func TestPrintExecutionErrorDefaultsToJSON(t *testing.T) {
 	t.Parallel()
 
@@ -345,5 +353,88 @@ func TestNestedShortHelpDoesNotRequirePINOrLogin(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "devdoc/search") {
 		t.Fatalf("nested short help output missing command title:\n%s", out.String())
+	}
+}
+
+func TestPrintExecutionError_RawStderrError_writes_raw_JSON_to_stderr(t *testing.T) {
+	t.Parallel()
+
+	rawJSON := `{"success":false,"code":"PAT_LOW_RISK_NO_PERMISSION","data":{}}`
+	err := &patLikeError{raw: rawJSON}
+
+	root := NewRootCommand()
+	var stdout, stderr bytes.Buffer
+	writeErr := printExecutionError(root, &stdout, &stderr, err)
+	if writeErr != nil {
+		t.Fatalf("printExecutionError() error = %v", writeErr)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty for RawStderrError", stdout.String())
+	}
+	got := strings.TrimSpace(stderr.String())
+	if got != rawJSON {
+		t.Fatalf("stderr = %q, want raw JSON %q", got, rawJSON)
+	}
+}
+
+func TestPrintExecutionError_RawStderrError_exit_code_is_4(t *testing.T) {
+	t.Parallel()
+
+	err := &patLikeError{raw: `{"code":"PAT_MEDIUM_RISK_NO_PERMISSION"}`}
+	exitCode := apperrors.ExitCode(err)
+	if exitCode != 4 {
+		t.Fatalf("apperrors.ExitCode(patLikeError) = %d, want 4", exitCode)
+	}
+}
+
+func TestPrintExecutionError_RawStderrError_takes_precedence_over_JSON_mode(t *testing.T) {
+	t.Parallel()
+
+	rawJSON := `{"success":false,"code":"PAT_HIGH_RISK_NO_PERMISSION"}`
+	err := &patLikeError{raw: rawJSON}
+
+	root := NewRootCommand()
+	_ = root.PersistentFlags().Set("format", "json")
+
+	var stdout, stderr bytes.Buffer
+	writeErr := printExecutionError(root, &stdout, &stderr, err)
+	if writeErr != nil {
+		t.Fatalf("printExecutionError() error = %v", writeErr)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty — RawStderrError should bypass JSON mode", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "PAT_HIGH_RISK_NO_PERMISSION") {
+		t.Fatalf("stderr = %q, want raw PAT JSON", stderr.String())
+	}
+}
+
+// simulateExecuteWithPanic mirrors the recovery pattern in Execute():
+// named return + defer recover → exitCode = 5 on panic.
+func simulateExecuteWithPanic(doPanic bool) (exitCode int) {
+	defer func() {
+		if r := recover(); r != nil {
+			exitCode = 5
+		}
+	}()
+	if doPanic {
+		panic("test panic")
+	}
+	return 0
+}
+
+func TestExecute_panic_recovery_returns_exit_5(t *testing.T) {
+	t.Parallel()
+	code := simulateExecuteWithPanic(true)
+	if code != 5 {
+		t.Fatalf("panic recovery exitCode = %d, want 5", code)
+	}
+}
+
+func TestExecute_no_panic_returns_0(t *testing.T) {
+	t.Parallel()
+	code := simulateExecuteWithPanic(false)
+	if code != 0 {
+		t.Fatalf("no-panic exitCode = %d, want 0", code)
 	}
 }
