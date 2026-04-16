@@ -31,6 +31,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/convert"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 type ValueKind string
@@ -139,6 +140,11 @@ func NewDirectCommand(route Route, runner executor.Runner) *cobra.Command {
 			for key, value := range bindingParams {
 				params[key] = value
 			}
+
+			// Collect schema-derived flags (from buildFlagsFromDetailSchema)
+			// that are not covered by explicit bindings.
+			collectSchemaFlags(cmd, route.Bindings, params)
+
 			if route.Normalizer != nil {
 				if err := route.Normalizer(cmd, params); err != nil {
 					return err
@@ -244,6 +250,70 @@ func ApplyBindings(cmd *cobra.Command, bindings []FlagBinding) {
 	cmd.Flags().String("params", "", "Additional JSON object payload merged after --json")
 	_ = cmd.Flags().MarkHidden("json")
 	_ = cmd.Flags().MarkHidden("params")
+}
+
+// collectSchemaFlags picks up flags created by buildFlagsFromDetailSchema that
+// have no explicit FlagBinding. This bridges the gap for plugin-defined tools
+// whose parameters come from the MCP inputSchema rather than CLIToolOverride.Flags.
+func collectSchemaFlags(cmd *cobra.Command, bindings []FlagBinding, params map[string]any) {
+	// Build a set of flag names already covered by bindings.
+	bound := make(map[string]bool, len(bindings)*2)
+	for _, b := range bindings {
+		if n := strings.TrimSpace(b.FlagName); n != "" {
+			bound[n] = true
+		}
+		if a := strings.TrimSpace(b.Alias); a != "" {
+			bound[a] = true
+		}
+	}
+
+	// Reserved/internal flags that should never be forwarded as tool params.
+	skip := map[string]bool{
+		"json": true, "params": true, "help": true,
+		"format": true, "fields": true, "jq": true,
+		"debug": true, "verbose": true, "dry-run": true,
+		"yes": true, "mock": true, "timeout": true,
+		"client-id": true, "client-secret": true,
+	}
+
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		if bound[f.Name] || skip[f.Name] {
+			return
+		}
+		// Convert flag name back to the original parameter name (kebab → snake/camel)
+		// For simplicity, use the flag name as-is since MCP tools typically
+		// use snake_case which maps to kebab-case flags.
+		paramName := toOriginalParamName(f.Name)
+		if _, exists := params[paramName]; exists {
+			return // already set by --json/--params
+		}
+
+		switch f.Value.Type() {
+		case "int":
+			if v, err := cmd.Flags().GetInt(f.Name); err == nil {
+				params[paramName] = v
+			}
+		case "bool":
+			if v, err := cmd.Flags().GetBool(f.Name); err == nil {
+				params[paramName] = v
+			}
+		case "stringSlice":
+			if v, err := cmd.Flags().GetStringSlice(f.Name); err == nil {
+				params[paramName] = v
+			}
+		default:
+			if v, err := cmd.Flags().GetString(f.Name); err == nil {
+				params[paramName] = v
+			}
+		}
+	})
+}
+
+// toOriginalParamName converts a kebab-case flag name back to the original
+// MCP parameter name. Since toKebabCase converts both camelCase and snake_case
+// to kebab-case, we default to snake_case (the MCP convention).
+func toOriginalParamName(flagName string) string {
+	return strings.ReplaceAll(flagName, "-", "_")
 }
 
 func CollectBindings(cmd *cobra.Command, bindings []FlagBinding, existing map[string]any) (map[string]any, error) {
