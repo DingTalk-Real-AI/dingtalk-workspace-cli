@@ -60,7 +60,7 @@ func NewDeviceFlowProvider(configDir string, logger *slog.Logger) *DeviceFlowPro
 		clientID:        ClientID(),
 		scope:           DefaultScopes,
 		baseURL:         DefaultDeviceBaseURL,
-		terminalBaseURL: GetTerminalBaseURL(),
+		terminalBaseURL: GetMCPBaseURL(),
 		logger:          logger,
 		Output:          os.Stderr,
 		httpClient:      &http.Client{Timeout: 30 * time.Second},
@@ -185,6 +185,11 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 	if err != nil {
 		return nil, err
 	}
+	if tokenResult == nil {
+		// FlowID was empty — no polling happened; authorization URL was already
+		// printed, so the user can handle it manually.
+		return nil, nil
+	}
 
 	_, _ = fmt.Fprintln(p.output(), "")
 	dfPrintStep(p.output(), 3, i18n.T("使用授权码换取 Access Token..."), 0)
@@ -269,6 +274,13 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 	tokenData.ClientID = p.clientID
 	if err := SaveTokenData(p.configDir, tokenData); err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("保存 token 失败"), err)
+	}
+
+	// Always persist clientId to app.json so future process startups
+	// can load it via ResolveAppCredentials and populate DWS_CLIENT_ID env.
+	if p.clientID != "" {
+		_ = os.Setenv("DWS_CLIENT_ID", p.clientID)
+		_ = SaveAppConfig(p.configDir, &AppConfig{ClientID: p.clientID})
 	}
 
 	// Persist app credentials if using custom client credentials
@@ -365,6 +377,15 @@ func (p *DeviceFlowProvider) pollDeviceStatus(ctx context.Context, flowID string
 }
 
 func (p *DeviceFlowProvider) waitForAuthorization(ctx context.Context, auth *DeviceAuthResponse) (*DeviceTokenResponse, error) {
+	// No FlowID from server — cannot poll status; return immediately so the
+	// user can still see the authorization URL printed earlier and handle it
+	// manually (same pattern as pat_auth_retry.go L451).
+	if auth.FlowID == "" {
+		dfPrintDim(p.output(), i18n.T("  服务端未返回 flowId，跳过轮询，请在浏览器中手动完成授权后重试"))
+		_, _ = fmt.Fprintln(p.output(), "")
+		return nil, nil
+	}
+
 	startTime := time.Now()
 	interval := time.Duration(auth.Interval) * time.Second
 	deadline := time.Duration(auth.ExpiresIn) * time.Second
@@ -580,61 +601,4 @@ func isInvalidGrantError(err error) bool {
 	return strings.Contains(msg, "invalid_grant") || (strings.Contains(msg, "code") && strings.Contains(msg, "expired"))
 }
 
-// FlowApprovalResult is returned when PollFlowApproval succeeds.
-type FlowApprovalResult struct {
-	AuthCode string // non-empty when the server returns an auth code
-}
 
-// PollFlowApproval polls the terminal API for a flow's approval status.
-// It blocks until APPROVED, REJECTED, EXPIRED, context cancellation, or
-// the maximum poll wait is exceeded.  On success it returns the optional
-// auth code so the caller can exchange it for a token.
-func PollFlowApproval(ctx context.Context, flowID string, output io.Writer) (*FlowApprovalResult, error) {
-	p := &DeviceFlowProvider{
-		terminalBaseURL: GetTerminalBaseURL(),
-		httpClient:      &http.Client{Timeout: 30 * time.Second},
-		Output:          output,
-	}
-
-	interval := time.Duration(defaultPollInterval) * time.Second
-	start := time.Now()
-	pollCount := 0
-
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(interval):
-		}
-
-		if time.Since(start) >= maxPollTotalWait {
-			return nil, fmt.Errorf("%s", i18n.T("授权等待超时，请重试"))
-		}
-
-		pollCount++
-		elapsedSec := int(time.Since(start).Seconds())
-		dfPrintPollStatus(output, pollCount, elapsedSec)
-
-		resp, err := p.pollDeviceStatus(ctx, flowID)
-		if err != nil {
-			dfPrintPollResult(output, "network_error", i18n.T("网络错误，继续重试..."))
-			continue
-		}
-
-		switch resp.Data.Status {
-		case "APPROVED":
-			dfPrintPollResult(output, "authorized", i18n.T("授权成功!"))
-			return &FlowApprovalResult{AuthCode: resp.Data.AuthCode}, nil
-		case "PENDING":
-			dfPrintPollResult(output, "pending", i18n.T("等待用户授权..."))
-		case "REJECTED":
-			_, _ = fmt.Fprintln(output, "")
-			return nil, fmt.Errorf("%s", i18n.T("用户拒绝了授权请求"))
-		case "EXPIRED":
-			_, _ = fmt.Fprintln(output, "")
-			return nil, fmt.Errorf("%s", i18n.T("设备授权码已过期"))
-		default:
-			dfPrintPollResult(output, "unknown", fmt.Sprintf(i18n.T("未知状态: %s"), resp.Data.Status))
-		}
-	}
-}

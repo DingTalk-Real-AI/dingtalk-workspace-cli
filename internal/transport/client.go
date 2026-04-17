@@ -525,6 +525,15 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte) 
 			}
 		}
 
+		// Diagnostic: log identity-related headers on first attempt.
+		if attempt == 0 && c.FileLogger != nil {
+			c.FileLogger.LogAttrs(context.Background(), slog.LevelDebug, "http_request_headers",
+				slog.String("endpoint", endpoint),
+				slog.String("x-user-access-token-present", fmt.Sprintf("%t", req.Header.Get("x-user-access-token") != "")),
+				slog.Int("extra_headers_count", len(c.ExtraHeaders)),
+			)
+		}
+
 		resp, err := c.HTTPClient.Do(req)
 		if err != nil {
 			lastErr = err

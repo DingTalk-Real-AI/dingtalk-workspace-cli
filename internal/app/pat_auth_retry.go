@@ -19,6 +19,7 @@ import (
 	stderrors "errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -207,6 +208,7 @@ func WaitForPatAuthorization(ctx context.Context, configDir string, output io.Wr
 	deadline := time.Now().Add(timeout)
 	pollTicker := time.NewTicker(PatAuthPollInterval)
 	defer pollTicker.Stop()
+	start := time.Now()
 
 	fmt.Fprintln(output)
 	fmt.Fprintf(output, "%s %s\n", yellow("⏳"), bold("等待用户授权..."))
@@ -228,7 +230,7 @@ func WaitForPatAuthorization(ctx context.Context, configDir string, output io.Wr
 
 		case <-pollTicker.C:
 			pollCount++
-			elapsed := time.Since(time.Now().Add(-timeout)).Truncate(time.Second)
+			elapsed := time.Since(start).Truncate(time.Second)
 			remaining := time.Until(deadline).Truncate(time.Second)
 
 			// Check if token is now valid
@@ -279,16 +281,24 @@ func retryWithPatAuthRetry(ctx context.Context, runner executor.Runner, invocati
 }
 
 // loadMCPClientIDIfNeeded ensures we have a client ID for device flow.
+// Priority: in-memory runtime value → DWS_CLIENT_ID env → MCP remote fetch.
 func loadMCPClientIDIfNeeded(ctx context.Context, configDir string) string {
 	clientID := authpkg.ClientID()
-	if clientID == "" {
-		mcpClientID, err := authpkg.FetchClientIDFromMCP(ctx)
-		if err == nil && mcpClientID != "" {
-			authpkg.SetClientIDFromMCP(mcpClientID)
-			return mcpClientID
-		}
+	if clientID != "" {
+		return clientID
 	}
-	return clientID
+	// Fallback: read from environment variable (set by previous PAT auth or caller).
+	if envID := os.Getenv("DWS_CLIENT_ID"); envID != "" {
+		authpkg.SetClientIDFromMCP(envID)
+		return envID
+	}
+	// Last resort: fetch from MCP server.
+	mcpClientID, err := authpkg.FetchClientIDFromMCP(ctx)
+	if err == nil && mcpClientID != "" {
+		authpkg.SetClientIDFromMCP(mcpClientID)
+		return mcpClientID
+	}
+	return ""
 }
 
 // TriggerPatDeviceFlow initiates a device authorization flow for the missing scope.
@@ -349,6 +359,18 @@ const (
 	patPollTimeout = 10 * time.Minute
 )
 
+// patRetryingKey is a context key to prevent recursive PAT auth checks.
+// After APPROVED, the retry should not trigger another PAT flow.
+type patRetryingKeyType struct{}
+
+var patRetryingKey = patRetryingKeyType{}
+
+// IsPatRetrying returns true if the current context is already in a PAT retry.
+func IsPatRetrying(ctx context.Context) bool {
+	v, _ := ctx.Value(patRetryingKey).(bool)
+	return v
+}
+
 // handlePatAuthCheck is called by runner.executeInvocation when a PAT
 // authorization error is detected.  It injects the server-assigned clientId
 // as x-robot-uid header, prints authorization details, opens the browser,
@@ -377,24 +399,34 @@ func handlePatAuthCheck(
 		return executor.Result{}, patErr
 	}
 
+	slog.Debug("PAT auth check",
+		"clientId", patData.Data.ClientID,
+		"flowId", patData.Data.FlowID,
+		"hasSecret", patData.Data.ClientSecret != "",
+	)
+
 	// Inject clientId/clientSecret from PAT response as runtime credentials
 	// so that subsequent device flow auth uses the server-assigned app identity.
 	if patData.Data.ClientID != "" {
 		authpkg.SetClientIDFromMCP(patData.Data.ClientID)
+		_ = os.Setenv("DWS_CLIENT_ID", patData.Data.ClientID)
 		if patData.Data.ClientSecret != "" {
 			authpkg.SetClientSecret(patData.Data.ClientSecret)
+			_ = os.Setenv("DWS_CLIENT_SECRET", patData.Data.ClientSecret)
 		}
-	}
 
-	// Inject clientId as x-robot-uid header so the MCP gateway treats it as
-	// the agent instance identity for subsequent requests.
-	if patData.Data.ClientID != "" && r.transport != nil {
-		if r.transport.ExtraHeaders == nil {
-			r.transport.ExtraHeaders = make(map[string]string)
+		// Persist clientId (and optionally secret) to ~/.dws/app.json so that
+		// future process invocations can load it at startup and populate
+		// DWS_CLIENT_ID env before the first MCP request.
+		appCfg := &authpkg.AppConfig{
+			ClientID: patData.Data.ClientID,
 		}
-		r.transport.ExtraHeaders["x-robot-uid"] = patData.Data.ClientID
-		// Also propagate to ROBOT_UID env so child processes inherit it.
-		_ = os.Setenv("ROBOT_UID", patData.Data.ClientID)
+		if patData.Data.ClientSecret != "" {
+			appCfg.ClientSecret = authpkg.PlainSecret(patData.Data.ClientSecret)
+		}
+		if err := authpkg.SaveAppConfig(configDir, appCfg); err != nil {
+			slog.Debug("failed to persist app config from PAT", "error", err)
+		}
 	}
 
 	bold := color.New(color.Bold).SprintFunc()
@@ -443,10 +475,17 @@ func handlePatAuthCheck(
 		// Clear token cache so the new credentials take effect.
 		ResetRuntimeTokenCache()
 
-		// Retry the original invocation.
+		// Brief delay to let server-side authorization state propagate.
+		time.Sleep(1 * time.Second)
+
+		// Retry the original invocation with pat-retrying flag to prevent recursion.
 		fmt.Fprintf(output, "%s %s\n", greenFn("▶"), bold("授权完成，正在重试..."))
 		fmt.Fprintln(output)
-		return r.Run(ctx, invocation)
+		slog.Debug("PAT retry: identity env check",
+			"DWS_CLIENT_ID", os.Getenv("DWS_CLIENT_ID"),
+		)
+		retryCtx := context.WithValue(ctx, patRetryingKey, true)
+		return r.Run(retryCtx, invocation)
 
 	case "REJECTED":
 		fmt.Fprintf(output, "%s %s\n", redFn("✗"), bold("用户已拒绝授权"))
@@ -475,12 +514,19 @@ func handlePatAuthCheck(
 // Returns the final status string.
 func pollPatDeviceFlow(ctx context.Context, flowID string, configDir string, output io.Writer) (string, error) {
 	pollURL := fmt.Sprintf("%s%s?flowId=%s",
-		authpkg.DefaultTerminalBaseURL, authpkg.DevicePollPath, url.QueryEscape(flowID))
+		authpkg.GetMCPBaseURL(), authpkg.DevicePollPath, url.QueryEscape(flowID))
 
 	// Load user access token for the poll request header.
 	var accessToken string
 	if tokenData, err := authpkg.LoadTokenData(configDir); err == nil && tokenData != nil {
 		accessToken = tokenData.AccessToken
+	}
+
+	// Use a client that does NOT follow redirects, so we can detect SSO 302.
+	noRedirectClient := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
 	}
 
 	ticker := time.NewTicker(patPollInterval)
@@ -504,24 +550,23 @@ func pollPatDeviceFlow(ctx context.Context, flowID string, configDir string, out
 			if accessToken != "" {
 				req.Header.Set("x-user-access-token", accessToken)
 			}
-			resp, err := http.DefaultClient.Do(req)
+			resp, err := noRedirectClient.Do(req)
 			if err != nil {
 				continue // transient network error, keep polling
 			}
 
-			var pollResp struct {
-				Success bool   `json:"success"`
-				Code    string `json:"code,omitempty"`
-				Message string `json:"message,omitempty"`
-				Data    struct {
-					Status string `json:"status"`
-				} `json:"data"`
-			}
-			if err := json.NewDecoder(resp.Body).Decode(&pollResp); err != nil {
-				resp.Body.Close()
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+
+			// If we got a redirect (302/301), SSO gateway intercepted — skip JSON parse.
+			if resp.StatusCode == http.StatusFound || resp.StatusCode == http.StatusMovedPermanently {
 				continue
 			}
-			resp.Body.Close()
+
+			var pollResp authpkg.DevicePollResponse
+			if err := json.Unmarshal(bodyBytes, &pollResp); err != nil {
+				continue
+			}
 
 			status := pollResp.Data.Status
 			switch status {

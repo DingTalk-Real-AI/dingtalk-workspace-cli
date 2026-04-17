@@ -485,6 +485,13 @@ continueLogin:
 		return nil, fmt.Errorf("%s: %w", i18n.T("保存 token 失败"), err)
 	}
 
+	// Always persist clientId to app.json so future process startups
+	// can load it via ResolveAppCredentials and populate DWS_CLIENT_ID env.
+	if p.clientID != "" {
+		_ = os.Setenv("DWS_CLIENT_ID", p.clientID)
+		_ = SaveAppConfig(p.configDir, &AppConfig{ClientID: p.clientID})
+	}
+
 	// Persist app credentials if using custom client credentials
 	p.persistAppConfigIfNeeded()
 

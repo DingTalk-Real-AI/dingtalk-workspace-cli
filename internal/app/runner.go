@@ -94,6 +94,15 @@ const (
 )
 
 func newCommandRunnerWithFlags(loader cli.CatalogLoader, flags *GlobalFlags) executor.Runner {
+	// Ensure DWS_CLIENT_ID env is populated from persisted config before
+	// resolveIdentityHeaders reads it.  This covers fresh-process cold starts
+	// where no env var has been inherited from a parent process.
+	if os.Getenv("DWS_CLIENT_ID") == "" {
+		if cid := authpkg.ClientID(); cid != "" {
+			_ = os.Setenv("DWS_CLIENT_ID", cid)
+		}
+	}
+
 	var httpClient *http.Client
 	if flags != nil && flags.Timeout > 0 {
 		httpClient = &http.Client{Timeout: time.Duration(flags.Timeout) * time.Second}
@@ -312,6 +321,9 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	if fn := edition.Get().ClassifyToolResult; fn != nil {
 		if editionErr := fn(callResult.Content); editionErr != nil {
 			if patCheck := apperrors.AsPatAuthCheckError(editionErr); patCheck != nil {
+				if IsPatRetrying(ctx) {
+					return executor.Result{}, patCheck // already retried once, don't loop
+				}
 				return handlePatAuthCheck(ctx, r, invocation, patCheck, defaultConfigDir(), os.Stderr)
 			}
 			return executor.Result{}, editionErr
@@ -320,6 +332,9 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 
 	// ---- Structured PAT auth check (open-source fallback) ----
 	if patCheck := apperrors.ClassifyPatAuthCheck(callResult.Content); patCheck != nil {
+		if IsPatRetrying(ctx) {
+			return executor.Result{}, patCheck // already retried once, don't loop
+		}
 		return handlePatAuthCheck(ctx, r, invocation, patCheck, defaultConfigDir(), os.Stderr)
 	}
 
@@ -563,7 +578,7 @@ func resolveIdentityHeaders() map[string]string {
 		headers = make(map[string]string)
 	}
 
-	// Inject environment variable based headers for MCP gateway tracking
+	// Inject environment variable based headers for MCP gateway tracking.
 	envHeaders := map[string]string{
 		"x-dingtalk-agent":      os.Getenv(envDingtalkAgent),
 		"x-dingtalk-trace-id":   os.Getenv(envDingtalkTraceID),
