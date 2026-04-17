@@ -24,6 +24,13 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 )
 
+// UserContext holds the minimal user identity fields injected into
+// stdio plugin subprocesses via environment variables.
+type UserContext struct {
+	UserID string
+	CorpID string
+}
+
 // StdioServerClient pairs a transport.StdioClient with its server key.
 type StdioServerClient struct {
 	Key    string
@@ -31,8 +38,11 @@ type StdioServerClient struct {
 }
 
 // StdioClients returns StdioClient instances for all stdio-type MCP
-// servers declared by this plugin.
-func (p *Plugin) StdioClients() []StdioServerClient {
+// servers declared by this plugin. uc is the current user's identity;
+// if non-nil, DWS_USER_ID and DWS_CORP_ID are injected as environment
+// variables so that the subprocess can identify the caller without
+// implementing its own auth.
+func (p *Plugin) StdioClients(uc *UserContext) []StdioServerClient {
 	var clients []StdioServerClient
 	for key, srv := range p.Manifest.MCPServers {
 		if srv.Type != "stdio" {
@@ -59,6 +69,16 @@ func (p *Plugin) StdioClients() []StdioServerClient {
 		}
 		env["DWS_PLUGIN_ROOT"] = p.Root
 		env["DWS_PLUGIN_DATA"] = filepath.Join(filepath.Dir(filepath.Dir(p.Root)), "data", p.Manifest.Name)
+
+		// Inject user identity so the subprocess knows who is calling.
+		if uc != nil {
+			if uc.UserID != "" {
+				env["DWS_USER_ID"] = uc.UserID
+			}
+			if uc.CorpID != "" {
+				env["DWS_CORP_ID"] = uc.CorpID
+			}
+		}
 
 		sc := transport.NewStdioClient(command, args, env)
 		clients = append(clients, StdioServerClient{Key: key, Client: sc})

@@ -190,6 +190,8 @@ func newPluginRemoveCommand() *cobra.Command {
 		Args:              cobra.ExactArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Stop stdio clients before removing to release file locks
+			StopStdioClientsByPlugin(args[0])
 			keepData, _ := cmd.Flags().GetBool("keep-data")
 			loader := plugin.NewLoader(RawVersion())
 			if err := loader.RemovePlugin(args[0], keepData); err != nil {

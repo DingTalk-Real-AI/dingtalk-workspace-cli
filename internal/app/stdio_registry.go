@@ -14,6 +14,7 @@
 package app
 
 import (
+	"log/slog"
 	"strings"
 	"sync"
 
@@ -37,11 +38,24 @@ func RegisterStdioClient(productID string, client *transport.StdioClient) {
 }
 
 // LookupStdioClient returns the StdioClient registered for the given product ID.
+// The productID can be either the full key (pluginName/serverKey) or just the serverKey.
+// This supports backward compatibility with existing CanonicalProduct values.
 func LookupStdioClient(productID string) (*transport.StdioClient, bool) {
 	stdioMu.RLock()
 	defer stdioMu.RUnlock()
-	c, ok := stdioClients[productID]
-	return c, ok
+	// Try exact match first
+	if c, ok := stdioClients[productID]; ok {
+		return c, true
+	}
+	// If not found, try matching by serverKey suffix (for backward compatibility)
+	for id, c := range stdioClients {
+		if idx := strings.LastIndex(id, "/"); idx >= 0 {
+			if id[idx+1:] == productID {
+				return c, true
+			}
+		}
+	}
+	return nil, false
 }
 
 // StdioEndpoint returns a virtual endpoint URL for a stdio-based MCP server.
@@ -53,4 +67,53 @@ func StdioEndpoint(pluginName, serverKey string) string {
 // IsStdioEndpoint returns true if the endpoint uses the stdio:// scheme.
 func IsStdioEndpoint(endpoint string) bool {
 	return strings.HasPrefix(endpoint, stdioEndpointScheme)
+}
+
+// StopAllStdioClients stops all registered stdio clients.
+// This should be called on program exit to terminate child processes.
+func StopAllStdioClients() {
+	stdioMu.Lock()
+	defer stdioMu.Unlock()
+	for id, client := range stdioClients {
+		if err := client.Stop(); err != nil {
+			slog.Warn("failed to stop stdio client", "id", id, "error", err)
+		}
+	}
+	stdioClients = make(map[string]*transport.StdioClient)
+}
+
+// StopStdioClient stops a specific stdio client by product ID.
+// Returns true if the client was found and stopped, false otherwise.
+func StopStdioClient(productID string) bool {
+	stdioMu.Lock()
+	defer stdioMu.Unlock()
+	client, ok := stdioClients[productID]
+	if !ok {
+		return false
+	}
+	if err := client.Stop(); err != nil {
+		slog.Warn("failed to stop stdio client", "id", productID, "error", err)
+	}
+	delete(stdioClients, productID)
+	return true
+}
+
+// StopStdioClientsByPlugin stops all stdio clients belonging to a plugin.
+// The productID format is "pluginName/serverKey". This function stops all
+// clients whose productID has the given pluginName prefix.
+func StopStdioClientsByPlugin(pluginName string) int {
+	stdioMu.Lock()
+	defer stdioMu.Unlock()
+	prefix := pluginName + "/"
+	count := 0
+	for id, client := range stdioClients {
+		if len(id) > len(prefix) && id[:len(prefix)] == prefix {
+			if err := client.Stop(); err != nil {
+				slog.Warn("failed to stop stdio client", "id", id, "error", err)
+			}
+			delete(stdioClients, id)
+			count++
+		}
+	}
+	return count
 }
