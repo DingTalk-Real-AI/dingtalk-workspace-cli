@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cache"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
@@ -432,6 +433,60 @@ func TestParseDetailSchema(t *testing.T) {
 				t.Fatalf("parseDetailSchema(%q) = nil, want non-nil", tt.input)
 			}
 		})
+	}
+}
+
+func TestDiscoverAllRuntime_TimeoutFallsBackToCache(t *testing.T) {
+	t.Parallel()
+
+	// done signals slow handlers to exit so srv.Close() can complete.
+	done := make(chan struct{})
+	// Server that blocks until signalled (simulates an unreachable MCP server).
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+		}
+		http.Error(w, "timeout", http.StatusServiceUnavailable)
+	}))
+	// LIFO: close(done) runs first so handlers exit, then srv.Close() completes.
+	defer srv.Close()
+	defer close(done)
+
+	svc := newTestService(t, srv.URL, srv)
+	// Override timeout so the test completes quickly.
+	svc.PerServerTimeout = 80 * time.Millisecond
+
+	server := market.ServerDescriptor{
+		Key:      "slow-server",
+		Endpoint: srv.URL + "/mcp",
+	}
+
+	// Pre-populate the cache so the fallback has data to return.
+	partition := "test-tenant/test-identity"
+	_ = svc.Cache.SaveTools(partition, server.Key, cache.ToolsSnapshot{
+		ServerKey:       server.Key,
+		ProtocolVersion: "2025-03-26",
+		Tools: []transport.ToolDescriptor{
+			{Name: "cached-tool", Description: "from cache"},
+		},
+	})
+
+	results, failures := svc.DiscoverAllRuntime(context.Background(), []market.ServerDescriptor{server})
+	if len(failures) != 0 {
+		t.Fatalf("failures count = %d, want 0 (expected cache fallback)", len(failures))
+	}
+	if len(results) != 1 {
+		t.Fatalf("results count = %d, want 1", len(results))
+	}
+	if !results[0].Degraded {
+		t.Fatal("cache fallback result should be degraded")
+	}
+	if len(results[0].Tools) == 0 {
+		t.Fatal("expected cached tools to be returned")
+	}
+	if results[0].Tools[0].Name != "cached-tool" {
+		t.Fatalf("tool name = %q, want cached-tool", results[0].Tools[0].Name)
 	}
 }
 
