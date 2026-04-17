@@ -53,12 +53,13 @@ const (
 var errCLIServerSkipped = errors.New("server marked cli.skip")
 
 type Service struct {
-	MarketClient *market.Client
-	Transport    *transport.Client
-	Cache        *cache.Store
-	Tenant       string
-	AuthIdentity string
-	Logger       *slog.Logger
+	MarketClient     *market.Client
+	Transport        *transport.Client
+	Cache            *cache.Store
+	Tenant           string
+	AuthIdentity     string
+	Logger           *slog.Logger
+	PerServerTimeout time.Duration // overrides perServerDiscoveryTimeout when > 0
 }
 
 type RuntimeServer struct {
@@ -170,7 +171,7 @@ func (s *Service) DiscoverServerRuntime(ctx context.Context, server market.Serve
 	}, nil
 }
 
-const perServerDiscoveryTimeout = 5 * time.Second
+const perServerDiscoveryTimeout = 2 * time.Second
 
 func (s *Service) DiscoverAllRuntime(ctx context.Context, servers []market.ServerDescriptor) ([]RuntimeServer, []RuntimeFailure) {
 	type discoveryResult struct {
@@ -189,12 +190,16 @@ func (s *Service) DiscoverAllRuntime(ctx context.Context, servers []market.Serve
 	}
 
 	ch := make(chan discoveryResult, len(filtered))
+	serverTimeout := s.PerServerTimeout
+	if serverTimeout <= 0 {
+		serverTimeout = perServerDiscoveryTimeout
+	}
 	var wg sync.WaitGroup
 	for _, srv := range filtered {
 		wg.Add(1)
 		go func(server market.ServerDescriptor) {
 			defer wg.Done()
-			serverCtx, cancel := context.WithTimeout(ctx, perServerDiscoveryTimeout)
+			serverCtx, cancel := context.WithTimeout(ctx, serverTimeout)
 			defer cancel()
 			start := time.Now()
 			rs, err := s.DiscoverServerRuntime(serverCtx, server)
