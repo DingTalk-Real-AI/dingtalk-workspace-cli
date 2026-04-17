@@ -137,7 +137,7 @@ const (
 const (
 	// DefaultTerminalBaseURL is the DingTalk developer platform base URL.
 	// Override at runtime via ~/.dws/terminal_url file.
-	DefaultTerminalBaseURL = "https://pre-open-dev.dingtalk.com"
+	DefaultTerminalBaseURL = "https://open-dev.dingtalk.com"
 
 	// DeveloperSettingsPath is the path to the organization developer
 	// settings page (CLI access management).
