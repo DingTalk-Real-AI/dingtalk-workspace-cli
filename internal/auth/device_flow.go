@@ -418,15 +418,15 @@ func (p *DeviceFlowProvider) waitForAuthorization(ctx context.Context, auth *Dev
 		}
 
 		switch pollResp.Data.Status {
-		case "APPROVED":
+		case StatusApproved:
 			dfPrintPollResult(p.output(), "authorized", i18n.T("授权成功!"))
 			return &DeviceTokenResponse{AuthCode: pollResp.Data.AuthCode}, nil
-		case "PENDING":
+		case StatusPending:
 			dfPrintPollResult(p.output(), "pending", i18n.T("等待用户授权..."))
-		case "REJECTED":
+		case StatusRejected:
 			_, _ = fmt.Fprintln(p.output(), "")
 			return nil, errors.New(i18n.T("用户拒绝了授权请求"))
-		case "EXPIRED":
+		case StatusExpired:
 			_, _ = fmt.Fprintln(p.output(), "")
 			return nil, errors.New(i18n.T("设备授权码已过期"))
 		default:

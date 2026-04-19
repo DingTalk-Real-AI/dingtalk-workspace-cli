@@ -28,6 +28,7 @@ import (
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 )
 
 func TestIsPatScopeError_MissingScope(t *testing.T) {
@@ -186,10 +187,8 @@ func TestExtractPatScopeError_ComplexScope(t *testing.T) {
 	if scopeErr == nil {
 		t.Fatal("expected non-nil PatScopeError")
 	}
-	if scopeErr.MissingScope != "mail:user_mailbox.message" {
-		// The regex captures "word:word" segments; the full dotted scope gets
-		// the first colon-separated pair.
-		t.Logf("extracted scope: %q (may need refinement for multi-segment scopes)", scopeErr.MissingScope)
+	if scopeErr.MissingScope != "mail:user_mailbox.message:send" {
+		t.Errorf("expected MissingScope 'mail:user_mailbox.message:send', got %q", scopeErr.MissingScope)
 	}
 }
 
@@ -435,5 +434,173 @@ func TestExtractPatScopeError_WithIdentity(t *testing.T) {
 	}
 	if scopeErr.MissingScope != "calendar:write" {
 		t.Errorf("expected MissingScope 'calendar:write', got %q", scopeErr.MissingScope)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// handlePatAuthCheck integration tests — cover the main orchestrator with
+// mock runner + httptest poll server for APPROVED, REJECTED, EmptyFlowID.
+// ---------------------------------------------------------------------------
+
+// mockRunner is a simple executor.Runner for testing handlePatAuthCheck.
+type mockRunner struct {
+	runFunc func(ctx context.Context, inv executor.Invocation) (executor.Result, error)
+}
+
+func (m *mockRunner) Run(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
+	return m.runFunc(ctx, inv)
+}
+
+// setupHandlePATServer creates an httptest server for handlePatAuthCheck tests.
+// It responds to device poll requests with the given status after the first poll.
+func setupHandlePATServer(t *testing.T, terminalStatus string, authCode string) (*httptest.Server, string) {
+	t.Helper()
+	var pollCount atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/cli/oauth/device/poll") {
+			idx := int(pollCount.Add(1)) - 1
+			var resp authpkg.DevicePollResponse
+			if idx == 0 {
+				resp = authpkg.DevicePollResponse{Success: true, Data: authpkg.DevicePollData{Status: "PENDING"}}
+			} else {
+				resp = authpkg.DevicePollResponse{
+					Success: terminalStatus == "APPROVED",
+					Data:    authpkg.DevicePollData{Status: terminalStatus, AuthCode: authCode},
+				}
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+
+	tmpDir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(tmpDir, "mcp_url"), []byte(server.URL), 0644)
+	t.Setenv("DWS_CONFIG_DIR", tmpDir)
+
+	return server, tmpDir
+}
+
+func makePATErrorJSON(flowID, clientID string) string {
+	type patData struct {
+		Desc     string `json:"desc"`
+		FlowID   string `json:"flowId"`
+		URI      string `json:"uri"`
+		ClientID string `json:"clientId"`
+	}
+	payload := struct {
+		Code string  `json:"code"`
+		Data patData `json:"data"`
+	}{
+		Code: "AGENT_CODE_NOT_EXISTS",
+		Data: patData{
+			Desc:     "test auth",
+			FlowID:   flowID,
+			URI:      "", // empty to avoid opening browser in test
+			ClientID: clientID,
+		},
+	}
+	data, _ := json.Marshal(payload)
+	return string(data)
+}
+
+func TestHandlePatAuthCheck_Approved(t *testing.T) {
+	server, configDir := setupHandlePATServer(t, "APPROVED", "test-auth-code")
+	defer server.Close()
+
+	var retryCalled bool
+	var retryHasKey bool
+	mock := &mockRunner{
+		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
+			retryCalled = true
+			retryHasKey = IsPatRetrying(ctx)
+			return executor.Result{Response: map[string]any{"ok": true}}, nil
+		},
+	}
+
+	runner := &runtimeRunner{fallback: mock}
+	patErr := &apperrors.PATError{RawJSON: makePATErrorJSON("flow-approved", "test-client-id")}
+
+	ctx := context.Background()
+	var buf bytes.Buffer
+	_, err := handlePatAuthCheck(ctx, runner, executor.Invocation{
+		CanonicalProduct: "test",
+		Tool:             "test_tool",
+	}, patErr, configDir, &buf)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !retryCalled {
+		t.Fatal("expected mock runner to be called for retry")
+	}
+	if !retryHasKey {
+		t.Fatal("expected retry context to have patRetryingKey")
+	}
+	// Verify SetClientIDFromMCP was called with the PAT response clientId.
+	if cid := authpkg.ClientID(); cid != "test-client-id" {
+		t.Errorf("expected ClientID 'test-client-id', got %q", cid)
+	}
+}
+
+func TestHandlePatAuthCheck_Rejected(t *testing.T) {
+	server, configDir := setupHandlePATServer(t, "REJECTED", "")
+	defer server.Close()
+
+	mock := &mockRunner{
+		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
+			t.Fatal("runner should not be called on REJECTED")
+			return executor.Result{}, nil
+		},
+	}
+
+	runner := &runtimeRunner{fallback: mock}
+	patErr := &apperrors.PATError{RawJSON: makePATErrorJSON("flow-rejected", "test-client-id")}
+
+	ctx := context.Background()
+	var buf bytes.Buffer
+	_, err := handlePatAuthCheck(ctx, runner, executor.Invocation{
+		CanonicalProduct: "test",
+		Tool:             "test_tool",
+	}, patErr, configDir, &buf)
+
+	if err == nil {
+		t.Fatal("expected error for REJECTED")
+	}
+	if !strings.Contains(err.Error(), "用户已拒绝授权") {
+		t.Errorf("expected rejection error, got: %v", err)
+	}
+}
+
+func TestHandlePatAuthCheck_EmptyFlowID_FallsBackToPATError(t *testing.T) {
+	// No poll server needed — empty flowId means no polling, return PATError directly.
+	tmpDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", tmpDir)
+
+	mock := &mockRunner{
+		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
+			t.Fatal("runner should not be called when flowId is empty")
+			return executor.Result{}, nil
+		},
+	}
+
+	runner := &runtimeRunner{fallback: mock}
+	patErr := &apperrors.PATError{RawJSON: makePATErrorJSON("", "test-client-id")}
+
+	ctx := context.Background()
+	var buf bytes.Buffer
+	_, err := handlePatAuthCheck(ctx, runner, executor.Invocation{
+		CanonicalProduct: "test",
+		Tool:             "test_tool",
+	}, patErr, tmpDir, &buf)
+
+	if err == nil {
+		t.Fatal("expected PATError when flowId is empty")
+	}
+	// Should return the original PATError.
+	if _, ok := err.(*apperrors.PATError); !ok {
+		t.Errorf("expected *PATError, got %T: %v", err, err)
 	}
 }

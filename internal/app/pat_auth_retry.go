@@ -67,7 +67,8 @@ var patScopeRegex = regexp.MustCompile(`(?i)(missing_scope|insufficient_scope|sc
 
 // scopeValueRegex extracts a scope identifier (e.g. "calendar:read",
 // "mail:user_mailbox.message:send") from an error message.
-var scopeValueRegex = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9_.]*:[a-zA-Z][a-zA-Z0-9_.]*)`)
+// Supports multi-segment scopes with multiple colons (resource:sub:action).
+var scopeValueRegex = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9_.]*(?::[a-zA-Z][a-zA-Z0-9_.]*)+)`)
 
 // identityValueRegex extracts an identity label from an error message.
 var identityValueRegex = regexp.MustCompile(`(?i)identity["\s:]+([a-zA-Z_]+)`)
@@ -421,7 +422,7 @@ func handlePatAuthCheck(
 	}
 
 	switch status {
-	case "APPROVED":
+	case authpkg.StatusApproved:
 		fmt.Fprintf(output, "%s %s\n", greenFn("✓"), bold("授权成功!"))
 		fmt.Fprintln(output)
 
@@ -459,7 +460,7 @@ func handlePatAuthCheck(
 		retryCtx := context.WithValue(ctx, patRetryingKey, true)
 		return r.Run(retryCtx, invocation)
 
-	case "REJECTED":
+	case authpkg.StatusRejected:
 		fmt.Fprintf(output, "%s %s\n", redFn("✗"), bold("用户已拒绝授权"))
 		return executor.Result{}, apperrors.NewAuth(
 			"用户已拒绝授权",
@@ -467,7 +468,7 @@ func handlePatAuthCheck(
 			apperrors.WithHint("用户在浏览器中拒绝了授权请求，请重新执行命令。"),
 		)
 
-	case "EXPIRED":
+	case authpkg.StatusExpired:
 		fmt.Fprintf(output, "%s %s\n", redFn("✗"), bold("授权超时"))
 		return executor.Result{}, apperrors.NewAuth(
 			"授权超时",
@@ -475,7 +476,7 @@ func handlePatAuthCheck(
 			apperrors.WithHint("授权链接已过期，请重新执行命令。"),
 		)
 
-	case "CANCELLED":
+	case authpkg.StatusCancelled:
 		fmt.Fprintf(output, "%s %s\n", redFn("✗"), bold("操作已取消"))
 		return executor.Result{}, apperrors.NewAuth(
 			"操作已取消",
@@ -519,9 +520,9 @@ func pollPatDeviceFlow(ctx context.Context, flowID string, configDir string, out
 		select {
 		case <-ctx.Done():
 			if ctx.Err() == context.Canceled {
-				return "CANCELLED", "", nil
+				return authpkg.StatusCancelled, "", nil
 			}
-			return "EXPIRED", "", nil
+			return authpkg.StatusExpired, "", nil
 		case <-ticker.C:
 			pollCount++
 			fmt.Fprintf(output, "\r%s [%d] 等待授权中...          ", dim("⟳"), pollCount)
@@ -554,22 +555,21 @@ func pollPatDeviceFlow(ctx context.Context, flowID string, configDir string, out
 				continue
 			}
 
-			status := pollResp.Data.Status
+			status := authpkg.ParseDeviceFlowStatus(pollResp.Data.Status, pollResp.Success)
 			switch status {
-			case "APPROVED":
+			case authpkg.StatusApproved:
 				fmt.Fprintln(output) // clear the polling line
 				return status, pollResp.Data.AuthCode, nil
-			case "REJECTED", "EXPIRED":
+			case authpkg.StatusRejected, authpkg.StatusExpired:
 				fmt.Fprintln(output) // clear the polling line
 				return status, "", nil
-			case "PENDING":
+			case authpkg.StatusPending:
 				// keep polling
 			default:
-				if status == "" && !pollResp.Success {
-					// Server error or flow not found — treat as expired
-					fmt.Fprintln(output)
-					return "EXPIRED", "", nil
-				}
+				// ParseDeviceFlowStatus normalizes empty+!success to EXPIRED,
+				// so this branch handles truly unknown statuses.
+				fmt.Fprintln(output)
+				return status, "", nil
 			}
 		}
 	}
