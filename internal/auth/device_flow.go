@@ -264,7 +264,7 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 
 			_, _ = fmt.Fprintln(p.output(), i18n.T("   请联系组织主管理员开启后重新登录。"))
 			_, _ = fmt.Fprintln(p.output(), "")
-			_, _ = fmt.Fprintln(p.output(), i18n.T("   管理员操作入口：https://open-dev.dingtalk.com/fe/old#/developerSettings"))
+			_, _ = fmt.Fprintf(p.output(), "   %s%s\n", i18n.T("管理员操作入口："), config.GetDeveloperSettingsURL())
 			_, _ = fmt.Fprintln(p.output(), "")
 			return nil, errors.New(i18n.T("该组织尚未开启 CLI 数据访问权限，请联系管理员开启"))
 		}
