@@ -15,16 +15,45 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
 )
 
-// PerfDebugEnv is the environment variable to enable performance timing output.
-const PerfDebugEnv = "DWS_PERF_DEBUG"
+func init() {
+	configmeta.Register(configmeta.ConfigItem{
+		Name:        "DWS_PERF_DEBUG",
+		Category:    configmeta.CategoryDebug,
+		Description: "启用性能计时输出到 stderr",
+		Example:     "1",
+	})
+	configmeta.Register(configmeta.ConfigItem{
+		Name:        "DWS_PERF_REPORT",
+		Category:    configmeta.CategoryDebug,
+		Description: "JSON 性能报告输出路径 (auto=~/.dws/perf/latest.json)",
+		Example:     "auto",
+	})
+}
+
+const (
+	// PerfDebugEnv is the environment variable to enable performance timing output.
+	PerfDebugEnv = "DWS_PERF_DEBUG"
+
+	// PerfReportEnv is the environment variable to enable JSON perf report output.
+	// Set to "auto" to write to ~/.dws/perf/latest.json, or a custom file path.
+	PerfReportEnv = "DWS_PERF_REPORT"
+
+	perfReportDir  = "perf"
+	perfReportFile = "latest.json"
+)
 
 // timingContextKey is the context key for TimingCollector.
 type timingContextKey struct{}
@@ -188,4 +217,165 @@ func StartTiming(ctx context.Context, name string) func() {
 // IsPerfDebugEnabled returns true if performance debug output is enabled.
 func IsPerfDebugEnabled() bool {
 	return os.Getenv(PerfDebugEnv) != ""
+}
+
+// ── Structured Performance Report ──────────────────────────────────────
+
+// PerfPhase is a single phase in the performance report.
+type PerfPhase struct {
+	Name       string `json:"name"`
+	DurationMs int64  `json:"duration_ms"`
+	Seq        int    `json:"seq"`
+}
+
+// PerfReport is the JSON-serialisable performance report.
+type PerfReport struct {
+	Kind       string      `json:"kind"`
+	Version    string      `json:"version"`
+	CLIVersion string      `json:"cli_version"`
+	Command    string      `json:"command"`
+	Timestamp  time.Time   `json:"timestamp"`
+	TotalMs    int64       `json:"total_ms"`
+	Phases     []PerfPhase `json:"phases"`
+	Slowest    string      `json:"slowest"`
+	OverheadMs int64       `json:"overhead_ms"`
+}
+
+// BuildReport constructs a PerfReport from the collected timing entries.
+func (tc *TimingCollector) BuildReport(cliVersion, command string) PerfReport {
+	entries := tc.Entries()
+	total := tc.Total()
+	totalMs := total.Milliseconds()
+
+	phases := make([]PerfPhase, len(entries))
+	var sumMs int64
+	var slowestName string
+	var slowestMs int64
+
+	for i, e := range entries {
+		ms := e.Duration.Milliseconds()
+		phases[i] = PerfPhase{
+			Name:       e.Name,
+			DurationMs: ms,
+			Seq:        e.Seq,
+		}
+		sumMs += ms
+		if ms > slowestMs {
+			slowestMs = ms
+			slowestName = e.Name
+		}
+	}
+
+	overhead := totalMs - sumMs
+	if overhead < 0 {
+		overhead = 0
+	}
+
+	return PerfReport{
+		Kind:       "perf_report",
+		Version:    "1",
+		CLIVersion: cliVersion,
+		Command:    command,
+		Timestamp:  time.Now(),
+		TotalMs:    totalMs,
+		Phases:     phases,
+		Slowest:    slowestName,
+		OverheadMs: overhead,
+	}
+}
+
+// WriteReportIfEnabled checks DWS_PERF_REPORT and writes a JSON report if set.
+func (tc *TimingCollector) WriteReportIfEnabled(cliVersion, command string) {
+	if tc == nil {
+		return
+	}
+	dest := os.Getenv(PerfReportEnv)
+	if dest == "" {
+		return
+	}
+
+	report := tc.BuildReport(cliVersion, command)
+	data, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return
+	}
+
+	path := resolvePerfReportPath(dest)
+	if path == "" {
+		return
+	}
+
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return
+	}
+
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		_ = os.Remove(tmp)
+		return
+	}
+	_ = os.Rename(tmp, path)
+}
+
+// LoadLatestReport reads the default perf report file (~/.dws/perf/latest.json).
+func LoadLatestReport() (*PerfReport, error) {
+	path := defaultPerfReportPath()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var report PerfReport
+	if err := json.Unmarshal(data, &report); err != nil {
+		return nil, err
+	}
+	return &report, nil
+}
+
+// resolvePerfReportPath resolves the DWS_PERF_REPORT value to an absolute path.
+func resolvePerfReportPath(dest string) string {
+	if dest == "auto" {
+		return defaultPerfReportPath()
+	}
+	return dest
+}
+
+func defaultPerfReportPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".dws", perfReportDir, perfReportFile)
+}
+
+// sensitiveFlags are flag names whose values should be masked in commands.
+var sensitiveFlags = map[string]bool{
+	"--token":         true,
+	"--client-secret": true,
+	"--client-id":     true,
+}
+
+// SanitizeCommand redacts sensitive flag values from a command arg slice.
+func SanitizeCommand(args []string) string {
+	sanitized := make([]string, 0, len(args))
+	skipNext := false
+	for _, arg := range args {
+		if skipNext {
+			sanitized = append(sanitized, "***")
+			skipNext = false
+			continue
+		}
+		if idx := strings.IndexByte(arg, '='); idx > 0 {
+			key := arg[:idx]
+			if sensitiveFlags[key] {
+				sanitized = append(sanitized, key+"=***")
+				continue
+			}
+		}
+		if sensitiveFlags[arg] {
+			skipNext = true
+		}
+		sanitized = append(sanitized, arg)
+	}
+	return strings.Join(sanitized, " ")
 }

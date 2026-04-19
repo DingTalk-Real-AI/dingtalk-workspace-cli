@@ -37,8 +37,19 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
 	"golang.org/x/text/language"
 )
+
+func init() {
+	configmeta.Register(configmeta.ConfigItem{
+		Name:         "DWS_LANG",
+		Category:     configmeta.CategoryCore,
+		Description:  "界面语言 (en/zh)，回退到 LANG",
+		DefaultValue: "en",
+		Example:      "zh",
+	})
+}
 
 //go:embed locales/*.json
 var localeFS embed.FS

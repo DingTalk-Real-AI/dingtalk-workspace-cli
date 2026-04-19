@@ -28,8 +28,26 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
+
+func init() {
+	configmeta.Register(configmeta.ConfigItem{
+		Name:         "DWS_CACHE_DIR",
+		Category:     configmeta.CategoryCore,
+		Description:  "覆盖缓存目录",
+		DefaultValue: "~/.dws/cache",
+		Example:      "/tmp/dws-cache",
+	})
+	configmeta.Register(configmeta.ConfigItem{
+		Name:        "DWS_CATALOG_FIXTURE",
+		Category:    configmeta.CategoryDebug,
+		Description: "使用本地 JSON 文件替代在线目录发现",
+		Example:     "/path/to/catalog.json",
+		Hidden:      true,
+	})
+}
 
 // CatalogDegradedReason identifies why catalog discovery returned empty.
 type CatalogDegradedReason string

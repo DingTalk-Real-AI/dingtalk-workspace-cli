@@ -34,8 +34,26 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/validate"
 )
+
+func init() {
+	configmeta.Register(configmeta.ConfigItem{
+		Name:         "DWS_ALLOW_HTTP_ENDPOINTS",
+		Category:     configmeta.CategorySecurity,
+		Description:  "允许非 HTTPS 的 MCP 端点 (仅限 loopback)",
+		DefaultValue: "(禁用)",
+		Example:      "1",
+	})
+	configmeta.Register(configmeta.ConfigItem{
+		Name:         "DWS_TRUSTED_DOMAINS",
+		Category:     configmeta.CategoryNetwork,
+		Description:  "信任的 HTTPS 域名白名单 (逗号分隔，* 信任所有)",
+		DefaultValue: "*.dingtalk.com",
+		Example:      "*.dingtalk.com,custom.example.com",
+	})
+}
 
 const (
 	trustedDomainsEnv     = "DWS_TRUSTED_DOMAINS"

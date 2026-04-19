@@ -14,7 +14,31 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
 )
+
+func init() {
+	configmeta.Register(configmeta.ConfigItem{
+		Name:         "DWS_UPGRADE_URL",
+		Category:     configmeta.CategoryNetwork,
+		Description:  "覆盖 GitHub API 地址 (镜像/测试)",
+		DefaultValue: "https://api.github.com",
+		Example:      "https://mirror.example.com/api",
+	})
+	configmeta.Register(configmeta.ConfigItem{
+		Name:        "GITHUB_TOKEN",
+		Category:    configmeta.CategoryExternal,
+		Description: "GitHub API Token (提升 API 限额)",
+		Sensitive:   true,
+	})
+	configmeta.Register(configmeta.ConfigItem{
+		Name:        "GH_TOKEN",
+		Category:    configmeta.CategoryExternal,
+		Description: "GitHub API Token 备选 (GITHUB_TOKEN 为空时使用)",
+		Sensitive:   true,
+	})
+}
 
 const (
 	gitHubAPIBase = "https://api.github.com"

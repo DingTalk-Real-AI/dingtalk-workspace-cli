@@ -27,7 +27,23 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cache"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
 )
+
+func init() {
+	configmeta.Register(configmeta.ConfigItem{
+		Name:         "DWS_TENANT",
+		Category:     configmeta.CategoryCore,
+		Description:  "缓存分区的租户标识",
+		DefaultValue: "default",
+	})
+	configmeta.Register(configmeta.ConfigItem{
+		Name:         "DWS_AUTH_IDENTITY",
+		Category:     configmeta.CategorySecurity,
+		Description:  "缓存分区的认证身份标识",
+		DefaultValue: "default",
+	})
+}
 
 const (
 	tenantEnv       = "DWS_TENANT"

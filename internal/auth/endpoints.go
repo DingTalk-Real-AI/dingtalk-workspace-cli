@@ -19,8 +19,31 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
+
+func init() {
+	configmeta.Register(configmeta.ConfigItem{
+		Name:         "DWS_CLIENT_ID",
+		Category:     configmeta.CategoryAuth,
+		Description:  "OAuth AppKey (DingTalk 应用凭证)",
+		DefaultValue: "(内置)",
+		Sensitive:    true,
+	})
+	configmeta.Register(configmeta.ConfigItem{
+		Name:         "DWS_CLIENT_SECRET",
+		Category:     configmeta.CategoryAuth,
+		Description:  "OAuth AppSecret (DingTalk 应用凭证)",
+		DefaultValue: "(内置)",
+		Sensitive:    true,
+	})
+	configmeta.Register(configmeta.ConfigItem{
+		Name:        "DWS_CHANNEL",
+		Category:    configmeta.CategoryExternal,
+		Description: "第三方渠道编码 (channelCode)，如 Qoderwork",
+	})
+}
 
 const (
 	// AuthorizeURL is the DingTalk OAuth authorization page.

@@ -176,33 +176,61 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 		_, _ = fmt.Fprintln(p.output(), i18n.T("   请检查网络连接后重试。"))
 		_, _ = fmt.Fprintln(p.output(), "")
 		return nil, fmt.Errorf("%s: %w", i18n.T("检查 CLI 授权状态失败"), authErr)
-	} else if authStatus.Success && !authStatus.Result.CLIAuthEnabled {
-		// CLI auth is disabled - show detailed error with admin info
+	}
+	denialReason := classifyDenialReason(authStatus, os.Getenv("DWS_CHANNEL"))
+	if denialReason != "" {
 		_, _ = fmt.Fprintln(p.output(), "")
-		_, _ = fmt.Fprintln(p.output(), dfRed(i18n.T("⚠️  该组织尚未开启 CLI 数据访问权限")))
-		_, _ = fmt.Fprintln(p.output(), i18n.T("   你所选择的组织管理员尚未开启「允许成员通过 CLI 访问其个人数据」的权限。"))
-		_, _ = fmt.Fprintln(p.output(), "")
+		switch denialReason {
+		case "user_forbidden":
+			_, _ = fmt.Fprintln(p.output(), dfRed(i18n.T("⚠️  该组织已禁止所有成员使用 CLI")))
+			_, _ = fmt.Fprintln(p.output(), "")
+			return nil, errors.New(i18n.T("该组织已禁止所有成员使用 CLI"))
+		case "user_not_allowed":
+			_, _ = fmt.Fprintln(p.output(), dfRed(i18n.T("⚠️  您不在该组织的 CLI 授权人员范围内")))
+			_, _ = fmt.Fprintln(p.output(), i18n.T("   请联系组织管理员将您加入 CLI 授权人员名单。"))
+			_, _ = fmt.Fprintln(p.output(), "")
+			return nil, errors.New(i18n.T("您不在该组织的 CLI 授权人员范围内，请联系组织管理员"))
+		case "channel_not_allowed":
+			ch := os.Getenv("DWS_CHANNEL")
+			_, _ = fmt.Fprintf(p.output(), dfRed(i18n.T("⚠️  当前渠道 %s 未获得该组织授权"))+"\n", ch)
+			_, _ = fmt.Fprintln(p.output(), i18n.T("   请联系组织管理员开通该渠道的访问权限。"))
+			_, _ = fmt.Fprintln(p.output(), "")
+			return nil, fmt.Errorf(i18n.T("当前渠道 %s 未获得该组织授权，请联系组织管理员"), ch)
+		case "channel_required":
+			_, _ = fmt.Fprintln(p.output(), dfRed(i18n.T("⚠️  当前组织已开启渠道管控")))
+			_, _ = fmt.Fprintln(p.output(), i18n.T("   请升级到最新版本的 CLI 后重试。"))
+			_, _ = fmt.Fprintln(p.output(), "")
+			return nil, errors.New(i18n.T("当前组织已开启渠道管控，请升级到最新版本的 CLI 后重试"))
+		case "no_auth":
+			_, _ = fmt.Fprintln(p.output(), dfRed(i18n.T("⚠️  认证已失效")))
+			_, _ = fmt.Fprintln(p.output(), i18n.T("   请执行 dws auth 重新登录。"))
+			_, _ = fmt.Fprintln(p.output(), "")
+			return nil, errors.New(i18n.T("认证已失效，请执行 dws auth 重新登录"))
+		default:
+			// cli_not_enabled or unknown — show existing admin-apply flow
+			_, _ = fmt.Fprintln(p.output(), dfRed(i18n.T("⚠️  该组织尚未开启 CLI 数据访问权限")))
+			_, _ = fmt.Fprintln(p.output(), i18n.T("   你所选择的组织管理员尚未开启「允许成员通过 CLI 访问其个人数据」的权限。"))
+			_, _ = fmt.Fprintln(p.output(), "")
 
-		// Try to get super admin list
-		admins, adminErr := GetSuperAdmins(ctx, tokenData.AccessToken)
-		if adminErr == nil && admins.Success && len(admins.Result) > 0 {
-			// Show up to 3 admins
-			maxAdmins := 3
-			if len(admins.Result) < maxAdmins {
-				maxAdmins = len(admins.Result)
+			admins, adminErr := GetSuperAdmins(ctx, tokenData.AccessToken)
+			if adminErr == nil && admins.Success && len(admins.Result) > 0 {
+				maxAdmins := 3
+				if len(admins.Result) < maxAdmins {
+					maxAdmins = len(admins.Result)
+				}
+				var adminNames []string
+				for i := 0; i < maxAdmins; i++ {
+					adminNames = append(adminNames, admins.Result[i].Name)
+				}
+				_, _ = fmt.Fprintf(p.output(), "   %s%s\n", i18n.T("组织主管理员："), strings.Join(adminNames, "、"))
 			}
-			var adminNames []string
-			for i := 0; i < maxAdmins; i++ {
-				adminNames = append(adminNames, admins.Result[i].Name)
-			}
-			_, _ = fmt.Fprintf(p.output(), "   %s%s\n", i18n.T("组织主管理员："), strings.Join(adminNames, "、"))
+
+			_, _ = fmt.Fprintln(p.output(), i18n.T("   请联系组织主管理员开启后重新登录。"))
+			_, _ = fmt.Fprintln(p.output(), "")
+			_, _ = fmt.Fprintln(p.output(), i18n.T("   管理员操作入口：https://open-dev.dingtalk.com/fe/old#/developerSettings"))
+			_, _ = fmt.Fprintln(p.output(), "")
+			return nil, errors.New(i18n.T("该组织尚未开启 CLI 数据访问权限，请联系管理员开启"))
 		}
-
-		_, _ = fmt.Fprintln(p.output(), i18n.T("   请联系组织主管理员开启后重新登录。"))
-		_, _ = fmt.Fprintln(p.output(), "")
-		_, _ = fmt.Fprintln(p.output(), i18n.T("   管理员操作入口：https://open-dev.dingtalk.com/fe/old#/developerSettings"))
-		_, _ = fmt.Fprintln(p.output(), "")
-		return nil, errors.New(i18n.T("该组织尚未开启 CLI 数据访问权限，请联系管理员开启"))
 	}
 
 	// Save token data with associated client ID for refresh

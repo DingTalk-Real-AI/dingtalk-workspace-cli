@@ -17,8 +17,19 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
+
+func init() {
+	configmeta.Register(configmeta.ConfigItem{
+		Name:         "DWS_CONFIG_DIR",
+		Category:     configmeta.CategoryCore,
+		Description:  "覆盖默认配置目录 (~/.dws)",
+		DefaultValue: "~/.dws",
+		Example:      "/opt/dws/config",
+	})
+}
 
 // Build-time variables injected via ldflags when available.
 var (

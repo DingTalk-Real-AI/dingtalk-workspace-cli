@@ -244,6 +244,194 @@ func TestFullPipelineEndToEnd(t *testing.T) {
 	}
 }
 
+// TestFullFivePhasePipeline exercises all five phases in order:
+// Register → PreParse → PostParse → PreRequest → PostResponse,
+// simulating a complete command lifecycle from registration through
+// response output.
+func TestFullFivePhasePipeline(t *testing.T) {
+	engine := pipeline.NewEngine()
+	engine.RegisterAll(
+		RegisterHandler{},
+		AliasHandler{},
+		StickyHandler{},
+		ParamNameHandler{},
+		ParamValueHandler{},
+		PreRequestHandler{},
+		PostResponseHandler{},
+	)
+
+	// Verify all five phases have handlers.
+	for _, phase := range []pipeline.Phase{
+		pipeline.Register,
+		pipeline.PreParse,
+		pipeline.PostParse,
+		pipeline.PreRequest,
+		pipeline.PostResponse,
+	} {
+		if !engine.HasHandlers(phase) {
+			t.Fatalf("engine missing handlers for phase %v", phase)
+		}
+	}
+
+	// Phase 1: Register — command tree being built.
+	ctx := &pipeline.Context{
+		Command: "aitable",
+	}
+	if err := engine.RunPhase(pipeline.Register, ctx); err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+
+	// Phase 2: PreParse — fix raw argv.
+	ctx.Args = []string{
+		"--userId", "u001",
+		"--pageSize50",
+		"--verbosetrue",
+	}
+	ctx.FlagSpecs = flagSpecs("user-id", "page-size", "verbose")
+
+	if err := engine.RunPhase(pipeline.PreParse, ctx); err != nil {
+		t.Fatalf("PreParse error: %v", err)
+	}
+
+	want := "--user-id u001 --page-size 50 --verbose true"
+	got := strings.Join(ctx.Args, " ")
+	if got != want {
+		t.Errorf("after PreParse: Args = %q, want %q", got, want)
+	}
+	preParseCorrections := len(ctx.Corrections)
+
+	// Phase 3: PostParse — simulate Cobra having parsed the corrected
+	// args into structured params, then normalise values.
+	ctx.Command = "aitable.query_records"
+	ctx.Params = map[string]any{
+		"user_id":   "u001",
+		"page_size": "1,000",
+		"verbose":   "yes",
+	}
+	ctx.Schema = map[string]any{
+		"properties": map[string]any{
+			"user_id":   map[string]any{"type": "string"},
+			"page_size": map[string]any{"type": "integer"},
+			"verbose":   map[string]any{"type": "boolean"},
+		},
+	}
+
+	if err := engine.RunPhase(pipeline.PostParse, ctx); err != nil {
+		t.Fatalf("PostParse error: %v", err)
+	}
+
+	if got := ctx.Params["verbose"]; got != true {
+		t.Errorf("verbose = %v (%T), want true (bool)", got, got)
+	}
+	if got := ctx.Params["page_size"]; got != int64(1000) {
+		t.Errorf("page_size = %v, want 1000", got)
+	}
+	postParseCorrections := len(ctx.Corrections) - preParseCorrections
+	if postParseCorrections != 2 {
+		t.Errorf("PostParse corrections = %d, want 2", postParseCorrections)
+	}
+
+	// Phase 4: PreRequest — inspect final payload before dispatch.
+	ctx.Payload = ctx.Params
+	if err := engine.RunPhase(pipeline.PreRequest, ctx); err != nil {
+		t.Fatalf("PreRequest error: %v", err)
+	}
+	// Verify payload was not corrupted.
+	if ctx.Payload["user_id"] != "u001" {
+		t.Error("PreRequest corrupted Payload")
+	}
+
+	// Phase 5: PostResponse — process response before output.
+	ctx.Response = map[string]any{
+		"records": []any{
+			map[string]any{"id": "rec001", "fields": map[string]any{"name": "test"}},
+		},
+		"total": 1,
+	}
+	if err := engine.RunPhase(pipeline.PostResponse, ctx); err != nil {
+		t.Fatalf("PostResponse error: %v", err)
+	}
+	// Verify response was not corrupted.
+	if ctx.Response["total"] != 1 {
+		t.Error("PostResponse corrupted Response")
+	}
+}
+
+// TestFullFivePhasePipelineWithEngineRun exercises all five phases
+// using Engine.Run (single shot) to verify the ordering is correct
+// end-to-end.
+func TestFullFivePhasePipelineWithEngineRun(t *testing.T) {
+	var seq []string
+
+	engine := pipeline.NewEngine()
+	engine.RegisterAll(
+		&phaseTracker{name: "reg", phase: pipeline.Register, seq: &seq},
+		&phaseTracker{name: "pre-parse", phase: pipeline.PreParse, seq: &seq},
+		&phaseTracker{name: "post-parse", phase: pipeline.PostParse, seq: &seq},
+		&phaseTracker{name: "pre-req", phase: pipeline.PreRequest, seq: &seq},
+		&phaseTracker{name: "post-resp", phase: pipeline.PostResponse, seq: &seq},
+	)
+
+	ctx := &pipeline.Context{Command: "test.tool"}
+	if err := engine.Run(ctx); err != nil {
+		t.Fatalf("Engine.Run error: %v", err)
+	}
+
+	want := "reg,pre-parse,post-parse,pre-req,post-resp"
+	got := strings.Join(seq, ",")
+	if got != want {
+		t.Errorf("phase execution order = %q, want %q", got, want)
+	}
+}
+
+// TestFivePhasePipelineCorrectHandlerCounts verifies that the
+// production-equivalent engine has the expected handler distribution.
+func TestFivePhasePipelineCorrectHandlerCounts(t *testing.T) {
+	engine := pipeline.NewEngine()
+	engine.RegisterAll(
+		RegisterHandler{},
+		AliasHandler{},
+		StickyHandler{},
+		ParamNameHandler{},
+		ParamValueHandler{},
+		PreRequestHandler{},
+		PostResponseHandler{},
+	)
+
+	tests := []struct {
+		phase pipeline.Phase
+		want  int
+	}{
+		{pipeline.Register, 1},
+		{pipeline.PreParse, 3},
+		{pipeline.PostParse, 1},
+		{pipeline.PreRequest, 1},
+		{pipeline.PostResponse, 1},
+	}
+	for _, tt := range tests {
+		if got := len(engine.Handlers(tt.phase)); got != tt.want {
+			t.Errorf("Handlers(%v) = %d, want %d", tt.phase, got, tt.want)
+		}
+	}
+	if got := engine.HandlerCount(); got != 7 {
+		t.Errorf("HandlerCount = %d, want 7", got)
+	}
+}
+
+// phaseTracker is a test helper that records its name when Handle is called.
+type phaseTracker struct {
+	name  string
+	phase pipeline.Phase
+	seq   *[]string
+}
+
+func (h *phaseTracker) Name() string          { return h.name }
+func (h *phaseTracker) Phase() pipeline.Phase { return h.phase }
+func (h *phaseTracker) Handle(_ *pipeline.Context) error {
+	*h.seq = append(*h.seq, h.name)
+	return nil
+}
+
 // TestPreParseDoesNotBreakValidArgs verifies that valid, correctly
 // formatted args pass through the pipeline without modification.
 func TestPreParseDoesNotBreakValidArgs(t *testing.T) {

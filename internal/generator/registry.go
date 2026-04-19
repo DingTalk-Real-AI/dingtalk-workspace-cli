@@ -20,8 +20,26 @@ import (
 	"strings"
 
 	registryassets "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/registry"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
 	"gopkg.in/yaml.v3"
 )
+
+func init() {
+	configmeta.Register(configmeta.ConfigItem{
+		Name:        "DWS_SKILLS_PERSONAS_FILE",
+		Category:    configmeta.CategoryDebug,
+		Description: "覆盖内置 personas.yaml 的本地文件路径",
+		Example:     "/path/to/personas.yaml",
+		Hidden:      true,
+	})
+	configmeta.Register(configmeta.ConfigItem{
+		Name:        "DWS_SKILLS_RECIPES_FILE",
+		Category:    configmeta.CategoryDebug,
+		Description: "覆盖内置 recipes.yaml 的本地文件路径",
+		Example:     "/path/to/recipes.yaml",
+		Hidden:      true,
+	})
+}
 
 const (
 	PersonaRegistryPathEnv = "DWS_SKILLS_PERSONAS_FILE"

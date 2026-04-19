@@ -408,3 +408,33 @@ func TestPrintExecutionError_RawStderrError_takes_precedence_over_JSON_mode(t *t
 		t.Fatalf("stderr = %q, want raw PAT JSON", stderr.String())
 	}
 }
+
+// simulateExecuteWithPanic mirrors the recovery pattern in Execute():
+// named return + defer recover → exitCode = 5 on panic.
+func simulateExecuteWithPanic(doPanic bool) (exitCode int) {
+	defer func() {
+		if r := recover(); r != nil {
+			exitCode = 5
+		}
+	}()
+	if doPanic {
+		panic("test panic")
+	}
+	return 0
+}
+
+func TestExecute_panic_recovery_returns_exit_5(t *testing.T) {
+	t.Parallel()
+	code := simulateExecuteWithPanic(true)
+	if code != 5 {
+		t.Fatalf("panic recovery exitCode = %d, want 5", code)
+	}
+}
+
+func TestExecute_no_panic_returns_0(t *testing.T) {
+	t.Parallel()
+	code := simulateExecuteWithPanic(false)
+	if code != 0 {
+		t.Fatalf("no-panic exitCode = %d, want 0", code)
+	}
+}

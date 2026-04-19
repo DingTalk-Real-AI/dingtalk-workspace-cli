@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"sort"
 	"strconv"
 	"strings"
@@ -232,6 +233,27 @@ func newProductCommand(product ir.CanonicalProduct, runner executor.Runner, engi
 	for _, tool := range product.Tools {
 		cmd.AddCommand(newToolCommand(product, tool, runner, engine))
 	}
+
+	// Register phase: notify the pipeline that a product and its
+	// tools have been added to the command tree. This runs once at
+	// startup (not per-request) and enables handlers to inspect or
+	// enrich the registered command surface.
+	if engine != nil && engine.HasHandlers(pipeline.Register) {
+		pctx := &pipeline.Context{
+			Command: product.ID,
+		}
+		// Best-effort — registration errors are logged but do not
+		// prevent the CLI from starting.
+		if pipeErr := engine.RunPhase(pipeline.Register, pctx); pipeErr != nil {
+			slog.Debug("pipeline register phase", "product", product.ID, "error", pipeErr)
+		} else {
+			slog.Debug("pipeline register",
+				"product", product.ID,
+				"tool_count", len(product.Tools),
+			)
+		}
+	}
+
 	return cmd
 }
 
@@ -387,6 +409,16 @@ func newToolCommand(product ir.CanonicalProduct, tool ir.ToolDescriptor, runner 
 					return pipeErr
 				}
 				params = pctx.Params
+				for _, c := range pctx.Corrections {
+					slog.Debug("pipeline correction",
+						"phase", "post-parse",
+						"handler", c.Handler,
+						"kind", c.Kind,
+						"field", c.Field,
+						"original", c.Original,
+						"corrected", c.Corrected,
+					)
+				}
 			}
 
 			if err := ValidateInputSchema(params, tool.InputSchema); err != nil {
@@ -411,6 +443,10 @@ func newToolCommand(product ir.CanonicalProduct, tool ir.ToolDescriptor, runner 
 					return pipeErr
 				}
 				params = pctx.Params
+				slog.Debug("pipeline pre-request",
+					"command", tool.CanonicalPath,
+					"param_count", len(params),
+				)
 			}
 
 			invocation := executor.NewInvocation(product, tool, params)
@@ -433,6 +469,10 @@ func newToolCommand(product ir.CanonicalProduct, tool ir.ToolDescriptor, runner 
 					return pipeErr
 				}
 				result.Response = pctx.Response
+				slog.Debug("pipeline post-response",
+					"command", tool.CanonicalPath,
+					"has_response", result.Response != nil,
+				)
 			}
 
 			if warning := lifecycleWarning(product); warning != "" {

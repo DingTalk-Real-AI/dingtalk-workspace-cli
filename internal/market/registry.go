@@ -108,6 +108,7 @@ type CLIGroupDef struct {
 // CLIToolOverride maps an MCP tool to a CLI command with flag aliases and transforms.
 type CLIToolOverride struct {
 	CLIName      string                     `json:"cliName"`
+	Description  string                     `json:"description,omitempty"`
 	Group        string                     `json:"group,omitempty"`
 	IsSensitive  bool                       `json:"isSensitive,omitempty"`
 	Hidden       bool                       `json:"hidden,omitempty"`
@@ -181,22 +182,23 @@ type DetailLocator struct {
 }
 
 type ServerDescriptor struct {
-	Key                       string        `json:"key"`
-	SourceServerID            string        `json:"source_server_id,omitempty"`
-	DisplayName               string        `json:"display_name"`
-	Description               string        `json:"description,omitempty"`
-	Endpoint                  string        `json:"endpoint"`
-	SchemaURI                 string        `json:"schema_uri,omitempty"`
-	NegotiatedProtocolVersion string        `json:"negotiated_protocol_version,omitempty"`
-	UpdatedAt                 time.Time     `json:"updated_at,omitempty"`
-	PublishedAt               time.Time     `json:"published_at,omitempty"`
-	Status                    string        `json:"status,omitempty"`
-	Source                    string        `json:"source"`
-	Degraded                  bool          `json:"degraded"`
-	DetailLocator             DetailLocator `json:"detail_locator,omitempty"`
-	Lifecycle                 LifecycleInfo `json:"lifecycle,omitempty"`
-	CLI                       CLIOverlay    `json:"cli,omitempty"`
-	HasCLIMeta                bool          `json:"has_cli_meta,omitempty"`
+	Key                       string            `json:"key"`
+	SourceServerID            string            `json:"source_server_id,omitempty"`
+	DisplayName               string            `json:"display_name"`
+	Description               string            `json:"description,omitempty"`
+	Endpoint                  string            `json:"endpoint"`
+	SchemaURI                 string            `json:"schema_uri,omitempty"`
+	NegotiatedProtocolVersion string            `json:"negotiated_protocol_version,omitempty"`
+	UpdatedAt                 time.Time         `json:"updated_at,omitempty"`
+	PublishedAt               time.Time         `json:"published_at,omitempty"`
+	Status                    string            `json:"status,omitempty"`
+	Source                    string            `json:"source"`
+	Degraded                  bool              `json:"degraded"`
+	DetailLocator             DetailLocator     `json:"detail_locator,omitempty"`
+	Lifecycle                 LifecycleInfo     `json:"lifecycle,omitempty"`
+	CLI                       CLIOverlay        `json:"cli,omitempty"`
+	HasCLIMeta                bool              `json:"has_cli_meta,omitempty"`
+	AuthHeaders               map[string]string `json:"auth_headers,omitempty"` // plugin-level auth headers for third-party MCP servers
 }
 
 func NewClient(baseURL string, httpClient *http.Client) *Client {

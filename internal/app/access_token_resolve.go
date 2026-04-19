@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
 // resolveAccessTokenFromDir loads OAuth then legacy token from configDir, applying
@@ -62,7 +63,7 @@ func ResolveAuxiliaryAccessToken(ctx context.Context, configDir, explicitToken s
 		if tok := resolveRuntimeAuthToken(ctx, ""); tok != "" {
 			return tok, nil
 		}
-		return "", fmt.Errorf("no credentials found, run: dws auth login")
+		return "", noCredentialsError()
 	}
 	tok, err := resolveAccessTokenFromDir(ctx, configDir)
 	if err != nil {
@@ -71,5 +72,12 @@ func ResolveAuxiliaryAccessToken(ctx context.Context, configDir, explicitToken s
 	if tok != "" {
 		return tok, nil
 	}
-	return "", fmt.Errorf("no credentials found, run: dws auth login")
+	return "", noCredentialsError()
+}
+
+func noCredentialsError() error {
+	if edition.Get().IsEmbedded {
+		return fmt.Errorf("认证信息已失效，请重新认证")
+	}
+	return fmt.Errorf("no credentials found, run: dws auth login")
 }

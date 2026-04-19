@@ -33,8 +33,50 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/safety"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
+
+func init() {
+	configmeta.Register(configmeta.ConfigItem{
+		Name:        "DWS_RUNTIME_CONTENT_SCAN",
+		Category:    configmeta.CategoryRuntime,
+		Description: "启用 MCP 响应内容安全扫描",
+		Example:     "true",
+	})
+	configmeta.Register(configmeta.ConfigItem{
+		Name:        "DWS_RUNTIME_CONTENT_SCAN_ENFORCE",
+		Category:    configmeta.CategoryRuntime,
+		Description: "内容安全扫描发现问题时阻断响应",
+		Example:     "true",
+	})
+	configmeta.Register(configmeta.ConfigItem{
+		Name:        "DWS_RUNTIME_CONTENT_SCAN_REPORT",
+		Category:    configmeta.CategoryRuntime,
+		Description: "在 JSON 输出中包含安全扫描报告",
+		Example:     "true",
+	})
+	configmeta.Register(configmeta.ConfigItem{
+		Name:        "DINGTALK_AGENT",
+		Category:    configmeta.CategoryExternal,
+		Description: "MCP 请求 x-dingtalk-agent 头",
+	})
+	configmeta.Register(configmeta.ConfigItem{
+		Name:        "DINGTALK_TRACE_ID",
+		Category:    configmeta.CategoryExternal,
+		Description: "MCP 请求 x-dingtalk-trace-id 头",
+	})
+	configmeta.Register(configmeta.ConfigItem{
+		Name:        "DINGTALK_SESSION_ID",
+		Category:    configmeta.CategoryExternal,
+		Description: "MCP 请求 x-dingtalk-session-id 头",
+	})
+	configmeta.Register(configmeta.ConfigItem{
+		Name:        "DINGTALK_MESSAGE_ID",
+		Category:    configmeta.CategoryExternal,
+		Description: "MCP 请求 x-dingtalk-message-id 头",
+	})
+}
 
 const (
 	runtimeContentScanEnv             = "DWS_RUNTIME_CONTENT_SCAN"
@@ -46,6 +88,9 @@ const (
 	envDingtalkTraceID   = "DINGTALK_TRACE_ID"
 	envDingtalkSessionID = "DINGTALK_SESSION_ID"
 	envDingtalkMessageID = "DINGTALK_MESSAGE_ID"
+
+	// Environment variables for third-party channel integration
+	envDWSChannel = "DWS_CHANNEL"
 )
 
 func newCommandRunnerWithFlags(loader cli.CatalogLoader, flags *GlobalFlags) executor.Runner {
@@ -131,6 +176,11 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 }
 
 func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, invocation executor.Invocation) (result executor.Result, retErr error) {
+	// Route stdio:// endpoints to the local StdioClient — no HTTP, no auth.
+	if IsStdioEndpoint(endpoint) {
+		return r.executeStdioInvocation(ctx, invocation)
+	}
+
 	invokeStart := time.Now()
 	execID := generateExecutionID()
 	r.transport.ExecutionId = execID
@@ -160,7 +210,17 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 			retErr == nil, time.Since(invokeStart), errCat, errReason)
 	}()
 
-	authToken := r.resolveAuthToken(ctx)
+	// Check if this product has plugin-level auth credentials registered.
+	// If so, use the plugin's token instead of the default DingTalk OAuth token.
+	// This allows third-party MCP servers (e.g. Bailian) to use their own API keys.
+	pluginAuth, hasPluginAuth := LookupPluginAuth(invocation.CanonicalProduct)
+
+	authToken := ""
+	if hasPluginAuth {
+		authToken = pluginAuth.Token
+	} else {
+		authToken = r.resolveAuthToken(ctx)
+	}
 
 	var timeoutSec int
 	if r.globalFlags != nil {
@@ -209,7 +269,15 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		)
 	}
 
-	tc := r.transport.WithAuth(authToken, resolveIdentityHeaders())
+	var tc *transport.Client
+	if hasPluginAuth {
+		// Use plugin-level auth: inject the plugin's token and trust its domains.
+		tc = r.transport.WithAuth(authToken, pluginAuth.ExtraHeaders)
+		tc.TrustedDomains = pluginAuth.TrustedDomains
+	} else {
+		// Default path: use DingTalk OAuth token with identity headers.
+		tc = r.transport.WithAuth(authToken, resolveIdentityHeaders())
+	}
 
 	callCtx := ctx
 	if r.globalFlags != nil && r.globalFlags.Timeout > 0 {
@@ -224,7 +292,10 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	if err != nil {
 		if isAuthError(err) {
 			if fn := edition.Get().OnAuthError; fn != nil {
-				_ = fn(defaultConfigDir(), err)
+				if overrideErr := fn(defaultConfigDir(), err); overrideErr != nil {
+					captureRuntimeFailure(invocation, err, overrideErr)
+					return executor.Result{}, overrideErr
+				}
 			}
 		}
 		captureRuntimeFailure(invocation, err, err)
@@ -280,12 +351,78 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	return executor.Result{Invocation: invocation, Response: response}, nil
 }
 
+// executeStdioInvocation dispatches a tool call through a local StdioClient
+// subprocess instead of the HTTP transport. This is used for plugin stdio
+// servers whose endpoints use the stdio:// scheme.
+func (r *runtimeRunner) executeStdioInvocation(ctx context.Context, invocation executor.Invocation) (executor.Result, error) {
+	if invocation.DryRun {
+		return executor.Result{
+			Invocation: invocation,
+			Response: map[string]any{
+				"dry_run":   true,
+				"transport": "stdio",
+				"request":   executor.ToolCallRequest(invocation.Tool, invocation.Params),
+				"note":      "execution skipped by --dry-run",
+			},
+		}, nil
+	}
+
+	client, ok := LookupStdioClient(invocation.CanonicalProduct)
+	if !ok {
+		return executor.Result{}, apperrors.NewInternal(
+			fmt.Sprintf("stdio client not found for %q", invocation.CanonicalProduct))
+	}
+
+	callCtx := ctx
+	if r.globalFlags != nil && r.globalFlags.Timeout > 0 {
+		var cancel context.CancelFunc
+		callCtx, cancel = context.WithTimeout(ctx, time.Duration(r.globalFlags.Timeout)*time.Second)
+		defer cancel()
+	}
+
+	callResult, err := client.CallTool(callCtx, invocation.Tool, invocation.Params)
+	if err != nil {
+		return executor.Result{}, apperrors.NewAPI(
+			fmt.Sprintf("stdio call failed: %v", err),
+			apperrors.WithOperation("tools/call"),
+			apperrors.WithReason("stdio_error"),
+		)
+	}
+
+	if callResult.IsError {
+		return executor.Result{}, apperrors.NewAPI(
+			extractMCPErrorMessage(callResult),
+			apperrors.WithOperation("tools/call"),
+			apperrors.WithReason("mcp_tool_error"),
+			apperrors.WithServerKey(invocation.CanonicalProduct),
+		)
+	}
+
+	invocation.Implemented = true
+	return executor.Result{
+		Invocation: invocation,
+		Response: map[string]any{
+			"transport": "stdio",
+			"content":   callResult.Content,
+		},
+	}, nil
+}
+
 func (r *runtimeRunner) resolveAuthToken(ctx context.Context) string {
 	explicitToken := ""
 	if r != nil && r.globalFlags != nil {
 		explicitToken = r.globalFlags.Token
 	}
-	return resolveRuntimeAuthToken(ctx, explicitToken)
+	if token := strings.TrimSpace(explicitToken); token != "" {
+		return token
+	}
+	if tp := edition.Get().TokenProvider; tp != nil {
+		token, _ := tp(ctx, func() (string, error) {
+			return resolveAccessTokenFromDir(ctx, defaultConfigDir())
+		})
+		return token
+	}
+	return getCachedRuntimeToken(ctx)
 }
 
 func resolveRuntimeAuthToken(ctx context.Context, explicitToken string) string {
@@ -407,6 +544,12 @@ func resolveIdentityHeaders() map[string]string {
 			headers[k] = v
 		}
 	}
+
+	// Inject third-party channel headers
+	if v := os.Getenv(envDWSChannel); v != "" {
+		headers["x-dws-channel"] = v
+	}
+
 	if fn := edition.Get().MergeHeaders; fn != nil {
 		headers = fn(headers)
 	}

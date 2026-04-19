@@ -157,6 +157,66 @@ func DirectRuntimeProductIDs() map[string]bool {
 	return ids
 }
 
+// AppendDynamicServer adds a single server descriptor to the existing
+// dynamic server registry without replacing the current entries. This
+// is used by the plugin loader to inject plugin servers alongside
+// Market-discovered servers.
+func AppendDynamicServer(server market.ServerDescriptor) {
+	dynamicMu.Lock()
+	defer dynamicMu.Unlock()
+
+	if dynamicEndpoints == nil {
+		dynamicEndpoints = make(map[string]string)
+	}
+	if dynamicProducts == nil {
+		dynamicProducts = make(map[string]bool)
+	}
+	if dynamicAliases == nil {
+		dynamicAliases = make(map[string]string)
+	}
+	if dynamicToolEndpoints == nil {
+		dynamicToolEndpoints = make(map[string]string)
+	}
+
+	if server.CLI.Skip {
+		return
+	}
+
+	id := strings.TrimSpace(server.CLI.ID)
+	endpoint := strings.TrimSpace(server.Endpoint)
+	if id != "" && endpoint != "" {
+		dynamicEndpoints[id] = endpoint
+		dynamicProducts[id] = true
+	}
+	cmd := strings.TrimSpace(server.CLI.Command)
+	if cmd != "" && cmd != id && endpoint != "" {
+		dynamicEndpoints[cmd] = endpoint
+		dynamicProducts[cmd] = true
+	}
+	for _, alias := range server.CLI.Aliases {
+		alias = strings.TrimSpace(alias)
+		if alias != "" && endpoint != "" {
+			dynamicEndpoints[alias] = endpoint
+			dynamicProducts[alias] = true
+			dynamicAliases[alias] = id
+		}
+	}
+	if endpoint != "" {
+		for _, tool := range server.CLI.Tools {
+			toolName := strings.TrimSpace(tool.Name)
+			if toolName != "" {
+				dynamicToolEndpoints[toolName] = endpoint
+			}
+		}
+		for toolName := range server.CLI.ToolOverrides {
+			toolName = strings.TrimSpace(toolName)
+			if toolName != "" {
+				dynamicToolEndpoints[toolName] = endpoint
+			}
+		}
+	}
+}
+
 func normalizeDirectRuntimeProductID(productID string) string {
 	dynamicMu.RLock()
 	da := dynamicAliases

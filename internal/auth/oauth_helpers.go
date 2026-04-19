@@ -21,6 +21,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
@@ -919,14 +920,235 @@ const notEnabledHTML = `<!doctype html>
   </body>
 </html>`
 
+const accessDeniedHTML = `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>钉钉 CLI</title>
+    <style>
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        margin: 0;
+        background: #f5f5f5;
+        padding: 20px;
+      }
+      .card {
+        height: 600px;
+        width: 480px;
+        border-radius: 16px;
+        background: #ffffff;
+        box-sizing: border-box;
+        border: 1px solid #f2f2f6;
+        box-shadow: 0px 2px 4px 0px rgba(0, 0, 0, 0.12);
+        padding: 32px 24px 24px;
+        text-align: center;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+      }
+      .lock-icon {
+        width: 120px;
+        height: 120px;
+        margin: 0 auto;
+        object-fit: contain;
+        display: block;
+      }
+      h1 {
+        margin: 8px 0 0;
+        font-family:
+          "PingFang SC",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          "Helvetica Neue",
+          Arial,
+          sans-serif;
+        font-size: 18px;
+        font-weight: 600;
+        line-height: 44px;
+        text-align: center;
+        letter-spacing: normal;
+        color: #181c1f;
+      }
+      p {
+        margin: 0;
+        font-family:
+          "PingFang SC",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          "Helvetica Neue",
+          Arial,
+          sans-serif;
+        font-size: 14px;
+        font-weight: normal;
+        line-height: 21px;
+        text-align: center;
+        letter-spacing: normal;
+        color: rgba(24, 28, 31, 0.6);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <img
+        class="lock-icon"
+        src="https://img.alicdn.com/imgextra/i4/O1CN01fS3xxz1vbzZSGjbe0_!!6000000006192-2-tps-480-480.png"
+        alt="lock icon"
+      />
+      <h1>无权限访问</h1>
+      <p>您不在该组织的 CLI 授权人员范围内。请联系组织管理员将您加入授权名单。此页面可以关闭。</p>
+    </div>
+  </body>
+</html>`
+
+const channelDeniedHTML = `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>钉钉 CLI</title>
+    <style>
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        margin: 0;
+        background: #f5f5f5;
+        padding: 20px;
+      }
+      .card {
+        height: 600px;
+        width: 480px;
+        border-radius: 16px;
+        background: #ffffff;
+        box-sizing: border-box;
+        border: 1px solid #f2f2f6;
+        box-shadow: 0px 2px 4px 0px rgba(0, 0, 0, 0.12);
+        padding: 32px 24px 24px;
+        text-align: center;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+      }
+      .lock-icon {
+        width: 120px;
+        height: 120px;
+        margin: 0 auto;
+        object-fit: contain;
+        display: block;
+      }
+      h1 {
+        margin: 8px 0 0;
+        font-family:
+          "PingFang SC",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          "Helvetica Neue",
+          Arial,
+          sans-serif;
+        font-size: 18px;
+        font-weight: 600;
+        line-height: 44px;
+        text-align: center;
+        letter-spacing: normal;
+        color: #181c1f;
+      }
+      p {
+        margin: 0;
+        font-family:
+          "PingFang SC",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          "Helvetica Neue",
+          Arial,
+          sans-serif;
+        font-size: 14px;
+        font-weight: normal;
+        line-height: 21px;
+        text-align: center;
+        letter-spacing: normal;
+        color: rgba(24, 28, 31, 0.6);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <img
+        class="lock-icon"
+        src="https://img.alicdn.com/imgextra/i4/O1CN01fS3xxz1vbzZSGjbe0_!!6000000006192-2-tps-480-480.png"
+        alt="lock icon"
+      />
+      <h1>渠道未授权</h1>
+      <p>当前渠道未获得该组织授权，或组织已开启渠道管控。请联系组织管理员开通渠道访问权限，或升级到最新版本的 CLI。此页面可以关闭。</p>
+    </div>
+  </body>
+</html>`
+
 // CLIAuthStatus represents the response from /cli/cliAuthEnabled API.
 type CLIAuthStatus struct {
-	Success   bool   `json:"success"`
-	ErrorCode string `json:"errorCode,omitempty"`
-	ErrorMsg  string `json:"errorMsg,omitempty"`
-	Result    struct {
-		CLIAuthEnabled bool `json:"cliAuthEnabled"`
-	} `json:"result"`
+	Success   bool           `json:"success"`
+	ErrorCode string         `json:"errorCode,omitempty"`
+	ErrorMsg  string         `json:"errorMsg,omitempty"`
+	Result    *CLIAuthResult `json:"result"`
+}
+
+// CLIAuthResult holds the business data returned by /cli/cliAuthEnabled.
+// The server computes cliAuthEnabled by considering the org switch, userScope,
+// and channelScope together; the CLI uses it as-is.
+type CLIAuthResult struct {
+	CLIAuthEnabled  bool     `json:"cliAuthEnabled"`
+	UserScope       string   `json:"userScope,omitempty"`       // "all" | "specified" | "forbidden"
+	AllowedUsers    []string `json:"allowedUsers,omitempty"`    // staffId list when userScope="specified"
+	ChannelScope    string   `json:"channelScope,omitempty"`    // "all" | "specified"
+	AllowedChannels []string `json:"allowedChannels,omitempty"` // channelCode list when channelScope="specified"
+}
+
+// classifyDenialReason inspects a CLIAuthStatus response and returns a machine-readable
+// denial reason string. Returns "" when access is granted.
+func classifyDenialReason(status *CLIAuthStatus, currentChannel string) string {
+	if status.ErrorCode == "CHANNEL_REQUIRED" {
+		return "channel_required"
+	}
+	if status.ErrorCode == "NO_AUTH" {
+		return "no_auth"
+	}
+	if status.Result == nil || !status.Success {
+		return "unknown"
+	}
+	if status.Result.CLIAuthEnabled {
+		return ""
+	}
+	// cliAuthEnabled=false — infer reason from auxiliary fields (same priority as server)
+	if status.Result.UserScope == "forbidden" {
+		return "user_forbidden"
+	}
+	if status.Result.UserScope == "specified" {
+		return "user_not_allowed"
+	}
+	if status.Result.ChannelScope == "specified" && currentChannel != "" {
+		return "channel_not_allowed"
+	}
+	return "cli_not_enabled"
 }
 
 // SuperAdmin represents a corp super admin.
@@ -985,6 +1207,9 @@ func (p *OAuthProvider) doCheckCLIAuthEnabled(ctx context.Context, accessToken s
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("x-user-access-token", accessToken)
+	if ch := os.Getenv("DWS_CHANNEL"); ch != "" {
+		req.Header.Set("x-dws-channel", ch)
+	}
 
 	client := p.httpClient
 	if client == nil {
