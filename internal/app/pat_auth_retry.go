@@ -137,8 +137,7 @@ func extractPatScopeError(err error) *PatScopeError {
 	}
 }
 
-// PrintPatAuthError prints a human-readable PAT authorization error,
-// matching the lark-cli style output.
+// PrintPatAuthError prints a human-readable PAT authorization error.
 func PrintPatAuthError(w io.Writer, scopeErr *PatScopeError) {
 	bold := color.New(color.Bold).SprintFunc()
 	cyan := color.New(color.FgCyan).SprintFunc()
