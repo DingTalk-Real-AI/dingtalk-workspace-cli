@@ -489,8 +489,29 @@ func (l *Loader) RemovePlugin(name string, keepData bool) error {
 		_ = os.RemoveAll(dataDir)
 	}
 
-	l.setPluginEnabled(name, false)
+	l.purgePluginFromSettings(name)
 	return nil
+}
+
+// purgePluginFromSettings removes all traces of a plugin from settings.json:
+// its enabled flag and any persisted pluginConfigs entry. Called after
+// RemovePlugin succeeds so settings.json does not retain dangling state for
+// plugins that no longer exist on disk.
+func (l *Loader) purgePluginFromSettings(name string) {
+	settings := l.loadSettings()
+	changed := false
+	if _, ok := settings.EnabledPlugins[name]; ok {
+		delete(settings.EnabledPlugins, name)
+		changed = true
+	}
+	if _, ok := settings.PluginConfigs[name]; ok {
+		delete(settings.PluginConfigs, name)
+		changed = true
+	}
+	if !changed {
+		return
+	}
+	l.saveSettings(settings)
 }
 
 // SetEnabled enables or disables a plugin in settings.json.
