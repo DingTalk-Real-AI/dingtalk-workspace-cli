@@ -363,9 +363,15 @@ func handlePatAuthCheck(
 	// Inject clientId/clientSecret from PAT response as runtime credentials
 	// so that subsequent device flow auth uses the server-assigned app identity.
 	if patData.Data.ClientID != "" {
-		authpkg.SetClientIDFromMCP(patData.Data.ClientID)
 		if patData.Data.ClientSecret != "" {
+			// When both clientId and clientSecret are provided, use direct mode
+			// (DingTalk API) rather than MCP proxy — the MCP proxy does not hold
+			// the secret for this particular app.
+			authpkg.SetClientID(patData.Data.ClientID)
 			authpkg.SetClientSecret(patData.Data.ClientSecret)
+		} else {
+			// No clientSecret — rely on MCP proxy to manage the secret server-side.
+			authpkg.SetClientIDFromMCP(patData.Data.ClientID)
 		}
 
 		// Persist clientId (and optionally secret) to ~/.dws/app.json so that
