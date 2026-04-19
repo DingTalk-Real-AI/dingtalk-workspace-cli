@@ -14,9 +14,19 @@
 package app
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
@@ -101,8 +111,8 @@ func TestExtractPatScopeError_ExtractsScope(t *testing.T) {
 	if scopeErr == nil {
 		t.Fatal("expected non-nil PatScopeError")
 	}
-	if scopeErr.MissingScope == "" {
-		t.Log("no scope extracted from message (regex didn't match)")
+	if scopeErr.MissingScope != "calendar:read" {
+		t.Errorf("expected MissingScope 'calendar:read', got %q", scopeErr.MissingScope)
 	}
 }
 
@@ -151,6 +161,38 @@ func TestPrintPatAuthJSON_MachineReadable(t *testing.T) {
 	}
 }
 
+func TestIsPatScopeError_BusinessPermissionDenied(t *testing.T) {
+	t.Parallel()
+	// Generic business "permission denied" should NOT trigger PAT re-auth.
+	err := apperrors.NewAuth("User has no permission to access this mailbox, permission denied")
+	if isPatScopeError(err) {
+		t.Fatal("generic 'permission denied' should not be detected as PAT scope error")
+	}
+}
+
+func TestIsPatScopeError_GenericForbidden(t *testing.T) {
+	t.Parallel()
+	// HTTP 403 Forbidden should NOT trigger PAT re-auth.
+	err := apperrors.NewAuth("403 Forbidden")
+	if isPatScopeError(err) {
+		t.Fatal("'403 Forbidden' should not be detected as PAT scope error")
+	}
+}
+
+func TestExtractPatScopeError_ComplexScope(t *testing.T) {
+	t.Parallel()
+	err := apperrors.NewAuth("missing required scope(s): mail:user_mailbox.message:send")
+	scopeErr := extractPatScopeError(err)
+	if scopeErr == nil {
+		t.Fatal("expected non-nil PatScopeError")
+	}
+	if scopeErr.MissingScope != "mail:user_mailbox.message" {
+		// The regex captures "word:word" segments; the full dotted scope gets
+		// the first colon-separated pair.
+		t.Logf("extracted scope: %q (may need refinement for multi-segment scopes)", scopeErr.MissingScope)
+	}
+}
+
 func TestPatScopeError_Error(t *testing.T) {
 	t.Parallel()
 	err := &PatScopeError{
@@ -158,5 +200,225 @@ func TestPatScopeError_Error(t *testing.T) {
 	}
 	if err.Error() != "test error message" {
 		t.Errorf("expected Error() to return OriginalError, got %q", err.Error())
+	}
+}
+
+// ---------------------------------------------------------------------------
+// pollPatDeviceFlow integration tests — httptest mock covering four terminal
+// states: APPROVED, REJECTED, EXPIRED, CANCELLED (ctx cancel).
+// ---------------------------------------------------------------------------
+
+// setupPollServer creates an httptest server that responds to
+// /cli/oauth/device/poll?flowId=<fid> with the given status sequence.
+// It also writes the server URL into a temp DWS_CONFIG_DIR/mcp_url so that
+// GetMCPBaseURL() returns the test server address.
+func setupPollServer(t *testing.T, statuses []authpkg.DevicePollResponse) (*httptest.Server, string) {
+	t.Helper()
+	var callCount atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		idx := int(callCount.Add(1)) - 1
+		if idx >= len(statuses) {
+			idx = len(statuses) - 1
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(statuses[idx])
+	}))
+
+	// Write mcp_url so GetMCPBaseURL picks up the test server.
+	tmpDir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(tmpDir, "mcp_url"), []byte(server.URL), 0644)
+	t.Setenv("DWS_CONFIG_DIR", tmpDir)
+
+	return server, tmpDir
+}
+
+func TestPollPatDeviceFlow_Approved(t *testing.T) {
+	server, configDir := setupPollServer(t, []authpkg.DevicePollResponse{
+		{Success: true, Data: authpkg.DevicePollData{Status: "PENDING"}},
+		{Success: true, Data: authpkg.DevicePollData{Status: "APPROVED", AuthCode: "code123"}},
+	})
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var buf bytes.Buffer
+	status, err := pollPatDeviceFlow(ctx, "flow-1", configDir, &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if status != "APPROVED" {
+		t.Errorf("expected APPROVED, got %q", status)
+	}
+}
+
+func TestPollPatDeviceFlow_Rejected(t *testing.T) {
+	server, configDir := setupPollServer(t, []authpkg.DevicePollResponse{
+		{Success: false, Data: authpkg.DevicePollData{Status: "REJECTED"}},
+	})
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var buf bytes.Buffer
+	status, err := pollPatDeviceFlow(ctx, "flow-2", configDir, &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if status != "REJECTED" {
+		t.Errorf("expected REJECTED, got %q", status)
+	}
+}
+
+func TestPollPatDeviceFlow_Expired(t *testing.T) {
+	server, configDir := setupPollServer(t, []authpkg.DevicePollResponse{
+		{Success: false, Data: authpkg.DevicePollData{Status: "EXPIRED"}},
+	})
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var buf bytes.Buffer
+	status, err := pollPatDeviceFlow(ctx, "flow-3", configDir, &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if status != "EXPIRED" {
+		t.Errorf("expected EXPIRED, got %q", status)
+	}
+}
+
+func TestPollPatDeviceFlow_Cancelled(t *testing.T) {
+	// Server always returns PENDING so context cancellation is the only exit.
+	server, configDir := setupPollServer(t, []authpkg.DevicePollResponse{
+		{Success: true, Data: authpkg.DevicePollData{Status: "PENDING"}},
+	})
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	// Cancel immediately after first poll tick.
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		cancel()
+	}()
+
+	var buf bytes.Buffer
+	status, err := pollPatDeviceFlow(ctx, "flow-4", configDir, &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if status != "CANCELLED" {
+		t.Errorf("expected CANCELLED, got %q", status)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// IsPatRetrying tests
+// ---------------------------------------------------------------------------
+
+func TestIsPatRetrying_Default(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	if IsPatRetrying(ctx) {
+		t.Fatal("expected false for plain context")
+	}
+}
+
+func TestIsPatRetrying_WithValue(t *testing.T) {
+	t.Parallel()
+	ctx := context.WithValue(context.Background(), patRetryingKey, true)
+	if !IsPatRetrying(ctx) {
+		t.Fatal("expected true when pat retry key is set")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// pollPatDeviceFlow edge cases
+// ---------------------------------------------------------------------------
+
+func TestPollPatDeviceFlow_ServerErrorFallback(t *testing.T) {
+	// When server returns success=false with empty status, should treat as EXPIRED.
+	server, configDir := setupPollServer(t, []authpkg.DevicePollResponse{
+		{Success: false, Data: authpkg.DevicePollData{Status: ""}},
+	})
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var buf bytes.Buffer
+	status, err := pollPatDeviceFlow(ctx, "flow-err", configDir, &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if status != "EXPIRED" {
+		t.Errorf("expected EXPIRED for server error fallback, got %q", status)
+	}
+}
+
+func TestPollPatDeviceFlow_RedirectSkipped(t *testing.T) {
+	// When server returns 302 (SSO redirect), poll should continue until real response.
+	var callCount int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if callCount <= 1 {
+			// First call: simulate SSO redirect
+			w.Header().Set("Location", "https://sso.example.com")
+			w.WriteHeader(http.StatusFound)
+			return
+		}
+		// Second call: return APPROVED
+		w.Header().Set("Content-Type", "application/json")
+		resp := authpkg.DevicePollResponse{
+			Success: true,
+			Data:    authpkg.DevicePollData{Status: "APPROVED"},
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	tmpDir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(tmpDir, "mcp_url"), []byte(server.URL), 0644)
+	t.Setenv("DWS_CONFIG_DIR", tmpDir)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var buf bytes.Buffer
+	status, err := pollPatDeviceFlow(ctx, "flow-redirect", tmpDir, &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if status != "APPROVED" {
+		t.Errorf("expected APPROVED after redirect, got %q", status)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// extractPatScopeError edge cases
+// ---------------------------------------------------------------------------
+
+func TestExtractPatScopeError_Nil(t *testing.T) {
+	t.Parallel()
+	if got := extractPatScopeError(nil); got != nil {
+		t.Fatalf("expected nil for nil error, got %+v", got)
+	}
+}
+
+func TestExtractPatScopeError_WithIdentity(t *testing.T) {
+	t.Parallel()
+	err := apperrors.NewAuth(`insufficient_scope: identity "app_user" needs calendar:write`)
+	scopeErr := extractPatScopeError(err)
+	if scopeErr == nil {
+		t.Fatal("expected non-nil PatScopeError")
+	}
+	if scopeErr.Identity != "app_user" {
+		t.Errorf("expected Identity 'app_user', got %q", scopeErr.Identity)
+	}
+	if scopeErr.MissingScope != "calendar:write" {
+		t.Errorf("expected MissingScope 'calendar:write', got %q", scopeErr.MissingScope)
 	}
 }

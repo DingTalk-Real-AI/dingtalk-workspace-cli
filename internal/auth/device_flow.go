@@ -600,5 +600,3 @@ func isInvalidGrantError(err error) bool {
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "invalid_grant") || (strings.Contains(msg, "code") && strings.Contains(msg, "expired"))
 }
-
-

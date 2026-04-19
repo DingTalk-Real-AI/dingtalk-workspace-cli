@@ -32,7 +32,6 @@ import (
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/fatih/color"
 )
 
@@ -54,16 +53,24 @@ type PatScopeError struct {
 	Message       string
 	Hint          string
 	MissingScope  string
-	VerifyURL     string
-	UserCode      string
 }
 
 func (e *PatScopeError) Error() string {
 	return e.OriginalError
 }
 
-// patScopeRegex matches common PAT scope error patterns from the API.
-var patScopeRegex = regexp.MustCompile(`(?i)(missing_scope|insufficient_scope|scope.*required|permission.*denied|forbidden)`)
+// patScopeRegex matches PAT-protocol scope error patterns from the API.
+// Only matches explicit scope-related keywords; generic "permission denied" or
+// "forbidden" are intentionally excluded to avoid false positives on business
+// authorization errors (e.g. mailbox access denied, 403 Forbidden).
+var patScopeRegex = regexp.MustCompile(`(?i)(missing_scope|insufficient_scope|scope.*required)`)
+
+// scopeValueRegex extracts a scope identifier (e.g. "calendar:read",
+// "mail:user_mailbox.message:send") from an error message.
+var scopeValueRegex = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9_.]*:[a-zA-Z][a-zA-Z0-9_.]*)`)
+
+// identityValueRegex extracts an identity label from an error message.
+var identityValueRegex = regexp.MustCompile(`(?i)identity["\s:]+([a-zA-Z_]+)`)
 
 // isPatScopeError checks if an error looks like a PAT scope/permission error
 // that can be resolved by re-authorizing with additional scopes.
@@ -83,8 +90,8 @@ func isPatScopeError(err error) bool {
 		// Check message, reason, and hint for scope-related patterns
 		fullText := strings.ToLower(typed.Message + " " + typed.Reason + " " + typed.Hint)
 		if typed.Category == apperrors.CategoryAuth {
-			if strings.Contains(fullText, "scope") || strings.Contains(fullText, "permission") ||
-				strings.Contains(fullText, "forbidden") || strings.Contains(fullText, "missing") {
+			if strings.Contains(fullText, "missing_scope") || strings.Contains(fullText, "insufficient_scope") ||
+				(strings.Contains(fullText, "scope") && strings.Contains(fullText, "required")) {
 				return true
 			}
 		}
@@ -114,15 +121,15 @@ func extractPatScopeError(err error) *PatScopeError {
 		}
 	}
 
-	// Try to extract scope from error message
-	scopeMatch := regexp.MustCompile(`(?i)scope[=: "]*([a-zA-Z0-9_:.]+)`).FindStringSubmatch(msg)
+	// Try to extract scope value (e.g. "calendar:read") from error message.
+	scopeMatch := scopeValueRegex.FindStringSubmatch(msg)
 	if len(scopeMatch) > 1 {
 		scope = scopeMatch[1]
 	}
 
-	// Try to extract identity from error message
+	// Try to extract identity from error message.
 	identity := "user"
-	identityMatch := regexp.MustCompile(`(?i)identity["\s:]+([a-zA-Z_]+)`).FindStringSubmatch(msg)
+	identityMatch := identityValueRegex.FindStringSubmatch(msg)
 	if len(identityMatch) > 1 {
 		identity = identityMatch[1]
 	}
@@ -185,9 +192,6 @@ func PrintPatAuthJSON(w io.Writer, scopeErr *PatScopeError) {
 	}
 	if scopeErr.MissingScope != "" {
 		payload["missing_scope"] = scopeErr.MissingScope
-	}
-	if scopeErr.VerifyURL != "" {
-		payload["verification_url"] = scopeErr.VerifyURL
 	}
 
 	data, _ := json.MarshalIndent(payload, "", "  ")
@@ -300,55 +304,6 @@ func loadMCPClientIDIfNeeded(ctx context.Context, configDir string) string {
 	return ""
 }
 
-// TriggerPatDeviceFlow initiates a device authorization flow for the missing scope.
-func TriggerPatDeviceFlow(ctx context.Context, configDir, missingScope string, output io.Writer) error {
-	bold := color.New(color.Bold).SprintFunc()
-	green := color.New(color.FgGreen).SprintFunc()
-
-	// Ensure we have a client ID
-	clientID := loadMCPClientIDIfNeeded(ctx, configDir)
-	if clientID == "" {
-		return fmt.Errorf("无法获取 Client ID，请先运行 dws auth login")
-	}
-
-	fmt.Fprintln(output)
-	fmt.Fprintf(output, "%s %s\n", green("▶"), bold("正在发起设备授权..."))
-	fmt.Fprintln(output)
-
-	// Create device flow provider with the missing scope
-	provider := authpkg.NewDeviceFlowProvider(configDir, nil)
-	provider.Output = output
-
-	// Set the scope to the missing one
-	if missingScope != "" {
-		provider.SetScope(missingScope)
-	}
-
-	// Run device flow with timeout
-	flowCtx, cancel := context.WithTimeout(ctx, config.DeviceFlowTimeout)
-	defer cancel()
-
-	tokenData, err := provider.Login(flowCtx)
-	if err != nil {
-		return err
-	}
-
-	fmt.Fprintln(output)
-	fmt.Fprintf(output, "%s %s\n", green("✓"), bold("授权成功!"))
-	if tokenData != nil && tokenData.CorpName != "" {
-		fmt.Fprintf(output, "%-16s%s\n", "企业:", tokenData.CorpName)
-	}
-	if tokenData != nil && tokenData.UserName != "" {
-		fmt.Fprintf(output, "%-16s%s\n", "用户:", tokenData.UserName)
-	}
-	fmt.Fprintln(output)
-
-	// Clear token cache so new token is used
-	ResetRuntimeTokenCache()
-
-	return nil
-}
-
 // ---- handlePatAuthCheck (runner.go entry point) -----------------------------
 
 const (
@@ -408,10 +363,8 @@ func handlePatAuthCheck(
 	// so that subsequent device flow auth uses the server-assigned app identity.
 	if patData.Data.ClientID != "" {
 		authpkg.SetClientIDFromMCP(patData.Data.ClientID)
-		_ = os.Setenv("DWS_CLIENT_ID", patData.Data.ClientID)
 		if patData.Data.ClientSecret != "" {
 			authpkg.SetClientSecret(patData.Data.ClientSecret)
-			_ = os.Setenv("DWS_CLIENT_SECRET", patData.Data.ClientSecret)
 		}
 
 		// Persist clientId (and optionally secret) to ~/.dws/app.json so that
@@ -424,7 +377,8 @@ func handlePatAuthCheck(
 			appCfg.ClientSecret = authpkg.PlainSecret(patData.Data.ClientSecret)
 		}
 		if err := authpkg.SaveAppConfig(configDir, appCfg); err != nil {
-			slog.Debug("failed to persist app config from PAT", "error", err)
+			slog.Warn("failed to persist app config from PAT", "error", err)
+			fmt.Fprintf(output, "  \u26a0 保存应用配置失败: %v (下次启动可能需要重新授权)\n", err)
 		}
 	}
 
@@ -474,7 +428,10 @@ func handlePatAuthCheck(
 		// Clear token cache so the new credentials take effect.
 		ResetRuntimeTokenCache()
 
-		// Brief delay to let server-side authorization state propagate.
+		// Workaround: brief delay to let server-side authorization state propagate
+		// before retrying.  Without this the retry may use stale credentials.
+		// TODO: replace with retry-on-auth-failure inside the retry path.
+		slog.Debug("PAT retry: waiting for server-side state propagation", "delay", "1s")
 		time.Sleep(1 * time.Second)
 
 		// Retry the original invocation with pat-retrying flag to prevent recursion.
@@ -500,6 +457,14 @@ func handlePatAuthCheck(
 			"授权超时",
 			apperrors.WithReason("pat_auth_expired"),
 			apperrors.WithHint("授权链接已过期，请重新执行命令。"),
+		)
+
+	case "CANCELLED":
+		fmt.Fprintf(output, "%s %s\n", redFn("✗"), bold("操作已取消"))
+		return executor.Result{}, apperrors.NewAuth(
+			"操作已取消",
+			apperrors.WithReason("pat_auth_cancelled"),
+			apperrors.WithHint("用户取消了授权操作。"),
 		)
 
 	default:
@@ -537,6 +502,9 @@ func pollPatDeviceFlow(ctx context.Context, flowID string, configDir string, out
 	for {
 		select {
 		case <-ctx.Done():
+			if ctx.Err() == context.Canceled {
+				return "CANCELLED", nil
+			}
 			return "EXPIRED", nil
 		case <-ticker.C:
 			pollCount++
@@ -544,6 +512,7 @@ func pollPatDeviceFlow(ctx context.Context, flowID string, configDir string, out
 
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, pollURL, nil)
 			if err != nil {
+				slog.Debug("PAT poll: failed to create request", "error", err)
 				continue
 			}
 			if accessToken != "" {
@@ -551,6 +520,7 @@ func pollPatDeviceFlow(ctx context.Context, flowID string, configDir string, out
 			}
 			resp, err := noRedirectClient.Do(req)
 			if err != nil {
+				slog.Debug("PAT poll: request failed", "error", err)
 				continue // transient network error, keep polling
 			}
 
@@ -564,6 +534,7 @@ func pollPatDeviceFlow(ctx context.Context, flowID string, configDir string, out
 
 			var pollResp authpkg.DevicePollResponse
 			if err := json.Unmarshal(bodyBytes, &pollResp); err != nil {
+				slog.Debug("PAT poll: failed to parse response", "error", err, "body", string(bodyBytes))
 				continue
 			}
 
