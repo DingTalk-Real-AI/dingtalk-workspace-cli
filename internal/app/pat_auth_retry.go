@@ -414,7 +414,7 @@ func handlePatAuthCheck(
 	pollCtx, cancel := context.WithTimeout(ctx, patPollTimeout)
 	defer cancel()
 
-	status, err := pollPatDeviceFlow(pollCtx, patData.Data.FlowID, configDir, output)
+	status, authCode, err := pollPatDeviceFlow(pollCtx, patData.Data.FlowID, configDir, output)
 	if err != nil {
 		fmt.Fprintf(output, "%s 轮询授权状态失败: %v\n", redFn("✗"), err)
 		return executor.Result{}, patErr
@@ -425,12 +425,28 @@ func handlePatAuthCheck(
 		fmt.Fprintf(output, "%s %s\n", greenFn("✓"), bold("授权成功!"))
 		fmt.Fprintln(output)
 
+		// Exchange authCode for a fresh access token (mirrors device_flow loginOnce).
+		if authCode != "" {
+			slog.Debug("PAT retry: exchanging authCode for token", "hasCode", true)
+			tokenData, exchErr := authpkg.ExchangeCodeForToken(ctx, configDir, authCode)
+			if exchErr != nil {
+				slog.Warn("PAT retry: exchangeCode failed, retrying with existing token", "error", exchErr)
+				fmt.Fprintf(output, "  %s 换取新 token 失败: %v (将使用现有凭证重试)\n", yellowFn("⚠"), exchErr)
+			} else {
+				if err := authpkg.SaveTokenData(configDir, tokenData); err != nil {
+					slog.Warn("PAT retry: failed to save new token", "error", err)
+					fmt.Fprintf(output, "  %s 保存新 token 失败: %v\n", yellowFn("⚠"), err)
+				} else {
+					slog.Debug("PAT retry: token refreshed and saved")
+				}
+			}
+		}
+
 		// Clear token cache so the new credentials take effect.
 		ResetRuntimeTokenCache()
 
 		// Workaround: brief delay to let server-side authorization state propagate
 		// before retrying.  Without this the retry may use stale credentials.
-		// TODO: replace with retry-on-auth-failure inside the retry path.
 		slog.Debug("PAT retry: waiting for server-side state propagation", "delay", "1s")
 		time.Sleep(1 * time.Second)
 
@@ -475,8 +491,8 @@ func handlePatAuthCheck(
 
 // pollPatDeviceFlow polls the PAT device flow status endpoint until a terminal
 // state (APPROVED/REJECTED/EXPIRED) is reached or the context is cancelled.
-// Returns the final status string.
-func pollPatDeviceFlow(ctx context.Context, flowID string, configDir string, output io.Writer) (string, error) {
+// Returns the final status string and the authCode (non-empty only on APPROVED).
+func pollPatDeviceFlow(ctx context.Context, flowID string, configDir string, output io.Writer) (string, string, error) {
 	pollURL := fmt.Sprintf("%s%s?flowId=%s",
 		authpkg.GetMCPBaseURL(), authpkg.DevicePollPath, url.QueryEscape(flowID))
 
@@ -503,9 +519,9 @@ func pollPatDeviceFlow(ctx context.Context, flowID string, configDir string, out
 		select {
 		case <-ctx.Done():
 			if ctx.Err() == context.Canceled {
-				return "CANCELLED", nil
+				return "CANCELLED", "", nil
 			}
-			return "EXPIRED", nil
+			return "EXPIRED", "", nil
 		case <-ticker.C:
 			pollCount++
 			fmt.Fprintf(output, "\r%s [%d] 等待授权中...          ", dim("⟳"), pollCount)
@@ -540,16 +556,19 @@ func pollPatDeviceFlow(ctx context.Context, flowID string, configDir string, out
 
 			status := pollResp.Data.Status
 			switch status {
-			case "APPROVED", "REJECTED", "EXPIRED":
+			case "APPROVED":
 				fmt.Fprintln(output) // clear the polling line
-				return status, nil
+				return status, pollResp.Data.AuthCode, nil
+			case "REJECTED", "EXPIRED":
+				fmt.Fprintln(output) // clear the polling line
+				return status, "", nil
 			case "PENDING":
 				// keep polling
 			default:
 				if status == "" && !pollResp.Success {
 					// Server error or flow not found — treat as expired
 					fmt.Fprintln(output)
-					return "EXPIRED", nil
+					return "EXPIRED", "", nil
 				}
 			}
 		}

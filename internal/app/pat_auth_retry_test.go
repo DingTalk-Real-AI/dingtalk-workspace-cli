@@ -244,12 +244,15 @@ func TestPollPatDeviceFlow_Approved(t *testing.T) {
 	defer cancel()
 
 	var buf bytes.Buffer
-	status, err := pollPatDeviceFlow(ctx, "flow-1", configDir, &buf)
+	status, authCode, err := pollPatDeviceFlow(ctx, "flow-1", configDir, &buf)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if status != "APPROVED" {
 		t.Errorf("expected APPROVED, got %q", status)
+	}
+	if authCode != "code123" {
+		t.Errorf("expected authCode 'code123', got %q", authCode)
 	}
 }
 
@@ -263,12 +266,15 @@ func TestPollPatDeviceFlow_Rejected(t *testing.T) {
 	defer cancel()
 
 	var buf bytes.Buffer
-	status, err := pollPatDeviceFlow(ctx, "flow-2", configDir, &buf)
+	status, authCode, err := pollPatDeviceFlow(ctx, "flow-2", configDir, &buf)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if status != "REJECTED" {
 		t.Errorf("expected REJECTED, got %q", status)
+	}
+	if authCode != "" {
+		t.Errorf("expected empty authCode for REJECTED, got %q", authCode)
 	}
 }
 
@@ -282,12 +288,15 @@ func TestPollPatDeviceFlow_Expired(t *testing.T) {
 	defer cancel()
 
 	var buf bytes.Buffer
-	status, err := pollPatDeviceFlow(ctx, "flow-3", configDir, &buf)
+	status, authCode, err := pollPatDeviceFlow(ctx, "flow-3", configDir, &buf)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if status != "EXPIRED" {
 		t.Errorf("expected EXPIRED, got %q", status)
+	}
+	if authCode != "" {
+		t.Errorf("expected empty authCode for EXPIRED, got %q", authCode)
 	}
 }
 
@@ -306,12 +315,15 @@ func TestPollPatDeviceFlow_Cancelled(t *testing.T) {
 	}()
 
 	var buf bytes.Buffer
-	status, err := pollPatDeviceFlow(ctx, "flow-4", configDir, &buf)
+	status, authCode, err := pollPatDeviceFlow(ctx, "flow-4", configDir, &buf)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if status != "CANCELLED" {
 		t.Errorf("expected CANCELLED, got %q", status)
+	}
+	if authCode != "" {
+		t.Errorf("expected empty authCode for CANCELLED, got %q", authCode)
 	}
 }
 
@@ -350,12 +362,15 @@ func TestPollPatDeviceFlow_ServerErrorFallback(t *testing.T) {
 	defer cancel()
 
 	var buf bytes.Buffer
-	status, err := pollPatDeviceFlow(ctx, "flow-err", configDir, &buf)
+	status, authCode, err := pollPatDeviceFlow(ctx, "flow-err", configDir, &buf)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if status != "EXPIRED" {
 		t.Errorf("expected EXPIRED for server error fallback, got %q", status)
+	}
+	if authCode != "" {
+		t.Errorf("expected empty authCode for server error, got %q", authCode)
 	}
 }
 
@@ -388,7 +403,7 @@ func TestPollPatDeviceFlow_RedirectSkipped(t *testing.T) {
 	defer cancel()
 
 	var buf bytes.Buffer
-	status, err := pollPatDeviceFlow(ctx, "flow-redirect", tmpDir, &buf)
+	status, _, err := pollPatDeviceFlow(ctx, "flow-redirect", tmpDir, &buf)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
