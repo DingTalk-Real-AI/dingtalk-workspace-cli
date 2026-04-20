@@ -4,8 +4,9 @@ DWS Skill Test Runner
 Validates AI Agent's ability to translate natural language prompts into DWS CLI commands.
 """
 
-import re
 import json
+import re
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional
 from collections import defaultdict
@@ -404,8 +405,12 @@ def generate_report(results: list[dict]) -> str:
     return '\n'.join(report)
 
 def main():
-    # Read the test file
-    with open('/Users/tianlei.qjb/Documents/my_python_project/cli/test/skill_tests.md', 'r', encoding='utf-8') as f:
+    test_dir = Path(__file__).resolve().parent
+    test_cases_path = test_dir / 'skill_tests.md'
+    results_path = test_dir / 'skill_tests_results.md'
+
+    # Read the test file from the repo instead of a developer-local absolute path.
+    with open(test_cases_path, 'r', encoding='utf-8') as f:
         content = f.read()
     
     # Parse test cases
@@ -421,8 +426,8 @@ def main():
     # Generate report
     report = generate_report(results)
     
-    # Write results
-    with open('/Users/tianlei.qjb/Documents/my_python_project/cli/test/skill_tests_results.md', 'w', encoding='utf-8') as f:
+    # Write results next to the test cases so the script stays portable.
+    with open(results_path, 'w', encoding='utf-8') as f:
         f.write(report)
     
     print(f"\nResults written to skill_tests_results.md")

@@ -28,3 +28,5 @@ credentials*
 plans
 _docs
 dws.zip
+*.code-workspace
+/dingtalk-workspace.zip
