@@ -603,4 +603,39 @@ func TestHandlePatAuthCheck_EmptyFlowID_FallsBackToPATError(t *testing.T) {
 	if _, ok := err.(*apperrors.PATError); !ok {
 		t.Errorf("expected *PATError, got %T: %v", err, err)
 	}
+	if got := strings.TrimSpace(buf.String()); got != "" {
+		t.Fatalf("expected no human-readable output for raw PAT passthrough, got %q", got)
+	}
+}
+
+func TestHandlePatAuthCheck_EmptyFlowID_LegacyErrorCode_NoOutput(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", tmpDir)
+
+	mock := &mockRunner{
+		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
+			t.Fatal("runner should not be called when flowId is empty")
+			return executor.Result{}, nil
+		},
+	}
+
+	runner := &runtimeRunner{fallback: mock}
+	patErr := &apperrors.PATError{RawJSON: `{"error_code":"PAT_LOW_RISK_NO_PERMISSION","data":{"clientId":"test-client-id"}}`}
+
+	ctx := context.Background()
+	var buf bytes.Buffer
+	_, err := handlePatAuthCheck(ctx, runner, executor.Invocation{
+		CanonicalProduct: "test",
+		Tool:             "test_tool",
+	}, patErr, tmpDir, &buf)
+
+	if err == nil {
+		t.Fatal("expected PATError when flowId is empty")
+	}
+	if _, ok := err.(*apperrors.PATError); !ok {
+		t.Errorf("expected *PATError, got %T: %v", err, err)
+	}
+	if got := strings.TrimSpace(buf.String()); got != "" {
+		t.Fatalf("expected no output for legacy error_code passthrough, got %q", got)
+	}
 }

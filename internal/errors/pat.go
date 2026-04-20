@@ -65,6 +65,17 @@ func IsPATNoPermissionCode(code string) bool {
 	return patNoPermissionCodes[code]
 }
 
+// getPATErrorCode extracts a PAT error code from a map.
+// Supports legacy error_code alongside code and errorCode.
+func getPATErrorCode(body map[string]any) (string, bool) {
+	for _, key := range []string{"code", "errorCode", "error_code"} {
+		if code, ok := body[key].(string); ok && patNoPermissionCodes[code] {
+			return code, true
+		}
+	}
+	return "", false
+}
+
 // ---- DWS gateway auth errors (shared between PAT & general auth) ----------
 
 // dwsGatewayErrors is the set of DWS gateway-level auth error codes.
@@ -124,10 +135,8 @@ func ClassifyToolResultContent(content map[string]any) error {
 			WithHint(authExpiredHint()),
 		)
 	}
-	for _, key := range []string{"code", "errorCode"} {
-		if code, ok := content[key].(string); ok && patNoPermissionCodes[code] {
-			return &PATError{RawJSON: cleanPATJSON(content, code)}
-		}
+	if code, ok := getPATErrorCode(content); ok {
+		return &PATError{RawJSON: cleanPATJSON(content, code)}
 	}
 	return nil
 }
@@ -158,10 +167,8 @@ func ClassifyMCPResponseText(text string) error {
 		)
 	}
 
-	for _, key := range []string{"code", "errorCode"} {
-		if code, ok := body[key].(string); ok && patNoPermissionCodes[code] {
-			return &PATError{RawJSON: cleanPATJSON(body, code)}
-		}
+	if code, ok := getPATErrorCode(body); ok {
+		return &PATError{RawJSON: cleanPATJSON(body, code)}
 	}
 
 	if isBusinessError(body) {
@@ -247,11 +254,9 @@ func cleanPATJSON(body map[string]any, code string) string {
 // Content map for PAT permission codes and auth-required codes.  Returns a
 // non-nil *PATError when the content carries a recognised PAT/auth error.
 func ClassifyPatAuthCheck(content map[string]any) *PATError {
-	for _, key := range []string{"code", "errorCode"} {
-		if code, ok := content[key].(string); ok {
-			if patNoPermissionCodes[code] || patAuthRequiredCodes[code] {
-				return &PATError{RawJSON: cleanPATJSON(content, code)}
-			}
+	for _, key := range []string{"code", "errorCode", "error_code"} {
+		if code, ok := content[key].(string); ok && (patNoPermissionCodes[code] || patAuthRequiredCodes[code]) {
+			return &PATError{RawJSON: cleanPATJSON(content, code)}
 		}
 	}
 	return nil

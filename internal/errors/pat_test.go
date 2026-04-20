@@ -234,6 +234,25 @@ func TestClassifyToolResultContent_PATPermission(t *testing.T) {
 	}
 }
 
+func TestClassifyToolResultContent_PATPermissionLegacyErrorCode(t *testing.T) {
+	t.Parallel()
+	content := map[string]any{
+		"error_code": "PAT_LOW_RISK_NO_PERMISSION",
+		"data":       map[string]any{"desc": "需要授权"},
+	}
+	err := ClassifyToolResultContent(content)
+	if err == nil {
+		t.Fatal("expected non-nil error for legacy error_code PAT permission")
+	}
+	var patErr *PATError
+	if !stderrors.As(err, &patErr) {
+		t.Fatalf("expected *PATError, got %T", err)
+	}
+	if !strings.Contains(patErr.RawJSON, "PAT_LOW_RISK_NO_PERMISSION") {
+		t.Errorf("RawJSON should contain PAT_LOW_RISK_NO_PERMISSION, got: %s", patErr.RawJSON)
+	}
+}
+
 func TestClassifyToolResultContent_NoError(t *testing.T) {
 	t.Parallel()
 	content := map[string]any{"success": true, "data": "ok"}
@@ -294,6 +313,22 @@ func TestClassifyMCPResponseText_PATPermission(t *testing.T) {
 	}
 }
 
+func TestClassifyMCPResponseText_PATPermissionLegacyErrorCode(t *testing.T) {
+	t.Parallel()
+	text := `{"error_code":"PAT_MEDIUM_RISK_NO_PERMISSION","data":{"desc":"legacy"}}`
+	err := ClassifyMCPResponseText(text)
+	if err == nil {
+		t.Fatal("expected non-nil error")
+	}
+	var patErr *PATError
+	if !stderrors.As(err, &patErr) {
+		t.Fatalf("expected *PATError, got %T", err)
+	}
+	if !strings.Contains(patErr.RawJSON, "PAT_MEDIUM_RISK_NO_PERMISSION") {
+		t.Errorf("RawJSON should contain legacy code, got: %s", patErr.RawJSON)
+	}
+}
+
 func TestClassifyMCPResponseText_BusinessError(t *testing.T) {
 	t.Parallel()
 	text := `{"success":false,"errorMsg":"搜索内容不能为空"}`
@@ -342,6 +377,18 @@ func TestClassifyPatAuthCheck_PATNoPermission(t *testing.T) {
 	}
 	if !strings.Contains(patErr.RawJSON, "PAT_NO_PERMISSION") {
 		t.Errorf("RawJSON should contain code, got: %s", patErr.RawJSON)
+	}
+}
+
+func TestClassifyPatAuthCheck_LegacyErrorCode(t *testing.T) {
+	t.Parallel()
+	content := map[string]any{"error_code": "PAT_HIGH_RISK_NO_PERMISSION", "data": map[string]any{"flowId": "f1"}}
+	patErr := ClassifyPatAuthCheck(content)
+	if patErr == nil {
+		t.Fatal("expected non-nil *PATError for legacy error_code")
+	}
+	if !strings.Contains(patErr.RawJSON, "PAT_HIGH_RISK_NO_PERMISSION") {
+		t.Errorf("RawJSON should contain PAT_HIGH_RISK_NO_PERMISSION, got: %s", patErr.RawJSON)
 	}
 }
 

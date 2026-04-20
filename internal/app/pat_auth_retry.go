@@ -362,6 +362,7 @@ func handlePatAuthCheck(
 
 	// Inject clientId/clientSecret from PAT response as runtime credentials
 	// so that subsequent device flow auth uses the server-assigned app identity.
+	var appCfg *authpkg.AppConfig
 	if patData.Data.ClientID != "" {
 		if patData.Data.ClientSecret != "" {
 			// When both clientId and clientSecret are provided, use direct mode
@@ -377,12 +378,24 @@ func handlePatAuthCheck(
 		// Persist clientId (and optionally secret) to ~/.dws/app.json so that
 		// future process invocations can load it at startup and populate
 		// DWS_CLIENT_ID env before the first MCP request.
-		appCfg := &authpkg.AppConfig{
+		appCfg = &authpkg.AppConfig{
 			ClientID: patData.Data.ClientID,
 		}
 		if patData.Data.ClientSecret != "" {
 			appCfg.ClientSecret = authpkg.PlainSecret(patData.Data.ClientSecret)
 		}
+	}
+
+	// If no flowId, the host expects a raw PAT JSON passthrough. Do not emit
+	// any human-readable output before returning the original PAT error.
+	if patData.Data.FlowID == "" {
+		if appCfg != nil {
+			_ = authpkg.SaveAppConfig(configDir, appCfg)
+		}
+		return executor.Result{}, patErr
+	}
+
+	if appCfg != nil {
 		if err := authpkg.SaveAppConfig(configDir, appCfg); err != nil {
 			slog.Warn("failed to persist app config from PAT", "error", err)
 			fmt.Fprintf(output, "  \u26a0 保存应用配置失败: %v (下次启动可能需要重新授权)\n", err)
@@ -405,12 +418,6 @@ func handlePatAuthCheck(
 		fmt.Fprintf(output, "  %s %s\n\n", dim("🔗"), cyan(patData.Data.URI))
 		// Best-effort browser open.
 		_ = tryOpenBrowser(patData.Data.URI)
-	}
-
-	// If no flowId, we can't poll — fall back to returning PATError for host-app.
-	if patData.Data.FlowID == "" {
-		fmt.Fprintln(output)
-		return executor.Result{}, patErr
 	}
 
 	// Poll the device flow status until user authorizes, rejects, or timeout.
