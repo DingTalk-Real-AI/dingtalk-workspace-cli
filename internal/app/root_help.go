@@ -5,6 +5,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -13,6 +14,26 @@ func configureRootHelp(root *cobra.Command) {
 	if root == nil {
 		return
 	}
+
+	// Replace the cobra-default English help command with a localized one so
+	// that both its listing short (shown in `dws --help`) and its own
+	// `dws help --help` long text follow the active locale.
+	root.SetHelpCommand(&cobra.Command{
+		Use:   "help [command]",
+		Short: i18n.T("查看任意命令的帮助信息"),
+		Long: i18n.T("显示任意命令的帮助文案。\n" +
+			"用法：dws help [命令路径] 查看完整说明。"),
+		DisableAutoGenTag: true,
+		Run: func(c *cobra.Command, args []string) {
+			target, _, err := c.Root().Find(args)
+			if target == nil || err != nil {
+				c.Root().HelpFunc()(c.Root(), args)
+				return
+			}
+			target.InitDefaultHelpFlag()
+			_ = target.Help()
+		},
+	})
 
 	defaultHelpFunc := root.HelpFunc()
 	root.SetHelpFunc(func(cmd *cobra.Command, args []string) {

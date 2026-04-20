@@ -20,13 +20,14 @@ import (
 	"strings"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin"
 	"github.com/spf13/cobra"
 )
 
 func newPluginCommand() *cobra.Command {
-	pluginCmd := newPlaceholderParent("plugin", "Manage plugins")
+	pluginCmd := newPlaceholderParent("plugin", i18n.T("插件管理"))
 
 	pluginCmd.AddCommand(
 		newPluginListCommand(),
@@ -48,7 +49,7 @@ func newPluginCommand() *cobra.Command {
 func newPluginListCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "list",
-		Short:             "List installed plugins",
+		Short:             i18n.T("列出已安装的插件"),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			loader := plugin.NewLoader(RawVersion())
@@ -82,7 +83,7 @@ func newPluginListCommand() *cobra.Command {
 func newPluginInstallCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "install",
-		Short: "Install a plugin",
+		Short: i18n.T("安装插件"),
 		Example: `  dws plugin install --dir ./conference
   dws plugin install --git https://github.com/DingTalk-Real-AI/conference.git`,
 		DisableAutoGenTag: true,
@@ -122,7 +123,7 @@ func newPluginInstallCommand() *cobra.Command {
 func newPluginInfoCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:               "info <name>",
-		Short:             "Show plugin details",
+		Short:             i18n.T("查看插件详情"),
 		Args:              cobra.ExactArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -152,7 +153,7 @@ func newPluginInfoCommand() *cobra.Command {
 func newPluginEnableCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:               "enable <name>",
-		Short:             "Enable a plugin",
+		Short:             i18n.T("启用插件"),
 		Args:              cobra.ExactArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -169,7 +170,7 @@ func newPluginEnableCommand() *cobra.Command {
 func newPluginDisableCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:               "disable <name>",
-		Short:             "Disable a plugin",
+		Short:             i18n.T("禁用插件"),
 		Args:              cobra.ExactArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -186,7 +187,7 @@ func newPluginDisableCommand() *cobra.Command {
 func newPluginRemoveCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "remove <name>",
-		Short:             "Remove an installed plugin",
+		Short:             i18n.T("卸载已安装的插件"),
 		Args:              cobra.ExactArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -208,7 +209,7 @@ func newPluginRemoveCommand() *cobra.Command {
 func newPluginValidateCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:               "validate <dir>",
-		Short:             "Validate a plugin.json",
+		Short:             i18n.T("校验 plugin.json"),
 		Args:              cobra.ExactArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -229,7 +230,7 @@ func newPluginValidateCommand() *cobra.Command {
 func newPluginCreateCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create <name>",
-		Short: "Scaffold a new plugin directory",
+		Short: i18n.T("脚手架生成新插件目录"),
 		Example: `  dws plugin create my-tool
   dws plugin create my-tool --description "My awesome tool"`,
 		Args:              cobra.ExactArgs(1),
@@ -351,7 +352,7 @@ Use this skill when the user mentions:
 func newPluginDevCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "dev <dir>",
-		Short: "Register a local directory as a dev plugin",
+		Short: i18n.T("将本地目录注册为开发态插件"),
 		Long: `Registers a plugin from a local source directory for development.
 The plugin is loaded directly from the source directory on next CLI invocation,
 without copying files to ~/.dws/plugins/. Use 'dws plugin dev --off <name>'
@@ -405,7 +406,7 @@ to unregister.`,
 }
 
 func newPluginConfigCommand() *cobra.Command {
-	configCmd := newPlaceholderParent("config", "Manage plugin configuration")
+	configCmd := newPlaceholderParent("config", i18n.T("管理插件配置"))
 	configCmd.AddCommand(
 		newPluginConfigSetCommand(),
 		newPluginConfigGetCommand(),
@@ -418,7 +419,7 @@ func newPluginConfigCommand() *cobra.Command {
 func newPluginConfigSetCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "set <plugin-name> <key> <value>",
-		Short: "Set a plugin config value",
+		Short: i18n.T("设置插件配置项"),
 		Long: `Persistently set a configuration value for a plugin.
 The value is stored in ~/.dws/settings.json and automatically injected
 as an environment variable when the plugin is loaded.
@@ -456,7 +457,7 @@ over values stored in settings.json.`,
 func newPluginConfigGetCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:               "get <plugin-name> <key>",
-		Short:             "Get a plugin config value",
+		Short:             i18n.T("读取插件配置项"),
 		Args:              cobra.ExactArgs(2),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -477,7 +478,7 @@ func newPluginConfigGetCommand() *cobra.Command {
 func newPluginConfigListCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "list <plugin-name>",
-		Short:             "List all config values for a plugin",
+		Short:             i18n.T("列出插件所有配置项"),
 		Args:              cobra.ExactArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -562,7 +563,7 @@ func newPluginConfigListCommand() *cobra.Command {
 func newPluginConfigUnsetCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:               "unset <plugin-name> <key>",
-		Short:             "Remove a plugin config value",
+		Short:             i18n.T("删除插件配置项"),
 		Args:              cobra.ExactArgs(2),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -606,7 +607,7 @@ func maskSensitiveValue(value string) string {
 func newPluginBuildCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "build <dir>",
-		Short: "Build plugin's stdio server into a native binary",
+		Short: i18n.T("将插件 stdio server 编译为原生二进制"),
 		Long: `Runs the build command declared in plugin.json to compile the
 plugin's server into a single executable. This ensures plugin users
 don't need any language runtime (Node.js, Python, etc.) installed.
