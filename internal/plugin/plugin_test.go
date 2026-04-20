@@ -199,8 +199,7 @@ func TestPluginToServerDescriptors(t *testing.T) {
 				},
 			},
 		},
-		Root:      "/tmp/plugins/conference",
-		IsManaged: true,
+		Root: "/tmp/plugins/conference",
 	}
 
 	descriptors := p.ToServerDescriptors()
@@ -217,8 +216,8 @@ func TestPluginToServerDescriptors(t *testing.T) {
 	if d.Endpoint != "https://mcp.conference.dingtalk.com" {
 		t.Errorf("endpoint = %q", d.Endpoint)
 	}
-	if d.Source != "plugin-managed" {
-		t.Errorf("source = %q, want plugin-managed", d.Source)
+	if d.Source != "plugin" {
+		t.Errorf("source = %q, want plugin", d.Source)
 	}
 	if d.CLI.ID != "conference" {
 		t.Errorf("cli.id = %q, want conference", d.CLI.ID)
@@ -273,7 +272,7 @@ func TestPluginToServerDescriptorsWithHeaders(t *testing.T) {
 		t.Errorf("AuthHeaders[X-Custom] = %q, want static-value", d.AuthHeaders["X-Custom"])
 	}
 	if d.Source != "plugin" {
-		t.Errorf("source = %q, want plugin (non-managed)", d.Source)
+		t.Errorf("source = %q, want plugin", d.Source)
 	}
 }
 
@@ -354,137 +353,57 @@ func TestLoaderScanEmpty(t *testing.T) {
 		CLIVersion: "1.0.0",
 	}
 
-	managed := loader.LoadManaged()
-	if len(managed) != 0 {
-		t.Errorf("expected 0 managed plugins, got %d", len(managed))
-	}
-
 	user := loader.LoadUser()
 	if len(user) != 0 {
 		t.Errorf("expected 0 user plugins, got %d", len(user))
 	}
 }
 
-func TestLoaderLoadManaged(t *testing.T) {
-	dir := t.TempDir()
-	managedDir := filepath.Join(dir, "managed", "conference")
-	if err := os.MkdirAll(managedDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	manifest := `{
-		"name": "conference",
-		"version": "1.0.0",
-		"type": "managed",
-		"mcpServers": {
-			"conference": {
-				"type": "streamable-http",
-				"endpoint": "https://example.com"
-			}
-		}
-	}`
-	if err := os.WriteFile(filepath.Join(managedDir, "plugin.json"), []byte(manifest), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	loader := &Loader{PluginsDir: dir, CLIVersion: "1.0.0"}
-	plugins := loader.LoadManaged()
-
-	if len(plugins) != 1 {
-		t.Fatalf("expected 1 managed plugin, got %d", len(plugins))
-	}
-	if plugins[0].Manifest.Name != "conference" {
-		t.Errorf("name = %q, want conference", plugins[0].Manifest.Name)
-	}
-	if !plugins[0].IsManaged {
-		t.Error("expected IsManaged = true")
-	}
-}
-
-// TestRemoveLegacyManagedPlugin ensures plugins that were installed under
-// the legacy ~/.dws/plugins/managed/ directory are now freely removable
-// — the old "cannot be removed" privilege has been dropped.
-func TestRemoveLegacyManagedPlugin(t *testing.T) {
-	dir := t.TempDir()
-	managedDir := filepath.Join(dir, "managed", "conference")
-	if err := os.MkdirAll(managedDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(managedDir, "plugin.json"), []byte(`{"name":"conference","version":"1.0.0"}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	loader := &Loader{PluginsDir: dir, CLIVersion: "1.0.0"}
-	if err := loader.RemovePlugin("conference", false); err != nil {
-		t.Fatalf("unexpected error removing legacy managed plugin: %v", err)
-	}
-	if _, err := os.Stat(managedDir); !os.IsNotExist(err) {
-		t.Errorf("managed plugin dir should be removed, stat err = %v", err)
-	}
-}
-
 // TestRemovePluginPurgesSettings verifies RemovePlugin fully purges the
 // plugin's settings — both its enabled flag and any pluginConfigs entry —
 // so settings.json does not retain dangling state for a plugin that no
-// longer exists on disk. Covers both the user and legacy managed paths.
+// longer exists on disk.
 func TestRemovePluginPurgesSettings(t *testing.T) {
-	cases := []struct {
-		name    string
-		layout  string // "user" or "legacy"
-		pkgName string
-	}{
-		{name: "user plugin", layout: "user", pkgName: "my-plugin"},
-		{name: "legacy managed plugin", layout: "legacy", pkgName: "conference"},
+	const pkgName = "my-plugin"
+	dir := t.TempDir()
+	pluginDir := filepath.Join(dir, "user", pkgName)
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			dir := t.TempDir()
-			var pluginDir string
-			switch tc.layout {
-			case "user":
-				pluginDir = filepath.Join(dir, "user", tc.pkgName)
-			case "legacy":
-				pluginDir = filepath.Join(dir, "managed", tc.pkgName)
-			}
-			if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"),
-				[]byte(`{"name":"`+tc.pkgName+`","version":"1.0.0"}`), 0o644); err != nil {
-				t.Fatal(err)
-			}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"),
+		[]byte(`{"name":"`+pkgName+`","version":"1.0.0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
-			loader := &Loader{PluginsDir: dir, CLIVersion: "1.0.0"}
+	loader := &Loader{PluginsDir: dir, CLIVersion: "1.0.0"}
 
-			// Seed settings.json with an explicit enabled flag and a
-			// pluginConfigs entry to verify both get purged.
-			settings := &Settings{
-				EnabledPlugins: map[string]bool{tc.pkgName: true, "other-plugin": true},
-				PluginConfigs: map[string]map[string]any{
-					tc.pkgName:     {"API_KEY": "secret"},
-					"other-plugin": {"TOKEN": "keep-me"},
-				},
-			}
-			loader.saveSettings(settings)
+	// Seed settings.json with an explicit enabled flag and a
+	// pluginConfigs entry to verify both get purged.
+	settings := &Settings{
+		EnabledPlugins: map[string]bool{pkgName: true, "other-plugin": true},
+		PluginConfigs: map[string]map[string]any{
+			pkgName:        {"API_KEY": "secret"},
+			"other-plugin": {"TOKEN": "keep-me"},
+		},
+	}
+	loader.saveSettings(settings)
 
-			if err := loader.RemovePlugin(tc.pkgName, false); err != nil {
-				t.Fatalf("RemovePlugin: %v", err)
-			}
+	if err := loader.RemovePlugin(pkgName, false); err != nil {
+		t.Fatalf("RemovePlugin: %v", err)
+	}
 
-			reloaded := loader.loadSettings()
-			if _, exists := reloaded.EnabledPlugins[tc.pkgName]; exists {
-				t.Errorf("EnabledPlugins should not retain removed plugin %q", tc.pkgName)
-			}
-			if _, exists := reloaded.PluginConfigs[tc.pkgName]; exists {
-				t.Errorf("PluginConfigs should not retain removed plugin %q", tc.pkgName)
-			}
-			if !reloaded.EnabledPlugins["other-plugin"] {
-				t.Error("unrelated EnabledPlugins entry should be preserved")
-			}
-			if reloaded.PluginConfigs["other-plugin"]["TOKEN"] != "keep-me" {
-				t.Error("unrelated PluginConfigs entry should be preserved")
-			}
-		})
+	reloaded := loader.loadSettings()
+	if _, exists := reloaded.EnabledPlugins[pkgName]; exists {
+		t.Errorf("EnabledPlugins should not retain removed plugin %q", pkgName)
+	}
+	if _, exists := reloaded.PluginConfigs[pkgName]; exists {
+		t.Errorf("PluginConfigs should not retain removed plugin %q", pkgName)
+	}
+	if !reloaded.EnabledPlugins["other-plugin"] {
+		t.Error("unrelated EnabledPlugins entry should be preserved")
+	}
+	if reloaded.PluginConfigs["other-plugin"]["TOKEN"] != "keep-me" {
+		t.Error("unrelated PluginConfigs entry should be preserved")
 	}
 }
 

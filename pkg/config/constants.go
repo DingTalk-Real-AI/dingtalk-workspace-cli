@@ -112,12 +112,6 @@ const (
 // ── Plugin system ──────────────────────────────────────────────────────
 
 const (
-	// PluginManagedDir is a legacy subdirectory under ~/.dws/plugins/
-	// retained so plugins installed by older CLI versions remain loadable.
-	// New installs always go to PluginUserDir; there is no privilege
-	// associated with this directory anymore.
-	PluginManagedDir = "managed"
-
 	// PluginUserDir is the subdirectory under ~/.dws/plugins/ where all
 	// third-party plugins are installed. Every plugin — whether authored
 	// by the DingTalk team or anyone else — lives here with equal status.

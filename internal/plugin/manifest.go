@@ -93,9 +93,8 @@ type HookEntry struct {
 
 // Plugin is a loaded, validated plugin ready for injection.
 type Plugin struct {
-	Manifest  Manifest
-	Root      string // absolute path to plugin directory
-	IsManaged bool   // true for official (DingTalk-Real-AI) plugins
+	Manifest Manifest
+	Root     string // absolute path to plugin directory
 }
 
 // ParseManifest reads and parses a plugin.json file.
