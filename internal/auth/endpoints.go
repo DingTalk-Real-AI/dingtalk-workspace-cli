@@ -44,11 +44,6 @@ func init() {
 		Category:    configmeta.CategoryExternal,
 		Description: "第三方渠道编码 (channelCode)，仅透传到上游，如 Qoderwork",
 	})
-	configmeta.Register(configmeta.ConfigItem{
-		Name:        "CLAW_TYPE",
-		Category:    configmeta.CategoryExternal,
-		Description: "本地宿主类型，用于控制 host-owned PAT 授权/回调契约",
-	})
 }
 
 const (

@@ -22,37 +22,27 @@ import (
 const (
 	// DWSChannelEnv carries the upstream channelCode forwarded as x-dws-channel.
 	DWSChannelEnv = "DWS_CHANNEL"
-	// CLAWTypeEnv selects local host integration behavior without affecting the
-	// upstream x-dws-channel header.
-	CLAWTypeEnv = "CLAW_TYPE"
-	// Supported CLAW_TYPE values for host-owned PAT integrations.
-	CLAWTypeHostControl   = "host-control"
-	CLAWTypeRewindDesktop = "rewind-desktop"
-	CLAWTypeDWSWukong     = "dws-wukong"
-	CLAWTypeWukong        = "wukong"
+	// DINGTALK_AGENT carries the business agent name used for both the
+	// x-dingtalk-agent header and the effective claw-type selector.
+	DingTalkAgentEnv = "DINGTALK_AGENT"
 )
-
-var hostPATClawTypes = map[string]struct{}{
-	CLAWTypeHostControl:   {},
-	CLAWTypeRewindDesktop: {},
-	CLAWTypeDWSWukong:     {},
-	CLAWTypeWukong:        {},
-}
 
 // CurrentChannelCode returns the raw upstream channel code as configured locally.
 func CurrentChannelCode() string {
 	return os.Getenv(DWSChannelEnv)
 }
 
-// CurrentClawType returns the normalized CLAW_TYPE value.
+// CurrentClawType returns the normalized claw-type selector derived from
+// DINGTALK_AGENT.
 func CurrentClawType() string {
-	return normalizeClawType(os.Getenv(CLAWTypeEnv))
+	return normalizeClawType(os.Getenv(DingTalkAgentEnv))
 }
 
-// IsHostPATClawType reports whether CLAW_TYPE represents a host-owned PAT integration.
+// IsHostPATClawType reports whether the effective claw-type represents a
+// host-owned PAT integration.
 func IsHostPATClawType(raw string) bool {
-	_, ok := hostPATClawTypes[normalizeClawType(raw)]
-	return ok
+	normalized := normalizeClawType(raw)
+	return normalized != "" && normalized != "default"
 }
 
 // CurrentHostPATClawType returns the effective host-owned PAT selector.

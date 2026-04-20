@@ -389,8 +389,9 @@ func handlePatAuthCheck(
 		}
 	}
 
-	// In host-controlled PAT mode, or when flowId is absent, the CLI returns
-	// machine-readable JSON to stderr and leaves UI/polling/retry to the host.
+	// In host-controlled PAT mode driven by the effective claw-type, or when
+	// flowId is absent, the CLI returns machine-readable JSON to stderr and
+	// leaves UI/polling/retry to the host.
 	if hostOwnedPAT || patData.Data.FlowID == "" {
 		if hostOwnedPAT {
 			return executor.Result{}, &apperrors.PATError{RawJSON: enrichPATErrorForHostControl(patErr.RawJSON, patData.Data.FlowID)}

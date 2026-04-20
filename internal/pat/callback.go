@@ -79,14 +79,15 @@ var callbackCmd = &cobra.Command{
 事件后继续完成“查主管理员 / 发送申请 / 轮询流程”等动作，而不是直接
 调用 DingTalk API。
 
-宿主接管模式只由 CLAW_TYPE 选择，支持值：
-  host-control
-  rewind-desktop
-  dws-wukong
-  wukong
+第三方业务开发者通过 DINGTALK_AGENT 指定自己的业务 Agent 名称，
+宿主发给 DWS 的请求头固定为：
+  claw-type: <business-agent-name 或 default>
 
-DWS_CHANNEL 只保留为上游 channelCode，
-不提供 PAT 宿主接管的任何回退路径。`,
+当 DINGTALK_AGENT 为空或为 default 时，走默认 DWS 行为。
+当 claw-type != default 且命中 PAT 时，PAT 返回 JSON，
+由宿主处理全部 UI / 交互 / 回调节奏 / 重试逻辑。
+
+DWS_CHANNEL 只保留为上游 channelCode。`,
 	Example: `  dws pat callback list-super-admins --auth-request-id req-001
   dws pat callback send-apply --admin-staff-id manager123 --auth-request-id req-001
   dws pat callback poll-flow --flow-id flow-001 --auth-request-id req-001

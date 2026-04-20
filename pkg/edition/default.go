@@ -13,6 +13,11 @@
 
 package edition
 
+import (
+	"os"
+	"strings"
+)
+
 // defaultHooks returns the open-source edition defaults.
 // All function hooks are nil, which the internal code interprets as
 // "use standard open-source behaviour".
@@ -23,7 +28,11 @@ func defaultHooks() *Hooks {
 			if base == nil {
 				base = make(map[string]string)
 			}
-			base["claw-type"] = "openClaw"
+			if agent := strings.TrimSpace(os.Getenv("DINGTALK_AGENT")); agent != "" {
+				base["claw-type"] = agent
+			} else {
+				base["claw-type"] = "default"
+			}
 			return base
 		},
 	}

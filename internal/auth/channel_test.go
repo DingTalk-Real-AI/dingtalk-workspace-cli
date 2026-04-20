@@ -24,19 +24,19 @@ func TestApplyChannelHeader_ForwardsRawChannelCode(t *testing.T) {
 	}
 }
 
-func TestCurrentClawType_NormalizesAliases(t *testing.T) {
-	t.Setenv(CLAWTypeEnv, "Rewind_Desktop")
+func TestCurrentClawType_NormalizesDINGTALKAgent(t *testing.T) {
+	t.Setenv(DingTalkAgentEnv, "Sales_Copilot")
 
-	if got := CurrentClawType(); got != "rewind-desktop" {
-		t.Fatalf("CurrentClawType() = %q, want rewind-desktop", got)
+	if got := CurrentClawType(); got != "sales-copilot" {
+		t.Fatalf("CurrentClawType() = %q, want sales-copilot", got)
 	}
 }
 
-func TestCurrentHostPATClawType_UsesCLAWTypeAllowlist(t *testing.T) {
-	t.Setenv(CLAWTypeEnv, CLAWTypeDWSWukong)
+func TestCurrentHostPATClawType_UsesNonDefaultDINGTALKAgent(t *testing.T) {
+	t.Setenv(DingTalkAgentEnv, "sales-copilot")
 
-	if got := CurrentHostPATClawType(); got != CLAWTypeDWSWukong {
-		t.Fatalf("CurrentHostPATClawType() = %q, want %q", got, CLAWTypeDWSWukong)
+	if got := CurrentHostPATClawType(); got != "sales-copilot" {
+		t.Fatalf("CurrentHostPATClawType() = %q, want sales-copilot", got)
 	}
 }
 
@@ -48,6 +48,14 @@ func TestCurrentHostPATClawType_IgnoresTaggedDWSChannel(t *testing.T) {
 	}
 }
 
+func TestCurrentHostPATClawType_IgnoresDefaultDINGTALKAgent(t *testing.T) {
+	t.Setenv(DingTalkAgentEnv, "default")
+
+	if got := CurrentHostPATClawType(); got != "" {
+		t.Fatalf("CurrentHostPATClawType() = %q, want empty for default", got)
+	}
+}
+
 func TestIsHostPATClawType(t *testing.T) {
 	t.Parallel()
 
@@ -55,11 +63,10 @@ func TestIsHostPATClawType(t *testing.T) {
 		value string
 		want  bool
 	}{
-		{"host-control", true},
-		{"rewind-desktop", true},
-		{"dws-wukong", true},
-		{"wukong", true},
-		{"openClaw", false},
+		{"sales-copilot", true},
+		{"customer-support", true},
+		{"custom-agent", true},
+		{"default", false},
 		{"", false},
 	}
 	for _, tc := range cases {

@@ -2,21 +2,27 @@
 
 Use this mode when your host or agent owns the PAT approval UI instead of the CLI terminal UX.
 
-## 1. Enable host-owned PAT with `CLAW_TYPE`
+## 1. Set `DINGTALK_AGENT`
 
-Choose one of the supported values:
+Third-party business developers set their business-specific agent name through `DINGTALK_AGENT`.
 
 ```bash
-export CLAW_TYPE=host-control
+export DINGTALK_AGENT=sales-copilot
 ```
 
-Also supported:
+Effective request header:
 
-- `rewind-desktop`
-- `dws-wukong`
-- `wukong`
+```http
+claw-type: sales-copilot
+```
 
-`DWS_CHANNEL` remains the upstream `channelCode` only. Do not use it to enable host-owned PAT, and do not expect any `DWS_CHANNEL` fallback.
+Default behavior:
+
+- `DINGTALK_AGENT` empty: `claw-type: default`
+- `DINGTALK_AGENT=default`: `claw-type: default`
+- `claw-type != default`: PAT returns JSON and the host handles all UI and logic
+
+`DWS_CHANNEL` remains the upstream `channelCode` only. Do not use it to enable host-owned PAT.
 
 ## 2. Run the original DWS command
 
@@ -34,7 +40,7 @@ Read:
 - `data.callbacks`
 - optional `data.flowId`
 
-`data.hostControl` means the host owns UI, callback invocation, and retry.
+When `claw-type != default`, `data.hostControl` means the host owns UI, callback invocation, and retry.
 
 Special case:
 

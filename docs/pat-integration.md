@@ -7,20 +7,24 @@ This guide is for desktop and agent hosts that intercept `dws` PAT authorization
 - Frontend/Desktop team: classify PAT stderr JSON, render the approval UI, and retry the original task.
 - CLI/Backend team: keep the PAT payload and callback command surface stable.
 - QA team: validate exit code, stderr JSON shape, host retry behavior, and selector handling.
-- Integration owner: choose which `CLAW_TYPE` values should enable host-owned PAT in your build.
+- Integration owner: set `DINGTALK_AGENT=<business-agent-name>` for each business host integration.
 
-## Primary host-control selector
+## Primary host-control rule
 
-Host-owned PAT is selected only by `CLAW_TYPE`.
+Third-party business developers assign their business-specific agent name through `DINGTALK_AGENT`.
 
-Supported values:
+Effective request header:
 
-- `host-control`
-- `rewind-desktop`
-- `dws-wukong`
-- `wukong`
+```http
+claw-type: <business-agent-name or default>
+```
 
-`DWS_CHANNEL` is not a host-control switch. It stays as the upstream `channelCode` only, and there is no `DWS_CHANNEL` fallback for host-owned PAT.
+Rules:
+
+- `DINGTALK_AGENT` empty or `default`: use the default DWS behavior.
+- `claw-type != default`: when PAT is hit, DWS returns JSON and the host handles all UI and logic.
+
+`DWS_CHANNEL` is not a host-control switch. It stays as the upstream `channelCode` only.
 
 ## Reference model from existing hosts
 
@@ -49,7 +53,7 @@ Typical envelope:
     "grantOptions": ["..."],
     "authRequestId": "...",
     "hostControl": {
-      "clawType": "rewind-desktop",
+      "clawType": "sales-copilot",
       "mode": "host",
       "pollingOwner": "host",
       "retryOwner": "host",
@@ -102,7 +106,7 @@ Preserve unknown `data.*` fields for diagnostics and forward compatibility.
 - PAT authorization failures exit with code `4`.
 - PAT JSON is written to `stderr` without the normal CLI formatter.
 - If `flowId` is absent, the host must not assume polling is possible.
-- In host-owned PAT mode, the host decides whether to show approval UI, invoke callbacks, and retry the original DWS command.
+- When `claw-type != default`, the host decides whether to show approval UI, invoke callbacks, and retry the original DWS command.
 
 ## Recommended host behavior
 
@@ -142,7 +146,9 @@ Hosts should keep using `tokenUpdated` and `retrySuggested` in callback response
 
 ## Compatibility invariants
 
-- Host-owned PAT must be enabled via `CLAW_TYPE` only.
+- `DINGTALK_AGENT` maps to `claw-type: <business-agent-name or default>`.
+- Empty `DINGTALK_AGENT` and `DINGTALK_AGENT=default` both mean default DWS behavior.
+- When `claw-type != default`, PAT returns JSON and the host handles all UI and logic.
 - `DWS_CHANNEL` remains upstream channel metadata only.
 - Keep command names `list-super-admins`, `send-apply`, and `poll-flow` unchanged for compatibility.
 - Keep `tokenUpdated` and `retrySuggested` unchanged in callback responses.
@@ -164,7 +170,9 @@ Hosts should keep using `tokenUpdated` and `retrySuggested` in callback response
 
 ### QA
 
-- Verify supported `CLAW_TYPE` values trigger host-owned PAT behavior.
+- Verify `DINGTALK_AGENT=<business-agent-name>` results in `claw-type=<business-agent-name>`.
+- Verify empty `DINGTALK_AGENT` and `DINGTALK_AGENT=default` both keep default DWS behavior.
+- Verify `claw-type != default` PAT flows return JSON for host-owned handling.
 - Verify PAT host-owned flows do not depend on `DWS_CHANNEL`.
 - Verify `PAT_SCOPE_AUTH_REQUIRED` is handled correctly with and without `flowId`.
 - Verify `poll-flow` approval responses preserve `tokenUpdated` and `retrySuggested`.

@@ -36,14 +36,15 @@ func RegisterCommands(root *cobra.Command, c edition.ToolCaller) {
   dws pat chmod     <scope>...   授予指定权限
   dws pat callback  <command>    宿主 / Agent PAT 接管模式的回调接口
 
-宿主接管 PAT 只由 CLAW_TYPE 选择。支持值：
-  host-control
-  rewind-desktop
-  dws-wukong
-  wukong
+第三方业务开发者通过 DINGTALK_AGENT 指定自己的业务 Agent 名称。
+生效请求头固定为：
+  claw-type: <business-agent-name 或 default>
 
-DWS_CHANNEL 只用于上游 channelCode，
-不提供 PAT 宿主接管的任何回退路径。`,
+当 DINGTALK_AGENT 为空或为 default 时，走默认 DWS 行为。
+当 claw-type != default 且命中 PAT 时，PAT 返回 JSON，
+由宿主处理全部 UI / 交互 / 回调节奏 / 重试逻辑。
+
+DWS_CHANNEL 只用于上游 channelCode。`,
 		RunE: cmdutil.GroupRunE,
 	}
 

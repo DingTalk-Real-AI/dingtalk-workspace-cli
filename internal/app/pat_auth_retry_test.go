@@ -583,7 +583,7 @@ func TestHandlePatAuthCheck_Rejected(t *testing.T) {
 func TestHandlePatAuthCheck_HostControlledFlowIDPassthrough(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", tmpDir)
-	t.Setenv(authpkg.CLAWTypeEnv, authpkg.CLAWTypeRewindDesktop)
+	t.Setenv(authpkg.DingTalkAgentEnv, "sales-copilot")
 
 	mock := &mockRunner{
 		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
@@ -623,8 +623,8 @@ func TestHandlePatAuthCheck_HostControlledFlowIDPassthrough(t *testing.T) {
 		t.Fatalf("data.flowId = %q, want flow-host", got)
 	}
 	hostControl, _ := data["hostControl"].(map[string]any)
-	if got, _ := hostControl["clawType"].(string); got != authpkg.CLAWTypeRewindDesktop {
-		t.Fatalf("hostControl.clawType = %q, want %q", got, authpkg.CLAWTypeRewindDesktop)
+	if got, _ := hostControl["clawType"].(string); got != "sales-copilot" {
+		t.Fatalf("hostControl.clawType = %q, want sales-copilot", got)
 	}
 	callbacks, _ := data["callbacks"].([]any)
 	if len(callbacks) != 3 {
@@ -643,7 +643,7 @@ func TestHandlePatAuthCheck_HostControlledFlowIDPassthrough(t *testing.T) {
 func TestHandlePatAuthCheck_HostControlledEmptyFlowID_StillReturnsContract(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", tmpDir)
-	t.Setenv(authpkg.CLAWTypeEnv, authpkg.CLAWTypeWukong)
+	t.Setenv(authpkg.DingTalkAgentEnv, "customer-support")
 
 	mock := &mockRunner{
 		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
@@ -804,7 +804,7 @@ func TestHandlePatAuthCheck_EmptyFlowID_LegacyErrorCode_NoOutput(t *testing.T) {
 }
 
 func TestRetryWithPatAuthRetry_HostControlledReturnsJSON(t *testing.T) {
-	t.Setenv(authpkg.CLAWTypeEnv, authpkg.CLAWTypeDWSWukong)
+	t.Setenv(authpkg.DingTalkAgentEnv, "customer-support")
 
 	scopeErr := &PatScopeError{
 		OriginalError: "missing required scope(s): mail:send",

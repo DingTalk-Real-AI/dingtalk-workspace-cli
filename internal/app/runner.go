@@ -59,7 +59,7 @@ func init() {
 	configmeta.Register(configmeta.ConfigItem{
 		Name:        "DINGTALK_AGENT",
 		Category:    configmeta.CategoryExternal,
-		Description: "MCP 请求 x-dingtalk-agent 头",
+		Description: "业务 Agent 名称；同时用于 x-dingtalk-agent 与 claw-type",
 	})
 	configmeta.Register(configmeta.ConfigItem{
 		Name:        "DINGTALK_TRACE_ID",
@@ -576,6 +576,9 @@ func resolveIdentityHeaders() map[string]string {
 	}
 
 	// Inject environment variable based headers for MCP gateway tracking.
+	// DINGTALK_AGENT remains the single assignment source for both the
+	// x-dingtalk-agent bridge here and the claw-type header added by the
+	// open-source edition hook.
 	envHeaders := map[string]string{
 		"x-dingtalk-agent":      os.Getenv(envDingtalkAgent),
 		"x-dingtalk-trace-id":   os.Getenv(envDingtalkTraceID),
