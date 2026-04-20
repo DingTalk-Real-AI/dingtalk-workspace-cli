@@ -550,7 +550,7 @@ func buildHostControlState() map[string]any {
 		"mode":          "host",
 		"pollingOwner":  "host",
 		"retryOwner":    "host",
-		"followupOwner": "host",
+		"callbackOwner": "host",
 	}
 }
 
