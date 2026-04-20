@@ -5,66 +5,46 @@ import (
 	"testing"
 )
 
-func TestParseChannelConfig(t *testing.T) {
-	t.Parallel()
+func TestCurrentChannelCode_ReturnsRawValue(t *testing.T) {
+	t.Setenv(DWSChannelEnv, "Qoderwork;preview")
 
-	cfg := ParseChannelConfig("Qoderwork;host-control;preview")
-	if cfg.Code != "Qoderwork" {
-		t.Fatalf("Code = %q, want Qoderwork", cfg.Code)
-	}
-	if !cfg.HasTag(DWSChannelTagHostControl) {
-		t.Fatal("HasTag(host-control) = false, want true")
-	}
-	if !cfg.HasTag("preview") {
-		t.Fatal("HasTag(preview) = false, want true")
+	if got := CurrentChannelCode(); got != "Qoderwork;preview" {
+		t.Fatalf("CurrentChannelCode() = %q, want raw DWS_CHANNEL value", got)
 	}
 }
 
-func TestParseChannelConfig_LegacyHostControlFallback(t *testing.T) {
-	t.Setenv(DWSChannelEnv, "Qoderwork;host-control")
+func TestApplyChannelHeader_ForwardsRawChannelCode(t *testing.T) {
+	t.Setenv(DWSChannelEnv, "Qoderwork;preview")
+	req := httptest.NewRequest("GET", "https://example.com", nil)
 
-	cfg := CurrentChannelConfig()
-	if !cfg.HostPATPassthroughEnabled() {
-		t.Fatal("HostPATPassthroughEnabled() = false, want true for legacy fallback")
+	ApplyChannelHeader(req)
+
+	if got := req.Header.Get("x-dws-channel"); got != "Qoderwork;preview" {
+		t.Fatalf("x-dws-channel = %q, want raw DWS_CHANNEL value", got)
 	}
 }
 
 func TestCurrentClawType_NormalizesAliases(t *testing.T) {
 	t.Setenv(CLAWTypeEnv, "Rewind_Desktop")
+
 	if got := CurrentClawType(); got != "rewind-desktop" {
 		t.Fatalf("CurrentClawType() = %q, want rewind-desktop", got)
 	}
 }
 
-func TestParseChannelConfig_InvalidTaggedGrammarPreservesRawValue(t *testing.T) {
-	t.Parallel()
-
-	raw := "Qoderwork;host/control"
-	cfg := ParseChannelConfig(raw)
-	if cfg.Code != raw {
-		t.Fatalf("Code = %q, want raw value %q", cfg.Code, raw)
-	}
-	if len(cfg.Tags) != 0 {
-		t.Fatalf("Tags = %#v, want no parsed tags", cfg.Tags)
-	}
-}
-
-func TestApplyChannelHeaderUsesParsedCodeOnly(t *testing.T) {
-	t.Setenv(DWSChannelEnv, "Qoderwork;host-control")
-	req := httptest.NewRequest("GET", "https://example.com", nil)
-
-	ApplyChannelHeader(req)
-
-	if got := req.Header.Get("x-dws-channel"); got != "Qoderwork" {
-		t.Fatalf("x-dws-channel = %q, want Qoderwork", got)
-	}
-}
-
-func TestHostPATPassthroughEnabled_PrefersCLAWType(t *testing.T) {
+func TestCurrentHostPATClawType_UsesCLAWTypeAllowlist(t *testing.T) {
 	t.Setenv(CLAWTypeEnv, CLAWTypeDWSWukong)
-	cfg := ParseChannelConfig("Qoderwork")
-	if !cfg.HostPATPassthroughEnabled() {
-		t.Fatal("HostPATPassthroughEnabled() = false, want true for CLAW_TYPE")
+
+	if got := CurrentHostPATClawType(); got != CLAWTypeDWSWukong {
+		t.Fatalf("CurrentHostPATClawType() = %q, want %q", got, CLAWTypeDWSWukong)
+	}
+}
+
+func TestCurrentHostPATClawType_IgnoresTaggedDWSChannel(t *testing.T) {
+	t.Setenv(DWSChannelEnv, "Qoderwork;host-control")
+
+	if got := CurrentHostPATClawType(); got != "" {
+		t.Fatalf("CurrentHostPATClawType() = %q, want empty when only DWS_CHANNEL is tagged", got)
 	}
 }
 

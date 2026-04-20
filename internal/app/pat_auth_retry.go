@@ -247,7 +247,7 @@ func WaitForPatAuthorization(ctx context.Context, configDir string, output io.Wr
 // retryWithPatAuthRetry wraps an invocation that failed with a PAT scope error.
 // It waits for the user to complete authorization and then retries the invocation.
 func retryWithPatAuthRetry(ctx context.Context, runner executor.Runner, invocation executor.Invocation, scopeErr *PatScopeError, configDir string, output io.Writer) (executor.Result, error) {
-	if authpkg.CurrentChannelConfig().HostPATPassthroughEnabled() {
+	if authpkg.CurrentHostPATClawType() != "" {
 		return executor.Result{}, &apperrors.PATError{RawJSON: buildPATScopeHostJSON(scopeErr)}
 	}
 
@@ -352,8 +352,7 @@ func handlePatAuthCheck(
 		"flowId", patData.Data.FlowID,
 		"hasSecret", patData.Data.ClientSecret != "",
 	)
-	channelCfg := authpkg.CurrentChannelConfig()
-	hostOwnedPAT := channelCfg.HostPATPassthroughEnabled()
+	hostOwnedPAT := authpkg.CurrentHostPATClawType() != ""
 
 	// Inject clientId/clientSecret from PAT response as runtime credentials
 	// so that subsequent device flow auth uses the server-assigned app identity.

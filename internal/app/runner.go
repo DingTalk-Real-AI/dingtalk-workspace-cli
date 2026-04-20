@@ -588,8 +588,8 @@ func resolveIdentityHeaders() map[string]string {
 		}
 	}
 
-	// Inject third-party channel headers. DWS_CHANNEL is the upstream
-	// channelCode; the legacy tagged form is normalized before forwarding.
+	// Inject third-party channel headers. DWS_CHANNEL is forwarded as the
+	// upstream channelCode.
 	if v := authpkg.CurrentChannelCode(); v != "" {
 		headers["x-dws-channel"] = v
 	}

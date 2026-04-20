@@ -16,31 +16,21 @@ package auth
 import (
 	"net/http"
 	"os"
-	"regexp"
 	"strings"
 )
 
 const (
-	// DWSChannelEnv is the environment variable carrying the upstream
-	// channelCode. Tagged values are only tolerated as a legacy compatibility
-	// fallback so the upstream x-dws-channel header keeps the original code.
+	// DWSChannelEnv carries the upstream channelCode forwarded as x-dws-channel.
 	DWSChannelEnv = "DWS_CHANNEL"
 	// CLAWTypeEnv selects local host integration behavior without affecting the
 	// upstream x-dws-channel header.
 	CLAWTypeEnv = "CLAW_TYPE"
-	// DWSChannelTagHostControl moves PAT UI/polling ownership to the host while
-	// keeping the upstream x-dws-channel header on the original channelCode.
-	// This remains as a legacy DWS_CHANNEL tag for backward compatibility.
-	DWSChannelTagHostControl = "host-control"
 	// Supported CLAW_TYPE values for host-owned PAT integrations.
 	CLAWTypeHostControl   = "host-control"
 	CLAWTypeRewindDesktop = "rewind-desktop"
 	CLAWTypeDWSWukong     = "dws-wukong"
 	CLAWTypeWukong        = "wukong"
 )
-
-var dwsTaggedChannelCodeRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
-var dwsLocalTagRE = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
 
 var hostPATClawTypes = map[string]struct{}{
 	CLAWTypeHostControl:   {},
@@ -49,68 +39,9 @@ var hostPATClawTypes = map[string]struct{}{
 	CLAWTypeWukong:        {},
 }
 
-// ChannelConfig represents the parsed DWS_CHANNEL specification.
-//
-// Grammar:
-//
-//	<channelCode>[;tag[;tag...]]
-//
-// Only channelCode is forwarded to upstream headers. Tags are local CLI hints.
-// The parser is intentionally conservative: any malformed tagged form falls
-// back to the raw input so upstream header semantics remain unchanged.
-type ChannelConfig struct {
-	Raw  string
-	Code string
-	Tags map[string]struct{}
-}
-
-// ParseChannelConfig parses a DWS_CHANNEL-style specification.
-func ParseChannelConfig(raw string) ChannelConfig {
-	cfg := ChannelConfig{
-		Raw:  raw,
-		Code: raw,
-		Tags: map[string]struct{}{},
-	}
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		cfg.Code = ""
-		return cfg
-	}
-
-	parts := strings.Split(trimmed, ";")
-	if len(parts) == 1 {
-		return cfg
-	}
-	code := strings.TrimSpace(parts[0])
-	if code == "" || !dwsTaggedChannelCodeRE.MatchString(code) {
-		return cfg
-	}
-
-	tags := make(map[string]struct{}, len(parts)-1)
-	for _, part := range parts[1:] {
-		part = strings.TrimSpace(part)
-		if !dwsLocalTagRE.MatchString(part) {
-			return cfg
-		}
-		tags[strings.ToLower(part)] = struct{}{}
-	}
-	if len(tags) == 0 {
-		return cfg
-	}
-
-	cfg.Code = code
-	cfg.Tags = tags
-	return cfg
-}
-
-// CurrentChannelConfig parses the current DWS_CHANNEL environment variable.
-func CurrentChannelConfig() ChannelConfig {
-	return ParseChannelConfig(os.Getenv(DWSChannelEnv))
-}
-
-// CurrentChannelCode returns only the upstream-safe channel code portion.
+// CurrentChannelCode returns the raw upstream channel code as configured locally.
 func CurrentChannelCode() string {
-	return CurrentChannelConfig().Code
+	return os.Getenv(DWSChannelEnv)
 }
 
 // CurrentClawType returns the normalized CLAW_TYPE value.
@@ -125,36 +56,14 @@ func IsHostPATClawType(raw string) bool {
 }
 
 // CurrentHostPATClawType returns the effective host-owned PAT selector.
-// It prefers CLAW_TYPE and falls back to the legacy DWS_CHANNEL suffix path.
 func CurrentHostPATClawType() string {
-	if clawType := CurrentClawType(); clawType != "" {
+	if clawType := CurrentClawType(); IsHostPATClawType(clawType) {
 		return clawType
-	}
-	if CurrentChannelConfig().HasTag(DWSChannelTagHostControl) {
-		return CLAWTypeHostControl
 	}
 	return ""
 }
 
-// HasTag reports whether a parsed local tag is present.
-func (c ChannelConfig) HasTag(name string) bool {
-	if c.Tags == nil {
-		return false
-	}
-	_, ok := c.Tags[strings.ToLower(strings.TrimSpace(name))]
-	return ok
-}
-
-// HostPATPassthroughEnabled reports whether PAT flow ownership should move to the host.
-// Primary signal: CLAW_TYPE. Legacy fallback: DWS_CHANNEL tag "host-control".
-func (c ChannelConfig) HostPATPassthroughEnabled() bool {
-	if IsHostPATClawType(CurrentClawType()) {
-		return true
-	}
-	return c.HasTag(DWSChannelTagHostControl)
-}
-
-// ApplyChannelHeader injects the upstream-safe channel code into a request.
+// ApplyChannelHeader injects the configured channel code into a request.
 func ApplyChannelHeader(req *http.Request) {
 	if req == nil {
 		return

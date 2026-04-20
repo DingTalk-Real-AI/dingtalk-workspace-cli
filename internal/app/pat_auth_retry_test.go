@@ -583,7 +583,6 @@ func TestHandlePatAuthCheck_Rejected(t *testing.T) {
 func TestHandlePatAuthCheck_HostControlledFlowIDPassthrough(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", tmpDir)
-	t.Setenv(authpkg.DWSChannelEnv, "Qoderwork")
 	t.Setenv(authpkg.CLAWTypeEnv, authpkg.CLAWTypeRewindDesktop)
 
 	mock := &mockRunner{
@@ -644,7 +643,6 @@ func TestHandlePatAuthCheck_HostControlledFlowIDPassthrough(t *testing.T) {
 func TestHandlePatAuthCheck_HostControlledEmptyFlowID_StillReturnsContract(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", tmpDir)
-	t.Setenv(authpkg.DWSChannelEnv, "Qoderwork")
 	t.Setenv(authpkg.CLAWTypeEnv, authpkg.CLAWTypeWukong)
 
 	mock := &mockRunner{
@@ -724,6 +722,52 @@ func TestHandlePatAuthCheck_EmptyFlowID_FallsBackToPATError(t *testing.T) {
 	}
 	if got := strings.TrimSpace(buf.String()); got != "" {
 		t.Fatalf("expected no human-readable output for raw PAT passthrough, got %q", got)
+	}
+}
+
+func TestHandlePatAuthCheck_TaggedDWSChannelDoesNotEnableHostControl(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", tmpDir)
+	t.Setenv(authpkg.DWSChannelEnv, "Qoderwork;host-control")
+
+	mock := &mockRunner{
+		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
+			t.Fatal("runner should not be called when flowId is empty")
+			return executor.Result{}, nil
+		},
+	}
+
+	runner := &runtimeRunner{fallback: mock}
+	patErr := &apperrors.PATError{RawJSON: makePATErrorJSON("", "test-client-id")}
+
+	var buf bytes.Buffer
+	_, err := handlePatAuthCheck(context.Background(), runner, executor.Invocation{
+		CanonicalProduct: "test",
+		Tool:             "test_tool",
+	}, patErr, tmpDir, &buf)
+
+	if err == nil {
+		t.Fatal("expected PATError when flowId is empty")
+	}
+	patOut, ok := err.(*apperrors.PATError)
+	if !ok {
+		t.Fatalf("expected *PATError, got %T: %v", err, err)
+	}
+	if got := strings.TrimSpace(buf.String()); got != "" {
+		t.Fatalf("expected no human-readable output for raw PAT passthrough, got %q", got)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(patOut.RawJSON), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(passthrough PAT payload) error = %v\nraw=%s", err, patOut.RawJSON)
+	}
+	data, _ := payload["data"].(map[string]any)
+	if _, ok := data["hostControl"]; ok {
+		t.Fatalf("unexpected hostControl payload when only DWS_CHANNEL is tagged: %#v", data["hostControl"])
+	}
+	meta, _ := payload["_meta"].(map[string]any)
+	if _, ok := meta[patHostControlCallbackMetaKey]; ok {
+		t.Fatal("unexpected host-control callback metadata when only DWS_CHANNEL is tagged")
 	}
 }
 

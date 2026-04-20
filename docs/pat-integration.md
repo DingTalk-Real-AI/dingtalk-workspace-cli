@@ -6,12 +6,12 @@ This guide is for desktop and agent hosts that intercept `dws` PAT authorization
 
 - Frontend/Desktop team: classify PAT stderr JSON, render the approval UI, and retry the original task.
 - CLI/Backend team: keep the PAT payload and callback command surface stable.
-- QA team: validate exit code, stderr JSON shape, host retry behavior, and legacy compatibility.
+- QA team: validate exit code, stderr JSON shape, host retry behavior, and selector handling.
 - Integration owner: choose which `CLAW_TYPE` values should enable host-owned PAT in your build.
 
 ## Primary host-control selector
 
-Host-owned PAT is selected by `CLAW_TYPE`.
+Host-owned PAT is selected only by `CLAW_TYPE`.
 
 Supported values:
 
@@ -20,15 +20,7 @@ Supported values:
 - `dws-wukong`
 - `wukong`
 
-`DWS_CHANNEL` is no longer the host-control switch. It stays as the upstream `channelCode` only.
-
-Legacy compatibility path:
-
-```bash
-DWS_CHANNEL='Qoderwork;host-control'
-```
-
-Treat that suffix form as a migration-only fallback for older agents. New integrations should prefer `CLAW_TYPE`.
+`DWS_CHANNEL` is not a host-control switch. It stays as the upstream `channelCode` only, and there is no `DWS_CHANNEL` fallback for host-owned PAT.
 
 ## Reference model from existing hosts
 
@@ -148,10 +140,10 @@ Hosts should keep using `tokenUpdated` and `retrySuggested` in callback response
 - Do not require `flowId` for `PAT_SCOPE_AUTH_REQUIRED`.
 - Ignore unknown keys so the contract can evolve safely.
 
-## Migration and compatibility
+## Compatibility invariants
 
-- New builds should enable host-owned PAT via `CLAW_TYPE`.
-- Existing third-party agents that still rely on `DWS_CHANNEL='...;host-control'` should be treated as legacy consumers.
+- Host-owned PAT must be enabled via `CLAW_TYPE` only.
+- `DWS_CHANNEL` remains upstream channel metadata only.
 - Keep command names `list-super-admins`, `send-apply`, and `poll-flow` unchanged for compatibility.
 - Keep `tokenUpdated` and `retrySuggested` unchanged in callback responses.
 
@@ -168,11 +160,11 @@ Hosts should keep using `tokenUpdated` and `retrySuggested` in callback response
 
 - Keep raw PAT stderr payloads clean.
 - Keep `data.hostControl`, `data.callbacks`, and callback command names stable.
-- Keep `DWS_CHANNEL` documented as upstream channel only, with the suffix form marked legacy-only.
+- Keep `DWS_CHANNEL` documented as upstream channel only, with no host-control fallback.
 
 ### QA
 
-- Verify `CLAW_TYPE` values trigger host-owned PAT behavior.
-- Verify legacy `DWS_CHANNEL='...;host-control'` still works if compatibility is enabled.
+- Verify supported `CLAW_TYPE` values trigger host-owned PAT behavior.
+- Verify PAT host-owned flows do not depend on `DWS_CHANNEL`.
 - Verify `PAT_SCOPE_AUTH_REQUIRED` is handled correctly with and without `flowId`.
 - Verify `poll-flow` approval responses preserve `tokenUpdated` and `retrySuggested`.

@@ -79,15 +79,14 @@ var callbackCmd = &cobra.Command{
 事件后继续完成“查主管理员 / 发送申请 / 轮询流程”等动作，而不是直接
 调用 DingTalk API。
 
-宿主接管模式由 CLAW_TYPE 主导，支持值：
+宿主接管模式只由 CLAW_TYPE 选择，支持值：
   host-control
   rewind-desktop
   dws-wukong
   wukong
 
-DWS_CHANNEL 只保留为上游 channelCode；历史上的
-  DWS_CHANNEL='...;host-control'
-仅作为兼容路径保留在文档中。`,
+DWS_CHANNEL 只保留为上游 channelCode，
+不提供 PAT 宿主接管的任何回退路径。`,
 	Example: `  dws pat callback list-super-admins --auth-request-id req-001
   dws pat callback send-apply --admin-staff-id manager123 --auth-request-id req-001
   dws pat callback poll-flow --flow-id flow-001 --auth-request-id req-001

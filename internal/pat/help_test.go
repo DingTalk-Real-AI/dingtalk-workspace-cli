@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestPatHelpMentionsCLAWTypeAndLegacyChannelCompatibility(t *testing.T) {
+func TestPatHelpMentionsCLAWTypeAsOnlySelector(t *testing.T) {
 	root := &cobra.Command{Use: "dws"}
 	RegisterCommands(root, nil)
 
@@ -27,19 +27,24 @@ func TestPatHelpMentionsCLAWTypeAndLegacyChannelCompatibility(t *testing.T) {
 	help := out.String()
 	for _, want := range []string{
 		"CLAW_TYPE",
+		"只由 CLAW_TYPE 选择",
 		"host-control",
 		"rewind-desktop",
 		"dws-wukong",
 		"wukong",
-		"DWS_CHANNEL='...;host-control'",
+		"DWS_CHANNEL",
+		"不提供 PAT 宿主接管的任何回退路径",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("pat help missing %q\n%s", want, help)
 		}
 	}
+	if strings.Contains(help, "DWS_CHANNEL='...;host-control'") {
+		t.Fatalf("pat help should not mention legacy DWS_CHANNEL suffix\n%s", help)
+	}
 }
 
-func TestPatCallbackHelpMentionsStableCommandsAndSelector(t *testing.T) {
+func TestPatCallbackHelpMentionsStableCommandsAndSelectorOnly(t *testing.T) {
 	root := &cobra.Command{Use: "dws"}
 	RegisterCommands(root, nil)
 
@@ -58,13 +63,18 @@ func TestPatCallbackHelpMentionsStableCommandsAndSelector(t *testing.T) {
 	help := out.String()
 	for _, want := range []string{
 		"CLAW_TYPE",
+		"只由 CLAW_TYPE 选择",
 		"list-super-admins",
 		"send-apply",
 		"poll-flow",
-		"DWS_CHANNEL='...;host-control'",
+		"DWS_CHANNEL",
+		"不提供 PAT 宿主接管的任何回退路径",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("callback help missing %q\n%s", want, help)
 		}
+	}
+	if strings.Contains(help, "DWS_CHANNEL='...;host-control'") {
+		t.Fatalf("callback help should not mention legacy DWS_CHANNEL suffix\n%s", help)
 	}
 }

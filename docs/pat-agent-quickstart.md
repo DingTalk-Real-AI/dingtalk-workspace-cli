@@ -16,15 +16,7 @@ Also supported:
 - `dws-wukong`
 - `wukong`
 
-`DWS_CHANNEL` remains the upstream `channelCode` only.
-
-Legacy compatibility only:
-
-```bash
-export DWS_CHANNEL='Qoderwork;host-control'
-```
-
-Use that suffix form only for older agents that have not migrated to `CLAW_TYPE`.
+`DWS_CHANNEL` remains the upstream `channelCode` only. Do not use it to enable host-owned PAT, and do not expect any `DWS_CHANNEL` fallback.
 
 ## 2. Run the original DWS command
 
