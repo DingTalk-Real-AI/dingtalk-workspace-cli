@@ -22,11 +22,8 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
-var caller edition.ToolCaller
-
 // RegisterCommands adds the pat command tree to rootCmd.
 func RegisterCommands(root *cobra.Command, c edition.ToolCaller) {
-	caller = c
 	patCmd := &cobra.Command{
 		Use:   "pat",
 		Short: "行为授权管理",
@@ -37,6 +34,6 @@ func RegisterCommands(root *cobra.Command, c edition.ToolCaller) {
 		RunE: cmdutil.GroupRunE,
 	}
 
-	patCmd.AddCommand(chmodCmd)
+	patCmd.AddCommand(newChmodCommand(c))
 	root.AddCommand(patCmd)
 }
