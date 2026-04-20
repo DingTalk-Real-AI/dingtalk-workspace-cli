@@ -88,9 +88,6 @@ const (
 	envDingtalkTraceID   = "DINGTALK_TRACE_ID"
 	envDingtalkSessionID = "DINGTALK_SESSION_ID"
 	envDingtalkMessageID = "DINGTALK_MESSAGE_ID"
-
-	// Environment variables for third-party channel integration
-	envDWSChannel = "DWS_CHANNEL"
 )
 
 func newCommandRunnerWithFlags(loader cli.CatalogLoader, flags *GlobalFlags) executor.Runner {
@@ -591,8 +588,9 @@ func resolveIdentityHeaders() map[string]string {
 		}
 	}
 
-	// Inject third-party channel headers
-	if v := os.Getenv(envDWSChannel); v != "" {
+	// Inject third-party channel headers. DWS_CHANNEL may contain local tags;
+	// only the channel code is forwarded upstream.
+	if v := authpkg.CurrentChannelCode(); v != "" {
 		headers["x-dws-channel"] = v
 	}
 

@@ -33,10 +33,12 @@ func RegisterCommands(root *cobra.Command, c edition.ToolCaller) {
 		Long: `管理行为授权（PAT）。
 
 命令结构:
-  dws pat chmod   <scope>...   授予指定权限`,
+  dws pat chmod     <scope>...   授予指定权限
+  dws pat callback  <command>    自定义宿主可调用的 PAT 回调接口`,
 		RunE: cmdutil.GroupRunE,
 	}
 
 	patCmd.AddCommand(chmodCmd)
+	patCmd.AddCommand(callbackCmd)
 	root.AddCommand(patCmd)
 }

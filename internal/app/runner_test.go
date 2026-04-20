@@ -25,6 +25,7 @@ import (
 	"strings"
 	"testing"
 
+	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	mockmcp "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/mock_mcp"
@@ -302,6 +303,16 @@ func TestRuntimeRunnerInjectsAuthTokenFromFlag(t *testing.T) {
 	}
 	if got := payload.Response.Content["documentId"]; got != "doc-flag-token" {
 		t.Fatalf("response.content.documentId = %#v, want doc-flag-token", got)
+	}
+}
+
+func TestResolveIdentityHeadersUsesParsedChannelCode(t *testing.T) {
+	setupRuntimeCommandTest(t)
+	t.Setenv(authpkg.DWSChannelEnv, "Qoderwork;host-control")
+
+	headers := resolveIdentityHeaders()
+	if got := headers["x-dws-channel"]; got != "Qoderwork" {
+		t.Fatalf("x-dws-channel = %q, want Qoderwork", got)
 	}
 }
 

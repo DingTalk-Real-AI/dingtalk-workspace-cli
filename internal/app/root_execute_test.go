@@ -18,14 +18,18 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cache"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	mockmcp "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/mock_mcp"
 )
 
@@ -436,5 +440,124 @@ func TestExecute_no_panic_returns_0(t *testing.T) {
 	code := simulateExecuteWithPanic(false)
 	if code != 0 {
 		t.Fatalf("no-panic exitCode = %d, want 0", code)
+	}
+}
+
+func TestPATCallbackListSuperAdminsCommand_UsesParsedChannelHeader(t *testing.T) {
+	t.Setenv("DWS_CHANNEL", "Qoderwork;host-control")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("x-dws-channel"); got != "Qoderwork" {
+			t.Fatalf("x-dws-channel = %q, want Qoderwork", got)
+		}
+		_ = json.NewEncoder(w).Encode(authpkg.SuperAdminResponse{
+			Success: true,
+			Result:  []authpkg.SuperAdmin{{StaffID: "admin1", Name: "Alice"}},
+		})
+	}))
+	defer srv.Close()
+
+	configDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+	if err := os.WriteFile(filepath.Join(configDir, "mcp_url"), []byte(srv.URL), 0o600); err != nil {
+		t.Fatalf("WriteFile(mcp_url) error = %v", err)
+	}
+
+	cmd := NewRootCommand()
+	var stdout, stderr bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	cmd.SetArgs([]string{
+		"pat", "callback", "list-super-admins",
+		"--config-dir", configDir,
+		"--access-token", "good-token",
+		"--auth-request-id", "req-1",
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "PAT_CALLBACK_LIST_SUPER_ADMINS") {
+		t.Fatalf("stdout = %q, want callback success envelope", stdout.String())
+	}
+}
+
+func TestPATCallbackPollFlowCommand_ApprovedUpdatesToken(t *testing.T) {
+	t.Setenv("DWS_CHANNEL", "Qoderwork;host-control")
+	t.Setenv("DWS_CLIENT_ID", "cli-app-id")
+
+	var savedToken []byte
+	edition.Override(&edition.Hooks{
+		SaveToken: func(configDir string, data []byte) error {
+			savedToken = append([]byte(nil), data...)
+			return nil
+		},
+		LoadToken: func(configDir string) ([]byte, error) {
+			if savedToken == nil {
+				return nil, os.ErrNotExist
+			}
+			return append([]byte(nil), savedToken...), nil
+		},
+	})
+	t.Cleanup(func() { edition.Override(&edition.Hooks{}) })
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("x-dws-channel"); got != "Qoderwork" {
+			t.Fatalf("x-dws-channel = %q, want Qoderwork", got)
+		}
+		switch r.URL.Path {
+		case authpkg.DevicePollPath:
+			_ = json.NewEncoder(w).Encode(authpkg.DevicePollResponse{
+				Success: true,
+				Data: authpkg.DevicePollData{
+					Status:   authpkg.StatusApproved,
+					AuthCode: "auth-code-1",
+					FlowID:   "flow-1",
+				},
+			})
+		case authpkg.MCPOAuthTokenPath:
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"accessToken":  "new-access-token",
+				"refreshToken": "refresh-token",
+				"expiresIn":    int64(3600),
+				"corpId":       "dingcorp",
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	configDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+	if err := os.WriteFile(filepath.Join(configDir, "mcp_url"), []byte(srv.URL), 0o600); err != nil {
+		t.Fatalf("WriteFile(mcp_url) error = %v", err)
+	}
+
+	cmd := NewRootCommand()
+	var stdout, stderr bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	cmd.SetArgs([]string{
+		"pat", "callback", "poll-flow",
+		"--config-dir", configDir,
+		"--flow-id", "flow-1",
+		"--auth-request-id", "req-3",
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"tokenUpdated": true`) {
+		t.Fatalf("stdout = %q, want tokenUpdated=true", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), `"retrySuggested": true`) {
+		t.Fatalf("stdout = %q, want retrySuggested=true", stdout.String())
 	}
 }

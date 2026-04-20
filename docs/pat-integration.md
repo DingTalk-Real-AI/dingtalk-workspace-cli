@@ -55,7 +55,34 @@ Additional fields may appear in `data` depending on the upstream service. Preser
 - PAT authorization failures exit with code `4`.
 - The CLI sends the raw JSON payload to `stderr`.
 - If `flowId` is missing, the CLI cannot poll and will return the PAT payload to the host app instead of continuing locally.
+- If `DWS_CHANNEL` contains the local tag `host-control`, the CLI will also return PAT JSON to the host even when `flowId` is present.
 - For non-PAT auth failures, do not assume exit code `4`; PAT handling is a separate path.
+
+## DWS_CHANNEL tags
+
+Use `DWS_CHANNEL` as:
+
+```bash
+DWS_CHANNEL='Qoderwork;host-control'
+```
+
+Rules:
+
+- `Qoderwork` is the real upstream `channelCode`.
+- Extra `;tag` suffixes are local CLI tags only.
+- The CLI forwards only `Qoderwork` via `x-dws-channel`; tags are not sent upstream.
+
+When `host-control` is present:
+
+- the CLI does not print terminal PAT guidance,
+- the CLI does not open the approval link,
+- the CLI does not locally poll `flowId`,
+- the CLI does not retry the original command.
+
+Instead it returns raw PAT JSON enriched with:
+
+- `data.hostControl`
+- `data.callbacks`
 
 ## Recommended frontend behavior
 
@@ -69,12 +96,28 @@ Follow a RewindDesktop-style pattern:
 6. If the user approves, resume the original command path.
 7. If the user rejects, the flow expires, or the request is cancelled, close the auth UI and show a retryable failure.
 
+When `host-control` is active:
+
+1. Treat the PAT payload as the only contract surface.
+2. Render any custom card or approval flow you want.
+3. Call the callback descriptors in `data.callbacks` instead of calling DingTalk APIs directly.
+4. Retry the original DWS command only after `poll_flow` reports `APPROVED` and `tokenUpdated=true`.
+
 ## Practical parsing rules
 
 - Prefer `code` first, then fall back to `error_code`.
 - Do not depend on top-level `message` or other wrapper fields; keep the JSON payload intact and read from `data`.
 - Ignore unknown keys so the contract can evolve without breaking the frontend.
 - If the payload includes both `requiredScopes` and `grantOptions`, render `requiredScopes` as the reason and `grantOptions` as the action set.
+- In host-control mode, use `data.callbacks[*].invoke` as the stable machine surface for follow-up actions.
+
+## Callback contract
+
+Current callbacks in host-control mode:
+
+- `list_super_admins`: fetch admins for a custom picker.
+- `send_apply`: submit a permission-change request to a selected admin.
+- `poll_flow`: poll a single `flowId`; on approval the CLI exchanges `authCode` and persists the refreshed token.
 
 ## Team checklist
 

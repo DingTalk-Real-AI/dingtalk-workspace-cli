@@ -574,6 +574,58 @@ func TestHandlePatAuthCheck_Rejected(t *testing.T) {
 	}
 }
 
+func TestHandlePatAuthCheck_HostControlledFlowIDPassthrough(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", tmpDir)
+	t.Setenv(authpkg.DWSChannelEnv, "Qoderwork;host-control")
+
+	mock := &mockRunner{
+		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
+			t.Fatal("runner should not be called in host-controlled PAT mode")
+			return executor.Result{}, nil
+		},
+	}
+
+	runner := &runtimeRunner{fallback: mock}
+	patErr := &apperrors.PATError{RawJSON: makePATErrorJSON("flow-host", "test-client-id")}
+
+	ctx := context.Background()
+	var buf bytes.Buffer
+	_, err := handlePatAuthCheck(ctx, runner, executor.Invocation{
+		CanonicalProduct: "test",
+		Tool:             "test_tool",
+	}, patErr, tmpDir, &buf)
+
+	if err == nil {
+		t.Fatal("expected PATError in host-controlled mode")
+	}
+	patOut, ok := err.(*apperrors.PATError)
+	if !ok {
+		t.Fatalf("expected *PATError, got %T: %v", err, err)
+	}
+	if got := strings.TrimSpace(buf.String()); got != "" {
+		t.Fatalf("expected no human-readable output in host mode, got %q", got)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(patOut.RawJSON), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(host PAT payload) error = %v\nraw=%s", err, patOut.RawJSON)
+	}
+
+	data, _ := payload["data"].(map[string]any)
+	if got, _ := data["flowId"].(string); got != "flow-host" {
+		t.Fatalf("data.flowId = %q, want flow-host", got)
+	}
+	meta, _ := payload["_meta"].(map[string]any)
+	callback, _ := meta[patHostControlCallbackMetaKey].(map[string]any)
+	if got, _ := callback["type"].(string); got != "pat_auth" {
+		t.Fatalf("callback.type = %q, want pat_auth", got)
+	}
+	if got, _ := callback["flowId"].(string); got != "flow-host" {
+		t.Fatalf("callback.flowId = %q, want flow-host", got)
+	}
+}
+
 func TestHandlePatAuthCheck_EmptyFlowID_FallsBackToPATError(t *testing.T) {
 	// No poll server needed — empty flowId means no polling, return PATError directly.
 	tmpDir := t.TempDir()

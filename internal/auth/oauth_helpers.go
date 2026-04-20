@@ -21,7 +21,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
@@ -202,6 +201,7 @@ func (p *OAuthProvider) postJSON(ctx context.Context, endpoint string, body any)
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	ApplyChannelHeader(req)
 
 	client := p.httpClient
 	if client == nil {
@@ -1220,9 +1220,7 @@ func (p *OAuthProvider) doCheckCLIAuthEnabled(ctx context.Context, accessToken s
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("x-user-access-token", accessToken)
-	if ch := os.Getenv("DWS_CHANNEL"); ch != "" {
-		req.Header.Set("x-dws-channel", ch)
-	}
+	ApplyChannelHeader(req)
 
 	client := p.httpClient
 	if client == nil {
@@ -1274,6 +1272,7 @@ func doGetSuperAdmins(ctx context.Context, accessToken string) (*SuperAdminRespo
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("x-user-access-token", accessToken)
+	ApplyChannelHeader(req)
 
 	resp, err := oauthHTTPClient.Do(req)
 	if err != nil {
@@ -1321,6 +1320,7 @@ func doSendCliAuthApply(ctx context.Context, accessToken, adminStaffID string) (
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("x-user-access-token", accessToken)
+	ApplyChannelHeader(req)
 
 	resp, err := oauthHTTPClient.Do(req)
 	if err != nil {
@@ -1376,6 +1376,7 @@ func doFetchClientIDFromMCP(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("creating request: %w", err)
 	}
+	ApplyChannelHeader(req)
 
 	resp, err := oauthHTTPClient.Do(req)
 	if err != nil {

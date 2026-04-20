@@ -43,6 +43,8 @@ const (
 	// PatAuthPollInterval is how often we poll to check if the user has
 	// completed authorization.
 	PatAuthPollInterval = 5 * time.Second
+
+	patHostControlCallbackMetaKey = "com.dingtalk.workspace-cli/host-control-callback"
 )
 
 // PatScopeError holds information about a missing PAT scope.
@@ -359,6 +361,7 @@ func handlePatAuthCheck(
 		"flowId", patData.Data.FlowID,
 		"hasSecret", patData.Data.ClientSecret != "",
 	)
+	channelCfg := authpkg.CurrentChannelConfig()
 
 	// Inject clientId/clientSecret from PAT response as runtime credentials
 	// so that subsequent device flow auth uses the server-assigned app identity.
@@ -386,20 +389,22 @@ func handlePatAuthCheck(
 		}
 	}
 
-	// If no flowId, the host expects a raw PAT JSON passthrough. Do not emit
-	// any human-readable output before returning the original PAT error.
-	if patData.Data.FlowID == "" {
-		if appCfg != nil {
-			_ = authpkg.SaveAppConfig(configDir, appCfg)
-		}
-		return executor.Result{}, patErr
-	}
-
 	if appCfg != nil {
 		if err := authpkg.SaveAppConfig(configDir, appCfg); err != nil {
 			slog.Warn("failed to persist app config from PAT", "error", err)
-			fmt.Fprintf(output, "  \u26a0 保存应用配置失败: %v (下次启动可能需要重新授权)\n", err)
+			if !channelCfg.HostPATPassthroughEnabled() && patData.Data.FlowID != "" {
+				fmt.Fprintf(output, "  \u26a0 保存应用配置失败: %v (下次启动可能需要重新授权)\n", err)
+			}
 		}
+	}
+
+	// In host-controlled PAT mode, or when flowId is absent, the CLI returns
+	// machine-readable JSON to stderr and leaves UI/polling/retry to the host.
+	if channelCfg.HostPATPassthroughEnabled() || patData.Data.FlowID == "" {
+		if channelCfg.HostPATPassthroughEnabled() {
+			return executor.Result{}, &apperrors.PATError{RawJSON: enrichPATErrorForHostControl(patErr.RawJSON, patData.Data.FlowID)}
+		}
+		return executor.Result{}, patErr
 	}
 
 	bold := color.New(color.Bold).SprintFunc()
@@ -501,6 +506,34 @@ func handlePatAuthCheck(
 		fmt.Fprintf(output, "%s 未知授权状态: %s\n", redFn("✗"), status)
 		return executor.Result{}, patErr
 	}
+}
+
+func enrichPATErrorForHostControl(raw string, flowID string) string {
+	if strings.TrimSpace(raw) == "" {
+		return raw
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return raw
+	}
+
+	meta, _ := payload["_meta"].(map[string]any)
+	if meta == nil {
+		meta = make(map[string]any)
+		payload["_meta"] = meta
+	}
+	meta[patHostControlCallbackMetaKey] = map[string]any{
+		"type":    "pat_auth",
+		"flowId":  flowID,
+		"version": 1,
+	}
+
+	encoded, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return raw
+	}
+	return string(encoded)
 }
 
 // pollPatDeviceFlow polls the PAT device flow status endpoint until a terminal
