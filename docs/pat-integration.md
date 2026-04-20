@@ -2,6 +2,13 @@
 
 This note is for desktop integrator teams that consume `dws` CLI PAT authorization failures and render a first-class auth flow.
 
+## Audience map
+
+- Frontend/Desktop team: parse PAT stderr JSON, render the approval UI, resume the original task.
+- CLI/Backend team: keep the PAT JSON envelope stable and avoid mixing human-readable text into passthrough payloads.
+- QA team: validate exit code, stderr JSON shape, retry behavior, and legacy `error_code` compatibility.
+- Product/Integration owner: use the selector matrix below to decide which approval UX to build first.
+
 ## What the CLI emits
 
 When `dws` hits a PAT authorization failure, it writes the raw JSON payload to `stderr` and does not wrap it in the normal CLI error formatter.
@@ -68,3 +75,24 @@ Follow a RewindDesktop-style pattern:
 - Do not depend on top-level `message` or other wrapper fields; keep the JSON payload intact and read from `data`.
 - Ignore unknown keys so the contract can evolve without breaking the frontend.
 - If the payload includes both `requiredScopes` and `grantOptions`, render `requiredScopes` as the reason and `grantOptions` as the action set.
+
+## Team checklist
+
+### Frontend/Desktop
+
+- Treat exit code `4` as a recoverable PAT event.
+- Parse stderr as JSON before showing any generic failure UI.
+- Persist `authRequestId` and `flowId` in local UI state so the retry path stays correlated.
+- Keep unknown `data.*` fields for diagnostics rather than dropping them.
+
+### CLI/Backend
+
+- Keep raw PAT passthrough on stderr clean for no-`flowId` cases.
+- Continue accepting upstream `code`, `errorCode`, and `error_code`.
+- Do not silently rename `data.requiredScopes`, `data.grantOptions`, `data.authRequestId`, or `data.flowId`.
+
+### QA
+
+- Verify both `code` and `error_code` inputs trigger PAT classification.
+- Verify no-`flowId` PAT responses contain only JSON on stderr.
+- Verify `flowId` responses still enter the local retry flow when the CLI owns the auth loop.
