@@ -72,12 +72,29 @@ func (e *callbackError) RawStderr() string {
 
 var callbackCmd = &cobra.Command{
 	Use:   "callback",
-	Short: "PAT 宿主回调接口",
-	Long: `面向自定义宿主 / Agent 的 PAT 机器接口。
+	Short: "PAT 宿主 / Agent 回调接口",
+	Long: `面向宿主 / Agent 的 PAT 机器接口。
 
 这些命令复用 CLI 已有的 PAT/CLI 授权接口，供宿主在拿到 PAT JSON
 事件后继续完成“查主管理员 / 发送申请 / 轮询流程”等动作，而不是直接
-调用 DingTalk API。`,
+调用 DingTalk API。
+
+宿主接管模式由 CLAW_TYPE 主导，支持值：
+  host-control
+  rewind-desktop
+  dws-wukong
+  wukong
+
+DWS_CHANNEL 只保留为上游 channelCode；历史上的
+  DWS_CHANNEL='...;host-control'
+仅作为兼容路径保留在文档中。`,
+	Example: `  dws pat callback list-super-admins --auth-request-id req-001
+  dws pat callback send-apply --admin-staff-id manager123 --auth-request-id req-001
+  dws pat callback poll-flow --flow-id flow-001 --auth-request-id req-001
+
+  # 显式指定 access token / config-dir（宿主通常二选一）
+  dws pat callback list-super-admins --access-token <token>
+  dws pat callback poll-flow --config-dir ~/.dws --flow-id flow-001`,
 	RunE: cmdutil.GroupRunE,
 }
 

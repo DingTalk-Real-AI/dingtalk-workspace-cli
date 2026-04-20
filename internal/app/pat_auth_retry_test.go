@@ -154,11 +154,17 @@ func TestPrintPatAuthJSON_MachineReadable(t *testing.T) {
 	PrintPatAuthJSON(&buf, scopeErr)
 
 	output := buf.String()
-	if !strings.Contains(output, `"ok": false`) {
-		t.Errorf("expected JSON to contain ok: false, got: %s", output)
+	if !strings.Contains(output, `"code": "PAT_SCOPE_AUTH_REQUIRED"`) {
+		t.Errorf("expected JSON to contain PAT scope code, got: %s", output)
 	}
-	if !strings.Contains(output, `"missing_scope": "mail:send"`) {
+	if !strings.Contains(output, `"missingScope": "mail:send"`) {
 		t.Errorf("expected JSON to contain missing_scope, got: %s", output)
+	}
+	if !strings.Contains(output, `"callbacks"`) {
+		t.Errorf("expected JSON to contain callbacks, got: %s", output)
+	}
+	if !strings.Contains(output, `"hostControl"`) {
+		t.Errorf("expected JSON to contain hostControl, got: %s", output)
 	}
 }
 
@@ -577,7 +583,8 @@ func TestHandlePatAuthCheck_Rejected(t *testing.T) {
 func TestHandlePatAuthCheck_HostControlledFlowIDPassthrough(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", tmpDir)
-	t.Setenv(authpkg.DWSChannelEnv, "Qoderwork;host-control")
+	t.Setenv(authpkg.DWSChannelEnv, "Qoderwork")
+	t.Setenv(authpkg.CLAWTypeEnv, authpkg.CLAWTypeRewindDesktop)
 
 	mock := &mockRunner{
 		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
@@ -616,6 +623,14 @@ func TestHandlePatAuthCheck_HostControlledFlowIDPassthrough(t *testing.T) {
 	if got, _ := data["flowId"].(string); got != "flow-host" {
 		t.Fatalf("data.flowId = %q, want flow-host", got)
 	}
+	hostControl, _ := data["hostControl"].(map[string]any)
+	if got, _ := hostControl["clawType"].(string); got != authpkg.CLAWTypeRewindDesktop {
+		t.Fatalf("hostControl.clawType = %q, want %q", got, authpkg.CLAWTypeRewindDesktop)
+	}
+	callbacks, _ := data["callbacks"].([]any)
+	if len(callbacks) != 3 {
+		t.Fatalf("callbacks len = %d, want 3", len(callbacks))
+	}
 	meta, _ := payload["_meta"].(map[string]any)
 	callback, _ := meta[patHostControlCallbackMetaKey].(map[string]any)
 	if got, _ := callback["type"].(string); got != "pat_auth" {
@@ -623,6 +638,58 @@ func TestHandlePatAuthCheck_HostControlledFlowIDPassthrough(t *testing.T) {
 	}
 	if got, _ := callback["flowId"].(string); got != "flow-host" {
 		t.Fatalf("callback.flowId = %q, want flow-host", got)
+	}
+}
+
+func TestHandlePatAuthCheck_HostControlledEmptyFlowID_StillReturnsContract(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", tmpDir)
+	t.Setenv(authpkg.DWSChannelEnv, "Qoderwork")
+	t.Setenv(authpkg.CLAWTypeEnv, authpkg.CLAWTypeWukong)
+
+	mock := &mockRunner{
+		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
+			t.Fatal("runner should not be called in host-controlled PAT mode")
+			return executor.Result{}, nil
+		},
+	}
+
+	runner := &runtimeRunner{fallback: mock}
+	patErr := &apperrors.PATError{RawJSON: makePATErrorJSON("", "test-client-id")}
+
+	var buf bytes.Buffer
+	_, err := handlePatAuthCheck(context.Background(), runner, executor.Invocation{
+		CanonicalProduct: "test",
+		Tool:             "test_tool",
+	}, patErr, tmpDir, &buf)
+
+	if err == nil {
+		t.Fatal("expected PATError in host-controlled mode")
+	}
+	if got := strings.TrimSpace(buf.String()); got != "" {
+		t.Fatalf("expected no human-readable output in host mode, got %q", got)
+	}
+	patOut, ok := err.(*apperrors.PATError)
+	if !ok {
+		t.Fatalf("expected *PATError, got %T: %v", err, err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(patOut.RawJSON), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(host PAT payload) error = %v\nraw=%s", err, patOut.RawJSON)
+	}
+	data, _ := payload["data"].(map[string]any)
+	callbacks, _ := data["callbacks"].([]any)
+	if len(callbacks) != 2 {
+		t.Fatalf("callbacks len = %d, want 2 when flowId is absent", len(callbacks))
+	}
+	meta, _ := payload["_meta"].(map[string]any)
+	callback, _ := meta[patHostControlCallbackMetaKey].(map[string]any)
+	if got, _ := callback["type"].(string); got != "pat_auth" {
+		t.Fatalf("callback.type = %q, want pat_auth", got)
+	}
+	if got, _ := callback["flowId"].(string); got != "" {
+		t.Fatalf("callback.flowId = %q, want empty", got)
 	}
 }
 
@@ -689,5 +756,57 @@ func TestHandlePatAuthCheck_EmptyFlowID_LegacyErrorCode_NoOutput(t *testing.T) {
 	}
 	if got := strings.TrimSpace(buf.String()); got != "" {
 		t.Fatalf("expected no output for legacy error_code passthrough, got %q", got)
+	}
+}
+
+func TestRetryWithPatAuthRetry_HostControlledReturnsJSON(t *testing.T) {
+	t.Setenv(authpkg.CLAWTypeEnv, authpkg.CLAWTypeDWSWukong)
+
+	scopeErr := &PatScopeError{
+		OriginalError: "missing required scope(s): mail:send",
+		Identity:      "user",
+		ErrorType:     "missing_scope",
+		Message:       "missing required scope(s): mail:send",
+		Hint:          "run `dws auth login --scope \"mail:send\"` to authorize the missing scope",
+		MissingScope:  "mail:send",
+	}
+
+	mock := &mockRunner{
+		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
+			t.Fatal("runner should not be called in host-controlled scope mode")
+			return executor.Result{}, nil
+		},
+	}
+
+	var buf bytes.Buffer
+	_, err := retryWithPatAuthRetry(context.Background(), mock, executor.Invocation{}, scopeErr, t.TempDir(), &buf)
+	if err == nil {
+		t.Fatal("expected PATError")
+	}
+	if got := strings.TrimSpace(buf.String()); got != "" {
+		t.Fatalf("expected no human-readable output, got %q", got)
+	}
+	patErr, ok := err.(*apperrors.PATError)
+	if !ok {
+		t.Fatalf("expected *PATError, got %T: %v", err, err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(patErr.RawJSON), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(scope host payload) error = %v\nraw=%s", err, patErr.RawJSON)
+	}
+	if got, _ := payload["code"].(string); got != "PAT_SCOPE_AUTH_REQUIRED" {
+		t.Fatalf("code = %q, want PAT_SCOPE_AUTH_REQUIRED", got)
+	}
+	data, _ := payload["data"].(map[string]any)
+	if got, _ := data["missingScope"].(string); got != "mail:send" {
+		t.Fatalf("missingScope = %q, want mail:send", got)
+	}
+	callbacks, _ := data["callbacks"].([]any)
+	if len(callbacks) != 1 {
+		t.Fatalf("callbacks len = %d, want 1", len(callbacks))
+	}
+	meta, _ := payload["_meta"].(map[string]any)
+	if _, ok := meta[patHostControlCallbackMetaKey]; !ok {
+		t.Fatal("expected _meta host-control callback metadata")
 	}
 }

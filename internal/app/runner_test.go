@@ -308,7 +308,7 @@ func TestRuntimeRunnerInjectsAuthTokenFromFlag(t *testing.T) {
 
 func TestResolveIdentityHeadersUsesParsedChannelCode(t *testing.T) {
 	setupRuntimeCommandTest(t)
-	t.Setenv(authpkg.DWSChannelEnv, "Qoderwork;host-control")
+	t.Setenv(authpkg.DWSChannelEnv, "Qoderwork")
 
 	headers := resolveIdentityHeaders()
 	if got := headers["x-dws-channel"]; got != "Qoderwork" {

@@ -45,6 +45,7 @@ const (
 	PatAuthPollInterval = 5 * time.Second
 
 	patHostControlCallbackMetaKey = "com.dingtalk.workspace-cli/host-control-callback"
+	patScopeAuthRequiredCode      = "PAT_SCOPE_AUTH_REQUIRED"
 )
 
 // PatScopeError holds information about a missing PAT scope.
@@ -184,21 +185,7 @@ func PrintPatAuthError(w io.Writer, scopeErr *PatScopeError) {
 
 // PrintPatAuthJSON prints a machine-readable PAT authorization error.
 func PrintPatAuthJSON(w io.Writer, scopeErr *PatScopeError) {
-	payload := map[string]any{
-		"ok":       false,
-		"identity": scopeErr.Identity,
-		"error": map[string]any{
-			"type":    scopeErr.ErrorType,
-			"message": scopeErr.Message,
-			"hint":    scopeErr.Hint,
-		},
-	}
-	if scopeErr.MissingScope != "" {
-		payload["missing_scope"] = scopeErr.MissingScope
-	}
-
-	data, _ := json.MarshalIndent(payload, "", "  ")
-	fmt.Fprintln(w, string(data))
+	fmt.Fprintln(w, buildPATScopeHostJSON(scopeErr))
 }
 
 // WaitForPatAuthorization polls until the user completes authorization or timeout.
@@ -260,6 +247,10 @@ func WaitForPatAuthorization(ctx context.Context, configDir string, output io.Wr
 // retryWithPatAuthRetry wraps an invocation that failed with a PAT scope error.
 // It waits for the user to complete authorization and then retries the invocation.
 func retryWithPatAuthRetry(ctx context.Context, runner executor.Runner, invocation executor.Invocation, scopeErr *PatScopeError, configDir string, output io.Writer) (executor.Result, error) {
+	if authpkg.CurrentChannelConfig().HostPATPassthroughEnabled() {
+		return executor.Result{}, &apperrors.PATError{RawJSON: buildPATScopeHostJSON(scopeErr)}
+	}
+
 	// Print the PAT error in human-readable format
 	PrintPatAuthError(output, scopeErr)
 
@@ -362,6 +353,7 @@ func handlePatAuthCheck(
 		"hasSecret", patData.Data.ClientSecret != "",
 	)
 	channelCfg := authpkg.CurrentChannelConfig()
+	hostOwnedPAT := channelCfg.HostPATPassthroughEnabled()
 
 	// Inject clientId/clientSecret from PAT response as runtime credentials
 	// so that subsequent device flow auth uses the server-assigned app identity.
@@ -392,7 +384,7 @@ func handlePatAuthCheck(
 	if appCfg != nil {
 		if err := authpkg.SaveAppConfig(configDir, appCfg); err != nil {
 			slog.Warn("failed to persist app config from PAT", "error", err)
-			if !channelCfg.HostPATPassthroughEnabled() && patData.Data.FlowID != "" {
+			if !hostOwnedPAT && patData.Data.FlowID != "" {
 				fmt.Fprintf(output, "  \u26a0 保存应用配置失败: %v (下次启动可能需要重新授权)\n", err)
 			}
 		}
@@ -400,8 +392,8 @@ func handlePatAuthCheck(
 
 	// In host-controlled PAT mode, or when flowId is absent, the CLI returns
 	// machine-readable JSON to stderr and leaves UI/polling/retry to the host.
-	if channelCfg.HostPATPassthroughEnabled() || patData.Data.FlowID == "" {
-		if channelCfg.HostPATPassthroughEnabled() {
+	if hostOwnedPAT || patData.Data.FlowID == "" {
+		if hostOwnedPAT {
 			return executor.Result{}, &apperrors.PATError{RawJSON: enrichPATErrorForHostControl(patErr.RawJSON, patData.Data.FlowID)}
 		}
 		return executor.Result{}, patErr
@@ -518,22 +510,135 @@ func enrichPATErrorForHostControl(raw string, flowID string) string {
 		return raw
 	}
 
+	hostCallback := map[string]any{
+		"type":    "pat_auth",
+		"flowId":  flowID,
+		"version": 1,
+	}
+
 	meta, _ := payload["_meta"].(map[string]any)
 	if meta == nil {
 		meta = make(map[string]any)
 		payload["_meta"] = meta
 	}
-	meta[patHostControlCallbackMetaKey] = map[string]any{
-		"type":    "pat_auth",
-		"flowId":  flowID,
-		"version": 1,
+	meta[patHostControlCallbackMetaKey] = hostCallback
+
+	data, _ := payload["data"].(map[string]any)
+	if data == nil {
+		data = make(map[string]any)
+		payload["data"] = data
 	}
+	data["hostControl"] = buildHostControlState()
+	data["callbacks"] = appendHostPATCallbacks(data, flowID)
 
 	encoded, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return raw
 	}
 	return string(encoded)
+}
+
+func buildPATScopeHostJSON(scopeErr *PatScopeError) string {
+	callback := map[string]any{
+		"name":        "auth_login",
+		"description": "Run dws auth login to grant the missing scope.",
+		"invoke": map[string]any{
+			"type": "cli",
+			"argv": buildAuthLoginArgv(scopeErr.MissingScope),
+		},
+	}
+	payload := map[string]any{
+		"success": false,
+		"code":    patScopeAuthRequiredCode,
+		"data": map[string]any{
+			"identity":     scopeErr.Identity,
+			"errorType":    scopeErr.ErrorType,
+			"message":      scopeErr.Message,
+			"hint":         scopeErr.Hint,
+			"missingScope": scopeErr.MissingScope,
+			"hostControl":  buildHostControlState(),
+			"callbacks":    []map[string]any{callback},
+		},
+		"_meta": map[string]any{
+			patHostControlCallbackMetaKey: callback,
+		},
+	}
+	b, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return `{"success":false,"code":"PAT_SCOPE_AUTH_REQUIRED"}`
+	}
+	return string(b)
+}
+
+func buildHostControlState() map[string]any {
+	return map[string]any{
+		"clawType":      authpkg.CurrentHostPATClawType(),
+		"mode":          "host",
+		"pollingOwner":  "host",
+		"retryOwner":    "host",
+		"callbackOwner": "host",
+	}
+}
+
+func appendHostPATCallbacks(data map[string]any, flowID string) []map[string]any {
+	authRequestID, _ := data["authRequestId"].(string)
+	withAuthRequestID := func(args map[string]any) map[string]any {
+		if strings.TrimSpace(authRequestID) == "" {
+			return args
+		}
+		if args == nil {
+			args = make(map[string]any)
+		}
+		args["authRequestId"] = authRequestID
+		return args
+	}
+
+	callbacks := []map[string]any{
+		{
+			"name":        "list_super_admins",
+			"description": "Fetch available organization admins for a custom authorization picker.",
+			"invoke": map[string]any{
+				"type": "cli",
+				"argv": []string{"dws", "pat", "callback", "list-super-admins"},
+				"args": withAuthRequestID(nil),
+			},
+		},
+		{
+			"name":        "send_apply",
+			"description": "Submit a permission-change request to the selected admin.",
+			"invoke": map[string]any{
+				"type":     "cli",
+				"argv":     []string{"dws", "pat", "callback", "send-apply"},
+				"args":     withAuthRequestID(nil),
+				"required": []string{"adminStaffId"},
+			},
+		},
+	}
+
+	if strings.TrimSpace(flowID) != "" {
+		callbacks = append(callbacks, map[string]any{
+			"name":        "poll_flow",
+			"description": "One-shot PAT flow status poll. Exchanges authCode and saves token on approval.",
+			"invoke": map[string]any{
+				"type": "cli",
+				"argv": []string{"dws", "pat", "callback", "poll-flow"},
+				"args": withAuthRequestID(map[string]any{
+					"flowId": flowID,
+				}),
+				"required": []string{"flowId"},
+			},
+		})
+	}
+
+	return callbacks
+}
+
+func buildAuthLoginArgv(scope string) []string {
+	argv := []string{"dws", "auth", "login"}
+	if strings.TrimSpace(scope) != "" {
+		argv = append(argv, "--scope", scope)
+	}
+	return argv
 }
 
 // pollPatDeviceFlow polls the PAT device flow status endpoint until a terminal

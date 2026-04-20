@@ -34,7 +34,17 @@ func RegisterCommands(root *cobra.Command, c edition.ToolCaller) {
 
 命令结构:
   dws pat chmod     <scope>...   授予指定权限
-  dws pat callback  <command>    自定义宿主可调用的 PAT 回调接口`,
+  dws pat callback  <command>    宿主 / Agent PAT 接管模式的回调接口
+
+宿主接管 PAT 时，以 CLAW_TYPE 为主选择器。支持值：
+  host-control
+  rewind-desktop
+  dws-wukong
+  wukong
+
+DWS_CHANNEL 只用于上游 channelCode；历史上的
+  DWS_CHANNEL='...;host-control'
+只应视为兼容路径。`,
 		RunE: cmdutil.GroupRunE,
 	}
 

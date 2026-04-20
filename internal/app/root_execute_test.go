@@ -444,7 +444,7 @@ func TestExecute_no_panic_returns_0(t *testing.T) {
 }
 
 func TestPATCallbackListSuperAdminsCommand_UsesParsedChannelHeader(t *testing.T) {
-	t.Setenv("DWS_CHANNEL", "Qoderwork;host-control")
+	t.Setenv(authpkg.DWSChannelEnv, "Qoderwork")
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("x-dws-channel"); got != "Qoderwork" {
@@ -486,7 +486,7 @@ func TestPATCallbackListSuperAdminsCommand_UsesParsedChannelHeader(t *testing.T)
 }
 
 func TestPATCallbackPollFlowCommand_ApprovedUpdatesToken(t *testing.T) {
-	t.Setenv("DWS_CHANNEL", "Qoderwork;host-control")
+	t.Setenv(authpkg.DWSChannelEnv, "Qoderwork")
 	t.Setenv("DWS_CLIENT_ID", "cli-app-id")
 
 	var savedToken []byte

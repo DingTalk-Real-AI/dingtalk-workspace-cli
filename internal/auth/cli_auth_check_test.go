@@ -181,7 +181,7 @@ func TestCheckCLIAuthEnabled_TransientThenSuccess(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCheckCLIAuthEnabled_Enabled(t *testing.T) {
-	t.Setenv(DWSChannelEnv, "Qoderwork;host-control")
+	t.Setenv(DWSChannelEnv, "Qoderwork")
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("x-user-access-token") != "good-token" {
@@ -721,7 +721,7 @@ func TestGetSuperAdmins_TransientThenSuccess(t *testing.T) {
 }
 
 func TestGetSuperAdmins_Success(t *testing.T) {
-	t.Setenv(DWSChannelEnv, "Qoderwork;host-control")
+	t.Setenv(DWSChannelEnv, "Qoderwork")
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("x-user-access-token") != "good-token" {
@@ -808,7 +808,7 @@ func TestSendCliAuthApply_TransientThenSuccess(t *testing.T) {
 }
 
 func TestSendCliAuthApply_Success(t *testing.T) {
-	t.Setenv(DWSChannelEnv, "Qoderwork;host-control")
+	t.Setenv(DWSChannelEnv, "Qoderwork")
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("x-user-access-token") != "good-token" {
