@@ -160,9 +160,6 @@ func TestPrintPatAuthJSON_MachineReadable(t *testing.T) {
 	if !strings.Contains(output, `"missingScope": "mail:send"`) {
 		t.Errorf("expected JSON to contain missing_scope, got: %s", output)
 	}
-	if !strings.Contains(output, `"callbacks"`) {
-		t.Errorf("expected JSON to contain callbacks, got: %s", output)
-	}
 	if !strings.Contains(output, `"hostControl"`) {
 		t.Errorf("expected JSON to contain hostControl, got: %s", output)
 	}
@@ -626,17 +623,14 @@ func TestHandlePatAuthCheck_HostControlledFlowIDPassthrough(t *testing.T) {
 	if got, _ := hostControl["clawType"].(string); got != "sales-copilot" {
 		t.Fatalf("hostControl.clawType = %q, want sales-copilot", got)
 	}
-	callbacks, _ := data["callbacks"].([]any)
-	if len(callbacks) != 3 {
-		t.Fatalf("callbacks len = %d, want 3", len(callbacks))
+	if _, ok := data["callbacks"]; ok {
+		t.Fatalf("unexpected callbacks contract in host-controlled PAT payload: %#v", data["callbacks"])
 	}
-	meta, _ := payload["_meta"].(map[string]any)
-	callback, _ := meta[patHostControlCallbackMetaKey].(map[string]any)
-	if got, _ := callback["type"].(string); got != "pat_auth" {
-		t.Fatalf("callback.type = %q, want pat_auth", got)
+	if _, ok := payload["_meta"]; ok {
+		t.Fatalf("unexpected _meta contract in host-controlled PAT payload: %#v", payload["_meta"])
 	}
-	if got, _ := callback["flowId"].(string); got != "flow-host" {
-		t.Fatalf("callback.flowId = %q, want flow-host", got)
+	if strings.Contains(patOut.RawJSON, `"pat","callback"`) {
+		t.Fatalf("host PAT payload should not advertise dws pat callback argv: %s", patOut.RawJSON)
 	}
 }
 
@@ -677,17 +671,14 @@ func TestHandlePatAuthCheck_HostControlledEmptyFlowID_StillReturnsContract(t *te
 		t.Fatalf("json.Unmarshal(host PAT payload) error = %v\nraw=%s", err, patOut.RawJSON)
 	}
 	data, _ := payload["data"].(map[string]any)
-	callbacks, _ := data["callbacks"].([]any)
-	if len(callbacks) != 2 {
-		t.Fatalf("callbacks len = %d, want 2 when flowId is absent", len(callbacks))
+	if _, ok := data["callbacks"]; ok {
+		t.Fatalf("unexpected callbacks contract when flowId is absent: %#v", data["callbacks"])
 	}
-	meta, _ := payload["_meta"].(map[string]any)
-	callback, _ := meta[patHostControlCallbackMetaKey].(map[string]any)
-	if got, _ := callback["type"].(string); got != "pat_auth" {
-		t.Fatalf("callback.type = %q, want pat_auth", got)
+	if _, ok := payload["_meta"]; ok {
+		t.Fatalf("unexpected _meta contract when flowId is absent: %#v", payload["_meta"])
 	}
-	if got, _ := callback["flowId"].(string); got != "" {
-		t.Fatalf("callback.flowId = %q, want empty", got)
+	if strings.Contains(patOut.RawJSON, `"pat","callback"`) {
+		t.Fatalf("host PAT payload should not advertise dws pat callback argv: %s", patOut.RawJSON)
 	}
 }
 
@@ -722,52 +713,6 @@ func TestHandlePatAuthCheck_EmptyFlowID_FallsBackToPATError(t *testing.T) {
 	}
 	if got := strings.TrimSpace(buf.String()); got != "" {
 		t.Fatalf("expected no human-readable output for raw PAT passthrough, got %q", got)
-	}
-}
-
-func TestHandlePatAuthCheck_TaggedDWSChannelDoesNotEnableHostControl(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("DWS_CONFIG_DIR", tmpDir)
-	t.Setenv(authpkg.DWSChannelEnv, "Qoderwork;host-control")
-
-	mock := &mockRunner{
-		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
-			t.Fatal("runner should not be called when flowId is empty")
-			return executor.Result{}, nil
-		},
-	}
-
-	runner := &runtimeRunner{fallback: mock}
-	patErr := &apperrors.PATError{RawJSON: makePATErrorJSON("", "test-client-id")}
-
-	var buf bytes.Buffer
-	_, err := handlePatAuthCheck(context.Background(), runner, executor.Invocation{
-		CanonicalProduct: "test",
-		Tool:             "test_tool",
-	}, patErr, tmpDir, &buf)
-
-	if err == nil {
-		t.Fatal("expected PATError when flowId is empty")
-	}
-	patOut, ok := err.(*apperrors.PATError)
-	if !ok {
-		t.Fatalf("expected *PATError, got %T: %v", err, err)
-	}
-	if got := strings.TrimSpace(buf.String()); got != "" {
-		t.Fatalf("expected no human-readable output for raw PAT passthrough, got %q", got)
-	}
-
-	var payload map[string]any
-	if err := json.Unmarshal([]byte(patOut.RawJSON), &payload); err != nil {
-		t.Fatalf("json.Unmarshal(passthrough PAT payload) error = %v\nraw=%s", err, patOut.RawJSON)
-	}
-	data, _ := payload["data"].(map[string]any)
-	if _, ok := data["hostControl"]; ok {
-		t.Fatalf("unexpected hostControl payload when only DWS_CHANNEL is tagged: %#v", data["hostControl"])
-	}
-	meta, _ := payload["_meta"].(map[string]any)
-	if _, ok := meta[patHostControlCallbackMetaKey]; ok {
-		t.Fatal("unexpected host-control callback metadata when only DWS_CHANNEL is tagged")
 	}
 }
 
@@ -845,12 +790,10 @@ func TestRetryWithPatAuthRetry_HostControlledReturnsJSON(t *testing.T) {
 	if got, _ := data["missingScope"].(string); got != "mail:send" {
 		t.Fatalf("missingScope = %q, want mail:send", got)
 	}
-	callbacks, _ := data["callbacks"].([]any)
-	if len(callbacks) != 1 {
-		t.Fatalf("callbacks len = %d, want 1", len(callbacks))
+	if _, ok := data["callbacks"]; ok {
+		t.Fatalf("unexpected callbacks contract in PAT scope host payload: %#v", data["callbacks"])
 	}
-	meta, _ := payload["_meta"].(map[string]any)
-	if _, ok := meta[patHostControlCallbackMetaKey]; !ok {
-		t.Fatal("expected _meta host-control callback metadata")
+	if strings.Contains(patErr.RawJSON, `"pat","callback"`) {
+		t.Fatalf("scope host payload should not advertise dws pat callback argv: %s", patErr.RawJSON)
 	}
 }

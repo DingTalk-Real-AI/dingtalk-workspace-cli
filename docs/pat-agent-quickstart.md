@@ -37,31 +37,30 @@ Read:
 - `data.grantOptions`
 - `data.authRequestId`
 - `data.hostControl`
-- `data.callbacks`
 - optional `data.flowId`
+- optional `data.missingScope`
 
-When `claw-type != default`, `data.hostControl` means the host owns UI, callback invocation, and retry.
+When `claw-type != default`, `data.hostControl` means the host owns UI, follow-up handling, and retry.
 
 Special case:
 
 - `PAT_SCOPE_AUTH_REQUIRED` may not include `flowId`
 - do not assume polling is available for every PAT event
 
-## 4. Use the callback commands
+## 4. Handle follow-up in the host
 
-- `dws pat callback list-super-admins`
-- `dws pat callback send-apply --admin-staff-id <id>`
-- `dws pat callback poll-flow --flow-id <id>`
-- `dws auth login --scope <scope>` when the callback name is `auth_login`
+The open-source CLI does not expose a dedicated `dws pat callback ...` surface.
+Hosts are responsible for their own follow-up logic after parsing the PAT payload.
 
-Use the callback descriptors in `data.callbacks` to decide which command to invoke. Do not call DingTalk PAT APIs directly from the host.
+Typical host-owned actions:
+
+- render an approval card from `requiredScopes` and `grantOptions`
+- bind host state to `authRequestId`
+- list approvers or super admins through host-managed services
+- submit approval requests through host-managed services
+- poll approval state only when `flowId` is present
+- for `PAT_SCOPE_AUTH_REQUIRED`, run `dws auth login --scope <scope>` or trigger an equivalent host re-auth flow
 
 ## 5. Retry only after approval
 
-`poll-flow` is one-shot. On approval it exchanges `authCode`, persists the refreshed token, and can return:
-
-- `status = "APPROVED"`
-- `tokenUpdated = true`
-- `retrySuggested = true`
-
-Only retry the original DWS command after `retrySuggested = true`.
+Only retry the original DWS command after the host confirms approval is complete and any required token refresh has finished.

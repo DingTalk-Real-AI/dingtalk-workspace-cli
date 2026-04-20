@@ -5,7 +5,7 @@ This guide is for desktop and agent hosts that intercept `dws` PAT authorization
 ## Audience map
 
 - Frontend/Desktop team: classify PAT stderr JSON, render the approval UI, and retry the original task.
-- CLI/Backend team: keep the PAT payload and callback command surface stable.
+- CLI/Backend team: keep the PAT payload shallow and stable.
 - QA team: validate exit code, stderr JSON shape, host retry behavior, and selector handling.
 - Integration owner: set `DINGTALK_AGENT=<business-agent-name>` for each business host integration.
 
@@ -35,8 +35,8 @@ Use the existing split of responsibilities as the reference implementation:
 
 That split is the model this open-source contract now follows as well:
 
-- CLI owns normalization and callback command execution.
-- Host owns rendering, user interaction, callback invocation cadence, and retry of the original command.
+- CLI owns normalization only.
+- Host owns rendering, user interaction, follow-up logic, and retry of the original command.
 
 ## What the CLI emits
 
@@ -56,18 +56,8 @@ Typical envelope:
       "clawType": "sales-copilot",
       "mode": "host",
       "pollingOwner": "host",
-      "retryOwner": "host",
-      "callbackOwner": "host"
+      "retryOwner": "host"
     },
-    "callbacks": [
-      {
-        "name": "list_super_admins",
-        "invoke": {
-          "type": "cli",
-          "argv": ["dws", "pat", "callback", "list-super-admins"]
-        }
-      }
-    ],
     "flowId": "..."
   }
 }
@@ -94,10 +84,10 @@ Known host-relevant PAT selectors:
 - `success`: `false` for PAT interception.
 - `data.requiredScopes`: scopes missing for the original operation.
 - `data.grantOptions`: approval choices the host can present.
-- `data.authRequestId`: correlation id for host state, logs, and callback requests.
+- `data.authRequestId`: correlation id for host state and logs.
 - `data.hostControl`: indicates the host owns UI, polling, and retry.
-- `data.callbacks`: callback descriptors for `dws pat callback ...` follow-up actions.
 - `data.flowId`: optional approval-flow id. It may be absent, especially for `PAT_SCOPE_AUTH_REQUIRED`.
+- `data.missingScope`: optional missing scope for `PAT_SCOPE_AUTH_REQUIRED`.
 
 Preserve unknown `data.*` fields for diagnostics and forward compatibility.
 
@@ -106,7 +96,7 @@ Preserve unknown `data.*` fields for diagnostics and forward compatibility.
 - PAT authorization failures exit with code `4`.
 - PAT JSON is written to `stderr` without the normal CLI formatter.
 - If `flowId` is absent, the host must not assume polling is possible.
-- When `claw-type != default`, the host decides whether to show approval UI, invoke callbacks, and retry the original DWS command.
+- When `claw-type != default`, the host decides whether to show approval UI, run its own follow-up flow, and retry the original DWS command.
 
 ## Recommended host behavior
 
@@ -115,27 +105,10 @@ Preserve unknown `data.*` fields for diagnostics and forward compatibility.
 3. Use `code` first and fall back to `error_code`.
 4. Bind UI state to `authRequestId` when present.
 5. Render `requiredScopes` as the reason for authorization and `grantOptions` as the action set.
-6. Use `data.callbacks` to drive `dws pat callback ...` follow-up actions rather than calling DingTalk APIs directly.
+6. Implement follow-up actions inside the host or host-managed backend rather than relying on CLI callback commands.
 7. Only poll when `flowId` is present.
-8. Retry the original DWS command only after `poll-flow` returns `status = "APPROVED"` and `retrySuggested = true`.
-
-## Callback contract
-
-The callback command names remain:
-
-- `dws pat callback list-super-admins`
-- `dws pat callback send-apply --admin-staff-id <id>`
-- `dws pat callback poll-flow --flow-id <id>`
-- `dws auth login --scope <scope>` via the `auth_login` callback for `PAT_SCOPE_AUTH_REQUIRED`
-
-`poll-flow` is one-shot. On approval it may:
-
-- exchange `authCode`
-- persist the refreshed token
-- return `tokenUpdated = true`
-- return `retrySuggested = true`
-
-Hosts should keep using `tokenUpdated` and `retrySuggested` in callback responses.
+8. For `PAT_SCOPE_AUTH_REQUIRED`, run `dws auth login --scope <scope>` or trigger an equivalent host-managed re-auth flow.
+9. Retry the original DWS command only after the host confirms approval and token state are ready.
 
 ## Parsing rules
 
@@ -150,8 +123,7 @@ Hosts should keep using `tokenUpdated` and `retrySuggested` in callback response
 - Empty `DINGTALK_AGENT` and `DINGTALK_AGENT=default` both mean default DWS behavior.
 - When `claw-type != default`, PAT returns JSON and the host handles all UI and logic.
 - `DWS_CHANNEL` remains upstream channel metadata only.
-- Keep command names `list-super-admins`, `send-apply`, and `poll-flow` unchanged for compatibility.
-- Keep `tokenUpdated` and `retrySuggested` unchanged in callback responses.
+- The stable PAT CLI surface is `dws pat chmod`; follow-up approval logic is host-owned.
 
 ## Team checklist
 
@@ -165,7 +137,7 @@ Hosts should keep using `tokenUpdated` and `retrySuggested` in callback response
 ### CLI/Backend
 
 - Keep raw PAT stderr payloads clean.
-- Keep `data.hostControl`, `data.callbacks`, and callback command names stable.
+- Keep `data.hostControl` and the core PAT fields stable.
 - Keep `DWS_CHANNEL` documented as upstream channel only, with no host-control fallback.
 
 ### QA
@@ -175,4 +147,4 @@ Hosts should keep using `tokenUpdated` and `retrySuggested` in callback response
 - Verify `claw-type != default` PAT flows return JSON for host-owned handling.
 - Verify PAT host-owned flows do not depend on `DWS_CHANNEL`.
 - Verify `PAT_SCOPE_AUTH_REQUIRED` is handled correctly with and without `flowId`.
-- Verify `poll-flow` approval responses preserve `tokenUpdated` and `retrySuggested`.
+- Verify host-owned approval flows can retry the original command after authorization completes.

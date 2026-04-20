@@ -34,7 +34,6 @@ func RegisterCommands(root *cobra.Command, c edition.ToolCaller) {
 
 命令结构:
   dws pat chmod     <scope>...   授予指定权限
-  dws pat callback  <command>    宿主 / Agent PAT 接管模式的回调接口
 
 第三方业务开发者通过 DINGTALK_AGENT 指定自己的业务 Agent 名称。
 生效请求头固定为：
@@ -49,6 +48,5 @@ DWS_CHANNEL 只用于上游 channelCode。`,
 	}
 
 	patCmd.AddCommand(chmodCmd)
-	patCmd.AddCommand(callbackCmd)
 	root.AddCommand(patCmd)
 }

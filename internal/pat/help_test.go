@@ -39,49 +39,25 @@ func TestPatHelpMentionsDingTalkAgentHostFlow(t *testing.T) {
 			t.Fatalf("pat help missing %q\n%s", want, help)
 		}
 	}
-	for _, bad := range []string{"host-control", "rewind-desktop", "dws-wukong", "wukong"} {
+	for _, bad := range []string{"host-control", "rewind-desktop", "dws-wukong", "wukong", "callback"} {
 		if strings.Contains(help, bad) {
 			t.Fatalf("pat help should not mention %q\n%s", bad, help)
 		}
 	}
 }
 
-func TestPatCallbackHelpMentionsStableCommandsAndDingTalkAgentFlow(t *testing.T) {
+func TestPatCallbackCommandIsNotRegistered(t *testing.T) {
 	root := &cobra.Command{Use: "dws"}
 	RegisterCommands(root, nil)
 
-	cmd, _, err := root.Find([]string{"pat", "callback"})
+	cmd, _, err := root.Find([]string{"pat"})
 	if err != nil {
-		t.Fatalf("Find(pat callback) error = %v", err)
+		t.Fatalf("Find(pat) error = %v", err)
 	}
 
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
-	if err := cmd.Help(); err != nil {
-		t.Fatalf("Help() error = %v", err)
-	}
-
-	help := out.String()
-	for _, want := range []string{
-		"DINGTALK_AGENT",
-		"claw-type",
-		"business-agent-name",
-		"claw-type != default",
-		"PAT 返回 JSON",
-		"由宿主处理全部 UI / 交互 / 回调节奏 / 重试逻辑",
-		"list-super-admins",
-		"send-apply",
-		"poll-flow",
-		"DWS_CHANNEL",
-	} {
-		if !strings.Contains(help, want) {
-			t.Fatalf("callback help missing %q\n%s", want, help)
-		}
-	}
-	for _, bad := range []string{"host-control", "rewind-desktop", "dws-wukong", "wukong"} {
-		if strings.Contains(help, bad) {
-			t.Fatalf("callback help should not mention %q\n%s", bad, help)
+	for _, sub := range cmd.Commands() {
+		if sub.Name() == "callback" {
+			t.Fatalf("pat subcommands unexpectedly include %q", sub.Name())
 		}
 	}
 }
