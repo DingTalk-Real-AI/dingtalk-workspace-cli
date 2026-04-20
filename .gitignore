@@ -16,6 +16,7 @@ dws
 test/cli/testdata/
 tmp/
 test/cli_compat/testdata/
+/internal/compat/testdata/*
 .gitignore
 .worktrees/
 

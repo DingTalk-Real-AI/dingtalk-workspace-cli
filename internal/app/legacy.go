@@ -187,23 +187,7 @@ func loadDynamicCommands(ctx context.Context, runner executor.Runner) []*cobra.C
 		}
 		fetchStart := time.Now()
 
-		var resp market.ListResponse
-		var fetchErr error
-
-		if editionURL := edition.Get().DiscoveryURL; editionURL != "" {
-			client := market.NewClient("", ipv4OnlyHTTPClient())
-			if fn := edition.Get().DiscoveryHeaders; fn != nil {
-				client.Headers = fn()
-			}
-			resp, fetchErr = client.FetchServersFromURL(ctx, editionURL)
-		} else {
-			baseURL := cli.DefaultMarketBaseURL
-			if discoveryBaseURLOverride != "" {
-				baseURL = discoveryBaseURLOverride
-			}
-			client := market.NewClient(baseURL, ipv4OnlyHTTPClient())
-			resp, fetchErr = client.FetchServers(ctx, config.DefaultFetchServersLimit)
-		}
+		resp, fetchErr := fetchRegistryServers(ctx, ipv4OnlyHTTPClient())
 
 		RecordTiming(ctx, "market_fetch", time.Since(fetchStart))
 		if fetchErr != nil {
@@ -439,19 +423,42 @@ func DiscoveryBaseURL() string {
 	return cli.DefaultMarketBaseURL
 }
 
-// ipv4OnlyHTTPClient returns an HTTP client that forces IPv4 connections
-// and uses a short timeout suitable for CLI startup network requests.
-// This avoids IPv6 DNS/connect timeouts on hosts without IPv6 networking.
-func ipv4OnlyHTTPClient() *http.Client {
+// ipv4HTTPClient returns an HTTP client that forces IPv4 connections with
+// the given total request timeout. This avoids IPv6 DNS/connect timeouts on
+// hosts without IPv6 networking.
+func ipv4HTTPClient(timeout time.Duration) *http.Client {
 	dialer := &net.Dialer{Timeout: 3 * time.Second}
 	return &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: timeout,
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				return dialer.DialContext(ctx, "tcp4", addr)
 			},
 		},
 	}
+}
+
+// ipv4OnlyHTTPClient returns an IPv4-forcing HTTP client with a short timeout
+// suitable for CLI startup network requests.
+func ipv4OnlyHTTPClient() *http.Client {
+	return ipv4HTTPClient(5 * time.Second)
+}
+
+// fetchRegistryServers performs the server-list HTTP fetch honoring the
+// active edition's DiscoveryURL override. It is the single source of truth
+// for all server-list fetches (startup, async revalidation, explicit
+// `cache refresh`); keeping the edition-URL branch in one place prevents
+// call sites from drifting out of sync.
+func fetchRegistryServers(ctx context.Context, httpClient *http.Client) (market.ListResponse, error) {
+	if editionURL := strings.TrimSpace(edition.Get().DiscoveryURL); editionURL != "" {
+		client := market.NewClient("", httpClient)
+		if fn := edition.Get().DiscoveryHeaders; fn != nil {
+			client.Headers = fn()
+		}
+		return client.FetchServersFromURL(ctx, editionURL)
+	}
+	client := market.NewClient(DiscoveryBaseURL(), httpClient)
+	return client.FetchServers(ctx, config.DefaultFetchServersLimit)
 }
 
 // asyncRevalidateRegistry refreshes the registry cache in the background.
@@ -461,21 +468,7 @@ func asyncRevalidateRegistry(parent context.Context, store *cache.Store, partiti
 	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 	defer cancel()
 
-	var resp market.ListResponse
-	var err error
-
-	if editionURL := edition.Get().DiscoveryURL; editionURL != "" {
-		client := market.NewClient("", ipv4OnlyHTTPClient())
-		if fn := edition.Get().DiscoveryHeaders; fn != nil {
-			client.Headers = fn()
-		}
-		resp, err = client.FetchServersFromURL(ctx, editionURL)
-	} else {
-		baseURL := DiscoveryBaseURL()
-		client := market.NewClient(baseURL, ipv4OnlyHTTPClient())
-		resp, err = client.FetchServers(ctx, config.DefaultFetchServersLimit)
-	}
-
+	resp, err := fetchRegistryServers(ctx, ipv4OnlyHTTPClient())
 	if err != nil {
 		slog.Debug("asyncRevalidateRegistry: fetch failed", "error", err)
 		return

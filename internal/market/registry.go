@@ -98,6 +98,32 @@ type CLIOverlay struct {
 	Tools         []CLITool                  `json:"tools"`
 	Groups        map[string]CLIGroupDef     `json:"groups,omitempty"`
 	ToolOverrides map[string]CLIToolOverride `json:"toolOverrides,omitempty"`
+	// ServerDeps declares other product IDs that this overlay depends on at
+	// runtime (e.g. chat depends on bot for cross-server tool routing).
+	// Consumed by the portal merge service for fail-fast validation; CLI side
+	// currently only stores the value for tooling/introspection.
+	ServerDeps []string `json:"serverDeps,omitempty"`
+	// Hints registers stub sub-commands under the overlay root that only
+	// print a redirect message pointing to the canonical command path. Used
+	// for deprecated command aliases and "did-you-mean" style hints.
+	// Key is the sub-command name; value describes the target path.
+	Hints map[string]CLIHintDef `json:"hintCommands,omitempty"`
+}
+
+// CLIHintDef declares a stub sub-command that prints a redirect message.
+// The command takes no bindings and calls no tool; its sole purpose is to
+// help users migrate from an old command path to the new one.
+type CLIHintDef struct {
+	// Target is the canonical command path shown in the redirect message
+	// (e.g. "dws chat message list").
+	Target string `json:"target"`
+	// Description overrides the Short/Long help text for the hint command.
+	// Empty falls back to a generic "use: <target>" string.
+	Description string `json:"description,omitempty"`
+	// Group optionally nests the hint under a named sub-group (same syntax
+	// as CLIToolOverride.Group with dot-separated paths). Empty means the
+	// hint is attached directly to the overlay root.
+	Group string `json:"group,omitempty"`
 }
 
 // CLIGroupDef defines a sub-command group within a CLI module.
@@ -114,6 +140,30 @@ type CLIToolOverride struct {
 	Hidden       bool                       `json:"hidden,omitempty"`
 	Flags        map[string]CLIFlagOverride `json:"flags,omitempty"`
 	OutputFormat map[string]any             `json:"outputFormat,omitempty"`
+	// ServerOverride routes this leaf command's tool invocation to a different
+	// product's MCP server (e.g. `chat bot ...` leaves live under the `chat`
+	// command tree but call the `bot` endpoint). Empty means use the enclosing
+	// overlay's server.
+	ServerOverride string `json:"serverOverride,omitempty"`
+	// BodyWrapper, when non-empty, wraps the collected params map under this
+	// single key before the invocation is dispatched. Useful when the upstream
+	// tool expects a typed DTO wrapper (e.g. `PersonalTodoCreateVO`). Only
+	// user-provided params are wrapped; internal control keys starting with
+	// '_' (e.g. `_blocked`, `_yes`) are preserved at the top level.
+	BodyWrapper string `json:"bodyWrapper,omitempty"`
+	// MutuallyExclusive groups flag aliases that must not be set together.
+	// Each inner slice becomes one cobra.MarkFlagsMutuallyExclusive call.
+	// Example: [["group","user","open-dingtalk-id"]] for `chat message list`.
+	MutuallyExclusive [][]string `json:"mutuallyExclusive,omitempty"`
+	// RequireOneOf groups flag aliases where at least one must be set. Each
+	// inner slice becomes one cobra.MarkFlagsOneRequired call. Typically
+	// paired with MutuallyExclusive to enforce "exactly one of".
+	RequireOneOf [][]string `json:"requireOneOf,omitempty"`
+	// RedirectTo, when non-empty, turns this entry into a stub command that
+	// prints the redirect target instead of invoking a tool. All other
+	// fields (Flags / BodyWrapper / IsSensitive / ServerOverride) are
+	// ignored. Use for deprecated leaf commands that moved to a new path.
+	RedirectTo string `json:"redirectTo,omitempty"`
 }
 
 // CLIFlagOverride describes how to map an MCP parameter to a CLI flag.
@@ -124,6 +174,18 @@ type CLIFlagOverride struct {
 	EnvDefault    string         `json:"envDefault,omitempty"`
 	Hidden        bool           `json:"hidden,omitempty"`
 	Default       string         `json:"default,omitempty"`
+	// Shorthand registers a single-char flag alias (cobra StringP etc.).
+	Shorthand string `json:"shorthand,omitempty"`
+	// Required marks this flag as mandatory via cobra.MarkFlagRequired.
+	// Ignored when Positional is true (positional args have their own arity rules).
+	Required bool `json:"required,omitempty"`
+	// Description overrides the usage string displayed in --help; takes
+	// priority over the Detail API's toolDesc when non-empty.
+	Description string `json:"description,omitempty"`
+	// Positional, when true, binds this parameter to a positional CLI argument
+	// instead of a --flag. PositionalIndex (0-based) selects which arg slot.
+	Positional      bool `json:"positional,omitempty"`
+	PositionalIndex int  `json:"positionalIndex,omitempty"`
 }
 
 type CLITool struct {

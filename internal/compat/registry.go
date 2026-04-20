@@ -61,6 +61,10 @@ type FlagBinding struct {
 	Kind     ValueKind
 	Usage    string
 	Required bool
+	// Positional binds this parameter to a positional CLI argument rather
+	// than a --flag. PositionalIndex is the 0-based slot.
+	Positional      bool
+	PositionalIndex int
 }
 
 type Normalizer func(cmd *cobra.Command, params map[string]any) error
@@ -109,6 +113,22 @@ func NewFallbackCommands(runner executor.Runner) []*cobra.Command {
 var NewGroupCommand = cobracmd.NewGroupCommand
 
 func NewDirectCommand(route Route, runner executor.Runner) *cobra.Command {
+	// Compute positional arity: cobra.Args requires knowing how many positional
+	// slots are needed up-front. We use MinimumNArgs so trailing positionals
+	// can still be captured via Use hints without breaking existing behaviour.
+	positionalCount := 0
+	hasPositional := false
+	for _, b := range route.Bindings {
+		if b.Positional && b.PositionalIndex+1 > positionalCount {
+			positionalCount = b.PositionalIndex + 1
+			hasPositional = true
+		}
+	}
+	var argsValidator cobra.PositionalArgs = cobra.NoArgs
+	if hasPositional {
+		argsValidator = cobra.MinimumNArgs(positionalCount)
+	}
+
 	cmd := &cobra.Command{
 		Use:               route.Use,
 		Aliases:           append([]string(nil), route.Aliases...),
@@ -116,7 +136,7 @@ func NewDirectCommand(route Route, runner executor.Runner) *cobra.Command {
 		Long:              route.Long,
 		Example:           route.Example,
 		Hidden:            route.Hidden,
-		Args:              cobra.NoArgs,
+		Args:              argsValidator,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonPayload, err := cmd.Flags().GetString("json")
@@ -139,6 +159,13 @@ func NewDirectCommand(route Route, runner executor.Runner) *cobra.Command {
 			params := baseParams
 			for key, value := range bindingParams {
 				params[key] = value
+			}
+
+			// Inject positional args into params according to each binding's
+			// PositionalIndex. Positional bindings are not registered as flags,
+			// so CollectBindings skips them.
+			if err := collectPositionalBindings(args, route.Bindings, params); err != nil {
+				return err
 			}
 
 			// Collect schema-derived flags (from buildFlagsFromDetailSchema)
@@ -198,6 +225,10 @@ func NewCuratedCommand(route Route, runner executor.Runner) *cobra.Command {
 
 func ApplyBindings(cmd *cobra.Command, bindings []FlagBinding) {
 	for _, binding := range bindings {
+		// Positional bindings are collected from cobra args rather than flags.
+		if binding.Positional {
+			continue
+		}
 		primary := strings.TrimSpace(binding.FlagName)
 		if primary == "" {
 			continue
@@ -245,11 +276,56 @@ func ApplyBindings(cmd *cobra.Command, bindings []FlagBinding) {
 				_ = cmd.Flags().MarkHidden(alias)
 			}
 		}
+		if binding.Required {
+			_ = cmd.MarkFlagRequired(primary)
+		}
 	}
 	cmd.Flags().String("json", "", "Base JSON object payload for this command")
 	cmd.Flags().String("params", "", "Additional JSON object payload merged after --json")
 	_ = cmd.Flags().MarkHidden("json")
 	_ = cmd.Flags().MarkHidden("params")
+}
+
+// collectPositionalBindings pulls positional args according to the bindings
+// and injects them into params[property]. Missing slots are skipped (cobra
+// arity validation already ran before RunE).
+func collectPositionalBindings(args []string, bindings []FlagBinding, params map[string]any) error {
+	for _, binding := range bindings {
+		if !binding.Positional {
+			continue
+		}
+		property := strings.TrimSpace(binding.Property)
+		if property == "" {
+			continue
+		}
+		if binding.PositionalIndex < 0 || binding.PositionalIndex >= len(args) {
+			continue
+		}
+		raw := args[binding.PositionalIndex]
+		switch binding.Kind {
+		case ValueInt:
+			v, err := strconv.Atoi(strings.TrimSpace(raw))
+			if err != nil {
+				return apperrors.NewValidation(fmt.Sprintf("positional argument %d (%s) must be int", binding.PositionalIndex, property))
+			}
+			params[property] = v
+		case ValueFloat:
+			v, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+			if err != nil {
+				return apperrors.NewValidation(fmt.Sprintf("positional argument %d (%s) must be float", binding.PositionalIndex, property))
+			}
+			params[property] = v
+		case ValueBool:
+			v, err := strconv.ParseBool(strings.TrimSpace(raw))
+			if err != nil {
+				return apperrors.NewValidation(fmt.Sprintf("positional argument %d (%s) must be bool", binding.PositionalIndex, property))
+			}
+			params[property] = v
+		default:
+			params[property] = raw
+		}
+	}
+	return nil
 }
 
 // collectSchemaFlags picks up flags created by buildFlagsFromDetailSchema that
@@ -322,6 +398,9 @@ func CollectBindings(cmd *cobra.Command, bindings []FlagBinding, existing map[st
 	}
 	params := make(map[string]any)
 	for _, binding := range bindings {
+		if binding.Positional {
+			continue
+		}
 		primaryName := strings.TrimSpace(binding.FlagName)
 		if primaryName == "" {
 			continue

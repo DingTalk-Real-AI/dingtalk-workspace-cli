@@ -93,6 +93,13 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 				cliName = deriveCommandName(toolName, cli.Prefixes)
 			}
 
+			// §P2.redirect: redirectTo turns this entry into a stub.
+			if target := strings.TrimSpace(override.RedirectTo); target != "" {
+				redirect := buildRedirectCommand(cliName, override.Description, target)
+				attachToGroup(rootCmd, override.Group, groupCmds, redirect)
+				continue
+			}
+
 			bindings, normalizer := buildOverrideBindings(override)
 
 			// Resolve Short/Long from Detail API toolTitle/toolDesc;
@@ -111,12 +118,19 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 				}
 			}
 
+			// ServerOverride routes this leaf's tool invocation to a different
+			// product's MCP server; fall back to the enclosing overlay's ID.
+			canonicalProduct := strings.TrimSpace(override.ServerOverride)
+			if canonicalProduct == "" {
+				canonicalProduct = strings.TrimSpace(cli.ID)
+			}
+
 			route := Route{
 				Use:   cliName,
 				Short: short,
 				Long:  long,
 				Target: Target{
-					CanonicalProduct: strings.TrimSpace(cli.ID),
+					CanonicalProduct: canonicalProduct,
 					Tool:             toolName,
 				},
 				Bindings:   bindings,
@@ -135,13 +149,25 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 				buildFlagsFromDetailSchema(cmd, dt.ToolRequest, override.Flags)
 			}
 
+			// §P2.flagconstraints: must run AFTER schema enrichment because the
+			// target flags may be registered lazily by buildFlagsFromDetailSchema.
+			applyFlagConstraints(cmd, override)
+
 			// §1.4: Add to the right parent group
-			groupName := strings.TrimSpace(override.Group)
-			if groupName != "" {
-				parent := resolveNestedGroup(rootCmd, groupName, groupCmds)
-				parent.AddCommand(cmd)
-			} else {
-				rootCmd.AddCommand(cmd)
+			attachToGroup(rootCmd, override.Group, groupCmds, cmd)
+		}
+
+		// §P2.hints: attach hint stub commands registered on the overlay.
+		if len(cli.Hints) > 0 {
+			hintNames := make([]string, 0, len(cli.Hints))
+			for name := range cli.Hints {
+				hintNames = append(hintNames, name)
+			}
+			sort.Strings(hintNames)
+			for _, name := range hintNames {
+				def := cli.Hints[name]
+				hint := buildHintCommand(name, def)
+				attachToGroup(rootCmd, def.Group, groupCmds, hint)
 			}
 		}
 
@@ -237,6 +263,12 @@ func buildFlagsFromDetailSchema(cmd *cobra.Command, schemaJSON string, flagOverr
 
 	for _, key := range keys {
 		prop := schema.Properties[key]
+
+		// Skip properties that are bound as positional arguments; they are
+		// collected from cobra args rather than flags.
+		if ov, ok := flagOverrides[key]; ok && ov.Positional {
+			continue
+		}
 
 		// Determine flag name: prefer alias from CLIFlagOverride, else kebab-case.
 		flagName := toKebabCase(key)
@@ -438,11 +470,25 @@ func buildOverrideBindings(override market.CLIToolOverride) ([]FlagBinding, Norm
 			continue
 		}
 
+		// Usage defaults to paramName but an explicit Description on the
+		// overlay wins (it also beats the Detail API's toolDesc during flag
+		// enrichment because buildFlagsFromDetailSchema preserves overlay usage).
+		usage := paramName
+		if desc := strings.TrimSpace(flagOverride.Description); desc != "" {
+			usage = desc
+		}
+
 		binding := FlagBinding{
 			FlagName: flagName,
+			Short:    strings.TrimSpace(flagOverride.Shorthand),
 			Property: paramName,
 			Kind:     ValueString,
-			Usage:    paramName,
+			Usage:    usage,
+			// §P1: required and positional are mutually exclusive — positional
+			// args are validated by cobra's MinimumNArgs, not MarkFlagRequired.
+			Required:        flagOverride.Required && !flagOverride.Positional,
+			Positional:      flagOverride.Positional,
+			PositionalIndex: flagOverride.PositionalIndex,
 		}
 
 		// §2.5: hidden flag with default
@@ -475,7 +521,7 @@ func buildOverrideBindings(override market.CLIToolOverride) ([]FlagBinding, Norm
 	}
 
 	// Check if we need a normalizer: transforms, env defaults, hidden defaults,
-	// or dotted property paths that need nesting.
+	// dotted property paths that need nesting, or a body wrapper.
 	needsDottedNesting := false
 	for _, b := range bindings {
 		if strings.Contains(b.Property, ".") {
@@ -483,11 +529,12 @@ func buildOverrideBindings(override market.CLIToolOverride) ([]FlagBinding, Norm
 			break
 		}
 	}
-	if len(transforms) == 0 && len(envDefaults) == 0 && len(hiddenDefaults) == 0 && !needsDottedNesting {
+	bodyWrapper := strings.TrimSpace(override.BodyWrapper)
+	if len(transforms) == 0 && len(envDefaults) == 0 && len(hiddenDefaults) == 0 && !needsDottedNesting && bodyWrapper == "" {
 		return bindings, nil
 	}
 
-	// Build a normalizer that applies hidden defaults + env defaults + transforms + nesting
+	// Build a normalizer that applies hidden defaults + env defaults + transforms + nesting + body wrap
 	normalizer := func(cmd *cobra.Command, params map[string]any) error {
 		// §2.5: Apply hidden flag defaults for parameters not explicitly set
 		for _, hd := range hiddenDefaults {
@@ -527,10 +574,142 @@ func buildOverrideBindings(override market.CLIToolOverride) ([]FlagBinding, Norm
 		// Nest dotted property paths: "Body.query" → params["Body"]["query"]
 		nestDottedPaths(params)
 
+		// §P2.bodyWrapper: wrap user-facing params under a single named key.
+		// Internal control keys (prefixed with '_' e.g. _blocked, _yes) stay
+		// at the top level so downstream confirmation logic keeps working.
+		if bodyWrapper != "" {
+			wrapParamsIntoBody(params, bodyWrapper)
+		}
+
 		return nil
 	}
 
 	return bindings, normalizer
+}
+
+// wrapParamsIntoBody moves every non-internal key from params into a new
+// map stored under params[wrapper]. Internal keys (leading underscore) are
+// preserved at the top level so the dispatcher / --yes logic still sees
+// them. If params already contains params[wrapper] it is merged in first.
+func wrapParamsIntoBody(params map[string]any, wrapper string) {
+	if wrapper == "" {
+		return
+	}
+	body := map[string]any{}
+	if existing, ok := params[wrapper].(map[string]any); ok {
+		for k, v := range existing {
+			body[k] = v
+		}
+		delete(params, wrapper)
+	}
+	for key, value := range params {
+		if strings.HasPrefix(key, "_") {
+			continue
+		}
+		body[key] = value
+		delete(params, key)
+	}
+	params[wrapper] = body
+}
+
+// attachToGroup places cmd under the right parent based on the dotted group
+// path. Empty group means attach directly to the overlay root.
+func attachToGroup(root *cobra.Command, groupPath string, groupCmds map[string]*cobra.Command, cmd *cobra.Command) {
+	gp := strings.TrimSpace(groupPath)
+	if gp == "" {
+		root.AddCommand(cmd)
+		return
+	}
+	parent := resolveNestedGroup(root, gp, groupCmds)
+	parent.AddCommand(cmd)
+}
+
+// buildRedirectCommand returns a stub leaf that prints "use: <target>" and
+// performs no tool invocation. Accepts unknown flags/args so users hitting
+// the old path get the redirect message instead of a parse error.
+func buildRedirectCommand(name, description, target string) *cobra.Command {
+	short := strings.TrimSpace(description)
+	if short == "" {
+		short = fmt.Sprintf("moved → %s", target)
+	}
+	cmd := &cobra.Command{
+		Use:                name,
+		Short:              short,
+		Long:               fmt.Sprintf("This command has moved. Please use: %s", target),
+		DisableFlagParsing: true,
+		DisableAutoGenTag:  true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Fprintf(cmd.OutOrStdout(), "This command has moved. Please use: %s\n", target)
+			return nil
+		},
+	}
+	return cmd
+}
+
+// buildHintCommand returns a stub sub-command that prints a redirect hint
+// to the canonical command path declared by the overlay's hintCommands entry.
+func buildHintCommand(name string, def market.CLIHintDef) *cobra.Command {
+	target := strings.TrimSpace(def.Target)
+	short := strings.TrimSpace(def.Description)
+	if short == "" {
+		if target != "" {
+			short = fmt.Sprintf("hint: use %s", target)
+		} else {
+			short = "hint: see --help for the canonical command"
+		}
+	}
+	cmd := &cobra.Command{
+		Use:                name,
+		Short:              short,
+		Long:               short,
+		DisableFlagParsing: true,
+		DisableAutoGenTag:  true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if target != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "Please use: %s\n", target)
+			} else {
+				_ = cmd.Help()
+			}
+			return nil
+		},
+	}
+	return cmd
+}
+
+// applyFlagConstraints wires mutuallyExclusive / requireOneOf declarations
+// onto the cobra command. Unknown flag names are logged and skipped so a
+// stale/malformed overlay never blocks the entire command tree from building.
+func applyFlagConstraints(cmd *cobra.Command, override market.CLIToolOverride) {
+	validate := func(names []string) []string {
+		valid := make([]string, 0, len(names))
+		for _, n := range names {
+			n = strings.TrimSpace(n)
+			if n == "" {
+				continue
+			}
+			if cmd.Flags().Lookup(n) == nil {
+				fmt.Fprintf(os.Stderr, "[discovery] flag constraint references unknown flag --%s on %q; skipping\n", n, cmd.Name())
+				return nil
+			}
+			valid = append(valid, n)
+		}
+		return valid
+	}
+
+	for _, group := range override.MutuallyExclusive {
+		names := validate(group)
+		if len(names) < 2 {
+			continue
+		}
+		cmd.MarkFlagsMutuallyExclusive(names...)
+	}
+	for _, group := range override.RequireOneOf {
+		names := validate(group)
+		if len(names) < 1 {
+			continue
+		}
+		cmd.MarkFlagsOneRequired(names...)
+	}
 }
 
 // chainSensitiveNormalizer wraps a normalizer with --yes confirmation for sensitive operations (§5.1).
