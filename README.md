@@ -359,15 +359,17 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 | Ding | `ding` | 2 | `message` | Send/recall DING messages |
 | Report | `report` | 7 | `create` `list` `detail` `template` `stats` `sent` | Create reports, sent/received list, templates, statistics |
 | AITable | `aitable` | 20 | `base` `table` `record` `field` `attachment` `template` | Full CRUD for bases/tables/records/fields, templates |
+| Doc | `doc` | 16 | `search` `list` `info` `read` `create` `update` `upload` `download` `folder` `block` `comment` | Search, read, create/update documents; block-level editing; file upload/download; comments |
+| Minutes | `minutes` | 14 | `list` `get` `update` `record` | List and search AI meeting transcripts; summaries, transcriptions, todos; recording control |
 | Workbench | `workbench` | 2 | `app` | Batch query app details |
 | DevDoc | `devdoc` | 1 | `article` | Search platform docs and error codes |
 
-> 86 commands across 12 products. Run `dws --help` for the full list, or `dws <service> --help` for subcommands.
+> 116 commands across 14 products. Run `dws --help` for the full list, or `dws <service> --help` for subcommands.
 
 <details>
 <summary>Coming soon</summary>
 
-`doc` (documents) · `mail` (email) · `minutes` (AI transcription) · `drive` (cloud drive) · `conference` (video) · `tb` (Teambition) · `aiapp` (AI apps) · `live` (streaming) · `skill` (marketplace)
+`mail` (email) · `drive` (cloud drive) · `conference` (video) · `tb` (Teambition) · `aiapp` (AI apps) · `live` (streaming) · `skill` (marketplace)
 
 </details>
 
