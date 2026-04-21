@@ -380,6 +380,44 @@ Flags:
 
 > 📎 **模板预览地址**：`https://docs.dingtalk.com/table/template/{templateId}`
 
+## 复杂操作
+
+### 仪表盘 / 图表（建议顺序）
+
+```bash
+# 1) 先看配置模板（JSONC）
+dws aitable dashboard config-example --format json
+dws aitable chart widgets-example --format json
+
+# 2) 先拿 dashboard，再拿 chart 详情
+dws aitable dashboard get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --format json
+dws aitable chart get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --chart-id <CHART_ID> --format json
+```
+
+要点：
+
+- `dashboard get` 返回的 `charts[].chartId` 可直接给 `chart get` 使用。
+- `dashboard share get` 可能返回 `404`（资源不存在或未开通），需按可重试错误处理，不要误判为参数拼错。
+- `chart share get` 可正常返回 `enabled/shareUrl`，用于分享状态判断。
+
+### 导出数据（两阶段轮询）
+
+`export data` 常见为异步任务：首次调用可能只返回 `taskId`，需要继续轮询。
+
+```bash
+# 第一步：创建任务（按 scope 传必要参数）
+dws aitable export data --base-id <BASE_ID> --scope table --table-id <TABLE_ID> --format excel --timeout-ms 1000
+
+# 第二步：拿 taskId 继续轮询，直到返回 downloadUrl
+dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 3000
+```
+
+参数约束
+
+- `scope=all`：只需 `base-id`
+- `scope=table`：必须 `table-id`
+- `scope=view`：必须同时 `table-id + view-id`
+
 ## 意图判断
 
 用户说"表格/多维表/AI表格":
