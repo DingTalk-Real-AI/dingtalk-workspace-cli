@@ -24,7 +24,7 @@ cli_version: ">=1.0.6"
 
 | 产品                | 用途                                                   | 参考文件                                                           |
 |-------------------|------------------------------------------------------|----------------------------------------------------------------|
-| `aitable`         | AI表格：表格/数据表/字段/记录增删改查/模板搜索                           | [aitable.md](./references/products/aitable.md)                 |
+| `aitable`         | AI表格：Base/数据表/字段/记录/附件/模板搜索                              | [aitable.md](./references/products/aitable.md)                 |
 | `approval`        | 审批：审批表单/发起实例/审批/撤销                                   | [simple.md](./references/products/simple.md)                   |
 | `attendance`      | 考勤：打卡记录/排班查询                                         | [attendance.md](./references/products/attendance.md)           |
 | `calendar`        | 日历：日程/参与者/会议室/闲忙查询                                   | [calendar.md](./references/products/calendar.md)               |

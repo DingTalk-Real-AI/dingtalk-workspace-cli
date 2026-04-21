@@ -31,9 +31,9 @@ Flags:
 
 > 📎 **操作后返回文档链接**：遍历返回的每个 base，拼接 `https://alidocs.dingtalk.com/i/nodes/{baseId}` 返回给用户。
 
-> ⚠️ **注意**：`base list` 仅返回**最近访问过**的 Base，不是全部 Base。
-> 新创建的 Base 如果尚未在钉钉前端打开过，可能不会出现在此列表中。
-> 如需查找特定 Base，请使用 `base search`；如果刚创建完，直接使用 `create` 返回的 `baseId` 即可。
+> ⚠️ **重要**：`base list` 仅返回**最近访问过**的 Base，**不是全部 Base**。
+> 如需查找表格，**请优先使用 `base search`**；`base list` 仅作为浏览最近表格的辅助手段。
+> 如果刚创建完，直接使用 `create` 返回的 `baseId` 即可。
 
 #### 搜索 AI 表格
 ```
@@ -55,6 +55,8 @@ Example:
 Flags:
       --base-id string   Base 唯一标识 (必填)
 ```
+
+> 💡 **用户提供 URL 时**：如果用户给出了链接如 `https://alidocs.dingtalk.com/i/nodes/ABC123`，请提取末尾的 `ABC123` 作为 `--base-id` 传入。详见下方「URL → baseId 提取」章节。
 
 返回 baseName、tables、dashboards 的 summary 信息（不含字段与记录详情）。
 后续如需 tableId，优先从这里读取。
@@ -186,15 +188,24 @@ Flags:
 Usage:
   dws aitable field create [flags]
 Example:
+  # 单字段模式
   dws aitable field create --base-id <BASE_ID> --table-id <TABLE_ID> \
-    --fields '[{"fieldName":"状态","type":"singleSelect","config":{"options":[{"name":"待办"},{"name":"进行中"},{"name":"已完成"}]}}]'
+    --name "状态" --type "singleSelect" --config '{"options":[{"name":"待办"},{"name":"进行中"},{"name":"已完成"}]}'
+
+  # 批量模式
+  dws aitable field create --base-id <BASE_ID> --table-id <TABLE_ID> \
+    --fields '[{"fieldName":"状态","type":"singleSelect","config":{"options":[{"name":"待办"}]}}]'
 Flags:
       --base-id string    Base ID (必填)
-      --fields string     待新增字段 JSON 数组，至少 1 个，单次最多 15 个 (必填)
+      --name string       单字段名称（与 --type 配合使用，替代 --fields）
+      --type string       单字段类型（参考 table create 字段类型）
+      --config string     单字段配置 JSON（可选，如 options）
+      --fields string     批量新增字段 JSON 数组，单次最多 15 个（与 --name/--type 二选一）
       --table-id string   Table ID (必填)
 ```
 
 允许部分成功，返回结果逐项标明成功/失败状态。
+`--name/--type/--config` 为单字段模式；`--fields` 为批量模式；两种模式二选一。
 
 #### 更新字段
 ```
@@ -236,13 +247,13 @@ Usage:
 Example:
   dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID>
   dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID> --record-ids rec1,rec2
-  dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID> --keyword "关键词" --limit 50
+  dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID> --query "关键词" --limit 50
 Flags:
       --base-id string      Base ID (必填)
       --cursor string       分页游标，首次不传
       --field-ids string    返回字段 ID 列表，逗号分隔，单次最多 100 个
       --filters string      结构化过滤条件 JSON
-      --keyword string     全文关键词搜索
+      --query string        全文关键词搜索
       --limit int           单次最大记录数，默认 100，最大 100
       --record-ids string   指定记录 ID 列表，逗号分隔，单次最多 100 个
       --sort string         排序条件 JSON 数组
@@ -250,6 +261,10 @@ Flags:
 ```
 
 两种模式: 按 ID 取（传 record-ids，忽略 filters/sort）或条件查（filters+sort+cursor 分页）。
+
+> ⚠️ **排序参数规范（关键）**：`--sort` 需要传 JSON 数组，排序方向字段必须是 `direction`（`asc` 或 `desc`），**不要使用 `order`**。
+>
+> 正确示例：`--sort '[{"fieldId":"wm8ns9bw2vmucb45xj3ix","direction":"desc"}]'`
 
 filters 结构：`{"operator":"and|or","operands":[{"operator":"<op>","operands":["<fieldId>","<value>"]}]}`
 
@@ -368,7 +383,7 @@ Flags:
 ## 意图判断
 
 用户说"表格/多维表/AI表格":
-- 查看/列表 → `base list`
+- 查看/查找/列表 → `base search`（优先）或 `base list`（仅浏览最近访问）
 - 搜索 → `base search`
 - 详情 → `base get`
 - 创建 → `base create`
@@ -433,6 +448,63 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 - 所有操作使用 ID（baseId/tableId/fieldId/recordId），不使用名称
 - records 的 cells key 是 fieldId，不是字段名称
 
+## `--filters` 筛选语法排错与使用规范（极易出错）
+
+调用 `record query` 时，如果条件筛选**完全失效（查询返回了所有记录）**，通常是因为 `--filters` JSON 语法错误，API 默默丢弃了不合规的 filter。
+
+**强制规则：**
+1. **根节点必须是逻辑操作符**：`"operator"` 必须是 `"and"` 或 `"or"`，不能是 `"eq"` 等比较操作符。
+2. 比较操作必须放在根节点的 `"operands"` 数组内的对象中。
+3. `singleSelect` 和 `multipleSelect` 字段，推荐使用 **选项的 exact String 名称 (name)** 作为比较值，而不是 ID。
+4. **内层比较操作符语义**：支持 `eq`(等于)、`not_eq`(不等于)、`contain`(包含/模糊搜索)、`not_contain`(不包含)、`gt/gte`(大于/大于等于)、`lt/lte`(小于/小于等于)、`is_empty/is_not_empty`(为空/不为空，对应 operands 内只传单个 fieldId)。
+
+**精简防呆模板与 4 种衍生情况**
+```json
+{
+  "operator": "and",       // 情况 4 (OR 查询): 这里改为 "or"
+  "operands": [
+    {
+      "operator": "eq",    // 情况 3 (文本包含): 这里改为 "contain"
+      "operands": ["fld_state", "进行中"] // 情况 1 (基础等于)
+    }
+    // 情况 2 (多条件 AND): 在此行增加类似 {"operator":"eq","operands":["fld_priority","高"]}
+  ]
+}
+```
+
+**错误示例 1：缺失根节点 and/or**（API 将忽略该 filter，返回全表）
+```json
+{"operator":"eq","operands":["fldXXX","本科"]}
+```
+
+**错误示例 2：传入选项 ID 而非名称**（可能导致匹配不到 0 记录）
+```json
+{"operator":"and","operands":[{"operator":"eq","operands":["fldXXX","CXzrOHK9JI"]}]}
+```
+
+## URL → baseId 提取
+
+用户经常通过钉钉链接指定表格，链接格式为：
+
+```
+https://alidocs.dingtalk.com/i/nodes/{baseId}
+https://alidocs.dingtalk.com/i/nodes/{baseId}?xxx=yyy
+```
+
+**处理规则**（必须严格遵守）：
+1. 当用户提供了包含 `alidocs.dingtalk.com/i/nodes/` 的 URL 时，提取 `/nodes/` 后的路径段作为 `baseId`
+2. 去掉尾部的查询参数（`?` 及其后内容）和尾部斜杠
+3. 将提取得到的 ID 传入 `--base-id` 参数
+
+**示例**：
+```
+用户输入：帮我查看 https://alidocs.dingtalk.com/i/nodes/ABC123XYZ 这个表格
+→ 提取 baseId = ABC123XYZ
+→ 执行: dws aitable base get --base-id ABC123XYZ --format json
+```
+
+> 💡 **注意**：URL 中的 nodeId 在 AI 表格场景下等同于 baseId，可以直接作为 `--base-id` 使用。
+
 ### cells 写入/读取格式速查
 
 | 字段类型 | 写入格式 | 读取返回格式 |
@@ -450,3 +522,7 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 | group | `[{"cid":"xxx"}]` (注意: key 是 cid，不是 openConversationId) | 同写入 |
 
 - 详见 [field-rules.md](../field-rules.md) 和 [error-codes.md](../error-codes.md)
+
+## 相关产品
+
+- [doc](./doc.md) — 富文本文档编辑，不是结构化数据表格
