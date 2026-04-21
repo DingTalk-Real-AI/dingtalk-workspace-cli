@@ -49,6 +49,26 @@ type ListResponse struct {
 type ListMetadata struct {
 	Count      int    `json:"count"`
 	NextCursor string `json:"nextCursor"`
+	// Warnings is populated by the Portal merge service when envelopes are
+	// dropped (e.g. missing serverDeps, status != active) or when a dangling
+	// serverDeps / toolOverrides.*.serverOverride reference is detected.
+	// Old Portals without the field simply leave this nil. CLI side should
+	// treat any non-empty slice as non-fatal informational output: print to
+	// stderr so cache refreshes expose Portal drift to the user, but do not
+	// fail the discovery load.
+	//
+	// See plan fix-wukong-discovery-missing-servers Phase 4.2/4.3.
+	Warnings []ListWarning `json:"warnings,omitempty"`
+}
+
+// ListWarning describes one envelope that was filtered out of the merged
+// response or flagged for dangling references. Fields mirror the JSON emitted
+// by WukongDiscoveryRegistry.buildWarning on the Portal side; unknown reason
+// codes are passed through verbatim for forward compatibility.
+type ListWarning struct {
+	ProductID string `json:"productId"`
+	Reason    string `json:"reason"`
+	Detail    string `json:"detail"`
 }
 
 type ServerEnvelope struct {
