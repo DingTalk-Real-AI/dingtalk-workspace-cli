@@ -19,6 +19,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -39,7 +41,7 @@ func (f *fakeToolCaller) CallTool(_ context.Context, _ string, toolName string, 
 	defer f.mu.Unlock()
 	f.callN++
 	f.gotTool = toolName
-	// defensive copy — runApply / chmodCmd may mutate the map after return
+	// defensive copy — RunE / runApply may mutate the map after return
 	f.gotArgs = make(map[string]any, len(args))
 	for k, v := range args {
 		f.gotArgs[k] = v
@@ -55,43 +57,26 @@ func (f *fakeToolCaller) CallTool(_ context.Context, _ string, toolName string, 
 func (f *fakeToolCaller) Format() string { return "json" }
 func (f *fakeToolCaller) DryRun() bool   { return f.dryRun }
 
-// installFakeCaller swaps the package-level caller with fake for the
-// duration of the test and resets it on cleanup.
+// buildChmod returns a freshly constructed chmod cobra.Command wired to
+// fake. Using the factory (instead of a package-level var) keeps every
+// subtest hermetic and matches the upstream shared-state fix in PR #129.
+func buildChmod(t *testing.T, fake *fakeToolCaller) *cobra.Command {
+	t.Helper()
+	return newChmodCommand(fake)
+}
+
+// installFakeCaller swaps the package-level caller used by the still-
+// package-scoped apply / status / scopes subcommands with fake, for the
+// duration of the test. chmod now consumes its caller via the
+// newChmodCommand factory and does NOT read this variable.
+//
+// TODO(pat-caller-factory): retire along with the package-level caller
+// once apply / status / scopes migrate to factories too.
 func installFakeCaller(t *testing.T, fake *fakeToolCaller) {
 	t.Helper()
 	prev := caller
 	caller = fake
 	t.Cleanup(func() { caller = prev })
-}
-
-// resetChmodFlags returns the chmodCmd flags to their documented defaults
-// between tests. Cobra's flag values persist on the package-level *cobra.Command
-// instance, so tests must explicitly reset or they see stale values from
-// prior subtests.
-func resetChmodFlags(t *testing.T) {
-	t.Helper()
-	for name, def := range map[string]string{
-		"agentCode":  "",
-		"grant-type": "session",
-		"session-id": "",
-	} {
-		if f := chmodCmd.Flags().Lookup(name); f != nil {
-			_ = f.Value.Set(def)
-			f.Changed = false
-		}
-	}
-	t.Cleanup(func() {
-		for name, def := range map[string]string{
-			"agentCode":  "",
-			"grant-type": "session",
-			"session-id": "",
-		} {
-			if f := chmodCmd.Flags().Lookup(name); f != nil {
-				_ = f.Value.Set(def)
-				f.Changed = false
-			}
-		}
-	})
 }
 
 // ---------------------------------------------------------------------------
@@ -102,15 +87,14 @@ func resetChmodFlags(t *testing.T) {
 // omitted but DINGTALK_DWS_AGENTCODE is exported, the resolver picks
 // the env value up and forwards it verbatim in the MCP argv.
 func TestChmod_agentCode_env_fallback(t *testing.T) {
-	resetChmodFlags(t)
 	t.Setenv(agentCodeEnv, "qoderwork")
 
 	fake := &fakeToolCaller{resultOK: true}
-	installFakeCaller(t, fake)
+	cmd := buildChmod(t, fake)
 
 	// grant-type=once → no session-id needed; keeps the test hermetic.
-	_ = chmodCmd.Flags().Set("grant-type", "once")
-	if err := chmodCmd.RunE(chmodCmd, []string{"aitable.record:read"}); err != nil {
+	_ = cmd.Flags().Set("grant-type", "once")
+	if err := cmd.RunE(cmd, []string{"aitable.record:read"}); err != nil {
 		t.Fatalf("chmod RunE error = %v (must not report flag missing)", err)
 	}
 
@@ -124,14 +108,13 @@ func TestChmod_agentCode_env_fallback(t *testing.T) {
 // rejected by the regex gate in validateAgentCode before any MCP call
 // is attempted.
 func TestChmod_agentCode_env_invalid(t *testing.T) {
-	resetChmodFlags(t)
 	t.Setenv(agentCodeEnv, "bad value with space!")
 
 	fake := &fakeToolCaller{resultOK: true}
-	installFakeCaller(t, fake)
-	_ = chmodCmd.Flags().Set("grant-type", "once")
+	cmd := buildChmod(t, fake)
+	_ = cmd.Flags().Set("grant-type", "once")
 
-	err := chmodCmd.RunE(chmodCmd, []string{"aitable.record:read"})
+	err := cmd.RunE(cmd, []string{"aitable.record:read"})
 	if err == nil {
 		t.Fatalf("expected validateAgentCode error, got nil")
 	}
@@ -151,16 +134,15 @@ func TestChmod_agentCode_env_invalid(t *testing.T) {
 // flag wins and env is silently ignored (no warning needed because the
 // flag is the explicit, scripted intent).
 func TestChmod_agentCode_flag_wins_over_env(t *testing.T) {
-	resetChmodFlags(t)
 	t.Setenv(agentCodeEnv, "envval")
 
 	fake := &fakeToolCaller{resultOK: true}
-	installFakeCaller(t, fake)
+	cmd := buildChmod(t, fake)
 
-	_ = chmodCmd.Flags().Set("grant-type", "once")
-	_ = chmodCmd.Flags().Set("agentCode", "flagval")
+	_ = cmd.Flags().Set("grant-type", "once")
+	_ = cmd.Flags().Set("agentCode", "flagval")
 
-	if err := chmodCmd.RunE(chmodCmd, []string{"aitable.record:read"}); err != nil {
+	if err := cmd.RunE(cmd, []string{"aitable.record:read"}); err != nil {
 		t.Fatalf("chmod RunE error = %v", err)
 	}
 	if got := fake.gotArgs["agentCode"]; got != "flagval" {
@@ -175,26 +157,26 @@ func TestChmod_agentCode_flag_wins_over_env(t *testing.T) {
 // DINGTALK_DWS_AGENTCODE env, and MUST NOT mention DWS_AGENTCODE as a
 // usable fallback. No MCP call is permitted.
 func TestChmod_agentCode_legacy_env_not_recognized(t *testing.T) {
-	resetChmodFlags(t)
 	t.Setenv(agentCodeEnv, "")
 	t.Setenv("DWS_AGENTCODE", "legacyval")
 
 	fake := &fakeToolCaller{resultOK: true}
-	installFakeCaller(t, fake)
-	_ = chmodCmd.Flags().Set("grant-type", "once")
+	cmd := buildChmod(t, fake)
+	_ = cmd.Flags().Set("grant-type", "once")
 
-	err := chmodCmd.RunE(chmodCmd, []string{"aitable.record:read"})
+	err := cmd.RunE(cmd, []string{"aitable.record:read"})
 	if err == nil {
 		t.Fatalf("expected hard error when only legacy DWS_AGENTCODE is set, got nil")
 	}
 	if !strings.Contains(err.Error(), "DINGTALK_DWS_AGENTCODE") {
 		t.Fatalf("error = %q, want to name canonical DINGTALK_DWS_AGENTCODE env", err.Error())
 	}
-	if strings.Contains(err.Error(), "DWS_AGENTCODE") && !strings.Contains(err.Error(), "DINGTALK_DWS_AGENTCODE") {
-		// Defensive: ensure the hint never advertises DWS_AGENTCODE as a fallback.
-		// (The canonical env naturally contains the substring "DWS_AGENTCODE"
-		// only as part of "DINGTALK_DWS_AGENTCODE"; the two-clause check above
-		// is the precise guard.)
+	// Defensive: the canonical env naturally contains the substring
+	// "DWS_AGENTCODE" as part of "DINGTALK_DWS_AGENTCODE"; the above
+	// assertion plus the absence check below precisely guard against
+	// advertising the legacy alias as usable.
+	hint := strings.ReplaceAll(err.Error(), "DINGTALK_DWS_AGENTCODE", "")
+	if strings.Contains(hint, "DWS_AGENTCODE") {
 		t.Fatalf("error = %q must not advertise DWS_AGENTCODE as usable", err.Error())
 	}
 	if fake.callN != 0 {
@@ -247,8 +229,7 @@ func TestResolveAgentCodeFromEnv(t *testing.T) {
 	}
 
 	// Reverse-guard: legacy DWS_AGENTCODE MUST NOT be picked up when the
-	// canonical env is unset — it was hard-removed by SSOT §8.4's
-	// "不再兼容的历史别名" list.
+	// canonical env is unset — it was hard-removed as a legacy alias.
 	t.Setenv(agentCodeEnv, "")
 	t.Setenv("DWS_AGENTCODE", "legacy")
 	if code, src := resolveAgentCodeFromEnv(); code != "" || src != "" {

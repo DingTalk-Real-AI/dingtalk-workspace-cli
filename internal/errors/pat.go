@@ -312,10 +312,10 @@ func cleanPATJSON(body map[string]any, code string) string {
 		}
 	}
 
-	// SSOT §2: stderr JSON MUST be a single-line, directly json.Unmarshal-able
+	// docs/pat/contract.md §2: stderr JSON MUST be a single-line, directly json.Unmarshal-able
 	// payload — pretty-printing would break naïve host parsers that read
 	// stderr line-by-line and fail on leading whitespace. See
-	// docs/pat/third-party-integration.md §5 and docs/pat/contract.md §2.
+	// docs/pat/contract.md §2.
 	b, err := json.Marshal(out)
 	if err != nil {
 		return fmt.Sprintf(`{"success":false,"code":"%s"}`, code)

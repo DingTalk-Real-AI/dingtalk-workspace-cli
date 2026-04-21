@@ -28,7 +28,7 @@ import (
 // cliOwnedBannerBlacklist is the union of human-readable banner substrings
 // that belong exclusively to the CLI-owned PAT authorization path. When
 // the host claims PAT ownership (DINGTALK_DWS_AGENTCODE non-empty per
-// SSOT §1+§2 / docs/pat/contract.md §7), NONE of these strings may leak
+// docs/pat/contract.md §7), NONE of these strings may leak
 // onto stderr — the host renders its own card and consumes the
 // single-line JSON payload carried by *apperrors.PATError.
 //

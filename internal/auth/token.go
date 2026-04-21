@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -61,6 +63,35 @@ func (t *TokenData) IsRefreshTokenValid() bool {
 // HasPersistentCode returns true if a persistent code is available.
 func (t *TokenData) HasPersistentCode() bool {
 	return t != nil && t.PersistentCode != ""
+}
+
+const tokenJSONFile = "token.json"
+
+// TokenMarker is a lightweight file the host application reads to detect
+// whether the CLI has a valid token without accessing the keychain.
+type TokenMarker struct {
+	UpdatedAt string `json:"updated_at"`
+}
+
+// WriteTokenMarker writes a token.json marker containing only an updated_at
+// timestamp. The host application uses this file's presence and mtime to
+// decide whether it needs to trigger a new auth exchange.
+func WriteTokenMarker(configDir string) error {
+	marker := TokenMarker{UpdatedAt: time.Now().Format(time.RFC3339)}
+	data, _ := json.MarshalIndent(marker, "", "  ")
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		return err
+	}
+	tmp := filepath.Join(configDir, tokenJSONFile+".tmp")
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, filepath.Join(configDir, tokenJSONFile))
+}
+
+// DeleteTokenMarker removes the token.json marker file.
+func DeleteTokenMarker(configDir string) error {
+	return os.Remove(filepath.Join(configDir, tokenJSONFile))
 }
 
 // SaveTokenData persists TokenData. When an edition hook (SaveToken) is

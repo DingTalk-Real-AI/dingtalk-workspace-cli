@@ -29,10 +29,6 @@ import (
 // authorization state for the given correlation id. When the positional
 // argument is omitted the command reads $DWS_PAT_AUTH_REQUEST_ID; both being
 // empty is a hard error.
-//
-// The `--diagnose` flag turns this subcommand into a pure local self-check
-// that prints the host-owned PAT decision for the current process. It never
-// calls any network endpoint and never touches keychain / disk credentials.
 var statusCmd = &cobra.Command{
 	Use:   "status [<authRequestId>]",
 	Short: "查询异步 PAT 授权流程状态",
@@ -47,34 +43,14 @@ exit code:
   0   已拿到终态（approved / rejected / expired），stdout 为服务端 JSON
   2   身份层鉴权失败（需要重新 dws auth login）
   4   本次查询本身触发了 PAT 拦截（罕见，遵循契约）
-  1/5 业务错 / 内部错
-
-诊断模式:
-  --diagnose                 打印本进程视角下的 host-owned PAT 决策；
-                             不发起任何网络请求，不读取任何凭证。
-                             配合 --format json 输出结构化结果。`,
+  1/5 业务错 / 内部错`,
 	Args: cobra.MaximumNArgs(1),
 	Example: `  dws pat status req-001
-  DWS_PAT_AUTH_REQUEST_ID=req-001 dws pat status
-  dws pat status --diagnose
-  dws pat status --diagnose --format json`,
+  DWS_PAT_AUTH_REQUEST_ID=req-001 dws pat status`,
 	RunE: runStatus,
 }
 
-func init() {
-	statusCmd.Flags().Bool("diagnose", false,
-		"打印本进程的 host-owned PAT 决策（仅本地，不发网络）")
-	statusCmd.Flags().String("format", "",
-		"诊断输出格式：json 或 text（默认 text）；仅配合 --diagnose 生效")
-}
-
 func runStatus(cmd *cobra.Command, args []string) error {
-	diagnose, _ := cmd.Flags().GetBool("diagnose")
-	format, _ := cmd.Flags().GetString("format")
-	if diagnose {
-		return runDiagnose(cmd, format)
-	}
-
 	authRequestID := ""
 	if len(args) == 1 {
 		authRequestID = args[0]

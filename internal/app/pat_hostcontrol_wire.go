@@ -24,7 +24,7 @@ import (
 // regardless of whether the PAT error was surfaced via the active retry
 // path or the passive classifier path (see docs/pat/contract.md §5.2).
 //
-// Decision rule (SSOT §1 + §2 / contract.md §7):
+// Decision rule (contract.md §7):
 //   - Host-owned is triggered iff DINGTALK_DWS_AGENTCODE is non-empty.
 //   - When triggered, `clawType` in the emitted hostControl block MUST
 //     be the exact value the CLI actually injects on the wire into the

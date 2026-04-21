@@ -51,11 +51,11 @@ func TestPrintExecutionErrorDefaultsToJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("printExecutionError() error = %v", err)
 	}
-	if stderr.Len() != 0 {
-		t.Fatalf("stderr = %q, want empty for JSON error output", stderr.String())
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty when errors go to stderr", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "\"category\": \"validation\"") {
-		t.Fatalf("stdout = %q, want JSON error payload", stdout.String())
+	if !strings.Contains(stderr.String(), "\"category\": \"validation\"") {
+		t.Fatalf("stderr = %q, want JSON error payload", stderr.String())
 	}
 }
 
@@ -73,11 +73,11 @@ func TestPrintExecutionErrorUsesJSONWhenFormatIsJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("printExecutionError() error = %v", err)
 	}
-	if stderr.Len() != 0 {
-		t.Fatalf("stderr = %q, want empty for JSON error output", stderr.String())
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty when errors go to stderr", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "\"category\": \"validation\"") {
-		t.Fatalf("stdout = %q, want JSON error payload", stdout.String())
+	if !strings.Contains(stderr.String(), "\"category\": \"validation\"") {
+		t.Fatalf("stderr = %q, want JSON error payload", stderr.String())
 	}
 }
 
@@ -105,11 +105,11 @@ func TestPrintExecutionErrorUsesJSONWhenCommandSetsJSONFlag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("printExecutionError() error = %v", err)
 	}
-	if stderr.Len() != 0 {
-		t.Fatalf("stderr = %q, want empty for JSON error output", stderr.String())
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty when errors go to stderr", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "\"category\": \"validation\"") {
-		t.Fatalf("stdout = %q, want JSON error payload", stdout.String())
+	if !strings.Contains(stderr.String(), "\"category\": \"validation\"") {
+		t.Fatalf("stderr = %q, want JSON error payload", stderr.String())
 	}
 }
 

@@ -593,7 +593,7 @@ func TestCleanPATJSON_OmitsHostControlByDefault(t *testing.T) {
 	}
 }
 
-// TestCleanPATJSON_SingleLineOutput pins down the SSOT §2 /
+// TestCleanPATJSON_SingleLineOutput pins down the docs/pat/contract.md §2 /
 // docs/pat/contract.md §2 wire invariant: stderr JSON MUST be emitted
 // as a single line (no embedded \n, no pretty-print indentation) so
 // that naïve host parsers reading stderr line-by-line stay correct.

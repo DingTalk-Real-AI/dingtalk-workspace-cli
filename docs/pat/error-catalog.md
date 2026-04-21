@@ -2,9 +2,6 @@
 
 > 按 `code` 分组：触发条件、期望宿主行为、stderr 示例、exit code。
 > 权威常量见 [contract.md](./contract.md)；本文档是查阅手册。
-
-<!-- evidence: internal/errors/pat.go patNoPermissionCodes + patAuthRequiredCodes + cleanPATJSON -->
-
 ---
 
 ## 概览表 / Summary
@@ -27,9 +24,9 @@
 
 - **Exit**: `4` · **Tier**: Frozen
 - **触发**：服务端返回的权限错误未分档，或旧服务端使用的通用 selector
-- **宿主行为**：按中敏处理；渲染多选授权卡片，用户选择后 `dws pat chmod <scopes...> --agentCode <id> --grant-type <choice>`；`grantOptions` 缺失时按 SSOT §3.3 中敏默认回退至 `["session","permanent"]`
+- **宿主行为**：按中敏处理；渲染多选授权卡片，用户选择后 `dws pat chmod <scopes...> --agentCode <id> --grant-type <choice>`
 - **建议卡片形态**：多选 radio 授权卡（Medium 档同款）；`grantOptions` 缺失时仅保留 `session` 单选；主按钮「授权」+ 次按钮「取消」
-- **grantOptions（回退建议）**：服务端若下发值则以下发为准；缺省时宿主按中敏默认 `["session","permanent"]`
+- **grantOptions**：服务端下发值优先；缺省时按中敏默认回退 `["session","permanent"]`
 
 ```json
 {
@@ -50,23 +47,10 @@
 
 - **Exit**: `4` · **Risk**: Low · **Tier**: Frozen
 - **触发**：服务端评估为低风险（只读、低敏感资源）
-- **宿主行为**：单按钮一键授权；按 SSOT §3.3，服务端**固定下发** `grantOptions: ["session","permanent"]`；宿主可选择仅暴露主按钮（默认 `session`）并在"更多选项"里提供 `permanent`；`authRequestId` 若有透传，若无可缺省
+- **宿主行为**：单按钮一键授权；宿主可仅暴露主按钮（默认 `session`）并在"更多选项"里提供 `permanent`；`authRequestId` 若有透传，若无可缺省
 - **建议卡片形态**：单键授权卡；标题显示 `displayName`，副标题显示 `productName`；主按钮默认 `grant-type=session`；次级入口可提供 `permanent`
-- **grantOptions（SSOT §3.3 契约值）**：`["session","permanent"]`
-
-```json
-{
-  "success": false,
-  "code": "PAT_LOW_RISK_NO_PERMISSION",
-  "data": {
-    "requiredScopes": ["contact.user:read"],
-    "grantOptions": ["session", "permanent"],
-    "displayName": "通讯录只读",
-    "productName": "Contact",
-    "hostControl": { "clawType": "my-copilot", "mode": "host", "pollingOwner": "host", "retryOwner": "host" }
-  }
-}
-```
+- **grantOptions（服务端固定下发）**：`["session","permanent"]`
+- **JSON**：与 `PAT_NO_PERMISSION` 同 shape；`code="PAT_LOW_RISK_NO_PERMISSION"`，可能额外带 `displayName` / `productName`，`authRequestId` 可缺省
 
 ---
 
@@ -74,24 +58,10 @@
 
 - **Exit**: `4` · **Risk**: Medium · **Tier**: Frozen
 - **触发**：服务端评估为中风险（写入、批量、跨资源）
-- **宿主行为**：多选卡片，展示 SSOT §3.3 契约下发的 `grantOptions` 全集（`["session","permanent"]`）；用户显式选择后再发 `dws pat chmod`；`permanent` 建议二次确认
+- **宿主行为**：多选卡片，展示全集 `grantOptions`；用户显式选择后再发 `dws pat chmod`；`permanent` 建议二次确认
 - **建议卡片形态**：多选 radio 授权卡；`grantOptions` 每项渲染一个 radio；默认预选 `session`；选中 `permanent` 时弹出二次确认对话框后才启用主按钮
-- **grantOptions（SSOT §3.3 契约值）**：`["session","permanent"]`
-
-```json
-{
-  "success": false,
-  "code": "PAT_MEDIUM_RISK_NO_PERMISSION",
-  "data": {
-    "requiredScopes": ["aitable.record:write"],
-    "grantOptions": ["session", "permanent"],
-    "authRequestId": "req-002",
-    "displayName": "AITable 写入",
-    "productName": "AITable",
-    "hostControl": { "clawType": "my-copilot", "mode": "host", "pollingOwner": "host", "retryOwner": "host" }
-  }
-}
-```
+- **grantOptions（服务端固定下发）**：`["session","permanent"]`
+- **JSON**：与 `PAT_NO_PERMISSION` 同 shape；`code="PAT_MEDIUM_RISK_NO_PERMISSION"`，通常带 `authRequestId` / `displayName` / `productName`
 
 ---
 
@@ -99,10 +69,10 @@
 
 - **Exit**: `4` · **Risk**: High · **Tier**: Frozen
 - **触发**：服务端评估为高风险（批量删除、跨组织、敏感导出）
-- **宿主行为**：`authRequestId` **必带**；宿主用它绑定异步审批 future；宿主**自备**审批通道（Webhook / 同步推送 / 轮询 API）；按 SSOT §3.3，服务端**固定下发** `grantOptions: ["once"]` 且**禁止**用 `--grant-type permanent` / `session` 绕过
+- **宿主行为**：`authRequestId` **必带**；宿主用它绑定异步审批 future；宿主**自备**审批通道（Webhook / 同步推送 / 轮询 API）；**禁止**用 `--grant-type permanent` / `session` 绕过
 - **建议超时**：30 分钟；超时后释放 pending future 并提示用户
 - **建议卡片形态**：异步等待卡 + `authRequestId` 绑定；正文显示「审批发起中」+ `displayName` / `productName`；倒计时 30 分钟；不提供"立即授权"按钮，只保留"取消"；回执到达后卡片自动切换为成功态并触发 re-run
-- **grantOptions（SSOT §3.3 契约值）**：`["once"]`
+- **grantOptions（服务端固定下发）**：`["once"]`
 
 ```json
 {
@@ -167,8 +137,7 @@
 }
 ```
 
-> 注意：本 code 的 exit 是 `2`（身份层），而非 `4`（PAT 层）；宿主必须用 exit code 做一级分类。即便 `code` 字段缺失，只要 exit=2 宿主就应终止当前 turn 并按需触发重登录。<!-- evidence: internal/errors/errors.go CategoryAuth ExitCode -->
-
+> 注意：本 code 的 exit 是 `2`（身份层），而非 `4`（PAT 层）；宿主必须用 exit code 做一级分类。即便 `code` 字段缺失，只要 exit=2 宿主就应终止当前 turn 并按需触发重登录。
 ---
 
 ## 解析流程 / Parsing flow

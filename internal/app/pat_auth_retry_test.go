@@ -86,21 +86,6 @@ func TestIsPatScopeError_InsufficientScope(t *testing.T) {
 	}
 }
 
-func TestExtractPatScopeError_MissingScope(t *testing.T) {
-	t.Parallel()
-	err := apperrors.NewAuth("missing required scope(s): mail:user_mailbox.message:send")
-	scopeErr := extractPatScopeError(err)
-	if scopeErr == nil {
-		t.Fatal("expected non-nil PatScopeError")
-	}
-	if scopeErr.ErrorType != "missing_scope" {
-		t.Errorf("expected error type 'missing_scope', got %q", scopeErr.ErrorType)
-	}
-	if !strings.Contains(scopeErr.Hint, "dws auth login") {
-		t.Errorf("expected hint to contain 'dws auth login', got %q", scopeErr.Hint)
-	}
-}
-
 func TestExtractPatScopeError_ExtractsScope(t *testing.T) {
 	t.Parallel()
 	err := &PatScopeError{
@@ -153,7 +138,7 @@ func TestPrintPatAuthJSON_MachineReadable(t *testing.T) {
 	}
 	PrintPatAuthJSON(&buf, scopeErr)
 
-	// Per SSOT §2 the payload is single-line; assert by parsing the JSON
+	// Per docs/pat/contract.md §2 the payload is single-line; assert by parsing the JSON
 	// rather than by matching pretty-printed substrings.
 	output := buf.String()
 	var parsed map[string]any
@@ -590,7 +575,7 @@ func TestHandlePatAuthCheck_Rejected(t *testing.T) {
 func TestHandlePatAuthCheck_HostControlledFlowIDPassthrough(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", tmpDir)
-	// Host-owned decision: driven ONLY by DINGTALK_DWS_AGENTCODE (SSOT §1+§2).
+	// Host-owned decision: driven ONLY by DINGTALK_DWS_AGENTCODE (see docs/pat/contract.md §7).
 	// DINGTALK_AGENT is set to demonstrate it does NOT leak into
 	// hostControl.clawType — the open-source build pins that to the
 	// literal edition.DefaultOSSClawType value ("openClaw").
@@ -732,39 +717,7 @@ func TestHandlePatAuthCheck_EmptyFlowID_FallsBackToPATError(t *testing.T) {
 	}
 }
 
-func TestHandlePatAuthCheck_EmptyFlowID_LegacyErrorCode_NoOutput(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("DWS_CONFIG_DIR", tmpDir)
-
-	mock := &mockRunner{
-		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
-			t.Fatal("runner should not be called when flowId is empty")
-			return executor.Result{}, nil
-		},
-	}
-
-	runner := &runtimeRunner{fallback: mock}
-	patErr := &apperrors.PATError{RawJSON: `{"error_code":"PAT_LOW_RISK_NO_PERMISSION","data":{"clientId":"test-client-id"}}`}
-
-	ctx := context.Background()
-	var buf bytes.Buffer
-	_, err := handlePatAuthCheck(ctx, runner, executor.Invocation{
-		CanonicalProduct: "test",
-		Tool:             "test_tool",
-	}, patErr, tmpDir, &buf)
-
-	if err == nil {
-		t.Fatal("expected PATError when flowId is empty")
-	}
-	if _, ok := err.(*apperrors.PATError); !ok {
-		t.Errorf("expected *PATError, got %T: %v", err, err)
-	}
-	if got := strings.TrimSpace(buf.String()); got != "" {
-		t.Fatalf("expected no output for legacy error_code passthrough, got %q", got)
-	}
-}
-
-// TestEnrichPATErrorForHostControl_SingleLineOutput locks in the SSOT §2 /
+// TestEnrichPATErrorForHostControl_SingleLineOutput locks in the docs/pat/contract.md §2 /
 // docs/pat/contract.md §2 wire invariant: the enriched host-controlled
 // PAT payload must be single-line (no embedded newlines, no indentation),
 // so stderr-line-scanning hosts stay correct. Regression guard against

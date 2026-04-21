@@ -22,6 +22,13 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
+// caller is the package-level ToolCaller shared by the apply / status /
+// scopes subcommands. chmod intentionally does NOT read this variable (see
+// newChmodCommand, which takes caller as a closure param) so multiple
+// RegisterCommands invocations keep producing independent chmod instances.
+//
+// TODO(pat-caller-factory): migrate apply / status / scopes to the same
+// factory pattern to retire this package-level variable.
 var caller edition.ToolCaller
 
 // RegisterCommands adds the pat command tree to rootCmd.
@@ -38,7 +45,7 @@ func RegisterCommands(root *cobra.Command, c edition.ToolCaller) {
   dws pat status    [<authRequestId>] 查询异步 PAT 流程状态
   dws pat scopes                      列出当前已授权的 scope
 
-Host-owned PAT 开关（SSOT §1 + §2）：
+Host-owned PAT 开关（contract.md §7）：
   当且仅当环境变量 DINGTALK_DWS_AGENTCODE 非空时，CLI 命中 PAT
   固定以 stderr JSON + exit=4 的 host-owned 形式返回，
   由宿主处理全部 UI / 交互 / 回调节奏 / 重试逻辑，
@@ -58,7 +65,7 @@ DWS_CHANNEL 只用于上游 channelCode。`,
 		RunE: cmdutil.GroupRunE,
 	}
 
-	patCmd.AddCommand(chmodCmd)
+	patCmd.AddCommand(newChmodCommand(c))
 	patCmd.AddCommand(applyCmd)
 	patCmd.AddCommand(statusCmd)
 	patCmd.AddCommand(scopesCmd)

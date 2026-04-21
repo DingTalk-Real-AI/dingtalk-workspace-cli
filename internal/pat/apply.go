@@ -107,7 +107,7 @@ func runApply(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := context.Background()
-	result, err := callPATToolWithLegacyFallback(ctx, "pat", patApplyToolName, patGrantToolName, toolArgs)
+	result, err := callPATToolWithLegacyFallback(ctx, caller, "pat", patApplyToolName, patGrantToolName, toolArgs)
 	if err != nil {
 		return fmt.Errorf("pat apply failed: %w", err)
 	}

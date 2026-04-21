@@ -14,7 +14,6 @@
 package auth
 
 import (
-	"errors"
 	"io"
 	"log/slog"
 	"os"
@@ -27,7 +26,6 @@ func testLogger() *slog.Logger {
 }
 
 func TestManagerTokenPriorityAndStatus(t *testing.T) {
-	t.Setenv(LegacyPlainTokenEnv, "1")
 	configDir := t.TempDir()
 	manager := NewManager(configDir, testLogger())
 
@@ -56,7 +54,6 @@ func TestManagerTokenPriorityAndStatus(t *testing.T) {
 }
 
 func TestManagerSaveAndDeleteFiles(t *testing.T) {
-	t.Setenv(LegacyPlainTokenEnv, "1")
 	configDir := t.TempDir()
 	manager := NewManager(configDir, testLogger())
 
@@ -82,73 +79,5 @@ func TestManagerSaveAndDeleteFiles(t *testing.T) {
 	}
 	if manager.IsAuthenticated() {
 		t.Fatal("IsAuthenticated() = true after delete, want false")
-	}
-}
-
-// TestManagerSaveTokenDefaultDisabled verifies that, without the
-// DWS_LEGACY_PLAIN_TOKEN=1 feature flag, all plaintext-path methods
-// short-circuit to the disabled sentinel and do not touch disk.
-func TestManagerSaveTokenDefaultDisabled(t *testing.T) {
-	// Explicitly clear the flag in case the process inherits it.
-	t.Setenv(LegacyPlainTokenEnv, "")
-	configDir := t.TempDir()
-	manager := NewManager(configDir, testLogger())
-
-	if err := manager.SaveToken("should-not-write"); !errors.Is(err, ErrLegacyPlainTokenDisabled) {
-		t.Fatalf("SaveToken() error = %v, want ErrLegacyPlainTokenDisabled", err)
-	}
-	if manager.IsAuthenticated() {
-		t.Fatal("IsAuthenticated() = true with disabled flag, want false")
-	}
-	if _, _, err := manager.GetToken(); !errors.Is(err, ErrLegacyPlainTokenDisabled) {
-		t.Fatalf("GetToken() error = %v, want ErrLegacyPlainTokenDisabled", err)
-	}
-	if _, err := manager.GetMCPURL(); !errors.Is(err, ErrLegacyPlainTokenDisabled) {
-		t.Fatalf("GetMCPURL() error = %v, want ErrLegacyPlainTokenDisabled", err)
-	}
-	if err := manager.SaveMCPURL("https://example.com/mcp"); !errors.Is(err, ErrLegacyPlainTokenDisabled) {
-		t.Fatalf("SaveMCPURL() error = %v, want ErrLegacyPlainTokenDisabled", err)
-	}
-	if err := manager.DeleteToken(); err != nil {
-		t.Fatalf("DeleteToken() with disabled flag error = %v, want nil (idempotent no-op)", err)
-	}
-	ok, src, masked := manager.Status()
-	if ok || src != "" || masked != "" {
-		t.Fatalf("Status() = (%t, %q, %q), want (false, \"\", \"\")", ok, src, masked)
-	}
-
-	// Disk must remain untouched under the disabled path.
-	if _, err := os.Stat(filepath.Join(configDir, tokenFileName)); !os.IsNotExist(err) {
-		t.Fatalf("token file exists despite disabled flag: err=%v", err)
-	}
-	if _, err := os.Stat(filepath.Join(configDir, "mcp_url")); !os.IsNotExist(err) {
-		t.Fatalf("mcp_url file exists despite disabled flag: err=%v", err)
-	}
-}
-
-// TestManagerSaveTokenEnabledWithFlag verifies that setting the feature
-// flag re-enables the plaintext path and restores the historical
-// behaviour.
-func TestManagerSaveTokenEnabledWithFlag(t *testing.T) {
-	t.Setenv(LegacyPlainTokenEnv, "1")
-	configDir := t.TempDir()
-	manager := NewManager(configDir, testLogger())
-
-	if err := manager.SaveToken("enabled-token"); err != nil {
-		t.Fatalf("SaveToken() error = %v", err)
-	}
-	if !manager.IsAuthenticated() {
-		t.Fatal("IsAuthenticated() = false after SaveToken with flag enabled")
-	}
-	token, source, err := manager.GetToken()
-	if err != nil {
-		t.Fatalf("GetToken() error = %v", err)
-	}
-	if token != "enabled-token" || source != "file" {
-		t.Fatalf("GetToken() = (%q, %q), want (enabled-token, file)", token, source)
-	}
-
-	if _, err := os.Stat(filepath.Join(configDir, tokenFileName)); err != nil {
-		t.Fatalf("token file missing despite enabled flag: %v", err)
 	}
 }

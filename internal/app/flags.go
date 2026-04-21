@@ -14,6 +14,7 @@
 package app
 
 import (
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/spf13/cobra"
 )
 
@@ -35,8 +36,8 @@ type GlobalFlags struct {
 }
 
 func bindPersistentFlags(cmd *cobra.Command, flags *GlobalFlags) {
-	cmd.PersistentFlags().StringVar(&flags.ClientID, "client-id", "", "Override OAuth client ID (DingTalk AppKey)")
-	cmd.PersistentFlags().StringVar(&flags.ClientSecret, "client-secret", "", "Override OAuth client secret (DingTalk AppSecret)")
+	cmd.PersistentFlags().StringVar(&flags.ClientID, "client-id", "", i18n.T("覆盖 OAuth 客户端 ID (钉钉 AppKey)"))
+	cmd.PersistentFlags().StringVar(&flags.ClientSecret, "client-secret", "", i18n.T("覆盖 OAuth 客户端密钥 (钉钉 AppSecret)"))
 	cmd.PersistentFlags().BoolVar(&flags.Debug, "debug", false, "显示调试日志")
 	cmd.PersistentFlags().BoolVar(&flags.DryRun, "dry-run", false, "预览操作内容，不实际执行")
 	cmd.PersistentFlags().StringVar(&flags.Fields, "fields", "", "筛选输出字段 (逗号分隔, 如: name,id,status)")

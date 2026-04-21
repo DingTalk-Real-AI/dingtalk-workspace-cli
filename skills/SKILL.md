@@ -1,6 +1,6 @@
 ---
 name: dws
-description: 管理钉钉产品能力(AI表格/日历/通讯录/群聊与机器人/待办/审批/考勤/日志/DING消息/工作台/开放平台文档等)。当用户需要操作表格数据、管理日程会议、查询通讯录、管理群聊、机器人发消息、创建待办、提交审批、查看考勤、提交日报周报（钉钉日志模版）时使用。
+description: 管理钉钉产品能力(AI表格/日历/通讯录/群聊与机器人/待办/审批/考勤/日志/DING消息/工作台/开放平台文档/钉钉文档/AI听记等)。当用户需要操作表格数据、管理日程会议、查询通讯录、管理群聊、机器人发消息、创建待办、提交审批、查看考勤、提交日报周报（钉钉日志模版）、读写钉钉文档、查询听记纪要时使用。
 cli_version: ">=1.0.6"
 ---
 
@@ -24,7 +24,7 @@ cli_version: ">=1.0.6"
 
 | 产品                | 用途                                                   | 参考文件                                                           |
 |-------------------|------------------------------------------------------|----------------------------------------------------------------|
-| `aitable`         | AI表格：表格/数据表/字段/记录增删改查/模板搜索                           | [aitable.md](./references/products/aitable.md)                 |
+| `aitable`         | AI表格：Base/数据表/字段/记录/附件/模板搜索                              | [aitable.md](./references/products/aitable.md)                 |
 | `approval`        | 审批：审批表单/发起实例/审批/撤销                                   | [simple.md](./references/products/simple.md)                   |
 | `attendance`      | 考勤：打卡记录/排班查询                                         | [attendance.md](./references/products/attendance.md)           |
 | `calendar`        | 日历：日程/参与者/会议室/闲忙查询                                   | [calendar.md](./references/products/calendar.md)               |
@@ -32,6 +32,8 @@ cli_version: ">=1.0.6"
 | `contact`         | 通讯录：用户查询(当前用户/搜索/详情)/部门查询(搜索/子部门/成员列表)               | [contact.md](./references/products/contact.md)                 |
 | `devdoc`          | 开放平台文档：搜索开发文档                                        | [simple.md](./references/products/simple.md)                   |
 | `ding`            | DING消息：发送/撤回（应用内/短信/电话）                              | [ding.md](./references/products/ding.md)                       |
+| `doc`             | 钉钉文档：搜索/浏览/读写/块级编辑/评论                                | [doc.md](./references/products/doc.md)                         |
+| `minutes`         | AI听记：听记列表/摘要/关键词/转写/待办/思维导图/发言人/热词                    | [minutes.md](./references/products/minutes.md)                 |
 | `report`          | 日志：按模版创建/收件箱/已发送/模版查看/详情/已读统计                         | [report.md](./references/products/report.md)                   |
 | `todo`            | 待办：创建(含优先级/截止时间)/查询/修改/标记完成/删除                       | [todo.md](./references/products/todo.md)                       |
 | `workbench`       | 工作台：应用管理                                             | [workbench.md](./references/products/workbench.md)             |
@@ -46,6 +48,8 @@ cli_version: ">=1.0.6"
 用户提到"通讯录/同事/部门/组织架构" → `contact`
 用户提到"开发/API/调用错误 文档" → `devdoc`
 用户提到"DING/紧急消息/电话提醒" → `ding`
+用户提到"钉钉文档/云文档/知识库/读写文档/块级编辑/文档评论" → `doc`
+用户提到"听记/AI听记/会议纪要/转写/摘要/思维导图/发言人/热词" → `minutes`
 用户提到"日志/日报/周报/日志统计/写日报/提交周报/发日志/填日志" → `report`
 用户提到"待办/TODO/任务提醒" → `todo`
 用户提到"工作台/应用管理" → `workbench`
@@ -69,6 +73,8 @@ cli_version: ">=1.0.6"
 | `calendar` | `participant delete` | 移除日程参与者 |
 | `calendar` | `room delete` | 取消会议室预定 |
 | `chat` | `group members remove` | 移除群成员 |
+| `doc` | `delete` | 删除钉钉文档（不可恢复） |
+| `doc` | `block delete` | 删除文档块 |
 | `todo` | `task delete` | 删除待办 |
 
 ### 确认流程

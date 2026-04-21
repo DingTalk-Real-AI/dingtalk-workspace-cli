@@ -24,20 +24,18 @@ const (
 	DWSChannelEnv = "DWS_CHANNEL"
 	// AgentCodeEnv is the sole per-spawn environment variable the host injects
 	// to declare "this process is driven by a third-party Agent host, render
-	// authorization UI yourselves". SSOT §1 + §2 / docs/pat/contract.md §7.
+	// authorization UI yourselves". docs/pat/contract.md §7.
 	AgentCodeEnv = "DINGTALK_DWS_AGENTCODE"
 )
 
 // CurrentChannelCode returns the raw upstream channel code as configured locally.
-//
-// Deprecated: use internal/a2a.CurrentChannelCode.
 func CurrentChannelCode() string {
 	return os.Getenv(DWSChannelEnv)
 }
 
 // HostOwnsPATFlow reports whether the current process is running under a
 // third-party Agent host that will render the PAT authorization card
-// itself. Per SSOT §1 + §2, the sole trigger is AgentCodeEnv
+// itself. Per docs/pat/contract.md §7, the sole trigger is AgentCodeEnv
 // (DINGTALK_DWS_AGENTCODE) being non-empty. The CLI deliberately does
 // not consult any other signal (DINGTALK_AGENT / DWS_CHANNEL / the wire
 // claw-type header) for this decision so that server-side routing tags
@@ -47,8 +45,6 @@ func HostOwnsPATFlow() bool {
 }
 
 // ApplyChannelHeader injects the configured channel code into a request.
-//
-// Deprecated: use internal/a2a.ApplyChannelHeader.
 func ApplyChannelHeader(req *http.Request) {
 	if req == nil {
 		return

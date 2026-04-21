@@ -132,27 +132,34 @@ func TestSecureTokenStorageRoundTrip(t *testing.T) {
 		t.Fatal("storage should not exist yet")
 	}
 
-	plaintext := []byte(`{"access_token":"at_test","refresh_token":"rt_test","corp_id":"dingcorp"}`)
-	if err := storage.SaveEncryptedBytes(plaintext); err != nil {
-		t.Fatalf("SaveEncryptedBytes() error = %v", err)
+	data := &TokenData{
+		AccessToken:  "at_test",
+		RefreshToken: "rt_test",
+		CorpID:       "dingcorp",
+	}
+	if err := storage.SaveToken(data); err != nil {
+		t.Fatalf("SaveToken() error = %v", err)
 	}
 
 	if !storage.Exists() {
 		t.Fatal("storage should exist after save")
 	}
 
-	loaded, err := storage.LoadEncryptedBytes()
+	loaded, err := storage.LoadToken()
 	if err != nil {
-		t.Fatalf("LoadEncryptedBytes() error = %v", err)
+		t.Fatalf("LoadToken() error = %v", err)
 	}
-	if !bytes.Equal(loaded, plaintext) {
-		t.Fatalf("round-trip mismatch: got %q want %q", loaded, plaintext)
+	if loaded.AccessToken != data.AccessToken {
+		t.Fatalf("access_token = %q, want %q", loaded.AccessToken, data.AccessToken)
+	}
+	if loaded.CorpID != data.CorpID {
+		t.Fatalf("corp_id = %q, want %q", loaded.CorpID, data.CorpID)
 	}
 
 	// Wrong MAC should fail.
 	wrongStorage := NewSecureTokenStorage(configDir, "", "11:22:33:44:55:66")
-	if _, err := wrongStorage.LoadEncryptedBytes(); err == nil {
-		t.Fatal("LoadEncryptedBytes with wrong MAC should fail")
+	if _, err := wrongStorage.LoadToken(); err == nil {
+		t.Fatal("LoadToken with wrong MAC should fail")
 	}
 
 	if err := storage.DeleteToken(); err != nil {

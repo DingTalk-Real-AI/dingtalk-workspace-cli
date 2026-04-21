@@ -59,7 +59,7 @@ func resolveSessionIDFromEnv() string {
 
 // agentCodeEnv is the canonical (and only) environment variable name
 // used as a per-shell fallback for the --agentCode flag on `dws pat *`
-// commands, per SSOT §2 / §3.2.
+// commands, per docs/pat/contract.md §2.
 //
 // Why: agent hosts typically set their business agent code once when
 // spawning a long-lived shell / sub-process; requiring `--agentCode` on
@@ -69,7 +69,7 @@ func resolveSessionIDFromEnv() string {
 // when both are set so scripted one-offs remain deterministic.
 //
 // Namespace note: DWS_AGENTCODE / DINGTALK_AGENTCODE / REWIND_AGENTCODE
-// are explicitly NOT consumed. The pre-SSOT DWS_AGENTCODE alias was
+// are explicitly NOT consumed. The legacy DWS_AGENTCODE alias was
 // hard-removed once the public integration surface landed on
 // DINGTALK_DWS_AGENTCODE; hosts must migrate rather than rely on a
 // silent fallback.
@@ -175,10 +175,15 @@ var validGrantTypes = map[string]bool{
 	"permanent": true,
 }
 
-var chmodCmd = &cobra.Command{
-	Use:   "chmod <scope>...",
-	Short: "授予指定权限",
-	Long: `授予指定 scope 的操作权限。
+// newChmodCommand builds a fresh `dws pat chmod` cobra.Command wired to
+// the supplied ToolCaller. A factory is used (instead of a package-level
+// var) so multiple RegisterCommands invocations never share mutable flag /
+// RunE state across concurrent tests.
+func newChmodCommand(c edition.ToolCaller) *cobra.Command {
+	chmodCmd := &cobra.Command{
+		Use:   "chmod <scope>...",
+		Short: "授予指定权限",
+		Long: `授予指定 scope 的操作权限。
 
 scope 格式: <product>.<entity>:<permission>
   例: aitable.record:read  chat.group:write  calendar.event:read
@@ -187,89 +192,93 @@ grantType 规则:
   once       一次性，执行一次后自动失效
   session    当前会话有效（默认），需要 --session-id
   permanent  永久有效`,
-	Args: cobra.MinimumNArgs(1),
-	Example: `  dws pat chmod aitable.record:read --agentCode agt-xxxx --grant-type session --session-id session-xxx
+		Args: cobra.MinimumNArgs(1),
+		Example: `  dws pat chmod aitable.record:read --agentCode agt-xxxx --grant-type session --session-id session-xxx
   dws pat chmod chat.message:list --grant-type once --agentCode agt-xxxx
   dws pat chmod aitable.record:read aitable.record:write --agentCode agt-xxxx --grant-type permanent`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		flagVal, _ := cmd.Flags().GetString("agentCode")
-		agentCode, err := resolveAgentCode(flagVal, true)
-		if err != nil {
-			return err
-		}
-		scopes := args
-		grantType, _ := cmd.Flags().GetString("grant-type")
-		sessionID, _ := cmd.Flags().GetString("session-id")
-
-		if !validGrantTypes[grantType] {
-			return fmt.Errorf("invalid --grant-type %q, must be one of: once, session, permanent", grantType)
-		}
-
-		if grantType == "session" && sessionID == "" && resolveSessionIDFromEnv() == "" {
-			return fmt.Errorf("--session-id is required when --grant-type is session\n  hint: dws pat chmod <scope> --agentCode <id> --grant-type session --session-id <id>")
-		}
-
-		if caller != nil && caller.DryRun() {
-			bold := color.New(color.FgYellow, color.Bold)
-			bold.Println("[DRY-RUN] Preview only, not executed:")
-			fmt.Printf("%-16s%s\n", "Tool:", patGrantToolName)
-			fmt.Printf("%-16s%s\n", "AgentCode:", agentCode)
-			fmt.Printf("%-16s%v\n", "Scope:", scopes)
-			fmt.Printf("%-16s%s\n", "GrantType:", grantType)
-			if sessionID != "" {
-				fmt.Printf("%-16s%s\n", "SessionID:", sessionID)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			flagVal, _ := cmd.Flags().GetString("agentCode")
+			agentCode, err := resolveAgentCode(flagVal, true)
+			if err != nil {
+				return err
 			}
-			return nil
-		}
+			scopes := args
+			grantType, _ := cmd.Flags().GetString("grant-type")
+			sessionID, _ := cmd.Flags().GetString("session-id")
 
-		if caller == nil {
-			return fmt.Errorf("internal error: tool runtime not initialized")
-		}
+			if !validGrantTypes[grantType] {
+				return fmt.Errorf("invalid --grant-type %q, must be one of: once, session, permanent", grantType)
+			}
 
-		toolArgs := map[string]any{
-			"agentCode": agentCode,
-			"scope":     scopes,
-			"grantType": grantType,
-		}
-		if sessionID == "" {
-			sessionID = resolveSessionIDFromEnv()
-		}
-		if sessionID != "" {
-			toolArgs["sessionId"] = sessionID
-		}
+			if grantType == "session" && sessionID == "" && resolveSessionIDFromEnv() == "" {
+				return fmt.Errorf("--session-id is required when --grant-type is session\n  hint: dws pat chmod <scope> --agentCode <id> --grant-type session --session-id <id>")
+			}
 
-		ctx := context.Background()
-		result, err := callPATToolWithLegacyFallback(ctx, "pat", patGrantToolName, patGrantToolNameLegacyAlias, toolArgs)
-		if err != nil {
-			return fmt.Errorf("pat chmod failed: %w", err)
-		}
+			if c != nil && c.DryRun() {
+				bold := color.New(color.FgYellow, color.Bold)
+				bold.Println("[DRY-RUN] Preview only, not executed:")
+				fmt.Printf("%-16s%s\n", "Tool:", patGrantToolName)
+				fmt.Printf("%-16s%s\n", "AgentCode:", agentCode)
+				fmt.Printf("%-16s%v\n", "Scope:", scopes)
+				fmt.Printf("%-16s%s\n", "GrantType:", grantType)
+				if sessionID != "" {
+					fmt.Printf("%-16s%s\n", "SessionID:", sessionID)
+				}
+				return nil
+			}
 
-		return handleToolResult(result)
-	},
-}
+			if c == nil {
+				return fmt.Errorf("internal error: tool runtime not initialized")
+			}
 
-func init() {
+			toolArgs := map[string]any{
+				"agentCode": agentCode,
+				"scope":     scopes,
+				"grantType": grantType,
+			}
+			if sessionID == "" {
+				sessionID = resolveSessionIDFromEnv()
+			}
+			if sessionID != "" {
+				toolArgs["sessionId"] = sessionID
+			}
+
+			ctx := context.Background()
+			result, err := callPATToolWithLegacyFallback(ctx, c, "pat", patGrantToolName, patGrantToolNameLegacyAlias, toolArgs)
+			if err != nil {
+				return fmt.Errorf("pat chmod failed: %w", err)
+			}
+
+			return handleToolResult(result)
+		},
+	}
+
 	// --agentCode is required, but we deliberately do NOT call
 	// MarkFlagRequired here. The agent code may also come from the
 	// DINGTALK_DWS_AGENTCODE env var (per docs/pat/contract.md §9 and
-	// SSOT §2 / §3.2); cobra's MarkFlagRequired would refuse to run
+	// contract.md §2); cobra's MarkFlagRequired would refuse to run
 	// before our resolver has a chance to consume the env.
 	chmodCmd.Flags().String("agentCode", "",
 		"Agent 唯一标识（必填；亦可通过 env DINGTALK_DWS_AGENTCODE 注入，flag 优先）")
 	chmodCmd.Flags().String("grant-type", "session", "授权策略: once|session|permanent")
 	chmodCmd.Flags().String("session-id", "", "会话标识（session 模式下必填）")
+
+	return chmodCmd
 }
 
-// callPATToolWithLegacyFallback invokes toolName on the PAT product. If the
-// server responds with a tool-not-registered style error AND a non-empty
-// legacyAlias is provided, the call is retried once against legacyAlias to
-// keep us compatible with older server builds during the English-first
-// migration.
+// callPATToolWithLegacyFallback invokes toolName on the PAT product via the
+// supplied ToolCaller. If the server responds with a tool-not-registered
+// style error AND a non-empty legacyAlias is provided, the call is retried
+// once against legacyAlias to keep us compatible with older server builds
+// during the English-first migration.
 //
 // NOTE(pat-legacy-alias): remove the legacyAlias fallback path when server
 // supports only English wire names; see docs/pat/contract.md §7.
-func callPATToolWithLegacyFallback(ctx context.Context, productID, toolName, legacyAlias string, toolArgs map[string]any) (*edition.ToolResult, error) {
-	result, err := caller.CallTool(ctx, productID, toolName, toolArgs)
+func callPATToolWithLegacyFallback(ctx context.Context, c edition.ToolCaller, productID, toolName, legacyAlias string, toolArgs map[string]any) (*edition.ToolResult, error) {
+	if c == nil {
+		return nil, fmt.Errorf("internal error: tool runtime not initialized")
+	}
+	result, err := c.CallTool(ctx, productID, toolName, toolArgs)
 	if err == nil {
 		return result, nil
 	}
@@ -277,7 +286,7 @@ func callPATToolWithLegacyFallback(ctx context.Context, productID, toolName, leg
 		return nil, err
 	}
 	fmt.Fprintf(os.Stderr, "pat: server has no tool %q yet; retrying with legacy alias %q (temporary migration shim)\n", toolName, legacyAlias)
-	return caller.CallTool(ctx, productID, legacyAlias, toolArgs)
+	return c.CallTool(ctx, productID, legacyAlias, toolArgs)
 }
 
 // isToolNotRegisteredError reports whether err looks like a server-side

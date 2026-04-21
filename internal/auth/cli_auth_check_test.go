@@ -181,14 +181,9 @@ func TestCheckCLIAuthEnabled_TransientThenSuccess(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCheckCLIAuthEnabled_Enabled(t *testing.T) {
-	t.Setenv(DWSChannelEnv, "Qoderwork")
-
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("x-user-access-token") != "good-token" {
 			t.Errorf("missing access token header")
-		}
-		if got := r.Header.Get("x-dws-channel"); got != "Qoderwork" {
-			t.Errorf("x-dws-channel = %q, want Qoderwork", got)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(CLIAuthStatus{
@@ -721,14 +716,9 @@ func TestGetSuperAdmins_TransientThenSuccess(t *testing.T) {
 }
 
 func TestGetSuperAdmins_Success(t *testing.T) {
-	t.Setenv(DWSChannelEnv, "Qoderwork")
-
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("x-user-access-token") != "good-token" {
 			t.Errorf("missing access token header")
-		}
-		if got := r.Header.Get("x-dws-channel"); got != "Qoderwork" {
-			t.Errorf("x-dws-channel = %q, want Qoderwork", got)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(SuperAdminResponse{
@@ -808,14 +798,9 @@ func TestSendCliAuthApply_TransientThenSuccess(t *testing.T) {
 }
 
 func TestSendCliAuthApply_Success(t *testing.T) {
-	t.Setenv(DWSChannelEnv, "Qoderwork")
-
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("x-user-access-token") != "good-token" {
 			t.Errorf("missing access token header")
-		}
-		if got := r.Header.Get("x-dws-channel"); got != "Qoderwork" {
-			t.Errorf("x-dws-channel = %q, want Qoderwork", got)
 		}
 		if !strings.Contains(r.URL.RawQuery, "adminStaffId=admin123") {
 			t.Errorf("missing or wrong adminStaffId param: %s", r.URL.RawQuery)

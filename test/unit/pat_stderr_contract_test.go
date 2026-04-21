@@ -25,7 +25,7 @@ import (
 // payload for every code in the SSOT-frozen enum.
 //
 // This test is the CI-level guard for docs/pat/contract.md §2 ("stderr
-// JSON MUST be single-line and directly unmarshal-able") and SSOT §3.3
+// JSON MUST be single-line and directly unmarshal-able") and contract.md §2
 // ("撞墙数据"). It sits in the public `test/unit` tree — deliberately
 // separate from internal/errors/pat_test.go — so the contract stays
 // defended even after internal refactors that might move the JSON
@@ -196,7 +196,7 @@ func TestPATStderrJSON_SingleLineUnmarshalable(t *testing.T) {
 				t.Fatalf("ClassifyPatAuthCheck(%s) returned nil; expected *PATError", tc.code)
 			}
 			if patErr.ExitCode() != errpkg.ExitCodePermission {
-				t.Fatalf("ExitCode() = %d, want %d (SSOT §2: PAT exit_code == 4)",
+				t.Fatalf("ExitCode() = %d, want %d (PAT exit_code == 4 per contract.md §2)",
 					patErr.ExitCode(), errpkg.ExitCodePermission)
 			}
 
@@ -217,7 +217,7 @@ func TestPATStderrJSON_SingleLineUnmarshalable(t *testing.T) {
 			}
 
 			if success, ok := parsed["success"].(bool); !ok || success {
-				t.Fatalf("parsed.success = %v, want false (SSOT §3.3)", parsed["success"])
+				t.Fatalf("parsed.success = %v, want false (contract.md §2)", parsed["success"])
 			}
 			gotCode, ok := parsed["code"].(string)
 			if !ok {

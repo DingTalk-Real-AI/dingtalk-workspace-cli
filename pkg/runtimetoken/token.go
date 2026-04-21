@@ -13,10 +13,6 @@
 
 // Package runtimetoken resolves API bearer tokens for features that bypass
 // the MCP runner (e.g. A2A gateway) but should behave like tool calls.
-//
-// Deprecated: use internal/a2a.ResolveAccessToken instead. This package
-// remains as a thin shim for backward compatibility and will be removed
-// in a future minor release.
 package runtimetoken
 
 import (
@@ -28,8 +24,6 @@ import (
 // ResolveAccessToken returns a non-empty bearer token using the same sources
 // and caching rules as MCP when configDir matches the active edition directory;
 // see app.ResolveAuxiliaryAccessToken.
-//
-// Deprecated: use internal/a2a.ResolveAccessToken.
 func ResolveAccessToken(ctx context.Context, configDir, explicitToken string) (string, error) {
 	return app.ResolveAuxiliaryAccessToken(ctx, configDir, explicitToken)
 }

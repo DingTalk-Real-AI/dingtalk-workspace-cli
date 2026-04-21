@@ -20,7 +20,7 @@ import (
 )
 
 // TestHostOwnsPATFlow_OnlySignal is the wire-level guard for
-// docs/pat/contract.md §7 and SSOT §1 + §2 "custom authorization card"
+// docs/pat/contract.md §7 and "custom authorization card" (docs/pat/contract.md §7)
 // contract: the CLI switches to host-owned PAT mode iff the host injects
 // DINGTALK_DWS_AGENTCODE. DINGTALK_AGENT / claw-type is purely a
 // server-side routing tag and must NOT influence the decision, in either

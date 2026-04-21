@@ -530,7 +530,7 @@ func enrichPATErrorForHostControl(raw string, flowID string) string {
 	data["hostControl"] = buildHostControlState()
 	delete(data, "callbacks")
 
-	// SSOT §2 / docs/pat/contract.md §2: stderr JSON is single-line.
+	// docs/pat/contract.md §2: stderr JSON is single-line.
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return raw
@@ -551,7 +551,7 @@ func buildPATScopeHostJSON(scopeErr *PatScopeError) string {
 			"hostControl":  buildHostControlState(),
 		},
 	}
-	// SSOT §2 / docs/pat/contract.md §2: stderr JSON is single-line.
+	// docs/pat/contract.md §2: stderr JSON is single-line.
 	b, err := json.Marshal(payload)
 	if err != nil {
 		return `{"success":false,"code":"PAT_SCOPE_AUTH_REQUIRED"}`

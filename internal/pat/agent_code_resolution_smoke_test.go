@@ -20,7 +20,7 @@ import (
 
 // D5 Smoke B — agent code two-tier resolution contract.
 //
-// SSOT §2 / §3.2 and docs/pat/contract.md §9 freeze the `--agentCode`
+// docs/pat/contract.md §9 freeze the `--agentCode`
 // resolution chain at exactly two tiers plus a hard error:
 //
 //	--agentCode flag  >  DINGTALK_DWS_AGENTCODE env  >  error

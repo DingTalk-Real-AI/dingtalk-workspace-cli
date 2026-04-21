@@ -59,9 +59,8 @@ type ToolCaller interface {
 // fall back to open-source defaults so the struct is safe to use as-is.
 type Hooks struct {
 	// --- identity ---
-	Name           string // "open" (default) / overlay identifier
-	ScenarioCode   string // injected into x-dingtalk-scenario-code header
-	DingTalkSource string // when non-empty, overrides x-dingtalk-source header; defaults to "github"
+	Name         string // "open" (default) / overlay identifier
+	ScenarioCode string // injected into x-dingtalk-scenario-code header
 
 	// --- runtime mode ---
 	IsEmbedded     bool // true when running inside a host application
