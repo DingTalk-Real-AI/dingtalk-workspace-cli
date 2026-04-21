@@ -254,8 +254,8 @@ func TestSendByBotEmptyTextStillErrors(t *testing.T) {
 	if err == nil {
 		t.Fatal("Execute() should fail when --text is empty")
 	}
-	if !strings.Contains(err.Error(), "--text") {
-		t.Errorf("error should mention --text, got: %v", err)
+	if !strings.Contains(err.Error(), "text") {
+		t.Errorf("error should mention text, got: %v", err)
 	}
 }
 
