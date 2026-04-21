@@ -25,7 +25,7 @@ cli_version: ">=1.0.6"
 | 产品                | 用途                                                   | 参考文件                                                           |
 |-------------------|------------------------------------------------------|----------------------------------------------------------------|
 | `aitable`         | AI表格：表格/数据表/字段/记录增删改查/模板搜索                           | [aitable.md](./references/products/aitable.md)                 |
-| `approval`        | 审批：审批表单/发起实例/审批/撤销                                   | [simple.md](./references/products/simple.md)                   |
+| `oa`              | 审批：审批表单/发起实例/同意/拒绝/撤销                                | [simple.md](./references/products/simple.md)                   |
 | `attendance`      | 考勤：打卡记录/排班查询                                         | [attendance.md](./references/products/attendance.md)           |
 | `calendar`        | 日历：日程/参与者/会议室/闲忙查询                                   | [calendar.md](./references/products/calendar.md)               |
 | `chat`            | 群聊与机器人：搜索群/建群/群成员管理/改群名/机器人群发/单聊/撤回/Webhook/机器人搜索     | [chat.md](./references/products/chat.md)                       |
@@ -76,6 +76,7 @@ cli_version: ">=1.0.6"
 | `doc` | `delete` | 删除钉钉文档（不可恢复） |
 | `doc` | `block delete` | 删除文档块 |
 | `todo` | `task delete` | 删除待办 |
+| `oa` | `approval approve` / `approval reject` | 同意或拒绝审批（审批决策不可撤回） |
 
 ### 确认流程
 ```

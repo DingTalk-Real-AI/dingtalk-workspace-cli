@@ -35,7 +35,7 @@ Flags:
       --template-id string   日志模版 ID (必填)，从 template list 返回中取
       --contents string      日志内容 JSON 数组 (必填)，每项须含 key/sort/content/contentType/type
       --dd-from string       创建来源标识 (默认 dws)
-      --to-chat string       是否发送到日志接收人单聊 (传 "true" 发送)
+      --to-chat              是否发送到日志接收人单聊 (默认 false，传本 flag 则为 true)
       --to-user-ids string   接收人 userId，逗号分隔 (可选)
 ```
 
@@ -68,9 +68,9 @@ Usage:
 Example:
   dws report list --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --cursor 0 --size 20
 Flags:
-      --cursor string   分页游标 (必填)
+      --cursor int      分页游标，首次传 0 (默认 0)
       --end string      结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00) (必填)
-      --size string     每页大小 (必填)
+      --size int        每页条数，最大 20 (默认 20)
       --start string    开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00) (必填)
 ```
 
@@ -93,8 +93,8 @@ Example:
   dws report sent --cursor 0 --size 20 --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00"
   dws report sent --cursor 0 --size 20 --template-name "日报"
 Flags:
-      --cursor string         分页游标，首次传 0 (默认 0)
-      --size string           每页条数，最大 20 (默认 20)
+      --cursor int            分页游标，首次传 0 (默认 0)
+      --size int              每页条数，最大 20 (默认 20)
       --start string          创建开始时间 ISO-8601 (默认最近 30 天)
       --end string            创建结束时间 ISO-8601 (默认最近 30 天)
       --modified-start string 修改开始时间 ISO-8601 (可选)
