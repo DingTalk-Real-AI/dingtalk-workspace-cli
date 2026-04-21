@@ -24,54 +24,35 @@ func TestApplyChannelHeader_ForwardsRawChannelCode(t *testing.T) {
 	}
 }
 
-func TestCurrentClawType_NormalizesDINGTALKAgent(t *testing.T) {
-	t.Setenv(DingTalkAgentEnv, "Sales_Copilot")
-
-	if got := CurrentClawType(); got != "sales-copilot" {
-		t.Fatalf("CurrentClawType() = %q, want sales-copilot", got)
-	}
-}
-
-func TestCurrentHostPATClawType_UsesNonDefaultDINGTALKAgent(t *testing.T) {
-	t.Setenv(DingTalkAgentEnv, "sales-copilot")
-
-	if got := CurrentHostPATClawType(); got != "sales-copilot" {
-		t.Fatalf("CurrentHostPATClawType() = %q, want sales-copilot", got)
-	}
-}
-
-func TestCurrentHostPATClawType_IgnoresTaggedDWSChannel(t *testing.T) {
-	t.Setenv(DWSChannelEnv, "Qoderwork;host-control")
-
-	if got := CurrentHostPATClawType(); got != "" {
-		t.Fatalf("CurrentHostPATClawType() = %q, want empty when only DWS_CHANNEL is tagged", got)
-	}
-}
-
-func TestCurrentHostPATClawType_IgnoresDefaultDINGTALKAgent(t *testing.T) {
-	t.Setenv(DingTalkAgentEnv, "default")
-
-	if got := CurrentHostPATClawType(); got != "" {
-		t.Fatalf("CurrentHostPATClawType() = %q, want empty for default", got)
-	}
-}
-
-func TestIsHostPATClawType(t *testing.T) {
-	t.Parallel()
-
+// TestHostOwnsPATFlow_OnlyAgentCodeMatters is the package-local mirror of
+// test/unit/pat_host_owned_signal_test.go. It locks in the invariant that
+// HostOwnsPATFlow consults ONLY DINGTALK_DWS_AGENTCODE — DINGTALK_AGENT
+// and DWS_CHANNEL must never sway the decision, in either direction.
+func TestHostOwnsPATFlow_OnlyAgentCodeMatters(t *testing.T) {
 	cases := []struct {
-		value string
-		want  bool
+		name      string
+		agentCode string
+		setAgent  bool
+		agentEnv  string
+		want      bool
 	}{
-		{"sales-copilot", true},
-		{"customer-support", true},
-		{"custom-agent", true},
-		{"default", false},
-		{"", false},
+		{"no signal → CLI-owned", "", false, "", false},
+		{"agent code only → host-owned", "agt-cursor", false, "", true},
+		{"agent code + DINGTALK_AGENT business → host-owned", "agt-cursor", true, "sales-copilot", true},
+		{"DINGTALK_AGENT alone → CLI-owned", "", true, "sales-copilot", false},
+		{"whitespace-only agent code → CLI-owned", "   ", true, "sales-copilot", false},
 	}
 	for _, tc := range cases {
-		if got := IsHostPATClawType(tc.value); got != tc.want {
-			t.Fatalf("IsHostPATClawType(%q) = %v, want %v", tc.value, got, tc.want)
-		}
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(AgentCodeEnv, tc.agentCode)
+			if tc.setAgent {
+				t.Setenv("DINGTALK_AGENT", tc.agentEnv)
+			}
+			if got := HostOwnsPATFlow(); got != tc.want {
+				t.Fatalf("HostOwnsPATFlow() = %v, want %v (agentCode=%q, DINGTALK_AGENT set=%v value=%q)",
+					got, tc.want, tc.agentCode, tc.setAgent, tc.agentEnv)
+			}
+		})
 	}
 }

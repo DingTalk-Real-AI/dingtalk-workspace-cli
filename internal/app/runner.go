@@ -59,22 +59,37 @@ func init() {
 	configmeta.Register(configmeta.ConfigItem{
 		Name:        "DINGTALK_AGENT",
 		Category:    configmeta.CategoryExternal,
-		Description: "业务 Agent 名称；同时用于 x-dingtalk-agent 与 claw-type",
+		Description: "业务 Agent 名称；仅用于 x-dingtalk-agent 请求头，与 claw-type/host-owned PAT 判定无关",
+	})
+	configmeta.Register(configmeta.ConfigItem{
+		Name:        "DWS_TRACE_ID",
+		Category:    configmeta.CategoryExternal,
+		Description: "MCP 请求 x-dingtalk-trace-id 头（主路径；DINGTALK_TRACE_ID 为向后兼容别名）",
+	})
+	configmeta.Register(configmeta.ConfigItem{
+		Name:        "DWS_SESSION_ID",
+		Category:    configmeta.CategoryExternal,
+		Description: "MCP 请求 x-dingtalk-session-id 头（主路径；DINGTALK_SESSION_ID 为向后兼容别名）",
+	})
+	configmeta.Register(configmeta.ConfigItem{
+		Name:        "DWS_MESSAGE_ID",
+		Category:    configmeta.CategoryExternal,
+		Description: "MCP 请求 x-dingtalk-message-id 头（主路径；DINGTALK_MESSAGE_ID 为向后兼容别名）",
 	})
 	configmeta.Register(configmeta.ConfigItem{
 		Name:        "DINGTALK_TRACE_ID",
 		Category:    configmeta.CategoryExternal,
-		Description: "MCP 请求 x-dingtalk-trace-id 头",
+		Description: "MCP 请求 x-dingtalk-trace-id 头（兼容别名，首选 DWS_TRACE_ID）",
 	})
 	configmeta.Register(configmeta.ConfigItem{
 		Name:        "DINGTALK_SESSION_ID",
 		Category:    configmeta.CategoryExternal,
-		Description: "MCP 请求 x-dingtalk-session-id 头",
+		Description: "MCP 请求 x-dingtalk-session-id 头（兼容别名，首选 DWS_SESSION_ID）",
 	})
 	configmeta.Register(configmeta.ConfigItem{
 		Name:        "DINGTALK_MESSAGE_ID",
 		Category:    configmeta.CategoryExternal,
-		Description: "MCP 请求 x-dingtalk-message-id 头",
+		Description: "MCP 请求 x-dingtalk-message-id 头（兼容别名，首选 DWS_MESSAGE_ID）",
 	})
 }
 
@@ -83,12 +98,64 @@ const (
 	runtimeContentScanEnforceEnv      = "DWS_RUNTIME_CONTENT_SCAN_ENFORCE"
 	runtimeContentScanReportOutputEnv = "DWS_RUNTIME_CONTENT_SCAN_REPORT"
 
-	// Environment variables for MCP request headers (passed from caller)
-	envDingtalkAgent     = "DINGTALK_AGENT"
+	// Environment variables for MCP request headers (passed from caller).
+	// Trace id / session id / message id have a primary DWS_* name and a
+	// DINGTALK_* backward-compatibility alias. DWS_* wins when both are set
+	// to different non-empty values; the mismatch is logged via slog.Warn
+	// in resolveTraceEnv so operators can notice the inconsistency.
+	envDingtalkAgent = "DINGTALK_AGENT"
+
+	envDwsTraceID   = "DWS_TRACE_ID"
+	envDwsSessionID = "DWS_SESSION_ID"
+	envDwsMessageID = "DWS_MESSAGE_ID"
+
 	envDingtalkTraceID   = "DINGTALK_TRACE_ID"
 	envDingtalkSessionID = "DINGTALK_SESSION_ID"
 	envDingtalkMessageID = "DINGTALK_MESSAGE_ID"
 )
+
+// resolveTraceEnv returns the effective value for a trace-family env,
+// preferring the DWS_* primary name over the DINGTALK_* compatibility
+// alias. When both are set to different non-empty values, DWS_* wins and
+// we emit a single slog.Warn so the fork is observable.
+func resolveTraceEnv(primaryName, aliasName string) string {
+	primary := os.Getenv(primaryName)
+	alias := os.Getenv(aliasName)
+	if primary != "" && alias != "" && primary != alias {
+		slog.Warn("runner: trace env names disagree; using primary",
+			"primary_name", primaryName,
+			"primary_value", primary,
+			"alias_name", aliasName,
+			"alias_value", alias,
+		)
+	}
+	if primary != "" {
+		return primary
+	}
+	return alias
+}
+
+// hostOwnedPATDecisionOnce ensures the host-owned PAT decision is logged at
+// most once per CLI process. The log line is emitted at Debug level so
+// `--debug` (or `--verbose`) surfaces it on stderr; the file logger at
+// ~/.dws/logs/dws.log captures it unconditionally at DEBUG. It records
+// ONLY the derived booleans — never the env value, token, client-id or
+// flow-id — so logs remain safe to attach to issues.
+// See docs/pat/host-integration.md §10.
+var hostOwnedPATDecisionOnce sync.Once
+
+// logHostOwnedPATDecisionOnce emits the single-shot debug trace. It is
+// called lazily from the runtime Run path (which executes AFTER
+// PersistentPreRunE has applied --debug / --verbose via configureLogLevel)
+// so the line actually surfaces when the user asks for it.
+func logHostOwnedPATDecisionOnce() {
+	hostOwnedPATDecisionOnce.Do(func() {
+		slog.Debug("runtime.host_owned_pat",
+			"hostOwned", authpkg.HostOwnsPATFlow(),
+			"agentCodeEnvPresent", os.Getenv(authpkg.AgentCodeEnv) != "",
+		)
+	})
+}
 
 func newCommandRunnerWithFlags(loader cli.CatalogLoader, flags *GlobalFlags) executor.Runner {
 	// Ensure DWS_CLIENT_ID env is populated from persisted config before
@@ -129,6 +196,12 @@ type runtimeRunner struct {
 }
 
 func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation) (executor.Result, error) {
+	// Emit the one-shot host-owned PAT decision log. Placed here (not in
+	// the constructor) so it fires AFTER PersistentPreRunE has configured
+	// slog level per --debug / --verbose. The Once guard makes repeat
+	// invocations within the same process free.
+	logHostOwnedPATDecisionOnce()
+
 	if r.loader == nil || r.transport == nil {
 		return r.fallback.Run(ctx, invocation)
 	}
@@ -576,14 +649,16 @@ func resolveIdentityHeaders() map[string]string {
 	}
 
 	// Inject environment variable based headers for MCP gateway tracking.
-	// DINGTALK_AGENT remains the single assignment source for both the
-	// x-dingtalk-agent bridge here and the claw-type header added by the
-	// open-source edition hook.
+	// DINGTALK_AGENT, if set by the caller, is forwarded verbatim as the
+	// x-dingtalk-agent header. It does NOT influence claw-type (which the
+	// open-source edition pins to edition.DefaultOSSClawType via the
+	// MergeHeaders hook below) and it does NOT influence the host-owned
+	// PAT decision (driven solely by DINGTALK_DWS_AGENTCODE).
 	envHeaders := map[string]string{
 		"x-dingtalk-agent":      os.Getenv(envDingtalkAgent),
-		"x-dingtalk-trace-id":   os.Getenv(envDingtalkTraceID),
-		"x-dingtalk-session-id": os.Getenv(envDingtalkSessionID),
-		"x-dingtalk-message-id": os.Getenv(envDingtalkMessageID),
+		"x-dingtalk-trace-id":   resolveTraceEnv(envDwsTraceID, envDingtalkTraceID),
+		"x-dingtalk-session-id": resolveTraceEnv(envDwsSessionID, envDingtalkSessionID),
+		"x-dingtalk-message-id": resolveTraceEnv(envDwsMessageID, envDingtalkMessageID),
 	}
 	for k, v := range envHeaders {
 		if v != "" {

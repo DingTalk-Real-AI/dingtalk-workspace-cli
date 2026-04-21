@@ -26,12 +26,14 @@ func TestPatHelpMentionsDingTalkAgentHostFlow(t *testing.T) {
 
 	help := out.String()
 	for _, want := range []string{
+		"DINGTALK_DWS_AGENTCODE",
 		"DINGTALK_AGENT",
 		"claw-type",
-		"business-agent-name",
-		"为空或为 default",
-		"claw-type != default",
-		"PAT 返回 JSON",
+		"x-dingtalk-agent",
+		"openClaw",
+		"host-owned",
+		"stderr JSON",
+		"exit=4",
 		"由宿主处理全部 UI / 交互 / 回调节奏 / 重试逻辑",
 		"DWS_CHANNEL",
 	} {

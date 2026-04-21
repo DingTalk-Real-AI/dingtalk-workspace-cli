@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 // ─── crypto.go ─────────────────────────────────────────────────────────
@@ -254,7 +253,9 @@ func TestSecureTokenStorage_DeleteTokenBothDirs(t *testing.T) {
 	dir1 := t.TempDir()
 	dir2 := t.TempDir()
 	s1 := NewSecureTokenStorage(dir1, "", "aa:bb:cc:dd:ee:ff")
-	s1.SaveToken(&TokenData{AccessToken: "t", ExpiresAt: time.Now().Add(time.Hour)})
+	if err := s1.SaveEncryptedBytes([]byte("t")); err != nil {
+		t.Fatalf("SaveEncryptedBytes error: %v", err)
+	}
 	os.WriteFile(filepath.Join(dir2, DataFileName), []byte("enc"), 0o600)
 
 	s := NewSecureTokenStorage(dir1, dir2, "aa:bb:cc:dd:ee:ff")

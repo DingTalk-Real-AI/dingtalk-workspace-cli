@@ -159,15 +159,16 @@ jobs:
         run: go test -v -count=1 ./pkg/editiontest/...
 
   notify-downstream:
-    name: Notify Wukong Overlay
+    name: Notify Downstream Overlays
     needs: [test, policy, edition-tests]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - name: Trigger downstream CI
         run: |
-          # Trigger internal GitLab CI pipeline via webhook.
-          # WUKONG_TRIGGER_TOKEN is a repository secret.
+          # Trigger downstream overlay CI pipeline via optional webhook.
+          # The trigger token/URL are repository secrets; when absent this
+          # step is a no-op so forks and open-source builds work unchanged.
           if [ -n "${{ secrets.WUKONG_TRIGGER_TOKEN }}" ]; then
             curl --fail --silent --show-error \
               -X POST \
@@ -177,5 +178,5 @@ jobs:
               "${{ secrets.WUKONG_TRIGGER_URL }}"
             echo "Downstream CI triggered."
           else
-            echo "No WUKONG_TRIGGER_TOKEN configured, skipping downstream notification."
+            echo "No downstream trigger secret configured, skipping downstream notification."
           fi

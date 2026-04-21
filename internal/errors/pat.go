@@ -18,15 +18,64 @@ import (
 	stderrors "errors"
 	"fmt"
 	"strings"
+	"sync"
 )
+
+// hostControlProvider returns the host-owned clawType for the current
+// process, or empty string when CLI is in default (CLI-owned) mode.
+// Injected lazily via SetHostControlProvider to avoid an
+// internal/errors → internal/auth import cycle.
+//
+// Access is serialized by hostControlMu so that tests can swap the provider
+// without triggering the race detector against parallel classifier callers.
+var (
+	hostControlMu       sync.RWMutex
+	hostControlProvider func() string
+)
+
+// SetHostControlProvider wires up the classifier's hostControl injection.
+// It MUST be called once during CLI bootstrap (e.g. from internal/app
+// init()) so that the first cleanPATJSON call observes a valid provider.
+// Passing nil disables injection (useful for isolated tests).
+func SetHostControlProvider(fn func() string) {
+	hostControlMu.Lock()
+	defer hostControlMu.Unlock()
+	hostControlProvider = fn
+}
+
+// HostControlBlock returns the canonical hostControl map documented in
+// docs/pat/contract.md §5.2 when the CLI is operating in host-owned mode,
+// or nil when it is not. The returned map is safe for the caller to mutate
+// because a new map is constructed on each call.
+//
+// Callers that need to include additional legacy keys (e.g. callbackOwner)
+// should layer them on top of the returned map.
+func HostControlBlock() map[string]any {
+	hostControlMu.RLock()
+	provider := hostControlProvider
+	hostControlMu.RUnlock()
+	if provider == nil {
+		return nil
+	}
+	claw := provider()
+	if claw == "" {
+		return nil
+	}
+	return map[string]any{
+		"clawType":     claw,
+		"mode":         "host",
+		"pollingOwner": "host",
+		"retryOwner":   "host",
+	}
+}
 
 // ExitCodePermission is the process exit code for PAT authorisation failures.
 const ExitCodePermission = 4
 
 // PATError represents a PAT (Personal Action Token) authorization failure
 // that should be passed through to stderr as raw JSON without any CLI-layer
-// wrapping.  The host application (e.g. RewindDesktop) parses the JSON to
-// display its own authorisation UI.
+// wrapping. The host application parses the JSON to display its own
+// authorization UI. See docs/pat/contract.md §2 for the wire schema.
 type PATError struct {
 	RawJSON string
 }
@@ -49,9 +98,22 @@ var patNoPermissionCodes = map[string]bool{
 }
 
 // patAuthRequiredCodes are error codes that trigger the PAT authorization
-// flow (e.g. the server auto-created a CLI app and returned auth details).
+// flow (e.g. the server auto-created a CLI app and returned auth details,
+// or the caller's OAuth token lacks a scope that must be re-acquired via
+// `dws auth login --scope <missing>`).
+//
+// Keep keys in alphabetical order so diffs are stable.
+//
+// Evidence / contract anchors:
+//   - AGENT_CODE_NOT_EXISTS  → docs/pat/contract.md §2.3 (Frozen selector)
+//     and docs/pat/error-catalog.md §AGENT_CODE_NOT_EXISTS.
+//   - PAT_SCOPE_AUTH_REQUIRED → docs/pat/contract.md §2.3 (Frozen selector)
+//     and docs/pat/error-catalog.md §PAT_SCOPE_AUTH_REQUIRED. CLI must
+//     surface it as a *PATError (exit=4) so hosts can kick the
+//     `dws auth login --scope <data.missingScope>` branch.
 var patAuthRequiredCodes = map[string]bool{
-	"AGENT_CODE_NOT_EXISTS": true,
+	"AGENT_CODE_NOT_EXISTS":   true,
+	"PAT_SCOPE_AUTH_REQUIRED": true,
 }
 
 // IsPATError reports whether err is a *PATError.
@@ -239,7 +301,22 @@ func cleanPATJSON(body map[string]any, code string) string {
 			out["data"] = stripClassFields(fallback)
 		}
 	}
-	b, err := json.MarshalIndent(out, "", "  ")
+
+	// docs/pat/contract.md §5.2 invariant: CLI injects data.hostControl at a
+	// single point (here) whenever it is operating in host-owned mode. When
+	// no provider is wired or it returns empty, we deliberately omit the
+	// field so defaults remain CLI-owned.
+	if block := HostControlBlock(); block != nil {
+		if data, ok := out["data"].(map[string]any); ok {
+			data["hostControl"] = block
+		}
+	}
+
+	// SSOT §2: stderr JSON MUST be a single-line, directly json.Unmarshal-able
+	// payload — pretty-printing would break naïve host parsers that read
+	// stderr line-by-line and fail on leading whitespace. See
+	// docs/pat/third-party-integration.md §5 and docs/pat/contract.md §2.
+	b, err := json.Marshal(out)
 	if err != nil {
 		return fmt.Sprintf(`{"success":false,"code":"%s"}`, code)
 	}

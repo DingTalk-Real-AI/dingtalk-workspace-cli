@@ -14,6 +14,7 @@
 package errors
 
 import (
+	"encoding/json"
 	stderrors "errors"
 	"strings"
 	"testing"
@@ -404,6 +405,43 @@ func TestClassifyPatAuthCheck_AgentCodeNotExists(t *testing.T) {
 	}
 }
 
+// TestClassifyPatAuthCheck_scope_auth_required pins the PAT_SCOPE_AUTH_REQUIRED
+// selector (Frozen; see docs/pat/contract.md §2.3 + error-catalog.md
+// §PAT_SCOPE_AUTH_REQUIRED) as a PATError with exit=4 so hosts can kick the
+// `dws auth login --scope <data.missingScope>` branch.
+func TestClassifyPatAuthCheck_scope_auth_required(t *testing.T) {
+	t.Parallel()
+	content := map[string]any{
+		"success": false,
+		"code":    "PAT_SCOPE_AUTH_REQUIRED",
+		"data":    map[string]any{"missingScope": "mail:send"},
+	}
+	patErr := ClassifyPatAuthCheck(content)
+	if patErr == nil {
+		t.Fatal("expected non-nil *PATError for PAT_SCOPE_AUTH_REQUIRED")
+	}
+
+	// Error value MUST satisfy the ExitCoder contract (exit=4) so the
+	// process exits with the PAT Frozen code regardless of wrapping.
+	var ec interface{ ExitCode() int } = patErr
+	if ec.ExitCode() != ExitCodePermission {
+		t.Errorf("ExitCode() = %d, want %d", ec.ExitCode(), ExitCodePermission)
+	}
+
+	// Host-visible RawStderr must carry the selector and, crucially, the
+	// missingScope field that drives `dws auth login --scope <x>`.
+	raw := patErr.RawStderr()
+	if !strings.Contains(raw, "PAT_SCOPE_AUTH_REQUIRED") {
+		t.Errorf("RawStderr missing selector, got: %s", raw)
+	}
+	if !strings.Contains(raw, "missingScope") {
+		t.Errorf("RawStderr missing missingScope field, got: %s", raw)
+	}
+	if !strings.Contains(raw, "mail:send") {
+		t.Errorf("RawStderr missing missingScope value, got: %s", raw)
+	}
+}
+
 func TestClassifyPatAuthCheck_NoMatch(t *testing.T) {
 	t.Parallel()
 	content := map[string]any{"code": "SOME_BUSINESS_ERROR", "message": "oops"}
@@ -487,6 +525,109 @@ func TestCleanPATJSON_WithoutData(t *testing.T) {
 	// Top-level stripped fields should not appear
 	if strings.Contains(result, `"message"`) {
 		t.Errorf("expected message to be stripped from top level, got: %s", result)
+	}
+}
+
+// TestCleanPATJSON_InjectsHostControlWhenClawSet verifies the contract
+// invariant from docs/pat/contract.md §5.2: when the bootstrap wires a
+// non-empty clawType provider, cleanPATJSON MUST emit data.hostControl.
+func TestCleanPATJSON_InjectsHostControlWhenClawSet(t *testing.T) {
+	// Not parallel: mutates the package-level provider.
+	t.Cleanup(func() { SetHostControlProvider(nil) })
+	SetHostControlProvider(func() string { return "my-copilot" })
+
+	body := map[string]any{
+		"success": false,
+		"code":    "PAT_NO_PERMISSION",
+		"data": map[string]any{
+			"desc":   "需要授权",
+			"flowId": "f-1",
+		},
+	}
+	raw := cleanPATJSON(body, "PAT_NO_PERMISSION")
+
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		t.Fatalf("unmarshal cleanPATJSON output: %v\nraw=%s", err, raw)
+	}
+	data, ok := parsed["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected data object, got %T", parsed["data"])
+	}
+	hc, ok := data["hostControl"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected data.hostControl to be a map, got %T\nraw=%s", data["hostControl"], raw)
+	}
+	if got, _ := hc["clawType"].(string); got != "my-copilot" {
+		t.Errorf("hostControl.clawType = %q, want %q", got, "my-copilot")
+	}
+	if got, _ := hc["mode"].(string); got != "host" {
+		t.Errorf("hostControl.mode = %q, want %q", got, "host")
+	}
+}
+
+// TestCleanPATJSON_OmitsHostControlByDefault verifies that cleanPATJSON
+// does NOT include a hostControl block when the provider is unset or
+// returns empty (default CLI-owned mode).
+func TestCleanPATJSON_OmitsHostControlByDefault(t *testing.T) {
+	// Not parallel: reads the package-level provider.
+	t.Cleanup(func() { SetHostControlProvider(nil) })
+	SetHostControlProvider(nil)
+
+	body := map[string]any{
+		"success": false,
+		"code":    "PAT_NO_PERMISSION",
+		"data": map[string]any{
+			"desc": "need auth",
+		},
+	}
+	raw := cleanPATJSON(body, "PAT_NO_PERMISSION")
+	if strings.Contains(raw, `"hostControl"`) {
+		t.Fatalf("cleanPATJSON should omit hostControl in default mode, got: %s", raw)
+	}
+
+	SetHostControlProvider(func() string { return "" })
+	raw = cleanPATJSON(body, "PAT_NO_PERMISSION")
+	if strings.Contains(raw, `"hostControl"`) {
+		t.Fatalf("cleanPATJSON should omit hostControl when provider returns empty, got: %s", raw)
+	}
+}
+
+// TestCleanPATJSON_SingleLineOutput pins down the SSOT §2 /
+// docs/pat/contract.md §2 wire invariant: stderr JSON MUST be emitted
+// as a single line (no embedded \n, no pretty-print indentation) so
+// that naïve host parsers reading stderr line-by-line stay correct.
+// Regression guard against accidental reintroduction of
+// json.MarshalIndent.
+func TestCleanPATJSON_SingleLineOutput(t *testing.T) {
+	t.Parallel()
+	body := map[string]any{
+		"success": false,
+		"code":    "PAT_LOW_RISK_NO_PERMISSION",
+		"data": map[string]any{
+			"requiredScopes": []any{"aitable.record:read"},
+			"grantOptions":   []any{"session", "permanent"},
+			"displayName":    "读取记录",
+			"productName":    "AI 表格",
+		},
+	}
+	raw := cleanPATJSON(body, "PAT_LOW_RISK_NO_PERMISSION")
+
+	if strings.Contains(raw, "\n") {
+		t.Fatalf("cleanPATJSON output must be single-line, got embedded newline:\n%s", raw)
+	}
+	if strings.HasPrefix(raw, " ") || strings.HasPrefix(raw, "\t") {
+		t.Fatalf("cleanPATJSON output must not be indented, got leading whitespace: %q", raw)
+	}
+
+	// Contract: the payload must remain a directly json.Unmarshal-able
+	// object, even after the single-line constraint is enforced.
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		t.Fatalf("single-line output must round-trip via json.Unmarshal: %v\nraw=%s", err, raw)
+	}
+	if code, _ := parsed["code"].(string); code != "PAT_LOW_RISK_NO_PERMISSION" {
+		t.Errorf("code = %q, want %q", code, "PAT_LOW_RISK_NO_PERMISSION")
 	}
 }
 

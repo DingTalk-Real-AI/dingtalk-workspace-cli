@@ -22,38 +22,33 @@ import (
 const (
 	// DWSChannelEnv carries the upstream channelCode forwarded as x-dws-channel.
 	DWSChannelEnv = "DWS_CHANNEL"
-	// DINGTALK_AGENT carries the business agent name used for both the
-	// x-dingtalk-agent header and the effective claw-type selector.
-	DingTalkAgentEnv = "DINGTALK_AGENT"
+	// AgentCodeEnv is the sole per-spawn environment variable the host injects
+	// to declare "this process is driven by a third-party Agent host, render
+	// authorization UI yourselves". SSOT §1 + §2 / docs/pat/contract.md §7.
+	AgentCodeEnv = "DINGTALK_DWS_AGENTCODE"
 )
 
 // CurrentChannelCode returns the raw upstream channel code as configured locally.
+//
+// Deprecated: use internal/a2a.CurrentChannelCode.
 func CurrentChannelCode() string {
 	return os.Getenv(DWSChannelEnv)
 }
 
-// CurrentClawType returns the normalized claw-type selector derived from
-// DINGTALK_AGENT.
-func CurrentClawType() string {
-	return normalizeClawType(os.Getenv(DingTalkAgentEnv))
-}
-
-// IsHostPATClawType reports whether the effective claw-type represents a
-// host-owned PAT integration.
-func IsHostPATClawType(raw string) bool {
-	normalized := normalizeClawType(raw)
-	return normalized != "" && normalized != "default"
-}
-
-// CurrentHostPATClawType returns the effective host-owned PAT selector.
-func CurrentHostPATClawType() string {
-	if clawType := CurrentClawType(); IsHostPATClawType(clawType) {
-		return clawType
-	}
-	return ""
+// HostOwnsPATFlow reports whether the current process is running under a
+// third-party Agent host that will render the PAT authorization card
+// itself. Per SSOT §1 + §2, the sole trigger is AgentCodeEnv
+// (DINGTALK_DWS_AGENTCODE) being non-empty. The CLI deliberately does
+// not consult any other signal (DINGTALK_AGENT / DWS_CHANNEL / the wire
+// claw-type header) for this decision so that server-side routing tags
+// and the host-owned UI contract remain independent concerns.
+func HostOwnsPATFlow() bool {
+	return strings.TrimSpace(os.Getenv(AgentCodeEnv)) != ""
 }
 
 // ApplyChannelHeader injects the configured channel code into a request.
+//
+// Deprecated: use internal/a2a.ApplyChannelHeader.
 func ApplyChannelHeader(req *http.Request) {
 	if req == nil {
 		return
@@ -61,10 +56,4 @@ func ApplyChannelHeader(req *http.Request) {
 	if ch := CurrentChannelCode(); ch != "" {
 		req.Header.Set("x-dws-channel", ch)
 	}
-}
-
-func normalizeClawType(raw string) string {
-	normalized := strings.ToLower(strings.TrimSpace(raw))
-	normalized = strings.ReplaceAll(normalized, "_", "-")
-	return normalized
 }

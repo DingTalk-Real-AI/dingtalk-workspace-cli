@@ -64,19 +64,35 @@ func (e *Error) Unwrap() error {
 // Option mutates a structured error before it is returned.
 type Option func(*Error)
 
+// Documented process exit codes per category. exit=4 is reserved
+// exclusively for PATError (see internal/errors/pat.go ExitCodePermission
+// and docs/pat/contract.md §1); discovery failures use a distinct code so
+// hosts can tell "catalog / endpoint lookup broke" apart from "PAT
+// permission insufficient".
+const (
+	ExitCodeAPI        = 1
+	ExitCodeAuth       = 2
+	ExitCodeValidation = 3
+	// ExitCodePAT (= 4) is declared in internal/errors/pat.go as
+	// ExitCodePermission; it is intentionally not re-declared here to keep
+	// the single-source-of-truth alias in the PAT error file.
+	ExitCodeInternal  = 5
+	ExitCodeDiscovery = 6
+)
+
 // ExitCode returns the documented process exit code for the error category.
 func (e *Error) ExitCode() int {
 	switch e.Category {
 	case CategoryAPI:
-		return 1
+		return ExitCodeAPI
 	case CategoryAuth:
-		return 2
+		return ExitCodeAuth
 	case CategoryValidation:
-		return 3
+		return ExitCodeValidation
 	case CategoryDiscovery:
-		return 4
+		return ExitCodeDiscovery
 	default:
-		return 5
+		return ExitCodeInternal
 	}
 }
 

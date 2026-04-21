@@ -186,7 +186,7 @@ func TestIdentity_Headers_Nil(t *testing.T) {
 // ─── manager.go ────────────────────────────────────────────────────────
 
 func TestManager_SaveAndGetToken(t *testing.T) {
-	t.Parallel()
+	t.Setenv(LegacyPlainTokenEnv, "1")
 	dir := t.TempDir()
 	m := NewManager(dir, nil)
 	if err := m.SaveToken("test-token"); err != nil {
@@ -205,7 +205,7 @@ func TestManager_SaveAndGetToken(t *testing.T) {
 }
 
 func TestManager_GetToken_Missing(t *testing.T) {
-	t.Parallel()
+	t.Setenv(LegacyPlainTokenEnv, "1")
 	m := NewManager(t.TempDir(), nil)
 	_, _, err := m.GetToken()
 	if err == nil {
@@ -214,7 +214,7 @@ func TestManager_GetToken_Missing(t *testing.T) {
 }
 
 func TestManager_SaveAndGetMCPURL(t *testing.T) {
-	t.Parallel()
+	t.Setenv(LegacyPlainTokenEnv, "1")
 	dir := t.TempDir()
 	m := NewManager(dir, nil)
 	if err := m.SaveMCPURL("https://example.com/mcp"); err != nil {
@@ -230,7 +230,7 @@ func TestManager_SaveAndGetMCPURL(t *testing.T) {
 }
 
 func TestManager_GetMCPURL_Missing(t *testing.T) {
-	t.Parallel()
+	t.Setenv(LegacyPlainTokenEnv, "1")
 	m := NewManager(t.TempDir(), nil)
 	_, err := m.GetMCPURL()
 	if err == nil {

@@ -20,6 +20,8 @@ import "sync"
 // product ID (CLI.ID) so that different servers can use independent
 // tokens without interfering with each other or with the default
 // DingTalk OAuth token.
+//
+// Deprecated: use internal/a2a.PluginAuth (alias of this type).
 type PluginAuth struct {
 	// Token is the Bearer token extracted from the plugin's
 	// "Authorization" header (e.g. a third-party API key).
@@ -43,6 +45,8 @@ var (
 // server keyed by its canonical product ID. The runner looks up these
 // credentials at execution time to inject the correct Bearer token
 // instead of the default DingTalk OAuth token.
+//
+// Deprecated: use internal/a2a.Register.
 func RegisterPluginAuth(productID string, auth *PluginAuth) {
 	pluginAuthMu.Lock()
 	defer pluginAuthMu.Unlock()
@@ -51,6 +55,8 @@ func RegisterPluginAuth(productID string, auth *PluginAuth) {
 
 // LookupPluginAuth returns the authentication credentials registered
 // for the given product ID, or nil if none exists.
+//
+// Deprecated: use internal/a2a.Lookup.
 func LookupPluginAuth(productID string) (*PluginAuth, bool) {
 	pluginAuthMu.RLock()
 	defer pluginAuthMu.RUnlock()

@@ -246,7 +246,13 @@ func WaitForPatAuthorization(ctx context.Context, configDir string, output io.Wr
 // retryWithPatAuthRetry wraps an invocation that failed with a PAT scope error.
 // It waits for the user to complete authorization and then retries the invocation.
 func retryWithPatAuthRetry(ctx context.Context, runner executor.Runner, invocation executor.Invocation, scopeErr *PatScopeError, configDir string, output io.Writer) (executor.Result, error) {
-	if authpkg.CurrentHostPATClawType() != "" {
+	hostOwnedPAT := authpkg.HostOwnsPATFlow()
+	slog.Debug("pat.host_owned_decision",
+		"site", "retryWithPatAuthRetry",
+		"hostOwned", hostOwnedPAT,
+		"agentCodeEnvSet", os.Getenv(authpkg.AgentCodeEnv) != "",
+	)
+	if hostOwnedPAT {
 		return executor.Result{}, &apperrors.PATError{RawJSON: buildPATScopeHostJSON(scopeErr)}
 	}
 
@@ -351,7 +357,12 @@ func handlePatAuthCheck(
 		"flowId", patData.Data.FlowID,
 		"hasSecret", patData.Data.ClientSecret != "",
 	)
-	hostOwnedPAT := authpkg.CurrentHostPATClawType() != ""
+	hostOwnedPAT := authpkg.HostOwnsPATFlow()
+	slog.Debug("pat.host_owned_decision",
+		"site", "handlePatAuthCheck",
+		"hostOwned", hostOwnedPAT,
+		"agentCodeEnvSet", os.Getenv(authpkg.AgentCodeEnv) != "",
+	)
 
 	// Inject clientId/clientSecret from PAT response as runtime credentials
 	// so that subsequent device flow auth uses the server-assigned app identity.
@@ -388,9 +399,11 @@ func handlePatAuthCheck(
 		}
 	}
 
-	// In host-controlled PAT mode driven by the effective claw-type, or when
-	// flowId is absent, the CLI returns machine-readable JSON to stderr and
-	// leaves UI/polling/retry to the host.
+	// In host-controlled PAT mode (driven solely by DINGTALK_DWS_AGENTCODE),
+	// or when flowId is absent, the CLI returns machine-readable JSON to
+	// stderr and leaves UI/polling/retry to the host. `claw-type` is NOT
+	// used for this decision — it is only forwarded on the wire via
+	// edition.MergeHeaders and surfaced in hostControl for traceability.
 	if hostOwnedPAT || patData.Data.FlowID == "" {
 		if hostOwnedPAT {
 			return executor.Result{}, &apperrors.PATError{RawJSON: enrichPATErrorForHostControl(patErr.RawJSON, patData.Data.FlowID)}
@@ -517,7 +530,8 @@ func enrichPATErrorForHostControl(raw string, flowID string) string {
 	data["hostControl"] = buildHostControlState()
 	delete(data, "callbacks")
 
-	encoded, err := json.MarshalIndent(payload, "", "  ")
+	// SSOT §2 / docs/pat/contract.md §2: stderr JSON is single-line.
+	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return raw
 	}
@@ -537,21 +551,37 @@ func buildPATScopeHostJSON(scopeErr *PatScopeError) string {
 			"hostControl":  buildHostControlState(),
 		},
 	}
-	b, err := json.MarshalIndent(payload, "", "  ")
+	// SSOT §2 / docs/pat/contract.md §2: stderr JSON is single-line.
+	b, err := json.Marshal(payload)
 	if err != nil {
 		return `{"success":false,"code":"PAT_SCOPE_AUTH_REQUIRED"}`
 	}
 	return string(b)
 }
 
+// buildHostControlState returns the host-control block used by the active
+// retry / scope-auth paths. Core fields come from apperrors.HostControlBlock
+// so the classifier-side injection and this call-site agree byte-for-byte;
+// callbackOwner is a legacy key preserved for backwards compatibility with
+// existing hosts and is layered on top here.
+//
+// NOTE: this function is only called from host-owned paths (caller has
+// already confirmed HostOwnsPATFlow()), so HostControlBlock() is expected
+// to be non-nil. The defensive fallback below reuses the same provider
+// the classifier wires in init() to avoid drift.
 func buildHostControlState() map[string]any {
-	return map[string]any{
-		"clawType":      authpkg.CurrentHostPATClawType(),
-		"mode":          "host",
-		"pollingOwner":  "host",
-		"retryOwner":    "host",
-		"callbackOwner": "host",
+	block := apperrors.HostControlBlock()
+	if block == nil {
+		claw := hostControlProviderFromEnv()
+		block = map[string]any{
+			"clawType":     claw,
+			"mode":         "host",
+			"pollingOwner": "host",
+			"retryOwner":   "host",
+		}
 	}
+	block["callbackOwner"] = "host"
+	return block
 }
 
 // pollPatDeviceFlow polls the PAT device flow status endpoint until a terminal

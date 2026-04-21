@@ -1,10 +1,10 @@
 package security
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 // ─── storage.go ────────────────────────────────────────────────────────
@@ -14,27 +14,17 @@ func TestSecureTokenStorage_SaveAndLoad(t *testing.T) {
 	dir := t.TempDir()
 	storage := NewSecureTokenStorage(dir, "", "aa:bb:cc:dd:ee:ff")
 
-	data := &TokenData{
-		AccessToken:  "access-token-xyz",
-		RefreshToken: "refresh-token-abc",
-		ExpiresAt:    time.Now().Add(time.Hour),
-		RefreshExpAt: time.Now().Add(24 * time.Hour),
-		CorpID:       "corp-123",
+	plaintext := []byte(`{"access_token":"access-token-xyz","corp_id":"corp-123"}`)
+	if err := storage.SaveEncryptedBytes(plaintext); err != nil {
+		t.Fatalf("SaveEncryptedBytes error: %v", err)
 	}
 
-	if err := storage.SaveToken(data); err != nil {
-		t.Fatalf("SaveToken error: %v", err)
-	}
-
-	loaded, err := storage.LoadToken()
+	loaded, err := storage.LoadEncryptedBytes()
 	if err != nil {
-		t.Fatalf("LoadToken error: %v", err)
+		t.Fatalf("LoadEncryptedBytes error: %v", err)
 	}
-	if loaded.AccessToken != "access-token-xyz" {
-		t.Fatalf("wrong access token: %s", loaded.AccessToken)
-	}
-	if loaded.CorpID != "corp-123" {
-		t.Fatalf("wrong corp ID: %s", loaded.CorpID)
+	if !bytes.Equal(loaded, plaintext) {
+		t.Fatalf("round-trip mismatch: got %q want %q", loaded, plaintext)
 	}
 }
 
@@ -42,13 +32,12 @@ func TestSecureTokenStorage_WrongMAC(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	storage := NewSecureTokenStorage(dir, "", "aa:bb:cc:dd:ee:ff")
-	data := &TokenData{AccessToken: "secret", ExpiresAt: time.Now().Add(time.Hour)}
-	if err := storage.SaveToken(data); err != nil {
-		t.Fatalf("SaveToken error: %v", err)
+	if err := storage.SaveEncryptedBytes([]byte("secret")); err != nil {
+		t.Fatalf("SaveEncryptedBytes error: %v", err)
 	}
 
 	wrongStorage := NewSecureTokenStorage(dir, "", "11:22:33:44:55:66")
-	_, err := wrongStorage.LoadToken()
+	_, err := wrongStorage.LoadEncryptedBytes()
 	if err == nil {
 		t.Fatal("expected error with wrong MAC")
 	}
@@ -57,7 +46,7 @@ func TestSecureTokenStorage_WrongMAC(t *testing.T) {
 func TestSecureTokenStorage_LoadMissing(t *testing.T) {
 	t.Parallel()
 	storage := NewSecureTokenStorage(t.TempDir(), "", "aa:bb:cc:dd:ee:ff")
-	_, err := storage.LoadToken()
+	_, err := storage.LoadEncryptedBytes()
 	if err == nil {
 		t.Fatal("expected error for missing file")
 	}
@@ -70,7 +59,9 @@ func TestSecureTokenStorage_Exists(t *testing.T) {
 	if storage.Exists() {
 		t.Fatal("should not exist yet")
 	}
-	storage.SaveToken(&TokenData{AccessToken: "t", ExpiresAt: time.Now().Add(time.Hour)})
+	if err := storage.SaveEncryptedBytes([]byte("t")); err != nil {
+		t.Fatalf("SaveEncryptedBytes error: %v", err)
+	}
 	if !storage.Exists() {
 		t.Fatal("should exist after save")
 	}
@@ -83,16 +74,18 @@ func TestSecureTokenStorage_FallbackDir(t *testing.T) {
 
 	// Save in fallback
 	fbStorage := NewSecureTokenStorage(fallback, "", "aa:bb:cc:dd:ee:ff")
-	fbStorage.SaveToken(&TokenData{AccessToken: "fb-token", ExpiresAt: time.Now().Add(time.Hour)})
+	if err := fbStorage.SaveEncryptedBytes([]byte("fb-token")); err != nil {
+		t.Fatalf("SaveEncryptedBytes error: %v", err)
+	}
 
 	// Load from primary with fallback
 	storage := NewSecureTokenStorage(primary, fallback, "aa:bb:cc:dd:ee:ff")
-	loaded, err := storage.LoadToken()
+	loaded, err := storage.LoadEncryptedBytes()
 	if err != nil {
-		t.Fatalf("LoadToken error: %v", err)
+		t.Fatalf("LoadEncryptedBytes error: %v", err)
 	}
-	if loaded.AccessToken != "fb-token" {
-		t.Fatalf("expected fb-token, got %s", loaded.AccessToken)
+	if !bytes.Equal(loaded, []byte("fb-token")) {
+		t.Fatalf("expected fb-token, got %s", loaded)
 	}
 }
 
@@ -129,7 +122,9 @@ func TestSecureTokenStorage_DeleteToken(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	storage := NewSecureTokenStorage(dir, "", "aa:bb:cc:dd:ee:ff")
-	storage.SaveToken(&TokenData{AccessToken: "t", ExpiresAt: time.Now().Add(time.Hour)})
+	if err := storage.SaveEncryptedBytes([]byte("t")); err != nil {
+		t.Fatalf("SaveEncryptedBytes error: %v", err)
+	}
 	if !storage.Exists() {
 		t.Fatal("should exist")
 	}

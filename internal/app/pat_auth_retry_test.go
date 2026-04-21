@@ -153,15 +153,25 @@ func TestPrintPatAuthJSON_MachineReadable(t *testing.T) {
 	}
 	PrintPatAuthJSON(&buf, scopeErr)
 
+	// Per SSOT §2 the payload is single-line; assert by parsing the JSON
+	// rather than by matching pretty-printed substrings.
 	output := buf.String()
-	if !strings.Contains(output, `"code": "PAT_SCOPE_AUTH_REQUIRED"`) {
-		t.Errorf("expected JSON to contain PAT scope code, got: %s", output)
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		t.Fatalf("PrintPatAuthJSON must emit directly-parsable JSON: %v\nraw=%s", err, output)
 	}
-	if !strings.Contains(output, `"missingScope": "mail:send"`) {
-		t.Errorf("expected JSON to contain missing_scope, got: %s", output)
+	if code, _ := parsed["code"].(string); code != "PAT_SCOPE_AUTH_REQUIRED" {
+		t.Errorf("code = %q, want PAT_SCOPE_AUTH_REQUIRED", code)
 	}
-	if !strings.Contains(output, `"hostControl"`) {
-		t.Errorf("expected JSON to contain hostControl, got: %s", output)
+	data, _ := parsed["data"].(map[string]any)
+	if data == nil {
+		t.Fatalf("expected data object, got: %s", output)
+	}
+	if got, _ := data["missingScope"].(string); got != "mail:send" {
+		t.Errorf("missingScope = %q, want mail:send", got)
+	}
+	if _, ok := data["hostControl"]; !ok {
+		t.Errorf("expected data.hostControl, got: %s", output)
 	}
 }
 
@@ -580,7 +590,12 @@ func TestHandlePatAuthCheck_Rejected(t *testing.T) {
 func TestHandlePatAuthCheck_HostControlledFlowIDPassthrough(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", tmpDir)
-	t.Setenv(authpkg.DingTalkAgentEnv, "sales-copilot")
+	// Host-owned decision: driven ONLY by DINGTALK_DWS_AGENTCODE (SSOT §1+§2).
+	// DINGTALK_AGENT is set to demonstrate it does NOT leak into
+	// hostControl.clawType — the open-source build pins that to the
+	// literal edition.DefaultOSSClawType value ("openClaw").
+	t.Setenv(authpkg.AgentCodeEnv, "agt-sales")
+	t.Setenv("DINGTALK_AGENT", "sales-copilot")
 
 	mock := &mockRunner{
 		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
@@ -620,8 +635,8 @@ func TestHandlePatAuthCheck_HostControlledFlowIDPassthrough(t *testing.T) {
 		t.Fatalf("data.flowId = %q, want flow-host", got)
 	}
 	hostControl, _ := data["hostControl"].(map[string]any)
-	if got, _ := hostControl["clawType"].(string); got != "sales-copilot" {
-		t.Fatalf("hostControl.clawType = %q, want sales-copilot", got)
+	if got, _ := hostControl["clawType"].(string); got != "openClaw" {
+		t.Fatalf("hostControl.clawType = %q, want openClaw (hard-wired by open-source edition)", got)
 	}
 	if _, ok := data["callbacks"]; ok {
 		t.Fatalf("unexpected callbacks contract in host-controlled PAT payload: %#v", data["callbacks"])
@@ -637,7 +652,8 @@ func TestHandlePatAuthCheck_HostControlledFlowIDPassthrough(t *testing.T) {
 func TestHandlePatAuthCheck_HostControlledEmptyFlowID_StillReturnsContract(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", tmpDir)
-	t.Setenv(authpkg.DingTalkAgentEnv, "customer-support")
+	t.Setenv(authpkg.AgentCodeEnv, "agt-support")
+	t.Setenv("DINGTALK_AGENT", "customer-support")
 
 	mock := &mockRunner{
 		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
@@ -748,8 +764,68 @@ func TestHandlePatAuthCheck_EmptyFlowID_LegacyErrorCode_NoOutput(t *testing.T) {
 	}
 }
 
+// TestEnrichPATErrorForHostControl_SingleLineOutput locks in the SSOT §2 /
+// docs/pat/contract.md §2 wire invariant: the enriched host-controlled
+// PAT payload must be single-line (no embedded newlines, no indentation),
+// so stderr-line-scanning hosts stay correct. Regression guard against
+// accidental reintroduction of json.MarshalIndent.
+func TestEnrichPATErrorForHostControl_SingleLineOutput(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "agt-sales")
+	t.Setenv("DINGTALK_AGENT", "sales-copilot")
+
+	raw := `{"success":false,"code":"PAT_LOW_RISK_NO_PERMISSION","data":{"flowId":"flow-1","desc":"授权"}}`
+	out := enrichPATErrorForHostControl(raw, "flow-1")
+
+	if strings.Contains(out, "\n") {
+		t.Fatalf("enrichPATErrorForHostControl output must be single-line, got embedded newline:\n%s", out)
+	}
+	if strings.HasPrefix(out, " ") || strings.HasPrefix(out, "\t") {
+		t.Fatalf("enrichPATErrorForHostControl output must not be indented, got leading whitespace: %q", out)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
+		t.Fatalf("single-line output must round-trip via json.Unmarshal: %v\nraw=%s", err, out)
+	}
+	data, _ := parsed["data"].(map[string]any)
+	if _, ok := data["hostControl"]; !ok {
+		t.Fatalf("expected data.hostControl injection, got: %s", out)
+	}
+}
+
+// TestBuildPATScopeHostJSON_SingleLineOutput mirrors the above regression
+// for the scope-error branch (PAT_SCOPE_AUTH_REQUIRED emission).
+func TestBuildPATScopeHostJSON_SingleLineOutput(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "agt-support")
+	t.Setenv("DINGTALK_AGENT", "customer-support")
+
+	scopeErr := &PatScopeError{
+		OriginalError: "missing required scope(s): mail:send",
+		Identity:      "user",
+		ErrorType:     "missing_scope",
+		Message:       "missing required scope(s): mail:send",
+		Hint:          "run `dws auth login --scope \"mail:send\"` to authorize",
+		MissingScope:  "mail:send",
+	}
+	out := buildPATScopeHostJSON(scopeErr)
+
+	if strings.Contains(out, "\n") {
+		t.Fatalf("buildPATScopeHostJSON output must be single-line, got embedded newline:\n%s", out)
+	}
+	if strings.HasPrefix(out, " ") || strings.HasPrefix(out, "\t") {
+		t.Fatalf("buildPATScopeHostJSON output must not be indented, got leading whitespace: %q", out)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
+		t.Fatalf("single-line output must round-trip via json.Unmarshal: %v\nraw=%s", err, out)
+	}
+	if code, _ := parsed["code"].(string); code != "PAT_SCOPE_AUTH_REQUIRED" {
+		t.Errorf("code = %q, want PAT_SCOPE_AUTH_REQUIRED", code)
+	}
+}
+
 func TestRetryWithPatAuthRetry_HostControlledReturnsJSON(t *testing.T) {
-	t.Setenv(authpkg.DingTalkAgentEnv, "customer-support")
+	t.Setenv(authpkg.AgentCodeEnv, "agt-support")
+	t.Setenv("DINGTALK_AGENT", "customer-support")
 
 	scopeErr := &PatScopeError{
 		OriginalError: "missing required scope(s): mail:send",
