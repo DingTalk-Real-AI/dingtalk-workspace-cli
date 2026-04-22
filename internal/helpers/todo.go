@@ -18,7 +18,6 @@ import (
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
-	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
@@ -88,13 +87,7 @@ func newTodoTaskCreateCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			title := cmdutil.FlagOrFallback(cmd, "title", "subject", "content")
-			if strings.TrimSpace(title) == "" {
-				return apperrors.NewValidation("--title is required")
-			}
 			executorsStr, _ := cmd.Flags().GetString("executors")
-			if strings.TrimSpace(executorsStr) == "" {
-				return apperrors.NewValidation("--executors is required")
-			}
 			executorIds := parseExecutorIds(executorsStr)
 
 			vo := map[string]any{
@@ -261,9 +254,6 @@ func newTodoTaskUpdateCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			taskID, _ := cmd.Flags().GetString("task-id")
-			if strings.TrimSpace(taskID) == "" {
-				return apperrors.NewValidation("--task-id is required")
-			}
 			inner := map[string]any{
 				"taskId": taskID,
 			}
@@ -326,13 +316,7 @@ func newTodoTaskDoneCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			taskID, _ := cmd.Flags().GetString("task-id")
-			if strings.TrimSpace(taskID) == "" {
-				return apperrors.NewValidation("--task-id is required")
-			}
 			status, _ := cmd.Flags().GetString("status")
-			if strings.TrimSpace(status) == "" {
-				return apperrors.NewValidation("--status is required")
-			}
 			params := map[string]any{
 				"taskId": taskID,
 				"isDone": status,
@@ -374,9 +358,6 @@ func newTodoTaskGetCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			taskID, _ := cmd.Flags().GetString("task-id")
-			if strings.TrimSpace(taskID) == "" {
-				return apperrors.NewValidation("--task-id is required")
-			}
 			params := map[string]any{
 				"taskId": taskID,
 			}
@@ -416,9 +397,6 @@ func newTodoTaskDeleteCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			taskID, _ := cmd.Flags().GetString("task-id")
-			if strings.TrimSpace(taskID) == "" {
-				return apperrors.NewValidation("--task-id is required")
-			}
 			if !confirmDeletePrompt(cmd, i18n.T("待办"), taskID) {
 				return nil
 			}

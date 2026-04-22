@@ -133,9 +133,6 @@ func newChatSearchCommand(runner executor.Runner) *cobra.Command {
 				return apperrors.NewInternal("failed to read --query")
 			}
 			query = strings.TrimSpace(query)
-			if query == "" {
-				return apperrors.NewValidation("--query is required")
-			}
 
 			searchReq := map[string]any{"query": query}
 			cursor, err := cmd.Flags().GetString("cursor")
@@ -218,18 +215,12 @@ func newChatGroupCreateCommand(runner executor.Runner) *cobra.Command {
 				return apperrors.NewInternal("failed to read --name")
 			}
 			name = strings.TrimSpace(name)
-			if name == "" {
-				return apperrors.NewValidation("--name is required")
-			}
 
 			users, err := cmd.Flags().GetString("users")
 			if err != nil {
 				return apperrors.NewInternal("failed to read --users")
 			}
 			memberUserIDs := splitCSVStrings(users)
-			if len(memberUserIDs) == 0 {
-				return apperrors.NewValidation("--users is required")
-			}
 
 			currentUserID, err := getCurrentUserID(cmd.Context(), runner)
 			if err != nil {
@@ -295,16 +286,6 @@ func buildChatMessageSendByBotInvocation(cmd *cobra.Command) (map[string]any, st
 	case strings.TrimSpace(group) != "" && strings.TrimSpace(users) != "":
 		return nil, "", apperrors.NewValidation("--group and --users are mutually exclusive")
 	}
-	if strings.TrimSpace(robotCode) == "" {
-		return nil, "", apperrors.NewValidation("--robot-code is required")
-	}
-	if strings.TrimSpace(title) == "" {
-		return nil, "", apperrors.NewValidation("--title is required")
-	}
-	if strings.TrimSpace(text) == "" {
-		return nil, "", apperrors.NewValidation("--text is required")
-	}
-
 	params := map[string]any{
 		"markdown":  text,
 		"robotCode": robotCode,
@@ -450,12 +431,6 @@ func newChatMessageRecallByBotCommand(runner executor.Runner) *cobra.Command {
 			robotCode, _ := cmd.Flags().GetString("robot-code")
 			keysStr, _ := cmd.Flags().GetString("keys")
 			groupID, _ := cmd.Flags().GetString("group")
-			if strings.TrimSpace(robotCode) == "" {
-				return apperrors.NewValidation("--robot-code is required")
-			}
-			if strings.TrimSpace(keysStr) == "" {
-				return apperrors.NewValidation("--keys is required")
-			}
 			processQueryKeys := splitCSV(keysStr)
 			if strings.TrimSpace(groupID) != "" {
 				params := map[string]any{
@@ -520,15 +495,6 @@ func newChatMessageSendByWebhookCommand(runner executor.Runner) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if strings.TrimSpace(token) == "" {
-				return apperrors.NewValidation("--token is required")
-			}
-			if strings.TrimSpace(title) == "" {
-				return apperrors.NewValidation("--title is required")
-			}
-			if strings.TrimSpace(text) == "" {
-				return apperrors.NewValidation("--text is required")
-			}
 			params := map[string]any{
 				"robotToken": token,
 				"title":      title,
@@ -572,9 +538,6 @@ func newChatMessageSendByWebhookCommand(runner executor.Runner) *cobra.Command {
 func newChatGroupMembersListRunE(runner executor.Runner) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		groupID, _ := cmd.Flags().GetString("id")
-		if strings.TrimSpace(groupID) == "" {
-			return apperrors.NewValidation("--id is required")
-		}
 		params := map[string]any{
 			"openconversation_id": groupID,
 		}
@@ -603,12 +566,6 @@ func newChatGroupRenameCommand(runner executor.Runner) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			groupID, _ := cmd.Flags().GetString("id")
 			name, _ := cmd.Flags().GetString("name")
-			if strings.TrimSpace(groupID) == "" {
-				return apperrors.NewValidation("--id is required")
-			}
-			if strings.TrimSpace(name) == "" {
-				return apperrors.NewValidation("--name is required")
-			}
 			params := map[string]any{
 				"openconversation_id": groupID,
 				"group_name":          name,
@@ -644,12 +601,6 @@ func newChatGroupMemberAddCommand(runner executor.Runner) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			groupID, _ := cmd.Flags().GetString("id")
 			usersStr, _ := cmd.Flags().GetString("users")
-			if strings.TrimSpace(groupID) == "" {
-				return apperrors.NewValidation("--id is required")
-			}
-			if strings.TrimSpace(usersStr) == "" {
-				return apperrors.NewValidation("--users is required")
-			}
 			params := map[string]any{
 				"openconversation_id": groupID,
 				"userId":              splitCSV(usersStr),
@@ -685,12 +636,6 @@ func newChatGroupMemberRemoveCommand(runner executor.Runner) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			groupID, _ := cmd.Flags().GetString("id")
 			usersStr, _ := cmd.Flags().GetString("users")
-			if strings.TrimSpace(groupID) == "" {
-				return apperrors.NewValidation("--id is required")
-			}
-			if strings.TrimSpace(usersStr) == "" {
-				return apperrors.NewValidation("--users is required")
-			}
 			params := map[string]any{
 				"openconversationId": groupID,
 				"userIdList":         splitCSV(usersStr),
@@ -726,12 +671,6 @@ func newChatGroupMembersAddBotCommand(runner executor.Runner) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			robotCode, _ := cmd.Flags().GetString("robot-code")
 			groupID, _ := cmd.Flags().GetString("id")
-			if strings.TrimSpace(robotCode) == "" {
-				return apperrors.NewValidation("--robot-code is required")
-			}
-			if strings.TrimSpace(groupID) == "" {
-				return apperrors.NewValidation("--id is required")
-			}
 			params := map[string]any{
 				"robotCode":          robotCode,
 				"openConversationId": groupID,

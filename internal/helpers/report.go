@@ -172,9 +172,6 @@ func newReportTemplateDetailCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name, _ := cmd.Flags().GetString("name")
-			if name == "" {
-				return apperrors.NewValidation("--name is required")
-			}
 			params := map[string]any{
 				"report_template_name": name,
 			}
@@ -219,13 +216,7 @@ func newReportCreateCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			tplID, _ := cmd.Flags().GetString("template-id")
-			if tplID == "" {
-				return apperrors.NewValidation("--template-id is required")
-			}
 			contentsJSON, _ := cmd.Flags().GetString("contents")
-			if contentsJSON == "" {
-				return apperrors.NewValidation("--contents is required")
-			}
 			var contents []map[string]any
 			if err := json.Unmarshal([]byte(contentsJSON), &contents); err != nil {
 				return apperrors.NewValidation(fmt.Sprintf("--contents JSON parse failed: %v", err))
@@ -280,9 +271,6 @@ func newReportDetailCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			reportID, _ := cmd.Flags().GetString("report-id")
-			if reportID == "" {
-				return apperrors.NewValidation("--report-id is required")
-			}
 			params := map[string]any{
 				"report_id": reportID,
 			}
@@ -384,9 +372,6 @@ func newReportStatsCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			reportID, _ := cmd.Flags().GetString("report-id")
-			if reportID == "" {
-				return apperrors.NewValidation("--report-id is required")
-			}
 			params := map[string]any{
 				"report_id": reportID,
 			}

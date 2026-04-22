@@ -18,7 +18,6 @@ import (
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
-	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/spf13/cobra"
 )
@@ -143,9 +142,6 @@ func newOaApprovalDetailCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			instanceID, _ := cmd.Flags().GetString("instance-id")
-			if strings.TrimSpace(instanceID) == "" {
-				return apperrors.NewValidation("--instance-id is required")
-			}
 			inv := executor.NewHelperInvocation(
 				cobracmd.LegacyCommandPath(cmd), "oa", "get_processInstance_detail",
 				map[string]any{"processInstanceId": instanceID},
@@ -177,12 +173,6 @@ func newOaApprovalApproveCommand(runner executor.Runner) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			instanceID, _ := cmd.Flags().GetString("instance-id")
 			taskIDStr, _ := cmd.Flags().GetString("task-id")
-			if strings.TrimSpace(instanceID) == "" {
-				return apperrors.NewValidation("--instance-id is required")
-			}
-			if strings.TrimSpace(taskIDStr) == "" {
-				return apperrors.NewValidation("--task-id is required")
-			}
 			taskIdNum, _ := strconv.ParseFloat(taskIDStr, 64)
 			params := map[string]any{
 				"processInstanceId": instanceID,
@@ -223,12 +213,6 @@ func newOaApprovalRejectCommand(runner executor.Runner) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			instanceID, _ := cmd.Flags().GetString("instance-id")
 			taskIDStr, _ := cmd.Flags().GetString("task-id")
-			if strings.TrimSpace(instanceID) == "" {
-				return apperrors.NewValidation("--instance-id is required")
-			}
-			if strings.TrimSpace(taskIDStr) == "" {
-				return apperrors.NewValidation("--task-id is required")
-			}
 			taskIdNum, _ := strconv.ParseFloat(taskIDStr, 64)
 			params := map[string]any{
 				"processInstanceId": instanceID,
@@ -269,9 +253,6 @@ func newOaApprovalRevokeCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			instanceID, _ := cmd.Flags().GetString("instance-id")
-			if strings.TrimSpace(instanceID) == "" {
-				return apperrors.NewValidation("--instance-id is required")
-			}
 			params := map[string]any{
 				"processInstanceId": instanceID,
 			}
@@ -307,9 +288,6 @@ func newOaApprovalRecordsCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			instanceID, _ := cmd.Flags().GetString("instance-id")
-			if strings.TrimSpace(instanceID) == "" {
-				return apperrors.NewValidation("--instance-id is required")
-			}
 			inv := executor.NewHelperInvocation(
 				cobracmd.LegacyCommandPath(cmd), "oa", "get_processInstance_records",
 				map[string]any{"processInstanceId": instanceID},
@@ -339,9 +317,6 @@ func newOaApprovalListInitiatedCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			processCode, _ := cmd.Flags().GetString("process-code")
-			if strings.TrimSpace(processCode) == "" {
-				return apperrors.NewValidation("--process-code is required")
-			}
 			startStr, _ := cmd.Flags().GetString("start")
 			endStr, _ := cmd.Flags().GetString("end")
 			startMs, err := parseFlexTimeToMillis("start", startStr)
@@ -398,9 +373,6 @@ func newOaApprovalTasksCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			instanceID, _ := cmd.Flags().GetString("instance-id")
-			if strings.TrimSpace(instanceID) == "" {
-				return apperrors.NewValidation("--instance-id is required")
-			}
 			inv := executor.NewHelperInvocation(
 				cobracmd.LegacyCommandPath(cmd), "oa", "list_pending_tasks",
 				map[string]any{"processInstanceId": instanceID},

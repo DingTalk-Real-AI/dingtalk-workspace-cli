@@ -60,9 +60,6 @@ func newAitableBaseSearchCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			query := aitableFlagOrFallback(cmd, "query", "keyword")
-			if query == "" {
-				return apperrors.NewValidation("--query is required")
-			}
 			params := map[string]any{"query": query}
 			if cursor := aitableStringFlag(cmd, "cursor"); cursor != "" {
 				params["cursor"] = cursor
@@ -204,9 +201,6 @@ func newAitableTableCreateCommand(runner executor.Runner) *cobra.Command {
 				return err
 			}
 			tableName := aitableFlagOrFallback(cmd, "name", "table-name")
-			if tableName == "" {
-				return apperrors.NewValidation("--name is required")
-			}
 			fieldsRaw, err := aitableRequiredFlag(cmd, "fields")
 			if err != nil {
 				return err
@@ -595,9 +589,6 @@ func newAitableTemplateSearchCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			query := aitableFlagOrFallback(cmd, "query", "keyword")
-			if query == "" {
-				return apperrors.NewValidation("--query is required")
-			}
 			params := map[string]any{"query": query}
 			if limit, _ := cmd.Flags().GetInt("limit"); limit > 0 {
 				params["limit"] = limit

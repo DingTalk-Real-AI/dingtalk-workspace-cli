@@ -103,12 +103,6 @@ func newAttendanceRecordGetCommand(runner executor.Runner) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			userID, _ := cmd.Flags().GetString("user")
 			dateStr, _ := cmd.Flags().GetString("date")
-			if userID == "" {
-				return apperrors.NewValidation("--user is required")
-			}
-			if dateStr == "" {
-				return apperrors.NewValidation("--date is required (format: YYYY-MM-DD)")
-			}
 			t, err := time.ParseInLocation("2006-01-02", dateStr, time.Local)
 			if err != nil {
 				return apperrors.NewValidation("--date format error, use YYYY-MM-DD, e.g. 2026-03-08")
@@ -154,15 +148,6 @@ func newAttendanceRecordListCommand(runner executor.Runner) *cobra.Command {
 			usersStr, _ := cmd.Flags().GetString("users")
 			startStr, _ := cmd.Flags().GetString("start")
 			endStr, _ := cmd.Flags().GetString("end")
-			if usersStr == "" {
-				return apperrors.NewValidation("--users is required")
-			}
-			if startStr == "" {
-				return apperrors.NewValidation("--start is required (format: YYYY-MM-DD)")
-			}
-			if endStr == "" {
-				return apperrors.NewValidation("--end is required (format: YYYY-MM-DD)")
-			}
 			startT, err := time.ParseInLocation("2006-01-02", startStr, time.Local)
 			if err != nil {
 				return apperrors.NewValidation("--start date format error, use YYYY-MM-DD")
@@ -220,15 +205,6 @@ func newAttendanceShiftListCommand(runner executor.Runner) *cobra.Command {
 			usersStr, _ := cmd.Flags().GetString("users")
 			startStr, _ := cmd.Flags().GetString("start")
 			endStr, _ := cmd.Flags().GetString("end")
-			if usersStr == "" {
-				return apperrors.NewValidation("--users is required")
-			}
-			if startStr == "" {
-				return apperrors.NewValidation("--start is required (format: YYYY-MM-DD)")
-			}
-			if endStr == "" {
-				return apperrors.NewValidation("--end is required (format: YYYY-MM-DD)")
-			}
 			startT, err := time.ParseInLocation("2006-01-02", startStr, time.Local)
 			if err != nil {
 				return apperrors.NewValidation("--start date format error, use YYYY-MM-DD")
@@ -285,12 +261,6 @@ func newAttendanceSummaryCommand(runner executor.Runner) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			userID, _ := cmd.Flags().GetString("user")
 			workDateStr, _ := cmd.Flags().GetString("date")
-			if userID == "" {
-				return apperrors.NewValidation("--user is required, provide DingTalk user ID")
-			}
-			if workDateStr == "" {
-				return apperrors.NewValidation("--date is required, format yyyy-MM-dd HH:mm:ss")
-			}
 			_, err := time.ParseInLocation("2006-01-02 15:04:05", workDateStr, time.Local)
 			if err != nil {
 				return apperrors.NewValidation("--date format error, use yyyy-MM-dd HH:mm:ss")
@@ -337,9 +307,6 @@ func newAttendanceRulesCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dateStr, _ := cmd.Flags().GetString("date")
-			if dateStr == "" {
-				return apperrors.NewValidation("--date is required")
-			}
 			// Support YYYY-MM-DD or yyyy-MM-dd HH:mm:ss, normalize to yyyy-MM-dd HH:mm:ss
 			var dateFormatted string
 			if t, err := time.ParseInLocation("2006-01-02 15:04:05", dateStr, time.Local); err == nil {
