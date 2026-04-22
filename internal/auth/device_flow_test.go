@@ -17,6 +17,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -25,6 +27,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 )
 
 func newDeviceFlowTestLogger() *slog.Logger {
@@ -180,8 +184,11 @@ func TestWaitForAuthorizationFallsBackToDeviceCodeWhenFlowIDMissing(t *testing.T
 	if calls.Load() != 3 {
 		t.Fatalf("poll calls = %d, want 3", calls.Load())
 	}
-	if strings.Contains(output.String(), "服务端未返回 flowId") {
-		t.Fatalf("unexpected PAT-only no-flowId hint in device flow output: %q", output.String())
+	if !strings.Contains(output.String(), i18n.T("等待用户授权...")) {
+		t.Fatalf("expected device-code path to emit pending output, got %q", output.String())
+	}
+	if !strings.Contains(output.String(), i18n.T("授权成功!")) {
+		t.Fatalf("expected device-code path to emit success output, got %q", output.String())
 	}
 }
 
@@ -211,5 +218,107 @@ func TestWaitForAuthorizationHonorsContextCancellation(t *testing.T) {
 		Interval:  1,
 	}); err == nil {
 		t.Fatal("waitForAuthorization() error = nil, want context cancellation")
+	}
+}
+
+func TestWaitForAuthorizationByDeviceCodeHonorsContextCancellation(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeServiceResult(w, true, DeviceTokenResponse{Error: "authorization_pending"}, "", "")
+	}))
+	defer server.Close()
+
+	provider := NewDeviceFlowProvider(t.TempDir(), newDeviceFlowTestLogger())
+	provider.Output = io.Discard
+	provider.SetBaseURL(server.URL)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+
+	_, err := provider.waitForAuthorization(ctx, &DeviceAuthResponse{
+		DeviceCode: "legacy-device-code",
+		ExpiresIn:  60,
+		Interval:   1,
+	})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("waitForAuthorization() error = %v, want context deadline exceeded", err)
+	}
+}
+
+func TestWaitForAuthorizationByDeviceCodeErrorStates(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		timeout    time.Duration
+		responses  []DeviceTokenResponse
+		wantErr    string
+		wantErrIs  error
+		wantOutput string
+	}{
+		{
+			name:       "slow_down_then_context_cancelled",
+			timeout:    1500 * time.Millisecond,
+			responses:  []DeviceTokenResponse{{Error: "slow_down"}},
+			wantErrIs:  context.DeadlineExceeded,
+			wantOutput: fmt.Sprintf(i18n.T("轮询过快，间隔增加至 %ds"), 6),
+		},
+		{
+			name:       "access_denied",
+			timeout:    5 * time.Second,
+			responses:  []DeviceTokenResponse{{Error: "access_denied"}},
+			wantErr:    i18n.T("用户拒绝了授权请求"),
+			wantOutput: fmt.Sprintf(i18n.T("[%d] 轮询中... (%ds)"), 1, 1),
+		},
+		{
+			name:       "expired_token",
+			timeout:    5 * time.Second,
+			responses:  []DeviceTokenResponse{{Error: "expired_token"}},
+			wantErr:    i18n.T("设备授权码已过期"),
+			wantOutput: fmt.Sprintf(i18n.T("[%d] 轮询中... (%ds)"), 1, 1),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var calls atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				idx := int(calls.Add(1)) - 1
+				if idx >= len(tt.responses) {
+					idx = len(tt.responses) - 1
+				}
+				writeServiceResult(w, true, tt.responses[idx], "", "")
+			}))
+			defer server.Close()
+
+			provider := NewDeviceFlowProvider(t.TempDir(), newDeviceFlowTestLogger())
+			var output bytes.Buffer
+			provider.Output = &output
+			provider.SetBaseURL(server.URL)
+
+			ctx, cancel := context.WithTimeout(context.Background(), tt.timeout)
+			defer cancel()
+
+			_, err := provider.waitForAuthorization(ctx, &DeviceAuthResponse{
+				DeviceCode: "legacy-device-code",
+				ExpiresIn:  60,
+				Interval:   1,
+			})
+
+			if tt.wantErrIs != nil {
+				if !errors.Is(err, tt.wantErrIs) {
+					t.Fatalf("waitForAuthorization() error = %v, want %v", err, tt.wantErrIs)
+				}
+			} else if err == nil || err.Error() != tt.wantErr {
+				t.Fatalf("waitForAuthorization() error = %v, want %q", err, tt.wantErr)
+			}
+
+			if !strings.Contains(output.String(), tt.wantOutput) {
+				t.Fatalf("expected output to contain %q, got %q", tt.wantOutput, output.String())
+			}
+		})
 	}
 }

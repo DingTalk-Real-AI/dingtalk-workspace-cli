@@ -284,27 +284,6 @@ func retryWithPatAuthRetry(ctx context.Context, runner executor.Runner, invocati
 	return runner.Run(ctx, invocation)
 }
 
-// loadMCPClientIDIfNeeded ensures we have a client ID for device flow.
-// Priority: in-memory runtime value → DWS_CLIENT_ID env → MCP remote fetch.
-func loadMCPClientIDIfNeeded(ctx context.Context, configDir string) string {
-	clientID := authpkg.ClientID()
-	if clientID != "" {
-		return clientID
-	}
-	// Fallback: read from environment variable (set by previous PAT auth or caller).
-	if envID := os.Getenv("DWS_CLIENT_ID"); envID != "" {
-		authpkg.SetClientIDFromMCP(envID)
-		return envID
-	}
-	// Last resort: fetch from MCP server.
-	mcpClientID, err := authpkg.FetchClientIDFromMCP(ctx)
-	if err == nil && mcpClientID != "" {
-		authpkg.SetClientIDFromMCP(mcpClientID)
-		return mcpClientID
-	}
-	return ""
-}
-
 // ---- handlePatAuthCheck (runner.go entry point) -----------------------------
 
 const (
