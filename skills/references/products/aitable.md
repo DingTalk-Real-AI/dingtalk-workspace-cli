@@ -9,7 +9,7 @@
 | Base 文档 | `https://alidocs.dingtalk.com/i/nodes/{baseId}` |
 | 模板预览 | `https://docs.dingtalk.com/table/template/{templateId}` |
 
-> 💡 **操作后请返回文档 URI**：每次执行 base list/search/create/get 操作后，从返回数据中提取 `baseId`，拼接为 `https://alidocs.dingtalk.com/i/nodes/{baseId}` 返回给用户，方便直接点击打开。
+> **操作后请返回文档 URI**：每次执行 base list/search/create/get 操作后，从返回数据中提取 `baseId`，拼接为 `https://alidocs.dingtalk.com/i/nodes/{baseId}` 返回给用户，方便直接点击打开。
 
 ## 命令总览
 
@@ -31,7 +31,7 @@ Flags:
 
 > 📎 **操作后返回文档链接**：遍历返回的每个 base，拼接 `https://alidocs.dingtalk.com/i/nodes/{baseId}` 返回给用户。
 
-> ⚠️ **重要**：`base list` 仅返回**最近访问过**的 Base，**不是全部 Base**。
+> **重要**：`base list` 仅返回**最近访问过**的 Base，**不是全部 Base**。
 > 如需查找表格，**请优先使用 `base search`**；`base list` 仅作为浏览最近表格的辅助手段。
 > 如果刚创建完，直接使用 `create` 返回的 `baseId` 即可。
 
@@ -56,12 +56,12 @@ Flags:
       --base-id string   Base 唯一标识 (必填)
 ```
 
-> 💡 **用户提供 URL 时**：如果用户给出了链接如 `https://alidocs.dingtalk.com/i/nodes/ABC123`，请提取末尾的 `ABC123` 作为 `--base-id` 传入。详见下方「URL → baseId 提取」章节。
+> **用户提供 URL 时**：如果用户给出了链接如 `https://alidocs.dingtalk.com/i/nodes/ABC123`，请提取末尾的 `ABC123` 作为 `--base-id` 传入。详见下方「URL → baseId 提取」章节。
 
 返回 baseName、tables、dashboards 的 summary 信息（不含字段与记录详情）。
 后续如需 tableId，优先从这里读取。
 
-> 📎 **文档地址**：`https://alidocs.dingtalk.com/i/nodes/{baseId}`
+>  **文档地址**：`https://alidocs.dingtalk.com/i/nodes/{baseId}`
 
 #### 创建 AI 表格
 ```
@@ -74,10 +74,10 @@ Flags:
       --template-id string   模板 ID (可选，可通过 template search 获取)
 ```
 
-> 💡 **创建后直接使用返回的 `baseId`**，无需再调用 `base list` 或 `base search` 查找。
+>  **创建后直接使用返回的 `baseId`**，无需再调用 `base list` 或 `base search` 查找。
 > 后续可直接 `base get --base-id <返回的baseId>` 获取 tableId，或 `table create --base-id <返回的baseId>` 创建数据表。
 >
-> 📎 **文档地址**：`https://alidocs.dingtalk.com/i/nodes/{返回的baseId}`
+> **文档地址**：`https://alidocs.dingtalk.com/i/nodes/{返回的baseId}`
 
 #### 更新 AI 表格
 ```
@@ -120,7 +120,7 @@ Flags:
 
 返回 tableId、tableName、description、fields 目录、views 目录。不传 table-ids 返回全部表。
 
-> 📎 **文档地址**：`https://alidocs.dingtalk.com/i/nodes/{baseId}`
+>  **文档地址**：`https://alidocs.dingtalk.com/i/nodes/{baseId}`
 
 #### 创建数据表
 ```
@@ -132,13 +132,13 @@ Example:
 Flags:
       --base-id string   目标 Base ID (必填)
       --fields string    初始字段 JSON 数组，至少 1 个，单次最多 15 个 (必填)
-      --name string      表格名称，1-100 字符 (必填)
+      --name string      表格名称，1-100 字符 (必填)，别名: --table-name
 ```
 
-> 💡 **创建后直接使用返回的 `tableId`**，无需再调 `table get` 查找。
+>  **创建后直接使用返回的 `tableId`**，无需再调 `table get` 查找。
 > 后续可直接 `field create --table-id <返回的tableId>` 补充字段，或 `record create` 写入数据。
 >
-> 📎 **文档地址**：`https://alidocs.dingtalk.com/i/nodes/{baseId}`
+>  **文档地址**：`https://alidocs.dingtalk.com/i/nodes/{baseId}`
 
 #### 更新数据表
 ```
@@ -188,24 +188,45 @@ Flags:
 Usage:
   dws aitable field create [flags]
 Example:
-  # 单字段模式
   dws aitable field create --base-id <BASE_ID> --table-id <TABLE_ID> \
     --name "状态" --type "singleSelect" --config '{"options":[{"name":"待办"},{"name":"进行中"},{"name":"已完成"}]}'
-
-  # 批量模式
+  
+  # 或者使用批量创建模式:
   dws aitable field create --base-id <BASE_ID> --table-id <TABLE_ID> \
     --fields '[{"fieldName":"状态","type":"singleSelect","config":{"options":[{"name":"待办"}]}}]'
 Flags:
       --base-id string    Base ID (必填)
-      --name string       单字段名称（与 --type 配合使用，替代 --fields）
-      --type string       单字段类型（参考 table create 字段类型）
-      --config string     单字段配置 JSON（可选，如 options）
-      --fields string     批量新增字段 JSON 数组，单次最多 15 个（与 --name/--type 二选一）
+      --name string       要创建的单字段名称（与 --type 配合使用，替代 --fields）
+      --type string       要创建的单字段类型（参考 table create 字段类型）
+      --config string     单字段配置，如 options（可选）
+      --ai-config string  单字段 AI 配置 JSON（可选，用于创建 AI 字段）
+      --fields string     批量新增字段 JSON 数组，单次最多 15 个 (与 --name/--type 二选一)
       --table-id string   Table ID (必填)
 ```
 
 允许部分成功，返回结果逐项标明成功/失败状态。
-`--name/--type/--config` 为单字段模式；`--fields` 为批量模式；两种模式二选一。
+
+#### AI 字段创建示例（可直接复用）
+
+```bash
+dws aitable field create --base-id <BASE_ID> --table-id <TABLE_ID> \
+  --name "AI摘要" --type text \
+  --ai-config '{
+    "outputType":"text",
+    "prompt":[
+      {"type":"text","value":"请将下面内容总结成不超过80字的中文摘要："},
+      {"type":"fieldRef","fieldId":"fld_content"}
+    ],
+    "autoRecompute":true,
+    "enableWebSearch":false,
+    "enableThinking":true
+  }' --format json
+```
+
+说明：
+- `outputType` 与字段类型需一致（如 `outputType=text` 配 `--type text`）
+- `prompt` 里通过 `fieldRef` 引用已有字段（示例中的 `fld_content`）
+- `autoRecompute=true` 表示引用字段变化后自动重算
 
 #### 更新字段
 ```
@@ -217,12 +238,30 @@ Example:
 Flags:
       --base-id string    Base ID (必填)
       --config string     字段配置 JSON (不修改时省略)
+      --ai-config string  AI 配置 JSON (不修改时省略)
       --field-id string   Field ID (必填)
       --name string       新字段名称 (不修改时省略)
       --table-id string   Table ID (必填)
 ```
 
 不可变更字段类型。更新 singleSelect/multipleSelect 的 options 时需传入完整列表，已有选项应回传原 id。
+`--name` / `--config` / `--ai-config` 至少传一个。
+
+#### AI 字段更新示例（可直接复用）
+
+```bash
+dws aitable field update --base-id <BASE_ID> --table-id <TABLE_ID> --field-id <FIELD_ID> \
+  --ai-config '{
+    "outputType":"text",
+    "prompt":[
+      {"type":"text","value":"请提炼3个要点，每点不超过20字："},
+      {"type":"fieldRef","fieldId":"fld_content"}
+    ],
+    "autoRecompute":true,
+    "enableWebSearch":false,
+    "enableThinking":true
+  }' --format json
+```
 
 #### 删除字段
 ```
@@ -253,7 +292,7 @@ Flags:
       --cursor string       分页游标，首次不传
       --field-ids string    返回字段 ID 列表，逗号分隔，单次最多 100 个
       --filters string      结构化过滤条件 JSON
-      --query string        全文关键词搜索
+      --query string      全文关键词搜索
       --limit int           单次最大记录数，默认 100，最大 100
       --record-ids string   指定记录 ID 列表，逗号分隔，单次最多 100 个
       --sort string         排序条件 JSON 数组
@@ -262,16 +301,17 @@ Flags:
 
 两种模式: 按 ID 取（传 record-ids，忽略 filters/sort）或条件查（filters+sort+cursor 分页）。
 
-> ⚠️ **排序参数规范（关键）**：`--sort` 需要传 JSON 数组，排序方向字段必须是 `direction`（`asc` 或 `desc`），**不要使用 `order`**。
+> **排序参数规范（关键）**：`--sort` 需要传 JSON 数组，排序方向字段必须是 `direction`（`asc` 或 `desc`），不要使用 `order`。
 >
-> 正确示例：`--sort '[{"fieldId":"wm8ns9bw2vmucb45xj3ix","direction":"desc"}]'`
+> 正确示例：
+> `--sort '[{"fieldId":"wm8ns9bw2vmucb45xj3ix","direction":"desc"}]'`
 
 filters 结构：`{"operator":"and|or","operands":[{"operator":"<op>","operands":["<fieldId>","<value>"]}]}`
 
-> 💡 **singleSelect/multipleSelect 过滤**：filters 中可传 option id 或 option name，但建议优先用 **option id**（通过 `field get` 获取），更可靠。
+>  **singleSelect/multipleSelect 过滤**：filters 中可传 option id 或 option name，但建议优先用 **option id**（通过 `field get` 获取），更可靠。
 > 写入时（record create/update）可直接传 option name。
 
-> 💡 **减少响应体积**：字段较多时，用 `--field-ids` 仅返回需要的字段，可显著减少返回数据量。
+>  **减少响应体积**：字段较多时，用 `--field-ids` 仅返回需要的字段，可显著减少返回数据量。
 
 #### 新增记录
 ```
@@ -286,7 +326,7 @@ Flags:
       --table-id string   Table ID (必填)
 ```
 
-> ⚠️ **常见错误（严格避免）**：
+> ️ **常见错误（严格避免）**：
 > - **参数名是 `--records`**，不是 `--data`
 > - **cells 的 key 必须是 fieldId**（如 `fldXXX`），**不是字段名称**（如 `"课程名称"`）
 > - 必须先 `table get` 获取 fieldId，再写入记录
@@ -332,7 +372,7 @@ Flags:
 
 ### attachment (附件管理)
 
-> 🛑 **STOP — 不要使用钉盘 (drive) 上传！** 钉盘 fileId 无法写入 attachment 字段。必须使用以下流程。
+>  **STOP — 不要使用钉盘 (drive) 上传！** 钉盘 fileId 无法写入 attachment 字段。必须使用以下流程。
 
 #### 准备附件上传
 ```
@@ -360,7 +400,7 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
   --records '[{"cells":{"fldAttachId":[{"fileToken":"ft_xxx"}]}}]' --format json
 ```
 
-> ⚠️ `uploadUrl` 有时效性（`expiresAt`），脚本会自动在获取后立即上传。
+>  `uploadUrl` 有时效性（`expiresAt`），脚本会自动在获取后立即上传。
 
 ### template (模板搜索)
 
@@ -378,7 +418,7 @@ Flags:
 
 返回 templateId 可用于 `base create --template-id`。
 
-> 📎 **模板预览地址**：`https://docs.dingtalk.com/table/template/{templateId}`
+>  **模板预览地址**：`https://docs.dingtalk.com/table/template/{templateId}`
 
 ## 复杂操作
 
@@ -486,7 +526,7 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 - 所有操作使用 ID（baseId/tableId/fieldId/recordId），不使用名称
 - records 的 cells key 是 fieldId，不是字段名称
 
-## `--filters` 筛选语法排错与使用规范（极易出错）
+## `--filters` 筛选语法排错与使用规范 ( 极易出错)
 
 调用 `record query` 时，如果条件筛选**完全失效（查询返回了所有记录）**，通常是因为 `--filters` JSON 语法错误，API 默默丢弃了不合规的 filter。
 
@@ -496,7 +536,7 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 3. `singleSelect` 和 `multipleSelect` 字段，推荐使用 **选项的 exact String 名称 (name)** 作为比较值，而不是 ID。
 4. **内层比较操作符语义**：支持 `eq`(等于)、`not_eq`(不等于)、`contain`(包含/模糊搜索)、`not_contain`(不包含)、`gt/gte`(大于/大于等于)、`lt/lte`(小于/小于等于)、`is_empty/is_not_empty`(为空/不为空，对应 operands 内只传单个 fieldId)。
 
-**精简防呆模板与 4 种衍生情况**
+ **精简防呆模板与 4 种衍生情况**
 ```json
 {
   "operator": "and",       // 情况 4 (OR 查询): 这里改为 "or"
@@ -510,12 +550,12 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 }
 ```
 
-**错误示例 1：缺失根节点 and/or**（API 将忽略该 filter，返回全表）
+ **错误示例 1：缺失根节点 and/or** (API 将忽略该 filter，返回全表)
 ```json
 {"operator":"eq","operands":["fldXXX","本科"]}
 ```
 
-**错误示例 2：传入选项 ID 而非名称**（可能导致匹配不到 0 记录）
+ **错误示例 2：传入选项 ID 而非名称** (可能导致匹配不到 0 记录)
 ```json
 {"operator":"and","operands":[{"operator":"eq","operands":["fldXXX","CXzrOHK9JI"]}]}
 ```
@@ -541,7 +581,7 @@ https://alidocs.dingtalk.com/i/nodes/{baseId}?xxx=yyy
 → 执行: dws aitable base get --base-id ABC123XYZ --format json
 ```
 
-> 💡 **注意**：URL 中的 nodeId 在 AI 表格场景下等同于 baseId，可以直接作为 `--base-id` 使用。
+>  **注意**：URL 中的 nodeId 在 AI 表格场景下等同于 baseId，可以直接作为 `--base-id` 使用。
 
 ### cells 写入/读取格式速查
 
@@ -554,12 +594,21 @@ https://alidocs.dingtalk.com/i/nodes/{baseId}?xxx=yyy
 | date | `"2026-03-13"` 或时间戳 | ISO 日期字符串 |
 | checkbox | `true`/`false` | `true`/`false` |
 | user | `[{"userId":"xxx"}]` | `[{"corpId":"xxx","userId":"xxx"}]` |
-| attachment | `[{"fileToken":"ft_xxx"}]` ⚠️需先走 attachment upload 3步流程 | `[{"url":"...","filename":"...","size":N}]` |
+| attachment | `[{"fileToken":"ft_xxx"}]` 需先走 attachment upload 3步流程 | `[{"url":"...","filename":"...","size":N}]` |
 | url | `{"text":"显示文本","link":"https://..."}` | 同写入 |
 | richText | `{"markdown":"**加粗**"}` | `{"markdown":"..."}` |
 | group | `[{"cid":"xxx"}]` (注意: key 是 cid，不是 openConversationId) | 同写入 |
 
 - 详见 [field-rules.md](../field-rules.md) 和 [error-codes.md](../error-codes.md)
+
+## 自动化脚本
+
+| 脚本 | 场景 | 用法 |
+|------|------|------|
+| [bulk_add_fields.py](../../scripts/bulk_add_fields.py) | 批量添加字段到数据表 | `python bulk_add_fields.py --base-id <ID> --table-id <ID> --fields fields.json` |
+| [import_records.py](../../scripts/import_records.py) | 从 JSON/CSV 批量导入记录 | `python import_records.py --base-id <ID> --table-id <ID> --file data.json` |
+| [aitable_export_via_task.py](../../scripts/aitable_export_via_task.py) | 文件导出任务（export_data 轮询 + 下载） | `python aitable_export_via_task.py <baseId> --scope table --table-id <tableId>` |
+| [upload_attachment.py](../../scripts/upload_attachment.py) | 上传附件到 AI 表格记录 | `python upload_attachment.py --base-id <ID> --file image.png` |
 
 ## 相关产品
 

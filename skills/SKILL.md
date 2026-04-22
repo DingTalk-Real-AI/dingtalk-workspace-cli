@@ -1,6 +1,6 @@
 ---
 name: dws
-description: 管理钉钉产品能力(AI表格/日历/通讯录/群聊与机器人/待办/审批/考勤/日志/DING消息/工作台/开放平台文档/钉钉文档/AI听记等)。当用户需要操作表格数据、管理日程会议、查询通讯录、管理群聊、机器人发消息、创建待办、提交审批、查看考勤、提交日报周报（钉钉日志模版）、读写钉钉文档、查询听记纪要时使用。
+description: 管理钉钉产品能力(AI表格/电子表格/钉盘/日历/通讯录/群聊与机器人/待办/审批/考勤/日志/DING消息/工作台/开放平台文档/钉钉文档/AI听记等)。当用户需要操作表格数据、管理日程会议、查询通讯录、管理群聊、机器人发消息、创建待办、提交审批、查看考勤、提交日报周报（钉钉日志模版）、读写钉钉文档、查询听记纪要、操作电子表格、上传下载钉盘文件时使用。
 cli_version: ">=1.0.6"
 ---
 
@@ -33,8 +33,10 @@ cli_version: ">=1.0.6"
 | `devdoc`          | 开放平台文档：搜索开发文档                                        | [simple.md](./references/products/simple.md)                   |
 | `ding`            | DING消息：发送/撤回（应用内/短信/电话）                              | [ding.md](./references/products/ding.md)                       |
 | `doc`             | 钉钉文档：搜索/浏览/读写/块级编辑/评论                                | [doc.md](./references/products/doc.md)                         |
+| `drive`           | 钉盘：浏览文件/元数据/下载/创建文件夹/上传文件                            | [drive.md](./references/products/drive.md)                     |
 | `minutes`         | AI听记：听记列表/摘要/关键词/转写/待办/思维导图/发言人/热词                    | [minutes.md](./references/products/minutes.md)                 |
 | `report`          | 日志：按模版创建/收件箱/已发送/模版查看/详情/已读统计                         | [report.md](./references/products/report.md)                   |
+| `sheet`           | 电子表格：创建表格/工作表管理/单元格数据读写/公式/超链接                      | [sheet.md](./references/products/sheet.md)                     |
 | `todo`            | 待办：创建(含优先级/截止时间)/查询/修改/标记完成/删除                       | [todo.md](./references/products/todo.md)                       |
 | `workbench`       | 工作台：应用管理                                             | [workbench.md](./references/products/workbench.md)             |
 
@@ -49,12 +51,15 @@ cli_version: ">=1.0.6"
 用户提到"开发/API/调用错误 文档" → `devdoc`
 用户提到"DING/紧急消息/电话提醒" → `ding`
 用户提到"钉钉文档/云文档/知识库/读写文档/块级编辑/文档评论" → `doc`
+用户提到"钉盘/网盘/我的文件/上传文件/下载文件" → `drive`
 用户提到"听记/AI听记/会议纪要/转写/摘要/思维导图/发言人/热词" → `minutes`
 用户提到"日志/日报/周报/日志统计/写日报/提交周报/发日志/填日志" → `report`
+用户提到"电子表格/Excel/单元格/公式/工作表/sheet" → `sheet`
 用户提到"待办/TODO/任务提醒" → `todo`
 用户提到"工作台/应用管理" → `workbench`
 
-关键区分: aitable(数据表格) vs todo(待办任务)
+关键区分: aitable(AI多维表/结构化记录) vs sheet(电子表格/单元格读写) vs doc(文档编辑)
+关键区分: drive(钉盘文件存储/上传/下载) vs doc(钉钉文档内容读写/知识库空间)
 关键区分: report(钉钉日志/日报周报) vs todo(待办任务)
 关键区分: chat send-by-bot(机器人身份发消息) vs send-by-webhook(自定义机器人Webhook告警)
 
@@ -68,6 +73,7 @@ cli_version: ">=1.0.6"
 | 产品 | 命令 | 说明 |
 |------|------|------|
 | `aitable` | `base delete` | 删除整个 AI 表格，含全部数据表和记录 |
+| `aitable` | `table delete` | 删除数据表，含全部记录 |
 | `aitable` | `record delete` | 删除记录（支持批量） |
 | `calendar` | `event delete` | 删除日程，所有参与者同步取消 |
 | `calendar` | `participant delete` | 移除日程参与者 |
