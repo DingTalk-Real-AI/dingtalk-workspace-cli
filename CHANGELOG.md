@@ -9,6 +9,44 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 ### Breaking
 
 - `exit code 4` is now reserved exclusively for PAT failures; discovery failures use `6`. See `docs/pat/contract.md` §1.
+## [1.0.13] - 2026-04-22
+
+IM / Messaging capability expansion: the `chat` (aka `im`) product surface grows from "group + bot messaging" into a full conversational layer — user-identity messaging, message reading & search, personal messages, topic replies, mentions, focused contacts, unread/top/common conversations, org-wide group creation, and first-class bot lifecycle.
+
+### Added
+
+- **`dws im` alias** — `dws im` is now registered as an alias of `dws chat` for intent clarity
+- **User-identity messaging** (`chat message send`) — send group or 1-on-1 messages as the current user
+  - Recipient selection is mutually exclusive: `--group <openConversationId>` / `--user <userId>` / `--open-dingtalk-id <openDingTalkId>`
+  - Markdown text via `--text` (or positional arg), optional `--title`
+  - Group-only: `--at-all` to @everyone, `--at-users` for per-member @mentions
+  - Image messages via `--media-id` (obtained from `dt_media_upload`)
+- **Personal messages** (`chat message send-personal`) — sensitive personal-channel send (⚠️ destructive/dangerous op, requires confirmation)
+- **Conversation read paths**:
+  - `chat message list` — pull group / 1-on-1 conversation messages
+  - `chat message list-all` — pull all conversations for the current user in a time range
+  - `chat message list-topic-replies` — pull group topic reply threads
+  - `chat message list-by-sender` — messages by a specific sender
+  - `chat message list-mentions` — messages where the current user was @-mentioned
+  - `chat message list-focused` — messages from focused / starred contacts
+  - `chat message list-unread-conversations` — unread conversation list
+  - `chat message search` — keyword search across conversations
+  - `chat message info` — conversation metadata
+  - `chat list-top-conversations` — pinned conversation list
+- **Group creation & discovery**:
+  - `chat group create-org` — create an organization-wide group
+  - `chat search-common` — search groups shared with a nickname list (`--nicks`, `--match-mode AND|OR`, cursor-based pagination)
+- **Bot lifecycle**:
+  - `chat bot create` — create an enterprise bot
+  - `chat bot search-groups` — search the groups a bot is present in
+
+### Changed
+
+- **`chat` skill reference** (`skills/references/products/chat.md`, #148) restructured into three sub-groups — `group` (9) / `message` (15) / `bot` (3) — with refreshed intent-routing table, workflow examples, and context-passing rules aligned with `dws-service-endpoints.json` (16 new group-chat tool overrides + 2 new bot tool overrides)
+- **README Key Services** sync:
+  - `Chat` row: 10 → 20 commands; subcommand tags expanded to `message` `group` `search` `list-top-conversations`
+  - `Bot` row: 6 → 7 commands; subcommand tags expanded with `create` `search-groups`
+  - Total raised to **152 commands across 14 products**
 
 ## [1.0.12] - 2026-04-21
 
