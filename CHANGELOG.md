@@ -4,6 +4,260 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
+## [1.0.12] - 2026-04-21
+
+Product-surface expansion: first-class `doc` (DingTalk Docs) and `minutes` (AI Minutes) skill references, refreshed `aitable` guide aligned with the shipped binary (including dashboard / chart / export), and a README sync that brings the full command catalog to **141 commands across 14 products**.
+
+### Added
+
+- **`doc` skill reference** (`skills/references/products/doc.md`) — 16-command coverage of DingTalk Docs:
+  - Discovery: `search`, `list`, `info`, `read`
+  - Authoring: `create`, `update`, `folder create`
+  - Files: `upload`, `download`
+  - Block-level editing: block `query`, `insert`, `update`, `delete`
+  - Comments: `comment list`, `create`, `reply`
+  - URL → `doc_id` extraction rules and nodeId dual-format notes
+- **`minutes` skill reference** (`skills/references/products/minutes.md`) — coverage of AI Minutes:
+  - Lists: personal / shared-with-me / all-accessible
+  - Content: basic info, AI summary, keywords, transcription, extracted todos, batch detail
+  - Editing: title update
+  - Recording control: start, pause, resume, stop
+- **SKILL.md routing**:
+  - Product overview table rows for `doc` and `minutes`
+  - Intent decision tree routes — `钉钉文档/云文档/知识库/块级编辑/文档评论` → `doc`; `听记/AI听记/会议纪要/转写/摘要/思维导图/发言人/热词` → `minutes`
+  - Danger-op table entries: `doc delete`, `doc block delete`
+  - `aitable` description completed with the `附件` (attachment) group
+- **`aitable` skill enhancements**:
+  - `field create` single-field mode (`--name` / `--type` / `--config`) with examples
+  - `base get` URL → `baseId` quick-tip
+  - Dedicated "URL → baseId 提取" chapter
+  - "`--filters` 筛选语法排错与使用规范" chapter
+  - "相关产品" cross-link section pointing to `doc`
+  - **"复杂操作" chapter** (#141) — dashboard / chart workflow (with two-call sequencing and `chart share get` vs `dashboard share get` error semantics) and two-stage `export data` polling (`scope=all/table/view` parameter constraints)
+- **README Key Services sync** (#140):
+  - New rows: `doc` (16 commands), `minutes` (22 commands — adds `hot-word`, `mind-graph`, `replace-text`, `speaker`, `upload` subgroups)
+  - `aitable` expanded from 20 → 37 commands; surfaces `chart`, `dashboard`, `export`, `import`, `view` subgroups
+  - Total command count updated from **86 → 141 across 14 products**
+  - "Coming soon" list drops `doc` and `minutes`
+
+### Changed
+
+- `aitable record query` docs rename `--keyword` → `--query` to match the shipped binary
+- `aitable record query` docs clarify `--sort` direction semantics (avoids misuse of `order`)
+- `aitable base list` guidance strengthened — "only for recent browsing; use `base search` for lookups"; intent decision prioritizes `base search` for base discovery
+
+## [1.0.11] - 2026-04-20
+
+Plugin subsystem hardening: faster cold startup, cleaner lifecycle, stricter isolation, and polished UX for PAT / i18n / error routing.
+
+### Added
+
+- `feat: supports claw-like products` — overlay path for Claw-style embedded editions
+- `feat(plugin): inject user identity (UserID, CorpID) into stdio plugin subprocesses`
+- `feat(auth): improve login UX for terminal auth denial cases` — clearer messaging + retry affordance
+- `feat: PAT scope error visualization and auto-retry with authorization polling` (#113)
+  - Human-readable error output (lark-cli style) with type/message/hint/authorization command
+  - JSON payload also available via `--format json`
+  - Auto-retry once the user completes scope authorization
+
+### Changed
+
+- `perf(plugin): serve plugin MCP tool list from disk cache on startup` — hot path skips Initialize+ListTools when snapshot exists
+- `perf(plugin): parallelize all plugin discovery and tighten cold timeouts` — HTTP cold budget 4s → 700ms (auth) / 500ms (plain); stdio and HTTP fan out concurrently
+- `perf(plugin): share cache.Store across discovery` — single `*cache.Store` above the fan-out instead of per-goroutine instances
+- `refactor(plugin): remove default/managed plugin privileged mechanism` (#124) — third-party plugins install on an equal footing via `dws plugin install`
+- `refactor(plugin): purge removed plugin settings instead of merely disabling` — `RemovePlugin` now deletes `EnabledPlugins` and `PluginConfigs` entries
+
+### Fixed
+
+- `fix(transport): cap plugin MCP startup at ~4s when endpoints are unreachable` (#119) — eliminates the 10s `dws --help` stall caused by compounding transport timeouts
+- `fix(plugin): stop stdio child processes on exit and before removal` — no more orphaned plugin subprocesses
+- `fix(pat): avoid shared PAT command state in root registration` (#129)
+- `fix: -f json 模式下错误 JSON 从 stdout 改为输出到 stderr` (#133) — restores CI stderr-based failure assertions
+- `fix(cli): localize plugin/help command strings via i18n` (#118, #134) — zh locale now shows consistent Chinese `--help`; wraps plugin module, help command, and OAuth client-id/secret flag descriptions
+- `chore: remove workspace and bundled artifacts` (#127) — clean local-only repository leftovers
+
+## [1.0.9] - 2026-04-16
+
+Plugin system launch + execution-pipeline overhaul. This is the largest release since 1.0.0: third-party MCP servers become first-class commands, the command pipeline grows to five stages, and the edition overlay gains the hooks needed for embedded hosts.
+
+### Added
+
+#### Plugin system (new)
+
+- `plugin` command family: `install`, `list`, `info`, `enable`, `disable`, `remove`, `create`, `dev`, `config set/get/list/unset`
+- Plugin manifest parsing/validation, managed/user directory-based identity
+- MCP server conversion and injection into the dynamic routing registry
+- Pipeline hook adapter for shell-based hooks
+- Stdio transport: subprocess lifecycle, `DWS_PLUGIN_ROOT` / `DWS_PLUGIN_DATA` variable expansion
+- Stdio server tools automatically registered as CLI subcommands (e.g. `dws hello greet --name Peter`)
+- Streamable-HTTP MCP tool discovery via `registerHTTPServer`
+- Updater: managed plugin update check on CLI startup (10 s timeout, best-effort)
+- `dws plugin create` scaffold (plugin.json, SKILL.md, hooks.json); `dws plugin dev` source-dir registration without copy
+- `SyncSkills` — copies plugin skills to agent directories on startup
+- **Auth Token Registry**: per-server HTTP headers declared in `plugin.json` for third-party MCP servers (e.g. Alibaba Cloud Bailian) independent from DingTalk OAuth
+- **Persistent plugin config** (`dws plugin config ...`): values persisted to `~/.dws/settings.json`, auto-injected as env vars; `${KEY}` in `plugin.json` resolves without manual `export`
+- **Build lifecycle**: `build` field compiles stdio servers to native binaries at install time
+- **Command-name conflict protection**: reserved built-in names (`auth`, `plugin`, `cache`, …) and plugin-vs-plugin duplicate detection
+- Parallel service discovery (`sync.WaitGroup`) — startup reduced from sequential `N*10s` to parallel `max(10s)`
+
+#### Core commands & diagnostics
+
+- `dws doctor` — one-stop environment/auth/network diagnostics
+- `dws config list` — centralized view of scattered configuration
+- Structured perf tracing (upgraded from debug tool to diagnostics output)
+- `feat(skill): restore find/get for legacy skill market API` — `skill find`, `skill get`; `skill add` still uses aihub download
+
+#### Edition / overlay hooks
+
+- `edition.Hooks.SaveToken` / `LoadToken` / `DeleteToken` — delegate token persistence with keychain fallback
+- `edition.Hooks.AuthClientID` / `AuthClientFromMCP` — overlay can override the OAuth client ID and route auth through MCP endpoints
+- `edition.Hooks.AfterPersistentPreRun` — wire non-MCP clients (e.g. A2A gateway) after root setup
+- `edition.Hooks.ClassifyToolResult` — custom MCP result classification before the default business-error detection
+- Token marker file (`token.json`) for embedded hosts to detect auth state without keychain access
+- `pkg/runtimetoken.ResolveAccessToken` mirroring MCP auth resolution; MCP identity headers exported via `pkg/cli` for auxiliary HTTP transports
+- `ExitCoder` interface — edition-specific errors carry custom exit codes
+- `RawStderrError` interface — errors that bypass CLI formatting and emit raw stderr (for desktop runtimes)
+
+### Changed
+
+- **Command execution pipeline: 3 → 5 stages** (`Register → PreParse → PostParse → PreRequest → PostResponse`)
+- `feat(schema): return structured degraded errors instead of silent empty catalog` — new `CatalogDegraded` error with reasons `unauthenticated` / `market_unreachable` / `runtime_all_failed`; auth pre-check short-circuits doomed MCP connections
+- `refactor(auth): unify auxiliary token resolution with MCP cached path` — shared `resolveAccessTokenFromDir`; overlays reuse the process-level token cache
+- `feat(plugin): improve CLI overlay resolution and plugin install robustness`
+  - `plugin.json` `cli` field now accepts a file path (e.g. `"cli": "overlay.json"`) in addition to inline JSON
+  - `description` field on `CLIToolOverride` for static fallback when MCP `tools/list` is unavailable
+  - Windows install uses `cmd /C` instead of `sh -c` for build commands
+
+### Fixed
+
+- `fix(plugin): harden plugin system security boundaries`
+  - Reject `file://` / local paths in git URLs; allow only `https` / `ssh`
+  - Reject symlink entries during ZIP extraction (path-traversal defense)
+  - `build.output` must be a relative path within the plugin directory
+  - Reject absolute paths in stdio command declarations
+  - Block dangerous env var names (`PATH`, `LD_PRELOAD`, …) from plugin config injection
+- `fix(plugin): schema flag params, HTTP tool discovery, and integration tests`
+- `fix(plugin): skip min version check in dev mode`
+
+## [1.0.8] - 2026-04-07
+
+AITable command surface expansion, installer alignment with npm conventions, and execution-timeout hardening.
+
+### Added
+
+- **AITable static helper commands** (20 commands in total) replacing dynamic routing:
+  - `base`: `list`, `search`, `get`, `create`, `update`
+  - `table`: `get`, `create`, `update`
+  - `field`: `get`, `create`, `update`
+  - `record`: `query`, `create`, `update`
+  - `template`: `search`
+  - `attachment`: `upload`
+- `feat(install): align skill dirs with npm and add OpenClaw` — skill install paths follow npm conventions; OpenClaw added to supported agents
+- Label rendering optimization for AITable records (`to #73551688`)
+- README: npm install method documented
+- README: note that `dws upgrade` requires v1.0.7+
+
+### Changed
+
+- `perf: optimize command timeout handling, instrumentation, and diagnostics`
+
+## [1.0.7] - 2026-04-02
+
+Self-upgrade, edition overlay foundation, and fail-closed auth enforcement.
+
+### Added
+
+- **`dws upgrade`** — self-upgrade via GitHub Releases; atomic replace; cross-platform (macOS/Linux/Windows)
+- `feat: edition layer for Wukong overlay` — build-time edition hook lets downstream overlays customize auth UX, config dir, static server list, visible products, and extra root commands
+  - `pkg/edition` defaults + `pkg/editiontest` contract tests
+  - `Makefile` target `edition-test`; CI job `edition-tests`
+  - Static server injection skips market discovery when configured
+  - Deduplicates top-level commands so overlay wins
+  - `hideNonDirectRuntimeCommands` respects edition `VisibleProducts`
+  - Gated `auth login` subcommand + hints for embedded editions
+  - Optional token auto-purge; edition `ConfigDir` override
+- `dws version` — human-readable multi-line output plus JSON with edition, architecture, build, commit
+- Tag reporting for case suites (`to #73551688`)
+- `feat(auth): unify MCP retry constant and add retry to remaining endpoints`
+
+### Changed
+
+- `style(auth): redesign OAuth authorization pages UI`
+
+### Fixed
+
+- `fix(auth): switch CLI auth check from fail-open to fail-closed`
+  - When `/cli/cliAuthEnabled` is unreachable (network error/timeout/5xx), OAuth callback now routes to the permission request page instead of silently marking "enabled"
+  - Device Flow blocks login and asks the user to verify network connectivity
+  - `CheckCLIAuthEnabled` retries with backoff (3 attempts, 0s/1s/2s) to tolerate transient issues
+
+## [1.0.6] - 2026-04-01
+
+Error diagnostics overhaul, destructive-command confirmation, and credential auto-persistence.
+
+### Added
+
+- **Interactive confirmation for destructive dynamic commands** — prompts before delete/remove operations unless `--yes` is set
+- **Enhanced error diagnostics**
+  - `ServerDiagnostics` struct extracts `trace_id`, `server_error_code`, `technical_detail`, `server_retryable` from MCP responses
+  - Pulls diagnostics from JSON-RPC `error.data`, tool call result content, and HTTP headers (`X-Trace-Id`, `X-Request-Id`, `x-dingtalk-trace-id`)
+  - Three verbosity levels for `PrintHuman`: Normal (trace ID + server code), Verbose (+ technical detail), Debug (+ RPC code / operation / reason)
+  - Local logging now includes sanitized request body, response body on error, retry attempts, and classification events
+  - `TruncateBody` / `SanitizeArguments` / `RedactHeaders` helpers with sensitive-key substring detection
+- **Auth credential persistence**
+  - `feat(auth): enhance device flow with CLI auth check and admin guidance`
+  - `feat(auth): persist OAuth credentials for reliable token refresh`
+  - `feat(auth): persist client credentials and optimize keychain access` — auto-persist `--client-id` / `--client-secret`; keychain credential cache to avoid repeated reads; enhanced logout cleans `app.json` + keychain secrets + `token.json`
+- `add report helper with flexible date parsing and defaults`
+- `feat: to #73551688 支持消息通知`
+- README: Official App mode (recommended, direct login without creating an app) + Custom App mode; admin guide for enabling CLI access
+
+### Changed
+
+- Getting Started simplified with inline login commands; whitelist references removed from the IMPORTANT banner
+- Version bump documentation updated to v1.0.5 internal; co-creation group QR code refreshed
+
+### Fixed
+
+- `fix: resolve verbosity flag lookup, FileLogger lazy binding, and business error logging`
+  - `resolveVerbosity` uses `cmd.Flags()` instead of `PersistentFlags()` so subcommands inherit `--verbose` / `--debug`
+  - `FileLogger` lazy-binds in `executeInvocation` (after `configureLogLevel` init)
+  - Business errors (HTTP 200 + `success=false`) now written to the file logger for offline diagnosis
+- OAuth callback race condition (write response before sending code)
+- `import path for errors package in skill_command.go`
+
+## [1.0.4] - 2026-03-30
+
+Token-refresh reliability and onboarding clarity.
+
+### Added
+
+- `feat(auth): persist client credentials for token refresh` — `--client-id` / `--client-secret` are stored for automatic refresh after expiration; client secret lives in the system Keychain with a file reference
+- README onboarding flow rewrite with step-by-step first-time setup and more realistic examples
+- Agent skill reference polish: clearer examples, updated intent routing patterns, expanded `simple.md` onboarding, cross-skill reference fixes
+
+## [1.0.3] - 2026-03-29
+
+Filtering power, schema rendering, and a native `todo` command family.
+
+### Added
+
+- **Nested / array-indexed output filtering**
+  - `--fields` now accepts dot-notation (e.g. `--fields response.content`) and array index access (e.g. `response.items[0]`)
+  - New field-path parser with recursive extraction logic
+- **`schema` command enhancements**
+  - Table format output for human consumption
+  - Product-level endpoint loading in the CLI loader
+  - Schema-text rendering wired into the runner output pipeline
+- **`todo` task helper family** — static `create` / `update` / `done` / `get` / `delete` with `preferLegacyLeaf` replacing dynamic commands
+  - MCP tool alignment: `create_personal_todo`, `update_todo_task`, `update_todo_done_status`, `query_todo_detail`, `delete_todo`
+  - ISO-8601 due-time parsing
+  - Hidden title aliases and delete confirmation
+  - Priority field on `todo` helper
+  - Expanded zh / en i18n coverage (fixes `en.json` spacing/wording issues)
+- README restructured with collapsible feature sections
+
 ## [1.0.2] - 2026-03-29
 
 Deep workspace tooling upgrade: pipeline-based input correction, output filtering, enhanced stdin handling, and multi-endpoint routing.

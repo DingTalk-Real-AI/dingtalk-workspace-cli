@@ -1096,18 +1096,13 @@ func loadPlugins(engine *pipeline.Engine, runner executor.Runner) []*cobra.Comma
 		}
 	}
 
-	// 1. Load plugins from the legacy managed/ directory (backward compat
-	//    for plugins installed by older CLI builds).
-	managedPlugins := pluginLoader.LoadManaged()
-
-	// 2. Load user plugins (per settings.json)
+	// 1. Load user plugins (per settings.json)
 	userPlugins := pluginLoader.LoadUser()
 
-	// 3. Load dev plugins (registered via `dws plugin dev`)
+	// 2. Load dev plugins (registered via `dws plugin dev`)
 	devPlugins := pluginLoader.LoadDev()
 
-	allPlugins := append(managedPlugins, userPlugins...)
-	allPlugins = append(allPlugins, devPlugins...)
+	allPlugins := append(userPlugins, devPlugins...)
 
 	// 3. Discover tools from streamable-http servers and build CLI commands.
 	//    Third-party servers with auth headers are discovered in parallel
@@ -1218,7 +1213,6 @@ func loadPlugins(engine *pipeline.Engine, runner executor.Runner) []*cobra.Comma
 
 	if len(allPlugins) > 0 {
 		slog.Debug("plugins loaded",
-			"managed", len(managedPlugins),
 			"user", len(userPlugins),
 			"dev", len(devPlugins),
 		)
@@ -1534,17 +1528,12 @@ func buildStdioCommands(p *plugin.Plugin, sc plugin.StdioServerClient, tools []t
 	// Construct virtual endpoint and server descriptor.
 	endpoint := StdioEndpoint(p.Manifest.Name, sc.Key)
 
-	source := "plugin"
-	if p.IsManaged {
-		source = "plugin-managed"
-	}
-
 	descriptor := market.ServerDescriptor{
 		Key:         sc.Key,
 		DisplayName: p.Manifest.Name + "/" + sc.Key,
 		Description: p.Manifest.Description,
 		Endpoint:    endpoint,
-		Source:      source,
+		Source:      "plugin",
 		CLI:         overlay,
 		HasCLIMeta:  true,
 	}
