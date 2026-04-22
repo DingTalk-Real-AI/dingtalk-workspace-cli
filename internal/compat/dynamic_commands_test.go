@@ -1194,3 +1194,320 @@ func TestBuildDynamicCommands_NoParent(t *testing.T) {
 		t.Fatalf("expected 2 top-level commands, got %d", len(cmds))
 	}
 }
+
+// envelope-help-alignment ----------------------------------------------------
+//
+// The next four tests cover the envelope-driven --help upgrades so dws-wukong
+// can ship hardcoded-equivalent --help text purely through Diamond config.
+
+// TestBuildDynamicCommands_ExampleField verifies CLIToolOverride.Example flows
+// to cobra.Command.Example, surfacing the "Examples:" section in --help.
+func TestBuildDynamicCommands_ExampleField(t *testing.T) {
+	t.Parallel()
+
+	const want = "  dws oa approval list-forms --cursor 0 --size 100"
+
+	servers := []market.ServerDescriptor{
+		{
+			Endpoint: "https://endpoint-oa",
+			CLI: market.CLIOverlay{
+				ID:      "oa",
+				Command: "oa",
+				ToolOverrides: map[string]market.CLIToolOverride{
+					"list_user_visible_process": {
+						CLIName: "list-forms",
+						Group:   "approval",
+						Example: "  dws oa approval list-forms --cursor 0 --size 100",
+					},
+				},
+			},
+		},
+	}
+
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil)
+	approval := findChild(cmds[0], "approval")
+	if approval == nil {
+		t.Fatal("approval group not found")
+	}
+	leaf := findChild(approval, "list-forms")
+	if leaf == nil {
+		t.Fatal("list-forms leaf not found")
+	}
+	if leaf.Example != want {
+		t.Fatalf("Example mismatch:\n want: %q\n got:  %q", want, leaf.Example)
+	}
+	if !strings.Contains(leaf.UsageString(), "Examples:") {
+		t.Fatalf("expected 'Examples:' section in --help; usage:\n%s", leaf.UsageString())
+	}
+}
+
+// TestApplyBindings_VisibleFlagDefault_String verifies that
+// CLIFlagOverride.Default flows to cobra String flags so --help shows
+// (default "0"). Hidden-only behavior is unchanged; this is the path that was
+// previously dead code for visible flags.
+func TestApplyBindings_VisibleFlagDefault_String(t *testing.T) {
+	t.Parallel()
+
+	servers := []market.ServerDescriptor{
+		{
+			Endpoint: "https://endpoint-oa",
+			CLI: market.CLIOverlay{
+				ID:      "oa",
+				Command: "oa",
+				ToolOverrides: map[string]market.CLIToolOverride{
+					"list_user_visible_process": {
+						CLIName: "list-forms",
+						Flags: map[string]market.CLIFlagOverride{
+							"cursor": {
+								Alias:   "cursor",
+								Type:    "string",
+								Default: "0",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil)
+	leaf := findChild(cmds[0], "list-forms")
+	if leaf == nil {
+		t.Fatal("list-forms leaf not found")
+	}
+	f := leaf.Flags().Lookup("cursor")
+	if f == nil {
+		t.Fatal("--cursor flag missing")
+	}
+	if f.DefValue != "0" {
+		t.Fatalf("expected DefValue=\"0\", got %q", f.DefValue)
+	}
+	usage := leaf.UsageString()
+	if !strings.Contains(usage, `(default "0")`) {
+		t.Fatalf("expected --help to contain (default \"0\"); got:\n%s", usage)
+	}
+}
+
+// TestApplyBindings_VisibleFlagDefault_Int verifies the Int kind path: cobra
+// renders int defaults without quotes, so we look for "(default 100)".
+func TestApplyBindings_VisibleFlagDefault_Int(t *testing.T) {
+	t.Parallel()
+
+	servers := []market.ServerDescriptor{
+		{
+			Endpoint: "https://endpoint-oa",
+			CLI: market.CLIOverlay{
+				ID:      "oa",
+				Command: "oa",
+				ToolOverrides: map[string]market.CLIToolOverride{
+					"list_user_visible_process": {
+						CLIName: "list-forms",
+						Flags: map[string]market.CLIFlagOverride{
+							"pageSize": {
+								Alias:   "size",
+								Type:    "int",
+								Default: "100",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil)
+	leaf := findChild(cmds[0], "list-forms")
+	if leaf == nil {
+		t.Fatal("list-forms leaf not found")
+	}
+	f := leaf.Flags().Lookup("size")
+	if f == nil {
+		t.Fatal("--size flag missing")
+	}
+	if f.DefValue != "100" {
+		t.Fatalf("expected DefValue=\"100\", got %q", f.DefValue)
+	}
+	if !strings.Contains(leaf.UsageString(), "(default 100)") {
+		t.Fatalf("expected --help to contain (default 100); got:\n%s", leaf.UsageString())
+	}
+}
+
+// TestCollectBindings_DefaultDoesNotImplyChanged guards the lower half of
+// the v3.2 contract: CollectBindings itself must not infer "user changed
+// this flag" from the presence of an envelope Default. Default-driven MCP
+// body injection lives in buildOverrideBindings' normalizer (verified by the
+// TestNormalizer_* tests below) so user-vs-default attribution stays clean
+// — `firstChangedFlag` is the single source of truth for "user typed it".
+func TestCollectBindings_DefaultDoesNotImplyChanged(t *testing.T) {
+	t.Parallel()
+
+	bindings := []FlagBinding{
+		{
+			FlagName: "cursor",
+			Property: "cursor",
+			Kind:     ValueString,
+			Default:  "0",
+			Usage:    "page cursor",
+		},
+	}
+	cmd := &cobra.Command{Use: "list-forms"}
+	ApplyBindings(cmd, bindings)
+
+	// Sanity: cobra received the default and would render it in --help.
+	if got := cmd.Flags().Lookup("cursor").DefValue; got != "0" {
+		t.Fatalf("expected DefValue=\"0\" wired to cobra, got %q", got)
+	}
+
+	// Don't call cmd.SetArgs / cmd.Execute — i.e. user typed nothing.
+	params, err := CollectBindings(cmd, bindings, nil)
+	if err != nil {
+		t.Fatalf("CollectBindings returned error: %v", err)
+	}
+	if _, ok := params["cursor"]; ok {
+		t.Fatalf("default-only flag must not appear in MCP params; got %v", params)
+	}
+}
+
+// TestNormalizer_VisibleFlagDefault_InjectsWhenOmitted is the v3.2 mirror of
+// the test above: CollectBindings still skips, but the normalizer returned
+// by buildOverrideBindings must inject the envelope default for visible
+// flags so the MCP body matches the hardcoded helper command's behavior
+// (`mustGetFlag(cobra default) → body`). This is the regression that broke
+// `dws oa approval list-forms` when the user omitted --cursor / --size.
+func TestNormalizer_VisibleFlagDefault_InjectsWhenOmitted(t *testing.T) {
+	t.Parallel()
+
+	override := market.CLIToolOverride{
+		CLIName: "list-forms",
+		Flags: map[string]market.CLIFlagOverride{
+			"cursor": {
+				Alias:   "cursor",
+				Type:    "int",
+				Default: "0",
+			},
+			"pageSize": {
+				Alias:   "size",
+				Type:    "int",
+				Default: "100",
+			},
+		},
+	}
+
+	bindings, normalizer := buildOverrideBindings(override)
+	if normalizer == nil {
+		t.Fatal("expected non-nil normalizer when defaults are present")
+	}
+	cmd := &cobra.Command{Use: "list-forms"}
+	ApplyBindings(cmd, bindings)
+
+	params, err := CollectBindings(cmd, bindings, nil)
+	if err != nil {
+		t.Fatalf("CollectBindings returned error: %v", err)
+	}
+	if err := normalizer(cmd, params); err != nil {
+		t.Fatalf("normalizer returned error: %v", err)
+	}
+
+	if got, ok := params["cursor"].(int); !ok || got != 0 {
+		t.Fatalf("expected params[cursor] = int(0), got %T(%v)", params["cursor"], params["cursor"])
+	}
+	if got, ok := params["pageSize"].(int); !ok || got != 100 {
+		t.Fatalf("expected params[pageSize] = int(100), got %T(%v)", params["pageSize"], params["pageSize"])
+	}
+}
+
+// TestNormalizer_DefaultCoercedByKind covers every ValueKind the envelope
+// type-name dictionary (kindFromTypeName) can actually produce today —
+// string / int / bool / string_slice — so a number-typed schema receives a
+// number (not the raw envelope string) and slice kinds get a []string.
+// Catches regressions in the parseFlagDefault dispatch.
+//
+// ValueFloat and the *_slice numeric kinds aren't reachable from envelope
+// `type` strings yet, but the normalizer still handles them for forward
+// compatibility (asserted indirectly by the build).
+func TestNormalizer_DefaultCoercedByKind(t *testing.T) {
+	t.Parallel()
+
+	override := market.CLIToolOverride{
+		CLIName: "demo",
+		Flags: map[string]market.CLIFlagOverride{
+			"name":    {Alias: "name", Type: "string", Default: "alice"},
+			"page":    {Alias: "page", Type: "int", Default: "7"},
+			"verbose": {Alias: "verbose", Type: "bool", Default: "true"},
+			"tags":    {Alias: "tags", Type: "string_slice", Default: "a,b,c"},
+		},
+	}
+
+	bindings, normalizer := buildOverrideBindings(override)
+	if normalizer == nil {
+		t.Fatal("expected non-nil normalizer when defaults are present")
+	}
+	cmd := &cobra.Command{Use: "demo"}
+	ApplyBindings(cmd, bindings)
+
+	params, err := CollectBindings(cmd, bindings, nil)
+	if err != nil {
+		t.Fatalf("CollectBindings returned error: %v", err)
+	}
+	if err := normalizer(cmd, params); err != nil {
+		t.Fatalf("normalizer returned error: %v", err)
+	}
+
+	if got, ok := params["name"].(string); !ok || got != "alice" {
+		t.Fatalf("name: expected string \"alice\", got %T(%v)", params["name"], params["name"])
+	}
+	if got, ok := params["page"].(int); !ok || got != 7 {
+		t.Fatalf("page: expected int 7, got %T(%v)", params["page"], params["page"])
+	}
+	if got, ok := params["verbose"].(bool); !ok || !got {
+		t.Fatalf("verbose: expected bool true, got %T(%v)", params["verbose"], params["verbose"])
+	}
+	got, ok := params["tags"].([]string)
+	if !ok {
+		t.Fatalf("tags: expected []string, got %T(%v)", params["tags"], params["tags"])
+	}
+	if strings.Join(got, ",") != "a,b,c" {
+		t.Fatalf("tags: expected [a b c], got %v", got)
+	}
+}
+
+// TestNormalizer_DefaultDoesNotOverrideUserValue locks in the
+// `if exists continue` guard so user input always beats the envelope default,
+// matching CollectBindings' user-changed-flag wins contract.
+func TestNormalizer_DefaultDoesNotOverrideUserValue(t *testing.T) {
+	t.Parallel()
+
+	override := market.CLIToolOverride{
+		CLIName: "list-forms",
+		Flags: map[string]market.CLIFlagOverride{
+			"cursor": {
+				Alias:   "cursor",
+				Type:    "int",
+				Default: "0",
+			},
+		},
+	}
+
+	bindings, normalizer := buildOverrideBindings(override)
+	if normalizer == nil {
+		t.Fatal("expected non-nil normalizer when defaults are present")
+	}
+	cmd := &cobra.Command{Use: "list-forms"}
+	ApplyBindings(cmd, bindings)
+
+	if err := cmd.ParseFlags([]string{"--cursor", "5"}); err != nil {
+		t.Fatalf("ParseFlags returned error: %v", err)
+	}
+
+	params, err := CollectBindings(cmd, bindings, nil)
+	if err != nil {
+		t.Fatalf("CollectBindings returned error: %v", err)
+	}
+	if err := normalizer(cmd, params); err != nil {
+		t.Fatalf("normalizer returned error: %v", err)
+	}
+
+	if got, ok := params["cursor"].(int); !ok || got != 5 {
+		t.Fatalf("expected params[cursor] = int(5), got %T(%v)", params["cursor"], params["cursor"])
+	}
+}

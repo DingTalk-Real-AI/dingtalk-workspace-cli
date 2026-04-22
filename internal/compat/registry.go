@@ -66,6 +66,13 @@ type FlagBinding struct {
 	Kind     ValueKind
 	Usage    string
 	Required bool
+	// Default is the cobra-level flag default value as a string. Parsed
+	// into the Kind-appropriate primitive at registration time. Empty
+	// string keeps the existing zero-value default. This only affects
+	// what cobra renders in --help (the "(default ...)" suffix); it does
+	// NOT inject the value into MCP params on its own — CollectBindings
+	// still gates writes by user-changed flags via firstChangedFlag.
+	Default string
 	// Positional binds this parameter to a positional CLI argument rather
 	// than a --flag. PositionalIndex is the 0-based slot.
 	Positional      bool
@@ -235,6 +242,48 @@ func NewCuratedCommand(route Route, runner executor.Runner) *cobra.Command {
 	return cmd
 }
 
+// parseFlagDefault converts a string-form envelope default into the typed
+// primitives used by pflag's *P helpers. Unparseable values silently fall
+// back to the type's zero value so a malformed envelope downgrades to
+// "no default in --help" rather than a panic at startup. The slice form
+// splits on commas and trims whitespace, mirroring pflag.StringSlice
+// behavior; empty/whitespace-only segments are dropped.
+func parseFlagDefault(kind ValueKind, raw string) (defStr string, defInt int, defFloat float64, defBool bool, defSlice []string) {
+	trimmed := strings.TrimSpace(raw)
+	switch kind {
+	case ValueString, ValueJSON:
+		// Preserve raw (not trimmed) so explicitly-padded defaults survive.
+		defStr = raw
+	case ValueInt:
+		if trimmed != "" {
+			if v, err := strconv.Atoi(trimmed); err == nil {
+				defInt = v
+			}
+		}
+	case ValueFloat:
+		if trimmed != "" {
+			if v, err := strconv.ParseFloat(trimmed, 64); err == nil {
+				defFloat = v
+			}
+		}
+	case ValueBool:
+		if trimmed != "" {
+			if v, err := strconv.ParseBool(trimmed); err == nil {
+				defBool = v
+			}
+		}
+	case ValueStringSlice, ValueIntSlice, ValueFloatSlice, ValueBoolSlice:
+		if trimmed != "" {
+			for _, p := range strings.Split(trimmed, ",") {
+				if t := strings.TrimSpace(p); t != "" {
+					defSlice = append(defSlice, t)
+				}
+			}
+		}
+	}
+	return
+}
+
 func ApplyBindings(cmd *cobra.Command, bindings []FlagBinding) {
 	for _, binding := range bindings {
 		// Positional bindings are collected from cobra args rather than flags.
@@ -267,40 +316,46 @@ func ApplyBindings(cmd *cobra.Command, bindings []FlagBinding) {
 			}
 		}
 
+		// Parse binding.Default once per binding into Kind-typed values used
+		// by both the primary and hidden-alias registrations below. Hidden
+		// aliases share the same default so users typing the legacy alias
+		// see consistent --help text and zero-value behavior.
+		defStr, defInt, defFloat, defBool, defSlice := parseFlagDefault(binding.Kind, binding.Default)
+
 		registerHidden := func(name string, suffix string) {
 			if name == "" {
 				return
 			}
 			switch binding.Kind {
 			case ValueString:
-				cmd.Flags().String(name, "", binding.Usage+suffix)
+				cmd.Flags().String(name, defStr, binding.Usage+suffix)
 			case ValueInt:
-				cmd.Flags().Int(name, 0, binding.Usage+suffix)
+				cmd.Flags().Int(name, defInt, binding.Usage+suffix)
 			case ValueFloat:
-				cmd.Flags().Float64(name, 0, binding.Usage+suffix)
+				cmd.Flags().Float64(name, defFloat, binding.Usage+suffix)
 			case ValueBool:
-				cmd.Flags().Bool(name, false, binding.Usage+suffix)
+				cmd.Flags().Bool(name, defBool, binding.Usage+suffix)
 			case ValueStringSlice, ValueIntSlice, ValueFloatSlice, ValueBoolSlice:
-				cmd.Flags().StringSlice(name, nil, binding.Usage+suffix)
+				cmd.Flags().StringSlice(name, defSlice, binding.Usage+suffix)
 			case ValueJSON:
-				cmd.Flags().String(name, "", binding.Usage+suffix)
+				cmd.Flags().String(name, defStr, binding.Usage+suffix)
 			}
 			_ = cmd.Flags().MarkHidden(name)
 		}
 
 		switch binding.Kind {
 		case ValueString:
-			cmd.Flags().StringP(primary, binding.Short, "", binding.Usage)
+			cmd.Flags().StringP(primary, binding.Short, defStr, binding.Usage)
 		case ValueInt:
-			cmd.Flags().IntP(primary, binding.Short, 0, binding.Usage)
+			cmd.Flags().IntP(primary, binding.Short, defInt, binding.Usage)
 		case ValueFloat:
-			cmd.Flags().Float64P(primary, binding.Short, 0, binding.Usage)
+			cmd.Flags().Float64P(primary, binding.Short, defFloat, binding.Usage)
 		case ValueBool:
-			cmd.Flags().BoolP(primary, binding.Short, false, binding.Usage)
+			cmd.Flags().BoolP(primary, binding.Short, defBool, binding.Usage)
 		case ValueStringSlice, ValueIntSlice, ValueFloatSlice, ValueBoolSlice:
-			cmd.Flags().StringSliceP(primary, binding.Short, nil, binding.Usage)
+			cmd.Flags().StringSliceP(primary, binding.Short, defSlice, binding.Usage)
 		case ValueJSON:
-			cmd.Flags().StringP(primary, binding.Short, "", binding.Usage+" (JSON)")
+			cmd.Flags().StringP(primary, binding.Short, defStr, binding.Usage+" (JSON)")
 		}
 		registerHidden(alias, " (alias)")
 		for _, extra := range extras {

@@ -166,6 +166,12 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 				Use:   cliName,
 				Short: short,
 				Long:  long,
+				// Preserve left-side indentation: cobra's Examples template
+				// renders {{.Example}} verbatim, and hardcoded helper commands
+				// rely on a 2-space prefix to look indented under "Examples:".
+				// Only trim trailing whitespace/newlines so envelope JSON can
+				// safely carry a closing "\n" without doubling the blank line.
+				Example: strings.TrimRight(override.Example, " \t\r\n"),
 				Target: Target{
 					CanonicalProduct: canonicalProduct,
 					Tool:             toolName,
@@ -487,11 +493,19 @@ func buildOverrideBindings(override market.CLIToolOverride) ([]FlagBinding, Norm
 		envVar    string
 	}
 	var envDefaults []envDefaultEntry
-	type hiddenDefaultEntry struct {
+	// defaultInjectEntry captures envelope flag.default values that must be
+	// injected into the MCP body when the user omits the flag. v3.2 widened
+	// this from hidden-only to all flags so that visible flags carrying a
+	// default (e.g. oa list-forms cursor=0 / pageSize=100) match the
+	// hardcoded helper command behavior of `mustGetFlag(cobra default) →
+	// body`. The kind drives typed coercion at injection time so a
+	// `type: int` envelope default reaches MCP as `int(0)`, not string `"0"`.
+	type defaultInjectEntry struct {
 		paramName    string
 		defaultValue string
+		kind         ValueKind
 	}
-	var hiddenDefaults []hiddenDefaultEntry
+	var defaultInjects []defaultInjectEntry
 	type runtimeDefaultEntry struct {
 		paramName   string
 		placeholder string
@@ -554,21 +568,27 @@ func buildOverrideBindings(override market.CLIToolOverride) ([]FlagBinding, Norm
 			Usage:    usage,
 			// §P1: required and positional are mutually exclusive — positional
 			// args are validated by cobra's MinimumNArgs, not MarkFlagRequired.
-			Required:        flagOverride.Required && !flagOverride.Positional,
+			Required: flagOverride.Required && !flagOverride.Positional,
+			// §2.4: Default drives both cobra's --help "(default ...)"
+			// rendering and (since v3.2) MCP body injection when the user
+			// omits the flag. CollectBindings still gates writes by
+			// user-changed flags, so user-provided values always win; the
+			// normalizer's defaultInjects loop only fills missing keys.
+			Default:         flagOverride.Default,
 			Positional:      flagOverride.Positional,
 			PositionalIndex: flagOverride.PositionalIndex,
 		}
 
-		// §2.5: hidden flag with default
-		if flagOverride.Hidden {
-			// Hidden flags are still added but marked hidden.
-			// They are auto-populated with their default value via the normalizer.
-			if flagOverride.Default != "" {
-				hiddenDefaults = append(hiddenDefaults, hiddenDefaultEntry{
-					paramName:    paramName,
-					defaultValue: flagOverride.Default,
-				})
-			}
+		// §v3.2: any non-empty default — hidden or visible — gets injected
+		// when the user omits the flag. Earlier versions gated this on
+		// flagOverride.Hidden which left visible flags with `"default": "0"`
+		// (e.g. oa list-forms cursor) silently absent from the MCP body.
+		if flagOverride.Default != "" {
+			defaultInjects = append(defaultInjects, defaultInjectEntry{
+				paramName:    paramName,
+				defaultValue: flagOverride.Default,
+				kind:         binding.Kind,
+			})
 		}
 
 		bindings = append(bindings, binding)
@@ -611,17 +631,31 @@ func buildOverrideBindings(override market.CLIToolOverride) ([]FlagBinding, Norm
 		}
 	}
 	bodyWrapper := strings.TrimSpace(override.BodyWrapper)
-	if len(transforms) == 0 && len(envDefaults) == 0 && len(hiddenDefaults) == 0 && len(runtimeDefaults) == 0 && len(omits) == 0 && !needsDottedNesting && bodyWrapper == "" {
+	if len(transforms) == 0 && len(envDefaults) == 0 && len(defaultInjects) == 0 && len(runtimeDefaults) == 0 && len(omits) == 0 && !needsDottedNesting && bodyWrapper == "" {
 		return bindings, nil
 	}
 
-	// Build a normalizer that applies hidden defaults + env defaults + runtime defaults
+	// Build a normalizer that applies default injections + env defaults + runtime defaults
 	// + transforms + omitWhen + nesting + body wrap.
 	normalizer := func(cmd *cobra.Command, params map[string]any) error {
-		// §2.5: Apply hidden flag defaults for parameters not explicitly set
-		for _, hd := range hiddenDefaults {
-			if _, exists := params[hd.paramName]; !exists {
-				params[hd.paramName] = hd.defaultValue
+		// §v3.2: Apply envelope flag.default for parameters not explicitly set.
+		// Coerce by Kind so number-typed schemas don't reject string defaults.
+		for _, di := range defaultInjects {
+			if _, exists := params[di.paramName]; exists {
+				continue
+			}
+			defStr, defInt, defFloat, defBool, defSlice := parseFlagDefault(di.kind, di.defaultValue)
+			switch di.kind {
+			case ValueInt:
+				params[di.paramName] = defInt
+			case ValueFloat:
+				params[di.paramName] = defFloat
+			case ValueBool:
+				params[di.paramName] = defBool
+			case ValueStringSlice, ValueIntSlice, ValueFloatSlice, ValueBoolSlice:
+				params[di.paramName] = defSlice
+			default: // ValueString, ValueJSON, and any unknown kind
+				params[di.paramName] = defStr
 			}
 		}
 

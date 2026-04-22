@@ -173,12 +173,17 @@ type CLIOutputFormat struct {
 
 // CLIToolOverride maps an MCP tool to a CLI command with flag aliases and transforms.
 type CLIToolOverride struct {
-	CLIName      string                     `json:"cliName"`
-	Description  string                     `json:"description,omitempty"`
-	Group        string                     `json:"group,omitempty"`
-	IsSensitive  bool                       `json:"isSensitive,omitempty"`
-	Hidden       bool                       `json:"hidden,omitempty"`
-	Flags        map[string]CLIFlagOverride `json:"flags,omitempty"`
+	CLIName     string `json:"cliName"`
+	Description string `json:"description,omitempty"`
+	// Example, when non-empty, is wired to cobra.Command.Example to render
+	// the "Examples:" section in --help. Mirrors hardcoded helper commands'
+	// Example field (e.g. wukong/products/oa.go list-forms). Empty value
+	// produces no Examples section. Multi-line strings keep "\n" literally.
+	Example     string                     `json:"example,omitempty"`
+	Group       string                     `json:"group,omitempty"`
+	IsSensitive bool                       `json:"isSensitive,omitempty"`
+	Hidden      bool                       `json:"hidden,omitempty"`
+	Flags       map[string]CLIFlagOverride `json:"flags,omitempty"`
 	// OutputFormat declares structured response post-processing. v3 typed form
 	// supersedes v2's untyped map[string]any, but parsing stays lenient so v2
 	// envelopes continue to deserialize (unknown keys are ignored).
