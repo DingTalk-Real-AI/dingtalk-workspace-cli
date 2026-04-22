@@ -874,6 +874,294 @@ func TestBuildDynamicCommands_UnknownFlagConstraintSkipped(t *testing.T) {
 	}
 }
 
+// TestBuildDynamicCommands_MultipleAliases_PrimarySet verifies the primary
+// flag still works when a binding declares extra hidden aliases.
+func TestBuildDynamicCommands_MultipleAliases_PrimarySet(t *testing.T) {
+	t.Parallel()
+
+	runner := &captureRunner{}
+	servers := []market.ServerDescriptor{
+		{
+			Endpoint: "https://endpoint-contact",
+			CLI: market.CLIOverlay{
+				ID:      "contact",
+				Command: "contact",
+				ToolOverrides: map[string]market.CLIToolOverride{
+					"search_contact_by_key_word": {
+						CLIName: "search",
+						Flags: map[string]market.CLIFlagOverride{
+							"keyword": {
+								Alias:    "query",
+								Aliases:  []string{"keyword"},
+								Required: true,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	cmds := BuildDynamicCommands(servers, runner, nil)
+	cmds[0].SetArgs([]string{"search", "--query", "hello"})
+	cmds[0].SilenceErrors = true
+	cmds[0].SilenceUsage = true
+	if err := cmds[0].Execute(); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if runner.lastParams["keyword"] != "hello" {
+		t.Fatalf("expected keyword=hello, got %+v", runner.lastParams)
+	}
+
+	// The hidden alias must exist on the leaf command but be marked hidden.
+	leaf := findChild(cmds[0], "search")
+	if leaf == nil {
+		t.Fatal("search leaf missing")
+	}
+	alias := leaf.Flags().Lookup("keyword")
+	if alias == nil {
+		t.Fatal("hidden alias --keyword not registered")
+	}
+	if !alias.Hidden {
+		t.Fatalf("--keyword must be hidden (got Hidden=false)")
+	}
+	if primary := leaf.Flags().Lookup("query"); primary == nil || primary.Hidden {
+		t.Fatalf("--query must be registered and visible (got %+v)", primary)
+	}
+}
+
+// TestBuildDynamicCommands_MultipleAliases_OnlyAliasSet verifies that
+// passing only a hidden alias satisfies Required and routes the value to
+// params[Property]. Regression: pre-fix envelope rejected --keyword with
+// "unknown flag".
+func TestBuildDynamicCommands_MultipleAliases_OnlyAliasSet(t *testing.T) {
+	t.Parallel()
+
+	runner := &captureRunner{}
+	servers := []market.ServerDescriptor{
+		{
+			Endpoint: "https://endpoint-contact",
+			CLI: market.CLIOverlay{
+				ID:      "contact",
+				Command: "contact",
+				ToolOverrides: map[string]market.CLIToolOverride{
+					"search_contact_by_key_word": {
+						CLIName: "search",
+						Flags: map[string]market.CLIFlagOverride{
+							"keyword": {
+								Alias:    "query",
+								Aliases:  []string{"keyword"},
+								Required: true,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	cmds := BuildDynamicCommands(servers, runner, nil)
+	cmds[0].SetArgs([]string{"search", "--keyword", "hi"})
+	cmds[0].SilenceErrors = true
+	cmds[0].SilenceUsage = true
+	if err := cmds[0].Execute(); err != nil {
+		t.Fatalf("execute with hidden alias: %v", err)
+	}
+	if runner.lastParams["keyword"] != "hi" {
+		t.Fatalf("expected keyword=hi, got %+v", runner.lastParams)
+	}
+}
+
+// TestBuildDynamicCommands_MultipleAliases_RequiredErrorWhenNoneSet verifies
+// the self-check fallback: when Required binding has aliases but none are
+// supplied, CollectBindings emits "--<primary> is required".
+func TestBuildDynamicCommands_MultipleAliases_RequiredErrorWhenNoneSet(t *testing.T) {
+	t.Parallel()
+
+	runner := &captureRunner{}
+	servers := []market.ServerDescriptor{
+		{
+			Endpoint: "https://endpoint-contact",
+			CLI: market.CLIOverlay{
+				ID:      "contact",
+				Command: "contact",
+				ToolOverrides: map[string]market.CLIToolOverride{
+					"search_contact_by_key_word": {
+						CLIName: "search",
+						Flags: map[string]market.CLIFlagOverride{
+							"keyword": {
+								Alias:    "query",
+								Aliases:  []string{"keyword"},
+								Required: true,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	cmds := BuildDynamicCommands(servers, runner, nil)
+	cmds[0].SetArgs([]string{"search"})
+	cmds[0].SilenceErrors = true
+	cmds[0].SilenceUsage = true
+	err := cmds[0].Execute()
+	if err == nil {
+		t.Fatal("expected required error, got nil")
+	}
+	if !strings.Contains(err.Error(), "--query is required") {
+		t.Fatalf("expected --query is required, got %v", err)
+	}
+}
+
+// TestBuildDynamicCommands_MultipleAliases_PrimaryWinsWhenBothSet verifies
+// that when both the primary and an alias are provided on the CLI, the
+// primary wins (matches cmdutil.FlagOrFallback precedence: primary first).
+func TestBuildDynamicCommands_MultipleAliases_PrimaryWinsWhenBothSet(t *testing.T) {
+	t.Parallel()
+
+	runner := &captureRunner{}
+	servers := []market.ServerDescriptor{
+		{
+			Endpoint: "https://endpoint-contact",
+			CLI: market.CLIOverlay{
+				ID:      "contact",
+				Command: "contact",
+				ToolOverrides: map[string]market.CLIToolOverride{
+					"search_contact_by_key_word": {
+						CLIName: "search",
+						Flags: map[string]market.CLIFlagOverride{
+							"keyword": {
+								Alias:   "query",
+								Aliases: []string{"keyword"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	cmds := BuildDynamicCommands(servers, runner, nil)
+	cmds[0].SetArgs([]string{"search", "--query", "primary", "--keyword", "fallback"})
+	cmds[0].SilenceErrors = true
+	cmds[0].SilenceUsage = true
+	if err := cmds[0].Execute(); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if runner.lastParams["keyword"] != "primary" {
+		t.Fatalf("expected primary to win (keyword=primary), got %+v", runner.lastParams)
+	}
+}
+
+// TestBuildDynamicCommands_MultipleAliases_MultiAliasChain verifies a chain
+// of 3+ aliases resolves the value from the first one that is set.
+func TestBuildDynamicCommands_MultipleAliases_MultiAliasChain(t *testing.T) {
+	t.Parallel()
+
+	runner := &captureRunner{}
+	servers := []market.ServerDescriptor{
+		{
+			Endpoint: "https://endpoint-contact",
+			CLI: market.CLIOverlay{
+				ID:      "contact",
+				Command: "contact",
+				ToolOverrides: map[string]market.CLIToolOverride{
+					"get_user_info_by_user_ids": {
+						CLIName: "get",
+						Flags: map[string]market.CLIFlagOverride{
+							"user_id_list": {
+								Alias:     "ids",
+								Aliases:   []string{"user-id", "user-ids"},
+								Required:  true,
+								Transform: "csv_to_array",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	cmds := BuildDynamicCommands(servers, runner, nil)
+	cmds[0].SetArgs([]string{"get", "--user-ids", "u1,u2"})
+	cmds[0].SilenceErrors = true
+	cmds[0].SilenceUsage = true
+	if err := cmds[0].Execute(); err != nil {
+		t.Fatalf("execute with --user-ids: %v", err)
+	}
+	got, ok := runner.lastParams["user_id_list"].([]any)
+	if !ok {
+		t.Fatalf("expected []any for user_id_list after csv_to_array, got %T (%+v)", runner.lastParams["user_id_list"], runner.lastParams)
+	}
+	if len(got) != 2 || got[0] != "u1" || got[1] != "u2" {
+		t.Fatalf("expected [u1 u2], got %+v", got)
+	}
+
+	// All three hidden aliases must be registered and hidden, primary visible.
+	leaf := findChild(cmds[0], "get")
+	if leaf == nil {
+		t.Fatal("get leaf missing")
+	}
+	for _, name := range []string{"user-id", "user-ids"} {
+		f := leaf.Flags().Lookup(name)
+		if f == nil {
+			t.Fatalf("alias --%s not registered", name)
+		}
+		if !f.Hidden {
+			t.Fatalf("alias --%s must be hidden", name)
+		}
+	}
+	if p := leaf.Flags().Lookup("ids"); p == nil || p.Hidden {
+		t.Fatalf("primary --ids must be visible")
+	}
+}
+
+// TestBuildDynamicCommands_MultipleAliases_Dedup verifies that reserved
+// names ("json", "params"), duplicates of the primary, duplicates of the
+// single Alias, and intra-slice duplicates are all silently skipped so
+// cobra never double-registers a flag.
+func TestBuildDynamicCommands_MultipleAliases_Dedup(t *testing.T) {
+	t.Parallel()
+
+	runner := &captureRunner{}
+	servers := []market.ServerDescriptor{
+		{
+			Endpoint: "https://endpoint-contact",
+			CLI: market.CLIOverlay{
+				ID:      "contact",
+				Command: "contact",
+				ToolOverrides: map[string]market.CLIToolOverride{
+					"search_contact_by_key_word": {
+						CLIName: "search",
+						Flags: map[string]market.CLIFlagOverride{
+							"keyword": {
+								Alias: "query",
+								// Conflicts: query dup with alias, json/params are
+								// reserved, keyword appears twice.
+								Aliases: []string{"query", "json", "params", "keyword", "keyword"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// If ApplyBindings panics (duplicate pflag) we fail. Otherwise the cmd
+	// should build and execute fine.
+	cmds := BuildDynamicCommands(servers, runner, nil)
+	cmds[0].SetArgs([]string{"search", "--keyword", "ok"})
+	cmds[0].SilenceErrors = true
+	cmds[0].SilenceUsage = true
+	if err := cmds[0].Execute(); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if runner.lastParams["keyword"] != "ok" {
+		t.Fatalf("expected keyword=ok, got %+v", runner.lastParams)
+	}
+}
+
 func TestBuildDynamicCommands_NoParent(t *testing.T) {
 	t.Parallel()
 

@@ -56,6 +56,11 @@ type Target struct {
 type FlagBinding struct {
 	FlagName string
 	Alias    string
+	// Aliases are additional hidden flag names that map to the same MCP
+	// parameter. Any of them being set satisfies Required, and the value
+	// is resolved via firstChangedFlag(FlagName, Alias, Aliases...).
+	// Mirrors cmdutil.ValidateRequiredFlagWithAliases / FlagOrFallback.
+	Aliases  []string
 	Short    string
 	Property string
 	Kind     ValueKind
@@ -244,47 +249,72 @@ func ApplyBindings(cmd *cobra.Command, bindings []FlagBinding) {
 		if alias == primary {
 			alias = ""
 		}
+		// Dedupe extra aliases against primary + single alias and each other.
+		var extras []string
+		if len(binding.Aliases) > 0 {
+			seen := map[string]bool{primary: true, "json": true, "params": true}
+			if alias != "" {
+				seen[alias] = true
+			}
+			extras = make([]string, 0, len(binding.Aliases))
+			for _, a := range binding.Aliases {
+				a = strings.TrimSpace(a)
+				if a == "" || seen[a] {
+					continue
+				}
+				seen[a] = true
+				extras = append(extras, a)
+			}
+		}
+
+		registerHidden := func(name string, suffix string) {
+			if name == "" {
+				return
+			}
+			switch binding.Kind {
+			case ValueString:
+				cmd.Flags().String(name, "", binding.Usage+suffix)
+			case ValueInt:
+				cmd.Flags().Int(name, 0, binding.Usage+suffix)
+			case ValueFloat:
+				cmd.Flags().Float64(name, 0, binding.Usage+suffix)
+			case ValueBool:
+				cmd.Flags().Bool(name, false, binding.Usage+suffix)
+			case ValueStringSlice, ValueIntSlice, ValueFloatSlice, ValueBoolSlice:
+				cmd.Flags().StringSlice(name, nil, binding.Usage+suffix)
+			case ValueJSON:
+				cmd.Flags().String(name, "", binding.Usage+suffix)
+			}
+			_ = cmd.Flags().MarkHidden(name)
+		}
 
 		switch binding.Kind {
 		case ValueString:
 			cmd.Flags().StringP(primary, binding.Short, "", binding.Usage)
-			if alias != "" {
-				cmd.Flags().String(alias, "", binding.Usage+" (alias)")
-				_ = cmd.Flags().MarkHidden(alias)
-			}
 		case ValueInt:
 			cmd.Flags().IntP(primary, binding.Short, 0, binding.Usage)
-			if alias != "" {
-				cmd.Flags().Int(alias, 0, binding.Usage+" (alias)")
-				_ = cmd.Flags().MarkHidden(alias)
-			}
 		case ValueFloat:
 			cmd.Flags().Float64P(primary, binding.Short, 0, binding.Usage)
-			if alias != "" {
-				cmd.Flags().Float64(alias, 0, binding.Usage+" (alias)")
-				_ = cmd.Flags().MarkHidden(alias)
-			}
 		case ValueBool:
 			cmd.Flags().BoolP(primary, binding.Short, false, binding.Usage)
-			if alias != "" {
-				cmd.Flags().Bool(alias, false, binding.Usage+" (alias)")
-				_ = cmd.Flags().MarkHidden(alias)
-			}
 		case ValueStringSlice, ValueIntSlice, ValueFloatSlice, ValueBoolSlice:
 			cmd.Flags().StringSliceP(primary, binding.Short, nil, binding.Usage)
-			if alias != "" {
-				cmd.Flags().StringSlice(alias, nil, binding.Usage+" (alias)")
-				_ = cmd.Flags().MarkHidden(alias)
-			}
 		case ValueJSON:
 			cmd.Flags().StringP(primary, binding.Short, "", binding.Usage+" (JSON)")
-			if alias != "" {
-				cmd.Flags().String(alias, "", binding.Usage+" (alias, JSON)")
-				_ = cmd.Flags().MarkHidden(alias)
-			}
+		}
+		registerHidden(alias, " (alias)")
+		for _, extra := range extras {
+			registerHidden(extra, " (alias)")
 		}
 		if binding.Required {
-			_ = cmd.MarkFlagRequired(primary)
+			// When no hidden aliases exist, lean on cobra's native required
+			// validation for the best UX (colored error, shown in --help).
+			// When aliases exist, CollectBindings does its own "any-of-these
+			// is set" check so users who type the hidden alias do not hit
+			// cobra yelling about the primary being missing.
+			if alias == "" && len(extras) == 0 {
+				_ = cmd.MarkFlagRequired(primary)
+			}
 		}
 	}
 	cmd.Flags().String("json", "", "Base JSON object payload for this command")
@@ -348,6 +378,11 @@ func collectSchemaFlags(cmd *cobra.Command, bindings []FlagBinding, params map[s
 		if a := strings.TrimSpace(b.Alias); a != "" {
 			bound[a] = true
 		}
+		for _, extra := range b.Aliases {
+			if e := strings.TrimSpace(extra); e != "" {
+				bound[e] = true
+			}
+		}
 	}
 
 	// Reserved/internal flags that should never be forwarded as tool params.
@@ -399,6 +434,23 @@ func toOriginalParamName(flagName string) string {
 	return strings.ReplaceAll(flagName, "-", "_")
 }
 
+// firstChangedFlag returns the first name (in order) whose cobra flag has
+// been set by the user. Whitespace-only or empty entries are skipped.
+// Mirrors wukong cmdutil.FlagOrFallback precedence: primary > alias >
+// extraAliases in declaration order.
+func firstChangedFlag(cmd *cobra.Command, names ...string) (name string, changed bool) {
+	for _, n := range names {
+		n = strings.TrimSpace(n)
+		if n == "" {
+			continue
+		}
+		if cobracmd.FlagChanged(cmd, n) {
+			return n, true
+		}
+	}
+	return "", false
+}
+
 func CollectBindings(cmd *cobra.Command, bindings []FlagBinding, existing map[string]any) (map[string]any, error) {
 	if existing == nil {
 		existing = map[string]any{}
@@ -413,25 +465,39 @@ func CollectBindings(cmd *cobra.Command, bindings []FlagBinding, existing map[st
 			continue
 		}
 		aliasName := strings.TrimSpace(binding.Alias)
-		primaryChanged := cobracmd.FlagChanged(cmd, primaryName)
-		aliasChanged := aliasName != "" && cobracmd.FlagChanged(cmd, aliasName)
 
-		flagName := primaryName
-		if aliasChanged {
-			flagName = aliasName
+		// Candidate flag names in precedence order: primary, single alias,
+		// then extra aliases. Whichever is set first wins; mirrors the
+		// semantics of cmdutil.FlagOrFallback.
+		candidates := make([]string, 0, 2+len(binding.Aliases))
+		candidates = append(candidates, primaryName)
+		if aliasName != "" && aliasName != primaryName {
+			candidates = append(candidates, aliasName)
+		}
+		for _, extra := range binding.Aliases {
+			e := strings.TrimSpace(extra)
+			if e == "" || e == primaryName || e == aliasName {
+				continue
+			}
+			candidates = append(candidates, e)
+		}
+
+		flagName, anyChanged := firstChangedFlag(cmd, candidates...)
+		if !anyChanged {
+			flagName = primaryName
 		}
 
 		flag := cmd.Flags().Lookup(flagName)
 		if flag == nil {
 			continue
 		}
-		if binding.Required && !primaryChanged && !aliasChanged {
+		if binding.Required && !anyChanged {
 			if _, ok := existing[binding.Property]; ok {
 				continue
 			}
 			return nil, apperrors.NewValidation(fmt.Sprintf("--%s is required", primaryName))
 		}
-		if !primaryChanged && !aliasChanged {
+		if !anyChanged {
 			continue
 		}
 

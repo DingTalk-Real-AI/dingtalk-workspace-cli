@@ -520,6 +520,23 @@ func buildOverrideBindings(override market.CLIToolOverride) ([]FlagBinding, Norm
 			continue
 		}
 
+		// §2.2 (aliases): deduplicate additional hidden aliases against the
+		// primary name + reserved names. Preserves envelope declaration order
+		// so CLI precedence (primary > Alias > Aliases[0..n]) is deterministic.
+		var extraAliases []string
+		if len(flagOverride.Aliases) > 0 {
+			seen := map[string]bool{flagName: true, "json": true, "params": true}
+			extraAliases = make([]string, 0, len(flagOverride.Aliases))
+			for _, a := range flagOverride.Aliases {
+				a = strings.TrimSpace(a)
+				if a == "" || seen[a] {
+					continue
+				}
+				seen[a] = true
+				extraAliases = append(extraAliases, a)
+			}
+		}
+
 		// Usage defaults to paramName but an explicit Description on the
 		// overlay wins (it also beats the Detail API's toolDesc during flag
 		// enrichment because buildFlagsFromDetailSchema preserves overlay usage).
@@ -530,6 +547,7 @@ func buildOverrideBindings(override market.CLIToolOverride) ([]FlagBinding, Norm
 
 		binding := FlagBinding{
 			FlagName: flagName,
+			Aliases:  extraAliases,
 			Short:    strings.TrimSpace(flagOverride.Shorthand),
 			Property: paramName,
 			Kind:     kindFromTypeName(flagOverride.Type),

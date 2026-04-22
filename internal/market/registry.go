@@ -211,7 +211,16 @@ type CLIToolOverride struct {
 
 // CLIFlagOverride describes how to map an MCP parameter to a CLI flag.
 type CLIFlagOverride struct {
-	Alias         string         `json:"alias"`
+	Alias string `json:"alias"`
+	// Aliases registers additional hidden CLI flag names for the same MCP
+	// parameter. Use to preserve legacy flag names when migrating from
+	// hardcoded commands (mirrors cmdutil.ValidateRequiredFlagWithAliases /
+	// cmdutil.FlagOrFallback). All entries are registered as hidden flags
+	// (not shown in --help); values are deduped against the primary flag
+	// name and Alias, and reserved names ("json", "params") are skipped.
+	// When any alias is set by the user, the binding's Required check is
+	// satisfied and the value is written to params[Property].
+	Aliases       []string       `json:"aliases,omitempty"`
 	Transform     string         `json:"transform,omitempty"`
 	TransformArgs map[string]any `json:"transformArgs,omitempty"`
 	EnvDefault    string         `json:"envDefault,omitempty"`
