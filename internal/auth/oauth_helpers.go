@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
@@ -1129,15 +1130,26 @@ type CLIAuthStatus struct {
 // The server computes cliAuthEnabled by considering the org switch, userScope,
 // and channelScope together; the CLI uses it as-is.
 type CLIAuthResult struct {
-	CLIAuthEnabled  bool     `json:"cliAuthEnabled"`
-	UserScope       string   `json:"userScope,omitempty"`       // "all" | "specified" | "forbidden"
-	AllowedUsers    []string `json:"allowedUsers,omitempty"`    // staffId list when userScope="specified"
-	ChannelScope    string   `json:"channelScope,omitempty"`    // "all" | "specified"
-	AllowedChannels []string `json:"allowedChannels,omitempty"` // channelCode list when channelScope="specified"
+	CLIAuthEnabled       bool     `json:"cliAuthEnabled"`
+	UserScope            string   `json:"userScope,omitempty"`            // "all" | "specified" | "forbidden"
+	AllowedUsers         []string `json:"allowedUsers,omitempty"`         // staffId list when userScope="specified"
+	ChannelScope         string   `json:"channelScope,omitempty"`         // "all" | "specified"
+	AllowedChannels      []string `json:"allowedChannels,omitempty"`      // channelCode list when channelScope="specified"
+	ChannelConfigEnabled bool     `json:"channelConfigEnabled,omitempty"` // whether org has any channel restriction configured
 }
 
 // classifyDenialReason inspects a CLIAuthStatus response and returns a machine-readable
 // denial reason string. Returns "" when access is granted.
+//
+// Priority rationale:
+//  1. Explicit org-wide ban (userScope=forbidden) always wins.
+//  2. Channel scope is evaluated BEFORE user scope because the CLI has
+//     authoritative knowledge of DWS_CHANNEL and can verify membership against
+//     allowedChannels. This avoids falsely blaming the user when the real
+//     denial cause is a channel mismatch (e.g. user is in allowedUsers but the
+//     current channel is not in allowedChannels).
+//  3. Only when the channel is unrestricted or matches do we attribute the
+//     denial to the user scope.
 func classifyDenialReason(status *CLIAuthStatus, currentChannel string) string {
 	if status.ErrorCode == "CHANNEL_REQUIRED" {
 		return "channel_required"
@@ -1148,18 +1160,26 @@ func classifyDenialReason(status *CLIAuthStatus, currentChannel string) string {
 	if status.Result == nil || !status.Success {
 		return "unknown"
 	}
-	if status.Result.CLIAuthEnabled {
+	r := status.Result
+	if r.CLIAuthEnabled {
 		return ""
 	}
-	// cliAuthEnabled=false — infer reason from auxiliary fields (same priority as server)
-	if status.Result.UserScope == "forbidden" {
+
+	if r.UserScope == "forbidden" {
 		return "user_forbidden"
 	}
-	if status.Result.UserScope == "specified" {
-		return "user_not_allowed"
+
+	if r.ChannelScope == "specified" {
+		if currentChannel == "" {
+			return "channel_required"
+		}
+		if !slices.Contains(r.AllowedChannels, currentChannel) {
+			return "channel_not_allowed"
+		}
 	}
-	if status.Result.ChannelScope == "specified" && currentChannel != "" {
-		return "channel_not_allowed"
+
+	if r.UserScope == "specified" {
+		return "user_not_allowed"
 	}
 	return "cli_not_enabled"
 }
