@@ -112,7 +112,7 @@ const (
 	CatalogFixtureEnv    = "DWS_CATALOG_FIXTURE"
 	CacheDirEnv          = "DWS_CACHE_DIR"
 	PluginColdTimeoutEnv = "DWS_PLUGIN_COLD_TIMEOUT"
-	DefaultMarketBaseURL = "https://mcp.dingtalk.com"
+	DefaultMarketBaseURL = "https://pre-mcp.dingtalk.com"
 
 	// defaultDiscoveryTimeout bounds the time spent on live registry discovery.
 	// Tightened to 4s so a slow/unreachable discovery endpoint cannot block
