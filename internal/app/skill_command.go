@@ -39,14 +39,14 @@ func init() {
 		Name:         "DWS_SKILL_API_HOST",
 		Category:     configmeta.CategoryNetwork,
 		Description:  "覆盖 Skill API 地址",
-		DefaultValue: "https://mcp.dingtalk.com",
+		DefaultValue: "https://pre-mcp.dingtalk.com",
 		Example:      "https://custom-mcp.example.com",
 	})
 }
 
 const (
 	// legacySkillAPIHost is the legacy skill market host used by the old cli.
-	legacySkillAPIHost = "https://mcp.dingtalk.com"
+	legacySkillAPIHost = "https://pre-mcp.dingtalk.com"
 	// skillDownloadEndpoint is the API endpoint for downloading skills.
 	skillDownloadEndpoint = "https://aihub.dingtalk.com/cli/download"
 	// skillDownloadTimeout is the timeout for skill download operations.

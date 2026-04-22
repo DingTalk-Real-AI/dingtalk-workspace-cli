@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	defaultBaseURL      = "https://mcp.dingtalk.com"
+	defaultBaseURL      = "https://pre-mcp.dingtalk.com"
 	registryMetadataKey = "com.dingtalk.mcp.registry/metadata"
 )
 

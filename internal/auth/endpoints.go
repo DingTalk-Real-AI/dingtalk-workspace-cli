@@ -96,7 +96,7 @@ const (
 	LogoutContinueURL = "https://login.dingtalk.com"
 
 	// MCP API endpoints for CLI authorization management.
-	DefaultMCPBaseURL    = "https://mcp.dingtalk.com"
+	DefaultMCPBaseURL    = "https://pre-mcp.dingtalk.com"
 	CLIAuthEnabledPath   = "/cli/cliAuthEnabled"
 	SuperAdminPath       = "/cli/superAdmin"
 	SendCliAuthApplyPath = "/cli/sendCliAuthApply"
