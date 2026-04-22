@@ -357,6 +357,229 @@ func TestBuildDynamicCommands_PositionalArgInjection(t *testing.T) {
 	}
 }
 
+// TestBuildDynamicCommands_PositionalWithFlagAliases verifies that an
+// envelope binding marked Positional + Alias + Aliases registers visible
+// primary + hidden alias flags AND still accepts the value as a positional
+// arg. Mirrors the dws devdoc article search shape:
+//   { keyword: { alias: "query", aliases: ["keyword"], positional: true } }
+func TestBuildDynamicCommands_PositionalWithFlagAliases(t *testing.T) {
+	t.Parallel()
+
+	build := func() (*cobra.Command, *captureRunner) {
+		captured := &captureRunner{}
+		servers := []market.ServerDescriptor{
+			{
+				Endpoint: "https://endpoint-devdoc",
+				CLI: market.CLIOverlay{
+					ID:      "devdoc",
+					Command: "devdoc",
+					Groups: map[string]market.CLIGroupDef{
+						"article": {Description: "文档文章"},
+					},
+					ToolOverrides: map[string]market.CLIToolOverride{
+						"search_open_platform_docs": {
+							CLIName: "search",
+							Group:   "article",
+							Flags: map[string]market.CLIFlagOverride{
+								"keyword": {
+									Alias:           "query",
+									Aliases:         []string{"keyword"},
+									Required:        true,
+									Positional:      true,
+									PositionalIndex: 0,
+									Description:     "搜索关键词 (必填)",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		cmds := BuildDynamicCommands(servers, captured, nil)
+		article := findChild(cmds[0], "article")
+		if article == nil {
+			t.Fatal("article group not found")
+		}
+		search := findChild(article, "search")
+		if search == nil {
+			t.Fatal("search leaf not found")
+		}
+		return search, captured
+	}
+
+	t.Run("flag registration: visible query + hidden keyword", func(t *testing.T) {
+		t.Parallel()
+		search, _ := build()
+		queryFlag := search.Flags().Lookup("query")
+		if queryFlag == nil {
+			t.Fatal("--query flag should be registered for dual-mode positional")
+		}
+		if queryFlag.Hidden {
+			t.Fatal("--query flag should be visible (not hidden)")
+		}
+		keywordFlag := search.Flags().Lookup("keyword")
+		if keywordFlag == nil {
+			t.Fatal("--keyword hidden alias flag should be registered")
+		}
+		if !keywordFlag.Hidden {
+			t.Fatal("--keyword alias flag should be hidden")
+		}
+	})
+
+	t.Run("invocation via positional", func(t *testing.T) {
+		t.Parallel()
+		search, captured := build()
+		if err := search.RunE(search, []string{"MCP"}); err != nil {
+			t.Fatalf("RunE positional: %v", err)
+		}
+		if captured.lastParams["keyword"] != "MCP" {
+			t.Fatalf("positional: keyword = %v, want MCP", captured.lastParams["keyword"])
+		}
+	})
+
+	t.Run("invocation via --query primary flag", func(t *testing.T) {
+		t.Parallel()
+		search, captured := build()
+		if err := search.Flags().Set("query", "MCP"); err != nil {
+			t.Fatalf("Set --query: %v", err)
+		}
+		if err := search.RunE(search, nil); err != nil {
+			t.Fatalf("RunE --query: %v", err)
+		}
+		if captured.lastParams["keyword"] != "MCP" {
+			t.Fatalf("--query: keyword = %v, want MCP", captured.lastParams["keyword"])
+		}
+	})
+
+	t.Run("invocation via --keyword hidden alias", func(t *testing.T) {
+		t.Parallel()
+		search, captured := build()
+		if err := search.Flags().Set("keyword", "MCP"); err != nil {
+			t.Fatalf("Set --keyword: %v", err)
+		}
+		if err := search.RunE(search, nil); err != nil {
+			t.Fatalf("RunE --keyword: %v", err)
+		}
+		if captured.lastParams["keyword"] != "MCP" {
+			t.Fatalf("--keyword: keyword = %v, want MCP", captured.lastParams["keyword"])
+		}
+	})
+
+	t.Run("flag wins over positional when both supplied", func(t *testing.T) {
+		t.Parallel()
+		search, captured := build()
+		if err := search.Flags().Set("query", "FROM_FLAG"); err != nil {
+			t.Fatalf("Set --query: %v", err)
+		}
+		if err := search.RunE(search, []string{"FROM_POSITIONAL"}); err != nil {
+			t.Fatalf("RunE both: %v", err)
+		}
+		if captured.lastParams["keyword"] != "FROM_FLAG" {
+			t.Fatalf("flag should win: keyword = %v, want FROM_FLAG", captured.lastParams["keyword"])
+		}
+	})
+
+	t.Run("missing input returns validation error", func(t *testing.T) {
+		t.Parallel()
+		search, _ := build()
+		err := search.RunE(search, nil)
+		if err == nil {
+			t.Fatal("expected validation error when neither flag nor positional was supplied")
+		}
+		msg := err.Error()
+		if !strings.Contains(msg, "--query") || !strings.Contains(msg, "keyword") {
+			t.Fatalf("error message %q should reference both --query and keyword", msg)
+		}
+	})
+
+	t.Run("arity allows zero args (relaxed for dual-mode)", func(t *testing.T) {
+		t.Parallel()
+		search, _ := build()
+		// Args validator should accept zero args because --query / --keyword
+		// can satisfy the requirement; the validation step in RunE catches
+		// the truly-missing case.
+		if err := search.Args(search, []string{}); err != nil {
+			t.Fatalf("Args([]) should not error for dual-mode positional: %v", err)
+		}
+		if err := search.Args(search, []string{"MCP"}); err != nil {
+			t.Fatalf("Args([MCP]) should not error: %v", err)
+		}
+		if err := search.Args(search, []string{"MCP", "extra"}); err == nil {
+			t.Fatal("Args should cap at totalMax=1, extra arg should error")
+		}
+	})
+}
+
+// TestBuildDynamicCommands_PositionalArityMixed verifies that mixing pure
+// positional (required) with dual-mode positional (with flag aliases) yields
+// a RangeArgs validator: pure positional enforces the minimum, dual-mode
+// extends the maximum.
+func TestBuildDynamicCommands_PositionalArityMixed(t *testing.T) {
+	t.Parallel()
+
+	servers := []market.ServerDescriptor{
+		{
+			Endpoint: "https://endpoint-mixed",
+			CLI: market.CLIOverlay{
+				ID:      "mixed",
+				Command: "mixed",
+				ToolOverrides: map[string]market.CLIToolOverride{
+					"do_thing": {
+						CLIName: "do",
+						Flags: map[string]market.CLIFlagOverride{
+							// pure positional, required: enforces MinimumNArgs(1)
+							"target": {
+								Positional:      true,
+								PositionalIndex: 0,
+								Required:        true,
+							},
+							// dual-mode positional at slot 1: extends totalMax to 2
+							"label": {
+								Alias:           "label",
+								Aliases:         []string{"name"},
+								Positional:      true,
+								PositionalIndex: 1,
+								Required:        true,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil)
+	leaf := findChild(cmds[0], "do")
+	if leaf == nil {
+		t.Fatal("do leaf not found")
+	}
+
+	// 0 args → arity error (pure positional 'target' missing)
+	if err := leaf.Args(leaf, []string{}); err == nil {
+		t.Fatal("Args([]) should error: pure positional 'target' is required")
+	}
+	// 1 arg → fills target, label can come from --label flag
+	if err := leaf.Args(leaf, []string{"T"}); err != nil {
+		t.Fatalf("Args([T]) should succeed: %v", err)
+	}
+	// 2 args → both positionals satisfied
+	if err := leaf.Args(leaf, []string{"T", "L"}); err != nil {
+		t.Fatalf("Args([T, L]) should succeed: %v", err)
+	}
+	// 3 args → exceeds totalMax=2
+	if err := leaf.Args(leaf, []string{"T", "L", "extra"}); err == nil {
+		t.Fatal("Args([T, L, extra]) should error: totalMax=2")
+	}
+
+	// 1 arg + --label flag should satisfy the validation step in RunE.
+	if err := leaf.Flags().Set("label", "L_FROM_FLAG"); err != nil {
+		t.Fatalf("Set --label: %v", err)
+	}
+	if err := leaf.RunE(leaf, []string{"T"}); err != nil {
+		t.Fatalf("RunE([T]) with --label flag: %v", err)
+	}
+}
+
 // TestBuildDynamicCommands_ServerOverride verifies ServerOverride routes
 // the tool invocation's CanonicalProduct to a different product.
 func TestBuildDynamicCommands_ServerOverride(t *testing.T) {

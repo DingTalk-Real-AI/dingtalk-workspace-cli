@@ -311,7 +311,10 @@ func buildFlagsFromDetailSchema(cmd *cobra.Command, schemaJSON string, flagOverr
 		prop := schema.Properties[key]
 
 		// Skip properties that are bound as positional arguments; they are
-		// collected from cobra args rather than flags.
+		// collected from cobra args rather than flags. For dual-mode positional
+		// bindings (envelope: positional + alias/aliases), ApplyBindings has
+		// already registered the alias flags, so we should not re-register
+		// them here from the MCP detail schema.
 		if ov, ok := flagOverrides[key]; ok && ov.Positional {
 			continue
 		}
@@ -520,12 +523,19 @@ func buildOverrideBindings(override market.CLIToolOverride) ([]FlagBinding, Norm
 	for _, paramName := range paramNames {
 		flagOverride := override.Flags[paramName]
 
-		// §2.2: flag name from alias, fallback to kebab-case of param name
-		flagName := strings.TrimSpace(flagOverride.Alias)
-		if flagName == "" {
+		// §2.2: flag name from alias, fallback to kebab-case of param name.
+		// For pure positional bindings (no alias declared) we deliberately
+		// leave FlagName empty so ApplyBindings / NewDirectCommand can
+		// distinguish "envelope wants flag-or-positional dual entry" from
+		// "envelope only wants positional". Auto-deriving a flag name here
+		// would otherwise leak a redundant `--<paramName>` flag and confuse
+		// the dual-mode detection.
+		explicitAlias := strings.TrimSpace(flagOverride.Alias)
+		flagName := explicitAlias
+		if flagName == "" && !flagOverride.Positional {
 			flagName = compatFlagName(paramName)
 		}
-		if flagName == "" {
+		if flagName == "" && !flagOverride.Positional {
 			flagName = paramName
 		}
 
@@ -539,7 +549,10 @@ func buildOverrideBindings(override market.CLIToolOverride) ([]FlagBinding, Norm
 		// so CLI precedence (primary > Alias > Aliases[0..n]) is deterministic.
 		var extraAliases []string
 		if len(flagOverride.Aliases) > 0 {
-			seen := map[string]bool{flagName: true, "json": true, "params": true}
+			seen := map[string]bool{"json": true, "params": true}
+			if flagName != "" {
+				seen[flagName] = true
+			}
 			extraAliases = make([]string, 0, len(flagOverride.Aliases))
 			for _, a := range flagOverride.Aliases {
 				a = strings.TrimSpace(a)
@@ -566,9 +579,13 @@ func buildOverrideBindings(override market.CLIToolOverride) ([]FlagBinding, Norm
 			Property: paramName,
 			Kind:     kindFromTypeName(flagOverride.Type),
 			Usage:    usage,
-			// §P1: required and positional are mutually exclusive — positional
-			// args are validated by cobra's MinimumNArgs, not MarkFlagRequired.
-			Required: flagOverride.Required && !flagOverride.Positional,
+			// §P1: Required is preserved for positional bindings too. For
+			// pure positional, cobra arity (MinimumNArgs) enforces presence
+			// at parse time. For dual-mode positional (positional + alias),
+			// validateRequiredPositionalBindings closes the loop in RunE
+			// after both flag and positional injection, so MarkFlagRequired
+			// is intentionally avoided.
+			Required: flagOverride.Required,
 			// §2.4: Default drives both cobra's --help "(default ...)"
 			// rendering and (since v3.2) MCP body injection when the user
 			// omits the flag. CollectBindings still gates writes by
