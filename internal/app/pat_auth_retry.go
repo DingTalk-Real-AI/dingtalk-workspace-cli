@@ -43,6 +43,8 @@ const (
 	// PatAuthPollInterval is how often we poll to check if the user has
 	// completed authorization.
 	PatAuthPollInterval = 5 * time.Second
+
+	patScopeAuthRequiredCode = "PAT_SCOPE_AUTH_REQUIRED"
 )
 
 // PatScopeError holds information about a missing PAT scope.
@@ -182,21 +184,7 @@ func PrintPatAuthError(w io.Writer, scopeErr *PatScopeError) {
 
 // PrintPatAuthJSON prints a machine-readable PAT authorization error.
 func PrintPatAuthJSON(w io.Writer, scopeErr *PatScopeError) {
-	payload := map[string]any{
-		"ok":       false,
-		"identity": scopeErr.Identity,
-		"error": map[string]any{
-			"type":    scopeErr.ErrorType,
-			"message": scopeErr.Message,
-			"hint":    scopeErr.Hint,
-		},
-	}
-	if scopeErr.MissingScope != "" {
-		payload["missing_scope"] = scopeErr.MissingScope
-	}
-
-	data, _ := json.MarshalIndent(payload, "", "  ")
-	fmt.Fprintln(w, string(data))
+	fmt.Fprintln(w, buildPATScopeHostJSON(scopeErr))
 }
 
 // WaitForPatAuthorization polls until the user completes authorization or timeout.
@@ -258,6 +246,16 @@ func WaitForPatAuthorization(ctx context.Context, configDir string, output io.Wr
 // retryWithPatAuthRetry wraps an invocation that failed with a PAT scope error.
 // It waits for the user to complete authorization and then retries the invocation.
 func retryWithPatAuthRetry(ctx context.Context, runner executor.Runner, invocation executor.Invocation, scopeErr *PatScopeError, configDir string, output io.Writer) (executor.Result, error) {
+	hostOwnedPAT := authpkg.HostOwnsPATFlow()
+	slog.Debug("pat.host_owned_decision",
+		"site", "retryWithPatAuthRetry",
+		"hostOwned", hostOwnedPAT,
+		"agentCodeEnvSet", os.Getenv(authpkg.AgentCodeEnv) != "",
+	)
+	if hostOwnedPAT {
+		return executor.Result{}, &apperrors.PATError{RawJSON: buildPATScopeHostJSON(scopeErr)}
+	}
+
 	// Print the PAT error in human-readable format
 	PrintPatAuthError(output, scopeErr)
 
@@ -359,9 +357,16 @@ func handlePatAuthCheck(
 		"flowId", patData.Data.FlowID,
 		"hasSecret", patData.Data.ClientSecret != "",
 	)
+	hostOwnedPAT := authpkg.HostOwnsPATFlow()
+	slog.Debug("pat.host_owned_decision",
+		"site", "handlePatAuthCheck",
+		"hostOwned", hostOwnedPAT,
+		"agentCodeEnvSet", os.Getenv(authpkg.AgentCodeEnv) != "",
+	)
 
 	// Inject clientId/clientSecret from PAT response as runtime credentials
 	// so that subsequent device flow auth uses the server-assigned app identity.
+	var appCfg *authpkg.AppConfig
 	if patData.Data.ClientID != "" {
 		if patData.Data.ClientSecret != "" {
 			// When both clientId and clientSecret are provided, use direct mode
@@ -377,16 +382,33 @@ func handlePatAuthCheck(
 		// Persist clientId (and optionally secret) to ~/.dws/app.json so that
 		// future process invocations can load it at startup and populate
 		// DWS_CLIENT_ID env before the first MCP request.
-		appCfg := &authpkg.AppConfig{
+		appCfg = &authpkg.AppConfig{
 			ClientID: patData.Data.ClientID,
 		}
 		if patData.Data.ClientSecret != "" {
 			appCfg.ClientSecret = authpkg.PlainSecret(patData.Data.ClientSecret)
 		}
+	}
+
+	if appCfg != nil {
 		if err := authpkg.SaveAppConfig(configDir, appCfg); err != nil {
 			slog.Warn("failed to persist app config from PAT", "error", err)
-			fmt.Fprintf(output, "  \u26a0 保存应用配置失败: %v (下次启动可能需要重新授权)\n", err)
+			if !hostOwnedPAT && patData.Data.FlowID != "" {
+				fmt.Fprintf(output, "  \u26a0 保存应用配置失败: %v (下次启动可能需要重新授权)\n", err)
+			}
 		}
+	}
+
+	// In host-controlled PAT mode (driven solely by DINGTALK_DWS_AGENTCODE),
+	// or when flowId is absent, the CLI returns machine-readable JSON to
+	// stderr and leaves UI/polling/retry to the host. `claw-type` is NOT
+	// used for this decision — it is only forwarded on the wire via
+	// edition.MergeHeaders and surfaced in hostControl for traceability.
+	if hostOwnedPAT || patData.Data.FlowID == "" {
+		if hostOwnedPAT {
+			return executor.Result{}, &apperrors.PATError{RawJSON: enrichPATErrorForHostControl(patErr.RawJSON, patData.Data.FlowID)}
+		}
+		return executor.Result{}, patErr
 	}
 
 	bold := color.New(color.Bold).SprintFunc()
@@ -405,12 +427,6 @@ func handlePatAuthCheck(
 		fmt.Fprintf(output, "  %s %s\n\n", dim("🔗"), cyan(patData.Data.URI))
 		// Best-effort browser open.
 		_ = tryOpenBrowser(patData.Data.URI)
-	}
-
-	// If no flowId, we can't poll — fall back to returning PATError for host-app.
-	if patData.Data.FlowID == "" {
-		fmt.Fprintln(output)
-		return executor.Result{}, patErr
 	}
 
 	// Poll the device flow status until user authorizes, rejects, or timeout.
@@ -494,6 +510,78 @@ func handlePatAuthCheck(
 		fmt.Fprintf(output, "%s 未知授权状态: %s\n", redFn("✗"), status)
 		return executor.Result{}, patErr
 	}
+}
+
+func enrichPATErrorForHostControl(raw string, flowID string) string {
+	if strings.TrimSpace(raw) == "" {
+		return raw
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return raw
+	}
+
+	data, _ := payload["data"].(map[string]any)
+	if data == nil {
+		data = make(map[string]any)
+		payload["data"] = data
+	}
+	data["hostControl"] = buildHostControlState()
+	delete(data, "callbacks")
+
+	// docs/pat/contract.md §2: stderr JSON is single-line.
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return raw
+	}
+	return string(encoded)
+}
+
+func buildPATScopeHostJSON(scopeErr *PatScopeError) string {
+	payload := map[string]any{
+		"success": false,
+		"code":    patScopeAuthRequiredCode,
+		"data": map[string]any{
+			"identity":     scopeErr.Identity,
+			"errorType":    scopeErr.ErrorType,
+			"message":      scopeErr.Message,
+			"hint":         scopeErr.Hint,
+			"missingScope": scopeErr.MissingScope,
+			"hostControl":  buildHostControlState(),
+		},
+	}
+	// docs/pat/contract.md §2: stderr JSON is single-line.
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return `{"success":false,"code":"PAT_SCOPE_AUTH_REQUIRED"}`
+	}
+	return string(b)
+}
+
+// buildHostControlState returns the host-control block used by the active
+// retry / scope-auth paths. Core fields come from apperrors.HostControlBlock
+// so the classifier-side injection and this call-site agree byte-for-byte;
+// callbackOwner is a legacy key preserved for backwards compatibility with
+// existing hosts and is layered on top here.
+//
+// NOTE: this function is only called from host-owned paths (caller has
+// already confirmed HostOwnsPATFlow()), so HostControlBlock() is expected
+// to be non-nil. The defensive fallback below reuses the same provider
+// the classifier wires in init() to avoid drift.
+func buildHostControlState() map[string]any {
+	block := apperrors.HostControlBlock()
+	if block == nil {
+		claw := hostControlProviderFromEnv()
+		block = map[string]any{
+			"clawType":     claw,
+			"mode":         "host",
+			"pollingOwner": "host",
+			"retryOwner":   "host",
+		}
+	}
+	block["callbackOwner"] = "host"
+	return block
 }
 
 // pollPatDeviceFlow polls the PAT device flow status endpoint until a terminal

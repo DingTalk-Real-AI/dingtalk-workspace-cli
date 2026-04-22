@@ -59,7 +59,7 @@ func init() {
 	configmeta.Register(configmeta.ConfigItem{
 		Name:        "DINGTALK_AGENT",
 		Category:    configmeta.CategoryExternal,
-		Description: "MCP 请求 x-dingtalk-agent 头",
+		Description: "业务 Agent 名称；仅用于 x-dingtalk-agent 请求头，与 claw-type/host-owned PAT 判定无关",
 	})
 	configmeta.Register(configmeta.ConfigItem{
 		Name:        "DINGTALK_TRACE_ID",
@@ -88,10 +88,29 @@ const (
 	envDingtalkTraceID   = "DINGTALK_TRACE_ID"
 	envDingtalkSessionID = "DINGTALK_SESSION_ID"
 	envDingtalkMessageID = "DINGTALK_MESSAGE_ID"
-
-	// Environment variables for third-party channel integration
-	envDWSChannel = "DWS_CHANNEL"
 )
+
+// hostOwnedPATDecisionOnce ensures the host-owned PAT decision is logged at
+// most once per CLI process. The log line is emitted at Debug level so
+// `--debug` (or `--verbose`) surfaces it on stderr; the file logger at
+// ~/.dws/logs/dws.log captures it unconditionally at DEBUG. It records
+// ONLY the derived booleans — never the env value, token, client-id or
+// flow-id — so logs remain safe to attach to issues.
+// See docs/pat/host-integration.md §10.
+var hostOwnedPATDecisionOnce sync.Once
+
+// logHostOwnedPATDecisionOnce emits the single-shot debug trace. It is
+// called lazily from the runtime Run path (which executes AFTER
+// PersistentPreRunE has applied --debug / --verbose via configureLogLevel)
+// so the line actually surfaces when the user asks for it.
+func logHostOwnedPATDecisionOnce() {
+	hostOwnedPATDecisionOnce.Do(func() {
+		slog.Debug("runtime.host_owned_pat",
+			"hostOwned", authpkg.HostOwnsPATFlow(),
+			"agentCodeEnvPresent", os.Getenv(authpkg.AgentCodeEnv) != "",
+		)
+	})
+}
 
 func newCommandRunnerWithFlags(loader cli.CatalogLoader, flags *GlobalFlags) executor.Runner {
 	// Ensure DWS_CLIENT_ID env is populated from persisted config before
@@ -132,6 +151,12 @@ type runtimeRunner struct {
 }
 
 func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation) (executor.Result, error) {
+	// Emit the one-shot host-owned PAT decision log. Placed here (not in
+	// the constructor) so it fires AFTER PersistentPreRunE has configured
+	// slog level per --debug / --verbose. The Once guard makes repeat
+	// invocations within the same process free.
+	logHostOwnedPATDecisionOnce()
+
 	if r.loader == nil || r.transport == nil {
 		return r.fallback.Run(ctx, invocation)
 	}
@@ -579,6 +604,11 @@ func resolveIdentityHeaders() map[string]string {
 	}
 
 	// Inject environment variable based headers for MCP gateway tracking.
+	// DINGTALK_AGENT, if set by the caller, is forwarded verbatim as the
+	// x-dingtalk-agent header. It does NOT influence claw-type (which the
+	// open-source edition pins to edition.DefaultOSSClawType via the
+	// MergeHeaders hook below) and it does NOT influence the host-owned
+	// PAT decision (driven solely by DINGTALK_DWS_AGENTCODE).
 	envHeaders := map[string]string{
 		"x-dingtalk-agent":      os.Getenv(envDingtalkAgent),
 		"x-dingtalk-trace-id":   os.Getenv(envDingtalkTraceID),
@@ -591,8 +621,9 @@ func resolveIdentityHeaders() map[string]string {
 		}
 	}
 
-	// Inject third-party channel headers
-	if v := os.Getenv(envDWSChannel); v != "" {
+	// Inject third-party channel headers. DWS_CHANNEL is forwarded as the
+	// upstream channelCode.
+	if v := authpkg.CurrentChannelCode(); v != "" {
 		headers["x-dws-channel"] = v
 	}
 

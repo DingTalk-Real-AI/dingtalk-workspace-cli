@@ -214,7 +214,8 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 		_, _ = fmt.Fprintln(p.output(), "")
 		return nil, fmt.Errorf("%s: %w", i18n.T("检查 CLI 授权状态失败"), authErr)
 	}
-	denialReason := classifyDenialReason(authStatus, os.Getenv("DWS_CHANNEL"))
+	currentChannel := CurrentChannelCode()
+	denialReason := classifyDenialReason(authStatus, currentChannel)
 	if denialReason != "" {
 		_, _ = fmt.Fprintln(p.output(), "")
 		switch denialReason {
@@ -228,7 +229,7 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 			_, _ = fmt.Fprintln(p.output(), "")
 			return nil, errors.New(i18n.T("您不在该组织的 CLI 授权人员范围内，请联系组织管理员"))
 		case "channel_not_allowed":
-			ch := os.Getenv("DWS_CHANNEL")
+			ch := currentChannel
 			_, _ = fmt.Fprintf(p.output(), dfRed(i18n.T("⚠️  当前渠道 %s 未获得该组织授权"))+"\n", ch)
 			_, _ = fmt.Fprintln(p.output(), i18n.T("   请联系组织管理员开通该渠道的访问权限。"))
 			_, _ = fmt.Fprintln(p.output(), "")

@@ -1,0 +1,239 @@
+// Copyright 2026 Alibaba Group
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package pat
+
+import (
+	"context"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
+)
+
+// fakeToolCaller captures the toolArgs passed to CallTool so tests can
+// assert how the two-tier --agentCode / DINGTALK_DWS_AGENTCODE / error
+// resolver feeds into the outgoing MCP argv.
+type fakeToolCaller struct {
+	mu       sync.Mutex
+	dryRun   bool
+	gotTool  string
+	gotArgs  map[string]any
+	callN    int
+	resultOK bool
+}
+
+func (f *fakeToolCaller) CallTool(_ context.Context, _ string, toolName string, args map[string]any) (*edition.ToolResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.callN++
+	f.gotTool = toolName
+	// defensive copy — RunE / runApply may mutate the map after return
+	f.gotArgs = make(map[string]any, len(args))
+	for k, v := range args {
+		f.gotArgs[k] = v
+	}
+	// Empty success payload keeps handleToolResult / emitApplyResult happy
+	// without triggering PAT classification in errors.ClassifyMCPResponseText.
+	if f.resultOK {
+		return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{"success":true,"data":{}}`}}}, nil
+	}
+	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{"success":true,"data":{"authRequestId":"req-ok"}}`}}}, nil
+}
+
+func (f *fakeToolCaller) Format() string { return "json" }
+func (f *fakeToolCaller) DryRun() bool   { return f.dryRun }
+
+// buildChmod returns a freshly constructed chmod cobra.Command wired to
+// fake. Using the factory (instead of a package-level var) keeps every
+// subtest hermetic and matches the upstream shared-state fix in PR #129.
+func buildChmod(t *testing.T, fake *fakeToolCaller) *cobra.Command {
+	t.Helper()
+	return newChmodCommand(fake)
+}
+
+// installFakeCaller swaps the package-level caller used by the still-
+// package-scoped apply / status / scopes subcommands with fake, for the
+// duration of the test. chmod now consumes its caller via the
+// newChmodCommand factory and does NOT read this variable.
+//
+// TODO(pat-caller-factory): retire along with the package-level caller
+// once apply / status / scopes migrate to factories too.
+func installFakeCaller(t *testing.T, fake *fakeToolCaller) {
+	t.Helper()
+	prev := caller
+	caller = fake
+	t.Cleanup(func() { caller = prev })
+}
+
+// ---------------------------------------------------------------------------
+// T1 · Agent-code env fallback tests
+// ---------------------------------------------------------------------------
+
+// TestChmod_agentCode_env_fallback verifies that when --agentCode is
+// omitted but DINGTALK_DWS_AGENTCODE is exported, the resolver picks
+// the env value up and forwards it verbatim in the MCP argv.
+func TestChmod_agentCode_env_fallback(t *testing.T) {
+	t.Setenv(agentCodeEnv, "qoderwork")
+
+	fake := &fakeToolCaller{resultOK: true}
+	cmd := buildChmod(t, fake)
+
+	// grant-type=once → no session-id needed; keeps the test hermetic.
+	_ = cmd.Flags().Set("grant-type", "once")
+	if err := cmd.RunE(cmd, []string{"aitable.record:read"}); err != nil {
+		t.Fatalf("chmod RunE error = %v (must not report flag missing)", err)
+	}
+
+	if got := fake.gotArgs["agentCode"]; got != "qoderwork" {
+		t.Fatalf("agentCode in argv = %v, want %q (env fallback)", got, "qoderwork")
+	}
+}
+
+// TestChmod_agentCode_env_invalid verifies that a malformed
+// DINGTALK_DWS_AGENTCODE value (whitespace, shell metacharacters) is
+// rejected by the regex gate in validateAgentCode before any MCP call
+// is attempted.
+func TestChmod_agentCode_env_invalid(t *testing.T) {
+	t.Setenv(agentCodeEnv, "bad value with space!")
+
+	fake := &fakeToolCaller{resultOK: true}
+	cmd := buildChmod(t, fake)
+	_ = cmd.Flags().Set("grant-type", "once")
+
+	err := cmd.RunE(cmd, []string{"aitable.record:read"})
+	if err == nil {
+		t.Fatalf("expected validateAgentCode error, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid agentCode") {
+		t.Fatalf("error = %q, want to mention 'invalid agentCode'", err.Error())
+	}
+	if !strings.Contains(err.Error(), agentCodeEnv) {
+		t.Fatalf("error = %q, want to attribute to %s env", err.Error(), agentCodeEnv)
+	}
+	if fake.callN != 0 {
+		t.Fatalf("CallTool was invoked %d times; validator must short-circuit before MCP", fake.callN)
+	}
+}
+
+// TestChmod_agentCode_flag_wins_over_env verifies the Priority-1 contract
+// of docs/pat/contract.md §9: when both the flag and the env are set, the
+// flag wins and env is silently ignored (no warning needed because the
+// flag is the explicit, scripted intent).
+func TestChmod_agentCode_flag_wins_over_env(t *testing.T) {
+	t.Setenv(agentCodeEnv, "envval")
+
+	fake := &fakeToolCaller{resultOK: true}
+	cmd := buildChmod(t, fake)
+
+	_ = cmd.Flags().Set("grant-type", "once")
+	_ = cmd.Flags().Set("agentCode", "flagval")
+
+	if err := cmd.RunE(cmd, []string{"aitable.record:read"}); err != nil {
+		t.Fatalf("chmod RunE error = %v", err)
+	}
+	if got := fake.gotArgs["agentCode"]; got != "flagval" {
+		t.Fatalf("agentCode in argv = %v, want %q (flag must win over env)", got, "flagval")
+	}
+}
+
+// TestChmod_agentCode_legacy_env_not_recognized is a reverse-guard: after
+// the SSOT hard-removal of the DWS_AGENTCODE alias, exporting only the
+// legacy env MUST NOT satisfy the --agentCode requirement. The command
+// is expected to fail with an error that explicitly names the canonical
+// DINGTALK_DWS_AGENTCODE env, and MUST NOT mention DWS_AGENTCODE as a
+// usable fallback. No MCP call is permitted.
+func TestChmod_agentCode_legacy_env_not_recognized(t *testing.T) {
+	t.Setenv(agentCodeEnv, "")
+	t.Setenv("DWS_AGENTCODE", "legacyval")
+
+	fake := &fakeToolCaller{resultOK: true}
+	cmd := buildChmod(t, fake)
+	_ = cmd.Flags().Set("grant-type", "once")
+
+	err := cmd.RunE(cmd, []string{"aitable.record:read"})
+	if err == nil {
+		t.Fatalf("expected hard error when only legacy DWS_AGENTCODE is set, got nil")
+	}
+	if !strings.Contains(err.Error(), "DINGTALK_DWS_AGENTCODE") {
+		t.Fatalf("error = %q, want to name canonical DINGTALK_DWS_AGENTCODE env", err.Error())
+	}
+	// Defensive: the canonical env naturally contains the substring
+	// "DWS_AGENTCODE" as part of "DINGTALK_DWS_AGENTCODE"; the above
+	// assertion plus the absence check below precisely guard against
+	// advertising the legacy alias as usable.
+	hint := strings.ReplaceAll(err.Error(), "DINGTALK_DWS_AGENTCODE", "")
+	if strings.Contains(hint, "DWS_AGENTCODE") {
+		t.Fatalf("error = %q must not advertise DWS_AGENTCODE as usable", err.Error())
+	}
+	if fake.callN != 0 {
+		t.Fatalf("CallTool was invoked %d times; legacy env must not satisfy --agentCode", fake.callN)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// validateAgentCode / resolveAgentCodeFromEnv unit tests
+// ---------------------------------------------------------------------------
+
+func TestValidateAgentCode(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		in      string
+		wantErr bool
+	}{
+		{"qoderwork", false},
+		{"agt-abc123", false},
+		{"Agt_Xyz-09", false},
+		{"abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789", false}, // 64 chars
+		{"", true},
+		{"bad value", true},
+		{"bad!chars", true},
+		{"中文不行", true},
+		{"abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789X", true}, // 65
+	}
+	for _, tc := range cases {
+		err := validateAgentCode(tc.in)
+		if (err != nil) != tc.wantErr {
+			t.Errorf("validateAgentCode(%q) err=%v, wantErr=%v", tc.in, err, tc.wantErr)
+		}
+	}
+}
+
+func TestResolveAgentCodeFromEnv(t *testing.T) {
+	// Not parallel: mutates process env.
+
+	// DINGTALK_DWS_AGENTCODE is honoured and trimmed.
+	t.Setenv(agentCodeEnv, "  qoderwork  ")
+	if code, src := resolveAgentCodeFromEnv(); code != "qoderwork" || src != agentCodeEnv {
+		t.Errorf("resolveAgentCodeFromEnv() = (%q, %q), want (%q, %q)",
+			code, src, "qoderwork", agentCodeEnv)
+	}
+
+	// Empty primary → ("", "").
+	t.Setenv(agentCodeEnv, "")
+	if code, src := resolveAgentCodeFromEnv(); code != "" || src != "" {
+		t.Errorf("resolveAgentCodeFromEnv() = (%q, %q), want empty", code, src)
+	}
+
+	// Reverse-guard: legacy DWS_AGENTCODE MUST NOT be picked up when the
+	// canonical env is unset — it was hard-removed as a legacy alias.
+	t.Setenv(agentCodeEnv, "")
+	t.Setenv("DWS_AGENTCODE", "legacy")
+	if code, src := resolveAgentCodeFromEnv(); code != "" || src != "" {
+		t.Errorf("resolveAgentCodeFromEnv() = (%q, %q), want empty — legacy DWS_AGENTCODE must be ignored",
+			code, src)
+	}
+}
