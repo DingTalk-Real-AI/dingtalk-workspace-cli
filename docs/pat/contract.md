@@ -116,6 +116,7 @@ Host MUST treat unknown selectors that start with `PAT_` as a generic PAT event 
           "type": "object",
           "properties": {
             "clawType":      { "type": "string" },
+            "callbackOwner": { "const": "host" },
             "mode":          { "const": "host" },
             "pollingOwner":  { "const": "host" },
             "retryOwner":    { "const": "host" }
@@ -206,6 +207,7 @@ CLI normalizes any of the following legacy shapes to the canonical single-string
 {
   "hostControl": {
     "clawType": "<effective claw-type header value>",
+    "callbackOwner": "host",
     "mode": "host",
     "pollingOwner": "host",
     "retryOwner": "host"
@@ -214,12 +216,17 @@ CLI normalizes any of the following legacy shapes to the canonical single-string
 ```
 
 - `clawType`：与 CLI 实际发送的请求头 `claw-type` 同值（见 §7b 身份头）；开源构建中该值被 `pkg/edition/default.go` 的 `MergeHeaders` 钩子**硬编码**为 `edition.DefaultOSSClawType`（字面量 `openClaw`），与 `DINGTALK_AGENT` 或任何宿主环境变量**无关**。宿主**不**需要自己计算；下游 edition 若覆盖了 `MergeHeaders`，其返回的 `claw-type` 取值会同步反映在本字段上。
+- `callbackOwner`：历史兼容字段。取值为 `host` 时，表示回执/回调链路也由宿主托管；新宿主可只依赖 `mode` / `pollingOwner` / `retryOwner`，但必须容忍该字段持续存在。
 - `mode`/`pollingOwner`/`retryOwner`：当取值均为 `host` 时，CLI 已放弃 UI / 轮询 / 重试所有权，完全交给宿主。
 ### 5.2 注入点（CLI 实现约束）/ Injection invariant (CLI invariant)
 
 **Invariant**：`data.hostControl` 由 CLI 在 `cleanPATJSON` / classifier 层**统一注入**——**当且仅当** 进程启动时设置了 `DINGTALK_DWS_AGENTCODE`（即 host-owned PAT，见 §7）——不论 PAT 是在主动 retry 路径还是被动 classify 路径上被识别。宿主必须能无条件读到该字段。
 
 **Invariant**: CLI MUST inject `data.hostControl` inside the PAT classifier layer (single code path) **iff** the spawn-time `DINGTALK_DWS_AGENTCODE` is non-empty (i.e. host-owned PAT, see §7), regardless of whether the PAT error was surfaced via the active retry path or the passive classification path. Hosts MUST be able to read it unconditionally.
+
+在 host-owned 模式下，CLI 也必须在同一归一化步骤里移除 `data.callbacks` 这类 CLI-owned callback argv 元数据；宿主不应再看到 `"pat","callback"` 之类命令提示。
+
+In host-owned mode, the same normalization step MUST also remove CLI-owned callback argv metadata such as `data.callbacks`; hosts must not see `"pat","callback"` command hints in the final stderr JSON.
 
 > 历史实现曾出现两条路径不对称；本契约要求收敛到单一注入点。
 ---

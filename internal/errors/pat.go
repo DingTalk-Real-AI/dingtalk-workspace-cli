@@ -44,12 +44,12 @@ func SetHostControlProvider(fn func() string) {
 }
 
 // HostControlBlock returns the canonical hostControl map documented in
-// docs/pat/contract.md §5.2 when the CLI is operating in host-owned mode,
+// docs/pat/contract.md §5 when the CLI is operating in host-owned mode,
 // or nil when it is not. The returned map is safe for the caller to mutate
 // because a new map is constructed on each call.
 //
-// Callers that need to include additional legacy keys (e.g. callbackOwner)
-// should layer them on top of the returned map.
+// callbackOwner is kept as a legacy compatibility key for hosts that adopted
+// it before the contract converged on the hostControl single injection point.
 func HostControlBlock() map[string]any {
 	hostControlMu.RLock()
 	provider := hostControlProvider
@@ -62,10 +62,11 @@ func HostControlBlock() map[string]any {
 		return nil
 	}
 	return map[string]any{
-		"clawType":     claw,
-		"mode":         "host",
-		"pollingOwner": "host",
-		"retryOwner":   "host",
+		"clawType":      claw,
+		"callbackOwner": "host",
+		"mode":          "host",
+		"pollingOwner":  "host",
+		"retryOwner":    "host",
 	}
 }
 
@@ -147,9 +148,9 @@ var dwsGatewayErrors = map[string]bool{
 }
 
 // getDWSGatewayErrorCode extracts a DWS gateway error code from errBody
-// (supports both errorCode and error_code field names).
+// (supports code, errorCode, and error_code field names).
 func getDWSGatewayErrorCode(errBody map[string]any) (string, bool) {
-	for _, key := range []string{"errorCode", "error_code"} {
+	for _, key := range []string{"code", "errorCode", "error_code"} {
 		if code, ok := errBody[key].(string); ok && dwsGatewayErrors[code] {
 			return code, true
 		}
@@ -159,7 +160,11 @@ func getDWSGatewayErrorCode(errBody map[string]any) (string, bool) {
 
 // isNotLoggedInError checks if the error body indicates missing authentication.
 func isNotLoggedInError(body map[string]any) bool {
-	if errMsg, ok := body["error"].(string); ok {
+	for _, key := range []string{"error", "message", "errorMsg"} {
+		errMsg, ok := body[key].(string)
+		if !ok {
+			continue
+		}
 		if strings.Contains(errMsg, "Missing service_id or access_key") {
 			return true
 		}
@@ -303,13 +308,17 @@ func cleanPATJSON(body map[string]any, code string) string {
 	}
 
 	// docs/pat/contract.md §5.2 invariant: CLI injects data.hostControl at a
-	// single point (here) whenever it is operating in host-owned mode. When
-	// no provider is wired or it returns empty, we deliberately omit the
-	// field so defaults remain CLI-owned.
+	// single point (here) whenever it is operating in host-owned mode. The
+	// same normalization also strips legacy CLI-owned callback argv metadata
+	// so passive classifier and active retry paths stay byte-for-byte aligned.
 	if block := HostControlBlock(); block != nil {
-		if data, ok := out["data"].(map[string]any); ok {
-			data["hostControl"] = block
+		data, ok := out["data"].(map[string]any)
+		if !ok || data == nil {
+			data = map[string]any{}
+			out["data"] = data
 		}
+		delete(data, "callbacks")
+		data["hostControl"] = block
 	}
 
 	// docs/pat/contract.md §2: stderr JSON MUST be a single-line, directly json.Unmarshal-able

@@ -505,6 +505,7 @@ func makePATErrorJSON(flowID, clientID string) string {
 }
 
 func TestHandlePatAuthCheck_Approved(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "")
 	server, configDir := setupHandlePATServer(t, "APPROVED", "test-auth-code")
 	defer server.Close()
 
@@ -544,6 +545,7 @@ func TestHandlePatAuthCheck_Approved(t *testing.T) {
 }
 
 func TestHandlePatAuthCheck_Rejected(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "")
 	server, configDir := setupHandlePATServer(t, "REJECTED", "")
 	defer server.Close()
 
@@ -623,6 +625,9 @@ func TestHandlePatAuthCheck_HostControlledFlowIDPassthrough(t *testing.T) {
 	if got, _ := hostControl["clawType"].(string); got != "openClaw" {
 		t.Fatalf("hostControl.clawType = %q, want openClaw (hard-wired by open-source edition)", got)
 	}
+	if got, _ := hostControl["callbackOwner"].(string); got != "host" {
+		t.Fatalf("hostControl.callbackOwner = %q, want host", got)
+	}
 	if _, ok := data["callbacks"]; ok {
 		t.Fatalf("unexpected callbacks contract in host-controlled PAT payload: %#v", data["callbacks"])
 	}
@@ -672,6 +677,10 @@ func TestHandlePatAuthCheck_HostControlledEmptyFlowID_StillReturnsContract(t *te
 		t.Fatalf("json.Unmarshal(host PAT payload) error = %v\nraw=%s", err, patOut.RawJSON)
 	}
 	data, _ := payload["data"].(map[string]any)
+	hostControl, _ := data["hostControl"].(map[string]any)
+	if got, _ := hostControl["callbackOwner"].(string); got != "host" {
+		t.Fatalf("hostControl.callbackOwner = %q, want host", got)
+	}
 	if _, ok := data["callbacks"]; ok {
 		t.Fatalf("unexpected callbacks contract when flowId is absent: %#v", data["callbacks"])
 	}
@@ -684,6 +693,7 @@ func TestHandlePatAuthCheck_HostControlledEmptyFlowID_StillReturnsContract(t *te
 }
 
 func TestHandlePatAuthCheck_EmptyFlowID_FallsBackToPATError(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "")
 	// No poll server needed — empty flowId means no polling, return PATError directly.
 	tmpDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", tmpDir)
@@ -726,8 +736,8 @@ func TestEnrichPATErrorForHostControl_SingleLineOutput(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "agt-sales")
 	t.Setenv("DINGTALK_AGENT", "sales-copilot")
 
-	raw := `{"success":false,"code":"PAT_LOW_RISK_NO_PERMISSION","data":{"flowId":"flow-1","desc":"授权"}}`
-	out := enrichPATErrorForHostControl(raw, "flow-1")
+	raw := `{"success":false,"code":"PAT_LOW_RISK_NO_PERMISSION","data":{"flowId":"flow-1","desc":"授权","callbacks":["cb1","cb2"]}}`
+	out := enrichPATErrorForHostControl(raw)
 
 	if strings.Contains(out, "\n") {
 		t.Fatalf("enrichPATErrorForHostControl output must be single-line, got embedded newline:\n%s", out)
@@ -740,8 +750,15 @@ func TestEnrichPATErrorForHostControl_SingleLineOutput(t *testing.T) {
 		t.Fatalf("single-line output must round-trip via json.Unmarshal: %v\nraw=%s", err, out)
 	}
 	data, _ := parsed["data"].(map[string]any)
-	if _, ok := data["hostControl"]; !ok {
+	hostControl, _ := data["hostControl"].(map[string]any)
+	if hostControl == nil {
 		t.Fatalf("expected data.hostControl injection, got: %s", out)
+	}
+	if got, _ := hostControl["callbackOwner"].(string); got != "host" {
+		t.Fatalf("hostControl.callbackOwner = %q, want host", got)
+	}
+	if _, ok := data["callbacks"]; ok {
+		t.Fatalf("expected callbacks to be stripped in host-owned contract, got: %v", data["callbacks"])
 	}
 }
 
@@ -818,6 +835,10 @@ func TestRetryWithPatAuthRetry_HostControlledReturnsJSON(t *testing.T) {
 	data, _ := payload["data"].(map[string]any)
 	if got, _ := data["missingScope"].(string); got != "mail:send" {
 		t.Fatalf("missingScope = %q, want mail:send", got)
+	}
+	hostControl, _ := data["hostControl"].(map[string]any)
+	if got, _ := hostControl["callbackOwner"].(string); got != "host" {
+		t.Fatalf("hostControl.callbackOwner = %q, want host", got)
 	}
 	if _, ok := data["callbacks"]; ok {
 		t.Fatalf("unexpected callbacks contract in PAT scope host payload: %#v", data["callbacks"])

@@ -385,7 +385,7 @@ func handlePatAuthCheck(
 	// edition.MergeHeaders and surfaced in hostControl for traceability.
 	if hostOwnedPAT || patData.Data.FlowID == "" {
 		if hostOwnedPAT {
-			return executor.Result{}, &apperrors.PATError{RawJSON: enrichPATErrorForHostControl(patErr.RawJSON, patData.Data.FlowID)}
+			return executor.Result{}, &apperrors.PATError{RawJSON: enrichPATErrorForHostControl(patErr.RawJSON)}
 		}
 		return executor.Result{}, patErr
 	}
@@ -491,7 +491,7 @@ func handlePatAuthCheck(
 	}
 }
 
-func enrichPATErrorForHostControl(raw string, flowID string) string {
+func enrichPATErrorForHostControl(raw string) string {
 	if strings.TrimSpace(raw) == "" {
 		return raw
 	}
@@ -501,13 +501,18 @@ func enrichPATErrorForHostControl(raw string, flowID string) string {
 		return raw
 	}
 
+	// Route back through the classifier so host-owned active retry emits the
+	// exact same PAT JSON shape as passive classification.
+	if patErr := apperrors.ClassifyPatAuthCheck(payload); patErr != nil {
+		return patErr.RawJSON
+	}
+
 	data, _ := payload["data"].(map[string]any)
 	if data == nil {
 		data = make(map[string]any)
 		payload["data"] = data
 	}
 	data["hostControl"] = buildHostControlState()
-	delete(data, "callbacks")
 
 	// docs/pat/contract.md §2: stderr JSON is single-line.
 	encoded, err := json.Marshal(payload)
@@ -539,10 +544,8 @@ func buildPATScopeHostJSON(scopeErr *PatScopeError) string {
 }
 
 // buildHostControlState returns the host-control block used by the active
-// retry / scope-auth paths. Core fields come from apperrors.HostControlBlock
-// so the classifier-side injection and this call-site agree byte-for-byte;
-// callbackOwner is a legacy key preserved for backwards compatibility with
-// existing hosts and is layered on top here.
+// retry / scope-auth paths. Fields come from apperrors.HostControlBlock so
+// the classifier-side injection and this call-site agree byte-for-byte.
 //
 // NOTE: this function is only called from host-owned paths (caller has
 // already confirmed HostOwnsPATFlow()), so HostControlBlock() is expected
@@ -553,13 +556,13 @@ func buildHostControlState() map[string]any {
 	if block == nil {
 		claw := hostControlProviderFromEnv()
 		block = map[string]any{
-			"clawType":     claw,
-			"mode":         "host",
-			"pollingOwner": "host",
-			"retryOwner":   "host",
+			"clawType":      claw,
+			"callbackOwner": "host",
+			"mode":          "host",
+			"pollingOwner":  "host",
+			"retryOwner":    "host",
 		}
 	}
-	block["callbackOwner"] = "host"
 	return block
 }
 

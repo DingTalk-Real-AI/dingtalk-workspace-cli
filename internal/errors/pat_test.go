@@ -144,8 +144,17 @@ func TestIsNotLoggedInError_False(t *testing.T) {
 func TestIsNotLoggedInError_NoErrorField(t *testing.T) {
 	t.Parallel()
 	body := map[string]any{"message": "Missing service_id or access_key"}
-	if isNotLoggedInError(body) {
-		t.Fatal("expected false when error field is absent")
+	if !isNotLoggedInError(body) {
+		t.Fatal("expected true when equivalent auth message is present in message")
+	}
+}
+
+func TestGetDWSGatewayErrorCode_CodeField(t *testing.T) {
+	t.Parallel()
+	body := map[string]any{"code": "DWS_SERVICE_UNAUTHORIZED"}
+	code, ok := getDWSGatewayErrorCode(body)
+	if !ok || code != "DWS_SERVICE_UNAUTHORIZED" {
+		t.Fatalf("getDWSGatewayErrorCode() = (%q, %t), want DWS_SERVICE_UNAUTHORIZED, true", code, ok)
 	}
 }
 
@@ -540,8 +549,9 @@ func TestCleanPATJSON_InjectsHostControlWhenClawSet(t *testing.T) {
 		"success": false,
 		"code":    "PAT_NO_PERMISSION",
 		"data": map[string]any{
-			"desc":   "需要授权",
-			"flowId": "f-1",
+			"desc":      "需要授权",
+			"flowId":    "f-1",
+			"callbacks": []any{"cb1", "cb2"},
 		},
 	}
 	raw := cleanPATJSON(body, "PAT_NO_PERMISSION")
@@ -561,8 +571,14 @@ func TestCleanPATJSON_InjectsHostControlWhenClawSet(t *testing.T) {
 	if got, _ := hc["clawType"].(string); got != "my-copilot" {
 		t.Errorf("hostControl.clawType = %q, want %q", got, "my-copilot")
 	}
+	if got, _ := hc["callbackOwner"].(string); got != "host" {
+		t.Errorf("hostControl.callbackOwner = %q, want %q", got, "host")
+	}
 	if got, _ := hc["mode"].(string); got != "host" {
 		t.Errorf("hostControl.mode = %q, want %q", got, "host")
+	}
+	if _, ok := data["callbacks"]; ok {
+		t.Fatalf("cleanPATJSON should strip callbacks in host-owned mode, got: %v", data["callbacks"])
 	}
 }
 
