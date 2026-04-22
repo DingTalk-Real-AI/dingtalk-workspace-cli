@@ -4,11 +4,6 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
-
-### Breaking
-
-- `exit code 4` is now reserved exclusively for PAT failures; discovery failures use `6`. See `docs/pat/contract.md` §1.
 ## [1.0.13] - 2026-04-22
 
 IM / Messaging capability expansion: the `chat` (aka `im`) product surface grows from "group + bot messaging" into a full conversational layer — user-identity messaging, message reading & search, personal messages, topic replies, mentions, focused contacts, unread/top/common conversations, org-wide group creation, and first-class bot lifecycle.
