@@ -14,6 +14,7 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -135,6 +136,52 @@ func TestWaitForAuthorizationSucceedsAfterPending(t *testing.T) {
 	}
 	if calls.Load() != 3 {
 		t.Fatalf("poll calls = %d, want 3", calls.Load())
+	}
+}
+
+func TestWaitForAuthorizationFallsBackToDeviceCodeWhenFlowIDMissing(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("method = %s, want POST", r.Method)
+		}
+		if err := r.ParseForm(); err != nil {
+			t.Fatalf("ParseForm() error = %v", err)
+		}
+		if got := r.FormValue("device_code"); got != "legacy-device-code" {
+			t.Fatalf("device_code = %q, want legacy-device-code", got)
+		}
+		if calls.Add(1) <= 2 {
+			writeServiceResult(w, true, DeviceTokenResponse{Error: "authorization_pending"}, "", "")
+			return
+		}
+		writeServiceResult(w, true, DeviceTokenResponse{AuthCode: "legacy-auth-code"}, "", "")
+	}))
+	defer server.Close()
+
+	provider := NewDeviceFlowProvider(t.TempDir(), newDeviceFlowTestLogger())
+	var output bytes.Buffer
+	provider.Output = &output
+	provider.SetBaseURL(server.URL)
+
+	resp, err := provider.waitForAuthorization(context.Background(), &DeviceAuthResponse{
+		DeviceCode: "legacy-device-code",
+		ExpiresIn:  10,
+		Interval:   1,
+	})
+	if err != nil {
+		t.Fatalf("waitForAuthorization() error = %v", err)
+	}
+	if resp.AuthCode != "legacy-auth-code" {
+		t.Fatalf("auth code = %q, want legacy-auth-code", resp.AuthCode)
+	}
+	if calls.Load() != 3 {
+		t.Fatalf("poll calls = %d, want 3", calls.Load())
+	}
+	if strings.Contains(output.String(), "服务端未返回 flowId") {
+		t.Fatalf("unexpected PAT-only no-flowId hint in device flow output: %q", output.String())
 	}
 }
 

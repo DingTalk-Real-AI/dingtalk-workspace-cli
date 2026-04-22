@@ -185,11 +185,6 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 	if err != nil {
 		return nil, err
 	}
-	if tokenResult == nil {
-		// FlowID was empty — no polling happened; authorization URL was already
-		// printed, so the user can handle it manually.
-		return nil, nil
-	}
 
 	_, _ = fmt.Fprintln(p.output(), "")
 	dfPrintStep(p.output(), 3, i18n.T("使用授权码换取 Access Token..."), 0)
@@ -377,15 +372,15 @@ func (p *DeviceFlowProvider) pollDeviceStatus(ctx context.Context, flowID string
 }
 
 func (p *DeviceFlowProvider) waitForAuthorization(ctx context.Context, auth *DeviceAuthResponse) (*DeviceTokenResponse, error) {
-	// No FlowID from server — cannot poll status; return immediately so the
-	// user can still see the authorization URL printed earlier and handle it
-	// manually (same pattern as pat_auth_retry.go L451).
 	if auth.FlowID == "" {
-		dfPrintDim(p.output(), i18n.T("  服务端未返回 flowId，跳过轮询，请在浏览器中手动完成授权后重试"))
-		_, _ = fmt.Fprintln(p.output(), "")
-		return nil, nil
+		// Keep the pre-flowId device-code polling path for regular device flow
+		// login responses that do not include terminal polling metadata.
+		return p.waitForAuthorizationByDeviceCode(ctx, auth)
 	}
+	return p.waitForAuthorizationByFlowID(ctx, auth)
+}
 
+func (p *DeviceFlowProvider) waitForAuthorizationByFlowID(ctx context.Context, auth *DeviceAuthResponse) (*DeviceTokenResponse, error) {
 	startTime := time.Now()
 	interval := time.Duration(auth.Interval) * time.Second
 	deadline := time.Duration(auth.ExpiresIn) * time.Second
@@ -431,6 +426,63 @@ func (p *DeviceFlowProvider) waitForAuthorization(ctx context.Context, auth *Dev
 			return nil, errors.New(i18n.T("设备授权码已过期"))
 		default:
 			dfPrintPollResult(p.output(), "unknown", fmt.Sprintf(i18n.T("未知状态: %s"), pollResp.Data.Status))
+		}
+	}
+}
+
+func (p *DeviceFlowProvider) waitForAuthorizationByDeviceCode(ctx context.Context, auth *DeviceAuthResponse) (*DeviceTokenResponse, error) {
+	startTime := time.Now()
+	interval := time.Duration(auth.Interval) * time.Second
+	deadline := time.Duration(auth.ExpiresIn) * time.Second
+	pollCount := 0
+
+	for {
+		elapsed := time.Since(startTime)
+		if elapsed >= maxPollTotalWait || elapsed >= deadline {
+			_, _ = fmt.Fprintln(p.output(), "")
+			return nil, fmt.Errorf("%s", i18n.Tf("设备授权码已过期（%d 秒），请重试", auth.ExpiresIn))
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(interval):
+		}
+
+		pollCount++
+		elapsedSec := int(time.Since(startTime).Seconds())
+		dfPrintPollStatus(p.output(), pollCount, elapsedSec)
+
+		resp, err := p.pollDeviceToken(ctx, auth.DeviceCode)
+		if err != nil {
+			dfPrintPollResult(p.output(), "network_error", i18n.T("网络错误，继续重试..."))
+			if p.logger != nil {
+				p.logger.Debug("poll error", "error", err)
+			}
+			continue
+		}
+
+		if resp.Error == "" {
+			dfPrintPollResult(p.output(), "authorized", i18n.T("授权成功!"))
+			return resp, nil
+		}
+		switch resp.Error {
+		case "authorization_pending":
+			dfPrintPollResult(p.output(), "pending", i18n.T("等待用户授权..."))
+		case "slow_down":
+			interval += 5 * time.Second
+			if interval > maxPollInterval*time.Second {
+				interval = maxPollInterval * time.Second
+			}
+			dfPrintPollResult(p.output(), "slow_down", fmt.Sprintf(i18n.T("轮询过快，间隔增加至 %ds"), int(interval.Seconds())))
+		case "access_denied":
+			_, _ = fmt.Fprintln(p.output(), "")
+			return nil, errors.New(i18n.T("用户拒绝了授权请求"))
+		case "expired_token":
+			_, _ = fmt.Fprintln(p.output(), "")
+			return nil, errors.New(i18n.T("设备授权码已过期"))
+		default:
+			dfPrintPollResult(p.output(), "unknown", fmt.Sprintf(i18n.T("未知错误: %s"), resp.Error))
 		}
 	}
 }
