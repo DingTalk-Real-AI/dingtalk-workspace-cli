@@ -56,13 +56,6 @@ type Settings struct {
 	DevPlugins       map[string]string         `json:"devPlugins,omitempty"` // name → absolute path
 }
 
-// LoadManaged scans ~/.dws/plugins/managed/ and returns all valid
-// official plugins. Managed plugins are always enabled.
-func (l *Loader) LoadManaged() []*Plugin {
-	managedDir := filepath.Join(l.PluginsDir, "managed")
-	return l.scanDir(managedDir, true)
-}
-
 // LoadUser scans ~/.dws/plugins/user/ and returns enabled user plugins.
 func (l *Loader) LoadUser() []*Plugin {
 	userDir := filepath.Join(l.PluginsDir, "user")
@@ -86,7 +79,7 @@ func (l *Loader) LoadUser() []*Plugin {
 
 		// Check if this is a direct plugin directory (has plugin.json)
 		if _, err := os.Stat(filepath.Join(entryPath, "plugin.json")); err == nil {
-			p := l.loadPlugin(entryPath, false)
+			p := l.loadPlugin(entryPath)
 			if p != nil && isPluginEnabled(settings, p.Manifest.Name) {
 				plugins = append(plugins, p)
 			}
@@ -103,7 +96,7 @@ func (l *Loader) LoadUser() []*Plugin {
 				continue
 			}
 			subPath := filepath.Join(entryPath, sub.Name())
-			p := l.loadPlugin(subPath, false)
+			p := l.loadPlugin(subPath)
 			if p != nil {
 				qualifiedName := entry.Name() + "/" + p.Manifest.Name
 				if isPluginEnabled(settings, qualifiedName) {
@@ -115,39 +108,15 @@ func (l *Loader) LoadUser() []*Plugin {
 	return plugins
 }
 
-// LoadAll loads both managed and user plugins.
+// LoadAll loads user + dev plugins.
 func (l *Loader) LoadAll() []*Plugin {
-	managed := l.LoadManaged()
 	user := l.LoadUser()
-	return append(managed, user...)
-}
-
-// scanDir reads a directory of plugin subdirectories and loads each one.
-func (l *Loader) scanDir(dir string, isManaged bool) []*Plugin {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			slog.Debug("plugin: cannot read dir", "path", dir, "error", err)
-		}
-		return nil
-	}
-
-	var plugins []*Plugin
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		pluginDir := filepath.Join(dir, entry.Name())
-		p := l.loadPlugin(pluginDir, isManaged)
-		if p != nil {
-			plugins = append(plugins, p)
-		}
-	}
-	return plugins
+	dev := l.LoadDev()
+	return append(user, dev...)
 }
 
 // loadPlugin reads and validates a single plugin directory.
-func (l *Loader) loadPlugin(dir string, isManaged bool) *Plugin {
+func (l *Loader) loadPlugin(dir string) *Plugin {
 	manifestPath := filepath.Join(dir, "plugin.json")
 	manifest, err := ParseManifest(manifestPath)
 	if err != nil {
@@ -163,9 +132,8 @@ func (l *Loader) loadPlugin(dir string, isManaged bool) *Plugin {
 	}
 
 	return &Plugin{
-		Manifest:  *manifest,
-		Root:      dir,
-		IsManaged: isManaged,
+		Manifest: *manifest,
+		Root:     dir,
 	}
 }
 
@@ -211,7 +179,7 @@ func isPluginEnabled(s *Settings, name string) bool {
 type PluginInfo struct {
 	Name        string `json:"name"`
 	Version     string `json:"version"`
-	Type        string `json:"type"` // "managed" or "user"
+	Type        string `json:"type"` // "user" or "dev"
 	Enabled     bool   `json:"enabled"`
 	Path        string `json:"path"`
 	Description string `json:"description,omitempty"`
@@ -221,29 +189,6 @@ type PluginInfo struct {
 func (l *Loader) ListInstalled() []PluginInfo {
 	var result []PluginInfo
 	settings := l.loadSettings()
-
-	// Managed plugins
-	managedDir := filepath.Join(l.PluginsDir, "managed")
-	if entries, err := os.ReadDir(managedDir); err == nil {
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				continue
-			}
-			dir := filepath.Join(managedDir, entry.Name())
-			m, err := ParseManifest(filepath.Join(dir, "plugin.json"))
-			if err != nil {
-				continue
-			}
-			result = append(result, PluginInfo{
-				Name:        m.Name,
-				Version:     m.Version,
-				Type:        "managed",
-				Enabled:     true, // managed plugins always enabled
-				Path:        dir,
-				Description: m.Description,
-			})
-		}
-	}
 
 	// User plugins
 	userDir := filepath.Join(l.PluginsDir, "user")
@@ -348,9 +293,8 @@ func (l *Loader) InstallFromDir(srcDir string) (*Plugin, error) {
 	l.setPluginEnabled(manifest.Name, true)
 
 	return &Plugin{
-		Manifest:  *manifest,
-		Root:      destDir,
-		IsManaged: false,
+		Manifest: *manifest,
+		Root:     destDir,
 	}, nil
 }
 
@@ -411,9 +355,8 @@ func (l *Loader) InstallFromGit(gitURL string) (*Plugin, error) {
 	l.setPluginEnabled(qualifiedName, true)
 
 	return &Plugin{
-		Manifest:  *manifest,
-		Root:      destDir,
-		IsManaged: false,
+		Manifest: *manifest,
+		Root:     destDir,
 	}, nil
 }
 
@@ -463,19 +406,9 @@ func parseGitURL(gitURL string) (workspace, repoName string, err error) {
 	return segments[len(segments)-2], segments[len(segments)-1], nil
 }
 
-// RemovePlugin removes an installed plugin by name. It searches both the
-// user and the legacy managed directories; all plugins are equally
-// removable.
+// RemovePlugin removes an installed plugin by name.
 func (l *Loader) RemovePlugin(name string, keepData bool) error {
 	pluginDir := l.findUserPluginDir(name)
-	if pluginDir == "" {
-		// Fall back to legacy managed/ directory (for plugins installed
-		// by older CLI builds that wrote under ~/.dws/plugins/managed/).
-		legacyDir := filepath.Join(l.PluginsDir, config.PluginManagedDir, name)
-		if _, err := os.Stat(filepath.Join(legacyDir, "plugin.json")); err == nil {
-			pluginDir = legacyDir
-		}
-	}
 	if pluginDir == "" {
 		return fmt.Errorf("plugin %q not found", name)
 	}
@@ -516,12 +449,8 @@ func (l *Loader) purgePluginFromSettings(name string) {
 
 // SetEnabled enables or disables a plugin in settings.json.
 func (l *Loader) SetEnabled(name string, enabled bool) error {
-	// Verify plugin exists
 	if l.findUserPluginDir(name) == "" {
-		managedDir := filepath.Join(l.PluginsDir, "managed", name)
-		if _, err := os.Stat(managedDir); err != nil {
-			return fmt.Errorf("plugin %q not found", name)
-		}
+		return fmt.Errorf("plugin %q not found", name)
 	}
 	l.setPluginEnabled(name, enabled)
 	return nil
@@ -695,7 +624,7 @@ func (l *Loader) LoadDev() []*Plugin {
 				"name", name, "dir", dir)
 			continue
 		}
-		p := l.loadPlugin(dir, false)
+		p := l.loadPlugin(dir)
 		if p != nil {
 			plugins = append(plugins, p)
 			slog.Debug("plugin: loaded dev plugin", "name", name, "dir", dir)

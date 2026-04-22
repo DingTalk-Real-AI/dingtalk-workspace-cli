@@ -131,9 +131,6 @@ func (p *Plugin) ToServerDescriptors() []market.ServerDescriptor {
 		}
 
 		source := "plugin"
-		if p.IsManaged {
-			source = "plugin-managed"
-		}
 
 		// Resolve headers: expand environment variable references (e.g. ${DASHSCOPE_API_KEY}).
 		var resolvedHeaders map[string]string
