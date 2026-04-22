@@ -79,7 +79,7 @@ Frozen：
 - `PAT_SCOPE_AUTH_REQUIRED`
 - `AGENT_CODE_NOT_EXISTS`
 
-Host MUST treat unknown selectors that start with `PAT_` as a generic PAT event and degrade to a generic approval UI. Per-code host behavior 参见 §6 三档表与 [host-integration.md §7.2 checklist](./host-integration.md#72-第三方-agent-最小分支实现-checklist)。
+Host MUST treat unknown selectors that start with `PAT_` as a generic PAT event and degrade to a generic approval UI. See [error-catalog.md](./error-catalog.md) for per-code behaviors.
 ### 2.4 JSON Schema (draft 2020-12) 片段
 
 ```json
@@ -318,13 +318,13 @@ dws aitable record list --sheet-id <id>
 | Variable | Tier | Consumer | Semantics (EN) | 语义（中文） |
 |---|---|---|---|---|
 | `DINGTALK_AGENT` | Stable | CLI | Optional business agent tag; when non-empty it is forwarded verbatim as the `x-dingtalk-agent` HTTP header. **Does NOT** derive `claw-type` (hard-wired to `openClaw` by the open-source edition hook) and **does NOT** gate host-owned PAT (see §7) | 可选的业务 Agent 标签；非空时原样转发为 `x-dingtalk-agent` 请求头。**不**派生 `claw-type`（由 `pkg/edition/default.go` 硬编码为 `openClaw`），**不**决定 host-owned PAT（见 §7） |
-| `DINGTALK_DWS_AGENTCODE` | Frozen | CLI | **Dual role**: (1) **sole** trigger for host-owned PAT mode (see §7); (2) **sole** per-shell fallback for `--agentCode` on `dws pat chmod`. Regex `^[A-Za-z0-9_-]{1,64}$`; `--agentCode` flag wins when both are set. `DWS_AGENTCODE` / `DINGTALK_AGENTCODE` / `REWIND_AGENTCODE` are **not** consulted | **双重作用**：(1) Host-owned PAT 模式的**唯一**触发信号（见 §7）；(2) `dws pat chmod` 的 `--agentCode` **唯一**每-shell 回退。正则 `^[A-Za-z0-9_-]{1,64}$`；flag 与 env 同时设置时 flag 优先；`DWS_AGENTCODE` / `DINGTALK_AGENTCODE` / `REWIND_AGENTCODE` **不再识别** |
+| `DINGTALK_DWS_AGENTCODE` | Frozen | CLI | **Dual role** : (1) **sole** trigger for host-owned PAT mode (see §7), and (2) **sole** per-shell fallback for `--agentCode` on `dws pat` commands. Regex `^[A-Za-z0-9_-]{1,64}$`; `--agentCode` flag wins when both are set. `DWS_AGENTCODE` / `DINGTALK_AGENTCODE` / `REWIND_AGENTCODE` are **not** consulted | **双重作用**：(1) Host-owned PAT 模式的**唯一**触发信号（见 §7）；(2) `dws pat *` 命令 `--agentCode` 的**唯一**每-shell 回退。正则 `^[A-Za-z0-9_-]{1,64}$`；flag 与 env 同时设置时 flag 优先；`DWS_AGENTCODE` / `DINGTALK_AGENTCODE` / `REWIND_AGENTCODE` **不再识别** |
 | `DWS_CHANNEL` | Stable | CLI | Upstream `channelCode` metadata only; **not** a host-control switch | 上游 `channelCode` 元数据；**非**宿主控制位 |
 | `DWS_CONFIG_DIR` | Frozen | CLI | Override token / identity storage directory | 覆盖凭证 / 身份存储目录 |
 | `DINGTALK_SESSION_ID` | Stable | CLI | Forwarded verbatim as `x-dingtalk-session-id` HTTP header | 原样转发为 `x-dingtalk-session-id` 请求头 |
 | `DINGTALK_TRACE_ID` | Stable | CLI | Forwarded verbatim as `x-dingtalk-trace-id` HTTP header | 原样转发为 `x-dingtalk-trace-id` 请求头 |
 | `DINGTALK_MESSAGE_ID` | Stable | CLI | Forwarded verbatim as `x-dingtalk-message-id` HTTP header | 原样转发为 `x-dingtalk-message-id` 请求头 |
-| `DWS_SESSION_ID` | Stable | CLI | Fallback for `--session-id` on `pat chmod` when `--grant-type session`. **Not** injected into trace headers | `pat chmod` 的 `--session-id` 回退（仅 `--grant-type session` 场景）；**不**注入 trace 头 |
+| `DWS_SESSION_ID` | Stable | CLI | Fallback for `--session-id` on `pat chmod` / `pat apply` when `--grant-type session`. **Not** injected into trace headers | `pat chmod` / `pat apply` 的 `--session-id` 回退（仅 `--grant-type session` 场景）；**不**注入 trace 头 |
 | `REWIND_SESSION_ID` | Stable (compat) | CLI | Compatibility alias for `DWS_SESSION_ID`; retained for existing reference host integrations | `DWS_SESSION_ID` 的兼容别名；仅为已有参考宿主保留 |
 | `DWS_TRUSTED_DOMAINS` | Stable | CLI | Comma-separated host whitelist for bearer-token outbound (default `*.dingtalk.com`) | 携带 bearer token 的出站域名白名单（默认 `*.dingtalk.com`） |
 | `DWS_ALLOW_HTTP_ENDPOINTS` | Stable | CLI | Set `1` to allow loopback HTTP during dev | 设 `1` 允许 loopback HTTP，仅开发用 |

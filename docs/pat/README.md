@@ -9,9 +9,9 @@
 
 | 读者 | 主要入口 | 辅助阅读 |
 |---|---|---|
-| 第三方 Agent 工程（Rust / Go / Node / Python 等宿主） | [host-integration.md](./host-integration.md) | [contract.md](./contract.md) |
+| 第三方 Agent 工程（Rust / Go / Node / Python 等宿主） | [host-integration.md](./host-integration.md) | [contract.md](./contract.md), [error-catalog.md](./error-catalog.md) |
 | 业务调用方 / Skill 作者（直接在 shell / 子进程里用 `dws`） | 下方 Quick Start | [contract.md](./contract.md) |
-| 运维 / SRE（监控、告警、回归） | [contract.md](./contract.md) §6 三档表 | [../reference.md](../reference.md) |
+| 运维 / SRE（监控、告警、回归） | [error-catalog.md](./error-catalog.md) | [../reference.md](../reference.md) |
 | CLI 贡献者（PR / 实现 lane） | [contract.md](./contract.md) + [../architecture.md](../architecture.md) 的 《PAT Architecture》章节 | 全部 |
 
 ---
@@ -81,8 +81,9 @@ dws aitable record list --sheet-id <id>
 
 | 文件 | 内容 | 一句话摘要 |
 |---|---|---|
-| [contract.md](./contract.md) | wire contract（中英双语对照） | exit code、stderr JSON schema、PAT grant-type、scope 字符串、hostControl、身份头、环境变量、风险等级、错误码三档表 |
+| [contract.md](./contract.md) | wire contract（中英双语对照） | exit code、stderr JSON schema、PAT grant-type、scope 字符串、hostControl、身份头、环境变量、风险等级 |
 | [host-integration.md](./host-integration.md) | 宿主端集成指南 | 如何解析 exit_code=4、如何渲染授权 UI、中敏 vs 高敏分支、参考时序图、negative space |
+| [error-catalog.md](./error-catalog.md) | 错误码目录 | 每个 code 的触发条件、期望宿主行为、stderr 示例、exit code |
 | [../architecture.md](../architecture.md) | 架构（含《PAT Architecture》章节） | `internal/pat/`、`internal/auth/`、`pkg/runtimetoken` 的职责边界 |
 | [../reference.md](../reference.md) | CLI 参考（含 PAT 章节） | `dws pat` 子命令、PAT 相关环境变量、exit code 表 |
 
@@ -104,8 +105,7 @@ dws aitable record list --sheet-id <id>
 
 ## 6. 稳定性承诺
 
-- **稳定 CLI 表面**：`dws pat chmod` 子命令及其 flag 名、exit code `0/2/4/5`、stderr JSON 顶层字段（`success / code / error_code / data.requiredScopes / data.grantOptions / data.authRequestId / data.hostControl`）。
-  - 本 PR（A-core）仅包含 `dws pat chmod`；`apply` / `status` / `scopes` 将在后续扩展 PR（A-ext）中上线，届时补齐稳定性承诺。
+- **稳定 CLI 表面**：`dws pat` 子命令树（`chmod` / `apply` / `status` / `scopes`）及其 flag 名、exit code `0/2/4/5`、stderr JSON 顶层字段（`success / code / error_code / data.requiredScopes / data.grantOptions / data.authRequestId / data.hostControl`）。
 - **可演进**：`data.*` 下的非核心字段。
 - **未承诺**：具体 MCP server 域名 / 端点、tool 内部名称、日志格式。
 

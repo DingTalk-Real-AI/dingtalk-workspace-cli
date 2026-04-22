@@ -96,8 +96,9 @@ flowchart TD
 
 Shipped（已完成，进入 Stable 表面）：
 
-- ✅ **PAT 最小闭环（A-core）**：`dws pat chmod` + Host-owned PAT 开关（`DINGTALK_DWS_AGENTCODE` → exit=4 + 单行 stderr JSON）+ 分类器（`internal/errors/pat.go`）+ 契约文档（`docs/pat/contract.md`、`host-integration.md`）。
+- ✅ **PAT 子命令齐全**：`dws pat chmod / apply / status / scopes` 四条子命令全部注册并可用（`internal/pat/{chmod,apply,status,scopes}.go` + `pat.go:RegisterCommands`）。
 
 In progress / Planned：
 
-- **A-ext**：`dws pat apply` / `status` / `scopes` 三条扩展子命令 + 异步审批通道（`authRequestId` 注册表 / `AsyncRegistry`）+ `PAT_SCOPE_AUTH_REQUIRED` 主动授权分支。本 PR（A-core）不包含这些能力，将在后续扩展 PR 中上线。
+- **P1**：`dws pat status` / `dws pat scopes` 的 legacy tool-name fallback —— 当前仅 `chmod` / `apply` 支持回落到 legacy 别名；灰度期若有需要可补齐（目前评估为无必要，因这两条命令上线与服务端新工具名同步）。
+- **P1**：`dws pat apply` stdout JSON 补 `clientGenerated` flag —— 现状是客户端 UUID v4 回落对宿主不可见，属潜在契约模糊点；见 [docs/pat/contract.md §2.5](./pat/contract.md#25-pat-apply-stdout-contract)。

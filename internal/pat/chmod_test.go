@@ -65,6 +65,20 @@ func buildChmod(t *testing.T, fake *fakeToolCaller) *cobra.Command {
 	return newChmodCommand(fake)
 }
 
+// installFakeCaller swaps the package-level caller used by the still-
+// package-scoped apply / status / scopes subcommands with fake, for the
+// duration of the test. chmod now consumes its caller via the
+// newChmodCommand factory and does NOT read this variable.
+//
+// TODO(pat-caller-factory): retire along with the package-level caller
+// once apply / status / scopes migrate to factories too.
+func installFakeCaller(t *testing.T, fake *fakeToolCaller) {
+	t.Helper()
+	prev := caller
+	caller = fake
+	t.Cleanup(func() { caller = prev })
+}
+
 // ---------------------------------------------------------------------------
 // T1 · Agent-code env fallback tests
 // ---------------------------------------------------------------------------
