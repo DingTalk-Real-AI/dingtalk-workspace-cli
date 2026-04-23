@@ -317,6 +317,9 @@ func isToolNotRegisteredError(err error) bool {
 		"tool does not exist",
 		"unknown tool",
 		"no such tool",
+		"未找到指定工具",
+		"未找到工具",
+		"工具不存在",
 	}
 	for _, needle := range needles {
 		if strings.Contains(msg, needle) {

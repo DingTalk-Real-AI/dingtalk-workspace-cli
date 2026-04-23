@@ -15,6 +15,7 @@ package pat
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -172,6 +173,13 @@ func TestCallPATToolWithLegacyFallback_emptyCanonicalResultRetriesLegacyAlias(t 
 	}
 	if _, ok := fake.calls[1].args["scopes"]; ok {
 		t.Fatalf("legacy args should not use canonical scopes: %#v", fake.calls[1].args)
+	}
+}
+
+func TestIsToolNotRegisteredError_ChineseGatewayMessage(t *testing.T) {
+	err := errors.New("pat chmod failed: business error: PARAM_ERROR - 未找到指定工具")
+	if !isToolNotRegisteredError(err) {
+		t.Fatalf("isToolNotRegisteredError(%q) = false, want true", err.Error())
 	}
 }
 
