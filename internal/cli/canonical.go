@@ -104,22 +104,38 @@ func NewMCPCommand(ctx context.Context, loader CatalogLoader, runner executor.Ru
 }
 
 func NewSchemaCommand(loader CatalogLoader) *cobra.Command {
-	return &cobra.Command{
-		Use:   "schema [product.tool]",
+	cmd := &cobra.Command{
+		Use:   "schema [path]",
 		Short: "查看 MCP 工具 Schema (产品列表 / 工具参数)",
 		Long: `查看已发现的 MCP 产品和工具的 Schema 元数据。
 
-不带参数时列出所有产品及其工具数量；带 product.tool 路径时
-输出该工具的完整输入 Schema（JSON Schema 格式）。
+不带参数时列出所有产品及其工具数量；带路径时输出该工具的完整
+输入 Schema（JSON Schema 格式）、输出 Schema、MCP 注解和 CLI
+层的 flag overlay（alias/transform/env_default）。
+
+路径支持三种写法：
+  product.rpc_name           规范路径 (e.g. ding.send_ding_message)
+  product.group.cli_name     CLI 点路径 (e.g. ding.message.send)
+  "product group cli_name"   CLI 空格/斜杠路径 (e.g. "ding message send")
 
 示例:
-  dws schema                         # 列出所有产品
-  dws schema aitable.query_records   # 查看 aitable query_records 的参数 Schema
-  dws schema --fields id,tools       # 只显示 id 和 tools 字段
-  dws schema --jq '.products[].id'   # 用 jq 提取所有产品 ID`,
+  dws schema                                # 列出所有产品
+  dws schema ding.send_ding_message         # 规范路径
+  dws schema "ding message send"            # CLI 路径（空格）
+  dws schema --cli-path "ding message send" # 同上，显式 flag（脚本友好）
+  dws schema -f pretty ding.send_ding_message  # ANSI 彩色分区展示
+  dws schema --jq '.tool.flag_overlay'      # 只看 CLI overlay`,
 		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cliPath, _ := cmd.Flags().GetString("cli-path")
+			cliPath = strings.TrimSpace(cliPath)
+			if cliPath != "" {
+				if len(args) > 0 {
+					return apperrors.NewValidation("--cli-path and positional argument are mutually exclusive")
+				}
+				args = []string{cliPath}
+			}
 			catalog, err := loader.Load(cmd.Context())
 			if err != nil {
 				var degraded *CatalogDegraded
@@ -158,6 +174,8 @@ func NewSchemaCommand(loader CatalogLoader) *cobra.Command {
 			)
 		},
 	}
+	cmd.Flags().String("cli-path", "", "按 CLI 命令路径查询 (等同于位置参数，便于脚本使用无需转义)")
+	return cmd
 }
 
 func BuildFlagSpecs(schema map[string]any, hints map[string]ir.CLIFlagHint) []FlagSpec {
@@ -664,7 +682,7 @@ func schemaPayload(catalog ir.Catalog, args []string) (map[string]any, error) {
 		}, nil
 	}
 
-	product, tool, ok := catalog.FindTool(args[0])
+	product, tool, ok := resolveSchemaPath(catalog, args[0])
 	if !ok {
 		return nil, apperrors.NewValidation(fmt.Sprintf("unknown canonical schema path %q", args[0]))
 	}
@@ -676,22 +694,99 @@ func schemaPayload(catalog ir.Catalog, args []string) (map[string]any, error) {
 	}, nil
 }
 
-// compactTool returns a lean representation of a tool for schema
-// output, keeping only the fields that AI agents and developers
-// need: name, description, parameters, and sensitivity flag.
-func compactTool(t ir.ToolDescriptor) map[string]any {
-	tool := map[string]any{
-		"name":        t.RPCName,
-		"title":       t.Title,
-		"description": t.Description,
-		"sensitive":   t.Sensitive,
+// resolveSchemaPath accepts three input forms and maps to (product, tool):
+//   - "product.rpc_name"   (canonical, e.g. "ding.send_ding_message")
+//   - "product.cli_name"   (single-level CLI path, e.g. "doc.create")
+//   - CLI path with group  ("ding message send" or "ding.message.send";
+//     also accepts "/" and multiple whitespace between tokens)
+//
+// Canonical form is tried first so existing callers and scripts keep
+// working; only when that fails does the CLI-path resolver run.
+func resolveSchemaPath(catalog ir.Catalog, raw string) (ir.CanonicalProduct, ir.ToolDescriptor, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ir.CanonicalProduct{}, ir.ToolDescriptor{}, false
 	}
 
+	if product, tool, ok := catalog.FindTool(raw); ok {
+		return product, tool, true
+	}
+
+	tokens := splitSchemaPathTokens(raw)
+	if len(tokens) < 2 {
+		return ir.CanonicalProduct{}, ir.ToolDescriptor{}, false
+	}
+
+	productID := tokens[0]
+	leaf := tokens[len(tokens)-1]
+	groupPath := strings.Join(tokens[1:len(tokens)-1], ".")
+
+	product, ok := catalog.FindProduct(productID)
+	if !ok {
+		return ir.CanonicalProduct{}, ir.ToolDescriptor{}, false
+	}
+
+	for _, tool := range product.Tools {
+		if tool.CLIName != leaf {
+			continue
+		}
+		if strings.TrimSpace(tool.Group) != groupPath {
+			continue
+		}
+		return product, tool, true
+	}
+	return ir.CanonicalProduct{}, ir.ToolDescriptor{}, false
+}
+
+// splitSchemaPathTokens splits a CLI path on dots, slashes, and
+// whitespace, returning only non-empty tokens. "ding message send",
+// "ding.message.send", and "ding/message/send" all yield the same
+// three tokens.
+func splitSchemaPathTokens(raw string) []string {
+	fields := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == '.' || r == '/' || r == ' ' || r == '\t'
+	})
+	out := fields[:0]
+	for _, f := range fields {
+		if s := strings.TrimSpace(f); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// compactTool returns a lean representation of a tool for schema
+// output, keeping the fields AI agents and scripts need: RPC + CLI
+// identity, input/output schema, sensitivity, MCP annotations, and the
+// CLI flag overlay (alias/transform/envDefault/default) that shapes
+// how raw MCP parameters appear on the command line.
+func compactTool(t ir.ToolDescriptor) map[string]any {
+	tool := map[string]any{
+		"name":           t.RPCName,
+		"cli_name":       t.CLIName,
+		"canonical_path": t.CanonicalPath,
+		"title":          t.Title,
+		"description":    t.Description,
+		"sensitive":      t.Sensitive,
+	}
+
+	if strings.TrimSpace(t.Group) != "" {
+		tool["group"] = t.Group
+	}
 	if props, ok := t.InputSchema["properties"]; ok {
 		tool["parameters"] = props
 	}
 	if req := requiredFields(t.InputSchema); len(req) > 0 {
 		tool["required"] = req
+	}
+	if len(t.OutputSchema) > 0 {
+		tool["output_schema"] = t.OutputSchema
+	}
+	if t.Annotations != nil {
+		tool["annotations"] = t.Annotations
+	}
+	if len(t.FlagOverlay) > 0 {
+		tool["flag_overlay"] = t.FlagOverlay
 	}
 
 	return tool
