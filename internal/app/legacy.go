@@ -32,6 +32,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -208,23 +209,31 @@ func loadCachedDetailsFast(store *cache.Store, servers []market.ServerDescriptor
 		}
 		details := make([]market.DetailTool, 0, len(snapshot.Tools))
 		for _, tool := range snapshot.Tools {
-			schemaJSON := ""
-			if tool.InputSchema != nil {
-				if data, marshalErr := json.Marshal(tool.InputSchema); marshalErr == nil {
-					schemaJSON = string(data)
-				}
-			}
-			details = append(details, market.DetailTool{
-				ToolName:    tool.Name,
-				ToolTitle:   tool.Title,
-				ToolDesc:    tool.Description,
-				IsSensitive: tool.Sensitive,
-				ToolRequest: schemaJSON,
-			})
+			details = append(details, toolDescriptorToDetail(tool))
 		}
 		result[serverID] = details
 	}
 	return result
+}
+
+// toolDescriptorToDetail converts a transport-level ToolDescriptor (returned by
+// MCP tools/list) into a market.DetailTool by marshalling InputSchema to JSON.
+// Used by both loadCachedDetailsFast (cache fallback) and buildHTTPCommandsFromTools
+// (cold-discovery path) to keep the conversion in one place.
+func toolDescriptorToDetail(tool transport.ToolDescriptor) market.DetailTool {
+	schemaJSON := ""
+	if tool.InputSchema != nil {
+		if data, marshalErr := json.Marshal(tool.InputSchema); marshalErr == nil {
+			schemaJSON = string(data)
+		}
+	}
+	return market.DetailTool{
+		ToolName:    tool.Name,
+		ToolTitle:   tool.Title,
+		ToolDesc:    tool.Description,
+		IsSensitive: tool.Sensitive,
+		ToolRequest: schemaJSON,
+	}
 }
 
 // fetchDetailsByServerID fetches MCP Detail API tool metadata for each server

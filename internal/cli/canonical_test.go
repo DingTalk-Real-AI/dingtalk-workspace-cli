@@ -72,6 +72,57 @@ func TestBuildFlagSpecsGeneratesOnlySupportedTopLevelFlags(t *testing.T) {
 	}
 }
 
+// Regression: nested-array params (e.g. sheet update_range.values, a 2-D
+// array of strings) must register as flagJSON so the cli parses the input
+// as JSON instead of forwarding the raw string. See PR #154.
+func TestBuildFlagSpecsNestedArrayMapsToJSON(t *testing.T) {
+	t.Parallel()
+
+	specs := BuildFlagSpecs(map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"values": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "array",
+					"items": map[string]any{
+						"type": "string",
+					},
+				},
+			},
+			"records": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "object",
+				},
+			},
+			"tags": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "string",
+				},
+			},
+		},
+	}, nil)
+
+	if len(specs) != 3 {
+		t.Fatalf("BuildFlagSpecs() len = %d, want 3", len(specs))
+	}
+	byName := make(map[string]FlagSpec, len(specs))
+	for _, s := range specs {
+		byName[s.PropertyName] = s
+	}
+	if got := byName["values"].Kind; got != flagJSON {
+		t.Errorf("values kind = %q, want flagJSON (nested array of strings)", got)
+	}
+	if got := byName["records"].Kind; got != flagJSON {
+		t.Errorf("records kind = %q, want flagJSON (array of objects)", got)
+	}
+	if got := byName["tags"].Kind; got != flagStringArray {
+		t.Errorf("tags kind = %q, want flagStringArray (flat array of strings)", got)
+	}
+}
+
 func TestFixtureLoaderLoadsCatalog(t *testing.T) {
 	t.Parallel()
 

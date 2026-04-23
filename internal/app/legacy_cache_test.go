@@ -29,6 +29,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cache"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/spf13/cobra"
 )
 
@@ -544,11 +545,24 @@ func TestLoadDynamicCommandsUsesStaleCacheWithoutBlockingRegistryRefresh(t *test
 
 // TestFetchDetailsByServerIDRunsConcurrently verifies that detail fetches are
 // concurrent, not serial. Uses MCPID path to avoid the localhost SSRF guard.
+//
+// Detection uses a deterministic inflight counter (max number of requests
+// observed in the handler at the same instant) instead of wall-clock timing,
+// which was flaky under -race on slow CI runners.
 func TestFetchDetailsByServerIDRunsConcurrently(t *testing.T) {
 	const numServers = 4
 	const delay = 50 * time.Millisecond
 
+	var current, maxInflight atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cur := current.Add(1)
+		defer current.Add(-1)
+		for {
+			prev := maxInflight.Load()
+			if cur <= prev || maxInflight.CompareAndSwap(prev, cur) {
+				break
+			}
+		}
 		time.Sleep(delay)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"success": true,
@@ -571,13 +585,10 @@ func TestFetchDetailsByServerIDRunsConcurrently(t *testing.T) {
 		}
 	}
 
-	start := time.Now()
 	result := fetchDetailsByServerID(context.TODO(), market.NewClient(srv.URL, nil), servers, cache.NewStore(t.TempDir()), false)
-	elapsed := time.Since(start)
 
-	serialBound := time.Duration(numServers) * delay
-	if elapsed >= serialBound {
-		t.Errorf("elapsed %v >= serial bound %v: requests appear serial, want concurrent", elapsed, serialBound)
+	if got := maxInflight.Load(); got < 2 {
+		t.Errorf("max concurrent inflight = %d, want >= 2 (requests appear serial)", got)
 	}
 	if len(result) == 0 {
 		t.Errorf("fetchDetailsByServerID() = empty map, want results")
@@ -739,5 +750,89 @@ func TestFetchDetailsByServerIDUsesCacheOnHit(t *testing.T) {
 	}
 	if len(result) == 0 {
 		t.Errorf("fetchDetailsByServerID() returned empty map, want cached tools")
+	}
+}
+
+// Regression: when a server has no Detail API locator (MCPID == 0), the
+// cache fallback path must read schemas from the per-server tools snapshot
+// (cache.Store.SaveTools) so the binding-kind upgrade in BuildDynamicCommands
+// has the JSON Schema available. See PR #154.
+func TestLoadCachedDetailsFastFallsBackToToolsSnapshot(t *testing.T) {
+	t.Parallel()
+
+	store := cache.NewStore(t.TempDir())
+
+	const serverKey = "sheet-key"
+	const serverID = "sheet"
+
+	tools := []transport.ToolDescriptor{
+		{
+			Name:        "update_range",
+			Title:       "Update Range",
+			Description: "Update sheet range",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"values": map[string]any{
+						"type": "array",
+						"items": map[string]any{
+							"type":  "array",
+							"items": map[string]any{"type": "string"},
+						},
+					},
+				},
+			},
+		},
+	}
+	if err := store.SaveTools("default/default", serverKey, cache.ToolsSnapshot{
+		SavedAt:   time.Now().UTC(),
+		ServerKey: serverKey,
+		Tools:     tools,
+	}); err != nil {
+		t.Fatalf("SaveTools error: %v", err)
+	}
+
+	servers := []market.ServerDescriptor{
+		{Key: serverKey, CLI: market.CLIOverlay{ID: serverID}}, // MCPID intentionally zero
+	}
+	result := loadCachedDetailsFast(store, servers)
+
+	got, ok := result[serverID]
+	if !ok || len(got) != 1 {
+		t.Fatalf("expected 1 detail tool for %q, got %#v", serverID, result)
+	}
+	if got[0].ToolName != "update_range" {
+		t.Errorf("ToolName = %q, want update_range", got[0].ToolName)
+	}
+	if !strings.Contains(got[0].ToolRequest, `"values"`) || !strings.Contains(got[0].ToolRequest, `"array"`) {
+		t.Errorf("ToolRequest missing schema, got: %s", got[0].ToolRequest)
+	}
+}
+
+// loadCachedDetailsFast must keep preferring the Detail API payload when
+// MCPID > 0; the tools-snapshot fallback only kicks in for discovery-driven
+// services without a locator.
+func TestLoadCachedDetailsFastDetailAPITakesPriority(t *testing.T) {
+	t.Parallel()
+
+	store := cache.NewStore(t.TempDir())
+	const serverID = "test-server"
+
+	cached := []market.DetailTool{{ToolName: "from_detail_api"}}
+	cachedJSON, _ := json.Marshal(map[string]any{"tools": cached})
+	if err := store.SaveDetail("default/default", serverID, cache.DetailSnapshot{
+		SavedAt: time.Now().UTC(),
+		MCPID:   42,
+		Payload: cachedJSON,
+	}); err != nil {
+		t.Fatalf("SaveDetail error: %v", err)
+	}
+
+	servers := []market.ServerDescriptor{
+		{DetailLocator: market.DetailLocator{MCPID: 42}, CLI: market.CLIOverlay{ID: serverID}},
+	}
+	result := loadCachedDetailsFast(store, servers)
+	if got := result[serverID]; len(got) != 1 || got[0].ToolName != "from_detail_api" {
+		t.Errorf("expected Detail API payload, got %#v", got)
 	}
 }

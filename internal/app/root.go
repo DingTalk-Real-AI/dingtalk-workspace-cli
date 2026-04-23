@@ -1307,21 +1307,9 @@ func buildHTTPCommandsFromTools(srv market.ServerDescriptor, tools []transport.T
 	}
 
 	detailsByID := make(map[string][]market.DetailTool)
-	var detailTools []market.DetailTool
+	detailTools := make([]market.DetailTool, 0, len(tools))
 	for _, tool := range tools {
-		schemaJSON := ""
-		if tool.InputSchema != nil {
-			if data, marshalErr := json.Marshal(tool.InputSchema); marshalErr == nil {
-				schemaJSON = string(data)
-			}
-		}
-		detailTools = append(detailTools, market.DetailTool{
-			ToolName:    tool.Name,
-			ToolTitle:   tool.Title,
-			ToolDesc:    tool.Description,
-			IsSensitive: tool.Sensitive,
-			ToolRequest: schemaJSON,
-		})
+		detailTools = append(detailTools, toolDescriptorToDetail(tool))
 	}
 	detailsByID[strings.TrimSpace(srv.CLI.ID)] = detailTools
 
