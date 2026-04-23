@@ -201,7 +201,7 @@ Flags:
       --table-id string   Table ID (必填)
 ```
 
-> ⚠️ 真实 CLI **没有 `--fields` 批量参数**。批量建字段请循环调用 `field create`，或通过 `scripts/bulk_add_fields.py` 脚本封装。
+> 💡 真实 CLI 支持 `--fields` 批量参数（JSON 数组）。批量建字段可传 `--fields`，或通过 `scripts/bulk_add_fields.py` 脚本封装。
 
 #### 更新字段
 ```
