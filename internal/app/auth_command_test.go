@@ -26,7 +26,9 @@ import (
 )
 
 func TestAuthStatusRefreshFailureLeavesStoredTokenIntact(t *testing.T) {
-	// Cleanup keychain after test
+	// Isolate keychain storage to a per-test directory so the saved
+	// token can't leak into other test packages running in parallel.
+	t.Setenv(keychain.StorageDirEnv, t.TempDir())
 	t.Cleanup(func() {
 		_ = keychain.Remove(keychain.Service, keychain.AccountToken)
 	})

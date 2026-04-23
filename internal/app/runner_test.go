@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	mockmcp "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/mock_mcp"
 )
@@ -33,6 +34,13 @@ import (
 func setupRuntimeCommandTest(t *testing.T) {
 	t.Helper()
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	// Isolate keychain storage so concurrent test packages can't leak a
+	// real auth token into runtime tests via the shared on-disk keychain
+	// location. We deliberately do NOT reset the process-wide token
+	// cache here: getCachedRuntimeToken uses sync.Once and is read by
+	// detached preload goroutines spawned per Run(); replacing the Once
+	// races with those still-running goroutines.
+	t.Setenv(keychain.StorageDirEnv, t.TempDir())
 
 	discoverySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(contactDiscoveryResponse())
