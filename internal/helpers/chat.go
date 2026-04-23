@@ -95,7 +95,7 @@ func newChatMessageSendByBotCommand(runner executor.Runner) *cobra.Command {
 
 			invocation := executor.NewHelperInvocation(
 				cobracmd.LegacyCommandPath(cmd),
-				"chat",
+				"bot",
 				tool,
 				params,
 			)
