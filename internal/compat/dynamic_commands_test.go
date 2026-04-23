@@ -361,7 +361,8 @@ func TestBuildDynamicCommands_PositionalArgInjection(t *testing.T) {
 // envelope binding marked Positional + Alias + Aliases registers visible
 // primary + hidden alias flags AND still accepts the value as a positional
 // arg. Mirrors the dws devdoc article search shape:
-//   { keyword: { alias: "query", aliases: ["keyword"], positional: true } }
+//
+//	{ keyword: { alias: "query", aliases: ["keyword"], positional: true } }
 func TestBuildDynamicCommands_PositionalWithFlagAliases(t *testing.T) {
 	t.Parallel()
 
