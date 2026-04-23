@@ -35,7 +35,7 @@ Flags:
       --template-id string   日志模版 ID (必填)，从 template list 返回中取
       --contents string      日志内容 JSON 数组 (必填)，每项须含 key/sort/content/contentType/type
       --dd-from string       创建来源标识 (默认 dws)
-      --to-chat string       是否发送到日志接收人单聊 (传 "true" 发送)
+      --to-chat              是否发送到日志接收人单聊 (bool flag，直接加 --to-chat 即可)
       --to-user-ids string   接收人 userId，逗号分隔 (可选)
 ```
 
