@@ -60,9 +60,6 @@ func newAitableBaseSearchCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			query := aitableFlagOrFallback(cmd, "query", "keyword")
-			if query == "" {
-				return apperrors.NewValidation("--query is required")
-			}
 			params := map[string]any{"query": query}
 			if cursor := aitableStringFlag(cmd, "cursor"); cursor != "" {
 				params["cursor"] = cursor
@@ -72,6 +69,7 @@ func newAitableBaseSearchCommand(runner executor.Runner) *cobra.Command {
 	}
 	preferLegacyLeaf(cmd)
 	cmd.Flags().String("query", "", i18n.T("Base 名称关键词 (必填)"))
+	_ = cmd.MarkFlagRequired("query")
 	cmd.Flags().String("keyword", "", i18n.T("--query 的别名"))
 	_ = cmd.Flags().MarkHidden("keyword")
 	cmd.Flags().String("cursor", "", i18n.T("分页游标"))
@@ -97,6 +95,7 @@ func newAitableBaseGetCommand(runner executor.Runner) *cobra.Command {
 	}
 	preferLegacyLeaf(cmd)
 	cmd.Flags().String("base-id", "", i18n.T("Base ID (必填)"))
+	_ = cmd.MarkFlagRequired("base-id")
 	return cmd
 }
 
@@ -121,6 +120,7 @@ func newAitableBaseCreateCommand(runner executor.Runner) *cobra.Command {
 	}
 	preferLegacyLeaf(cmd)
 	cmd.Flags().String("name", "", i18n.T("Base 名称 (必填)"))
+	_ = cmd.MarkFlagRequired("name")
 	cmd.Flags().String("template-id", "", i18n.T("模板 ID"))
 	return cmd
 }
@@ -153,7 +153,9 @@ func newAitableBaseUpdateCommand(runner executor.Runner) *cobra.Command {
 	}
 	preferLegacyLeaf(cmd)
 	cmd.Flags().String("base-id", "", i18n.T("Base ID (必填)"))
+	_ = cmd.MarkFlagRequired("base-id")
 	cmd.Flags().String("name", "", i18n.T("新名称 (必填)"))
+	_ = cmd.MarkFlagRequired("name")
 	cmd.Flags().String("desc", "", i18n.T("备注文本"))
 	return cmd
 }
@@ -181,6 +183,7 @@ func newAitableTableGetCommand(runner executor.Runner) *cobra.Command {
 	}
 	preferLegacyLeaf(cmd)
 	cmd.Flags().String("base-id", "", i18n.T("Base ID (必填)"))
+	_ = cmd.MarkFlagRequired("base-id")
 	cmd.Flags().String("table-ids", "", i18n.T("Table ID 列表，逗号分隔"))
 	return cmd
 }
@@ -198,9 +201,6 @@ func newAitableTableCreateCommand(runner executor.Runner) *cobra.Command {
 				return err
 			}
 			tableName := aitableFlagOrFallback(cmd, "name", "table-name")
-			if tableName == "" {
-				return apperrors.NewValidation("--name is required")
-			}
 			fieldsRaw, err := aitableRequiredFlag(cmd, "fields")
 			if err != nil {
 				return err
@@ -218,10 +218,13 @@ func newAitableTableCreateCommand(runner executor.Runner) *cobra.Command {
 	}
 	preferLegacyLeaf(cmd)
 	cmd.Flags().String("base-id", "", i18n.T("Base ID (必填)"))
+	_ = cmd.MarkFlagRequired("base-id")
 	cmd.Flags().String("name", "", i18n.T("表格名称 (必填)"))
+	_ = cmd.MarkFlagRequired("name")
 	cmd.Flags().String("table-name", "", i18n.T("--name 的别名"))
 	_ = cmd.Flags().MarkHidden("table-name")
 	cmd.Flags().String("fields", "", i18n.T("字段 JSON 数组 (必填)"))
+	_ = cmd.MarkFlagRequired("fields")
 	return cmd
 }
 
@@ -254,8 +257,11 @@ func newAitableTableUpdateCommand(runner executor.Runner) *cobra.Command {
 	}
 	preferLegacyLeaf(cmd)
 	cmd.Flags().String("base-id", "", i18n.T("Base ID (必填)"))
+	_ = cmd.MarkFlagRequired("base-id")
 	cmd.Flags().String("table-id", "", i18n.T("Table ID (必填)"))
+	_ = cmd.MarkFlagRequired("table-id")
 	cmd.Flags().String("name", "", i18n.T("新表名 (必填)"))
+	_ = cmd.MarkFlagRequired("name")
 	return cmd
 }
 
@@ -289,7 +295,9 @@ func newAitableFieldGetCommand(runner executor.Runner) *cobra.Command {
 	}
 	preferLegacyLeaf(cmd)
 	cmd.Flags().String("base-id", "", i18n.T("Base ID (必填)"))
+	_ = cmd.MarkFlagRequired("base-id")
 	cmd.Flags().String("table-id", "", i18n.T("Table ID (必填)"))
+	_ = cmd.MarkFlagRequired("table-id")
 	cmd.Flags().String("field-ids", "", i18n.T("Field ID 列表，逗号分隔"))
 	return cmd
 }
@@ -350,7 +358,9 @@ func newAitableFieldCreateCommand(runner executor.Runner) *cobra.Command {
 	}
 	preferLegacyLeaf(cmd)
 	cmd.Flags().String("base-id", "", i18n.T("Base ID (必填)"))
+	_ = cmd.MarkFlagRequired("base-id")
 	cmd.Flags().String("table-id", "", i18n.T("Table ID (必填)"))
+	_ = cmd.MarkFlagRequired("table-id")
 	cmd.Flags().String("fields", "", i18n.T("字段 JSON 数组"))
 	cmd.Flags().String("name", "", i18n.T("单字段名称"))
 	cmd.Flags().String("type", "", i18n.T("单字段类型"))
@@ -404,8 +414,11 @@ func newAitableFieldUpdateCommand(runner executor.Runner) *cobra.Command {
 	}
 	preferLegacyLeaf(cmd)
 	cmd.Flags().String("base-id", "", i18n.T("Base ID (必填)"))
+	_ = cmd.MarkFlagRequired("base-id")
 	cmd.Flags().String("table-id", "", i18n.T("Table ID (必填)"))
+	_ = cmd.MarkFlagRequired("table-id")
 	cmd.Flags().String("field-id", "", i18n.T("Field ID (必填)"))
+	_ = cmd.MarkFlagRequired("field-id")
 	cmd.Flags().String("name", "", i18n.T("新字段名"))
 	cmd.Flags().String("config", "", i18n.T("字段配置 JSON"))
 	return cmd
@@ -468,7 +481,9 @@ func newAitableRecordQueryCommand(runner executor.Runner) *cobra.Command {
 	}
 	preferLegacyLeaf(cmd)
 	cmd.Flags().String("base-id", "", i18n.T("Base ID (必填)"))
+	_ = cmd.MarkFlagRequired("base-id")
 	cmd.Flags().String("table-id", "", i18n.T("Table ID (必填)"))
+	_ = cmd.MarkFlagRequired("table-id")
 	cmd.Flags().String("record-ids", "", i18n.T("Record ID 列表，逗号分隔"))
 	cmd.Flags().String("field-ids", "", i18n.T("Field ID 列表，逗号分隔"))
 	cmd.Flags().String("filters", "", i18n.T("过滤条件 JSON"))
@@ -514,8 +529,11 @@ func newAitableRecordCreateCommand(runner executor.Runner) *cobra.Command {
 	}
 	preferLegacyLeaf(cmd)
 	cmd.Flags().String("base-id", "", i18n.T("Base ID (必填)"))
+	_ = cmd.MarkFlagRequired("base-id")
 	cmd.Flags().String("table-id", "", i18n.T("Table ID (必填)"))
+	_ = cmd.MarkFlagRequired("table-id")
 	cmd.Flags().String("records", "", i18n.T("记录 JSON 数组 (必填)"))
+	_ = cmd.MarkFlagRequired("records")
 	return cmd
 }
 
@@ -552,8 +570,11 @@ func newAitableRecordUpdateCommand(runner executor.Runner) *cobra.Command {
 	}
 	preferLegacyLeaf(cmd)
 	cmd.Flags().String("base-id", "", i18n.T("Base ID (必填)"))
+	_ = cmd.MarkFlagRequired("base-id")
 	cmd.Flags().String("table-id", "", i18n.T("Table ID (必填)"))
+	_ = cmd.MarkFlagRequired("table-id")
 	cmd.Flags().String("records", "", i18n.T("记录 JSON 数组 (必填)"))
+	_ = cmd.MarkFlagRequired("records")
 	return cmd
 }
 
@@ -568,9 +589,6 @@ func newAitableTemplateSearchCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			query := aitableFlagOrFallback(cmd, "query", "keyword")
-			if query == "" {
-				return apperrors.NewValidation("--query is required")
-			}
 			params := map[string]any{"query": query}
 			if limit, _ := cmd.Flags().GetInt("limit"); limit > 0 {
 				params["limit"] = limit
@@ -583,6 +601,7 @@ func newAitableTemplateSearchCommand(runner executor.Runner) *cobra.Command {
 	}
 	preferLegacyLeaf(cmd)
 	cmd.Flags().String("query", "", i18n.T("模板关键词 (必填)"))
+	_ = cmd.MarkFlagRequired("query")
 	cmd.Flags().String("keyword", "", i18n.T("--query 的别名"))
 	_ = cmd.Flags().MarkHidden("keyword")
 	cmd.Flags().Int("limit", 0, i18n.T("每页数量"))
@@ -623,7 +642,9 @@ func newAITableAttachmentUploadCommand(runner executor.Runner) *cobra.Command {
 	}
 	preferLegacyLeaf(cmd)
 	cmd.Flags().String("base-id", "", i18n.T("Base ID (必填)"))
+	_ = cmd.MarkFlagRequired("base-id")
 	cmd.Flags().String("file-name", "", i18n.T("文件名 (必填)"))
+	_ = cmd.MarkFlagRequired("file-name")
 	cmd.Flags().Int64("size", 0, i18n.T("文件大小（字节）"))
 	cmd.Flags().String("mime-type", "", i18n.T("文件 MIME Type"))
 	return cmd

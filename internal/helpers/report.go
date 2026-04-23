@@ -172,9 +172,6 @@ func newReportTemplateDetailCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name, _ := cmd.Flags().GetString("name")
-			if name == "" {
-				return apperrors.NewValidation("--name is required")
-			}
 			params := map[string]any{
 				"report_template_name": name,
 			}
@@ -193,6 +190,7 @@ func newReportTemplateDetailCommand(runner executor.Runner) *cobra.Command {
 		},
 	}
 	cmd.Flags().String("name", "", "模版名称 (必填)")
+	_ = cmd.MarkFlagRequired("name")
 	preferLegacyLeaf(cmd)
 	return cmd
 }
@@ -204,20 +202,21 @@ func newReportCreateCommand(runner executor.Runner) *cobra.Command {
 		Use:   "create",
 		Short: "创建日志",
 		Long: `按模版创建一条日志。--contents 为 JSON 数组，每项需含 key、sort、content、contentType、type，
-与远程 create_report 一致；可先通过 report template list / template detail 取得 templateId 与控件定义。`,
-		Example: `  dws report create --template-id TPL_ID --contents '[{"content":"完成开发","sort":"0","key":"今日完成","contentType":"markdown","type":"1"}]'
+与远程 create_report 一致；可先通过 report template list / template detail 取得 templateId 与控件定义。
+
+注意：key 必须精确等于模板的 field_name（可用 report template detail --name <模板名> 查询）。`,
+		Example: `  # Step 1: 查模板字段
+  dws report template detail --name "日报"
+  # → report_template_id 和 report_template_fields[].field_name
+
+  # Step 2: 按 field_name 作为 key 创建
+  dws report create --template-id TPL_ID --contents '[{"content":"完成开发","sort":"0","key":"今日完成","contentType":"markdown","type":"1"}]'
   dws report create --template-id TPL_ID --contents '[...]' --to-chat --to-user-ids userId1,userId2`,
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			tplID, _ := cmd.Flags().GetString("template-id")
-			if tplID == "" {
-				return apperrors.NewValidation("--template-id is required")
-			}
 			contentsJSON, _ := cmd.Flags().GetString("contents")
-			if contentsJSON == "" {
-				return apperrors.NewValidation("--contents is required")
-			}
 			var contents []map[string]any
 			if err := json.Unmarshal([]byte(contentsJSON), &contents); err != nil {
 				return apperrors.NewValidation(fmt.Sprintf("--contents JSON parse failed: %v", err))
@@ -251,7 +250,9 @@ func newReportCreateCommand(runner executor.Runner) *cobra.Command {
 		},
 	}
 	cmd.Flags().String("template-id", "", "日志模版 ID (必填)")
-	cmd.Flags().String("contents", "", "日志内容 JSON 数组 (必填)，每项含 key/sort/content/contentType/type")
+	_ = cmd.MarkFlagRequired("template-id")
+	cmd.Flags().String("contents", "", "日志内容 JSON 数组 (必填)，每项含 key/sort/content/contentType/type。key 必须精确等于模板 field_name")
+	_ = cmd.MarkFlagRequired("contents")
 	cmd.Flags().String("dd-from", "dws", "创建来源标识")
 	cmd.Flags().Bool("to-chat", false, "是否发送到日志接收人单聊")
 	cmd.Flags().String("to-user-ids", "", "接收人 userId，逗号分隔 (可选)")
@@ -270,9 +271,6 @@ func newReportDetailCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			reportID, _ := cmd.Flags().GetString("report-id")
-			if reportID == "" {
-				return apperrors.NewValidation("--report-id is required")
-			}
 			params := map[string]any{
 				"report_id": reportID,
 			}
@@ -291,6 +289,7 @@ func newReportDetailCommand(runner executor.Runner) *cobra.Command {
 		},
 	}
 	cmd.Flags().String("report-id", "", "日志 ID (必填)")
+	_ = cmd.MarkFlagRequired("report-id")
 	preferLegacyLeaf(cmd)
 	return cmd
 }
@@ -351,7 +350,9 @@ func newReportListCommand(runner executor.Runner) *cobra.Command {
 		},
 	}
 	cmd.Flags().String("start", "", "开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00) (必填)")
+	_ = cmd.MarkFlagRequired("start")
 	cmd.Flags().String("end", "", "结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00) (必填)")
+	_ = cmd.MarkFlagRequired("end")
 	cmd.Flags().Int("cursor", 0, "分页游标，首次传 0 (默认 0)")
 	cmd.Flags().Int("size", 20, "每页条数，最大 20 (默认 20)")
 	cmd.Flags().Int("limit", 0, "--size 的别名")
@@ -371,9 +372,6 @@ func newReportStatsCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			reportID, _ := cmd.Flags().GetString("report-id")
-			if reportID == "" {
-				return apperrors.NewValidation("--report-id is required")
-			}
 			params := map[string]any{
 				"report_id": reportID,
 			}
@@ -392,6 +390,7 @@ func newReportStatsCommand(runner executor.Runner) *cobra.Command {
 		},
 	}
 	cmd.Flags().String("report-id", "", "日志 ID (必填)")
+	_ = cmd.MarkFlagRequired("report-id")
 	preferLegacyLeaf(cmd)
 	return cmd
 }

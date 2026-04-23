@@ -18,7 +18,6 @@ import (
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
-	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
@@ -88,13 +87,7 @@ func newTodoTaskCreateCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			title := cmdutil.FlagOrFallback(cmd, "title", "subject", "content")
-			if strings.TrimSpace(title) == "" {
-				return apperrors.NewValidation("--title is required")
-			}
 			executorsStr, _ := cmd.Flags().GetString("executors")
-			if strings.TrimSpace(executorsStr) == "" {
-				return apperrors.NewValidation("--executors is required")
-			}
 			executorIds := parseExecutorIds(executorsStr)
 
 			vo := map[string]any{
@@ -135,7 +128,9 @@ func newTodoTaskCreateCommand(runner executor.Runner) *cobra.Command {
 	preferLegacyLeaf(cmd)
 
 	cmd.Flags().String("title", "", i18n.T("待办标题 (必填)"))
+	_ = cmd.MarkFlagRequired("title")
 	cmd.Flags().String("executors", "", i18n.T("执行者 userId 列表 (必填)"))
+	_ = cmd.MarkFlagRequired("executors")
 	cmd.Flags().String("due", "", i18n.T("截止时间 ISO-8601 (如 2026-03-10T18:00:00+08:00)"))
 	cmd.Flags().String("priority", "", i18n.T("优先级: 10低/20普通/30较高/40紧急"))
 	cmd.Flags().String("recurrence", "", i18n.T("循环待办 (需先设置 --due); 格式: DTSTART:...\\nRRULE:FREQ=DAILY;INTERVAL=1"))
@@ -259,9 +254,6 @@ func newTodoTaskUpdateCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			taskID, _ := cmd.Flags().GetString("task-id")
-			if strings.TrimSpace(taskID) == "" {
-				return apperrors.NewValidation("--task-id is required")
-			}
 			inner := map[string]any{
 				"taskId": taskID,
 			}
@@ -302,6 +294,7 @@ func newTodoTaskUpdateCommand(runner executor.Runner) *cobra.Command {
 	preferLegacyLeaf(cmd)
 
 	cmd.Flags().String("task-id", "", i18n.T("待办任务 ID (必填)"))
+	_ = cmd.MarkFlagRequired("task-id")
 	cmd.Flags().String("title", "", i18n.T("新标题"))
 	cmd.Flags().String("due", "", i18n.T("截止时间 ISO-8601 (如 2026-03-10T18:00:00+08:00)"))
 	cmd.Flags().String("priority", "", i18n.T("优先级: 10低/20普通/30较高/40紧急"))
@@ -323,13 +316,7 @@ func newTodoTaskDoneCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			taskID, _ := cmd.Flags().GetString("task-id")
-			if strings.TrimSpace(taskID) == "" {
-				return apperrors.NewValidation("--task-id is required")
-			}
 			status, _ := cmd.Flags().GetString("status")
-			if strings.TrimSpace(status) == "" {
-				return apperrors.NewValidation("--status is required")
-			}
 			params := map[string]any{
 				"taskId": taskID,
 				"isDone": status,
@@ -352,7 +339,9 @@ func newTodoTaskDoneCommand(runner executor.Runner) *cobra.Command {
 	preferLegacyLeaf(cmd)
 
 	cmd.Flags().String("task-id", "", i18n.T("待办任务 ID (必填)"))
+	_ = cmd.MarkFlagRequired("task-id")
 	cmd.Flags().String("status", "", i18n.T("完成状态: true=已完成, false=未完成 (必填)"))
+	_ = cmd.MarkFlagRequired("status")
 	return cmd
 }
 
@@ -369,9 +358,6 @@ func newTodoTaskGetCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			taskID, _ := cmd.Flags().GetString("task-id")
-			if strings.TrimSpace(taskID) == "" {
-				return apperrors.NewValidation("--task-id is required")
-			}
 			params := map[string]any{
 				"taskId": taskID,
 			}
@@ -393,6 +379,7 @@ func newTodoTaskGetCommand(runner executor.Runner) *cobra.Command {
 	preferLegacyLeaf(cmd)
 
 	cmd.Flags().String("task-id", "", i18n.T("待办任务 ID (必填)"))
+	_ = cmd.MarkFlagRequired("task-id")
 	return cmd
 }
 
@@ -410,9 +397,6 @@ func newTodoTaskDeleteCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			taskID, _ := cmd.Flags().GetString("task-id")
-			if strings.TrimSpace(taskID) == "" {
-				return apperrors.NewValidation("--task-id is required")
-			}
 			if !confirmDeletePrompt(cmd, i18n.T("待办"), taskID) {
 				return nil
 			}
@@ -437,6 +421,7 @@ func newTodoTaskDeleteCommand(runner executor.Runner) *cobra.Command {
 	preferLegacyLeaf(cmd)
 
 	cmd.Flags().String("task-id", "", i18n.T("待办任务 ID (必填)"))
+	_ = cmd.MarkFlagRequired("task-id")
 	cmd.Flags().Bool("yes", false, i18n.T("跳过确认直接删除"))
 	return cmd
 }

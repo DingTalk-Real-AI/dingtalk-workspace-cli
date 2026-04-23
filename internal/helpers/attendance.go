@@ -103,12 +103,6 @@ func newAttendanceRecordGetCommand(runner executor.Runner) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			userID, _ := cmd.Flags().GetString("user")
 			dateStr, _ := cmd.Flags().GetString("date")
-			if userID == "" {
-				return apperrors.NewValidation("--user is required")
-			}
-			if dateStr == "" {
-				return apperrors.NewValidation("--date is required (format: YYYY-MM-DD)")
-			}
 			t, err := time.ParseInLocation("2006-01-02", dateStr, time.Local)
 			if err != nil {
 				return apperrors.NewValidation("--date format error, use YYYY-MM-DD, e.g. 2026-03-08")
@@ -132,7 +126,9 @@ func newAttendanceRecordGetCommand(runner executor.Runner) *cobra.Command {
 		},
 	}
 	cmd.Flags().String("user", "", "钉钉用户 ID (必填)")
+	_ = cmd.MarkFlagRequired("user")
 	cmd.Flags().String("date", "", "查询日期，格式 YYYY-MM-DD (必填)")
+	_ = cmd.MarkFlagRequired("date")
 	preferLegacyLeaf(cmd)
 	return cmd
 }
@@ -152,15 +148,6 @@ func newAttendanceRecordListCommand(runner executor.Runner) *cobra.Command {
 			usersStr, _ := cmd.Flags().GetString("users")
 			startStr, _ := cmd.Flags().GetString("start")
 			endStr, _ := cmd.Flags().GetString("end")
-			if usersStr == "" {
-				return apperrors.NewValidation("--users is required")
-			}
-			if startStr == "" {
-				return apperrors.NewValidation("--start is required (format: YYYY-MM-DD)")
-			}
-			if endStr == "" {
-				return apperrors.NewValidation("--end is required (format: YYYY-MM-DD)")
-			}
 			startT, err := time.ParseInLocation("2006-01-02", startStr, time.Local)
 			if err != nil {
 				return apperrors.NewValidation("--start date format error, use YYYY-MM-DD")
@@ -195,8 +182,11 @@ func newAttendanceRecordListCommand(runner executor.Runner) *cobra.Command {
 		},
 	}
 	cmd.Flags().String("users", "", "Comma-separated user ID list (required)")
+	_ = cmd.MarkFlagRequired("users")
 	cmd.Flags().String("start", "", "Start date, format YYYY-MM-DD (required)")
+	_ = cmd.MarkFlagRequired("start")
 	cmd.Flags().String("end", "", "End date, format YYYY-MM-DD (required)")
+	_ = cmd.MarkFlagRequired("end")
 	preferLegacyLeaf(cmd)
 	return cmd
 }
@@ -215,15 +205,6 @@ func newAttendanceShiftListCommand(runner executor.Runner) *cobra.Command {
 			usersStr, _ := cmd.Flags().GetString("users")
 			startStr, _ := cmd.Flags().GetString("start")
 			endStr, _ := cmd.Flags().GetString("end")
-			if usersStr == "" {
-				return apperrors.NewValidation("--users is required")
-			}
-			if startStr == "" {
-				return apperrors.NewValidation("--start is required (format: YYYY-MM-DD)")
-			}
-			if endStr == "" {
-				return apperrors.NewValidation("--end is required (format: YYYY-MM-DD)")
-			}
 			startT, err := time.ParseInLocation("2006-01-02", startStr, time.Local)
 			if err != nil {
 				return apperrors.NewValidation("--start date format error, use YYYY-MM-DD")
@@ -258,8 +239,11 @@ func newAttendanceShiftListCommand(runner executor.Runner) *cobra.Command {
 		},
 	}
 	cmd.Flags().String("users", "", "Comma-separated user ID list, max 50 (required)")
+	_ = cmd.MarkFlagRequired("users")
 	cmd.Flags().String("start", "", "Start date, format YYYY-MM-DD (required)")
+	_ = cmd.MarkFlagRequired("start")
 	cmd.Flags().String("end", "", "End date, format YYYY-MM-DD (required)")
+	_ = cmd.MarkFlagRequired("end")
 	preferLegacyLeaf(cmd)
 	return cmd
 }
@@ -277,12 +261,6 @@ func newAttendanceSummaryCommand(runner executor.Runner) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			userID, _ := cmd.Flags().GetString("user")
 			workDateStr, _ := cmd.Flags().GetString("date")
-			if userID == "" {
-				return apperrors.NewValidation("--user is required, provide DingTalk user ID")
-			}
-			if workDateStr == "" {
-				return apperrors.NewValidation("--date is required, format yyyy-MM-dd HH:mm:ss")
-			}
 			_, err := time.ParseInLocation("2006-01-02 15:04:05", workDateStr, time.Local)
 			if err != nil {
 				return apperrors.NewValidation("--date format error, use yyyy-MM-dd HH:mm:ss")
@@ -310,7 +288,9 @@ func newAttendanceSummaryCommand(runner executor.Runner) *cobra.Command {
 		},
 	}
 	cmd.Flags().String("user", "", "钉钉用户 ID（必填）")
+	_ = cmd.MarkFlagRequired("user")
 	cmd.Flags().String("date", "", "工作日期，格式 yyyy-MM-dd HH:mm:ss，如 2026-03-12 15:00:00（必填）")
+	_ = cmd.MarkFlagRequired("date")
 	preferLegacyLeaf(cmd)
 	return cmd
 }
@@ -327,9 +307,6 @@ func newAttendanceRulesCommand(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dateStr, _ := cmd.Flags().GetString("date")
-			if dateStr == "" {
-				return apperrors.NewValidation("--date is required")
-			}
 			// Support YYYY-MM-DD or yyyy-MM-dd HH:mm:ss, normalize to yyyy-MM-dd HH:mm:ss
 			var dateFormatted string
 			if t, err := time.ParseInLocation("2006-01-02 15:04:05", dateStr, time.Local); err == nil {
@@ -357,6 +334,7 @@ func newAttendanceRulesCommand(runner executor.Runner) *cobra.Command {
 		},
 	}
 	cmd.Flags().String("date", "", "考勤日期，格式 YYYY-MM-DD 或 yyyy-MM-dd HH:mm:ss (必填)")
+	_ = cmd.MarkFlagRequired("date")
 	preferLegacyLeaf(cmd)
 	return cmd
 }
