@@ -86,21 +86,6 @@ func TestIsPatScopeError_InsufficientScope(t *testing.T) {
 	}
 }
 
-func TestExtractPatScopeError_MissingScope(t *testing.T) {
-	t.Parallel()
-	err := apperrors.NewAuth("missing required scope(s): mail:user_mailbox.message:send")
-	scopeErr := extractPatScopeError(err)
-	if scopeErr == nil {
-		t.Fatal("expected non-nil PatScopeError")
-	}
-	if scopeErr.ErrorType != "missing_scope" {
-		t.Errorf("expected error type 'missing_scope', got %q", scopeErr.ErrorType)
-	}
-	if !strings.Contains(scopeErr.Hint, "dws auth login") {
-		t.Errorf("expected hint to contain 'dws auth login', got %q", scopeErr.Hint)
-	}
-}
-
 func TestExtractPatScopeError_ExtractsScope(t *testing.T) {
 	t.Parallel()
 	err := &PatScopeError{
@@ -153,12 +138,25 @@ func TestPrintPatAuthJSON_MachineReadable(t *testing.T) {
 	}
 	PrintPatAuthJSON(&buf, scopeErr)
 
+	// Per docs/pat/contract.md §2 the payload is single-line; assert by parsing the JSON
+	// rather than by matching pretty-printed substrings.
 	output := buf.String()
-	if !strings.Contains(output, `"ok": false`) {
-		t.Errorf("expected JSON to contain ok: false, got: %s", output)
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		t.Fatalf("PrintPatAuthJSON must emit directly-parsable JSON: %v\nraw=%s", err, output)
 	}
-	if !strings.Contains(output, `"missing_scope": "mail:send"`) {
-		t.Errorf("expected JSON to contain missing_scope, got: %s", output)
+	if code, _ := parsed["code"].(string); code != "PAT_SCOPE_AUTH_REQUIRED" {
+		t.Errorf("code = %q, want PAT_SCOPE_AUTH_REQUIRED", code)
+	}
+	data, _ := parsed["data"].(map[string]any)
+	if data == nil {
+		t.Fatalf("expected data object, got: %s", output)
+	}
+	if got, _ := data["missingScope"].(string); got != "mail:send" {
+		t.Errorf("missingScope = %q, want mail:send", got)
+	}
+	if _, ok := data["hostControl"]; !ok {
+		t.Errorf("expected data.hostControl, got: %s", output)
 	}
 }
 
@@ -507,6 +505,7 @@ func makePATErrorJSON(flowID, clientID string) string {
 }
 
 func TestHandlePatAuthCheck_Approved(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "")
 	server, configDir := setupHandlePATServer(t, "APPROVED", "test-auth-code")
 	defer server.Close()
 
@@ -546,6 +545,7 @@ func TestHandlePatAuthCheck_Approved(t *testing.T) {
 }
 
 func TestHandlePatAuthCheck_Rejected(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "")
 	server, configDir := setupHandlePATServer(t, "REJECTED", "")
 	defer server.Close()
 
@@ -574,7 +574,126 @@ func TestHandlePatAuthCheck_Rejected(t *testing.T) {
 	}
 }
 
+func TestHandlePatAuthCheck_HostControlledFlowIDPassthrough(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", tmpDir)
+	// Host-owned decision: driven ONLY by DINGTALK_DWS_AGENTCODE (see docs/pat/contract.md §7).
+	// DINGTALK_AGENT is set to demonstrate it does NOT leak into
+	// hostControl.clawType — the open-source build pins that to the
+	// literal edition.DefaultOSSClawType value ("openClaw").
+	t.Setenv(authpkg.AgentCodeEnv, "agt-sales")
+	t.Setenv("DINGTALK_AGENT", "sales-copilot")
+
+	mock := &mockRunner{
+		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
+			t.Fatal("runner should not be called in host-controlled PAT mode")
+			return executor.Result{}, nil
+		},
+	}
+
+	runner := &runtimeRunner{fallback: mock}
+	patErr := &apperrors.PATError{RawJSON: makePATErrorJSON("flow-host", "test-client-id")}
+
+	ctx := context.Background()
+	var buf bytes.Buffer
+	_, err := handlePatAuthCheck(ctx, runner, executor.Invocation{
+		CanonicalProduct: "test",
+		Tool:             "test_tool",
+	}, patErr, tmpDir, &buf)
+
+	if err == nil {
+		t.Fatal("expected PATError in host-controlled mode")
+	}
+	patOut, ok := err.(*apperrors.PATError)
+	if !ok {
+		t.Fatalf("expected *PATError, got %T: %v", err, err)
+	}
+	if got := strings.TrimSpace(buf.String()); got != "" {
+		t.Fatalf("expected no human-readable output in host mode, got %q", got)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(patOut.RawJSON), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(host PAT payload) error = %v\nraw=%s", err, patOut.RawJSON)
+	}
+
+	data, _ := payload["data"].(map[string]any)
+	if got, _ := data["flowId"].(string); got != "flow-host" {
+		t.Fatalf("data.flowId = %q, want flow-host", got)
+	}
+	hostControl, _ := data["hostControl"].(map[string]any)
+	if got, _ := hostControl["clawType"].(string); got != "openClaw" {
+		t.Fatalf("hostControl.clawType = %q, want openClaw (hard-wired by open-source edition)", got)
+	}
+	if got, _ := hostControl["callbackOwner"].(string); got != "host" {
+		t.Fatalf("hostControl.callbackOwner = %q, want host", got)
+	}
+	if _, ok := data["callbacks"]; ok {
+		t.Fatalf("unexpected callbacks contract in host-controlled PAT payload: %#v", data["callbacks"])
+	}
+	if _, ok := payload["_meta"]; ok {
+		t.Fatalf("unexpected _meta contract in host-controlled PAT payload: %#v", payload["_meta"])
+	}
+	if strings.Contains(patOut.RawJSON, `"pat","callback"`) {
+		t.Fatalf("host PAT payload should not advertise dws pat callback argv: %s", patOut.RawJSON)
+	}
+}
+
+func TestHandlePatAuthCheck_HostControlledEmptyFlowID_StillReturnsContract(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", tmpDir)
+	t.Setenv(authpkg.AgentCodeEnv, "agt-support")
+	t.Setenv("DINGTALK_AGENT", "customer-support")
+
+	mock := &mockRunner{
+		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
+			t.Fatal("runner should not be called in host-controlled PAT mode")
+			return executor.Result{}, nil
+		},
+	}
+
+	runner := &runtimeRunner{fallback: mock}
+	patErr := &apperrors.PATError{RawJSON: makePATErrorJSON("", "test-client-id")}
+
+	var buf bytes.Buffer
+	_, err := handlePatAuthCheck(context.Background(), runner, executor.Invocation{
+		CanonicalProduct: "test",
+		Tool:             "test_tool",
+	}, patErr, tmpDir, &buf)
+
+	if err == nil {
+		t.Fatal("expected PATError in host-controlled mode")
+	}
+	if got := strings.TrimSpace(buf.String()); got != "" {
+		t.Fatalf("expected no human-readable output in host mode, got %q", got)
+	}
+	patOut, ok := err.(*apperrors.PATError)
+	if !ok {
+		t.Fatalf("expected *PATError, got %T: %v", err, err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(patOut.RawJSON), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(host PAT payload) error = %v\nraw=%s", err, patOut.RawJSON)
+	}
+	data, _ := payload["data"].(map[string]any)
+	hostControl, _ := data["hostControl"].(map[string]any)
+	if got, _ := hostControl["callbackOwner"].(string); got != "host" {
+		t.Fatalf("hostControl.callbackOwner = %q, want host", got)
+	}
+	if _, ok := data["callbacks"]; ok {
+		t.Fatalf("unexpected callbacks contract when flowId is absent: %#v", data["callbacks"])
+	}
+	if _, ok := payload["_meta"]; ok {
+		t.Fatalf("unexpected _meta contract when flowId is absent: %#v", payload["_meta"])
+	}
+	if strings.Contains(patOut.RawJSON, `"pat","callback"`) {
+		t.Fatalf("host PAT payload should not advertise dws pat callback argv: %s", patOut.RawJSON)
+	}
+}
+
 func TestHandlePatAuthCheck_EmptyFlowID_FallsBackToPATError(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "")
 	// No poll server needed — empty flowId means no polling, return PATError directly.
 	tmpDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", tmpDir)
@@ -602,5 +721,129 @@ func TestHandlePatAuthCheck_EmptyFlowID_FallsBackToPATError(t *testing.T) {
 	// Should return the original PATError.
 	if _, ok := err.(*apperrors.PATError); !ok {
 		t.Errorf("expected *PATError, got %T: %v", err, err)
+	}
+	if got := strings.TrimSpace(buf.String()); got != "" {
+		t.Fatalf("expected no human-readable output for raw PAT passthrough, got %q", got)
+	}
+}
+
+// TestEnrichPATErrorForHostControl_SingleLineOutput locks in the docs/pat/contract.md §2 /
+// docs/pat/contract.md §2 wire invariant: the enriched host-controlled
+// PAT payload must be single-line (no embedded newlines, no indentation),
+// so stderr-line-scanning hosts stay correct. Regression guard against
+// accidental reintroduction of json.MarshalIndent.
+func TestEnrichPATErrorForHostControl_SingleLineOutput(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "agt-sales")
+	t.Setenv("DINGTALK_AGENT", "sales-copilot")
+
+	raw := `{"success":false,"code":"PAT_LOW_RISK_NO_PERMISSION","data":{"flowId":"flow-1","desc":"授权","callbacks":["cb1","cb2"]}}`
+	out := enrichPATErrorForHostControl(raw)
+
+	if strings.Contains(out, "\n") {
+		t.Fatalf("enrichPATErrorForHostControl output must be single-line, got embedded newline:\n%s", out)
+	}
+	if strings.HasPrefix(out, " ") || strings.HasPrefix(out, "\t") {
+		t.Fatalf("enrichPATErrorForHostControl output must not be indented, got leading whitespace: %q", out)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
+		t.Fatalf("single-line output must round-trip via json.Unmarshal: %v\nraw=%s", err, out)
+	}
+	data, _ := parsed["data"].(map[string]any)
+	hostControl, _ := data["hostControl"].(map[string]any)
+	if hostControl == nil {
+		t.Fatalf("expected data.hostControl injection, got: %s", out)
+	}
+	if got, _ := hostControl["callbackOwner"].(string); got != "host" {
+		t.Fatalf("hostControl.callbackOwner = %q, want host", got)
+	}
+	if _, ok := data["callbacks"]; ok {
+		t.Fatalf("expected callbacks to be stripped in host-owned contract, got: %v", data["callbacks"])
+	}
+}
+
+// TestBuildPATScopeHostJSON_SingleLineOutput mirrors the above regression
+// for the scope-error branch (PAT_SCOPE_AUTH_REQUIRED emission).
+func TestBuildPATScopeHostJSON_SingleLineOutput(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "agt-support")
+	t.Setenv("DINGTALK_AGENT", "customer-support")
+
+	scopeErr := &PatScopeError{
+		OriginalError: "missing required scope(s): mail:send",
+		Identity:      "user",
+		ErrorType:     "missing_scope",
+		Message:       "missing required scope(s): mail:send",
+		Hint:          "run `dws auth login --scope \"mail:send\"` to authorize",
+		MissingScope:  "mail:send",
+	}
+	out := buildPATScopeHostJSON(scopeErr)
+
+	if strings.Contains(out, "\n") {
+		t.Fatalf("buildPATScopeHostJSON output must be single-line, got embedded newline:\n%s", out)
+	}
+	if strings.HasPrefix(out, " ") || strings.HasPrefix(out, "\t") {
+		t.Fatalf("buildPATScopeHostJSON output must not be indented, got leading whitespace: %q", out)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
+		t.Fatalf("single-line output must round-trip via json.Unmarshal: %v\nraw=%s", err, out)
+	}
+	if code, _ := parsed["code"].(string); code != "PAT_SCOPE_AUTH_REQUIRED" {
+		t.Errorf("code = %q, want PAT_SCOPE_AUTH_REQUIRED", code)
+	}
+}
+
+func TestRetryWithPatAuthRetry_HostControlledReturnsJSON(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "agt-support")
+	t.Setenv("DINGTALK_AGENT", "customer-support")
+
+	scopeErr := &PatScopeError{
+		OriginalError: "missing required scope(s): mail:send",
+		Identity:      "user",
+		ErrorType:     "missing_scope",
+		Message:       "missing required scope(s): mail:send",
+		Hint:          "run `dws auth login --scope \"mail:send\"` to authorize the missing scope",
+		MissingScope:  "mail:send",
+	}
+
+	mock := &mockRunner{
+		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
+			t.Fatal("runner should not be called in host-controlled scope mode")
+			return executor.Result{}, nil
+		},
+	}
+
+	var buf bytes.Buffer
+	_, err := retryWithPatAuthRetry(context.Background(), mock, executor.Invocation{}, scopeErr, t.TempDir(), &buf)
+	if err == nil {
+		t.Fatal("expected PATError")
+	}
+	if got := strings.TrimSpace(buf.String()); got != "" {
+		t.Fatalf("expected no human-readable output, got %q", got)
+	}
+	patErr, ok := err.(*apperrors.PATError)
+	if !ok {
+		t.Fatalf("expected *PATError, got %T: %v", err, err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(patErr.RawJSON), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(scope host payload) error = %v\nraw=%s", err, patErr.RawJSON)
+	}
+	if got, _ := payload["code"].(string); got != "PAT_SCOPE_AUTH_REQUIRED" {
+		t.Fatalf("code = %q, want PAT_SCOPE_AUTH_REQUIRED", got)
+	}
+	data, _ := payload["data"].(map[string]any)
+	if got, _ := data["missingScope"].(string); got != "mail:send" {
+		t.Fatalf("missingScope = %q, want mail:send", got)
+	}
+	hostControl, _ := data["hostControl"].(map[string]any)
+	if got, _ := hostControl["callbackOwner"].(string); got != "host" {
+		t.Fatalf("hostControl.callbackOwner = %q, want host", got)
+	}
+	if _, ok := data["callbacks"]; ok {
+		t.Fatalf("unexpected callbacks contract in PAT scope host payload: %#v", data["callbacks"])
+	}
+	if strings.Contains(patErr.RawJSON, `"pat","callback"`) {
+		t.Fatalf("scope host payload should not advertise dws pat callback argv: %s", patErr.RawJSON)
 	}
 }

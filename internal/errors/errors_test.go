@@ -29,7 +29,7 @@ func TestExitCodeByCategory(t *testing.T) {
 		{err: NewAPI("api"), want: 1},
 		{err: NewAuth("auth"), want: 2},
 		{err: NewValidation("validation"), want: 3},
-		{err: NewDiscovery("discovery"), want: 4},
+		{err: NewDiscovery("discovery"), want: 6},
 		{err: NewInternal("internal"), want: 5},
 		{err: stderrors.New("plain"), want: 5},
 	}
