@@ -350,8 +350,8 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 | Service | Command | Commands | Subcommands | Description |
 |---------|---------|:--------:|-------------|-------------|
 | Contact | `contact` | 6 | `user` `dept` | Search users by name/mobile, batch query, departments, current user profile |
-| Chat | `chat` | 10 | `message` `group` `search` | Group CRUD, member management, bot messaging, webhook |
-| Bot | `chat bot` | 6 | `bot` `group` `message` `search` | Robot creation/search, group/single messaging, webhook, message recall |
+| Chat / IM | `chat` (alias `im`) | 20 | `message` `group` `search` `list-top-conversations` | User-identity send (group / 1-on-1 / open-dingtalk-id), Markdown + image, @mentions; read & search conversations (list, list-all, topic replies, by-sender, mentions, focused, unread, search, info, top / common groups); group CRUD + member management |
+| Bot | `chat bot` | 7 | `bot` `group` `message` `search` `create` `search-groups` | Bot create / search, search bot groups; bot-identity group & batch-1:1 messaging, Webhook, message recall; add bot to group |
 | Calendar | `calendar` | 13 | `event` `room` `participant` `busy` | Events CRUD, meeting room booking, free-busy query, participant management |
 | Todo | `todo` | 6 | `task` | Create, list, update, done, get detail, delete |
 | Approval | `oa` | 9 | `approval` | Approve/reject/revoke, pending tasks, initiated instances, process list |
@@ -364,7 +364,7 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 | Workbench | `workbench` | 2 | `app` | Batch query app details |
 | DevDoc | `devdoc` | 1 | `article` | Search platform docs and error codes |
 
-> 141 commands across 14 products. Run `dws --help` for the full list, or `dws <service> --help` for subcommands.
+> 152 commands across 14 products. Run `dws --help` for the full list, or `dws <service> --help` for subcommands.
 
 <details>
 <summary>Coming soon</summary>
