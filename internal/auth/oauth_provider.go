@@ -55,6 +55,16 @@ func NewOAuthProvider(configDir string, logger *slog.Logger) *OAuthProvider {
 	}
 }
 
+// resetCredentialState clears any stale credential state inherited from
+// previous login methods so that OAuth flow always starts fresh by
+// fetching clientID from MCP.
+func (p *OAuthProvider) resetCredentialState() {
+	p.clientID = ""
+	clientMu.Lock()
+	clientIDFromMCP = false
+	clientMu.Unlock()
+}
+
 func (p *OAuthProvider) output() io.Writer {
 	if p != nil && p.Output != nil {
 		return p.Output
@@ -94,21 +104,22 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 	}
 
 	// Fall through: full browser OAuth flow.
-	// Ensure we have a valid client ID (fetch from MCP if not available)
-	if p.clientID == "" {
-		if p.logger != nil {
-			p.logger.Debug("client ID not configured, fetching from MCP server")
-		}
-		mcpClientID, mcpErr := FetchClientIDFromMCP(ctx)
-		if mcpErr != nil {
-			return nil, fmt.Errorf("%s: %w", i18n.T("获取 Client ID 失败"), mcpErr)
-		}
-		p.clientID = mcpClientID
-		// Mark that clientID is from MCP, so we use MCP OAuth endpoints
-		SetClientIDFromMCP(mcpClientID)
-		if p.logger != nil {
-			p.logger.Debug("fetched client ID from MCP server", "clientID", mcpClientID)
-		}
+	// Defensive reset: clear any stale credential state from previous login
+	// methods so we always re-fetch clientID from MCP. This ensures
+	// --force login works regardless of what app.json contains.
+	p.resetCredentialState()
+
+	if p.logger != nil {
+		p.logger.Debug("fetching client ID from MCP server (OAuth flow always re-fetches)")
+	}
+	mcpClientID, mcpErr := FetchClientIDFromMCP(ctx)
+	if mcpErr != nil {
+		return nil, fmt.Errorf("%s: %w", i18n.T("获取 Client ID 失败"), mcpErr)
+	}
+	p.clientID = mcpClientID
+	SetClientIDFromMCP(mcpClientID)
+	if p.logger != nil {
+		p.logger.Debug("fetched client ID from MCP server", "clientID", mcpClientID)
 	}
 
 	// Find a free port for the callback server.
