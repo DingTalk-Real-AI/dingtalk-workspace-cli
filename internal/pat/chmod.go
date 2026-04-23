@@ -16,6 +16,7 @@ package pat
 import (
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -308,6 +309,15 @@ func isToolNotRegisteredError(err error) bool {
 		return false
 	}
 	msg := strings.ToLower(err.Error())
+	var typed *apperrors.Error
+	if stderrors.As(err, &typed) && typed != nil {
+		msg = strings.Join([]string{
+			msg,
+			strings.ToLower(typed.Reason),
+			strings.ToLower(typed.ServerDiag.ServerErrorCode),
+			strings.ToLower(typed.ServerDiag.TechnicalDetail),
+		}, " ")
+	}
 	needles := []string{
 		"tool_not_found",
 		"mcp_tool_not_found",

@@ -22,6 +22,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -178,6 +179,19 @@ func TestCallPATToolWithLegacyFallback_emptyCanonicalResultRetriesLegacyAlias(t 
 
 func TestIsToolNotRegisteredError_ChineseGatewayMessage(t *testing.T) {
 	err := errors.New("pat chmod failed: business error: PARAM_ERROR - 未找到指定工具")
+	if !isToolNotRegisteredError(err) {
+		t.Fatalf("isToolNotRegisteredError(%q) = false, want true", err.Error())
+	}
+}
+
+func TestIsToolNotRegisteredError_ChineseGatewayDiagnostics(t *testing.T) {
+	err := apperrors.NewAPI("business error: success=false",
+		apperrors.WithReason("business_error"),
+		apperrors.WithServerDiag(apperrors.ServerDiagnostics{
+			ServerErrorCode: "PARAM_ERROR",
+			TechnicalDetail: "Tool metadata API error: PARAM_ERROR - 未找到指定工具",
+		}),
+	)
 	if !isToolNotRegisteredError(err) {
 		t.Fatalf("isToolNotRegisteredError(%q) = false, want true", err.Error())
 	}
