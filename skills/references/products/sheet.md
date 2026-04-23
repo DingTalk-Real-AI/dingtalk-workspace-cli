@@ -1,5 +1,7 @@
 # 电子表格 (sheet) 命令参考
 
+> ⚠️ **命令名以 `dws sheet --help` 实际输出为准**：本文档的命令命名（如 `sheet list` / `sheet range read`）来自上游 wukong CLI 的层级 overlay；当前 cli 暴露的可能是扁平 MCP tool 名（如 `sheet get-all-sheets` / `sheet get-range`）。用户实际操作前请用 `dws sheet --help` / `dws sheet <cmd> --help` 确认子命令名与参数名。
+
 ## 命令总览
 
 ### 创建钉钉表格文档
