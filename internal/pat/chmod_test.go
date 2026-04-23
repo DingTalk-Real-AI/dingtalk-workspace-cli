@@ -57,6 +57,43 @@ func (f *fakeToolCaller) CallTool(_ context.Context, _ string, toolName string, 
 func (f *fakeToolCaller) Format() string { return "json" }
 func (f *fakeToolCaller) DryRun() bool   { return f.dryRun }
 
+type recordedToolCall struct {
+	tool string
+	args map[string]any
+}
+
+type fallbackToolCaller struct {
+	calls []recordedToolCall
+}
+
+func (f *fallbackToolCaller) CallTool(_ context.Context, _ string, toolName string, args map[string]any) (*edition.ToolResult, error) {
+	copied := make(map[string]any, len(args))
+	for k, v := range args {
+		copied[k] = v
+	}
+	f.calls = append(f.calls, recordedToolCall{tool: toolName, args: copied})
+	if len(f.calls) == 1 {
+		return &edition.ToolResult{}, nil
+	}
+	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{"success":true,"data":{"authRequestId":"req-ok"}}`}}}, nil
+}
+
+func (f *fallbackToolCaller) Format() string { return "json" }
+func (f *fallbackToolCaller) DryRun() bool   { return false }
+
+func stringSliceArgEqual(got any, want []string) bool {
+	gotSlice, ok := got.([]string)
+	if !ok || len(gotSlice) != len(want) {
+		return false
+	}
+	for i := range want {
+		if gotSlice[i] != want[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // buildChmod returns a freshly constructed chmod cobra.Command wired to
 // fake. Using the factory (instead of a package-level var) keeps every
 // subtest hermetic and matches the upstream shared-state fix in PR #129.
@@ -86,6 +123,55 @@ func TestChmod_agentCode_env_fallback(t *testing.T) {
 
 	if got := fake.gotArgs["agentCode"]; got != "qoderwork" {
 		t.Fatalf("agentCode in argv = %v, want %q (env fallback)", got, "qoderwork")
+	}
+	if got := fake.gotArgs["scopes"]; !stringSliceArgEqual(got, []string{"aitable.record:read"}) {
+		t.Fatalf("scopes in argv = %#v, want %#v", got, []string{"aitable.record:read"})
+	}
+	if _, ok := fake.gotArgs["scope"]; ok {
+		t.Fatalf("unexpected legacy singular scope arg in argv: %#v", fake.gotArgs)
+	}
+}
+
+func TestCallPATToolWithLegacyFallback_emptyCanonicalResultRetriesLegacyAlias(t *testing.T) {
+	fake := &fallbackToolCaller{}
+	canonicalArgs := map[string]any{
+		"agentCode": "qoderwork",
+		"scopes":    []string{"aitable.record:read"},
+		"grantType": "permanent",
+	}
+	legacyArgs := map[string]any{
+		"agentCode": "qoderwork",
+		"scope":     []string{"aitable.record:read"},
+		"grantType": "permanent",
+	}
+
+	result, err := callPATToolWithLegacyFallback(context.Background(), fake, "pat", patGrantToolName, patGrantToolNameLegacyAlias, canonicalArgs, legacyArgs)
+	if err != nil {
+		t.Fatalf("callPATToolWithLegacyFallback error = %v", err)
+	}
+	if isEmptyToolResult(result) {
+		t.Fatalf("fallback result is empty: %#v", result)
+	}
+	if len(fake.calls) != 2 {
+		t.Fatalf("CallTool call count = %d, want 2", len(fake.calls))
+	}
+	if fake.calls[0].tool != patGrantToolName {
+		t.Fatalf("first tool = %q, want %q", fake.calls[0].tool, patGrantToolName)
+	}
+	if _, ok := fake.calls[0].args["scopes"]; !ok {
+		t.Fatalf("canonical args missing scopes: %#v", fake.calls[0].args)
+	}
+	if _, ok := fake.calls[0].args["scope"]; ok {
+		t.Fatalf("canonical args should not use legacy scope: %#v", fake.calls[0].args)
+	}
+	if fake.calls[1].tool != patGrantToolNameLegacyAlias {
+		t.Fatalf("fallback tool = %q, want %q", fake.calls[1].tool, patGrantToolNameLegacyAlias)
+	}
+	if _, ok := fake.calls[1].args["scope"]; !ok {
+		t.Fatalf("legacy args missing scope: %#v", fake.calls[1].args)
+	}
+	if _, ok := fake.calls[1].args["scopes"]; ok {
+		t.Fatalf("legacy args should not use canonical scopes: %#v", fake.calls[1].args)
 	}
 }
 

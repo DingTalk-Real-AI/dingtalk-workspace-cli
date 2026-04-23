@@ -11,10 +11,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// English-first wire name per docs/pat/contract.md §7/§8; legacy Chinese
-// alias is kept only for cross-version server compatibility and MUST be
-// removed once server-side migration to pat.grant completes.
-
 package pat
 
 import (
@@ -144,16 +140,11 @@ func resolveAgentCode(flagVal string, required bool) (string, error) {
 }
 
 const (
-	// patGrantToolName is the English-first wire name for the PAT grant tool
-	// as mandated by docs/pat/contract.md §7/§8. This is the canonical id
-	// that CLI sends to the server.
+	// patGrantToolName is the English-first wire name for the PAT grant tool.
 	patGrantToolName = "pat.grant"
 
-	// patGrantToolNameLegacyAlias is retained solely for cross-version
-	// compatibility with older server builds that only registered the
-	// legacy Chinese display name.
-	// NOTE(pat-legacy-alias): remove when server supports only pat.grant;
-	// see docs/pat/contract.md §7.
+	// patGrantToolNameLegacyAlias is retained for server builds that still
+	// expose only the legacy Chinese display name.
 	patGrantToolNameLegacyAlias = "个人授权"
 
 	// patApplyToolName is the English-first wire name used by the
@@ -233,6 +224,11 @@ grantType 规则:
 
 			toolArgs := map[string]any{
 				"agentCode": agentCode,
+				"scopes":    scopes,
+				"grantType": grantType,
+			}
+			legacyToolArgs := map[string]any{
+				"agentCode": agentCode,
 				"scope":     scopes,
 				"grantType": grantType,
 			}
@@ -241,10 +237,11 @@ grantType 规则:
 			}
 			if sessionID != "" {
 				toolArgs["sessionId"] = sessionID
+				legacyToolArgs["sessionId"] = sessionID
 			}
 
 			ctx := context.Background()
-			result, err := callPATToolWithLegacyFallback(ctx, c, "pat", patGrantToolName, patGrantToolNameLegacyAlias, toolArgs)
+			result, err := callPATToolWithLegacyFallback(ctx, c, "pat", patGrantToolName, patGrantToolNameLegacyAlias, toolArgs, legacyToolArgs)
 			if err != nil {
 				return fmt.Errorf("pat chmod failed: %w", err)
 			}
@@ -266,27 +263,40 @@ grantType 规则:
 	return chmodCmd
 }
 
-// callPATToolWithLegacyFallback invokes toolName on the PAT product via the
-// supplied ToolCaller. If the server responds with a tool-not-registered
-// style error AND a non-empty legacyAlias is provided, the call is retried
-// once against legacyAlias to keep us compatible with older server builds
-// during the English-first migration.
-//
-// NOTE(pat-legacy-alias): remove the legacyAlias fallback path when server
-// supports only English wire names; see docs/pat/contract.md §7.
-func callPATToolWithLegacyFallback(ctx context.Context, c edition.ToolCaller, productID, toolName, legacyAlias string, toolArgs map[string]any) (*edition.ToolResult, error) {
+// callPATToolWithLegacyFallback invokes the canonical PAT grant tool first,
+// then silently retries the legacy Chinese alias when the server has not
+// registered the canonical tool yet. The retry intentionally emits no stderr
+// banner because host-owned PAT callers parse stderr as machine JSON.
+func callPATToolWithLegacyFallback(ctx context.Context, c edition.ToolCaller, productID, toolName, legacyAlias string, toolArgs, legacyArgs map[string]any) (*edition.ToolResult, error) {
 	if c == nil {
 		return nil, fmt.Errorf("internal error: tool runtime not initialized")
 	}
 	result, err := c.CallTool(ctx, productID, toolName, toolArgs)
-	if err == nil {
+	if err == nil && !isEmptyToolResult(result) {
 		return result, nil
 	}
-	if legacyAlias == "" || !isToolNotRegisteredError(err) {
+	if legacyAlias == "" {
+		if err != nil {
+			return nil, err
+		}
+		return result, nil
+	}
+	if err != nil && !isToolNotRegisteredError(err) {
 		return nil, err
 	}
-	fmt.Fprintf(os.Stderr, "pat: server has no tool %q yet; retrying with legacy alias %q (temporary migration shim)\n", toolName, legacyAlias)
-	return c.CallTool(ctx, productID, legacyAlias, toolArgs)
+	return c.CallTool(ctx, productID, legacyAlias, legacyArgs)
+}
+
+func isEmptyToolResult(result *edition.ToolResult) bool {
+	if result == nil || len(result.Content) == 0 {
+		return true
+	}
+	for _, block := range result.Content {
+		if block.Type == "text" && strings.TrimSpace(block.Text) != "" {
+			return false
+		}
+	}
+	return true
 }
 
 // isToolNotRegisteredError reports whether err looks like a server-side
@@ -331,10 +341,6 @@ func handleToolResult(result *edition.ToolResult) error {
 		fmt.Println(c.Text)
 		return nil
 	}
-	data, err := json.MarshalIndent(result, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal result: %w", err)
-	}
-	fmt.Println(string(data))
-	return nil
+	data, _ := json.Marshal(result)
+	return fmt.Errorf("empty PAT authorization result: %s", string(data))
 }
