@@ -41,10 +41,13 @@ Usage:
   dws aitable base search [flags]
 Example:
   dws aitable base search --query "项目管理"
+  dws aitable base search --query "项目" --cursor <nextCursor>
 Flags:
       --cursor string   分页游标，首次不传
       --query string    Base 名称关键词，建议至少 2 个字符 (必填)
 ```
+
+> ⚠️ `base search` **没有 `--limit` flag**（由服务端固定分页），如需翻页用 `--cursor`。
 
 #### 获取 AI 表格信息
 ```
@@ -188,24 +191,17 @@ Flags:
 Usage:
   dws aitable field create [flags]
 Example:
-  # 单字段模式
   dws aitable field create --base-id <BASE_ID> --table-id <TABLE_ID> \
     --name "状态" --type "singleSelect" --config '{"options":[{"name":"待办"},{"name":"进行中"},{"name":"已完成"}]}'
-
-  # 批量模式
-  dws aitable field create --base-id <BASE_ID> --table-id <TABLE_ID> \
-    --fields '[{"fieldName":"状态","type":"singleSelect","config":{"options":[{"name":"待办"}]}}]'
 Flags:
       --base-id string    Base ID (必填)
-      --name string       单字段名称（与 --type 配合使用，替代 --fields）
-      --type string       单字段类型（参考 table create 字段类型）
-      --config string     单字段配置 JSON（可选，如 options）
-      --fields string     批量新增字段 JSON 数组，单次最多 15 个（与 --name/--type 二选一）
+      --name string       字段名称 (必填)
+      --type string       字段类型（参考 table create 字段类型）(必填)
+      --config string     字段配置 JSON（可选，如 options）
       --table-id string   Table ID (必填)
 ```
 
-允许部分成功，返回结果逐项标明成功/失败状态。
-`--name/--type/--config` 为单字段模式；`--fields` 为批量模式；两种模式二选一。
+> ⚠️ 真实 CLI **没有 `--fields` 批量参数**。批量建字段请循环调用 `field create`，或通过 `scripts/bulk_add_fields.py` 脚本封装。
 
 #### 更新字段
 ```
@@ -379,6 +375,246 @@ Flags:
 返回 templateId 可用于 `base create --template-id`。
 
 > 📎 **模板预览地址**：`https://docs.dingtalk.com/table/template/{templateId}`
+
+### view (视图管理)
+
+#### 获取视图
+```
+Usage:
+  dws aitable view get [flags]
+Example:
+  dws aitable view get --base-id <BASE_ID> --table-id <TABLE_ID>
+  dws aitable view get --base-id <BASE_ID> --table-id <TABLE_ID> --view-ids viewId1,viewId2
+Flags:
+      --base-id string    baseId (必填)
+      --table-id string   tableId (必填)
+      --view-ids string   viewIds 列表，逗号分隔（可选，不传返回全部）
+```
+
+#### 创建视图
+```
+Usage:
+  dws aitable view create [flags]
+Example:
+  dws aitable view create --base-id <BASE_ID> --table-id <TABLE_ID> --name "进行中" --view-type grid
+Flags:
+      --base-id string     baseId (必填)
+      --table-id string    tableId (必填)
+      --name string        视图名称 viewName (必填)
+      --view-type string   视图类型 viewType（grid/kanban/gallery/form 等）
+      --config string      视图配置 JSON（筛选/排序/分组等）
+```
+
+#### 更新视图
+```
+Usage:
+  dws aitable view update [flags]
+Example:
+  dws aitable view update --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID> --name "已完成"
+Flags:
+      --base-id string    baseId (必填)
+      --table-id string   tableId (必填)
+      --view-id string    viewId (必填)
+      --name string       新视图名 newViewName
+      --config string     新视图配置 JSON
+```
+
+#### 删除视图
+> ⚠️ 执行前须用户确认，同意后加 `--yes`。
+```
+Usage:
+  dws aitable view delete [flags]
+Example:
+  dws aitable view delete --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID> --yes
+Flags:
+      --base-id string    baseId (必填)
+      --table-id string   tableId (必填)
+      --view-id string    viewId (必填)
+```
+
+---
+
+### dashboard (仪表盘管理)
+
+#### 获取配置模板（JSONC）
+```
+Usage:
+  dws aitable dashboard config-example
+```
+返回一份带注释的示例 config，用于构造 `dashboard create --config`。
+
+#### 创建仪表盘
+```
+Usage:
+  dws aitable dashboard create [flags]
+Example:
+  dws aitable dashboard create --base-id <BASE_ID> --config '<JSON>'
+Flags:
+      --base-id string   baseId (必填)
+      --config string    仪表盘配置 JSON (必填)
+```
+
+#### 获取仪表盘详情
+```
+Usage:
+  dws aitable dashboard get [flags]
+Example:
+  dws aitable dashboard get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID>
+Flags:
+      --base-id string        baseId (必填)
+      --dashboard-id string   dashboardId (必填)
+```
+
+#### 更新仪表盘
+```
+Usage:
+  dws aitable dashboard update [flags]
+Flags:
+      --base-id string        baseId (必填)
+      --dashboard-id string   dashboardId (必填)
+      --config string         新配置 JSON
+```
+
+#### 删除仪表盘
+> ⚠️ 须用户确认后加 `--yes`。
+```
+Usage:
+  dws aitable dashboard delete [flags]
+Flags:
+      --base-id string        baseId (必填)
+      --dashboard-id string   dashboardId (必填)
+      --reason string         删除原因
+```
+
+#### 仪表盘分享
+```
+Usage:
+  dws aitable dashboard share get    [--base-id ... --dashboard-id ...]
+  dws aitable dashboard share update [--base-id ... --dashboard-id ...]
+```
+- `share get` — 查询分享状态；资源不存在或未开通时可能 404
+- `share update` — 开启/修改分享
+
+---
+
+### chart (图表管理)
+
+#### 获取 widgets 配置模板
+```
+Usage:
+  dws aitable chart widgets-example
+```
+
+#### 创建图表
+```
+Usage:
+  dws aitable chart create [flags]
+Flags:
+      --base-id string        baseId (必填)
+      --dashboard-id string   dashboardId (必填) — 图表归属的仪表盘
+      --config string         图表配置 JSON
+      --layout string         布局 JSON
+```
+
+#### 获取图表详情
+```
+Usage:
+  dws aitable chart get [flags]
+Flags:
+      --base-id string        baseId (必填)
+      --dashboard-id string   dashboardId (必填)
+      --chart-id string       chartId (必填)
+```
+
+#### 更新图表
+```
+Usage:
+  dws aitable chart update [flags]
+Flags:
+      --base-id string        baseId (必填)
+      --dashboard-id string   dashboardId (必填)
+      --chart-id string       chartId (必填)
+      --config string         新配置 JSON
+      --layout string         新布局 JSON
+```
+
+#### 删除图表
+> ⚠️ 须用户确认后加 `--yes`。
+```
+Flags:
+      --base-id string        baseId (必填)
+      --dashboard-id string   dashboardId (必填)
+      --chart-id string       chartId (必填)
+      --reason string         删除原因
+```
+
+#### 图表分享
+```
+Usage:
+  dws aitable chart share get    [--base-id ... --dashboard-id ... --chart-id ...]
+  dws aitable chart share update [--base-id ... --dashboard-id ... --chart-id ...]
+```
+返回 `enabled/shareUrl` 供判断与展示。
+
+---
+
+### import (数据导入)
+
+#### 获取导入上传凭证
+```
+Usage:
+  dws aitable import upload [flags]
+Example:
+  dws aitable import upload --base-id <BASE_ID> --file-name "data.xlsx" --file-size 102400
+Flags:
+      --base-id string     baseId (必填)
+      --file-name string   fileName (必填)
+      --file-size string   fileSize 字节 (必填)
+```
+
+#### 提交导入任务
+```
+Usage:
+  dws aitable import data [flags]
+Example:
+  dws aitable import data --import-id <IMPORT_ID>
+Flags:
+      --import-id string   importId (必填，上一步 upload 返回)
+```
+
+---
+
+### export (数据导出)
+
+```
+Usage:
+  dws aitable export data [flags]
+Example:
+  dws aitable export data --base-id <BASE_ID> --scope table --table-id <TABLE_ID>
+  dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID>     # 轮询
+Flags:
+      --base-id string    baseId (必填)
+      --scope string      导出范围：all / table / view
+      --table-id string   tableId（scope=table/view 时必填）
+      --view-id string    viewId（scope=view 时必填）
+      --task-id string    taskId（后续轮询用，首次可不传）
+```
+
+---
+
+### get-base-primary-doc-id (顶级) — 获取主文档 ID
+
+```
+Usage:
+  dws aitable get-base-primary-doc-id [flags]
+Example:
+  dws aitable get-base-primary-doc-id --base-id <BASE_ID>
+  dws aitable get-base-primary-doc-id --base-id <BASE_ID> --table-id <TABLE_ID> --record-id <RECORD_ID>
+Flags:
+      --base-id string    baseId (必填)
+      --table-id string   tableId（可选，定位某行所在表）
+      --record-id string  recordId（可选，定位某行）
+```
 
 ## 复杂操作
 

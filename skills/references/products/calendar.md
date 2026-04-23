@@ -97,13 +97,13 @@ Flags:
 Usage:
   dws calendar room search [flags]
 Example:
-  dws calendar room search --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15:00:00+08:00" --available
+  dws calendar room search --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15:00:00+08:00" --available true
   dws calendar room search --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15:00:00+08:00" --group-id <GROUP_ID>
 Flags:
-      --available        仅查空闲会议室
-      --end string       结束时间 ISO-8601 (必填)
-      --group-id string  会议室分组ID（可选，留空查根目录；超100条时需按分组查询）
-      --start string     开始时间 ISO-8601 (必填)
+      --start string      开始时间 ISO-8601 (必填) startTime
+      --end string        结束时间 ISO-8601 (必填) endTime
+      --available string  "true"=仅查空闲；"false"=全部（真实 CLI 类型为 string，非 bool）
+      --group-id string   会议室分组 ID（可选，留空查根目录；超 100 条时需按分组查询）
 ```
 
 ### 预定会议室
@@ -144,9 +144,46 @@ Example:
   dws calendar busy search --users <USER_ID_1>,<USER_ID_2> \
     --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T18:00:00+08:00"
 Flags:
-      --end string     结束时间 ISO-8601 (必填)
+      --users string   用户 userId 列表 (必填)
       --start string   开始时间 ISO-8601 (必填)
-      --users string   用户 ID 列表 (必填)
+      --end string     结束时间 ISO-8601 (必填)
+```
+
+### 列出我的日历
+```
+Usage:
+  dws calendar list-calendars
+```
+无参数；返回当前用户所有可访问的日历列表。
+
+### 推荐空闲时段（挑会议时间）
+```
+Usage:
+  dws calendar list-suggested-event-times [flags]
+Example:
+  dws calendar list-suggested-event-times \
+    --attendee-user-ids userId1,userId2,userId3 \
+    --duration-minutes 60 \
+    --start "2026-03-10T09:00:00+08:00" \
+    --end "2026-03-10T18:00:00+08:00" \
+    --time-zone "Asia/Shanghai"
+Flags:
+      --attendee-user-ids string   参会人 userId 列表（逗号分隔）
+      --duration-minutes string    目标时长（分钟）
+      --start string               搜索起始时间 ISO-8601
+      --end string                 搜索结束时间 ISO-8601
+      --time-zone string           时区，如 Asia/Shanghai
+```
+
+### 给日程添加附件
+```
+Usage:
+  dws calendar add-attachments [flags]
+Example:
+  dws calendar add-attachments --event-id <EVENT_ID> --attachments '[{"name":"议程.pdf","url":"..."}]'
+Flags:
+      --event-id string      日程 eventId (必填)
+      --attachments string   附件 JSON 数组 (必填)
 ```
 
 ## 意图判断
@@ -171,6 +208,10 @@ Flags:
 
 用户说"有空吗/忙不忙/闲忙":
 - 查询 → `busy search`
+
+用户说"推荐时间/挑个时间/什么时候大家都有空" → `list-suggested-event-times`
+用户说"我的日历/有哪些日历" → `list-calendars`
+用户说"日程加附件/会议资料" → `add-attachments`
 
 ## 核心工作流
 

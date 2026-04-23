@@ -26,10 +26,24 @@ Flags:
       --robot-code string   机器人 ID (必填, 或设 DINGTALK_DING_ROBOT_CODE)
 ```
 
+### 搜索我的机器人
+```
+Usage:
+  dws ding search-my-robots [flags]
+Example:
+  dws ding search-my-robots --page-size 10
+  dws ding search-my-robots --robot-name "告警" --current-page 1 --page-size 20
+Flags:
+      --robot-name string     机器人名称（可选，按名称筛选）
+      --current-page string   页码（从 1 开始）
+      --page-size string      每页数量
+```
+
 ## 意图判断
 
 用户说"DING 一下/紧急通知/电话提醒" → `message send`
 用户说"撤回 DING" → `message recall`
+用户说"查我的 DING 机器人/能发 DING 的机器人" → `search-my-robots`
 
 关键区分:
 - ding(紧急提醒, 支持电话/短信) vs bot(常规群/单聊消息)

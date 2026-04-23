@@ -9,11 +9,15 @@ Usage:
 Example:
   dws todo task create --title "修复线上Bug" --executors <USER_ID_1>,<USER_ID_2> --priority 40
   dws todo task create --title "提交报告" --executors <USER_ID> --due "2026-03-20T10:00:00+08:00"
+  dws todo task create --title "每日站会记录" --executors <USER_ID> \
+    --due "2026-03-10T10:00:00+08:00" \
+    --recurrence $'DTSTART:20260310T100000\nRRULE:FREQ=DAILY;INTERVAL=1'
 Flags:
-      --due string         截止时间 ISO-8601 (如 2026-03-10T18:00:00+08:00)
-      --executors string   执行者 userId 列表 (必填)
-      --priority string    优先级: 10低/20普通/30较高/40紧急
-      --title string       待办标题 (必填)
+      --title string        待办标题 (必填)
+      --executors string    执行者 userId 列表 (必填)
+      --due string          截止时间 ISO-8601 (如 2026-03-10T18:00:00+08:00)
+      --priority string     优先级: 10低/20普通/30较高/40紧急
+      --recurrence string   循环待办规则（需先设置 --due）；格式：DTSTART:...\nRRULE:FREQ=DAILY;INTERVAL=1
 ```
 
 ### 查询待办列表
@@ -77,6 +81,13 @@ Flags:
       --task-id string   待办任务 ID (必填)
 ```
 
+### 获取待办详情（顶级，兼容接口）
+```
+Usage:
+  dws todo get-todo-detail [flags]
+```
+> 顶级 `get-todo-detail` 与 `task get` 功能重叠；agent 优先用 `task get`。
+
 ## 意图判断
 
 用户说"加个待办/记一下/TODO" → `task create`
@@ -85,6 +96,7 @@ Flags:
 用户说"做完了/完成待办/标记完成" → `task done`
 用户说"看看待办详情" → `task get`
 用户说"删除待办/取消待办" → `task delete`
+用户说"循环待办/每天/每周提醒我" → `task create --recurrence`（需同时 `--due`）
 
 关键区分: todo(个人待办)
 
