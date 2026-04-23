@@ -814,7 +814,7 @@ func flagKindForSchema(schema map[string]any) (FlagKind, bool) {
 			return flagNumberList, true
 		case "boolean":
 			return flagBooleanList, true
-		case "object":
+		case "object", "array":
 			return flagJSON, true
 		}
 	}

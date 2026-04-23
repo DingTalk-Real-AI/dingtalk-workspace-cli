@@ -95,6 +95,13 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 
 			bindings, normalizer := buildOverrideBindings(override)
 
+			// Upgrade binding.Kind from JSON schema: array/object params must
+			// be parsed as JSON, not transmitted as raw strings (otherwise
+			// MCP backends silently accept stringified payloads and drop data).
+			if dt, ok := detailIndex[toolName]; ok && dt.ToolRequest != "" {
+				bindings = upgradeBindingsFromSchema(bindings, dt.ToolRequest)
+			}
+
 			// Resolve Short/Long from Detail API toolTitle/toolDesc;
 			// fallback to overlay description; then to generic cmdName/cliName.
 			short := fmt.Sprintf("%s/%s", cmdName, cliName)
@@ -387,6 +394,38 @@ func resolveNestedGroup(root *cobra.Command, groupPath string, registry map[stri
 	}
 	// Auto-create if not defined in groups
 	return ensureNestedGroup(root, groupPath, groupPath, registry)
+}
+
+// upgradeBindingsFromSchema inspects the MCP toolRequest JSON Schema and
+// promotes ValueString bindings whose schema type is "array" or "object" to
+// ValueJSON. This ensures complex parameters (e.g. sheet update_range.values
+// 2D array) are parsed and forwarded as proper JSON values rather than raw
+// strings — backends that accept stringified payloads silently drop data.
+func upgradeBindingsFromSchema(bindings []FlagBinding, schemaJSON string) []FlagBinding {
+	if len(bindings) == 0 || schemaJSON == "" {
+		return bindings
+	}
+	var schema toolRequestSchema
+	if err := json.Unmarshal([]byte(schemaJSON), &schema); err != nil {
+		return bindings
+	}
+	if len(schema.Properties) == 0 {
+		return bindings
+	}
+	for i := range bindings {
+		if bindings[i].Kind != ValueString {
+			continue
+		}
+		prop, ok := schema.Properties[bindings[i].Property]
+		if !ok {
+			continue
+		}
+		switch prop.Type {
+		case "array", "object":
+			bindings[i].Kind = ValueJSON
+		}
+	}
+	return bindings
 }
 
 // buildOverrideBindings converts CLIToolOverride flags into FlagBindings and

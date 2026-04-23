@@ -167,6 +167,11 @@ func loadDynamicCommands(ctx context.Context, runner executor.Runner) []*cobra.C
 
 // loadCachedDetailsFast reads Detail API tool metadata from disk cache only —
 // no network calls. Returns whatever is available (fresh or stale).
+//
+// For servers without a Detail API locator (most discovery-driven services),
+// fall back to the per-server tools snapshot persisted by tools/list. This
+// ensures binding-kind upgrades (array/object → ValueJSON) have access to
+// the JSON Schema even when no Detail API is configured.
 func loadCachedDetailsFast(store *cache.Store, servers []market.ServerDescriptor) map[string][]market.DetailTool {
 	result := make(map[string][]market.DetailTool)
 	if store == nil {
@@ -174,23 +179,50 @@ func loadCachedDetailsFast(store *cache.Store, servers []market.ServerDescriptor
 	}
 	partition := config.DefaultPartition
 	for _, server := range servers {
-		if server.DetailLocator.MCPID <= 0 {
-			continue
-		}
 		serverID := strings.TrimSpace(server.CLI.ID)
 		if serverID == "" {
 			continue
 		}
-		snap, _, err := store.LoadDetail(partition, serverID)
-		if err != nil {
+
+		// Primary: Detail API payload (when configured).
+		if server.DetailLocator.MCPID > 0 {
+			if snap, _, err := store.LoadDetail(partition, serverID); err == nil {
+				var payload struct {
+					Tools []market.DetailTool `json:"tools"`
+				}
+				if jsonErr := json.Unmarshal(snap.Payload, &payload); jsonErr == nil && len(payload.Tools) > 0 {
+					result[serverID] = payload.Tools
+					continue
+				}
+			}
+		}
+
+		// Fallback: tools snapshot from tools/list (used by most services).
+		serverKey := strings.TrimSpace(server.Key)
+		if serverKey == "" {
 			continue
 		}
-		var payload struct {
-			Tools []market.DetailTool `json:"tools"`
+		snapshot, _, err := store.LoadTools(partition, serverKey)
+		if err != nil || len(snapshot.Tools) == 0 {
+			continue
 		}
-		if jsonErr := json.Unmarshal(snap.Payload, &payload); jsonErr == nil && len(payload.Tools) > 0 {
-			result[serverID] = payload.Tools
+		details := make([]market.DetailTool, 0, len(snapshot.Tools))
+		for _, tool := range snapshot.Tools {
+			schemaJSON := ""
+			if tool.InputSchema != nil {
+				if data, marshalErr := json.Marshal(tool.InputSchema); marshalErr == nil {
+					schemaJSON = string(data)
+				}
+			}
+			details = append(details, market.DetailTool{
+				ToolName:    tool.Name,
+				ToolTitle:   tool.Title,
+				ToolDesc:    tool.Description,
+				IsSensitive: tool.Sensitive,
+				ToolRequest: schemaJSON,
+			})
 		}
+		result[serverID] = details
 	}
 	return result
 }
