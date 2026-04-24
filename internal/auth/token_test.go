@@ -20,9 +20,12 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 )
 
-// cleanupKeychain removes test data from keychain after test completes.
+// cleanupKeychain isolates keychain state to a per-test temporary directory
+// so that concurrent test packages (notably internal/app) don't read tokens
+// written by these tests, and removes test data on completion.
 func cleanupKeychain(t *testing.T) {
 	t.Helper()
+	t.Setenv(keychain.StorageDirEnv, t.TempDir())
 	t.Cleanup(func() {
 		_ = keychain.Remove(keychain.Service, keychain.AccountToken)
 	})

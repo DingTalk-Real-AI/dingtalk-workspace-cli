@@ -38,6 +38,7 @@ const (
 type Client struct {
 	BaseURL    string
 	HTTPClient *http.Client
+	Headers    map[string]string
 }
 
 type ListResponse struct {
@@ -48,6 +49,26 @@ type ListResponse struct {
 type ListMetadata struct {
 	Count      int    `json:"count"`
 	NextCursor string `json:"nextCursor"`
+	// Warnings is populated by the Portal merge service when envelopes are
+	// dropped (e.g. missing serverDeps, status != active) or when a dangling
+	// serverDeps / toolOverrides.*.serverOverride reference is detected.
+	// Old Portals without the field simply leave this nil. CLI side should
+	// treat any non-empty slice as non-fatal informational output: print to
+	// stderr so cache refreshes expose Portal drift to the user, but do not
+	// fail the discovery load.
+	//
+	// See plan fix-wukong-discovery-missing-servers Phase 4.2/4.3.
+	Warnings []ListWarning `json:"warnings,omitempty"`
+}
+
+// ListWarning describes one envelope that was filtered out of the merged
+// response or flagged for dangling references. Fields mirror the JSON emitted
+// by WukongDiscoveryRegistry.buildWarning on the Portal side; unknown reason
+// codes are passed through verbatim for forward compatibility.
+type ListWarning struct {
+	ProductID string `json:"productId"`
+	Reason    string `json:"reason"`
+	Detail    string `json:"detail"`
 }
 
 type ServerEnvelope struct {
@@ -97,6 +118,37 @@ type CLIOverlay struct {
 	Tools         []CLITool                  `json:"tools"`
 	Groups        map[string]CLIGroupDef     `json:"groups,omitempty"`
 	ToolOverrides map[string]CLIToolOverride `json:"toolOverrides,omitempty"`
+	// ServerDeps declares other product IDs that this overlay depends on at
+	// runtime (e.g. chat depends on bot for cross-server tool routing).
+	// Consumed by the portal merge service for fail-fast validation; CLI side
+	// currently only stores the value for tooling/introspection.
+	ServerDeps []string `json:"serverDeps,omitempty"`
+	// Hints registers stub sub-commands under the overlay root that only
+	// print a redirect message pointing to the canonical command path. Used
+	// for deprecated command aliases and "did-you-mean" style hints.
+	// Key is the sub-command name; value describes the target path.
+	Hints map[string]CLIHintDef `json:"hintCommands,omitempty"`
+	// RedirectTo, when non-empty, turns the entire top-level product into a
+	// stub that prints "Please use: dws <target>" and performs no work. Used
+	// for deprecated top-level products migrated to new paths (e.g.
+	// `bot → chat bot`, `message → chat message`). See schema v3 §2.6.
+	RedirectTo string `json:"redirectTo,omitempty"`
+}
+
+// CLIHintDef declares a stub sub-command that prints a redirect message.
+// The command takes no bindings and calls no tool; its sole purpose is to
+// help users migrate from an old command path to the new one.
+type CLIHintDef struct {
+	// Target is the canonical command path shown in the redirect message
+	// (e.g. "dws chat message list").
+	Target string `json:"target"`
+	// Description overrides the Short/Long help text for the hint command.
+	// Empty falls back to a generic "use: <target>" string.
+	Description string `json:"description,omitempty"`
+	// Group optionally nests the hint under a named sub-group (same syntax
+	// as CLIToolOverride.Group with dot-separated paths). Empty means the
+	// hint is attached directly to the overlay root.
+	Group string `json:"group,omitempty"`
 }
 
 // CLIGroupDef defines a sub-command group within a CLI module.
@@ -104,25 +156,111 @@ type CLIGroupDef struct {
 	Description string `json:"description"`
 }
 
+// CLIOutputFormat declares structured post-processing applied to the MCP tool
+// response before the formatter prints it. See schema v3 §2.5.
+//
+// Apply order: Drop → Rename → Columns. All three are optional.
+type CLIOutputFormat struct {
+	// Rename moves fields from src key to dst key at top level and one level
+	// of nested objects. Missing src keys are silently ignored.
+	Rename map[string]string `json:"rename,omitempty"`
+	// Drop removes these keys from the response (top level + one level deep).
+	Drop []string `json:"drop,omitempty"`
+	// Columns controls column order and subset for --format=table. Ignored in
+	// JSON output mode.
+	Columns []string `json:"columns,omitempty"`
+}
+
 // CLIToolOverride maps an MCP tool to a CLI command with flag aliases and transforms.
 type CLIToolOverride struct {
-	CLIName      string                     `json:"cliName"`
-	Description  string                     `json:"description,omitempty"`
-	Group        string                     `json:"group,omitempty"`
-	IsSensitive  bool                       `json:"isSensitive,omitempty"`
-	Hidden       bool                       `json:"hidden,omitempty"`
-	Flags        map[string]CLIFlagOverride `json:"flags,omitempty"`
-	OutputFormat map[string]any             `json:"outputFormat,omitempty"`
+	CLIName     string `json:"cliName"`
+	Description string `json:"description,omitempty"`
+	// Example, when non-empty, is wired to cobra.Command.Example to render
+	// the "Examples:" section in --help. Mirrors hardcoded helper commands'
+	// Example field (e.g. wukong/products/oa.go list-forms). Empty value
+	// produces no Examples section. Multi-line strings keep "\n" literally.
+	Example     string                     `json:"example,omitempty"`
+	Group       string                     `json:"group,omitempty"`
+	IsSensitive bool                       `json:"isSensitive,omitempty"`
+	Hidden      bool                       `json:"hidden,omitempty"`
+	Flags       map[string]CLIFlagOverride `json:"flags,omitempty"`
+	// OutputFormat declares structured response post-processing. v3 typed form
+	// supersedes v2's untyped map[string]any, but parsing stays lenient so v2
+	// envelopes continue to deserialize (unknown keys are ignored).
+	OutputFormat CLIOutputFormat `json:"outputFormat,omitempty"`
+	// ServerOverride routes this leaf command's tool invocation to a different
+	// product's MCP server (e.g. `chat bot ...` leaves live under the `chat`
+	// command tree but call the `bot` endpoint). Empty means use the enclosing
+	// overlay's server.
+	ServerOverride string `json:"serverOverride,omitempty"`
+	// BodyWrapper, when non-empty, wraps the collected params map under this
+	// single key before the invocation is dispatched. Useful when the upstream
+	// tool expects a typed DTO wrapper (e.g. `PersonalTodoCreateVO`). Only
+	// user-provided params are wrapped; internal control keys starting with
+	// '_' (e.g. `_blocked`, `_yes`) are preserved at the top level.
+	BodyWrapper string `json:"bodyWrapper,omitempty"`
+	// MutuallyExclusive groups flag aliases that must not be set together.
+	// Each inner slice becomes one cobra.MarkFlagsMutuallyExclusive call.
+	// Example: [["group","user","open-dingtalk-id"]] for `chat message list`.
+	MutuallyExclusive [][]string `json:"mutuallyExclusive,omitempty"`
+	// RequireOneOf groups flag aliases where at least one must be set. Each
+	// inner slice becomes one cobra.MarkFlagsOneRequired call. Typically
+	// paired with MutuallyExclusive to enforce "exactly one of".
+	RequireOneOf [][]string `json:"requireOneOf,omitempty"`
+	// RedirectTo, when non-empty, turns this entry into a stub command that
+	// prints the redirect target instead of invoking a tool. All other
+	// fields (Flags / BodyWrapper / IsSensitive / ServerOverride) are
+	// ignored. Use for deprecated leaf commands that moved to a new path.
+	RedirectTo string `json:"redirectTo,omitempty"`
 }
 
 // CLIFlagOverride describes how to map an MCP parameter to a CLI flag.
 type CLIFlagOverride struct {
-	Alias         string         `json:"alias"`
+	Alias string `json:"alias"`
+	// Aliases registers additional hidden CLI flag names for the same MCP
+	// parameter. Use to preserve legacy flag names when migrating from
+	// hardcoded commands (mirrors cmdutil.ValidateRequiredFlagWithAliases /
+	// cmdutil.FlagOrFallback). All entries are registered as hidden flags
+	// (not shown in --help); values are deduped against the primary flag
+	// name and Alias, and reserved names ("json", "params") are skipped.
+	// When any alias is set by the user, the binding's Required check is
+	// satisfied and the value is written to params[Property].
+	Aliases       []string       `json:"aliases,omitempty"`
 	Transform     string         `json:"transform,omitempty"`
 	TransformArgs map[string]any `json:"transformArgs,omitempty"`
 	EnvDefault    string         `json:"envDefault,omitempty"`
 	Hidden        bool           `json:"hidden,omitempty"`
 	Default       string         `json:"default,omitempty"`
+	// Shorthand registers a single-char flag alias (cobra StringP etc.).
+	Shorthand string `json:"shorthand,omitempty"`
+	// Required marks this flag as mandatory via cobra.MarkFlagRequired.
+	// Ignored when Positional is true (positional args have their own arity rules).
+	Required bool `json:"required,omitempty"`
+	// Description overrides the usage string displayed in --help; takes
+	// priority over the Detail API's toolDesc when non-empty.
+	Description string `json:"description,omitempty"`
+	// Positional, when true, binds this parameter to a positional CLI argument
+	// instead of a --flag. PositionalIndex (0-based) selects which arg slot.
+	Positional      bool `json:"positional,omitempty"`
+	PositionalIndex int  `json:"positionalIndex,omitempty"`
+	// Type explicitly declares the flag's type: "string" (default) / "int" /
+	// "bool" / "stringSlice". When set, overrides the type inferred from MCP
+	// tools/list inputSchema. See schema v3 §2.1.
+	Type string `json:"type,omitempty"`
+	// OmitWhen declares empty-value handling when building the invocation body:
+	//
+	//   "empty" (default): empty string / zero-length slice-or-map → omit
+	//   "zero":            + zero numbers / false booleans → omit
+	//   "never":           always send, even at zero value (explicit-zero semantics)
+	//
+	// See schema v3 §2.2.
+	OmitWhen string `json:"omitWhen,omitempty"`
+	// RuntimeDefault, when non-empty, injects a runtime-resolved value if the
+	// user omits the flag. Allowed placeholders: "$currentUserId" / "$unionId"
+	// / "$corpId" / "$now" / "$today". Unknown placeholders → warning + skip.
+	// Resolution comes from edition.Hooks.RuntimeDefaults; open-source core
+	// only recognises the placeholder set. See schema v3 §2.3.
+	RuntimeDefault string `json:"runtimeDefault,omitempty"`
 }
 
 type CLITool struct {
@@ -256,6 +394,9 @@ func (c *Client) FetchServersFromURL(ctx context.Context, fullURL string) (ListR
 	if err != nil {
 		return ListResponse{}, apperrors.NewDiscovery("failed to create servers request")
 	}
+	for k, v := range c.Headers {
+		req.Header.Set(k, v)
+	}
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return ListResponse{}, apperrors.NewDiscovery(fmt.Sprintf("servers request failed: %v", err))
@@ -288,6 +429,9 @@ func (c *Client) fetchServersPage(ctx context.Context, limit int, cursor string)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL.String(), nil)
 	if err != nil {
 		return ListResponse{}, apperrors.NewDiscovery("failed to create market servers request")
+	}
+	for k, v := range c.Headers {
+		req.Header.Set(k, v)
 	}
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {

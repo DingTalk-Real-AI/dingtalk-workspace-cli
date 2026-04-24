@@ -32,6 +32,7 @@ With `-f json`, error responses include structured payloads: `category`, `reason
 dws contact user search --keyword "Alice" -f table   # Table (default, human-friendly / 表格，默认)
 dws contact user search --keyword "Alice" -f json    # JSON (for agents and piping / 适合 agent)
 dws contact user search --keyword "Alice" -f raw     # Raw API response / 原始响应
+dws schema -f pretty ding.send_ding_message          # Pretty (ANSI-colored, schema-aware / 彩色分区，专为 schema 设计)
 ```
 
 ## Dry Run / 试运行
@@ -44,6 +45,46 @@ dws todo task list --dry-run    # Preview MCP call without executing / 预览但
 
 ```bash
 dws contact user search --keyword "Alice" -o result.json
+```
+
+## Schema Introspection / Schema 查询
+
+`dws schema` 查询已发现的 MCP 产品和工具元数据。不带参数列出所有产品，带路径输出单个工具的完整 schema。
+
+### 路径写法
+
+```bash
+dws schema                                  # 列出所有产品 + 工具名
+dws schema ding.send_ding_message           # canonical: product.rpc_name
+dws schema ding.message.send                # CLI 点路径: product.group.cli_name
+dws schema "ding message send"              # CLI 空格路径（同上）
+dws schema --cli-path "ding message send"   # 显式 flag（脚本友好，免转义）
+dws schema -f pretty ding.send_ding_message # ANSI 着色分区展示（人肉查看最舒服）
+```
+
+Canonical 路径先匹配；落空后走 CLI 路径（product → group.. → cli_name）。
+
+### 单工具输出字段
+
+| 字段 | 说明 |
+|------|------|
+| `name` / `cli_name` / `canonical_path` | MCP RPC 名 / CLI 叶子名 / `product.rpc_name` |
+| `group` | CLI 父级 group 路径（dot-separated） |
+| `title` / `description` | 工具名/说明（overlay 优先） |
+| `parameters` / `required` | MCP 输入 JSON Schema 的 properties / required |
+| `output_schema` | MCP 输出 Schema（上游下发时才有） |
+| `sensitive` | 敏感写操作，需 `--yes` 确认 |
+| `annotations.destructive_hint` | 对齐 MCP 2025+ annotations，目前从 `sensitive` 映射 |
+| `flag_overlay[param]` | CLI 层对 MCP 参数的改写：`alias` / `transform` / `transform_args` / `env_default` / `default` / `hidden` |
+
+**调试 `--flag` 行为的第一站**是 `flag_overlay` —— 比如 `--users 0232...` 能不能直接用，看 `receiverUserIdList.transform == "csv_to_array"` 即可判断。
+
+### 筛选输出
+
+```bash
+dws schema ding.send_ding_message --jq '.tool.flag_overlay'       # 只看 overlay
+dws schema --jq '.products[] | {id, count: (.tools|length)}'      # 各产品工具数
+dws schema aitable.delete_base --jq '.tool.annotations'           # 敏感操作提示
 ```
 
 ## Shell Completion / 自动补全

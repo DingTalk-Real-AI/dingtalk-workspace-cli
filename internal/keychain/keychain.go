@@ -23,6 +23,13 @@ const (
 
 	// AccountToken is the account key for storing auth token data.
 	AccountToken = "auth-token"
+
+	// StorageDirEnv overrides the on-disk keychain storage root on
+	// platforms that use file-backed storage (macOS, Linux). It is
+	// intended for tests that need to isolate keychain state from the
+	// real user environment and from sibling test packages running in
+	// parallel. When empty, the platform default applies.
+	StorageDirEnv = "DWS_KEYCHAIN_DIR"
 )
 
 // KeychainAccess abstracts keychain Get/Set/Remove for dependency injection.

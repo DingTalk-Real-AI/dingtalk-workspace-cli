@@ -34,8 +34,13 @@ const (
 )
 
 // StorageDir returns the storage directory for a given service name.
-// Follows XDG Base Directory Specification: ~/.local/share/<service>
+// Follows XDG Base Directory Specification: ~/.local/share/<service>.
+// When the DWS_KEYCHAIN_DIR environment variable is set (used by tests for
+// isolation), the storage root is taken from that env var instead.
 func StorageDir(service string) string {
+	if override := os.Getenv(StorageDirEnv); override != "" {
+		return filepath.Join(override, service)
+	}
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
 		fmt.Fprintf(os.Stderr, "warning: unable to determine home directory: %v\n", err)

@@ -17,6 +17,7 @@
 package editiontest
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -83,6 +84,49 @@ func RunContractTests(t *testing.T, h *edition.Hooks) {
 		products := h.VisibleProducts()
 		if len(products) == 0 {
 			t.Error("VisibleProducts() must return at least one product when set")
+		}
+	})
+
+	t.Run("SupplementServers_valid_when_set", func(t *testing.T) {
+		if h.SupplementServers == nil {
+			return
+		}
+		servers := h.SupplementServers()
+		if len(servers) == 0 {
+			t.Error("SupplementServers() must return at least one server when set")
+		}
+		for i, s := range servers {
+			if s.ID == "" || s.Endpoint == "" {
+				t.Errorf("SupplementServers()[%d]: ID and Endpoint must be non-empty", i)
+			}
+		}
+	})
+
+	t.Run("FallbackServers_superset_of_supplement", func(t *testing.T) {
+		if h.FallbackServers == nil || h.SupplementServers == nil {
+			return
+		}
+		fallback := h.FallbackServers()
+		if len(fallback) == 0 {
+			t.Error("FallbackServers() must return at least one server when set")
+		}
+		fbIDs := make(map[string]bool, len(fallback))
+		for _, s := range fallback {
+			fbIDs[s.ID] = true
+		}
+		for _, s := range h.SupplementServers() {
+			if !fbIDs[s.ID] {
+				t.Errorf("SupplementServers ID %q not found in FallbackServers", s.ID)
+			}
+		}
+	})
+
+	t.Run("DiscoveryURL_valid_when_set", func(t *testing.T) {
+		if h.DiscoveryURL == "" {
+			return
+		}
+		if !strings.HasPrefix(h.DiscoveryURL, "https://") {
+			t.Errorf("DiscoveryURL must start with https://, got %q", h.DiscoveryURL)
 		}
 	})
 }

@@ -40,7 +40,12 @@ const (
 
 // StorageDir returns the storage directory for a given service name on macOS.
 // Uses ~/Library/Application Support/<service> following Apple conventions.
+// When the DWS_KEYCHAIN_DIR environment variable is set (used by tests for
+// isolation), the storage root is taken from that env var instead.
 func StorageDir(service string) string {
+	if override := os.Getenv(StorageDirEnv); override != "" {
+		return filepath.Join(override, service)
+	}
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
 		return filepath.Join(".dws", "keychain", service)

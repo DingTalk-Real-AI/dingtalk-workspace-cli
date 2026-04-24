@@ -69,7 +69,52 @@ func SetDynamicServers(servers []market.ServerDescriptor) {
 	toolEndpoints := make(map[string]string)
 	registerDynamicServer(defaultPATServerDescriptor(), endpoints, products, aliases, toolEndpoints)
 	for _, server := range servers {
-		registerDynamicServer(server, endpoints, products, aliases, toolEndpoints)
+		if server.CLI.Skip {
+			continue
+		}
+		id := strings.TrimSpace(server.CLI.ID)
+		endpoint := strings.TrimSpace(server.Endpoint)
+		if id != "" && endpoint != "" {
+			endpoints[id] = endpoint
+			products[id] = true
+		}
+		cmd := strings.TrimSpace(server.CLI.Command)
+		if cmd != "" && cmd != id && endpoint != "" {
+			endpoints[cmd] = endpoint
+			products[cmd] = true
+		}
+		for _, alias := range server.CLI.Aliases {
+			alias = strings.TrimSpace(alias)
+			if alias != "" && endpoint != "" {
+				endpoints[alias] = endpoint
+				products[alias] = true
+				// Build alias → CLI.ID mapping
+				aliases[alias] = id
+			}
+		}
+		// Build tool → endpoint mapping from CLI tools and overrides.
+		if endpoint != "" {
+			for _, tool := range server.CLI.Tools {
+				toolName := strings.TrimSpace(tool.Name)
+				if toolName != "" {
+					toolEndpoints[toolName] = endpoint
+				}
+			}
+			for toolName, override := range server.CLI.ToolOverrides {
+				toolName = strings.TrimSpace(toolName)
+				if toolName == "" {
+					continue
+				}
+				// Leaves with serverOverride are routed to a different server's
+				// endpoint (e.g. chat's "search_my_robots" → bot). Registering
+				// them here would overwrite the real owner's tool → endpoint
+				// mapping and send the invocation to the wrong MCP URL.
+				if strings.TrimSpace(override.ServerOverride) != "" {
+					continue
+				}
+				toolEndpoints[toolName] = endpoint
+			}
+		}
 	}
 	dynamicEndpoints = endpoints
 	dynamicProducts = products
@@ -239,11 +284,17 @@ func AppendDynamicServer(server market.ServerDescriptor) {
 				dynamicToolEndpoints[toolName] = endpoint
 			}
 		}
-		for toolName := range server.CLI.ToolOverrides {
+		for toolName, override := range server.CLI.ToolOverrides {
 			toolName = strings.TrimSpace(toolName)
-			if toolName != "" {
-				dynamicToolEndpoints[toolName] = endpoint
+			if toolName == "" {
+				continue
 			}
+			// Leaves with serverOverride are routed to a different server's
+			// endpoint; skip to avoid overwriting the real owner's mapping.
+			if strings.TrimSpace(override.ServerOverride) != "" {
+				continue
+			}
+			dynamicToolEndpoints[toolName] = endpoint
 		}
 	}
 }

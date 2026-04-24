@@ -16,6 +16,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -56,6 +57,19 @@ func (a *toolCallerAdapter) DryRun() bool {
 func convertResult(r executor.Result) *edition.ToolResult {
 	resp := r.Response
 	if resp == nil {
+		// After the fix-wukong-discovery-missing-servers Phase 3 change,
+		// runtimeRunner.Run returns an explicit error for catalog misses
+		// instead of an empty Response, so this branch should only be
+		// reachable for unit tests / unexpected runners. Log a warning so
+		// any future regression (silent `{"Content": null}` on the CLI)
+		// leaves a trace in the file logger / stderr.
+		slog.Warn(
+			"tool_caller_adapter: empty runner response — upstream should surface an error instead",
+			"product", r.Invocation.CanonicalProduct,
+			"tool", r.Invocation.Tool,
+			"kind", r.Invocation.Kind,
+			"dry_run", r.Invocation.DryRun,
+		)
 		return &edition.ToolResult{}
 	}
 

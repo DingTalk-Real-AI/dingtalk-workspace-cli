@@ -4,6 +4,48 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
+## [1.0.15] - 2026-04-23
+
+Compat layer gains **subcommand merging** under shared parents so multiple server entries can contribute into the same `dws <parent> <branch>` subtree without producing duplicate `--help` rows. Ships with a fresh auto-generated command index doc, a README sync to **159 commands across 13 products**, and a wide-ranging flag-naming cleanup that standardises CLI flags across chat, calendar, drive, minutes, contact, and devdoc commands.
+
+### Added
+
+- **`internal/compat` subcommand merging via `attachOrMerge`** — when two or more server entries attach to the same parent (e.g. `parent: "chat"`) and their `cli.command` collides with an existing subcommand in the parent's tree, the new subcommand's children are merged recursively into the existing one instead of creating a duplicate sibling. Leaf-name collisions resolve first-wins. Fixes the "double `group` / `message` rows in `dws chat --help`" symptom when bot capabilities are distributed across `chat.group.members` and `chat.message`.
+- **`docs/command-index.md`** — a single, English, auto-generated listing of every runtime command the `dws` CLI exposes under the pre environment (159 total). Each entry carries a description and a "when to use" column aimed at AI agents. Replaces the earlier `command-index.pre.*` / `command-index.full.*` ad-hoc snapshots.
+
+### Changed
+
+- **README Key Services table** (`README.md` + `README_zh.md`) fully synced to the shipped command surface:
+  - `Chat`: 20 → **23** (bot capabilities merged in; new `list-all` / `list-focused` / `list-unread-conversations` / `conversation-info` exposed)
+  - `Calendar`: 13 → **14**
+  - `AI Tables`: 37 → **41** (chart / dashboard public-share config rows)
+  - `Doc`: 16 → **21** (comment subtree + `file create`)
+  - `Minutes`: 22 → **19** (single-tool `record`, `list query`, `list-by-keyword-range` pruned)
+  - New `Drive` row (6 commands) — promoted out of "Coming soon"
+  - `Workbench` row and standalone `Bot` row removed
+  - Total revised to **159 commands across 13 products**
+- **Quick Start** expanded to 7 examples covering `doc`, `minutes`, `drive` in addition to `contact`, `calendar`, `todo`
+- **Coming soon** trimmed to 5: `mail`, `conference`, `aiapp`, `live`, `wiki`
+- **Reference & Docs** section now leads with a pointer to the new `docs/command-index.md`
+- **Flag naming cleanup** — CLI flags across chat, calendar, drive, minutes, contact, and devdoc have been standardised so the names users type match the product-skill documentation. Notable flags:
+  - `dws contact user search` / `dws contact dept search` / `dws devdoc article search` now take `--query` (previously `--keyword`)
+  - `dws chat message list` / `dws chat message search` / `dws chat message list-mentions` / `dws chat conversation-info` / `dws chat message send` now take `--group` for the target conversation (previously `--id`) and `--open-dingtalk-id` (previously `--open-id`)
+  - `dws chat message list-by-sender` now takes `--sender-user-id` / `--sender-open-dingtalk-id` (previously `--user` / `--open-id`)
+  - `dws chat message list-topic-replies` now takes `--group` / `--topic-id` / `--limit` / `--time` (previously `--id` / `--topic` / `--size` / `--start`)
+  - `dws chat search-common` now takes `--match-mode` (previously `--mode`)
+  - `dws drive list` now takes `--max` / `--thumbnail` (previously `--max-results` / `--with-thumbnail`)
+  - `dws calendar event suggest` now takes `--users` / `--duration` / `--timezone` (previously `--attendee-user-ids` / `--duration-minutes` / `--time-zone`)
+  - `dws minutes list mine` / `dws minutes list shared` now take `--max` (previously `--max-results`) and gain `--query` / `--start` / `--end`
+  - `dws minutes list all` no longer exposes the legacy `--__scope__` internal alias
+- **Flag coverage additions** — `dws calendar event create` / `update` gain `--attendees`, `--open-dingtalk-ids`, `--timezone`; `dws chat message send` gains file-message flags (`--dentry-id`, `--file-name`, `--file-size`, `--file-type`, `--media-id`, `--msg-type`, `--space-id`) plus `--open-dingtalk-id` / `--user`; `dws chat message list` gains `--open-dingtalk-id` / `--user`; `dws aitable table delete` gains `--reason`; `dws calendar participant add` gains `--optional`; `dws todo task create` gains `--recurrence`.
+
+### Tests
+
+- 3 new unit tests in `internal/compat/dynamic_commands_test.go`:
+  - `TestBuildDynamicCommands_ParentMergeSameName` — two servers with identical `command` + `parent` collapse into a single merged subcommand
+  - `TestBuildDynamicCommands_ParentMergeRecursive` — recursive merge through nested groups (e.g. `chat.group.members`)
+  - `TestBuildDynamicCommands_ParentMergeLeafCollision` — identical leaf paths resolve first-wins without producing duplicates
+
 ## [1.0.13] - 2026-04-22
 
 IM / Messaging capability expansion: the `chat` (aka `im`) product surface grows from "group + bot messaging" into a full conversational layer — user-identity messaging, message reading & search, personal messages, topic replies, mentions, focused contacts, unread/top/common conversations, org-wide group creation, and first-class bot lifecycle.

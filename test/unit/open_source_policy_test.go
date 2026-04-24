@@ -48,6 +48,8 @@ func TestOpenSourceTreeOmitsEmbeddedHostMarkers(t *testing.T) {
 		"DeleteExeRelative" + "TokenOnAuthErr",
 		"MergeWukong" + "MCPHeaders",
 		"buildMode ==" + " \"real\"",
+		"wukong/" + "discovery",
+		"dingi8fo" + "prfi3jynjjlu",
 	}
 
 	var matches []string
