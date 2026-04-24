@@ -277,6 +277,52 @@ curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace
 ## 功能特性
 
 <details>
+<summary><strong>Raw API 调用</strong> — 直接调用钉钉 OpenAPI</summary>
+
+`dws api` 让你直接调用任意钉钉 OpenAPI，无需 SDK，Token 自动获取和刷新。
+
+> **前置条件**：必须使用自有应用凭证登录（见[自建应用模式](#开始使用)）。通过 MCP 默认凭证登录的加密 token 不支持 raw API 调用。
+
+```bash
+# 登录（仅首次）
+dws auth login --client-id <APP_KEY> --client-secret <APP_SECRET>
+
+# === api.dingtalk.com ===
+
+# 获取当前用户信息
+dws api GET /v1.0/contact/users/me
+
+# 搜索用户 (POST + JSON body)
+dws api POST /v1.0/contact/users/search \
+  --data '{"queryWord":"张三","offset":0,"size":10}'
+
+# === oapi.dingtalk.com ===
+
+# 获取用户详情（使用 --base-url 指定域名）
+dws api POST /topapi/v2/user/get \
+  --base-url https://oapi.dingtalk.com \
+  --data '{"userid":"manager123"}'
+
+# 也可以直接使用完整 URL
+dws api POST https://oapi.dingtalk.com/topapi/v2/user/get \
+  --data '{"userid":"manager123"}'
+
+# === 通用功能 ===
+dws api GET /v1.0/attendance/groups --page-all   # 自动翻页
+dws api GET /v1.0/contact/users/me --dry-run     # 预览请求
+dws api GET /v1.0/contact/users/me --jq '.nick'  # jq 过滤
+```
+
+| 特性 | 说明 |
+|------|------|
+| 双形态自动识别 | 根据 URL 自动选择 api.dingtalk.com（Header 认证）或 oapi.dingtalk.com（Query 参数认证） |
+| Token 自动管理 | 首次调用自动获取应用级 accessToken，有效期内缓存，过期自动刷新 |
+| 域名白名单 | 仅允许 `api.dingtalk.com` 和 `oapi.dingtalk.com`，防止 Token 泄露 |
+| 自动分页 | `--page-all` 自动遍历所有分页，`--page-limit` 控制上限 |
+
+</details>
+
+<details>
 <summary><strong>智能输入纠错</strong> — 自动修正 AI 模型常见的参数错误</summary>
 
 内置 Pipeline 纠错引擎，支持命名风格转换、粘连参数拆分、拼写模糊匹配：
@@ -367,8 +413,9 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 | 钉盘 | `drive` | 6 | `list` `info` `download` `mkdir` `upload-info` `commit` | 钉盘文件操作：列表、详情、下载、创建文件夹、两阶段上传 |
 | AI 听记 | `minutes` | 19 | `list` `get` `update` `mind-graph` `speaker` `hot-word` `upload` | 听记列表（我创建 / 共享给我）、详情（info / summary / keywords / transcription / todos / batch）、标题/摘要更新、思维导图、发言人替换、热词、上传会话 |
 | 开发者文档 | `devdoc` | 1 | `article` | 搜索钉钉开放平台文档 |
+| Raw API | `api` | 1 | — | 直接调用任意钉钉 OpenAPI（api / oapi 双形态），自动管理应用级 Token |
 
-> **13 个产品，159 条命令。** 完整命令清单（带描述与使用场景）：[`docs/command-index.md`](./docs/command-index.md)。运行 `dws --help` 查看顶层命令树，或 `dws <service> --help` 查看子命令。
+> **13 个产品，160 条命令。** 完整命令清单（带描述与使用场景）：[`docs/command-index.md`](./docs/command-index.md)。运行 `dws --help` 查看顶层命令树，或 `dws <service> --help` 查看子命令。
 
 > **关于 `chat bot`**：机器人能力（`send-by-bot` / `recall-by-bot` / `add-bot` / `send-by-webhook` / bot 搜索）已合并到对应的 `chat` 子树下（例如 `dws chat message send-by-bot`、`dws chat group members add-bot`），保持 agent 视角下的命令面扁平易发现。不再有独立的顶层 `bot` 产品。
 

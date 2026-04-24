@@ -277,6 +277,52 @@ curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace
 ## Features
 
 <details>
+<summary><strong>Raw API Access</strong> — call any DingTalk OpenAPI directly</summary>
+
+`dws api` lets you call any DingTalk OpenAPI without an SDK. Tokens are automatically acquired and refreshed.
+
+> **Prerequisite**: Must login with your own app credentials (see [Custom App mode](#getting-started)). Encrypted tokens from MCP default-credential login are not supported for raw API calls.
+
+```bash
+# Login (first time only)
+dws auth login --client-id <APP_KEY> --client-secret <APP_SECRET>
+
+# === api.dingtalk.com ===
+
+# Get current user info
+dws api GET /v1.0/contact/users/me
+
+# Search users (POST + JSON body)
+dws api POST /v1.0/contact/users/search \
+  --data '{"queryWord":"engineering","offset":0,"size":10}'
+
+# === oapi.dingtalk.com ===
+
+# Get user details (use --base-url to specify domain)
+dws api POST /topapi/v2/user/get \
+  --base-url https://oapi.dingtalk.com \
+  --data '{"userid":"manager123"}'
+
+# Or use the full URL directly
+dws api POST https://oapi.dingtalk.com/topapi/v2/user/get \
+  --data '{"userid":"manager123"}'
+
+# === General ===
+dws api GET /v1.0/attendance/groups --page-all   # auto-paginate
+dws api GET /v1.0/contact/users/me --dry-run     # preview request
+dws api GET /v1.0/contact/users/me --jq '.nick'  # jq filtering
+```
+
+| Feature | Details |
+|---------|----------|
+| Dual-form auto-detection | Automatically selects api.dingtalk.com (header auth) or oapi.dingtalk.com (query-param auth) based on URL |
+| Automatic token management | App-level accessToken is fetched on first call, cached while valid, auto-refreshed on expiry |
+| Domain allowlist | Only `api.dingtalk.com` and `oapi.dingtalk.com` permitted — prevents token leakage |
+| Auto-pagination | `--page-all` iterates all pages; `--page-limit` caps the maximum |
+
+</details>
+
+<details>
 <summary><strong>Smart Input Correction</strong> — auto-corrects common AI model parameter mistakes</summary>
 
 Built-in pipeline engine that normalizes flag names, splits sticky arguments, and fuzzy-matches typos:
@@ -367,8 +413,9 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 | Drive | `drive` | 6 | `list` `info` `download` `mkdir` `upload-info` `commit` | DingTalk drive file ops: list, info, download, create folders, two-phase upload |
 | Minutes | `minutes` | 19 | `list` `get` `update` `mind-graph` `speaker` `hot-word` `upload` | List AI meeting notes (mine / shared), details (info / summary / keywords / transcription / todos / batch), title/summary updates, mind map, speaker replace, hot-word, upload session |
 | DevDoc | `devdoc` | 1 | `article` | Search the DingTalk Open Platform documentation |
+| Raw API | `api` | 1 | — | Call any DingTalk OpenAPI directly (api / oapi dual-form), with automatic app-level token management |
 
-> **159 commands across 13 products.** Full listing with descriptions and usage scenarios: [`docs/command-index.md`](./docs/command-index.md). Run `dws --help` for the top-level tree, or `dws <service> --help` for subcommands.
+> **160 commands across 13 products.** Full listing with descriptions and usage scenarios: [`docs/command-index.md`](./docs/command-index.md). Run `dws --help` for the top-level tree, or `dws <service> --help` for subcommands.
 
 > **Note on `chat bot`**: bot capabilities (`send-by-bot` / `recall-by-bot` / `add-bot` / `send-by-webhook` / bot search) are merged into the relevant `chat` subtrees (e.g. `dws chat message send-by-bot`, `dws chat group members add-bot`) so the agent-facing command surface stays flat and discoverable. There is no longer a separate top-level `bot` product.
 
