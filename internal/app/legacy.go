@@ -32,6 +32,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -52,32 +53,36 @@ func newLegacyPublicCommands(ctx context.Context, runner executor.Runner) []*cob
 	return mergeTopLevelCommands(pickCommands(dynamicCmds, helperCmds))
 }
 
-// pickCommands returns the union of dynamic and helpers commands, with
-// same-named helpers dropped so discovery envelopes remain the authority.
+// pickCommands returns the union of dynamic and helpers commands. For
+// same-named top-level products, helper-only leaves are grafted into the
+// dynamic tree via cmdutil.MergeHardcodedLeaves so the discovery envelope
+// remains the authority for leaves it declares, while hardcoded helpers can
+// still fill gaps the envelope did not cover (e.g. `chat message send-by-bot`
+// alongside the envelope's `chat message send`).
 //
 // Why this exists: mergeTopLevelCommands below calls cobracmd.MergeCommandTree
 // on same-named top-level commands, which — at leaf conflicts — falls back to
 // "more local flags wins" via ShouldReplaceLeaf. Hardcoded helpers commands
 // typically expose more flags than the corresponding dynamic overlay leaves,
 // so a naive append would silently promote helper leaves over their dynamic
-// counterparts and append helper-only siblings into the dynamic subtree.
-// By shadowing same-named helpers upfront we keep the dynamic subtree intact
-// and let helpers only fill in products the discovery envelope did not cover.
+// counterparts. MergeHardcodedLeaves avoids that by letting dynamic win every
+// leaf conflict, and only adding subtrees the dynamic side lacks.
 func pickCommands(dynamic, helpers []*cobra.Command) []*cobra.Command {
-	dynNames := make(map[string]bool, len(dynamic))
+	dynByName := make(map[string]*cobra.Command, len(dynamic))
 	out := make([]*cobra.Command, 0, len(dynamic)+len(helpers))
 	for _, c := range dynamic {
 		if c == nil {
 			continue
 		}
-		dynNames[c.Name()] = true
+		dynByName[c.Name()] = c
 		out = append(out, c)
 	}
 	for _, h := range helpers {
 		if h == nil {
 			continue
 		}
-		if dynNames[h.Name()] {
+		if dyn := dynByName[h.Name()]; dyn != nil {
+			cmdutil.MergeHardcodedLeaves(dyn, h)
 			continue
 		}
 		out = append(out, h)
