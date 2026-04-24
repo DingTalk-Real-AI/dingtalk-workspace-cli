@@ -88,6 +88,45 @@ func TestMergeHardcodedLeaves_DynamicLeafWins(t *testing.T) {
 	}
 }
 
+func TestMergeHardcodedLeaves_HigherPriorityHardcodedOverridesDynamic(t *testing.T) {
+	t.Parallel()
+	dynLeaf := newLeaf("shared", "dynamic")
+	dyn := newGroup("root", dynLeaf)
+	hcLeaf := newLeaf("shared", "hardcoded")
+	SetOverridePriority(hcLeaf, 100)
+	hc := newGroup("root", hcLeaf)
+
+	MergeHardcodedLeaves(dyn, hc)
+
+	got := findChildByName(dyn, "shared")
+	if got == nil {
+		t.Fatal("expected shared leaf on dyn after merge")
+	}
+	if got != hcLeaf {
+		t.Fatalf("expected hardcoded leaf to replace dynamic; got Short=%q", got.Short)
+	}
+	if findChildByName(hc, "shared") != nil {
+		t.Fatal("expected hardcoded.shared to be moved off hardcodedRoot after replacement")
+	}
+}
+
+func TestMergeHardcodedLeaves_EqualPriorityKeepsDynamic(t *testing.T) {
+	t.Parallel()
+	dynLeaf := newLeaf("shared", "dynamic")
+	SetOverridePriority(dynLeaf, 100)
+	dyn := newGroup("root", dynLeaf)
+	hcLeaf := newLeaf("shared", "hardcoded")
+	SetOverridePriority(hcLeaf, 100)
+	hc := newGroup("root", hcLeaf)
+
+	MergeHardcodedLeaves(dyn, hc)
+
+	got := findChildByName(dyn, "shared")
+	if got != dynLeaf {
+		t.Fatalf("equal priorities must keep dynamic; got Short=%q", got.Short)
+	}
+}
+
 func TestMergeHardcodedLeaves_RecurseGroups(t *testing.T) {
 	t.Parallel()
 	dyn := newGroup("root",

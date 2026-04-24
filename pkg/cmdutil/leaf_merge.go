@@ -20,11 +20,20 @@ import (
 )
 
 // MergeHardcodedLeaves grafts leaves from hardcodedRoot onto dynamicRoot when
-// the same-named path does not already exist. Groups recurse. On conflicts the
-// dynamic side always wins, because the discovery envelope is the runtime
-// authority: hardcoded commands are retained only as a leaf-level fallback for
-// behaviour the envelope explicitly does not declare. See
-// _docs/discovery-overlay-authority.md.
+// the same-named path does not already exist. Groups recurse. On leaf
+// conflicts the dynamic side wins by default, because the discovery envelope
+// is the runtime authority — hardcoded commands are retained only as a
+// leaf-level fallback for behaviour the envelope explicitly does not
+// declare. See _docs/discovery-overlay-authority.md.
+//
+// Explicit opt-in override: a hardcoded leaf may promote itself over a
+// same-named dynamic leaf by carrying a strictly higher OverridePriority
+// (see SetOverridePriority / OverridePriority). This exists for the narrow
+// case where the envelope exposes one dispatch path but the hardcoded leaf
+// needs richer flag-based routing (e.g. `chat message send` fanning out to
+// multiple MCP tools depending on --group vs --user), which the envelope
+// cannot currently express. Helpers without the annotation still lose to
+// the envelope, so the default authority contract is preserved.
 //
 // PRECONDITION: dynamicRoot must be envelope-sourced (carry the
 // SourceAnnotation=SourceEnvelope marker set by BuildDynamicCommands via
@@ -37,13 +46,14 @@ import (
 //
 // Conflict resolution table:
 //
-//	dynamic  hardcoded  →  action
-//	-------  ---------  -----------------------------
-//	absent   anything      graft hardcoded subtree
-//	leaf     leaf          dynamic wins (no-op)
-//	group    group         recurse
-//	leaf     group         dynamic wins, warn
-//	group    leaf          dynamic wins, warn
+//	dynamic  hardcoded                          →  action
+//	-------  ---------------------------------  -----------------------------
+//	absent   anything                              graft hardcoded subtree
+//	leaf     leaf (hc priority ≤ dyn)              dynamic wins (no-op)
+//	leaf     leaf (hc priority > dyn)              hardcoded replaces dynamic
+//	group    group                                 recurse
+//	leaf     group                                 dynamic wins, warn
+//	group    leaf                                  dynamic wins, warn
 //
 // MergeHardcodedLeaves mutates dynamicRoot in place and returns it so callers
 // can chain. hardcodedRoot is treated as a donor: grafted children are
@@ -63,7 +73,12 @@ func MergeHardcodedLeaves(dynamicRoot, hardcodedRoot *cobra.Command) *cobra.Comm
 			hardcodedRoot.RemoveCommand(hc)
 			dynamicRoot.AddCommand(hc)
 		case IsLeafCmd(hc) && IsLeafCmd(dyn):
-			// Envelope is authority; hardcoded leaf is ignored.
+			if OverridePriority(hc) > OverridePriority(dyn) {
+				hardcodedRoot.RemoveCommand(hc)
+				dynamicRoot.RemoveCommand(dyn)
+				dynamicRoot.AddCommand(hc)
+			}
+			// else: envelope is authority; hardcoded leaf is ignored.
 		case !IsLeafCmd(hc) && !IsLeafCmd(dyn):
 			MergeHardcodedLeaves(dyn, hc)
 		default:
