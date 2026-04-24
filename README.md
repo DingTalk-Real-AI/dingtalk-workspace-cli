@@ -185,11 +185,16 @@ Credentials are securely persisted after first login (Keychain). Subsequent runs
 ## Quick Start
 
 ```bash
-dws contact user search --keyword "engineering"     # search contacts
-dws calendar event list                            # list calendar events
+dws contact user search --query "engineering"      # search contacts
+dws calendar event list                            # list today's calendar events
+dws doc search --query "quarterly"                 # search DingTalk Docs
+dws minutes list mine                              # list AI meeting notes I created
+dws drive list                                     # list DingTalk drive files
 dws todo task create --title "Quarterly report" --executors "<your-userId>"   # create a todo (replace <your-userId>)
 dws todo task list --dry-run                       # preview without executing
 ```
+
+> **Full command list**: [`docs/command-index.md`](./docs/command-index.md) — all 159 commands with descriptions and when-to-use guidance.
 
 ## Using with Agents
 
@@ -350,26 +355,27 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 | Service | Command | Commands | Subcommands | Description |
 |---------|---------|:--------:|-------------|-------------|
 | Contact | `contact` | 6 | `user` `dept` | Search users by name/mobile, batch query, departments, current user profile |
-| Chat / IM | `chat` (alias `im`) | 20 | `message` `group` `search` `list-top-conversations` | User-identity send (group / 1-on-1 / open-dingtalk-id), Markdown + image, @mentions; read & search conversations (list, list-all, topic replies, by-sender, mentions, focused, unread, search, info, top / common groups); group CRUD + member management |
-| Bot | `chat bot` | 7 | `bot` `group` `message` `search` `create` `search-groups` | Bot create / search, search bot groups; bot-identity group & batch-1:1 messaging, Webhook, message recall; add bot to group |
-| Calendar | `calendar` | 13 | `event` `room` `participant` `busy` | Events CRUD, meeting room booking, free-busy query, participant management |
+| Chat / IM | `chat` (alias `im`) | 23 | `message` `group` `bot` `conversation-info` `search` `search-common` `list-top-conversations` | Messages (send / list / list-all / by-sender / mentions / focused / unread / topic replies / search), group CRUD + member management (incl. `add-bot`), bot-identity messaging (`send-by-bot` / `recall-by-bot` / `send-by-webhook`), conversation info, common groups lookup |
+| Calendar | `calendar` | 14 | `event` `room` `participant` `busy` | Events CRUD + suggested times + attachments, meeting room booking, free-busy query, participant management |
 | Todo | `todo` | 6 | `task` | Create, list, update, done, get detail, delete |
-| Approval | `oa` | 9 | `approval` | Approve/reject/revoke, pending tasks, initiated instances, process list |
+| Approval | `oa` | 9 | `approval` | Approve / reject / revoke, pending / initiated instances, process list, operation records |
 | Attendance | `attendance` | 4 | `record` `shift` `summary` `rules` | Clock-in records, shift schedules, attendance summary, group rules |
-| Ding | `ding` | 2 | `message` | Send/recall DING messages |
+| Ding | `ding` | 2 | `message` | Send / recall DING messages |
 | Report | `report` | 7 | `create` `list` `detail` `template` `stats` `sent` | Create reports, sent/received list, templates, statistics |
-| AITable | `aitable` | 37 | `base` `table` `record` `field` `attachment` `template` `chart` `dashboard` `export` `import` `view` | Full CRUD for bases/tables/records/fields; charts/dashboards; data import/export; views; templates |
-| Doc | `doc` | 16 | `search` `list` `info` `read` `create` `update` `upload` `download` `folder` `block` `comment` | Search, read, create/update documents; block-level editing; file upload/download; comments |
-| Minutes | `minutes` | 22 | `list` `get` `update` `record` `hot-word` `mind-graph` `replace-text` `speaker` `upload` | List/search AI meeting transcripts; summaries, transcriptions, todos, mind-maps; recording control; speaker management, hot-words, file upload |
-| Workbench | `workbench` | 2 | `app` | Batch query app details |
-| DevDoc | `devdoc` | 1 | `article` | Search platform docs and error codes |
+| AI Tables | `aitable` | 41 | `base` `table` `record` `field` `view` `dashboard` `chart` `import` `export` `attachment` `template` | Full CRUD for Bases / datasheets / records / fields / views; charts & dashboards with public-share configs; data import/export; attachments; templates |
+| Doc | `doc` | 21 | `search` `list` `info` `read` `create` `update` `upload` `download` `copy` `move` `rename` `file` `folder` `block` `comment` | Search / read / write docs, file & folder create, block-level editing, comments (list / create / reply / create-inline), upload / download |
+| Drive | `drive` | 6 | `list` `info` `download` `mkdir` `upload-info` `commit` | DingTalk drive file ops: list, info, download, create folders, two-phase upload |
+| Minutes | `minutes` | 19 | `list` `get` `update` `mind-graph` `speaker` `hot-word` `upload` | List AI meeting notes (mine / shared), details (info / summary / keywords / transcription / todos / batch), title/summary updates, mind map, speaker replace, hot-word, upload session |
+| DevDoc | `devdoc` | 1 | `article` | Search the DingTalk Open Platform documentation |
 
-> 152 commands across 14 products. Run `dws --help` for the full list, or `dws <service> --help` for subcommands.
+> **159 commands across 13 products.** Full listing with descriptions and usage scenarios: [`docs/command-index.md`](./docs/command-index.md). Run `dws --help` for the top-level tree, or `dws <service> --help` for subcommands.
+
+> **Note on `chat bot`**: bot capabilities (`send-by-bot` / `recall-by-bot` / `add-bot` / `send-by-webhook` / bot search) are merged into the relevant `chat` subtrees (e.g. `dws chat message send-by-bot`, `dws chat group members add-bot`) so the agent-facing command surface stays flat and discoverable. There is no longer a separate top-level `bot` product.
 
 <details>
 <summary>Coming soon</summary>
 
-`mail` (email) · `drive` (cloud drive) · `conference` (video) · `tb` (Teambition) · `aiapp` (AI apps) · `live` (streaming) · `skill` (marketplace)
+`mail` (email) · `conference` (video) · `aiapp` (AI apps) · `live` (streaming) · `wiki` (knowledge base)
 
 </details>
 
@@ -418,6 +424,7 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 
 ## Reference & Docs
 
+- [Command Index](./docs/command-index.md) — every runtime command (159 total) with description and when-to-use guidance
 - [Reference](./docs/reference.md) — environment variables, exit codes, output formats, shell completion
 - [Architecture](./docs/architecture.md) — discovery-driven pipeline, IR, transport layer
 - [Changelog](./CHANGELOG.md) — release history and migration notes

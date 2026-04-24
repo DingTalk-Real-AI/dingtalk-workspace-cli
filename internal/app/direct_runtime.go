@@ -80,11 +80,19 @@ func SetDynamicServers(servers []market.ServerDescriptor) {
 					toolEndpoints[toolName] = endpoint
 				}
 			}
-			for toolName := range server.CLI.ToolOverrides {
+			for toolName, override := range server.CLI.ToolOverrides {
 				toolName = strings.TrimSpace(toolName)
-				if toolName != "" {
-					toolEndpoints[toolName] = endpoint
+				if toolName == "" {
+					continue
 				}
+				// Leaves with serverOverride are routed to a different server's
+				// endpoint (e.g. chat's "search_my_robots" → bot). Registering
+				// them here would overwrite the real owner's tool → endpoint
+				// mapping and send the invocation to the wrong MCP URL.
+				if strings.TrimSpace(override.ServerOverride) != "" {
+					continue
+				}
+				toolEndpoints[toolName] = endpoint
 			}
 		}
 	}
@@ -208,11 +216,17 @@ func AppendDynamicServer(server market.ServerDescriptor) {
 				dynamicToolEndpoints[toolName] = endpoint
 			}
 		}
-		for toolName := range server.CLI.ToolOverrides {
+		for toolName, override := range server.CLI.ToolOverrides {
 			toolName = strings.TrimSpace(toolName)
-			if toolName != "" {
-				dynamicToolEndpoints[toolName] = endpoint
+			if toolName == "" {
+				continue
 			}
+			// Leaves with serverOverride are routed to a different server's
+			// endpoint; skip to avoid overwriting the real owner's mapping.
+			if strings.TrimSpace(override.ServerOverride) != "" {
+				continue
+			}
+			dynamicToolEndpoints[toolName] = endpoint
 		}
 	}
 }

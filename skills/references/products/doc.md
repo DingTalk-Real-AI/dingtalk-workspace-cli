@@ -80,6 +80,22 @@ Flags:
       --markdown string    文档初始 Markdown 内容
 ```
 
+### 创建其他类型文件 (表格/脑图/白板/多维表/画板)
+```
+Usage:
+  dws doc file create [flags]
+Example:
+  dws doc file create --name "项目周报" --type adoc
+  dws doc file create --name "数据统计" --type axls --folder <FOLDER_ID>
+  dws doc file create --name "思维导图" --type amind --workspace <WS_ID>
+  dws doc file create --name "子文件夹" --type folder
+Flags:
+      --name string        文件名称 (必填)
+      --type string        文件类型 (必填): adoc=文档, axls=表格, appt=演示, adraw=白板, amind=脑图, able=多维表, folder=文件夹
+      --folder string      目标文件夹 ID 或 URL
+      --workspace string   目标知识库 ID 或 URL
+```
+
 ### 更新文档内容
 ```
 Usage:
@@ -133,6 +149,45 @@ Flags:
       --name string        文件夹名称 (必填)
       --folder string      父文件夹 ID 或 URL
       --workspace string   目标知识库 ID
+```
+
+### 复制文档/文件
+```
+Usage:
+  dws doc copy [flags]
+Example:
+  dws doc copy --node <DOC_ID> --folder <TARGET_FOLDER_ID>
+  dws doc copy --node <DOC_ID> --workspace <TARGET_WS_ID>
+  dws doc copy --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>" --folder <FOLDER_ID>
+Flags:
+      --node string        源文档/文件 ID 或 URL (必填)
+      --folder string      目标文件夹 ID 或 URL
+      --workspace string   目标知识库 ID 或 URL (不传 --folder 时复制到该知识库根目录)
+```
+
+### 移动文档/文件
+```
+Usage:
+  dws doc move [flags]
+Example:
+  dws doc move --node <DOC_ID> --folder <TARGET_FOLDER_ID>
+  dws doc move --node <DOC_ID> --workspace <TARGET_WS_ID>
+Flags:
+      --node string        源文档/文件 ID 或 URL (必填)
+      --folder string      目标文件夹 ID 或 URL
+      --workspace string   目标知识库 ID 或 URL (不传 --folder 时移动到该知识库根目录)
+```
+
+### 重命名文档/文件
+```
+Usage:
+  dws doc rename [flags]
+Example:
+  dws doc rename --node <DOC_ID> --name "新名称"
+  dws doc rename --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>" --name "项目周报 v2"
+Flags:
+      --node string   文档/文件 ID 或 URL (必填)
+      --name string   新名称 (必填)
 ```
 
 ### 查询块元素
@@ -229,6 +284,24 @@ Flags:
       --mention string   被 @ 的用户 uid 列表，逗号分隔
 ```
 
+### 创建划词评论 (内联评论)
+```
+Usage:
+  dws doc comment create-inline [flags]
+Example:
+  dws doc comment create-inline --node <DOC_ID> --block-id <BLOCK_ID> --start 0 --end 10 --content "这里需要修改"
+  dws doc comment create-inline --node <DOC_ID> --block-id <BLOCK_ID> --start 5 --end 20 --content "建议调整" --selected-text "被选中的原文"
+  dws doc comment create-inline --node <DOC_ID> --block-id <BLOCK_ID> --start 0 --end 10 --content "请review" --mention uid1,uid2
+Flags:
+      --node string            目标文档的标识，支持传入 URL 或 ID (必填)
+      --block-id string        评论锚定所在的块 ID (必填，可通过 dws doc block list 获取)
+      --start int              选中文本在块内的起始字符偏移量，从 0 开始 (必填)
+      --end int                选中文本在块内的结束字符偏移量，必须大于 start (必填)
+      --content string         评论的文字内容，纯文本 (必填)
+      --selected-text string   选中文本内容，填写后评论列表会展示「引用原文：xxx」
+      --mention string         被 @ 的用户 uid 列表，逗号分隔
+```
+
 ### 回复文档评论
 ```
 Usage:
@@ -282,12 +355,24 @@ Flags:
 - 元信息 → `info`
 
 用户说"写文档/创建文档":
-- 新建 → `create`
+- 新建纯文档 (adoc) → `create`
 - 追加内容 → `update --mode append`
 - 覆盖替换 → `update --mode overwrite`
 
+用户说"新建表格/脑图/白板/多维表/演示文稿":
+- 用 `file create --type` 指定类型 (axls/amind/adraw/able/appt/adraw)
+
 用户说"建文件夹/新建目录":
-- 创建 → `folder create`
+- 创建 → `folder create` 或 `file create --type folder`
+
+用户说"复制文档/拷贝一份":
+- 复制 → `copy` (需源 --node 和目标 --folder/--workspace)
+
+用户说"移动文档/换个目录":
+- 移动 → `move` (需源 --node 和目标 --folder/--workspace)
+
+用户说"改文档名字/重命名":
+- 改名 → `rename` (需 --node 和新 --name)
 
 用户说"上传文件/传文件/上传到文档/上传到知识库":
 - 上传 → `upload`（需本地文件路径）
@@ -390,7 +475,7 @@ dws doc block delete --node <DOC_ID> --block-id <BLOCK_ID> --yes
 # 1. 查看文档的所有评论
 dws doc comment list --node <DOC_ID> --format json
 
-# 2. 在文档上创建评论
+# 2. 在文档上创建全文评论
 dws doc comment create --node <DOC_ID> --content "这里需要补充数据来源" --format json
 
 # 3. 创建评论并 @ 相关人
@@ -398,11 +483,34 @@ dws doc comment create --node <DOC_ID> --content "这里需要补充数据来源
 #    再将 userId 传入 --mention
 dws doc comment create --node <DOC_ID> --content "请确认这部分内容" --mention <userId1>,<userId2> --format json
 
-# 4. 回复某条评论（commentKey 从 list 或 create 返回中获取）
+# 4. 对某段文字创建划词评论（需先 block list 拿 blockId 和字符偏移）
+dws doc block list --node <DOC_ID> --format json
+dws doc comment create-inline --node <DOC_ID> --block-id <BLOCK_ID> --start 0 --end 12 \
+  --content "这里的数据要复核" --selected-text "被选中的原文片段" --format json
+
+# 5. 回复某条评论（commentKey 从 list 或 create 返回中获取）
 dws doc comment reply --node <DOC_ID> --comment-key <COMMENT_KEY> --content "已修改" --format json
 
-# 5. 用表情回复评论
+# 6. 用表情回复评论
 dws doc comment reply --node <DOC_ID> --comment-key <COMMENT_KEY> --content "比心" --emoji --format json
+
+# ── 工作流 8: 创建非文档类型文件 ──
+
+# 创建表格 / 脑图 / 白板 / 多维表 / 演示文稿
+dws doc file create --name "销售数据" --type axls --folder <FOLDER_ID> --format json
+dws doc file create --name "需求脑图" --type amind --workspace <WS_ID> --format json
+dws doc file create --name "Q1 立项会" --type appt --format json
+
+# ── 工作流 9: 整理文档结构 (复制 / 移动 / 重命名) ──
+
+# 1. 把模板复制到目标目录作为新工作件
+dws doc copy --node <TEMPLATE_DOC_ID> --folder <TARGET_FOLDER_ID> --format json
+
+# 2. 把文档从个人空间挪到团队知识库
+dws doc move --node <DOC_ID> --workspace <WS_ID> --format json
+
+# 3. 重命名
+dws doc rename --node <DOC_ID> --name "项目周报 v2" --format json
 ```
 
 ## 上下文传递表
@@ -418,8 +526,11 @@ dws doc comment reply --node <DOC_ID> --comment-key <COMMENT_KEY> --content "比
 | `upload` | `nodeId` / URL | 上传后文件的访问链接 |
 | `download` | 本地文件路径 | 下载后的文件保存位置 |
 | `comment list` | `commentList[].commentKey` | comment reply 的 --comment-key |
-| `comment create` | `commentKey` | comment reply 的 --comment-key |
-| `contact user search` | `userId` | comment create/reply 的 --mention |
+| `comment create` / `comment create-inline` | `commentKey` | comment reply 的 --comment-key |
+| `block list` | `blockId` + 文本内容 | comment create-inline 的 --block-id 及 --start/--end 计算 |
+| `contact user search` | `userId` | comment create / create-inline / reply 的 --mention |
+| `file create` | `nodeId` | 后续 read / update / block 操作的 --node（仅 adoc 支持 read/update，axls/amind 等类型用各自产品的命令） |
+| `copy` / `move` | 新 `nodeId`（copy）或原 nodeId（move） | 后续 read / info 等的 --node |
 
 ## nodeId 双格式说明
 
@@ -448,6 +559,10 @@ dws doc read --node "https://alidocs.dingtalk.com/i/nodes/9E05BDRVQePjzLkZt2p2vE
 - `upload` 支持上传任意类型文件 (PDF、Office、图片等) 到钉钉文档空间或知识库；`--convert` 可将 Office 文件转换为钉钉在线文档
 - `upload` 是三步自动完成的流程 (获取凭证 → OSS 上传 → 提交入库)，无需手动分步操作
 - `download` 是两步自动完成的流程 (获取下载链接 → HTTP GET 下载)，支持自动推断文件名；`--output` 可指定文件路径或目录
+- `create` 只能建"文档"（adoc）；要建表格/脑图/白板/多维表/演示/文件夹，用 `file create --type`
+- `copy` 需要对源节点有"阅读"权限、对目标目录有"编辑"权限；`move` 需要对源节点有"管理"权限
+- `copy` / `move` 不传 `--folder` 时，`--workspace` 表示放到知识库根目录；两者都不传则回落到"我的文档"
+- `comment create` 是全文评论；`comment create-inline` 是划词评论，必须先 `block list` 拿到 `blockId` 并确定 `--start` / `--end` 偏移（按块内纯文本字符算，从 0 开始）
 
 ## 自动化脚本
 

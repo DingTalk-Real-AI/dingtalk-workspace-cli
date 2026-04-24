@@ -84,6 +84,8 @@ Flags:
       --report-id string   日志 ID (必填)
 ```
 
+返回该日志的互动聚合数据：浏览数 (views)、点赞数 (likes)、评论数 (comments) 等，用于衡量一篇日志的阅读与反馈情况。
+
 ### 查询当前人创建的日志列表
 ```
 Usage:
@@ -106,7 +108,7 @@ Flags:
 
 用户说"查日志/看日报" → `list` 获取列表，再 `detail`
 用户说"写日报/提交周报/发日志/填日志" → 先 `template list` / `template detail` 取 `templateId` 与各控件 `key`/`sort`/类型，拼 `--contents` JSON，再 `create`
-用户说"日志统计/已读统计" → `stats`
+用户说"日志数据/互动情况/多少人看了/点赞评论" → `stats`
 用户说"有什么日志模版" → `template list` 或 `template detail`
 用户说"我发过的日志/我创建的日志" → `sent`
 
@@ -133,7 +135,7 @@ dws report list --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+0
 # 4. 查看日志详情
 dws report detail --report-id <reportId> --format json
 
-# 5. 查看日志统计（已读/未读）
+# 5. 查看日志统计（浏览/点赞/评论聚合）
 dws report stats --report-id <reportId> --format json
 
 # 6. 查看当前人创建的日志列表

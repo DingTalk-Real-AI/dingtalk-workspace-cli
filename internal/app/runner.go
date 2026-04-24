@@ -168,10 +168,10 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 
 	product, ok := catalog.FindProduct(invocation.CanonicalProduct)
 	if !ok || strings.TrimSpace(product.Endpoint) == "" {
-		return r.fallback.Run(ctx, invocation)
+		return r.handleCatalogMiss(ctx, invocation, "product missing from discovery catalog and no supplement/env override")
 	}
 	if _, ok := product.FindTool(invocation.Tool); !ok {
-		return r.fallback.Run(ctx, invocation)
+		return r.handleCatalogMiss(ctx, invocation, fmt.Sprintf("tool %q not declared by product %q in discovery catalog", invocation.Tool, invocation.CanonicalProduct))
 	}
 	if r.globalFlags != nil && r.globalFlags.DryRun {
 		invocation.DryRun = true
@@ -182,6 +182,37 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 		endpoint = override
 	}
 	return r.executeInvocation(ctx, endpoint, invocation)
+}
+
+// handleCatalogMiss decides what to do when discovery catalog does not cover the
+// requested product / tool and no `directRuntimeEndpoint` match fired earlier.
+//
+// Previously every catalog miss silently fell through to EchoRunner, which
+// returns an empty `executor.Result{Response: nil}`. The helper-invocation
+// adapter then converted that into `&edition.ToolResult{}`, whose `Content`
+// marshals to `null`, surfacing as `{"Content": null}` at the CLI. Users had no
+// signal that endpoint resolution failed — see the fix-wukong-discovery-missing-servers plan (Phase 3) for the full trace.
+//
+// New contract:
+//   - Dry-run (invocation.DryRun or globalFlags.DryRun): keep EchoRunner so
+//     `--dry-run` still prints the planned payload without real execution.
+//   - Otherwise: return an explicit apperrors.NewAPI("endpoint_not_resolved")
+//     with the offending product/tool attached. This fails fast to stderr and
+//     makes missing envelopes / supplement gaps immediately visible.
+func (r *runtimeRunner) handleCatalogMiss(ctx context.Context, invocation executor.Invocation, detail string) (executor.Result, error) {
+	dryRun := invocation.DryRun || (r.globalFlags != nil && r.globalFlags.DryRun)
+	if dryRun {
+		invocation.DryRun = true
+		return r.fallback.Run(ctx, invocation)
+	}
+	return executor.Result{}, apperrors.NewAPI(
+		fmt.Sprintf("endpoint not resolved for product %q (tool %q): %s", invocation.CanonicalProduct, invocation.Tool, detail),
+		apperrors.WithOperation("discovery.resolve"),
+		apperrors.WithReason("endpoint_not_resolved"),
+		apperrors.WithServerKey(invocation.CanonicalProduct),
+		apperrors.WithHint("产品 envelope 可能未下发到 discovery，或已经被 serverDeps fail-fast 丢弃；可执行 'dws cache refresh' 强制重新 discovery，仍失败请向 Portal 确认 envelope 状态。"),
+		apperrors.WithActions("dws cache refresh"),
+	)
 }
 
 func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, invocation executor.Invocation) (result executor.Result, retErr error) {

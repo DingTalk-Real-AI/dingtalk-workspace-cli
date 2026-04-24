@@ -55,6 +55,12 @@ type ToolCaller interface {
 	DryRun() bool
 }
 
+// RuntimeDefaultFn resolves a single runtimeDefault placeholder (e.g.
+// "$currentUserId") to a concrete string value. Called lazily at RunE time.
+// Returning (_, false) is equivalent to "not registered" and falls through
+// to the next-lower default source.
+type RuntimeDefaultFn func(ctx context.Context) (string, bool)
+
 // Hooks groups all edition-specific behavioural overrides. Zero values
 // fall back to open-source defaults so the struct is safe to use as-is.
 type Hooks struct {
@@ -88,17 +94,54 @@ type Hooks struct {
 	// ClassifyToolResult inspects raw MCP tool-call content and returns a typed
 	// error (e.g. PATError, CLIError) when the response contains a known
 	// gateway-auth or PAT-permission failure. nil → no special handling.
-	ClassifyToolResult func(content map[string]any) error
+	// ClassifyToolResult func(content map[string]any) error
 
 	// --- product & endpoint ---
 	StaticServers         func() []ServerInfo                          // non-nil → skip Market discovery
 	VisibleProducts       func() []string                              // non-nil → override help visibility
 	RegisterExtraCommands func(root *cobra.Command, caller ToolCaller) // register overlay-only commands
 
+	// --- discovery ---
+
+	// DiscoveryURL overrides the Market API endpoint for server list.
+	// Non-empty → loadDynamicCommands uses FetchServersFromURL(DiscoveryURL)
+	// instead of the default Market base URL. Provides edition-level isolation.
+	DiscoveryURL string
+
+	// DiscoveryHeaders returns HTTP headers injected into discovery requests.
+	// Used to authenticate edition-specific endpoints.
+	DiscoveryHeaders func() map[string]string
+
+	// SupplementServers returns edition-specific MCP servers NOT registered
+	// in any Market registry. Always merged into the endpoint map alongside
+	// Market/cache results, regardless of discovery success or failure.
+	SupplementServers func() []ServerInfo
+
+	// FallbackServers returns the full server list as a safety net when
+	// Market discovery + cache both fail. Results are NOT cached so the
+	// next startup still attempts live discovery.
+	FallbackServers func() []ServerInfo
+
 	// AfterPersistentPreRun runs at the end of the root PersistentPreRunE after
 	// global setup (OAuth flag overrides, log level, output sink). Overlays use
 	// this for clients that bypass the MCP runner (e.g. A2A gateway).
 	AfterPersistentPreRun func(cmd *cobra.Command, args []string) error
+
+	// ClassifyToolResult is called before the framework's default business-error
+	// detection on MCP tool results. If it returns a non-nil error, that error
+	// is used instead of the generic CategoryAPI business error. Editions use
+	// this to return custom error types with specific exit codes (e.g. PAT
+	// authorization errors with exit code 4).
+	ClassifyToolResult func(content map[string]any) error
+
+	// --- schema v3: runtime defaults ---
+
+	// RuntimeDefaults returns resolvers for runtimeDefault placeholders (e.g.
+	// "$currentUserId" → fn). Placeholders not in the map fall through to a
+	// "not registered" warning. Open-source core returns an empty map;
+	// overlays populate the whitelist ($currentUserId / $unionId / $corpId /
+	// $now / $today). See schema v3 §2.3.
+	RuntimeDefaults func() map[string]RuntimeDefaultFn
 }
 
 var (

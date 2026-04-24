@@ -250,6 +250,13 @@ func (l EnvironmentLoader) Load(ctx context.Context) (ir.Catalog, error) {
 		return ir.Catalog{}, newCatalogDegraded(DegradedMarketUnreachable, 0)
 	}
 
+	// Surface Portal-side merge warnings (dropped envelopes, dangling serverDeps,
+	// dangling toolOverrides.*.serverOverride) to stderr so configuration drift
+	// is visible at the first `dws cache refresh` / cold start after Portal
+	// publishes a broken envelope. Non-fatal: discovery continues with the
+	// accepted subset. See plan fix-wukong-discovery-missing-servers Phase 4.3.
+	logDiscoveryWarnings(response.Metadata.Warnings)
+
 	servers := market.NormalizeServers(response, "live_market")
 	_ = store.SaveRegistry(partition, cache.RegistrySnapshot{Servers: servers})
 
@@ -353,4 +360,20 @@ func (l EnvironmentLoader) lookup(key string) (string, bool) {
 		return "", false
 	}
 	return value, true
+}
+
+// logDiscoveryWarnings prints Portal-side merge warnings via slog (stderr).
+// No-op when the response carries an empty / nil Warnings slice — which is the
+// common case for older Portal builds that don't populate the field.
+func logDiscoveryWarnings(warnings []market.ListWarning) {
+	if len(warnings) == 0 {
+		return
+	}
+	for _, w := range warnings {
+		slog.Warn("discovery: merge warning from Portal",
+			"product", w.ProductID,
+			"reason", w.Reason,
+			"detail", w.Detail,
+		)
+	}
 }

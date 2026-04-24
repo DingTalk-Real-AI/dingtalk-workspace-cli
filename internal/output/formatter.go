@@ -29,9 +29,10 @@ import (
 type Format string
 
 const (
-	FormatJSON  Format = "json"
-	FormatTable Format = "table"
-	FormatRaw   Format = "raw"
+	FormatJSON   Format = "json"
+	FormatTable  Format = "table"
+	FormatRaw    Format = "raw"
+	FormatPretty Format = "pretty"
 )
 
 var preferredListKeys = []string{"items", "results", "data", "list", "records", "tools", "servers", "products"}
@@ -75,6 +76,8 @@ func Write(w io.Writer, format Format, payload any) error {
 		return writeRaw(w, payload)
 	case FormatTable:
 		return writeTableish(w, payload)
+	case FormatPretty:
+		return writePretty(w, payload)
 	default:
 		return WriteJSON(w, payload)
 	}
@@ -123,6 +126,8 @@ func normalizeFormat(raw string, fallback Format) Format {
 		return FormatRaw
 	case string(FormatTable):
 		return FormatTable
+	case string(FormatPretty):
+		return FormatPretty
 	default:
 		return fallback
 	}
