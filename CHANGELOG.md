@@ -56,10 +56,6 @@ Discovery layer abstraction and schema v3 expansion, plus an open-edition comple
 - Expanded `internal/compat/dynamic_commands_test.go` (+1.6k lines) covering schema v3 extensions (positional, examples, defaults, mutually-exclusive, body-wrapper, runtime defaults).
 - New `pkg/cmdutil/leaf_merge_test.go` (159 lines) for `MergeHardcodedLeaves` semantics.
 
-## [1.0.14] - 2026-04-22
-
-Docs-only re-tag of v1.0.13. The single commit (#153) backfills the v1.0.13 release notes after the binary was already published; no functional or CLI surface change.
-
 ## [1.0.15] - 2026-04-23
 
 Compat layer gains **subcommand merging** under shared parents so multiple server entries can contribute into the same `dws <parent> <branch>` subtree without producing duplicate `--help` rows. Ships with a fresh auto-generated command index doc, a README sync to **159 commands across 13 products**, and a wide-ranging flag-naming cleanup that standardises CLI flags across chat, calendar, drive, minutes, contact, and devdoc commands.
@@ -101,6 +97,10 @@ Compat layer gains **subcommand merging** under shared parents so multiple serve
   - `TestBuildDynamicCommands_ParentMergeSameName` — two servers with identical `command` + `parent` collapse into a single merged subcommand
   - `TestBuildDynamicCommands_ParentMergeRecursive` — recursive merge through nested groups (e.g. `chat.group.members`)
   - `TestBuildDynamicCommands_ParentMergeLeafCollision` — identical leaf paths resolve first-wins without producing duplicates
+
+## [1.0.14] - 2026-04-22
+
+Docs-only re-tag of v1.0.13. The single commit (#153) backfills the v1.0.13 release notes after the binary was already published; no functional or CLI surface change.
 
 ## [1.0.13] - 2026-04-22
 
