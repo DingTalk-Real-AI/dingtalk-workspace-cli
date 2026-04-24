@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	mockmcp "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/mock_mcp"
 )
@@ -33,6 +34,13 @@ import (
 func setupRuntimeCommandTest(t *testing.T) {
 	t.Helper()
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	// Isolate keychain storage so concurrent test packages can't leak a
+	// real auth token into runtime tests via the shared on-disk keychain
+	// location. We deliberately do NOT reset the process-wide token
+	// cache here: getCachedRuntimeToken uses sync.Once and is read by
+	// detached preload goroutines spawned per Run(); replacing the Once
+	// races with those still-running goroutines.
+	t.Setenv(keychain.StorageDirEnv, t.TempDir())
 
 	discoverySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(contactDiscoveryResponse())
@@ -336,7 +344,17 @@ func TestRuntimeRunnerRejectsUnauthenticatedRequest(t *testing.T) {
 	}
 }
 
-func TestRuntimeRunnerFallsBackForUnavailableProduct(t *testing.T) {
+// TestRuntimeRunnerErrorsForUnavailableProduct pins down the post-fix
+// (fix-wukong-discovery-missing-servers Phase 3) behaviour: when the catalog
+// does not carry the requested product (here `contact` against a
+// doc-only fixture), `runtimeRunner.Run` must surface an explicit
+// `endpoint_not_resolved` error instead of silently echoing an empty result
+// back to the user — the latter is what historically produced `{"Content":
+// null}` output on `dws doc list`.
+//
+// Dry-run / compat semantics continue to route through EchoRunner and are
+// covered by other tests in this file (TestRuntime*Dry*, TestCompat*).
+func TestRuntimeRunnerErrorsForUnavailableProduct(t *testing.T) {
 	setupRuntimeCommandTest(t)
 	server := mockmcp.DefaultServer()
 	defer server.Close()
@@ -349,33 +367,16 @@ func TestRuntimeRunnerFallsBackForUnavailableProduct(t *testing.T) {
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"-f", "json", "contact", "user", "get-self"})
 
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatalf("Execute() error = nil, want endpoint_not_resolved error\noutput:\n%s", out.String())
 	}
-
-	var payload struct {
-		Invocation struct {
-			Implemented      bool   `json:"implemented"`
-			CanonicalProduct string `json:"canonical_product"`
-			Tool             string `json:"tool"`
-		} `json:"invocation"`
-		Response map[string]any `json:"response"`
+	msg := err.Error()
+	if !strings.Contains(msg, "endpoint not resolved") {
+		t.Fatalf("error message = %q, want it to contain \"endpoint not resolved\"", msg)
 	}
-	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
-		t.Fatalf("json.Unmarshal() error = %v\noutput:\n%s", err, out.String())
-	}
-
-	if payload.Invocation.Implemented {
-		t.Fatalf("implemented = true, want false for fallback")
-	}
-	if payload.Invocation.CanonicalProduct != "contact" {
-		t.Fatalf("canonical_product = %q, want contact", payload.Invocation.CanonicalProduct)
-	}
-	if payload.Invocation.Tool != "get_current_user_profile" {
-		t.Fatalf("tool = %q, want get_current_user_profile", payload.Invocation.Tool)
-	}
-	if payload.Response != nil {
-		t.Fatalf("response = %#v, want nil for echo fallback", payload.Response)
+	if !strings.Contains(msg, "contact") {
+		t.Fatalf("error message = %q, want it to mention product \"contact\"", msg)
 	}
 }
 

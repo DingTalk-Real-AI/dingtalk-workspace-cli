@@ -185,11 +185,16 @@ dws auth login --client-id <your-app-key> --client-secret <your-app-secret>
 ## 快速开始
 
 ```bash
-dws contact user search --keyword "悟空"           # 搜索联系人
-dws calendar event list                            # 查看日历日程
+dws contact user search --query "悟空"             # 搜索联系人
+dws calendar event list                            # 查看今天的日程
+dws doc search --query "季度"                      # 搜索钉钉文档
+dws minutes list mine                              # 列出我创建的 AI 听记
+dws drive list                                     # 列出钉盘文件
 dws todo task create --title "季度汇报" --executors "<your-userId>"   # 创建待办（请替换为真实 userId）
 dws todo task list --dry-run                       # 预览操作但不执行
 ```
+
+> **完整命令列表**：[`docs/command-index.md`](./docs/command-index.md) — 全部 159 条命令，带描述和使用场景。
 
 ## 在 Agent 中使用
 
@@ -350,24 +355,27 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 | 服务 | 命令 | 命令数 | 子命令 | 描述 |
 |------|------|:------:|--------|------|
 | 通讯录 | `contact` | 6 | `user` `dept` | 按姓名/手机号搜索、批量查询、部门树、当前用户信息 |
-| 群聊 | `chat` | 10 | `message` `group` `search` | 群增删改查、成员管理、机器人消息、Webhook |
-| 机器人 | `chat bot` | 6 | `bot` `group` `message` `search` | 机器人创建/搜索、群聊/单聊消息、Webhook、消息撤回 |
-| 日历 | `calendar` | 13 | `event` `room` `participant` `busy` | 日程增删改查、会议室预订、闲忙查询、参与者管理 |
+| 群聊 | `chat`（别名 `im`）| 23 | `message` `group` `bot` `conversation-info` `search` `search-common` `list-top-conversations` | 消息（发送 / 列表 / list-all / 按发送者 / @我 / 关注 / 未读 / 话题回复 / 搜索）、群增删改 + 成员管理（含 `add-bot`）、机器人身份消息（`send-by-bot` / `recall-by-bot` / `send-by-webhook`）、会话信息查询、共同群聊 |
+| 日历 | `calendar` | 14 | `event` `room` `participant` `busy` | 日程 CRUD + 建议时间 + 附件、会议室预订、闲忙查询、参与者管理 |
 | 待办 | `todo` | 6 | `task` | 创建、列表、修改、完成、详情、删除 |
-| 审批 | `oa` | 9 | `approval` | 同意/拒绝/撤销、待我审批、我发起的、流程列表 |
+| 审批 | `oa` | 9 | `approval` | 同意 / 拒绝 / 撤销、待我审批 / 我发起的、流程列表、操作记录 |
 | 考勤 | `attendance` | 4 | `record` `shift` `summary` `rules` | 打卡记录、排班查询、考勤摘要、考勤组规则 |
-| DING | `ding` | 2 | `message` | 发送/撤回 DING 消息 |
-| 日志 | `report` | 7 | `create` `list` `detail` `template` `stats` `sent` | 创建日志、收发列表、模版、统计 |
-| 智能表格 | `aitable` | 20 | `base` `table` `record` `field` `attachment` `template` | 多维表/数据表/记录/字段全量 CRUD、模板 |
-| 工作台 | `workbench` | 2 | `app` | 批量查询应用详情 |
-| 开发者文档 | `devdoc` | 1 | `article` | 搜索开放平台文档与错误码 |
+| DING | `ding` | 2 | `message` | 发送 / 撤回 DING 消息 |
+| 日志 | `report` | 7 | `create` `list` `detail` `template` `stats` `sent` | 创建日志、收发列表、模版、详情、统计 |
+| AI 表格 | `aitable` | 41 | `base` `table` `record` `field` `view` `dashboard` `chart` `import` `export` `attachment` `template` | Base / 数据表 / 记录 / 字段 / 视图 全量 CRUD；图表 + 仪表盘（含分享配置）；数据导入导出；附件；模板 |
+| 文档 | `doc` | 21 | `search` `list` `info` `read` `create` `update` `upload` `download` `copy` `move` `rename` `file` `folder` `block` `comment` | 搜索 / 读写文档、文件与文件夹创建、块级编辑、评论（list / create / reply / create-inline）、上传 / 下载 |
+| 钉盘 | `drive` | 6 | `list` `info` `download` `mkdir` `upload-info` `commit` | 钉盘文件操作：列表、详情、下载、创建文件夹、两阶段上传 |
+| AI 听记 | `minutes` | 19 | `list` `get` `update` `mind-graph` `speaker` `hot-word` `upload` | 听记列表（我创建 / 共享给我）、详情（info / summary / keywords / transcription / todos / batch）、标题/摘要更新、思维导图、发言人替换、热词、上传会话 |
+| 开发者文档 | `devdoc` | 1 | `article` | 搜索钉钉开放平台文档 |
 
-> 12 个产品，86 个命令。运行 `dws --help` 查看完整列表，或 `dws <service> --help` 查看子命令。
+> **13 个产品，159 条命令。** 完整命令清单（带描述与使用场景）：[`docs/command-index.md`](./docs/command-index.md)。运行 `dws --help` 查看顶层命令树，或 `dws <service> --help` 查看子命令。
+
+> **关于 `chat bot`**：机器人能力（`send-by-bot` / `recall-by-bot` / `add-bot` / `send-by-webhook` / bot 搜索）已合并到对应的 `chat` 子树下（例如 `dws chat message send-by-bot`、`dws chat group members add-bot`），保持 agent 视角下的命令面扁平易发现。不再有独立的顶层 `bot` 产品。
 
 <details>
 <summary>即将推出</summary>
 
-`doc`（文档）· `mail`（邮箱）· `minutes`（AI 听记）· `drive`（钉盘）· `conference`（视频会议）· `tb`（Teambition）· `aiapp`（AI 应用）· `live`（直播）· `skill`（技能市场）
+`mail`（邮箱）· `conference`（视频会议）· `aiapp`（AI 应用）· `live`（直播）· `wiki`（知识库）
 
 </details>
 
@@ -418,6 +426,7 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 
 ## 参考与文档
 
+- [命令索引](./docs/command-index.md) — 159 条运行时命令，带描述与使用场景
 - [参考手册](./docs/reference.md) — 环境变量、退出码、输出格式、Shell 补全
 - [架构设计](./docs/architecture.md) — 发现驱动管道、IR、Transport 层
 - [更新日志](./CHANGELOG.md) — 版本历史与迁移说明

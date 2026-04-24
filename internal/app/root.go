@@ -421,20 +421,25 @@ func newCacheCommand() *cobra.Command {
 			if err != nil {
 				return apperrors.NewInternal("failed to read cache refresh flags")
 			}
-			baseURL := DiscoveryBaseURL()
 
 			store := cacheStoreFromEnv()
 			transportClient := transport.NewClient(nil)
 			transportClient.AuthToken = resolveRuntimeAuthToken(cmd.Context(), "")
+			// Market client here is only a fallback for Detail API calls inside
+			// DiscoverAllRuntime; the primary server-list fetch below goes
+			// through fetchRegistryServers so edition DiscoveryURL wins.
 			service := discovery.NewService(
-				market.NewClient(baseURL, nil),
+				market.NewClient(DiscoveryBaseURL(), nil),
 				transportClient,
 				store,
 			)
-			servers, err := service.DiscoverServers(cmd.Context())
+
+			resp, err := fetchRegistryServers(cmd.Context(), ipv4HTTPClient(config.HTTPTimeout))
 			if err != nil {
-				return err
+				return apperrors.NewDiscovery(fmt.Sprintf("cache refresh: fetch server list failed: %v", err))
 			}
+			servers := market.NormalizeServers(resp, "live_market")
+			_ = store.SaveRegistry(service.CachePartition(), cache.RegistrySnapshot{Servers: servers})
 
 			selected := selectServersForProduct(servers, product)
 			if strings.TrimSpace(product) != "" && len(selected) == 0 {

@@ -127,18 +127,43 @@ type serviceResult struct {
 	ErrorMsg  string          `json:"errorMsg"`
 }
 
+// resetCredentialState clears any stale credential state inherited from
+// previous login methods (OAuth, PAT, etc.) so that device flow always
+// starts fresh by fetching clientID from MCP.
+//
+// This is a defensive measure: no matter what a prior login wrote to
+// app.json or runtime globals, device flow will re-fetch from MCP and
+// set the correct clientIDFromMCP flag, ensuring exchangeCode() uses
+// the MCP proxy path (which doesn't require clientSecret).
+func (p *DeviceFlowProvider) resetCredentialState() {
+	p.clientID = ""
+	clientMu.Lock()
+	clientIDFromMCP = false
+	clientMu.Unlock()
+}
+
 func (p *DeviceFlowProvider) Login(ctx context.Context) (*TokenData, error) {
-	// Ensure we have a valid client ID (fetch from MCP if not available)
-	if p.clientID == "" {
+	// Defensive reset: clear stale credential state from previous login methods,
+	// but preserve user-provided --client-id if present.
+	userClientID := p.clientID
+	p.resetCredentialState()
+
+	if userClientID != "" && userClientID != DefaultClientID {
+		// User provided --client-id flag: use it directly, skip MCP fetch.
+		p.clientID = userClientID
 		if p.logger != nil {
-			p.logger.Debug("client ID not configured, fetching from MCP server")
+			p.logger.Debug("using user-provided client ID, skipping MCP fetch", "clientID", userClientID)
+		}
+	} else {
+		// No user-provided client ID: fetch from MCP server.
+		if p.logger != nil {
+			p.logger.Debug("fetching client ID from MCP server")
 		}
 		mcpClientID, mcpErr := FetchClientIDFromMCP(ctx)
 		if mcpErr != nil {
 			return nil, fmt.Errorf("%s: %w", i18n.T("获取 Client ID 失败"), mcpErr)
 		}
 		p.clientID = mcpClientID
-		// Mark that clientID is from MCP
 		SetClientIDFromMCP(mcpClientID)
 		if p.logger != nil {
 			p.logger.Debug("fetched client ID from MCP server", "clientID", mcpClientID)

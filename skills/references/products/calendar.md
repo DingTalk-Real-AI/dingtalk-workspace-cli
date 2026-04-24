@@ -30,11 +30,17 @@ Usage:
 Example:
   dws calendar event create --title "Q1 复盘会" \
     --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15:00:00+08:00"
+  dws calendar event create --title "Q1 复盘会" \
+    --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15:00:00+08:00" \
+    --attendees userId1,userId2 --timezone "Asia/Shanghai" --desc "Q1 复盘"
 Flags:
-      --desc string    日程描述
-      --end string     结束时间 ISO-8601 (必填)
-      --start string   开始时间 ISO-8601 (必填)
-      --title string   日程标题 (必填)
+      --attendees string           参会人 userId 列表 (逗号分隔)
+      --desc string                日程描述
+      --end string                 结束时间 ISO-8601 (必填)
+      --open-dingtalk-ids string   参会人 openDingTalkId 列表 (逗号分隔)
+      --start string               开始时间 ISO-8601 (必填)
+      --timezone string            时区 (如 Asia/Shanghai)
+      --title string               日程标题 (必填)
 ```
 
 ### 修改日程
@@ -43,11 +49,14 @@ Usage:
   dws calendar event update [flags]
 Example:
   dws calendar event update --id <EVENT_ID> --title "新标题"
+  dws calendar event update --id <EVENT_ID> --desc "议程调整" --timezone "Asia/Shanghai"
 Flags:
-      --end string     新结束时间
-      --id string      日程 ID (必填)
-      --start string   新开始时间
-      --title string   新标题
+      --desc string       新描述
+      --end string        新结束时间
+      --id string         日程 ID (必填)
+      --start string      新开始时间
+      --timezone string   时区 (如 Asia/Shanghai)
+      --title string      新标题
 ```
 
 ### 删除日程
@@ -59,6 +68,23 @@ Example:
 Flags:
       --id string   日程 ID (必填)
 ```
+
+### 推荐会议时间
+```
+Usage:
+  dws calendar event suggest [flags]
+Example:
+  dws calendar event suggest --users <USER_ID_1>,<USER_ID_2> \
+    --start "2026-03-10T09:00:00+08:00" --end "2026-03-10T18:00:00+08:00" --duration 30
+Flags:
+      --duration string   会议时长（分钟）
+      --end string        候选时段结束时间 ISO-8601 (必填)
+      --start string      候选时段开始时间 ISO-8601 (必填)
+      --timezone string   时区 (如 Asia/Shanghai)
+      --users string      参会人 userId 列表 (必填)
+```
+
+基于参会人闲忙数据给出排名后的候选时段，比 `busy search` 直接给出原始忙闲更适合"帮我约"场景。
 
 ### 查看参与者
 ```
@@ -157,6 +183,7 @@ Flags:
 - 创建/约 → `event create`
 - 修改/改时间 → `event update`
 - 取消/删除 → `event delete`
+- 帮我约/找个大家都有空的时间 → `event suggest`
 
 用户说"参会人/与会者":
 - 查看 → `participant list`
@@ -170,7 +197,8 @@ Flags:
 - 分组 → `room list-groups`，取 groupId 后 `room search --group-id`
 
 用户说"有空吗/忙不忙/闲忙":
-- 查询 → `busy search`
+- 要原始闲忙块 → `busy search`
+- 要直接给时段候选 → `event suggest`
 
 ## 核心工作流
 

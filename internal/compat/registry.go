@@ -56,11 +56,27 @@ type Target struct {
 type FlagBinding struct {
 	FlagName string
 	Alias    string
+	// Aliases are additional hidden flag names that map to the same MCP
+	// parameter. Any of them being set satisfies Required, and the value
+	// is resolved via firstChangedFlag(FlagName, Alias, Aliases...).
+	// Mirrors cmdutil.ValidateRequiredFlagWithAliases / FlagOrFallback.
+	Aliases  []string
 	Short    string
 	Property string
 	Kind     ValueKind
 	Usage    string
 	Required bool
+	// Default is the cobra-level flag default value as a string. Parsed
+	// into the Kind-appropriate primitive at registration time. Empty
+	// string keeps the existing zero-value default. This only affects
+	// what cobra renders in --help (the "(default ...)" suffix); it does
+	// NOT inject the value into MCP params on its own — CollectBindings
+	// still gates writes by user-changed flags via firstChangedFlag.
+	Default string
+	// Positional binds this parameter to a positional CLI argument rather
+	// than a --flag. PositionalIndex is the 0-based slot.
+	Positional      bool
+	PositionalIndex int
 }
 
 type Normalizer func(cmd *cobra.Command, params map[string]any) error
@@ -75,6 +91,10 @@ type Route struct {
 	Target     Target
 	Bindings   []FlagBinding
 	Normalizer Normalizer
+	// OutputTransform, when non-nil, post-processes the MCP response payload
+	// (rename / drop / columns) before the formatter emits it. Wired up from
+	// CLIToolOverride.OutputFormat. See discovery-schema-v3 §2.5.
+	OutputTransform func(map[string]any) map[string]any
 }
 
 type CommandFactory func(runner executor.Runner) *cobra.Command
@@ -109,14 +129,87 @@ func NewFallbackCommands(runner executor.Runner) []*cobra.Command {
 var NewGroupCommand = cobracmd.NewGroupCommand
 
 func NewDirectCommand(route Route, runner executor.Runner) *cobra.Command {
+	// Compute positional arity. Two counts:
+	//   - totalMax: the highest PositionalIndex+1 across all positional bindings
+	//     (caps how many trailing args cobra accepts).
+	//   - strictMin: the highest PositionalIndex+1 among "pure" positional
+	//     bindings (no flag aliases). Backward-compat: any pure positional
+	//     binding implies required arity at parse time, regardless of Required.
+	//
+	// Dual-mode positional bindings (positional + envelope-declared flag
+	// aliases, e.g. `{positional:true, alias:"query", aliases:["keyword"]}`)
+	// are counted into totalMax but excluded from strictMin so a flag-only
+	// invocation parses; their required-presence is enforced by
+	// validateRequiredPositionalBindings inside RunE.
+	//
+	// For positional bindings, buildOverrideBindings populates FlagName /
+	// Aliases only when the envelope explicitly declared them, so the
+	// dual-mode detection here is unambiguous.
+	strictMin := 0
+	totalMax := 0
+	for _, b := range route.Bindings {
+		if !b.Positional {
+			continue
+		}
+		if b.PositionalIndex+1 > totalMax {
+			totalMax = b.PositionalIndex + 1
+		}
+		hasFlagAlias := strings.TrimSpace(b.Alias) != "" || strings.TrimSpace(b.FlagName) != "" || len(b.Aliases) > 0
+		if !hasFlagAlias && b.PositionalIndex+1 > strictMin {
+			strictMin = b.PositionalIndex + 1
+		}
+	}
+	var argsValidator cobra.PositionalArgs = cobra.NoArgs
+	switch {
+	case totalMax == 0:
+		argsValidator = cobra.NoArgs
+	case strictMin > 0 && strictMin == totalMax:
+		argsValidator = cobra.MinimumNArgs(strictMin)
+	case strictMin > 0:
+		argsValidator = cobra.RangeArgs(strictMin, totalMax)
+	default:
+		argsValidator = cobra.MaximumNArgs(totalMax)
+	}
+
+	// Extend Use with [<placeholder>] tokens for positional bindings so
+	// `--help` renders `cmd [arg1] [arg2] [flags]`, matching hardcoded
+	// helper commands' style (e.g. devdoc article search [keyword]).
+	use := route.Use
+	if totalMax > 0 {
+		ordered := make([]FlagBinding, 0, totalMax)
+		for _, b := range route.Bindings {
+			if b.Positional {
+				ordered = append(ordered, b)
+			}
+		}
+		sort.SliceStable(ordered, func(i, j int) bool {
+			return ordered[i].PositionalIndex < ordered[j].PositionalIndex
+		})
+		var sb strings.Builder
+		sb.WriteString(use)
+		for _, b := range ordered {
+			name := strings.TrimSpace(b.Property)
+			if name == "" {
+				name = strings.TrimSpace(b.FlagName)
+			}
+			if name == "" {
+				continue
+			}
+			sb.WriteString(" [")
+			sb.WriteString(name)
+			sb.WriteString("]")
+		}
+		use = sb.String()
+	}
+
 	cmd := &cobra.Command{
-		Use:               route.Use,
+		Use:               use,
 		Aliases:           append([]string(nil), route.Aliases...),
 		Short:             route.Short,
 		Long:              route.Long,
 		Example:           route.Example,
 		Hidden:            route.Hidden,
-		Args:              cobra.NoArgs,
+		Args:              argsValidator,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonPayload, err := cmd.Flags().GetString("json")
@@ -141,9 +234,26 @@ func NewDirectCommand(route Route, runner executor.Runner) *cobra.Command {
 				params[key] = value
 			}
 
+			// Inject positional args into params according to each binding's
+			// PositionalIndex. Pure positional bindings are not registered as
+			// flags; dual-mode positional bindings (positional + alias) only
+			// fall through to positional injection when their flag aliases
+			// were not used (collectPositionalBindings skips when params
+			// already contains the property).
+			if err := collectPositionalBindings(args, route.Bindings, params); err != nil {
+				return err
+			}
+
 			// Collect schema-derived flags (from buildFlagsFromDetailSchema)
 			// that are not covered by explicit bindings.
 			collectSchemaFlags(cmd, route.Bindings, params)
+
+			// Required-presence check for positional bindings — must run after
+			// both flag (CollectBindings) and positional (collectPositionalBindings)
+			// have had a chance to populate params.
+			if err := validateRequiredPositionalBindings(cmd, route.Bindings, params); err != nil {
+				return err
+			}
 
 			if route.Normalizer != nil {
 				if err := route.Normalizer(cmd, params); err != nil {
@@ -180,6 +290,9 @@ func NewDirectCommand(route Route, runner executor.Runner) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if route.OutputTransform != nil && result.Response != nil {
+				result.Response = route.OutputTransform(result.Response)
+			}
 			return output.WriteCommandPayload(cmd, result, output.FormatJSON)
 		},
 	}
@@ -196,8 +309,64 @@ func NewCuratedCommand(route Route, runner executor.Runner) *cobra.Command {
 	return cmd
 }
 
+// parseFlagDefault converts a string-form envelope default into the typed
+// primitives used by pflag's *P helpers. Unparseable values silently fall
+// back to the type's zero value so a malformed envelope downgrades to
+// "no default in --help" rather than a panic at startup. The slice form
+// splits on commas and trims whitespace, mirroring pflag.StringSlice
+// behavior; empty/whitespace-only segments are dropped.
+func parseFlagDefault(kind ValueKind, raw string) (defStr string, defInt int, defFloat float64, defBool bool, defSlice []string) {
+	trimmed := strings.TrimSpace(raw)
+	switch kind {
+	case ValueString, ValueJSON:
+		// Preserve raw (not trimmed) so explicitly-padded defaults survive.
+		defStr = raw
+	case ValueInt:
+		if trimmed != "" {
+			if v, err := strconv.Atoi(trimmed); err == nil {
+				defInt = v
+			}
+		}
+	case ValueFloat:
+		if trimmed != "" {
+			if v, err := strconv.ParseFloat(trimmed, 64); err == nil {
+				defFloat = v
+			}
+		}
+	case ValueBool:
+		if trimmed != "" {
+			if v, err := strconv.ParseBool(trimmed); err == nil {
+				defBool = v
+			}
+		}
+	case ValueStringSlice, ValueIntSlice, ValueFloatSlice, ValueBoolSlice:
+		if trimmed != "" {
+			for _, p := range strings.Split(trimmed, ",") {
+				if t := strings.TrimSpace(p); t != "" {
+					defSlice = append(defSlice, t)
+				}
+			}
+		}
+	}
+	return
+}
+
 func ApplyBindings(cmd *cobra.Command, bindings []FlagBinding) {
 	for _, binding := range bindings {
+		// Positional bindings are collected from cobra args rather than flags.
+		// Exception: dual-mode bindings (positional + envelope-declared flag
+		// aliases) also register the aliases so users can pass either
+		// `cmd VALUE` or `cmd --primary VALUE`. Required-presence is enforced
+		// later by validateRequiredPositionalBindings instead of MarkFlagRequired.
+		if binding.Positional {
+			primary := strings.TrimSpace(binding.FlagName)
+			alias := strings.TrimSpace(binding.Alias)
+			if primary == "" && alias == "" && len(binding.Aliases) == 0 {
+				continue
+			}
+			registerPositionalAliasFlags(cmd, binding)
+			continue
+		}
 		primary := strings.TrimSpace(binding.FlagName)
 		if primary == "" {
 			continue
@@ -206,43 +375,77 @@ func ApplyBindings(cmd *cobra.Command, bindings []FlagBinding) {
 		if alias == primary {
 			alias = ""
 		}
+		// Dedupe extra aliases against primary + single alias and each other.
+		var extras []string
+		if len(binding.Aliases) > 0 {
+			seen := map[string]bool{primary: true, "json": true, "params": true}
+			if alias != "" {
+				seen[alias] = true
+			}
+			extras = make([]string, 0, len(binding.Aliases))
+			for _, a := range binding.Aliases {
+				a = strings.TrimSpace(a)
+				if a == "" || seen[a] {
+					continue
+				}
+				seen[a] = true
+				extras = append(extras, a)
+			}
+		}
+
+		// Parse binding.Default once per binding into Kind-typed values used
+		// by both the primary and hidden-alias registrations below. Hidden
+		// aliases share the same default so users typing the legacy alias
+		// see consistent --help text and zero-value behavior.
+		defStr, defInt, defFloat, defBool, defSlice := parseFlagDefault(binding.Kind, binding.Default)
+
+		registerHidden := func(name string, suffix string) {
+			if name == "" {
+				return
+			}
+			switch binding.Kind {
+			case ValueString:
+				cmd.Flags().String(name, defStr, binding.Usage+suffix)
+			case ValueInt:
+				cmd.Flags().Int(name, defInt, binding.Usage+suffix)
+			case ValueFloat:
+				cmd.Flags().Float64(name, defFloat, binding.Usage+suffix)
+			case ValueBool:
+				cmd.Flags().Bool(name, defBool, binding.Usage+suffix)
+			case ValueStringSlice, ValueIntSlice, ValueFloatSlice, ValueBoolSlice:
+				cmd.Flags().StringSlice(name, defSlice, binding.Usage+suffix)
+			case ValueJSON:
+				cmd.Flags().String(name, defStr, binding.Usage+suffix)
+			}
+			_ = cmd.Flags().MarkHidden(name)
+		}
 
 		switch binding.Kind {
 		case ValueString:
-			cmd.Flags().StringP(primary, binding.Short, "", binding.Usage)
-			if alias != "" {
-				cmd.Flags().String(alias, "", binding.Usage+" (alias)")
-				_ = cmd.Flags().MarkHidden(alias)
-			}
+			cmd.Flags().StringP(primary, binding.Short, defStr, binding.Usage)
 		case ValueInt:
-			cmd.Flags().IntP(primary, binding.Short, 0, binding.Usage)
-			if alias != "" {
-				cmd.Flags().Int(alias, 0, binding.Usage+" (alias)")
-				_ = cmd.Flags().MarkHidden(alias)
-			}
+			cmd.Flags().IntP(primary, binding.Short, defInt, binding.Usage)
 		case ValueFloat:
-			cmd.Flags().Float64P(primary, binding.Short, 0, binding.Usage)
-			if alias != "" {
-				cmd.Flags().Float64(alias, 0, binding.Usage+" (alias)")
-				_ = cmd.Flags().MarkHidden(alias)
-			}
+			cmd.Flags().Float64P(primary, binding.Short, defFloat, binding.Usage)
 		case ValueBool:
-			cmd.Flags().BoolP(primary, binding.Short, false, binding.Usage)
-			if alias != "" {
-				cmd.Flags().Bool(alias, false, binding.Usage+" (alias)")
-				_ = cmd.Flags().MarkHidden(alias)
-			}
+			cmd.Flags().BoolP(primary, binding.Short, defBool, binding.Usage)
 		case ValueStringSlice, ValueIntSlice, ValueFloatSlice, ValueBoolSlice:
-			cmd.Flags().StringSliceP(primary, binding.Short, nil, binding.Usage)
-			if alias != "" {
-				cmd.Flags().StringSlice(alias, nil, binding.Usage+" (alias)")
-				_ = cmd.Flags().MarkHidden(alias)
-			}
+			cmd.Flags().StringSliceP(primary, binding.Short, defSlice, binding.Usage)
 		case ValueJSON:
-			cmd.Flags().StringP(primary, binding.Short, "", binding.Usage+" (JSON)")
-			if alias != "" {
-				cmd.Flags().String(alias, "", binding.Usage+" (alias, JSON)")
-				_ = cmd.Flags().MarkHidden(alias)
+			cmd.Flags().StringP(primary, binding.Short, defStr, binding.Usage+" (JSON)")
+		}
+		registerHidden(alias, " (alias)")
+		for _, extra := range extras {
+			registerHidden(extra, " (alias)")
+		}
+		if binding.Required {
+			// When no hidden aliases exist, lean on cobra's native required
+			// validation for the best UX (colored error, shown in --help).
+			// When aliases exist, CollectBindings does its own "any-of-these
+			// is set" check so users who type the hidden alias do not hit
+			// cobra yelling about the primary being missing.
+			if alias == "" && len(extras) == 0 {
+				_ = cmd.MarkFlagRequired(primary)
 			}
 		}
 	}
@@ -250,6 +453,165 @@ func ApplyBindings(cmd *cobra.Command, bindings []FlagBinding) {
 	cmd.Flags().String("params", "", "Additional JSON object payload merged after --json")
 	_ = cmd.Flags().MarkHidden("json")
 	_ = cmd.Flags().MarkHidden("params")
+}
+
+// registerPositionalAliasFlags registers the visible primary flag and any
+// hidden aliases for a "dual-mode" positional binding (envelope:
+// `{positional:true, alias:"X", aliases:["Y"]}`). Required-presence is
+// intentionally deferred to validateRequiredPositionalBindings — cobra's
+// MarkFlagRequired would yell even when the user supplied the value as a
+// positional arg.
+func registerPositionalAliasFlags(cmd *cobra.Command, binding FlagBinding) {
+	primary := strings.TrimSpace(binding.FlagName)
+	alias := strings.TrimSpace(binding.Alias)
+	if alias == primary {
+		alias = ""
+	}
+
+	// Dedupe extras against primary + alias and reserved internal names.
+	seen := map[string]bool{"json": true, "params": true}
+	if primary != "" {
+		seen[primary] = true
+	}
+	if alias != "" {
+		seen[alias] = true
+	}
+	extras := make([]string, 0, len(binding.Aliases))
+	for _, a := range binding.Aliases {
+		a = strings.TrimSpace(a)
+		if a == "" || seen[a] {
+			continue
+		}
+		seen[a] = true
+		extras = append(extras, a)
+	}
+
+	defStr, defInt, defFloat, defBool, defSlice := parseFlagDefault(binding.Kind, binding.Default)
+
+	register := func(name string, withShort bool, hidden bool, usageSuffix string) {
+		if name == "" {
+			return
+		}
+		short := ""
+		if withShort {
+			short = binding.Short
+		}
+		usage := binding.Usage + usageSuffix
+		switch binding.Kind {
+		case ValueString:
+			cmd.Flags().StringP(name, short, defStr, usage)
+		case ValueInt:
+			cmd.Flags().IntP(name, short, defInt, usage)
+		case ValueFloat:
+			cmd.Flags().Float64P(name, short, defFloat, usage)
+		case ValueBool:
+			cmd.Flags().BoolP(name, short, defBool, usage)
+		case ValueStringSlice, ValueIntSlice, ValueFloatSlice, ValueBoolSlice:
+			cmd.Flags().StringSliceP(name, short, defSlice, usage)
+		case ValueJSON:
+			cmd.Flags().StringP(name, short, defStr, usage+" (JSON)")
+		default:
+			cmd.Flags().StringP(name, short, defStr, usage)
+		}
+		if hidden {
+			_ = cmd.Flags().MarkHidden(name)
+		}
+	}
+
+	register(primary, true, false, "")
+	register(alias, false, true, " (alias)")
+	for _, e := range extras {
+		register(e, false, true, " (alias)")
+	}
+}
+
+// collectPositionalBindings pulls positional args according to the bindings
+// and injects them into params[property]. Missing slots are skipped (cobra
+// arity validation already ran before RunE).
+func collectPositionalBindings(args []string, bindings []FlagBinding, params map[string]any) error {
+	for _, binding := range bindings {
+		if !binding.Positional {
+			continue
+		}
+		property := strings.TrimSpace(binding.Property)
+		if property == "" {
+			continue
+		}
+		// Dual-mode positional: if the user already provided the value via a
+		// flag alias (CollectBindings wrote it), honor flag > positional.
+		if _, ok := params[property]; ok {
+			continue
+		}
+		if binding.PositionalIndex < 0 || binding.PositionalIndex >= len(args) {
+			continue
+		}
+		raw := args[binding.PositionalIndex]
+		switch binding.Kind {
+		case ValueInt:
+			v, err := strconv.Atoi(strings.TrimSpace(raw))
+			if err != nil {
+				return apperrors.NewValidation(fmt.Sprintf("positional argument %d (%s) must be int", binding.PositionalIndex, property))
+			}
+			params[property] = v
+		case ValueFloat:
+			v, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+			if err != nil {
+				return apperrors.NewValidation(fmt.Sprintf("positional argument %d (%s) must be float", binding.PositionalIndex, property))
+			}
+			params[property] = v
+		case ValueBool:
+			v, err := strconv.ParseBool(strings.TrimSpace(raw))
+			if err != nil {
+				return apperrors.NewValidation(fmt.Sprintf("positional argument %d (%s) must be bool", binding.PositionalIndex, property))
+			}
+			params[property] = v
+		default:
+			params[property] = raw
+		}
+	}
+	return nil
+}
+
+// validateRequiredPositionalBindings enforces required-presence for positional
+// bindings whose original envelope spec set required=true. The arity validator
+// for dual-mode positionals is intentionally relaxed (MaximumNArgs / RangeArgs
+// excluding the dual slot) so a flag-only invocation is permitted; this check
+// closes the loop by rejecting the case where neither the positional arg nor
+// any flag alias was supplied.
+func validateRequiredPositionalBindings(cmd *cobra.Command, bindings []FlagBinding, params map[string]any) error {
+	for _, binding := range bindings {
+		if !binding.Positional || !binding.Required {
+			continue
+		}
+		property := strings.TrimSpace(binding.Property)
+		if property == "" {
+			continue
+		}
+		if v, ok := params[property]; ok {
+			if s, isStr := v.(string); !isStr || strings.TrimSpace(s) != "" {
+				continue
+			}
+		}
+		// Compose candidate flag names so the error message points users at
+		// the first writable label even for flag-only invocations.
+		primary := strings.TrimSpace(binding.FlagName)
+		alias := strings.TrimSpace(binding.Alias)
+		if _, changed := firstChangedFlag(cmd, append([]string{primary, alias}, binding.Aliases...)...); changed {
+			continue
+		}
+		display := primary
+		if display == "" {
+			display = alias
+		}
+		if display == "" && len(binding.Aliases) > 0 {
+			display = binding.Aliases[0]
+		}
+		if display == "" {
+			return apperrors.NewValidation(fmt.Sprintf("positional argument <%s> is required", property))
+		}
+		return apperrors.NewValidation(fmt.Sprintf("--%s (or positional <%s>) is required", display, property))
+	}
+	return nil
 }
 
 // collectSchemaFlags picks up flags created by buildFlagsFromDetailSchema that
@@ -264,6 +626,11 @@ func collectSchemaFlags(cmd *cobra.Command, bindings []FlagBinding, params map[s
 		}
 		if a := strings.TrimSpace(b.Alias); a != "" {
 			bound[a] = true
+		}
+		for _, extra := range b.Aliases {
+			if e := strings.TrimSpace(extra); e != "" {
+				bound[e] = true
+			}
 		}
 	}
 
@@ -316,36 +683,78 @@ func toOriginalParamName(flagName string) string {
 	return strings.ReplaceAll(flagName, "-", "_")
 }
 
+// firstChangedFlag returns the first name (in order) whose cobra flag has
+// been set by the user. Whitespace-only or empty entries are skipped.
+// Mirrors wukong cmdutil.FlagOrFallback precedence: primary > alias >
+// extraAliases in declaration order.
+func firstChangedFlag(cmd *cobra.Command, names ...string) (name string, changed bool) {
+	for _, n := range names {
+		n = strings.TrimSpace(n)
+		if n == "" {
+			continue
+		}
+		if cobracmd.FlagChanged(cmd, n) {
+			return n, true
+		}
+	}
+	return "", false
+}
+
 func CollectBindings(cmd *cobra.Command, bindings []FlagBinding, existing map[string]any) (map[string]any, error) {
 	if existing == nil {
 		existing = map[string]any{}
 	}
 	params := make(map[string]any)
 	for _, binding := range bindings {
+		if binding.Positional {
+			// Pure positional (no flag aliases) is handled by
+			// collectPositionalBindings. Dual-mode positional bindings
+			// (envelope: positional + alias/aliases) fall through so any
+			// user-supplied flag value wins over the positional arg.
+			primary := strings.TrimSpace(binding.FlagName)
+			alias := strings.TrimSpace(binding.Alias)
+			if primary == "" && alias == "" && len(binding.Aliases) == 0 {
+				continue
+			}
+		}
 		primaryName := strings.TrimSpace(binding.FlagName)
 		if primaryName == "" {
 			continue
 		}
 		aliasName := strings.TrimSpace(binding.Alias)
-		primaryChanged := cobracmd.FlagChanged(cmd, primaryName)
-		aliasChanged := aliasName != "" && cobracmd.FlagChanged(cmd, aliasName)
 
-		flagName := primaryName
-		if aliasChanged {
-			flagName = aliasName
+		// Candidate flag names in precedence order: primary, single alias,
+		// then extra aliases. Whichever is set first wins; mirrors the
+		// semantics of cmdutil.FlagOrFallback.
+		candidates := make([]string, 0, 2+len(binding.Aliases))
+		candidates = append(candidates, primaryName)
+		if aliasName != "" && aliasName != primaryName {
+			candidates = append(candidates, aliasName)
+		}
+		for _, extra := range binding.Aliases {
+			e := strings.TrimSpace(extra)
+			if e == "" || e == primaryName || e == aliasName {
+				continue
+			}
+			candidates = append(candidates, e)
+		}
+
+		flagName, anyChanged := firstChangedFlag(cmd, candidates...)
+		if !anyChanged {
+			flagName = primaryName
 		}
 
 		flag := cmd.Flags().Lookup(flagName)
 		if flag == nil {
 			continue
 		}
-		if binding.Required && !primaryChanged && !aliasChanged {
+		if binding.Required && !anyChanged && !binding.Positional {
 			if _, ok := existing[binding.Property]; ok {
 				continue
 			}
 			return nil, apperrors.NewValidation(fmt.Sprintf("--%s is required", primaryName))
 		}
-		if !primaryChanged && !aliasChanged {
+		if !anyChanged {
 			continue
 		}
 

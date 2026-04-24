@@ -35,6 +35,8 @@ func TestOpenSourceTreeOmitsEmbeddedHostMarkers(t *testing.T) {
 		"REWIND_" + "MESSAGE_ID",
 		"MergeWukong" + "MCPHeaders",
 		"buildMode ==" + " \"real\"",
+		"wukong/" + "discovery",
+		"dingi8fo" + "prfi3jynjjlu",
 	}
 
 	var matches []string

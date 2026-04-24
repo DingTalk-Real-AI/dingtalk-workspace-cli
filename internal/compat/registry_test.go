@@ -21,6 +21,71 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func TestApplyBindings_PositionalWithFlagAliases(t *testing.T) {
+	t.Parallel()
+
+	// envelope shape: { keyword: { alias: "query", aliases: ["keyword"], positional: true } }
+	bindings := []FlagBinding{
+		{
+			FlagName:        "query",
+			Aliases:         []string{"keyword"},
+			Property:        "keyword",
+			Kind:            ValueString,
+			Usage:           "搜索关键词",
+			Required:        true,
+			Positional:      true,
+			PositionalIndex: 0,
+		},
+	}
+
+	cmd := &cobra.Command{Use: "search"}
+	ApplyBindings(cmd, bindings)
+
+	primary := cmd.Flags().Lookup("query")
+	if primary == nil {
+		t.Fatal("--query flag should be registered for dual-mode positional")
+	}
+	if primary.Hidden {
+		t.Fatal("--query flag should be visible")
+	}
+	hidden := cmd.Flags().Lookup("keyword")
+	if hidden == nil {
+		t.Fatal("--keyword alias flag should be registered")
+	}
+	if !hidden.Hidden {
+		t.Fatal("--keyword alias flag should be hidden")
+	}
+
+	// --query should NOT be marked required at cobra level — that would
+	// break flag-only invocation when arity is relaxed.
+	if _, ok := primary.Annotations[cobra.BashCompOneRequiredFlag]; ok {
+		t.Fatal("--query should not be MarkFlagRequired (validation happens in RunE)")
+	}
+}
+
+func TestApplyBindings_PurePositionalSkipsFlagRegistration(t *testing.T) {
+	t.Parallel()
+
+	// Pure positional (no Alias / no Aliases) → no flag should be registered;
+	// arity validator (set in NewDirectCommand) handles required-presence.
+	bindings := []FlagBinding{
+		{
+			Property:        "text",
+			Kind:            ValueString,
+			Required:        true,
+			Positional:      true,
+			PositionalIndex: 0,
+		},
+	}
+
+	cmd := &cobra.Command{Use: "send"}
+	ApplyBindings(cmd, bindings)
+
+	if f := cmd.Flags().Lookup("text"); f != nil {
+		t.Fatalf("pure positional should not register a flag, got %+v", f)
+	}
+}
+
 func TestCollectBindingsParsesTypedValuesAndAcceptsAliasFlags(t *testing.T) {
 	t.Parallel()
 

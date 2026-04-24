@@ -216,6 +216,114 @@ func TestBuildCatalogFallsBackToRuntimeSensitiveMetadata(t *testing.T) {
 	}
 }
 
+func TestBuildCatalogCarriesToolOverrideGroupAndFlagOverlay(t *testing.T) {
+	t.Parallel()
+
+	catalog := BuildCatalog([]discovery.RuntimeServer{
+		{
+			Server: market.ServerDescriptor{
+				Key:         "ding-key",
+				DisplayName: "DING",
+				Endpoint:    "https://example.com/server/ding",
+				CLI: market.CLIOverlay{
+					Command: "ding",
+					ToolOverrides: map[string]market.CLIToolOverride{
+						"send_ding_message": {
+							CLIName:     "send",
+							Group:       "message",
+							IsSensitive: true,
+							Flags: map[string]market.CLIFlagOverride{
+								"receiverUserIdList": {
+									Alias:     "users",
+									Transform: "csv_to_array",
+								},
+								"robotCode": {
+									Alias:      "robot-code",
+									EnvDefault: "DINGTALK_DING_ROBOT_CODE",
+								},
+								"remindType": {
+									Alias:     "type",
+									Transform: "enum_map",
+									TransformArgs: map[string]any{
+										"_default": float64(1),
+										"app":      float64(1),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			Tools: []transport.ToolDescriptor{
+				{Name: "send_ding_message", Title: "发送DING消息", InputSchema: map[string]any{"type": "object"}},
+			},
+		},
+	})
+
+	if len(catalog.Products) != 1 {
+		t.Fatalf("products len = %d, want 1", len(catalog.Products))
+	}
+	product := catalog.Products[0]
+	if product.ID != "ding" {
+		t.Fatalf("product ID = %q, want ding", product.ID)
+	}
+	tool, ok := product.FindTool("send_ding_message")
+	if !ok {
+		t.Fatalf("tool not found")
+	}
+	if tool.CLIName != "send" {
+		t.Fatalf("CLIName = %q, want send", tool.CLIName)
+	}
+	if tool.Group != "message" {
+		t.Fatalf("Group = %q, want message", tool.Group)
+	}
+	if !tool.Sensitive {
+		t.Fatalf("Sensitive = false, want true (from overlay)")
+	}
+	if tool.Annotations == nil || tool.Annotations.DestructiveHint == nil || !*tool.Annotations.DestructiveHint {
+		t.Fatalf("DestructiveHint not propagated, got %#v", tool.Annotations)
+	}
+	if tool.Annotations.ReadOnlyHint != nil {
+		t.Fatalf("ReadOnlyHint should be nil when source is unknown, got %#v", *tool.Annotations.ReadOnlyHint)
+	}
+	users := tool.FlagOverlay["receiverUserIdList"]
+	if users.Alias != "users" || users.Transform != "csv_to_array" {
+		t.Fatalf("receiverUserIdList overlay = %#v", users)
+	}
+	robot := tool.FlagOverlay["robotCode"]
+	if robot.Alias != "robot-code" || robot.EnvDefault != "DINGTALK_DING_ROBOT_CODE" {
+		t.Fatalf("robotCode overlay = %#v", robot)
+	}
+	remind := tool.FlagOverlay["remindType"]
+	if remind.Transform != "enum_map" {
+		t.Fatalf("remindType.Transform = %q, want enum_map", remind.Transform)
+	}
+	if v, _ := remind.TransformArgs["app"].(float64); v != 1 {
+		t.Fatalf("remindType.TransformArgs[app] = %v, want 1", remind.TransformArgs["app"])
+	}
+}
+
+func TestBuildCatalogLeavesAnnotationsNilForNonSensitive(t *testing.T) {
+	t.Parallel()
+
+	catalog := BuildCatalog([]discovery.RuntimeServer{
+		{
+			Server: market.ServerDescriptor{
+				Key:         "doc-key",
+				DisplayName: "文档",
+				Endpoint:    "https://example.com/server/doc",
+			},
+			Tools: []transport.ToolDescriptor{
+				{Name: "list_documents", InputSchema: map[string]any{"type": "object"}},
+			},
+		},
+	})
+	tool := catalog.Products[0].Tools[0]
+	if tool.Annotations != nil {
+		t.Fatalf("Annotations = %#v, want nil for non-sensitive tool", tool.Annotations)
+	}
+}
+
 func TestBuildCatalogConsumesCLIRouteMetadata(t *testing.T) {
 	t.Parallel()
 

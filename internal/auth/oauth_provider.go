@@ -55,6 +55,16 @@ func NewOAuthProvider(configDir string, logger *slog.Logger) *OAuthProvider {
 	}
 }
 
+// resetCredentialState clears any stale credential state inherited from
+// previous login methods so that OAuth flow always starts fresh by
+// fetching clientID from MCP.
+func (p *OAuthProvider) resetCredentialState() {
+	p.clientID = ""
+	clientMu.Lock()
+	clientIDFromMCP = false
+	clientMu.Unlock()
+}
+
 func (p *OAuthProvider) output() io.Writer {
 	if p != nil && p.Output != nil {
 		return p.Output
@@ -75,6 +85,10 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 				if p.logger != nil {
 					p.logger.Debug("access_token still valid, skipping login")
 				}
+				// Even on early return, persist custom app credentials if provided
+				// via --client-id/--client-secret flags. Without this, the flags
+				// are only in runtime globals and lost when the process exits.
+				p.persistAppConfigIfNeeded()
 				return data, nil
 			}
 			// Case 2: refresh using refresh_token (with lock to prevent concurrent refresh).
@@ -84,6 +98,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 				}
 				refreshed, rErr := p.lockedRefresh(ctx)
 				if rErr == nil {
+					p.persistAppConfigIfNeeded()
 					return refreshed, nil
 				}
 				if p.logger != nil {
@@ -94,17 +109,27 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 	}
 
 	// Fall through: full browser OAuth flow.
-	// Ensure we have a valid client ID (fetch from MCP if not available)
-	if p.clientID == "" {
+	// Defensive reset: clear stale credential state from previous login methods,
+	// but preserve user-provided --client-id if present.
+	userClientID := p.clientID
+	p.resetCredentialState()
+
+	if userClientID != "" && userClientID != DefaultClientID {
+		// User provided --client-id flag: use it directly, skip MCP fetch.
+		p.clientID = userClientID
 		if p.logger != nil {
-			p.logger.Debug("client ID not configured, fetching from MCP server")
+			p.logger.Debug("using user-provided client ID, skipping MCP fetch", "clientID", userClientID)
+		}
+	} else {
+		// No user-provided client ID: fetch from MCP server.
+		if p.logger != nil {
+			p.logger.Debug("fetching client ID from MCP server")
 		}
 		mcpClientID, mcpErr := FetchClientIDFromMCP(ctx)
 		if mcpErr != nil {
 			return nil, fmt.Errorf("%s: %w", i18n.T("获取 Client ID 失败"), mcpErr)
 		}
 		p.clientID = mcpClientID
-		// Mark that clientID is from MCP, so we use MCP OAuth endpoints
 		SetClientIDFromMCP(mcpClientID)
 		if p.logger != nil {
 			p.logger.Debug("fetched client ID from MCP server", "clientID", mcpClientID)
