@@ -4,6 +4,62 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
+## [1.0.16] - 2026-04-24
+
+Discovery layer abstraction and schema v3 expansion, plus an open-edition completeness fix that restores helper subtrees previously dropped by `pickCommands`. Also hardens the device-flow login path against credential state left behind by other login methods (OAuth scan, PAT).
+
+### Added
+
+- **`internal/discovery` service abstraction** (#156) — new `Service` struct encapsulating market registry fetch, MCP runtime negotiation (`initialize → tools/list → detail` merge), and multi-level cache fallback.
+  - `DiscoverServers` / `DiscoverServerRuntime` / `DiscoverAllRuntime` — concurrent per-server discovery with configurable timeout and cache fallback on `DeadlineExceeded`
+  - Action version–based cache invalidation via `invalidateToolsIfVersionChanged`
+  - `EnvironmentLoader` (`internal/cli/loader.go`) implements **cache-first startup**: a fresh cached catalog returns immediately without blocking on live discovery
+  - Degraded mode with typed reasons (`unauthenticated`, `market_unreachable`, `runtime_all_failed`) and edition-aware hint messages
+  - Changed-server detection via `UpdatedAt` comparison — only re-discovers servers whose registry entry changed
+  - Portal-side merge warnings surfaced to stderr for configuration drift visibility
+- **Schema v3 extensions** (#156) on `internal/market` + `internal/compat`:
+  - **Positional parameters** — `CLIFlagOverride.Positional` / `PositionalIndex` bind MCP params to positional CLI args with typed coercion (int/float/bool/string), dual-mode (positional + flag alias), and automatic `Use` line placeholder rendering
+  - **Example strings** — `CLIToolOverride.Example` wired to `cobra.Command.Example` for the `--help` Examples section
+  - **Flag defaults** — `CLIFlagOverride.Default` sets cobra default values and injects into the MCP body via `defaultInjectEntry` when the user omits the flag
+  - **Runtime defaults** — `CLIFlagOverride.RuntimeDefault` with whitelisted placeholders (`$currentUserId`, `$unionId`, `$corpId`, `$now`, `$today`) resolved at invocation time
+  - **Body wrapper** — `CLIToolOverride.BodyWrapper` wraps user params under a named key while preserving internal control keys (prefix `_`)
+  - **Mutually exclusive / require-one-of** — `MutuallyExclusive` and `RequireOneOf` flag groups wired to cobra validation
+  - **`OmitWhen`** — empty-value handling policy (`empty` / `zero` / `never`) for invocation body construction
+  - **Type override** — explicit `CLIFlagOverride.Type` overrides MCP `inputSchema` type inference
+  - **Detail schema default** — MCP detail schema `default` field propagated to cobra string flag defaults
+- **Cobra annotation utilities** (`pkg/cmdutil`) (#170) — `OverridePriority` / `SetOverridePriority` / `MergeHardcodedLeaves` promoted out of `internal/cobracmd` as the new single source of truth for the merge layer and helpers.
+- **`dws chat message send` destination-flag routing** (#170) — the open edition gains a hardcoded helper that dispatches by destination flag instead of being limited to the group-only path:
+  - `--group <openConversationId>` → `send_message_as_user`
+  - `--user <userId>` / `--open-dingtalk-id <openDingTalkId>` → `send_direct_message_as_user`
+  - Mirrors the closed-source overlay so single-chat sends now work end-to-end on the open edition.
+
+### Changed
+
+- **`pickCommands` → `cmdutil.MergeHardcodedLeaves`** for same-named products (#169) — previously, when a top-level product name collided between the dynamic overlay and a hardcoded helper subtree, the entire helper subtree was dropped. The dynamic side still wins every leaf conflict, but helper-only siblings are now grafted into the dynamic tree. Restores commands that had silently vanished from the open edition since `pickCommands` was introduced:
+  - `dws chat message send-by-bot`
+  - `dws chat message recall-by-bot`
+  - `dws chat message send-by-webhook`
+  - `dws chat group members add-bot`
+- **Hardcoded leaves can opt into overriding the dynamic envelope** (#170) via a strictly higher `OverridePriority`. Default behaviour remains "envelope is authority"; the opt-in covers the narrow case where the envelope exposes a single dispatch path but the helper needs richer flag-based routing (e.g. `chat message send` using `preferLegacyLeaf`, priority 100).
+
+### Fixed
+
+- **Device flow defensively resets credentials before login** (#157) — `--device` login now always clears stale credential state and re-fetches `clientID` from the MCP server, regardless of what previous login methods (OAuth scan, PAT, etc.) left in `app.json` or runtime globals.
+  - Root cause: after OAuth login saved `app.json` without the MCP source marker, subsequent `--device` login reused the stale `clientID` without setting the `clientIDFromMCP` flag, causing `exchangeCode()` to fall back to direct mode (which requires `clientSecret`).
+  - Replaces the previous `Source`-field approach with a simpler defensive reset that is future-proof against new login methods.
+  - `AppConfig.Source` field removed; new `resetCredentialState()` on `DeviceFlowProvider`; 5 new tests covering OAuth→device, legacy→device, and direct→device scenarios.
+
+### Tests
+
+- New `internal/auth/credential_reset_test.go` (319 lines) replacing `app_config_source_test.go`.
+- New `internal/app/direct_runtime_override_test.go`, `root_cache_refresh_test.go`, `auth_refresh_retry.go` coverage for the discovery service abstraction.
+- Expanded `internal/compat/dynamic_commands_test.go` (+1.6k lines) covering schema v3 extensions (positional, examples, defaults, mutually-exclusive, body-wrapper, runtime defaults).
+- New `pkg/cmdutil/leaf_merge_test.go` (159 lines) for `MergeHardcodedLeaves` semantics.
+
+## [1.0.14] - 2026-04-22
+
+Docs-only re-tag of v1.0.13. The single commit (#153) backfills the v1.0.13 release notes after the binary was already published; no functional or CLI surface change.
+
 ## [1.0.15] - 2026-04-23
 
 Compat layer gains **subcommand merging** under shared parents so multiple server entries can contribute into the same `dws <parent> <branch>` subtree without producing duplicate `--help` rows. Ships with a fresh auto-generated command index doc, a README sync to **159 commands across 13 products**, and a wide-ranging flag-naming cleanup that standardises CLI flags across chat, calendar, drive, minutes, contact, and devdoc commands.
