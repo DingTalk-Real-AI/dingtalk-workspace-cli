@@ -121,6 +121,205 @@ func TestSchemaPayloadFindsTool(t *testing.T) {
 	}
 }
 
+func TestCompactToolEmitsExtendedFields(t *testing.T) {
+	t.Parallel()
+
+	destructive := true
+	tool := ir.ToolDescriptor{
+		RPCName:       "send_ding_message",
+		CLIName:       "send",
+		Group:         "message",
+		CanonicalPath: "ding.send_ding_message",
+		Title:         "发送DING消息",
+		Description:   "desc",
+		Sensitive:     true,
+		InputSchema: map[string]any{
+			"type":     "object",
+			"required": []any{"robotCode"},
+			"properties": map[string]any{
+				"robotCode": map[string]any{"type": "string"},
+			},
+		},
+		OutputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"openDingId": map[string]any{"type": "string"},
+			},
+		},
+		Annotations: &ir.ToolAnnotations{DestructiveHint: &destructive},
+		FlagOverlay: map[string]ir.FlagOverlay{
+			"receiverUserIdList": {Alias: "users", Transform: "csv_to_array"},
+		},
+	}
+
+	out := compactTool(tool)
+	if out["name"] != "send_ding_message" {
+		t.Errorf("name = %v", out["name"])
+	}
+	if out["cli_name"] != "send" {
+		t.Errorf("cli_name = %v", out["cli_name"])
+	}
+	if out["canonical_path"] != "ding.send_ding_message" {
+		t.Errorf("canonical_path = %v", out["canonical_path"])
+	}
+	if out["group"] != "message" {
+		t.Errorf("group = %v", out["group"])
+	}
+	if _, ok := out["output_schema"]; !ok {
+		t.Errorf("output_schema missing, keys = %v", keysOf(out))
+	}
+	if _, ok := out["annotations"]; !ok {
+		t.Errorf("annotations missing, keys = %v", keysOf(out))
+	}
+	overlay, ok := out["flag_overlay"].(map[string]ir.FlagOverlay)
+	if !ok {
+		t.Fatalf("flag_overlay type = %T", out["flag_overlay"])
+	}
+	if overlay["receiverUserIdList"].Alias != "users" {
+		t.Errorf("overlay alias = %q", overlay["receiverUserIdList"].Alias)
+	}
+}
+
+func TestCompactToolOmitsEmptyExtras(t *testing.T) {
+	t.Parallel()
+
+	tool := ir.ToolDescriptor{
+		RPCName:       "list_documents",
+		CLIName:       "list",
+		CanonicalPath: "doc.list_documents",
+		InputSchema:   map[string]any{"type": "object"},
+	}
+	out := compactTool(tool)
+	for _, key := range []string{"output_schema", "annotations", "flag_overlay", "group"} {
+		if _, has := out[key]; has {
+			t.Errorf("key %q should be omitted when empty, got %#v", key, out[key])
+		}
+	}
+}
+
+func TestSchemaPayloadResolvesCLIPath(t *testing.T) {
+	t.Parallel()
+
+	catalog := ir.Catalog{
+		Products: []ir.CanonicalProduct{
+			{
+				ID: "ding",
+				Tools: []ir.ToolDescriptor{
+					{
+						RPCName:       "send_ding_message",
+						CLIName:       "send",
+						Group:         "message",
+						CanonicalPath: "ding.send_ding_message",
+						InputSchema:   map[string]any{"type": "object"},
+					},
+					{
+						RPCName:       "recall_ding_message",
+						CLIName:       "recall",
+						Group:         "message",
+						CanonicalPath: "ding.recall_ding_message",
+						InputSchema:   map[string]any{"type": "object"},
+					},
+				},
+			},
+		},
+	}
+
+	cases := []struct {
+		name    string
+		input   string
+		wantRPC string
+		wantErr bool
+	}{
+		{"canonical rpc path", "ding.send_ding_message", "send_ding_message", false},
+		{"dotted cli path", "ding.message.send", "send_ding_message", false},
+		{"space cli path", "ding message send", "send_ding_message", false},
+		{"slash cli path", "ding/message/recall", "recall_ding_message", false},
+		{"unknown leaf", "ding message nope", "", true},
+		{"unknown group", "ding random send", "", true},
+		{"unknown product", "nope send", "", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			payload, err := schemaPayload(catalog, []string{tc.input})
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err = %v, wantErr = %v", err, tc.wantErr)
+			}
+			if tc.wantErr {
+				return
+			}
+			tool, ok := payload["tool"].(map[string]any)
+			if !ok {
+				t.Fatalf("payload tool missing, got %#v", payload)
+			}
+			if tool["name"] != tc.wantRPC {
+				t.Errorf("tool name = %v, want %s", tool["name"], tc.wantRPC)
+			}
+		})
+	}
+}
+
+func TestSchemaCommandCLIPathFlag(t *testing.T) {
+	t.Parallel()
+
+	loader := StaticLoader{Catalog: ir.Catalog{
+		Products: []ir.CanonicalProduct{{
+			ID: "ding",
+			Tools: []ir.ToolDescriptor{{
+				RPCName:       "send_ding_message",
+				CLIName:       "send",
+				Group:         "message",
+				CanonicalPath: "ding.send_ding_message",
+				InputSchema:   map[string]any{"type": "object"},
+			}},
+		}},
+	}}
+
+	t.Run("resolves via --cli-path", func(t *testing.T) {
+		cmd := NewSchemaCommand(loader)
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		cmd.SetErr(&bytes.Buffer{})
+		cmd.SetArgs([]string{"--cli-path", "ding message send"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("Execute() error = %v", err)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		tool, ok := payload["tool"].(map[string]any)
+		if !ok {
+			t.Fatalf("tool missing: %#v", payload)
+		}
+		if tool["name"] != "send_ding_message" {
+			t.Errorf("tool name = %v", tool["name"])
+		}
+	})
+
+	t.Run("rejects positional + flag collision", func(t *testing.T) {
+		cmd := NewSchemaCommand(loader)
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		cmd.SetErr(&bytes.Buffer{})
+		cmd.SetArgs([]string{"--cli-path", "ding message send", "ding.send_ding_message"})
+		err := cmd.Execute()
+		if err == nil {
+			t.Fatalf("expected mutual-exclusion error, got nil")
+		}
+		if !strings.Contains(err.Error(), "mutually exclusive") {
+			t.Errorf("err = %v, want mutual-exclusion message", err)
+		}
+	})
+}
+
+func keysOf(m map[string]any) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
 func TestNewMCPCommandReturnsLoaderErrorForInvocations(t *testing.T) {
 	t.Parallel()
 

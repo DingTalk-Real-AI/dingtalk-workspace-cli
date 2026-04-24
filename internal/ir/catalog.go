@@ -49,6 +49,29 @@ type CLIFlagHint struct {
 	Alias     string `json:"alias,omitempty"`
 }
 
+// FlagOverlay carries CLI-layer transformation metadata for a single
+// MCP parameter: the flag alias the user types, the transform applied
+// before dispatch, env-var fallback, default value, and whether the flag
+// is hidden from help. Sourced from market.CLIToolOverride.Flags.
+type FlagOverlay struct {
+	Alias         string         `json:"alias,omitempty"`
+	Transform     string         `json:"transform,omitempty"`
+	TransformArgs map[string]any `json:"transform_args,omitempty"`
+	EnvDefault    string         `json:"env_default,omitempty"`
+	Default       string         `json:"default,omitempty"`
+	Hidden        bool           `json:"hidden,omitempty"`
+}
+
+// ToolAnnotations mirrors MCP 2025+ tool annotations. All hints are
+// nullable: absence means "unknown", not "false". Populate only when the
+// source has a clear signal — don't guess.
+type ToolAnnotations struct {
+	DestructiveHint *bool `json:"destructive_hint,omitempty"`
+	ReadOnlyHint    *bool `json:"read_only_hint,omitempty"`
+	IdempotentHint  *bool `json:"idempotent_hint,omitempty"`
+	OpenWorldHint   *bool `json:"open_world_hint,omitempty"`
+}
+
 type CanonicalProduct struct {
 	ID                        string              `json:"id"`
 	DisplayName               string              `json:"display_name"`
@@ -67,13 +90,16 @@ type CanonicalProduct struct {
 type ToolDescriptor struct {
 	RPCName         string                 `json:"rpc_name"`
 	CLIName         string                 `json:"cli_name,omitempty"`
+	Group           string                 `json:"group,omitempty"`
 	Title           string                 `json:"title,omitempty"`
 	Description     string                 `json:"description,omitempty"`
 	InputSchema     map[string]any         `json:"input_schema,omitempty"`
 	OutputSchema    map[string]any         `json:"output_schema,omitempty"`
 	Sensitive       bool                   `json:"sensitive"`
+	Annotations     *ToolAnnotations       `json:"annotations,omitempty"`
 	Hidden          bool                   `json:"hidden,omitempty"`
 	FlagHints       map[string]CLIFlagHint `json:"flag_hints,omitempty"`
+	FlagOverlay     map[string]FlagOverlay `json:"flag_overlay,omitempty"`
 	SourceServerKey string                 `json:"source_server_key"`
 	CanonicalPath   string                 `json:"canonical_path"`
 }
@@ -105,10 +131,58 @@ func BuildCatalog(runtimeServers []discovery.RuntimeServer) Catalog {
 		sensitiveByTool := make(map[string]bool, len(runtimeServer.Server.CLI.Tools))
 		hasSensitiveOverride := make(map[string]bool, len(runtimeServer.Server.CLI.Tools))
 		toolCLIName := make(map[string]string, len(runtimeServer.Server.CLI.Tools))
+		toolGroup := make(map[string]string)
 		toolHidden := make(map[string]bool, len(runtimeServer.Server.CLI.Tools))
 		toolTitleOverride := make(map[string]string, len(runtimeServer.Server.CLI.Tools))
 		toolDescriptionOverride := make(map[string]string, len(runtimeServer.Server.CLI.Tools))
 		toolFlagHints := make(map[string]map[string]CLIFlagHint, len(runtimeServer.Server.CLI.Tools))
+		toolFlagOverlay := make(map[string]map[string]FlagOverlay)
+
+		// Merge richer market.CLIToolOverride data (group, cliName, flag
+		// transforms/aliases/env-defaults) that the dynamic compat layer
+		// already consumes but the IR previously dropped.
+		for name, override := range runtimeServer.Server.CLI.ToolOverrides {
+			trimmed := strings.TrimSpace(name)
+			if trimmed == "" {
+				continue
+			}
+			if cn := strings.TrimSpace(override.CLIName); cn != "" {
+				toolCLIName[trimmed] = cn
+			}
+			if gp := strings.TrimSpace(override.Group); gp != "" {
+				toolGroup[trimmed] = gp
+			}
+			if override.Hidden {
+				toolHidden[trimmed] = true
+			}
+			if override.IsSensitive {
+				sensitiveByTool[trimmed] = true
+				hasSensitiveOverride[trimmed] = true
+			}
+			if desc := strings.TrimSpace(override.Description); desc != "" && toolDescriptionOverride[trimmed] == "" {
+				toolDescriptionOverride[trimmed] = desc
+			}
+			if len(override.Flags) > 0 {
+				overlay := make(map[string]FlagOverlay, len(override.Flags))
+				for paramName, flagOverride := range override.Flags {
+					paramTrim := strings.TrimSpace(paramName)
+					if paramTrim == "" {
+						continue
+					}
+					overlay[paramTrim] = FlagOverlay{
+						Alias:         strings.TrimSpace(flagOverride.Alias),
+						Transform:     strings.TrimSpace(flagOverride.Transform),
+						TransformArgs: cloneTransformArgs(flagOverride.TransformArgs),
+						EnvDefault:    strings.TrimSpace(flagOverride.EnvDefault),
+						Default:       strings.TrimSpace(flagOverride.Default),
+						Hidden:        flagOverride.Hidden,
+					}
+				}
+				if len(overlay) > 0 {
+					toolFlagOverlay[trimmed] = overlay
+				}
+			}
+		}
 		for _, cliTool := range runtimeServer.Server.CLI.Tools {
 			name := strings.TrimSpace(cliTool.Name)
 			if name == "" {
@@ -164,13 +238,16 @@ func BuildCatalog(runtimeServers []discovery.RuntimeServer) Catalog {
 			tools = append(tools, ToolDescriptor{
 				RPCName:         tool.Name,
 				CLIName:         cliName,
+				Group:           strings.TrimSpace(toolGroup[tool.Name]),
 				Title:           title,
 				Description:     description,
 				InputSchema:     cloneMap(tool.InputSchema),
 				OutputSchema:    cloneMap(tool.OutputSchema),
 				Sensitive:       sensitive,
+				Annotations:     deriveAnnotations(sensitive),
 				Hidden:          toolHidden[tool.Name],
 				FlagHints:       cloneFlagHints(toolFlagHints[tool.Name]),
+				FlagOverlay:     cloneFlagOverlay(toolFlagOverlay[tool.Name]),
 				SourceServerKey: runtimeServer.Server.Key,
 				CanonicalPath:   fmt.Sprintf("%s.%s", productID, tool.Name),
 			})
@@ -362,4 +439,44 @@ func cloneFlagHints(value map[string]CLIFlagHint) map[string]CLIFlagHint {
 		out[key] = hint
 	}
 	return out
+}
+
+func cloneFlagOverlay(value map[string]FlagOverlay) map[string]FlagOverlay {
+	if len(value) == 0 {
+		return nil
+	}
+	out := make(map[string]FlagOverlay, len(value))
+	for key, overlay := range value {
+		overlay.TransformArgs = cloneTransformArgs(overlay.TransformArgs)
+		out[key] = overlay
+	}
+	return out
+}
+
+func cloneTransformArgs(value map[string]any) map[string]any {
+	if len(value) == 0 {
+		return nil
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil
+	}
+	var cloned map[string]any
+	if err := json.Unmarshal(data, &cloned); err != nil {
+		return nil
+	}
+	return cloned
+}
+
+// deriveAnnotations maps the coarse-grained Sensitive bool onto MCP 2025+
+// annotation hints. Only DestructiveHint is populated — the other hints
+// (read_only, idempotent, open_world) stay nil until the upstream tool
+// manifest advertises them explicitly. Guessing from name prefixes
+// ("list_", "get_") risks false signals for AI agents.
+func deriveAnnotations(sensitive bool) *ToolAnnotations {
+	if !sensitive {
+		return nil
+	}
+	destructive := true
+	return &ToolAnnotations{DestructiveHint: &destructive}
 }

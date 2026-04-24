@@ -238,7 +238,7 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 	}
 	for _, child := range children {
 		if parent, ok := topLevel[child.parent]; ok {
-			parent.AddCommand(child.cmd)
+			attachOrMerge(parent, child.cmd)
 		} else {
 			// Parent not found among dynamic commands; emit as top-level.
 			name := child.cmd.Name()
@@ -468,6 +468,43 @@ func resolveNestedGroup(root *cobra.Command, groupPath string, registry map[stri
 	}
 	// Auto-create if not defined in groups
 	return ensureNestedGroup(root, groupPath, groupPath, registry)
+}
+
+// attachOrMerge adds child as a sub-command of parent. If parent already has a
+// sub-command with the same Name(), the two are merged recursively: child's
+// sub-commands are moved onto the existing one and child itself is discarded.
+// Leaf collisions (two commands with the same Name and no further children)
+// are resolved first-wins — the incoming one is dropped.
+//
+// This lets multiple server entries share a cli.command under the same parent,
+// e.g. bot-message (command="message", parent="chat") can contribute leaves
+// into the same "message" subtree already built from chat's own toolOverrides,
+// without creating a duplicate "message" sibling in chat's help output.
+func attachOrMerge(parent, child *cobra.Command) {
+	existing := findSubcommand(parent, child.Name())
+	if existing == nil {
+		parent.AddCommand(child)
+		return
+	}
+	// Snapshot child's sub-commands before we start moving them (RemoveCommand
+	// mutates the slice we'd be iterating).
+	subs := make([]*cobra.Command, len(child.Commands()))
+	copy(subs, child.Commands())
+	for _, sub := range subs {
+		child.RemoveCommand(sub)
+		attachOrMerge(existing, sub)
+	}
+}
+
+// findSubcommand returns the first sub-command of parent with the given name,
+// or nil if none match.
+func findSubcommand(parent *cobra.Command, name string) *cobra.Command {
+	for _, sub := range parent.Commands() {
+		if sub.Name() == name {
+			return sub
+		}
+	}
+	return nil
 }
 
 // buildOverrideBindings converts CLIToolOverride flags into FlagBindings and

@@ -20,6 +20,8 @@ import (
 	"strings"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
@@ -110,6 +112,18 @@ func transformCSVToArray(value any) (any, error) {
 	return result, nil
 }
 
+// transformJSONParse parses a CLI string into a structured value so callers can
+// pass complex payloads (JSON arrays/objects) through a single flag.
+//
+// Two input dialects are accepted, in order:
+//  1. Strict JSON  — `[{"fieldName":"x","type":"text"}]`
+//  2. YAML (flow)  — `[{fieldName: x, type: text}]`
+//
+// YAML is a superset of JSON that permits unquoted keys and strings, which
+// dramatically reduces the need for shell-level escaping. Users can therefore
+// write `--fields '[{fieldName: 标题, type: text}]'` instead of piling quotes
+// around every token. The output shape is the same either way; downstream
+// consumers see the parsed Go value, not the original dialect.
 func transformJSONParse(value any) (any, error) {
 	s, ok := toString(value)
 	if !ok {
@@ -119,11 +133,22 @@ func transformJSONParse(value any) (any, error) {
 	if s == "" {
 		return value, nil
 	}
+	// Strict JSON first — fast path and unambiguous type promotion (numbers
+	// stay numbers, etc.).
 	var parsed any
-	if err := json.Unmarshal([]byte(s), &parsed); err != nil {
-		return nil, apperrors.NewValidation(fmt.Sprintf("json_parse: invalid JSON: %v", err))
+	if err := json.Unmarshal([]byte(s), &parsed); err == nil {
+		return parsed, nil
 	}
-	return parsed, nil
+	// YAML (flow) fallback — accepts `{key: value}` without surrounding
+	// quotes, which is the natural form when typing at a shell prompt.
+	if err := yaml.Unmarshal([]byte(s), &parsed); err == nil {
+		return parsed, nil
+	}
+	return nil, apperrors.NewValidation(
+		"json_parse: input is not valid JSON or YAML; " +
+			"quote the whole value and use `[{key: value, ...}]` for ad-hoc input, " +
+			"or pass `@path/to/file.json` to read from a file",
+	)
 }
 
 func transformEnumMap(value any, args map[string]any) (any, error) {

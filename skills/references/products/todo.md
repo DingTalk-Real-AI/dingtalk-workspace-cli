@@ -9,11 +9,15 @@ Usage:
 Example:
   dws todo task create --title "修复线上Bug" --executors <USER_ID_1>,<USER_ID_2> --priority 40
   dws todo task create --title "提交报告" --executors <USER_ID> --due "2026-03-20T10:00:00+08:00"
+  dws todo task create --title "每日站会" --executors <USER_ID> \
+    --due "2026-03-20T10:00:00+08:00" \
+    --recurrence $'DTSTART:20260320T020000Z\nRRULE:FREQ=DAILY;INTERVAL=1'
 Flags:
-      --due string         截止时间 ISO-8601 (如 2026-03-10T18:00:00+08:00)
-      --executors string   执行者 userId 列表 (必填)
-      --priority string    优先级: 10低/20普通/30较高/40紧急
-      --title string       待办标题 (必填)
+      --due string          截止时间 ISO-8601 (如 2026-03-10T18:00:00+08:00)
+      --executors string    执行者 userId 列表 (必填)
+      --priority string     优先级: 10低/20普通/30较高/40紧急
+      --recurrence string   循环规则 RFC 5545 (DTSTART+RRULE，仅在同时设置 --due 时生效)
+      --title string        待办标题 (必填)
 ```
 
 ### 查询待办列表
@@ -122,6 +126,7 @@ dws todo task delete --task-id <taskId> --yes --format json
 
 - 优先级值: 10=低, 20=普通, 30=较高, 40=紧急
 - `--due` 截止时间使用 ISO-8601 格式（如 2026-03-10T18:00:00+08:00）
+- `--recurrence` 为 RFC 5545 循环规则（`DTSTART:...\nRRULE:FREQ=DAILY;INTERVAL=1` 这种格式），必须与 `--due` 同时设置才生效
 - `task list` 的 `--status` 对应 MCP `get_user_todos_in_current_org` 的 `todoStatus` 参数
 - todo 是个人待办管理产品
 - `task update` 可同时修改标题/优先级/截止时间/完成状态

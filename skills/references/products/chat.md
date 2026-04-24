@@ -9,21 +9,20 @@
 | 子命令 | 用途 |
 |-------|------|
 | `group create` | 创建内部群 |
-| `group create-org` | 创建企业全员群 |
-| `group members list` | 查看群成员列表 |
+| `group members` | 查看群成员列表 |
 | `group members add` | 添加群成员 |
 | `group members remove` | 移除群成员（⚠️ 危险操作） |
 | `group members add-bot` | 添加机器人到群 |
 | `group rename` | 修改群名称 |
 | `search` | 搜索群会话 |
 | `search-common` | 搜索共同群 |
+| `conversation-info` | 获取会话基础信息（单聊/群聊） |
 
 ### message (会话消息管理)
 
 | 子命令 | 用途 |
 |-------|------|
 | `message send` | 以当前用户身份发群消息或单聊消息 |
-| `message send-personal` | 发送个人消息（⚠️ 敏感操作） |
 | `message list` | 拉取群聊或单聊会话消息 |
 | `message list-all` | 按时间范围拉取当前用户所有会话消息 |
 | `message list-topic-replies` | 拉取群话题回复消息列表 |
@@ -32,7 +31,6 @@
 | `message list-focused` | 拉取特别关注人的消息 |
 | `message list-unread-conversations` | 获取未读会话列表 |
 | `message search` | 按关键词搜索消息 |
-| `message info` | 获取会话信息 |
 | `message send-by-bot` | 机器人发消息（群聊或批量单聊） |
 | `message recall-by-bot` | 机器人撤回消息 |
 | `message send-by-webhook` | 自定义机器人 Webhook 发消息 |
@@ -43,8 +41,6 @@
 | 子命令 | 用途 |
 |-------|------|
 | `bot search` | 搜索我的机器人 |
-| `bot create` | 创建企业机器人 |
-| `bot search-groups` | 搜索机器人所在群 |
 
 ---
 
@@ -64,31 +60,15 @@ Flags:
 
 ---
 
-## group create-org — 创建企业全员群
-
-创建面向企业组织的群，成员通过 userId 列表指定。
-
-```
-Usage:
-  dws chat group create-org [flags]
-Example:
-  dws chat group create-org --name "全员通知群" --users userId1,userId2
-Flags:
-      --name string     群名称 (必填)
-      --users string    成员 userId 列表，逗号分隔 (必填)
-```
-
----
-
-## group members list — 查看群成员列表
+## group members — 查看群成员列表
 
 分页查询指定群聊的成员。
 
 ```
 Usage:
-  dws chat group members list [flags]
+  dws chat group members [flags]
 Example:
-  dws chat group members list --id <openconversation_id>
+  dws chat group members --id <openconversation_id>
 Flags:
       --cursor string   分页游标，首次从 0 开始
       --id string       群 ID / openconversation_id (必填)
@@ -227,6 +207,12 @@ Flags:
       --at-all                   @所有人（仅群聊时生效，可选，默认 false）
       --at-users string          @指定成员的 userId 列表，逗号分隔（仅群聊时生效，可选）
       --media-id string          图片 mediaId（通过 dt_media_upload 工具上传获得，需从返回链接中去除 _宽_高.格式 后缀并加上 @ 前缀），指定后发送图片消息，不需要传文本内容
+      --msg-type string          消息类型（可选，如 text/markdown/image/file；通常由 --text/--media-id/--dentry-id 自动推断）
+      --dentry-id string         钉盘文件 dentryId（发送钉盘文件消息时使用，需配合 --space-id）
+      --space-id string          钉盘空间 spaceId（与 --dentry-id 配合使用）
+      --file-name string         文件消息的文件名
+      --file-size string         文件消息的文件大小（字节）
+      --file-type string         文件消息的文件类型（如 pdf / docx / xlsx 等）
 
 注意:
   - --text 和位置参数二选一，--text 优先
@@ -234,33 +220,7 @@ Flags:
   - --group 的别名: --id, --chat, --conversation-id (均可替代 --group)
   - --at-all 和 --at-users 仅在 --group 群聊时生效；当设置--at-all时，消息内容中一定要包含对应的占位符<@all>；当设置--at-users userId1,userId2时，消息内容中一定要包含对应格式的占位符<@userId1> <@userId2>
   - --media-id 指定图片 mediaId 时自动发送图片消息（msgType=image），不需要传 --text；图片单聊仅支持 --open-dingtalk-id，不支持 --user
-```
-
----
-
-## message send-personal — 发送个人消息
-
-> ⚠️ 敏感操作：执行前必须向用户确认，同意后才加 `--yes`。
-
-发送个人消息到指定会话或指定用户。支持 @指定人。
-
-```
-Usage:
-  dws chat message send-personal [flags]
-Example:
-  dws chat message send-personal --id <openConversationId> --content "你好" --type text
-  dws chat message send-personal --open-id <openDingTalkId> --content "消息内容" --type text
-  dws chat message send-personal --id <openConversationId> --content "内容" --at-all
-Flags:
-      --content string   消息内容 (必填)
-      --type string      消息类型，如 text、markdown (必填)
-      --id string        群聊会话 ID openConversationId（与 --open-id 二选一）
-      --open-id string   接收人 openDingTalkId（与 --id 二选一）
-      --at-all           @所有人（可选）
-      --at-users string  @指定人的 openDingTalkId 列表，逗号分隔（可选）
-
-注意:
-  - --id（群聊会话）和 --open-id（指定用户 openDingTalkId）二选一
+  - 发送钉盘文件消息：传 --dentry-id + --space-id（必要时配合 --file-name / --file-size / --file-type），msg-type 自动推断为 file
 ```
 
 ---
@@ -457,22 +417,22 @@ Flags:
 
 ---
 
-## message info — 获取会话信息
+## conversation-info — 获取会话基础信息
 
-获取指定群聊或单聊会话的详情信息。
+按会话 ID 获取单聊或群聊的基础元数据（名称、类型、成员数等）。在对会话执行操作前用来确认上下文。
 
 ```
 Usage:
-  dws chat message info [flags]
+  dws chat conversation-info [flags]
 Example:
-  dws chat message info --id <openConversationId>
-  dws chat message info --open-id <openDingTalkId>
+  dws chat conversation-info --group <openConversationId>
+  dws chat conversation-info --open-dingtalk-id <openDingTalkId>
 Flags:
-      --id string        群聊会话 ID openConversationId（与 --open-id 二选一）
-      --open-id string   用户 openDingTalkId（单聊时与 --id 二选一）
+      --group string             群聊会话 ID openConversationId（与 --open-dingtalk-id 二选一）
+      --open-dingtalk-id string  用户 openDingTalkId（单聊时与 --group 二选一）
 
 注意:
-  - --id（群聊）和 --open-id（单聊用户 openDingTalkId）二选一
+  - --group（群聊 openConversationId）和 --open-dingtalk-id（单聊用户 openDingTalkId）二选一
 ```
 
 ---
@@ -511,37 +471,6 @@ Flags:
       --name string   按名称搜索
       --page int      页码，从1开始 (默认 1)
       --size int      每页条数 (默认 50)，别名: --limit
-```
-
----
-
-## bot create — 创建企业机器人
-
-```
-Usage:
-  dws chat bot create [flags]
-Example:
-  dws chat bot create --name "日报提醒机器人" --desc "负责每日日报提醒"
-Flags:
-      --name string   机器人名称 (必填)
-      --desc string   机器人描述（可选）
-```
-
----
-
-## bot search-groups — 搜索机器人所在群
-
-搜索指定机器人已加入的群列表。
-
-```
-Usage:
-  dws chat bot search-groups [flags]
-Example:
-  dws chat bot search-groups --keyword "项目"
-  dws chat bot search-groups --keyword "冲刺" --cursor <nextCursor>
-Flags:
-      --keyword string   搜索关键词 (必填)
-      --cursor string    分页游标（首页留空，翻页传返回的 cursor）
 ```
 
 ---
@@ -612,9 +541,8 @@ Flags:
 ## 意图判断
 
 用户说"建群/创建群聊" → `chat group create`
-用户说"创建企业全员群/组织群" → `chat group create-org`
 用户说"搜索群/找群" → `chat search`
-用户说"群成员/看群里有谁" → `chat group members list`
+用户说"群成员/看群里有谁" → `chat group members`
 用户说"拉人进群/加群成员" → `chat group members add`
 用户说"踢人/移除群成员" → `chat group members remove`
 用户说"加机器人到群" → `chat group members add-bot`
@@ -626,7 +554,6 @@ Flags:
 用户说"未读消息会话/未读会话列表/我的未读会话" → `chat message list-unread-conversations`
 用户说"发群消息(以个人身份)" → `chat message send --group`
 用户说"发单聊消息(以个人身份)" → `chat message send --user`（有 userId 时）或 `chat message send --open-dingtalk-id`（有 openDingTalkId 时）
-用户说"发个人消息/个人通知" → `chat message send-personal`（⚠️ 敏感操作，需确认）
 用户说"机器人发消息/机器人群发" → `chat message send-by-bot`
 用户说"机器人撤回消息" → `chat message recall-by-bot`
 用户说"Webhook 发消息/告警消息" → `chat message send-by-webhook`
@@ -634,12 +561,10 @@ Flags:
 用户说"所有消息/全部会话消息/拉取全部消息/时间范围内消息/我的消息/我今天的消息/查我的钉钉消息/最近的消息" → `chat message list-all`
 用户说"特别关注人的消息/关注的人的消息/星标联系人的消息" → `chat message list-focused`
 用户说"查看我的机器人" → `chat bot search`
-用户说"创建机器人" → `chat bot create`
 用户说"搜索消息/查找关键词/搜一下消息里的XX" → `chat message search`
 用户说"我和XX的共同群/我们都在哪些群/查共同群" → `chat search-common`
 用户说"置顶会话/置顶消息/我的置顶/查看置顶" → `chat list-top-conversations`
-用户说"获取会话信息/会话详情" → `chat message info`
-用户说"机器人在哪些群/机器人的群" → `chat bot search-groups`
+用户说"获取会话信息/会话详情/会话元数据" → `chat conversation-info`
 
 关键区分:
 - `chat message list` — 拉取指定会话的消息（需指定 --group 或 --user），按时间点 + 方向翻页
@@ -652,15 +577,13 @@ Flags:
 - `chat message list-focused` — 拉取特别关注人的消息，cursor 分页
 - `chat list-top-conversations` — 拉取置顶会话列表（用户询问"置顶会话"或"置顶消息"时路由到此），cursor 分页
 - `chat message send` — 以**当前用户**身份发消息（群聊或单聊），text 为位置参数；支持 --media-id 发送图片消息
-- `chat message send-personal` — 发送个人消息，支持通过 openConversationId 或 openDingTalkId 指定目标（⚠️ 敏感操作）
 - `chat message search` — 按关键词搜索消息内容（跨所有会话，可选指定群）
 - `chat search-common` — 搜索共同群，查询指定人共同所在的群聊（AND=所有人都在，OR=任一人在）
 - `chat message send-by-bot` — 以**机器人**身份发消息（群聊或单聊），text 为 --text flag
 - `chat message send-by-webhook` — 通过**自定义机器人 Webhook** 发群消息
 - `chat message recall-by-bot` — 通过机器人撤回已发送的消息
-- `chat message info` — 获取指定会话的详情信息
-- `chat bot create` — 创建新的企业机器人
-- `chat bot search-groups` — 搜索机器人所在群列表
+- `chat conversation-info` — 按会话 ID 获取单聊/群聊的基础元数据（名称、类型、成员数等）
+- `chat bot search` — 搜索当前用户名下的机器人，拿到 robotCode 用于 send-by-bot / recall-by-bot / group members add-bot
 
 ## 核心工作流
 
@@ -715,16 +638,18 @@ dws chat message recall-by-bot --robot-code <robot-code> --group <openconversati
   --keys <processQueryKey> --format json
 ```
 
-### 创建并使用机器人（完整流程）
+### 将已有机器人加入群并发消息（完整流程）
+
+机器人需先在钉钉开放平台创建好，这里只做"找机器人 → 加入群 → 发消息"。
 
 ```bash
-# Step 1: 创建机器人
-dws chat bot create --name "项目提醒机器人" --desc "项目状态提醒" --format json
+# Step 1: 搜索我的机器人 — 提取 robotCode
+dws chat bot search --name "项目提醒" --format json
 
 # Step 2: 搜索群 — 提取 openConversationId
 dws chat search --query "项目群" --format json
 
-# Step 3: 将机器人添加到群
+# Step 3: 将机器人添加到群（需当前用户对该群有管理权限）
 dws chat group members add-bot --id <openConversationId> --robot-code <robotCode> --format json
 
 # Step 4: 机器人发消息
@@ -775,8 +700,8 @@ dws chat message send --group <openconversation_id> \
 | `aisearch person` | `userId` | message send 的 --user、--at-users、send-by-bot 的 --users、list-by-sender 的 --sender-user-id |
 | `aisearch person` → `contact user get` | `openDingTalkId` | list-by-sender 的 --sender-open-dingtalk-id、message send/list 的 --open-dingtalk-id |
 | `chat bot search` | `robotCode` | send-by-bot / recall-by-bot 的 --robot-code、group members add-bot 的 --robot-code |
-| `chat bot create` | `robotCode` | send-by-bot / recall-by-bot 的 --robot-code |
 | `chat message send-by-bot` | `processQueryKey` | recall-by-bot 的 --keys |
+| `chat conversation-info` | `openConversationId` / 成员信息 | 作为 message send/list 等后续操作的会话上下文确认 |
 | `chat message search` | `nextCursor` | 下次 message search 的 --cursor |
 | `chat search-common` | `openConversationId` | message send/list 等的 --group |
 | `drive download` | 下载链接 | message send 的 Markdown 图片/链接语法 |
@@ -785,7 +710,6 @@ dws chat message send --group <openconversation_id> \
 
 - `--group` 为群聊会话 ID (openconversation_id)，可从群搜索或群聊信息中获取
 - `chat message send` 的 text 是位置参数（恰好 1 个），非 flag；群聊用 `--group`，单聊用 `--user`（userId）或 `--open-dingtalk-id`（openDingTalkId），三者互斥；`--at-all`、`--at-users` 仅在 `--group` 群聊时生效；发送图片消息用 `--media-id`
-- `chat message send-personal` 为敏感操作（isSensitive），执行前需用户明确确认
 - `chat message list-all` 的四个参数（--start、--end、--limit、--cursor）每次请求都必须传递；翻页时用响应中的 nextCursor 值作为下次 --cursor
 - `chat message list` 的 `--group`、`--user`、`--open-dingtalk-id` 三者互斥，必须且只能指定其一
 - `chat message list-by-sender` 不需要指定单聊/群聊，返回结果自带会话类型标识
