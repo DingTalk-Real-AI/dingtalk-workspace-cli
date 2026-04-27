@@ -293,6 +293,8 @@ const (
 	patPollTimeout = 10 * time.Minute
 )
 
+var openBrowserFunc = tryOpenBrowser
+
 // patRetryingKey is a context key to prevent recursive PAT auth checks.
 // After APPROVED, the retry should not trigger another PAT flow.
 type patRetryingKeyType struct{}
@@ -303,6 +305,32 @@ var patRetryingKey = patRetryingKeyType{}
 func IsPatRetrying(ctx context.Context) bool {
 	v, _ := ctx.Value(patRetryingKey).(bool)
 	return v
+}
+
+func openPATAuthorizationURI(rawURI string) error {
+	if rawURI == "" {
+		// Defensive guard for future callers. The current call site already
+		// checks for a non-empty PAT URI before invoking this helper.
+		return nil
+	}
+	// The PAT service returns the complete authorization URL. Treat it as an
+	// opaque string and open it verbatim instead of parsing/rebuilding it
+	// locally, because required parameters may live in query, hash, or
+	// fragment sections.
+	return openBrowserFunc(rawURI)
+}
+
+func printPATPollDebugResponse(output io.Writer, statusCode int, body []byte) {
+	if os.Getenv("DWS_DEBUG_PAT_POLL") == "" {
+		return
+	}
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed == "" {
+		trimmed = "<empty body>"
+	}
+	fmt.Fprintln(output)
+	fmt.Fprintf(output, "  ℹ PAT 轮询接口返回原文 (HTTP %d):\n", statusCode)
+	fmt.Fprintf(output, "    %s\n", trimmed)
 }
 
 // handlePatAuthCheck is called by runner.executeInvocation when a PAT
@@ -383,7 +411,7 @@ func handlePatAuthCheck(
 	if patData.Data.URI != "" {
 		fmt.Fprintf(output, "  %s %s\n\n", dim("🔗"), cyan(patData.Data.URI))
 		// Best-effort browser open.
-		_ = tryOpenBrowser(patData.Data.URI)
+		_ = openPATAuthorizationURI(patData.Data.URI)
 	}
 
 	// If no flowId, we can't poll — fall back to returning PATError for host-app.
@@ -537,23 +565,25 @@ func pollPatDeviceFlow(ctx context.Context, flowID string, configDir string, out
 			var pollResp authpkg.DevicePollResponse
 			if err := json.Unmarshal(bodyBytes, &pollResp); err != nil {
 				slog.Debug("PAT poll: failed to parse response", "error", err, "body", string(bodyBytes))
+				printPATPollDebugResponse(output, resp.StatusCode, bodyBytes)
 				continue
 			}
 
-			status := authpkg.ParseDeviceFlowStatus(pollResp.Data.Status, pollResp.Success)
+			pollData := pollResp.EffectiveData()
+			status := authpkg.ParseDeviceFlowStatus(pollData.Status, pollResp.Success)
 			switch status {
 			case authpkg.StatusApproved:
 				fmt.Fprintln(output) // clear the polling line
-				return status, pollResp.Data.AuthCode, nil
+				return status, pollData.AuthCode, nil
 			case authpkg.StatusRejected, authpkg.StatusExpired:
 				fmt.Fprintln(output) // clear the polling line
 				return status, "", nil
 			case authpkg.StatusPending:
-				// keep polling
 			default:
 				// ParseDeviceFlowStatus normalizes empty+!success to EXPIRED,
 				// so this branch handles truly unknown statuses.
 				fmt.Fprintln(output)
+				printPATPollDebugResponse(output, resp.StatusCode, bodyBytes)
 				return status, "", nil
 			}
 		}

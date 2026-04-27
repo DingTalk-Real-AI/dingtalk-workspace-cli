@@ -655,16 +655,7 @@ func newMCPCommand(ctx context.Context, loader cli.CatalogLoader, runner executo
 // Public utility commands (auth, cache, completion, version) are always kept
 // visible; explicitly hidden commands stay hidden.
 func hideNonDirectRuntimeCommands(root *cobra.Command) {
-	var allowedProducts map[string]bool
-	if fn := edition.Get().VisibleProducts; fn != nil {
-		products := fn()
-		allowedProducts = make(map[string]bool, len(products))
-		for _, p := range products {
-			allowedProducts[p] = true
-		}
-	} else {
-		allowedProducts = DirectRuntimeProductIDs()
-	}
+	allowedProducts := resolveVisibleProducts()
 	staticCommands := map[string]bool{
 		"auth":       true,
 		"cache":      true,
@@ -1162,11 +1153,31 @@ func loadPlugins(engine *pipeline.Engine, runner executor.Runner) []*cobra.Comma
 	sharedStore := cacheStoreFromEnv()
 	coldTimeouts := resolvePluginColdTimeouts()
 
-	// Fan out HTTP and stdio discovery in parallel. Each goroutine resolves
-	// its cache hit locally (no network) or runs a bounded cold-path probe.
-	// Wall-clock cost ≈ max(individual plugin latencies), not the sum.
+	// Phase A: stdio overlay-first registration (synchronous, no I/O).
+	// Plugins whose overlay.json declares ToolOverrides register their full
+	// command tree up-front from manifest metadata alone — no subprocess
+	// handshake required. This fixes the "discovery fails → no commands
+	// ever appear" lock-out and keeps `dws --help` reliable even when the
+	// underlying MCP server is temporarily unavailable.
+	var legacyStdioEntries []stdioEntry
+	for _, e := range stdioEntries {
+		cmds, _, ok := registerStdioServerFromOverlay(e.plugin, e.sc, runner, sharedStore)
+		if !ok {
+			legacyStdioEntries = append(legacyStdioEntries, e)
+			continue
+		}
+		pluginCmds = append(pluginCmds, cmds...)
+	}
+
+	// Phase B: fan out discovery in parallel.
+	//   - HTTP plugins: same behaviour as before (discovery-first).
+	//   - stdio overlay-first plugins: async cache refresh only; their
+	//     commands are already registered. Failures are non-fatal and do
+	//     NOT poison the warm-cache with a null-tools snapshot.
+	//   - stdio legacy plugins (overlay without toolOverrides): preserve
+	//     the old discovery-first path for backwards compatibility.
 	httpResults := make([][]*cobra.Command, len(httpServers))
-	stdioResults := make([][]*cobra.Command, len(stdioEntries))
+	legacyStdioResults := make([][]*cobra.Command, len(legacyStdioEntries))
 	var wg sync.WaitGroup
 	for i, ps := range httpServers {
 		wg.Add(1)
@@ -1175,18 +1186,30 @@ func loadPlugins(engine *pipeline.Engine, runner executor.Runner) []*cobra.Comma
 			httpResults[idx] = registerHTTPServer(ps.plugin, ps.srv, tc, runner, sharedStore, coldTimeouts)
 		}(i, ps)
 	}
-	for i, e := range stdioEntries {
+	// overlay-first stdio: async refresh (no command building here).
+	for _, e := range stdioEntries {
+		if !hasOverlayToolOverrides(e.plugin, e.sc) {
+			continue
+		}
+		wg.Add(1)
+		go func(e stdioEntry) {
+			defer wg.Done()
+			refreshStdioToolsCache(e.plugin, e.sc, sharedStore, coldTimeouts)
+		}(e)
+	}
+	// legacy stdio: discovery-first (commands depend on tool list).
+	for i, e := range legacyStdioEntries {
 		wg.Add(1)
 		go func(idx int, e stdioEntry) {
 			defer wg.Done()
-			stdioResults[idx] = registerStdioServer(e.plugin, e.sc, runner, sharedStore, coldTimeouts)
+			legacyStdioResults[idx] = registerStdioServer(e.plugin, e.sc, runner, sharedStore, coldTimeouts)
 		}(i, e)
 	}
 	wg.Wait()
 	for _, cmds := range httpResults {
 		pluginCmds = append(pluginCmds, cmds...)
 	}
-	for _, cmds := range stdioResults {
+	for _, cmds := range legacyStdioResults {
 		pluginCmds = append(pluginCmds, cmds...)
 	}
 
@@ -1472,6 +1495,11 @@ func discoverStdioTools(p *plugin.Plugin, sc plugin.StdioServerClient, timeouts 
 // buildStdioCommands constructs Cobra commands from a tool list and
 // registers the runtime dispatch state (StdioClient + dynamic server).
 // Returns nil for an empty tool list.
+//
+// This is the legacy discovery-first path, used only for stdio plugins whose
+// overlay.json does NOT carry toolOverrides. Plugins that ship toolOverrides
+// register commands up-front via registerStdioServerFromOverlay, bypassing
+// this function entirely (see plugin_stdio_overlay.go).
 func buildStdioCommands(p *plugin.Plugin, sc plugin.StdioServerClient, tools []transport.ToolDescriptor, runner executor.Runner) []*cobra.Command {
 	if len(tools) == 0 {
 		slog.Debug("plugin: stdio server has no tools",
@@ -1479,44 +1507,14 @@ func buildStdioCommands(p *plugin.Plugin, sc plugin.StdioServerClient, tools []t
 		return nil
 	}
 
-	// Build CLIOverlay: use manifest CLI metadata if present, else auto-generate.
-	serverID := sc.Key
-	overlay := market.CLIOverlay{
-		ID:      serverID,
-		Command: serverID,
-	}
-	if srv, ok := p.Manifest.MCPServers[sc.Key]; ok && len(srv.CLI) > 0 {
-		cliData := srv.CLI
-		// If cli is a JSON string, treat it as a relative file path to an overlay file.
-		if len(cliData) > 0 && cliData[0] == '"' {
-			var cliPath string
-			if err := json.Unmarshal(cliData, &cliPath); err == nil && cliPath != "" {
-				absPath := filepath.Join(p.Root, cliPath)
-				if fileData, readErr := os.ReadFile(absPath); readErr == nil {
-					cliData = fileData
-				} else {
-					slog.Warn("plugin: failed to read CLI overlay file",
-						"plugin", p.Manifest.Name, "path", absPath, "error", readErr)
-				}
-			}
-		}
-		if err := json.Unmarshal(cliData, &overlay); err != nil {
-			slog.Warn("plugin: failed to parse CLI overlay for stdio server",
-				"plugin", p.Manifest.Name, "server", sc.Key, "error", err)
-		}
-		if overlay.ID == "" {
-			overlay.ID = serverID
-		}
-		if overlay.Command == "" {
-			overlay.Command = serverID
-		}
-	}
+	overlay := resolveStdioOverlay(p, sc)
 
-	// Auto-generate ToolOverrides from discovered tools when not provided.
+	// Auto-generate ToolOverrides from discovered tools when not provided
+	// by the manifest/overlay (legacy discovery-first path).
 	if len(overlay.ToolOverrides) == 0 {
 		overlay.ToolOverrides = make(map[string]market.CLIToolOverride)
 		if len(overlay.Prefixes) == 0 {
-			overlay.Prefixes = []string{serverID}
+			overlay.Prefixes = []string{overlay.ID}
 		}
 		for _, tool := range tools {
 			overlay.ToolOverrides[tool.Name] = market.CLIToolOverride{
@@ -1525,43 +1523,20 @@ func buildStdioCommands(p *plugin.Plugin, sc plugin.StdioServerClient, tools []t
 		}
 	}
 
-	// Construct virtual endpoint and server descriptor.
-	endpoint := StdioEndpoint(p.Manifest.Name, sc.Key)
-
 	descriptor := market.ServerDescriptor{
 		Key:         sc.Key,
 		DisplayName: p.Manifest.Name + "/" + sc.Key,
 		Description: p.Manifest.Description,
-		Endpoint:    endpoint,
+		Endpoint:    StdioEndpoint(p.Manifest.Name, sc.Key),
 		Source:      "plugin",
 		CLI:         overlay,
 		HasCLIMeta:  true,
 	}
 
 	AppendDynamicServer(descriptor)
-	// Register with pluginName/serverKey format for cleanup by plugin name
-	RegisterStdioClient(p.Manifest.Name+"/"+serverID, sc.Client)
+	RegisterStdioClient(p.Manifest.Name+"/"+sc.Key, sc.Client)
 
-	// Convert tool descriptors to DetailTool entries for flag generation.
-	detailsByID := make(map[string][]market.DetailTool)
-	var detailTools []market.DetailTool
-	for _, tool := range tools {
-		schemaJSON := ""
-		if tool.InputSchema != nil {
-			if data, marshalErr := json.Marshal(tool.InputSchema); marshalErr == nil {
-				schemaJSON = string(data)
-			}
-		}
-		detailTools = append(detailTools, market.DetailTool{
-			ToolName:    tool.Name,
-			ToolTitle:   tool.Title,
-			ToolDesc:    tool.Description,
-			IsSensitive: tool.Sensitive,
-			ToolRequest: schemaJSON,
-		})
-	}
-	detailsByID[serverID] = detailTools
-
+	detailsByID := toolsToDetails(tools, overlay.ID)
 	cmds := compat.BuildDynamicCommands(
 		[]market.ServerDescriptor{descriptor}, runner, detailsByID)
 

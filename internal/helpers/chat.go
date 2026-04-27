@@ -92,10 +92,14 @@ func newChatMessageSendCommand(runner executor.Runner) *cobra.Command {
 --open-dingtalk-id 指定 openDingTalkId 发单聊 (适用于无法获取 userId 的场景)。
 三者只能选其一，不能同时指定。
 
+<<<<<<< fix/issue-177-164-chat-mention-and-members-list
 消息内容通过 --text 传入，也可作为位置参数；支持 Markdown。可选 --title 作为消息标题。
 
 群聊场景下可用 --at-all / --at-users / --at-mobiles 进行 @ 提醒（仅 --group 时生效）。
 注意 --text 中需包含对应的 <@userId> / <@all> 占位符才能在客户端渲染出 @ 效果。`,
+=======
+消息内容通过 --text 传入，也可作为位置参数；支持 Markdown。必须提供 --title 作为消息标题。`,
+>>>>>>> main
 		Example: `  dws chat message send --group <openconversation_id> --text "hello"
   dws chat message send --user <userId> --text "请查收"
   dws chat message send --open-dingtalk-id <openDingTalkId> --title "提醒" --text "请确认"

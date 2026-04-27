@@ -25,8 +25,13 @@ const ExitCodePermission = 4
 
 // PATError represents a PAT (Personal Action Token) authorization failure
 // that should be passed through to stderr as raw JSON without any CLI-layer
-// wrapping.  The host application (e.g. RewindDesktop) parses the JSON to
+// wrapping. The host application (e.g. RewindDesktop) parses the JSON to
 // display its own authorisation UI.
+//
+// When the payload includes data.uri, that URL is the authoritative
+// server-provided authorization link. Hosts must treat it as opaque and open
+// it verbatim instead of parsing and reconstructing it locally, because
+// required parameters may live in query, encoded hash, or fragment sections.
 type PATError struct {
 	RawJSON string
 }
@@ -220,6 +225,9 @@ func cleanPATJSON(body map[string]any, code string) string {
 		"code":    code,
 	}
 	if data, ok := body["data"]; ok {
+		// Keep data.uri exactly as returned by the service. Host consumers open
+		// that link directly, so local normalization would risk dropping
+		// parameters embedded in query/hash/fragment sections.
 		out["data"] = stripClassFields(data)
 	} else {
 		fallback := map[string]any{}

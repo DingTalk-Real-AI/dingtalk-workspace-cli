@@ -411,6 +411,85 @@ func TestPollPatDeviceFlow_RedirectSkipped(t *testing.T) {
 	}
 }
 
+func TestPollPatDeviceFlow_UnknownStatusPrintsRawResponse(t *testing.T) {
+	t.Setenv("DWS_DEBUG_PAT_POLL", "1")
+	server, configDir := setupPollServer(t, []authpkg.DevicePollResponse{
+		{Success: true, Data: authpkg.DevicePollData{Status: ""}},
+	})
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var buf bytes.Buffer
+	status, authCode, err := pollPatDeviceFlow(ctx, "flow-unknown", configDir, &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if status != "" {
+		t.Fatalf("expected empty unknown status, got %q", status)
+	}
+	if authCode != "" {
+		t.Fatalf("expected empty authCode for unknown status, got %q", authCode)
+	}
+	output := buf.String()
+	if !strings.Contains(output, "PAT 轮询接口返回原文") {
+		t.Fatalf("expected raw poll response to be printed, got %q", output)
+	}
+	if !strings.Contains(output, `"status":""`) {
+		t.Fatalf("expected raw poll body in output, got %q", output)
+	}
+}
+
+func TestPollPatDeviceFlow_UnknownStatusHidesRawResponseByDefault(t *testing.T) {
+	server, configDir := setupPollServer(t, []authpkg.DevicePollResponse{
+		{Success: true, Data: authpkg.DevicePollData{Status: ""}},
+	})
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var buf bytes.Buffer
+	status, authCode, err := pollPatDeviceFlow(ctx, "flow-unknown-default", configDir, &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if status != "" {
+		t.Fatalf("expected empty unknown status, got %q", status)
+	}
+	if authCode != "" {
+		t.Fatalf("expected empty authCode for unknown status, got %q", authCode)
+	}
+	output := buf.String()
+	if strings.Contains(output, "PAT 轮询接口返回原文") {
+		t.Fatalf("expected raw poll response to stay hidden by default, got %q", output)
+	}
+}
+
+func TestPollPatDeviceFlow_ResultEnvelopeCompatibility(t *testing.T) {
+	server, configDir := setupPollServer(t, []authpkg.DevicePollResponse{
+		{Success: true, Result: authpkg.DevicePollData{Status: "PENDING"}},
+		{Success: true, Result: authpkg.DevicePollData{Status: "APPROVED", AuthCode: "code-from-result"}},
+	})
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var buf bytes.Buffer
+	status, authCode, err := pollPatDeviceFlow(ctx, "flow-result", configDir, &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if status != "APPROVED" {
+		t.Fatalf("expected APPROVED, got %q", status)
+	}
+	if authCode != "code-from-result" {
+		t.Fatalf("expected authCode from result envelope, got %q", authCode)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // extractPatScopeError edge cases
 // ---------------------------------------------------------------------------
@@ -484,6 +563,10 @@ func setupHandlePATServer(t *testing.T, terminalStatus string, authCode string) 
 }
 
 func makePATErrorJSON(flowID, clientID string) string {
+	return makePATErrorJSONWithURI(flowID, clientID, "")
+}
+
+func makePATErrorJSONWithURI(flowID, clientID, uri string) string {
 	type patData struct {
 		Desc     string `json:"desc"`
 		FlowID   string `json:"flowId"`
@@ -498,7 +581,7 @@ func makePATErrorJSON(flowID, clientID string) string {
 		Data: patData{
 			Desc:     "test auth",
 			FlowID:   flowID,
-			URI:      "", // empty to avoid opening browser in test
+			URI:      uri,
 			ClientID: clientID,
 		},
 	}
@@ -602,5 +685,46 @@ func TestHandlePatAuthCheck_EmptyFlowID_FallsBackToPATError(t *testing.T) {
 	// Should return the original PATError.
 	if _, ok := err.(*apperrors.PATError); !ok {
 		t.Errorf("expected *PATError, got %T: %v", err, err)
+	}
+}
+
+func TestHandlePatAuthCheck_OpensOpaqueURIWithoutRebuild(t *testing.T) {
+	server, configDir := setupHandlePATServer(t, "APPROVED", "test-auth-code")
+	defer server.Close()
+
+	rawURI := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3D50dff7654b7444e88ced7489b07cce8d%26userCode%3DQ8RY-X6E9#/personalAuthorization?flowId=50dff7654b7444e88ced7489b07cce8d&userCode=Q8RY-X6E9"
+	var opened string
+	origOpenBrowser := openBrowserFunc
+	openBrowserFunc = func(rawURL string) error {
+		opened = rawURL
+		return nil
+	}
+	t.Cleanup(func() { openBrowserFunc = origOpenBrowser })
+
+	var retryCalled bool
+	mock := &mockRunner{
+		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
+			retryCalled = true
+			return executor.Result{Response: map[string]any{"ok": true}}, nil
+		},
+	}
+
+	runner := &runtimeRunner{fallback: mock}
+	patErr := &apperrors.PATError{RawJSON: makePATErrorJSONWithURI("flow-opaque", "test-client-id", rawURI)}
+
+	var buf bytes.Buffer
+	_, err := handlePatAuthCheck(context.Background(), runner, executor.Invocation{
+		CanonicalProduct: "test",
+		Tool:             "test_tool",
+	}, patErr, configDir, &buf)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !retryCalled {
+		t.Fatal("expected retry to run after approved PAT flow")
+	}
+	if opened != rawURI {
+		t.Fatalf("opened url = %q, want verbatim %q", opened, rawURI)
 	}
 }

@@ -183,8 +183,8 @@ Flags:
 
 ## message send — 以当前用户身份发消息
 
---group 指定群聊 ID 发群消息；--user 指定用户 userId 发单聊；--open-dingtalk-id 指定用户 openDingTalkId 发单聊。三者只能选其一，不能同时指定。消息内容为位置参数（恰好 1 个），支持 Markdown。可选 --title 作为消息标题。
---群聊时可选 --at-all @所有人，或 --at-users / --at-mobiles 指定成员（仅群聊时生效）。
+--group 指定群聊 ID 发群消息；--user 指定用户 userId 发单聊；--open-dingtalk-id 指定用户 openDingTalkId 发单聊。三者只能选其一，不能同时指定。消息内容为位置参数（恰好 1 个），支持 Markdown。必须提供 --title 作为消息标题。
+--群聊时可选 --at-all @所有人，或 --at-users 指定成员（仅群聊时生效）。
 --发送图片消息：指定 --media-id（通过 dt_media_upload 工具上传获得），自动设置 msgType=image，此时不需要传文本内容。
 
 ```
@@ -205,7 +205,7 @@ Flags:
       --group string             群聊 openconversation_id（群聊时必填）
       --user string              接收人 userId（单聊时与 --open-dingtalk-id 二选一）
       --open-dingtalk-id string  接收人 openDingTalkId（单聊时与 --user 二选一，适用于三方应用等无法获取 userId 的场景）
-      --title string             消息标题（可选，默认「消息」）
+      --title string             消息标题（必填）
       --at-all                   @所有人（仅群聊时生效，可选，默认 false）
       --at-users string          @指定成员的 userId 列表，逗号分隔（仅群聊时生效，可选）
       --at-mobiles string        @指定成员的手机号列表，逗号分隔（仅群聊时生效，可选）
@@ -604,10 +604,10 @@ dws chat message list-unread-conversations --count 20 --format json
 dws chat message send --group <openconversation_id> --title "周报提醒" "请大家本周五前提交周报" --format json
 
 # 4. 以个人身份单聊（通过 userId）
-dws chat message send --user <userId> "你好" --format json
+dws chat message send --user <userId> --title "问候" "你好" --format json
 
 # 4b. 以个人身份单聊（通过 openDingTalkId，三方应用等无法获取 userId 时使用）
-dws chat message send --open-dingtalk-id <openDingTalkId> "你好" --format json
+dws chat message send --open-dingtalk-id <openDingTalkId> --title "问候" "你好" --format json
 
 # 5. 机器人发群消息（Markdown）
 dws chat message send-by-bot --robot-code <robot-code> \
