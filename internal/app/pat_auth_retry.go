@@ -309,6 +309,8 @@ func IsPatRetrying(ctx context.Context) bool {
 
 func openPATAuthorizationURI(rawURI string) error {
 	if rawURI == "" {
+		// Defensive guard for future callers. The current call site already
+		// checks for a non-empty PAT URI before invoking this helper.
 		return nil
 	}
 	// The PAT service returns the complete authorization URL. Treat it as an
