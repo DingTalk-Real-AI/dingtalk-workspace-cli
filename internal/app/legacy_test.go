@@ -16,6 +16,7 @@ package app
 import (
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
 	"github.com/spf13/cobra"
 )
 
@@ -140,6 +141,64 @@ func TestPickCommands_EmptyDynamicPreservesHelpers(t *testing.T) {
 	}
 	if got[0] != todoHelper || got[1] != chatHelper {
 		t.Fatalf("pickCommands changed helpers order or identity")
+	}
+}
+
+// TestPickCommands_HelperGroupShadowsDynamicLeaf simulates the issue #164
+// shape mismatch: the discovery envelope publishes `chat group members` as
+// a LEAF (the get_group_members tool exposed at that CLI path), while the
+// hardcoded helper has restructured `members` into a GROUP container with
+// `list / add / remove / add-bot` subcommands. The helper group carries the
+// preferLegacyLeaf priority annotation, so it must replace the dynamic leaf
+// and surface its subtree — otherwise `dws chat group members list` is
+// unreachable and the user-visible regression in #164 stays.
+func TestPickCommands_HelperGroupShadowsDynamicLeaf(t *testing.T) {
+	dynMembers := &cobra.Command{Use: "members", Run: func(*cobra.Command, []string) {}}
+	dynMembers.Flags().String("id", "", "")
+	dynGroup := &cobra.Command{Use: "group"}
+	dynGroup.AddCommand(dynMembers)
+	dyn := &cobra.Command{Use: "chat"}
+	dyn.AddCommand(dynGroup)
+
+	hlpList := &cobra.Command{Use: "list", Run: func(*cobra.Command, []string) {}}
+	hlpList.Flags().String("id", "", "")
+	hlpAdd := &cobra.Command{Use: "add", Run: func(*cobra.Command, []string) {}}
+	hlpRemove := &cobra.Command{Use: "remove", Run: func(*cobra.Command, []string) {}}
+	hlpMembers := &cobra.Command{Use: "members"}
+	hlpMembers.AddCommand(hlpList, hlpAdd, hlpRemove)
+	cobracmd.SetOverridePriority(hlpMembers, 100)
+	hlpGroup := &cobra.Command{Use: "group"}
+	hlpGroup.AddCommand(hlpMembers)
+	hlp := &cobra.Command{Use: "chat"}
+	hlp.AddCommand(hlpGroup)
+
+	got := pickCommands([]*cobra.Command{dyn}, []*cobra.Command{hlp})
+	if len(got) != 1 || got[0] != dyn {
+		t.Fatalf("got %v, want [dyn]", got)
+	}
+
+	// Locate the (potentially replaced) members node under chat.group.
+	var members *cobra.Command
+	for _, c := range dynGroup.Commands() {
+		if c.Name() == "members" {
+			members = c
+			break
+		}
+	}
+	if members == nil {
+		t.Fatalf("members node missing under dyn.chat.group after merge")
+	}
+
+	want := map[string]bool{"list": false, "add": false, "remove": false}
+	for _, sub := range members.Commands() {
+		if _, ok := want[sub.Name()]; ok {
+			want[sub.Name()] = true
+		}
+	}
+	for name, seen := range want {
+		if !seen {
+			t.Errorf("expected `chat group members %s` after merge, missing", name)
+		}
 	}
 }
 

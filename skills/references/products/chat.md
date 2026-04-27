@@ -60,19 +60,21 @@ Flags:
 
 ---
 
-## group members — 查看群成员列表
+## group members list — 查看群成员列表
 
 分页查询指定群聊的成员。
 
 ```
 Usage:
-  dws chat group members [flags]
+  dws chat group members list [flags]
 Example:
-  dws chat group members --id <openconversation_id>
+  dws chat group members list --id <openconversation_id>
 Flags:
       --cursor string   分页游标，首次从 0 开始
       --id string       群 ID / openconversation_id (必填)
 ```
+
+> ⚠️ 注意：v1.0.17 起 list 是显式子命令；旧用法 `dws chat group members --id ...` 已不再支持，请改用 `dws chat group members list --id ...`。
 
 ---
 
@@ -182,7 +184,7 @@ Flags:
 ## message send — 以当前用户身份发消息
 
 --group 指定群聊 ID 发群消息；--user 指定用户 userId 发单聊；--open-dingtalk-id 指定用户 openDingTalkId 发单聊。三者只能选其一，不能同时指定。消息内容为位置参数（恰好 1 个），支持 Markdown。可选 --title 作为消息标题。
---群聊时可选 --at-all @所有人，或 --at-users 指定成员（仅群聊时生效）。
+--群聊时可选 --at-all @所有人，或 --at-users / --at-mobiles 指定成员（仅群聊时生效）。
 --发送图片消息：指定 --media-id（通过 dt_media_upload 工具上传获得），自动设置 msgType=image，此时不需要传文本内容。
 
 ```
@@ -206,6 +208,7 @@ Flags:
       --title string             消息标题（可选，默认「消息」）
       --at-all                   @所有人（仅群聊时生效，可选，默认 false）
       --at-users string          @指定成员的 userId 列表，逗号分隔（仅群聊时生效，可选）
+      --at-mobiles string        @指定成员的手机号列表，逗号分隔（仅群聊时生效，可选）
       --media-id string          图片 mediaId（通过 dt_media_upload 工具上传获得，需从返回链接中去除 _宽_高.格式 后缀并加上 @ 前缀），指定后发送图片消息，不需要传文本内容
       --msg-type string          消息类型（可选，如 text/markdown/image/file；通常由 --text/--media-id/--dentry-id 自动推断）
       --dentry-id string         钉盘文件 dentryId（发送钉盘文件消息时使用，需配合 --space-id）
@@ -218,7 +221,7 @@ Flags:
   - --text 和位置参数二选一，--text 优先
   - --group、--user、--open-dingtalk-id 三者互斥，只需指定其一：群聊用 --group，单聊用 --user 或 --open-dingtalk-id
   - --group 的别名: --id, --chat, --conversation-id (均可替代 --group)
-  - --at-all 和 --at-users 仅在 --group 群聊时生效；当设置--at-all时，消息内容中一定要包含对应的占位符<@all>；当设置--at-users userId1,userId2时，消息内容中一定要包含对应格式的占位符<@userId1> <@userId2>
+  - --at-all / --at-users / --at-mobiles 仅在 --group 群聊时生效；当设置--at-all时，消息内容中一定要包含对应的占位符<@all>；当设置--at-users userId1,userId2时，消息内容中一定要包含对应格式的占位符<@userId1> <@userId2>
   - --media-id 指定图片 mediaId 时自动发送图片消息（msgType=image），不需要传 --text；图片单聊仅支持 --open-dingtalk-id，不支持 --user
   - 发送钉盘文件消息：传 --dentry-id + --space-id（必要时配合 --file-name / --file-size / --file-type），msg-type 自动推断为 file
 ```
@@ -542,7 +545,7 @@ Flags:
 
 用户说"建群/创建群聊" → `chat group create`
 用户说"搜索群/找群" → `chat search`
-用户说"群成员/看群里有谁" → `chat group members`
+用户说"群成员/看群里有谁" → `chat group members list`
 用户说"拉人进群/加群成员" → `chat group members add`
 用户说"踢人/移除群成员" → `chat group members remove`
 用户说"加机器人到群" → `chat group members add-bot`

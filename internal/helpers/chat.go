@@ -92,11 +92,14 @@ func newChatMessageSendCommand(runner executor.Runner) *cobra.Command {
 --open-dingtalk-id 指定 openDingTalkId 发单聊 (适用于无法获取 userId 的场景)。
 三者只能选其一，不能同时指定。
 
-消息内容通过 --text 传入，也可作为位置参数；支持 Markdown。可选 --title 作为消息标题。`,
+消息内容通过 --text 传入，也可作为位置参数；支持 Markdown。可选 --title 作为消息标题。
+
+群聊场景下可用 --at-all / --at-users / --at-mobiles 进行 @ 提醒（仅 --group 时生效）。
+注意 --text 中需包含对应的 <@userId> / <@all> 占位符才能在客户端渲染出 @ 效果。`,
 		Example: `  dws chat message send --group <openconversation_id> --text "hello"
   dws chat message send --user <userId> --text "请查收"
   dws chat message send --open-dingtalk-id <openDingTalkId> --title "提醒" --text "请确认"
-  dws chat message send --group <openconversation_id> "hello"`,
+  dws chat message send --group <openconversation_id> --title "拉群通知" --text "<@uid> 你被 @ 了" --at-users uid`,
 		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -125,6 +128,9 @@ func newChatMessageSendCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("open-dingtalk-id", "", "接收人 openDingTalkId (单聊三选一)")
 	cmd.Flags().String("text", "", "消息内容，支持 Markdown (也可作位置参数)")
 	cmd.Flags().String("title", "", "消息标题 (可选)")
+	cmd.Flags().Bool("at-all", false, "@所有人 (仅 --group 群聊生效)")
+	cmd.Flags().String("at-users", "", "按 userId @ 指定成员，逗号分隔 (仅 --group 群聊生效)")
+	cmd.Flags().String("at-mobiles", "", "按手机号 @ 指定成员，逗号分隔 (仅 --group 群聊生效)")
 	return cmd
 }
 
@@ -181,6 +187,15 @@ func buildChatMessageSendInvocation(cmd *cobra.Command, args []string) (map[stri
 		return nil, "", apperrors.NewValidation("--text (or positional argument) is required")
 	}
 
+	atAll, _ := cmd.Flags().GetBool("at-all")
+	atUsers, _ := cmd.Flags().GetString("at-users")
+	atMobiles, _ := cmd.Flags().GetString("at-mobiles")
+	hasAtUsers := strings.TrimSpace(atUsers) != ""
+	hasAtMobiles := strings.TrimSpace(atMobiles) != ""
+	if !hasGroup && (atAll || hasAtUsers || hasAtMobiles) {
+		return nil, "", apperrors.NewValidation("--at-all / --at-users / --at-mobiles only apply when --group is set")
+	}
+
 	params := map[string]any{"text": text}
 	if strings.TrimSpace(title) != "" {
 		params["title"] = title
@@ -189,6 +204,15 @@ func buildChatMessageSendInvocation(cmd *cobra.Command, args []string) (map[stri
 	switch {
 	case hasGroup:
 		params["openConversation_id"] = group
+		if atAll {
+			params["isAtAll"] = true
+		}
+		if hasAtUsers {
+			params["atUserIds"] = splitCSV(atUsers)
+		}
+		if hasAtMobiles {
+			params["atMobiles"] = splitCSV(atMobiles)
+		}
 		return params, "send_message_as_user", nil
 	case hasUser:
 		params["receiverUserId"] = user
@@ -298,13 +322,18 @@ func newChatGroupCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		TraverseChildren:  true,
 		DisableAutoGenTag: true,
-		RunE:              newChatGroupMembersListRunE(runner),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
 	}
-	members.Flags().String("id", "", "群 ID / openconversation_id (必填)")
-	members.Flags().String("cursor", "", "分页游标")
+	// Keeps the helper-restructured group winning over the dynamic envelope's
+	// `members` leaf (which only exposes `get_group_members`); without this
+	// the merge layer treats the shape mismatch as "envelope is authority"
+	// and drops the entire helper subtree (issue #164).
 	preferLegacyLeaf(members)
 
 	members.AddCommand(
+		newChatGroupMembersListCommand(runner),
 		newChatGroupMemberAddCommand(runner),
 		newChatGroupMemberRemoveCommand(runner),
 		newChatGroupMembersAddBotCommand(runner),
@@ -675,26 +704,37 @@ func newChatMessageSendByWebhookCommand(runner executor.Runner) *cobra.Command {
 
 // ── group members list ─────────────────────────────────────
 
-func newChatGroupMembersListRunE(runner executor.Runner) func(*cobra.Command, []string) error {
-	return func(cmd *cobra.Command, args []string) error {
-		groupID, _ := cmd.Flags().GetString("id")
-		if strings.TrimSpace(groupID) == "" {
-			return apperrors.NewValidation("--id is required")
-		}
-		params := map[string]any{
-			"openconversation_id": groupID,
-		}
-		if v, _ := cmd.Flags().GetString("cursor"); v != "" {
-			params["cursor"] = v
-		}
-		result, err := runner.Run(cmd.Context(), executor.NewHelperInvocation(
-			cobracmd.LegacyCommandPath(cmd), "chat", "get_group_members", params,
-		))
-		if err != nil {
-			return err
-		}
-		return writeCommandPayload(cmd, result)
+func newChatGroupMembersListCommand(runner executor.Runner) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:               "list",
+		Short:             "查询群成员列表",
+		Example:           `  dws chat group members list --id <openconversation_id>`,
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			groupID, _ := cmd.Flags().GetString("id")
+			if strings.TrimSpace(groupID) == "" {
+				return apperrors.NewValidation("--id is required")
+			}
+			params := map[string]any{
+				"openconversation_id": groupID,
+			}
+			if v, _ := cmd.Flags().GetString("cursor"); v != "" {
+				params["cursor"] = v
+			}
+			result, err := runner.Run(cmd.Context(), executor.NewHelperInvocation(
+				cobracmd.LegacyCommandPath(cmd), "chat", "get_group_members", params,
+			))
+			if err != nil {
+				return err
+			}
+			return writeCommandPayload(cmd, result)
+		},
 	}
+	preferLegacyLeaf(cmd)
+	cmd.Flags().String("id", "", "群 ID / openconversation_id (必填)")
+	cmd.Flags().String("cursor", "", "分页游标 (首页留空)")
+	return cmd
 }
 
 // ── group rename ───────────────────────────────────────────
