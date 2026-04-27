@@ -92,7 +92,7 @@ func newChatMessageSendCommand(runner executor.Runner) *cobra.Command {
 --open-dingtalk-id 指定 openDingTalkId 发单聊 (适用于无法获取 userId 的场景)。
 三者只能选其一，不能同时指定。
 
-消息内容通过 --text 传入，也可作为位置参数；支持 Markdown。可选 --title 作为消息标题。`,
+消息内容通过 --text 传入，也可作为位置参数；支持 Markdown。必须提供 --title 作为消息标题。`,
 		Example: `  dws chat message send --group <openconversation_id> --text "hello"
   dws chat message send --user <userId> --text "请查收"
   dws chat message send --open-dingtalk-id <openDingTalkId> --title "提醒" --text "请确认"

@@ -194,7 +194,7 @@ dws todo task create --title "Quarterly report" --executors "<your-userId>"   # 
 dws todo task list --dry-run                       # preview without executing
 ```
 
-> **Full command list**: [`docs/command-index.md`](./docs/command-index.md) — all 159 commands with descriptions and when-to-use guidance.
+> **Full command list**: [`docs/command-index.md`](./docs/command-index.md) — all commands with descriptions and when-to-use guidance.
 
 ## Using with Agents
 
@@ -366,16 +366,17 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 | Doc | `doc` | 21 | `search` `list` `info` `read` `create` `update` `upload` `download` `copy` `move` `rename` `file` `folder` `block` `comment` | Search / read / write docs, file & folder create, block-level editing, comments (list / create / reply / create-inline), upload / download |
 | Drive | `drive` | 6 | `list` `info` `download` `mkdir` `upload-info` `commit` | DingTalk drive file ops: list, info, download, create folders, two-phase upload |
 | Minutes | `minutes` | 19 | `list` `get` `update` `mind-graph` `speaker` `hot-word` `upload` | List AI meeting notes (mine / shared), details (info / summary / keywords / transcription / todos / batch), title/summary updates, mind map, speaker replace, hot-word, upload session |
+| Mail | `mail` | 4 | `mailbox` `message` | List mailbox addresses, KQL message search, get full message content, send email |
 | DevDoc | `devdoc` | 1 | `article` | Search the DingTalk Open Platform documentation |
 
-> **159 commands across 13 products.** Full listing with descriptions and usage scenarios: [`docs/command-index.md`](./docs/command-index.md). Run `dws --help` for the top-level tree, or `dws <service> --help` for subcommands.
+> **163 commands across 14 products.** Full listing with descriptions and usage scenarios: [`docs/command-index.md`](./docs/command-index.md). Run `dws --help` for the top-level tree, or `dws <service> --help` for subcommands.
 
 > **Note on `chat bot`**: bot capabilities (`send-by-bot` / `recall-by-bot` / `add-bot` / `send-by-webhook` / bot search) are merged into the relevant `chat` subtrees (e.g. `dws chat message send-by-bot`, `dws chat group members add-bot`) so the agent-facing command surface stays flat and discoverable. There is no longer a separate top-level `bot` product.
 
 <details>
 <summary>Coming soon</summary>
 
-`mail` (email) · `conference` (video) · `aiapp` (AI apps) · `live` (streaming) · `wiki` (knowledge base)
+`conference` (video) · `aiapp` (AI apps) · `live` (streaming) · `wiki` (knowledge base)
 
 </details>
 
@@ -424,7 +425,7 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 
 ## Reference & Docs
 
-- [Command Index](./docs/command-index.md) — every runtime command (159 total) with description and when-to-use guidance
+- [Command Index](./docs/command-index.md) — every runtime command with description and when-to-use guidance
 - [Reference](./docs/reference.md) — environment variables, exit codes, output formats, shell completion
 - [Architecture](./docs/architecture.md) — discovery-driven pipeline, IR, transport layer
 - [Changelog](./CHANGELOG.md) — release history and migration notes
