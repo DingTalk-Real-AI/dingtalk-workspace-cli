@@ -190,6 +190,57 @@ func TestWaitForAuthorizationAcceptsResultEnvelope(t *testing.T) {
 	}
 }
 
+func TestDevicePollResponseEffectiveData_FallsBackToResultEnvelope(t *testing.T) {
+	t.Parallel()
+
+	resp := DevicePollResponse{
+		Success: true,
+		Result: DevicePollData{
+			Status:   "APPROVED",
+			AuthCode: "auth-from-result",
+			FlowID:   "flow-from-result",
+		},
+	}
+
+	effective := resp.EffectiveData()
+	if effective.Status != "APPROVED" {
+		t.Fatalf("effective.Status = %q, want APPROVED", effective.Status)
+	}
+	if effective.AuthCode != "auth-from-result" {
+		t.Fatalf("effective.AuthCode = %q, want auth-from-result", effective.AuthCode)
+	}
+	if effective.FlowID != "flow-from-result" {
+		t.Fatalf("effective.FlowID = %q, want flow-from-result", effective.FlowID)
+	}
+}
+
+func TestDevicePollResponseEffectiveData_DataEnvelopeWinsAsWholePayload(t *testing.T) {
+	t.Parallel()
+
+	resp := DevicePollResponse{
+		Success: true,
+		Data: DevicePollData{
+			Status: "PENDING",
+		},
+		Result: DevicePollData{
+			Status:   "APPROVED",
+			AuthCode: "auth-from-result",
+			FlowID:   "flow-from-result",
+		},
+	}
+
+	effective := resp.EffectiveData()
+	if effective.Status != "PENDING" {
+		t.Fatalf("effective.Status = %q, want PENDING", effective.Status)
+	}
+	if effective.AuthCode != "" {
+		t.Fatalf("effective.AuthCode = %q, want empty because Data envelope wins as a whole", effective.AuthCode)
+	}
+	if effective.FlowID != "" {
+		t.Fatalf("effective.FlowID = %q, want empty because Data envelope wins as a whole", effective.FlowID)
+	}
+}
+
 func TestWaitForAuthorizationFallsBackToDeviceCodeWhenFlowIDMissing(t *testing.T) {
 	t.Parallel()
 

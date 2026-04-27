@@ -112,7 +112,10 @@ type DevicePollResponse struct {
 	Code    string         `json:"code,omitempty"`
 	Message string         `json:"message,omitempty"`
 	Data    DevicePollData `json:"data"`
-	Result  DevicePollData `json:"result"`
+	// Result is an alternate envelope some service versions return instead of
+	// (or alongside) Data. Always read poll fields via EffectiveData() rather
+	// than touching Data/Result directly.
+	Result DevicePollData `json:"result"`
 }
 
 type DevicePollData struct {
@@ -123,18 +126,16 @@ type DevicePollData struct {
 
 // EffectiveData normalizes terminal poll responses that may carry payload
 // fields under either `data` or `result`.
+//
+// Semantics are envelope-level rather than field-level: when Data includes a
+// non-empty status, treat Data as the authoritative payload and return it
+// unchanged; otherwise fall back to Result. This avoids mixing fields from two
+// disagreeing envelopes into a Frankenstein result.
 func (r DevicePollResponse) EffectiveData() DevicePollData {
-	effective := r.Data
-	if effective.Status == "" {
-		effective.Status = r.Result.Status
+	if r.Data.Status != "" || r.Result.Status == "" {
+		return r.Data
 	}
-	if effective.AuthCode == "" {
-		effective.AuthCode = r.Result.AuthCode
-	}
-	if effective.FlowID == "" {
-		effective.FlowID = r.Result.FlowID
-	}
-	return effective
+	return r.Result
 }
 
 type serviceResult struct {
