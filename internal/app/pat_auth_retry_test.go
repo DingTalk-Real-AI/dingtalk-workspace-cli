@@ -484,6 +484,10 @@ func setupHandlePATServer(t *testing.T, terminalStatus string, authCode string) 
 }
 
 func makePATErrorJSON(flowID, clientID string) string {
+	return makePATErrorJSONWithURI(flowID, clientID, "")
+}
+
+func makePATErrorJSONWithURI(flowID, clientID, uri string) string {
 	type patData struct {
 		Desc     string `json:"desc"`
 		FlowID   string `json:"flowId"`
@@ -498,7 +502,7 @@ func makePATErrorJSON(flowID, clientID string) string {
 		Data: patData{
 			Desc:     "test auth",
 			FlowID:   flowID,
-			URI:      "", // empty to avoid opening browser in test
+			URI:      uri,
 			ClientID: clientID,
 		},
 	}
@@ -602,5 +606,46 @@ func TestHandlePatAuthCheck_EmptyFlowID_FallsBackToPATError(t *testing.T) {
 	// Should return the original PATError.
 	if _, ok := err.(*apperrors.PATError); !ok {
 		t.Errorf("expected *PATError, got %T: %v", err, err)
+	}
+}
+
+func TestHandlePatAuthCheck_OpensOpaqueURIWithoutRebuild(t *testing.T) {
+	server, configDir := setupHandlePATServer(t, "APPROVED", "test-auth-code")
+	defer server.Close()
+
+	rawURI := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3D50dff7654b7444e88ced7489b07cce8d%26userCode%3DQ8RY-X6E9#/personalAuthorization?flowId=50dff7654b7444e88ced7489b07cce8d&userCode=Q8RY-X6E9"
+	var opened string
+	origOpenBrowser := openBrowserFunc
+	openBrowserFunc = func(rawURL string) error {
+		opened = rawURL
+		return nil
+	}
+	t.Cleanup(func() { openBrowserFunc = origOpenBrowser })
+
+	var retryCalled bool
+	mock := &mockRunner{
+		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
+			retryCalled = true
+			return executor.Result{Response: map[string]any{"ok": true}}, nil
+		},
+	}
+
+	runner := &runtimeRunner{fallback: mock}
+	patErr := &apperrors.PATError{RawJSON: makePATErrorJSONWithURI("flow-opaque", "test-client-id", rawURI)}
+
+	var buf bytes.Buffer
+	_, err := handlePatAuthCheck(context.Background(), runner, executor.Invocation{
+		CanonicalProduct: "test",
+		Tool:             "test_tool",
+	}, patErr, configDir, &buf)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !retryCalled {
+		t.Fatal("expected retry to run after approved PAT flow")
+	}
+	if opened != rawURI {
+		t.Fatalf("opened url = %q, want verbatim %q", opened, rawURI)
 	}
 }

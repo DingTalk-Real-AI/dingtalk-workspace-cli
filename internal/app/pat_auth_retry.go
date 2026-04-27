@@ -293,6 +293,8 @@ const (
 	patPollTimeout = 10 * time.Minute
 )
 
+var openBrowserFunc = tryOpenBrowser
+
 // patRetryingKey is a context key to prevent recursive PAT auth checks.
 // After APPROVED, the retry should not trigger another PAT flow.
 type patRetryingKeyType struct{}
@@ -303,6 +305,17 @@ var patRetryingKey = patRetryingKeyType{}
 func IsPatRetrying(ctx context.Context) bool {
 	v, _ := ctx.Value(patRetryingKey).(bool)
 	return v
+}
+
+func openPATAuthorizationURI(rawURI string) error {
+	if rawURI == "" {
+		return nil
+	}
+	// The PAT service returns the complete authorization URL. Treat it as an
+	// opaque string and open it verbatim instead of parsing/rebuilding it
+	// locally, because required parameters may live in query, hash, or
+	// fragment sections.
+	return openBrowserFunc(rawURI)
 }
 
 // handlePatAuthCheck is called by runner.executeInvocation when a PAT
@@ -383,7 +396,7 @@ func handlePatAuthCheck(
 	if patData.Data.URI != "" {
 		fmt.Fprintf(output, "  %s %s\n\n", dim("🔗"), cyan(patData.Data.URI))
 		// Best-effort browser open.
-		_ = tryOpenBrowser(patData.Data.URI)
+		_ = openPATAuthorizationURI(patData.Data.URI)
 	}
 
 	// If no flowId, we can't poll — fall back to returning PATError for host-app.
