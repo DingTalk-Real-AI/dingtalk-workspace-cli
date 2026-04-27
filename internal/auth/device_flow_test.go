@@ -143,6 +143,53 @@ func TestWaitForAuthorizationSucceedsAfterPending(t *testing.T) {
 	}
 }
 
+func TestWaitForAuthorizationAcceptsResultEnvelope(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("method = %s, want GET", r.Method)
+		}
+		if calls.Add(1) <= 2 {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": true,
+				"result":  map[string]string{"status": "PENDING"},
+			})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"result": map[string]string{
+				"status":   "APPROVED",
+				"authCode": "final-auth-code",
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := NewDeviceFlowProvider(t.TempDir(), newDeviceFlowTestLogger())
+	provider.Output = io.Discard
+	provider.SetTerminalBaseURL(server.URL)
+
+	resp, err := provider.waitForAuthorization(context.Background(), &DeviceAuthResponse{
+		FlowID:    "test-flow-id-result",
+		ExpiresIn: 10,
+		Interval:  1,
+	})
+	if err != nil {
+		t.Fatalf("waitForAuthorization() error = %v", err)
+	}
+	if resp.AuthCode != "final-auth-code" {
+		t.Fatalf("auth code = %q, want final-auth-code", resp.AuthCode)
+	}
+	if calls.Load() != 3 {
+		t.Fatalf("poll calls = %d, want 3", calls.Load())
+	}
+}
+
 func TestWaitForAuthorizationFallsBackToDeviceCodeWhenFlowIDMissing(t *testing.T) {
 	t.Parallel()
 

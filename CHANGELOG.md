@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
+## [1.0.16] - 2026-04-24
+
+Discovery service abstraction with schema v3 extensions, open-edition helper-subtree restoration, and a defensive device-flow login reset.
+
+### Added
+
+- **`internal/discovery` service abstraction** (#156) — encapsulates market registry fetch, MCP runtime negotiation (`initialize → tools/list → detail` merge), and multi-level cache fallback. `EnvironmentLoader` now does cache-first startup, with degraded-mode reasons (`unauthenticated` / `market_unreachable` / `runtime_all_failed`) and `UpdatedAt`-based selective re-discovery.
+- **Schema v3 extensions** (#156) — positional parameters with typed coercion, `Example` on `--help`, flag `Default` / `RuntimeDefault` (with `$currentUserId` / `$now` etc.), `BodyWrapper`, `MutuallyExclusive` / `RequireOneOf` flag groups, `OmitWhen`, explicit `Type` override, and detail-schema `default` propagation.
+- **`dws chat message send` destination-flag routing** (#170) — open edition gains a hardcoded helper that dispatches by `--group` (→ `send_message_as_user`) vs `--user` / `--open-dingtalk-id` (→ `send_direct_message_as_user`), mirroring the closed-source overlay so single-chat sends finally work end-to-end.
+
+### Changed
+
+- **`pickCommands` → `cmdutil.MergeHardcodedLeaves`** (#169) — when a top-level product name collides between the dynamic overlay and a helper subtree, helper-only siblings are grafted into the dynamic tree instead of dropped. Restores `dws chat message send-by-bot` / `recall-by-bot` / `send-by-webhook` and `dws chat group members add-bot`, which had silently vanished from the open edition.
+- **`OverridePriority` / `MergeHardcodedLeaves` promoted into `pkg/cmdutil`** (#170) — single source of truth for the merge layer; hardcoded leaves can opt into overriding the dynamic envelope via a strictly higher priority.
+
+### Fixed
+
+- **Device flow defensively resets credentials before login** (#157) — `--device` login now clears stale credential state and re-fetches `clientID` from the MCP server, regardless of what previous login methods (OAuth scan, PAT) left in `app.json`. Fixes the case where a prior OAuth login made `--device` fall back to direct mode and demand `clientSecret`.
+
 ## [1.0.15] - 2026-04-23
 
 Compat layer gains **subcommand merging** under shared parents so multiple server entries can contribute into the same `dws <parent> <branch>` subtree without producing duplicate `--help` rows. Ships with a fresh auto-generated command index doc, a README sync to **159 commands across 13 products**, and a wide-ranging flag-naming cleanup that standardises CLI flags across chat, calendar, drive, minutes, contact, and devdoc commands.
@@ -45,6 +64,10 @@ Compat layer gains **subcommand merging** under shared parents so multiple serve
   - `TestBuildDynamicCommands_ParentMergeSameName` — two servers with identical `command` + `parent` collapse into a single merged subcommand
   - `TestBuildDynamicCommands_ParentMergeRecursive` — recursive merge through nested groups (e.g. `chat.group.members`)
   - `TestBuildDynamicCommands_ParentMergeLeafCollision` — identical leaf paths resolve first-wins without producing duplicates
+
+## [1.0.14] - 2026-04-22
+
+Docs-only re-tag of v1.0.13. The single commit (#153) backfills the v1.0.13 release notes after the binary was already published; no functional or CLI surface change.
 
 ## [1.0.13] - 2026-04-22
 

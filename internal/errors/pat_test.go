@@ -647,6 +647,31 @@ func TestCleanPATJSON_SingleLineOutput(t *testing.T) {
 	}
 }
 
+func TestCleanPATJSON_PreservesOpaqueURIVerbatim(t *testing.T) {
+	t.Parallel()
+	rawURI := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3D50dff7654b7444e88ced7489b07cce8d%26userCode%3DQ8RY-X6E9#/personalAuthorization?flowId=50dff7654b7444e88ced7489b07cce8d&userCode=Q8RY-X6E9"
+	body := map[string]any{
+		"success": false,
+		"code":    "PAT_MEDIUM_RISK_NO_PERMISSION",
+		"data": map[string]any{
+			"desc":   "在浏览器中打开以下链接进行认证",
+			"flowId": "50dff7654b7444e88ced7489b07cce8d",
+			"uri":    rawURI,
+		},
+	}
+
+	result := cleanPATJSON(body, "PAT_MEDIUM_RISK_NO_PERMISSION")
+
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+		t.Fatalf("unmarshal cleanPATJSON output: %v\nraw=%s", err, result)
+	}
+	data, _ := parsed["data"].(map[string]any)
+	if got, _ := data["uri"].(string); got != rawURI {
+		t.Fatalf("data.uri = %q, want verbatim %q", got, rawURI)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // stripClassFields
 // ---------------------------------------------------------------------------
