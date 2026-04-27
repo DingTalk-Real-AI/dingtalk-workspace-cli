@@ -182,6 +182,66 @@ func TestMergeHardcodedLeaves_ShapeMismatch_KeepsDynamic(t *testing.T) {
 	}
 }
 
+// TestMergeHardcodedLeaves_HigherPriorityHardcodedGroupOverridesDynamicLeaf
+// covers the leaf↔group shape-mismatch promotion path added for issue #164:
+// when the envelope publishes a single tool at a CLI path (leaf) but the
+// helper restructures it into a richer subcommand group, the helper group
+// must win when it carries OverridePriority strictly higher than the
+// dynamic leaf — otherwise the helper subtree (e.g. `chat group members
+// list / add / remove / add-bot`) is silently dropped and the regression
+// the priority annotation is meant to prevent re-emerges in shape-mismatch
+// form.
+func TestMergeHardcodedLeaves_HigherPriorityHardcodedGroupOverridesDynamicLeaf(t *testing.T) {
+	t.Parallel()
+	dynLeaf := newLeaf("shared", "dynamic")
+	dyn := newGroup("root", dynLeaf)
+	hcGroup := newGroup("shared",
+		newLeaf("list", "hardcoded"),
+		newLeaf("add", "hardcoded"),
+	)
+	SetOverridePriority(hcGroup, 100)
+	hc := newGroup("root", hcGroup)
+
+	MergeHardcodedLeaves(dyn, hc)
+
+	got := findChildByName(dyn, "shared")
+	if got == nil {
+		t.Fatal("expected `shared` on dyn after merge")
+	}
+	if got != hcGroup {
+		t.Fatal("expected hardcoded group to replace dynamic leaf")
+	}
+	if findChildByName(got, "list") == nil {
+		t.Fatal("expected hardcoded subtree leaf `list` to be reachable")
+	}
+	if findChildByName(got, "add") == nil {
+		t.Fatal("expected hardcoded subtree leaf `add` to be reachable")
+	}
+	if findChildByName(hc, "shared") != nil {
+		t.Fatal("expected hardcoded `shared` to be detached from hc after replacement")
+	}
+}
+
+// TestMergeHardcodedLeaves_EqualPriorityShapeMismatchKeepsDynamic guards the
+// boundary: only a strictly-higher priority promotes the helper group.
+// Equal priority must still keep the envelope as authority (warn case).
+func TestMergeHardcodedLeaves_EqualPriorityShapeMismatchKeepsDynamic(t *testing.T) {
+	t.Parallel()
+	dynLeaf := newLeaf("shared", "dynamic")
+	SetOverridePriority(dynLeaf, 100)
+	dyn := newGroup("root", dynLeaf)
+	hcGroup := newGroup("shared", newLeaf("list", "hardcoded"))
+	SetOverridePriority(hcGroup, 100)
+	hc := newGroup("root", hcGroup)
+
+	MergeHardcodedLeaves(dyn, hc)
+
+	got := findChildByName(dyn, "shared")
+	if got != dynLeaf {
+		t.Fatalf("equal priorities + shape mismatch must keep dynamic leaf; got %+v", got)
+	}
+}
+
 func TestIsLeafCmd(t *testing.T) {
 	t.Parallel()
 	leaf := newLeaf("x", "")
