@@ -29,6 +29,7 @@ import (
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat"
 )
 
 func TestIsPatScopeError_MissingScope(t *testing.T) {
@@ -154,6 +155,9 @@ func TestPrintPatAuthJSON_MachineReadable(t *testing.T) {
 	}
 	if got, _ := data["missingScope"].(string); got != "mail:send" {
 		t.Errorf("missingScope = %q, want mail:send", got)
+	}
+	if got, ok := data["openBrowser"].(bool); !ok || !got {
+		t.Errorf("openBrowser = %#v, want true", data["openBrowser"])
 	}
 	if _, ok := data["hostControl"]; !ok {
 		t.Errorf("expected data.hostControl, got: %s", output)
@@ -780,6 +784,200 @@ func TestHandlePatAuthCheck_EmptyFlowID_FallsBackToPATError(t *testing.T) {
 	}
 	if got := strings.TrimSpace(buf.String()); got != "" {
 		t.Fatalf("expected no human-readable output for raw PAT passthrough, got %q", got)
+	}
+}
+
+func TestHandlePatAuthCheck_JSONModeReturnsStructuredPATErrorWithoutRetry(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "")
+	tmpDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", tmpDir)
+	if _, err := pat.SetBrowserPolicy(tmpDir, "", false); err != nil {
+		t.Fatalf("SetBrowserPolicy(default) error = %v", err)
+	}
+
+	mock := &mockRunner{
+		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
+			t.Fatal("runner should not be called in json PAT mode")
+			return executor.Result{}, nil
+		},
+	}
+
+	runner := &runtimeRunner{
+		fallback:    mock,
+		globalFlags: &GlobalFlags{Format: "json"},
+	}
+	patErr := &apperrors.PATError{RawJSON: makePATErrorJSON("flow-json", "test-client-id")}
+
+	var buf bytes.Buffer
+	_, err := handlePatAuthCheck(context.Background(), runner, executor.Invocation{
+		CanonicalProduct: "test",
+		Tool:             "test_tool",
+	}, patErr, tmpDir, &buf)
+
+	if err == nil {
+		t.Fatal("expected PATError in json PAT mode")
+	}
+	if got := strings.TrimSpace(buf.String()); got != "" {
+		t.Fatalf("expected no human-readable output in json PAT mode, got %q", got)
+	}
+
+	patOut, ok := err.(*apperrors.PATError)
+	if !ok {
+		t.Fatalf("expected *PATError, got %T: %v", err, err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(patOut.RawJSON), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(json PAT payload) error = %v\nraw=%s", err, patOut.RawJSON)
+	}
+	data, _ := payload["data"].(map[string]any)
+	if got, ok := data["openBrowser"].(bool); !ok || got {
+		t.Fatalf("data.openBrowser = %#v, want false", data["openBrowser"])
+	}
+}
+
+func TestHandlePatAuthCheck_JSONModeCanOpenBrowserWithoutTextOutput(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "")
+	tmpDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", tmpDir)
+	if _, err := pat.SetBrowserPolicy(tmpDir, "", true); err != nil {
+		t.Fatalf("SetBrowserPolicy(default) error = %v", err)
+	}
+
+	var opened string
+	origOpenBrowser := openBrowserFunc
+	openBrowserFunc = func(rawURL string) error {
+		opened = rawURL
+		return nil
+	}
+	t.Cleanup(func() { openBrowserFunc = origOpenBrowser })
+
+	mock := &mockRunner{
+		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
+			t.Fatal("runner should not be called in json PAT mode")
+			return executor.Result{}, nil
+		},
+	}
+
+	runner := &runtimeRunner{
+		fallback:    mock,
+		globalFlags: &GlobalFlags{Format: "json"},
+	}
+	raw := `{"code":"AGENT_CODE_NOT_EXISTS","data":{"desc":"test auth","flowId":"flow-json","uri":"https://example.com/pat","clientId":"test-client-id"}}`
+
+	var buf bytes.Buffer
+	_, err := handlePatAuthCheck(context.Background(), runner, executor.Invocation{
+		CanonicalProduct: "test",
+		Tool:             "test_tool",
+	}, &apperrors.PATError{RawJSON: raw}, tmpDir, &buf)
+
+	if err == nil {
+		t.Fatal("expected PATError in json PAT mode")
+	}
+	if got := strings.TrimSpace(buf.String()); got != "" {
+		t.Fatalf("expected no human-readable output in json PAT mode, got %q", got)
+	}
+	if opened != "https://example.com/pat" {
+		t.Fatalf("opened url = %q, want https://example.com/pat", opened)
+	}
+}
+
+func TestHandlePatAuthCheck_NonJSONModeRespectsBrowserPolicy(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "")
+	server, configDir := setupHandlePATServer(t, "APPROVED", "test-auth-code")
+	defer server.Close()
+	if _, err := pat.SetBrowserPolicy(configDir, "", false); err != nil {
+		t.Fatalf("SetBrowserPolicy(default) error = %v", err)
+	}
+
+	var opened bool
+	origOpenBrowser := openBrowserFunc
+	openBrowserFunc = func(rawURL string) error {
+		opened = true
+		return nil
+	}
+	t.Cleanup(func() { openBrowserFunc = origOpenBrowser })
+
+	var retryCalled bool
+	mock := &mockRunner{
+		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
+			retryCalled = true
+			return executor.Result{Response: map[string]any{"ok": true}}, nil
+		},
+	}
+
+	runner := &runtimeRunner{
+		fallback:    mock,
+		globalFlags: &GlobalFlags{Format: "table"},
+	}
+	raw := `{"code":"AGENT_CODE_NOT_EXISTS","data":{"desc":"test auth","flowId":"flow-approved","uri":"https://example.com/pat","clientId":"test-client-id"}}`
+
+	var buf bytes.Buffer
+	_, err := handlePatAuthCheck(context.Background(), runner, executor.Invocation{
+		CanonicalProduct: "test",
+		Tool:             "test_tool",
+	}, &apperrors.PATError{RawJSON: raw}, configDir, &buf)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !retryCalled {
+		t.Fatal("expected retry to still happen in non-json mode")
+	}
+	if opened {
+		t.Fatal("browser should not open when policy disables it")
+	}
+	if !strings.Contains(buf.String(), "需要 PAT 授权") {
+		t.Fatalf("expected human-readable PAT output, got %q", buf.String())
+	}
+}
+
+func TestRetryWithPatAuthRetry_JSONModeReturnsStructuredPATError(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "")
+	configDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+	if _, err := pat.SetBrowserPolicy(configDir, "", false); err != nil {
+		t.Fatalf("SetBrowserPolicy(default) error = %v", err)
+	}
+
+	mock := &mockRunner{
+		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
+			t.Fatal("runner should not be called in scope json mode")
+			return executor.Result{}, nil
+		},
+	}
+
+	runner := &runtimeRunner{
+		fallback:    mock,
+		globalFlags: &GlobalFlags{Format: "json"},
+	}
+	scopeErr := &PatScopeError{
+		OriginalError: "missing required scope(s): mail:send",
+		Identity:      "user",
+		ErrorType:     "missing_scope",
+		Message:       "missing required scope(s): mail:send",
+		Hint:          "run `dws auth login --scope \"mail:send\"` to authorize the missing scope",
+		MissingScope:  "mail:send",
+	}
+
+	var buf bytes.Buffer
+	_, err := retryWithPatAuthRetry(context.Background(), runner, executor.Invocation{}, scopeErr, configDir, &buf)
+	if err == nil {
+		t.Fatal("expected PATError")
+	}
+	if got := strings.TrimSpace(buf.String()); got != "" {
+		t.Fatalf("expected no human-readable output in json scope mode, got %q", got)
+	}
+	patOut, ok := err.(*apperrors.PATError)
+	if !ok {
+		t.Fatalf("expected *PATError, got %T: %v", err, err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(patOut.RawJSON), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(scope PAT payload) error = %v\nraw=%s", err, patOut.RawJSON)
+	}
+	data, _ := payload["data"].(map[string]any)
+	if got, ok := data["openBrowser"].(bool); !ok || got {
+		t.Fatalf("data.openBrowser = %#v, want false", data["openBrowser"])
 	}
 }
 

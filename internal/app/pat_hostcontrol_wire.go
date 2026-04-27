@@ -16,6 +16,7 @@ package app
 import (
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -35,6 +36,9 @@ import (
 //     HostControlBlock yields nil and no hostControl block is emitted.
 func init() {
 	apperrors.SetHostControlProvider(hostControlProviderFromEnv)
+	apperrors.SetPATOpenBrowserProvider(func() bool {
+		return pat.EffectiveOpenBrowser(defaultConfigDir())
+	})
 }
 
 func hostControlProviderFromEnv() string {

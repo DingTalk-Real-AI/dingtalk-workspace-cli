@@ -31,6 +31,8 @@ import (
 var (
 	hostControlMu       sync.RWMutex
 	hostControlProvider func() string
+	patBrowserMu        sync.RWMutex
+	patBrowserProvider  func() bool
 )
 
 // SetHostControlProvider wires up the classifier's hostControl injection.
@@ -41,6 +43,27 @@ func SetHostControlProvider(fn func() string) {
 	hostControlMu.Lock()
 	defer hostControlMu.Unlock()
 	hostControlProvider = fn
+}
+
+// SetPATOpenBrowserProvider wires the PAT JSON serializer to the current
+// browser policy. Passing nil restores the open-source fallback (true).
+func SetPATOpenBrowserProvider(fn func() bool) {
+	patBrowserMu.Lock()
+	defer patBrowserMu.Unlock()
+	patBrowserProvider = fn
+}
+
+// PATOpenBrowserValue returns the effective browser-open recommendation to
+// embed in PAT JSON payloads. The open-source fallback is true to preserve
+// historical behavior when no provider is wired.
+func PATOpenBrowserValue() bool {
+	patBrowserMu.RLock()
+	provider := patBrowserProvider
+	patBrowserMu.RUnlock()
+	if provider == nil {
+		return true
+	}
+	return provider()
 }
 
 // HostControlBlock returns the canonical hostControl map documented in
@@ -328,6 +351,12 @@ func cleanPATJSON(body map[string]any, code string) string {
 		delete(data, "callbacks")
 		data["hostControl"] = block
 	}
+	data, ok := out["data"].(map[string]any)
+	if !ok || data == nil {
+		data = map[string]any{}
+		out["data"] = data
+	}
+	data["openBrowser"] = PATOpenBrowserValue()
 
 	// docs/pat/contract.md §2: stderr JSON MUST be a single-line, directly json.Unmarshal-able
 	// payload — pretty-printing would break naïve host parsers that read

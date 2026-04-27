@@ -324,6 +324,16 @@ func TestResolveIdentityHeadersUsesParsedChannelCode(t *testing.T) {
 	}
 }
 
+func TestResolveIdentityHeadersForwardsAgentCode(t *testing.T) {
+	setupRuntimeCommandTest(t)
+	t.Setenv(authpkg.AgentCodeEnv, " cursor ")
+
+	headers := resolveIdentityHeaders()
+	if got := headers["x-dingtalk-dws-agent-code"]; got != "cursor" {
+		t.Fatalf("x-dingtalk-dws-agent-code = %q, want cursor", got)
+	}
+}
+
 // TestRuntimeRunnerRejectsUnauthenticatedRequest verifies that requests without
 // a valid token are rejected with a clear error before making any network call.
 func TestRuntimeRunnerRejectsUnauthenticatedRequest(t *testing.T) {

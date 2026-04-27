@@ -557,7 +557,7 @@ func NormalizeServers(response ListResponse, source string) []ServerDescriptor {
 			Source:      source,
 			DetailLocator: DetailLocator{
 				MCPID:     meta.MCPID,
-				DetailURL: strings.TrimSpace(meta.DetailURL),
+				DetailURL: NormalizeEndpoint(strings.TrimSpace(meta.DetailURL)),
 			},
 			Lifecycle:  markDeprecatedCandidate(strings.TrimSpace(envelope.Server.Name), meta.Lifecycle),
 			CLI:        envelope.Meta.CLI,

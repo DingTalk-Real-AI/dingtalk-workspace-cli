@@ -517,6 +517,9 @@ func TestCleanPATJSON_WithData(t *testing.T) {
 	if strings.Contains(result, "class") {
 		t.Errorf("expected class field to be stripped, got: %s", result)
 	}
+	if !strings.Contains(result, `"openBrowser":true`) {
+		t.Errorf("expected openBrowser default in output, got: %s", result)
+	}
 }
 
 func TestCleanPATJSON_WithoutData(t *testing.T) {
@@ -606,6 +609,33 @@ func TestCleanPATJSON_OmitsHostControlByDefault(t *testing.T) {
 	raw = cleanPATJSON(body, "PAT_NO_PERMISSION")
 	if strings.Contains(raw, `"hostControl"`) {
 		t.Fatalf("cleanPATJSON should omit hostControl when provider returns empty, got: %s", raw)
+	}
+}
+
+func TestCleanPATJSON_UsesBrowserPolicyProvider(t *testing.T) {
+	t.Cleanup(func() {
+		SetHostControlProvider(nil)
+		SetPATOpenBrowserProvider(nil)
+	})
+	SetHostControlProvider(nil)
+	SetPATOpenBrowserProvider(func() bool { return false })
+
+	body := map[string]any{
+		"success": false,
+		"code":    "PAT_NO_PERMISSION",
+		"data": map[string]any{
+			"desc": "need auth",
+		},
+	}
+	raw := cleanPATJSON(body, "PAT_NO_PERMISSION")
+
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		t.Fatalf("unmarshal cleanPATJSON output: %v\nraw=%s", err, raw)
+	}
+	data, _ := parsed["data"].(map[string]any)
+	if got, ok := data["openBrowser"].(bool); !ok || got {
+		t.Fatalf("data.openBrowser = %#v, want false", data["openBrowser"])
 	}
 }
 

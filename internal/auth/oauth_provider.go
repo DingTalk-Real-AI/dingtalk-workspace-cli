@@ -252,7 +252,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		if statusErr != nil {
 			denialReason = "unknown"
 		} else {
-			denialReason = classifyDenialReason(authStatus, CurrentChannelCode())
+			denialReason = classifyDenialReason(authStatus, os.Getenv("DWS_CHANNEL"))
 		}
 		cliAuthEnabled := denialReason == ""
 
@@ -468,7 +468,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 				// Check if CLI auth is now enabled (admin approved)
 				if currentToken != nil {
 					authStatus, err := p.CheckCLIAuthEnabled(ctx, currentToken.AccessToken)
-					if err == nil && classifyDenialReason(authStatus, CurrentChannelCode()) == "" {
+					if err == nil && classifyDenialReason(authStatus, os.Getenv("DWS_CHANNEL")) == "" {
 						_, _ = fmt.Fprintf(p.output(), "\r%s\n", i18n.T("✅ 权限已开启，继续登录..."))
 						time.Sleep(2 * time.Second)
 						result.token = currentToken

@@ -32,6 +32,7 @@ import (
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat"
 	"github.com/fatih/color"
 )
 
@@ -46,6 +47,8 @@ const (
 
 	patScopeAuthRequiredCode = "PAT_SCOPE_AUTH_REQUIRED"
 )
+
+var openBrowserFunc = tryOpenBrowser
 
 // PatScopeError holds information about a missing PAT scope.
 type PatScopeError struct {
@@ -187,6 +190,49 @@ func PrintPatAuthJSON(w io.Writer, scopeErr *PatScopeError) {
 	fmt.Fprintln(w, buildPATScopeHostJSON(scopeErr))
 }
 
+func wantsStructuredPATOutput(r *runtimeRunner) bool {
+	if r == nil || r.globalFlags == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(r.globalFlags.Format), "json")
+}
+
+func wantsStructuredPATOutputFromRunner(runner executor.Runner) bool {
+	rr, ok := runner.(*runtimeRunner)
+	if !ok {
+		return false
+	}
+	return wantsStructuredPATOutput(rr)
+}
+
+func currentPATOpenBrowser(configDir string) bool {
+	return pat.EffectiveOpenBrowser(configDir)
+}
+
+func enrichPATErrorWithOpenBrowser(raw string, openBrowser bool) string {
+	if strings.TrimSpace(raw) == "" {
+		return raw
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return raw
+	}
+
+	data, ok := payload["data"].(map[string]any)
+	if !ok || data == nil {
+		data = map[string]any{}
+		payload["data"] = data
+	}
+	data["openBrowser"] = openBrowser
+
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return raw
+	}
+	return string(encoded)
+}
+
 // WaitForPatAuthorization polls until the user completes authorization or timeout.
 // It returns true if authorization was completed, false if timed out or cancelled.
 func WaitForPatAuthorization(ctx context.Context, configDir string, output io.Writer) bool {
@@ -247,6 +293,9 @@ func WaitForPatAuthorization(ctx context.Context, configDir string, output io.Wr
 // It waits for the user to complete authorization and then retries the invocation.
 func retryWithPatAuthRetry(ctx context.Context, runner executor.Runner, invocation executor.Invocation, scopeErr *PatScopeError, configDir string, output io.Writer) (executor.Result, error) {
 	hostOwnedPAT := authpkg.HostOwnsPATFlow()
+	if wantsStructuredPATOutputFromRunner(runner) {
+		return executor.Result{}, &apperrors.PATError{RawJSON: buildPATScopeHostJSON(scopeErr)}
+	}
 	slog.Debug("pat.host_owned_decision",
 		"site", "retryWithPatAuthRetry",
 		"hostOwned", hostOwnedPAT,
@@ -290,8 +339,6 @@ const (
 	// patPollTimeout is the maximum time to wait for user authorization via device flow.
 	patPollTimeout = 10 * time.Minute
 )
-
-var openBrowserFunc = tryOpenBrowser
 
 // patRetryingKey is a context key to prevent recursive PAT auth checks.
 // After APPROVED, the retry should not trigger another PAT flow.
@@ -360,6 +407,7 @@ func handlePatAuthCheck(
 		"hasSecret", patData.Data.ClientSecret != "",
 	)
 	hostOwnedPAT := authpkg.HostOwnsPATFlow()
+	openBrowser := currentPATOpenBrowser(configDir)
 	slog.Debug("pat.host_owned_decision",
 		"site", "handlePatAuthCheck",
 		"hostOwned", hostOwnedPAT,
@@ -410,7 +458,14 @@ func handlePatAuthCheck(
 		if hostOwnedPAT {
 			return executor.Result{}, &apperrors.PATError{RawJSON: enrichPATErrorForHostControl(patErr.RawJSON)}
 		}
-		return executor.Result{}, patErr
+		return executor.Result{}, &apperrors.PATError{RawJSON: enrichPATErrorWithOpenBrowser(patErr.RawJSON, openBrowser)}
+	}
+
+	if wantsStructuredPATOutput(r) {
+		if openBrowser && patData.Data.URI != "" {
+			_ = openBrowserFunc(patData.Data.URI)
+		}
+		return executor.Result{}, &apperrors.PATError{RawJSON: enrichPATErrorWithOpenBrowser(patErr.RawJSON, openBrowser)}
 	}
 
 	bold := color.New(color.Bold).SprintFunc()
@@ -427,8 +482,9 @@ func handlePatAuthCheck(
 	}
 	if patData.Data.URI != "" {
 		fmt.Fprintf(output, "  %s %s\n\n", dim("🔗"), cyan(patData.Data.URI))
-		// Best-effort browser open.
-		_ = openPATAuthorizationURI(patData.Data.URI)
+		if openBrowser {
+			_ = openPATAuthorizationURI(patData.Data.URI)
+		}
 	}
 
 	// Poll the device flow status until user authorizes, rejects, or timeout.
@@ -536,6 +592,7 @@ func enrichPATErrorForHostControl(raw string) string {
 		payload["data"] = data
 	}
 	data["hostControl"] = buildHostControlState()
+	data["openBrowser"] = apperrors.PATOpenBrowserValue()
 
 	// docs/pat/contract.md §2: stderr JSON is single-line.
 	encoded, err := json.Marshal(payload)
@@ -556,6 +613,7 @@ func buildPATScopeHostJSON(scopeErr *PatScopeError) string {
 			"hint":         scopeErr.Hint,
 			"missingScope": scopeErr.MissingScope,
 			"hostControl":  buildHostControlState(),
+			"openBrowser":  apperrors.PATOpenBrowserValue(),
 		},
 	}
 	// docs/pat/contract.md §2: stderr JSON is single-line.

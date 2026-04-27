@@ -641,10 +641,11 @@ func resolveIdentityHeaders() map[string]string {
 	// MergeHeaders hook below) and it does NOT influence the host-owned
 	// PAT decision (driven solely by DINGTALK_DWS_AGENTCODE).
 	envHeaders := map[string]string{
-		"x-dingtalk-agent":      os.Getenv(envDingtalkAgent),
-		"x-dingtalk-trace-id":   os.Getenv(envDingtalkTraceID),
-		"x-dingtalk-session-id": os.Getenv(envDingtalkSessionID),
-		"x-dingtalk-message-id": os.Getenv(envDingtalkMessageID),
+		"x-dingtalk-agent":          os.Getenv(envDingtalkAgent),
+		"x-dingtalk-dws-agent-code": strings.TrimSpace(os.Getenv(authpkg.AgentCodeEnv)),
+		"x-dingtalk-trace-id":       os.Getenv(envDingtalkTraceID),
+		"x-dingtalk-session-id":     os.Getenv(envDingtalkSessionID),
+		"x-dingtalk-message-id":     os.Getenv(envDingtalkMessageID),
 	}
 	for k, v := range envHeaders {
 		if v != "" {
