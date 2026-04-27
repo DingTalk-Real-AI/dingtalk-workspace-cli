@@ -112,12 +112,29 @@ type DevicePollResponse struct {
 	Code    string         `json:"code,omitempty"`
 	Message string         `json:"message,omitempty"`
 	Data    DevicePollData `json:"data"`
+	Result  DevicePollData `json:"result"`
 }
 
 type DevicePollData struct {
 	Status   string `json:"status"`
 	AuthCode string `json:"authCode,omitempty"`
 	FlowID   string `json:"flowId,omitempty"`
+}
+
+// EffectiveData normalizes terminal poll responses that may carry payload
+// fields under either `data` or `result`.
+func (r DevicePollResponse) EffectiveData() DevicePollData {
+	effective := r.Data
+	if effective.Status == "" {
+		effective.Status = r.Result.Status
+	}
+	if effective.AuthCode == "" {
+		effective.AuthCode = r.Result.AuthCode
+	}
+	if effective.FlowID == "" {
+		effective.FlowID = r.Result.FlowID
+	}
+	return effective
 }
 
 type serviceResult struct {
@@ -428,10 +445,11 @@ func (p *DeviceFlowProvider) waitForAuthorizationByFlowID(ctx context.Context, a
 			continue
 		}
 
-		switch pollResp.Data.Status {
+		pollData := pollResp.EffectiveData()
+		switch pollData.Status {
 		case StatusApproved:
 			dfPrintPollResult(p.output(), "authorized", i18n.T("授权成功!"))
-			return &DeviceTokenResponse{AuthCode: pollResp.Data.AuthCode}, nil
+			return &DeviceTokenResponse{AuthCode: pollData.AuthCode}, nil
 		case StatusPending:
 			dfPrintPollResult(p.output(), "pending", i18n.T("等待用户授权..."))
 		case StatusRejected:
@@ -441,7 +459,7 @@ func (p *DeviceFlowProvider) waitForAuthorizationByFlowID(ctx context.Context, a
 			_, _ = fmt.Fprintln(p.output(), "")
 			return nil, errors.New(i18n.T("设备授权码已过期"))
 		default:
-			dfPrintPollResult(p.output(), "unknown", fmt.Sprintf(i18n.T("未知状态: %s"), pollResp.Data.Status))
+			dfPrintPollResult(p.output(), "unknown", fmt.Sprintf(i18n.T("未知状态: %s"), pollData.Status))
 		}
 	}
 }

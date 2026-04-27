@@ -411,6 +411,58 @@ func TestPollPatDeviceFlow_RedirectSkipped(t *testing.T) {
 	}
 }
 
+func TestPollPatDeviceFlow_UnknownStatusPrintsRawResponse(t *testing.T) {
+	server, configDir := setupPollServer(t, []authpkg.DevicePollResponse{
+		{Success: true, Data: authpkg.DevicePollData{Status: ""}},
+	})
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var buf bytes.Buffer
+	status, authCode, err := pollPatDeviceFlow(ctx, "flow-unknown", configDir, &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if status != "" {
+		t.Fatalf("expected empty unknown status, got %q", status)
+	}
+	if authCode != "" {
+		t.Fatalf("expected empty authCode for unknown status, got %q", authCode)
+	}
+	output := buf.String()
+	if !strings.Contains(output, "PAT 轮询接口返回原文") {
+		t.Fatalf("expected raw poll response to be printed, got %q", output)
+	}
+	if !strings.Contains(output, `"status":""`) {
+		t.Fatalf("expected raw poll body in output, got %q", output)
+	}
+}
+
+func TestPollPatDeviceFlow_ResultEnvelopeCompatibility(t *testing.T) {
+	server, configDir := setupPollServer(t, []authpkg.DevicePollResponse{
+		{Success: true, Result: authpkg.DevicePollData{Status: "PENDING"}},
+		{Success: true, Result: authpkg.DevicePollData{Status: "APPROVED", AuthCode: "code-from-result"}},
+	})
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var buf bytes.Buffer
+	status, authCode, err := pollPatDeviceFlow(ctx, "flow-result", configDir, &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if status != "APPROVED" {
+		t.Fatalf("expected APPROVED, got %q", status)
+	}
+	if authCode != "code-from-result" {
+		t.Fatalf("expected authCode from result envelope, got %q", authCode)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // extractPatScopeError edge cases
 // ---------------------------------------------------------------------------
