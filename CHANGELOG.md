@@ -4,6 +4,38 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
+## [1.0.18] - 2026-04-28
+
+Host-owned **PAT A-core** flow lets third-party agent hosts take over authorization UI and retry orchestration through `DINGTALK_DWS_AGENTCODE`. PAT stderr output is now a single-line machine-readable JSON contract, `dws pat chmod` is the minimal authorization entry point, and browser opening is controlled by a separate local PAT policy.
+
+### Breaking
+
+- **PAT exit-code contract** (#142) — PAT authorization interceptions now use exit code `4`; Discovery, cache, and protocol negotiation failures now use exit code `6`. Downstream scripts that previously treated `4` as Discovery must update their handling.
+
+### Added
+
+- **Host-owned PAT A-core flow** (#142) — when `DINGTALK_DWS_AGENTCODE` is set, PAT hits return `exit=4` plus single-line stderr JSON; the host renders authorization UI, calls `dws pat chmod <scope>...`, and replays the original command.
+- **`dws pat chmod` authorization entry point** (#142) — grants scopes with `--agentCode`, `--grant-type`, and session fallback support; `DINGTALK_DWS_AGENTCODE` can supply the agent code when the flag is omitted.
+- **PAT browser-open policy** (#142) — `dws pat browser-policy --enabled <true|false> [--agentCode <id>]` controls whether the CLI may open a browser, independently from `--format` output mode.
+
+### Changed
+
+- **PAT stderr JSON classifier** (#142) — recognizes `code`, `errorCode`, and `error_code`, including `PAT_NO_PERMISSION`, risk-tier PAT errors, `PAT_SCOPE_AUTH_REQUIRED`, and `AGENT_CODE_NOT_EXISTS`.
+- **Host-control metadata injection** (#142) — classifier and active-retry paths now share one mutation point for `data.hostControl` and `data.openBrowser`, keeping host-facing JSON shapes aligned.
+- **Open-edition routing signals** (#142) — open edition pins `claw-type: openClaw`; `DINGTALK_AGENT`, `DWS_CHANNEL`, and host-owned PAT detection are kept as independent signals.
+- **Behavior authorization endpoint fallback** (#142) — the PAT runtime can resolve the built-in behavior-authorization MCP endpoint before discovery data is available.
+
+### Fixed
+
+- **Opaque authorization URLs** (#142) — PAT authorization links are preserved verbatim, including query/hash/fragment content required by the server.
+- **Polling compatibility** (#142) — device-flow result envelopes and no-`flowId` device-code fallback remain supported.
+- **Empty grant result handling** (#142) — `dws pat chmod` now returns an explicit error instead of treating `{"Content": null}` as success.
+- **Session-id log safety** (#142) — raw `DWS_SESSION_ID` / `REWIND_SESSION_ID` values are no longer logged when the two env vars disagree.
+
+### Tests
+
+- Added PAT contract coverage for host-owned signal selection, single-line stderr JSON, chmod env fallback and legacy alias fallback, browser policy, direct-runtime PAT endpoint fallback, and retry/poll behavior. (#142)
+
 ## [1.0.17] - 2026-04-27
 
 New **Mail** product surface (mailbox list, KQL message search, message get, send) brings runtime command count to **163 across 14 products**. Plugin command-tree visibility hardening: stdio plugins shipping CLI overlays no longer wait on subprocess discovery to surface their commands, and overlay-registered plugin products are no longer hidden by edition `VisibleProducts` whitelists. Chat docs clarify that `--title` is required on `dws chat message send`.
