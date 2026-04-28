@@ -14,24 +14,16 @@
 package auth
 
 import (
-	"net/http"
 	"os"
 	"strings"
 )
 
 const (
-	// DWSChannelEnv carries the upstream channelCode forwarded as x-dws-channel.
-	DWSChannelEnv = "DWS_CHANNEL"
 	// AgentCodeEnv is the sole per-spawn environment variable the host injects
 	// to declare "this process is driven by a third-party Agent host, render
 	// authorization UI yourselves". docs/pat/contract.md §7.
 	AgentCodeEnv = "DINGTALK_DWS_AGENTCODE"
 )
-
-// CurrentChannelCode returns the raw upstream channel code as configured locally.
-func CurrentChannelCode() string {
-	return os.Getenv(DWSChannelEnv)
-}
 
 // HostOwnsPATFlow reports whether the current process is running under a
 // third-party Agent host that will render the PAT authorization card
@@ -42,14 +34,4 @@ func CurrentChannelCode() string {
 // and the host-owned UI contract remain independent concerns.
 func HostOwnsPATFlow() bool {
 	return strings.TrimSpace(os.Getenv(AgentCodeEnv)) != ""
-}
-
-// ApplyChannelHeader injects the configured channel code into a request.
-func ApplyChannelHeader(req *http.Request) {
-	if req == nil {
-		return
-	}
-	if ch := CurrentChannelCode(); ch != "" {
-		req.Header.Set("x-dws-channel", ch)
-	}
 }

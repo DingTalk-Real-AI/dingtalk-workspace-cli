@@ -88,6 +88,9 @@ const (
 	envDingtalkTraceID   = "DINGTALK_TRACE_ID"
 	envDingtalkSessionID = "DINGTALK_SESSION_ID"
 	envDingtalkMessageID = "DINGTALK_MESSAGE_ID"
+
+	// Environment variables for third-party channel integration
+	envDWSChannel = "DWS_CHANNEL"
 )
 
 // hostOwnedPATDecisionOnce ensures the host-owned PAT decision is logged at
@@ -655,7 +658,7 @@ func resolveIdentityHeaders() map[string]string {
 
 	// Inject third-party channel headers. DWS_CHANNEL is forwarded as the
 	// upstream channelCode.
-	if v := authpkg.CurrentChannelCode(); v != "" {
+	if v := os.Getenv(envDWSChannel); v != "" {
 		headers["x-dws-channel"] = v
 	}
 

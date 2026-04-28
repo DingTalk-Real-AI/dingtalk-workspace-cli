@@ -14,10 +14,13 @@
 package app
 
 import (
+	"net"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
 
+	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
@@ -41,20 +44,52 @@ var legacyDirectRuntimeAliases = map[string]string{
 const (
 	defaultPATProductID   = "pat"
 	defaultPATDisplayName = "行为授权"
-	defaultPATMCPEndpoint = "https://mcp-gw.dingtalk.com/server/abc3c880fb90f04b52d1426aaf093766e5fc9ec38411688cbb74df42a584d374"
+	defaultPATServerID    = "abc3c880fb90f04b52d1426aaf093766e5fc9ec38411688cbb74df42a584d374"
 )
 
 func defaultPATServerDescriptor() market.ServerDescriptor {
 	return market.ServerDescriptor{
 		Key:         defaultPATProductID,
 		DisplayName: defaultPATDisplayName,
-		Endpoint:    defaultPATMCPEndpoint,
+		Endpoint:    defaultPATMCPEndpoint(),
 		CLI: market.CLIOverlay{
 			ID:       defaultPATProductID,
 			Command:  defaultPATProductID,
 			Prefixes: []string{defaultPATProductID},
 		},
 	}
+}
+
+func defaultPATMCPEndpoint() string {
+	return defaultPATGatewayBaseURL() + "/server/" + defaultPATServerID
+}
+
+func defaultPATGatewayBaseURL() string {
+	raw := strings.TrimSpace(authpkg.GetMCPBaseURL())
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return strings.TrimRight(raw, "/")
+	}
+
+	host := parsed.Hostname()
+	switch {
+	case host == "mcp.dingtalk.com":
+		host = "mcp-gw.dingtalk.com"
+	case strings.HasPrefix(host, "pre-mcp."):
+		host = strings.Replace(host, "pre-mcp.", "pre-mcp-gw.", 1)
+	case strings.HasPrefix(host, "mcp."):
+		host = strings.Replace(host, "mcp.", "mcp-gw.", 1)
+	}
+
+	if port := parsed.Port(); port != "" {
+		parsed.Host = net.JoinHostPort(host, port)
+	} else {
+		parsed.Host = host
+	}
+	parsed.Path = strings.TrimRight(parsed.Path, "/")
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return strings.TrimRight(parsed.String(), "/")
 }
 
 // SetDynamicServers injects server data discovered from servers.json.
@@ -215,7 +250,7 @@ func directRuntimeEndpoint(productID, toolName string) (string, bool) {
 	// discovery/plugin registration has populated the dynamic registry.
 	for _, candidate := range []string{strings.TrimSpace(productID), normalized} {
 		if candidate == defaultPATProductID {
-			return defaultPATMCPEndpoint, true
+			return defaultPATMCPEndpoint(), true
 		}
 	}
 	return "", false

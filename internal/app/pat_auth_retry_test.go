@@ -624,6 +624,9 @@ func TestHandlePatAuthCheck_Approved(t *testing.T) {
 	if !retryHasKey {
 		t.Fatal("expected retry context to have patRetryingKey")
 	}
+	if _, err := os.Stat(filepath.Join(configDir, "app.json")); err != nil {
+		t.Fatalf("expected approved PAT flow to persist app.json, stat error = %v", err)
+	}
 	// Verify SetClientIDFromMCP was called with the PAT response clientId.
 	if cid := authpkg.ClientID(); cid != "test-client-id" {
 		t.Errorf("expected ClientID 'test-client-id', got %q", cid)
@@ -697,6 +700,9 @@ func TestHandlePatAuthCheck_HostControlledFlowIDPassthrough(t *testing.T) {
 	if got := strings.TrimSpace(buf.String()); got != "" {
 		t.Fatalf("expected no human-readable output in host mode, got %q", got)
 	}
+	if _, err := os.Stat(filepath.Join(tmpDir, "app.json")); !os.IsNotExist(err) {
+		t.Fatalf("host-owned PAT must not persist shared app.json, stat error = %v", err)
+	}
 
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(patOut.RawJSON), &payload); err != nil {
@@ -752,6 +758,9 @@ func TestHandlePatAuthCheck_HostControlledEmptyFlowID_StillReturnsContract(t *te
 	}
 	if got := strings.TrimSpace(buf.String()); got != "" {
 		t.Fatalf("expected no human-readable output in host mode, got %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(tmpDir, "app.json")); !os.IsNotExist(err) {
+		t.Fatalf("host-owned PAT must not persist shared app.json, stat error = %v", err)
 	}
 	patOut, ok := err.(*apperrors.PATError)
 	if !ok {
@@ -846,6 +855,9 @@ func TestHandlePatAuthCheck_JSONModeReturnsStructuredPATErrorWithoutRetry(t *tes
 	if got := strings.TrimSpace(buf.String()); got != "" {
 		t.Fatalf("expected no human-readable output in json PAT mode, got %q", got)
 	}
+	if _, err := os.Stat(filepath.Join(tmpDir, "app.json")); !os.IsNotExist(err) {
+		t.Fatalf("json PAT mode must not persist shared app.json, stat error = %v", err)
+	}
 
 	patOut, ok := err.(*apperrors.PATError)
 	if !ok {
@@ -904,6 +916,9 @@ func TestHandlePatAuthCheck_JSONModeCanOpenBrowserWithoutTextOutput(t *testing.T
 	}
 	if got := strings.TrimSpace(buf.String()); got != "" {
 		t.Fatalf("expected no human-readable output in json PAT mode, got %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(tmpDir, "app.json")); !os.IsNotExist(err) {
+		t.Fatalf("json PAT mode must not persist shared app.json, stat error = %v", err)
 	}
 	if opened != "https://example.com/pat" {
 		t.Fatalf("opened url = %q, want https://example.com/pat", opened)

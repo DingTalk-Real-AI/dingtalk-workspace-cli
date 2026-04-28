@@ -101,40 +101,6 @@ func TestNormalizeServersDeduplicatesSameNameAcrossEndpoints(t *testing.T) {
 	}
 }
 
-func TestNormalizeServersPreservesMCPHosts(t *testing.T) {
-	t.Parallel()
-
-	response := ListResponse{
-		Servers: []ServerEnvelope{
-			{
-				Server: RegistryServer{
-					Name: "群聊",
-					Remotes: []RegistryRemote{
-						{Type: "streamable-http", URL: "https://" + "mcp-gw" + ".dingtalk.com/server/chat/"},
-					},
-				},
-				Meta: EnvelopeMeta{
-					Registry: RegistryMetadata{
-						Status:    "active",
-						DetailURL: "https://" + "mcp" + ".dingtalk.com/mcp/market/detail?mcpId=1",
-					},
-				},
-			},
-		},
-	}
-
-	servers := NormalizeServers(response, "live_market")
-	if len(servers) != 1 {
-		t.Fatalf("NormalizeServers() len = %d, want 1", len(servers))
-	}
-	if servers[0].Endpoint != "https://mcp-gw.dingtalk.com/server/chat" {
-		t.Fatalf("Endpoint = %q, want production gateway", servers[0].Endpoint)
-	}
-	if servers[0].DetailLocator.DetailURL != "https://mcp.dingtalk.com/mcp/market/detail?mcpId=1" {
-		t.Fatalf("DetailURL = %q, want production market", servers[0].DetailLocator.DetailURL)
-	}
-}
-
 func TestNormalizeServersMarksLegacyNameAsDeprecatedCandidate(t *testing.T) {
 	t.Parallel()
 

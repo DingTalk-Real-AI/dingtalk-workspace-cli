@@ -32,8 +32,8 @@ import (
 // side), so product-level and tool-level lookups both resolve correctly.
 
 const (
-	testBotEndpoint  = "https://mcp-gw.dingtalk.com/server/4717d5cbb92ecdebd89c174e4331dc17207208a97622e2004cac49c0fbedc9d1"
-	testChatEndpoint = "https://mcp-gw.dingtalk.com/server/0a1609437385696b77fc4771c3ddaf5656b487f809966c0cc8d4755e7b1d3b74"
+	testBotEndpoint  = "https://pre-mcp-gw.dingtalk.com/server/4717d5cbb92ecdebd89c174e4331dc17207208a97622e2004cac49c0fbedc9d1"
+	testChatEndpoint = "https://pre-mcp-gw.dingtalk.com/server/0a1609437385696b77fc4771c3ddaf5656b487f809966c0cc8d4755e7b1d3b74"
 )
 
 // botDescriptor returns a minimal `bot` server descriptor that owns the

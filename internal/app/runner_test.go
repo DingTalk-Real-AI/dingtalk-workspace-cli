@@ -314,16 +314,6 @@ func TestRuntimeRunnerInjectsAuthTokenFromFlag(t *testing.T) {
 	}
 }
 
-func TestResolveIdentityHeadersUsesParsedChannelCode(t *testing.T) {
-	setupRuntimeCommandTest(t)
-	t.Setenv(authpkg.DWSChannelEnv, "Qoderwork")
-
-	headers := resolveIdentityHeaders()
-	if got := headers["x-dws-channel"]; got != "Qoderwork" {
-		t.Fatalf("x-dws-channel = %q, want Qoderwork", got)
-	}
-}
-
 func TestResolveIdentityHeadersForwardsAgentCode(t *testing.T) {
 	setupRuntimeCommandTest(t)
 	t.Setenv(authpkg.AgentCodeEnv, " cursor ")

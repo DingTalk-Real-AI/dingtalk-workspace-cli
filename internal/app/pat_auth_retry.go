@@ -434,23 +434,12 @@ func handlePatAuthCheck(
 			authpkg.SetClientIDFromMCP(patData.Data.ClientID)
 		}
 
-		// Persist clientId (and optionally secret) to ~/.dws/app.json so that
-		// future process invocations can load it at startup and populate
-		// DWS_CLIENT_ID env before the first MCP request.
-		appCfg = &authpkg.AppConfig{
-			ClientID: patData.Data.ClientID,
-		}
+		// Persist only after an explicit APPROVED result below. Raw PAT
+		// interceptions (host-owned / json / empty-flow pass-through) must not
+		// rewrite the shared ~/.dws/app.json state for unrelated shells or agents.
+		appCfg = &authpkg.AppConfig{ClientID: patData.Data.ClientID}
 		if patData.Data.ClientSecret != "" {
 			appCfg.ClientSecret = authpkg.PlainSecret(patData.Data.ClientSecret)
-		}
-	}
-
-	if appCfg != nil {
-		if err := authpkg.SaveAppConfig(configDir, appCfg); err != nil {
-			slog.Warn("failed to persist app config from PAT", "error", err)
-			if !hostOwnedPAT && patData.Data.FlowID != "" {
-				fmt.Fprintf(output, "  \u26a0 保存应用配置失败: %v (下次启动可能需要重新授权)\n", err)
-			}
 		}
 	}
 
@@ -510,6 +499,13 @@ func handlePatAuthCheck(
 	case authpkg.StatusApproved:
 		fmt.Fprintf(output, "%s %s\n", greenFn("✓"), bold("授权成功!"))
 		fmt.Fprintln(output)
+
+		if appCfg != nil {
+			if err := authpkg.SaveAppConfig(configDir, appCfg); err != nil {
+				slog.Warn("failed to persist approved app config from PAT", "error", err)
+				fmt.Fprintf(output, "  \u26a0 保存应用配置失败: %v (下次启动可能需要重新授权)\n", err)
+			}
+		}
 
 		// Exchange authCode for a fresh access token (mirrors device_flow loginOnce).
 		if authCode != "" {

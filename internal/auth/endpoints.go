@@ -42,7 +42,7 @@ func init() {
 	configmeta.Register(configmeta.ConfigItem{
 		Name:        "DWS_CHANNEL",
 		Category:    configmeta.CategoryExternal,
-		Description: "第三方渠道编码 (channelCode)，仅透传到上游，如 Qoderwork",
+		Description: "第三方渠道编码 (channelCode)，如 Qoderwork",
 	})
 }
 

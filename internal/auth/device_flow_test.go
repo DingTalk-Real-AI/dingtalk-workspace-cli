@@ -240,6 +240,7 @@ func TestDevicePollResponseEffectiveData_DataEnvelopeWinsAsWholePayload(t *testi
 		t.Fatalf("effective.FlowID = %q, want empty because Data envelope wins as a whole", effective.FlowID)
 	}
 }
+
 func TestWaitForAuthorizationFallsBackToDeviceCodeWhenFlowIDMissing(t *testing.T) {
 	t.Parallel()
 
