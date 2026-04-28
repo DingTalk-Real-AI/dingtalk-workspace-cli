@@ -46,6 +46,47 @@ func TestBrowserPolicy_DefaultRoundTrip(t *testing.T) {
 	}
 }
 
+func TestSetBrowserPolicy_EmptyAgentCodeIgnoresEnvAndWritesDefault(t *testing.T) {
+	t.Setenv(agentCodeEnv, "agt-env")
+	configDir := t.TempDir()
+
+	saved, err := SetBrowserPolicy(configDir, "", false)
+	if err != nil {
+		t.Fatalf("SetBrowserPolicy(default) error = %v", err)
+	}
+	if saved.Scope != "default" {
+		t.Fatalf("saved.Scope = %q, want default", saved.Scope)
+	}
+	if saved.AgentCode != "" {
+		t.Fatalf("saved.AgentCode = %q, want empty", saved.AgentCode)
+	}
+
+	policy, err := LoadBrowserPolicy(configDir)
+	if err != nil {
+		t.Fatalf("LoadBrowserPolicy error = %v", err)
+	}
+	if policy.Default == nil {
+		t.Fatal("policy.Default is nil, want default policy")
+	}
+	if got := len(policy.Agents); got != 0 {
+		t.Fatalf("len(policy.Agents) = %d, want 0", got)
+	}
+
+	loaded, err := ResolveBrowserPolicy(configDir, "")
+	if err != nil {
+		t.Fatalf("ResolveBrowserPolicy(default under env) error = %v", err)
+	}
+	if loaded.Scope != "default" {
+		t.Fatalf("loaded.Scope = %q, want default", loaded.Scope)
+	}
+	if loaded.AgentCode != "" {
+		t.Fatalf("loaded.AgentCode = %q, want empty", loaded.AgentCode)
+	}
+	if loaded.OpenBrowser {
+		t.Fatal("loaded.OpenBrowser = true, want false")
+	}
+}
+
 func TestBrowserPolicy_AgentOverridesDefault(t *testing.T) {
 	t.Parallel()
 
@@ -154,5 +195,43 @@ func TestBrowserPolicyCommand_WritesAgentPolicy(t *testing.T) {
 	}
 	if loaded.OpenBrowser {
 		t.Fatal("loaded.OpenBrowser = true, want false")
+	}
+}
+
+func TestBrowserPolicyCommand_NoAgentCodeWritesDefaultEvenWhenEnvSet(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+	t.Setenv(agentCodeEnv, "agt-env")
+
+	cmd := newBrowserPolicyCommand()
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stdout)
+	cmd.SetArgs([]string{"--enabled=false"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("browser-policy Execute() error = %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(command output) error = %v\nraw=%s", err, stdout.String())
+	}
+	if got, _ := payload["scope"].(string); got != "default" {
+		t.Fatalf("scope = %q, want default", got)
+	}
+	if _, ok := payload["agentCode"]; ok {
+		t.Fatalf("unexpected agentCode in default policy output: %v", payload["agentCode"])
+	}
+
+	policy, err := LoadBrowserPolicy(configDir)
+	if err != nil {
+		t.Fatalf("LoadBrowserPolicy error = %v", err)
+	}
+	if policy.Default == nil {
+		t.Fatal("policy.Default is nil, want default policy")
+	}
+	if got := len(policy.Agents); got != 0 {
+		t.Fatalf("len(policy.Agents) = %d, want 0", got)
 	}
 }

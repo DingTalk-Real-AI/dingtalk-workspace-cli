@@ -37,7 +37,8 @@ func RegisterCommands(root *cobra.Command, c edition.ToolCaller) {
   --format 只控制 PAT 撞墙时的输出形态；当 --format json 时，
   CLI 只返回结构化 JSON，不混入非结构化文本。
   浏览器是否打开由本地 PAT 策略单独决定，与 json / non-json 独立。
-  该策略可按 DINGTALK_DWS_AGENTCODE 隔离，也可回退到开源默认配置。
+  生效时会优先按 DINGTALK_DWS_AGENTCODE 读取 agent 策略，再回退到默认策略。
+  写入 agent 策略需显式传 --agentCode；不传则写入全局默认策略。
 
 Host-owned PAT 开关（contract.md §7）：
   当且仅当环境变量 DINGTALK_DWS_AGENTCODE 非空时，CLI 命中 PAT

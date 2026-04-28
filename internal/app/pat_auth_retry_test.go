@@ -128,7 +128,7 @@ func TestPrintPatAuthError_HumanReadable(t *testing.T) {
 }
 
 func TestPrintPatAuthJSON_MachineReadable(t *testing.T) {
-	t.Parallel()
+	t.Setenv(authpkg.AgentCodeEnv, "")
 	var buf strings.Builder
 	scopeErr := &PatScopeError{
 		Identity:     "user",
@@ -159,8 +159,8 @@ func TestPrintPatAuthJSON_MachineReadable(t *testing.T) {
 	if got, ok := data["openBrowser"].(bool); !ok || !got {
 		t.Errorf("openBrowser = %#v, want true", data["openBrowser"])
 	}
-	if _, ok := data["hostControl"]; !ok {
-		t.Errorf("expected data.hostControl, got: %s", output)
+	if _, ok := data["hostControl"]; ok {
+		t.Errorf("unexpected data.hostControl in CLI-owned JSON output: %s", output)
 	}
 }
 
@@ -859,6 +859,9 @@ func TestHandlePatAuthCheck_JSONModeReturnsStructuredPATErrorWithoutRetry(t *tes
 	if got, ok := data["openBrowser"].(bool); !ok || got {
 		t.Fatalf("data.openBrowser = %#v, want false", data["openBrowser"])
 	}
+	if _, ok := data["hostControl"]; ok {
+		t.Fatalf("unexpected data.hostControl in CLI-owned json PAT mode: %s", patOut.RawJSON)
+	}
 }
 
 func TestHandlePatAuthCheck_JSONModeCanOpenBrowserWithoutTextOutput(t *testing.T) {
@@ -1004,6 +1007,9 @@ func TestRetryWithPatAuthRetry_JSONModeReturnsStructuredPATError(t *testing.T) {
 	data, _ := payload["data"].(map[string]any)
 	if got, ok := data["openBrowser"].(bool); !ok || got {
 		t.Fatalf("data.openBrowser = %#v, want false", data["openBrowser"])
+	}
+	if _, ok := data["hostControl"]; ok {
+		t.Fatalf("unexpected data.hostControl in CLI-owned json scope mode: %s", patOut.RawJSON)
 	}
 }
 

@@ -187,7 +187,7 @@ func PrintPatAuthError(w io.Writer, scopeErr *PatScopeError) {
 
 // PrintPatAuthJSON prints a machine-readable PAT authorization error.
 func PrintPatAuthJSON(w io.Writer, scopeErr *PatScopeError) {
-	fmt.Fprintln(w, buildPATScopeHostJSON(scopeErr))
+	fmt.Fprintln(w, buildPATScopeJSON(scopeErr, authpkg.HostOwnsPATFlow()))
 }
 
 func wantsStructuredPATOutput(r *runtimeRunner) bool {
@@ -293,9 +293,6 @@ func WaitForPatAuthorization(ctx context.Context, configDir string, output io.Wr
 // It waits for the user to complete authorization and then retries the invocation.
 func retryWithPatAuthRetry(ctx context.Context, runner executor.Runner, invocation executor.Invocation, scopeErr *PatScopeError, configDir string, output io.Writer) (executor.Result, error) {
 	hostOwnedPAT := authpkg.HostOwnsPATFlow()
-	if wantsStructuredPATOutputFromRunner(runner) {
-		return executor.Result{}, &apperrors.PATError{RawJSON: buildPATScopeHostJSON(scopeErr)}
-	}
 	slog.Debug("pat.host_owned_decision",
 		"site", "retryWithPatAuthRetry",
 		"hostOwned", hostOwnedPAT,
@@ -303,6 +300,9 @@ func retryWithPatAuthRetry(ctx context.Context, runner executor.Runner, invocati
 	)
 	if hostOwnedPAT {
 		return executor.Result{}, &apperrors.PATError{RawJSON: buildPATScopeHostJSON(scopeErr)}
+	}
+	if wantsStructuredPATOutputFromRunner(runner) {
+		return executor.Result{}, &apperrors.PATError{RawJSON: buildPATScopeJSON(scopeErr, false)}
 	}
 
 	// Print the PAT error in human-readable format
@@ -596,7 +596,9 @@ func enrichPATErrorForHostControl(raw string) string {
 		data = make(map[string]any)
 		payload["data"] = data
 	}
-	data["hostControl"] = buildHostControlState()
+	if hostControl := buildHostControlState(); hostControl != nil {
+		data["hostControl"] = hostControl
+	}
 	data["openBrowser"] = apperrors.PATOpenBrowserValue()
 
 	// docs/pat/contract.md §2: stderr JSON is single-line.
@@ -608,18 +610,28 @@ func enrichPATErrorForHostControl(raw string) string {
 }
 
 func buildPATScopeHostJSON(scopeErr *PatScopeError) string {
+	return buildPATScopeJSON(scopeErr, true)
+}
+
+func buildPATScopeJSON(scopeErr *PatScopeError, includeHostControl bool) string {
+	data := map[string]any{
+		"identity":     scopeErr.Identity,
+		"errorType":    scopeErr.ErrorType,
+		"message":      scopeErr.Message,
+		"hint":         scopeErr.Hint,
+		"missingScope": scopeErr.MissingScope,
+		"openBrowser":  apperrors.PATOpenBrowserValue(),
+	}
+	if includeHostControl {
+		if hostControl := buildHostControlState(); hostControl != nil {
+			data["hostControl"] = hostControl
+		}
+	}
+
 	payload := map[string]any{
 		"success": false,
 		"code":    patScopeAuthRequiredCode,
-		"data": map[string]any{
-			"identity":     scopeErr.Identity,
-			"errorType":    scopeErr.ErrorType,
-			"message":      scopeErr.Message,
-			"hint":         scopeErr.Hint,
-			"missingScope": scopeErr.MissingScope,
-			"hostControl":  buildHostControlState(),
-			"openBrowser":  apperrors.PATOpenBrowserValue(),
-		},
+		"data":    data,
 	}
 	// docs/pat/contract.md §2: stderr JSON is single-line.
 	b, err := json.Marshal(payload)
@@ -633,23 +645,10 @@ func buildPATScopeHostJSON(scopeErr *PatScopeError) string {
 // retry / scope-auth paths. Fields come from apperrors.HostControlBlock so
 // the classifier-side injection and this call-site agree byte-for-byte.
 //
-// NOTE: this function is only called from host-owned paths (caller has
-// already confirmed HostOwnsPATFlow()), so HostControlBlock() is expected
-// to be non-nil. The defensive fallback below reuses the same provider
-// the classifier wires in init() to avoid drift.
+// In CLI-owned mode HostControlBlock returns nil, and callers must omit the
+// field rather than fabricating a host-owned contract.
 func buildHostControlState() map[string]any {
-	block := apperrors.HostControlBlock()
-	if block == nil {
-		claw := hostControlProviderFromEnv()
-		block = map[string]any{
-			"clawType":      claw,
-			"callbackOwner": "host",
-			"mode":          "host",
-			"pollingOwner":  "host",
-			"retryOwner":    "host",
-		}
-	}
-	return block
+	return apperrors.HostControlBlock()
 }
 
 // pollPatDeviceFlow polls the PAT device flow status endpoint until a terminal

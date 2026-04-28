@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -145,8 +146,19 @@ func EffectiveOpenBrowser(configDir string) bool {
 	return selection.OpenBrowser
 }
 
+func resolveBrowserPolicyWriteAgentCode(explicitAgentCode string) (string, error) {
+	agentCode := strings.TrimSpace(explicitAgentCode)
+	if agentCode == "" {
+		return "", nil
+	}
+	if err := validateAgentCode(agentCode); err != nil {
+		return "", err
+	}
+	return agentCode, nil
+}
+
 func SetBrowserPolicy(configDir, explicitAgentCode string, enabled bool) (BrowserPolicySelection, error) {
-	agentCode, err := resolveAgentCode(explicitAgentCode, false)
+	agentCode, err := resolveBrowserPolicyWriteAgentCode(explicitAgentCode)
 	if err != nil {
 		return BrowserPolicySelection{}, err
 	}
@@ -211,6 +223,6 @@ func newBrowserPolicyCommand() *cobra.Command {
 	}
 
 	cmd.Flags().Bool("enabled", false, "PAT 撞墙时是否允许本地打开浏览器")
-	cmd.Flags().String("agentCode", "", "Agent 唯一标识（可选；亦可通过 env DINGTALK_DWS_AGENTCODE 注入，flag 优先）")
+	cmd.Flags().String("agentCode", "", "Agent 唯一标识（可选；不填则写入全局默认策略，不从 env DINGTALK_DWS_AGENTCODE 回退）")
 	return cmd
 }
