@@ -19,12 +19,11 @@ import (
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 )
 
-// TestHostOwnsPATFlow_OnlySignal is the wire-level guard for
-// docs/pat/contract.md §7 and "custom authorization card" (docs/pat/contract.md §7)
-// contract: the CLI switches to host-owned PAT mode iff the host injects
-// DINGTALK_DWS_AGENTCODE. DINGTALK_AGENT / claw-type is purely a
-// server-side routing tag and must NOT influence the decision, in either
-// direction.
+// TestHostOwnsPATFlow_OnlySignal is the wire-level guard for the
+// "custom authorization card" contract: the CLI switches to host-owned
+// PAT mode iff the host injects DINGTALK_DWS_AGENTCODE. DINGTALK_AGENT /
+// claw-type is purely a server-side routing tag and must NOT influence
+// the decision, in either direction.
 //
 // Regression guard: several earlier drafts conflated the two signals,
 // causing third-party Agent hosts that only set DINGTALK_DWS_AGENTCODE

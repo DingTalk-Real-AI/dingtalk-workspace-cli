@@ -66,9 +66,9 @@ func PATOpenBrowserValue() bool {
 	return provider()
 }
 
-// HostControlBlock returns the canonical hostControl map documented in
-// docs/pat/contract.md §5 when the CLI is operating in host-owned mode,
-// or nil when it is not. The returned map is safe for the caller to mutate
+// HostControlBlock returns the canonical hostControl map injected into
+// PAT stderr JSON when the CLI is operating in host-owned mode, or nil
+// when it is not. The returned map is safe for the caller to mutate
 // because a new map is constructed on each call.
 //
 // callbackOwner is kept as a legacy compatibility key for hosts that adopted
@@ -99,7 +99,9 @@ const ExitCodePermission = 4
 // PATError represents a PAT (Personal Action Token) authorization failure
 // that should be passed through to stderr as raw JSON without any CLI-layer
 // wrapping. The host application parses the JSON to display its own
-// authorization UI. See docs/pat/contract.md §2 for the wire schema.
+// authorization UI. The wire schema is fixed: a single-line, directly
+// json.Unmarshal-able payload of the form
+// {"success":false,"code":<frozen enum>,"data":{...}}.
 //
 // When the payload includes data.uri, that URL is the authoritative
 // server-provided authorization link. Hosts must treat it as opaque and open
@@ -131,15 +133,14 @@ var patNoPermissionCodes = map[string]bool{
 // or the caller's OAuth token lacks a scope that must be re-acquired via
 // `dws auth login --scope <missing>`).
 //
-// Keep keys in alphabetical order so diffs are stable.
-//
-// Evidence / contract anchors:
-//   - AGENT_CODE_NOT_EXISTS  → docs/pat/contract.md §2.3 (Frozen selector)
-//     and docs/pat/error-catalog.md §AGENT_CODE_NOT_EXISTS.
-//   - PAT_SCOPE_AUTH_REQUIRED → docs/pat/contract.md §2.3 (Frozen selector)
-//     and docs/pat/error-catalog.md §PAT_SCOPE_AUTH_REQUIRED. CLI must
-//     surface it as a *PATError (exit=4) so hosts can kick the
-//     `dws auth login --scope <data.missingScope>` branch.
+// Keep keys in alphabetical order so diffs are stable. Both codes below are
+// part of the frozen PAT-family selector and MUST be surfaced as *PATError
+// (exit=4) so hosts can act on them:
+//   - AGENT_CODE_NOT_EXISTS: data.agentCode tells the host which agent
+//     registration is missing.
+//   - PAT_SCOPE_AUTH_REQUIRED: data.missingScope tells the host which
+//     OAuth scope to re-acquire via
+//     `dws auth login --scope <data.missingScope>`.
 var patAuthRequiredCodes = map[string]bool{
 	"AGENT_CODE_NOT_EXISTS":   true,
 	"PAT_SCOPE_AUTH_REQUIRED": true,
@@ -156,19 +157,33 @@ func IsPATNoPermissionCode(code string) bool {
 	return patNoPermissionCodes[code]
 }
 
-// getPATErrorCode extracts any PAT-intercept code from a map.
-// Supports legacy error_code alongside code and errorCode.
-//
-// PAT intercepts include both permission denials and auth-required selectors:
-// callers on the text/tool-result path must preserve both families as
-// *PATError so exit=4 + raw stderr JSON survives all the way to the host/CLI.
-func getPATErrorCode(body map[string]any) (string, bool) {
-	for _, key := range []string{"code", "errorCode", "error_code"} {
-		if code, ok := body[key].(string); ok && (patNoPermissionCodes[code] || patAuthRequiredCodes[code]) {
+// errCodeKeys is the canonical priority order in which we look up
+// upstream error code fields. Servers historically rotated between camel
+// and snake case; we accept all three and pick the first that resolves to
+// a recognised value.
+var errCodeKeys = []string{"code", "errorCode", "error_code"}
+
+// lookupCodeIn returns the first value in body[errCodeKeys] that is a
+// non-empty string AND is a member of accept. Used by the PAT and DWS
+// gateway classifiers, which differ only in their accept-set.
+func lookupCodeIn(body map[string]any, accept map[string]bool) (string, bool) {
+	for _, key := range errCodeKeys {
+		if code, ok := body[key].(string); ok && accept[code] {
 			return code, true
 		}
 	}
 	return "", false
+}
+
+// getPATErrorCode extracts any PAT-intercept code from a map. PAT
+// intercepts include both permission denials and auth-required selectors:
+// callers on the text/tool-result path must preserve both families as
+// *PATError so exit=4 + raw stderr JSON survives all the way to the host/CLI.
+func getPATErrorCode(body map[string]any) (string, bool) {
+	if code, ok := lookupCodeIn(body, patNoPermissionCodes); ok {
+		return code, true
+	}
+	return lookupCodeIn(body, patAuthRequiredCodes)
 }
 
 // ---- DWS gateway auth errors (shared between PAT & general auth) ----------
@@ -179,15 +194,9 @@ var dwsGatewayErrors = map[string]bool{
 	"DWS_AUTH_SERVICE_FAILED":  true,
 }
 
-// getDWSGatewayErrorCode extracts a DWS gateway error code from errBody
-// (supports code, errorCode, and error_code field names).
+// getDWSGatewayErrorCode extracts a DWS gateway error code from errBody.
 func getDWSGatewayErrorCode(errBody map[string]any) (string, bool) {
-	for _, key := range []string{"code", "errorCode", "error_code"} {
-		if code, ok := errBody[key].(string); ok && dwsGatewayErrors[code] {
-			return code, true
-		}
-	}
-	return "", false
+	return lookupCodeIn(errBody, dwsGatewayErrors)
 }
 
 // isNotLoggedInError checks if the error body indicates missing authentication.
@@ -320,6 +329,33 @@ var patTopLevelStrip = map[string]bool{
 	"message": true, "error": true, "trace_id": true, "class": true,
 }
 
+// ApplyHostMutations writes the two stderr-JSON fields the host integration
+// contract requires onto out["data"]:
+//   - data.hostControl: present iff the CLI is in host-owned mode (i.e.
+//     HostControlBlock returns non-nil); legacy data.callbacks is stripped
+//     in the same pass so passive classifier and active retry paths stay
+//     byte-for-byte aligned.
+//   - data.openBrowser: always present; reflects the user's PAT browser
+//     policy.
+//
+// Centralizing the two writes here is the single-injection invariant —
+// any caller that produces a PAT-shaped stderr payload (cleanPATJSON,
+// active-retry enrichers, scope-required builders) MUST go through this
+// function instead of writing the fields directly. out["data"] is
+// promoted to map[string]any if missing or of the wrong type.
+func ApplyHostMutations(out map[string]any) {
+	data, ok := out["data"].(map[string]any)
+	if !ok || data == nil {
+		data = map[string]any{}
+		out["data"] = data
+	}
+	if block := HostControlBlock(); block != nil {
+		delete(data, "callbacks")
+		data["hostControl"] = block
+	}
+	data["openBrowser"] = PATOpenBrowserValue()
+}
+
 func cleanPATJSON(body map[string]any, code string) string {
 	out := map[string]any{
 		"success": false,
@@ -341,31 +377,11 @@ func cleanPATJSON(body map[string]any, code string) string {
 			out["data"] = stripClassFields(fallback)
 		}
 	}
+	ApplyHostMutations(out)
 
-	// docs/pat/contract.md §5.2 invariant: CLI injects data.hostControl at a
-	// single point (here) whenever it is operating in host-owned mode. The
-	// same normalization also strips legacy CLI-owned callback argv metadata
-	// so passive classifier and active retry paths stay byte-for-byte aligned.
-	if block := HostControlBlock(); block != nil {
-		data, ok := out["data"].(map[string]any)
-		if !ok || data == nil {
-			data = map[string]any{}
-			out["data"] = data
-		}
-		delete(data, "callbacks")
-		data["hostControl"] = block
-	}
-	data, ok := out["data"].(map[string]any)
-	if !ok || data == nil {
-		data = map[string]any{}
-		out["data"] = data
-	}
-	data["openBrowser"] = PATOpenBrowserValue()
-
-	// docs/pat/contract.md §2: stderr JSON MUST be a single-line, directly json.Unmarshal-able
+	// stderr JSON MUST be a single-line, directly json.Unmarshal-able
 	// payload — pretty-printing would break naïve host parsers that read
-	// stderr line-by-line and fail on leading whitespace. See
-	// docs/pat/contract.md §2.
+	// stderr line-by-line and fail on leading whitespace.
 	b, err := json.Marshal(out)
 	if err != nil {
 		return fmt.Sprintf(`{"success":false,"code":"%s"}`, code)
@@ -378,13 +394,11 @@ func cleanPATJSON(body map[string]any, code string) string {
 // framework (ClassifyPatAuthCheck / AsPatAuthCheckError).
 
 // ClassifyPatAuthCheck is the open-source fallback that checks a tool-call
-// Content map for PAT permission codes and auth-required codes.  Returns a
+// Content map for PAT permission codes and auth-required codes. Returns a
 // non-nil *PATError when the content carries a recognised PAT/auth error.
 func ClassifyPatAuthCheck(content map[string]any) *PATError {
-	for _, key := range []string{"code", "errorCode", "error_code"} {
-		if code, ok := content[key].(string); ok && (patNoPermissionCodes[code] || patAuthRequiredCodes[code]) {
-			return &PATError{RawJSON: cleanPATJSON(content, code)}
-		}
+	if code, ok := getPATErrorCode(content); ok {
+		return &PATError{RawJSON: cleanPATJSON(content, code)}
 	}
 	return nil
 }

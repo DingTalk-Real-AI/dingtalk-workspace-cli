@@ -453,8 +453,8 @@ func TestClassifyPatAuthCheck_AgentCodeNotExists(t *testing.T) {
 }
 
 // TestClassifyPatAuthCheck_scope_auth_required pins the PAT_SCOPE_AUTH_REQUIRED
-// selector (Frozen; see docs/pat/contract.md §2.3 + error-catalog.md
-// §PAT_SCOPE_AUTH_REQUIRED) as a PATError with exit=4 so hosts can kick the
+// selector (part of the frozen PAT-family enum; see patAuthRequiredCodes in
+// internal/errors/pat.go) as a PATError with exit=4 so hosts can kick the
 // `dws auth login --scope <data.missingScope>` branch.
 func TestClassifyPatAuthCheck_scope_auth_required(t *testing.T) {
 	t.Parallel()
@@ -578,9 +578,9 @@ func TestCleanPATJSON_WithoutData(t *testing.T) {
 	}
 }
 
-// TestCleanPATJSON_InjectsHostControlWhenClawSet verifies the contract
-// invariant from docs/pat/contract.md §5.2: when the bootstrap wires a
-// non-empty clawType provider, cleanPATJSON MUST emit data.hostControl.
+// TestCleanPATJSON_InjectsHostControlWhenClawSet verifies the
+// single-injection invariant: when the bootstrap wires a non-empty
+// clawType provider, cleanPATJSON MUST emit data.hostControl.
 func TestCleanPATJSON_InjectsHostControlWhenClawSet(t *testing.T) {
 	// Not parallel: mutates the package-level provider.
 	t.Cleanup(func() { SetHostControlProvider(nil) })
@@ -677,11 +677,10 @@ func TestCleanPATJSON_UsesBrowserPolicyProvider(t *testing.T) {
 	}
 }
 
-// TestCleanPATJSON_SingleLineOutput pins down the docs/pat/contract.md §2 /
-// docs/pat/contract.md §2 wire invariant: stderr JSON MUST be emitted
-// as a single line (no embedded \n, no pretty-print indentation) so
-// that naïve host parsers reading stderr line-by-line stay correct.
-// Regression guard against accidental reintroduction of
+// TestCleanPATJSON_SingleLineOutput pins down the wire invariant: stderr
+// JSON MUST be emitted as a single line (no embedded \n, no pretty-print
+// indentation) so that naïve host parsers reading stderr line-by-line stay
+// correct. Regression guard against accidental reintroduction of
 // json.MarshalIndent.
 func TestCleanPATJSON_SingleLineOutput(t *testing.T) {
 	t.Parallel()

@@ -28,11 +28,11 @@ func TestOpenSourceTreeOmitsEmbeddedHostMarkers(t *testing.T) {
 	// NOTE: REWIND_SESSION_ID / REWIND_REQUEST_ID / REWIND_MESSAGE_ID are
 	// intentionally NOT on this list. They are accepted by the CLI as
 	// optional backward-compatibility aliases for the primary DWS_* trace
-	// env names (see docs/pat/contract.md §3.1 and §9). Because they are a
-	// documented compatibility surface rather than an internal coupling to
-	// a specific host implementation, referring to these literals from
-	// source code and docs is allowed. Product names like "RewindDesktop"
-	// and other host-implementation specific symbols remain forbidden.
+	// env names. Because they are a documented compatibility surface
+	// rather than an internal coupling to a specific host implementation,
+	// referring to these literals from source code and docs is allowed.
+	// Product names like "RewindDesktop" and other host-implementation
+	// specific symbols remain forbidden.
 	forbidden := []string{
 		"DWS_" + "BUILD_MODE",
 		"com.dingtalk.scenario." + "wukong",

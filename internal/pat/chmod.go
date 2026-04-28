@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"regexp"
 	"strings"
@@ -32,31 +31,28 @@ import (
 
 // resolveSessionIDFromEnv returns the effective session id from environment
 // variables. Resolution order:
-//  1. DWS_SESSION_ID (primary; Stable per docs/pat/contract.md §3.1)
-//  2. REWIND_SESSION_ID (compatibility alias; reference host implementation
-//     compatibility — kept only so hosts that already inject the legacy
-//     trace triple keep working without code churn)
+//  1. DWS_SESSION_ID (primary, stable env name).
+//  2. REWIND_SESSION_ID (compatibility alias; kept only so hosts that
+//     already inject the legacy trace triple keep working without code
+//     churn).
 //
-// When both are set to different non-empty values, DWS_SESSION_ID wins and
-// we emit a slog.Warn so operators can spot the inconsistency.
+// When both are set to different non-empty values, DWS_SESSION_ID wins
+// silently. We deliberately do NOT log either raw session id value or
+// any derived fingerprint: this resolver is invoked by `dws pat chmod`
+// session grants, and any stderr / ~/.dws/logs capture of those
+// identifiers can land verbatim in attached troubleshooting bundles.
+// Hosts that need to detect a mismatch between the two env vars must do
+// so on the host side before invoking the CLI.
 func resolveSessionIDFromEnv() string {
-	dws := os.Getenv("DWS_SESSION_ID")
-	legacy := os.Getenv("REWIND_SESSION_ID")
-	if dws != "" && legacy != "" && dws != legacy {
-		slog.Warn("pat: DWS_SESSION_ID and REWIND_SESSION_ID disagree; using DWS_SESSION_ID",
-			"dws_session_id", dws,
-			"legacy_session_id", legacy,
-		)
-	}
-	if dws != "" {
+	if dws := os.Getenv("DWS_SESSION_ID"); dws != "" {
 		return dws
 	}
-	return legacy
+	return os.Getenv("REWIND_SESSION_ID")
 }
 
 // agentCodeEnv is the canonical (and only) environment variable name
 // used as a per-shell fallback for the --agentCode flag on `dws pat *`
-// commands, per docs/pat/contract.md §2.
+// commands.
 //
 // Why: agent hosts typically set their business agent code once when
 // spawning a long-lived shell / sub-process; requiring `--agentCode` on
@@ -77,7 +73,7 @@ const agentCodeEnv = "DINGTALK_DWS_AGENTCODE"
 // documented agent-code generation schemes (e.g. md5 digests, uuid-like
 // ids, short host-assigned slugs) while rejecting shell metacharacters
 // and whitespace that would otherwise flow unescaped into an MCP tool
-// argument. Kept in sync with docs/pat/contract.md §9.
+// argument.
 var agentCodePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
 // resolveAgentCodeFromEnv returns the fallback agent code from the
@@ -108,8 +104,7 @@ func validateAgentCode(code string) error {
 }
 
 // resolveAgentCode implements the canonical two-tier lookup for
-// --agentCode documented at docs/pat/contract.md §9 and the SSOT
-// third-party integration guide §3:
+// --agentCode:
 //
 //  1. explicit --agentCode flag value (highest priority; wins over env)
 //  2. DINGTALK_DWS_AGENTCODE env var (per-shell primary fallback)
@@ -147,18 +142,6 @@ const (
 	// patGrantToolNameLegacyAlias is retained for server builds that still
 	// expose only the legacy Chinese display name.
 	patGrantToolNameLegacyAlias = "个人授权"
-
-	// patApplyToolName is the English-first wire name used by the
-	// orchestrator entry `dws pat apply`.
-	patApplyToolName = "pat.apply"
-
-	// patStatusToolName is the English-first wire name used by
-	// `dws pat status`.
-	patStatusToolName = "pat.status"
-
-	// patScopesToolName is the English-first wire name used by
-	// `dws pat scopes`.
-	patScopesToolName = "pat.scopes"
 )
 
 var validGrantTypes = map[string]bool{
@@ -223,22 +206,27 @@ grantType 规则:
 				return fmt.Errorf("internal error: tool runtime not initialized")
 			}
 
+			if sessionID == "" {
+				sessionID = resolveSessionIDFromEnv()
+			}
 			toolArgs := map[string]any{
 				"agentCode": agentCode,
 				"scopes":    scopes,
 				"grantType": grantType,
 			}
-			legacyToolArgs := map[string]any{
-				"agentCode": agentCode,
-				"scope":     scopes,
-				"grantType": grantType,
-			}
-			if sessionID == "" {
-				sessionID = resolveSessionIDFromEnv()
-			}
 			if sessionID != "" {
 				toolArgs["sessionId"] = sessionID
-				legacyToolArgs["sessionId"] = sessionID
+			}
+			// Legacy server schema accepted singular "scope"; clone the
+			// canonical argv and rename the key so the two payloads stay
+			// in lock-step on every other field.
+			legacyToolArgs := make(map[string]any, len(toolArgs))
+			for k, v := range toolArgs {
+				if k == "scopes" {
+					legacyToolArgs["scope"] = v
+					continue
+				}
+				legacyToolArgs[k] = v
 			}
 
 			ctx := context.Background()
@@ -253,9 +241,8 @@ grantType 规则:
 
 	// --agentCode is required, but we deliberately do NOT call
 	// MarkFlagRequired here. The agent code may also come from the
-	// DINGTALK_DWS_AGENTCODE env var (per docs/pat/contract.md §9 and
-	// contract.md §2); cobra's MarkFlagRequired would refuse to run
-	// before our resolver has a chance to consume the env.
+	// DINGTALK_DWS_AGENTCODE env var; cobra's MarkFlagRequired would
+	// refuse to run before our resolver has a chance to consume the env.
 	chmodCmd.Flags().String("agentCode", "",
 		"Agent 唯一标识（必填；亦可通过 env DINGTALK_DWS_AGENTCODE 注入，flag 优先）")
 	chmodCmd.Flags().String("grant-type", "session", "授权策略: once|session|permanent")

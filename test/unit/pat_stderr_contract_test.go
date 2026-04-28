@@ -22,14 +22,14 @@ import (
 )
 
 // D5 Smoke A — PAT stderr JSON is a single-line, json.Unmarshal-able
-// payload for every code in the SSOT-frozen enum.
+// payload for every code in the frozen enum.
 //
-// This test is the CI-level guard for docs/pat/contract.md §2 ("stderr
-// JSON MUST be single-line and directly unmarshal-able") and contract.md §2
-// ("撞墙数据"). It sits in the public `test/unit` tree — deliberately
-// separate from internal/errors/pat_test.go — so the contract stays
-// defended even after internal refactors that might move the JSON
-// assembly code to another package or collapse helpers into it.
+// This test is the CI-level guard for the wire invariant ("stderr JSON
+// MUST be single-line and directly unmarshal-able"). It sits in the
+// public `test/unit` tree — deliberately separate from
+// internal/errors/pat_test.go — so the contract stays defended even
+// after internal refactors that might move the JSON assembly code to
+// another package or collapse helpers into it.
 //
 // Wire path exercised: ClassifyPatAuthCheck covers BOTH error families
 // the SSOT freezes — patNoPermissionCodes (PAT_NO_PERMISSION and the
@@ -196,7 +196,7 @@ func TestPATStderrJSON_SingleLineUnmarshalable(t *testing.T) {
 				t.Fatalf("ClassifyPatAuthCheck(%s) returned nil; expected *PATError", tc.code)
 			}
 			if patErr.ExitCode() != errpkg.ExitCodePermission {
-				t.Fatalf("ExitCode() = %d, want %d (PAT exit_code == 4 per contract.md §2)",
+				t.Fatalf("ExitCode() = %d, want %d (PAT exit_code MUST be 4)",
 					patErr.ExitCode(), errpkg.ExitCodePermission)
 			}
 
@@ -217,7 +217,7 @@ func TestPATStderrJSON_SingleLineUnmarshalable(t *testing.T) {
 			}
 
 			if success, ok := parsed["success"].(bool); !ok || success {
-				t.Fatalf("parsed.success = %v, want false (contract.md §2)", parsed["success"])
+				t.Fatalf("parsed.success = %v, want false", parsed["success"])
 			}
 			gotCode, ok := parsed["code"].(string)
 			if !ok {
@@ -232,12 +232,13 @@ func TestPATStderrJSON_SingleLineUnmarshalable(t *testing.T) {
 	}
 }
 
-// TestPATStderrJSON_CodeEnumFrozen pins the exact code enum that the
-// SSOT / docs/pat/contract.md §2.3 freezes for PAT-family errors. If a
-// future refactor accidentally renames a code (e.g. drops the risk-tier
-// prefix) the classifier will stop producing a *PATError and this
-// table-driven loop will fail with a clear message — preventing a
-// silent break of the host integration contract.
+// TestPATStderrJSON_CodeEnumFrozen pins the exact code enum frozen for
+// PAT-family errors (see patNoPermissionCodes / patAuthRequiredCodes in
+// internal/errors/pat.go). If a future refactor accidentally renames a
+// code (e.g. drops the risk-tier prefix) the classifier will stop
+// producing a *PATError and this table-driven loop will fail with a
+// clear message — preventing a silent break of the host integration
+// contract.
 func TestPATStderrJSON_CodeEnumFrozen(t *testing.T) {
 	t.Parallel()
 

@@ -21,17 +21,17 @@ import (
 const (
 	// AgentCodeEnv is the sole per-spawn environment variable the host injects
 	// to declare "this process is driven by a third-party Agent host, render
-	// authorization UI yourselves". docs/pat/contract.md §7.
+	// authorization UI yourselves".
 	AgentCodeEnv = "DINGTALK_DWS_AGENTCODE"
 )
 
 // HostOwnsPATFlow reports whether the current process is running under a
 // third-party Agent host that will render the PAT authorization card
-// itself. Per docs/pat/contract.md §7, the sole trigger is AgentCodeEnv
-// (DINGTALK_DWS_AGENTCODE) being non-empty. The CLI deliberately does
-// not consult any other signal (DINGTALK_AGENT / DWS_CHANNEL / the wire
-// claw-type header) for this decision so that server-side routing tags
-// and the host-owned UI contract remain independent concerns.
+// itself. The sole trigger is AgentCodeEnv (DINGTALK_DWS_AGENTCODE) being
+// non-empty. The CLI deliberately does not consult any other signal
+// (DINGTALK_AGENT / DWS_CHANNEL / the wire claw-type header) for this
+// decision so that server-side routing tags and the host-owned UI contract
+// remain independent concerns.
 func HostOwnsPATFlow() bool {
 	return strings.TrimSpace(os.Getenv(AgentCodeEnv)) != ""
 }

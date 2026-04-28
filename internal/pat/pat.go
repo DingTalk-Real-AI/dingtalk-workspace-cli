@@ -40,7 +40,7 @@ func RegisterCommands(root *cobra.Command, c edition.ToolCaller) {
   生效时会优先按 DINGTALK_DWS_AGENTCODE 读取 agent 策略，再回退到默认策略。
   写入 agent 策略需显式传 --agentCode；不传则写入全局默认策略。
 
-Host-owned PAT 开关（contract.md §7）：
+Host-owned PAT 开关：
   当且仅当环境变量 DINGTALK_DWS_AGENTCODE 非空时，CLI 命中 PAT
   固定以 stderr JSON + exit=4 的 host-owned 形式返回，
   由宿主处理全部 UI / 交互 / 回调节奏 / 重试逻辑，

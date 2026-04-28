@@ -504,9 +504,9 @@ func TestChmod_agentCode_env_invalid(t *testing.T) {
 }
 
 // TestChmod_agentCode_flag_wins_over_env verifies the Priority-1 contract
-// of docs/pat/contract.md §9: when both the flag and the env are set, the
-// flag wins and env is silently ignored (no warning needed because the
-// flag is the explicit, scripted intent).
+// of resolveAgentCode: when both the flag and the env are set, the flag
+// wins and env is silently ignored (no warning needed because the flag is
+// the explicit, scripted intent).
 func TestChmod_agentCode_flag_wins_over_env(t *testing.T) {
 	t.Setenv(agentCodeEnv, "envval")
 

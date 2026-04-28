@@ -99,7 +99,6 @@ const (
 // ~/.dws/logs/dws.log captures it unconditionally at DEBUG. It records
 // ONLY the derived booleans — never the env value, token, client-id or
 // flow-id — so logs remain safe to attach to issues.
-// See docs/pat/host-integration.md §10.
 var hostOwnedPATDecisionOnce sync.Once
 
 // logHostOwnedPATDecisionOnce emits the single-shot debug trace. It is

@@ -17,7 +17,7 @@ package edition
 // the open-source build. It is intentionally hard-wired — the open-source
 // CLI does NOT derive claw-type from DINGTALK_AGENT or any other caller
 // input, so third-party hosts get a predictable header regardless of
-// their environment. See docs/pat/contract.md §7b.
+// their environment.
 const DefaultOSSClawType = "openClaw"
 
 // defaultHooks returns the open-source edition defaults.

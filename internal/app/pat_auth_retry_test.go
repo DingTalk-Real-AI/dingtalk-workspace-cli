@@ -139,7 +139,7 @@ func TestPrintPatAuthJSON_MachineReadable(t *testing.T) {
 	}
 	PrintPatAuthJSON(&buf, scopeErr)
 
-	// Per docs/pat/contract.md §2 the payload is single-line; assert by parsing the JSON
+	// The payload is required to be single-line; assert by parsing the JSON
 	// rather than by matching pretty-printed substrings.
 	output := buf.String()
 	var parsed map[string]any
@@ -666,7 +666,7 @@ func TestHandlePatAuthCheck_Rejected(t *testing.T) {
 func TestHandlePatAuthCheck_HostControlledFlowIDPassthrough(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", tmpDir)
-	// Host-owned decision: driven ONLY by DINGTALK_DWS_AGENTCODE (see docs/pat/contract.md §7).
+	// Host-owned decision: driven ONLY by DINGTALK_DWS_AGENTCODE.
 	// DINGTALK_AGENT is set to demonstrate it does NOT leak into
 	// hostControl.clawType — the open-source build pins that to the
 	// literal edition.DefaultOSSClawType value ("openClaw").
@@ -1028,11 +1028,11 @@ func TestRetryWithPatAuthRetry_JSONModeReturnsStructuredPATError(t *testing.T) {
 	}
 }
 
-// TestEnrichPATErrorForHostControl_SingleLineOutput locks in the docs/pat/contract.md §2 /
-// docs/pat/contract.md §2 wire invariant: the enriched host-controlled
-// PAT payload must be single-line (no embedded newlines, no indentation),
-// so stderr-line-scanning hosts stay correct. Regression guard against
-// accidental reintroduction of json.MarshalIndent.
+// TestEnrichPATErrorForHostControl_SingleLineOutput locks in the wire
+// invariant: the enriched host-controlled PAT payload must be single-line
+// (no embedded newlines, no indentation), so stderr-line-scanning hosts
+// stay correct. Regression guard against accidental reintroduction of
+// json.MarshalIndent.
 func TestEnrichPATErrorForHostControl_SingleLineOutput(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "agt-sales")
 	t.Setenv("DINGTALK_AGENT", "sales-copilot")
@@ -1077,13 +1077,13 @@ func TestBuildPATScopeHostJSON_SingleLineOutput(t *testing.T) {
 		Hint:          "run `dws auth login --scope \"mail:send\"` to authorize",
 		MissingScope:  "mail:send",
 	}
-	out := buildPATScopeHostJSON(scopeErr)
+	out := buildPATScopeJSON(scopeErr, true)
 
 	if strings.Contains(out, "\n") {
-		t.Fatalf("buildPATScopeHostJSON output must be single-line, got embedded newline:\n%s", out)
+		t.Fatalf("buildPATScopeJSON(host) output must be single-line, got embedded newline:\n%s", out)
 	}
 	if strings.HasPrefix(out, " ") || strings.HasPrefix(out, "\t") {
-		t.Fatalf("buildPATScopeHostJSON output must not be indented, got leading whitespace: %q", out)
+		t.Fatalf("buildPATScopeJSON(host) output must not be indented, got leading whitespace: %q", out)
 	}
 	var parsed map[string]any
 	if err := json.Unmarshal([]byte(out), &parsed); err != nil {

@@ -66,9 +66,9 @@ type Option func(*Error)
 
 // ExitCode returns the documented process exit code for the error category.
 // exit=4 is reserved exclusively for PATError (see internal/errors/pat.go
-// ExitCodePermission and docs/pat/contract.md §1); Discovery therefore
-// uses 6 so hosts can tell "catalog lookup broke" apart from "PAT
-// permission insufficient".
+// ExitCodePermission and the exit-code table in docs/reference.md);
+// Discovery therefore uses 6 so hosts can tell "catalog lookup broke"
+// apart from "PAT permission insufficient".
 func (e *Error) ExitCode() int {
 	switch e.Category {
 	case CategoryAPI:

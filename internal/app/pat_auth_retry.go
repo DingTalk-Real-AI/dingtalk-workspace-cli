@@ -299,7 +299,7 @@ func retryWithPatAuthRetry(ctx context.Context, runner executor.Runner, invocati
 		"agentCodeEnvSet", os.Getenv(authpkg.AgentCodeEnv) != "",
 	)
 	if hostOwnedPAT {
-		return executor.Result{}, &apperrors.PATError{RawJSON: buildPATScopeHostJSON(scopeErr)}
+		return executor.Result{}, &apperrors.PATError{RawJSON: buildPATScopeJSON(scopeErr, true)}
 	}
 	if wantsStructuredPATOutputFromRunner(runner) {
 		return executor.Result{}, &apperrors.PATError{RawJSON: buildPATScopeJSON(scopeErr, false)}
@@ -587,17 +587,9 @@ func enrichPATErrorForHostControl(raw string) string {
 		return patErr.RawJSON
 	}
 
-	data, _ := payload["data"].(map[string]any)
-	if data == nil {
-		data = make(map[string]any)
-		payload["data"] = data
-	}
-	if hostControl := buildHostControlState(); hostControl != nil {
-		data["hostControl"] = hostControl
-	}
-	data["openBrowser"] = apperrors.PATOpenBrowserValue()
+	apperrors.ApplyHostMutations(payload)
 
-	// docs/pat/contract.md §2: stderr JSON is single-line.
+	// stderr JSON MUST be single-line.
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return raw
@@ -605,10 +597,12 @@ func enrichPATErrorForHostControl(raw string) string {
 	return string(encoded)
 }
 
-func buildPATScopeHostJSON(scopeErr *PatScopeError) string {
-	return buildPATScopeJSON(scopeErr, true)
-}
-
+// buildPATScopeJSON renders the PAT_SCOPE_AUTH_REQUIRED stderr payload.
+// includeHostControl=true follows the standard host-owned/CLI-owned split
+// (data.hostControl is injected only if HostControlBlock is non-nil).
+// includeHostControl=false is an explicit override used by the CLI-owned
+// branch so that any env-mode misconfiguration cannot leak a host-owned
+// contract into stderr.
 func buildPATScopeJSON(scopeErr *PatScopeError, includeHostControl bool) string {
 	data := map[string]any{
 		"identity":     scopeErr.Identity,
@@ -619,7 +613,7 @@ func buildPATScopeJSON(scopeErr *PatScopeError, includeHostControl bool) string 
 		"openBrowser":  apperrors.PATOpenBrowserValue(),
 	}
 	if includeHostControl {
-		if hostControl := buildHostControlState(); hostControl != nil {
+		if hostControl := apperrors.HostControlBlock(); hostControl != nil {
 			data["hostControl"] = hostControl
 		}
 	}
@@ -629,22 +623,12 @@ func buildPATScopeJSON(scopeErr *PatScopeError, includeHostControl bool) string 
 		"code":    patScopeAuthRequiredCode,
 		"data":    data,
 	}
-	// docs/pat/contract.md §2: stderr JSON is single-line.
+	// stderr JSON MUST be single-line.
 	b, err := json.Marshal(payload)
 	if err != nil {
 		return `{"success":false,"code":"PAT_SCOPE_AUTH_REQUIRED"}`
 	}
 	return string(b)
-}
-
-// buildHostControlState returns the host-control block used by the active
-// retry / scope-auth paths. Fields come from apperrors.HostControlBlock so
-// the classifier-side injection and this call-site agree byte-for-byte.
-//
-// In CLI-owned mode HostControlBlock returns nil, and callers must omit the
-// field rather than fabricating a host-owned contract.
-func buildHostControlState() map[string]any {
-	return apperrors.HostControlBlock()
 }
 
 // pollPatDeviceFlow polls the PAT device flow status endpoint until a terminal

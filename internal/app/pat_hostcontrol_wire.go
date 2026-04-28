@@ -23,9 +23,9 @@ import (
 // init wires the PAT classifier's hostControl injection hook. This
 // guarantees cleanPATJSON emits data.hostControl in host-owned mode
 // regardless of whether the PAT error was surfaced via the active retry
-// path or the passive classifier path (see docs/pat/contract.md §5.2).
+// path or the passive classifier path.
 //
-// Decision rule (contract.md §7):
+// Decision rule:
 //   - Host-owned is triggered iff DINGTALK_DWS_AGENTCODE is non-empty.
 //   - When triggered, `clawType` in the emitted hostControl block MUST
 //     be the exact value the CLI actually injects on the wire into the
