@@ -83,6 +83,25 @@ func (f *fallbackToolCaller) CallTool(_ context.Context, _ string, toolName stri
 func (f *fallbackToolCaller) Format() string { return "json" }
 func (f *fallbackToolCaller) DryRun() bool   { return false }
 
+type fallbackErrorToolCaller struct {
+	calls []recordedToolCall
+}
+
+func (f *fallbackErrorToolCaller) CallTool(_ context.Context, _ string, toolName string, args map[string]any) (*edition.ToolResult, error) {
+	copied := make(map[string]any, len(args))
+	for k, v := range args {
+		copied[k] = v
+	}
+	f.calls = append(f.calls, recordedToolCall{tool: toolName, args: copied})
+	if len(f.calls) == 1 {
+		return nil, errors.New("pat chmod failed: business error: PARAM_ERROR - 未找到指定工具")
+	}
+	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{"success":true,"data":{"authRequestId":"req-ok"}}`}}}, nil
+}
+
+func (f *fallbackErrorToolCaller) Format() string { return "json" }
+func (f *fallbackErrorToolCaller) DryRun() bool   { return false }
+
 func stringSliceArgEqual(got any, want []string) bool {
 	gotSlice, ok := got.([]string)
 	if !ok || len(gotSlice) != len(want) {
@@ -134,8 +153,42 @@ func TestChmod_agentCode_env_fallback(t *testing.T) {
 	}
 }
 
-func TestCallPATToolWithLegacyFallback_emptyCanonicalResultRetriesLegacyAlias(t *testing.T) {
+func TestCallPATToolWithLegacyFallback_emptyCanonicalResultDoesNotRetryLegacyAlias(t *testing.T) {
 	fake := &fallbackToolCaller{}
+	canonicalArgs := map[string]any{
+		"agentCode": "qoderwork",
+		"scopes":    []string{"aitable.record:read"},
+		"grantType": "permanent",
+	}
+	legacyArgs := map[string]any{
+		"agentCode": "qoderwork",
+		"scope":     []string{"aitable.record:read"},
+		"grantType": "permanent",
+	}
+
+	result, err := callPATToolWithLegacyFallback(context.Background(), fake, "pat", patGrantToolName, patGrantToolNameLegacyAlias, canonicalArgs, legacyArgs)
+	if err != nil {
+		t.Fatalf("callPATToolWithLegacyFallback error = %v", err)
+	}
+	if !isEmptyToolResult(result) {
+		t.Fatalf("expected original empty canonical result, got %#v", result)
+	}
+	if len(fake.calls) != 1 {
+		t.Fatalf("CallTool call count = %d, want 1", len(fake.calls))
+	}
+	if fake.calls[0].tool != patGrantToolName {
+		t.Fatalf("first tool = %q, want %q", fake.calls[0].tool, patGrantToolName)
+	}
+	if _, ok := fake.calls[0].args["scopes"]; !ok {
+		t.Fatalf("canonical args missing scopes: %#v", fake.calls[0].args)
+	}
+	if _, ok := fake.calls[0].args["scope"]; ok {
+		t.Fatalf("canonical args should not use legacy scope: %#v", fake.calls[0].args)
+	}
+}
+
+func TestCallPATToolWithLegacyFallback_toolNotFoundRetriesLegacyAlias(t *testing.T) {
+	fake := &fallbackErrorToolCaller{}
 	canonicalArgs := map[string]any{
 		"agentCode": "qoderwork",
 		"scopes":    []string{"aitable.record:read"},
@@ -159,12 +212,6 @@ func TestCallPATToolWithLegacyFallback_emptyCanonicalResultRetriesLegacyAlias(t 
 	}
 	if fake.calls[0].tool != patGrantToolName {
 		t.Fatalf("first tool = %q, want %q", fake.calls[0].tool, patGrantToolName)
-	}
-	if _, ok := fake.calls[0].args["scopes"]; !ok {
-		t.Fatalf("canonical args missing scopes: %#v", fake.calls[0].args)
-	}
-	if _, ok := fake.calls[0].args["scope"]; ok {
-		t.Fatalf("canonical args should not use legacy scope: %#v", fake.calls[0].args)
 	}
 	if fake.calls[1].tool != patGrantToolNameLegacyAlias {
 		t.Fatalf("fallback tool = %q, want %q", fake.calls[1].tool, patGrantToolNameLegacyAlias)

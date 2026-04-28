@@ -273,16 +273,13 @@ func callPATToolWithLegacyFallback(ctx context.Context, c edition.ToolCaller, pr
 		return nil, fmt.Errorf("internal error: tool runtime not initialized")
 	}
 	result, err := c.CallTool(ctx, productID, toolName, toolArgs)
-	if err == nil && !isEmptyToolResult(result) {
+	if err == nil {
 		return result, nil
 	}
 	if legacyAlias == "" {
-		if err != nil {
-			return nil, err
-		}
-		return result, nil
+		return nil, err
 	}
-	if err != nil && !isToolNotRegisteredError(err) {
+	if !isToolNotRegisteredError(err) {
 		return nil, err
 	}
 	return c.CallTool(ctx, productID, legacyAlias, legacyArgs)

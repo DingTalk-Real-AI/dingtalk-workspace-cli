@@ -156,11 +156,15 @@ func IsPATNoPermissionCode(code string) bool {
 	return patNoPermissionCodes[code]
 }
 
-// getPATErrorCode extracts a PAT error code from a map.
+// getPATErrorCode extracts any PAT-intercept code from a map.
 // Supports legacy error_code alongside code and errorCode.
+//
+// PAT intercepts include both permission denials and auth-required selectors:
+// callers on the text/tool-result path must preserve both families as
+// *PATError so exit=4 + raw stderr JSON survives all the way to the host/CLI.
 func getPATErrorCode(body map[string]any) (string, bool) {
 	for _, key := range []string{"code", "errorCode", "error_code"} {
-		if code, ok := body[key].(string); ok && patNoPermissionCodes[code] {
+		if code, ok := body[key].(string); ok && (patNoPermissionCodes[code] || patAuthRequiredCodes[code]) {
 			return code, true
 		}
 	}

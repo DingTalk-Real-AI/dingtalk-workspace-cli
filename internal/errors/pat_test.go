@@ -263,6 +263,25 @@ func TestClassifyToolResultContent_PATPermissionLegacyErrorCode(t *testing.T) {
 	}
 }
 
+func TestClassifyToolResultContent_PATAuthRequired(t *testing.T) {
+	t.Parallel()
+	content := map[string]any{
+		"errorCode": "AGENT_CODE_NOT_EXISTS",
+		"data":      map[string]any{"agentCode": "agt-missing"},
+	}
+	err := ClassifyToolResultContent(content)
+	if err == nil {
+		t.Fatal("expected non-nil error for PAT auth-required selector")
+	}
+	var patErr *PATError
+	if !stderrors.As(err, &patErr) {
+		t.Fatalf("expected *PATError, got %T", err)
+	}
+	if !strings.Contains(patErr.RawJSON, "AGENT_CODE_NOT_EXISTS") {
+		t.Errorf("RawJSON should contain AGENT_CODE_NOT_EXISTS, got: %s", patErr.RawJSON)
+	}
+}
+
 func TestClassifyToolResultContent_NoError(t *testing.T) {
 	t.Parallel()
 	content := map[string]any{"success": true, "data": "ok"}
@@ -336,6 +355,25 @@ func TestClassifyMCPResponseText_PATPermissionLegacyErrorCode(t *testing.T) {
 	}
 	if !strings.Contains(patErr.RawJSON, "PAT_MEDIUM_RISK_NO_PERMISSION") {
 		t.Errorf("RawJSON should contain legacy code, got: %s", patErr.RawJSON)
+	}
+}
+
+func TestClassifyMCPResponseText_PATAuthRequired(t *testing.T) {
+	t.Parallel()
+	text := `{"success":false,"code":"PAT_SCOPE_AUTH_REQUIRED","data":{"missingScope":"mail:send"}}`
+	err := ClassifyMCPResponseText(text)
+	if err == nil {
+		t.Fatal("expected non-nil error")
+	}
+	var patErr *PATError
+	if !stderrors.As(err, &patErr) {
+		t.Fatalf("expected *PATError, got %T", err)
+	}
+	if !strings.Contains(patErr.RawJSON, "PAT_SCOPE_AUTH_REQUIRED") {
+		t.Errorf("RawJSON should contain PAT_SCOPE_AUTH_REQUIRED, got: %s", patErr.RawJSON)
+	}
+	if !strings.Contains(patErr.RawJSON, "missingScope") {
+		t.Errorf("RawJSON should preserve missingScope, got: %s", patErr.RawJSON)
 	}
 }
 

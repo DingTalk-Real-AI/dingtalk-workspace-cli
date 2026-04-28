@@ -1,6 +1,10 @@
 package app
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
+)
 
 func TestDefaultPATServerDescriptorUsesBehaviorAuthorizationName(t *testing.T) {
 	server := defaultPATServerDescriptor()
@@ -30,6 +34,26 @@ func TestDirectRuntimeProductIDsIncludesDefaultPAT(t *testing.T) {
 	if !ids["pat"] {
 		t.Fatalf("DirectRuntimeProductIDs() missing default pat product: %#v", ids)
 	}
+}
+
+func TestDirectRuntimeEndpoint_DefaultPATFallbackWhenRegistryMissing(t *testing.T) {
+	withCleanDynamicRegistry(t)
+	assertEndpoint(t, "pat", "", defaultPATMCPEndpoint)
+}
+
+func TestDirectRuntimeEndpoint_PATDiscoveryOverrideWinsOverBuiltInFallback(t *testing.T) {
+	withCleanDynamicRegistry(t)
+	customEndpoint := "https://example.com/server/custom-pat"
+	SetDynamicServers([]market.ServerDescriptor{
+		{
+			Endpoint: customEndpoint,
+			CLI: market.CLIOverlay{
+				ID:      "pat",
+				Command: "pat",
+			},
+		},
+	})
+	assertEndpoint(t, "pat", "", customEndpoint)
 }
 
 func TestNormalizeDirectRuntimeProductIDPreservesLegacyHiddenVendorRouting(t *testing.T) {

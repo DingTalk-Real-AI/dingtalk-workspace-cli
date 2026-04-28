@@ -13,14 +13,11 @@ import (
 // TestOpenSourceTreeOmitsEmbeddedHostMarkers scans source files for proprietary
 // markers that must not leak into the public (open-source) tree.
 //
-// The scanner intentionally skips the docs/ directory in addition to the other
-// excluded folders. The docs/pat/ subtree records the public wire contract
-// (docs/pat/contract.md) and docs/_research/ holds design evidence; both
-// legitimately enumerate reserved environment-variable names, historical
-// symbols, and host-integration mechanics as part of the externally visible
-// compatibility surface. The policy's job is to catch internal coupling in
-// source code (.go/.sh/.yml/.yaml/.ps1/.tmpl/Makefile). Any reference to
-// these markers inside other directories' markdown is still scanned.
+// The scanner covers public docs as well as source code because OSS leakage is
+// often introduced through documentation first. Only a small set of explicitly
+// documented compatibility literals (see NOTE below) are allowed to remain in
+// tree; everything else should trip the guard regardless of whether it appears
+// in Go, shell, YAML, templates, or markdown.
 func TestOpenSourceTreeOmitsEmbeddedHostMarkers(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
@@ -59,7 +56,7 @@ func TestOpenSourceTreeOmitsEmbeddedHostMarkers(t *testing.T) {
 		}
 		if d.IsDir() {
 			switch d.Name() {
-			case ".git", ".worktrees", "node_modules", "dist", "plans", "docs":
+			case ".git", ".worktrees", "node_modules", "dist", "plans":
 				return filepath.SkipDir
 			}
 			return nil

@@ -187,12 +187,6 @@ func directRuntimeEndpoint(productID, toolName string) (string, bool) {
 		}
 	}
 
-	for _, candidate := range []string{strings.TrimSpace(productID), normalized} {
-		if candidate == defaultPATProductID {
-			return defaultPATMCPEndpoint, true
-		}
-	}
-
 	dynamicMu.RLock()
 	de := dynamicEndpoints
 	te := dynamicToolEndpoints
@@ -214,6 +208,14 @@ func directRuntimeEndpoint(productID, toolName string) (string, bool) {
 			if endpoint, ok := de[candidate]; ok {
 				return endpoint, true
 			}
+		}
+	}
+
+	// Priority 3: built-in PAT fallback for cold-start paths that run before
+	// discovery/plugin registration has populated the dynamic registry.
+	for _, candidate := range []string{strings.TrimSpace(productID), normalized} {
+		if candidate == defaultPATProductID {
+			return defaultPATMCPEndpoint, true
 		}
 	}
 	return "", false
