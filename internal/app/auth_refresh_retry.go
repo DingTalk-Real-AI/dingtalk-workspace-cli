@@ -15,9 +15,6 @@ package app
 
 import (
 	"context"
-
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/authretry"
 )
 
 // authRetryingKey marks a context that has already attempted one
@@ -36,48 +33,4 @@ func IsAuthRetrying(ctx context.Context) bool {
 	}
 	v, _ := ctx.Value(authRetryingKey).(bool)
 	return v
-}
-
-// withAuthRetrying returns a child context flagged as "already retried once"
-// so the runner does not enter an infinite refresh loop if the second attempt
-// also returns AuthRefreshRequired.
-func withAuthRetrying(ctx context.Context) context.Context {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return context.WithValue(ctx, authRetryingKey, true)
-}
-
-// handleAuthRefreshRequired performs a one-shot ForceRefresh using the active
-// configDir and re-runs the invocation through the supplied runner. It must
-// only be called when the runner has observed an *authretry.AuthRefreshRequired
-// from an edition hook (ClassifyToolResult / OnAuthError).
-//
-// Behaviour rules — all three matter for safety:
-//  1. If the context is already flagged via IsAuthRetrying, this returns
-//     refresh.Cause unchanged. No further refresh attempts, no recursion.
-//  2. If ForceRefresh fails (e.g. refresh_token also expired), this returns
-//     refresh.Cause so the user sees the original auth diagnostic, not an
-//     internal "force refresh failed" message.
-//  3. On successful refresh, this resets the per-process token cache and
-//     re-runs the invocation with withAuthRetrying applied so a second
-//     refresh request from the overlay degrades gracefully to "show the
-//     original error".
-func handleAuthRefreshRequired(
-	ctx context.Context,
-	r executor.Runner,
-	invocation executor.Invocation,
-	refresh *authretry.AuthRefreshRequired,
-) (executor.Result, error) {
-	if refresh == nil {
-		return executor.Result{}, nil
-	}
-	if IsAuthRetrying(ctx) {
-		return executor.Result{}, refresh.Cause
-	}
-	if _, err := ForceRefreshAccessToken(ctx, defaultConfigDir()); err != nil {
-		return executor.Result{}, refresh.Cause
-	}
-	ResetRuntimeTokenCache()
-	return r.Run(withAuthRetrying(ctx), invocation)
 }
