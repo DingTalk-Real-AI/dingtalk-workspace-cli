@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Breaking
+
+- PAT interceptions now use exit code `4`; Discovery/cache/protocol failures now use exit code `6`.
+
+### Added
+
+- Add host-owned PAT A-core flow with `DINGTALK_DWS_AGENTCODE`, single-line stderr JSON, `dws pat chmod`, and browser-open policy.
+
 ## [1.0.17] - 2026-04-27
 
 New **Mail** product surface (mailbox list, KQL message search, message get, send) brings runtime command count to **163 across 14 products**. Plugin command-tree visibility hardening: stdio plugins shipping CLI overlays no longer wait on subprocess discovery to surface their commands, and overlay-registered plugin products are no longer hidden by edition `VisibleProducts` whitelists. Chat docs clarify that `--title` is required on `dws chat message send`.
