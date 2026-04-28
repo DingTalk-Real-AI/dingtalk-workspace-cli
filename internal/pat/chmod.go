@@ -279,7 +279,7 @@ func callPATToolWithLegacyFallback(ctx context.Context, c edition.ToolCaller, pr
 	if legacyAlias == "" {
 		return nil, err
 	}
-	if !isToolNotRegisteredError(err) {
+	if !isToolNotRegisteredError(err) && !isLegacyGrantSchemaMismatchError(err, toolArgs, legacyArgs) {
 		return nil, err
 	}
 	return c.CallTool(ctx, productID, legacyAlias, legacyArgs)
@@ -305,16 +305,7 @@ func isToolNotRegisteredError(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := strings.ToLower(err.Error())
-	var typed *apperrors.Error
-	if stderrors.As(err, &typed) && typed != nil {
-		msg = strings.Join([]string{
-			msg,
-			strings.ToLower(typed.Reason),
-			strings.ToLower(typed.ServerDiag.ServerErrorCode),
-			strings.ToLower(typed.ServerDiag.TechnicalDetail),
-		}, " ")
-	}
+	msg := normalizedPATErrorText(err)
 	needles := []string{
 		"tool_not_found",
 		"mcp_tool_not_found",
@@ -328,6 +319,97 @@ func isToolNotRegisteredError(err error) bool {
 		"未找到工具",
 		"工具不存在",
 	}
+	for _, needle := range needles {
+		if strings.Contains(msg, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func isLegacyGrantSchemaMismatchError(err error, toolArgs, legacyArgs map[string]any) bool {
+	if err == nil || !hasScopeKeyShapeMismatch(toolArgs, legacyArgs) {
+		return false
+	}
+	if apperrors.IsPATError(err) {
+		return false
+	}
+	msg := normalizedPATErrorText(err)
+	if containsAny(msg,
+		"pat_no_permission",
+		"pat_low_risk_no_permission",
+		"pat_medium_risk_no_permission",
+		"pat_high_risk_no_permission",
+		"pat_scope_auth_required",
+		"agent_code_not_exists",
+		"requiredscopes",
+		"missingscope",
+		"missing_scope",
+		"insufficient_scope",
+	) {
+		return false
+	}
+	if !containsAny(msg, "scope", "scopes") {
+		return false
+	}
+	if !containsAny(msg,
+		"param_error",
+		"参数错误",
+		"parameter",
+		"validation",
+		"required",
+		"missing",
+		"unknown",
+		"unexpected",
+		"invalid",
+		"unmarshal",
+	) {
+		return false
+	}
+	if containsAny(msg,
+		"permission denied",
+		"no permission",
+		"forbidden",
+		"unauthorized",
+		"auth required",
+		"无权限",
+		"未授权",
+		"pat_medium_risk_no_permission",
+	) {
+		return false
+	}
+	return true
+}
+
+func hasScopeKeyShapeMismatch(toolArgs, legacyArgs map[string]any) bool {
+	if toolArgs == nil || legacyArgs == nil {
+		return false
+	}
+	_, hasCanonicalPlural := toolArgs["scopes"]
+	_, hasCanonicalSingular := toolArgs["scope"]
+	_, hasLegacyPlural := legacyArgs["scopes"]
+	_, hasLegacySingular := legacyArgs["scope"]
+	return hasCanonicalPlural && !hasCanonicalSingular && hasLegacySingular && !hasLegacyPlural
+}
+
+func normalizedPATErrorText(err error) string {
+	if err == nil {
+		return ""
+	}
+	parts := []string{strings.ToLower(err.Error())}
+	var typed *apperrors.Error
+	if stderrors.As(err, &typed) && typed != nil {
+		parts = append(parts,
+			strings.ToLower(typed.Reason),
+			strings.ToLower(typed.ServerDiag.ServerErrorCode),
+			strings.ToLower(typed.ServerDiag.TechnicalDetail),
+			strings.ToLower(typed.Hint),
+		)
+	}
+	return strings.Join(parts, " ")
+}
+
+func containsAny(msg string, needles ...string) bool {
 	for _, needle := range needles {
 		if strings.Contains(msg, needle) {
 			return true

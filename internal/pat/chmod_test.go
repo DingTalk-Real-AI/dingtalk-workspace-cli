@@ -102,6 +102,91 @@ func (f *fallbackErrorToolCaller) CallTool(_ context.Context, _ string, toolName
 func (f *fallbackErrorToolCaller) Format() string { return "json" }
 func (f *fallbackErrorToolCaller) DryRun() bool   { return false }
 
+type fallbackSchemaMismatchToolCaller struct {
+	calls []recordedToolCall
+}
+
+func (f *fallbackSchemaMismatchToolCaller) CallTool(_ context.Context, _ string, toolName string, args map[string]any) (*edition.ToolResult, error) {
+	copied := make(map[string]any, len(args))
+	for k, v := range args {
+		copied[k] = v
+	}
+	f.calls = append(f.calls, recordedToolCall{tool: toolName, args: copied})
+	if len(f.calls) == 1 {
+		return nil, apperrors.NewAPI("business error: success=false",
+			apperrors.WithReason("business_error"),
+			apperrors.WithServerDiag(apperrors.ServerDiagnostics{
+				ServerErrorCode: "PARAM_ERROR",
+				TechnicalDetail: `input schema validation failed: unknown field "scopes"; missing required field "scope"`,
+			}),
+		)
+	}
+	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{"success":true,"data":{"authRequestId":"req-ok"}}`}}}, nil
+}
+
+func (f *fallbackSchemaMismatchToolCaller) Format() string { return "json" }
+func (f *fallbackSchemaMismatchToolCaller) DryRun() bool   { return false }
+
+type fallbackPermissionDeniedToolCaller struct {
+	calls []recordedToolCall
+}
+
+func (f *fallbackPermissionDeniedToolCaller) CallTool(_ context.Context, _ string, toolName string, args map[string]any) (*edition.ToolResult, error) {
+	copied := make(map[string]any, len(args))
+	for k, v := range args {
+		copied[k] = v
+	}
+	f.calls = append(f.calls, recordedToolCall{tool: toolName, args: copied})
+	return nil, apperrors.NewAPI("business error: success=false",
+		apperrors.WithReason("business_error"),
+		apperrors.WithServerDiag(apperrors.ServerDiagnostics{
+			ServerErrorCode: "PAT_MEDIUM_RISK_NO_PERMISSION",
+			TechnicalDetail: "permission denied for scope chat.message:send",
+		}),
+	)
+}
+
+func (f *fallbackPermissionDeniedToolCaller) Format() string { return "json" }
+func (f *fallbackPermissionDeniedToolCaller) DryRun() bool   { return false }
+
+type fallbackPATErrorToolCaller struct {
+	calls []recordedToolCall
+}
+
+func (f *fallbackPATErrorToolCaller) CallTool(_ context.Context, _ string, toolName string, args map[string]any) (*edition.ToolResult, error) {
+	copied := make(map[string]any, len(args))
+	for k, v := range args {
+		copied[k] = v
+	}
+	f.calls = append(f.calls, recordedToolCall{tool: toolName, args: copied})
+	return nil, &apperrors.PATError{RawJSON: `{"success":false,"code":"PAT_SCOPE_AUTH_REQUIRED","data":{"missingScope":"mail:send"}}`}
+}
+
+func (f *fallbackPATErrorToolCaller) Format() string { return "json" }
+func (f *fallbackPATErrorToolCaller) DryRun() bool   { return false }
+
+type fallbackPATContractErrorToolCaller struct {
+	calls []recordedToolCall
+}
+
+func (f *fallbackPATContractErrorToolCaller) CallTool(_ context.Context, _ string, toolName string, args map[string]any) (*edition.ToolResult, error) {
+	copied := make(map[string]any, len(args))
+	for k, v := range args {
+		copied[k] = v
+	}
+	f.calls = append(f.calls, recordedToolCall{tool: toolName, args: copied})
+	return nil, apperrors.NewAPI("business error: success=false",
+		apperrors.WithReason("business_error"),
+		apperrors.WithServerDiag(apperrors.ServerDiagnostics{
+			ServerErrorCode: "PAT_SCOPE_AUTH_REQUIRED",
+			TechnicalDetail: `missingScope mail:send`,
+		}),
+	)
+}
+
+func (f *fallbackPATContractErrorToolCaller) Format() string { return "json" }
+func (f *fallbackPATContractErrorToolCaller) DryRun() bool   { return false }
+
 func stringSliceArgEqual(got any, want []string) bool {
 	gotSlice, ok := got.([]string)
 	if !ok || len(gotSlice) != len(want) {
@@ -187,6 +272,27 @@ func TestCallPATToolWithLegacyFallback_emptyCanonicalResultDoesNotRetryLegacyAli
 	}
 }
 
+func TestChmod_emptyCanonicalResultReturnsError(t *testing.T) {
+	fake := &fallbackToolCaller{}
+	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("agentCode", "qoderwork")
+	_ = cmd.Flags().Set("grant-type", "permanent")
+
+	err := cmd.RunE(cmd, []string{"aitable.record:read"})
+	if err == nil {
+		t.Fatal("chmod RunE error = nil, want empty PAT authorization result")
+	}
+	if !strings.Contains(err.Error(), "empty PAT authorization result") {
+		t.Fatalf("chmod RunE error = %q, want empty PAT authorization result", err.Error())
+	}
+	if len(fake.calls) != 1 {
+		t.Fatalf("CallTool call count = %d, want 1", len(fake.calls))
+	}
+	if fake.calls[0].tool != patGrantToolName {
+		t.Fatalf("first tool = %q, want %q", fake.calls[0].tool, patGrantToolName)
+	}
+}
+
 func TestCallPATToolWithLegacyFallback_toolNotFoundRetriesLegacyAlias(t *testing.T) {
 	fake := &fallbackErrorToolCaller{}
 	canonicalArgs := map[string]any{
@@ -224,6 +330,123 @@ func TestCallPATToolWithLegacyFallback_toolNotFoundRetriesLegacyAlias(t *testing
 	}
 }
 
+func TestCallPATToolWithLegacyFallback_schemaMismatchRetriesLegacyAlias(t *testing.T) {
+	fake := &fallbackSchemaMismatchToolCaller{}
+	canonicalArgs := map[string]any{
+		"agentCode": "qoderwork",
+		"scopes":    []string{"aitable.record:read"},
+		"grantType": "permanent",
+	}
+	legacyArgs := map[string]any{
+		"agentCode": "qoderwork",
+		"scope":     []string{"aitable.record:read"},
+		"grantType": "permanent",
+	}
+
+	result, err := callPATToolWithLegacyFallback(context.Background(), fake, "pat", patGrantToolName, patGrantToolNameLegacyAlias, canonicalArgs, legacyArgs)
+	if err != nil {
+		t.Fatalf("callPATToolWithLegacyFallback error = %v", err)
+	}
+	if isEmptyToolResult(result) {
+		t.Fatalf("fallback result is empty: %#v", result)
+	}
+	if len(fake.calls) != 2 {
+		t.Fatalf("CallTool call count = %d, want 2", len(fake.calls))
+	}
+	if fake.calls[0].tool != patGrantToolName {
+		t.Fatalf("first tool = %q, want %q", fake.calls[0].tool, patGrantToolName)
+	}
+	if fake.calls[1].tool != patGrantToolNameLegacyAlias {
+		t.Fatalf("fallback tool = %q, want %q", fake.calls[1].tool, patGrantToolNameLegacyAlias)
+	}
+	if _, ok := fake.calls[1].args["scope"]; !ok {
+		t.Fatalf("legacy args missing scope: %#v", fake.calls[1].args)
+	}
+}
+
+func TestCallPATToolWithLegacyFallback_permissionDeniedDoesNotRetryLegacyAlias(t *testing.T) {
+	fake := &fallbackPermissionDeniedToolCaller{}
+	canonicalArgs := map[string]any{
+		"agentCode": "qoderwork",
+		"scopes":    []string{"chat.message:send"},
+		"grantType": "once",
+	}
+	legacyArgs := map[string]any{
+		"agentCode": "qoderwork",
+		"scope":     []string{"chat.message:send"},
+		"grantType": "once",
+	}
+
+	_, err := callPATToolWithLegacyFallback(context.Background(), fake, "pat", patGrantToolName, patGrantToolNameLegacyAlias, canonicalArgs, legacyArgs)
+	if err == nil {
+		t.Fatal("callPATToolWithLegacyFallback error = nil, want original permission denial")
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) {
+		t.Fatalf("error type = %T, want *errors.Error", err)
+	}
+	if typed.ServerDiag.ServerErrorCode != "PAT_MEDIUM_RISK_NO_PERMISSION" {
+		t.Fatalf("ServerErrorCode = %q, want PAT_MEDIUM_RISK_NO_PERMISSION", typed.ServerDiag.ServerErrorCode)
+	}
+	if len(fake.calls) != 1 {
+		t.Fatalf("CallTool call count = %d, want 1", len(fake.calls))
+	}
+}
+
+func TestCallPATToolWithLegacyFallback_patErrorDoesNotRetryLegacyAlias(t *testing.T) {
+	fake := &fallbackPATErrorToolCaller{}
+	canonicalArgs := map[string]any{
+		"agentCode": "qoderwork",
+		"scopes":    []string{"mail:send"},
+		"grantType": "once",
+	}
+	legacyArgs := map[string]any{
+		"agentCode": "qoderwork",
+		"scope":     []string{"mail:send"},
+		"grantType": "once",
+	}
+
+	_, err := callPATToolWithLegacyFallback(context.Background(), fake, "pat", patGrantToolName, patGrantToolNameLegacyAlias, canonicalArgs, legacyArgs)
+	if err == nil {
+		t.Fatal("callPATToolWithLegacyFallback error = nil, want PATError")
+	}
+	if !apperrors.IsPATError(err) {
+		t.Fatalf("expected PATError, got %T", err)
+	}
+	if len(fake.calls) != 1 {
+		t.Fatalf("CallTool call count = %d, want 1", len(fake.calls))
+	}
+}
+
+func TestCallPATToolWithLegacyFallback_patContractErrorDoesNotRetryLegacyAlias(t *testing.T) {
+	fake := &fallbackPATContractErrorToolCaller{}
+	canonicalArgs := map[string]any{
+		"agentCode": "qoderwork",
+		"scopes":    []string{"mail:send"},
+		"grantType": "once",
+	}
+	legacyArgs := map[string]any{
+		"agentCode": "qoderwork",
+		"scope":     []string{"mail:send"},
+		"grantType": "once",
+	}
+
+	_, err := callPATToolWithLegacyFallback(context.Background(), fake, "pat", patGrantToolName, patGrantToolNameLegacyAlias, canonicalArgs, legacyArgs)
+	if err == nil {
+		t.Fatal("callPATToolWithLegacyFallback error = nil, want original PAT contract error")
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) {
+		t.Fatalf("error type = %T, want *errors.Error", err)
+	}
+	if typed.ServerDiag.ServerErrorCode != "PAT_SCOPE_AUTH_REQUIRED" {
+		t.Fatalf("ServerErrorCode = %q, want PAT_SCOPE_AUTH_REQUIRED", typed.ServerDiag.ServerErrorCode)
+	}
+	if len(fake.calls) != 1 {
+		t.Fatalf("CallTool call count = %d, want 1", len(fake.calls))
+	}
+}
+
 func TestIsToolNotRegisteredError_ChineseGatewayMessage(t *testing.T) {
 	err := errors.New("pat chmod failed: business error: PARAM_ERROR - 未找到指定工具")
 	if !isToolNotRegisteredError(err) {
@@ -241,6 +464,16 @@ func TestIsToolNotRegisteredError_ChineseGatewayDiagnostics(t *testing.T) {
 	)
 	if !isToolNotRegisteredError(err) {
 		t.Fatalf("isToolNotRegisteredError(%q) = false, want true", err.Error())
+	}
+}
+
+func TestHandleToolResult_emptyResultReturnsError(t *testing.T) {
+	err := handleToolResult(&edition.ToolResult{})
+	if err == nil {
+		t.Fatal("handleToolResult error = nil, want empty PAT authorization result error")
+	}
+	if !strings.Contains(err.Error(), "empty PAT authorization result") {
+		t.Fatalf("handleToolResult error = %q, want empty PAT authorization result", err.Error())
 	}
 }
 
