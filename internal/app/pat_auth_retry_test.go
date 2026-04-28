@@ -1135,6 +1135,7 @@ func TestRetryWithPatAuthRetry_HostControlledReturnsJSON(t *testing.T) {
 }
 
 func TestHandlePatAuthCheck_OpensOpaqueURIWithoutRebuild(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "")
 	server, configDir := setupHandlePATServer(t, "APPROVED", "test-auth-code")
 	defer server.Close()
 
