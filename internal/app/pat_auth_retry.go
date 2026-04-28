@@ -354,6 +354,8 @@ func IsPatRetrying(ctx context.Context) bool {
 
 func openPATAuthorizationURI(rawURI string) error {
 	if rawURI == "" {
+		// Defensive guard for future callers. The current call site already
+		// checks for a non-empty PAT URI before invoking this helper.
 		return nil
 	}
 	// The PAT service returns the complete authorization URL. Treat it as an
@@ -364,6 +366,9 @@ func openPATAuthorizationURI(rawURI string) error {
 }
 
 func printPATPollDebugResponse(output io.Writer, statusCode int, body []byte) {
+	if os.Getenv("DWS_DEBUG_PAT_POLL") == "" {
+		return
+	}
 	trimmed := strings.TrimSpace(string(body))
 	if trimmed == "" {
 		trimmed = "<empty body>"
@@ -723,7 +728,6 @@ func pollPatDeviceFlow(ctx context.Context, flowID string, configDir string, out
 				fmt.Fprintln(output) // clear the polling line
 				return status, "", nil
 			case authpkg.StatusPending:
-			// keep polling
 			default:
 				// ParseDeviceFlowStatus normalizes empty+!success to EXPIRED,
 				// so this branch handles truly unknown statuses.

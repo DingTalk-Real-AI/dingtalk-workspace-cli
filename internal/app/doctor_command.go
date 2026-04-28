@@ -429,10 +429,3 @@ func printPerfReportSummary(w io.Writer, report *PerfReport) {
 	fmt.Fprintf(w, "  %-25s ─────────\n", "─────────────────────────")
 	fmt.Fprintf(w, "  %-25s %dms  (框架开销 %dms)\n", "总耗时", report.TotalMs, report.OverheadMs)
 }
-
-func formatLocalTime(t time.Time) string {
-	if t.IsZero() {
-		return ""
-	}
-	return t.Local().Format("2006-01-02 15:04")
-}

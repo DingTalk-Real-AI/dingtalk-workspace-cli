@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
+## [1.0.17] - 2026-04-27
+
+New **Mail** product surface (mailbox list, KQL message search, message get, send) brings runtime command count to **163 across 14 products**. Plugin command-tree visibility hardening: stdio plugins shipping CLI overlays no longer wait on subprocess discovery to surface their commands, and overlay-registered plugin products are no longer hidden by edition `VisibleProducts` whitelists. Chat docs clarify that `--title` is required on `dws chat message send`.
+
+### Added
+
+- **`mail` product** (#167) — new top-level service for DingTalk Mail. Four leaf commands across two subgroups:
+  - `dws mail mailbox list` — list mailbox addresses available to the current user (`list_user_mailboxes`)
+  - `dws mail message search` — KQL search across folders / sender / date / attachments / read-state (`search_emails`); supports `--cursor` pagination
+  - `dws mail message get` — fetch full message body + headers + attachments by message ID (`get_email_by_message_id`)
+  - `dws mail message send` — send email to one or more recipients (`send_email`)
+  - Skill reference at `skills/references/products/mail.md` registered in `skills/SKILL.md` master index and intent decision tree
+- **Stdio plugin overlay-first command registration** (#179) — when a stdio plugin's `overlay.json` declares `toolOverrides`, command trees are built from manifest metadata synchronously at startup, no subprocess `Initialize` / `tools/list` handshake required. Previously, slow or failing subprocesses left plugin commands invisible in `dws --help`. Background discovery still runs to refresh the warm cache for richer flag types on subsequent startups.
+
+### Changed
+
+- **`hideNonDirectRuntimeCommands` / `visibleMCPRootCommands` / `visibleUtilityRootCommands`** (#179) — refactored to share a single `resolveVisibleProducts()` helper that **unions** the edition's `VisibleProducts` hook with `DirectRuntimeProductIDs()`, so plugins registered via `AppendDynamicServer` stay visible in `dws --help` even when an edition installs a static product whitelist. Previously the hook fully replaced the dynamic registry, silently hiding plugin commands.
+- **`dws chat message send` documentation clarifies `--title` is required** (#174) — the helper command short text and the chat skill reference now state explicitly that `--title` is mandatory for both group and single-chat sends, matching the runtime validation.
+- **`buildStdioCommands` refactored to share helpers with the overlay-first path** (#179) — overlay parsing (`resolveStdioOverlay`) and tools→DetailTool conversion (`toolsToDetails`) extracted as package-level helpers; the legacy discovery-first stdio path now delegates to them, eliminating duplicated overlay JSON / cache-snapshot logic.
+
+### Fixed
+
+- **Negative-cache poisoning guard for stdio plugin discovery** (#179) — `refreshStdioToolsCache` now skips `SaveTools` entirely when discovery returns an empty tool list (transient failure, subprocess not ready, RPC timeout), so a single bad refresh cannot overwrite a previously-good cache and degrade flag enrichment on the next startup.
+
+### Tests
+
+- 6 new test cases in `internal/app/plugin_stdio_overlay_test.go` and `internal/app/visibility_test.go` cover overlay-first registration without discovery, warm-cache flag enrichment from `InputSchema`, fallback when overlays lack `toolOverrides`, the cache-poisoning guard, and integration cases for plugin visibility under restrictive `VisibleProducts` whitelists.
+- Coverage 49.8% → 52.8%.
+
 ## [1.0.16] - 2026-04-24
 
 Discovery service abstraction with schema v3 extensions, open-edition helper-subtree restoration, and a defensive device-flow login reset.

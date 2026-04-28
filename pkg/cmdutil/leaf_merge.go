@@ -52,8 +52,18 @@ import (
 //	leaf     leaf (hc priority ≤ dyn)              dynamic wins (no-op)
 //	leaf     leaf (hc priority > dyn)              hardcoded replaces dynamic
 //	group    group                                 recurse
-//	leaf     group                                 dynamic wins, warn
+//	leaf     group (hc priority > dyn)             hardcoded group replaces dyn leaf
+//	leaf     group (hc priority ≤ dyn)             dynamic wins, warn
 //	group    leaf                                  dynamic wins, warn
+//
+// The "leaf vs group" priority promotion path (added for issue #164) covers
+// the case where the envelope exposes a single tool at a CLI path but the
+// hardcoded helper restructures that path into a group of richer subcommands
+// (e.g. `chat group members` published as a leaf for `get_group_members`,
+// but the helper provides `list / add / remove / add-bot` siblings). Without
+// this path the helper subtree is silently dropped on every release, which
+// is exactly the regression the OverridePriority annotation exists to prevent
+// for leaf-vs-leaf — extending it to leaf-vs-group keeps the contract honest.
 //
 // MergeHardcodedLeaves mutates dynamicRoot in place and returns it so callers
 // can chain. hardcodedRoot is treated as a donor: grafted children are
@@ -81,6 +91,13 @@ func MergeHardcodedLeaves(dynamicRoot, hardcodedRoot *cobra.Command) *cobra.Comm
 			// else: envelope is authority; hardcoded leaf is ignored.
 		case !IsLeafCmd(hc) && !IsLeafCmd(dyn):
 			MergeHardcodedLeaves(dyn, hc)
+		case IsLeafCmd(dyn) && !IsLeafCmd(hc) && OverridePriority(hc) > OverridePriority(dyn):
+			// Helper restructures a dynamic leaf into a richer subcommand
+			// group; honour the explicit OverridePriority opt-in just like
+			// the leaf-vs-leaf case.
+			hardcodedRoot.RemoveCommand(hc)
+			dynamicRoot.RemoveCommand(dyn)
+			dynamicRoot.AddCommand(hc)
 		default:
 			slog.Warn("overlay: shape mismatch, keeping dynamic",
 				"name", hc.Name(),

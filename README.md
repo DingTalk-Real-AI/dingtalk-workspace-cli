@@ -194,7 +194,7 @@ dws todo task create --title "Quarterly report" --executors "<your-userId>"   # 
 dws todo task list --dry-run                       # preview without executing
 ```
 
-> **Full command list**: [`docs/command-index.md`](./docs/command-index.md) — all 159 commands with descriptions and when-to-use guidance.
+> **Full command list**: [`docs/command-index.md`](./docs/command-index.md) — all commands with descriptions and when-to-use guidance.
 
 ## Using with Agents
 
@@ -275,6 +275,52 @@ curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace
 **ISV Integration**: Author your own Agent Skills and orchestrate them with dws skills for cross-product workflows: **ISV Skill → dws Skill → DingTalk Open Platform API (enforced auth + full audit)**.
 
 ## Features
+
+<details>
+<summary><strong>Raw API Access</strong> — call any DingTalk OpenAPI directly</summary>
+
+`dws api` lets you call any DingTalk OpenAPI without an SDK. Tokens are automatically acquired and refreshed.
+
+> **Prerequisite**: Must login with your own app credentials (see [Custom App mode](#getting-started)). Encrypted tokens from MCP default-credential login are not supported for raw API calls.
+
+```bash
+# Login (first time only)
+dws auth login --client-id <APP_KEY> --client-secret <APP_SECRET>
+
+# === api.dingtalk.com ===
+
+# List all enterprise apps
+dws api GET /v1.0/microApp/allApps
+
+# Search users (POST + JSON body)
+dws api POST /v1.0/contact/users/search \
+  --data '{"queryWord":"engineering","offset":0,"size":10}'
+
+# === oapi.dingtalk.com ===
+
+# Get user details (use --base-url to specify domain)
+dws api POST /topapi/v2/user/get \
+  --base-url https://oapi.dingtalk.com \
+  --data '{"userid":"<USER_ID>"}'
+
+# Or use the full URL directly
+dws api POST https://oapi.dingtalk.com/topapi/v2/user/get \
+  --data '{"userid":"<USER_ID>"}'
+
+# === General ===
+dws api GET /v1.0/microApp/allApps --page-all   # auto-paginate
+dws api GET /v1.0/microApp/allApps --dry-run     # preview request
+dws api GET /v1.0/microApp/allApps --jq '.agentId'  # jq filtering
+```
+
+| Feature | Details |
+|---------|----------|
+| Dual-form auto-detection | Automatically selects api.dingtalk.com (header auth) or oapi.dingtalk.com (query-param auth) based on URL |
+| Automatic token management | App-level accessToken is fetched on first call, cached while valid, auto-refreshed on expiry |
+| Domain allowlist | Only `api.dingtalk.com` and `oapi.dingtalk.com` permitted — prevents token leakage |
+| Auto-pagination | `--page-all` iterates all pages. `--page-limit` caps the maximum (default 10, set to 0 for unlimited, hard cap at 500 to prevent infinite loops) |
+
+</details>
 
 <details>
 <summary><strong>Smart Input Correction</strong> — auto-corrects common AI model parameter mistakes</summary>
@@ -366,16 +412,18 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 | Doc | `doc` | 21 | `search` `list` `info` `read` `create` `update` `upload` `download` `copy` `move` `rename` `file` `folder` `block` `comment` | Search / read / write docs, file & folder create, block-level editing, comments (list / create / reply / create-inline), upload / download |
 | Drive | `drive` | 6 | `list` `info` `download` `mkdir` `upload-info` `commit` | DingTalk drive file ops: list, info, download, create folders, two-phase upload |
 | Minutes | `minutes` | 19 | `list` `get` `update` `mind-graph` `speaker` `hot-word` `upload` | List AI meeting notes (mine / shared), details (info / summary / keywords / transcription / todos / batch), title/summary updates, mind map, speaker replace, hot-word, upload session |
+| Mail | `mail` | 4 | `mailbox` `message` | List mailbox addresses, KQL message search, get full message content, send email |
 | DevDoc | `devdoc` | 1 | `article` | Search the DingTalk Open Platform documentation |
+| Raw API | `api` | 1 | — | Call any DingTalk OpenAPI directly (api / oapi dual-form), with automatic app-level token management |
 
-> **159 commands across 13 products.** Full listing with descriptions and usage scenarios: [`docs/command-index.md`](./docs/command-index.md). Run `dws --help` for the top-level tree, or `dws <service> --help` for subcommands.
+> **163 commands across 14 products.** Full listing with descriptions and usage scenarios: [`docs/command-index.md`](./docs/command-index.md). Run `dws --help` for the top-level tree, or `dws <service> --help` for subcommands.
 
 > **Note on `chat bot`**: bot capabilities (`send-by-bot` / `recall-by-bot` / `add-bot` / `send-by-webhook` / bot search) are merged into the relevant `chat` subtrees (e.g. `dws chat message send-by-bot`, `dws chat group members add-bot`) so the agent-facing command surface stays flat and discoverable. There is no longer a separate top-level `bot` product.
 
 <details>
 <summary>Coming soon</summary>
 
-`mail` (email) · `conference` (video) · `aiapp` (AI apps) · `live` (streaming) · `wiki` (knowledge base)
+`conference` (video) · `aiapp` (AI apps) · `live` (streaming) · `wiki` (knowledge base)
 
 </details>
 
@@ -424,7 +472,7 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 
 ## Reference & Docs
 
-- [Command Index](./docs/command-index.md) — every runtime command (159 total) with description and when-to-use guidance
+- [Command Index](./docs/command-index.md) — every runtime command with description and when-to-use guidance
 - [Reference](./docs/reference.md) — environment variables, exit codes, output formats, shell completion
 - [Architecture](./docs/architecture.md) — discovery-driven pipeline, IR, transport layer
 - [Changelog](./CHANGELOG.md) — release history and migration notes

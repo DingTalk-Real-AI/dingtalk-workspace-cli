@@ -106,6 +106,12 @@ const (
 	MCPOAuthTokenPath   = "/oauth2/getToken"
 	MCPRefreshTokenPath = "/oauth2/refreshToken"
 	MCPRevokeTokenPath  = "/oauth2/revokeToken"
+
+	// App-level access token endpoints (for dws api raw calls).
+
+	// AppAccessTokenURL is the unified app-level access token endpoint.
+	// POST with {"appKey":"X","appSecret":"X"} → {"accessToken":"...","expireIn":7200}
+	AppAccessTokenURL = "https://api.dingtalk.com/v1.0/oauth2/accessToken"
 )
 
 // GetTerminalBaseURL returns the terminal base URL with priority:
@@ -288,11 +294,6 @@ func getRuntimeCredentials() (clientID, clientSecret string) {
 	clientMu.RLock()
 	defer clientMu.RUnlock()
 	return runtimeClientID, runtimeClientSecret
-}
-
-// getEnvClientID returns the environment variable client ID if set.
-func getEnvClientID() string {
-	return os.Getenv("DWS_CLIENT_ID")
 }
 
 // getDefaultConfigDir returns the default configuration directory.
