@@ -238,6 +238,44 @@ func TestChmod_agentCode_env_fallback(t *testing.T) {
 	}
 }
 
+func TestChmod_permanentGrantIgnoresSessionIDEnv(t *testing.T) {
+	t.Setenv(agentCodeEnv, "qoderwork")
+	t.Setenv("DWS_SESSION_ID", "session-should-not-leak")
+
+	fake := &fakeToolCaller{resultOK: true}
+	cmd := buildChmod(t, fake)
+	_ = cmd.Flags().Set("grant-type", "permanent")
+
+	if err := cmd.RunE(cmd, []string{"chat.message:send"}); err != nil {
+		t.Fatalf("chmod RunE error = %v", err)
+	}
+	if got := fake.gotArgs["grantType"]; got != "permanent" {
+		t.Fatalf("grantType = %v, want permanent", got)
+	}
+	if _, ok := fake.gotArgs["sessionId"]; ok {
+		t.Fatalf("permanent grant must not send sessionId: %#v", fake.gotArgs)
+	}
+}
+
+func TestChmod_sessionGrantUsesSessionIDEnv(t *testing.T) {
+	t.Setenv(agentCodeEnv, "qoderwork")
+	t.Setenv("DWS_SESSION_ID", "session-from-env")
+
+	fake := &fakeToolCaller{resultOK: true}
+	cmd := buildChmod(t, fake)
+	_ = cmd.Flags().Set("grant-type", "session")
+
+	if err := cmd.RunE(cmd, []string{"chat.message:send"}); err != nil {
+		t.Fatalf("chmod RunE error = %v", err)
+	}
+	if got := fake.gotArgs["grantType"]; got != "session" {
+		t.Fatalf("grantType = %v, want session", got)
+	}
+	if got := fake.gotArgs["sessionId"]; got != "session-from-env" {
+		t.Fatalf("sessionId = %v, want session-from-env", got)
+	}
+}
+
 func TestCallPATToolWithLegacyFallback_emptyCanonicalResultDoesNotRetryLegacyAlias(t *testing.T) {
 	fake := &fallbackToolCaller{}
 	canonicalArgs := map[string]any{

@@ -206,7 +206,7 @@ grantType 规则:
 				return fmt.Errorf("internal error: tool runtime not initialized")
 			}
 
-			if sessionID == "" {
+			if grantType == "session" && sessionID == "" {
 				sessionID = resolveSessionIDFromEnv()
 			}
 			toolArgs := map[string]any{
@@ -214,7 +214,7 @@ grantType 规则:
 				"scopes":    scopes,
 				"grantType": grantType,
 			}
-			if sessionID != "" {
+			if grantType == "session" && sessionID != "" {
 				toolArgs["sessionId"] = sessionID
 			}
 			// Legacy server schema accepted singular "scope"; clone the

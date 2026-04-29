@@ -633,6 +633,75 @@ func TestHandlePatAuthCheck_Approved(t *testing.T) {
 	}
 }
 
+func TestHandlePatAuthCheck_ApprovedStillPATAddsDiagnostic(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "")
+	server, configDir := setupHandlePATServer(t, "APPROVED", "test-auth-code")
+	defer server.Close()
+
+	var retryCalled bool
+	var retryHasKey bool
+	mock := &mockRunner{
+		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
+			retryCalled = true
+			retryHasKey = IsPatRetrying(ctx)
+			return executor.Result{}, &apperrors.PATError{RawJSON: `{"success":false,"code":"PAT_MEDIUM_RISK_NO_PERMISSION","data":{"requiredScopes":[{"scope":"chat.message:send"}],"grantOptions":["once","permanent"],"flowId":"flow-repeat"}}`}
+		},
+	}
+
+	runner := &runtimeRunner{fallback: mock}
+	patErr := &apperrors.PATError{RawJSON: makePATErrorJSON("flow-approved-repeat", "test-client-id")}
+
+	var buf bytes.Buffer
+	_, err := handlePatAuthCheck(context.Background(), runner, executor.Invocation{
+		CanonicalProduct: "chat",
+		Tool:             "message_send",
+	}, patErr, configDir, &buf)
+
+	if err == nil {
+		t.Fatal("expected repeated PATError after approved retry")
+	}
+	if !retryCalled {
+		t.Fatal("expected mock runner to be called for retry")
+	}
+	if !retryHasKey {
+		t.Fatal("expected retry context to have patRetryingKey")
+	}
+	patOut, ok := err.(*apperrors.PATError)
+	if !ok {
+		t.Fatalf("expected *PATError, got %T: %v", err, err)
+	}
+	if strings.Contains(patOut.RawJSON, "\n") {
+		t.Fatalf("repeated PAT payload must stay single-line, got %q", patOut.RawJSON)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(patOut.RawJSON), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(repeated PAT payload) error = %v\nraw=%s", err, patOut.RawJSON)
+	}
+	data, _ := payload["data"].(map[string]any)
+	postApproval, _ := data["postApprovalRetry"].(map[string]any)
+	if postApproval == nil {
+		t.Fatalf("expected data.postApprovalRetry diagnostic, got: %s", patOut.RawJSON)
+	}
+	if got, _ := postApproval["reason"].(string); got != "pat_still_required_after_approval" {
+		t.Fatalf("postApprovalRetry.reason = %q, want pat_still_required_after_approval", got)
+	}
+	command, _ := postApproval["command"].(map[string]any)
+	if got, _ := command["product"].(string); got != "chat" {
+		t.Fatalf("postApprovalRetry.command.product = %q, want chat", got)
+	}
+	if got, _ := command["tool"].(string); got != "message_send" {
+		t.Fatalf("postApprovalRetry.command.tool = %q, want message_send", got)
+	}
+	coverage, _ := postApproval["coverage"].(map[string]any)
+	if got, _ := coverage["source"].(string); got != "not_available_from_cli" {
+		t.Fatalf("postApprovalRetry.coverage.source = %q, want not_available_from_cli", got)
+	}
+	if got, ok := data["requiredScopes"].([]any); !ok || len(got) != 1 {
+		t.Fatalf("requiredScopes must be preserved, got %#v", data["requiredScopes"])
+	}
+}
+
 func TestHandlePatAuthCheck_Rejected(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
 	server, configDir := setupHandlePATServer(t, "REJECTED", "")
