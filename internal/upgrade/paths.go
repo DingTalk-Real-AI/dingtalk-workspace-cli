@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 )
 
 // Permission constants following Unix best practices.
@@ -18,7 +19,8 @@ const (
 	filePermConfig os.FileMode = 0o644
 )
 
-// knownSkillDirs lists all known Agent skill directories (relative to $HOME).
+// knownSkillDirs lists well-known Agent skill directories (relative to $HOME).
+// Used as a fallback when active discovery misses entries.
 // Kept in sync with build/npm/install.js AGENT_DIRS.
 // The first entry (.agents/skills) is always updated; subsequent entries are
 // only updated when their parent directory already exists.
@@ -42,6 +44,92 @@ var knownSkillDirs = []string{
 // external mechanisms (e.g. IDE extensions) and must NOT be touched by upgrade.
 var skillDirBlacklist = []string{
 	".real",
+}
+
+// DiscoverSkillDirs scans homeDir for agent skill directories by looking for
+// any first-level subdirectory that contains a "skills" subdirectory.
+// Returns relative paths (e.g. ".claude/skills") suitable for skill installation.
+//
+// This enables automatic coverage of any new AI agent without requiring
+// code changes — any directory matching ~/xxx/skills/ is detected.
+func DiscoverSkillDirs(homeDir string) []string {
+	entries, err := os.ReadDir(homeDir)
+	if err != nil {
+		return nil
+	}
+
+	var discovered []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		// Build the relative path: .claude/skills, .hermes/skills, etc.
+		relPath := filepath.ToSlash(filepath.Join(name, "skills"))
+		// Check if the "skills" subdirectory exists
+		skillsDir := filepath.Join(homeDir, name, "skills")
+		if info, err := os.Stat(skillsDir); err == nil && info.IsDir() {
+			if !isBlacklisted(relPath) {
+				discovered = append(discovered, relPath)
+			}
+		}
+	}
+
+	return discovered
+}
+
+// mergeSkillDirs combines discovered and known directories, deduplicating
+// while preserving order: primary (.agents/skills) always first, then
+// discovered dirs, then any known dirs not already included.
+func mergeSkillDirs(discovered, known []string) []string {
+	seen := make(map[string]bool)
+	var result []string
+
+	// Ensure .agents/skills is always first
+	primary := ".agents/skills"
+	result = append(result, primary)
+	seen[primary] = true
+
+	// Add discovered dirs (skip primary, already added)
+	for _, d := range discovered {
+		if !seen[d] {
+			result = append(result, d)
+			seen[d] = true
+		}
+	}
+
+	// Add known dirs not yet included (fallback for undiscovered agents)
+	for _, d := range known {
+		if !seen[d] {
+			result = append(result, d)
+			seen[d] = true
+		}
+	}
+
+	// Sort everything after the primary entry
+	if len(result) > 1 {
+		sort.Strings(result[1:])
+	}
+
+	return result
+}
+
+// removeAllSafe removes a directory safely. If the path is a symlink,
+// only the symlink itself is removed (not the target), preventing
+// accidental destruction of linked source content.
+func removeAllSafe(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	// If it's a symlink, remove just the link (not the target)
+	if info.Mode()&os.ModeSymlink != 0 {
+		return os.Remove(path)
+	}
+	return os.RemoveAll(path)
 }
 
 // SkillDirStatus describes the installation outcome for a single skill directory.
@@ -91,11 +179,13 @@ func (r *SkillUpgradeResult) Failed() []SkillDirResult {
 // UpgradeSkillLocations installs skills from extractedDir into all locations
 // where they are currently installed or expected.
 //
-// Strategy (matches npm install.js installSkillsToHomes):
+// Strategy:
+//   - First, scan $HOME for any */skills/ directories (active discovery)
+//   - Merge discovered dirs with knownSkillDirs (fallback) for full coverage
 //   - ~/.agents/skills/dws/ is ALWAYS updated (primary install location)
-//   - Other agent dirs (claude, cursor, ...) are updated only when the parent
-//     directory exists (e.g. ~/.claude/ exists => user has Claude)
-//   - ~/.real/ and other blacklisted paths are NEVER touched
+//   - Other agent dirs are updated only when the parent directory exists
+//   - Blacklisted paths (e.g. ~/.real/) are NEVER touched
+//   - Symlink destinations are handled safely (link removed, not target)
 //   - If no location was updated at all, fall back to ~/.agents/skills/dws/
 func UpgradeSkillLocations(extractedDir string) (*SkillUpgradeResult, error) {
 	homeDir, err := os.UserHomeDir()
@@ -105,7 +195,13 @@ func UpgradeSkillLocations(extractedDir string) (*SkillUpgradeResult, error) {
 
 	result := &SkillUpgradeResult{}
 
-	for i, agentDir := range knownSkillDirs {
+	// Phase 1: Active discovery — scan $HOME for any */skills/ directories
+	discovered := DiscoverSkillDirs(homeDir)
+
+	// Phase 2: Merge with known list for full coverage
+	allDirs := mergeSkillDirs(discovered, knownSkillDirs)
+
+	for i, agentDir := range allDirs {
 		destDir := filepath.Join(homeDir, agentDir, "dws")
 
 		if isBlacklisted(agentDir) {
@@ -113,6 +209,8 @@ func UpgradeSkillLocations(extractedDir string) (*SkillUpgradeResult, error) {
 			continue
 		}
 
+		// Primary location (.agents/skills) is always updated;
+		// others require the parent directory to exist
 		if i > 0 {
 			parentGate := filepath.Dir(filepath.Join(homeDir, agentDir))
 			if _, err := os.Stat(parentGate); os.IsNotExist(err) {
@@ -121,7 +219,7 @@ func UpgradeSkillLocations(extractedDir string) (*SkillUpgradeResult, error) {
 			}
 		}
 
-		os.RemoveAll(destDir)
+		removeAllSafe(destDir)
 		if err := copyDir(extractedDir, destDir); err != nil {
 			result.Results = append(result.Results, SkillDirResult{Dir: destDir, Status: SkillDirFailed, Err: err})
 			continue

@@ -25,6 +25,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
@@ -669,14 +670,9 @@ func SyncSkills(plugins []*Plugin) {
 		return
 	}
 
-	// Known agent skill directories (subset of upgrade/paths.go knownSkillDirs).
-	agentDirs := []string{
-		".agents/skills",
-		".claude/skills",
-		".cursor/skills",
-		".qoder/skills",
-		".codex/skills",
-	}
+	// Use active discovery to find all agent skill directories.
+	// Falls back to the hardcoded knownSkillDirs via DiscoverSkillDirs.
+	agentDirs := upgrade.DiscoverSkillDirs(homeDir)
 
 	for _, p := range plugins {
 		skillsDir := p.SkillsDir()

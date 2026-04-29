@@ -23,6 +23,7 @@ Raw DingTalk OpenAPI access lands as a new `dws api` surface for both `api.dingt
 
 ### Changed
 
+- **Active discovery for skill directories** (#188) — `dws upgrade` and `SyncSkills` now dynamically scan `$HOME` for any `*/skills/` directories instead of relying solely on a hardcoded list. New AI agents are automatically covered without code changes. The hardcoded `knownSkillDirs` list is retained as a fallback. Symlink destinations are handled safely (only the link is removed, not the target).
 - **README raw API guide** (#184) — English and Chinese READMEs now document custom-app prerequisites, api/oapi examples, auto-pagination, dry-run, jq filtering, security properties, and the new Raw API service-table row.
 - **Raw API token retrieval path** (#184) — token lookup now goes through a single app-token interface; stale auth-refresh retry helpers were removed from the raw API path.
 - **PAT stderr JSON classifier** (#142) — recognizes `code`, `errorCode`, and `error_code`, including `PAT_NO_PERMISSION`, risk-tier PAT errors, `PAT_SCOPE_AUTH_REQUIRED`, and `AGENT_CODE_NOT_EXISTS`.
