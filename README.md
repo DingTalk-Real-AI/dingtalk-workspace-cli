@@ -207,7 +207,7 @@ dws is designed as an AI-native CLI. Complete [Installation](#installation) and 
 dws todo task create --title "Review PR" --executors "<your-userId>" --yes
 
 # Use --dry-run to preview operations (safe execution)
-dws contact user search --keyword "engineering" --dry-run
+dws contact user search --query "engineering" --dry-run
 
 # Use --jq to extract precisely (save tokens)
 dws contact user get-self --jq '.result[0].orgEmployeeModel | {name: .orgUserName, dept: .depts[0].deptName, userId}'
@@ -332,7 +332,7 @@ Built-in pipeline engine that normalizes flag names, splits sticky arguments, an
 dws aitable record query --baseId BASE_ID --tableId TABLE_ID         # auto-corrected to --base-id --table-id
 
 # Sticky argument splitting
-dws contact user search --keyword "engineering" --timeout30           # auto-split to --timeout 30
+dws contact user search --query "engineering" --timeout30           # auto-split to --timeout 30
 
 # Fuzzy flag name matching
 dws aitable record query --base-id BASE_ID --tabel-id TABLE_ID       # --tabel-id -> --table-id
