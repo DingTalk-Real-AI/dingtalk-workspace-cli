@@ -88,13 +88,13 @@ Flags:
 |------|--------|--------|
 | Long 描述 | "消息内容通过 --text 传入，也可作为位置参数；支持 Markdown。必须提供 --title 作为消息标题。" | 移除"必须提供 --title"的错误说明，新增"消息类型"段落，解释 title 与 msgType 的关系 |
 | --msg-type flag | 不存在 | 新增 `--msg-type string  消息类型: text(纯文本) / markdown / actionCard(卡片，需配合 --title)` |
-| 行为变化（代码层） | 不传 msgType，服务端默认 actionCard → title/text 重复渲染 + 底部空白 | 不传 title → 显式 msgType="text"；传 title → 显式 msgType="actionCard"；传 --msg-type → 用户值优先 |
+| 行为变化（代码层） | 不传 msgType，服务端默认 actionCard → title/text 重复渲染 + 底部空白 | 传 title → 显式 msgType="actionCard"；不传 title → 不设置 msgType（保持原行为，群聊 API 不支持纯 text）；传 --msg-type → 用户值优先 |
 
 ## 新增测试用例
 
 | 测试函数 | 场景 | 预期 |
 |----------|------|------|
-| `TestChatMessageSend_NoTitle_SetsMsgTypeText` | 只传 --text | params["msgType"] == "text" |
+| `TestChatMessageSend_NoTitle_NoMsgType` | 只传 --text | params 中不含 msgType（群聊 API 不支持 text 类型） |
 | `TestChatMessageSend_WithTitle_SetsActionCard` | 传 --title + --text | params["msgType"] == "actionCard" |
 | `TestChatMessageSend_ExplicitMsgType_Overrides` | 传 --msg-type markdown | params["msgType"] == "markdown" |
 | `TestChatMessageSend_ExplicitMsgTypeWithTitle` | 传 --msg-type markdown + --title | params["msgType"] == "markdown"，title 透传 |

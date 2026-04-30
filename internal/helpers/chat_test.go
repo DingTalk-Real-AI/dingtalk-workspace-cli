@@ -244,10 +244,10 @@ func TestChatMessageSendForwardsAtMentions(t *testing.T) {
 // drop user intent when --at-* is combined with --user / --open-dingtalk-id
 // (single-chat tools have no @-mention semantics, so the flag would never
 // take effect — fail loudly instead of swallowing).
-// TestChatMessageSend_NoTitle_SetsMsgTypeText verifies that when --title is
-// omitted, msgType is explicitly set to "text" (not left empty for the server
-// to default to actionCard).
-func TestChatMessageSend_NoTitle_SetsMsgTypeText(t *testing.T) {
+// TestChatMessageSend_NoTitle_NoMsgType verifies that when --title is
+// omitted, msgType is NOT set at all (the group-chat API requires title
+// and does not support msgType "text").
+func TestChatMessageSend_NoTitle_NoMsgType(t *testing.T) {
 	runner := &captureRunner{}
 	cmd := newChatMessageSendCommand(runner)
 	var out bytes.Buffer
@@ -257,8 +257,8 @@ func TestChatMessageSend_NoTitle_SetsMsgTypeText(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if got := runner.last.Params["msgType"]; got != "text" {
-		t.Errorf("msgType = %v, want \"text\" when --title is empty", got)
+	if _, hasMsgType := runner.last.Params["msgType"]; hasMsgType {
+		t.Errorf("msgType should not be set when --title is empty, got %v", runner.last.Params["msgType"])
 	}
 	if _, hasTitle := runner.last.Params["title"]; hasTitle {
 		t.Errorf("title should not be set when --title is empty")

@@ -218,10 +218,11 @@ func buildChatMessageSendInvocation(cmd *cobra.Command, args []string) (map[stri
 		// Title provided without explicit msgType → actionCard.
 		params["title"] = title
 		params["msgType"] = "actionCard"
-	} else {
-		// No title, no explicit msgType → plain text.
-		params["msgType"] = "text"
 	}
+	// No title, no explicit msgType → do not set msgType.
+	// The group-chat API (send_message_as_user) requires title and does not
+	// support msgType "text"; forcing it would break the call.  Omitting
+	// msgType preserves the pre-fix behaviour for the no-title path.
 
 	switch {
 	case hasGroup:
