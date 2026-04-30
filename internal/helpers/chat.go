@@ -92,7 +92,12 @@ func newChatMessageSendCommand(runner executor.Runner) *cobra.Command {
 --open-dingtalk-id 指定 openDingTalkId 发单聊 (适用于无法获取 userId 的场景)。
 三者只能选其一，不能同时指定。
 
-消息内容通过 --text 传入，也可作为位置参数；支持 Markdown。必须提供 --title 作为消息标题。
+消息内容通过 --text 传入，支持 Markdown，也可作为位置参数。
+
+消息类型:
+  不传 --title 时，发送纯文本消息，仅渲染 --text 内容。
+  传了 --title 时，发送卡片(actionCard)消息，title 为卡片标题，text 为正文。
+  可通过 --msg-type 显式指定消息类型 (text / markdown / actionCard)。
 
 群聊场景下可用 --at-all / --at-users / --at-mobiles 进行 @ 提醒（仅 --group 时生效）。
 注意 --text 中需包含对应的 <@userId> / <@all> 占位符才能在客户端渲染出 @ 效果。`,
@@ -131,6 +136,7 @@ func newChatMessageSendCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().Bool("at-all", false, "@所有人 (仅 --group 群聊生效)")
 	cmd.Flags().String("at-users", "", "按 userId @ 指定成员，逗号分隔 (仅 --group 群聊生效)")
 	cmd.Flags().String("at-mobiles", "", "按手机号 @ 指定成员，逗号分隔 (仅 --group 群聊生效)")
+	cmd.Flags().String("msg-type", "", "消息类型: text(纯文本) / markdown / actionCard(卡片，需配合 --title)")
 	return cmd
 }
 
@@ -197,8 +203,24 @@ func buildChatMessageSendInvocation(cmd *cobra.Command, args []string) (map[stri
 	}
 
 	params := map[string]any{"text": text}
-	if strings.TrimSpace(title) != "" {
+
+	// Determine msgType: explicit --msg-type wins; otherwise infer from --title.
+	msgType, _ := cmd.Flags().GetString("msg-type")
+	msgType = strings.TrimSpace(msgType)
+
+	if msgType != "" {
+		// User explicitly specified message type — honour it.
+		params["msgType"] = msgType
+		if strings.TrimSpace(title) != "" {
+			params["title"] = title
+		}
+	} else if strings.TrimSpace(title) != "" {
+		// Title provided without explicit msgType → actionCard.
 		params["title"] = title
+		params["msgType"] = "actionCard"
+	} else {
+		// No title, no explicit msgType → plain text.
+		params["msgType"] = "text"
 	}
 
 	switch {

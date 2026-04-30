@@ -177,6 +177,7 @@ func TestChatMessageSendForwardsAtMentions(t *testing.T) {
 				"title":               "拉群通知",
 				"text":                "<@uid-1> <@uid-2> 请关注",
 				"atUserIds":           []any{"uid-1", "uid-2"},
+				"msgType":             "actionCard",
 			},
 		},
 		{
@@ -192,6 +193,7 @@ func TestChatMessageSendForwardsAtMentions(t *testing.T) {
 				"title":               "全员通知",
 				"text":                "<@all> 请关注",
 				"isAtAll":             true,
+				"msgType":             "actionCard",
 			},
 		},
 		{
@@ -207,6 +209,7 @@ func TestChatMessageSendForwardsAtMentions(t *testing.T) {
 				"title":               "提醒",
 				"text":                "请 13800000000 确认",
 				"atMobiles":           []any{"13800000000", "13900000000"},
+				"msgType":             "actionCard",
 			},
 		},
 	}
@@ -241,6 +244,84 @@ func TestChatMessageSendForwardsAtMentions(t *testing.T) {
 // drop user intent when --at-* is combined with --user / --open-dingtalk-id
 // (single-chat tools have no @-mention semantics, so the flag would never
 // take effect — fail loudly instead of swallowing).
+// TestChatMessageSend_NoTitle_SetsMsgTypeText verifies that when --title is
+// omitted, msgType is explicitly set to "text" (not left empty for the server
+// to default to actionCard).
+func TestChatMessageSend_NoTitle_SetsMsgTypeText(t *testing.T) {
+	runner := &captureRunner{}
+	cmd := newChatMessageSendCommand(runner)
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--group", "cid-xyz", "--text", "hello"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if got := runner.last.Params["msgType"]; got != "text" {
+		t.Errorf("msgType = %v, want \"text\" when --title is empty", got)
+	}
+	if _, hasTitle := runner.last.Params["title"]; hasTitle {
+		t.Errorf("title should not be set when --title is empty")
+	}
+}
+
+// TestChatMessageSend_WithTitle_SetsActionCard verifies that providing --title
+// without --msg-type automatically sets msgType to "actionCard".
+func TestChatMessageSend_WithTitle_SetsActionCard(t *testing.T) {
+	runner := &captureRunner{}
+	cmd := newChatMessageSendCommand(runner)
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--group", "cid-xyz", "--title", "通知", "--text", "请查收"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if got := runner.last.Params["msgType"]; got != "actionCard" {
+		t.Errorf("msgType = %v, want actionCard when --title is provided", got)
+	}
+	if got := runner.last.Params["title"]; got != "通知" {
+		t.Errorf("title = %v, want \"通知\"", got)
+	}
+}
+
+// TestChatMessageSend_ExplicitMsgType_Overrides verifies that --msg-type takes
+// precedence over the title-based inference.
+func TestChatMessageSend_ExplicitMsgType_Overrides(t *testing.T) {
+	runner := &captureRunner{}
+	cmd := newChatMessageSendCommand(runner)
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--group", "cid-xyz", "--text", "hello", "--msg-type", "markdown"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if got := runner.last.Params["msgType"]; got != "markdown" {
+		t.Errorf("msgType = %v, want markdown", got)
+	}
+}
+
+// TestChatMessageSend_ExplicitMsgTypeWithTitle verifies that --msg-type +
+// --title passes both through without overriding msgType to actionCard.
+func TestChatMessageSend_ExplicitMsgTypeWithTitle(t *testing.T) {
+	runner := &captureRunner{}
+	cmd := newChatMessageSendCommand(runner)
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--group", "cid-xyz", "--title", "标题", "--text", "正文", "--msg-type", "markdown"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if got := runner.last.Params["msgType"]; got != "markdown" {
+		t.Errorf("msgType = %v, want markdown (explicit override)", got)
+	}
+	if got := runner.last.Params["title"]; got != "标题" {
+		t.Errorf("title = %v, want \"标题\"", got)
+	}
+}
+
 func TestChatMessageSendRejectsAtMentionsOutsideGroup(t *testing.T) {
 	cases := []struct {
 		name string
