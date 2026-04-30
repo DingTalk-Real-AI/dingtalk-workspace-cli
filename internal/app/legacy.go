@@ -29,6 +29,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/compat"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/editionmerge"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
@@ -123,13 +124,10 @@ func injectStaticServers(servers []edition.ServerInfo) {
 // Tests may override discoveryBaseURLOverride to redirect to a local server;
 // in that case the registry cache is always bypassed.
 // editionPartition returns the cache partition for the active edition.
-// Each edition gets its own partition to prevent cross-edition data leakage.
+// Thin wrapper around config.EditionPartition; kept so the many existing
+// call sites in internal/app don't need to thread edition.Get() everywhere.
 func editionPartition() string {
-	name := edition.Get().Name
-	if name == "" || name == "open" {
-		return config.DefaultPartition
-	}
-	return name + "/default"
+	return config.EditionPartition(edition.Get().Name)
 }
 
 // discoveryTraceEnabled reports whether the user asked for discovery-path diagnostics.
@@ -265,8 +263,8 @@ func loadDynamicCommands(ctx context.Context, runner executor.Runner) []*cobra.C
 		if fn := edition.Get().FallbackServers; fn != nil {
 			if fb := fn(); len(fb) > 0 {
 				slog.Debug("loadDynamicCommands: using FallbackServers", "count", len(fb))
-				descriptors := fallbackToDescriptors(fb)
-				descriptors = mergeSupplementServers(descriptors)
+				descriptors := editionmerge.FallbackToDescriptors(fb)
+				descriptors = editionmerge.MergeSupplement(descriptors)
 				SetDynamicServers(descriptors)
 				return nil
 			}
@@ -275,7 +273,7 @@ func loadDynamicCommands(ctx context.Context, runner executor.Runner) []*cobra.C
 	}
 
 	// Merge edition-specific supplement servers (not in Market).
-	servers = mergeSupplementServers(servers)
+	servers = editionmerge.MergeSupplement(servers)
 	// Inject dynamic server data for endpoint resolution
 	SetDynamicServers(servers)
 
@@ -545,49 +543,7 @@ func mergeTopLevelCommands(commands []*cobra.Command) []*cobra.Command {
 	return out
 }
 
-// mergeSupplementServers appends edition-specific servers (not in Market)
-// into the discovery result. Existing IDs from Market/cache take precedence.
-func mergeSupplementServers(servers []market.ServerDescriptor) []market.ServerDescriptor {
-	fn := edition.Get().SupplementServers
-	if fn == nil {
-		return servers
-	}
-	existing := make(map[string]bool, len(servers))
-	for _, s := range servers {
-		existing[s.CLI.ID] = true
-		existing[s.Key] = true
-	}
-	for _, sup := range fn() {
-		if !existing[sup.ID] {
-			servers = append(servers, market.ServerDescriptor{
-				Key:         sup.ID,
-				DisplayName: sup.Name,
-				Endpoint:    sup.Endpoint,
-				CLI: market.CLIOverlay{
-					ID:       sup.ID,
-					Command:  sup.ID,
-					Prefixes: sup.Prefixes,
-				},
-			})
-		}
-	}
-	return servers
-}
-
-// fallbackToDescriptors converts edition.ServerInfo into market.ServerDescriptor.
-func fallbackToDescriptors(servers []edition.ServerInfo) []market.ServerDescriptor {
-	descriptors := make([]market.ServerDescriptor, 0, len(servers))
-	for _, s := range servers {
-		descriptors = append(descriptors, market.ServerDescriptor{
-			Key:         s.ID,
-			DisplayName: s.Name,
-			Endpoint:    s.Endpoint,
-			CLI: market.CLIOverlay{
-				ID:       s.ID,
-				Command:  s.ID,
-				Prefixes: s.Prefixes,
-			},
-		})
-	}
-	return descriptors
-}
+// mergeSupplementServers / fallbackToDescriptors have moved to
+// internal/editionmerge so that both internal/cli and internal/app can
+// apply the edition's SupplementServers / FallbackServers hooks against
+// the same discovery pipeline (command tree + runtime catalog).

@@ -178,7 +178,7 @@ func TestExitCode_AllCategories(t *testing.T) {
 		{CategoryAPI, 1},
 		{CategoryAuth, 2},
 		{CategoryValidation, 3},
-		{CategoryDiscovery, 4},
+		{CategoryDiscovery, 6},
 		{CategoryInternal, 5},
 	}
 	for _, tt := range tests {

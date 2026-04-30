@@ -19,8 +19,9 @@
 | 1 | API | MCP tool call or upstream API failure / MCP 工具调用或上游 API 失败 |
 | 2 | Auth | Authentication or authorization failure / 身份认证或授权失败 |
 | 3 | Validation | Invalid input, flags, or parameter schema mismatch / 输入参数校验失败 |
-| 4 | Discovery | Server discovery, cache, or protocol negotiation failure / 服务发现失败 |
+| 4 | PAT | PAT authorization interception; stderr carries raw machine-readable PAT JSON / PAT 授权拦截；stderr 返回原始机器可解析 JSON |
 | 5 | Internal | Unexpected internal error / 未预期的内部错误 |
+| 6 | Discovery | Server discovery, cache, or protocol negotiation failure / 服务发现、缓存或协议协商失败 |
 
 With `-f json`, error responses include structured payloads: `category`, `reason`, `hint`, `actions`.
 

@@ -1,6 +1,74 @@
 package app
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
+)
+
+func TestDefaultPATServerDescriptorUsesBehaviorAuthorizationName(t *testing.T) {
+	server := defaultPATServerDescriptor()
+	if server.CLI.ID != "pat" {
+		t.Fatalf("default PAT server id = %q, want pat", server.CLI.ID)
+	}
+	if server.DisplayName != "行为授权" {
+		t.Fatalf("default PAT server display name = %q, want 行为授权", server.DisplayName)
+	}
+	if server.Endpoint != defaultPATMCPEndpoint() {
+		t.Fatalf("default PAT server endpoint = %q, want %q", server.Endpoint, defaultPATMCPEndpoint())
+	}
+}
+
+func TestDirectRuntimeProductIDsIncludesDefaultPAT(t *testing.T) {
+	dynamicMu.Lock()
+	previousProducts := dynamicProducts
+	dynamicProducts = nil
+	dynamicMu.Unlock()
+	t.Cleanup(func() {
+		dynamicMu.Lock()
+		dynamicProducts = previousProducts
+		dynamicMu.Unlock()
+	})
+
+	ids := DirectRuntimeProductIDs()
+	if !ids["pat"] {
+		t.Fatalf("DirectRuntimeProductIDs() missing default pat product: %#v", ids)
+	}
+}
+
+func TestDirectRuntimeEndpoint_DefaultPATFallbackWhenRegistryMissing(t *testing.T) {
+	withCleanDynamicRegistry(t)
+	assertEndpoint(t, "pat", "", defaultPATMCPEndpoint())
+}
+
+func TestDirectRuntimeEndpoint_DefaultPATFallbackUsesConfiguredMCPBaseURL(t *testing.T) {
+	withCleanDynamicRegistry(t)
+
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "mcp_url"), []byte("http://127.0.0.1:54321/base"), 0o600); err != nil {
+		t.Fatalf("WriteFile(mcp_url) error = %v", err)
+	}
+	t.Setenv("DWS_CONFIG_DIR", tmpDir)
+
+	assertEndpoint(t, "pat", "", "http://127.0.0.1:54321/base/server/"+defaultPATServerID)
+}
+
+func TestDirectRuntimeEndpoint_PATDiscoveryOverrideWinsOverBuiltInFallback(t *testing.T) {
+	withCleanDynamicRegistry(t)
+	customEndpoint := "https://example.com/server/custom-pat"
+	SetDynamicServers([]market.ServerDescriptor{
+		{
+			Endpoint: customEndpoint,
+			CLI: market.CLIOverlay{
+				ID:      "pat",
+				Command: "pat",
+			},
+		},
+	})
+	assertEndpoint(t, "pat", "", customEndpoint)
+}
 
 func TestNormalizeDirectRuntimeProductIDPreservesLegacyHiddenVendorRouting(t *testing.T) {
 	dynamicMu.Lock()

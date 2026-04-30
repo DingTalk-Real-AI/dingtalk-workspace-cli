@@ -4,6 +4,51 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
+## [1.0.18] - 2026-04-28
+
+Raw DingTalk OpenAPI access lands as a new `dws api` surface for both `api.dingtalk.com` and `oapi.dingtalk.com`, backed by app-level token caching and guarded host allowlists. PAT enters the host-owned **A-core** loop: agent hosts can own authorization UI through `DINGTALK_DWS_AGENTCODE`, parse single-line stderr JSON, call `dws pat chmod`, and replay the original command. Chat helper regressions are fixed, skill references are brought back in line with shipped commands, and the v1.0.17 Mail release notes are backfilled into README / CHANGELOG.
+
+### Breaking
+
+- **PAT exit-code contract** (#142) — PAT authorization interceptions now use exit code `4`; Discovery, cache, and protocol negotiation failures now use exit code `6`. Downstream scripts that previously treated `4` as Discovery must update their handling.
+
+### Added
+
+- **`dws api` raw DingTalk OpenAPI command** (#184) — direct DingTalk OpenAPI calls without writing an MCP wrapper first. Supports `GET` / `POST` / `PUT` / `PATCH` / `DELETE`, JSON `--params` / `--data`, stdin input, dry-run previews, `--jq`, field selection, `--page-all`, `--page-limit`, `--page-delay`, and `--base-url`.
+- **Dual-form OpenAPI routing** (#184) — `api.dingtalk.com` requests use the `x-acs-dingtalk-access-token` header; `oapi.dingtalk.com` requests use the legacy `access_token` query parameter. The raw API client validates the target host before attaching credentials.
+- **App-level token cache for raw API** (#184) — custom-app credentials now fetch app access tokens from the unified OAuth endpoint, cache them while valid, and refresh them before expiry. The same token provider works for new-style and legacy OpenAPI calls.
+- **Host-owned PAT A-core flow** (#142) — when `DINGTALK_DWS_AGENTCODE` is set, PAT hits return `exit=4` plus single-line stderr JSON; the host renders authorization UI, calls `dws pat chmod <scope>...`, and replays the original command.
+- **`dws pat chmod` authorization entry point** (#142) — grants scopes with `--agentCode`, `--grant-type`, and session fallback support; `DINGTALK_DWS_AGENTCODE` can supply the agent code when the flag is omitted.
+- **PAT browser-open policy** (#142) — `dws pat browser-policy --enabled <true|false> [--agentCode <id>]` controls whether the CLI may open a browser, independently from `--format` output mode.
+
+### Changed
+
+- **README raw API guide** (#184) — English and Chinese READMEs now document custom-app prerequisites, api/oapi examples, auto-pagination, dry-run, jq filtering, security properties, and the new Raw API service-table row.
+- **Raw API token retrieval path** (#184) — token lookup now goes through a single app-token interface; stale auth-refresh retry helpers were removed from the raw API path.
+- **PAT stderr JSON classifier** (#142) — recognizes `code`, `errorCode`, and `error_code`, including `PAT_NO_PERMISSION`, risk-tier PAT errors, `PAT_SCOPE_AUTH_REQUIRED`, and `AGENT_CODE_NOT_EXISTS`.
+- **Host-control metadata injection** (#142) — classifier and active-retry paths now share one mutation point for `data.hostControl` and `data.openBrowser`, keeping host-facing JSON shapes aligned.
+- **Open-edition routing signals** (#142) — open edition pins `claw-type: openClaw`; `DINGTALK_AGENT`, `DWS_CHANNEL`, and host-owned PAT detection are kept as independent signals.
+- **Behavior authorization endpoint fallback** (#142) — the PAT runtime can resolve the built-in behavior-authorization MCP endpoint before discovery data is available.
+- **v1.0.17 documentation backfill** (#181) — the previous release notes and README service table now explicitly include the shipped Mail product, update the total to **163 commands across 14 products**, and remove Mail from "Coming soon".
+
+### Fixed
+
+- **CLI auth-denial attribution** — local CLI authorization denials are attributed to the channel before falling back to user-scope classification, avoiding user-scope misclassification for channel-level auth failures.
+- **Opaque authorization URLs** (#182, #142) — PAT authorization links are preserved verbatim, including query/hash/fragment content required by the server.
+- **Polling compatibility** (#182, #142) — device-flow result envelopes and no-`flowId` device-code fallback remain supported, with guarded debug output and envelope priority.
+- **Group chat @-mentions restored** (#180) — `dws chat message send --group ...` again accepts and forwards `--at-users`, `--at-all`, and `--at-mobiles`; those flags are rejected outside group-chat mode so single-chat sends cannot silently drop @-mention intent.
+- **Explicit members-list command restored** (#180) — `dws chat group members list --id <openConversationId>` is reachable after the helper/dynamic merge path changed. `cmdutil.MergeHardcodedLeaves` now honors higher-priority helper groups when a dynamic envelope contributes a leaf at the same path.
+- **Skill reference command names** (#186) — `simple.md` now uses shipped OA command names (`list-pending`, `list-initiated`), removes a non-existent devdoc `search-error` command, and marks `workbench.md` as Draft because workbench commands are not available in the runtime.
+- **Empty grant result handling** (#142) — `dws pat chmod` now returns an explicit error instead of treating `{"Content": null}` as success.
+- **Session-id log safety** (#142) — raw `DWS_SESSION_ID` / `REWIND_SESSION_ID` values are no longer logged when the two env vars disagree.
+
+### Tests
+
+- Added raw API coverage for request validation, api/oapi routing, token management, pagination, response handling, dry-run output, JSON parsing, stdin handling, and command wiring. (#184)
+- Added chat/cmdutil regression tests for group @-mention forwarding, single-chat rejection, `members list`, helper-vs-envelope shape mismatch, and merge-priority behavior. (#180)
+- Added PAT contract coverage for host-owned signal selection, single-line stderr JSON, chmod env fallback and legacy alias fallback, browser policy, direct-runtime PAT endpoint fallback, and retry/poll behavior. (#142)
+- Coverage badge refreshed after the post-v1.0.17 CI runs.
+
 ## [1.0.17] - 2026-04-27
 
 New **Mail** product surface (mailbox list, KQL message search, message get, send) brings runtime command count to **163 across 14 products**. Plugin command-tree visibility hardening: stdio plugins shipping CLI overlays no longer wait on subprocess discovery to surface their commands, and overlay-registered plugin products are no longer hidden by edition `VisibleProducts` whitelists. Chat docs clarify that `--title` is required on `dws chat message send`.

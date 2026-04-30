@@ -379,7 +379,7 @@ func newTodoTaskGetCommand(runner executor.Runner) *cobra.Command {
 			invocation := executor.NewHelperInvocation(
 				cobracmd.LegacyCommandPath(cmd),
 				"todo",
-				"query_todo_detail",
+				"get_todo_detail",
 				params,
 			)
 			invocation.DryRun = commandDryRun(cmd)

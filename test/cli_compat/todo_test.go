@@ -258,7 +258,7 @@ func TestTodoTaskGet_should_call_query_todo_detail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	assertToolName(t, cap, "query_todo_detail")
+	assertToolName(t, cap, "get_todo_detail")
 }
 
 func TestTodoTaskGet_should_pass_taskId(t *testing.T) {
