@@ -1014,7 +1014,7 @@
 **contact_contact_dept_search_001** ✅ PASS
 
 - Prompt: 搜索部门，keyword 为 技术部
-- Expected: `dws contact dept search --keyword 技术部 --format json`
+- Expected: `dws contact dept search --query 技术部 --format json`
 - Skill Reference: references/products/contact.md
 - Command path: PASS (contact dept search)
 - Flags: PASS (1 flags validated)
@@ -1022,7 +1022,7 @@
 **contact_contact_dept_search_002** ✅ PASS
 
 - Prompt: 搜一下技术部的部门信息
-- Expected: `dws contact dept search --keyword "技术部" --format json`
+- Expected: `dws contact dept search --query "技术部" --format json`
 - Skill Reference: references/products/contact.md
 - Command path: PASS (contact dept search)
 - Flags: PASS (1 flags validated)
@@ -1062,7 +1062,7 @@
 **contact_contact_user_search_001** ✅ PASS
 
 - Prompt: 按关键词搜索用户，keyword 为 张三
-- Expected: `dws contact user search --keyword 张三 --format json`
+- Expected: `dws contact user search --query 张三 --format json`
 - Skill Reference: references/products/contact.md
 - Command path: PASS (contact user search)
 - Flags: PASS (1 flags validated)
@@ -1070,7 +1070,7 @@
 **contact_contact_user_search_002** ✅ PASS
 
 - Prompt: 帮我找一下张三的联系方式
-- Expected: `dws contact user search --keyword "张三" --format json`
+- Expected: `dws contact user search --query "张三" --format json`
 - Skill Reference: references/products/contact.md
 - Command path: PASS (contact user search)
 - Flags: PASS (1 flags validated)
