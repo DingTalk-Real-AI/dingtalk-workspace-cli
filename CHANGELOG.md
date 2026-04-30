@@ -4,6 +4,40 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
+## [1.0.19] - 2026-04-30
+
+Discovery hardening for edition overlays: `edition.SupplementServers` / `FallbackServers` hooks now consistently surface through the **runtime catalog loader**, not just the static command tree, so overlay products that live outside the Portal envelope (e.g. Wukong gray-release `conference`) resolve an endpoint on both the cold-cache and tool-not-in-catalog paths. Ships with per-edition cache partitioning to stop cross-edition disk-cache leakage, plus a small todo fix.
+
+### Added
+
+- **`pkg/config.EditionPartition(name)`** (#197) — returns the cache partition key for a given edition. Open-source core (`""` / `"open"`) keeps using `DefaultPartition` (`default/default`); every other edition gets its own namespace (`<edition>/default`), preventing cross-edition data leakage in the shared `~/.dws` disk cache. Lives in `pkg/config` as a leaf helper so `internal/cli`, `internal/app`, and `internal/cache` can all call it without risking import cycles.
+- **`internal/editionmerge` shared package** (#197) — single source of truth for converting `edition.ServerInfo` into `market.ServerDescriptor` (`ToDescriptor`) and for merging `SupplementServers` / `FallbackServers` into a descriptor list. Both `internal/cli` (command tree) and `internal/app` (runtime catalog) now apply the edition hooks against the same discovery pipeline.
+
+### Changed
+
+- **`EnvironmentLoader.loadFromCache` honors `SupplementServers` even on empty registry** (#197) — when the Portal registry cache is missing or empty, the catalog loader still materialises the edition's `SupplementServers` as endpoint-only `discovery.RuntimeServer` entries (source: `edition_supplement`), so hardcoded overlay commands for supplement-only products can still resolve an endpoint via the catalog path. Previously `loadFromCache` short-circuited to an empty catalog whenever the registry snapshot was empty, silently dropping gray-release products.
+- **Cache loader switches from `DefaultPartition` to `EditionPartition(edition.Get().Name)`** (#197) — the runtime catalog, registry snapshot, and tools snapshot are now partitioned per edition instead of all editions sharing `default/default`.
+- **`loadFromCache` appends supplement servers alongside fresh-cache servers** (#197) — supplement entries whose `CLI.ID` / `Key` are already present in the cached registry are skipped, so the hook never shadows Portal-published servers; only new products are added.
+- **`runtimeRunner.Run` falls through to `directRuntimeEndpoint` for supplement products** (#197) — when the catalog contains the product (e.g. supplied by `SupplementServers`) but the specific tool is not declared, the runner now trusts `directRuntimeEndpoint` to resolve a working endpoint for the tool before returning the explicit catalog-miss error. Supplement entries intentionally carry no tool list, so this is the path that makes overlay-only tools executable.
+- **Legacy `mergeSupplementServers` / `fallbackToDescriptors` moved out of `internal/app/legacy.go`** (#197) — relocated into `internal/editionmerge` and reused by the catalog loader, eliminating the duplicate `edition.ServerInfo → market.ServerDescriptor` logic that previously only ran on the static command-tree path.
+
+### Fixed
+
+- **`dws todo task get` returns empty** (#202) — the helper was calling `query_todo_detail`, which is not a valid MCP tool and returns empty. Switched to `get_todo_detail` as declared in `discovery.json`, restoring correct task-detail behaviour.
+- **Conference and other Wukong gray-release products miss endpoint on cold cache** (#197) — products registered only via `edition.SupplementServers` (not yet in the Portal envelope) now resolve an endpoint through the catalog path in both cold-start and tool-not-declared scenarios.
+
+### Tests
+
+- `internal/editionmerge/merge_test.go` — descriptor conversion + supplement/fallback merge semantics.
+- `internal/cli/loader_partition_test.go` + `loader_supplement_test.go` — edition-partitioned cache reads and supplement hook surfacing from `loadFromCache` (including empty-registry cold path and existing-ID deduplication).
+- `internal/app/legacy_wukong_partition_e2e_test.go` — end-to-end cache partition isolation for the Wukong edition.
+- `internal/app/runner_supplement_fallback_test.go` — runner falls through to `directRuntimeEndpoint` when the tool isn't declared by a supplement-sourced catalog entry.
+- `pkg/config/constants_test.go` — `EditionPartition` name handling (`""`, `"open"`, custom edition).
+
+### Docs
+
+- **CHANGELOG v1.0.18 rewrite** (#193) — previous release notes expanded to call out the PAT host-owned A-core flow, exit-code contract change (auth `4`, Discovery/cache/protocol `6`), `dws pat chmod` / `pat browser-policy` entry points, stderr-JSON classifier updates, and host-control metadata injection.
+
 ## [1.0.18] - 2026-04-28
 
 Raw DingTalk OpenAPI access lands as a new `dws api` surface for both `api.dingtalk.com` and `oapi.dingtalk.com`, backed by app-level token caching and guarded host allowlists. PAT enters the host-owned **A-core** loop: agent hosts can own authorization UI through `DINGTALK_DWS_AGENTCODE`, parse single-line stderr JSON, call `dws pat chmod`, and replay the original command. Chat helper regressions are fixed, skill references are brought back in line with shipped commands, and the v1.0.17 Mail release notes are backfilled into README / CHANGELOG.
