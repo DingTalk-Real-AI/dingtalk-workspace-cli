@@ -539,7 +539,16 @@ func handlePatAuthCheck(
 			"DWS_CLIENT_ID", os.Getenv("DWS_CLIENT_ID"),
 		)
 		retryCtx := context.WithValue(ctx, patRetryingKey, true)
-		return r.Run(retryCtx, invocation)
+		result, retryErr := r.Run(retryCtx, invocation)
+		if retryErr != nil {
+			if repeatedPAT := apperrors.AsPatAuthCheckError(retryErr); repeatedPAT != nil {
+				return executor.Result{}, &apperrors.PATError{
+					RawJSON: enrichPATErrorAfterApprovedRetry(repeatedPAT.RawJSON, invocation),
+				}
+			}
+			return result, retryErr
+		}
+		return result, nil
 
 	case authpkg.StatusRejected:
 		fmt.Fprintf(output, "%s %s\n", redFn("✗"), bold("用户已拒绝授权"))
@@ -569,6 +578,42 @@ func handlePatAuthCheck(
 		fmt.Fprintf(output, "%s 未知授权状态: %s\n", redFn("✗"), status)
 		return executor.Result{}, patErr
 	}
+}
+
+func enrichPATErrorAfterApprovedRetry(raw string, invocation executor.Invocation) string {
+	if strings.TrimSpace(raw) == "" {
+		return raw
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return raw
+	}
+
+	data, ok := payload["data"].(map[string]any)
+	if !ok || data == nil {
+		data = map[string]any{}
+		payload["data"] = data
+	}
+	data["postApprovalRetry"] = map[string]any{
+		"reason":  "pat_still_required_after_approval",
+		"message": "PAT authorization was approved, but the retried command still requires authorization. Check whether the grant covered the required scopes, the same org/user/agentCode was used, or server-side grant propagation failed.",
+		"command": map[string]any{
+			"product": invocation.CanonicalProduct,
+			"tool":    invocation.Tool,
+		},
+		"coverage": map[string]any{
+			"knownAuthorizedScopes": []string{},
+			"source":                "not_available_from_cli",
+			"hint":                  "The CLI only has the current requiredScopes from this PAT payload; verify persisted grant coverage from PAT service logs or grant records.",
+		},
+	}
+
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return raw
+	}
+	return string(encoded)
 }
 
 func enrichPATErrorForHostControl(raw string) string {
