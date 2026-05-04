@@ -250,7 +250,7 @@ Flags:
       --forward                  true=拉给定时间之后的消息，false=拉给定时间之前的消息 (default true)
       --group string             群聊 openconversation_id（群聊时必填）
       --limit int                返回数量，不传则不限制
-      --time string              开始时间，格式: yyyy-MM-dd HH:mm:ss (必填)
+      --time string              开始时间，格式: yyyy-MM-dd HH:mm:ss（不传则默认拉取最新消息）
       --user string              单聊用户 userId（单聊时与 --open-dingtalk-id 二选一）
       --open-dingtalk-id string  单聊用户 openDingTalkId（单聊时与 --user 二选一，适用于三方应用等无法获取 userId 的场景）
 
@@ -285,7 +285,9 @@ Flags:
    ```
 5. 重复步骤 2-4 直到 `hasMore: false`
 
-> ⚠️ **常见错误**：响应中可能包含 `nextCursor` 字段（值为纯数字时间戳如 `1776684611219`），**不要**将 `nextCursor` 作为 `--time` 的值传入。`--time` 只接受 `yyyy-MM-dd HH:mm:ss` 格式的字符串。将 `nextCursor` 传给 `--time` 会导致返回相同页面，陷入死循环。`nextCursor` 仅用于 `message list-all` 的 `--cursor` 参数。
+> ⚠️ **常见错误**：
+> - **不要把 `nextCursor` 传给 `--time`**：响应中的 `nextCursor` 字段（纯数字时间戳如 `1776684611219`）**不是给 `--time` 用的**。`--time` 只接受 `yyyy-MM-dd HH:mm:ss` 格式。将 `nextCursor` 传给 `--time` 会导致返回相同页面，陷入死循环。`nextCursor` 仅用于 `message list-all` 的 `--cursor` 参数。
+> - **不要把 `nextCursor` 传给 `--forward`**：`--forward` 只接受 `true`（拉给定时间之后的消息）或 `false`（拉给定时间之前的消息），不是时间戳或游标参数。
 
 ---
 
