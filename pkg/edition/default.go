@@ -13,9 +13,20 @@
 
 package edition
 
+// DefaultOSSClawType is the wire value for request header claw-type in
+// the open-source build. It is intentionally hard-wired — the open-source
+// CLI does NOT derive claw-type from DINGTALK_AGENT or any other caller
+// input, so third-party hosts get a predictable header regardless of
+// their environment.
+const DefaultOSSClawType = "openClaw"
+
 // defaultHooks returns the open-source edition defaults.
-// All function hooks are nil, which the internal code interprets as
-// "use standard open-source behaviour".
+//
+// MergeHeaders is the only hook that ships with behaviour: it pins the
+// `claw-type` request header to DefaultOSSClawType so every open-source
+// MCP request carries the same stable routing tag. All other fields are
+// nil — the internal code interprets nil as "use standard open-source
+// behaviour".
 func defaultHooks() *Hooks {
 	return &Hooks{
 		Name: "open",
@@ -23,7 +34,7 @@ func defaultHooks() *Hooks {
 			if base == nil {
 				base = make(map[string]string)
 			}
-			base["claw-type"] = "openClaw"
+			base["claw-type"] = DefaultOSSClawType
 			return base
 		},
 	}

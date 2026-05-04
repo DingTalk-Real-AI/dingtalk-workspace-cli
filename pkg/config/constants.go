@@ -74,6 +74,23 @@ const (
 	DefaultPartition = "default/default"
 )
 
+// EditionPartition returns the cache partition for a given edition name.
+// The open-source core (name == "" or "open") uses DefaultPartition; every
+// other edition gets its own namespace to prevent cross-edition data
+// leakage in the disk cache.
+//
+// This helper takes the edition name as a parameter instead of calling
+// edition.Get() so that pkg/config remains a leaf dependency — importable
+// from internal/cli, internal/app, internal/cache, etc. without risking
+// import cycles.
+func EditionPartition(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" || name == "open" {
+		return DefaultPartition
+	}
+	return name + "/default"
+}
+
 // ── Auth flow timeouts ──────────────────────────────────────────────────
 
 const (

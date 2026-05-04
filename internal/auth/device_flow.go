@@ -112,12 +112,30 @@ type DevicePollResponse struct {
 	Code    string         `json:"code,omitempty"`
 	Message string         `json:"message,omitempty"`
 	Data    DevicePollData `json:"data"`
+	// Result is an alternate envelope some service versions return instead of
+	// (or alongside) Data. Always read poll fields via EffectiveData() rather
+	// than touching Data/Result directly.
+	Result DevicePollData `json:"result"`
 }
 
 type DevicePollData struct {
 	Status   string `json:"status"`
 	AuthCode string `json:"authCode,omitempty"`
 	FlowID   string `json:"flowId,omitempty"`
+}
+
+// EffectiveData normalizes terminal poll responses that may carry payload
+// fields under either `data` or `result`.
+//
+// Semantics are envelope-level rather than field-level: when Data includes a
+// non-empty status, treat Data as the authoritative payload and return it
+// unchanged; otherwise fall back to Result. This avoids mixing fields from two
+// disagreeing envelopes into a Frankenstein result.
+func (r DevicePollResponse) EffectiveData() DevicePollData {
+	if r.Data.Status != "" || r.Result.Status == "" {
+		return r.Data
+	}
+	return r.Result
 }
 
 type serviceResult struct {
@@ -287,15 +305,18 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 		return nil, fmt.Errorf("%s: %w", i18n.T("保存 token 失败"), err)
 	}
 
+	// Persist app credentials (with secret) if using custom client credentials.
+	// MUST run BEFORE os.Setenv below to avoid env-matching short circuit.
+	oauthProvider.persistAppConfigIfNeeded()
+
 	// Always persist clientId to app.json so future process startups
 	// can load it via ResolveAppCredentials and populate DWS_CLIENT_ID env.
 	if p.clientID != "" {
 		_ = os.Setenv("DWS_CLIENT_ID", p.clientID)
-		_ = SaveAppConfig(p.configDir, &AppConfig{ClientID: p.clientID})
+		if !HasAppConfig(p.configDir) {
+			_ = SaveAppConfig(p.configDir, &AppConfig{ClientID: p.clientID})
+		}
 	}
-
-	// Persist app credentials if using custom client credentials
-	oauthProvider.persistAppConfigIfNeeded()
 
 	return tokenData, nil
 }
@@ -428,10 +449,11 @@ func (p *DeviceFlowProvider) waitForAuthorizationByFlowID(ctx context.Context, a
 			continue
 		}
 
-		switch pollResp.Data.Status {
+		pollData := pollResp.EffectiveData()
+		switch pollData.Status {
 		case StatusApproved:
 			dfPrintPollResult(p.output(), "authorized", i18n.T("授权成功!"))
-			return &DeviceTokenResponse{AuthCode: pollResp.Data.AuthCode}, nil
+			return &DeviceTokenResponse{AuthCode: pollData.AuthCode}, nil
 		case StatusPending:
 			dfPrintPollResult(p.output(), "pending", i18n.T("等待用户授权..."))
 		case StatusRejected:
@@ -441,7 +463,7 @@ func (p *DeviceFlowProvider) waitForAuthorizationByFlowID(ctx context.Context, a
 			_, _ = fmt.Fprintln(p.output(), "")
 			return nil, errors.New(i18n.T("设备授权码已过期"))
 		default:
-			dfPrintPollResult(p.output(), "unknown", fmt.Sprintf(i18n.T("未知状态: %s"), pollResp.Data.Status))
+			dfPrintPollResult(p.output(), "unknown", fmt.Sprintf(i18n.T("未知状态: %s"), pollData.Status))
 		}
 	}
 }

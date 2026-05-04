@@ -84,21 +84,30 @@ func renderRootHelp(root *cobra.Command) {
 	_, _ = fmt.Fprintln(w, `Use "dws <service> --help" for more information about a discovered MCP service or "dws <command> --help" for utility commands.`)
 }
 
+// resolveVisibleProducts returns the set of top-level product IDs that should
+// be treated as visible. It unions the edition's VisibleProducts hook (when
+// set) with DirectRuntimeProductIDs(), so dynamically-registered products —
+// including plugins loaded via AppendDynamicServer — are never silently hidden
+// by a static VisibleProducts list.
+func resolveVisibleProducts() map[string]bool {
+	allowed := map[string]bool{}
+	if fn := edition.Get().VisibleProducts; fn != nil {
+		for _, p := range fn() {
+			allowed[p] = true
+		}
+	}
+	for id := range DirectRuntimeProductIDs() {
+		allowed[id] = true
+	}
+	return allowed
+}
+
 func visibleMCPRootCommands(root *cobra.Command) []*cobra.Command {
 	if root == nil {
 		return nil
 	}
 
-	var allowed map[string]bool
-	if fn := edition.Get().VisibleProducts; fn != nil {
-		products := fn()
-		allowed = make(map[string]bool, len(products))
-		for _, p := range products {
-			allowed[p] = true
-		}
-	} else {
-		allowed = DirectRuntimeProductIDs()
-	}
+	allowed := resolveVisibleProducts()
 	if len(allowed) == 0 {
 		return nil
 	}
@@ -121,13 +130,7 @@ func visibleUtilityRootCommands(root *cobra.Command) []*cobra.Command {
 		return nil
 	}
 
-	productCommands := DirectRuntimeProductIDs()
-	if fn := edition.Get().VisibleProducts; fn != nil {
-		productCommands = make(map[string]bool, len(fn()))
-		for _, product := range fn() {
-			productCommands[product] = true
-		}
-	}
+	productCommands := resolveVisibleProducts()
 
 	commands := make([]*cobra.Command, 0)
 	for _, cmd := range root.Commands() {

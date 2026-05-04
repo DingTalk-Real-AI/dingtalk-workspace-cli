@@ -91,7 +91,7 @@
 
 ```bash
 # 1. 搜索同事 userId
-dws contact user search --keyword "张三" --format json
+dws contact user search --query "张三" --format json
 
 # 2. 创建日程
 dws calendar event create --title "会议" \
@@ -107,7 +107,7 @@ dws calendar participant add --event <EVENT_ID> --users <USER_ID> --format json
 
 ```bash
 # 1. 搜索同事 userId
-dws contact user search --keyword "张三" --format json
+dws contact user search --query "张三" --format json
 
 # 2. 创建待办
 dws todo task create --title "任务内容" --executors <USER_ID> --format json

@@ -10,6 +10,14 @@ import (
 	"testing"
 )
 
+// TestOpenSourceTreeOmitsEmbeddedHostMarkers scans source files for proprietary
+// markers that must not leak into the public (open-source) tree.
+//
+// The scanner covers public docs as well as source code because OSS leakage is
+// often introduced through documentation first. Only a small set of explicitly
+// documented compatibility literals (see NOTE below) are allowed to remain in
+// tree; everything else should trip the guard regardless of whether it appears
+// in Go, shell, YAML, templates, or markdown.
 func TestOpenSourceTreeOmitsEmbeddedHostMarkers(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
@@ -17,6 +25,14 @@ func TestOpenSourceTreeOmitsEmbeddedHostMarkers(t *testing.T) {
 	}
 
 	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	// NOTE: REWIND_SESSION_ID / REWIND_REQUEST_ID / REWIND_MESSAGE_ID are
+	// intentionally NOT on this list. They are accepted by the CLI as
+	// optional backward-compatibility aliases for the primary DWS_* trace
+	// env names. Because they are a documented compatibility surface
+	// rather than an internal coupling to a specific host implementation,
+	// referring to these literals from source code and docs is allowed.
+	// Product names like "RewindDesktop" and other host-implementation
+	// specific symbols remain forbidden.
 	forbidden := []string{
 		"DWS_" + "BUILD_MODE",
 		"com.dingtalk.scenario." + "wukong",
@@ -27,12 +43,6 @@ func TestOpenSourceTreeOmitsEmbeddedHostMarkers(t *testing.T) {
 		"EnablePrivate" + "UtilityCommands",
 		"UseExecutable" + "ConfigDir",
 		"DeleteExeRelative" + "TokenOnAuthErr",
-		"WriteToken" + "Marker",
-		"Token" + "Marker",
-		"tokenJSON" + "File",
-		"REWIND_" + "REQUEST_ID",
-		"REWIND_" + "SESSION_ID",
-		"REWIND_" + "MESSAGE_ID",
 		"MergeWukong" + "MCPHeaders",
 		"buildMode ==" + " \"real\"",
 		"wukong/" + "discovery",

@@ -32,6 +32,7 @@ import (
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat"
 	"github.com/fatih/color"
 )
 
@@ -43,7 +44,11 @@ const (
 	// PatAuthPollInterval is how often we poll to check if the user has
 	// completed authorization.
 	PatAuthPollInterval = 5 * time.Second
+
+	patScopeAuthRequiredCode = "PAT_SCOPE_AUTH_REQUIRED"
 )
+
+var openBrowserFunc = tryOpenBrowser
 
 // PatScopeError holds information about a missing PAT scope.
 type PatScopeError struct {
@@ -182,21 +187,50 @@ func PrintPatAuthError(w io.Writer, scopeErr *PatScopeError) {
 
 // PrintPatAuthJSON prints a machine-readable PAT authorization error.
 func PrintPatAuthJSON(w io.Writer, scopeErr *PatScopeError) {
-	payload := map[string]any{
-		"ok":       false,
-		"identity": scopeErr.Identity,
-		"error": map[string]any{
-			"type":    scopeErr.ErrorType,
-			"message": scopeErr.Message,
-			"hint":    scopeErr.Hint,
-		},
+	fmt.Fprintln(w, buildPATScopeJSON(scopeErr, authpkg.HostOwnsPATFlow()))
+}
+
+func wantsStructuredPATOutput(r *runtimeRunner) bool {
+	if r == nil || r.globalFlags == nil {
+		return false
 	}
-	if scopeErr.MissingScope != "" {
-		payload["missing_scope"] = scopeErr.MissingScope
+	return strings.EqualFold(strings.TrimSpace(r.globalFlags.Format), "json")
+}
+
+func wantsStructuredPATOutputFromRunner(runner executor.Runner) bool {
+	rr, ok := runner.(*runtimeRunner)
+	if !ok {
+		return false
+	}
+	return wantsStructuredPATOutput(rr)
+}
+
+func currentPATOpenBrowser(configDir string) bool {
+	return pat.EffectiveOpenBrowser(configDir)
+}
+
+func enrichPATErrorWithOpenBrowser(raw string, openBrowser bool) string {
+	if strings.TrimSpace(raw) == "" {
+		return raw
 	}
 
-	data, _ := json.MarshalIndent(payload, "", "  ")
-	fmt.Fprintln(w, string(data))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return raw
+	}
+
+	data, ok := payload["data"].(map[string]any)
+	if !ok || data == nil {
+		data = map[string]any{}
+		payload["data"] = data
+	}
+	data["openBrowser"] = openBrowser
+
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return raw
+	}
+	return string(encoded)
 }
 
 // WaitForPatAuthorization polls until the user completes authorization or timeout.
@@ -258,6 +292,19 @@ func WaitForPatAuthorization(ctx context.Context, configDir string, output io.Wr
 // retryWithPatAuthRetry wraps an invocation that failed with a PAT scope error.
 // It waits for the user to complete authorization and then retries the invocation.
 func retryWithPatAuthRetry(ctx context.Context, runner executor.Runner, invocation executor.Invocation, scopeErr *PatScopeError, configDir string, output io.Writer) (executor.Result, error) {
+	hostOwnedPAT := authpkg.HostOwnsPATFlow()
+	slog.Debug("pat.host_owned_decision",
+		"site", "retryWithPatAuthRetry",
+		"hostOwned", hostOwnedPAT,
+		"agentCodeEnvSet", os.Getenv(authpkg.AgentCodeEnv) != "",
+	)
+	if hostOwnedPAT {
+		return executor.Result{}, &apperrors.PATError{RawJSON: buildPATScopeJSON(scopeErr, true)}
+	}
+	if wantsStructuredPATOutputFromRunner(runner) {
+		return executor.Result{}, &apperrors.PATError{RawJSON: buildPATScopeJSON(scopeErr, false)}
+	}
+
 	// Print the PAT error in human-readable format
 	PrintPatAuthError(output, scopeErr)
 
@@ -305,6 +352,32 @@ func IsPatRetrying(ctx context.Context) bool {
 	return v
 }
 
+func openPATAuthorizationURI(rawURI string) error {
+	if rawURI == "" {
+		// Defensive guard for future callers. The current call site already
+		// checks for a non-empty PAT URI before invoking this helper.
+		return nil
+	}
+	// The PAT service returns the complete authorization URL. Treat it as an
+	// opaque string and open it verbatim instead of parsing/rebuilding it
+	// locally, because required parameters may live in query, hash, or
+	// fragment sections.
+	return openBrowserFunc(rawURI)
+}
+
+func printPATPollDebugResponse(output io.Writer, statusCode int, body []byte) {
+	if os.Getenv("DWS_DEBUG_PAT_POLL") == "" {
+		return
+	}
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed == "" {
+		trimmed = "<empty body>"
+	}
+	fmt.Fprintln(output)
+	fmt.Fprintf(output, "  ℹ PAT 轮询接口返回原文 (HTTP %d):\n", statusCode)
+	fmt.Fprintf(output, "    %s\n", trimmed)
+}
+
 // handlePatAuthCheck is called by runner.executeInvocation when a PAT
 // authorization error is detected.  It injects the server-assigned clientId
 // as x-robot-uid header, prints authorization details, opens the browser,
@@ -338,9 +411,17 @@ func handlePatAuthCheck(
 		"flowId", patData.Data.FlowID,
 		"hasSecret", patData.Data.ClientSecret != "",
 	)
+	hostOwnedPAT := authpkg.HostOwnsPATFlow()
+	openBrowser := currentPATOpenBrowser(configDir)
+	slog.Debug("pat.host_owned_decision",
+		"site", "handlePatAuthCheck",
+		"hostOwned", hostOwnedPAT,
+		"agentCodeEnvSet", os.Getenv(authpkg.AgentCodeEnv) != "",
+	)
 
 	// Inject clientId/clientSecret from PAT response as runtime credentials
 	// so that subsequent device flow auth uses the server-assigned app identity.
+	var appCfg *authpkg.AppConfig
 	if patData.Data.ClientID != "" {
 		if patData.Data.ClientSecret != "" {
 			// When both clientId and clientSecret are provided, use direct mode
@@ -353,19 +434,32 @@ func handlePatAuthCheck(
 			authpkg.SetClientIDFromMCP(patData.Data.ClientID)
 		}
 
-		// Persist clientId (and optionally secret) to ~/.dws/app.json so that
-		// future process invocations can load it at startup and populate
-		// DWS_CLIENT_ID env before the first MCP request.
-		appCfg := &authpkg.AppConfig{
-			ClientID: patData.Data.ClientID,
-		}
+		// Persist only after an explicit APPROVED result below. Raw PAT
+		// interceptions (host-owned / json / empty-flow pass-through) must not
+		// rewrite the shared ~/.dws/app.json state for unrelated shells or agents.
+		appCfg = &authpkg.AppConfig{ClientID: patData.Data.ClientID}
 		if patData.Data.ClientSecret != "" {
 			appCfg.ClientSecret = authpkg.PlainSecret(patData.Data.ClientSecret)
 		}
-		if err := authpkg.SaveAppConfig(configDir, appCfg); err != nil {
-			slog.Warn("failed to persist app config from PAT", "error", err)
-			fmt.Fprintf(output, "  \u26a0 保存应用配置失败: %v (下次启动可能需要重新授权)\n", err)
+	}
+
+	// In host-controlled PAT mode (driven solely by DINGTALK_DWS_AGENTCODE),
+	// or when flowId is absent, the CLI returns machine-readable JSON to
+	// stderr and leaves UI/polling/retry to the host. `claw-type` is NOT
+	// used for this decision — it is only forwarded on the wire via
+	// edition.MergeHeaders and surfaced in hostControl for traceability.
+	if hostOwnedPAT || patData.Data.FlowID == "" {
+		if hostOwnedPAT {
+			return executor.Result{}, &apperrors.PATError{RawJSON: enrichPATErrorForHostControl(patErr.RawJSON)}
 		}
+		return executor.Result{}, &apperrors.PATError{RawJSON: enrichPATErrorWithOpenBrowser(patErr.RawJSON, openBrowser)}
+	}
+
+	if wantsStructuredPATOutput(r) {
+		if openBrowser && patData.Data.URI != "" {
+			_ = openBrowserFunc(patData.Data.URI)
+		}
+		return executor.Result{}, &apperrors.PATError{RawJSON: enrichPATErrorWithOpenBrowser(patErr.RawJSON, openBrowser)}
 	}
 
 	bold := color.New(color.Bold).SprintFunc()
@@ -382,14 +476,9 @@ func handlePatAuthCheck(
 	}
 	if patData.Data.URI != "" {
 		fmt.Fprintf(output, "  %s %s\n\n", dim("🔗"), cyan(patData.Data.URI))
-		// Best-effort browser open.
-		_ = tryOpenBrowser(patData.Data.URI)
-	}
-
-	// If no flowId, we can't poll — fall back to returning PATError for host-app.
-	if patData.Data.FlowID == "" {
-		fmt.Fprintln(output)
-		return executor.Result{}, patErr
+		if openBrowser {
+			_ = openPATAuthorizationURI(patData.Data.URI)
+		}
 	}
 
 	// Poll the device flow status until user authorizes, rejects, or timeout.
@@ -410,6 +499,13 @@ func handlePatAuthCheck(
 	case authpkg.StatusApproved:
 		fmt.Fprintf(output, "%s %s\n", greenFn("✓"), bold("授权成功!"))
 		fmt.Fprintln(output)
+
+		if appCfg != nil {
+			if err := authpkg.SaveAppConfig(configDir, appCfg); err != nil {
+				slog.Warn("failed to persist approved app config from PAT", "error", err)
+				fmt.Fprintf(output, "  \u26a0 保存应用配置失败: %v (下次启动可能需要重新授权)\n", err)
+			}
+		}
 
 		// Exchange authCode for a fresh access token (mirrors device_flow loginOnce).
 		if authCode != "" {
@@ -475,6 +571,66 @@ func handlePatAuthCheck(
 	}
 }
 
+func enrichPATErrorForHostControl(raw string) string {
+	if strings.TrimSpace(raw) == "" {
+		return raw
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return raw
+	}
+
+	// Route back through the classifier so host-owned active retry emits the
+	// exact same PAT JSON shape as passive classification.
+	if patErr := apperrors.ClassifyPatAuthCheck(payload); patErr != nil {
+		return patErr.RawJSON
+	}
+
+	apperrors.ApplyHostMutations(payload)
+
+	// stderr JSON MUST be single-line.
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return raw
+	}
+	return string(encoded)
+}
+
+// buildPATScopeJSON renders the PAT_SCOPE_AUTH_REQUIRED stderr payload.
+// includeHostControl=true follows the standard host-owned/CLI-owned split
+// (data.hostControl is injected only if HostControlBlock is non-nil).
+// includeHostControl=false is an explicit override used by the CLI-owned
+// branch so that any env-mode misconfiguration cannot leak a host-owned
+// contract into stderr.
+func buildPATScopeJSON(scopeErr *PatScopeError, includeHostControl bool) string {
+	data := map[string]any{
+		"identity":     scopeErr.Identity,
+		"errorType":    scopeErr.ErrorType,
+		"message":      scopeErr.Message,
+		"hint":         scopeErr.Hint,
+		"missingScope": scopeErr.MissingScope,
+		"openBrowser":  apperrors.PATOpenBrowserValue(),
+	}
+	if includeHostControl {
+		if hostControl := apperrors.HostControlBlock(); hostControl != nil {
+			data["hostControl"] = hostControl
+		}
+	}
+
+	payload := map[string]any{
+		"success": false,
+		"code":    patScopeAuthRequiredCode,
+		"data":    data,
+	}
+	// stderr JSON MUST be single-line.
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return `{"success":false,"code":"PAT_SCOPE_AUTH_REQUIRED"}`
+	}
+	return string(b)
+}
+
 // pollPatDeviceFlow polls the PAT device flow status endpoint until a terminal
 // state (APPROVED/REJECTED/EXPIRED) is reached or the context is cancelled.
 // Returns the final status string and the authCode (non-empty only on APPROVED).
@@ -537,23 +693,25 @@ func pollPatDeviceFlow(ctx context.Context, flowID string, configDir string, out
 			var pollResp authpkg.DevicePollResponse
 			if err := json.Unmarshal(bodyBytes, &pollResp); err != nil {
 				slog.Debug("PAT poll: failed to parse response", "error", err, "body", string(bodyBytes))
+				printPATPollDebugResponse(output, resp.StatusCode, bodyBytes)
 				continue
 			}
 
-			status := authpkg.ParseDeviceFlowStatus(pollResp.Data.Status, pollResp.Success)
+			pollData := pollResp.EffectiveData()
+			status := authpkg.ParseDeviceFlowStatus(pollData.Status, pollResp.Success)
 			switch status {
 			case authpkg.StatusApproved:
 				fmt.Fprintln(output) // clear the polling line
-				return status, pollResp.Data.AuthCode, nil
+				return status, pollData.AuthCode, nil
 			case authpkg.StatusRejected, authpkg.StatusExpired:
 				fmt.Fprintln(output) // clear the polling line
 				return status, "", nil
 			case authpkg.StatusPending:
-				// keep polling
 			default:
 				// ParseDeviceFlowStatus normalizes empty+!success to EXPIRED,
 				// so this branch handles truly unknown statuses.
 				fmt.Fprintln(output)
+				printPATPollDebugResponse(output, resp.StatusCode, bodyBytes)
 				return status, "", nil
 			}
 		}

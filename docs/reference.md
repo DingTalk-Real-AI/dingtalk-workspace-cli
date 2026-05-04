@@ -19,8 +19,9 @@
 | 1 | API | MCP tool call or upstream API failure / MCP 工具调用或上游 API 失败 |
 | 2 | Auth | Authentication or authorization failure / 身份认证或授权失败 |
 | 3 | Validation | Invalid input, flags, or parameter schema mismatch / 输入参数校验失败 |
-| 4 | Discovery | Server discovery, cache, or protocol negotiation failure / 服务发现失败 |
+| 4 | PAT | PAT authorization interception; stderr carries raw machine-readable PAT JSON / PAT 授权拦截；stderr 返回原始机器可解析 JSON |
 | 5 | Internal | Unexpected internal error / 未预期的内部错误 |
+| 6 | Discovery | Server discovery, cache, or protocol negotiation failure / 服务发现、缓存或协议协商失败 |
 
 With `-f json`, error responses include structured payloads: `category`, `reason`, `hint`, `actions`.
 
@@ -29,9 +30,9 @@ With `-f json`, error responses include structured payloads: `category`, `reason
 ## Output Formats / 输出格式
 
 ```bash
-dws contact user search --keyword "Alice" -f table   # Table (default, human-friendly / 表格，默认)
-dws contact user search --keyword "Alice" -f json    # JSON (for agents and piping / 适合 agent)
-dws contact user search --keyword "Alice" -f raw     # Raw API response / 原始响应
+dws contact user search --query "Alice" -f table   # Table (default, human-friendly / 表格，默认)
+dws contact user search --query "Alice" -f json    # JSON (for agents and piping / 适合 agent)
+dws contact user search --query "Alice" -f raw     # Raw API response / 原始响应
 dws schema -f pretty ding.send_ding_message          # Pretty (ANSI-colored, schema-aware / 彩色分区，专为 schema 设计)
 ```
 
@@ -44,7 +45,7 @@ dws todo task list --dry-run    # Preview MCP call without executing / 预览但
 ## Output to File / 输出到文件
 
 ```bash
-dws contact user search --keyword "Alice" -o result.json
+dws contact user search --query "Alice" -o result.json
 ```
 
 ## Schema Introspection / Schema 查询

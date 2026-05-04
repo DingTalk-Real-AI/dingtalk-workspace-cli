@@ -59,7 +59,7 @@ func init() {
 	configmeta.Register(configmeta.ConfigItem{
 		Name:        "DINGTALK_AGENT",
 		Category:    configmeta.CategoryExternal,
-		Description: "MCP 请求 x-dingtalk-agent 头",
+		Description: "业务 Agent 名称；仅用于 x-dingtalk-agent 请求头，与 claw-type/host-owned PAT 判定无关",
 	})
 	configmeta.Register(configmeta.ConfigItem{
 		Name:        "DINGTALK_TRACE_ID",
@@ -92,6 +92,27 @@ const (
 	// Environment variables for third-party channel integration
 	envDWSChannel = "DWS_CHANNEL"
 )
+
+// hostOwnedPATDecisionOnce ensures the host-owned PAT decision is logged at
+// most once per CLI process. The log line is emitted at Debug level so
+// `--debug` (or `--verbose`) surfaces it on stderr; the file logger at
+// ~/.dws/logs/dws.log captures it unconditionally at DEBUG. It records
+// ONLY the derived booleans — never the env value, token, client-id or
+// flow-id — so logs remain safe to attach to issues.
+var hostOwnedPATDecisionOnce sync.Once
+
+// logHostOwnedPATDecisionOnce emits the single-shot debug trace. It is
+// called lazily from the runtime Run path (which executes AFTER
+// PersistentPreRunE has applied --debug / --verbose via configureLogLevel)
+// so the line actually surfaces when the user asks for it.
+func logHostOwnedPATDecisionOnce() {
+	hostOwnedPATDecisionOnce.Do(func() {
+		slog.Debug("runtime.host_owned_pat",
+			"hostOwned", authpkg.HostOwnsPATFlow(),
+			"agentCodeEnvPresent", os.Getenv(authpkg.AgentCodeEnv) != "",
+		)
+	})
+}
 
 func newCommandRunnerWithFlags(loader cli.CatalogLoader, flags *GlobalFlags) executor.Runner {
 	// Ensure DWS_CLIENT_ID env is populated from persisted config before
@@ -132,6 +153,12 @@ type runtimeRunner struct {
 }
 
 func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation) (executor.Result, error) {
+	// Emit the one-shot host-owned PAT decision log. Placed here (not in
+	// the constructor) so it fires AFTER PersistentPreRunE has configured
+	// slog level per --debug / --verbose. The Once guard makes repeat
+	// invocations within the same process free.
+	logHostOwnedPATDecisionOnce()
+
 	if r.loader == nil || r.transport == nil {
 		return r.fallback.Run(ctx, invocation)
 	}
@@ -171,6 +198,17 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 		return r.handleCatalogMiss(ctx, invocation, "product missing from discovery catalog and no supplement/env override")
 	}
 	if _, ok := product.FindTool(invocation.Tool); !ok {
+		// Catalog knows the product but not the tool — this happens when the
+		// catalog entry came from SupplementServers (endpoint-only, no tool
+		// list). Trust directRuntimeEndpoint to re-resolve a working endpoint
+		// for the tool. If that also misses, fall through to handleCatalogMiss
+		// so stderr still carries the explicit not-resolved signal.
+		if endpoint, ok := directRuntimeEndpoint(invocation.CanonicalProduct, invocation.Tool); ok {
+			if r.globalFlags != nil && r.globalFlags.DryRun {
+				invocation.DryRun = true
+			}
+			return r.executeInvocation(ctx, endpoint, invocation)
+		}
 		return r.handleCatalogMiss(ctx, invocation, fmt.Sprintf("tool %q not declared by product %q in discovery catalog", invocation.Tool, invocation.CanonicalProduct))
 	}
 	if r.globalFlags != nil && r.globalFlags.DryRun {
@@ -610,11 +648,17 @@ func resolveIdentityHeaders() map[string]string {
 	}
 
 	// Inject environment variable based headers for MCP gateway tracking.
+	// DINGTALK_AGENT, if set by the caller, is forwarded verbatim as the
+	// x-dingtalk-agent header. It does NOT influence claw-type (which the
+	// open-source edition pins to edition.DefaultOSSClawType via the
+	// MergeHeaders hook below) and it does NOT influence the host-owned
+	// PAT decision (driven solely by DINGTALK_DWS_AGENTCODE).
 	envHeaders := map[string]string{
-		"x-dingtalk-agent":      os.Getenv(envDingtalkAgent),
-		"x-dingtalk-trace-id":   os.Getenv(envDingtalkTraceID),
-		"x-dingtalk-session-id": os.Getenv(envDingtalkSessionID),
-		"x-dingtalk-message-id": os.Getenv(envDingtalkMessageID),
+		"x-dingtalk-agent":          os.Getenv(envDingtalkAgent),
+		"x-dingtalk-dws-agent-code": strings.TrimSpace(os.Getenv(authpkg.AgentCodeEnv)),
+		"x-dingtalk-trace-id":       os.Getenv(envDingtalkTraceID),
+		"x-dingtalk-session-id":     os.Getenv(envDingtalkSessionID),
+		"x-dingtalk-message-id":     os.Getenv(envDingtalkMessageID),
 	}
 	for k, v := range envHeaders {
 		if v != "" {
@@ -622,7 +666,8 @@ func resolveIdentityHeaders() map[string]string {
 		}
 	}
 
-	// Inject third-party channel headers
+	// Inject third-party channel headers. DWS_CHANNEL is forwarded as the
+	// upstream channelCode.
 	if v := os.Getenv(envDWSChannel); v != "" {
 		headers["x-dws-channel"] = v
 	}

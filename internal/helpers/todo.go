@@ -83,7 +83,7 @@ func newTodoTaskCreateCommand(runner executor.Runner) *cobra.Command {
 		Example: `  dws todo task create --title "修复线上Bug" --executors userId1,userId2 --priority 40
   dws todo task create --title "提交报告" --executors userId1 --due "2026-03-10T18:00:00+08:00"
 
-  # 查询 userId: dws contact user search --keyword "姓名"`,
+  # 查询 userId: dws contact user search --query "姓名"`,
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -135,7 +135,7 @@ func newTodoTaskCreateCommand(runner executor.Runner) *cobra.Command {
 	preferLegacyLeaf(cmd)
 
 	cmd.Flags().String("title", "", i18n.T("待办标题 (必填)"))
-	cmd.Flags().String("executors", "", i18n.T("执行者 userId 列表 (必填)"))
+	cmd.Flags().String("executors", "", i18n.T("执行者 userId 列表，逗号分隔 (必填)。注意: 此处是通讯录 userId，可通过 dws contact user search --query 姓名 查询"))
 	cmd.Flags().String("due", "", i18n.T("截止时间 ISO-8601 (如 2026-03-10T18:00:00+08:00)"))
 	cmd.Flags().String("priority", "", i18n.T("优先级: 10低/20普通/30较高/40紧急"))
 	cmd.Flags().String("recurrence", "", i18n.T("循环待办 (需先设置 --due); 格式: DTSTART:...\\nRRULE:FREQ=DAILY;INTERVAL=1"))
@@ -152,8 +152,20 @@ func newTodoTaskCreateCommand(runner executor.Runner) *cobra.Command {
 
 func newTodoTaskListCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:               "list",
-		Short:             i18n.T("查询待办列表"),
+		Use:   "list",
+		Short: i18n.T("查询待办列表"),
+		Long: i18n.T(`查询当前用户在当前企业的待办列表。
+
+覆盖范围:
+  返回当前用户作为"执行者"(executor) 的待办。
+  仅参与但不执行的待办、自己创建但交给他人执行的待办不在返回范围内。
+
+  当前列表能力面向"个人待办"，即钉钉待办模块中展示的待办任务，
+  不包含 OA 审批流待办、Teambition 项目任务等其他业务线的待办。
+
+分页:
+  默认每页 20 条。--size 超过 20 时，CLI 会自动进行多次 API 调用
+  并合并结果（自动分页），无需手动翻页。`),
 		Example:           `  dws todo task list --page 1 --size 20 --status false`,
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
@@ -362,6 +374,23 @@ func newTodoTaskGetCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get",
 		Short: i18n.T("待办详情"),
+		Long: i18n.T(`查看待办任务详情。
+
+返回字段说明:
+  creatorId / executorIds / participantIds / modifierId
+    待办系统内部人员标识（短数字 ID，如 6380165826），
+    不是通讯录 userId（如 035551044606950179）或 unionid。
+    这些 ID 在待办系统内对同一用户稳定，但无法直接用于通讯录 API 查询。
+    如需获取人员姓名，可参考返回中的 creatorInfo / executorInfos /
+    participantInfos 字段（包含 name 属性）。
+
+  bizTag / source
+    底层待办引擎的实现标识。即使是在钉钉客户端直接创建的普通个人待办，
+    也会返回 "teambition"，这是内核实现细节，不代表来自 Teambition 产品。
+
+  tenantId / tenantType
+    待办所属的租户标识，非企业 corpId。tenantType 为 "user" 时
+    tenantId 是用户维度标识；为 "org" 时是组织维度标识。`),
 		Example: `  dws todo task get --task-id <taskId>
 
   # 查询 taskId: dws todo task list`,
@@ -379,7 +408,7 @@ func newTodoTaskGetCommand(runner executor.Runner) *cobra.Command {
 			invocation := executor.NewHelperInvocation(
 				cobracmd.LegacyCommandPath(cmd),
 				"todo",
-				"query_todo_detail",
+				"get_todo_detail",
 				params,
 			)
 			invocation.DryRun = commandDryRun(cmd)

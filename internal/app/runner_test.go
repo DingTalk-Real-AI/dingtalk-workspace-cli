@@ -25,6 +25,7 @@ import (
 	"strings"
 	"testing"
 
+	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -310,6 +311,16 @@ func TestRuntimeRunnerInjectsAuthTokenFromFlag(t *testing.T) {
 	}
 	if got := payload.Response.Content["documentId"]; got != "doc-flag-token" {
 		t.Fatalf("response.content.documentId = %#v, want doc-flag-token", got)
+	}
+}
+
+func TestResolveIdentityHeadersForwardsAgentCode(t *testing.T) {
+	setupRuntimeCommandTest(t)
+	t.Setenv(authpkg.AgentCodeEnv, " cursor ")
+
+	headers := resolveIdentityHeaders()
+	if got := headers["x-dingtalk-dws-agent-code"]; got != "cursor" {
+		t.Fatalf("x-dingtalk-dws-agent-code = %q, want cursor", got)
 	}
 }
 

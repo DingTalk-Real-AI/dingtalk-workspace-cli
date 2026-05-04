@@ -74,6 +74,28 @@ func TestDefaultPartition(t *testing.T) {
 	}
 }
 
+func TestEditionPartition(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"empty maps to default", "", DefaultPartition},
+		{"open maps to default", "open", DefaultPartition},
+		{"whitespace is trimmed", "  wukong  ", "wukong/default"},
+		{"wukong overlay", "wukong", "wukong/default"},
+		{"arbitrary edition", "internal-lab", "internal-lab/default"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := EditionPartition(tc.input); got != tc.want {
+				t.Fatalf("EditionPartition(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestManualTokenExpiry(t *testing.T) {
 	t.Parallel()
 	if ManualTokenExpiry <= 0 {

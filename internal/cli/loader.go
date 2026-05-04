@@ -24,6 +24,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cache"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/discovery"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/editionmerge"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/ir"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
@@ -196,14 +197,23 @@ func (l EnvironmentLoader) Load(ctx context.Context) (ir.Catalog, error) {
 		return FixtureLoader{Path: fixturePath}.Load(ctx)
 	}
 
+	// Priority: explicit test override > edition-specific discovery URL >
+	// open-source default. For Wukong this pulls the runtime catalog fetch
+	// onto the same Portal endpoint that loadDynamicCommands already uses,
+	// eliminating the historical split where the command tree came from
+	// Wukong Portal while runtime endpoint resolution silently read the
+	// open-source Market cache (see fix-wukong-endpoint-partition plan).
 	baseURL := DefaultMarketBaseURL
+	if editionURL := strings.TrimSpace(edition.Get().DiscoveryURL); editionURL != "" {
+		baseURL = editionURL
+	}
 	if l.CatalogBaseURLOverride != "" {
 		baseURL = l.CatalogBaseURLOverride
 	}
 
 	cacheDir, _ := l.lookup(CacheDirEnv)
 	store := cache.NewStore(cacheDir)
-	partition := config.DefaultPartition
+	partition := config.EditionPartition(edition.Get().Name)
 
 	// Cache-first: if a cached catalog is available, use it immediately.
 	// Startup command construction should not block on synchronous discovery
@@ -223,6 +233,15 @@ func (l EnvironmentLoader) Load(ctx context.Context) (ir.Catalog, error) {
 	}
 
 	if !hasAuth {
+		// Cache / discovery both unreachable without credentials — fall back
+		// to the edition's SupplementServers / FallbackServers hook so that
+		// hardcoded overlay commands can still resolve an endpoint via the
+		// returned catalog. Without this an unauthenticated cold start
+		// produces DegradedUnauthenticated and every hardcoded command
+		// fails even when the edition carries its own static endpoint map.
+		if fb := fallbackRuntimeServers(); len(fb) > 0 {
+			return ir.BuildCatalog(fb), nil
+		}
 		return ir.Catalog{}, newCatalogDegraded(DegradedUnauthenticated, 0)
 	}
 
@@ -246,6 +265,9 @@ func (l EnvironmentLoader) Load(ctx context.Context) (ir.Catalog, error) {
 	if err != nil {
 		if cached.Available && len(cached.Catalog.Products) > 0 {
 			return cached.Catalog, nil
+		}
+		if fb := fallbackRuntimeServers(); len(fb) > 0 {
+			return ir.BuildCatalog(fb), nil
 		}
 		return ir.Catalog{}, newCatalogDegraded(DegradedMarketUnreachable, 0)
 	}
@@ -287,6 +309,9 @@ func (l EnvironmentLoader) Load(ctx context.Context) (ir.Catalog, error) {
 		if cached.Available && len(cached.Catalog.Products) > 0 {
 			return cached.Catalog, nil
 		}
+		if fb := fallbackRuntimeServers(); len(fb) > 0 {
+			return ir.BuildCatalog(fb), nil
+		}
 		return ir.Catalog{}, newCatalogDegraded(DegradedRuntimeAllFailed, len(servers))
 	}
 
@@ -305,6 +330,7 @@ func (l EnvironmentLoader) Load(ctx context.Context) (ir.Catalog, error) {
 			runtimeServers = append(runtimeServers, runtimeServer)
 		}
 	}
+	runtimeServers = appendSupplementRuntimeServers(runtimeServers)
 	return ir.BuildCatalog(runtimeServers), nil
 }
 
@@ -313,15 +339,28 @@ func (l EnvironmentLoader) Load(ctx context.Context) (ir.Catalog, error) {
 // window, the returned state asks the caller to try live discovery before
 // trusting the cache as current truth.
 func (l EnvironmentLoader) loadFromCache(store *cache.Store) cachedCatalogState {
-	partition := config.DefaultPartition
+	partition := config.EditionPartition(edition.Get().Name)
 	regSnap, freshness, err := store.LoadRegistry(partition)
 	if err != nil || len(regSnap.Servers) == 0 {
+		// No cached registry. Still honour the edition's SupplementServers
+		// hook so that hardcoded overlay commands whose products are not
+		// part of the Portal envelope (Wukong gray-release in particular)
+		// can resolve an endpoint via the catalog path as well.
+		if supplement := supplementRuntimeServers(nil); len(supplement) > 0 {
+			return cachedCatalogState{
+				Catalog:         ir.BuildCatalog(supplement),
+				Registry:        regSnap,
+				Available:       true,
+				NeedsRevalidate: true,
+			}
+		}
 		return cachedCatalogState{}
 	}
 
 	now := store.Now().UTC()
 	needsRevalidate := freshness == cache.FreshnessStale || cache.ShouldRevalidate(now, regSnap.SavedAt)
 	runtimeServers := make([]discovery.RuntimeServer, 0, len(regSnap.Servers))
+	existing := make(map[string]bool, len(regSnap.Servers))
 	for _, server := range regSnap.Servers {
 		toolsSnap, toolsFreshness, toolsErr := store.LoadTools(partition, server.Key)
 		if toolsErr != nil || toolsFreshness != cache.FreshnessFresh {
@@ -335,16 +374,98 @@ func (l EnvironmentLoader) loadFromCache(store *cache.Store) cachedCatalogState 
 			Source:                    "fresh_cache",
 			Degraded:                  false,
 		})
+		if id := server.CLI.ID; id != "" {
+			existing[id] = true
+		}
+		if server.Key != "" {
+			existing[server.Key] = true
+		}
 	}
 	if len(runtimeServers) != len(regSnap.Servers) {
 		needsRevalidate = true
 	}
+	runtimeServers = append(runtimeServers, supplementRuntimeServers(existing)...)
 	return cachedCatalogState{
 		Catalog:         ir.BuildCatalog(runtimeServers),
 		Registry:        regSnap,
 		Available:       true,
 		NeedsRevalidate: needsRevalidate,
 	}
+}
+
+// supplementRuntimeServers materialises the edition.SupplementServers hook
+// as discovery.RuntimeServer values, skipping IDs that already appear in
+// the discovery result. The returned servers carry no tools — they exist
+// only so catalog.FindProduct can resolve an endpoint; tool validation
+// for these products is expected to fall through to directRuntimeEndpoint.
+func supplementRuntimeServers(existing map[string]bool) []discovery.RuntimeServer {
+	fn := edition.Get().SupplementServers
+	if fn == nil {
+		return nil
+	}
+	sup := fn()
+	if len(sup) == 0 {
+		return nil
+	}
+	out := make([]discovery.RuntimeServer, 0, len(sup))
+	for _, s := range sup {
+		if s.ID == "" {
+			continue
+		}
+		if existing != nil && existing[s.ID] {
+			continue
+		}
+		out = append(out, discovery.RuntimeServer{
+			Server:   editionmerge.ToDescriptor(s, "edition_supplement"),
+			Source:   "edition_supplement",
+			Degraded: false,
+		})
+	}
+	return out
+}
+
+// fallbackRuntimeServers materialises the edition.FallbackServers hook,
+// additionally folding in SupplementServers entries the hook omits.
+// Used when every other discovery avenue failed.
+func fallbackRuntimeServers() []discovery.RuntimeServer {
+	fn := edition.Get().FallbackServers
+	if fn == nil {
+		return supplementRuntimeServers(nil)
+	}
+	fb := fn()
+	if len(fb) == 0 {
+		return supplementRuntimeServers(nil)
+	}
+	existing := make(map[string]bool, len(fb))
+	out := make([]discovery.RuntimeServer, 0, len(fb))
+	for _, s := range fb {
+		if s.ID == "" {
+			continue
+		}
+		existing[s.ID] = true
+		out = append(out, discovery.RuntimeServer{
+			Server:   editionmerge.ToDescriptor(s, "edition_fallback"),
+			Source:   "edition_fallback",
+			Degraded: false,
+		})
+	}
+	out = append(out, supplementRuntimeServers(existing)...)
+	return out
+}
+
+// appendSupplementRuntimeServers merges supplement entries into a live
+// discovery result, deduplicating against existing IDs.
+func appendSupplementRuntimeServers(servers []discovery.RuntimeServer) []discovery.RuntimeServer {
+	existing := make(map[string]bool, len(servers))
+	for _, s := range servers {
+		if id := s.Server.CLI.ID; id != "" {
+			existing[id] = true
+		}
+		if s.Server.Key != "" {
+			existing[s.Server.Key] = true
+		}
+	}
+	return append(servers, supplementRuntimeServers(existing)...)
 }
 
 func (l EnvironmentLoader) lookup(key string) (string, bool) {

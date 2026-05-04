@@ -4,6 +4,133 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
+## [1.0.19] - 2026-04-30
+
+Discovery hardening for edition overlays: `edition.SupplementServers` / `FallbackServers` hooks now consistently surface through the **runtime catalog loader**, not just the static command tree, so overlay products that live outside the Portal envelope (e.g. Wukong gray-release `conference`) resolve an endpoint on both the cold-cache and tool-not-in-catalog paths. Ships with per-edition cache partitioning to stop cross-edition disk-cache leakage, plus a small todo fix.
+
+### Added
+
+- **`pkg/config.EditionPartition(name)`** (#197) — returns the cache partition key for a given edition. Open-source core (`""` / `"open"`) keeps using `DefaultPartition` (`default/default`); every other edition gets its own namespace (`<edition>/default`), preventing cross-edition data leakage in the shared `~/.dws` disk cache. Lives in `pkg/config` as a leaf helper so `internal/cli`, `internal/app`, and `internal/cache` can all call it without risking import cycles.
+- **`internal/editionmerge` shared package** (#197) — single source of truth for converting `edition.ServerInfo` into `market.ServerDescriptor` (`ToDescriptor`) and for merging `SupplementServers` / `FallbackServers` into a descriptor list. Both `internal/cli` (command tree) and `internal/app` (runtime catalog) now apply the edition hooks against the same discovery pipeline.
+
+### Changed
+
+- **`EnvironmentLoader.loadFromCache` honors `SupplementServers` even on empty registry** (#197) — when the Portal registry cache is missing or empty, the catalog loader still materialises the edition's `SupplementServers` as endpoint-only `discovery.RuntimeServer` entries (source: `edition_supplement`), so hardcoded overlay commands for supplement-only products can still resolve an endpoint via the catalog path. Previously `loadFromCache` short-circuited to an empty catalog whenever the registry snapshot was empty, silently dropping gray-release products.
+- **Cache loader switches from `DefaultPartition` to `EditionPartition(edition.Get().Name)`** (#197) — the runtime catalog, registry snapshot, and tools snapshot are now partitioned per edition instead of all editions sharing `default/default`.
+- **`loadFromCache` appends supplement servers alongside fresh-cache servers** (#197) — supplement entries whose `CLI.ID` / `Key` are already present in the cached registry are skipped, so the hook never shadows Portal-published servers; only new products are added.
+- **`runtimeRunner.Run` falls through to `directRuntimeEndpoint` for supplement products** (#197) — when the catalog contains the product (e.g. supplied by `SupplementServers`) but the specific tool is not declared, the runner now trusts `directRuntimeEndpoint` to resolve a working endpoint for the tool before returning the explicit catalog-miss error. Supplement entries intentionally carry no tool list, so this is the path that makes overlay-only tools executable.
+- **Legacy `mergeSupplementServers` / `fallbackToDescriptors` moved out of `internal/app/legacy.go`** (#197) — relocated into `internal/editionmerge` and reused by the catalog loader, eliminating the duplicate `edition.ServerInfo → market.ServerDescriptor` logic that previously only ran on the static command-tree path.
+
+### Fixed
+
+- **`dws todo task get` returns empty** (#202) — the helper was calling `query_todo_detail`, which is not a valid MCP tool and returns empty. Switched to `get_todo_detail` as declared in `discovery.json`, restoring correct task-detail behaviour.
+- **Conference and other Wukong gray-release products miss endpoint on cold cache** (#197) — products registered only via `edition.SupplementServers` (not yet in the Portal envelope) now resolve an endpoint through the catalog path in both cold-start and tool-not-declared scenarios.
+
+### Tests
+
+- `internal/editionmerge/merge_test.go` — descriptor conversion + supplement/fallback merge semantics.
+- `internal/cli/loader_partition_test.go` + `loader_supplement_test.go` — edition-partitioned cache reads and supplement hook surfacing from `loadFromCache` (including empty-registry cold path and existing-ID deduplication).
+- `internal/app/legacy_wukong_partition_e2e_test.go` — end-to-end cache partition isolation for the Wukong edition.
+- `internal/app/runner_supplement_fallback_test.go` — runner falls through to `directRuntimeEndpoint` when the tool isn't declared by a supplement-sourced catalog entry.
+- `pkg/config/constants_test.go` — `EditionPartition` name handling (`""`, `"open"`, custom edition).
+
+### Docs
+
+- **CHANGELOG v1.0.18 rewrite** (#193) — previous release notes expanded to call out the PAT host-owned A-core flow, exit-code contract change (auth `4`, Discovery/cache/protocol `6`), `dws pat chmod` / `pat browser-policy` entry points, stderr-JSON classifier updates, and host-control metadata injection.
+
+## [1.0.18] - 2026-04-28
+
+Raw DingTalk OpenAPI access lands as a new `dws api` surface for both `api.dingtalk.com` and `oapi.dingtalk.com`, backed by app-level token caching and guarded host allowlists. PAT enters the host-owned **A-core** loop: agent hosts can own authorization UI through `DINGTALK_DWS_AGENTCODE`, parse single-line stderr JSON, call `dws pat chmod`, and replay the original command. Chat helper regressions are fixed, skill references are brought back in line with shipped commands, and the v1.0.17 Mail release notes are backfilled into README / CHANGELOG.
+
+### Breaking
+
+- **PAT exit-code contract** (#142) — PAT authorization interceptions now use exit code `4`; Discovery, cache, and protocol negotiation failures now use exit code `6`. Downstream scripts that previously treated `4` as Discovery must update their handling.
+
+### Added
+
+- **`dws api` raw DingTalk OpenAPI command** (#184) — direct DingTalk OpenAPI calls without writing an MCP wrapper first. Supports `GET` / `POST` / `PUT` / `PATCH` / `DELETE`, JSON `--params` / `--data`, stdin input, dry-run previews, `--jq`, field selection, `--page-all`, `--page-limit`, `--page-delay`, and `--base-url`.
+- **Dual-form OpenAPI routing** (#184) — `api.dingtalk.com` requests use the `x-acs-dingtalk-access-token` header; `oapi.dingtalk.com` requests use the legacy `access_token` query parameter. The raw API client validates the target host before attaching credentials.
+- **App-level token cache for raw API** (#184) — custom-app credentials now fetch app access tokens from the unified OAuth endpoint, cache them while valid, and refresh them before expiry. The same token provider works for new-style and legacy OpenAPI calls.
+- **Host-owned PAT A-core flow** (#142) — when `DINGTALK_DWS_AGENTCODE` is set, PAT hits return `exit=4` plus single-line stderr JSON; the host renders authorization UI, calls `dws pat chmod <scope>...`, and replays the original command.
+- **`dws pat chmod` authorization entry point** (#142) — grants scopes with `--agentCode`, `--grant-type`, and session fallback support; `DINGTALK_DWS_AGENTCODE` can supply the agent code when the flag is omitted.
+- **PAT browser-open policy** (#142) — `dws pat browser-policy --enabled <true|false> [--agentCode <id>]` controls whether the CLI may open a browser, independently from `--format` output mode.
+
+### Changed
+
+- **README raw API guide** (#184) — English and Chinese READMEs now document custom-app prerequisites, api/oapi examples, auto-pagination, dry-run, jq filtering, security properties, and the new Raw API service-table row.
+- **Raw API token retrieval path** (#184) — token lookup now goes through a single app-token interface; stale auth-refresh retry helpers were removed from the raw API path.
+- **PAT stderr JSON classifier** (#142) — recognizes `code`, `errorCode`, and `error_code`, including `PAT_NO_PERMISSION`, risk-tier PAT errors, `PAT_SCOPE_AUTH_REQUIRED`, and `AGENT_CODE_NOT_EXISTS`.
+- **Host-control metadata injection** (#142) — classifier and active-retry paths now share one mutation point for `data.hostControl` and `data.openBrowser`, keeping host-facing JSON shapes aligned.
+- **Open-edition routing signals** (#142) — open edition pins `claw-type: openClaw`; `DINGTALK_AGENT`, `DWS_CHANNEL`, and host-owned PAT detection are kept as independent signals.
+- **Behavior authorization endpoint fallback** (#142) — the PAT runtime can resolve the built-in behavior-authorization MCP endpoint before discovery data is available.
+- **v1.0.17 documentation backfill** (#181) — the previous release notes and README service table now explicitly include the shipped Mail product, update the total to **163 commands across 14 products**, and remove Mail from "Coming soon".
+
+### Fixed
+
+- **CLI auth-denial attribution** — local CLI authorization denials are attributed to the channel before falling back to user-scope classification, avoiding user-scope misclassification for channel-level auth failures.
+- **Opaque authorization URLs** (#182, #142) — PAT authorization links are preserved verbatim, including query/hash/fragment content required by the server.
+- **Polling compatibility** (#182, #142) — device-flow result envelopes and no-`flowId` device-code fallback remain supported, with guarded debug output and envelope priority.
+- **Group chat @-mentions restored** (#180) — `dws chat message send --group ...` again accepts and forwards `--at-users`, `--at-all`, and `--at-mobiles`; those flags are rejected outside group-chat mode so single-chat sends cannot silently drop @-mention intent.
+- **Explicit members-list command restored** (#180) — `dws chat group members list --id <openConversationId>` is reachable after the helper/dynamic merge path changed. `cmdutil.MergeHardcodedLeaves` now honors higher-priority helper groups when a dynamic envelope contributes a leaf at the same path.
+- **Skill reference command names** (#186) — `simple.md` now uses shipped OA command names (`list-pending`, `list-initiated`), removes a non-existent devdoc `search-error` command, and marks `workbench.md` as Draft because workbench commands are not available in the runtime.
+- **Empty grant result handling** (#142) — `dws pat chmod` now returns an explicit error instead of treating `{"Content": null}` as success.
+- **Session-id log safety** (#142) — raw `DWS_SESSION_ID` / `REWIND_SESSION_ID` values are no longer logged when the two env vars disagree.
+
+### Tests
+
+- Added raw API coverage for request validation, api/oapi routing, token management, pagination, response handling, dry-run output, JSON parsing, stdin handling, and command wiring. (#184)
+- Added chat/cmdutil regression tests for group @-mention forwarding, single-chat rejection, `members list`, helper-vs-envelope shape mismatch, and merge-priority behavior. (#180)
+- Added PAT contract coverage for host-owned signal selection, single-line stderr JSON, chmod env fallback and legacy alias fallback, browser policy, direct-runtime PAT endpoint fallback, and retry/poll behavior. (#142)
+- Coverage badge refreshed after the post-v1.0.17 CI runs.
+
+## [1.0.17] - 2026-04-27
+
+New **Mail** product surface (mailbox list, KQL message search, message get, send) brings runtime command count to **163 across 14 products**. Plugin command-tree visibility hardening: stdio plugins shipping CLI overlays no longer wait on subprocess discovery to surface their commands, and overlay-registered plugin products are no longer hidden by edition `VisibleProducts` whitelists. Chat docs clarify that `--title` is required on `dws chat message send`.
+
+### Added
+
+- **`mail` product** (#167) — new top-level service for DingTalk Mail. Four leaf commands across two subgroups:
+  - `dws mail mailbox list` — list mailbox addresses available to the current user (`list_user_mailboxes`)
+  - `dws mail message search` — KQL search across folders / sender / date / attachments / read-state (`search_emails`); supports `--cursor` pagination
+  - `dws mail message get` — fetch full message body + headers + attachments by message ID (`get_email_by_message_id`)
+  - `dws mail message send` — send email to one or more recipients (`send_email`)
+  - Skill reference at `skills/references/products/mail.md` registered in `skills/SKILL.md` master index and intent decision tree
+- **Stdio plugin overlay-first command registration** (#179) — when a stdio plugin's `overlay.json` declares `toolOverrides`, command trees are built from manifest metadata synchronously at startup, no subprocess `Initialize` / `tools/list` handshake required. Previously, slow or failing subprocesses left plugin commands invisible in `dws --help`. Background discovery still runs to refresh the warm cache for richer flag types on subsequent startups.
+
+### Changed
+
+- **`hideNonDirectRuntimeCommands` / `visibleMCPRootCommands` / `visibleUtilityRootCommands`** (#179) — refactored to share a single `resolveVisibleProducts()` helper that **unions** the edition's `VisibleProducts` hook with `DirectRuntimeProductIDs()`, so plugins registered via `AppendDynamicServer` stay visible in `dws --help` even when an edition installs a static product whitelist. Previously the hook fully replaced the dynamic registry, silently hiding plugin commands.
+- **`dws chat message send` documentation clarifies `--title` is required** (#174) — the helper command short text and the chat skill reference now state explicitly that `--title` is mandatory for both group and single-chat sends, matching the runtime validation.
+- **`buildStdioCommands` refactored to share helpers with the overlay-first path** (#179) — overlay parsing (`resolveStdioOverlay`) and tools→DetailTool conversion (`toolsToDetails`) extracted as package-level helpers; the legacy discovery-first stdio path now delegates to them, eliminating duplicated overlay JSON / cache-snapshot logic.
+
+### Fixed
+
+- **Negative-cache poisoning guard for stdio plugin discovery** (#179) — `refreshStdioToolsCache` now skips `SaveTools` entirely when discovery returns an empty tool list (transient failure, subprocess not ready, RPC timeout), so a single bad refresh cannot overwrite a previously-good cache and degrade flag enrichment on the next startup.
+
+### Tests
+
+- 6 new test cases in `internal/app/plugin_stdio_overlay_test.go` and `internal/app/visibility_test.go` cover overlay-first registration without discovery, warm-cache flag enrichment from `InputSchema`, fallback when overlays lack `toolOverrides`, the cache-poisoning guard, and integration cases for plugin visibility under restrictive `VisibleProducts` whitelists.
+- Coverage 49.8% → 52.8%.
+
+## [1.0.16] - 2026-04-24
+
+Discovery service abstraction with schema v3 extensions, open-edition helper-subtree restoration, and a defensive device-flow login reset.
+
+### Added
+
+- **`internal/discovery` service abstraction** (#156) — encapsulates market registry fetch, MCP runtime negotiation (`initialize → tools/list → detail` merge), and multi-level cache fallback. `EnvironmentLoader` now does cache-first startup, with degraded-mode reasons (`unauthenticated` / `market_unreachable` / `runtime_all_failed`) and `UpdatedAt`-based selective re-discovery.
+- **Schema v3 extensions** (#156) — positional parameters with typed coercion, `Example` on `--help`, flag `Default` / `RuntimeDefault` (with `$currentUserId` / `$now` etc.), `BodyWrapper`, `MutuallyExclusive` / `RequireOneOf` flag groups, `OmitWhen`, explicit `Type` override, and detail-schema `default` propagation.
+- **`dws chat message send` destination-flag routing** (#170) — open edition gains a hardcoded helper that dispatches by `--group` (→ `send_message_as_user`) vs `--user` / `--open-dingtalk-id` (→ `send_direct_message_as_user`), mirroring the closed-source overlay so single-chat sends finally work end-to-end.
+
+### Changed
+
+- **`pickCommands` → `cmdutil.MergeHardcodedLeaves`** (#169) — when a top-level product name collides between the dynamic overlay and a helper subtree, helper-only siblings are grafted into the dynamic tree instead of dropped. Restores `dws chat message send-by-bot` / `recall-by-bot` / `send-by-webhook` and `dws chat group members add-bot`, which had silently vanished from the open edition.
+- **`OverridePriority` / `MergeHardcodedLeaves` promoted into `pkg/cmdutil`** (#170) — single source of truth for the merge layer; hardcoded leaves can opt into overriding the dynamic envelope via a strictly higher priority.
+
+### Fixed
+
+- **Device flow defensively resets credentials before login** (#157) — `--device` login now clears stale credential state and re-fetches `clientID` from the MCP server, regardless of what previous login methods (OAuth scan, PAT) left in `app.json`. Fixes the case where a prior OAuth login made `--device` fall back to direct mode and demand `clientSecret`.
+
 ## [1.0.15] - 2026-04-23
 
 Compat layer gains **subcommand merging** under shared parents so multiple server entries can contribute into the same `dws <parent> <branch>` subtree without producing duplicate `--help` rows. Ships with a fresh auto-generated command index doc, a README sync to **159 commands across 13 products**, and a wide-ranging flag-naming cleanup that standardises CLI flags across chat, calendar, drive, minutes, contact, and devdoc commands.
@@ -45,6 +172,10 @@ Compat layer gains **subcommand merging** under shared parents so multiple serve
   - `TestBuildDynamicCommands_ParentMergeSameName` — two servers with identical `command` + `parent` collapse into a single merged subcommand
   - `TestBuildDynamicCommands_ParentMergeRecursive` — recursive merge through nested groups (e.g. `chat.group.members`)
   - `TestBuildDynamicCommands_ParentMergeLeafCollision` — identical leaf paths resolve first-wins without producing duplicates
+
+## [1.0.14] - 2026-04-22
+
+Docs-only re-tag of v1.0.13. The single commit (#153) backfills the v1.0.13 release notes after the binary was already published; no functional or CLI surface change.
 
 ## [1.0.13] - 2026-04-22
 
