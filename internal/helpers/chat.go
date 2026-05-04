@@ -252,9 +252,9 @@ func newChatMessageSendByBotCommand(runner executor.Runner) *cobra.Command {
 	preferLegacyLeaf(cmd)
 
 	cmd.Flags().String("group", "", "群会话 openConversationId (群聊必填)")
-	cmd.Flags().String("robot-code", "", "机器人 Code")
-	cmd.Flags().String("text", "", "消息内容 (Markdown)")
-	cmd.Flags().String("title", "", "消息标题")
+	cmd.Flags().String("robot-code", "", "机器人 Code (必填)")
+	cmd.Flags().String("text", "", "消息内容 Markdown (必填)")
+	cmd.Flags().String("title", "", "消息标题 (必填)")
 	cmd.Flags().String("users", "", "接收者 userId 列表，逗号分隔，最多 20 个 (单聊必填)")
 	return cmd
 }
