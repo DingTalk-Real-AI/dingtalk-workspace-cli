@@ -232,30 +232,62 @@ Flags:
 
 拉取指定群聊或单聊的会话消息内容。
 
---group 指定群聊，--user 指定单聊用户（通过 userId），--open-dingtalk-id 指定单聊用户（通过 openDingTalkId），三者互斥。默认拉取给定时间之后的消息，--forward=false 拉之前的。hasMore=true 时用结果中的边界 createTime 作为下次 --time 翻页。
+--group 指定群聊，--user 指定单聊用户（通过 userId），--open-dingtalk-id 指定单聊用户（通过 openDingTalkId），三者互斥。默认拉取给定时间之后的消息，--forward=false 拉之前的。
 
 ```
 Usage:
   dws chat message list [flags]
 Example:
+  # 拉取群聊中某个时间点之后的消息
   dws chat message list --group <openconversation_id> --time "2025-03-01 00:00:00"
+  # 拉取单聊消息（通过 userId）
   dws chat message list --user <userId> --time "2025-03-01 00:00:00" --limit 50
+  # 拉取单聊消息（通过 openDingTalkId）
   dws chat message list --open-dingtalk-id <openDingTalkId> --time "2025-03-01 00:00:00" --limit 50
+  # 拉取某个时间点之前的消息（向过去翻页）
   dws chat message list --group <openconversation_id> --time "2025-03-01 00:00:00" --forward=false
 Flags:
       --forward                  true=拉给定时间之后的消息，false=拉给定时间之前的消息 (default true)
       --group string             群聊 openconversation_id（群聊时必填）
       --limit int                返回数量，不传则不限制
-      --time string              开始时间，格式: yyyy-MM-dd HH:mm:ss (必填)
+      --time string              开始时间，格式: yyyy-MM-dd HH:mm:ss（不传则默认拉取最新消息）
       --user string              单聊用户 userId（单聊时与 --open-dingtalk-id 二选一）
       --open-dingtalk-id string  单聊用户 openDingTalkId（单聊时与 --user 二选一，适用于三方应用等无法获取 userId 的场景）
 
 注意:
   - --group、--user、--open-dingtalk-id 三者互斥，只需指定其一：群聊用 --group，单聊用 --user 或 --open-dingtalk-id
   - --group 的别名: --id, --chat, --conversation-id (均可替代 --group)
-  - 翻页：hasMore=true 时，用结果中的边界 createTime 作为下次 --time
   - 如果返回的会话消息中包含 openConvThreadId 字段，说明是话题类消息，需要调用 dws chat message list-topic-replies 拉取话题的回复内容列表，openConvThreadId 作为 --topic-id 参数
 ```
+
+### 分页翻页说明（重要）
+
+`message list` 的翻页方式与 `message list-all` **完全不同**，请勿混淆：
+
+| 命令 | 翻页参数 | 翻页值来源 | 值格式 |
+|------|---------|-----------|--------|
+| `message list` | `--time` | 上一页结果中**最后一条消息的 `createTime` 字段** | `yyyy-MM-dd HH:mm:ss`（如 `"2025-03-01 14:30:00"`） |
+| `message list-all` | `--cursor` | 上一页响应中的 `nextCursor` 字段 | 字符串（如 `"abc123token"`） |
+
+**翻页步骤（message list）：**
+
+1. **首次请求**：指定起始时间
+   ```bash
+   dws chat message list --group <id> --time "2025-03-01 00:00:00" --limit 50 --format json
+   ```
+2. **检查响应**：查看 `hasMore` 字段
+   - `hasMore: false` → 没有更多消息，翻页结束
+   - `hasMore: true` → 还有更多消息，继续下一步
+3. **获取翻页时间**：取返回结果中**最后一条消息**的 `createTime` 字段值（如 `"2025-03-01 14:30:00"`）
+4. **下一页请求**：将该 `createTime` 作为 `--time` 传入
+   ```bash
+   dws chat message list --group <id> --time "2025-03-01 14:30:00" --limit 50 --format json
+   ```
+5. 重复步骤 2-4 直到 `hasMore: false`
+
+> ⚠️ **常见错误**：
+> - **不要把 `nextCursor` 传给 `--time`**：响应中的 `nextCursor` 字段（纯数字时间戳如 `1776684611219`）**不是给 `--time` 用的**。`--time` 只接受 `yyyy-MM-dd HH:mm:ss` 格式。将 `nextCursor` 传给 `--time` 会导致返回相同页面，陷入死循环。`nextCursor` 仅用于 `message list-all` 的 `--cursor` 参数。
+> - **不要把 `nextCursor` 传给 `--forward`**：`--forward` 只接受 `true`（拉给定时间之后的消息）或 `false`（拉给定时间之前的消息），不是时间戳或游标参数。
 
 ---
 
