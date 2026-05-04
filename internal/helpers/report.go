@@ -204,8 +204,18 @@ func newReportCreateCommand(runner executor.Runner) *cobra.Command {
 		Use:   "create",
 		Short: "创建日志",
 		Long: `按模版创建一条日志。--contents 为 JSON 数组，每项需含 key、sort、content、contentType、type，
-与远程 create_report 一致；可先通过 report template list / template detail 取得 templateId 与控件定义。`,
-		Example: `  dws report create --template-id TPL_ID --contents '[{"content":"完成开发","sort":"0","key":"今日完成","contentType":"markdown","type":"1"}]'
+与远程 create_report 一致；可先通过 report template list / template detail 取得 templateId 与控件定义。
+
+注意：每个 contents 项的 key 必须精确等于模板的 field_name（中文/英文逐字匹配，不是控件 ID 或别名）。
+key 与 field_name 不一致时钉钉 API 会返回 SYSTEM_ERROR (success=false)，CLI 层不会预先拦截。
+请先用 report template detail 查到 report_template_fields[].field_name 后再填。`,
+		Example: `  # Step 1：查模板，取 report_template_fields[].field_name 当作 contents[].key
+  dws report template detail --name "周报"
+
+  # Step 2：用上一步拿到的 field_name 作为 key 创建日志
+  dws report create --template-id TPL_ID --contents '[{"key":"<field_name>","sort":"0","content":"完成开发","contentType":"markdown","type":"1"}]'
+
+  # 同时通知到接收人单聊
   dws report create --template-id TPL_ID --contents '[...]' --to-chat --to-user-ids userId1,userId2`,
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
@@ -251,7 +261,7 @@ func newReportCreateCommand(runner executor.Runner) *cobra.Command {
 		},
 	}
 	cmd.Flags().String("template-id", "", "日志模版 ID (必填)")
-	cmd.Flags().String("contents", "", "日志内容 JSON 数组 (必填)，每项含 key/sort/content/contentType/type")
+	cmd.Flags().String("contents", "", "日志内容 JSON 数组 (必填)，每项含 key/sort/content/contentType/type；key 必须精确等于模板 field_name (用 report template detail --name <模板名> 查询)")
 	cmd.Flags().String("dd-from", "dws", "创建来源标识")
 	cmd.Flags().Bool("to-chat", false, "是否发送到日志接收人单聊")
 	cmd.Flags().String("to-user-ids", "", "接收人 userId，逗号分隔 (可选)")
