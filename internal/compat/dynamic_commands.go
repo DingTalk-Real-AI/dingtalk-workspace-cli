@@ -337,7 +337,7 @@ func buildFlagsFromDetailSchema(cmd *cobra.Command, schemaJSON string, flagOverr
 					help = strings.TrimSpace(prop.Title)
 				}
 				if help != "" {
-					f.Usage = help
+					f.Usage = appendRequiredMarker(help, requiredSet[key])
 				}
 			}
 			continue
@@ -350,6 +350,11 @@ func buildFlagsFromDetailSchema(cmd *cobra.Command, schemaJSON string, flagOverr
 		if help == "" {
 			help = key
 		}
+		// Append `(必填)` so the rendered --help line carries the contract that
+		// schema.required already encodes. cobra.MarkFlagRequired only enforces
+		// at runtime; without this suffix downstream MCP wrappers / agents can't
+		// see the required flags from `dws --help` text alone (issue #107).
+		help = appendRequiredMarker(help, requiredSet[key])
 
 		switch prop.Type {
 		case "integer", "number":
@@ -367,6 +372,23 @@ func buildFlagsFromDetailSchema(cmd *cobra.Command, schemaJSON string, flagOverr
 			_ = cmd.MarkFlagRequired(flagName)
 		}
 	}
+}
+
+// appendRequiredMarker conditionally appends ` (必填)` to a flag's help text
+// when the underlying MCP schema marks the property as required. The marker
+// is skipped if the upstream description already contains an equivalent
+// (`(必填)` or `(required)`), so localized / pre-marked descriptions are not
+// double-tagged. See issue #107 for the motivation: cobra.MarkFlagRequired
+// enforces at runtime but doesn't surface the contract in --help text.
+func appendRequiredMarker(help string, required bool) string {
+	if !required {
+		return help
+	}
+	if strings.Contains(help, "(必填)") || strings.Contains(help, "（必填）") ||
+		strings.Contains(strings.ToLower(help), "(required)") {
+		return help
+	}
+	return help + " (必填)"
 }
 
 // toKebabCase converts camelCase or snake_case identifiers to kebab-case.

@@ -399,6 +399,13 @@ func ApplyBindings(cmd *cobra.Command, bindings []FlagBinding) {
 		// see consistent --help text and zero-value behavior.
 		defStr, defInt, defFloat, defBool, defSlice := parseFlagDefault(binding.Kind, binding.Default)
 
+		// Surface the required contract in --help text so MCP wrappers and
+		// agents reading `dws ... --help` can see which flags are mandatory
+		// without having to introspect cobra MarkFlagRequired (issue #107).
+		// Only the primary visible flag carries the marker; hidden alias
+		// rows already render `(alias)` and would clutter with `(必填) (alias)`.
+		usage := appendRequiredMarker(binding.Usage, binding.Required)
+
 		registerHidden := func(name string, suffix string) {
 			if name == "" {
 				return
@@ -422,17 +429,17 @@ func ApplyBindings(cmd *cobra.Command, bindings []FlagBinding) {
 
 		switch binding.Kind {
 		case ValueString:
-			cmd.Flags().StringP(primary, binding.Short, defStr, binding.Usage)
+			cmd.Flags().StringP(primary, binding.Short, defStr, usage)
 		case ValueInt:
-			cmd.Flags().IntP(primary, binding.Short, defInt, binding.Usage)
+			cmd.Flags().IntP(primary, binding.Short, defInt, usage)
 		case ValueFloat:
-			cmd.Flags().Float64P(primary, binding.Short, defFloat, binding.Usage)
+			cmd.Flags().Float64P(primary, binding.Short, defFloat, usage)
 		case ValueBool:
-			cmd.Flags().BoolP(primary, binding.Short, defBool, binding.Usage)
+			cmd.Flags().BoolP(primary, binding.Short, defBool, usage)
 		case ValueStringSlice, ValueIntSlice, ValueFloatSlice, ValueBoolSlice:
-			cmd.Flags().StringSliceP(primary, binding.Short, defSlice, binding.Usage)
+			cmd.Flags().StringSliceP(primary, binding.Short, defSlice, usage)
 		case ValueJSON:
-			cmd.Flags().StringP(primary, binding.Short, defStr, binding.Usage+" (JSON)")
+			cmd.Flags().StringP(primary, binding.Short, defStr, usage+" (JSON)")
 		}
 		registerHidden(alias, " (alias)")
 		for _, extra := range extras {
