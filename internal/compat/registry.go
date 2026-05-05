@@ -310,11 +310,12 @@ func NewDirectCommand(route Route, runner executor.Runner) *cobra.Command {
 			if cmdLine, _, _ := strings.Cut(firstLine, "  #"); cmdLine != "" {
 				firstLine = strings.TrimSpace(cmdLine)
 			}
-			// Strip quotes and backslashes to prevent JSON double-escaping.
-			// The original Example may contain escaped quotes like \"name\"
-			// for shell representation; these cause \\u.. or \\ escapes in
-			// the JSON error output and are noise for the user.
-			firstLine = strings.NewReplacer(`"`, "", `\`, "").Replace(firstLine)
+			// Remove escaped quotes (\" → empty) and bare quotes (" → empty)
+			// from the example line. These are shell-escaped quote artifacts
+			// that cause JSON double-escaping noise. Standalone backslashes
+			// (e.g. file paths) are kept as-is — json.Marshal will escape them
+			// to \\ which is correct and expected.
+			firstLine = strings.NewReplacer(`\"`, "", `"`, "").Replace(firstLine)
 			msg += "; 正确用法: " + firstLine
 		}
 		msg += "; 详见 '" + cmd.CommandPath() + " --help'"
