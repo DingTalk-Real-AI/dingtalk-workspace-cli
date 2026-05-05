@@ -181,3 +181,114 @@ func TestAppendDynamicServer_ServerOverrideDoesNotHijackToolEndpoint(t *testing.
 		})
 	}
 }
+
+// --- Issue #219 regression tests: cross-product tool name collision ---
+//
+// When two different products register tools with the same name (e.g. drive
+// and doc both have "create_folder"), the product-level endpoint must win
+// when the caller already knows the productID. Otherwise the tool-level map
+// (last-writer-wins) routes the invocation to the wrong MCP server.
+
+const (
+	testDriveEndpoint = "https://mcp-gw.dingtalk.com/server/drive-hash"
+	testDocEndpoint   = "https://mcp-gw.dingtalk.com/server/doc-hash"
+)
+
+func driveDescriptor() market.ServerDescriptor {
+	return market.ServerDescriptor{
+		Endpoint: testDriveEndpoint,
+		CLI: market.CLIOverlay{
+			ID:      "drive",
+			Command: "drive",
+			ToolOverrides: map[string]market.CLIToolOverride{
+				"create_folder":   {CLIName: "mkdir"},
+				"list_files":      {CLIName: "list"},
+				"download_file":   {CLIName: "download"},
+				"get_upload_info": {CLIName: "upload-info"},
+			},
+		},
+	}
+}
+
+func docDescriptor() market.ServerDescriptor {
+	return market.ServerDescriptor{
+		Endpoint: testDocEndpoint,
+		CLI: market.CLIOverlay{
+			ID:      "doc",
+			Command: "doc",
+			ToolOverrides: map[string]market.CLIToolOverride{
+				"create_folder":    {CLIName: "create", Group: "folder"},
+				"download_file":    {CLIName: "download"},
+				"search_documents": {CLIName: "search"},
+				"list_nodes":       {CLIName: "list"},
+			},
+		},
+	}
+}
+
+// TestDirectRuntimeEndpoint_ProductLevelWinsOverConflictingToolLevel verifies
+// that when productID is known and has a registered endpoint, the product-level
+// endpoint is used even if the tool-level map points to a different server
+// (due to same-name tool collision). This is the core fix for issue #219.
+func TestDirectRuntimeEndpoint_ProductLevelWinsOverConflictingToolLevel(t *testing.T) {
+	tests := []struct {
+		name    string
+		servers []market.ServerDescriptor
+	}{
+		{
+			name:    "drive first, doc second",
+			servers: []market.ServerDescriptor{driveDescriptor(), docDescriptor()},
+		},
+		{
+			name:    "doc first, drive second",
+			servers: []market.ServerDescriptor{docDescriptor(), driveDescriptor()},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			withCleanDynamicRegistry(t)
+			SetDynamicServers(tc.servers)
+
+			// Drive tools must always route to drive's endpoint regardless of
+			// registration order — productID "drive" is known.
+			assertEndpoint(t, "drive", "create_folder", testDriveEndpoint)
+			assertEndpoint(t, "drive", "download_file", testDriveEndpoint)
+			assertEndpoint(t, "drive", "list_files", testDriveEndpoint)
+			assertEndpoint(t, "drive", "get_upload_info", testDriveEndpoint)
+
+			// Doc tools must always route to doc's endpoint.
+			assertEndpoint(t, "doc", "create_folder", testDocEndpoint)
+			assertEndpoint(t, "doc", "download_file", testDocEndpoint)
+			assertEndpoint(t, "doc", "search_documents", testDocEndpoint)
+			assertEndpoint(t, "doc", "list_nodes", testDocEndpoint)
+
+			// Product-level fallback (no tool name) still works.
+			assertEndpoint(t, "drive", "", testDriveEndpoint)
+			assertEndpoint(t, "doc", "", testDocEndpoint)
+		})
+	}
+}
+
+// TestDirectRuntimeEndpoint_ToolLevelFallbackWhenProductUnknown verifies that
+// tool-level routing still works as a fallback when productID is empty or has
+// no registered endpoint (the original design intent for tool-level Priority 1).
+func TestDirectRuntimeEndpoint_ToolLevelFallbackWhenProductUnknown(t *testing.T) {
+	withCleanDynamicRegistry(t)
+	SetDynamicServers([]market.ServerDescriptor{driveDescriptor(), docDescriptor()})
+
+	// When productID is empty, tool-level endpoint is the only option.
+	// The actual endpoint depends on registration order (last-writer-wins),
+	// but the lookup must succeed.
+	endpoint, ok := directRuntimeEndpoint("", "create_folder")
+	if !ok {
+		t.Fatal("directRuntimeEndpoint(\"\", \"create_folder\") returned ok=false, want ok=true")
+	}
+	if endpoint != testDriveEndpoint && endpoint != testDocEndpoint {
+		t.Fatalf("directRuntimeEndpoint(\"\", \"create_folder\") = %q, want one of drive/doc endpoints", endpoint)
+	}
+
+	// Unique tools (no collision) still resolve via tool-level.
+	assertEndpoint(t, "", "search_documents", testDocEndpoint)
+	assertEndpoint(t, "", "get_upload_info", testDriveEndpoint)
+}
