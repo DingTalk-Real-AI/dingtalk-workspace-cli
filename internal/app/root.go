@@ -1565,10 +1565,12 @@ func newPipelineEngine() *pipeline.Engine {
 		// Register handler runs during command tree building.
 		handlers.RegisterHandler{},
 
-		// PreParse handlers run in order: alias → sticky → paramname.
+		// PreParse handlers run in order: dash → alias → sticky → paramname.
+		// Dash corrects single-dash to double-dash (-name → --name), then
 		// Alias normalises case first (--userId → --user-id), then
 		// sticky splits glued values (--limit100 → --limit 100), then
 		// paramname fixes near-miss typos (--limt → --limit).
+		handlers.DashHandler{},
 		handlers.AliasHandler{},
 		handlers.StickyHandler{},
 		handlers.ParamNameHandler{},

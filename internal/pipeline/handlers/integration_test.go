@@ -21,12 +21,13 @@ import (
 )
 
 // TestFullPreParsePipeline exercises the complete PreParse handler
-// chain: AliasHandler → StickyHandler → ParamNameHandler. It
+// chain: DashHandler → AliasHandler → StickyHandler → ParamNameHandler. It
 // simulates a model-generated CLI invocation with multiple errors
 // and verifies the pipeline corrects all of them in one pass.
 func TestFullPreParsePipeline(t *testing.T) {
 	engine := pipeline.NewEngine()
 	engine.RegisterAll(
+		DashHandler{},
 		AliasHandler{},
 		StickyHandler{},
 		ParamNameHandler{},
@@ -39,6 +40,27 @@ func TestFullPreParsePipeline(t *testing.T) {
 		want        string
 		corrections int
 	}{
+		{
+			name:        "single dash to double dash",
+			args:        []string{"-name", "test"},
+			flags:       []string{"name"},
+			want:        "--name test",
+			corrections: 1, // dash(name)
+		},
+		{
+			name:        "single dash + alias + typo chain",
+			args:        []string{"-UserName", "alice", "--limt", "10"},
+			flags:       []string{"user-name", "limit"},
+			want:        "--user-name alice --limit 10",
+			corrections: 3, // dash(UserName) + alias(user-name) + fuzzy(limt)
+		},
+		{
+			name:        "single dash short flag untouched in chain",
+			args:        []string{"-v", "--name", "test"},
+			flags:       []string{"verbose", "name"},
+			want:        "-v --name test",
+			corrections: 0,
+		},
 		{
 			name:        "camelCase + sticky combined",
 			args:        []string{"--userId", "123", "--pageSize50"},
@@ -390,6 +412,7 @@ func TestFivePhasePipelineCorrectHandlerCounts(t *testing.T) {
 	engine := pipeline.NewEngine()
 	engine.RegisterAll(
 		RegisterHandler{},
+		DashHandler{},
 		AliasHandler{},
 		StickyHandler{},
 		ParamNameHandler{},
@@ -403,7 +426,7 @@ func TestFivePhasePipelineCorrectHandlerCounts(t *testing.T) {
 		want  int
 	}{
 		{pipeline.Register, 1},
-		{pipeline.PreParse, 3},
+		{pipeline.PreParse, 4}, // Dash + Alias + Sticky + ParamName
 		{pipeline.PostParse, 1},
 		{pipeline.PreRequest, 1},
 		{pipeline.PostResponse, 1},
@@ -413,8 +436,8 @@ func TestFivePhasePipelineCorrectHandlerCounts(t *testing.T) {
 			t.Errorf("Handlers(%v) = %d, want %d", tt.phase, got, tt.want)
 		}
 	}
-	if got := engine.HandlerCount(); got != 7 {
-		t.Errorf("HandlerCount = %d, want 7", got)
+	if got := engine.HandlerCount(); got != 8 {
+		t.Errorf("HandlerCount = %d, want 8", got)
 	}
 }
 

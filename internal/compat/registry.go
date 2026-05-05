@@ -297,6 +297,30 @@ func NewDirectCommand(route Route, runner executor.Runner) *cobra.Command {
 		},
 	}
 
+	// SetFlagErrorFunc intercepts Cobra's flag-parsing errors (unknown flag,
+	// unknown shorthand) and enhances the message with the command's Example.
+	// The message is kept as a single line to avoid JSON escaping issues
+	// when errors are rendered as JSON (the default output format).
+	cmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
+		msg := "参数错误, " + err.Error()
+		if example := strings.TrimSpace(cmd.Example); example != "" {
+			// Use only the first line of Example (the actual command),
+			// strip any trailing comments, keep it single-line.
+			firstLine, _, _ := strings.Cut(example, "\n")
+			if cmdLine, _, _ := strings.Cut(firstLine, "  #"); cmdLine != "" {
+				firstLine = strings.TrimSpace(cmdLine)
+			}
+			// Strip quotes and backslashes to prevent JSON double-escaping.
+			// The original Example may contain escaped quotes like \"name\"
+			// for shell representation; these cause \\u.. or \\ escapes in
+			// the JSON error output and are noise for the user.
+			firstLine = strings.NewReplacer(`"`, "", `\`, "").Replace(firstLine)
+			msg += "; 正确用法: " + firstLine
+		}
+		msg += "; 详见 '" + cmd.CommandPath() + " --help'"
+		return apperrors.NewValidation(msg)
+	})
+
 	ApplyBindings(cmd, route.Bindings)
 	return cmd
 }
