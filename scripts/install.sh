@@ -201,7 +201,8 @@ install_skills_to_homes() {
     ".amp/skills" \
     ".kiro/skills" \
     ".trae/skills" \
-    ".openclaw/skills"
+    ".openclaw/skills" \
+    ".hermes/skills"
   do
     base_dir="$root/$agent_dir"
     parent_gate="$(dirname "$base_dir")"
