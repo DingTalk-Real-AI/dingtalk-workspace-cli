@@ -148,10 +148,15 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 		firstLine, _, _ := strings.Cut(example, "\n")
 		if cmdLine, _, _ := strings.Cut(firstLine, "  #"); cmdLine != "" {
 			firstLine = strings.TrimSpace(cmdLine)
+		} else {
+			// Line is blank or only contains a comment → skip Example.
+			firstLine = ""
 		}
-		firstLine = strings.ReplaceAll(firstLine, `\"`, `"`)
-		return fmt.Errorf("%w; 正确用法: %s; 详见 '%s --help'",
-			err, firstLine, cmd.CommandPath())
+		if firstLine != "" {
+			firstLine = strings.ReplaceAll(firstLine, `\"`, `"`)
+			return fmt.Errorf("%w; 正确用法: %s; 详见 '%s --help'",
+				err, firstLine, cmd.CommandPath())
+		}
 	}
 	return fmt.Errorf("%w; 详见 '%s --help'", err, cmd.CommandPath())
 }
