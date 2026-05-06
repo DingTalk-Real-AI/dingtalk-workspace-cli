@@ -137,6 +137,21 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 		}
 	}
 
+	// Fallback: if the command has an Example, append a usage hint.
+	// This catches all unknown-flag errors not covered by the specific
+	// suggestions above. Uses %w to preserve the original error type,
+	// matching the error-wrapping style of the known-suggestion branch.
+	if example := strings.TrimSpace(cmd.Example); example != "" {
+		firstLine, _, _ := strings.Cut(example, "\n")
+		if cmdLine, _, _ := strings.Cut(firstLine, "  #"); cmdLine != "" {
+			firstLine = strings.TrimSpace(cmdLine)
+		}
+		// Convert shell-escaped quotes (\" → ") to prevent JSON double-escaping.
+		firstLine = strings.ReplaceAll(firstLine, `\"`, `"`)
+		return fmt.Errorf("%w; 正确用法: %s; 详见 '%s --help'",
+			err, firstLine, cmd.CommandPath())
+	}
+
 	return err
 }
 
