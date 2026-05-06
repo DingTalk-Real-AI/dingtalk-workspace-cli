@@ -23,20 +23,10 @@ import (
 // token is longer than one character. This handles the common mistake
 // where users or AI models write "-name" instead of "--name".
 //
-// The corrected "--xxx" then either matches a known flag (normal parsing)
-// or reaches Cobra as "unknown flag: --xxx", which triggers
-// flagErrorWithSuggestions to display a friendly error with the command's
-// Example text — far more readable than Cobra's default "unknown
-// shorthand flag: 'n' in -name" message.
-//
-// Trade-off: POSIX combined short flags like "-vf" are also converted
-// to "--vf", losing the multi-flag combination. In practice this is
-// acceptable because:
-//   - Combined short flags are rare in this project's CLI usage.
-//   - The resulting "unknown flag: --vf" is still a clear error.
-//   - Single-character short flags (-h, -v, -f, -y) are protected by
-//     the len(bare) <= 1 check.
-//   - Negative numbers (-50, -3.14) are protected by the digit check.
+// POSIX combined short flags like "-vf" (equivalent to -v -f) are
+// detected and left intact: each character of the bare token is checked
+// against the registered shorthand flag set. If all characters are valid
+// shorthands, the token is a combined short flag and must not be touched.
 //
 // The handler runs before AliasHandler in the PreParse phase so that
 // the corrected "--xxx" token can undergo further normalisation
@@ -51,10 +41,11 @@ func (DashHandler) Handle(ctx *pipeline.Context) error {
 		return nil
 	}
 
+	shorthands := buildShorthandSet(ctx.FlagSpecs)
 	result := make([]string, 0, len(ctx.Args))
 
 	for _, arg := range ctx.Args {
-		rewritten, ok := tryFixSingleDash(arg)
+		rewritten, ok := tryFixSingleDash(arg, shorthands)
 		if ok {
 			ctx.AddCorrection("dash", pipeline.PreParse, rewritten, arg, rewritten, "dash")
 			result = append(result, rewritten)
@@ -67,6 +58,32 @@ func (DashHandler) Handle(ctx *pipeline.Context) error {
 	return nil
 }
 
+// buildShorthandSet collects all single-character short flag names from
+// the flag specs into a set for O(1) lookup.
+func buildShorthandSet(specs []pipeline.FlagInfo) map[rune]bool {
+	s := make(map[rune]bool, len(specs))
+	for _, spec := range specs {
+		for _, r := range spec.Shorthand {
+			s[r] = true
+		}
+	}
+	return s
+}
+
+// isCombinedShortFlags returns true when every character of bare is a
+// registered shorthand flag and the token is longer than one character.
+func isCombinedShortFlags(bare string, shorthands map[rune]bool) bool {
+	if len(bare) <= 1 {
+		return false
+	}
+	for _, r := range bare {
+		if !shorthands[r] {
+			return false
+		}
+	}
+	return true
+}
+
 // tryFixSingleDash checks whether arg is a single-dash token that should
 // be converted to double-dash. It handles both bare flags and "-flag=value"
 // syntax.
@@ -75,8 +92,9 @@ func (DashHandler) Handle(ctx *pipeline.Context) error {
 //   - Must start with exactly one "-" (not "--").
 //   - Bare token must be longer than 1 character (protects -h, -v, -f, -y).
 //   - Bare token must not start with a digit (protects -50, -3.14).
+//   - Bare token must not be a POSIX combined short flag (-vf).
 //   - Handles "-flag=value" syntax.
-func tryFixSingleDash(arg string) (string, bool) {
+func tryFixSingleDash(arg string, shorthands map[rune]bool) (string, bool) {
 	if !strings.HasPrefix(arg, "-") {
 		return "", false
 	}
@@ -98,7 +116,11 @@ func tryFixSingleDash(arg string) (string, bool) {
 
 	// Single-character short flags (-h, -v, -f, -y) are legitimate.
 	// Numeric bare tokens (-10, -3.14) are negative values, not flags.
+	// POSIX combined short flags (-vf = -v -f) are left intact.
 	if len(bare) <= 1 || (bare[0] >= '0' && bare[0] <= '9') {
+		return "", false
+	}
+	if isCombinedShortFlags(bare, shorthands) {
 		return "", false
 	}
 

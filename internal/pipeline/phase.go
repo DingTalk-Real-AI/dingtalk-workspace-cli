@@ -122,6 +122,9 @@ type FlagInfo struct {
 
 	// Type is the JSON Schema type ("string", "integer", etc.).
 	Type string
+
+	// Shorthand is the single-character short flag (e.g. "h" for --help).
+	Shorthand string
 }
 
 // Correction records a single input correction applied by a handler.

@@ -173,10 +173,11 @@ func TestDashHandlerNameAndPhase(t *testing.T) {
 
 func TestTryFixSingleDash(t *testing.T) {
 	tests := []struct {
-		name string
-		arg  string
-		want string
-		ok   bool
+		name       string
+		arg        string
+		shorthands map[rune]bool
+		want       string
+		ok         bool
 	}{
 		{
 			name: "standard single dash",
@@ -238,11 +239,30 @@ func TestTryFixSingleDash(t *testing.T) {
 			want: "--unknown",
 			ok:   true,
 		},
+		{
+			name: "POSIX combined short flags are left intact",
+			arg:  "-vf",
+			shorthands: map[rune]bool{
+				'v': true,
+				'f': true,
+			},
+			want: "",
+			ok:   false,
+		},
+		{
+			name: "mixed short+non-short char is converted",
+			arg:  "-vn",
+			shorthands: map[rune]bool{
+				'v': true,
+			},
+			want: "--vn",
+			ok:   true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := tryFixSingleDash(tt.arg)
+			got, ok := tryFixSingleDash(tt.arg, tt.shorthands)
 			if ok != tt.ok {
 				t.Errorf("tryFixSingleDash(%q) ok = %v, want %v", tt.arg, ok, tt.ok)
 			}

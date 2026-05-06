@@ -96,6 +96,7 @@ func FlagInfoFromCommand(cmd *cobra.Command) []FlagInfo {
 			Name:         f.Name,
 			PropertyName: f.Name,
 			Type:         f.Value.Type(),
+			Shorthand:    f.Shorthand,
 		})
 	})
 
@@ -108,6 +109,7 @@ func FlagInfoFromCommand(cmd *cobra.Command) []FlagInfo {
 			Name:         f.Name,
 			PropertyName: f.Name,
 			Type:         f.Value.Type(),
+			Shorthand:    f.Shorthand,
 		})
 	})
 
