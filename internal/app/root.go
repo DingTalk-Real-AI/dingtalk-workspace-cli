@@ -137,22 +137,23 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 		}
 	}
 
-	// Fallback: if the command has an Example, append a usage hint.
-	// This catches all unknown-flag errors not covered by the specific
-	// suggestions above. Uses %w to preserve the original error type,
-	// matching the error-wrapping style of the known-suggestion branch.
-	if example := strings.TrimSpace(cmd.Example); example != "" {
+	// Fallback: enhance unknown-flag errors with a usage hint.
+	// When the command has an Example, the hint includes the actual
+	// correct command line. Otherwise a plain '--help' reference is
+	// shown — this covers static commands (auth, schema, cache, etc.)
+	// that may not have an Example field.
+	// Uses %w to preserve the original error type.
+	example := strings.TrimSpace(cmd.Example)
+	if example != "" {
 		firstLine, _, _ := strings.Cut(example, "\n")
 		if cmdLine, _, _ := strings.Cut(firstLine, "  #"); cmdLine != "" {
 			firstLine = strings.TrimSpace(cmdLine)
 		}
-		// Convert shell-escaped quotes (\" → ") to prevent JSON double-escaping.
 		firstLine = strings.ReplaceAll(firstLine, `\"`, `"`)
 		return fmt.Errorf("%w; 正确用法: %s; 详见 '%s --help'",
 			err, firstLine, cmd.CommandPath())
 	}
-
-	return err
+	return fmt.Errorf("%w; 详见 '%s --help'", err, cmd.CommandPath())
 }
 
 func printExecutionError(root *cobra.Command, stdout, stderr io.Writer, err error) error {
