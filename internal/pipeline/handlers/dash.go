@@ -43,9 +43,10 @@ func (DashHandler) Handle(ctx *pipeline.Context) error {
 	}
 
 	result := make([]string, 0, len(ctx.Args))
+	known := buildFlagSet(ctx.FlagSpecs)
 
 	for _, arg := range ctx.Args {
-		rewritten, ok := tryFixSingleDash(arg)
+		rewritten, ok := tryFixSingleDash(arg, known)
 		if ok {
 			ctx.AddCorrection("dash", pipeline.PreParse, rewritten, arg, rewritten, "dash")
 			result = append(result, rewritten)
@@ -59,34 +60,29 @@ func (DashHandler) Handle(ctx *pipeline.Context) error {
 }
 
 // tryFixSingleDash checks whether arg is a single-dash token that should
-// be converted to double-dash. It handles both bare flags and "--flag=value"
-// syntax.
+// be converted to double-dash. It only converts when the resulting "--xxx"
+// is a known long flag, which prevents breaking POSIX combined short
+// flags like "-vf" (which Cobra natively parses as -v -f).
 //
 // Rules:
 //   - Must start with exactly one "-" (not "--").
-//   - The bare token (after stripping "-") must be longer than 1 character,
-//     to avoid interfering with single-character short flags (-h, -v, etc.).
-//   - Bare token must not start with a digit; "-10" is a negative number, not a flag.
-//   - Handles "-flag=value" syntax by preserving the "=value" suffix.
-//
-// Note: we do NOT check known[bare] here because the known set contains
-// long flag names. A token like "-name" is always a mistake — there are
-// no multi-character short flags in this project. The length-and-digit
-// check is sufficient to protect legitimate short flags and negative numbers.
-func tryFixSingleDash(arg string) (string, bool) {
+//   - Bare token must be longer than 1 character (protects -h, -v, etc.).
+//   - Bare token must not start with a digit (protects -50, -3.14).
+//   - The kebab-case form of bare must be a known flag name.
+//   - Handles "-flag=value" syntax.
+func tryFixSingleDash(arg string, known map[string]bool) (string, bool) {
 	if !strings.HasPrefix(arg, "-") {
 		return "", false
 	}
 	if strings.HasPrefix(arg, "--") {
-		return "", false // already double-dash, nothing to fix
+		return "", false
 	}
 
 	bare := arg[1:]
 
-	// Handle -flag=value syntax: split on '=' to isolate the flag name.
 	var suffix string
 	if idx := strings.IndexByte(bare, '='); idx >= 0 {
-		suffix = bare[idx:] // includes "="
+		suffix = bare[idx:]
 		bare = bare[:idx]
 	}
 
@@ -100,5 +96,18 @@ func tryFixSingleDash(arg string) (string, bool) {
 		return "", false
 	}
 
-	return "--" + bare + suffix, true
+	// Only convert if the kebab-case form is a known flag.
+	// This prevents breaking POSIX combined short flags (-vf → should
+	// stay as Cobra-native combined short flags, not become --vf).
+	candidate := toKebabCase(bare)
+	if !known[candidate] && !known[bare] {
+		return "", false
+	}
+
+	flagName := candidate
+	if known[bare] {
+		flagName = bare
+	}
+
+	return "--" + flagName + suffix, true
 }

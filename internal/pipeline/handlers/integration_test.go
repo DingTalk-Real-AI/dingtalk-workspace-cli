@@ -52,7 +52,7 @@ func TestFullPreParsePipeline(t *testing.T) {
 			args:        []string{"-UserName", "alice", "--limt", "10"},
 			flags:       []string{"user-name", "limit"},
 			want:        "--user-name alice --limit 10",
-			corrections: 3, // dash(UserName) + alias(user-name) + fuzzy(limt)
+			corrections: 2, // dash(UserName→user-name) + fuzzy(limt)
 		},
 		{
 			name:        "single dash short flag untouched in chain",
