@@ -258,6 +258,18 @@ func TestTryFixSingleDash(t *testing.T) {
 			want: "--vn",
 			ok:   true,
 		},
+		{
+			name: "value contains = is preserved",
+			arg:  "-filter=a=b",
+			want: "--filter=a=b",
+			ok:   true,
+		},
+		{
+			name: "camelCase single dash is converted",
+			arg:  "-UserName",
+			want: "--UserName",
+			ok:   true,
+		},
 	}
 
 	for _, tt := range tests {
