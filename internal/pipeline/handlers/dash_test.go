@@ -99,13 +99,6 @@ func TestDashHandler(t *testing.T) {
 			corrections: 0,
 		},
 		{
-			name:        "unknown single dash (not in known) is left alone",
-			args:        []string{"-unknown", "val"},
-			flags:       []string{"name"},
-			want:        "-unknown val",
-			corrections: 0,
-		},
-		{
 			name:        "empty args",
 			args:        []string{},
 			flags:       []string{"limit"},
@@ -131,20 +124,6 @@ func TestDashHandler(t *testing.T) {
 			args:        []string{"--ratio", "-3.14"},
 			flags:       []string{"ratio"},
 			want:        "--ratio -3.14",
-			corrections: 0,
-		},
-		{
-			name:        "unknown single dash not in known flags is left alone",
-			args:        []string{"-unknown", "val"},
-			flags:       []string{"name"},
-			want:        "-unknown val",
-			corrections: 0,
-		},
-		{
-			name:        "POSIX combined short flags are left alone",
-			args:        []string{"-vf", "json"},
-			flags:       []string{"verbose", "format"},
-			want:        "-vf json",
 			corrections: 0,
 		},
 		{
@@ -194,27 +173,20 @@ func TestDashHandlerNameAndPhase(t *testing.T) {
 
 func TestTryFixSingleDash(t *testing.T) {
 	tests := []struct {
-		name  string
-		arg   string
-		known map[string]bool
-		want  string
-		ok    bool
+		name string
+		arg  string
+		want string
+		ok   bool
 	}{
 		{
-			name: "standard single dash to known long flag",
+			name: "standard single dash",
 			arg:  "-name",
-			known: map[string]bool{
-				"name": true,
-			},
 			want: "--name",
 			ok:   true,
 		},
 		{
 			name: "single dash = syntax",
 			arg:  "-name=test",
-			known: map[string]bool{
-				"name": true,
-			},
 			want: "--name=test",
 			ok:   true,
 		},
@@ -249,61 +221,28 @@ func TestTryFixSingleDash(t *testing.T) {
 			ok:   false,
 		},
 		{
+			name: "negative decimal is not a flag",
+			arg:  "-3.14",
+			want: "",
+			ok:   false,
+		},
+		{
 			name: "not a flag (no dash)",
 			arg:  "value",
 			want: "",
 			ok:   false,
 		},
 		{
-			name: "unknown long flag with single dash is left alone",
+			name: "any multi-char single dash gets converted",
 			arg:  "-unknown",
-			known: map[string]bool{
-				"name": true,
-			},
-			want: "",
-			ok:   false,
-		},
-		{
-			name: "POSIX combined short flags are left alone",
-			arg:  "-vf",
-			known: map[string]bool{
-				"verbose": true,
-				"format":  true,
-			},
-			want: "",
-			ok:   false,
-		},
-		{
-			name: "POSIX combined triple short flags",
-			arg:  "-vyf",
-			known: map[string]bool{
-				"verbose": true,
-				"yes":     true,
-				"format":  true,
-			},
-			want: "",
-			ok:   false,
-		},
-		{
-			name: "camelCase bare is kebab-cased for known check",
-			arg:  "-userId",
-			known: map[string]bool{
-				"user-id": true,
-			},
-			want: "--user-id",
+			want: "--unknown",
 			ok:   true,
-		},
-		{
-			name: "negative decimal is left alone",
-			arg:  "-3.14",
-			want: "",
-			ok:   false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := tryFixSingleDash(tt.arg, tt.known)
+			got, ok := tryFixSingleDash(tt.arg)
 			if ok != tt.ok {
 				t.Errorf("tryFixSingleDash(%q) ok = %v, want %v", tt.arg, ok, tt.ok)
 			}
