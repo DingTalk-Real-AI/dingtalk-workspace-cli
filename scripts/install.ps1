@@ -44,7 +44,8 @@ $AgentDirs = @(
     ".amp\skills",
     ".kiro\skills",
     ".trae\skills",
-    ".openclaw\skills"
+    ".openclaw\skills",
+    ".hermes\skills"
 )
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

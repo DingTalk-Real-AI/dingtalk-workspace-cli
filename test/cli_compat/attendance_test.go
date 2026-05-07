@@ -1,6 +1,8 @@
 package cli_compat_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -146,7 +148,11 @@ func TestAttendanceShiftList_should_filter_empty_user_ids(t *testing.T) {
 func TestAttendanceSummary_should_call_tool_with_user_and_date(t *testing.T) {
 	cap := setupTestDeps(t, "attendance")
 	root := buildRoot()
-	err := execCmd(t, root, []string{"attendance", "summary"}, map[string]string{"user": "U001", "date": "2026-03-12 15:00:00"})
+	err := execCmd(t, root, []string{"attendance", "summary"}, map[string]string{
+		"user":       "U001",
+		"date":       "2026-03-12 15:00:00",
+		"stats-type": "month",
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -157,8 +163,9 @@ func TestAttendanceSummary_should_pass_user_and_date_flags(t *testing.T) {
 	cap := setupTestDeps(t, "attendance")
 	root := buildRoot()
 	_ = execCmd(t, root, []string{"attendance", "summary"}, map[string]string{
-		"user": "U001",
-		"date": "2026-03-12 15:00:00",
+		"user":       "U001",
+		"date":       "2026-03-12 15:00:00",
+		"stats-type": "month",
 	})
 	last := cap.last()
 	if last == nil {
@@ -200,10 +207,14 @@ func TestAttendanceSummary_should_error_when_user_missing(t *testing.T) {
 	}
 }
 
-func TestAttendanceSummary_should_pass_only_user_flag(t *testing.T) {
+func TestAttendanceSummary_should_pass_user_id_through_vo(t *testing.T) {
 	cap := setupTestDeps(t, "attendance")
 	root := buildRoot()
-	_ = execCmd(t, root, []string{"attendance", "summary"}, map[string]string{"user": "U002", "date": "2026-03-12 15:00:00"})
+	_ = execCmd(t, root, []string{"attendance", "summary"}, map[string]string{
+		"user":       "U002",
+		"date":       "2026-03-12 15:00:00",
+		"stats-type": "month",
+	})
 	last := cap.last()
 	if last == nil {
 		t.Fatal("no call captured")
@@ -220,12 +231,107 @@ func TestAttendanceSummary_should_pass_only_user_flag(t *testing.T) {
 func TestAttendanceSummary_should_use_dry_run_mode(t *testing.T) {
 	cap := setupTestDepsWithDryRun(t, "attendance")
 	root := buildRoot()
-	err := execCmd(t, root, []string{"attendance", "summary"}, map[string]string{"user": "U001", "date": "2026-03-12 15:00:00"})
+	err := execCmd(t, root, []string{"attendance", "summary"}, map[string]string{
+		"user":       "U001",
+		"date":       "2026-03-12 15:00:00",
+		"stats-type": "month",
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if cap.last() != nil {
 		t.Error("expected no MCP call in dry-run mode")
+	}
+}
+
+// execSummaryDryRun runs attendance summary with --dry-run and returns the
+// parsed QueryUserAttendVO map from the helper_invocation payload. This is
+// necessary because the attendance handler is a custom helper (not a dynamic
+// MCP-route), so the test framework's mcpCallCapture cannot intercept the
+// call in non-dry-run mode.
+func execSummaryDryRun(t *testing.T, flags map[string]string) map[string]any {
+	t.Helper()
+	root := buildRoot()
+	_ = setupTestDeps(t, "attendance")
+
+	cliArgs := []string{"-f", "json", "attendance", "summary", "--dry-run"}
+	for k, v := range flags {
+		if v != "" {
+			cliArgs = append(cliArgs, "--"+k, v)
+		}
+	}
+
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&bytes.Buffer{})
+	root.SetArgs(cliArgs)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected CLI error: %v", err)
+	}
+
+	var payload struct {
+		Params map[string]any `json:"params"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to parse dry-run output as JSON: %v\noutput: %s", err, out.String())
+	}
+	vo, ok := payload.Params["QueryUserAttendVO"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected QueryUserAttendVO map in dry-run params, got %T: %v", payload.Params["QueryUserAttendVO"], payload.Params)
+	}
+	return vo
+}
+
+func TestAttendanceSummary_should_pass_stats_type_when_provided(t *testing.T) {
+	vo := execSummaryDryRun(t, map[string]string{
+		"user":       "U001",
+		"date":       "2026-03-12 15:00:00",
+		"stats-type": "month",
+	})
+	if vo["statsType"] != "month" {
+		t.Errorf("expected statsType=month in VO, got %v", vo["statsType"])
+	}
+}
+
+func TestAttendanceSummary_should_pass_stats_type_week(t *testing.T) {
+	vo := execSummaryDryRun(t, map[string]string{
+		"user":       "U001",
+		"date":       "2026-03-12 15:00:00",
+		"stats-type": "week",
+	})
+	if vo["statsType"] != "week" {
+		t.Errorf("expected statsType=week in VO, got %v", vo["statsType"])
+	}
+}
+
+func TestAttendanceSummary_should_error_when_stats_type_missing(t *testing.T) {
+	_ = setupTestDeps(t, "attendance")
+	root := buildRoot()
+	err := execCmd(t, root, []string{"attendance", "summary"}, map[string]string{
+		"user": "U001",
+		"date": "2026-03-12 15:00:00",
+	})
+	if err == nil {
+		t.Fatal("expected error when --stats-type is missing")
+	}
+	if !strings.Contains(err.Error(), "stats-type") {
+		t.Errorf("expected error message to mention stats-type, got: %v", err)
+	}
+}
+
+func TestAttendanceSummary_should_error_when_stats_type_invalid(t *testing.T) {
+	_ = setupTestDeps(t, "attendance")
+	root := buildRoot()
+	err := execCmd(t, root, []string{"attendance", "summary"}, map[string]string{
+		"user":       "U001",
+		"date":       "2026-03-12 15:00:00",
+		"stats-type": "foobar",
+	})
+	if err == nil {
+		t.Fatal("expected error when --stats-type is neither week nor month")
+	}
+	if !strings.Contains(err.Error(), "week") || !strings.Contains(err.Error(), "month") {
+		t.Errorf("expected error message to mention week and month, got: %v", err)
 	}
 }
 
