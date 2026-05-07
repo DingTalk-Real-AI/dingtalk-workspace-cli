@@ -4,6 +4,43 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
+## [1.0.22] - 2026-05-07
+
+Two release-blocking bug fixes: `dws attendance summary` now exposes the server-required `--stats-type` flag (without it, every call returned C0002), and the install scripts finally populate `~/.hermes/skills/dws/` for users who already have Hermes.
+
+### Fixed
+
+- **`dws attendance summary` returned C0002 (统计类型错误) on every call** (#228, fixes #227) — the DingTalk MCP tool `get_attendance_summary` requires `statsType` at the business layer even though the schema marks it optional. The CLI did not expose any way to set it, so the command was 100% unusable. A new `--stats-type` flag (`week` / `month`) is now plumbed through to `QueryUserAttendVO.statsType`; the flag is documented as required in the long help, flag description, and `skills/references/products/attendance.md`.
+- **Install scripts skipped `.hermes/skills/` when populating skill directories** (#221, fixes #188) — the `AGENT_DIRS` lists across `build/npm/install.js`, `scripts/install.sh`, `scripts/install.ps1`, `scripts/install-skills.sh` and the four upgrade-path mirrors (8 sources total once review feedback was addressed) did not include `.hermes/skills`, so users with Hermes installed were not getting `~/.hermes/skills/dws/` populated automatically. The existing parent-directory gate keeps this zero-side-effect for users without Hermes.
+
+### Tests
+
+- New `--stats-type` regression coverage in `test/cli_compat/attendance_test.go` — verifies `statsType` is written to `QueryUserAttendVO` when set to `month` or `week`, and is omitted when not provided. (#228)
+
+## [1.0.21] - 2026-05-05
+
+A single critical routing fix for `dws drive` commands. No new commands or behaviour changes elsewhere.
+
+### Fixed
+
+- **`dws drive mkdir` / `dws drive download` silently routed to the doc MCP server** (#220, fixes #219) — when two MCP servers register tools with the same name (e.g. both `drive` and `doc` expose `create_folder`), the tool-level endpoint map used last-writer-wins, so drive-side calls landed on the doc endpoint and returned mock-shaped responses (`success: true` with a fake `folderId`) without actually creating anything. `directRuntimeEndpoint` now resolves product-level first when the caller already knows the productID, and only falls back to the tool-level lookup when productID is empty. The wrong-server collision and the resulting "succeeded but didn't" behaviour are gone.
+
+## [1.0.20] - 2026-05-04
+
+Documentation polish and a login regression fix. No behaviour changes outside the login MCP refresh path.
+
+### Fixed
+
+- **Login no longer reuses stale `clientId` from an old MCP cache** (#213) — `dws login` now unconditionally re-fetches the MCP descriptor, so a previously cached client id can't keep producing auth errors after the server rotates it.
+
+### Docs
+
+- **`dws chat message list` pagination** (#218, fixes #195) — clarifies that `nextCursor` is opaque and must be passed back as `--cursor` exactly; warns against parsing or reusing it as an offset.
+- **`dws contact search` examples** (#209) — switched from the removed `--keyword` flag to the current `--query`.
+- **`dws todo` help text** (#205) — expanded field semantics so MCP wrappers generate accurate schemas.
+- **`dws chat message send-by-bot` and `dws report create` help** (#217, #106, #107) — `--robot-code` / `--title` / `--text` now carry the `(必填)` marker; `report create --contents` documents the `key=field_name` requirement and rewrites examples as a `template detail → create` two-step pipeline.
+- **CHANGELOG backfill for 1.0.19** (#204).
+
 ## [1.0.19] - 2026-04-30
 
 Discovery hardening for edition overlays: `edition.SupplementServers` / `FallbackServers` hooks now consistently surface through the **runtime catalog loader**, not just the static command tree, so overlay products that live outside the Portal envelope (e.g. Wukong gray-release `conference`) resolve an endpoint on both the cold-cache and tool-not-in-catalog paths. Ships with per-edition cache partitioning to stop cross-edition disk-cache leakage, plus a small todo fix.
