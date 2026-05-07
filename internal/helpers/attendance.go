@@ -270,9 +270,11 @@ func newAttendanceSummaryCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "summary",
 		Short: "查询某个人的考勤统计摘要",
-		Long:  "查询某个人的考勤统计摘要。--user、--date、--stats-type 均必填；--stats-type 指定统计周期（week/month），钉钉服务端业务层强制要求该字段，不填必报 C0002 统计类型错误。",
-		Example: `  dws attendance summary --user USER_ID --date "2026-03-12 15:00:00"
-  dws attendance summary --user USER_ID --date "2026-03-12 15:00:00" --stats-type month
+		Long: `查询某个人的考勤统计摘要。
+
+--user、--date、--stats-type 均必填。
+钉钉服务端业务层强制要求 --stats-type（week/month），不填会返回 C0002 统计类型错误。`,
+		Example: `  dws attendance summary --user USER_ID --date "2026-03-12 15:00:00" --stats-type month
   dws attendance summary --user USER_ID --date "2026-03-12 15:00:00" --stats-type week`,
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
@@ -290,13 +292,17 @@ func newAttendanceSummaryCommand(runner executor.Runner) *cobra.Command {
 			if err != nil {
 				return apperrors.NewValidation("--date format error, use yyyy-MM-dd HH:mm:ss")
 			}
+			if statsType == "" {
+				return apperrors.NewValidation(`--stats-type is required (week|month), enforced by DingTalk server`)
+			}
+			if statsType != "week" && statsType != "month" {
+				return apperrors.NewValidation(`--stats-type must be "week" or "month"`)
+			}
 			// Build nested structure QueryUserAttendVO
 			vo := map[string]any{
 				"userId":    userID,
 				"queryDate": workDateStr,
-			}
-			if statsType != "" {
-				vo["statsType"] = statsType
+				"statsType": statsType,
 			}
 			params := map[string]any{
 				"QueryUserAttendVO": vo,
@@ -317,7 +323,7 @@ func newAttendanceSummaryCommand(runner executor.Runner) *cobra.Command {
 	}
 	cmd.Flags().String("user", "", "钉钉用户 ID（必填）")
 	cmd.Flags().String("date", "", "工作日期，格式 yyyy-MM-dd HH:mm:ss，如 2026-03-12 15:00:00（必填）")
-	cmd.Flags().String("stats-type", "", "统计类型：week（周统计）或 month（月统计）（必填，钉钉服务端业务层强制要求；不填必报 C0002 统计类型错误）")
+	cmd.Flags().String("stats-type", "", "统计类型：week（周统计）或 month（月统计）（必填，钉钉服务端业务层强制要求）")
 	preferLegacyLeaf(cmd)
 	return cmd
 }

@@ -148,7 +148,11 @@ func TestAttendanceShiftList_should_filter_empty_user_ids(t *testing.T) {
 func TestAttendanceSummary_should_call_tool_with_user_and_date(t *testing.T) {
 	cap := setupTestDeps(t, "attendance")
 	root := buildRoot()
-	err := execCmd(t, root, []string{"attendance", "summary"}, map[string]string{"user": "U001", "date": "2026-03-12 15:00:00"})
+	err := execCmd(t, root, []string{"attendance", "summary"}, map[string]string{
+		"user":       "U001",
+		"date":       "2026-03-12 15:00:00",
+		"stats-type": "month",
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -159,8 +163,9 @@ func TestAttendanceSummary_should_pass_user_and_date_flags(t *testing.T) {
 	cap := setupTestDeps(t, "attendance")
 	root := buildRoot()
 	_ = execCmd(t, root, []string{"attendance", "summary"}, map[string]string{
-		"user": "U001",
-		"date": "2026-03-12 15:00:00",
+		"user":       "U001",
+		"date":       "2026-03-12 15:00:00",
+		"stats-type": "month",
 	})
 	last := cap.last()
 	if last == nil {
@@ -202,10 +207,14 @@ func TestAttendanceSummary_should_error_when_user_missing(t *testing.T) {
 	}
 }
 
-func TestAttendanceSummary_should_pass_only_user_flag(t *testing.T) {
+func TestAttendanceSummary_should_pass_user_id_through_vo(t *testing.T) {
 	cap := setupTestDeps(t, "attendance")
 	root := buildRoot()
-	_ = execCmd(t, root, []string{"attendance", "summary"}, map[string]string{"user": "U002", "date": "2026-03-12 15:00:00"})
+	_ = execCmd(t, root, []string{"attendance", "summary"}, map[string]string{
+		"user":       "U002",
+		"date":       "2026-03-12 15:00:00",
+		"stats-type": "month",
+	})
 	last := cap.last()
 	if last == nil {
 		t.Fatal("no call captured")
@@ -222,7 +231,11 @@ func TestAttendanceSummary_should_pass_only_user_flag(t *testing.T) {
 func TestAttendanceSummary_should_use_dry_run_mode(t *testing.T) {
 	cap := setupTestDepsWithDryRun(t, "attendance")
 	root := buildRoot()
-	err := execCmd(t, root, []string{"attendance", "summary"}, map[string]string{"user": "U001", "date": "2026-03-12 15:00:00"})
+	err := execCmd(t, root, []string{"attendance", "summary"}, map[string]string{
+		"user":       "U001",
+		"date":       "2026-03-12 15:00:00",
+		"stats-type": "month",
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -291,13 +304,34 @@ func TestAttendanceSummary_should_pass_stats_type_week(t *testing.T) {
 	}
 }
 
-func TestAttendanceSummary_should_not_pass_stats_type_when_omitted(t *testing.T) {
-	vo := execSummaryDryRun(t, map[string]string{
+func TestAttendanceSummary_should_error_when_stats_type_missing(t *testing.T) {
+	_ = setupTestDeps(t, "attendance")
+	root := buildRoot()
+	err := execCmd(t, root, []string{"attendance", "summary"}, map[string]string{
 		"user": "U001",
 		"date": "2026-03-12 15:00:00",
 	})
-	if _, exists := vo["statsType"]; exists {
-		t.Errorf("expected statsType to be absent when --stats-type not provided, got %v", vo["statsType"])
+	if err == nil {
+		t.Fatal("expected error when --stats-type is missing")
+	}
+	if !strings.Contains(err.Error(), "stats-type") {
+		t.Errorf("expected error message to mention stats-type, got: %v", err)
+	}
+}
+
+func TestAttendanceSummary_should_error_when_stats_type_invalid(t *testing.T) {
+	_ = setupTestDeps(t, "attendance")
+	root := buildRoot()
+	err := execCmd(t, root, []string{"attendance", "summary"}, map[string]string{
+		"user":       "U001",
+		"date":       "2026-03-12 15:00:00",
+		"stats-type": "foobar",
+	})
+	if err == nil {
+		t.Fatal("expected error when --stats-type is neither week nor month")
+	}
+	if !strings.Contains(err.Error(), "week") || !strings.Contains(err.Error(), "month") {
+		t.Errorf("expected error message to mention week and month, got: %v", err)
 	}
 }
 
