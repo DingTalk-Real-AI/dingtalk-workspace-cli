@@ -22,6 +22,7 @@ const AGENT_DIRS = [
   ".kiro/skills",
   ".trae/skills",
   ".openclaw/skills",
+  ".hermes/skills",
 ];
 
 const PLATFORM_MAP = {
