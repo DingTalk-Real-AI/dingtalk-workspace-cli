@@ -33,10 +33,15 @@ Usage:
   dws attendance summary [flags]
 Example:
   dws attendance summary --user USER_ID --date "2026-03-12 15:00:00"
+  dws attendance summary --user USER_ID --date "2026-03-12 15:00:00" --stats-type month
+  dws attendance summary --user USER_ID --date "2026-03-12 15:00:00" --stats-type week
 Flags:
-      --date string   工作日期, 格式 yyyy-MM-dd HH:mm:ss (必填)
-      --user string   钉钉用户 ID (必填)
+      --date string         工作日期, 格式 yyyy-MM-dd HH:mm:ss (必填)
+      --stats-type string   统计类型：week（周统计）或 month（月统计）；⚠️ 钉钉服务端业务层必填，不传必报 C0002 统计类型错误
+      --user string         钉钉用户 ID (必填)
 ```
+
+> ⚠️ **重要**：`--stats-type` 在 schema 中为可选（`required: []`），但钉钉服务端业务层**强制要求**，不传必报 `C0002 / 统计类型错误`。永远带上 `--stats-type month` 或 `--stats-type week`。
 
 ### 查询考勤组与考勤规则
 ```

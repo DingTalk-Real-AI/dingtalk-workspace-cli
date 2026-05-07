@@ -268,15 +268,18 @@ func newAttendanceShiftListCommand(runner executor.Runner) *cobra.Command {
 
 func newAttendanceSummaryCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:               "summary",
-		Short:             "查询某个人的考勤统计摘要",
-		Long:              "查询某个人的考勤统计摘要。--user 与 --date 均必填。",
-		Example:           `  dws attendance summary --user USER_ID --date "2026-03-12 15:00:00"`,
+		Use:   "summary",
+		Short: "查询某个人的考勤统计摘要",
+		Long:  "查询某个人的考勤统计摘要。--user、--date、--stats-type 均必填；--stats-type 指定统计周期（week/month），钉钉服务端业务层强制要求该字段，不填必报 C0002 统计类型错误。",
+		Example: `  dws attendance summary --user USER_ID --date "2026-03-12 15:00:00"
+  dws attendance summary --user USER_ID --date "2026-03-12 15:00:00" --stats-type month
+  dws attendance summary --user USER_ID --date "2026-03-12 15:00:00" --stats-type week`,
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			userID, _ := cmd.Flags().GetString("user")
 			workDateStr, _ := cmd.Flags().GetString("date")
+			statsType, _ := cmd.Flags().GetString("stats-type")
 			if userID == "" {
 				return apperrors.NewValidation("--user is required, provide DingTalk user ID")
 			}
@@ -291,6 +294,9 @@ func newAttendanceSummaryCommand(runner executor.Runner) *cobra.Command {
 			vo := map[string]any{
 				"userId":    userID,
 				"queryDate": workDateStr,
+			}
+			if statsType != "" {
+				vo["statsType"] = statsType
 			}
 			params := map[string]any{
 				"QueryUserAttendVO": vo,
@@ -311,6 +317,7 @@ func newAttendanceSummaryCommand(runner executor.Runner) *cobra.Command {
 	}
 	cmd.Flags().String("user", "", "钉钉用户 ID（必填）")
 	cmd.Flags().String("date", "", "工作日期，格式 yyyy-MM-dd HH:mm:ss，如 2026-03-12 15:00:00（必填）")
+	cmd.Flags().String("stats-type", "", "统计类型：week（周统计）或 month（月统计）（必填，钉钉服务端业务层强制要求；不填必报 C0002 统计类型错误）")
 	preferLegacyLeaf(cmd)
 	return cmd
 }
