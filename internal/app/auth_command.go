@@ -68,16 +68,21 @@ func newAuthLoginCommand() *cobra.Command {
 		Long: `登录钉钉并获取认证凭证。
 
 支持的登录方式:
-  - OAuth 设备流 (默认): 通过钉钉扫码授权登录
-  - 直接提供 Token: 通过 --token 参数传入已有 token
+  - OAuth Loopback 流 (默认): 本机自动起 127.0.0.1 监听接收回调，浏览器授权后自动完成
+  - OAuth 设备流 (--device): 显示 user_code + 短 URL，适合 SSH 远程 / 容器 / 无头环境
+  - 直接提供 Token (--token): 跳过授权，使用已有 token
 
 不支持的登录方式:
   - 邮箱/密码登录
   - 手机号/验证码登录
   - 应用凭证 (AppKey/AppSecret) 直接登录
 
+⚠️  SSH 远程或无头环境（无本地浏览器可访问远端的 127.0.0.1）请使用 --device，
+    否则 OAuth 回调会跳到本机不可达的 127.0.0.1 链接，授权完成后无法回写 token。
+
 示例:
-  dws auth login              # 扫码登录
+  dws auth login              # 本机扫码登录 (loopback 流)
+  dws auth login --device     # SSH 远程 / 无头环境登录 (设备流)
   dws auth login --force      # 强制重新登录 (忽略缓存 token)
   dws auth login --token xxx  # 使用指定 token`,
 		DisableAutoGenTag: true,

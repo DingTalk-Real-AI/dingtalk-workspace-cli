@@ -120,8 +120,8 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 	// Common flag aliases and suggestions
 	suggestions := map[string]string{
 		"--json":        "提示: 请使用 --format json 或 -f json 来输出 JSON 格式",
-		"--method":      "提示: dws auth login 默认使用 OAuth 设备流登录，无需指定 --method",
-		"--device-flow": "提示: dws auth login 默认已使用设备流，无需 --device-flow 参数",
+		"--method":      "提示: dws auth login 默认使用 OAuth loopback 流；SSH/无头环境请加 --device 走设备流",
+		"--device-flow": "提示: 设备流的标志名是 --device（不是 --device-flow），SSH/无头环境登录请用 dws auth login --device",
 		"--email":       "提示: dws 不支持邮箱/密码登录，请使用 dws auth login 进行扫码登录",
 		"--code":        "提示: dws 不支持验证码登录，请使用 dws auth login 进行扫码登录",
 		"--corp-id":     "提示: corp-id 会在登录时自动获取，无需手动指定",
