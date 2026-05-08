@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
+## [1.0.23] - 2026-05-08
+
+A single fix for HTTP proxy support across the CLI's custom HTTP transports. No behaviour changes elsewhere.
+
+### Fixed
+
+- **`HTTP_PROXY` / `HTTPS_PROXY` environment variables silently ignored by all custom transports** (#237, fixes #236) — the three custom `http.Transport` instances built by the CLI (`internal/transport/client.go` MCP transport, `internal/apiclient/client.go` DingTalk OpenAPI client, `internal/app/legacy.go` IPv4-forcing registry client) all set `DialContext` / `TLSClientConfig` / timeouts but omitted the `Proxy` field. Per Go's `net/http` contract, a non-nil Transport without an explicit `Proxy` means "no proxy" — env vars are silently ignored, breaking sandboxed or air-gapped deployments that route outbound through `HTTP_PROXY` / `HTTPS_PROXY`. All three transports now set `Proxy: http.ProxyFromEnvironment`.
+
+### Tests
+
+- Per-package regression test that pointer-compares the Transport's `Proxy` func against `http.ProxyFromEnvironment`, avoiding flakiness from Go's `envProxyOnce` memoisation when running alongside tests that read proxy env early. (#237)
+
 ## [1.0.22] - 2026-05-07
 
 Two release-blocking bug fixes: `dws attendance summary` now exposes the server-required `--stats-type` flag (without it, every call returned C0002), and the install scripts finally populate `~/.hermes/skills/dws/` for users who already have Hermes.
