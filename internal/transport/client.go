@@ -211,6 +211,11 @@ func (r *ToolCallResult) UnmarshalJSON(data []byte) error {
 // "accepted but never responded" servers faster, and explicit TLS/dial timeouts.
 func defaultTransport() *http.Transport {
 	return &http.Transport{
+		// Honour HTTP_PROXY / HTTPS_PROXY / NO_PROXY env vars; a custom
+		// Transport without an explicit Proxy field would otherwise bypass
+		// proxies entirely, which breaks sandboxed/air-gapped deployments
+		// that rely on an outbound proxy (#236).
+		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
 			Timeout:   3 * time.Second,
 			KeepAlive: 30 * time.Second,

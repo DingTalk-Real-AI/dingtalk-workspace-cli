@@ -210,6 +210,8 @@ func NormalisePath(path, baseURL string) string {
 // defaultTransport returns a tuned http.Transport matching the project conventions.
 func defaultTransport() *http.Transport {
 	return &http.Transport{
+		// Honour HTTP_PROXY / HTTPS_PROXY / NO_PROXY env vars (#236).
+		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
 			Timeout:   3 * time.Second,
 			KeepAlive: 30 * time.Second,
