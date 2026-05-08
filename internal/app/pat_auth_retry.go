@@ -718,17 +718,23 @@ func pollPatDeviceFlow(ctx context.Context, flowID string, configDir string, out
 	}
 }
 
-// tryOpenBrowser opens url in the default browser; errors are silently ignored.
-func tryOpenBrowser(url string) error {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
+func browserOpenCommand(goos, rawURL string) *exec.Cmd {
+	switch goos {
 	case "darwin":
-		cmd = exec.Command("open", url)
+		return exec.Command("open", rawURL)
 	case "linux":
-		cmd = exec.Command("xdg-open", url)
+		return exec.Command("xdg-open", rawURL)
 	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", url)
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", rawURL)
 	default:
+		return nil
+	}
+}
+
+// tryOpenBrowser opens rawURL in the default browser; errors are silently ignored.
+func tryOpenBrowser(rawURL string) error {
+	cmd := browserOpenCommand(runtime.GOOS, rawURL)
+	if cmd == nil {
 		return nil
 	}
 	return cmd.Start()

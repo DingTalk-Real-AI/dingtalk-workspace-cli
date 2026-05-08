@@ -903,7 +903,8 @@ func TestHandlePatAuthCheck_JSONModeCanOpenBrowserWithoutTextOutput(t *testing.T
 		fallback:    mock,
 		globalFlags: &GlobalFlags{Format: "json"},
 	}
-	raw := `{"code":"AGENT_CODE_NOT_EXISTS","data":{"desc":"test auth","flowId":"flow-json","uri":"https://example.com/pat","clientId":"test-client-id"}}`
+	rawURI := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3Df72437f040f04a8295988ff71e690b35%26userCode%3D98JV-JSBL#/personalAuthorization?flowId=f72437f040f04a8295988ff71e690b35&userCode=98JV-JSBL"
+	raw := `{"code":"AGENT_CODE_NOT_EXISTS","data":{"desc":"test auth","flowId":"flow-json","uri":"` + rawURI + `","clientId":"test-client-id"}}`
 
 	var buf bytes.Buffer
 	_, err := handlePatAuthCheck(context.Background(), runner, executor.Invocation{
@@ -920,8 +921,23 @@ func TestHandlePatAuthCheck_JSONModeCanOpenBrowserWithoutTextOutput(t *testing.T
 	if _, err := os.Stat(filepath.Join(tmpDir, "app.json")); !os.IsNotExist(err) {
 		t.Fatalf("json PAT mode must not persist shared app.json, stat error = %v", err)
 	}
-	if opened != "https://example.com/pat" {
-		t.Fatalf("opened url = %q, want https://example.com/pat", opened)
+	if opened != rawURI {
+		t.Fatalf("opened url = %q, want verbatim %q", opened, rawURI)
+	}
+	patOut, ok := err.(*apperrors.PATError)
+	if !ok {
+		t.Fatalf("expected *PATError, got %T: %v", err, err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(patOut.RawJSON), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(json PAT payload) error = %v\nraw=%s", err, patOut.RawJSON)
+	}
+	data, _ := payload["data"].(map[string]any)
+	if got, _ := data["uri"].(string); got != rawURI {
+		t.Fatalf("data.uri = %q, want verbatim %q", got, rawURI)
+	}
+	if got, ok := data["openBrowser"].(bool); !ok || !got {
+		t.Fatalf("data.openBrowser = %#v, want true", data["openBrowser"])
 	}
 }
 
@@ -1188,5 +1204,30 @@ func TestHandlePatAuthCheck_OpensOpaqueURIWithoutRebuild(t *testing.T) {
 	}
 	if opened != rawURI {
 		t.Fatalf("opened url = %q, want verbatim %q", opened, rawURI)
+	}
+}
+
+func TestBrowserOpenCommand_WindowsPreservesOpaquePATURI(t *testing.T) {
+	t.Parallel()
+
+	rawURI := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3Df72437f040f04a8295988ff71e690b35%26userCode%3D98JV-JSBL#/personalAuthorization?flowId=f72437f040f04a8295988ff71e690b35&userCode=98JV-JSBL"
+	cmd := browserOpenCommand("windows", rawURI)
+	if cmd == nil {
+		t.Fatal("browserOpenCommand(windows) returned nil")
+	}
+	if got := cmd.Args[0]; got == "cmd" {
+		t.Fatalf("windows browser opener must not route PAT URLs through cmd.exe: args=%v", cmd.Args)
+	}
+	if got := len(cmd.Args); got != 3 {
+		t.Fatalf("windows browser opener args length = %d, want 3: %v", got, cmd.Args)
+	}
+	if got := cmd.Args[0]; got != "rundll32" {
+		t.Fatalf("windows browser opener command = %q, want rundll32", got)
+	}
+	if got := cmd.Args[1]; got != "url.dll,FileProtocolHandler" {
+		t.Fatalf("windows browser opener handler = %q, want url.dll,FileProtocolHandler", got)
+	}
+	if got := cmd.Args[2]; got != rawURI {
+		t.Fatalf("windows browser opener URL arg = %q, want verbatim %q", got, rawURI)
 	}
 }
