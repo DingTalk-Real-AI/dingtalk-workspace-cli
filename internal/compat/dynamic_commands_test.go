@@ -744,6 +744,116 @@ func TestBuildDynamicCommands_OverlayFlagWinsOverDetailSchema(t *testing.T) {
 	}
 }
 
+// TestBuildDynamicCommands_ObjectSchemaPreservesTypes is the regression test
+// for issue #222: when the Detail API schema declares a field as `type:
+// object`, the user's --flag JSON string must reach the MCP as a structured
+// map with original types, not as a serialized string. Otherwise upstream
+// best-effort re-parses it and bool/number fields get mangled (e.g. true →
+// "True"). Same constraint applies to arrays of object items.
+func TestBuildDynamicCommands_ObjectSchemaPreservesTypes(t *testing.T) {
+	t.Parallel()
+
+	runner := &captureRunner{}
+	servers := []market.ServerDescriptor{
+		{
+			Endpoint: "https://endpoint-aitable",
+			CLI: market.CLIOverlay{
+				ID:      "aitable",
+				Command: "aitable",
+				ToolOverrides: map[string]market.CLIToolOverride{
+					"create_chart": {CLIName: "chart-create"},
+				},
+			},
+		},
+	}
+	details := map[string][]market.DetailTool{
+		"aitable": {
+			{
+				ToolName: "create_chart",
+				ToolRequest: `{"properties":{` +
+					`"baseId":{"type":"string"},` +
+					`"config":{"type":"object","description":"Chart config"},` +
+					`"layout":{"type":"object","description":"Chart layout"},` +
+					`"rows":{"type":"array","items":{"type":"object"},"description":"Object rows"}` +
+					`}}`,
+			},
+		},
+	}
+
+	cmds := BuildDynamicCommands(servers, runner, details)
+	leaf := findChild(cmds[0], "chart-create")
+	if leaf == nil {
+		t.Fatal("chart-create leaf not found")
+	}
+
+	configFlag := leaf.Flags().Lookup("config")
+	if configFlag == nil {
+		t.Fatal("--config flag missing")
+	}
+	if configFlag.Value.Type() != "string" {
+		t.Errorf("--config Value.Type() = %q, want string (object types stay as JSON-string flag)", configFlag.Value.Type())
+	}
+	if !needsSchemaJSONParse(configFlag) {
+		t.Errorf("--config should carry schemaJSONParseAnnotation, annotations=%v", configFlag.Annotations)
+	}
+
+	layoutFlag := leaf.Flags().Lookup("layout")
+	if !needsSchemaJSONParse(layoutFlag) {
+		t.Errorf("--layout should carry schemaJSONParseAnnotation, annotations=%v", layoutFlag.Annotations)
+	}
+
+	rowsFlag := leaf.Flags().Lookup("rows")
+	if rowsFlag == nil {
+		t.Fatal("--rows flag missing")
+	}
+	if rowsFlag.Value.Type() != "string" {
+		t.Errorf("--rows (array of object) Value.Type() = %q, want string", rowsFlag.Value.Type())
+	}
+	if !needsSchemaJSONParse(rowsFlag) {
+		t.Errorf("--rows should carry schemaJSONParseAnnotation, annotations=%v", rowsFlag.Annotations)
+	}
+
+	cmds[0].SetArgs([]string{
+		"chart-create",
+		"--base-id", "BASE_ID",
+		"--config", `{"chartType":"SUMMARY","numberFormat":{"digits":0,"thousandSeparator":true}}`,
+		"--layout", `{"x":0,"y":0,"w":3,"h":3}`,
+		"--rows", `[{"fieldName":"name","type":"text"}]`,
+	})
+	cmds[0].SilenceErrors = true
+	cmds[0].SilenceUsage = true
+	if err := cmds[0].Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if runner.lastTool != "create_chart" {
+		t.Fatalf("captured tool = %q, want create_chart", runner.lastTool)
+	}
+
+	cfg, ok := runner.lastParams["config"].(map[string]any)
+	if !ok {
+		t.Fatalf("config param = %T (%v), want map[string]any (proves issue #222 fix)", runner.lastParams["config"], runner.lastParams["config"])
+	}
+	nf, ok := cfg["numberFormat"].(map[string]any)
+	if !ok {
+		t.Fatalf("numberFormat = %T, want map[string]any", cfg["numberFormat"])
+	}
+	if got := nf["thousandSeparator"]; got != true {
+		t.Errorf("thousandSeparator = %v (%T), want true (bool) — regression of issue #222", got, got)
+	}
+
+	if _, ok := runner.lastParams["layout"].(map[string]any); !ok {
+		t.Fatalf("layout param = %T, want map[string]any", runner.lastParams["layout"])
+	}
+	rows, ok := runner.lastParams["rows"].([]any)
+	if !ok {
+		t.Fatalf("rows param = %T, want []any (array)", runner.lastParams["rows"])
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows len = %d, want 1", len(rows))
+	}
+}
+
 // Phase 5 P2 schema extensions ----------------------------------------------
 
 // TestBuildDynamicCommands_BodyWrapper verifies that bodyWrapper wraps all

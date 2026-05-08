@@ -230,7 +230,9 @@ func TestCollectSchemaFlagsPicksUpUnboundFlags(t *testing.T) {
 	_ = cmd.Flags().Set("loud", "true")
 
 	params := make(map[string]any)
-	collectSchemaFlags(cmd, nil, params)
+	if err := collectSchemaFlags(cmd, nil, params); err != nil {
+		t.Fatalf("collectSchemaFlags: %v", err)
+	}
 
 	if params["name"] != "Alice" {
 		t.Errorf("name = %v, want Alice", params["name"])
@@ -267,7 +269,9 @@ func TestCollectSchemaFlagsSkipsBoundFlags(t *testing.T) {
 	_ = cmd.Flags().Set("title", "Hello")
 
 	params := make(map[string]any)
-	collectSchemaFlags(cmd, bindings, params)
+	if err := collectSchemaFlags(cmd, bindings, params); err != nil {
+		t.Fatalf("collectSchemaFlags: %v", err)
+	}
 
 	// dept-id is bound, should NOT be collected by collectSchemaFlags
 	if _, exists := params["dept_id"]; exists {
@@ -276,6 +280,104 @@ func TestCollectSchemaFlagsSkipsBoundFlags(t *testing.T) {
 	// title is unbound, should be collected
 	if params["title"] != "Hello" {
 		t.Errorf("title = %v, want Hello", params["title"])
+	}
+}
+
+// TestCollectSchemaFlagsParsesObjectAndArrayJSON guards the fix for issue
+// #222: when a JSON Schema declares `type: object` (or array of object items),
+// the user-supplied --flag string must be parsed into a structured value
+// before being forwarded to the MCP. Otherwise upstream sees a serialized JSON
+// string and best-effort re-parses it, which mangles bool/number fields.
+func TestCollectSchemaFlagsParsesObjectAndArrayJSON(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("config", "", "Chart config (JSON object)")
+	if err := cmd.Flags().SetAnnotation("config", schemaJSONParseAnnotation, []string{"true"}); err != nil {
+		t.Fatalf("SetAnnotation config: %v", err)
+	}
+	cmd.Flags().String("layout", "", "Chart layout (JSON object)")
+	if err := cmd.Flags().SetAnnotation("layout", schemaJSONParseAnnotation, []string{"true"}); err != nil {
+		t.Fatalf("SetAnnotation layout: %v", err)
+	}
+	// Use "rows" not "fields" — the latter collides with the reserved
+	// global flag name (collectSchemaFlags skip list).
+	cmd.Flags().String("rows", "", "Rows (JSON array)")
+	if err := cmd.Flags().SetAnnotation("rows", schemaJSONParseAnnotation, []string{"true"}); err != nil {
+		t.Fatalf("SetAnnotation rows: %v", err)
+	}
+	cmd.Flags().String("name", "", "Plain string flag")
+
+	_ = cmd.Flags().Set("config", `{"chartType":"SUMMARY","numberFormat":{"digits":0,"thousandSeparator":true}}`)
+	_ = cmd.Flags().Set("layout", `{"x":0,"y":0,"w":3,"h":3}`)
+	_ = cmd.Flags().Set("rows", `[{"fieldName":"name","type":"text"}]`)
+	_ = cmd.Flags().Set("name", "测试")
+
+	params := make(map[string]any)
+	if err := collectSchemaFlags(cmd, nil, params); err != nil {
+		t.Fatalf("collectSchemaFlags: %v", err)
+	}
+
+	cfg, ok := params["config"].(map[string]any)
+	if !ok {
+		t.Fatalf("config should be parsed object, got %T (%v)", params["config"], params["config"])
+	}
+	nf, ok := cfg["numberFormat"].(map[string]any)
+	if !ok {
+		t.Fatalf("numberFormat should be parsed object, got %T", cfg["numberFormat"])
+	}
+	if got := nf["thousandSeparator"]; got != true {
+		t.Errorf("thousandSeparator = %v (%T), want true (bool)", got, got)
+	}
+	if got, ok := nf["digits"].(float64); !ok || got != 0 {
+		t.Errorf("digits = %v (%T), want 0 (number)", nf["digits"], nf["digits"])
+	}
+
+	layout, ok := params["layout"].(map[string]any)
+	if !ok {
+		t.Fatalf("layout should be parsed object, got %T", params["layout"])
+	}
+	if got, ok := layout["w"].(float64); !ok || got != 3 {
+		t.Errorf("layout.w = %v (%T), want 3 (number)", layout["w"], layout["w"])
+	}
+
+	rows, ok := params["rows"].([]any)
+	if !ok {
+		t.Fatalf("rows should be parsed array, got %T", params["rows"])
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows len = %d, want 1", len(rows))
+	}
+	first, ok := rows[0].(map[string]any)
+	if !ok {
+		t.Fatalf("rows[0] should be object, got %T", rows[0])
+	}
+	if first["type"] != "text" {
+		t.Errorf("rows[0].type = %v, want text", first["type"])
+	}
+
+	if params["name"] != "测试" {
+		t.Errorf("name = %v, want 测试 (plain string flag should not be parsed)", params["name"])
+	}
+}
+
+// TestCollectSchemaFlagsReportsBadJSON ensures the fix for #222 doesn't
+// silently swallow malformed input — invalid JSON for an object-typed flag
+// should surface as a validation error to the caller.
+func TestCollectSchemaFlagsReportsBadJSON(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("config", "", "Chart config")
+	if err := cmd.Flags().SetAnnotation("config", schemaJSONParseAnnotation, []string{"true"}); err != nil {
+		t.Fatalf("SetAnnotation: %v", err)
+	}
+	_ = cmd.Flags().Set("config", "not-json-not-yaml: }{")
+
+	params := make(map[string]any)
+	err := collectSchemaFlags(cmd, nil, params)
+	if err == nil {
+		t.Fatal("expected error for malformed JSON, got nil")
 	}
 }
 
@@ -298,7 +400,9 @@ func TestCollectSchemaFlagsSkipsGlobalFlags(t *testing.T) {
 	_ = cmd.Flags().Set("format", "table")
 
 	params := make(map[string]any)
-	collectSchemaFlags(cmd, nil, params)
+	if err := collectSchemaFlags(cmd, nil, params); err != nil {
+		t.Fatalf("collectSchemaFlags: %v", err)
+	}
 
 	if params["name"] != "Bob" {
 		t.Errorf("name = %v, want Bob", params["name"])

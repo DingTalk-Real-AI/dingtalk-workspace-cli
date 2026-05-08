@@ -275,11 +275,19 @@ type toolRequestSchema struct {
 }
 
 type toolRequestProp struct {
-	Type        string `json:"type"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Default     string `json:"default,omitempty"`
+	Type        string           `json:"type"`
+	Title       string           `json:"title"`
+	Description string           `json:"description"`
+	Default     string           `json:"default,omitempty"`
+	Items       *toolRequestProp `json:"items,omitempty"`
 }
+
+// schemaJSONParseAnnotation marks a schema-derived flag whose CLI string value
+// should be parsed into a structured object/array (via transformJSONParse) before
+// being forwarded as an MCP tool param. Set when the JSON Schema declares
+// `type: object` or `type: array` of object items — the upstream tool expects
+// a nested value, not a serialized JSON string.
+const schemaJSONParseAnnotation = "dws-schema-json-parse"
 
 // buildFlagsFromDetailSchema adds properly-typed cobra flags to cmd based on
 // the MCP toolRequest JSON Schema. The flagOverrides map (from CLIToolOverride.Flags)
@@ -357,8 +365,25 @@ func buildFlagsFromDetailSchema(cmd *cobra.Command, schemaJSON string, flagOverr
 		case "boolean":
 			cmd.Flags().Bool(flagName, false, help)
 		case "array":
-			cmd.Flags().StringSlice(flagName, nil, help+" (comma-separated)")
-		default: // "string", "object", or unknown → string
+			// Comma-separated StringSlice works for primitive items, but
+			// arrays of objects need full JSON input (e.g. table create
+			// --fields '[{...}]'). Register a String flag and tag it for
+			// json_parse so the structured payload survives the trip.
+			if prop.Items != nil && (prop.Items.Type == "object" || prop.Items.Type == "array") {
+				cmd.Flags().String(flagName, "", help+" (JSON array)")
+				_ = cmd.Flags().SetAnnotation(flagName, schemaJSONParseAnnotation, []string{"true"})
+			} else {
+				cmd.Flags().StringSlice(flagName, nil, help+" (comma-separated)")
+			}
+		case "object":
+			// Nested-object payloads (chart config, layout, etc.) must be
+			// parsed into a Go map before reaching the MCP transport.
+			// Otherwise upstream sees a raw JSON string and best-effort
+			// re-parses it (yaml.safe_load → str()), which mangles bool
+			// fields into "True"/"False" — see issue #222.
+			cmd.Flags().String(flagName, prop.Default, help+" (JSON object)")
+			_ = cmd.Flags().SetAnnotation(flagName, schemaJSONParseAnnotation, []string{"true"})
+		default: // "string" or unknown → string
 			defaultVal := prop.Default
 			cmd.Flags().String(flagName, defaultVal, help)
 		}

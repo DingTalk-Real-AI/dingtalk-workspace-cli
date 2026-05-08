@@ -246,7 +246,9 @@ func NewDirectCommand(route Route, runner executor.Runner) *cobra.Command {
 
 			// Collect schema-derived flags (from buildFlagsFromDetailSchema)
 			// that are not covered by explicit bindings.
-			collectSchemaFlags(cmd, route.Bindings, params)
+			if err := collectSchemaFlags(cmd, route.Bindings, params); err != nil {
+				return err
+			}
 
 			// Required-presence check for positional bindings — must run after
 			// both flag (CollectBindings) and positional (collectPositionalBindings)
@@ -617,7 +619,13 @@ func validateRequiredPositionalBindings(cmd *cobra.Command, bindings []FlagBindi
 // collectSchemaFlags picks up flags created by buildFlagsFromDetailSchema that
 // have no explicit FlagBinding. This bridges the gap for plugin-defined tools
 // whose parameters come from the MCP inputSchema rather than CLIToolOverride.Flags.
-func collectSchemaFlags(cmd *cobra.Command, bindings []FlagBinding, params map[string]any) {
+//
+// Flags marked with the schemaJSONParseAnnotation (i.e. JSON Schema declared
+// `type: object` or `type: array` of object items) have their string value
+// parsed via ApplyTransform("json_parse", ...) before being stored. Without
+// this step, the upstream MCP would receive a serialized JSON string in a
+// field declared as object — see issue #222 for the symptoms.
+func collectSchemaFlags(cmd *cobra.Command, bindings []FlagBinding, params map[string]any) error {
 	// Build a set of flag names already covered by bindings.
 	bound := make(map[string]bool, len(bindings)*2)
 	for _, b := range bindings {
@@ -643,7 +651,11 @@ func collectSchemaFlags(cmd *cobra.Command, bindings []FlagBinding, params map[s
 		"client-id": true, "client-secret": true,
 	}
 
+	var visitErr error
 	cmd.Flags().Visit(func(f *pflag.Flag) {
+		if visitErr != nil {
+			return
+		}
 		if bound[f.Name] || skip[f.Name] {
 			return
 		}
@@ -669,11 +681,36 @@ func collectSchemaFlags(cmd *cobra.Command, bindings []FlagBinding, params map[s
 				params[paramName] = v
 			}
 		default:
-			if v, err := cmd.Flags().GetString(f.Name); err == nil {
-				params[paramName] = v
+			v, err := cmd.Flags().GetString(f.Name)
+			if err != nil {
+				return
 			}
+			if needsSchemaJSONParse(f) && strings.TrimSpace(v) != "" {
+				parsed, perr := ApplyTransform(v, "json_parse", nil)
+				if perr != nil {
+					visitErr = fmt.Errorf("--%s: %w", f.Name, perr)
+					return
+				}
+				params[paramName] = parsed
+				return
+			}
+			params[paramName] = v
 		}
 	})
+	return visitErr
+}
+
+// needsSchemaJSONParse reports whether a schema-derived flag was tagged for
+// JSON parsing because its declared type is object or array-of-object.
+func needsSchemaJSONParse(f *pflag.Flag) bool {
+	if f == nil || f.Annotations == nil {
+		return false
+	}
+	values, ok := f.Annotations[schemaJSONParseAnnotation]
+	if !ok || len(values) == 0 {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(values[0]), "true")
 }
 
 // toOriginalParamName converts a kebab-case flag name back to the original
