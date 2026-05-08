@@ -77,8 +77,8 @@ func newAuthLoginCommand() *cobra.Command {
   - 手机号/验证码登录
   - 应用凭证 (AppKey/AppSecret) 直接登录
 
-⚠️  SSH 远程或无头环境（无本地浏览器可访问远端的 127.0.0.1）请使用 --device，
-    否则 OAuth 回调会跳到本机不可达的 127.0.0.1 链接，授权完成后无法回写 token。
+注意: SSH 远程或无头环境（无本地浏览器可访问远端的 127.0.0.1）请使用 --device，
+      否则 OAuth 回调会跳到本机不可达的 127.0.0.1 链接，授权完成后无法回写 token。
 
 示例:
   dws auth login              # 本机扫码登录 (loopback 流)
