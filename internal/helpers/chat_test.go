@@ -130,7 +130,7 @@ func TestChatMessageSendRejectsInvalidDestination(t *testing.T) {
 		{
 			name:    "empty-text",
 			args:    []string{"--group", "cid-x"},
-			wantErr: "--text (or positional argument) is required",
+			wantErr: "--text (or positional argument), --media-id, or --dentry-id/--space-id is required",
 		},
 	}
 	for _, tc := range cases {
@@ -232,6 +232,143 @@ func TestChatMessageSendForwardsAtMentions(t *testing.T) {
 				if !equalAny(got, want) {
 					t.Fatalf("Params[%q] = %#v, want %#v", key, got, want)
 				}
+			}
+		})
+	}
+}
+
+// TestChatMessageSendForwardsMediaAndFilePayloads guards the documented
+// file/image flags on the hardcoded helper. The dynamic envelope already
+// advertised these flags, but the helper leaf used at runtime must also
+// accept and forward them to the chat MCP tool.
+func TestChatMessageSendForwardsMediaAndFilePayloads(t *testing.T) {
+	cases := []struct {
+		name       string
+		args       []string
+		wantTool   string
+		wantParams map[string]any
+	}{
+		{
+			name: "group-file",
+			args: []string{
+				"--group", "cid-xyz",
+				"--dentry-id", "220459649015",
+				"--space-id", "3240604728",
+				"--file-name", "fault-closure.html",
+				"--file-size", "17399",
+				"--file-type", "html",
+			},
+			wantTool: "send_message_as_user",
+			wantParams: map[string]any{
+				"openConversation_id": "cid-xyz",
+				"dentryId":            "220459649015",
+				"spaceId":             "3240604728",
+				"fileName":            "fault-closure.html",
+				"fileSize":            "17399",
+				"fileType":            "html",
+				"msgType":             "file",
+			},
+		},
+		{
+			name: "open-dingtalk-id-image",
+			args: []string{
+				"--open-dingtalk-id", "op-123",
+				"--media-id", "@media-456",
+			},
+			wantTool: "send_direct_message_as_user",
+			wantParams: map[string]any{
+				"receiverOpenDingTalkId": "op-123",
+				"mediaId":                "@media-456",
+				"msgType":                "image",
+			},
+		},
+		{
+			name: "explicit-msg-type",
+			args: []string{
+				"--group", "cid-xyz",
+				"--dentry-id", "220459649015",
+				"--space-id", "3240604728",
+				"--msg-type", "file",
+			},
+			wantTool: "send_message_as_user",
+			wantParams: map[string]any{
+				"openConversation_id": "cid-xyz",
+				"dentryId":            "220459649015",
+				"spaceId":             "3240604728",
+				"msgType":             "file",
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &captureRunner{}
+			cmd := newChatMessageSendCommand(runner)
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			cmd.SetArgs(tc.args)
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
+			}
+			if got := runner.last.Tool; got != tc.wantTool {
+				t.Fatalf("Tool = %q, want %q", got, tc.wantTool)
+			}
+			for key, want := range tc.wantParams {
+				got, ok := runner.last.Params[key]
+				if !ok {
+					t.Fatalf("Params missing %q; got %#v", key, runner.last.Params)
+				}
+				if !equalAny(got, want) {
+					t.Fatalf("Params[%q] = %#v, want %#v", key, got, want)
+				}
+			}
+		})
+	}
+}
+
+func TestChatMessageSendRejectsInvalidMediaAndFilePayloads(t *testing.T) {
+	cases := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{
+			name:    "file-missing-space-id",
+			args:    []string{"--group", "cid-x", "--dentry-id", "d-1"},
+			wantErr: "--dentry-id and --space-id are required for file messages",
+		},
+		{
+			name:    "text-and-file",
+			args:    []string{"--group", "cid-x", "--text", "hi", "--dentry-id", "d-1", "--space-id", "s-1"},
+			wantErr: "--text, --media-id, and --dentry-id/--space-id are mutually exclusive",
+		},
+		{
+			name:    "user-image",
+			args:    []string{"--user", "034766", "--media-id", "@media-1"},
+			wantErr: "--media-id direct messages require --open-dingtalk-id instead of --user",
+		},
+		{
+			name:    "file-with-at-all",
+			args:    []string{"--group", "cid-x", "--dentry-id", "d-1", "--space-id", "s-1", "--at-all"},
+			wantErr: "--at-all / --at-users / --at-mobiles only apply to text messages",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &captureRunner{}
+			cmd := newChatMessageSendCommand(runner)
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			cmd.SetArgs(tc.args)
+			err := cmd.Execute()
+			if err == nil {
+				t.Fatalf("expected error, got nil; output: %s", out.String())
+			}
+			if got := err.Error(); !strings.Contains(got, tc.wantErr) {
+				t.Fatalf("error = %q, want to contain %q", got, tc.wantErr)
 			}
 		})
 	}

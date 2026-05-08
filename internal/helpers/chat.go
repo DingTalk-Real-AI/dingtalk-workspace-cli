@@ -92,14 +92,16 @@ func newChatMessageSendCommand(runner executor.Runner) *cobra.Command {
 --open-dingtalk-id 指定 openDingTalkId 发单聊 (适用于无法获取 userId 的场景)。
 三者只能选其一，不能同时指定。
 
-消息内容通过 --text 传入，也可作为位置参数；支持 Markdown。必须提供 --title 作为消息标题。
+消息内容通过 --text 传入，也可作为位置参数；支持 Markdown。发送图片可指定 --media-id；
+发送钉盘文件可指定 --dentry-id + --space-id。文本消息必须提供 --title 作为消息标题。
 
 群聊场景下可用 --at-all / --at-users / --at-mobiles 进行 @ 提醒（仅 --group 时生效）。
 注意 --text 中需包含对应的 <@userId> / <@all> 占位符才能在客户端渲染出 @ 效果。`,
 		Example: `  dws chat message send --group <openconversation_id> --text "hello"
   dws chat message send --user <userId> --text "请查收"
   dws chat message send --open-dingtalk-id <openDingTalkId> --title "提醒" --text "请确认"
-  dws chat message send --group <openconversation_id> --title "拉群通知" --text "<@uid> 你被 @ 了" --at-users uid`,
+  dws chat message send --group <openconversation_id> --title "拉群通知" --text "<@uid> 你被 @ 了" --at-users uid
+  dws chat message send --group <openconversation_id> --dentry-id <dentryId> --space-id <spaceId> --file-name report.html --file-type html`,
 		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -131,6 +133,13 @@ func newChatMessageSendCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().Bool("at-all", false, "@所有人 (仅 --group 群聊生效)")
 	cmd.Flags().String("at-users", "", "按 userId @ 指定成员，逗号分隔 (仅 --group 群聊生效)")
 	cmd.Flags().String("at-mobiles", "", "按手机号 @ 指定成员，逗号分隔 (仅 --group 群聊生效)")
+	cmd.Flags().String("media-id", "", "图片 mediaId，指定后发送图片消息")
+	cmd.Flags().String("msg-type", "", "消息类型 (如 text/markdown/image/file；通常由 --text/--media-id/--dentry-id 自动推断)")
+	cmd.Flags().String("dentry-id", "", "钉盘文件 dentryId (发送钉盘文件消息时使用，需配合 --space-id)")
+	cmd.Flags().String("space-id", "", "钉盘空间 spaceId (与 --dentry-id 配合使用)")
+	cmd.Flags().String("file-name", "", "文件消息的文件名")
+	cmd.Flags().String("file-size", "", "文件消息的文件大小 (字节)")
+	cmd.Flags().String("file-type", "", "文件消息的文件类型 (如 pdf / docx / xlsx / html)")
 	return cmd
 }
 
@@ -162,6 +171,34 @@ func buildChatMessageSendInvocation(cmd *cobra.Command, args []string) (map[stri
 	if strings.TrimSpace(text) == "" && len(args) > 0 {
 		text = args[0]
 	}
+	mediaID, err := cmd.Flags().GetString("media-id")
+	if err != nil {
+		return nil, "", apperrors.NewInternal("failed to read --media-id")
+	}
+	msgType, err := cmd.Flags().GetString("msg-type")
+	if err != nil {
+		return nil, "", apperrors.NewInternal("failed to read --msg-type")
+	}
+	dentryID, err := cmd.Flags().GetString("dentry-id")
+	if err != nil {
+		return nil, "", apperrors.NewInternal("failed to read --dentry-id")
+	}
+	spaceID, err := cmd.Flags().GetString("space-id")
+	if err != nil {
+		return nil, "", apperrors.NewInternal("failed to read --space-id")
+	}
+	fileName, err := cmd.Flags().GetString("file-name")
+	if err != nil {
+		return nil, "", apperrors.NewInternal("failed to read --file-name")
+	}
+	fileSize, err := cmd.Flags().GetString("file-size")
+	if err != nil {
+		return nil, "", apperrors.NewInternal("failed to read --file-size")
+	}
+	fileType, err := cmd.Flags().GetString("file-type")
+	if err != nil {
+		return nil, "", apperrors.NewInternal("failed to read --file-type")
+	}
 
 	hasGroup := strings.TrimSpace(group) != ""
 	hasUser := strings.TrimSpace(user) != ""
@@ -183,8 +220,26 @@ func buildChatMessageSendInvocation(cmd *cobra.Command, args []string) (map[stri
 	default:
 		return nil, "", apperrors.NewValidation("--group, --user, and --open-dingtalk-id are mutually exclusive")
 	}
-	if strings.TrimSpace(text) == "" {
-		return nil, "", apperrors.NewValidation("--text (or positional argument) is required")
+
+	hasText := strings.TrimSpace(text) != ""
+	hasMedia := strings.TrimSpace(mediaID) != ""
+	hasFile := strings.TrimSpace(dentryID) != "" || strings.TrimSpace(spaceID) != "" ||
+		strings.TrimSpace(fileName) != "" || strings.TrimSpace(fileSize) != "" || strings.TrimSpace(fileType) != ""
+	payloadKinds := 0
+	for _, present := range []bool{hasText, hasMedia, hasFile} {
+		if present {
+			payloadKinds++
+		}
+	}
+	switch {
+	case payloadKinds == 0:
+		return nil, "", apperrors.NewValidation("--text (or positional argument), --media-id, or --dentry-id/--space-id is required")
+	case payloadKinds > 1:
+		return nil, "", apperrors.NewValidation("--text, --media-id, and --dentry-id/--space-id are mutually exclusive")
+	case hasFile && (strings.TrimSpace(dentryID) == "" || strings.TrimSpace(spaceID) == ""):
+		return nil, "", apperrors.NewValidation("--dentry-id and --space-id are required for file messages")
+	case hasMedia && hasUser:
+		return nil, "", apperrors.NewValidation("--media-id direct messages require --open-dingtalk-id instead of --user")
 	}
 
 	atAll, _ := cmd.Flags().GetBool("at-all")
@@ -195,10 +250,45 @@ func buildChatMessageSendInvocation(cmd *cobra.Command, args []string) (map[stri
 	if !hasGroup && (atAll || hasAtUsers || hasAtMobiles) {
 		return nil, "", apperrors.NewValidation("--at-all / --at-users / --at-mobiles only apply when --group is set")
 	}
+	if !hasText && (atAll || hasAtUsers || hasAtMobiles) {
+		return nil, "", apperrors.NewValidation("--at-all / --at-users / --at-mobiles only apply to text messages")
+	}
 
-	params := map[string]any{"text": text}
+	params := map[string]any{}
 	if strings.TrimSpace(title) != "" {
 		params["title"] = title
+	}
+	if hasText {
+		params["text"] = text
+		if strings.TrimSpace(msgType) != "" {
+			params["msgType"] = msgType
+		}
+	}
+	if hasMedia {
+		params["mediaId"] = mediaID
+		if strings.TrimSpace(msgType) != "" {
+			params["msgType"] = msgType
+		} else {
+			params["msgType"] = "image"
+		}
+	}
+	if hasFile {
+		params["dentryId"] = dentryID
+		params["spaceId"] = spaceID
+		if strings.TrimSpace(fileName) != "" {
+			params["fileName"] = fileName
+		}
+		if strings.TrimSpace(fileSize) != "" {
+			params["fileSize"] = fileSize
+		}
+		if strings.TrimSpace(fileType) != "" {
+			params["fileType"] = fileType
+		}
+		if strings.TrimSpace(msgType) != "" {
+			params["msgType"] = msgType
+		} else {
+			params["msgType"] = "file"
+		}
 	}
 
 	switch {
