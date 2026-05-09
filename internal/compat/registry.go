@@ -28,6 +28,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/convert"
 	"github.com/spf13/cobra"
@@ -60,12 +61,16 @@ type FlagBinding struct {
 	// parameter. Any of them being set satisfies Required, and the value
 	// is resolved via firstChangedFlag(FlagName, Alias, Aliases...).
 	// Mirrors cmdutil.ValidateRequiredFlagWithAliases / FlagOrFallback.
-	Aliases  []string
-	Short    string
-	Property string
-	Kind     ValueKind
-	Usage    string
-	Required bool
+	Aliases []string
+	// PipelineLocal, when true, marks this binding as CLI-side only — its
+	// value is consumed by the pipeline executor (e.g. as an HTTP
+	// download destination) and NOT forwarded to any MCP tool's params.
+	PipelineLocal bool
+	Short         string
+	Property      string
+	Kind          ValueKind
+	Usage         string
+	Required      bool
 	// Default is the cobra-level flag default value as a string. Parsed
 	// into the Kind-appropriate primitive at registration time. Empty
 	// string keeps the existing zero-value default. This only affects
@@ -82,14 +87,19 @@ type FlagBinding struct {
 type Normalizer func(cmd *cobra.Command, params map[string]any) error
 
 type Route struct {
-	Use        string
-	Aliases    []string
-	Short      string
-	Long       string
-	Example    string
-	Hidden     bool
-	Target     Target
-	Bindings   []FlagBinding
+	Use      string
+	Aliases  []string
+	Short    string
+	Long     string
+	Example  string
+	Hidden   bool
+	Target   Target
+	Bindings []FlagBinding
+	// Pipeline, when non-empty, replaces the single-tool dispatch with a
+	// multi-step orchestration. NewDirectCommand sees this and wires the
+	// pipeline executor into RunE instead of the standard
+	// invoke-then-output flow. See internal/compat/pipeline.go.
+	Pipeline   []market.PipelineStep
 	Normalizer Normalizer
 	// OutputTransform, when non-nil, post-processes the MCP response payload
 	// (rename / drop / columns) before the formatter emits it. Wired up from
@@ -275,6 +285,33 @@ func NewDirectCommand(route Route, runner executor.Runner) *cobra.Command {
 				}
 				// User confirmed, continue execution
 				delete(params, "_blocked")
+			}
+
+			// §pipeline: when the override declares a multi-step pipeline,
+			// dispatch via the pipeline executor instead of the single-tool
+			// invoke-then-output flow. The executor reads flag values by
+			// alias (so $flag.<alias> templates resolve), walks each step,
+			// handles polling + downloads, and returns the last "call"
+			// step's response as the payload to the formatter.
+			if len(route.Pipeline) > 0 {
+				flagValues := extractFlagValuesByAlias(cmd, route.Bindings)
+				resp, err := runPipeline(cmd.Context(), cmd, runner, route, flagValues)
+				if err != nil {
+					return err
+				}
+				result := executor.Result{
+					Invocation: executor.NewCompatibilityInvocation(
+						cobracmd.LegacyCommandPath(cmd),
+						route.Target.CanonicalProduct,
+						"pipeline",
+						params,
+					),
+					Response: resp,
+				}
+				if route.OutputTransform != nil && result.Response != nil {
+					result.Response = route.OutputTransform(result.Response)
+				}
+				return output.WriteCommandPayload(cmd, result, output.FormatJSON)
 			}
 
 			invocation := executor.NewCompatibilityInvocation(
@@ -706,6 +743,13 @@ func CollectBindings(cmd *cobra.Command, bindings []FlagBinding, existing map[st
 	}
 	params := make(map[string]any)
 	for _, binding := range bindings {
+		// Pipeline-local flags exist purely for the pipeline executor
+		// (e.g. --output destination paths) and must never be forwarded
+		// to MCP tools as params, otherwise the upstream API would
+		// either reject the unknown field or silently store junk.
+		if binding.PipelineLocal {
+			continue
+		}
 		if binding.Positional {
 			// Pure positional (no flag aliases) is handled by
 			// collectPositionalBindings. Dual-mode positional bindings
