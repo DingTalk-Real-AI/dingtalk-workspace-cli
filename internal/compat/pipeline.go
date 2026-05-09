@@ -149,6 +149,18 @@ func executePipelineCall(
 		if result.Response == nil {
 			return map[string]any{}, nil
 		}
+		// Fail-fast on MCP business errors. Pre-execution validation (cobra
+		// MarkFlagRequired) only checks that the flag was set, not that
+		// the value is non-empty — so a `--required-flag ""` reaches here
+		// and the upstream tool rejects with errorCode. Without this check
+		// the pipeline proceeds to poll/download and either spins until
+		// PollTimeout or burns through retries.
+		if errCode := getDotPath(result.Response, "content.errorCode"); errCode != nil && fmt.Sprint(errCode) != "" {
+			msg := getDotPath(result.Response, "content.errorMessage")
+			return nil, apperrors.NewValidation(fmt.Sprintf(
+				"%s rejected: %s — %v", step.Tool, errCode, msg,
+			))
+		}
 		return result.Response, nil
 	}
 
@@ -355,12 +367,16 @@ func inferFilenameFromURL(rawURL string) string {
 }
 
 // inferJobIDFromContext walks prior step outputs looking for a `jobId`
-// field, so the synthetic download response can echo it back to the user.
-// Returns "" when no jobId is present anywhere in prior responses.
+// field at top level or one level under common MCP wrappers ("content" /
+// "result"), so the synthetic download response can echo it back to the
+// user. Returns "" when no jobId is present anywhere in prior responses.
 func inferJobIDFromContext(pctx *pipelineCtx) any {
+	candidates := []string{"jobId", "content.jobId", "result.jobId"}
 	for i := len(pctx.stepOutputs) - 1; i >= 0; i-- {
-		if v := pctx.stepOutputs[i]["jobId"]; v != nil {
-			return v
+		for _, p := range candidates {
+			if v := getDotPath(pctx.stepOutputs[i], p); v != nil && fmt.Sprint(v) != "" {
+				return v
+			}
 		}
 	}
 	return ""
