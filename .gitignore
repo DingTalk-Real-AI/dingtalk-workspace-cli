@@ -31,3 +31,5 @@ _docs
 dws.zip
 *.code-workspace
 /dingtalk-workspace.zip
+
+pre_mcp_discovery.json
