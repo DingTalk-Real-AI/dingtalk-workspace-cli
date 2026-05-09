@@ -220,6 +220,56 @@ type CLIToolOverride struct {
 	// fields (Flags / BodyWrapper / IsSensitive / ServerOverride) are
 	// ignored. Use for deprecated leaf commands that moved to a new path.
 	RedirectTo string `json:"redirectTo,omitempty"`
+	// Pipeline declares a multi-step orchestration: each step calls one
+	// MCP tool, with subsequent steps able to reference prior step outputs
+	// in their argument templates. PollUntilField/Value turn a step into a
+	// polling loop (for async jobs); type:"download" turns a step into an
+	// HTTP download sink that writes to a CLI-local --output flag. When
+	// Pipeline is non-empty, dispatch ignores the parent toolOverrides map
+	// key (no single "primary tool"); the executor walks the steps in
+	// order. CLI surface (CLIName / Group / Flags) still comes from the
+	// parent override; flags can be marked PipelineLocal=true to be
+	// consumed by the executor without being forwarded to MCP tools.
+	//
+	// See internal/compat/pipeline.go for the executor + envelope examples.
+	Pipeline []PipelineStep `json:"pipeline,omitempty"`
+}
+
+// PipelineStep declares one step in a multi-step CLIToolOverride.Pipeline.
+// Templates supported in Args / DownloadURLField:
+//
+//	$flag.<aliasName>      — value of the user's CLI flag whose alias is
+//	                         <aliasName> (resolved at dispatch time).
+//	$step.<idx>.<dotPath>  — field from a prior step's response, e.g.
+//	                         "$step.0.jobId" or "$step.1.result.url".
+//	literal value          — passed through unchanged.
+type PipelineStep struct {
+	// Type controls dispatch. Empty / "call" invokes Tool as an MCP tool.
+	// "download" treats this step as an HTTP GET sink (no MCP tool is
+	// invoked); URL is resolved from DownloadURLField.
+	Type string `json:"type,omitempty"`
+	// Tool is the MCP tool name to invoke for type=="call".
+	Tool string `json:"tool,omitempty"`
+	// Args maps MCP tool parameter names to template strings.
+	Args map[string]string `json:"args,omitempty"`
+	// PollUntilField, when non-empty (with PollUntilValue), turns this
+	// step into a polling loop: invoke repeatedly with the same Args
+	// until response[<PollUntilField>] equals PollUntilValue (string
+	// compare). Use for async-job patterns where a status field
+	// transitions to a terminal value (e.g. "done" / "succeeded").
+	PollUntilField  string `json:"pollUntilField,omitempty"`
+	PollUntilValue  string `json:"pollUntilValue,omitempty"`
+	PollIntervalSec int    `json:"pollIntervalSec,omitempty"` // default 2 when polling
+	PollTimeoutSec  int    `json:"pollTimeoutSec,omitempty"`  // default 300 when polling
+	// DownloadURLField (type=="download") is a $step.X.field template
+	// that resolves to an HTTP URL. The body is fetched via GET and
+	// written to the path given by OutputFlag's value. If OutputFlag's
+	// value is empty, the URL is printed to stdout for the user.
+	DownloadURLField string `json:"downloadURLField,omitempty"`
+	// OutputFlag (type=="download") names the CLI flag (alias) whose
+	// user-supplied value is the local destination path. When the path
+	// is a directory, the filename is inferred from the URL's basename.
+	OutputFlag string `json:"outputFlag,omitempty"`
 }
 
 // CLIFlagOverride describes how to map an MCP parameter to a CLI flag.
@@ -269,6 +319,12 @@ type CLIFlagOverride struct {
 	// Resolution comes from edition.Hooks.RuntimeDefaults; open-source core
 	// only recognises the placeholder set. See schema v3 §2.3.
 	RuntimeDefault string `json:"runtimeDefault,omitempty"`
+	// PipelineLocal, when true, marks this flag as CLI-side only — its
+	// value is consumed by the pipeline executor (e.g. as an HTTP
+	// download destination) and NOT forwarded to any MCP tool's params.
+	// Only meaningful when the enclosing CLIToolOverride.Pipeline is set.
+	// Use for flags like `--output` that describe local destination paths.
+	PipelineLocal bool `json:"pipelineLocal,omitempty"`
 }
 
 type CLITool struct {
