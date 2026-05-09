@@ -227,14 +227,11 @@ func directRuntimeEndpoint(productID, toolName string) (string, bool) {
 	te := dynamicToolEndpoints
 	dynamicMu.RUnlock()
 
-	// Priority 1: tool-level endpoint (resolves multi-endpoint products).
-	if tool := strings.TrimSpace(toolName); tool != "" && te != nil {
-		if endpoint, ok := te[tool]; ok {
-			return endpoint, true
-		}
-	}
-
-	// Priority 2: product-level endpoint.
+	// Priority 1: product-level endpoint.
+	// When the caller already knows the productID (e.g. "drive"), the product
+	// endpoint is authoritative. This prevents cross-product tool name
+	// collisions (e.g. both "drive" and "doc" register "create_folder") from
+	// routing the request to the wrong MCP server. See issue #219.
 	for _, candidate := range []string{strings.TrimSpace(productID), normalized} {
 		if candidate == "" {
 			continue
@@ -243,6 +240,16 @@ func directRuntimeEndpoint(productID, toolName string) (string, bool) {
 			if endpoint, ok := de[candidate]; ok {
 				return endpoint, true
 			}
+		}
+	}
+
+	// Priority 2: tool-level endpoint (fallback for unknown productID).
+	// This path is used when the caller does not know the productID but has a
+	// tool name, e.g. in helper invocations or plugin routes where only the
+	// tool name is available.
+	if tool := strings.TrimSpace(toolName); tool != "" && te != nil {
+		if endpoint, ok := te[tool]; ok {
+			return endpoint, true
 		}
 	}
 

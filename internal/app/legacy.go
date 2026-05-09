@@ -464,6 +464,8 @@ func ipv4HTTPClient(timeout time.Duration) *http.Client {
 	return &http.Client{
 		Timeout: timeout,
 		Transport: &http.Transport{
+			// Honour HTTP_PROXY / HTTPS_PROXY / NO_PROXY env vars (#236).
+			Proxy: http.ProxyFromEnvironment,
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				return dialer.DialContext(ctx, "tcp4", addr)
 			},

@@ -19,7 +19,15 @@ const (
 )
 
 // knownSkillDirs lists all known Agent skill directories (relative to $HOME).
-// Kept in sync with build/npm/install.js AGENT_DIRS.
+// Kept in sync with:
+//   - build/npm/install.js                                  AGENT_DIRS
+//   - scripts/install.sh                                    for-in list
+//   - scripts/install.ps1                                   $AgentDirs
+//   - scripts/install-skills.sh                             for-in list
+//   - build/homebrew.rb.tmpl                                targets
+//   - test/scripts/package_script_test.go                   expectedPackagedSkillTargets
+//   - scripts/release/verify-package-managers.sh            HOME_AGENT_PARENTS / HOME_SKILL_TARGETS
+//
 // The first entry (.agents/skills) is always updated; subsequent entries are
 // only updated when their parent directory already exists.
 var knownSkillDirs = []string{
@@ -36,6 +44,7 @@ var knownSkillDirs = []string{
 	".kiro/skills",
 	".trae/skills",
 	".openclaw/skills",
+	".hermes/skills",
 }
 
 // skillDirBlacklist contains parent directories whose skills are managed by

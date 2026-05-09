@@ -37,6 +37,7 @@ HOME_AGENT_PARENTS="
 .kiro
 .trae
 .openclaw
+.hermes
 "
 HOME_SKILL_TARGETS="
 .agents/skills/dws
@@ -52,6 +53,7 @@ HOME_SKILL_TARGETS="
 .kiro/skills/dws
 .trae/skills/dws
 .openclaw/skills/dws
+.hermes/skills/dws
 "
 cleanup() {
   if command -v brew >/dev/null 2>&1; then
