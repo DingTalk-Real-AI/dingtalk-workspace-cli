@@ -173,8 +173,16 @@ type CLIOutputFormat struct {
 
 // CLIToolOverride maps an MCP tool to a CLI command with flag aliases and transforms.
 type CLIToolOverride struct {
-	CLIName     string `json:"cliName"`
-	Description string `json:"description,omitempty"`
+	CLIName string `json:"cliName"`
+	// CLIAliases registers additional cobra command aliases for the same MCP
+	// tool, so the leaf command can be invoked under multiple names without
+	// duplicating the override. Mirrors cobra.Command.Aliases. Each alias is
+	// added to the cobra Aliases slice; conflicts with existing siblings are
+	// silently ignored by cobra. Use for command-name normalisation (e.g.
+	// `range read` accepts `range get` as an alias) or hardcoded-command
+	// migration paths. Empty / nil means no extra aliases.
+	CLIAliases  []string `json:"cliAliases,omitempty"`
+	Description string   `json:"description,omitempty"`
 	// Example, when non-empty, is wired to cobra.Command.Example to render
 	// the "Examples:" section in --help. Mirrors hardcoded helper commands'
 	// Example field (e.g. wukong/products/oa.go list-forms). Empty value

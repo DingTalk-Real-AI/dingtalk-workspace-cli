@@ -163,9 +163,12 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 			}
 
 			route := Route{
-				Use:   cliName,
-				Short: short,
-				Long:  long,
+				Use: cliName,
+				// CLIAliases register additional cobra command aliases for the
+				// same MCP tool. Empty / nil means no extra names.
+				Aliases: append([]string(nil), override.CLIAliases...),
+				Short:   short,
+				Long:    long,
 				// Preserve left-side indentation: cobra's Examples template
 				// renders {{.Example}} verbatim, and hardcoded helper commands
 				// rely on a 2-space prefix to look indented under "Examples:".
