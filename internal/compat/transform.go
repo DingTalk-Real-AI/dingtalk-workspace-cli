@@ -26,7 +26,8 @@ import (
 )
 
 // ApplyTransform applies a named transform rule to a value.
-// Supported transforms: iso8601_to_millis, csv_to_array, json_parse, enum_map.
+// Supported transforms: iso8601_to_millis, csv_to_array, json_parse,
+// json_parse_strict, enum_map.
 func ApplyTransform(value any, transform string, args map[string]any) (any, error) {
 	switch strings.TrimSpace(transform) {
 	case "":
@@ -37,6 +38,8 @@ func ApplyTransform(value any, transform string, args map[string]any) (any, erro
 		return transformCSVToArray(value)
 	case "json_parse":
 		return transformJSONParse(value)
+	case "json_parse_strict":
+		return transformJSONParseStrict(value)
 	case "enum_map":
 		return transformEnumMap(value, args)
 	default:
@@ -149,6 +152,30 @@ func transformJSONParse(value any) (any, error) {
 			"quote the whole value and use `[{key: value, ...}]` for ad-hoc input, " +
 			"or pass `@path/to/file.json` to read from a file",
 	)
+}
+
+// transformJSONParseStrict is the strict variant of json_parse: only accepts
+// well-formed JSON, rejecting input that the YAML fallback would otherwise
+// silently coerce to a scalar string. Use when the upstream tool requires a
+// structured array/object value and "garbage in → empty out" is unacceptable.
+func transformJSONParseStrict(value any) (any, error) {
+	s, ok := toString(value)
+	if !ok {
+		return value, nil
+	}
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return value, nil
+	}
+	var parsed any
+	if err := json.Unmarshal([]byte(s), &parsed); err != nil {
+		return nil, apperrors.NewValidation(
+			"json_parse_strict: input is not valid JSON; " +
+				"this transform rejects YAML-style ad-hoc input — quote the whole value " +
+				"as strict JSON (e.g. '[{\"key\":\"value\"}]') or use `json_parse` for YAML-tolerant parsing",
+		)
+	}
+	return parsed, nil
 }
 
 func transformEnumMap(value any, args map[string]any) (any, error) {
