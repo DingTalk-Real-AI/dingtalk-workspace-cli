@@ -58,8 +58,6 @@ func newUpgradeCommand() *cobra.Command {
   dws upgrade -y                 # 跳过确认直接升级`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// 嵌入式发行版（如 wukong real）禁止走开源自升级链路：
-			// 二进制由宿主分发并固定在受控路径，CLI 自替换会破坏宿主集成。
 			if h := edition.Get(); h != nil && h.IsEmbedded {
 				name := h.Name
 				if name == "" {
