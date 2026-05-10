@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **`dws chat message send` to a single chat failed with a misleading "发群服务窗会话消息失败" when `--title` was omitted** — the `send_direct_message_as_user` tool requires a title at the business layer, but the `--title` flag was documented as "可选" (optional) and one of the help examples sent a direct message without it, so callers (humans and agents alike) hit a cryptic API error instead of a clear validation message. The CLI now validates `--title` up front for `--user` / `--open-dingtalk-id` sends (`--title is required for direct messages`), and the long help, flag description, examples, and `skills/references/products/chat.md` now state that the title is required for direct messages and optional for group messages.
+
 ## [1.0.23] - 2026-05-08
 
 A single fix for HTTP proxy support across the CLI's custom HTTP transports. No behaviour changes elsewhere.
