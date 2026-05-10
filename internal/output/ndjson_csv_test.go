@@ -69,16 +69,80 @@ func TestWriteNDJSON(t *testing.T) {
 	}
 }
 
-// TODO(#252): replace this with real coverage once writeCSV is implemented —
-// happy-path list (incl. a comma-bearing and a CJK field), empty list, and the
-// non-list fallback. For now it just pins the not-implemented contract.
-func TestWriteCSVNotImplementedYet(t *testing.T) {
-	var buf bytes.Buffer
-	err := Write(&buf, FormatCSV, []any{map[string]any{"id": "1"}})
-	if err == nil {
-		t.Fatal("expected -f csv to return a not-implemented error; got nil — did you implement writeCSV? then update this test (#252)")
+func TestWriteCSV(t *testing.T) {
+	cases := []struct {
+		name    string
+		payload any
+		want    string
+	}{
+		{
+			// Union of keys (sorted), missing values → empty cells, a field with
+			// a comma gets quoted, CJK passes through verbatim, a nested array is
+			// rendered as compact JSON with its quotes CSV-escaped.
+			name: "list of objects",
+			payload: []any{
+				map[string]any{"id": "1", "name": "张三"},
+				map[string]any{"id": "2", "name": "Bob, Jr."},
+				map[string]any{"id": "3", "tags": []any{"x", "y"}},
+			},
+			want: "id,name,tags\n" +
+				"1,张三,\n" +
+				"2,\"Bob, Jr.\",\n" +
+				"3,,\"[\"\"x\"\",\"\"y\"\"]\"\n",
+		},
+		{
+			// {records:[...], total:N}: the list becomes the table, the sibling
+			// metadata (total) is dropped.
+			name: "wrapped list with metadata",
+			payload: map[string]any{
+				"records": []any{map[string]any{"id": "1"}, map[string]any{"id": "2"}},
+				"total":   2,
+			},
+			want: "id\n1\n2\n",
+		},
+		{
+			// A plain object → two-column key,value CSV with keys sorted.
+			name:    "single object",
+			payload: map[string]any{"ok": true, "name": "x"},
+			want:    "key,value\nname,x\nok,true\n",
+		},
+		{
+			name:    "scalar",
+			payload: "hello",
+			want:    "hello\n",
+		},
 	}
-	if !strings.Contains(err.Error(), "not implemented") {
-		t.Errorf("error = %q, want it to mention 'not implemented'", err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := Write(&buf, FormatCSV, tc.payload); err != nil {
+				t.Fatalf("Write(csv) error = %v", err)
+			}
+			if got := buf.String(); got != tc.want {
+				t.Errorf("Write(csv) =\n%q\nwant\n%q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestWriteCSVComposesWithFields guards that --fields projection (applied by
+// WriteFiltered before Write) narrows the CSV columns.
+func TestWriteCSVComposesWithFields(t *testing.T) {
+	payload := map[string]any{
+		"items": []any{
+			map[string]any{"id": "1", "name": "Alice", "secret": "s1"},
+			map[string]any{"id": "2", "name": "Bob", "secret": "s2"},
+		},
+	}
+	var buf bytes.Buffer
+	if err := WriteFiltered(&buf, FormatCSV, payload, "id,name", ""); err != nil {
+		t.Fatalf("WriteFiltered(csv) error = %v", err)
+	}
+	got := buf.String()
+	if strings.Contains(got, "secret") || strings.Contains(got, "s1") {
+		t.Errorf("--fields did not drop the secret column; got:\n%s", got)
+	}
+	if !strings.Contains(got, "id,name") || !strings.Contains(got, "Alice") {
+		t.Errorf("expected projected columns id,name with values; got:\n%s", got)
 	}
 }

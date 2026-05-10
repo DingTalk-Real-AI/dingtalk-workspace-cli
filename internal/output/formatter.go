@@ -36,8 +36,8 @@ const (
 	// FormatNDJSON emits one JSON object per line — friendly for streaming /
 	// piping list results into downstream tools. See ndjson.go.
 	FormatNDJSON Format = "ndjson"
-	// FormatCSV emits comma-separated values for list-shaped results — friendly
-	// for spreadsheets and non-technical consumers. See csv.go (#252, WIP).
+	// FormatCSV emits RFC-4180 comma-separated values for list-shaped results —
+	// friendly for spreadsheets and non-technical consumers. See csv.go.
 	FormatCSV Format = "csv"
 )
 

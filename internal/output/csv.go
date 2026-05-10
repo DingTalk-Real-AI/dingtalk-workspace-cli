@@ -14,32 +14,95 @@
 package output
 
 import (
-	"fmt"
+	"encoding/csv"
 	"io"
 )
 
-// writeCSV renders list-shaped results as RFC-4180 CSV.
+// writeCSV renders a payload as RFC-4180 CSV.
 //
-// TODO(#252): implement. Planned approach (mirrors how `-f table` already
-// flattens results, so reuse those helpers):
+// It mirrors the shape decisions `-f table` already makes (same helpers:
+// normalizePayload / unwrapPrimaryObject / extractRowsFromMap / rowsFromSlice /
+// formatValue), so column order and value flattening stay consistent between
+// the two formats:
 //
-//  1. Locate the row list with the existing helpers — extractRowsFromMap /
-//     rowsFromSlice in formatter.go already turn `{items:[{...},...]}` (or a
-//     bare `[{...},...]`) into (headers []string, rows [][]string). Reuse them
-//     verbatim so table and csv agree on column order and flattening rules.
-//  2. Write headers as the first record, then each row, via encoding/csv.Writer
-//     (it handles quoting/escaping of commas, quotes and newlines for us).
-//  3. Nested objects / arrays in a cell: render as compact JSON (same as the
-//     table renderer does today) so the column count stays stable.
-//  4. Non-list payloads (a single object, a scalar): emit a two-column
-//     key,value CSV — or return a clear error telling the user `-f csv` only
-//     applies to list results. Pick one and cover it in the test.
-//  5. Tests in csv_test.go: a happy-path list (incl. a field containing a
-//     comma and a field containing CJK text), an empty list (headers only?),
-//     and the non-list fallback. Wire `--fields` projection through as well.
+//   - a list of objects — either a bare [{...},...] or wrapped under a
+//     well-known key ({items|results|data|records|...}) — becomes a header row
+//     plus one row per element. The union of keys (sorted) is the column set;
+//     missing values are empty cells; nested objects/arrays render as compact
+//     JSON in the cell. Any sibling metadata of the list (total, hasMore, ...)
+//     is dropped — CSV is the tabular slice, nothing else.
+//   - a single object becomes a two-column `key,value` CSV.
+//   - a non-uniform list or a scalar becomes a single-column `value` CSV.
 //
-// Until then, fail loudly rather than silently degrading to JSON so callers
-// know the format isn't ready yet.
-func writeCSV(_ io.Writer, _ any) error {
-	return fmt.Errorf("output format %q is not implemented yet — see https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/issues/252", FormatCSV)
+// `--fields` projection composes for free: WriteFiltered applies SelectFields
+// before Write reaches us, so the rows are already narrowed.
+//
+// encoding/csv.Writer handles quoting/escaping of commas, double quotes and
+// embedded newlines; cell text goes through formatValue (which also strips
+// terminal control sequences, same as the table renderer).
+func writeCSV(w io.Writer, payload any) error {
+	normalized, err := normalizePayload(payload)
+	if err != nil {
+		return err
+	}
+
+	cw := csv.NewWriter(w)
+
+	switch typed := normalized.(type) {
+	case map[string]any:
+		if inner, ok := unwrapPrimaryObject(typed); ok {
+			return writeKeyValueCSV(cw, inner)
+		}
+		if headers, rows, _, ok := extractRowsFromMap(typed); ok {
+			return writeTableCSV(cw, headers, rows)
+		}
+		return writeKeyValueCSV(cw, typed)
+	case []any:
+		headers, rows, _ := rowsFromSlice(typed)
+		return writeTableCSV(cw, headers, rows)
+	case nil:
+		// Nothing to write — emit an empty document rather than erroring.
+		cw.Flush()
+		return cw.Error()
+	default:
+		// Scalar: a single-cell, single-row CSV.
+		if err := cw.Write([]string{formatValue(normalized)}); err != nil {
+			return err
+		}
+		cw.Flush()
+		return cw.Error()
+	}
+}
+
+func writeTableCSV(cw *csv.Writer, headers []string, rows [][]string) error {
+	if err := cw.Write(headers); err != nil {
+		return err
+	}
+	for _, row := range rows {
+		// rowsFromSlice / extractRowsFromMap already guarantee
+		// len(row) == len(headers), but stay defensive against future callers.
+		if len(row) != len(headers) {
+			padded := make([]string, len(headers))
+			copy(padded, row)
+			row = padded
+		}
+		if err := cw.Write(row); err != nil {
+			return err
+		}
+	}
+	cw.Flush()
+	return cw.Error()
+}
+
+func writeKeyValueCSV(cw *csv.Writer, m map[string]any) error {
+	if err := cw.Write([]string{"key", "value"}); err != nil {
+		return err
+	}
+	for _, key := range sortedMapKeys(m) {
+		if err := cw.Write([]string{key, formatValue(m[key])}); err != nil {
+			return err
+		}
+	}
+	cw.Flush()
+	return cw.Error()
 }
