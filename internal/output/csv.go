@@ -30,7 +30,11 @@ import (
 //     plus one row per element. The union of keys (sorted) is the column set;
 //     missing values are empty cells; nested objects/arrays render as compact
 //     JSON in the cell. Any sibling metadata of the list (total, hasMore, ...)
-//     is dropped — CSV is the tabular slice, nothing else.
+//     is broadcast as extra trailing columns, repeated on every row, so a CSV
+//     consumer never loses it (CSV has no "two tables in one file" concept the
+//     way the table renderer's footer does). Meta keys that collide with a data
+//     column are skipped. An empty list still emits the header plus one row of
+//     empty data cells carrying just the meta values.
 //   - a single object becomes a two-column `key,value` CSV.
 //   - a non-uniform list or a scalar becomes a single-column `value` CSV.
 //
@@ -53,7 +57,8 @@ func writeCSV(w io.Writer, payload any) error {
 		if inner, ok := unwrapPrimaryObject(typed); ok {
 			return writeKeyValueCSV(cw, inner)
 		}
-		if headers, rows, _, ok := extractRowsFromMap(typed); ok {
+		if headers, rows, meta, ok := extractRowsFromMap(typed); ok {
+			headers, rows = broadcastMeta(headers, rows, meta)
 			return writeTableCSV(cw, headers, rows)
 		}
 		return writeKeyValueCSV(cw, typed)
@@ -92,6 +97,46 @@ func writeTableCSV(cw *csv.Writer, headers []string, rows [][]string) error {
 	}
 	cw.Flush()
 	return cw.Error()
+}
+
+// broadcastMeta appends the list's sibling metadata (total, hasMore, ...) as
+// trailing columns repeated on every row. Meta keys that collide with an
+// existing data column are skipped. If there are no rows but there is meta, a
+// single row of empty data cells is emitted so the meta values aren't lost.
+func broadcastMeta(headers []string, rows [][]string, meta map[string]any) ([]string, [][]string) {
+	if len(meta) == 0 {
+		return headers, rows
+	}
+	existing := make(map[string]bool, len(headers))
+	for _, h := range headers {
+		existing[h] = true
+	}
+	var metaKeys []string
+	var metaVals []string
+	for _, k := range sortedMapKeys(meta) {
+		if existing[k] {
+			continue
+		}
+		metaKeys = append(metaKeys, k)
+		metaVals = append(metaVals, formatValue(meta[k]))
+	}
+	if len(metaKeys) == 0 {
+		return headers, rows
+	}
+
+	outHeaders := append(append([]string{}, headers...), metaKeys...)
+	if len(rows) == 0 {
+		emptyData := make([]string, len(headers))
+		return outHeaders, [][]string{append(emptyData, metaVals...)}
+	}
+	outRows := make([][]string, len(rows))
+	for i, r := range rows {
+		nr := make([]string, 0, len(outHeaders))
+		nr = append(nr, r...)
+		nr = append(nr, metaVals...)
+		outRows[i] = nr
+	}
+	return outHeaders, outRows
 }
 
 func writeKeyValueCSV(cw *csv.Writer, m map[string]any) error {

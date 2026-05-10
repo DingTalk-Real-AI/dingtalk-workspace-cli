@@ -91,14 +91,25 @@ func TestWriteCSV(t *testing.T) {
 				"3,,\"[\"\"x\"\",\"\"y\"\"]\"\n",
 		},
 		{
-			// {records:[...], total:N}: the list becomes the table, the sibling
-			// metadata (total) is dropped.
+			// {records:[...], total:N}: the list becomes the table; sibling
+			// metadata (total) is broadcast as a trailing column on every row.
 			name: "wrapped list with metadata",
 			payload: map[string]any{
 				"records": []any{map[string]any{"id": "1"}, map[string]any{"id": "2"}},
 				"total":   2,
 			},
-			want: "id\n1\n2\n",
+			want: "id,total\n1,2\n2,2\n",
+		},
+		{
+			// Empty list + metadata: still emit the header (data + meta) plus a
+			// single row of empty data cells carrying the meta values.
+			name: "empty wrapped list with metadata",
+			payload: map[string]any{
+				"records": []any{},
+				"total":   0,
+				"hasMore": false,
+			},
+			want: "value,hasMore,total\n,false,0\n",
 		},
 		{
 			// A plain object → two-column key,value CSV with keys sorted.
