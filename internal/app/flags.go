@@ -41,7 +41,8 @@ func bindPersistentFlags(cmd *cobra.Command, flags *GlobalFlags) {
 	cmd.PersistentFlags().BoolVar(&flags.Debug, "debug", false, "显示调试日志")
 	cmd.PersistentFlags().BoolVar(&flags.DryRun, "dry-run", false, "预览操作内容，不实际执行")
 	cmd.PersistentFlags().StringVar(&flags.Fields, "fields", "", "筛选输出字段 (逗号分隔, 如: name,id,status)")
-	cmd.PersistentFlags().StringVarP(&flags.Format, "format", "f", "json", "输出格式: json|table|raw|pretty")
+	// TODO(#252): append |csv once writeCSV is implemented in internal/output/csv.go.
+	cmd.PersistentFlags().StringVarP(&flags.Format, "format", "f", "json", "输出格式: json|table|raw|pretty|ndjson")
 	cmd.PersistentFlags().StringVar(&flags.JQ, "jq", "", "jq 表达式过滤输出 (如: '.items[] | .name')")
 	cmd.PersistentFlags().BoolVar(&flags.Mock, "mock", false, "使用 Mock 数据 (开发调试用)")
 	cmd.PersistentFlags().StringVarP(&flags.Output, "output", "o", "", "Write command output to a file")

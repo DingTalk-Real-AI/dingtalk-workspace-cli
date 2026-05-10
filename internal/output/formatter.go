@@ -33,6 +33,12 @@ const (
 	FormatTable  Format = "table"
 	FormatRaw    Format = "raw"
 	FormatPretty Format = "pretty"
+	// FormatNDJSON emits one JSON object per line — friendly for streaming /
+	// piping list results into downstream tools. See ndjson.go.
+	FormatNDJSON Format = "ndjson"
+	// FormatCSV emits comma-separated values for list-shaped results — friendly
+	// for spreadsheets and non-technical consumers. See csv.go (#252, WIP).
+	FormatCSV Format = "csv"
 )
 
 var preferredListKeys = []string{"items", "results", "data", "list", "records", "tools", "servers", "products"}
@@ -78,6 +84,10 @@ func Write(w io.Writer, format Format, payload any) error {
 		return writeTableish(w, payload)
 	case FormatPretty:
 		return writePretty(w, payload)
+	case FormatNDJSON:
+		return writeNDJSON(w, payload)
+	case FormatCSV:
+		return writeCSV(w, payload)
 	default:
 		return WriteJSON(w, payload)
 	}
@@ -128,6 +138,10 @@ func normalizeFormat(raw string, fallback Format) Format {
 		return FormatTable
 	case string(FormatPretty):
 		return FormatPretty
+	case string(FormatNDJSON):
+		return FormatNDJSON
+	case string(FormatCSV):
+		return FormatCSV
 	default:
 		return fallback
 	}
