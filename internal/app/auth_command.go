@@ -57,6 +57,9 @@ func buildAuthCommand() *cobra.Command {
 		newAuthStatusCommand(),
 		newAuthExchangeCommand(),
 		newAuthResetCommand(),
+		// TODO(#253): scopes / check are skeletons — see auth_scopes_command.go.
+		newAuthScopesCommand(),
+		newAuthCheckCommand(),
 	)
 	return cmd
 }
