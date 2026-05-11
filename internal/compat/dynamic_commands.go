@@ -163,9 +163,12 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 			}
 
 			route := Route{
-				Use:   cliName,
-				Short: short,
-				Long:  long,
+				Use: cliName,
+				// CLIAliases register additional cobra command aliases for the
+				// same MCP tool. Empty / nil means no extra names.
+				Aliases: append([]string(nil), override.CLIAliases...),
+				Short:   short,
+				Long:    long,
 				// Preserve left-side indentation: cobra's Examples template
 				// renders {{.Example}} verbatim, and hardcoded helper commands
 				// rely on a 2-space prefix to look indented under "Examples:".
@@ -176,7 +179,12 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 					CanonicalProduct: canonicalProduct,
 					Tool:             toolName,
 				},
-				Bindings:   bindings,
+				Bindings: bindings,
+				// §pipeline: when the envelope declares a multi-step
+				// orchestration, NewDirectCommand reroutes RunE into the
+				// pipeline executor instead of the single-tool flow. The
+				// CLIName / Group / Flags surface above still applies.
+				Pipeline:   append([]market.PipelineStep(nil), override.Pipeline...),
 				Normalizer: normalizer,
 			}
 
@@ -612,10 +620,16 @@ func buildOverrideBindings(override market.CLIToolOverride) ([]FlagBinding, Norm
 		binding := FlagBinding{
 			FlagName: flagName,
 			Aliases:  extraAliases,
-			Short:    strings.TrimSpace(flagOverride.Shorthand),
-			Property: paramName,
-			Kind:     kindFromTypeName(flagOverride.Type),
-			Usage:    usage,
+			// §pipeline: PipelineLocal flags (e.g. `--output` in the
+			// sheet export pipeline) are CLI-side only — they appear in
+			// --help and are bindable, but CollectBindings skips them so
+			// the value never reaches MCP params. The pipeline executor
+			// reads them via extractFlagValuesByAlias.
+			PipelineLocal: flagOverride.PipelineLocal,
+			Short:         strings.TrimSpace(flagOverride.Shorthand),
+			Property:      paramName,
+			Kind:          kindFromTypeName(flagOverride.Type),
+			Usage:         usage,
 			// §P1: Required is preserved for positional bindings too. For
 			// pure positional, cobra arity (MinimumNArgs) enforces presence
 			// at parse time. For dual-mode positional (positional + alias),
