@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **`dws chat message send` 单聊缺 `--title` 时前置校验** (#250) — 单聊（`--user` / `--open-dingtalk-id`）的底层工具 `send_direct_message_as_user` 在 API 层强制要求 title，缺失时返回误导性的 `发群服务窗会话消息失败`。CLI 现在在 `buildChatMessageSendInvocation` 里前置校验，直接返回 `--title is required for direct messages (--user / --open-dingtalk-id)`；同时把 `Long` help、`--title` flag 描述、Example 和 `skills/references/products/chat.md` 全部对齐为「单聊必填，群聊可选」。群聊行为不变。
+
 ## [1.0.25] - 2026-05-11
 
 Two generic envelope-schema enhancements that close gaps the `cli_to_mcp` test suite kept surfacing — both product-agnostic, no hardcoded helper commands.
