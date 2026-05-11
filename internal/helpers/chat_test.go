@@ -67,14 +67,14 @@ func TestChatMessageSendRoutesByDestination(t *testing.T) {
 		},
 		{
 			name:      "user-direct",
-			args:      []string{"--user", "034766", "--text", "hi"},
+			args:      []string{"--user", "034766", "--title", "t", "--text", "hi"},
 			wantTool:  "send_direct_message_as_user",
 			wantKey:   "receiverUserId",
 			wantValue: "034766",
 		},
 		{
 			name:      "open-dingtalk-id-direct",
-			args:      []string{"--open-dingtalk-id", "OP123", "--text", "hi"},
+			args:      []string{"--open-dingtalk-id", "OP123", "--title", "t", "--text", "hi"},
 			wantTool:  "send_direct_message_as_user",
 			wantKey:   "receiverOpenDingTalkId",
 			wantValue: "OP123",
@@ -131,6 +131,16 @@ func TestChatMessageSendRejectsInvalidDestination(t *testing.T) {
 			name:    "empty-text",
 			args:    []string{"--group", "cid-x"},
 			wantErr: "--text (or positional argument) is required",
+		},
+		{
+			name:    "direct-user-without-title",
+			args:    []string{"--user", "034766", "--text", "hi"},
+			wantErr: "--title is required for direct messages",
+		},
+		{
+			name:    "direct-open-dingtalk-id-without-title",
+			args:    []string{"--open-dingtalk-id", "OP123", "--text", "hi"},
+			wantErr: "--title is required for direct messages",
 		},
 	}
 	for _, tc := range cases {

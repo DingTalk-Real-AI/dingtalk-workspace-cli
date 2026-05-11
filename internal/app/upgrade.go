@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
@@ -57,6 +58,14 @@ func newUpgradeCommand() *cobra.Command {
   dws upgrade -y                 # 跳过确认直接升级`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if h := edition.Get(); h != nil && h.IsEmbedded {
+				name := h.Name
+				if name == "" {
+					name = "embedded"
+				}
+				return fmt.Errorf("当前运行在嵌入模式（%s），dws upgrade 已禁用；请通过宿主完成升级", name)
+			}
+
 			yes, _ := cmd.Flags().GetBool("yes")
 			format := resolveUpgradeFormat(cmd)
 
