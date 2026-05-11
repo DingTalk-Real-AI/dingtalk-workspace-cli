@@ -6,10 +6,11 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [1.0.25] - 2026-05-11
 
-Two generic envelope-schema enhancements that close gaps the `cli_to_mcp` test suite kept surfacing — both product-agnostic, no hardcoded helper commands.
+Two generic envelope-schema enhancements that close gaps the `cli_to_mcp` test suite kept surfacing — both product-agnostic, no hardcoded helper commands. Plus a missing skill reference for the already-registered `wiki` product is now shipped.
 
 ### Added
 
+- **`wiki` (知识库) skill reference + product-overview entry** — the wiki product's 7 envelope tools (`wiki.create_wikiSpace`, `wiki.get_wikiSpace`, `wiki.list_wikiSpaces`, `wiki.search_wikiSpaces`, `wiki.add_member`, `wiki.list_member`, `wiki.update_member`, surfaced as `dws wiki space create / get / list / search` and `dws wiki member add / list / update`) have been registered for a while, but no `skills/references/products/wiki.md` shipped with them, so agents had no per-command reference to consult. This release adds the reference doc, registers `wiki` in `skills/SKILL.md`'s 产品总览 table and 意图判断决策树, mentions 知识库 in the skill `description` frontmatter, adds a Wiki row to `README.md` / `README_zh.md` "Key Services", and removes `wiki` from the "Coming soon" callout (which was now stale).
 - **`CLIToolOverride.CLIAliases` envelope field** (#246) — lets a single MCP tool register additional cobra command aliases via envelope JSON (e.g. `range read` also accepts `range get`, `member list` accepts `member ls`). Plumbed through the existing `Route.Aliases → cobra.Command.Aliases` path; sibling conflicts are silently dropped by cobra. Lives in `internal/market/registry.go` + `internal/compat/dynamic_commands.go`.
 - **`json_parse_strict` transform** (#246) — strict-JSON variant of `json_parse` that does **not** fall back to YAML. Use when the upstream tool requires a structured array/object and silently coercing a malformed input to a scalar string would mask a real user error (observed: `filter-view --criteria 'NOT_VALID_JSON'` was being accepted and quietly creating an empty-criteria view). In `internal/compat/transform.go`.
 - **`CLIToolOverride.Pipeline` + pipeline executor** (#247) — a single CLI command can now orchestrate an ordered sequence of MCP tool calls plus optional HTTP-download sinks, declared entirely in envelope JSON. Motivating use case: the "submit-job → poll-status → download-result" pattern (e.g. sheet export) that previously required per-product hardcoded helpers.
