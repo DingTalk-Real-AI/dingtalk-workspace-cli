@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
+## [1.0.25] - 2026-05-11
+
+Two generic envelope-schema enhancements that close gaps the `cli_to_mcp` test suite kept surfacing — both product-agnostic, no hardcoded helper commands.
+
+### Added
+
+- **`CLIToolOverride.CLIAliases` envelope field** (#246) — lets a single MCP tool register additional cobra command aliases via envelope JSON (e.g. `range read` also accepts `range get`, `member list` accepts `member ls`). Plumbed through the existing `Route.Aliases → cobra.Command.Aliases` path; sibling conflicts are silently dropped by cobra. Lives in `internal/market/registry.go` + `internal/compat/dynamic_commands.go`.
+- **`json_parse_strict` transform** (#246) — strict-JSON variant of `json_parse` that does **not** fall back to YAML. Use when the upstream tool requires a structured array/object and silently coercing a malformed input to a scalar string would mask a real user error (observed: `filter-view --criteria 'NOT_VALID_JSON'` was being accepted and quietly creating an empty-criteria view). In `internal/compat/transform.go`.
+- **`CLIToolOverride.Pipeline` + pipeline executor** (#247) — a single CLI command can now orchestrate an ordered sequence of MCP tool calls plus optional HTTP-download sinks, declared entirely in envelope JSON. Motivating use case: the "submit-job → poll-status → download-result" pattern (e.g. sheet export) that previously required per-product hardcoded helpers.
+  - `PipelineStep` supports `type:"call"` (with optional `PollUntilField` / `PollUntilValue` / `PollIntervalSec` / `PollTimeoutSec` for polling loops) and `type:"download"` (resolves `DownloadURLField`, HTTP GETs the body, writes to the path from `OutputFlag`, infers filename for directory paths).
+  - Template language: `$flag.<name>` resolves a user CLI flag by alias; `$step.<idx>.<dotPath>` walks a prior step's response (works through wrapped MCP envelopes); literals pass through.
+  - `CLIFlagOverride.PipelineLocal` marks a flag as CLI-side only so `CollectBindings` skips it (value never reaches MCP params); the pipeline executor still reads it via `extractFlagValuesByAlias`.
+  - Download step emits machine-parseable plain-text lines (`jobId: <id>\n`, `downloadUrl: <url>\n`) alongside the standard JSON envelope, so shell pipelines and regex-based tests can extract key values without JSON parsing.
+
+## [1.0.24] - 2026-05-09
+
+Three small but user-visible safety/usability changes: the embedded distribution now refuses to self-upgrade, the `dws auth login` help text finally matches the actual default flow (loopback, not device), and the release workflow gains a manual fallback trigger.
+
+### Changed
+
+- **`dws upgrade` is blocked in embedded distributions** (#248) — when the CLI is shipped as an embedded asset (e.g. inside another product), `dws upgrade` would happily overwrite the host-managed binary. The upgrade entry point now detects the embedded build flag and exits early with a clear message; covered by `internal/app/upgrade_embedded_guard_test.go`.
+
+### Docs
+
+- **`dws auth login` help text reflects the real default** (#238, fixes #226) — the long help previously claimed "OAuth 设备流 (默认)", but the actual default starts a 127.0.0.1 loopback listener and only switches to device flow when `--device` is passed. SSH-into-headless-Linux users following the old text hit a dead end (remote-side 127.0.0.1 is unreachable from the local browser). Help and two `flagErrorWithSuggestions` messages in `root.go` are realigned: each method is named after its real flag (`OAuth Loopback 流 (默认)` / `OAuth 设备流 (--device)` / `直接提供 Token (--token)`), with an explicit `--device` example for SSH/headless. No behaviour change.
+
+### CI
+
+- **`workflow_dispatch` trigger added to release workflow as a fallback** (#261) — GitHub occasionally drops tag-push events; the release job can now be re-run manually against any tag ref without having to delete and re-push the tag.
+
 ## [1.0.23] - 2026-05-08
 
 A single fix for HTTP proxy support across the CLI's custom HTTP transports. No behaviour changes elsewhere.
