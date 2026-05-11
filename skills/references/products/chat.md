@@ -183,7 +183,7 @@ Flags:
 
 ## message send — 以当前用户身份发消息
 
---group 指定群聊 ID 发群消息；--user 指定用户 userId 发单聊；--open-dingtalk-id 指定用户 openDingTalkId 发单聊。三者只能选其一，不能同时指定。消息内容为位置参数（恰好 1 个），支持 Markdown。必须提供 --title 作为消息标题。
+--group 指定群聊 ID 发群消息；--user 指定用户 userId 发单聊；--open-dingtalk-id 指定用户 openDingTalkId 发单聊。三者只能选其一，不能同时指定。消息内容为位置参数（恰好 1 个），支持 Markdown。单聊消息（--user / --open-dingtalk-id）必须提供 --title 作为消息标题；群聊可选。
 --群聊时可选 --at-all @所有人，或 --at-users 指定成员（仅群聊时生效）。
 --发送图片消息：指定 --media-id（通过 dt_media_upload 工具上传获得），自动设置 msgType=image，此时不需要传文本内容。
 
@@ -192,8 +192,8 @@ Usage:
   dws chat message send [flags] [<text>]
 Example:
   dws chat message send --group <openconversation_id> --text "hello"
-  dws chat message send --user <userId> --text "请查收"
-  dws chat message send --open-dingtalk-id <openDingTalkId> --text "请查收"
+  dws chat message send --user <userId> --title "提醒" --text "请查收"
+  dws chat message send --open-dingtalk-id <openDingTalkId> --title "提醒" --text "请查收"
   dws chat message send --group <openconversation_id> "hello"
   dws chat message send --group <openconversation_id> --title "周报提醒" --text "请大家本周五前提交周报"
   dws chat message send --group <openconversation_id> --at-all "<@all> 请大家注意"

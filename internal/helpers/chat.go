@@ -92,12 +92,13 @@ func newChatMessageSendCommand(runner executor.Runner) *cobra.Command {
 --open-dingtalk-id 指定 openDingTalkId 发单聊 (适用于无法获取 userId 的场景)。
 三者只能选其一，不能同时指定。
 
-消息内容通过 --text 传入，也可作为位置参数；支持 Markdown。必须提供 --title 作为消息标题。
+消息内容通过 --text 传入，也可作为位置参数；支持 Markdown。
+单聊消息（--user / --open-dingtalk-id）必须提供 --title 作为消息标题；群聊可选。
 
 群聊场景下可用 --at-all / --at-users / --at-mobiles 进行 @ 提醒（仅 --group 时生效）。
 注意 --text 中需包含对应的 <@userId> / <@all> 占位符才能在客户端渲染出 @ 效果。`,
 		Example: `  dws chat message send --group <openconversation_id> --text "hello"
-  dws chat message send --user <userId> --text "请查收"
+  dws chat message send --user <userId> --title "提醒" --text "请查收"
   dws chat message send --open-dingtalk-id <openDingTalkId> --title "提醒" --text "请确认"
   dws chat message send --group <openconversation_id> --title "拉群通知" --text "<@uid> 你被 @ 了" --at-users uid`,
 		Args:              cobra.MaximumNArgs(1),
@@ -127,7 +128,7 @@ func newChatMessageSendCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("user", "", "接收人 userId (单聊三选一)")
 	cmd.Flags().String("open-dingtalk-id", "", "接收人 openDingTalkId (单聊三选一)")
 	cmd.Flags().String("text", "", "消息内容，支持 Markdown (也可作位置参数)")
-	cmd.Flags().String("title", "", "消息标题 (可选)")
+	cmd.Flags().String("title", "", "消息标题 (单聊必填，群聊可选)")
 	cmd.Flags().Bool("at-all", false, "@所有人 (仅 --group 群聊生效)")
 	cmd.Flags().String("at-users", "", "按 userId @ 指定成员，逗号分隔 (仅 --group 群聊生效)")
 	cmd.Flags().String("at-mobiles", "", "按手机号 @ 指定成员，逗号分隔 (仅 --group 群聊生效)")
@@ -194,6 +195,12 @@ func buildChatMessageSendInvocation(cmd *cobra.Command, args []string) (map[stri
 	hasAtMobiles := strings.TrimSpace(atMobiles) != ""
 	if !hasGroup && (atAll || hasAtUsers || hasAtMobiles) {
 		return nil, "", apperrors.NewValidation("--at-all / --at-users / --at-mobiles only apply when --group is set")
+	}
+	// Direct-message tools (send_direct_message_as_user) reject an empty title at
+	// the API level with a misleading "发群服务窗会话消息失败" error, so fail loudly
+	// here instead. Group messages do not require a title.
+	if (hasUser || hasOpenID) && strings.TrimSpace(title) == "" {
+		return nil, "", apperrors.NewValidation("--title is required for direct messages (--user / --open-dingtalk-id)")
 	}
 
 	params := map[string]any{"text": text}
