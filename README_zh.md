@@ -413,17 +413,19 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 | 钉盘 | `drive` | 6 | `list` `info` `download` `mkdir` `upload-info` `commit` | 钉盘文件操作：列表、详情、下载、创建文件夹、两阶段上传 |
 | AI 听记 | `minutes` | 19 | `list` `get` `update` `mind-graph` `speaker` `hot-word` `upload` | 听记列表（我创建 / 共享给我）、详情（info / summary / keywords / transcription / todos / batch）、标题/摘要更新、思维导图、发言人替换、热词、上传会话 |
 | 邮箱 | `mail` | 4 | `mailbox` `message` | 邮箱地址列表、KQL 邮件搜索、邮件详情、发送邮件 |
+| 在线电子表格 | `sheet` | 20 | `create` `new` `list` `info` `range` `find` `replace` `append` `merge-cells` `unmerge-cells` `filter-view` `insert-dimension` `delete-dimension` `move-dimension` `update-dimension` `add-dimension` `write-image` | 在线电子表格（`contentType=ALIDOC` / `extension=axls`）：工作表 CRUD、区域读写、单元格合并/取消合并、查找/替换、筛选视图、行列增删改、图片写入、导出 xlsx |
+| 知识库 | `wiki` | 6 | `space` `member` | 知识库管理：空间创建 / 详情 / 列表 / 搜索 + 成员管理 |
 | 开发者文档 | `devdoc` | 1 | `article` | 搜索钉钉开放平台文档 |
 | Raw API | `api` | 1 | — | 直接调用任意钉钉 OpenAPI（api / oapi 双形态），自动管理应用级 Token |
 
-> **14 个产品，163 条命令。** 完整命令清单（带描述与使用场景）：[`docs/command-index.md`](./docs/command-index.md)。运行 `dws --help` 查看顶层命令树，或 `dws <service> --help` 查看子命令。
+> **16 个产品，189 条命令。** 完整命令清单（带描述与使用场景）：[`docs/command-index.md`](./docs/command-index.md)。运行 `dws --help` 查看顶层命令树，或 `dws <service> --help` 查看子命令。
 
 > **关于 `chat bot`**：机器人能力（`send-by-bot` / `recall-by-bot` / `add-bot` / `send-by-webhook` / bot 搜索）已合并到对应的 `chat` 子树下（例如 `dws chat message send-by-bot`、`dws chat group members add-bot`），保持 agent 视角下的命令面扁平易发现。不再有独立的顶层 `bot` 产品。
 
 <details>
 <summary>即将推出</summary>
 
-`conference`（视频会议）· `aiapp`（AI 应用）· `live`（直播）· `wiki`（知识库）
+`conference`（视频会议）· `aiapp`（AI 应用）· `live`（直播）
 
 </details>
 

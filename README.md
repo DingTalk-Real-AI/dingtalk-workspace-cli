@@ -413,17 +413,19 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 | Drive | `drive` | 6 | `list` `info` `download` `mkdir` `upload-info` `commit` | DingTalk drive file ops: list, info, download, create folders, two-phase upload |
 | Minutes | `minutes` | 19 | `list` `get` `update` `mind-graph` `speaker` `hot-word` `upload` | List AI meeting notes (mine / shared), details (info / summary / keywords / transcription / todos / batch), title/summary updates, mind map, speaker replace, hot-word, upload session |
 | Mail | `mail` | 4 | `mailbox` `message` | List mailbox addresses, KQL message search, get full message content, send email |
+| Sheet | `sheet` | 20 | `create` `new` `list` `info` `range` `find` `replace` `append` `merge-cells` `unmerge-cells` `filter-view` `insert-dimension` `delete-dimension` `move-dimension` `update-dimension` `add-dimension` `write-image` | Online spreadsheet (`contentType=ALIDOC` / `extension=axls`): worksheet CRUD, range read/write, cell merge/unmerge, find/replace, filter views, row/column ops, image write, export to xlsx |
+| Wiki | `wiki` | 6 | `space` `member` | Knowledge base management: space create / get / list / search + member management |
 | DevDoc | `devdoc` | 1 | `article` | Search the DingTalk Open Platform documentation |
 | Raw API | `api` | 1 | — | Call any DingTalk OpenAPI directly (api / oapi dual-form), with automatic app-level token management |
 
-> **163 commands across 14 products.** Full listing with descriptions and usage scenarios: [`docs/command-index.md`](./docs/command-index.md). Run `dws --help` for the top-level tree, or `dws <service> --help` for subcommands.
+> **189 commands across 16 products.** Full listing with descriptions and usage scenarios: [`docs/command-index.md`](./docs/command-index.md). Run `dws --help` for the top-level tree, or `dws <service> --help` for subcommands.
 
 > **Note on `chat bot`**: bot capabilities (`send-by-bot` / `recall-by-bot` / `add-bot` / `send-by-webhook` / bot search) are merged into the relevant `chat` subtrees (e.g. `dws chat message send-by-bot`, `dws chat group members add-bot`) so the agent-facing command surface stays flat and discoverable. There is no longer a separate top-level `bot` product.
 
 <details>
 <summary>Coming soon</summary>
 
-`conference` (video) · `aiapp` (AI apps) · `live` (streaming) · `wiki` (knowledge base)
+`conference` (video) · `aiapp` (AI apps) · `live` (streaming)
 
 </details>
 

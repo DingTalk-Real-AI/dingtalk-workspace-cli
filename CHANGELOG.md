@@ -6,7 +6,7 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [1.0.25] - 2026-05-11
 
-Two generic envelope-schema enhancements that close gaps the `cli_to_mcp` test suite kept surfacing — both product-agnostic, no hardcoded helper commands.
+Two generic envelope-schema enhancements that close gaps the `cli_to_mcp` test suite kept surfacing — both product-agnostic, no hardcoded helper commands. The same pipeline plumbing also graduates `sheet` and `wiki` from the README "Coming soon" list to first-class products with full skill references.
 
 ### Added
 
@@ -17,6 +17,10 @@ Two generic envelope-schema enhancements that close gaps the `cli_to_mcp` test s
   - Template language: `$flag.<name>` resolves a user CLI flag by alias; `$step.<idx>.<dotPath>` walks a prior step's response (works through wrapped MCP envelopes); literals pass through.
   - `CLIFlagOverride.PipelineLocal` marks a flag as CLI-side only so `CollectBindings` skips it (value never reaches MCP params); the pipeline executor still reads it via `extractFlagValuesByAlias`.
   - Download step emits machine-parseable plain-text lines (`jobId: <id>\n`, `downloadUrl: <url>\n`) alongside the standard JSON envelope, so shell pipelines and regex-based tests can extract key values without JSON parsing.
+- **`sheet` (在线电子表格) and `wiki` (知识库) graduate to first-class products** — backed by the new Pipeline executor above, the multi-step workflows these products require (notably `dws sheet export` = submit-job → poll-status → download-result) now run natively without per-product hardcoded helpers. Both move out of the README "Coming soon" list:
+  - `sheet` — full coverage for 在线电子表格 (`contentType=ALIDOC`, `extension=axls`): worksheet CRUD, range read/write, cell merge/unmerge, find/replace, filter views, row/column add/remove/move/resize, image write, export to xlsx.
+  - `wiki` — knowledge base management: space `create` / `get` / `list` / `search` + member management.
+  - **Skill docs** — new `skills/references/products/sheet.md` and `skills/references/products/wiki.md` aligned with the existing product reference style (`chat.md`, `aitable.md`, etc.); `skills/SKILL.md` 产品总览 + 意图判断决策树 + `description` field updated to register both products. README.md / README_zh.md "Key Services" tables also gain the two new rows; the "Coming soon" callouts drop `wiki`.
 
 ## [1.0.24] - 2026-05-09
 
