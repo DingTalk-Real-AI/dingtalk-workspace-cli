@@ -157,3 +157,79 @@ func TestWriteCSVComposesWithFields(t *testing.T) {
 		t.Errorf("expected projected columns id,name with values; got:\n%s", got)
 	}
 }
+
+// TestTabularDetectsRealDingTalkEnvelopes guards against shipping a -f csv /
+// -f ndjson that degrades to one-line-key-value for the envelope shapes the
+// real product surface actually returns. Each case is a payload shape observed
+// in production (contact / doc / mail / todo / chat search responses).
+func TestTabularDetectsRealDingTalkEnvelopes(t *testing.T) {
+	cases := []struct {
+		name        string
+		payload     map[string]any
+		wantNDLines int    // expected line count from -f ndjson
+		wantCSVHead string // first header line of -f csv
+	}{
+		{
+			name: "result direct array (contact user search)",
+			payload: map[string]any{
+				"result":  []any{map[string]any{"name": "张三", "userId": "123"}, map[string]any{"name": "李四", "userId": "456"}},
+				"success": true,
+			},
+			wantNDLines: 2,
+			wantCSVHead: "name,userId,success",
+		},
+		{
+			name: "documents top-level (doc search)",
+			payload: map[string]any{
+				"documents":     []any{map[string]any{"nodeId": "n1", "name": "A"}, map[string]any{"nodeId": "n2", "name": "B"}},
+				"hasMore":       true,
+				"nextPageToken": "tok",
+			},
+			wantNDLines: 2,
+			wantCSVHead: "name,nodeId,hasMore,nextPageToken",
+		},
+		{
+			name: "emailAccounts top-level (mail mailbox list)",
+			payload: map[string]any{
+				"emailAccounts": []any{map[string]any{"email": "a@b.com", "type": "ORG"}},
+				"success":       "true",
+			},
+			wantNDLines: 1,
+			wantCSVHead: "email,type,success",
+		},
+		{
+			name: "todoCards under result wrapper (todo task list)",
+			payload: map[string]any{
+				"result": map[string]any{
+					"todoCards": []any{
+						map[string]any{"taskId": "t1", "subject": "做一做"},
+						map[string]any{"taskId": "t2", "subject": "再做一做"},
+					},
+				},
+			},
+			wantNDLines: 2,
+			wantCSVHead: "subject,taskId",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var nd bytes.Buffer
+			if err := Write(&nd, FormatNDJSON, tc.payload); err != nil {
+				t.Fatalf("ndjson write: %v", err)
+			}
+			ndLines := strings.Split(strings.TrimRight(nd.String(), "\n"), "\n")
+			if len(ndLines) != tc.wantNDLines {
+				t.Errorf("ndjson: got %d lines %q, want %d", len(ndLines), ndLines, tc.wantNDLines)
+			}
+
+			var c bytes.Buffer
+			if err := Write(&c, FormatCSV, tc.payload); err != nil {
+				t.Fatalf("csv write: %v", err)
+			}
+			gotHead := strings.SplitN(c.String(), "\n", 2)[0]
+			if gotHead != tc.wantCSVHead {
+				t.Errorf("csv header: got %q, want %q", gotHead, tc.wantCSVHead)
+			}
+		})
+	}
+}

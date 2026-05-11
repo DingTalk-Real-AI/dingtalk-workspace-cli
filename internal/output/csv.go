@@ -54,12 +54,17 @@ func writeCSV(w io.Writer, payload any) error {
 
 	switch typed := normalized.(type) {
 	case map[string]any:
-		if inner, ok := unwrapPrimaryObject(typed); ok {
-			return writeKeyValueCSV(cw, inner)
-		}
+		// Try table extraction first so wrappers around list payloads
+		// (e.g. {result: {todoCards: [...]}}) render as a real table
+		// instead of being peeled by unwrapPrimaryObject and degraded
+		// to key/value rows. unwrapPrimaryObject is then the fallback
+		// for single-object wrappers like {invocation: {...}}.
 		if headers, rows, meta, ok := extractRowsFromMap(typed); ok {
 			headers, rows = broadcastMeta(headers, rows, meta)
 			return writeTableCSV(cw, headers, rows)
+		}
+		if inner, ok := unwrapPrimaryObject(typed); ok {
+			return writeKeyValueCSV(cw, inner)
 		}
 		return writeKeyValueCSV(cw, typed)
 	case []any:
