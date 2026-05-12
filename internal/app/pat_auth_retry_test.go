@@ -936,6 +936,9 @@ func TestHandlePatAuthCheck_JSONModeCanOpenBrowserWithoutTextOutput(t *testing.T
 	if got, _ := data["uri"].(string); got != rawURI {
 		t.Fatalf("data.uri = %q, want verbatim %q", got, rawURI)
 	}
+	if got, _ := data["authorizationUrl"].(string); got != rawURI {
+		t.Fatalf("data.authorizationUrl = %q, want %q", got, rawURI)
+	}
 	if got, ok := data["openBrowser"].(bool); !ok || !got {
 		t.Fatalf("data.openBrowser = %#v, want true", data["openBrowser"])
 	}
@@ -1204,6 +1207,55 @@ func TestHandlePatAuthCheck_OpensOpaqueURIWithoutRebuild(t *testing.T) {
 	}
 	if opened != rawURI {
 		t.Fatalf("opened url = %q, want verbatim %q", opened, rawURI)
+	}
+	if got := buf.String(); !strings.Contains(got, "PAT_AUTHORIZATION_URL="+rawURI) {
+		t.Fatalf("output missing copy-safe PAT_AUTHORIZATION_URL line:\n%s", got)
+	}
+}
+
+func TestHandlePatAuthCheck_NormalizesLegacyHashRouteForBrowserAndOutput(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "")
+	server, configDir := setupHandlePATServer(t, "APPROVED", "test-auth-code")
+	defer server.Close()
+
+	rawURI := "https://open-dev.dingtalk.com/fe/old#%2FpersonalAuthorization%3FflowId%3D56b12fd3201d4efab9a9138672cf4deb%26userCode%3DCFTC-27ZN"
+	wantURL := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3D56b12fd3201d4efab9a9138672cf4deb%26userCode%3DCFTC-27ZN#/personalAuthorization?flowId=56b12fd3201d4efab9a9138672cf4deb&userCode=CFTC-27ZN"
+	var opened string
+	origOpenBrowser := openBrowserFunc
+	openBrowserFunc = func(rawURL string) error {
+		opened = rawURL
+		return nil
+	}
+	t.Cleanup(func() { openBrowserFunc = origOpenBrowser })
+
+	var retryCalled bool
+	mock := &mockRunner{
+		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {
+			retryCalled = true
+			return executor.Result{Response: map[string]any{"ok": true}}, nil
+		},
+	}
+
+	runner := &runtimeRunner{fallback: mock}
+	patErr := &apperrors.PATError{RawJSON: makePATErrorJSONWithURI("flow-legacy-hash", "test-client-id", rawURI)}
+
+	var buf bytes.Buffer
+	_, err := handlePatAuthCheck(context.Background(), runner, executor.Invocation{
+		CanonicalProduct: "test",
+		Tool:             "test_tool",
+	}, patErr, configDir, &buf)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !retryCalled {
+		t.Fatal("expected retry to run after approved PAT flow")
+	}
+	if opened != wantURL {
+		t.Fatalf("opened url = %q, want normalized %q", opened, wantURL)
+	}
+	if got := buf.String(); !strings.Contains(got, "PAT_AUTHORIZATION_URL="+wantURL) {
+		t.Fatalf("output missing normalized PAT_AUTHORIZATION_URL line:\n%s", got)
 	}
 }
 
