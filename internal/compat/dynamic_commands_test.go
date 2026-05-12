@@ -1945,3 +1945,86 @@ func TestBuildDynamicCommands_ParentMergeLeafCollision(t *testing.T) {
 		t.Fatalf("expected exactly one 'send' leaf, got %d", sendCount)
 	}
 }
+
+// TestBuildFlagsFromDetailSchema_FormatEnumAnnotations verifies that the
+// JSON Schema "format" and "enum" hints are copied onto the cobra flag's
+// pflag annotations under x-cli-format / x-cli-enum, so PreParse
+// handlers can use them when deciding whether to split glued tokens.
+func TestBuildFlagsFromDetailSchema_FormatEnumAnnotations(t *testing.T) {
+	t.Parallel()
+
+	servers := []market.ServerDescriptor{
+		{
+			Endpoint: "https://endpoint-calendar",
+			CLI: market.CLIOverlay{
+				ID:      "calendar",
+				Command: "calendar",
+				ToolOverrides: map[string]market.CLIToolOverride{
+					"event_list": {CLIName: "list"},
+				},
+			},
+		},
+	}
+
+	details := map[string][]market.DetailTool{
+		"calendar": {
+			{
+				ToolName: "event_list",
+				ToolRequest: `{"properties":{` +
+					`"start":{"type":"string","format":"date-time","description":"开始时间"},` +
+					`"end":{"type":"string","format":"date-time","description":"结束时间"},` +
+					`"status":{"type":"string","enum":["confirmed","tentative","cancelled"]}` +
+					`}}`,
+			},
+		},
+	}
+
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, details)
+	list := findChild(cmds[0], "list")
+	if list == nil {
+		t.Fatal("list leaf not found")
+	}
+
+	startFlag := list.Flags().Lookup("start")
+	if startFlag == nil {
+		t.Fatal("--start flag missing")
+	}
+	if got := startFlag.Annotations["x-cli-format"]; len(got) != 1 || got[0] != "date-time" {
+		t.Errorf("--start x-cli-format = %v, want [date-time]", got)
+	}
+
+	endFlag := list.Flags().Lookup("end")
+	if endFlag == nil {
+		t.Fatal("--end flag missing")
+	}
+	if got := endFlag.Annotations["x-cli-format"]; len(got) != 1 || got[0] != "date-time" {
+		t.Errorf("--end x-cli-format = %v, want [date-time]", got)
+	}
+
+	statusFlag := list.Flags().Lookup("status")
+	if statusFlag == nil {
+		t.Fatal("--status flag missing")
+	}
+	gotEnum := statusFlag.Annotations["x-cli-enum"]
+	wantEnum := []string{"confirmed", "tentative", "cancelled"}
+	if !equalStringSlice(gotEnum, wantEnum) {
+		t.Errorf("--status x-cli-enum = %v, want %v", gotEnum, wantEnum)
+	}
+	// Status has no format and should not carry x-cli-format.
+	if got := statusFlag.Annotations["x-cli-format"]; len(got) != 0 {
+		t.Errorf("--status should not have x-cli-format, got %v", got)
+	}
+}
+
+// equalStringSlice is a small helper for slice comparison in tests.
+func equalStringSlice(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
