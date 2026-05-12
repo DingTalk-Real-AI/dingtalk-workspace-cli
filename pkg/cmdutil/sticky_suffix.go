@@ -16,6 +16,7 @@ package cmdutil
 import (
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // SuffixLooksLikeValue decides whether a candidate suffix from a glued
@@ -71,11 +72,12 @@ func SuffixLooksLikeValue(suffix, typ, format string, enum []string) bool {
 	case "ipv4", "ipv6", "hostname":
 		return startsWithDigitSuffix(suffix)
 	case "uuid":
-		return isHexRuneSuffix(rune(suffix[0]))
+		first, _ := utf8.DecodeRuneInString(suffix)
+		return isHexRuneSuffix(first)
 	}
 
-	first := rune(suffix[0])
-	if unicode.IsLetter(first) {
+	first, _ := utf8.DecodeRuneInString(suffix)
+	if first == utf8.RuneError || unicode.IsLetter(first) {
 		return false
 	}
 	return true
