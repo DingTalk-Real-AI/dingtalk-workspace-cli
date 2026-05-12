@@ -413,17 +413,19 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 | 钉盘 | `drive` | 6 | `list` `info` `download` `mkdir` `upload-info` `commit` | 钉盘文件操作：列表、详情、下载、创建文件夹、两阶段上传 |
 | AI 听记 | `minutes` | 19 | `list` `get` `update` `mind-graph` `speaker` `hot-word` `upload` | 听记列表（我创建 / 共享给我）、详情（info / summary / keywords / transcription / todos / batch）、标题/摘要更新、思维导图、发言人替换、热词、上传会话 |
 | 邮箱 | `mail` | 4 | `mailbox` `message` | 邮箱地址列表、KQL 邮件搜索、邮件详情、发送邮件 |
+| 在线电子表格 | `sheet` | 34 | `range` `filter-view`（顶层：`create` `new` `list` `info` `find` `replace` `append` `merge-cells` `unmerge-cells` `add-dimension` `insert-dimension` `delete-dimension` `move-dimension` `update-dimension` `write-image` `copy_sheet` `update_sheet` `submit_export_job` `query_export_job` `create_filter` `get_filter` `update_filter` `delete_filter` `set_filter_criteria` `clear_filter_criteria` `sort_filter`） | 在线电子表格（`contentType=ALIDOC`、`extension=axls`）：工作表 CRUD、区域读写/追加、行列操作、合并、查找替换、命名筛选视图 + 表级筛选、写入图片、异步导出（`submit_export_job` + `query_export_job`，v1.0.25 暂无合并的 `export` 命令） |
+| 知识库 | `wiki` | 7 | `space` `member` | 知识库管理：空间 `create` / `get` / `list` / `search` + 成员 `add` / `list` / `update` |
 | 开发者文档 | `devdoc` | 1 | `article` | 搜索钉钉开放平台文档 |
 | Raw API | `api` | 1 | — | 直接调用任意钉钉 OpenAPI（api / oapi 双形态），自动管理应用级 Token |
 
-> **14 个产品，163 条命令。** 完整命令清单（带描述与使用场景）：[`docs/command-index.md`](./docs/command-index.md)。运行 `dws --help` 查看顶层命令树，或 `dws <service> --help` 查看子命令。
+> **16 个产品，204 条命令。** 完整命令清单（带描述与使用场景）：[`docs/command-index.md`](./docs/command-index.md)。运行 `dws --help` 查看顶层命令树，或 `dws <service> --help` 查看子命令。
 
 > **关于 `chat bot`**：机器人能力（`send-by-bot` / `recall-by-bot` / `add-bot` / `send-by-webhook` / bot 搜索）已合并到对应的 `chat` 子树下（例如 `dws chat message send-by-bot`、`dws chat group members add-bot`），保持 agent 视角下的命令面扁平易发现。不再有独立的顶层 `bot` 产品。
 
 <details>
 <summary>即将推出</summary>
 
-`conference`（视频会议）· `aiapp`（AI 应用）· `live`（直播）· `wiki`（知识库）
+`conference`（视频会议）· `aiapp`（AI 应用）· `live`（直播）
 
 </details>
 

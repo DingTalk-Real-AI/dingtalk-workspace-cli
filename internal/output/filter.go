@@ -82,16 +82,21 @@ type dataListLocation struct {
 
 // findDataList walks the object tree looking for the first array of
 // objects under well-known keys. It searches both top-level and one
-// level deep (e.g. result.value, response.items).
+// level deep (e.g. result.value, response.items). The allow-list lives
+// in preferredListKeys (formatter.go) and is shared with the table /
+// csv renderers so all tabular formatters agree on what counts as the
+// data list.
 func findDataList(m map[string]any) *dataListLocation {
-	listKeys := []string{"value", "items", "results", "data", "list", "records", "tools", "servers", "products"}
-
-	// Top-level: {value: [...]}
-	for _, key := range listKeys {
-		if arr, ok := m[key].([]any); ok && len(arr) > 0 {
-			if _, isMap := arr[0].(map[string]any); isMap {
-				return &dataListLocation{list: arr, innerKey: key}
-			}
+	// Top-level: {value: [...]}. Empty arrays under a preferred key still
+	// match so an "empty list + metadata" payload renders as an empty table
+	// (with the meta broadcast) rather than degrading to key/value rows.
+	for _, key := range preferredListKeys {
+		arr, ok := m[key].([]any)
+		if !ok {
+			continue
+		}
+		if len(arr) == 0 || isMapValue(arr[0]) {
+			return &dataListLocation{list: arr, innerKey: key}
 		}
 	}
 
@@ -101,16 +106,23 @@ func findDataList(m map[string]any) *dataListLocation {
 		if !ok {
 			continue
 		}
-		for _, key := range listKeys {
-			if arr, ok := inner[key].([]any); ok && len(arr) > 0 {
-				if _, isMap := arr[0].(map[string]any); isMap {
-					return &dataListLocation{list: arr, outerKey: outerKey, innerKey: key}
-				}
+		for _, key := range preferredListKeys {
+			arr, ok := inner[key].([]any)
+			if !ok {
+				continue
+			}
+			if len(arr) == 0 || isMapValue(arr[0]) {
+				return &dataListLocation{list: arr, outerKey: outerKey, innerKey: key}
 			}
 		}
 	}
 
 	return nil
+}
+
+func isMapValue(v any) bool {
+	_, ok := v.(map[string]any)
+	return ok
 }
 
 // filterSlice applies field filtering to each object element in a

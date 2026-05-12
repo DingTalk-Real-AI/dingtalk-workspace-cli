@@ -33,9 +33,26 @@ const (
 	FormatTable  Format = "table"
 	FormatRaw    Format = "raw"
 	FormatPretty Format = "pretty"
+	// FormatNDJSON emits one JSON object per line — friendly for streaming /
+	// piping list results into downstream tools. See ndjson.go.
+	FormatNDJSON Format = "ndjson"
+	// FormatCSV emits RFC-4180 comma-separated values for list-shaped results —
+	// friendly for spreadsheets and non-technical consumers. See csv.go.
+	FormatCSV Format = "csv"
 )
 
-var preferredListKeys = []string{"items", "results", "data", "list", "records", "tools", "servers", "products"}
+// preferredListKeys is the shared allow-list of keys whose array values are
+// treated as the "data list" by all tabular formatters (-f table / csv /
+// ndjson). It is the single source of truth — findDataList in filter.go
+// reuses it. When adding a new key, prefer real envelope keys observed in
+// production responses over speculative future names.
+var preferredListKeys = []string{
+	// Generic well-known list keys.
+	"value", "items", "results", "data", "list", "records",
+	"tools", "servers", "products",
+	// Envelope keys observed in real DingTalk responses.
+	"result", "documents", "emailAccounts", "todoCards", "events", "messages",
+}
 
 func ResolveFormat(cmd *cobra.Command, fallback Format) Format {
 	if cmd == nil {
@@ -78,6 +95,10 @@ func Write(w io.Writer, format Format, payload any) error {
 		return writeTableish(w, payload)
 	case FormatPretty:
 		return writePretty(w, payload)
+	case FormatNDJSON:
+		return writeNDJSON(w, payload)
+	case FormatCSV:
+		return writeCSV(w, payload)
 	default:
 		return WriteJSON(w, payload)
 	}
@@ -128,6 +149,10 @@ func normalizeFormat(raw string, fallback Format) Format {
 		return FormatTable
 	case string(FormatPretty):
 		return FormatPretty
+	case string(FormatNDJSON):
+		return FormatNDJSON
+	case string(FormatCSV):
+		return FormatCSV
 	default:
 		return fallback
 	}
@@ -261,9 +286,11 @@ func writeTableish(w io.Writer, payload any) error {
 
 	switch typed := normalized.(type) {
 	case map[string]any:
-		if inner, ok := unwrapPrimaryObject(typed); ok {
-			return writeKeyValues(w, inner)
-		}
+		// Try table extraction first so wrappers around list payloads
+		// (e.g. {result: {todoCards: [...]}}) render as a table instead
+		// of being peeled by unwrapPrimaryObject and degraded to key/
+		// value rows. unwrapPrimaryObject remains the fallback for
+		// single-object wrappers like {invocation: {kind, params, ...}}.
 		if headers, rows, meta, ok := extractRowsFromMap(typed); ok {
 			if err := writeTable(w, headers, rows); err != nil {
 				return err
@@ -275,6 +302,9 @@ func writeTableish(w io.Writer, payload any) error {
 				return writeKeyValues(w, meta)
 			}
 			return nil
+		}
+		if inner, ok := unwrapPrimaryObject(typed); ok {
+			return writeKeyValues(w, inner)
 		}
 		return writeKeyValues(w, typed)
 	case []any:
@@ -322,30 +352,52 @@ func unwrapPrimaryObject(payload map[string]any) (map[string]any, bool) {
 	return nil, false
 }
 
+// extractRowsFromMap finds the data list inside a wrapper map and returns it
+// as (headers, rows, meta). It delegates the search to findDataList so the
+// detection rules stay aligned with -f ndjson: top-level under a preferred
+// key, or one level deep under {result|response|data}. Meta is built from
+// every sibling of the list — at both the outer and inner level when the
+// list sits one level deep — so callers like the table renderer's footer and
+// the csv broadcastMeta path see the same key set.
 func extractRowsFromMap(payload map[string]any) ([]string, [][]string, map[string]any, bool) {
-	for _, key := range preferredListKeys {
-		value, ok := payload[key]
-		if !ok {
-			continue
-		}
-		list, ok := value.([]any)
-		if !ok {
-			continue
-		}
-		headers, rows, ok := rowsFromSlice(list)
-		if !ok {
-			continue
-		}
-		meta := make(map[string]any, len(payload)-1)
-		for metaKey, metaValue := range payload {
-			if metaKey == key {
+	loc := findDataList(payload)
+	if loc == nil {
+		return nil, nil, nil, false
+	}
+	headers, rows, ok := rowsFromSlice(loc.list)
+	if !ok {
+		return nil, nil, nil, false
+	}
+	meta := make(map[string]any)
+	if loc.outerKey == "" {
+		for k, v := range payload {
+			if k == loc.innerKey {
 				continue
 			}
-			meta[metaKey] = metaValue
+			meta[k] = v
 		}
-		return headers, rows, meta, true
+	} else {
+		for k, v := range payload {
+			if k == loc.outerKey {
+				continue
+			}
+			meta[k] = v
+		}
+		if inner, ok := payload[loc.outerKey].(map[string]any); ok {
+			for k, v := range inner {
+				if k == loc.innerKey {
+					continue
+				}
+				if _, exists := meta[k]; exists {
+					// Outer wins on key collision so users see the wrapper-level
+					// sibling rather than a clobbered inner one.
+					continue
+				}
+				meta[k] = v
+			}
+		}
 	}
-	return nil, nil, nil, false
+	return headers, rows, meta, true
 }
 
 func rowsFromSlice(items []any) ([]string, [][]string, bool) {

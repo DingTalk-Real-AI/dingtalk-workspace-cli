@@ -364,6 +364,17 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		defer cancel()
 	}
 
+	if err := r.preflightDocDownload(callCtx, tc, endpoint, invocation); err != nil {
+		if patCheck := apperrors.AsPatAuthCheckError(err); patCheck != nil {
+			if IsPatRetrying(ctx) {
+				return executor.Result{}, patCheck
+			}
+			return handlePatAuthCheck(ctx, r, invocation, patCheck, defaultConfigDir(), os.Stderr)
+		}
+		captureRuntimeFailure(invocation, err, err)
+		return executor.Result{}, err
+	}
+
 	callStart := time.Now()
 	callResult, err := tc.CallTool(callCtx, endpoint, invocation.Tool, invocation.Params)
 	RecordTiming(ctx, "mcp_call", time.Since(callStart))
