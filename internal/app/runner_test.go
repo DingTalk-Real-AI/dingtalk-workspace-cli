@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -27,7 +28,10 @@ import (
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	mockmcp "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/mock_mcp"
 )
@@ -321,6 +325,186 @@ func TestResolveIdentityHeadersForwardsAgentCode(t *testing.T) {
 	headers := resolveIdentityHeaders()
 	if got := headers["x-dingtalk-dws-agent-code"]; got != "cursor" {
 		t.Fatalf("x-dingtalk-dws-agent-code = %q, want cursor", got)
+	}
+}
+
+func TestDocDownloadPreflightRejectsAXLSBeforeDownloadPAT(t *testing.T) {
+	setupRuntimeCommandTest(t)
+	t.Setenv("DWS_ALLOW_HTTP_ENDPOINTS", "1")
+	t.Setenv("DWS_TRUSTED_DOMAINS", "*")
+
+	var calls []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		name := jsonRPCToolName(req)
+		calls = append(calls, name)
+		switch name {
+		case docGetDocumentInfoTool:
+			writeJSONRPCToolResult(t, w, req, map[string]any{
+				"success": true,
+				"result": map[string]any{
+					"contentType": "ALIDOC",
+					"extension":   "axls",
+					"nodeType":    "file",
+				},
+			}, false)
+		case docDownloadFileTool:
+			t.Fatalf("download_file should not be called for axls")
+		default:
+			http.Error(w, "unexpected tool "+name, http.StatusBadRequest)
+		}
+	}))
+	defer server.Close()
+
+	runner := runtimeRunnerForHTTPTest(server)
+	_, err := runner.executeInvocation(context.Background(), server.URL, executor.Invocation{
+		CanonicalProduct: docProductID,
+		Tool:             docDownloadFileTool,
+		CanonicalPath:    "doc.download_file",
+		Params:           map[string]any{"nodeId": "axls-node"},
+	})
+	if err == nil {
+		t.Fatal("executeInvocation() error = nil, want axls rejection")
+	}
+	if !strings.Contains(err.Error(), "extension=axls") {
+		t.Fatalf("executeInvocation() error = %v, want extension=axls guidance", err)
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) {
+		t.Fatalf("executeInvocation() error = %T, want *errors.Error", err)
+	}
+	if typed.Category != apperrors.CategoryValidation {
+		t.Fatalf("error category = %q, want validation", typed.Category)
+	}
+	if typed.Reason != "unsupported_alidoc_extension" {
+		t.Fatalf("error reason = %q, want unsupported_alidoc_extension", typed.Reason)
+	}
+	if got := strings.Join(calls, ","); got != docGetDocumentInfoTool {
+		t.Fatalf("tool calls = %q, want only %s", got, docGetDocumentInfoTool)
+	}
+}
+
+func TestDocDownloadPreflightAllowsNonAXLSDownload(t *testing.T) {
+	setupRuntimeCommandTest(t)
+	t.Setenv("DWS_ALLOW_HTTP_ENDPOINTS", "1")
+	t.Setenv("DWS_TRUSTED_DOMAINS", "*")
+
+	var calls []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		name := jsonRPCToolName(req)
+		calls = append(calls, name)
+		switch name {
+		case docGetDocumentInfoTool:
+			writeJSONRPCToolResult(t, w, req, map[string]any{
+				"success": true,
+				"result": map[string]any{
+					"contentType": "DRIVE",
+					"extension":   "xlsx",
+					"nodeType":    "file",
+				},
+			}, false)
+		case docDownloadFileTool:
+			writeJSONRPCToolResult(t, w, req, map[string]any{
+				"resourceUrl": []any{"https://example.invalid/file.xlsx"},
+			}, false)
+		default:
+			http.Error(w, "unexpected tool "+name, http.StatusBadRequest)
+		}
+	}))
+	defer server.Close()
+
+	runner := runtimeRunnerForHTTPTest(server)
+	result, err := runner.executeInvocation(context.Background(), server.URL, executor.Invocation{
+		CanonicalProduct: docProductID,
+		Tool:             docDownloadFileTool,
+		CanonicalPath:    "doc.download_file",
+		Params:           map[string]any{"nodeId": "xlsx-node"},
+	})
+	if err != nil {
+		t.Fatalf("executeInvocation() error = %v", err)
+	}
+	if got := strings.Join(calls, ","); got != docGetDocumentInfoTool+","+docDownloadFileTool {
+		t.Fatalf("tool calls = %q, want preflight then download", got)
+	}
+	content, ok := result.Response["content"].(map[string]any)
+	if !ok {
+		t.Fatalf("response.content = %#v, want map", result.Response["content"])
+	}
+	if _, ok := content["resourceUrl"]; !ok {
+		t.Fatalf("response.content.resourceUrl missing: %#v", content)
+	}
+}
+
+func TestDocDownloadPreflightPATAuthorizationUsesExistingHandler(t *testing.T) {
+	setupRuntimeCommandTest(t)
+	t.Setenv("DWS_ALLOW_HTTP_ENDPOINTS", "1")
+	t.Setenv("DWS_TRUSTED_DOMAINS", "*")
+
+	originalOpenBrowser := openBrowserFunc
+	var openedURI string
+	openBrowserFunc = func(uri string) error {
+		openedURI = uri
+		return nil
+	}
+	t.Cleanup(func() { openBrowserFunc = originalOpenBrowser })
+
+	const authURI = "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3Dflow-1%26userCode%3DCODE#/personalAuthorization?flowId=flow-1&userCode=CODE"
+	var calls []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		name := jsonRPCToolName(req)
+		calls = append(calls, name)
+		switch name {
+		case docGetDocumentInfoTool:
+			writeJSONRPCToolResult(t, w, req, map[string]any{
+				"code": "PAT_MEDIUM_RISK_NO_PERMISSION",
+				"data": map[string]any{
+					"flowId":   "flow-1",
+					"uri":      authURI,
+					"clientId": "client-1",
+				},
+			}, false)
+		case docDownloadFileTool:
+			t.Fatalf("download_file should not be called before preflight PAT authorization")
+		default:
+			http.Error(w, "unexpected tool "+name, http.StatusBadRequest)
+		}
+	}))
+	defer server.Close()
+
+	runner := runtimeRunnerForHTTPTest(server)
+	runner.globalFlags.Format = "json"
+	_, err := runner.executeInvocation(context.Background(), server.URL, executor.Invocation{
+		CanonicalProduct: docProductID,
+		Tool:             docDownloadFileTool,
+		CanonicalPath:    "doc.download_file",
+		Params:           map[string]any{"nodeId": "pat-node"},
+	})
+	if err == nil {
+		t.Fatal("executeInvocation() error = nil, want PAT error")
+	}
+	var patErr *apperrors.PATError
+	if !errors.As(err, &patErr) {
+		t.Fatalf("executeInvocation() error = %T, want *errors.PATError", err)
+	}
+	if openedURI != authURI {
+		t.Fatalf("opened URI = %q, want %q", openedURI, authURI)
+	}
+	if got := strings.Join(calls, ","); got != docGetDocumentInfoTool {
+		t.Fatalf("tool calls = %q, want only %s before PAT authorization", got, docGetDocumentInfoTool)
 	}
 }
 
@@ -656,6 +840,36 @@ func contentScanServer() *mockmcp.Server {
 		},
 	}
 	return mockmcp.MustNewServer(fixture)
+}
+
+func runtimeRunnerForHTTPTest(server *httptest.Server) *runtimeRunner {
+	client := transport.NewClient(server.Client())
+	client.Stderr = &bytes.Buffer{}
+	return &runtimeRunner{
+		transport:   client,
+		globalFlags: &GlobalFlags{Token: "test-token", Timeout: 30},
+	}
+}
+
+func jsonRPCToolName(req map[string]any) string {
+	params, _ := req["params"].(map[string]any)
+	if params == nil {
+		return ""
+	}
+	name, _ := params["name"].(string)
+	return name
+}
+
+func writeJSONRPCToolResult(t *testing.T, w http.ResponseWriter, req map[string]any, content map[string]any, isError bool) {
+	t.Helper()
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      req["id"],
+		"result": map[string]any{
+			"content": content,
+			"isError": isError,
+		},
+	})
 }
 
 func TestClassifyToolResultHookPreemptsBusinessError(t *testing.T) {
