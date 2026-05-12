@@ -16,6 +16,7 @@ package errors
 import (
 	"encoding/json"
 	stderrors "errors"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -749,6 +750,48 @@ func TestPATAuthorizationURL_NormalizesLegacyHashRoute(t *testing.T) {
 
 	if got := PATAuthorizationURL(rawURI); got != want {
 		t.Fatalf("PATAuthorizationURL() = %q, want %q", got, want)
+	}
+}
+
+func TestPATAuthorizationURL_NormalizesLegacyHashRoutePreservesExtraQuery(t *testing.T) {
+	t.Parallel()
+	rawURI := "https://open-dev.dingtalk.com/fe/old#%2FpersonalAuthorization%3FflowId%3D77108a9d0e6f4b74b769c04eb451e7d9%26userCode%3DWSAX-EEF2%26agentCode%3Dcodex%26scene%3Ddesktop%26redirect%3Dhttps%253A%252F%252Fexample.com%252Fcallback%253Fa%253D1"
+
+	got := PATAuthorizationURL(rawURI)
+
+	if got == rawURI {
+		t.Fatal("expected legacy hash route to be normalized")
+	}
+	parsed, err := url.Parse(got)
+	if err != nil {
+		t.Fatalf("parse normalized URL: %v\nurl=%s", err, got)
+	}
+	hash := parsed.Query().Get("hash")
+	if hash == "" {
+		t.Fatalf("expected normalized URL to include hash query, got: %s", got)
+	}
+	if hash != "#"+parsed.Fragment {
+		t.Fatalf("hash query = %q, want fragment route %q", hash, "#"+parsed.Fragment)
+	}
+	rawQuery, ok := strings.CutPrefix(parsed.Fragment, "/personalAuthorization?")
+	if !ok {
+		t.Fatalf("fragment = %q, want personalAuthorization route", parsed.Fragment)
+	}
+	values, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		t.Fatalf("parse normalized route query: %v\nquery=%s", err, rawQuery)
+	}
+	want := map[string]string{
+		"flowId":    "77108a9d0e6f4b74b769c04eb451e7d9",
+		"userCode":  "WSAX-EEF2",
+		"agentCode": "codex",
+		"scene":     "desktop",
+		"redirect":  "https://example.com/callback?a=1",
+	}
+	for key, wantValue := range want {
+		if gotValue := values.Get(key); gotValue != wantValue {
+			t.Fatalf("route query %s = %q, want %q", key, gotValue, wantValue)
+		}
 	}
 }
 

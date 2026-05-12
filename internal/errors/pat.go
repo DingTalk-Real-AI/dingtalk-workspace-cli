@@ -383,14 +383,11 @@ func PATAuthorizationURL(rawURI string) string {
 		return rawURI
 	}
 
-	flowID, userCode := patAuthorizationRouteParams(parsed)
-	if flowID == "" || userCode == "" {
+	routeQuery := patAuthorizationRouteQuery(parsed)
+	if routeQuery.Get("flowId") == "" || routeQuery.Get("userCode") == "" {
 		return rawURI
 	}
 
-	routeQuery := url.Values{}
-	routeQuery.Set("flowId", flowID)
-	routeQuery.Set("userCode", userCode)
 	route := "/personalAuthorization?" + routeQuery.Encode()
 
 	next := *parsed
@@ -402,31 +399,31 @@ func PATAuthorizationURL(rawURI string) string {
 	return next.String()
 }
 
-func patAuthorizationRouteParams(parsed *url.URL) (string, string) {
+func patAuthorizationRouteQuery(parsed *url.URL) url.Values {
 	candidates := []string{
 		parsed.Fragment,
 		parsed.RawFragment,
 		parsed.Query().Get("hash"),
 	}
 	for _, candidate := range candidates {
-		if flowID, userCode := parsePersonalAuthorizationRoute(candidate); flowID != "" && userCode != "" {
-			return flowID, userCode
+		if values := parsePersonalAuthorizationRouteQuery(candidate); values.Get("flowId") != "" && values.Get("userCode") != "" {
+			return values
 		}
 		if decoded, err := url.QueryUnescape(candidate); err == nil && decoded != candidate {
-			if flowID, userCode := parsePersonalAuthorizationRoute(decoded); flowID != "" && userCode != "" {
-				return flowID, userCode
+			if values := parsePersonalAuthorizationRouteQuery(decoded); values.Get("flowId") != "" && values.Get("userCode") != "" {
+				return values
 			}
 		}
 	}
-	return "", ""
+	return nil
 }
 
-func parsePersonalAuthorizationRoute(route string) (string, string) {
+func parsePersonalAuthorizationRouteQuery(route string) url.Values {
 	route = strings.TrimSpace(route)
 	route = strings.TrimPrefix(route, "#")
 	idx := strings.Index(route, "personalAuthorization?")
 	if idx < 0 {
-		return "", ""
+		return nil
 	}
 	rawQuery := route[idx+len("personalAuthorization?"):]
 	if cut := strings.IndexAny(rawQuery, "?#"); cut >= 0 {
@@ -434,9 +431,9 @@ func parsePersonalAuthorizationRoute(route string) (string, string) {
 	}
 	values, err := url.ParseQuery(rawQuery)
 	if err != nil {
-		return "", ""
+		return nil
 	}
-	return values.Get("flowId"), values.Get("userCode")
+	return values
 }
 
 func cleanPATJSON(body map[string]any, code string) string {
