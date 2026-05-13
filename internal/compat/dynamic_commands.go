@@ -120,6 +120,11 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 		toolNames := sortedToolNames(cli.ToolOverrides)
 		for _, toolName := range toolNames {
 			override := cli.ToolOverrides[toolName]
+			// Cross-edition flag alias injection: bridges naming diffs
+			// between open-source and DingTalk in-house ("wukong") builds.
+			// See cross_edition_aliases.go for the registry and rationale.
+			// Mutates a local copy; the server-side overlay is untouched.
+			applyCrossEditionAliases(&override, strings.TrimSpace(cli.ID)+"."+strings.TrimSpace(toolName))
 			// §1.5: toolOverrides[tool].hidden = true → skip
 			if override.Hidden {
 				continue
