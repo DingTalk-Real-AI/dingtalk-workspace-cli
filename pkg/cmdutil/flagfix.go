@@ -15,6 +15,7 @@ package cmdutil
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -75,6 +76,41 @@ func DetectNumericTypeError(err error) (flagName, badValue string, ok bool) {
 	return rest[:endIdx], badVal, true
 }
 
+// flagFixCandidate reports whether f should participate in unknown-flag
+// suggestion candidates and Flags: listings. Hidden flags (e.g. wukong's
+// MarkHidden compatibility aliases) and internal json/params merge flags
+// are skipped so the hint candidate set stays a subset of what --help shows.
+func flagFixCandidate(f *pflag.Flag) bool {
+	if f == nil || f.Hidden {
+		return false
+	}
+	switch f.Name {
+	case "json", "params":
+		return false
+	}
+	return true
+}
+
+// VisibleFlagNames returns sorted candidate flag names for cmd.Flags()
+// using flagFixCandidate. Intended for agent-facing error recovery
+// (available_flags).
+func VisibleFlagNames(cmd *cobra.Command) []string {
+	if cmd == nil {
+		return nil
+	}
+	seen := make(map[string]bool)
+	var names []string
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if !flagFixCandidate(f) || seen[f.Name] {
+			return
+		}
+		seen[f.Name] = true
+		names = append(names, f.Name)
+	})
+	sort.Strings(names)
+	return names
+}
+
 // SuggestFlagFix detects flag-value concatenation errors, common flag aliases,
 // and Levenshtein-close typos.
 func SuggestFlagFix(cmd *cobra.Command, flagErr error) FlagFixResult {
@@ -92,6 +128,9 @@ func SuggestFlagFix(cmd *cobra.Command, flagErr error) FlagFixResult {
 
 	var bestFlag, bestValue string
 	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if !flagFixCandidate(f) {
+			return
+		}
 		name := f.Name
 		if strings.HasPrefix(body, name) && len(body) > len(name) {
 			if len(name) > len(bestFlag) {
@@ -101,16 +140,28 @@ func SuggestFlagFix(cmd *cobra.Command, flagErr error) FlagFixResult {
 		}
 	})
 	if bestFlag != "" {
-		canAutoFix := len(bestValue) > 0
-		suggestion := fmt.Sprintf("Space required between flag and value: --%s %s", bestFlag, bestValue)
-		if canAutoFix {
-			return FlagFixResult{Suggestion: suggestion, AutoFixFlag: bestFlag, AutoFixValue: bestValue}
+		lf := cmd.Flags().Lookup(bestFlag)
+		if lf != nil {
+			fmtStr := ""
+			if v := lf.Annotations["x-cli-format"]; len(v) > 0 {
+				fmtStr = v[0]
+			}
+			var enumCopy []string
+			if v := lf.Annotations["x-cli-enum"]; len(v) > 0 {
+				enumCopy = append([]string{}, v...)
+			}
+			if SuffixLooksLikeValue(bestValue, lf.Value.Type(), fmtStr, enumCopy) {
+				suggestion := fmt.Sprintf("Space required between flag and value: --%s %s", bestFlag, bestValue)
+				return FlagFixResult{Suggestion: suggestion, AutoFixFlag: bestFlag, AutoFixValue: bestValue}
+			}
 		}
-		return FlagFixResult{Suggestion: suggestion}
 	}
 
 	bestName, bestDist := "", 999
 	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if !flagFixCandidate(f) {
+			return
+		}
 		d := LevenshteinDist(body, f.Name)
 		if d < bestDist {
 			bestDist = d
@@ -119,10 +170,31 @@ func SuggestFlagFix(cmd *cobra.Command, flagErr error) FlagFixResult {
 	})
 	threshold := LevenshteinThreshold(len(body))
 	if bestDist > 0 && bestDist <= threshold && bestName != "" {
-		return FlagFixResult{Suggestion: fmt.Sprintf("Did you mean --%s?", bestName)}
+		suf := formatFlagHintSuffix(cmd.Flags().Lookup(bestName))
+		return FlagFixResult{Suggestion: fmt.Sprintf("Did you mean --%s?%s", bestName, suf)}
 	}
 
 	return FlagFixResult{Suggestion: fmt.Sprintf("Run '%s --help' to see available options", cmd.CommandPath())}
+}
+
+func formatFlagHintSuffix(f *pflag.Flag) string {
+	if f == nil {
+		return ""
+	}
+	var parts []string
+	if u := strings.TrimSpace(f.Usage); u != "" {
+		if len(u) > 100 {
+			u = u[:97] + "..."
+		}
+		parts = append(parts, u)
+	}
+	if v := f.Annotations["x-cli-format"]; len(v) > 0 && v[0] != "" {
+		parts = append(parts, "format="+v[0])
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return " (" + strings.Join(parts, ", ") + ")"
 }
 
 // LevenshteinThreshold returns the max edit distance allowed based on string length.

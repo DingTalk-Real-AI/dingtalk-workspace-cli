@@ -47,6 +47,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/recovery"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -133,7 +134,28 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 
 	for flag, suggestion := range suggestions {
 		if strings.Contains(errMsg, "unknown flag: "+flag) {
-			return fmt.Errorf("%w\n%s", err, suggestion)
+			return apperrors.NewValidation(
+				errMsg,
+				apperrors.WithHint(suggestion),
+				apperrors.WithReason("unknown_flag"),
+				apperrors.WithCause(err),
+				apperrors.WithActions(fmt.Sprintf("Run '%s --help' for valid flags", cmd.CommandPath())),
+				apperrors.WithAvailableFlags(cmdutil.VisibleFlagNames(cmd)...),
+			)
+		}
+	}
+
+	if strings.Contains(errMsg, "unknown flag:") {
+		fix := cmdutil.SuggestFlagFix(cmd, err)
+		if fix.Suggestion != "" {
+			return apperrors.NewValidation(
+				errMsg,
+				apperrors.WithHint(fix.Suggestion),
+				apperrors.WithReason("unknown_flag"),
+				apperrors.WithCause(err),
+				apperrors.WithActions(fmt.Sprintf("Run '%s --help' for valid flags", cmd.CommandPath())),
+				apperrors.WithAvailableFlags(cmdutil.VisibleFlagNames(cmd)...),
+			)
 		}
 	}
 

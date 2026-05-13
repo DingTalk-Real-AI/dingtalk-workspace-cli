@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync"
 )
@@ -107,6 +108,8 @@ const ExitCodePermission = 4
 // server-provided authorization link. Hosts must treat it as opaque and open
 // it verbatim instead of parsing and reconstructing it locally, because
 // required parameters may live in query, encoded hash, or fragment sections.
+// New hosts may prefer data.authorizationUrl when present; it preserves data.uri
+// while adding a copy/open-safe URL for legacy DingTalk hash-route variants.
 type PATError struct {
 	RawJSON string
 }
@@ -349,11 +352,88 @@ func ApplyHostMutations(out map[string]any) {
 		data = map[string]any{}
 		out["data"] = data
 	}
+	if rawURI, ok := data["uri"].(string); ok && strings.TrimSpace(rawURI) != "" {
+		data["authorizationUrl"] = PATAuthorizationURL(rawURI)
+	}
 	if block := HostControlBlock(); block != nil {
 		delete(data, "callbacks")
 		data["hostControl"] = block
 	}
 	data["openBrowser"] = PATOpenBrowserValue()
+}
+
+// PATAuthorizationURL returns the best URL for hosts to open or show to users.
+// It keeps already-complete PAT URLs unchanged. For DingTalk's legacy
+// /fe/old#%2FpersonalAuthorization?... hash-route form, it adds the explicit
+// hash query and decoded fragment route used by the working authorization page.
+func PATAuthorizationURL(rawURI string) string {
+	rawURI = strings.TrimSpace(rawURI)
+	if rawURI == "" {
+		return ""
+	}
+
+	parsed, err := url.Parse(rawURI)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return rawURI
+	}
+	if !strings.HasSuffix(parsed.Path, "/fe/old") {
+		return rawURI
+	}
+	if parsed.Query().Get("hash") != "" && strings.Contains(parsed.Fragment, "personalAuthorization") {
+		return rawURI
+	}
+
+	routeQuery := patAuthorizationRouteQuery(parsed)
+	if routeQuery.Get("flowId") == "" || routeQuery.Get("userCode") == "" {
+		return rawURI
+	}
+
+	route := "/personalAuthorization?" + routeQuery.Encode()
+
+	next := *parsed
+	query := next.Query()
+	query.Set("hash", "#"+route)
+	next.RawQuery = query.Encode()
+	next.Fragment = route
+	next.RawFragment = ""
+	return next.String()
+}
+
+func patAuthorizationRouteQuery(parsed *url.URL) url.Values {
+	candidates := []string{
+		parsed.Fragment,
+		parsed.RawFragment,
+		parsed.Query().Get("hash"),
+	}
+	for _, candidate := range candidates {
+		if values := parsePersonalAuthorizationRouteQuery(candidate); values.Get("flowId") != "" && values.Get("userCode") != "" {
+			return values
+		}
+		if decoded, err := url.QueryUnescape(candidate); err == nil && decoded != candidate {
+			if values := parsePersonalAuthorizationRouteQuery(decoded); values.Get("flowId") != "" && values.Get("userCode") != "" {
+				return values
+			}
+		}
+	}
+	return nil
+}
+
+func parsePersonalAuthorizationRouteQuery(route string) url.Values {
+	route = strings.TrimSpace(route)
+	route = strings.TrimPrefix(route, "#")
+	idx := strings.Index(route, "personalAuthorization?")
+	if idx < 0 {
+		return nil
+	}
+	rawQuery := route[idx+len("personalAuthorization?"):]
+	if cut := strings.IndexAny(rawQuery, "?#"); cut >= 0 {
+		rawQuery = rawQuery[:cut]
+	}
+	values, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return nil
+	}
+	return values
 }
 
 func cleanPATJSON(body map[string]any, code string) string {

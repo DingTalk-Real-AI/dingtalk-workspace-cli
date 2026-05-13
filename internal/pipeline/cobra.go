@@ -79,6 +79,12 @@ func RunPreParse(root *cobra.Command, engine *Engine) {
 
 // FlagInfoFromCommand extracts FlagInfo entries from a Cobra
 // command's registered flags (both local and inherited).
+//
+// JSON Schema "format" and "enum" hints injected via pflag
+// annotations (x-cli-format / x-cli-enum, see
+// internal/compat/dynamic_commands.go) are surfaced on FlagInfo
+// so PreParse handlers can validate sticky-split candidates against
+// the actual schema, not just the pflag type.
 func FlagInfoFromCommand(cmd *cobra.Command) []FlagInfo {
 	if cmd == nil {
 		return nil
@@ -92,11 +98,7 @@ func FlagInfoFromCommand(cmd *cobra.Command) []FlagInfo {
 			return
 		}
 		seen[f.Name] = true
-		infos = append(infos, FlagInfo{
-			Name:         f.Name,
-			PropertyName: f.Name,
-			Type:         f.Value.Type(),
-		})
+		infos = append(infos, flagInfoFromPflag(f))
 	})
 
 	cmd.InheritedFlags().VisitAll(func(f *pflag.Flag) {
@@ -104,12 +106,25 @@ func FlagInfoFromCommand(cmd *cobra.Command) []FlagInfo {
 			return
 		}
 		seen[f.Name] = true
-		infos = append(infos, FlagInfo{
-			Name:         f.Name,
-			PropertyName: f.Name,
-			Type:         f.Value.Type(),
-		})
+		infos = append(infos, flagInfoFromPflag(f))
 	})
 
 	return infos
+}
+
+// flagInfoFromPflag builds a FlagInfo from a pflag.Flag, copying
+// schema metadata stashed in the flag's annotations map.
+func flagInfoFromPflag(f *pflag.Flag) FlagInfo {
+	fi := FlagInfo{
+		Name:         f.Name,
+		PropertyName: f.Name,
+		Type:         f.Value.Type(),
+	}
+	if v := f.Annotations["x-cli-format"]; len(v) > 0 {
+		fi.Format = v[0]
+	}
+	if v := f.Annotations["x-cli-enum"]; len(v) > 0 {
+		fi.Enum = append([]string{}, v...)
+	}
+	return fi
 }

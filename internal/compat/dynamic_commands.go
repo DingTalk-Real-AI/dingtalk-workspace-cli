@@ -283,10 +283,12 @@ type toolRequestSchema struct {
 }
 
 type toolRequestProp struct {
-	Type        string `json:"type"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Default     string `json:"default,omitempty"`
+	Type        string   `json:"type"`
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	Default     string   `json:"default,omitempty"`
+	Format      string   `json:"format,omitempty"`
+	Enum        []string `json:"enum,omitempty"`
 }
 
 // buildFlagsFromDetailSchema adds properly-typed cobra flags to cmd based on
@@ -369,6 +371,17 @@ func buildFlagsFromDetailSchema(cmd *cobra.Command, schemaJSON string, flagOverr
 		default: // "string", "object", or unknown → string
 			defaultVal := prop.Default
 			cmd.Flags().String(flagName, defaultVal, help)
+		}
+
+		// Carry schema "format" / "enum" hints onto the cobra flag via
+		// pflag annotations so PreParse handlers (e.g. StickyHandler)
+		// can reason about whether a glued suffix looks like a real
+		// value. The annotation keys are read by FlagInfoFromCommand.
+		if prop.Format != "" {
+			_ = cmd.Flags().SetAnnotation(flagName, "x-cli-format", []string{prop.Format})
+		}
+		if len(prop.Enum) > 0 {
+			_ = cmd.Flags().SetAnnotation(flagName, "x-cli-enum", append([]string{}, prop.Enum...))
 		}
 
 		if requiredSet[key] {

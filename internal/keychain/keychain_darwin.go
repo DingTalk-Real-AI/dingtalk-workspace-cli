@@ -59,8 +59,16 @@ func safeFileName(account string) string {
 	return safeFileNameRe.ReplaceAllString(account, "_") + ".enc"
 }
 
-// getDEK retrieves or generates the Data Encryption Key from system Keychain.
+// getDEK retrieves or generates the Data Encryption Key.
+// When DWS_DISABLE_KEYCHAIN=1 (set in sandboxed runtimes like Codex App
+// where Keychain APIs are blocked), falls back to a file-based DEK
+// identical to the Linux scheme. See DisableKeychainEnv docs for the
+// security tradeoff.
 func getDEK(service string) ([]byte, error) {
+	if os.Getenv(DisableKeychainEnv) != "" {
+		return fileDEK(service)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), keychainTimeout)
 	defer cancel()
 

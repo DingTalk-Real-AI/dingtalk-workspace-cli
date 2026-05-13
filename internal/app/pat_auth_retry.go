@@ -224,6 +224,9 @@ func enrichPATErrorWithOpenBrowser(raw string, openBrowser bool) string {
 		data = map[string]any{}
 		payload["data"] = data
 	}
+	if rawURI, ok := data["uri"].(string); ok && strings.TrimSpace(rawURI) != "" {
+		data["authorizationUrl"] = apperrors.PATAuthorizationURL(rawURI)
+	}
 	data["openBrowser"] = openBrowser
 
 	encoded, err := json.Marshal(payload)
@@ -359,10 +362,10 @@ func openPATAuthorizationURI(rawURI string) error {
 		return nil
 	}
 	// The PAT service returns the complete authorization URL. Treat it as an
-	// opaque string and open it verbatim instead of parsing/rebuilding it
-	// locally, because required parameters may live in query, hash, or
-	// fragment sections.
-	return openBrowserFunc(rawURI)
+	// opaque string unless it is the known legacy DingTalk hash-route variant.
+	// That variant is normalized by the PAT error contract helper while still
+	// preserving the original data.uri in structured output.
+	return openBrowserFunc(apperrors.PATAuthorizationURL(rawURI))
 }
 
 func printPATPollDebugResponse(output io.Writer, statusCode int, body []byte) {
@@ -457,7 +460,7 @@ func handlePatAuthCheck(
 
 	if wantsStructuredPATOutput(r) {
 		if openBrowser && patData.Data.URI != "" {
-			_ = openBrowserFunc(patData.Data.URI)
+			_ = openPATAuthorizationURI(patData.Data.URI)
 		}
 		return executor.Result{}, &apperrors.PATError{RawJSON: enrichPATErrorWithOpenBrowser(patErr.RawJSON, openBrowser)}
 	}
@@ -475,9 +478,11 @@ func handlePatAuthCheck(
 		fmt.Fprintf(output, "  %s %s\n", dim("ℹ"), patData.Data.Desc)
 	}
 	if patData.Data.URI != "" {
-		fmt.Fprintf(output, "  %s %s\n\n", dim("🔗"), cyan(patData.Data.URI))
+		authURL := apperrors.PATAuthorizationURL(patData.Data.URI)
+		fmt.Fprintf(output, "  %s 授权链接: %s\n", dim("🔗"), cyan(authURL))
+		fmt.Fprintf(output, "  PAT_AUTHORIZATION_URL=%s\n\n", authURL)
 		if openBrowser {
-			_ = openPATAuthorizationURI(patData.Data.URI)
+			_ = openPATAuthorizationURI(authURL)
 		}
 	}
 
@@ -718,17 +723,23 @@ func pollPatDeviceFlow(ctx context.Context, flowID string, configDir string, out
 	}
 }
 
-// tryOpenBrowser opens url in the default browser; errors are silently ignored.
-func tryOpenBrowser(url string) error {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
+func browserOpenCommand(goos, rawURL string) *exec.Cmd {
+	switch goos {
 	case "darwin":
-		cmd = exec.Command("open", url)
+		return exec.Command("open", rawURL)
 	case "linux":
-		cmd = exec.Command("xdg-open", url)
+		return exec.Command("xdg-open", rawURL)
 	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", url)
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", rawURL)
 	default:
+		return nil
+	}
+}
+
+// tryOpenBrowser opens rawURL in the default browser; errors are silently ignored.
+func tryOpenBrowser(rawURL string) error {
+	cmd := browserOpenCommand(runtime.GOOS, rawURL)
+	if cmd == nil {
 		return nil
 	}
 	return cmd.Start()

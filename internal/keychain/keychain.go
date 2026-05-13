@@ -30,6 +30,14 @@ const (
 	// real user environment and from sibling test packages running in
 	// parallel. When empty, the platform default applies.
 	StorageDirEnv = "DWS_KEYCHAIN_DIR"
+
+	// DisableKeychainEnv opts the macOS implementation out of system
+	// Keychain access for the DEK, falling back to a file-based DEK
+	// (same scheme as Linux). Intended for sandboxed runtimes where
+	// Keychain APIs are blocked (e.g. Codex App). This weakens the
+	// at-rest protection — DEK and ciphertext live in the same
+	// directory — and is therefore opt-in.
+	DisableKeychainEnv = "DWS_DISABLE_KEYCHAIN"
 )
 
 // KeychainAccess abstracts keychain Get/Set/Remove for dependency injection.

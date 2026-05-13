@@ -27,6 +27,11 @@ import (
 	"github.com/google/uuid"
 )
 
+// getDEK retrieves or generates the Data Encryption Key from local file.
+func getDEK(service string) ([]byte, error) {
+	return fileDEK(service)
+}
+
 const (
 	dekBytes = 32 // DEK = Data Encryption Key (AES-256)
 	ivBytes  = 12
@@ -54,48 +59,6 @@ var safeFileNameRe = regexp.MustCompile(`[^a-zA-Z0-9._-]`)
 
 func safeFileName(account string) string {
 	return safeFileNameRe.ReplaceAllString(account, "_") + ".enc"
-}
-
-// getDEK retrieves or generates the Data Encryption Key from local file.
-func getDEK(service string) ([]byte, error) {
-	dir := StorageDir(service)
-	keyPath := filepath.Join(dir, "dek")
-
-	// Try to read existing DEK
-	key, err := os.ReadFile(keyPath)
-	if err == nil && len(key) == dekBytes {
-		return key, nil
-	}
-
-	// Create directory if needed
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return nil, fmt.Errorf("create keychain dir: %w", err)
-	}
-
-	// Generate new random DEK
-	key = make([]byte, dekBytes)
-	if _, err := rand.Read(key); err != nil {
-		return nil, fmt.Errorf("generate dek: %w", err)
-	}
-
-	// Atomic write to prevent multi-process initialization collision
-	tmpKeyPath := filepath.Join(dir, "dek."+uuid.New().String()+".tmp")
-	defer os.Remove(tmpKeyPath)
-
-	if err := os.WriteFile(tmpKeyPath, key, 0600); err != nil {
-		return nil, fmt.Errorf("write dek: %w", err)
-	}
-
-	if err := os.Rename(tmpKeyPath, keyPath); err != nil {
-		// If rename fails, another process might have created it. Try reading again.
-		existingKey, readErr := os.ReadFile(keyPath)
-		if readErr == nil && len(existingKey) == dekBytes {
-			return existingKey, nil
-		}
-		return nil, fmt.Errorf("save dek: %w", err)
-	}
-
-	return key, nil
 }
 
 func encryptData(plaintext string, key []byte) ([]byte, error) {
