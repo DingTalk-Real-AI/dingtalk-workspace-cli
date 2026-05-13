@@ -14,7 +14,10 @@
 package compat
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -121,5 +124,138 @@ func TestJSONParse_InvalidInput(t *testing.T) {
 	}
 	if msg := err.Error(); msg == "" {
 		t.Fatal("error message should be non-empty")
+	}
+}
+
+// TestFileRead_BasicFile exercises the happy path: a UTF-8 file on disk is
+// read in full and surfaced as a string value. This is the contract the
+// `--content-file ./a.md` flag relies on so the upstream MCP tool sees the
+// file contents in place of the path.
+func TestFileRead_BasicFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "note.md")
+	contents := "# Heading\n\n- bullet one\n- bullet two\n"
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	got, err := ApplyTransform(path, "file_read", nil)
+	if err != nil {
+		t.Fatalf("file_read should succeed, got err: %v", err)
+	}
+	if got != contents {
+		t.Errorf("file_read should return file contents verbatim; got %q want %q", got, contents)
+	}
+}
+
+// TestFileRead_EmptyPath rejects empty input with a validation error rather
+// than silently reading "" / cwd. The dispatcher maps validation errors to
+// exit code 2 so the user sees a usage problem.
+func TestFileRead_EmptyPath(t *testing.T) {
+	t.Parallel()
+
+	_, err := ApplyTransform("", "file_read", nil)
+	if err == nil {
+		t.Fatal("expected validation error for empty path")
+	}
+	if !strings.Contains(err.Error(), "file_read") {
+		t.Errorf("error should mention the transform name, got %q", err.Error())
+	}
+}
+
+// TestFileRead_MissingFile surfaces a clear validation error when the path
+// doesn't exist. The previous `os.ReadFile` error is wrapped so the user
+// sees what they passed.
+func TestFileRead_MissingFile(t *testing.T) {
+	t.Parallel()
+
+	missing := filepath.Join(t.TempDir(), "definitely-not-here.md")
+	_, err := ApplyTransform(missing, "file_read", nil)
+	if err == nil {
+		t.Fatal("expected error for missing file")
+	}
+	if !strings.Contains(err.Error(), "definitely-not-here.md") {
+		t.Errorf("error should mention the missing path, got %q", err.Error())
+	}
+}
+
+// TestFileRead_InvalidUTF8 rejects binary input. Upstream tools expect text
+// content and silently shipping a corrupted byte string would mask a real
+// user error.
+func TestFileRead_InvalidUTF8(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "binary.dat")
+	if err := os.WriteFile(path, []byte{0xff, 0xfe, 0x00, 0x01}, 0o600); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	_, err := ApplyTransform(path, "file_read", nil)
+	if err == nil {
+		t.Fatal("expected UTF-8 validation error for binary input")
+	}
+	if !strings.Contains(err.Error(), "UTF-8") {
+		t.Errorf("error should mention UTF-8, got %q", err.Error())
+	}
+}
+
+// TestFileRead_NonString rejects non-string flag values. CLI flags resolve to
+// string by default but a misconfigured envelope (e.g. Type: int) shouldn't
+// silently no-op.
+func TestFileRead_NonString(t *testing.T) {
+	t.Parallel()
+
+	_, err := ApplyTransform(123, "file_read", nil)
+	if err == nil {
+		t.Fatal("expected validation error for non-string value")
+	}
+}
+
+// TestFileRead_StdinDashIsAccepted documents the contract: the special value
+// "-" is reserved for stdin. We don't test stdin redirection here (that
+// requires plumbing os.Stdin replacement which complicates the test) — this
+// is a compile-time signal that "-" doesn't path-resolve to a file named "-"
+// in the current directory. The end-to-end stdin path is covered in
+// test/cli_compat once the envelope ships.
+func TestFileRead_StdinDashIsAccepted(t *testing.T) {
+	t.Parallel()
+
+	// Run with stdin redirected from an empty pipe so we don't hang.
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	defer r.Close()
+	if _, err := w.Write([]byte("piped content")); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	w.Close()
+
+	origStdin := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = origStdin }()
+
+	got, err := ApplyTransform("-", "file_read", nil)
+	if err != nil {
+		t.Fatalf("file_read with '-' should read stdin, got err: %v", err)
+	}
+	if got != "piped content" {
+		t.Errorf("expected stdin contents, got %q", got)
+	}
+}
+
+// TestFileRead_UnknownTransformPassThrough double-checks that the new case
+// is gated by name and doesn't regress when the transform name is missing.
+func TestFileRead_UnknownTransformPassThrough(t *testing.T) {
+	t.Parallel()
+
+	got, err := ApplyTransform("./some-path", "", nil)
+	if err != nil {
+		t.Fatalf("empty transform should pass through, got err: %v", err)
+	}
+	if !reflect.DeepEqual(got, "./some-path") {
+		t.Errorf("expected pass-through, got %v", got)
 	}
 }
