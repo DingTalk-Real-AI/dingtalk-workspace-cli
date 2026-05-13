@@ -12,6 +12,14 @@ Platform-stability round: Windows PAT-auth browser opener no longer truncates UR
 
 - **`-f ndjson` and `-f csv` global output formats** (#259, closes #252) — `ndjson` emits one compact JSON record per line (works straight with `jq -c` / `while read` / log pipelines); `csv` goes through `encoding/csv` (RFC-4180 — quoting, embedded newlines, CJK all handled by stdlib) and reuses the existing `-f table` column resolver (`normalizePayload` / `unwrapPrimaryObject` / `extractRowsFromMap` / `rowsFromSlice` / `formatValue`) so table and csv stay visually aligned. After a 7-product real-traffic sweep (contact / chat / doc / mail / todo / minutes / schema), the `preferredListKeys` whitelist was extended to cover the actual DingTalk envelope shapes — `contact user search` (`result`), `chat search` (`result.value`), `doc search` (`documents`), `mail mailbox list` (`emailAccounts`), `todo task list` (`result.todoCards`) — so these commands now degrade into a proper row stream instead of collapsing to a single-line `key,value` blob. Lives in `internal/output/ndjson.go` + `internal/output/csv.go`; `--format` help in `internal/app/flags.go` now lists `ndjson|csv` alongside `json|table|raw|pretty`.
 
+### Changed
+
+- **Sticky flag splitting is now schema-aware** (#272) — PreParse `StickyHandler` 此前会把任何前缀命中已知 flag 的 `--flagsuffix` 一律切成 `--flag suffix`，于是 `--starttime20260507` 这类拼错被静默改写成 `--start time20260507`，把假值传到下游。新行为按 flag 的 pflag 类型 / JSON Schema `format` / `enum` 校验 suffix 是否像合法 value（共享逻辑见 `pkg/cmdutil/sticky_suffix.go`），不像就保留原 token 让 cobra 报 `unknown flag`。slice/array/object 类型的 flag 永不切分。首 rune 读取使用 `utf8.DecodeRuneInString`，对中文等多字节 value 安全。
+
+### Added
+
+- **`available_flags` field on unknown-flag errors** (#272) — `dws -f json` 的 unknown-flag 错误体里新增 `available_flags`（已排序、过滤掉 hidden 与内部 `json` / `params`），方便 agent 不解析 `--help` 就能恢复。Human-readable 输出会附 `Flags: ...` 行，截断在 200 字节内。
+
 ### Fixed
 
 - **`dws chat message send` 单聊缺 `--title` 时前置校验** (#250) — 单聊（`--user` / `--open-dingtalk-id`）的底层工具 `send_direct_message_as_user` 在 API 层强制要求 title，缺失时返回误导性的 `发群服务窗会话消息失败`。CLI 现在在 `buildChatMessageSendInvocation` 里前置校验，直接返回 `--title is required for direct messages (--user / --open-dingtalk-id)`；同时把 `Long` help、`--title` flag 描述、Example 和 `skills/references/products/chat.md` 全部对齐为「单聊必填，群聊可选」。群聊行为不变。

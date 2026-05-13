@@ -120,8 +120,20 @@ type FlagInfo struct {
 	// PropertyName is the original schema property key (e.g. "userId").
 	PropertyName string
 
-	// Type is the JSON Schema type ("string", "integer", etc.).
+	// Type is the JSON Schema / pflag type ("string", "integer",
+	// "bool", "stringSlice", "duration", etc.).
 	Type string
+
+	// Format carries the JSON Schema "format" hint when present —
+	// e.g. "date", "date-time", "duration", "email", "uri", "ipv4".
+	// PreParse handlers use this to decide whether a suffix in a
+	// glued token (e.g. "--starttime1") looks like a plausible value.
+	Format string
+
+	// Enum carries the JSON Schema "enum" string values when present.
+	// PreParse handlers use this for sticky-split validation: a glued
+	// suffix is accepted only if it matches one of the enum entries.
+	Enum []string
 }
 
 // Correction records a single input correction applied by a handler.

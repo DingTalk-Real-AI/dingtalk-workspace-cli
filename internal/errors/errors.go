@@ -37,19 +37,20 @@ const (
 
 // Error is the structured repository-local error model for the Go rewrite.
 type Error struct {
-	Category   Category
-	Message    string
-	Operation  string
-	ServerKey  string
-	Retryable  bool
-	Reason     string
-	Hint       string
-	Actions    []string
-	Snapshot   string
-	RPCCode    int               `json:"rpc_code,omitempty"`
-	RPCData    json.RawMessage   `json:"rpc_data,omitempty"`
-	ServerDiag ServerDiagnostics `json:"-"`
-	Cause      error             `json:"-"`
+	Category       Category
+	Message        string
+	Operation      string
+	ServerKey      string
+	Retryable      bool
+	Reason         string
+	Hint           string
+	Actions        []string
+	AvailableFlags []string
+	Snapshot       string
+	RPCCode        int               `json:"rpc_code,omitempty"`
+	RPCData        json.RawMessage   `json:"rpc_data,omitempty"`
+	ServerDiag     ServerDiagnostics `json:"-"`
+	Cause          error             `json:"-"`
 }
 
 func (e *Error) Error() string {
@@ -132,6 +133,16 @@ func WithActions(actions ...string) Option {
 		if len(out) > 0 {
 			err.Actions = out
 		}
+	}
+}
+
+// WithAvailableFlags records visible local flag names for agent recovery.
+func WithAvailableFlags(names ...string) Option {
+	return func(err *Error) {
+		if len(names) == 0 {
+			return
+		}
+		err.AvailableFlags = append([]string{}, names...)
 	}
 }
 
@@ -260,6 +271,9 @@ func PrintJSON(w io.Writer, err error) error {
 		if len(typed.Actions) > 0 {
 			errorPayload["actions"] = typed.Actions
 		}
+		if len(typed.AvailableFlags) > 0 {
+			errorPayload["available_flags"] = typed.AvailableFlags
+		}
 		if typed.Snapshot != "" {
 			errorPayload["snapshot_path"] = typed.Snapshot
 		}
@@ -359,6 +373,9 @@ func PrintHumanAt(w io.Writer, err error, v Verbosity) error {
 			lines = append(lines, fmt.Sprintf("Action: %s", action))
 		}
 	}
+	if line := formatAvailableFlagsHumanLine(typed.AvailableFlags); line != "" {
+		lines = append(lines, line)
+	}
 	if typed.Retryable {
 		lines = append(lines, "Retryable: true")
 	}
@@ -413,4 +430,32 @@ func category(err error) string {
 		return string(typed.Category)
 	}
 	return string(CategoryInternal)
+}
+
+const availableFlagsHumanMaxRunes = 200
+
+func formatAvailableFlagsHumanLine(flags []string) string {
+	if len(flags) == 0 {
+		return ""
+	}
+	b := strings.Builder{}
+	b.WriteString("Flags: ")
+	written := 0
+	for i, name := range flags {
+		if i > 0 {
+			if written+2 > availableFlagsHumanMaxRunes {
+				b.WriteString("...")
+				return b.String()
+			}
+			b.WriteString(", ")
+			written += 2
+		}
+		if written+len(name) > availableFlagsHumanMaxRunes {
+			b.WriteString("...")
+			return b.String()
+		}
+		b.WriteString(name)
+		written += len(name)
+	}
+	return b.String()
 }

@@ -77,6 +77,27 @@ func TestPrintJSON(t *testing.T) {
 	}
 }
 
+func TestPrintJSON_AvailableFlags(t *testing.T) {
+	t.Parallel()
+
+	var b strings.Builder
+	if err := PrintJSON(&b, NewValidation(
+		"unknown flag: --foo",
+		WithReason("unknown_flag"),
+		WithHint("Did you mean --bar?"),
+		WithAvailableFlags("bar", "baz"),
+	)); err != nil {
+		t.Fatalf("PrintJSON() error = %v", err)
+	}
+	got := b.String()
+	if !strings.Contains(got, `"available_flags"`) {
+		t.Fatalf("expected available_flags in output, got %q", got)
+	}
+	if !strings.Contains(got, `"bar"`) || !strings.Contains(got, `"baz"`) {
+		t.Fatalf("expected flag names in output, got %q", got)
+	}
+}
+
 func TestPrintHuman(t *testing.T) {
 	t.Parallel()
 

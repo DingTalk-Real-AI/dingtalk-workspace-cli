@@ -32,68 +32,93 @@ func TestFullPreParsePipeline(t *testing.T) {
 		ParamNameHandler{},
 	)
 
+	// Numeric / boolean flag typing matters for the sticky guard. The
+	// helper below declares known flags as int so digit-led suffixes
+	// pass the suffixLooksLikeValue check.
+	intSpecs := func(names ...string) []pipeline.FlagInfo {
+		out := make([]pipeline.FlagInfo, len(names))
+		for i, n := range names {
+			out[i] = pipeline.FlagInfo{Name: n, Type: "int"}
+		}
+		return out
+	}
+
 	tests := []struct {
 		name        string
 		args        []string
-		flags       []string
+		flags       []pipeline.FlagInfo
 		want        string
 		corrections int
 	}{
 		{
 			name:        "camelCase + sticky combined",
 			args:        []string{"--userId", "123", "--pageSize50"},
-			flags:       []string{"user-id", "page-size"},
+			flags:       intSpecs("user-id", "page-size"),
 			want:        "--user-id 123 --page-size 50",
 			corrections: 2, // alias(userId) + sticky(pageSize50)
 		},
 		{
 			name:        "camelCase + typo combined",
 			args:        []string{"--userId", "123", "--limt", "10"},
-			flags:       []string{"user-id", "limit"},
+			flags:       intSpecs("user-id", "limit"),
 			want:        "--user-id 123 --limit 10",
 			corrections: 2, // alias(userId) + fuzzy(limt)
 		},
 		{
 			name:        "triple error: case + sticky + typo",
 			args:        []string{"--UserName", "alice", "--limit100", "--offse", "0"},
-			flags:       []string{"user-name", "limit", "offset"},
+			flags:       append(flagSpecs("user-name"), intSpecs("limit", "offset")...),
 			want:        "--user-name alice --limit 100 --offset 0",
 			corrections: 3,
 		},
 		{
 			name:        "snake_case + sticky",
 			args:        []string{"--user_id", "42", "--pageSize20"},
-			flags:       []string{"user-id", "page-size"},
+			flags:       intSpecs("user-id", "page-size"),
 			want:        "--user-id 42 --page-size 20",
 			corrections: 2,
 		},
 		{
 			name:        "all correct — zero corrections",
 			args:        []string{"--user-id", "123", "--limit", "10"},
-			flags:       []string{"user-id", "limit"},
+			flags:       intSpecs("user-id", "limit"),
 			want:        "--user-id 123 --limit 10",
 			corrections: 0,
 		},
 		{
 			name:        "UPPER case flags",
 			args:        []string{"--USER-ID", "999"},
-			flags:       []string{"user-id"},
+			flags:       intSpecs("user-id"),
 			want:        "--user-id 999",
 			corrections: 1,
 		},
 		{
 			name:        "= syntax with camelCase",
 			args:        []string{"--userId=123", "--pageSize=50"},
-			flags:       []string{"user-id", "page-size"},
+			flags:       intSpecs("user-id", "page-size"),
 			want:        "--user-id=123 --page-size=50",
 			corrections: 2,
 		},
 		{
 			name:        "camelCase sticky split with normalisation",
 			args:        []string{"--limitValue100"},
-			flags:       []string{"limit-value"},
+			flags:       intSpecs("limit-value"),
 			want:        "--limit-value 100",
 			corrections: 1, // sticky handles both kebab-normalisation and split
+		},
+
+		// Hardening: a mistyped flag whose name happens to start with
+		// a real flag must NOT be split. The pipeline should leave the
+		// token untouched so Cobra can raise "unknown flag".
+		{
+			name: "typo --starttime1 not split (date-time format)",
+			args: []string{"--starttime1", "2026-02-07"},
+			flags: []pipeline.FlagInfo{
+				{Name: "start", Type: "string", Format: "date-time"},
+				{Name: "end", Type: "string", Format: "date-time"},
+			},
+			want:        "--starttime1 2026-02-07",
+			corrections: 0,
 		},
 	}
 
@@ -101,7 +126,7 @@ func TestFullPreParsePipeline(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := &pipeline.Context{
 				Args:      append([]string{}, tt.args...),
-				FlagSpecs: flagSpecs(tt.flags...),
+				FlagSpecs: tt.flags,
 			}
 			if err := engine.RunPhase(pipeline.PreParse, ctx); err != nil {
 				t.Fatalf("RunPhase error: %v", err)
@@ -191,7 +216,11 @@ func TestFullPipelineEndToEnd(t *testing.T) {
 			"--pageSize50",
 			"--verbosetrue",
 		},
-		FlagSpecs: flagSpecs("user-id", "page-size", "verbose"),
+		FlagSpecs: []pipeline.FlagInfo{
+			{Name: "user-id", Type: "string"},
+			{Name: "page-size", Type: "int"},
+			{Name: "verbose", Type: "bool"},
+		},
 	}
 
 	if err := engine.RunPhase(pipeline.PreParse, ctx); err != nil {
@@ -287,7 +316,11 @@ func TestFullFivePhasePipeline(t *testing.T) {
 		"--pageSize50",
 		"--verbosetrue",
 	}
-	ctx.FlagSpecs = flagSpecs("user-id", "page-size", "verbose")
+	ctx.FlagSpecs = []pipeline.FlagInfo{
+		{Name: "user-id", Type: "string"},
+		{Name: "page-size", Type: "int"},
+		{Name: "verbose", Type: "bool"},
+	}
 
 	if err := engine.RunPhase(pipeline.PreParse, ctx); err != nil {
 		t.Fatalf("PreParse error: %v", err)
