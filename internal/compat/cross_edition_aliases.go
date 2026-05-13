@@ -38,7 +38,7 @@ import "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
 //
 // Verified divergences (as of 2026-05):
 //
-//   sheet.find_cells | text → primary: --find (opensource), alias: --query (wukong)
+//	sheet.find_cells | text → primary: --find (opensource), alias: --query (wukong)
 //
 // (Confirmed via `dws sheet find --help` showing `--find` on opensource
 // v1.0.26 and `--query` on wukong v0.2.67, where wukong's help description
