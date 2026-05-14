@@ -310,7 +310,9 @@ func AppendDynamicServer(server market.ServerDescriptor) {
 	}
 	cmd := strings.TrimSpace(server.CLI.Command)
 	if cmd != "" && cmd != id && endpoint != "" {
-		dynamicEndpoints[cmd] = endpoint
+		if _, exists := dynamicEndpoints[cmd]; !exists {
+			dynamicEndpoints[cmd] = endpoint
+		}
 		dynamicProducts[cmd] = true
 	}
 	for _, alias := range server.CLI.Aliases {
