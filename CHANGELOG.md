@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **`dws chat message send` 群聊缺 `--title` 时前置校验** — 完成 #250 的对称修复。`send_message_as_user`（群聊）的 schema 同样把 `title` 列为 `required`，缺失时 API 返回与单聊一致的误导性 `发群服务窗会话消息失败`（实测：`dws chat message send --group <cid> --text "1"` 失败；带上 `--title` 后成功）。CLI 现在在 `buildChatMessageSendInvocation` 把缺 title 的校验扩展到 `--group` 分支，分别返回 `--title is required for group messages (--group)` 和原有的 `--title is required for direct messages (--user / --open-dingtalk-id)`；同时把 `Long` help、`--title` flag 描述、Example、`skills/references/products/chat.md` 全部对齐为「群聊与单聊都必填」。`internal/helpers/chat_test.go` 新增 `group-without-title` 断言，并把既有 `group` / `positional-text` 用例补上 `--title`，群聊 API 行为不变。
+
 ## [1.0.27] - 2026-05-14
 
 Two user-visible fixes plus the schema primitive they're built on. `dws doc update` now reads Markdown from a file or stdin, so long / multi-line / table-heavy content no longer gets mangled by shell escaping; `dws sheet find --query` stops returning `unknown flag` on the open-source build, restoring copy-paste from internal wukong docs. Underneath, schema/discovery envelopes get a generic `file_read` transform and a `CLIFlagOverride.MapsTo` field that lets two sibling CLI flags route into the same MCP parameter slot. Also suppresses a noisy WARN on normal stdio-plugin shutdown.

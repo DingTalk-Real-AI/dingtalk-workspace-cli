@@ -93,11 +93,11 @@ func newChatMessageSendCommand(runner executor.Runner) *cobra.Command {
 三者只能选其一，不能同时指定。
 
 消息内容通过 --text 传入，也可作为位置参数；支持 Markdown。
-单聊消息（--user / --open-dingtalk-id）必须提供 --title 作为消息标题；群聊可选。
+--title 是消息标题，群聊与单聊都必填（API 强制要求；缺失时返回误导性的 "发群服务窗会话消息失败"）。
 
 群聊场景下可用 --at-all / --at-users / --at-mobiles 进行 @ 提醒（仅 --group 时生效）。
 注意 --text 中需包含对应的 <@userId> / <@all> 占位符才能在客户端渲染出 @ 效果。`,
-		Example: `  dws chat message send --group <openconversation_id> --text "hello"
+		Example: `  dws chat message send --group <openconversation_id> --title "周报" --text "请提交本周日报"
   dws chat message send --user <userId> --title "提醒" --text "请查收"
   dws chat message send --open-dingtalk-id <openDingTalkId> --title "提醒" --text "请确认"
   dws chat message send --group <openconversation_id> --title "拉群通知" --text "<@uid> 你被 @ 了" --at-users uid`,
@@ -128,7 +128,7 @@ func newChatMessageSendCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("user", "", "接收人 userId (单聊三选一)")
 	cmd.Flags().String("open-dingtalk-id", "", "接收人 openDingTalkId (单聊三选一)")
 	cmd.Flags().String("text", "", "消息内容，支持 Markdown (也可作位置参数)")
-	cmd.Flags().String("title", "", "消息标题 (单聊必填，群聊可选)")
+	cmd.Flags().String("title", "", "消息标题 (必填，群聊与单聊都必填)")
 	cmd.Flags().Bool("at-all", false, "@所有人 (仅 --group 群聊生效)")
 	cmd.Flags().String("at-users", "", "按 userId @ 指定成员，逗号分隔 (仅 --group 群聊生效)")
 	cmd.Flags().String("at-mobiles", "", "按手机号 @ 指定成员，逗号分隔 (仅 --group 群聊生效)")
@@ -196,10 +196,14 @@ func buildChatMessageSendInvocation(cmd *cobra.Command, args []string) (map[stri
 	if !hasGroup && (atAll || hasAtUsers || hasAtMobiles) {
 		return nil, "", apperrors.NewValidation("--at-all / --at-users / --at-mobiles only apply when --group is set")
 	}
-	// Direct-message tools (send_direct_message_as_user) reject an empty title at
-	// the API level with a misleading "发群服务窗会话消息失败" error, so fail loudly
-	// here instead. Group messages do not require a title.
-	if (hasUser || hasOpenID) && strings.TrimSpace(title) == "" {
+	// Both send_message_as_user (group) and send_direct_message_as_user (direct)
+	// reject an empty title at the API level with a misleading
+	// "发群服务窗会话消息失败" error, so fail loudly here instead. The schema
+	// declares title as a required parameter on both tools.
+	if strings.TrimSpace(title) == "" {
+		if hasGroup {
+			return nil, "", apperrors.NewValidation("--title is required for group messages (--group)")
+		}
 		return nil, "", apperrors.NewValidation("--title is required for direct messages (--user / --open-dingtalk-id)")
 	}
 
