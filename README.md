@@ -21,7 +21,7 @@
 > [!IMPORTANT]
 > **Co-creation Phase**: This project accesses DingTalk enterprise data and requires enterprise admin authorization. Join the DingTalk DWS co-creation group for support and updates. See [Getting Started](#getting-started) below.
 >
-> <img src="https://img.alicdn.com/imgextra/i1/O1CN01WJyAsJ1prD2ovQACM_!!6000000005413-2-tps-718-720.png" alt="dws Open Source Community DingTalk Group QR Code" width="200">
+> <img src="https://img.alicdn.com/imgextra/i1/O1CN01WJyAsJ1prD2ovQACM_!!6000000005413-2-tps-718-720.png" alt="dws Open Source Community DingTalk Group QR Code" width="150">
 
 <details>
 <summary><strong>Table of Contents</strong></summary>
