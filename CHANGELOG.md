@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
+## [1.0.27] - 2026-05-14
+
+Two user-visible fixes plus the schema primitive they're built on. `dws doc update` now reads Markdown from a file or stdin, so long / multi-line / table-heavy content no longer gets mangled by shell escaping; `dws sheet find --query` stops returning `unknown flag` on the open-source build, restoring copy-paste from internal wukong docs. Underneath, schema/discovery envelopes get a generic `file_read` transform and a `CLIFlagOverride.MapsTo` field that lets two sibling CLI flags route into the same MCP parameter slot. Also suppresses a noisy WARN on normal stdio-plugin shutdown.
+
+### Added
+
+- **`file_read` transform + `CLIFlagOverride.MapsTo` field** (#291, closes #277 #278 #282 #288) — discovery envelopes can now declare a path-typed CLI flag that performs the "file path → file contents string" conversion client-side before the value reaches the upstream MCP parameter.
+  - `transform: "file_read"` (`internal/compat/transform.go`) — reads the file at the flag's value with UTF-8 validation; `-` means stdin. Any IO / encoding failure is surfaced as a validation error (exit 2), distinct from the generic transient-failure path (exit 1).
+  - `CLIFlagOverride.MapsTo` (`internal/market/registry.go`) — redirects the flag's final value (post-transform or literal) into a named MCP parameter slot instead of the default `params[propertyName]`. This lets a single MCP parameter (e.g. `markdown`) be fed by two sibling CLI flags — a literal `--content` and a file-reading `--content-file` — paired with the existing tool-level `MutuallyExclusive` / `RequireOneOf` to express "exclusive, at least one".
+  - Wired into the `internal/compat/dynamic_commands.go` normalizer via a separate `mapsToRoutes` collection + routing pass; empty `MapsTo` preserves the legacy `params[propertyName] = value` semantics, so every pre-existing dynamic_commands test passes unchanged. Pre-prod end-to-end verified across 6 cases (see PR #291's Validation table).
+- **`dws doc update --content-file <path>` (envelope rollout)** — fixes "long Markdown can't reach the doc". The old command only accepted `--content "..."`, so long / multi-line / table-heavy Markdown got mangled by shell escaping and AI agents writing >2KB of content were stuck. The envelope now maps both `--content` (literal) and `--content-file` (`file_read` transform) to the `markdown` parameter, makes them mutually exclusive via cobra's `MarkFlagsMutuallyExclusive`, and requires at least one via `RequireOneOf`. `--content-file -` reads from stdin, so `cat long.md | dws doc update --content-file -` works directly. **Existing users must run `dws cache refresh` once** to pick up the new envelope.
+- **`dws sheet find --query` hidden alias (envelope rollout)** — fixes "unknown flag when copy-pasting commands across editions". Users copying `dws sheet find --query "..."` from internal wukong docs onto open-source `dws` got `unknown flag: --query`, because the open-source primary flag is named `--find`. The envelope now registers `--query` as a hidden alias of `--find` via `CLIFlagOverride.Aliases` (the field shipped in 1.0.26) — it doesn't show up in `--help`, but accepts values and writes to the same MCP parameter. `--find` behaviour is unchanged. Also requires `dws cache refresh` once.
+
+### Fixed
+
+- **Noisy `failed to stop stdio client: exit status 1` WARN on normal stdio-plugin shutdown** (#285) — when `Stop()` explicitly `Kill`s the subprocess, the non-zero exit code returned by `cmd.Wait()` is expected behaviour, but it was being propagated as an error and logged to stderr on every CLI exit, polluting agent log parsing. `Stop()` now returns `nil` after Kill + Wait; the error path is reserved for "process exited on its own with non-zero" (e.g. stdin close without an explicit Kill). `internal/transport/stdio.go` + `stdio_integration_test.go` assert "Stop() returns nil after kill".
+
 ## [1.0.26] - 2026-05-12
 
 Platform-stability round: Windows PAT-auth browser opener no longer truncates URLs at `&userCode=`, macOS sandbox hosts get an opt-in keychain fallback, and `dws doc download` rejects `axls` nodes before requesting `drive:download` consent. Two new global output formats `-f ndjson` and `-f csv` (matching `larksuite/cli`) land as first-class citizens with real-traffic-verified list detection. The `dws doc comment *` regression tracked in #240 is also resolved — fix is in the market metadata, users just need `dws cache refresh` once.
