@@ -21,7 +21,7 @@
 > [!IMPORTANT]
 > **共创阶段**：本项目涉及钉钉企业数据访问，需企业管理员授权后方可使用。欢迎加入钉钉 DWS 共创群获取支持与最新动态。详见下方 [开始使用](#开始使用)。
 >
-> <img src=".github/assets/community-qr.png" alt="dws 开源沟通群二维码" width="200">
+> <img src="https://img.alicdn.com/imgextra/i1/O1CN01WJyAsJ1prD2ovQACM_!!6000000005413-2-tps-718-720.png" alt="dws 开源沟通群二维码" width="200">
 
 <details>
 <summary><strong>目录</strong></summary>
