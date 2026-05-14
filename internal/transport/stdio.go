@@ -117,18 +117,14 @@ func (s *StdioClient) Stop() error {
 
 	s.stdin.Close()
 
-	killed := false
 	if s.cmd.Process != nil {
 		_ = s.cmd.Process.Kill()
-		killed = true
+		_ = s.cmd.Wait()
+		s.started = false
+		return nil
 	}
 	err := s.cmd.Wait()
 	s.started = false
-	// A killed process always exits with a non-zero status; suppress that
-	// expected error to avoid noisy warnings on normal shutdown.
-	if killed {
-		return nil
-	}
 	return err
 }
 
