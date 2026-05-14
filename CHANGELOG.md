@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
+## [1.0.27] - 2026-05-14
+
+两个用户体感明显的修复 + 一个通用 schema 能力。`dws doc update` 现在支持从文件或 stdin 读 Markdown，长文 / 多行 / 表格不再被 shell 转义吃掉；`dws sheet find --query` 在开源版上不再报 `unknown flag`（兼容用户从内部 wukong 文档复制过来的命令）；底层为此引入了通用的 `file_read` transform 和 `CLIFlagOverride.MapsTo` 字段，envelope JSON 现在可以声明「两个 sibling CLI flag 映射到同一个 MCP 参数」。另外抑制了 stdio 插件正常关停时的 WARN 日志噪声。
+
+### Added
+
+- **`file_read` transform + `CLIFlagOverride.MapsTo` 字段** (#291, 关 #277 #278 #282 #288) — schema / 服务发现 envelope 现在可以声明一个 path-typed CLI flag 在 CLI 侧把「文件路径 → 文件内容字符串」做完转换、再下发到上游 MCP 参数。
+  - `transform: "file_read"`（`internal/compat/transform.go`）— 读取 flag 指向的文件并做 UTF-8 校验，`-` 表示 stdin；任何 IO / 编码错误归为 validation error（exit 2），区别于通用的 transient failure（exit 1）。
+  - `CLIFlagOverride.MapsTo`（`internal/market/registry.go`）— 把 flag 的最终值（transform 后或字面量）路由到指定 MCP 参数 slot，而不是默认的 `params[propertyName]`。允许一个 MCP 参数（例如 `markdown`）同时被两个 sibling CLI flag 绑定 — 字面量 `--content` 走字面量、`--content-file` 走 `file_read` — 配合已有的 tool-level `MutuallyExclusive` / `RequireOneOf` 形成「互斥 + 至少一个」语义。
+  - 落点在 `internal/compat/dynamic_commands.go` 的 normalizer 闭包里，单独走 `mapsToRoutes` 收集 + 路由路径；空 `MapsTo` 保持旧行为（`params[propertyName] = value`），所有已有 dynamic_commands 测试零改动。Pre-prod 6 条 case 端到端验证通过（详见 PR #291 Validation 表）。
+- **`dws doc update --content-file <path>`（envelope 配置上线）** — 解决「长 Markdown 写不进文档」的痛点。老命令只有 `--content "..."`，长文 / 多行 / 表格在 shell 转义后会乱掉，AI agent 写 >2KB 内容直接没法用。envelope 把 `--content`（字面量）和 `--content-file`（`file_read` transform）都 `mapsTo` 到 `markdown` 参数，两者通过 cobra `MarkFlagsMutuallyExclusive` 互斥、`RequireOneOf` 至少必填一个。`--content-file -` 从 stdin 读，`cat 长文.md | dws doc update --content-file -` 直接可用。**老用户需要执行一次 `dws cache refresh` 才能拉到新的 envelope**。
+- **`dws sheet find --query` 隐藏别名（envelope 配置上线）** — 解决「跨开源 / wukong 版本复制命令报 unknown flag」的痛点。用户从内部 wukong 文档复制 `dws sheet find --query "..."` 到开源 dws 上跑会报错，因为开源版的主 flag 名是 `--find`。envelope 现在通过 `CLIFlagOverride.Aliases`（1.0.26 已落地的字段）把 `--query` 注册成 `--find` 的隐藏别名 — 不出现在 `--help`，但能正常接住值并写入同一个 MCP 参数；`--find` 行为完全不变。同样需要 `dws cache refresh` 一次拉取最新 envelope。
+
+### Fixed
+
+- **stdio 插件正常关停时 stderr 打印 `failed to stop stdio client: exit status 1` WARN** (#285) — `Stop()` 主动 `Kill` 子进程后，`cmd.Wait()` 返回的非零 exit code 是预期行为，但之前被当成 error 一路传上去，每次 CLI 退出都会在 stderr 打一条 WARN，干扰 agent 日志解析。现在 `Stop()` 在 Kill + Wait 之后直接返回 `nil`；只有「进程自己异常退出」（例如 stdin close 但没主动 Kill）才走原来的错误路径。`internal/transport/stdio.go` + `stdio_integration_test.go` 配套断言「Stop() 返回 nil」。
+
 ## [1.0.26] - 2026-05-12
 
 Platform-stability round: Windows PAT-auth browser opener no longer truncates URLs at `&userCode=`, macOS sandbox hosts get an opt-in keychain fallback, and `dws doc download` rejects `axls` nodes before requesting `drive:download` consent. Two new global output formats `-f ndjson` and `-f csv` (matching `larksuite/cli`) land as first-class citizens with real-traffic-verified list detection. The `dws doc comment *` regression tracked in #240 is also resolved — fix is in the market metadata, users just need `dws cache refresh` once.
