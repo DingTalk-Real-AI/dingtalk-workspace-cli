@@ -4,11 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.0.28] - 2026-05-14
+
+A single symmetric follow-up to 1.0.26's #250: `dws chat message send --group <cid>` now refuses an empty `--title` at the CLI layer instead of letting the call fall through to the API and surface a misleading `发群服务窗会话消息失败` error. No other behaviour changes.
 
 ### Fixed
 
-- **`dws chat message send` 群聊缺 `--title` 时前置校验** — 完成 #250 的对称修复。`send_message_as_user`（群聊）的 schema 同样把 `title` 列为 `required`，缺失时 API 返回与单聊一致的误导性 `发群服务窗会话消息失败`（实测：`dws chat message send --group <cid> --text "1"` 失败；带上 `--title` 后成功）。CLI 现在在 `buildChatMessageSendInvocation` 把缺 title 的校验扩展到 `--group` 分支，分别返回 `--title is required for group messages (--group)` 和原有的 `--title is required for direct messages (--user / --open-dingtalk-id)`；同时把 `Long` help、`--title` flag 描述、Example、`skills/references/products/chat.md` 全部对齐为「群聊与单聊都必填」。`internal/helpers/chat_test.go` 新增 `group-without-title` 断言，并把既有 `group` / `positional-text` 用例补上 `--title`，群聊 API 行为不变。
+- **`dws chat message send` rejects missing `--title` on group messages** (#294, completes #250) — `send_message_as_user`'s schema marks `title` as required (just like `send_direct_message_as_user`), but `buildChatMessageSendInvocation` only had the pre-validation on the direct-message branches. Group sends without a title were falling through to the API and returning the same misleading `发群服务窗会话消息失败` that #250 already fixed for direct messages. The check now covers both branches: missing `--title` on `--group` returns `--title is required for group messages (--group)` with exit code 2; missing on `--user` / `--open-dingtalk-id` keeps the original `--title is required for direct messages (--user / --open-dingtalk-id)`. The `Long` help, `--title` flag description, the first `Example`, and `skills/references/products/chat.md` (including the drive→chat workflow example) are realigned to "title is required for both direct and group messages" — the docs previously contradicted themselves (the prose said 群聊可选 while the flag listing said 必填). `internal/helpers/chat_test.go` adds a `group-without-title` rejection case; the existing `group` / `positional-text` success cases now pass `--title` to stay aligned with the new validation. No API request shape change — the server has always required `title`; the CLI now matches.
 
 ## [1.0.27] - 2026-05-14
 
