@@ -545,10 +545,19 @@ func buildOverrideBindings(override market.CLIToolOverride) ([]FlagBinding, Norm
 	var bindings []FlagBinding
 	type transformEntry struct {
 		paramName     string
+		mapsTo        string
 		transform     string
 		transformArgs map[string]any
 	}
 	var transforms []transformEntry
+	// mapsToRoutes captures flags that only need value-routing (no transform)
+	// — e.g. a literal --content flag that mapsTo "markdown". The dispatch
+	// loop moves params[paramName] → params[mapsTo] after CLI binding.
+	type mapsToRoute struct {
+		paramName string
+		mapsTo    string
+	}
+	var mapsToRoutes []mapsToRoute
 	type envDefaultEntry struct {
 		paramName string
 		envVar    string
@@ -677,8 +686,18 @@ func buildOverrideBindings(override market.CLIToolOverride) ([]FlagBinding, Norm
 		if flagOverride.Transform != "" {
 			transforms = append(transforms, transformEntry{
 				paramName:     paramName,
+				mapsTo:        strings.TrimSpace(flagOverride.MapsTo),
 				transform:     flagOverride.Transform,
 				transformArgs: flagOverride.TransformArgs,
+			})
+		} else if mt := strings.TrimSpace(flagOverride.MapsTo); mt != "" {
+			// mapsTo without transform: just route the literal value into a
+			// different MCP parameter slot. Common case is --content (literal
+			// string) mapping to MCP parameter markdown, alongside a sibling
+			// --content-file (transform: file_read) mapping to the same slot.
+			mapsToRoutes = append(mapsToRoutes, mapsToRoute{
+				paramName: paramName,
+				mapsTo:    mt,
 			})
 		}
 		if flagOverride.EnvDefault != "" {
@@ -712,12 +731,15 @@ func buildOverrideBindings(override market.CLIToolOverride) ([]FlagBinding, Norm
 		}
 	}
 	bodyWrapper := strings.TrimSpace(override.BodyWrapper)
-	if len(transforms) == 0 && len(envDefaults) == 0 && len(defaultInjects) == 0 && len(runtimeDefaults) == 0 && len(omits) == 0 && !needsDottedNesting && bodyWrapper == "" {
+	if len(transforms) == 0 && len(envDefaults) == 0 && len(defaultInjects) == 0 && len(runtimeDefaults) == 0 && len(omits) == 0 && len(mapsToRoutes) == 0 && !needsDottedNesting && bodyWrapper == "" {
 		return bindings, nil
 	}
 
-	// Build a normalizer that applies default injections + env defaults + runtime defaults
-	// + transforms + omitWhen + nesting + body wrap.
+	// Build a normalizer that applies default injections + env defaults +
+	// runtime defaults + transforms + mapsTo routing + omitWhen + nesting +
+	// body wrap. Tool-level cobra constraints (MutuallyExclusive /
+	// RequireOneOf) are wired separately via applyFlagConstraints and don't
+	// belong in this closure.
 	normalizer := func(cmd *cobra.Command, params map[string]any) error {
 		// §v3.2: Apply envelope flag.default for parameters not explicitly set.
 		// Coerce by Kind so number-typed schemas don't reject string defaults.
@@ -769,14 +791,21 @@ func buildOverrideBindings(override market.CLIToolOverride) ([]FlagBinding, Norm
 			}
 		}
 
-		// §3: Apply transforms
+		// §3: Apply transforms. When MapsTo is set, the transformed value is
+		// routed to params[MapsTo] and the original params[paramName] is
+		// dropped, so the MCP body carries a single (post-transform) entry
+		// at the target slot.
 		for _, t := range transforms {
 			val, exists := params[t.paramName]
 			if !exists {
 				// For enum_map with _default, apply default even when flag is omitted
 				if t.transform == "enum_map" && t.transformArgs != nil {
 					if defaultVal, hasDefault := t.transformArgs["_default"]; hasDefault {
-						params[t.paramName] = defaultVal
+						target := t.paramName
+						if t.mapsTo != "" {
+							target = t.mapsTo
+						}
+						params[target] = defaultVal
 					}
 				}
 				continue
@@ -785,7 +814,25 @@ func buildOverrideBindings(override market.CLIToolOverride) ([]FlagBinding, Norm
 			if err != nil {
 				return err
 			}
-			params[t.paramName] = transformed
+			if t.mapsTo != "" {
+				params[t.mapsTo] = transformed
+				delete(params, t.paramName)
+			} else {
+				params[t.paramName] = transformed
+			}
+		}
+
+		// §3b: mapsTo-only routes (no transform). Move params[paramName] →
+		// params[mapsTo] verbatim. Common pattern: a literal --content flag
+		// that routes to MCP parameter `markdown`, alongside a sibling
+		// --content-file flag that transforms + routes to the same slot.
+		for _, r := range mapsToRoutes {
+			val, exists := params[r.paramName]
+			if !exists {
+				continue
+			}
+			params[r.mapsTo] = val
+			delete(params, r.paramName)
 		}
 
 		// §v3.2.2: Apply omitWhen — drop keys whose value meets the omit
