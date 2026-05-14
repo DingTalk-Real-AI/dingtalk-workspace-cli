@@ -97,10 +97,9 @@ func TestStdioClientEndToEnd(t *testing.T) {
 		t.Error("CallTool with unknown tool should return error")
 	}
 
-	// Stop
+	// Stop — after kill, Stop should return nil (non-zero exit is suppressed)
 	if err := client.Stop(); err != nil {
-		// Process killed, expected to return an error
-		_ = err
+		t.Errorf("Stop after kill should return nil, got %v", err)
 	}
 }
 
