@@ -16,9 +16,12 @@ package compat
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
 
@@ -27,7 +30,7 @@ import (
 
 // ApplyTransform applies a named transform rule to a value.
 // Supported transforms: iso8601_to_millis, csv_to_array, json_parse,
-// json_parse_strict, enum_map.
+// json_parse_strict, enum_map, file_read.
 func ApplyTransform(value any, transform string, args map[string]any) (any, error) {
 	switch strings.TrimSpace(transform) {
 	case "":
@@ -42,6 +45,8 @@ func ApplyTransform(value any, transform string, args map[string]any) (any, erro
 		return transformJSONParseStrict(value)
 	case "enum_map":
 		return transformEnumMap(value, args)
+	case "file_read":
+		return transformFileRead(value)
 	default:
 		return value, nil
 	}
@@ -192,6 +197,44 @@ func transformEnumMap(value any, args map[string]any) (any, error) {
 		return defaultVal, nil
 	}
 	return value, nil
+}
+
+// transformFileRead reads the file at the given path and returns its contents
+// as a UTF-8 string. The special path "-" reads from stdin.
+//
+// Typical envelope use is paired with CLIFlagOverride.MapsTo so a path-typed
+// CLI flag (e.g. --content-file ./a.md) routes the file contents into a
+// content-typed MCP parameter (e.g. markdown), letting a sibling literal
+// flag (--content "# 标题") feed the same parameter without conflict.
+//
+// Errors are surfaced as validation errors so the dispatcher returns exit code 2
+// (user input) rather than the generic exit code 1 (transient failure).
+func transformFileRead(value any) (any, error) {
+	s, ok := toString(value)
+	if !ok {
+		return nil, apperrors.NewValidation("file_read: expected string path, got non-string value")
+	}
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, apperrors.NewValidation("file_read: empty path")
+	}
+	var buf []byte
+	var err error
+	if s == "-" {
+		buf, err = io.ReadAll(os.Stdin)
+		if err != nil {
+			return nil, apperrors.NewValidation(fmt.Sprintf("file_read: read stdin: %v", err))
+		}
+	} else {
+		buf, err = os.ReadFile(s)
+		if err != nil {
+			return nil, apperrors.NewValidation(fmt.Sprintf("file_read: read %q: %v", s, err))
+		}
+	}
+	if !utf8.Valid(buf) {
+		return nil, apperrors.NewValidation(fmt.Sprintf("file_read: %q is not valid UTF-8", s))
+	}
+	return string(buf), nil
 }
 
 func toString(v any) (string, bool) {
