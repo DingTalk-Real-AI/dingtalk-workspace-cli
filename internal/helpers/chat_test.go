@@ -60,7 +60,7 @@ func TestChatMessageSendRoutesByDestination(t *testing.T) {
 	}{
 		{
 			name:      "group",
-			args:      []string{"--group", "cid-xyz", "--text", "hello"},
+			args:      []string{"--group", "cid-xyz", "--title", "t", "--text", "hello"},
 			wantTool:  "send_message_as_user",
 			wantKey:   "openConversation_id",
 			wantValue: "cid-xyz",
@@ -81,7 +81,7 @@ func TestChatMessageSendRoutesByDestination(t *testing.T) {
 		},
 		{
 			name:      "positional-text",
-			args:      []string{"--group", "cid-xyz", "hello from positional"},
+			args:      []string{"--group", "cid-xyz", "--title", "t", "hello from positional"},
 			wantTool:  "send_message_as_user",
 			wantKey:   "text",
 			wantValue: "hello from positional",
@@ -131,6 +131,11 @@ func TestChatMessageSendRejectsInvalidDestination(t *testing.T) {
 			name:    "empty-text",
 			args:    []string{"--group", "cid-x"},
 			wantErr: "--text (or positional argument) is required",
+		},
+		{
+			name:    "group-without-title",
+			args:    []string{"--group", "cid-x", "--text", "hi"},
+			wantErr: "--title is required for group messages",
 		},
 		{
 			name:    "direct-user-without-title",
