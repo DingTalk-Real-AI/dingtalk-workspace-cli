@@ -200,9 +200,12 @@ func transformEnumMap(value any, args map[string]any) (any, error) {
 }
 
 // transformFileRead reads the file at the given path and returns its contents
-// as a UTF-8 string. The special path "-" reads from stdin. Use with MapsTo to
-// route a path-typed CLI flag (e.g. --content-file ./a.md) into a content-typed
-// MCP parameter (e.g. markdown).
+// as a UTF-8 string. The special path "-" reads from stdin.
+//
+// Typical envelope use is paired with CLIFlagOverride.MapsTo so a path-typed
+// CLI flag (e.g. --content-file ./a.md) routes the file contents into a
+// content-typed MCP parameter (e.g. markdown), letting a sibling literal
+// flag (--content "# 标题") feed the same parameter without conflict.
 //
 // Errors are surfaced as validation errors so the dispatcher returns exit code 2
 // (user input) rather than the generic exit code 1 (transient failure).

@@ -283,7 +283,19 @@ type CLIFlagOverride struct {
 	// name and Alias, and reserved names ("json", "params") are skipped.
 	// When any alias is set by the user, the binding's Required check is
 	// satisfied and the value is written to params[Property].
-	Aliases       []string       `json:"aliases,omitempty"`
+	Aliases []string `json:"aliases,omitempty"`
+	// MapsTo redirects this flag's final value into a different MCP parameter
+	// slot. When empty (default), the value is written to params[propertyName]
+	// as today. When set, params[MapsTo] receives the (possibly transformed)
+	// value and params[propertyName] is NOT written. This is what lets a
+	// sibling CLI flag — e.g. --content-file with transform: file_read — feed
+	// the same MCP parameter (markdown) as the existing literal --content
+	// flag, without forcing one flag to do double-duty.
+	//
+	// Pair with the existing CLIToolOverride.MutuallyExclusive (tool-level
+	// cobra MarkFlagsMutuallyExclusive) when two sibling flags map to the
+	// same MCP slot but should not be set together.
+	MapsTo        string         `json:"mapsTo,omitempty"`
 	Transform     string         `json:"transform,omitempty"`
 	TransformArgs map[string]any `json:"transformArgs,omitempty"`
 	EnvDefault    string         `json:"envDefault,omitempty"`
