@@ -22,12 +22,31 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
 const (
-	// appConfigFile is the filename for storing app credentials.
+	// appConfigFile is the filename for the open-source edition's app
+	// credentials store. Sibling editions get a name-suffixed file via
+	// editionAppConfigFile() so two dws binaries sharing the same config
+	// directory (~/.dws or DWS_CONFIG_DIR) cannot read/write each other's
+	// credentials. See GetAppConfigPath for the path derivation contract.
 	appConfigFile = "app.json"
 )
+
+// editionAppConfigFile returns the app.json filename for the currently-active
+// edition. Open-source ("" or "open") keeps the historical "app.json" so
+// existing users see no migration; every other edition (e.g. "wukong",
+// "dev") gets its own "app-<edition>.json" file. This mirrors the
+// pkg/config.EditionPartition strategy used by the disk cache loader and
+// gives us end-to-end physical isolation without any read-time heuristics.
+func editionAppConfigFile() string {
+	name := edition.Get().Name
+	if name == "" || name == "open" {
+		return appConfigFile
+	}
+	return "app-" + name + ".json"
+}
 
 // AppConfig represents the application credentials configuration.
 // This is stored in ~/.dws/app.json with the client secret securely stored in keychain.
@@ -53,9 +72,14 @@ var (
 	cachedResolvedMu     sync.RWMutex
 )
 
-// GetAppConfigPath returns the path to the app config file.
+// GetAppConfigPath returns the path to the app config file for the
+// currently-active edition. The filename is partitioned by edition so that
+// two dws binaries from different editions sharing the same configDir
+// (typically ~/.dws or DWS_CONFIG_DIR) cannot read or overwrite each
+// other's credentials. Open-source stays on "app.json" for backwards
+// compatibility; sibling editions land on "app-<edition>.json".
 func GetAppConfigPath(configDir string) string {
-	return filepath.Join(configDir, appConfigFile)
+	return filepath.Join(configDir, editionAppConfigFile())
 }
 
 // LoadAppConfig loads the app configuration from disk.
