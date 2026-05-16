@@ -49,7 +49,8 @@ func editionAppConfigFile() string {
 }
 
 // AppConfig represents the application credentials configuration.
-// This is stored in ~/.dws/app.json with the client secret securely stored in keychain.
+// This is stored in the edition-specific app config file, with the client
+// secret securely stored in keychain when present.
 type AppConfig struct {
 	ClientID     string      `json:"clientId"`
 	ClientSecret SecretInput `json:"clientSecret"`

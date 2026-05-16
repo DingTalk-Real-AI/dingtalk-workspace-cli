@@ -14,6 +14,7 @@
 package auth
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -81,5 +82,27 @@ func TestGetAppConfigPath_OpenAndSiblingAreDisjoint(t *testing.T) {
 	}
 	if filepath.Dir(openPath) != filepath.Dir(wukongPath) {
 		t.Fatalf("paths landed in different directories (%q vs %q); partitioning should only differ by filename", filepath.Dir(openPath), filepath.Dir(wukongPath))
+	}
+}
+
+func TestAppConfigIO_OpenEditionDoesNotReadSiblingCredentials(t *testing.T) {
+	prev := edition.Get()
+	t.Cleanup(func() { edition.Override(prev) })
+
+	configDir := t.TempDir()
+
+	edition.Override(&edition.Hooks{Name: "wukong"})
+	wukongPath := GetAppConfigPath(configDir)
+	if err := os.WriteFile(wukongPath, []byte(`{"clientId":"wukong-cid","createdAt":"2026-05-17T00:00:00+08:00"}`+"\n"), 0600); err != nil {
+		t.Fatalf("writing sibling app config: %v", err)
+	}
+
+	edition.Override(&edition.Hooks{Name: "open"})
+	got, err := LoadAppConfig(configDir)
+	if err != nil {
+		t.Fatalf("LoadAppConfig(open) error = %v", err)
+	}
+	if got != nil {
+		t.Fatalf("open edition read sibling app config: %#v", got)
 	}
 }

@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
+## [1.0.29] - 2026-05-17
+
+### Security
+
+- **App credential files are partitioned by edition to prevent cross-edition credential leakage** (#300, no public issue; found during internal review) — different `dws` editions sharing the same config directory previously read and wrote the same `app.json`. A sibling edition that pinned its OAuth client ID could persist that ID through the shared post-login path, and the open-source build could later adopt it from the same file. Open-source/empty edition keeps the legacy `app.json` path for compatibility; sibling editions now use `app-<edition>.json`, matching the existing cache partitioning strategy. This prevents new cross-edition app credential writes and reads from colliding. Users who previously ran a sibling edition in a shared `~/.dws` directory may still have an orphaned `~/.dws/app.json` written by that edition; remove it manually with `rm ~/.dws/app.json` after confirming it is not the open-source credential file you still need.
+
 ## [1.0.28] - 2026-05-14
 
 A single symmetric follow-up to 1.0.26's #250: `dws chat message send --group <cid>` now refuses an empty `--title` at the CLI layer instead of letting the call fall through to the API and surface a misleading `发群服务窗会话消息失败` error. No other behaviour changes.
