@@ -416,16 +416,19 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 | Sheet | `sheet` | 34 | `range` `filter-view` (top-level: `create` `new` `list` `info` `find` `replace` `append` `merge-cells` `unmerge-cells` `add-dimension` `insert-dimension` `delete-dimension` `move-dimension` `update-dimension` `write-image` `copy_sheet` `update_sheet` `submit_export_job` `query_export_job` `create_filter` `get_filter` `update_filter` `delete_filter` `set_filter_criteria` `clear_filter_criteria` `sort_filter`) | Online spreadsheet (`contentType=ALIDOC`, `extension=axls`): worksheet CRUD, range read/write/append, dimension ops, cell merge, find/replace, named filter views + sheet-level filters, image write, async export (`submit_export_job` + `query_export_job` — no consolidated `export` in v1.0.25) |
 | Wiki | `wiki` | 7 | `space` `member` | Knowledge base management: space `create` / `get` / `list` / `search` + member `add` / `list` / `update` |
 | DevDoc | `devdoc` | 1 | `article` | Search the DingTalk Open Platform documentation |
+| AI Search | `aisearch` | 1 | `person` | Enterprise people search by name / department / position / duty / supervisor / subordinate / phone / job-number (single command, multi-dimension filter) |
+| AI App | `aiapp` | 3 | — | AI application lifecycle: `create` (with prompt / attachments / skills) / `query` (by task ID) / `modify` (by thread ID) |
+| Live | `live` | 1 | `stream` | DingTalk live streaming: list my lives |
 | Raw API | `api` | 1 | — | Call any DingTalk OpenAPI directly (api / oapi dual-form), with automatic app-level token management |
 
-> **204 commands across 16 products.** Full listing with descriptions and usage scenarios: [`docs/command-index.md`](./docs/command-index.md). Run `dws --help` for the top-level tree, or `dws <service> --help` for subcommands.
+> **209 commands across 19 products.** Full listing with descriptions and usage scenarios: [`docs/command-index.md`](./docs/command-index.md). Run `dws --help` for the top-level tree, or `dws <service> --help` for subcommands.
 
 > **Note on `chat bot`**: bot capabilities (`send-by-bot` / `recall-by-bot` / `add-bot` / `send-by-webhook` / bot search) are merged into the relevant `chat` subtrees (e.g. `dws chat message send-by-bot`, `dws chat group members add-bot`) so the agent-facing command surface stays flat and discoverable. There is no longer a separate top-level `bot` product.
 
 <details>
 <summary>Coming soon</summary>
 
-`conference` (video) · `aiapp` (AI apps) · `live` (streaming)
+`conference` (video meetings)
 
 </details>
 
