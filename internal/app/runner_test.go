@@ -458,6 +458,7 @@ func TestDocDownloadPreflightPATAuthorizationUsesExistingHandler(t *testing.T) {
 	t.Cleanup(func() { openBrowserFunc = originalOpenBrowser })
 
 	const authURI = "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3Dflow-1%26userCode%3DCODE#/personalAuthorization?flowId=flow-1&userCode=CODE"
+	const authURL = "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3Dflow-1%26userCode%3DCODE"
 	var calls []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]any
@@ -500,8 +501,8 @@ func TestDocDownloadPreflightPATAuthorizationUsesExistingHandler(t *testing.T) {
 	if !errors.As(err, &patErr) {
 		t.Fatalf("executeInvocation() error = %T, want *errors.PATError", err)
 	}
-	if openedURI != authURI {
-		t.Fatalf("opened URI = %q, want %q", openedURI, authURI)
+	if openedURI != authURL {
+		t.Fatalf("opened URI = %q, want %q", openedURI, authURL)
 	}
 	if got := strings.Join(calls, ","); got != docGetDocumentInfoTool {
 		t.Fatalf("tool calls = %q, want only %s before PAT authorization", got, docGetDocumentInfoTool)

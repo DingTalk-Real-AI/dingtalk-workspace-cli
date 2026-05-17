@@ -904,6 +904,7 @@ func TestHandlePatAuthCheck_JSONModeCanOpenBrowserWithoutTextOutput(t *testing.T
 		globalFlags: &GlobalFlags{Format: "json"},
 	}
 	rawURI := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3Df72437f040f04a8295988ff71e690b35%26userCode%3D98JV-JSBL#/personalAuthorization?flowId=f72437f040f04a8295988ff71e690b35&userCode=98JV-JSBL"
+	wantURL := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3Df72437f040f04a8295988ff71e690b35%26userCode%3D98JV-JSBL"
 	raw := `{"code":"AGENT_CODE_NOT_EXISTS","data":{"desc":"test auth","flowId":"flow-json","uri":"` + rawURI + `","clientId":"test-client-id"}}`
 
 	var buf bytes.Buffer
@@ -921,8 +922,8 @@ func TestHandlePatAuthCheck_JSONModeCanOpenBrowserWithoutTextOutput(t *testing.T
 	if _, err := os.Stat(filepath.Join(tmpDir, "app.json")); !os.IsNotExist(err) {
 		t.Fatalf("json PAT mode must not persist shared app.json, stat error = %v", err)
 	}
-	if opened != rawURI {
-		t.Fatalf("opened url = %q, want verbatim %q", opened, rawURI)
+	if opened != wantURL {
+		t.Fatalf("opened url = %q, want canonical %q", opened, wantURL)
 	}
 	patOut, ok := err.(*apperrors.PATError)
 	if !ok {
@@ -936,8 +937,11 @@ func TestHandlePatAuthCheck_JSONModeCanOpenBrowserWithoutTextOutput(t *testing.T
 	if got, _ := data["uri"].(string); got != rawURI {
 		t.Fatalf("data.uri = %q, want verbatim %q", got, rawURI)
 	}
-	if got, _ := data["authorizationUrl"].(string); got != rawURI {
-		t.Fatalf("data.authorizationUrl = %q, want %q", got, rawURI)
+	if got, _ := data["authorizationUrl"].(string); got != wantURL {
+		t.Fatalf("data.authorizationUrl = %q, want %q", got, wantURL)
+	}
+	if got, _ := data["userCode"].(string); got != "98JV-JSBL" {
+		t.Fatalf("data.userCode = %q, want 98JV-JSBL", got)
 	}
 	if got, ok := data["openBrowser"].(bool); !ok || !got {
 		t.Fatalf("data.openBrowser = %#v, want true", data["openBrowser"])
@@ -1168,12 +1172,13 @@ func TestRetryWithPatAuthRetry_HostControlledReturnsJSON(t *testing.T) {
 	}
 }
 
-func TestHandlePatAuthCheck_OpensOpaqueURIWithoutRebuild(t *testing.T) {
+func TestHandlePatAuthCheck_OpensCanonicalAuthorizationURL(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
 	server, configDir := setupHandlePATServer(t, "APPROVED", "test-auth-code")
 	defer server.Close()
 
 	rawURI := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3D50dff7654b7444e88ced7489b07cce8d%26userCode%3DQ8RY-X6E9#/personalAuthorization?flowId=50dff7654b7444e88ced7489b07cce8d&userCode=Q8RY-X6E9"
+	wantURL := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3D50dff7654b7444e88ced7489b07cce8d%26userCode%3DQ8RY-X6E9"
 	var opened string
 	origOpenBrowser := openBrowserFunc
 	openBrowserFunc = func(rawURL string) error {
@@ -1205,10 +1210,10 @@ func TestHandlePatAuthCheck_OpensOpaqueURIWithoutRebuild(t *testing.T) {
 	if !retryCalled {
 		t.Fatal("expected retry to run after approved PAT flow")
 	}
-	if opened != rawURI {
-		t.Fatalf("opened url = %q, want verbatim %q", opened, rawURI)
+	if opened != wantURL {
+		t.Fatalf("opened url = %q, want canonical %q", opened, wantURL)
 	}
-	if got := buf.String(); !strings.Contains(got, "PAT_AUTHORIZATION_URL="+rawURI) {
+	if got := buf.String(); !strings.Contains(got, "PAT_AUTHORIZATION_URL="+wantURL) {
 		t.Fatalf("output missing copy-safe PAT_AUTHORIZATION_URL line:\n%s", got)
 	}
 }
@@ -1219,7 +1224,7 @@ func TestHandlePatAuthCheck_NormalizesLegacyHashRouteForBrowserAndOutput(t *test
 	defer server.Close()
 
 	rawURI := "https://open-dev.dingtalk.com/fe/old#%2FpersonalAuthorization%3FflowId%3D56b12fd3201d4efab9a9138672cf4deb%26userCode%3DCFTC-27ZN"
-	wantURL := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3D56b12fd3201d4efab9a9138672cf4deb%26userCode%3DCFTC-27ZN#/personalAuthorization?flowId=56b12fd3201d4efab9a9138672cf4deb&userCode=CFTC-27ZN"
+	wantURL := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3D56b12fd3201d4efab9a9138672cf4deb%26userCode%3DCFTC-27ZN"
 	var opened string
 	origOpenBrowser := openBrowserFunc
 	openBrowserFunc = func(rawURL string) error {

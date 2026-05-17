@@ -224,9 +224,7 @@ func enrichPATErrorWithOpenBrowser(raw string, openBrowser bool) string {
 		data = map[string]any{}
 		payload["data"] = data
 	}
-	if rawURI, ok := data["uri"].(string); ok && strings.TrimSpace(rawURI) != "" {
-		data["authorizationUrl"] = apperrors.PATAuthorizationURL(rawURI)
-	}
+	apperrors.ApplyPATAuthorizationFields(data)
 	data["openBrowser"] = openBrowser
 
 	encoded, err := json.Marshal(payload)

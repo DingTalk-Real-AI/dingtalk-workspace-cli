@@ -718,6 +718,7 @@ func TestCleanPATJSON_SingleLineOutput(t *testing.T) {
 func TestCleanPATJSON_PreservesOpaqueURIVerbatim(t *testing.T) {
 	t.Parallel()
 	rawURI := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3D50dff7654b7444e88ced7489b07cce8d%26userCode%3DQ8RY-X6E9#/personalAuthorization?flowId=50dff7654b7444e88ced7489b07cce8d&userCode=Q8RY-X6E9"
+	wantURL := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3D50dff7654b7444e88ced7489b07cce8d%26userCode%3DQ8RY-X6E9"
 	body := map[string]any{
 		"success": false,
 		"code":    "PAT_MEDIUM_RISK_NO_PERMISSION",
@@ -738,15 +739,69 @@ func TestCleanPATJSON_PreservesOpaqueURIVerbatim(t *testing.T) {
 	if got, _ := data["uri"].(string); got != rawURI {
 		t.Fatalf("data.uri = %q, want verbatim %q", got, rawURI)
 	}
-	if got, _ := data["authorizationUrl"].(string); got != rawURI {
-		t.Fatalf("data.authorizationUrl = %q, want %q", got, rawURI)
+	if got, _ := data["authorizationUrl"].(string); got != wantURL {
+		t.Fatalf("data.authorizationUrl = %q, want %q", got, wantURL)
+	}
+	if got, _ := data["userCode"].(string); got != "Q8RY-X6E9" {
+		t.Fatalf("data.userCode = %q, want Q8RY-X6E9", got)
+	}
+}
+
+func TestClassifyPatAuthCheck_HostOwnedDeviceFlowAddsUserCodeAndSafeURL(t *testing.T) {
+	SetHostControlProvider(func() string { return "openClaw" })
+	SetPATOpenBrowserProvider(func() bool { return true })
+	t.Cleanup(func() {
+		SetHostControlProvider(nil)
+		SetPATOpenBrowserProvider(nil)
+	})
+
+	rawURI := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3D8bfc1e2b8f954e53a27ed5ad6ca44eac%26userCode%3D4CTX-HVXJ#/personalAuthorization?flowId=8bfc1e2b8f954e53a27ed5ad6ca44eac&userCode=4CTX-HVXJ"
+	wantURL := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3D8bfc1e2b8f954e53a27ed5ad6ca44eac%26userCode%3D4CTX-HVXJ"
+	patErr := ClassifyPatAuthCheck(map[string]any{
+		"success": false,
+		"code":    "PAT_MEDIUM_RISK_NO_PERMISSION",
+		"data": map[string]any{
+			"authRequestId": nil,
+			"desc":          "open browser",
+			"flowId":        "8bfc1e2b8f954e53a27ed5ad6ca44eac",
+			"grantOptions":  []any{"once", "permanent"},
+			"requiredScopes": []any{
+				map[string]any{"scope": "mail.message:search"},
+			},
+			"uri": rawURI,
+		},
+	})
+	if patErr == nil {
+		t.Fatal("ClassifyPatAuthCheck returned nil, want PATError")
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(patErr.RawJSON), &payload); err != nil {
+		t.Fatalf("unmarshal PAT payload: %v\nraw=%s", err, patErr.RawJSON)
+	}
+	data, _ := payload["data"].(map[string]any)
+	if got, _ := data["uri"].(string); got != rawURI {
+		t.Fatalf("data.uri = %q, want verbatim %q", got, rawURI)
+	}
+	if got, _ := data["authorizationUrl"].(string); got != wantURL {
+		t.Fatalf("data.authorizationUrl = %q, want %q", got, wantURL)
+	}
+	if got, _ := data["userCode"].(string); got != "4CTX-HVXJ" {
+		t.Fatalf("data.userCode = %q, want 4CTX-HVXJ", got)
+	}
+	hostControl, _ := data["hostControl"].(map[string]any)
+	if got, _ := hostControl["clawType"].(string); got != "openClaw" {
+		t.Fatalf("hostControl.clawType = %q, want openClaw", got)
+	}
+	if got, ok := data["openBrowser"].(bool); !ok || !got {
+		t.Fatalf("data.openBrowser = %#v, want true", data["openBrowser"])
 	}
 }
 
 func TestPATAuthorizationURL_NormalizesLegacyHashRoute(t *testing.T) {
 	t.Parallel()
 	rawURI := "https://open-dev.dingtalk.com/fe/old#%2FpersonalAuthorization%3FflowId%3D77108a9d0e6f4b74b769c04eb451e7d9%26userCode%3DWSAX-EEF2"
-	want := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3D77108a9d0e6f4b74b769c04eb451e7d9%26userCode%3DWSAX-EEF2#/personalAuthorization?flowId=77108a9d0e6f4b74b769c04eb451e7d9&userCode=WSAX-EEF2"
+	want := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3D77108a9d0e6f4b74b769c04eb451e7d9%26userCode%3DWSAX-EEF2"
 
 	if got := PATAuthorizationURL(rawURI); got != want {
 		t.Fatalf("PATAuthorizationURL() = %q, want %q", got, want)
@@ -770,12 +825,12 @@ func TestPATAuthorizationURL_NormalizesLegacyHashRoutePreservesExtraQuery(t *tes
 	if hash == "" {
 		t.Fatalf("expected normalized URL to include hash query, got: %s", got)
 	}
-	if hash != "#"+parsed.Fragment {
-		t.Fatalf("hash query = %q, want fragment route %q", hash, "#"+parsed.Fragment)
+	if parsed.Fragment != "" {
+		t.Fatalf("fragment = %q, want empty canonical authorizationUrl", parsed.Fragment)
 	}
-	rawQuery, ok := strings.CutPrefix(parsed.Fragment, "/personalAuthorization?")
+	rawQuery, ok := strings.CutPrefix(hash, "#/personalAuthorization?")
 	if !ok {
-		t.Fatalf("fragment = %q, want personalAuthorization route", parsed.Fragment)
+		t.Fatalf("hash query = %q, want personalAuthorization route", hash)
 	}
 	values, err := url.ParseQuery(rawQuery)
 	if err != nil {
@@ -798,7 +853,7 @@ func TestPATAuthorizationURL_NormalizesLegacyHashRoutePreservesExtraQuery(t *tes
 func TestCleanPATJSON_AddsNormalizedAuthorizationURL(t *testing.T) {
 	t.Parallel()
 	rawURI := "https://open-dev.dingtalk.com/fe/old#%2FpersonalAuthorization%3FflowId%3D56b12fd3201d4efab9a9138672cf4deb%26userCode%3DCFTC-27ZN"
-	want := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3D56b12fd3201d4efab9a9138672cf4deb%26userCode%3DCFTC-27ZN#/personalAuthorization?flowId=56b12fd3201d4efab9a9138672cf4deb&userCode=CFTC-27ZN"
+	want := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3D56b12fd3201d4efab9a9138672cf4deb%26userCode%3DCFTC-27ZN"
 	body := map[string]any{
 		"success": false,
 		"code":    "PAT_MEDIUM_RISK_NO_PERMISSION",
@@ -821,6 +876,9 @@ func TestCleanPATJSON_AddsNormalizedAuthorizationURL(t *testing.T) {
 	}
 	if got, _ := data["authorizationUrl"].(string); got != want {
 		t.Fatalf("data.authorizationUrl = %q, want %q", got, want)
+	}
+	if got, _ := data["userCode"].(string); got != "CFTC-27ZN" {
+		t.Fatalf("data.userCode = %q, want CFTC-27ZN", got)
 	}
 }
 
