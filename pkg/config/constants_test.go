@@ -96,6 +96,48 @@ func TestEditionPartition(t *testing.T) {
 	}
 }
 
+func TestIsOpenEdition(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"empty is open", "", true},
+		{"open is open", "open", true},
+		{"whitespace open is open", "  open  ", true},
+		{"wukong is sibling", "wukong", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsOpenEdition(tc.input); got != tc.want {
+				t.Fatalf("IsOpenEdition(%q) = %v, want %v", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestEditionFileName(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name    string
+		edition string
+		want    string
+	}{
+		{"empty uses legacy filename", "", "app.json"},
+		{"open uses legacy filename", "open", "app.json"},
+		{"whitespace is trimmed", "  wukong  ", "app-wukong.json"},
+		{"sibling is suffixed", "wukong", "app-wukong.json"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := EditionFileName(tc.edition, "app", ".json"); got != tc.want {
+				t.Fatalf("EditionFileName(%q, \"app\", \".json\") = %q, want %q", tc.edition, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestManualTokenExpiry(t *testing.T) {
 	t.Parallel()
 	if ManualTokenExpiry <= 0 {

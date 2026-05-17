@@ -74,21 +74,36 @@ const (
 	DefaultPartition = "default/default"
 )
 
-// EditionPartition returns the cache partition for a given edition name.
-// The open-source core (name == "" or "open") uses DefaultPartition; every
-// other edition gets its own namespace to prevent cross-edition data
-// leakage in the disk cache.
+// IsOpenEdition reports whether an edition name maps to the open-source core.
 //
 // This helper takes the edition name as a parameter instead of calling
 // edition.Get() so that pkg/config remains a leaf dependency — importable
 // from internal/cli, internal/app, internal/cache, etc. without risking
 // import cycles.
+func IsOpenEdition(name string) bool {
+	name = strings.TrimSpace(name)
+	return name == "" || name == "open"
+}
+
+// EditionPartition returns the cache partition for a given edition name.
+// The open-source core (name == "" or "open") uses DefaultPartition; every
+// other edition gets its own namespace to prevent cross-edition data
+// leakage in the disk cache.
 func EditionPartition(name string) string {
 	name = strings.TrimSpace(name)
-	if name == "" || name == "open" {
+	if IsOpenEdition(name) {
 		return DefaultPartition
 	}
 	return name + "/default"
+}
+
+// EditionFileName returns the edition-partitioned file name for base+ext.
+func EditionFileName(name, base, ext string) string {
+	name = strings.TrimSpace(name)
+	if IsOpenEdition(name) {
+		return base + ext
+	}
+	return base + "-" + name + ext
 }
 
 // ── Auth flow timeouts ──────────────────────────────────────────────────
