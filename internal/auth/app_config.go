@@ -16,41 +16,27 @@ package auth
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	configpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
 const (
 	// appConfigFile is the filename for the open-source edition's app
 	// credentials store. Sibling editions get a name-suffixed file via
-	// editionAppConfigFile() so two dws binaries sharing the same config
+	// config.EditionFileName so two dws binaries sharing the same config
 	// directory (~/.dws or DWS_CONFIG_DIR) cannot read/write each other's
 	// credentials. See GetAppConfigPath for the path derivation contract.
-	appConfigFile = "app.json"
+	appConfigBase = "app"
+	appConfigExt  = ".json"
+	appConfigFile = appConfigBase + appConfigExt
 )
-
-// editionAppConfigFile returns the app.json filename for the currently-active
-// edition. Open-source ("" or "open") keeps the historical "app.json" so
-// existing users see no migration; every other edition (e.g. "wukong",
-// "dev") gets its own "app-<edition>.json" file. This mirrors the
-// pkg/config.EditionPartition strategy used by the disk cache loader and
-// gives us end-to-end physical isolation without any read-time heuristics.
-func editionAppConfigFile() string {
-	name := edition.Get().Name
-	if isOpenEditionName(name) {
-		return appConfigFile
-	}
-	return "app-" + name + ".json"
-}
-
-func isOpenEditionName(name string) bool {
-	return name == "" || name == "open"
-}
 
 // AppConfig represents the application credentials configuration.
 // This is stored in the edition-specific app config file, with the client
@@ -84,7 +70,7 @@ var (
 // other's credentials. Open-source stays on "app.json" for backwards
 // compatibility; sibling editions land on "app-<edition>.json".
 func GetAppConfigPath(configDir string) string {
-	return filepath.Join(configDir, editionAppConfigFile())
+	return filepath.Join(configDir, configpkg.EditionFileName(edition.Get().Name, appConfigBase, appConfigExt))
 }
 
 // LoadAppConfig loads the app configuration from disk.
@@ -152,7 +138,7 @@ func SaveAppConfig(configDir string, config *AppConfig) error {
 }
 
 func cleanupLegacySiblingAppConfig(configDir string, config *AppConfig) {
-	if config == nil || config.ClientID == "" || isOpenEditionName(edition.Get().Name) {
+	if config == nil || config.ClientID == "" || configpkg.IsOpenEdition(edition.Get().Name) {
 		return
 	}
 
@@ -174,7 +160,9 @@ func cleanupLegacySiblingAppConfig(configDir string, config *AppConfig) {
 		return
 	}
 
-	_ = os.Remove(legacyPath)
+	if err := os.Remove(legacyPath); err != nil && !os.IsNotExist(err) {
+		slog.Debug("auth: best-effort cleanup of legacy app config failed", "path", legacyPath, "error", err)
+	}
 }
 
 // DeleteAppConfig removes the app configuration and associated keychain secrets.
