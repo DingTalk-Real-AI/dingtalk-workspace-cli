@@ -169,10 +169,10 @@ func NewDirectCommand(route Route, runner executor.Runner) *cobra.Command {
 			strictMin = b.PositionalIndex + 1
 		}
 	}
-	var argsValidator cobra.PositionalArgs = cobra.NoArgs
+	var argsValidator cobra.PositionalArgs = cobra.ArbitraryArgs
 	switch {
 	case totalMax == 0:
-		argsValidator = cobra.NoArgs
+		argsValidator = cobra.ArbitraryArgs
 	case strictMin > 0 && strictMin == totalMax:
 		argsValidator = cobra.MinimumNArgs(strictMin)
 	case strictMin > 0:
