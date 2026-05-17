@@ -87,7 +87,10 @@ func TestGetAppConfigPath_OpenAndSiblingAreDisjoint(t *testing.T) {
 
 func TestAppConfigIO_OpenEditionDoesNotReadSiblingCredentials(t *testing.T) {
 	prev := edition.Get()
-	t.Cleanup(func() { edition.Override(prev) })
+	t.Cleanup(func() {
+		edition.Override(prev)
+		resetAppConfigCache()
+	})
 
 	configDir := t.TempDir()
 
@@ -104,5 +107,60 @@ func TestAppConfigIO_OpenEditionDoesNotReadSiblingCredentials(t *testing.T) {
 	}
 	if got != nil {
 		t.Fatalf("open edition read sibling app config: %#v", got)
+	}
+}
+
+func TestSaveAppConfig_SiblingEditionRemovesMatchingLegacyAppConfig(t *testing.T) {
+	prev := edition.Get()
+	t.Cleanup(func() {
+		edition.Override(prev)
+		resetAppConfigCache()
+	})
+
+	configDir := t.TempDir()
+	legacyPath := filepath.Join(configDir, appConfigFile)
+	legacyJSON := []byte(`{"clientId":"wukong-cid","createdAt":"2026-05-17T00:00:00+08:00"}` + "\n")
+	if err := os.WriteFile(legacyPath, legacyJSON, 0600); err != nil {
+		t.Fatalf("writing legacy app config: %v", err)
+	}
+
+	edition.Override(&edition.Hooks{Name: "wukong"})
+	if err := SaveAppConfig(configDir, &AppConfig{ClientID: "wukong-cid"}); err != nil {
+		t.Fatalf("SaveAppConfig(wukong) error = %v", err)
+	}
+
+	if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
+		t.Fatalf("matching legacy app config should be removed, stat error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(configDir, "app-wukong.json")); err != nil {
+		t.Fatalf("sibling app config not written: %v", err)
+	}
+}
+
+func TestSaveAppConfig_SiblingEditionKeepsDifferentLegacyAppConfig(t *testing.T) {
+	prev := edition.Get()
+	t.Cleanup(func() {
+		edition.Override(prev)
+		resetAppConfigCache()
+	})
+
+	configDir := t.TempDir()
+	legacyPath := filepath.Join(configDir, appConfigFile)
+	legacyJSON := []byte(`{"clientId":"open-cid","createdAt":"2026-05-17T00:00:00+08:00"}` + "\n")
+	if err := os.WriteFile(legacyPath, legacyJSON, 0600); err != nil {
+		t.Fatalf("writing legacy app config: %v", err)
+	}
+
+	edition.Override(&edition.Hooks{Name: "wukong"})
+	if err := SaveAppConfig(configDir, &AppConfig{ClientID: "wukong-cid"}); err != nil {
+		t.Fatalf("SaveAppConfig(wukong) error = %v", err)
+	}
+
+	got, err := os.ReadFile(legacyPath)
+	if err != nil {
+		t.Fatalf("different legacy app config should be preserved: %v", err)
+	}
+	if string(got) != string(legacyJSON) {
+		t.Fatalf("legacy app config changed: got %q, want %q", got, legacyJSON)
 	}
 }

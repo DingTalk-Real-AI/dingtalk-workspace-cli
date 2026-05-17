@@ -42,10 +42,14 @@ const (
 // gives us end-to-end physical isolation without any read-time heuristics.
 func editionAppConfigFile() string {
 	name := edition.Get().Name
-	if name == "" || name == "open" {
+	if isOpenEditionName(name) {
 		return appConfigFile
 	}
 	return "app-" + name + ".json"
+}
+
+func isOpenEditionName(name string) bool {
+	return name == "" || name == "open"
 }
 
 // AppConfig represents the application credentials configuration.
@@ -130,6 +134,7 @@ func SaveAppConfig(configDir string, config *AppConfig) error {
 	if err := helpers.AtomicWriteJSON(path, append(data, '\n')); err != nil {
 		return fmt.Errorf("writing app config: %w", err)
 	}
+	cleanupLegacySiblingAppConfig(configDir, config)
 
 	// Update cache
 	cachedAppConfigMu.Lock()
@@ -144,6 +149,32 @@ func SaveAppConfig(configDir string, config *AppConfig) error {
 	cachedResolvedMu.Unlock()
 
 	return nil
+}
+
+func cleanupLegacySiblingAppConfig(configDir string, config *AppConfig) {
+	if config == nil || config.ClientID == "" || isOpenEditionName(edition.Get().Name) {
+		return
+	}
+
+	legacyPath := filepath.Join(configDir, appConfigFile)
+	if legacyPath == GetAppConfigPath(configDir) {
+		return
+	}
+
+	data, err := os.ReadFile(legacyPath)
+	if err != nil {
+		return
+	}
+
+	var legacy AppConfig
+	if err := json.Unmarshal(data, &legacy); err != nil {
+		return
+	}
+	if legacy.ClientID != config.ClientID {
+		return
+	}
+
+	_ = os.Remove(legacyPath)
 }
 
 // DeleteAppConfig removes the app configuration and associated keychain secrets.
