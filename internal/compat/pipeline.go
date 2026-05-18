@@ -149,12 +149,12 @@ func executePipelineCall(
 		if result.Response == nil {
 			return map[string]any{}, nil
 		}
-		// Fail-fast on MCP business errors. Pre-execution validation (e.g.
-		// cobra MarkFlagRequired) only checks that the flag was set, not
-		// that the value is non-empty — so a `--required-flag ""` reaches
-		// here and the upstream tool rejects with errorCode. Without this
-		// check the pipeline would happily proceed to poll/download and
-		// either spin until PollTimeout or burn through retries.
+		// Fail-fast on MCP business errors. Pre-execution validation (cobra
+		// MarkFlagRequired) only checks that the flag was set, not that
+		// the value is non-empty — so a `--required-flag ""` reaches here
+		// and the upstream tool rejects with errorCode. Without this check
+		// the pipeline proceeds to poll/download and either spins until
+		// PollTimeout or burns through retries.
 		if errCode := getDotPath(result.Response, "content.errorCode"); errCode != nil && fmt.Sprint(errCode) != "" {
 			msg := getDotPath(result.Response, "content.errorMessage")
 			return nil, apperrors.NewValidation(fmt.Sprintf(

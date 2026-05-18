@@ -101,6 +101,65 @@ func TestNormalizeServersDeduplicatesSameNameAcrossEndpoints(t *testing.T) {
 	}
 }
 
+// TestNormalizeServersPreservesDistinctCLIIDsOnSharedEndpoint guards the
+// bot-root / bot-message / bot-group split (issue: chat bot subtree vanished
+// from the CLI after NormalizeServers collapsed three envelopes that share a
+// single MCP endpoint and displayName but expose different cli.id values).
+func TestNormalizeServersPreservesDistinctCLIIDsOnSharedEndpoint(t *testing.T) {
+	t.Parallel()
+
+	sharedURL := "https://example.com/server/4717"
+	sharedName := "机器人消息"
+	response := ListResponse{
+		Servers: []ServerEnvelope{
+			{
+				Server: RegistryServer{
+					Name:    sharedName,
+					Remotes: []RegistryRemote{{Type: "streamable-http", URL: sharedURL}},
+				},
+				Meta: EnvelopeMeta{
+					Registry: RegistryMetadata{Status: "active", UpdatedAt: "2026-03-29T00:00:00Z"},
+					CLI:      CLIOverlay{ID: "bot-root", Command: "bot"},
+				},
+			},
+			{
+				Server: RegistryServer{
+					Name:    sharedName,
+					Remotes: []RegistryRemote{{Type: "streamable-http", URL: sharedURL}},
+				},
+				Meta: EnvelopeMeta{
+					Registry: RegistryMetadata{Status: "active", UpdatedAt: "2026-03-29T00:00:00Z"},
+					CLI:      CLIOverlay{ID: "bot-message", Command: "message"},
+				},
+			},
+			{
+				Server: RegistryServer{
+					Name:    sharedName,
+					Remotes: []RegistryRemote{{Type: "streamable-http", URL: sharedURL}},
+				},
+				Meta: EnvelopeMeta{
+					Registry: RegistryMetadata{Status: "active", UpdatedAt: "2026-03-29T00:00:00Z"},
+					CLI:      CLIOverlay{ID: "bot-group", Command: "group"},
+				},
+			},
+		},
+	}
+
+	servers := NormalizeServers(response, "live_market")
+	if len(servers) != 3 {
+		t.Fatalf("NormalizeServers() len = %d, want 3 (one per cli.id)", len(servers))
+	}
+	seen := map[string]bool{}
+	for _, s := range servers {
+		seen[s.CLI.ID] = true
+	}
+	for _, want := range []string{"bot-root", "bot-message", "bot-group"} {
+		if !seen[want] {
+			t.Errorf("NormalizeServers() missing descriptor with cli.id %q", want)
+		}
+	}
+}
+
 func TestNormalizeServersMarksLegacyNameAsDeprecatedCandidate(t *testing.T) {
 	t.Parallel()
 

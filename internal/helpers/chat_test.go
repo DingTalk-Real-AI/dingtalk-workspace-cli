@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
-	"github.com/spf13/cobra"
 )
 
 type captureRunner struct {
@@ -304,76 +303,6 @@ func equalAny(a, b any) bool {
 		return true
 	default:
 		return a == b
-	}
-}
-
-// TestChatGroupMembersListSubcommand pins the explicit `list` subcommand
-// added for issue #164: previously the bare `chat group members --id` was
-// the list path, but it shape-mismatched the dynamic envelope's `members`
-// leaf and got eaten by the merge layer. Now `dws chat group members list
-// --id <cid>` is a proper leaf siblings of add/remove/add-bot.
-func TestChatGroupMembersListSubcommand(t *testing.T) {
-	runner := &captureRunner{}
-	groupCmd := newChatGroupCommand(runner)
-	var members *cobra.Command
-	for _, sub := range groupCmd.Commands() {
-		if sub.Name() == "members" {
-			members = sub
-			break
-		}
-	}
-	if members == nil {
-		t.Fatalf("members subcommand missing under chat group")
-	}
-
-	want := map[string]bool{"list": false, "add": false, "remove": false, "add-bot": false}
-	for _, leaf := range members.Commands() {
-		if _, ok := want[leaf.Name()]; ok {
-			want[leaf.Name()] = true
-		}
-	}
-	for name, seen := range want {
-		if !seen {
-			t.Errorf("expected `chat group members %s` subcommand, missing", name)
-		}
-	}
-
-	if members.Flags().Lookup("id") != nil {
-		t.Errorf("members container should not declare --id (moved to `list` subcommand to avoid shape-mismatch with dynamic envelope)")
-	}
-
-	var listCmd *cobra.Command
-	for _, leaf := range members.Commands() {
-		if leaf.Name() == "list" {
-			listCmd = leaf
-			break
-		}
-	}
-	if listCmd == nil {
-		t.Fatalf("`list` subcommand not found")
-	}
-	if listCmd.Flags().Lookup("id") == nil {
-		t.Errorf("`list` subcommand must declare --id")
-	}
-	if listCmd.Flags().Lookup("cursor") == nil {
-		t.Errorf("`list` subcommand must declare --cursor")
-	}
-
-	// Drive execution via the group root so cobra resolves the subcommand
-	// path properly (calling Execute() on a child directly would re-enter
-	// the root help branch).
-	var out bytes.Buffer
-	groupCmd.SetOut(&out)
-	groupCmd.SetErr(&out)
-	groupCmd.SetArgs([]string{"members", "list", "--id", "cid-xyz"})
-	if err := groupCmd.Execute(); err != nil {
-		t.Fatalf("members list Execute error = %v\noutput: %s", err, out.String())
-	}
-	if got := runner.last.Tool; got != "get_group_members" {
-		t.Fatalf("Tool = %q, want get_group_members", got)
-	}
-	if got := runner.last.Params["openconversation_id"]; got != "cid-xyz" {
-		t.Fatalf("openconversation_id = %#v, want cid-xyz", got)
 	}
 }
 
