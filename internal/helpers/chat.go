@@ -647,10 +647,10 @@ func newChatMessageSendByWebhookCommand(runner executor.Runner) *cobra.Command {
 
 func newChatMessageReplyCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "reply",
-		Short: "引用回复消息（支持单聊/群聊）",
-		Long:  "以当前用户身份引用某条消息并回复。需 --conversation-id 会话 ID、--ref-msg-id 被引用消息 ID、--ref-sender 原发送者 openDingTalkId、--text 回复内容。",
-		Example: `  dws chat message reply --conversation-id <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --text "收到，马上处理"`,
+		Use:               "reply",
+		Short:             "引用回复消息（支持单聊/群聊）",
+		Long:              "以当前用户身份引用某条消息并回复。需 --conversation-id 会话 ID、--ref-msg-id 被引用消息 ID、--ref-sender 原发送者 openDingTalkId、--text 回复内容。",
+		Example:           `  dws chat message reply --conversation-id <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --text "收到，马上处理"`,
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
