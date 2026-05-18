@@ -106,6 +106,7 @@ func (s *StdioClient) Start(ctx context.Context) error {
 }
 
 // Stop kills the subprocess and waits for it to exit.
+// A non-zero exit code after Kill is expected and not treated as an error.
 func (s *StdioClient) Stop() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -118,6 +119,9 @@ func (s *StdioClient) Stop() error {
 
 	if s.cmd.Process != nil {
 		_ = s.cmd.Process.Kill()
+		_ = s.cmd.Wait()
+		s.started = false
+		return nil
 	}
 	err := s.cmd.Wait()
 	s.started = false

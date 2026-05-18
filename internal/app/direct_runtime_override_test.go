@@ -270,6 +270,68 @@ func TestDirectRuntimeEndpoint_ProductLevelWinsOverConflictingToolLevel(t *testi
 	}
 }
 
+// --- Command field first-writer-wins regression test ---
+//
+// When two plugins declare the same CLI.Command but different CLI.ID values,
+// AppendDynamicServer must NOT let the second registration overwrite the
+// command → endpoint mapping established by the first. The fix uses a simple
+// "if not exists" guard on dynamicEndpoints[cmd].
+
+const (
+	testFirstEndpoint  = "https://mcp-gw.dingtalk.com/server/first-plugin-hash"
+	testSecondEndpoint = "https://mcp-gw.dingtalk.com/server/second-plugin-hash"
+)
+
+func firstPluginDescriptor() market.ServerDescriptor {
+	return market.ServerDescriptor{
+		Endpoint: testFirstEndpoint,
+		CLI: market.CLIOverlay{
+			ID:      "plugin-alpha",
+			Command: "shared-cmd",
+		},
+	}
+}
+
+func secondPluginDescriptor() market.ServerDescriptor {
+	return market.ServerDescriptor{
+		Endpoint: testSecondEndpoint,
+		CLI: market.CLIOverlay{
+			ID:      "plugin-beta",
+			Command: "shared-cmd",
+		},
+	}
+}
+
+// TestAppendDynamicServer_CommandEndpointFirstWriterWins verifies that when
+// two plugins declare the same Command (but different IDs), only the first
+// registration takes effect for the command → endpoint mapping. The second
+// plugin's own id-based endpoint is unaffected.
+func TestAppendDynamicServer_CommandEndpointFirstWriterWins(t *testing.T) {
+	withCleanDynamicRegistry(t)
+
+	AppendDynamicServer(firstPluginDescriptor())
+	AppendDynamicServer(secondPluginDescriptor())
+
+	// The command "shared-cmd" must resolve to the first plugin's endpoint.
+	assertEndpoint(t, "shared-cmd", "", testFirstEndpoint)
+
+	// Each plugin's own id-based endpoint is always unconditionally written.
+	assertEndpoint(t, "plugin-alpha", "", testFirstEndpoint)
+	assertEndpoint(t, "plugin-beta", "", testSecondEndpoint)
+
+	// Command must appear in dynamicProducts (discovery) regardless.
+	ids := DirectRuntimeProductIDs()
+	if !ids["shared-cmd"] {
+		t.Fatal("shared-cmd not found in DirectRuntimeProductIDs()")
+	}
+	if !ids["plugin-alpha"] {
+		t.Fatal("plugin-alpha not found in DirectRuntimeProductIDs()")
+	}
+	if !ids["plugin-beta"] {
+		t.Fatal("plugin-beta not found in DirectRuntimeProductIDs()")
+	}
+}
+
 // TestDirectRuntimeEndpoint_ToolLevelFallbackWhenProductUnknown verifies that
 // tool-level routing still works as a fallback when productID is empty or has
 // no registered endpoint (the original design intent for tool-level Priority 1).
