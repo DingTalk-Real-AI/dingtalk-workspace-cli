@@ -47,6 +47,38 @@ func TestReadFileArgPlainValue(t *testing.T) {
 	}
 }
 
+// TestReadFileArgChineseAtMention guards the @所有人-style mentions that the
+// chat bot Webhook tests rely on: an '@' followed by non-ASCII text must be
+// treated as a literal message, not as the @file injection syntax.
+func TestReadFileArgChineseAtMention(t *testing.T) {
+	t.Parallel()
+	cases := []string{
+		"@所有人 这是 @ 所有人 的消息",
+		"@张三",
+		"@A 但接下来都是中文@测试",
+	}
+	for _, in := range cases {
+		val, isFile, err := ReadFileArg(in)
+		if in == "@A 但接下来都是中文@测试" {
+			// '@A' starts with ASCII, treated as path → expect file error
+			if err == nil {
+				t.Errorf("@A... should attempt file lookup; got val=%q isFile=%v", val, isFile)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%q: unexpected error %v", in, err)
+			continue
+		}
+		if isFile {
+			t.Errorf("%q: should be plain text, got isFile=true", in)
+		}
+		if val != in {
+			t.Errorf("%q: got %q", in, val)
+		}
+	}
+}
+
 func TestReadFileArgReadsFile(t *testing.T) {
 	t.Parallel()
 

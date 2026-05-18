@@ -236,10 +236,18 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 	for _, b := range built {
 		if b.parent == "" {
 			name := b.cmd.Name()
-			if _, exists := topLevel[name]; !exists {
+			if existing, exists := topLevel[name]; exists {
+				// Multiple servers contribute the same top-level command
+				// (e.g. group-chat and im both register `dws chat`). Move
+				// the incoming command's *children* into the existing top-
+				// level command instead of attaching the whole command (which
+				// would create `dws chat chat` because attachOrMerge would
+				// AddCommand(b.cmd) when no same-named sub exists).
+				mergeSubcommandsInto(existing, b.cmd)
+			} else {
 				topOrder = append(topOrder, name)
+				topLevel[name] = b.cmd
 			}
-			topLevel[name] = b.cmd
 		} else {
 			children = append(children, b)
 		}
@@ -248,12 +256,16 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 		if parent, ok := topLevel[child.parent]; ok {
 			attachOrMerge(parent, child.cmd)
 		} else {
-			// Parent not found among dynamic commands; emit as top-level.
+			// Parent not found among dynamic commands; emit as top-level,
+			// merging into an existing same-named top-level command if one
+			// is already registered (same reasoning as the loop above).
 			name := child.cmd.Name()
-			if _, exists := topLevel[name]; !exists {
+			if existing, exists := topLevel[name]; exists {
+				mergeSubcommandsInto(existing, child.cmd)
+			} else {
 				topOrder = append(topOrder, name)
+				topLevel[name] = child.cmd
 			}
-			topLevel[name] = child.cmd
 		}
 	}
 
@@ -489,6 +501,24 @@ func resolveNestedGroup(root *cobra.Command, groupPath string, registry map[stri
 	}
 	// Auto-create if not defined in groups
 	return ensureNestedGroup(root, groupPath, groupPath, registry)
+}
+
+// mergeSubcommandsInto moves all sub-commands of src into dst, using
+// attachOrMerge so subtree merges happen recursively. src itself is left
+// empty after the call. Used when two envelope entries register the same
+// top-level command (e.g. group-chat and im both `cli.command="chat"`):
+// we want their *children* to coexist under one chat root, not have one
+// nested inside the other.
+func mergeSubcommandsInto(dst, src *cobra.Command) {
+	if dst == nil || src == nil {
+		return
+	}
+	subs := make([]*cobra.Command, len(src.Commands()))
+	copy(subs, src.Commands())
+	for _, sub := range subs {
+		src.RemoveCommand(sub)
+		attachOrMerge(dst, sub)
+	}
 }
 
 // attachOrMerge adds child as a sub-command of parent. If parent already has a
