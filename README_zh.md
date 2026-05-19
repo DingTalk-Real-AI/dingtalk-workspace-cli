@@ -403,7 +403,7 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 | 服务 | 命令 | 命令数 | 子命令 | 描述 |
 |------|------|:------:|--------|------|
 | 通讯录 | `contact` | 6 | `user` `dept` | 按姓名/手机号搜索、批量查询、部门树、当前用户信息 |
-| 群聊 | `chat`（别名 `im`）| 23 | `message` `group` `bot` `conversation-info` `search` `search-common` `list-top-conversations` | 消息（发送 / 列表 / list-all / 按发送者 / @我 / 关注 / 未读 / 话题回复 / 搜索）、群增删改 + 成员管理（含 `add-bot`）、机器人身份消息（`send-by-bot` / `recall-by-bot` / `send-by-webhook`）、会话信息查询、共同群聊 |
+| 群聊 | `chat`（别名 `im`）| 57 | `message` `group` `bot` `conversation-info` `search` `search-common` `list-top-conversations` `group-mute` `group-mute-member` `mute` `set-top` `list-categories` `list-conversations` | 消息（发送 / 回复 / 列表 / list-all / 按发送者 / @我 / 关注 / 未读 / 话题回复 / 搜索 / 高级搜索 / 转发 / 卡片 / 表情与文本表情反应 / 撤回 / 已读与发送状态查询）、群增删改 + 成员管理（成员增 / 删 / 查 / `add-bot`、成员角色增删改查、邀请链接、群图标、群设置、转让群主、设置管理员、退群）、机器人身份消息（`send-by-bot` / `recall-by-bot` / `send-by-webhook`）、会话信息查询、共同群聊、群/成员/会话免打扰、会话置顶、会话分类 |
 | 日历 | `calendar` | 14 | `event` `room` `participant` `busy` | 日程 CRUD + 建议时间 + 附件、会议室预订、闲忙查询、参与者管理 |
 | 待办 | `todo` | 6 | `task` | 创建、列表、修改、完成、详情、删除 |
 | 审批 | `oa` | 9 | `approval` | 同意 / 拒绝 / 撤销、待我审批 / 我发起的、流程列表、操作记录 |
