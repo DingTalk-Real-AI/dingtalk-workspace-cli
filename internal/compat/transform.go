@@ -30,7 +30,7 @@ import (
 
 // ApplyTransform applies a named transform rule to a value.
 // Supported transforms: iso8601_to_millis, csv_to_array, json_parse,
-// json_parse_strict, enum_map, file_read.
+// json_parse_strict, enum_map, file_read, invert_bool.
 func ApplyTransform(value any, transform string, args map[string]any) (any, error) {
 	switch strings.TrimSpace(transform) {
 	case "":
@@ -47,6 +47,31 @@ func ApplyTransform(value any, transform string, args map[string]any) (any, erro
 		return transformEnumMap(value, args)
 	case "file_read":
 		return transformFileRead(value)
+	case "invert_bool":
+		return transformInvertBool(value)
+	default:
+		return value, nil
+	}
+}
+
+// transformInvertBool flips a boolean: true → false, false → true. Strings
+// "true"/"false" (any case) are accepted. Used by envelope flags whose CLI
+// surface and MCP body have opposite semantics — e.g. `--off` (CLI) maps to
+// `mute=true` (MCP) for "mute is enabled", so the flag override declares
+// `transform: invert_bool` and the framework flips at send time.
+func transformInvertBool(value any) (any, error) {
+	switch v := value.(type) {
+	case bool:
+		return !v, nil
+	case string:
+		s := strings.ToLower(strings.TrimSpace(v))
+		switch s {
+		case "true", "1", "yes", "on":
+			return false, nil
+		case "false", "0", "no", "off", "":
+			return true, nil
+		}
+		return value, nil
 	default:
 		return value, nil
 	}

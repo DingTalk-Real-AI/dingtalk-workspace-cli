@@ -259,3 +259,29 @@ func TestFileRead_UnknownTransformPassThrough(t *testing.T) {
 		t.Errorf("expected pass-through, got %v", got)
 	}
 }
+
+func TestInvertBoolTransform(t *testing.T) {
+	cases := []struct {
+		in   any
+		want any
+	}{
+		{true, false},
+		{false, true},
+		{"true", false},
+		{"false", true},
+		{"True", false},
+		{"FALSE", true},
+		{"on", false},
+		{"off", true},
+		{"", true},
+	}
+	for _, c := range cases {
+		got, err := ApplyTransform(c.in, "invert_bool", nil)
+		if err != nil {
+			t.Errorf("ApplyTransform(%v, invert_bool) err=%v", c.in, err)
+		}
+		if got != c.want {
+			t.Errorf("ApplyTransform(%v) = %v, want %v", c.in, got, c.want)
+		}
+	}
+}

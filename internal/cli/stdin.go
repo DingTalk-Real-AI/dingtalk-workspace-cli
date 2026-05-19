@@ -19,6 +19,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"unicode"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
@@ -122,19 +123,51 @@ func readStdinBounded() (string, error) {
 	return string(data), nil
 }
 
+// looksLikeFilePath returns true when value should be interpreted as the
+// `@<path>` file-injection syntax. Heuristic: value must start with '@', and
+// the character right after '@' must be ASCII (letter, digit, or one of the
+// common path-prefix characters: . / ~ _ -). This rules out mistaken matches
+// for natural-language messages that happen to start with '@' followed by
+// non-ASCII text — e.g. "@所有人" should be a chat mention, not a file path.
+func looksLikeFilePath(value string) bool {
+	if !strings.HasPrefix(value, "@") || len(value) < 2 {
+		return false
+	}
+	rest := value[1:]
+	if rest == "-" {
+		return true // @- = stdin
+	}
+	first := rune(rest[0])
+	if first > unicode.MaxASCII {
+		// First byte is part of a multi-byte rune (e.g. Chinese) — not a path.
+		return false
+	}
+	switch {
+	case first >= 'A' && first <= 'Z',
+		first >= 'a' && first <= 'z',
+		first >= '0' && first <= '9',
+		first == '.', first == '/', first == '~', first == '_', first == '-':
+		return true
+	}
+	return false
+}
+
 // ReadFileArg reads the contents of a file referenced by the @filename syntax.
-// Returns the original value unchanged if it does not start with "@".
+// Returns the original value unchanged if it does not start with "@" or is
+// otherwise not a file-path-shaped value (e.g. "@所有人" is treated as plain
+// text, not a path).
 // Returns an error if the file cannot be read or exceeds the size limit.
 //
 // Note: @- (stdin) is NOT handled here; use ResolveInputSource instead.
 func ReadFileArg(value string) (string, bool, error) {
-	if !strings.HasPrefix(value, "@") {
+	// Preserve the historical bare-"@" behaviour (empty filename → error).
+	if value == "@" {
+		return "", false, apperrors.NewValidation("@file: filename must not be empty")
+	}
+	if !looksLikeFilePath(value) {
 		return value, false, nil
 	}
 	path := value[1:]
-	if path == "" {
-		return "", false, apperrors.NewValidation("@file: filename must not be empty")
-	}
 	// @- is stdin, not a file — callers should use ResolveInputSource.
 	if path == "-" {
 		return value, false, nil
@@ -156,14 +189,17 @@ func ReadFileArg(value string) (string, bool, error) {
 //
 // The flagName parameter is used only for error messages and StdinGuard tracking.
 func ResolveInputSource(value string, flagName string, guard *StdinGuard) (string, error) {
-	if !strings.HasPrefix(value, "@") {
+	// Preserve the historical bare-"@" behaviour (empty filename → error).
+	if value == "@" {
+		return "", apperrors.NewValidation(fmt.Sprintf("--%s: @file filename must not be empty", flagName))
+	}
+	if !looksLikeFilePath(value) {
+		// Pass through natural-language strings that happen to start with
+		// '@' (e.g. "@所有人 早上好") so they reach the MCP payload intact.
 		return value, nil
 	}
 
 	path := value[1:]
-	if path == "" {
-		return "", apperrors.NewValidation(fmt.Sprintf("--%s: @file filename must not be empty", flagName))
-	}
 
 	// @- reads from stdin.
 	if path == "-" {

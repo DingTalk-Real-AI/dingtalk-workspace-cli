@@ -647,18 +647,24 @@ func NormalizeServers(response ListResponse, source string) []ServerDescriptor {
 			descriptor.UpdatedAt = updatedAt
 		}
 
-		existing, exists := bestByEndpoint[descriptor.Key]
+		// Dedup key includes cli.id when present so that envelopes
+		// intentionally splitting one MCP endpoint into multiple CLI command
+		// trees (e.g. bot-root / bot-message / bot-group all serving
+		// .../server/4717... but exposing different command roots) are not
+		// collapsed by endpoint-only dedup. Without cli.id the key falls
+		// back to descriptor.Key (= endpoint) for backwards compatibility.
+		endpointKey := dedupKeyForEndpoint(descriptor)
+		existing, exists := bestByEndpoint[endpointKey]
 		if !exists || descriptorIsNewer(descriptor, existing) {
-			bestByEndpoint[descriptor.Key] = descriptor
+			bestByEndpoint[endpointKey] = descriptor
 		}
 	}
 
 	bestByName := make(map[string]ServerDescriptor)
 	for _, descriptor := range bestByEndpoint {
-		nameKey := normalizeDisplayNameKey(descriptor.DisplayName)
-		if nameKey == "" {
-			nameKey = descriptor.Key
-		}
+		// Same reasoning as endpoint dedup: append cli.id so three bot-*
+		// entries with displayName "机器人消息" don't collapse into one.
+		nameKey := dedupKeyForName(descriptor)
 		existing, exists := bestByName[nameKey]
 		if !exists || descriptorIsNewer(descriptor, existing) {
 			bestByName[nameKey] = descriptor
@@ -702,6 +708,33 @@ func descriptorIsNewer(current, existing ServerDescriptor) bool {
 
 func normalizeDisplayNameKey(displayName string) string {
 	return strings.ToLower(strings.TrimSpace(displayName))
+}
+
+// dedupKeyForEndpoint returns the dedup key used when collapsing multiple
+// envelope entries that share an MCP endpoint. cli.id is appended so an
+// endpoint intentionally fronting multiple CLI command roots (bot-root /
+// bot-message / bot-group all served by the same MCP server) stays as
+// distinct descriptors. When cli.id is empty (or absent), the key is the
+// endpoint alone to preserve historical dedup behaviour.
+func dedupKeyForEndpoint(descriptor ServerDescriptor) string {
+	if cliID := strings.TrimSpace(descriptor.CLI.ID); cliID != "" {
+		return descriptor.Key + "#" + cliID
+	}
+	return descriptor.Key
+}
+
+// dedupKeyForName mirrors dedupKeyForEndpoint for the second-pass name-based
+// dedup so two envelopes with the same displayName but distinct cli.id (the
+// bot-* trio shares displayName "机器人消息") remain separate.
+func dedupKeyForName(descriptor ServerDescriptor) string {
+	nameKey := normalizeDisplayNameKey(descriptor.DisplayName)
+	if nameKey == "" {
+		nameKey = descriptor.Key
+	}
+	if cliID := strings.TrimSpace(descriptor.CLI.ID); cliID != "" {
+		return nameKey + "#" + cliID
+	}
+	return nameKey
 }
 
 func markDeprecatedCandidate(displayName string, lifecycle LifecycleInfo) LifecycleInfo {

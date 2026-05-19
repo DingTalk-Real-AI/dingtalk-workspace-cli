@@ -219,6 +219,19 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 	if override, ok := productEndpointOverride(invocation.CanonicalProduct); ok {
 		endpoint = override
 	}
+	// Multi-server tool-name authority correction.
+	//
+	// When two envelope servers share the same cli.command (e.g. group-chat
+	// and im both publish `dws chat ...`), the endpoints[cmd] map in
+	// registerDynamicServer is the second-writer wins, and catalog FindProduct
+	// may pick the wrong product's Endpoint for a tool whose real owner is
+	// a different server. Cross-check the canonical tool→endpoint map: when
+	// the per-tool endpoint exists and differs from the per-product endpoint
+	// catalog returned, trust the tool-owner endpoint (the server that
+	// actually declares this tool in its toolOverrides).
+	if toolEndpoint, ok := directRuntimeToolEndpoint(invocation.Tool); ok && toolEndpoint != "" && toolEndpoint != endpoint {
+		endpoint = toolEndpoint
+	}
 	return r.executeInvocation(ctx, endpoint, invocation)
 }
 

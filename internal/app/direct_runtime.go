@@ -210,6 +210,25 @@ func shouldUseDirectRuntime(invocation executor.Invocation) bool {
 	}
 }
 
+// directRuntimeToolEndpoint returns the MCP endpoint owned by the server
+// whose toolOverrides registered this tool name. Used to correct catalog
+// lookups when two envelope servers share the same cli.command and the
+// per-product endpoint map collides (see runner.go cross-check).
+func directRuntimeToolEndpoint(toolName string) (string, bool) {
+	toolName = strings.TrimSpace(toolName)
+	if toolName == "" {
+		return "", false
+	}
+	dynamicMu.RLock()
+	te := dynamicToolEndpoints
+	dynamicMu.RUnlock()
+	if te == nil {
+		return "", false
+	}
+	endpoint, ok := te[toolName]
+	return endpoint, ok && strings.TrimSpace(endpoint) != ""
+}
+
 func directRuntimeEndpoint(productID, toolName string) (string, bool) {
 	// Priority 0: env-var override always wins (DINGTALK_<PRODUCT>_MCP_URL).
 	normalized := normalizeDirectRuntimeProductID(productID)
