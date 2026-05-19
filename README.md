@@ -394,6 +394,8 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
   --title "Weekly Report" --text @-
 ```
 
+> **Note**: `@` is treated as the `@<path>` file-injection prefix only when the next character is an ASCII path-shaped character (`A-Z` / `a-z` / `0-9` / `.` / `/` / `~` / `_` / `-`), or `@-` for stdin. Chat-bot payloads like `--text "@所有人 周报"` or `--text "@张三 看一下"` pass through unchanged, so literal mentions reach the API as-is.
+
 </details>
 
 ## Key Services

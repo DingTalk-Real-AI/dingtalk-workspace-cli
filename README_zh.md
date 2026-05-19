@@ -394,6 +394,8 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
   --title "周报" --text @-
 ```
 
+> **说明**：`@` 仅在其后是 ASCII 路径前缀字符（`A-Z` / `a-z` / `0-9` / `.` / `/` / `~` / `_` / `-`）或 `@-`（stdin）时，才会被识别为 `@<path>` 文件注入语法。`--text "@所有人 周报"` / `--text "@张三 看一下"` 这类机器人消息中的字面 `@` 提及会原样透传到 API。
+
 </details>
 
 ## 核心服务
