@@ -235,8 +235,8 @@ func TestPostGoreleaserUsesFlattenedSkillsSourceRoot(t *testing.T) {
 	}
 
 	text := string(data)
-	if !strings.Contains(text, `cd "$ROOT/skills"`) {
-		t.Fatalf("post-goreleaser.sh missing flattened skills source root:\n%s", text)
+	if !strings.Contains(text, `cd "$ROOT/skills/mono"`) {
+		t.Fatalf("post-goreleaser.sh missing skills/mono source root:\n%s", text)
 	}
 	if strings.Contains(text, `cd "$ROOT/skills/dws"`) {
 		t.Fatalf("post-goreleaser.sh still references legacy nested skills root:\n%s", text)

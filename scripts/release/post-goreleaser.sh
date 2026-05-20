@@ -169,7 +169,7 @@ create_skills_zip() {
   skills_zip="$DIST_DIR/dws-skills.zip"
   rm -f "$skills_zip"
   (
-    cd "$ROOT/skills"
+    cd "$ROOT/skills/mono"
     env -u LC_ALL -u LC_CTYPE LANG=C LC_ALL=C LC_CTYPE=C zip -qr "$skills_zip" .
   )
 }

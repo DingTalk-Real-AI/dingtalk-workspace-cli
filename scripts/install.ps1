@@ -297,7 +297,7 @@ function Install-Binary {
 
 function Install-SkillsLocal {
     param([string]$Root)
-    $skillSrc = Join-Path $Root "skills"
+    $skillSrc = Join-Path (Join-Path $Root "skills") "mono"
 
     if (!(Test-Path $skillSrc)) {
         Write-Say "⚠️  Local skills directory not found: $skillSrc"

@@ -196,12 +196,12 @@ func TestInstallScriptsUseFlattenedSkillsSourceRoot(t *testing.T) {
 	}{
 		{
 			relPath: filepath.Join("..", "..", "scripts", "install.sh"),
-			want:    `skill_src="${root}/skills"`,
+			want:    `skill_src="${root}/skills/mono"`,
 			avoid:   `skill_src="${root}/skills/${SKILL_NAME}"`,
 		},
 		{
 			relPath: filepath.Join("..", "..", "scripts", "install.ps1"),
-			want:    `$skillSrc = Join-Path $Root "skills"`,
+			want:    `$skillSrc = Join-Path (Join-Path $Root "skills") "mono"`,
 			avoid:   `$skillSrc = Join-Path $Root "skills\$SkillName"`,
 		},
 	}

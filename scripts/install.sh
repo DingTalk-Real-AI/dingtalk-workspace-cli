@@ -166,7 +166,7 @@ install_binary_from_source() {
 
 install_skills_local() {
   root="$1"
-  skill_src="${root}/skills"
+  skill_src="${root}/skills/mono"
 
   if [ ! -d "$skill_src" ]; then
     say "⚠️  Local skills directory not found: ${skill_src}"

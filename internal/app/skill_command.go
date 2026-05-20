@@ -122,6 +122,7 @@ func buildSkillCommand() *cobra.Command {
 		newSkillSearchCommand(),
 		newSkillFindHintCommand(),
 		newSkillAddHintCommand(),
+		newSkillSetupCommand(),
 	)
 	return cmd
 }
