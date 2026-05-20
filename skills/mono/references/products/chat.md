@@ -1355,7 +1355,7 @@ dws chat message send --group <openconversation_id> \
 | `chat message send-by-bot` | `processQueryKey` | recall-by-bot 的 --keys |
 | `chat message send` | `openTaskId` | query-send-status 的 --open-task-id |
 | `chat message list` | `openMessageId` | recall 的 --msg-id、reply 的 --ref-msg-id、forward 的 --msg-id、query-read-status 的 --msg-id、list-by-ids 的 --msg-ids、add-emoji/add-text-emotion 的 --msg-id |
-| `chat conversation-info` | `openConversationId` / `newCSpaceIdIM` | 作为 message send/list 等后续操作的会话上下文；newCSpaceIdIM 用于 drive upload 的 --space-id |
+| `chat conversation-info` | `openConversationId` / `newCSpaceIdIM` | 作为 message send/list 等后续操作的会话上下文；newCSpaceIdIM 用于 drive upload-info 的 --space-id |
 | `chat search-common` | `openConversationId` | message send/list 等的 --group |
 | `chat list-categories` | `categoryId` | list-conversations 的 --category-id |
 | `chat group member-role list` | `openRoleId` | group member-role update/remove/set-user/remove-user 的 --role-id / --role-ids |

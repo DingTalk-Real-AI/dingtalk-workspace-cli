@@ -10,7 +10,7 @@
 |---------|---------|
 | 在线电子表格（`axls`） | 走 `sheet` 全部命令（读/写/筛选/合并/导出等服务端原子操作） |
 | `xlsx` / `xls` / `xlsm` / `csv` 等本地表格文件 | 必须用 `dws doc download --node <ID> --output <路径>` 先下载到本地再解析处理，禁止调用任何 `sheet` 子命令（sheet 底层 MCP 工具仅认 `axls`，传入 xlsx 节点会直接报错） |
-| 想把在线表格导出为 xlsx | 用 `dws sheet export` ——输入是 `axls`，输出是 xlsx（axls → xlsx 的格式转换） |
+| 想把在线表格导出为 xlsx | 开源 v1.0.30 暂不支持 CLI 导出，请在钉钉客户端导出 |
 
 > 用户直接粘贴原始 `alidocs` URL 时必须先 probe：先执行 `dws doc info --node <URL> --format json`，按 `dws-shared/references/url-patterns.md` 的「alidocs URL 类型探测流程」校验 `contentType` 和 `extension`：
 > - 仅当 `contentType=ALIDOC` 且 `extension=axls` 时，才继续走 `sheet`
@@ -107,7 +107,6 @@ dws sheet filter-view --help
 | `sheet list-float-images` | 列出工作表所有浮动图片 |
 | `sheet update-float-image` | 更新浮动图片属性 |
 | `sheet delete-float-image` | 删除浮动图片 |
-| `sheet export` | 导出表格为 xlsx |
 | `sheet filter-view list` | 获取所有筛选视图 |
 | `sheet filter-view create` | 创建筛选视图 |
 | `sheet filter-view update` | 更新筛选视图属性 |
@@ -199,63 +198,6 @@ dws sheet filter-view --help
 - 注意与 `append`（追加数据行）区分：`add-dimension` 追加的是空行/空列，`append` 追加的是带数据的行
 - 请勿用 `range update` 写空数据来模拟追加，`add-dimension` 直接扩展表格维度
 
-### 单元格格式
-
-用户说"设置样式/改颜色/设背景色/加粗/居中/换行/字体颜色/字号":
-- 设置单元格样式 → `range set-style`
-- 批量设置不同 range 的样式 → `range batch-set-style --batch ./styles.json`（内部顺序循环调 `update_range`）
-- 请勿用 `range update --values` 写空/重写来模拟样式变更；也请勿把样式变更混在 `range update` 里、再故意清空 `--values`
-
-用户说"合并单元格/合并/合并区域/按行合并/按列合并":
-- 合并所有单元格 → `merge-cells`（默认 mergeAll）
-- 按行合并 → `merge-cells --merge-type mergeRows`
-- 按列合并 → `merge-cells --merge-type mergeColumns`
-
-用户说"取消合并/拆分单元格/还原合并":
-- 取消合并单元格 → `unmerge-cells`
-
-### 下拉列表
-
-用户说"设置下拉列表/下拉选项/下拉菜单/添加下拉/配置下拉":
-- 设置下拉列表 → `set-dropdown`
-- 设置多选下拉 → `set-dropdown --multi-select`
-
-用户说"查看下拉列表/获取下拉配置/下拉列表有哪些选项":
-- 获取下拉列表配置 → `get-dropdown`
-
-用户说"删除下拉列表/移除下拉/取消下拉/清除下拉":
-- 删除下拉列表 → `delete-dropdown`
-
-### 媒体上传
-
-用户说"上传附件/传文件到表格/上传文件到表格/上传到表格":
-- 上传附件 → `media-upload`（需表格 ID 或 URL + 本地文件路径）
-- 用户指定了上传后的名称 → `media-upload --name "自定义名称"`
-- `media-upload` 的 `--name` 参数用于指定附件在表格中显示的名称（不改变本地文件名）；不传时默认使用本地文件名
-
-用户说"写入图片/插入图片/加图片/放图片到单元格/嵌入图片到表格":
-- 写入图片 → `write-image`（需表格 ID + 工作表 ID + 单元格范围 + 本地图片路径）
-- 禁止使用 `range update` 写入图片，因为 `update_range` 的 MCP 工具不支持图片类型参数，调用必定失败。必须使用 `write-image` 命令
-- 用户指定了图片尺寸 → `write-image --width N --height M`
-
-### 浮动图片
-
-用户说"浮动图片/悬浮图片/在表格上放一张图/加个浮动的图":
-- 创建浮动图片 → 先 `media-upload` 上传图片获取 `resourceUrl`，再 `create-float-image`
-- 浮动图片悬浮于单元格之上，不占用单元格内容，与 `write-image`（写入单元格内部的图片）不同
-
-用户说"查看浮动图片/有哪些浮动图片/浮动图片列表":
-- 列出所有浮动图片 → `list-float-images`
-- 查看某个浮动图片详情 → `get-float-image`
-
-用户说"移动浮动图片/调整浮动图片大小/修改浮动图片/更新浮动图片":
-- 更新浮动图片属性 → `update-float-image`（可更新锚点位置、尺寸、偏移量、图片资源路径）
-
-用户说"删除浮动图片/移除浮动图片":
-- 删除浮动图片 → `delete-float-image`
-
-关键区分：`write-image`（单元格内嵌图片，占据单元格内容）vs `create-float-image`（浮动图片，悬浮于单元格之上，不占内容）
-
 ### 筛选视图
 
 用户说"筛选视图/查看筛选视图/有哪些筛选视图/筛选视图列表":
@@ -283,15 +225,6 @@ dws sheet filter-view --help
 用户说"清除筛选条件/移除筛选条件/取消筛选条件":
 - 清除筛选视图列条件 → `filter-view delete-criteria`
 - 注意与 `filter-view delete`（删除整个筛选视图）区分：`delete-criteria` 仅清除指定列的条件，不删除筛选视图本身
-
-### 导出
-
-用户说"导出/下载xlsx/存为Excel/存成表格文件/把表格变成xlsx/导出表格/下载表格/导出为 excel":
-- 导出表格 → `export`（单命令一站式，内部自动完成提交、轮询、可选下载）
-- 仅需传 `--node`，可选 `--output` 指定本地文件/目录（不传则返回 downloadUrl）
-- 需要落盘到本地 → `dws sheet export --node <NODE_ID> --output <path>`，命令自动下载 xlsx
-- 禁止用 `range read` 全量读取后自行拼接 xlsx 来模拟导出，必须使用 `export` 命令（服务端原子导出，保留格式/合并/公式等属性）
-- 禁止在 AI Agent 侧实现轮询或重试，CLI 内部已按渐进式退避策略完成（最多 30 次约 5 分钟）
 
 ### URL 粘贴场景
 
@@ -384,67 +317,6 @@ Flags:
       --name string   工作表名称 (必填)
 ```
 
-### 更新工作表属性
-```
-Usage:
-  dws sheet update [flags]
-Example:
-  # 改名 + 调整冻结
-  dws sheet update --node <NODE_ID> --sheet-id <SHEET_ID> --title "汇总表" --frozen-row-count 2 --frozen-column-count 1
-
-  # 隐藏工作表
-  dws sheet update --node <NODE_ID> --sheet-id <SHEET_ID> --hidden=true
-
-  # 显示工作表
-  dws sheet update --node <NODE_ID> --sheet-id <SHEET_ID> --hidden=false
-
-  # 移动工作表到第一个位置
-  dws sheet update --node <NODE_ID> --sheet-id <SHEET_ID> --index 0
-
-  # 取消冻结
-  dws sheet update --node <NODE_ID> --sheet-id <SHEET_ID> --frozen-row-count 0 --frozen-column-count 0
-Flags:
-      --node string              表格文档 ID 或 URL (必填)
-      --sheet-id string          工作表 ID 或名称 (必填)
-      --title string             新标题，最长 100 字符，不能包含 / \ ? * [ ] :
-      --index int                新位置（从 0 开始）
-      --hidden                   --hidden=true 隐藏，--hidden=false 取消隐藏
-      --frozen-row-count int     冻结行数，0 表示取消冻结
-      --frozen-column-count int  冻结列数，0 表示取消冻结
-```
-
-更新工作表标题、位置、隐藏状态、冻结行列。
-`--title` / `--index` / `--hidden` / `--frozen-row-count` / `--frozen-column-count` 至少提供一个；多个属性可同时传入，将在同一次请求中更新。
-
-注意：
-- 至少需要保留一个可见的工作表，不能将所有工作表都隐藏
-- 冻结行数/列数不能超过工作表的总行数/列数
-
-### 复制工作表
-```
-Usage:
-  dws sheet copy [flags]
-Example:
-  # 按默认位置复制
-  dws sheet copy --node <NODE_ID> --sheet-id <SHEET_ID>
-
-  # 指定副本名称和位置
-  dws sheet copy --node <NODE_ID> --sheet-id <SHEET_ID> --title "销售副本" --index 2
-
-  # 只指定名称
-  dws sheet copy --node <NODE_ID> --sheet-id <SHEET_ID> --title "备份"
-Flags:
-      --node string       表格文档 ID 或 URL (必填)
-      --sheet-id string   源工作表 ID 或名称 (必填)
-      --title string      副本名称，最长 100 字符，不能包含 / \ ? * [ ] : (不传则系统自动生成)
-      --index int         副本位置（从 0 开始）(不传则放在源工作表之后)
-```
-
-复制指定工作表，在同一表格中创建一个副本。
-复制操作会将源工作表的所有内容（包括数据、格式、公式等）完整复制到新工作表中。
-传 `--index` 时，CLI 会先复制，再追加一次位置更新，把副本移动到目标索引。
-名称与已有工作表重复时系统会自动重命名。
-
 ### 读取工作表数据
 ```
 Usage:
@@ -498,87 +370,6 @@ Flags:
 ```
 
 **单次调用建议**：行数 ≤ 1000，单元格总数（行×列）≤ 5000；超过时请拆分多次调用。
-
-### 设置单元格样式
-```
-Usage:
-  dws sheet range set-style [flags]
-Example:
-  # 给 A1:B3 打上黄底粗体居中
-  dws sheet range set-style --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:B3" \
-    --bg-color "#FFF2CC" --font-weight bold --h-align center
-
-  # 给 C1:C5 逐单元格设置不同背景色
-  dws sheet range set-style --node <NODE_ID> --sheet-id <SHEET_ID> --range "C1:C5" \
-    --bg-colors-json '[["#FF0000"],["#00FF00"],["#0000FF"],["#FFFF00"],["#FF00FF"]]'
-
-  # 整片 range 启用自动换行
-  dws sheet range set-style --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:E10" --word-wrap autoWrap
-Flags:
-      --node string                 表格文档 ID 或 URL (必填)
-      --sheet-id string             工作表 ID 或名称 (必填)
-      --range string                目标区域，如 A1:B3 (必填)
-      --bg-color string             背景色（#RRGGBB），一键刷整个 range；与 --bg-colors-json 二选一
-      --bg-colors-json string       背景色二维 JSON 数组，维度需与 --range 一致
-      --font-size int               字号，一键刷整个 range；与 --font-sizes-json 二选一
-      --font-sizes-json string      字号二维 JSON 数组
-      --h-align string              水平对齐：left/center/right/general
-      --h-aligns-json string        水平对齐二维 JSON 数组
-      --v-align string              垂直对齐：top/middle/bottom
-      --v-aligns-json string        垂直对齐二维 JSON 数组
-      --font-color string           字体颜色（#RRGGBB）
-      --font-colors-json string     字体颜色二维 JSON 数组
-      --font-weight string          字体粗细：bold/normal
-      --font-weights-json string    字体粗细二维 JSON 数组
-      --word-wrap string            换行方式：overflow/clip/autoWrap（整个 range 共用）
-      --number-format string        数字格式，如 General/@/#,##0/0%/yyyy/m/d
-```
-
-**特性说明**：
-- 每个样式维度提供两种写法，二选一：`--xxx`（单值刷整个 range，CLI 本地展开为二维数组）vs `--xxx-json`（逐单元格指定，维度需与 `--range` 完全一致）
-- 至少需传入一个样式参数。单次调用建议：行数 ≤ 1000，单元格总数 ≤ 5000
-- 枚举值按驼峰书写：`autoWrap`、`bold`、`normal`、`center` 等
-
-### 批量设置单元格样式
-```
-Usage:
-  dws sheet range batch-set-style [flags]
-Example:
-  dws sheet range batch-set-style --node <NODE_ID> --batch ./styles.json
-  dws sheet range batch-set-style --node <NODE_ID> --batch ./styles.json --continue-on-error
-Flags:
-      --node string               表格文档 ID 或 URL (必填)
-      --batch string              批次配置 JSON 文件路径 (必填)
-      --continue-on-error         遇到失败时继续执行后续条目（默认遇错即停）
-```
-
-配置文件格式（JSON 数组，每个元素一条批次项）：
-```json
-[
-  {
-    "sheetId": "Sheet1",
-    "range":   "A1:B3",
-    "bgColor":      "#FFF2CC",
-    "fontSize":     12,
-    "hAlign":       "center",
-    "vAlign":       "middle",
-    "fontColor":    "#333333",
-    "fontWeight":   "bold",
-    "wordWrap":     "autoWrap",
-    "numberFormat": "General"
-  },
-  {
-    "sheetId": "Sheet1",
-    "range":   "C1:C5",
-    "bgColorsJson": "[[\"#FF0000\"],[\"#00FF00\"],[\"#0000FF\"],[\"#FFFF00\"],[\"#FF00FF\"]]"
-  }
-]
-```
-
-**特性说明**：
-- CLI 侧顺序循环逐条调用 `update_range`（非服务端批量），运行时输出 `[N/M]` 进度
-- 每条记录执行与 `set-style` 一致的校验：至少一项样式字段 + rows ≤ 1000 + rows×cols ≤ 30000 + 枚举合法
-- 默认遇错即停（返回非 0），`--continue-on-error` 时所有条目跑完再返回首个错误
 
 ### 在工作表中搜索单元格内容
 ```
@@ -752,142 +543,6 @@ Flags:
 注意：合并时只保留左上角单元格的值，其他单元格的值会被丢弃。
 `--range` 支持带工作表前缀的写法（如 `Sheet1!A1:B3`），此时将优先使用前缀解析出的工作表，忽略 `--sheet-id`。
 
-### 上传附件到表格
-```
-Usage:
-  dws sheet media-upload [flags]
-Example:
-  dws sheet media-upload --node <NODE_ID> --file ./report.pdf
-  dws sheet media-upload --node <NODE_ID> --file ./data.bin --name "数据文件.dat" --mime-type application/octet-stream
-Flags:
-      --node string        目标表格文档的标识，支持传入 URL 或 ID (必填)
-      --file string        本地文件路径 (必填)
-      --name string        附件显示名称 (默认使用文件名)
-      --mime-type string   文件 MIME 类型 (默认根据扩展名推断)
-```
-
-### 上传图片并写入表格单元格
-```
-Usage:
-  dws sheet write-image [flags]
-Example:
-  dws sheet write-image --node <NODE_ID> --sheet-id <SHEET_ID> --range A1:A1 --file ./chart.png
-  dws sheet write-image --node <NODE_ID> --sheet-id <SHEET_ID> --range B2:B2 --file ./logo.png --width 200 --height 100
-Flags:
-      --node string        目标表格文档的标识，支持传入 URL 或 ID (必填)
-      --sheet-id string    工作表 ID 或名称 (必填)
-      --range string       目标单元格区域地址，如 A1:A1 (必填)
-      --file string        本地图片文件路径 (必填)
-      --name string        图片显示名称 (默认使用文件名)
-      --mime-type string   文件 MIME 类型 (默认根据扩展名推断)
-      --width int          图片显示宽度 (可选)
-      --height int         图片显示高度 (可选)
-```
-
-### 创建浮动图片
-```
-Usage:
-  dws sheet create-float-image [flags]
-Example:
-  # 先上传图片获取 resourceUrl
-  dws sheet media-upload --node <NODE_ID> --file ./chart.png
-  # 输出: resourceUrl: /core/api/resources/img/xxxx...
-
-  # 再创建浮动图片
-  dws sheet create-float-image --node <NODE_ID> --sheet-id <SHEET_ID> \
-    --src "/core/api/resources/img/xxxx..." --range A1 --width 400 --height 300
-
-  # 带偏移量
-  dws sheet create-float-image --node <NODE_ID> --sheet-id <SHEET_ID> \
-    --src "/core/api/resources/img/xxxx..." --range B2 --width 200 --height 150 --offset-x 10 --offset-y 20
-Flags:
-      --node string       表格文档 ID 或 URL (必填)
-      --sheet-id string   工作表 ID 或名称 (必填)
-      --src string        图片资源路径，通过 media-upload 获取的 resourceUrl (必填)
-      --range string      锚点单元格，A1 表示法，如 A1、B3 (必填)
-      --width int         图片宽度，像素，正整数 (必填)
-      --height int        图片高度，像素，正整数 (必填)
-      --offset-x int      水平偏移量，像素 (默认 0)
-      --offset-y int      垂直偏移量，像素 (默认 0)
-```
-
-浮动图片悬浮于单元格之上，不占用单元格内容，可自由定位和调整大小。
-- `--src` 必须是 `media-upload` 返回的 `resourceUrl`（格式为 `/core/api/resources/img/...`），不能直接传外部 URL
-- `--range` 使用 A1 表示法指定锚点单元格（如 `A1`、`B3`），支持带工作表前缀（如 `Sheet1!A1`）
-- `--width` / `--height` 为必填，单位像素，必须为正整数
-- `--offset-x` / `--offset-y` 表示相对锚点单元格左上角的偏移量（像素），默认 0，不能为负数
-
-### 获取浮动图片详情
-```
-Usage:
-  dws sheet get-float-image [flags]
-Example:
-  dws sheet get-float-image --node <NODE_ID> --sheet-id <SHEET_ID> --float-image-id <FI_ID>
-Flags:
-      --node string             表格文档 ID 或 URL (必填)
-      --sheet-id string         工作表 ID 或名称 (必填)
-      --float-image-id string   浮动图片 ID (必填)
-```
-
-获取单个浮动图片的详细信息，包括 ID、图片资源路径、锚点位置、尺寸和偏移量。
-`--float-image-id` 可通过 `list-float-images` 获取。
-
-### 列出工作表所有浮动图片
-```
-Usage:
-  dws sheet list-float-images [flags]
-Example:
-  dws sheet list-float-images --node <NODE_ID> --sheet-id <SHEET_ID>
-Flags:
-      --node string       表格文档 ID 或 URL (必填)
-      --sheet-id string   工作表 ID 或名称 (必填)
-```
-
-列出指定工作表中所有浮动图片，返回 `floatImages` 数组和 `totalCount`。
-
-### 更新浮动图片属性
-```
-Usage:
-  dws sheet update-float-image [flags]
-Example:
-  # 移动浮动图片到新位置
-  dws sheet update-float-image --node <NODE_ID> --sheet-id <SHEET_ID> --float-image-id <FI_ID> --range C5
-
-  # 调整尺寸
-  dws sheet update-float-image --node <NODE_ID> --sheet-id <SHEET_ID> --float-image-id <FI_ID> --width 600 --height 400
-
-  # 替换图片（需先 media-upload 新图片获取 resourceUrl）
-  dws sheet update-float-image --node <NODE_ID> --sheet-id <SHEET_ID> --float-image-id <FI_ID> \
-    --src "/core/api/resources/img/xxxx..."
-Flags:
-      --node string             表格文档 ID 或 URL (必填)
-      --sheet-id string         工作表 ID 或名称 (必填)
-      --float-image-id string   浮动图片 ID (必填)
-      --src string              新的图片资源路径，通过 media-upload 获取的 resourceUrl
-      --range string            新的锚点单元格，A1 表示法
-      --width int               新的图片宽度，像素
-      --height int              新的图片高度，像素
-      --offset-x int            新的水平偏移量，像素
-      --offset-y int            新的垂直偏移量，像素
-```
-
-更新浮动图片的属性，`--src` / `--range` / `--width` / `--height` / `--offset-x` / `--offset-y` 至少传入一个。
-`--float-image-id` 可通过 `list-float-images` 获取。
-
-### 删除浮动图片
-```
-Usage:
-  dws sheet delete-float-image [flags]
-Example:
-  dws sheet delete-float-image --node <NODE_ID> --sheet-id <SHEET_ID> --float-image-id <FI_ID>
-Flags:
-      --node string             表格文档 ID 或 URL (必填)
-      --sheet-id string         工作表 ID 或名称 (必填)
-      --float-image-id string   浮动图片 ID (必填)
-```
-
-删除指定的浮动图片，操作不可恢复。`--float-image-id` 可通过 `list-float-images` 获取。
-
 ### 全局查找替换
 ```
 Usage:
@@ -974,67 +629,6 @@ Flags:
 ```
 
 取消指定范围内所有合并的单元格，恢复为独立单元格。
-
-### 设置下拉列表
-```
-Usage:
-  dws sheet set-dropdown [flags]
-Example:
-  # 设置单选下拉列表
-  dws sheet set-dropdown --node <NODE_ID> --sheet-id <SHEET_ID> --range "A2:A100" \
-    --options '[{"value":"选项1"},{"value":"选项2"},{"value":"选项3"}]'
-
-  # 设置带颜色的多选下拉列表
-  dws sheet set-dropdown --node <NODE_ID> --sheet-id <SHEET_ID> --range "B2:B50" \
-    --options '[{"value":"高","color":"#ff0000"},{"value":"中","color":"#ffaa00"},{"value":"低","color":"#00ff00"}]' \
-    --multi-select
-Flags:
-      --node string         表格文档 ID 或 URL (必填)
-      --sheet-id string     工作表 ID 或名称 (必填)
-      --range string        目标单元格范围，A1 表示法，如 A2:A100 (必填)
-      --options string      下拉选项 JSON 数组 (必填)，如 '[{"value":"选项1","color":"#ff0000"}]'
-      --multi-select        是否允许多选（默认单选）
-```
-
-在指定单元格范围内设置下拉列表。设置后用户可从预定义选项中选择值。
-- **用途**：为单元格配置下拉列表，支持自定义选项颜色和多选。
-- **场景**：规范数据输入，如状态选择（完成/进行中/待处理）、优先级（高/中/低）等。
-- **注意**：选项值不能包含英文逗号；如果目标范围已存在下拉列表，会被新配置覆盖。
-
-### 获取下拉列表配置
-```
-Usage:
-  dws sheet get-dropdown [flags]
-Example:
-  dws sheet get-dropdown --node <NODE_ID> --sheet-id <SHEET_ID> --range "A2:A100"
-  dws sheet get-dropdown --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1"
-Flags:
-      --node string       表格文档 ID 或 URL (必填)
-      --sheet-id string   工作表 ID 或名称 (必填)
-      --range string      查询范围，A1 表示法，如 A1:A100 (必填)
-```
-
-查询指定范围内的下拉列表配置信息，包括选项值、颜色和是否多选。
-- **用途**：查看单元格已设置的下拉列表选项和配置。
-- **场景**：在修改下拉列表前先查询现有配置；确认下拉列表是否设置成功。
-- **返回**：`dataValidations` 数组，相同选项的单元格聚合为一组，每组包含 `conditionValues`（选项值）、`ranges`（覆盖范围）、`options`（含 `enableMultiSelect` 和 `colorValueMap`）。范围内无下拉列表时 `hasDropdown` 为 false。
-
-### 删除下拉列表
-```
-Usage:
-  dws sheet delete-dropdown [flags]
-Example:
-  dws sheet delete-dropdown --node <NODE_ID> --sheet-id <SHEET_ID> --range "A2:A100"
-  dws sheet delete-dropdown --node <NODE_ID> --sheet-id <SHEET_ID> --range "B1:D10"
-Flags:
-      --node string       表格文档 ID 或 URL (必填)
-      --sheet-id string   工作表 ID 或名称 (必填)
-      --range string      要删除下拉列表的范围，A1 表示法 (必填)
-```
-
-删除指定范围内的下拉列表配置，单元格恢复为普通文本格式。
-- **用途**：移除不再需要的下拉列表约束。
-- **注意**：已填写的单元格值不会被清除；目标范围不存在下拉列表时操作仍返回成功。
 
 ### 获取所有筛选视图
 ```
@@ -1202,112 +796,6 @@ Flags:
 - **用途**：移除筛选视图中指定列的筛选条件，使该列不再参与过滤。
 - **场景**：之前通过 `update-criteria` 设置了某列的筛选条件，现在需要取消该列的筛选以显示全部数据。
 - **区分**：`delete-criteria` 只清除指定列的条件，筛选视图本身和其他列的条件保持不变；`delete` 会删除整个筛选视图。如果指定列没有设置筛选条件，调用此命令不会报错（幂等操作）。
-
-### 获取单个筛选视图详情
-```
-Usage:
-  dws sheet filter-view info [flags]
-Example:
-  # 查看指定筛选视图的详情
-  dws sheet filter-view info --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID>
-Flags:
-      --node string             表格文档 ID 或 URL (必填)
-      --sheet-id string         工作表 ID 或名称 (必填)
-      --filter-view-id string   筛选视图 ID (必填)
-```
-
-获取指定筛选视图的完整信息，包括 ID、名称、范围和筛选条件。
-- **用途**：查看某个筛选视图的当前配置，包括已设置的所有筛选条件详情。
-- **场景**：在修改或删除筛选视图前，先确认其当前状态；或在 `update-criteria` 后验证条件是否生效。
-- **区分**：`info` 返回单个视图的完整信息（含 criteria）；`list` 返回所有视图的列表概要。`info` 需要指定 `--filter-view-id`，ID 可通过 `list` 获取。
-- **实现**：内部调用 `get_filter_views` 获取全部列表后按 ID 过滤。
-
-### 列出筛选视图所有列条件
-```
-Usage:
-  dws sheet filter-view list-criteria [flags]
-Example:
-  # 列出筛选视图的所有条件
-  dws sheet filter-view list-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID>
-Flags:
-      --node string             表格文档 ID 或 URL (必填)
-      --sheet-id string         工作表 ID 或名称 (必填)
-      --filter-view-id string   筛选视图 ID (必填)
-```
-
-列出指定筛选视图中已设置的所有列筛选条件。
-- **用途**：查看某个筛选视图当前设置了哪些列的筛选条件，包括每列的条件类型和具体规则。
-- **场景**：在管理筛选条件（修改/删除特定列条件）前，先了解当前视图有哪些条件；或排查筛选结果不符合预期时检查条件配置。
-- **区分**：`list-criteria` 返回所有列的条件（按列偏移量为 key 的对象）；`get-criteria` 只返回指定列的条件。如果没有设置任何条件，返回空对象 `{}`。
-- **实现**：内部调用 `get_filter_views` 获取视图详情后提取 `criteria` 字段。
-
-### 获取单列筛选条件
-```
-Usage:
-  dws sheet filter-view get-criteria [flags]
-Example:
-  # 查看第 1 列（偏移量 0）的筛选条件
-  dws sheet filter-view get-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID> --column 0
-
-  # 查看第 3 列（偏移量 2）的筛选条件
-  dws sheet filter-view get-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID> --column 2
-Flags:
-      --node string             表格文档 ID 或 URL (必填)
-      --sheet-id string         工作表 ID 或名称 (必填)
-      --filter-view-id string   筛选视图 ID (必填)
-      --column int              列偏移量，从 0 开始 (必填)
-```
-
-获取指定筛选视图中某一列的筛选条件详情。
-- **用途**：查看某个筛选视图中指定列当前设置的筛选条件，包括条件类型、运算符和比较值。
-- **场景**：在修改某列条件前，先查看其当前配置；或验证 `update-criteria` 后该列条件是否正确。
-- **区分**：`get-criteria` 只返回指定列的条件；`list-criteria` 返回所有列的条件。`--column` 为列偏移量（从 0 开始），相对于筛选视图范围首列。
-- **实现**：内部调用 `get_filter_views` 获取视图详情后按列偏移量过滤 `criteria` 中的对应条件。
-
-### 导出表格为 xlsx（异步任务一站式）
-```
-Usage:
-  dws sheet export [flags]    # 一站式：提交 → 轮询 → 可选下载
-Example:
-  # 仅导出，返回 downloadUrl（链接有时效性，请尽快下载）
-  dws sheet export --node <NODE_ID>
-  dws sheet export --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>"
-
-  # 导出并自动下载为本地文件
-  dws sheet export --node <NODE_ID> --output ./report.xlsx
-
-  # --output 为目录时，自动按下载链接中的文件名保存
-  dws sheet export --node <NODE_ID> --output ./
-
-Flags:
-      --node string     表格文档 ID 或 URL (必填)
-      --output string   本地保存路径（可选，支持文件路径或目录）
-```
-
-将钉钉在线电子表格导出为 Office xlsx 格式。**单命令一站式**：命令内部自动完成「提交任务 → 渐进式退避轮询 → （可选）下载文件」全流程，AI Agent 无需自行拆分步骤或实现轮询。
-
-**内部流程**：
-1. 调 `submit_export_job` 获取 `jobId`
-2. 按渐进式退避策略轮询 `query_export_job` 直至任务终态或超时
-3. 任务成功后取得 `downloadUrl`；若指定了 `--output`，自动 HTTP GET 下载 xlsx 到本地文件
-
-**内置轮询策略（CLI 内实现，无需关心）**：
-- 第 1~5 次：每次间隔 2 秒
-- 第 6~10 次：每次间隔 5 秒
-- 第 11~20 次：每次间隔 10 秒
-- 第 21~30 次：每次间隔 15 秒
-- **硬上限：最多轮询 30 次（约 5 分钟）**，超时后命令返回错误
-
-**命令返回**：
-- `--output` 未指定：进度日志 + 末尾输出 `jobId` 和 `downloadUrl`（链接有时效性，请尽快下载）
-- `--output` 指定为文件路径：下载到该路径并输出 `导出完成: <path>`
-- `--output` 指定为已存在目录：自动从 `downloadUrl` 推断文件名并保存到该目录下
-
-**失败处理（命令内部已处理，Agent 仅需转述）**：
-- MCP 返回 `FAILED`：命令立即返回错误并附带失败原因，**禁止自动重试 `dws sheet export`**，告知用户稍后再试
-- 轮询 30 次仍 `PROCESSING`：命令返回超时错误，告知用户稍后再试
-
-**限制**：仅支持钉钉在线电子表格（alxs）→ xlsx。导出钉钉文字文档请使用 `doc` 产品对应的导出工具。
 
 ## 核心工作流
 
@@ -1487,10 +975,10 @@ dws sheet merge-cells --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:C3" --m
 # ── 工作流 9: 上传附件到表格 ──
 
 # 1. 基本用法: 上传本地文件到表格
-dws sheet media-upload --node <NODE_ID> --file ./report.pdf -f json
+# dws sheet media-upload 在开源 v1.0.30 未暴露；附件上传请走 doc upload 或 drive upload-info
 
 # 2. 自定义附件显示名称 (--name 指定上传后在表格中显示的名称)
-dws sheet media-upload --node <NODE_ID> --file ./data.csv --name "销售数据.csv" -f json
+# 同上，sheet media-upload 在开源 v1.0.30 未暴露
 
 # 3. 指定 MIME 类型 (文件扩展名无法推断时)
 dws sheet media-upload --node <NODE_ID> --file ./data.bin --name "导出数据.dat" --mime-type application/octet-stream -f json
@@ -1567,18 +1055,18 @@ dws sheet filter-view create --node <NODE_ID> --sheet-id <SHEET_ID> \
 # ── 工作流 12: 导出表格为 xlsx（单命令一站式）──
 
 # 场景 A：仅获取下载链接（命令内部自动完成提交+轮询，最终返回 downloadUrl）
-dws sheet export --node <NODE_ID> --format json
+# dws sheet export 在开源 v1.0.30 未暴露；请用钉钉客户端导出
 # 传入 URL 也可：
-# dws sheet export --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>" --format json
+# 钉钉客户端导出请用 alidocs URL 直接打开后菜单导出
 
 # 场景 B：导出并自动下载为本地文件
-dws sheet export --node <NODE_ID> --output ./report.xlsx
+# dws sheet export 在开源 v1.0.30 未暴露
 
 # 场景 C：下载到目录，自动按链接推断文件名
-dws sheet export --node <NODE_ID> --output ./
+# dws sheet export 在开源 v1.0.30 未暴露
 
 # 禁止在 Agent 侧实现任何轮询或重试，CLI 内部已按 2s/5s/10s/15s 渐进式退避自动完成（最多 30 次）。
-# 若命令返回失败或超时，直接告知用户稍后再试，不要自动重调 dws sheet export。
+# 在线表格导出请在钉钉客户端进行
 ```
 
 ## 上下文传递表
@@ -1751,7 +1239,7 @@ dws sheet export --node <NODE_ID> --output ./
 - ★ `export` 仅支持钉钉在线电子表格（alxs）→ xlsx；传入钉钉文字文档会报 `invalidRequest.document.typeIllegal`
 - ★ `export` 为单命令一站式，CLI 内部已自动完成「提交 → 渐进式退避轮询 → 可选下载」，**Agent 不得在外部实现轮询或重试**；命令返回成功后不再调用其他 export 相关命令
 - `export` 内置轮询策略：1~5 次间隔 2s、6~10 次间隔 5s、11~20 次间隔 10s、21~30 次间隔 15s，硬上限 30 次（约 5 分钟）；超时后命令返回错误，告知用户稍后再试即可
-- ★ `export` 命令返回失败或超时时，**禁止自动重调 `dws sheet export`**；直接告知用户导出失败并建议稍后再试
+- 在线表格导出在开源 v1.0.30 暂不支持；请引导用户到钉钉客户端导出
 - `export` 未指定 `--output` 时，返回的 `downloadUrl` 具有时效性，获取后请尽快下载；若用户需要本地文件，优先直接传 `--output` 让 CLI 代为下载
 - `export` 的 `--output` 可为文件路径或已存在目录；为目录时自动从 `downloadUrl` 推断文件名，为文件路径时直接按该路径保存
 - 用户要求"导出表格/下载 xlsx"时，必须使用 `export` 单命令，禁止用 `range read` 读全量数据后自行拼 xlsx 模拟导出（服务端导出会保留格式/合并/公式等完整属性）
@@ -1770,4 +1258,4 @@ dws sheet export --node <NODE_ID> --output ./
 - sheet 产品线仅支持 `axls`（在线电子表格，`contentType=ALIDOC`），不支持 `xlsx` / `xls` / `xlsm` / `csv` 等本地表格文件
 - 遇到未知 `alidocs` URL 时，必须先 probe（`dws doc info --node <URL> --format json`）确认 `contentType` 和 `extension`，才能决定是否走 sheet
 - 当节点 `extension=xlsx` / `xls` / `xlsm` / `csv`（`contentType≠ALIDOC`）时，必须用 `dws doc download --node <ID> --output <路径>` 先下载到本地再处理，禁止调用任何 sheet 子命令（sheet 底层 MCP 工具只识别 axls，调用 xlsx 节点必失败）
-- 要把在线表格导出为 xlsx 文件——走 `dws sheet export`（axls → xlsx 的格式转换）；要读已有的 xlsx 文件——走 `dws doc download` 后在本地解析，两者方向相反
+- 要把在线表格导出为 xlsx 文件——开源 v1.0.30 暂不支持，请在钉钉客户端导出；要读已有的 xlsx 文件——走 `dws doc download` 后在本地解析

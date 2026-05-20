@@ -227,7 +227,7 @@ Flags:
 dws doc info --node <NODE_ID> --format json
 ```
 **步骤 2：根据 contentType 选命令**
-- 如果是 ALIDOC → `dws doc export --node <NODE_ID> --output <路径>`
+- 如果是 ALIDOC（在线文档）→ 暂不支持导出为本地 docx；用 `dws doc read --node <NODE_ID>` 拿到内容自己处理
 - 如果是非 ALIDOC → `dws doc download --node <NODE_ID> --output <路径>`
 
 download 命令（仅限非 ALIDOC 文件）:
@@ -487,86 +487,6 @@ Flags:
       --mention string         被 @ 的用户 uid 列表，逗号分隔
 ```
 
-### 添加文档权限（节点级授权）
-```
-Usage:
-  dws doc permission add [flags]
-Example:
-  dws doc permission add --node <DOC_ID> --user uid1 --role READER
-  dws doc permission add --node <DOC_ID> --user uid1,uid2 --role EDITOR
-  dws doc permission add --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>" --user uid1 --role MANAGER
-Flags:
-      --node string        目标文档/文件夹的 ID 或 URL (必填)
-      --user strings       被授权的用户 userId 列表，逗号分隔 (必填，单次最多 30 个)
-      --role string        授予的角色 (必填，大小写敏感，必须全大写): MANAGER (管理者) / EDITOR (可编辑) / DOWNLOADER (可下载) / READER (可阅读)
-      --workspace string   所属知识库 ID (选填，仅用于辅助构造返回的 docUrl，业务实际依赖 nodeId)
-```
-
-> **重要约束**：
-> - 仅支持 USER 类型授权。
-> - 角色枚举严格大写：MANAGER / EDITOR / DOWNLOADER / READER（OWNER 不可通过此接口添加）。
-> - 操作者需在该节点具备「可编辑（EDITOR）」及以上角色（OWNER / MANAGER / EDITOR）。
-> - 授权对象是文档节点本身，不需要也不应该用 `wiki member add`（那个是知识库容器级授权）。
-
-### 修改文档权限（节点级）
-```
-Usage:
-  dws doc permission update [flags]
-Example:
-  dws doc permission update --node <DOC_ID> --user uid1 --role EDITOR
-  dws doc permission update --node <DOC_ID> --user uid1,uid2 --role READER
-Flags:
-      --node string        目标文档/文件夹的 ID 或 URL (必填)
-      --user strings       目标用户 userId 列表，逗号分隔 (必填，单次最多 30 个)
-      --role string        新角色 (必填，大小写敏感，必须全大写): MANAGER / EDITOR / DOWNLOADER / READER
-      --workspace string   所属知识库 ID (选填)
-```
-
-### 列出文档权限（节点级）
-```
-Usage:
-  dws doc permission list [flags]
-Example:
-  dws doc permission list --node <DOC_ID>
-  dws doc permission list --node <DOC_ID> --max-results 50
-  dws doc permission list --node <DOC_ID> --filter-role EDITOR
-Flags:
-      --node string          目标文档/文件夹的 ID 或 URL (必填)
-      --workspace string     所属知识库 ID (选填)
-      --max-results int      返回数量上限，最大 200 (默认 50)
-      --filter-role string   按角色过滤: MANAGER / EDITOR / DOWNLOADER / READER (选填)
-```
-
-> 接口不支持游标分页，使用 `--max-results` 一次性拉取。
-
-### 导出在线文档为 docx（一体化命令）
-```
-Usage:
-  dws doc export [flags]
-Example:
-  dws doc export --node "https://alidocs.dingtalk.com/i/nodes/xxx" --output ./exported.docx
-  dws doc export --node <DOC_ID> --output ~/downloads/
-Flags:
-      --node string           要导出的文档标识，支持文档 URL 或 dentryUuid (必填)
-      --output string         本地保存路径，文件路径或目录 (必填)
-      --export-format string  导出格式，当前仅支持 docx (默认)
-```
-
-CLI 内部自动完成：提交导出任务 → 渐进式退避轮询（最多约 5 分钟）→ 成功后自动下载文件。
-**只需一条命令，无需手动轮询。**
-
-### 查询导出任务结果（手动兜底）
-```
-Usage:
-  dws doc export get [flags]
-Example:
-  dws doc export get --job-id <JOB_ID>
-Flags:
-      --job-id string   导出任务 ID (必填)
-```
-
-仅在 `dws doc export` 超时或中断后，用于手动查询任务状态。通常不需要调用。
-
 ## URL 识别与 DOC_ID 提取
 
 当用户输入包含钉钉文档 URL 时，**必须先识别并提取 DOC_ID**，再判断意图。
@@ -755,7 +675,7 @@ dws doc info --node <NODE_ID> --format json
 dws doc download --node <NODE_ID> --output ~/downloads/
 
 # 如果是在线文档 (ALIDOC)，用 export：
-dws doc export --node <NODE_ID> --output ~/downloads/
+# dws doc export 在开源 v1.0.30 不可用——在线文档暂不支持 CLI 导出；可读取内容后自行写入本地
 
 # ── 工作流 6: 上传附件并插入文档 ──
 
@@ -858,10 +778,9 @@ dws doc comment create-inline --node <DOC_ID> --block-id <BLOCK_ID> --start 5 --
 # ── 工作流 10: 导出在线文档为 docx ──
 
 # 一条命令自动完成（提交→轮询→下载），无需手动编排
-dws doc export --node <DOC_ID_OR_URL> --output ./exported.docx
+# dws doc export 在开源 v1.0.30 不可用
 
 # 如果导出命令超时或中断，可用 export get 手动查询任务状态：
-# dws doc export get --job-id <JOB_ID>
 ```
 
 ## 上下文传递表
@@ -906,7 +825,6 @@ dws doc read --node "https://alidocs.dingtalk.com/i/nodes/9E05BDRVQePjzLkZt2p2vE
 ## 注意事项
 
 - `export` 是一体化命令，一条命令自动完成提交→轮询→下载，**无需手动编排轮询**。CLI 内部使用渐进式退避轮询（最多约 5 分钟）
-- `export` 超时或中断后，CLI 会输出 `jobId`，可用 `dws doc export get --job-id <jobId>` 手动查询任务状态
 - `export` 当前仅支持钉钉在线文档 (alidocs) 导出为 `docx`，在线表格导出请使用其他命令
 - `update` 必须显式指定 `--mode`（overwrite 或 append），不再有默认值。`--mode overwrite` 会**清空原内容后重写**，谨慎使用；`--mode append` (追加) 更安全
 - `read` 返回 Markdown 格式的文档内容，仅限有"下载"权限的文档
@@ -918,7 +836,7 @@ dws doc read --node "https://alidocs.dingtalk.com/i/nodes/9E05BDRVQePjzLkZt2p2vE
 - 块类型包括: paragraph, heading, blockquote, callout, columns, orderedList, unorderedList, table, sheet, attachment, slot
 - 关键区分: doc(文档内容级操作) vs wiki(知识库空间级管理) vs aitable(数据表格操作) vs drive(钉盘文件管理)
 - wiki 是知识库容器，doc 是知识库中的文档内容；需要 `workspaceId` 时，先用 `dws wiki space list/search` 获取，再传给 doc 的 `--workspace` 参数
-- `doc upload vs drive upload` 用户提到"知识库/文档空间/workspace"→ `doc upload`；提到"钉盘/网盘/我的文件"→ `drive upload`；未明确目标时默认 `drive upload`
+- `doc upload vs drive upload-info`：用户提到"知识库/文档空间/workspace"→ `doc upload`；提到"钉盘/网盘/我的文件"→ `drive upload-info` + `drive commit`（开源 v1.0.30 是两步上传）
 - `upload` 支持上传任意类型文件 (PDF、Office、图片等) 到钉钉文档空间或知识库；`--convert` 可将 Office 文件转换为钉钉在线文档
 - `upload` 是三步自动完成的流程 (获取凭证 → OSS 上传 → 提交入库)，无需手动分步操作
 - `download` 是两步自动完成的流程 (获取下载链接 → HTTP GET 下载)，支持自动推断文件名；`--output` 可指定文件路径或目录

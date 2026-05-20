@@ -1,6 +1,6 @@
 # 钉盘 (drive) 命令参考
 
-> ⚠️ **CLI 暴露状态（开源 dws v1.0.30）**：本文档列出的 `drive list-spaces` 与单步 `drive upload` 命令在开源 dws 未暴露。开源 `dws drive` 仅有 6 个子命令：`commit / download / info / list / mkdir / upload-info`。上传文件必须走两步：(1) `drive upload-info` 拿到 upload URL → (2) HTTP PUT 文件 → (3) `drive commit` 注册。本文档保留 `drive upload` 段是因为内部 wukong 版本提供了封装；开源用户跑会 fall back 到 `dws drive` 父级 help。
+> ✅ **CLI 对齐状态（开源 dws v1.0.30）**：本文档已对齐开源 dws 实际暴露的 6 个子命令：`commit / download / info / list / mkdir / upload-info`。上传文件必须走两步：(1) `drive upload-info` 拿到 upload URL → (2) HTTP PUT 文件 → (3) `drive commit` 注册。单步 `drive upload` 命令在开源 v1.0.30 不存在；钉盘 space 枚举 (`list-spaces`) 也未暴露。
 
 
 ## 查询命令帮助
@@ -13,7 +13,7 @@ dws drive --help
 
 # 查看具体命令的完整参数说明
 dws drive list --help
-dws drive upload --help
+dws drive upload-info --help
 dws drive download --help
 ```
 
@@ -41,32 +41,6 @@ Flags:
       --space-id string     空间 ID，不传则使用「我的文件」对应 spaceId (可选)
       --thumbnail           是否返回缩略图信息 (可选)
 ```
-
-### 获取钉盘空间列表
-
-```
-Usage:
-  dws drive list-spaces [flags]
-Example:
-  dws drive list-spaces
-  dws drive list-spaces --space-type mySpace
-  dws drive list-spaces --space-type orgSpace --limit 20 --next-token <TOKEN>
-Flags:
-      --space-type string   空间类型: orgSpace=企业空间(默认), mySpace=我的文件 (可选)
-      --limit int           每页返回数量 (默认 20，最大 50)，仅 spaceType 为 orgSpace 时有效
-      --next-token string   分页游标，仅企业空间支持分页 (可选)
-```
-
-spaceType 筛选规则：
-- `orgSpace`（默认/不传）：返回企业空间列表，支持 `nextToken` 分页
-- `mySpace`：返回用户的"我的文件"个人空间（单个，不支持分页）
-
-返回字段说明：
-- `spaceId` — 空间 ID，用于 `list`/`info`/`upload` 等命令的 `--space-id`
-- `spaceName` — 空间名称（如"全员文件夹"、"我的文件"）
-- `rootFolderId` — 空间根目录的 dentryUuid，可作为 `doc copy/move` 的 `--folder` 参数
-- `spaceType` — 空间类型（如 `orgSpace`）
-- `nextToken` — 若不为空，表示还有更多空间可查询（仅企业空间）
 
 ### 获取文件元数据信息
 
@@ -112,42 +86,6 @@ Flags:
       --space-id string    目标空间 ID，不传则使用「我的文件」 (可选)
 ```
 
-### 上传本地文件到钉盘
-
-> **注意：** 上传文件必须使用 `dws drive upload` 命令，禁止使用 `upload-info` + `curl` + `commit` 三步流程。
-
-```
-Usage:
-  dws drive upload [flags]
-Example:
-  dws drive upload --file ./report.pdf
-  dws drive upload --file ./slides.pptx --file-name "Q1汇报.pptx"
-  dws drive upload --file ./data.xlsx --parent-id <dentryUuid>
-Flags:
-      --file string        本地文件路径 (必填)
-      --file-name string   文件显示名称 (默认使用文件名)
-      --space-id string    目标空间 ID，不传则使用「我的文件」 (可选)
-      --mime-type string   文件 MIME 类型，不传则自动推断 (可选)
-      --parent-id string   父节点 ID (dentryUuid)，不传则上传到空间根目录 (可选)
-```
-
-`upload` 命令内部自动完成三步流程（获取凭证 → OSS PUT → 提交入库），无需手动分步操作。
-
-### 删除文件/文件夹到回收站
-
-> **CAUTION:** 不可逆操作 — 执行前必须向用户确认。
-
-```
-Usage:
-  dws drive delete [flags]
-Example:
-  dws drive delete --file-id <dentryUuid> --format json    # 查询 fileId: dws drive list
-Flags:
-      --file-id string    文件/文件夹 ID (dentryUuid)，即 drive list 返回的 fileId (必填)
-```
-
-注意：`--file-id` 使用的是 `drive list` 返回结果中的 `fileId` 字段（即 `dentryUuid`），**不是** `dentryId` 字段。
-
 ## 意图判断
 
 用户说"我的文件/钉盘/网盘/云盘" → `list`
@@ -161,7 +99,7 @@ Flags:
 
 关键区分: drive(钉盘文件管理) vs doc(文档内容读写)
 
-**drive upload vs doc upload**: 用户提到"钉盘/网盘/我的文件"→ `drive upload`；提到"知识库/文档空间/workspace"→ `doc upload`；未明确目标时默认 `drive upload`
+**drive vs doc upload**: 用户提到"钉盘/网盘/我的文件"→ 用 `drive upload-info` + `drive commit` 两步流程；提到"知识库/文档空间/workspace"→ `doc upload`
 
 **钉盘文件复制/移动**: drive 本身没有 copy/move 命令，需使用 `dws doc copy`/`dws doc move` 实现（详见下方工作流）
 
@@ -184,8 +122,6 @@ dws drive download --file-id <dentryUuid> --output /tmp/ --format json
 dws drive mkdir --name "项目资料" --format json
 
 # 6. 上传文件（必须使用 upload 命令，禁止手动分步操作）
-dws drive upload --file ./报告.pdf --format json
-dws drive upload --file ./报告.pdf --parent-id <dentryUuid> --format json
 
 # 7. 删除文件/文件夹到回收站（危险操作：必须先向用户确认，用户同意后才加 --yes 执行）
 # 正确流程：1.向用户展示"即将删除「文件名」到回收站" → 2.等用户确认 → 3.执行下面命令
@@ -204,9 +140,9 @@ dws drive delete --file-id <dentryUuid> --yes --format json
 
 | 目标位置 | 参数传递方式 | 前置步骤 |
 |---------|-----------|---------|
-| 未指定目标（默认） | `--folder <rootFolderId>` | 先 `dws drive list-spaces --space-type mySpace` 获取「我的文件」的 `rootFolderId` |
+| 未指定目标（默认） | `--folder <rootFolderId>` | rootFolderId 需在钉盘 UI 中拿；开源 v1.0.30 暂无 `list-spaces` 命令枚举空间 |
 | 知识库空间根目录 | `--workspace <workspaceId>` | 无需额外步骤，直接传入 workspaceId |
-| 钉盘 space 根目录 | `--folder <rootFolderId>` | 先 `dws drive list-spaces` 获取目标 space 的 `rootFolderId` |
+| 钉盘 space 根目录 | `--folder <rootFolderId>` | rootFolderId 来自钉盘 UI 或 `dws drive list --space-id <id>` 返回的父目录 |
 | 钉盘 space 下的子文件夹 | `--folder <fileId>` | 先 `dws drive list --space-id <spaceId>` 逐层浏览，获取目标文件夹的 `fileId`（dentryUuid 格式） |
 
 ### 工作流示例
@@ -216,7 +152,7 @@ dws drive delete --file-id <dentryUuid> --yes --format json
 # 1. 获取源文件 dentryUuid
 dws drive list --space-id <SPACE_ID> --format json
 # 2. 获取「我的文件」个人空间的 rootFolderId
-dws drive list-spaces --space-type mySpace --format json
+# dws drive list-spaces 在开源 v1.0.30 未暴露；用 dws drive list 替代
 # 3. 用「我的文件」的 rootFolderId 作为 --folder
 dws doc copy --node <源文件dentryUuid> --folder <我的文件rootFolderId> --format json
 
@@ -265,7 +201,7 @@ dws doc copy --node <源文件dentryUuid> --folder <目标文件夹fileId> --for
 - 不传 `--parent-id` 时默认操作空间根目录
 - `--parent-id` 只能使用父文件夹的 `dentryUuid`。不要把 `drive info` 返回的数字型 `dentryId` 当作父目录；`dentryId` 只用于 `chat message send --dentry-id`
 - `--order-by` 支持: `createTime`、`modifyTime`、`name`
-- **上传文件必须使用 `dws drive upload` 命令**，禁止使用 `upload-info` + `curl` + `commit` 三步手动流程
+- **上传文件必须使用 `dws drive upload-info` + `dws drive commit` 两步流程**（开源 v1.0.30 没有 `drive upload` 单步封装）
 - `--file-name` 必须包含扩展名（如 `report.pdf`）
 
 ## 自动化脚本

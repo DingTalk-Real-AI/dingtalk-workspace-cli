@@ -31,7 +31,6 @@ metadata:
 | "追加一行" | `dws sheet append --node <nodeId或URL> --sheet-id <sheetId> --values '[[..]]'` |
 | "查找 / 替换" | `dws sheet find --node <nodeId或URL> --sheet-id <sheetId> --find "<关键词>"` / `dws sheet replace --node <nodeId或URL> --sheet-id <sheetId> --find "<旧值>" --replacement "<新值>"` |
 | "插入图片到单元格" | `dws sheet write-image --node <nodeId或URL> --sheet-id <sheetId> --range A1 --resource-id <attachmentId>`（或 `--resource-url <url>`） |
-| "创建浮动图片" | 先 `dws sheet media-upload --node <nodeId或URL> --file <图片路径>` 获取 `resourceUrl`，再 `dws sheet create-float-image --node <nodeId或URL> --sheet-id <sheetId> --src "<resourceUrl>" --range A1 --width <宽> --height <高>` |
 
 ## URL 与 ID 前置
 
