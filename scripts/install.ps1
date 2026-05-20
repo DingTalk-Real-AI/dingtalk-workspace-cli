@@ -17,6 +17,7 @@
 #   DWS_ARCH          — architecture override          (amd64 or arm64)
 #   DWS_NO_SKILLS     — set to 1 to skip skills install
 #   DWS_SKILLS_ONLY   — set to 1 to install only skills
+#   DWS_SKILL_MODE    — mono | multi (default: prompt if TTY, else mono)
 #
 # Agent skills paths follow build/npm/install.js AGENT_DIRS (order and entries must match).
 
@@ -29,6 +30,7 @@ $Version = if ($env:DWS_VERSION) { $env:DWS_VERSION } else { "latest" }
 $NoSkills = $env:DWS_NO_SKILLS -eq "1"
 $SkillsOnly = $env:DWS_SKILLS_ONLY -eq "1"
 $SkillName = "dws"
+$SkillMode = ""
 
 # Agent skill base directories (same order as build/npm/install.js AGENT_DIRS).
 $AgentDirs = @(
@@ -217,6 +219,62 @@ function Write-Banner {
     Write-Say "│     DingTalk Workspace CLI            │"
     Write-Say "└──────────────────────────────────────┘"
     Write-Host ""
+}
+
+# ── Skill Mode Resolution ────────────────────────────────────────────────────
+#
+# Priority (highest first):
+#   1. DWS_SKILL_MODE env var (mono | multi, case-insensitive)
+#   2. Interactive prompt when both stdin and stdout are TTYs (default: mono)
+#   3. Fallback: mono (non-TTY without env var, e.g. irm | iex)
+function Resolve-SkillMode {
+    if ($env:DWS_SKILL_MODE) {
+        $normalized = $env:DWS_SKILL_MODE.ToLower()
+        if ($normalized -eq "mono" -or $normalized -eq "multi") {
+            $script:SkillMode = $normalized
+            Write-Say "Skill mode: $SkillMode (from DWS_SKILL_MODE)"
+            return
+        }
+        Write-Err "Invalid DWS_SKILL_MODE='$($env:DWS_SKILL_MODE)'. Use 'mono' or 'multi'."
+    }
+
+    $isInteractive = $false
+    try {
+        $isInteractive = ([Console]::IsInputRedirected -eq $false) -and ([Console]::IsOutputRedirected -eq $false)
+    } catch {
+        $isInteractive = $false
+    }
+
+    if ($isInteractive) {
+        Write-Host ""
+        Write-Say "Select skill installation mode:"
+        Write-Say "  1) mono   — install one bundled dws skill (default)"
+        Write-Say "  2) multi  — split each product into its own skill (run 'dws skill setup --mode multi' afterwards)"
+        $choice = Read-Host "  Choice [1]"
+        switch ($choice) {
+            ""      { $script:SkillMode = "mono" }
+            "1"     { $script:SkillMode = "mono" }
+            "mono"  { $script:SkillMode = "mono" }
+            "2"     { $script:SkillMode = "multi" }
+            "multi" { $script:SkillMode = "multi" }
+            default {
+                Write-Say "Unrecognized choice '$choice', defaulting to mono."
+                $script:SkillMode = "mono"
+            }
+        }
+        Write-Say "Skill mode: $SkillMode"
+        return
+    }
+
+    $script:SkillMode = "mono"
+}
+
+function Write-MultiModeNotice {
+    Write-Say ""
+    Write-Say "📣 Skill mode: multi — automatic skill install skipped."
+    Write-Say "   To install split skills, run:"
+    Write-Say "     $BinName skill setup --mode multi"
+    Write-Say "   (One skill per product family; requires the dws binary installed above.)"
 }
 
 # ── Install Binary ───────────────────────────────────────────────────────────
@@ -435,18 +493,34 @@ $SourceRoot = Resolve-SourceRoot
 
 Write-Banner
 
+if (!$NoSkills) {
+    Resolve-SkillMode
+}
+
 if ($SourceRoot -and !$SkillsOnly -and ($Version -eq "latest")) {
     Install-BinaryFromSource -Root $SourceRoot
     if (!$NoSkills) {
-        Install-SkillsLocal -Root $SourceRoot
+        if ($SkillMode -eq "multi") {
+            Write-MultiModeNotice
+        } else {
+            Install-SkillsLocal -Root $SourceRoot
+        }
     }
 } elseif ($SkillsOnly) {
-    Install-Skills
+    if ($SkillMode -eq "multi") {
+        Write-MultiModeNotice
+    } else {
+        Install-Skills
+    }
 } elseif ($NoSkills) {
     Install-Binary
 } else {
     Install-Binary
-    Install-Skills
+    if ($SkillMode -eq "multi") {
+        Write-MultiModeNotice
+    } else {
+        Install-Skills
+    }
 }
 
 Write-Host ""

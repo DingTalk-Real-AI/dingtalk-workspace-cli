@@ -64,6 +64,25 @@ irm https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/ma
 ```
 
 <details>
+<summary><strong>Skill mode: mono vs multi</strong></summary>
+
+The installer ships skills in one of two layouts. CLI commands (`dws aitable ...`, `dws calendar ...`) are identical in both modes — only the agent-side skill layout differs.
+
+| Mode | What gets installed | Best for |
+|------|----------------------|----------|
+| **mono** (recommended, default) | One `dws` skill covering all products | Cross-product workflows; single entry point |
+| **multi** (experimental) | 29 per-product skills (`dingtalk-aitable`, `dingtalk-calendar`, `dingtalk-chat`, ...) | Single-product tasks; smaller context per call |
+
+How to pick:
+
+- **Quick install** (one-liner above): non-interactive, installs `mono`.
+- **TTY install** (download then run): `curl -O .../install.sh && bash install.sh` — prompts `1) mono  2) multi` (default 1).
+- **Override via env**: `DWS_SKILL_MODE=multi curl -fsSL ... | sh`.
+- **Switch later**: `dws skill setup --mode multi` (or `--mode mono`) — re-run any time.
+
+</details>
+
+<details>
 <summary>Other install methods</summary>
 
 **npm** (requires Node.js (npm/npx)):
@@ -230,26 +249,56 @@ dws aitable record query --base-id BASE_ID --table-id TABLE_ID --limit 10
 
 ### Agent Skills
 
-The repo ships a complete Agent Skill system (`skills/`). After installing, AI tools like Claude Code / Cursor can operate DingTalk directly through natural language:
+The repo ships a complete Agent Skill system under `skills/`, now organized into two layouts:
+
+- `skills/mono/` — single-skill layout (one `SKILL.md` + `references/products/`), recommended default.
+- `skills/multi/` — per-product skills (`dingtalk-aitable/`, `dingtalk-calendar/`, `dingtalk-chat/`, ... 29 products in total), each with its own `SKILL.md`. **Experimental.**
+
+After installing, AI tools like Claude Code / Cursor can operate DingTalk directly through natural language:
 
 ```bash
-# Install skills into current project
+# Install skills into current project (defaults to mono)
 curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install-skills.sh | sh
 ```
 
 > `install.sh` installs to `$HOME/.agents/skills/dws` (global); `install-skills.sh` installs to `./.agents/skills/dws` (current project).
 
-**What's included:**
+**Switching or re-installing with `dws skill setup`:**
+
+```bash
+# Interactive: prompts for mode + target agents
+dws skill setup
+
+# Install mono skill to every detected agent home (claude / cursor / codex / opencode / qoder)
+dws skill setup --mode mono --target all --yes
+
+# Install multi skills to a single agent home
+dws skill setup --mode multi --target cursor --yes
+
+# Point at a local source tree (e.g. a fork or work-in-progress)
+DWS_SKILL_SOURCE=/path/to/skills dws skill setup --mode multi
+```
+
+| Flag | Values | Description |
+|------|--------|-------------|
+| `--mode` | `mono` \| `multi` | Skill layout; defaults to interactive prompt |
+| `--target` | `all` \| `claude` \| `cursor` \| `codex` \| `opencode` \| `qoder` | Where to install; `all` covers every detected agent home |
+| `--source` | path | Local source directory (overrides bundled skills) |
+| `--yes` | — | Skip confirmation prompts |
+
+Env vars: `DWS_SKILL_MODE=mono|multi` (also honored by `install.sh` / `install.ps1`), `DWS_SKILL_SOURCE=<path>`.
+
+**What's included (mono layout):**
 
 | Component | Path | Description |
 |-----------|------|-------------|
-| Master Skill | `SKILL.md` | Intent routing, decision tree, safety rules, error handling |
-| Product references | `references/products/*.md` | Per-product command reference (aitable, chat, calendar, etc.) |
-| Intent guide | `references/intent-guide.md` | Disambiguation for confusing scenarios (e.g. report vs todo) |
-| Global reference | `references/global-reference.md` | Auth, output formats, global flags |
-| Error codes | `references/error-codes.md` | Error codes + debugging workflows |
-| Recovery guide | `references/recovery-guide.md` | `RECOVERY_EVENT_ID` handling |
-| Ready-made scripts | `scripts/*.py` | 13 batch operation scripts (see below) |
+| Master Skill | `skills/mono/SKILL.md` | Intent routing, decision tree, safety rules, error handling |
+| Product references | `skills/mono/references/products/*.md` | Per-product command reference (aitable, chat, calendar, etc.) |
+| Intent guide | `skills/mono/references/intent-guide.md` | Disambiguation for confusing scenarios (e.g. report vs todo) |
+| Global reference | `skills/mono/references/global-reference.md` | Auth, output formats, global flags |
+| Error codes | `skills/mono/references/error-codes.md` | Error codes + debugging workflows |
+| Recovery guide | `skills/mono/references/recovery-guide.md` | `RECOVERY_EVENT_ID` handling |
+| Ready-made scripts | `skills/mono/scripts/*.py` | 13 batch operation scripts (see below) |
 
 <details>
 <summary><strong>Ready-made scripts</strong> — 13 Python scripts for common multi-step workflows</summary>
@@ -430,7 +479,8 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 <details>
 <summary>Coming soon</summary>
 
-`conference` (video meetings)
+- `conference` (video meetings)
+- Multi-skill mode (experimental) — per-product skills under `skills/multi/`; opt in via `dws skill setup --mode multi`
 
 </details>
 

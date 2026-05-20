@@ -227,6 +227,55 @@ func TestInstallScriptsUseFlattenedSkillsSourceRoot(t *testing.T) {
 	}
 }
 
+func TestInstallScriptsExposeSkillModeSelection(t *testing.T) {
+	t.Parallel()
+
+	shPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatalf("Abs(install.sh) error = %v", err)
+	}
+	shData, err := os.ReadFile(shPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", shPath, err)
+	}
+	shText := string(shData)
+
+	// install.sh must honor DWS_SKILL_MODE, expose mono/multi, and check TTY via [ -t 0 ].
+	for _, want := range []string{
+		"DWS_SKILL_MODE",
+		"mono",
+		"multi",
+		"[ -t 0 ]",
+		"dws skill setup --mode multi",
+	} {
+		if !strings.Contains(shText, want) {
+			t.Fatalf("install.sh missing %q (needed for skill mode selection)", want)
+		}
+	}
+
+	ps1Path, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.ps1"))
+	if err != nil {
+		t.Fatalf("Abs(install.ps1) error = %v", err)
+	}
+	ps1Data, err := os.ReadFile(ps1Path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", ps1Path, err)
+	}
+	ps1Text := string(ps1Data)
+
+	for _, want := range []string{
+		"DWS_SKILL_MODE",
+		"mono",
+		"multi",
+		"IsInputRedirected",
+		"dws skill setup --mode multi",
+	} {
+		if !strings.Contains(ps1Text, want) {
+			t.Fatalf("install.ps1 missing %q (needed for skill mode selection)", want)
+		}
+	}
+}
+
 func TestBuildEntrypointsUseStripLdflags(t *testing.T) {
 	t.Parallel()
 

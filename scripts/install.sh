@@ -14,6 +14,7 @@
 #   DWS_VERSION       — version to install             (default: latest)
 #   DWS_NO_SKILLS     — set to 1 to skip skills install
 #   DWS_SKILLS_ONLY   — set to 1 to install only skills (skip binary)
+#   DWS_SKILL_MODE    — mono | multi (default: prompt if TTY, else mono)
 #
 # Agent skills paths follow build/npm/install.js AGENT_DIRS (order and entries must match).
 
@@ -27,6 +28,7 @@ VERSION="${DWS_VERSION:-latest}"
 NO_SKILLS="${DWS_NO_SKILLS:-0}"
 SKILLS_ONLY="${DWS_SKILLS_ONLY:-0}"
 SKILL_NAME="dws"
+SKILL_MODE=""
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -135,6 +137,59 @@ print_banner() {
   say "│     DingTalk Workspace CLI           │"
   say "└──────────────────────────────────────┘"
   printf '\n'
+}
+
+# ── Skill Mode Resolution ────────────────────────────────────────────────────
+#
+# Priority (highest first):
+#   1. DWS_SKILL_MODE env var (mono | multi, case-insensitive)
+#   2. Interactive prompt when both stdin and stdout are TTYs (default: mono)
+#   3. Fallback: mono (non-TTY without env var, e.g. curl | sh)
+resolve_skill_mode() {
+  if [ -n "${DWS_SKILL_MODE:-}" ]; then
+    raw="$DWS_SKILL_MODE"
+    # Lower-case without bash-specific ${var,,}; tr is POSIX.
+    normalized="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')"
+    case "$normalized" in
+      mono|multi)
+        SKILL_MODE="$normalized"
+        say "Skill mode: ${SKILL_MODE} (from DWS_SKILL_MODE)"
+        return 0
+        ;;
+      *)
+        err "Invalid DWS_SKILL_MODE='${raw}'. Use 'mono' or 'multi'."
+        ;;
+    esac
+  fi
+
+  if [ -t 0 ] && [ -t 1 ]; then
+    printf '\n'
+    say "Select skill installation mode:"
+    say "  1) mono   — install one bundled dws skill (default)"
+    say "  2) multi  — split each product into its own skill (run 'dws skill setup --mode multi' afterwards)"
+    printf '  Choice [1]: '
+    read choice || choice=""
+    case "$choice" in
+      ""|1|mono)  SKILL_MODE="mono" ;;
+      2|multi)    SKILL_MODE="multi" ;;
+      *)
+        say "Unrecognized choice '${choice}', defaulting to mono."
+        SKILL_MODE="mono"
+        ;;
+    esac
+    say "Skill mode: ${SKILL_MODE}"
+    return 0
+  fi
+
+  SKILL_MODE="mono"
+}
+
+print_multi_mode_notice() {
+  say ""
+  say "📣 Skill mode: multi — automatic skill install skipped."
+  say "   To install split skills, run:"
+  say "     ${BIN_NAME} skill setup --mode multi"
+  say "   (One skill per product family; requires the dws binary installed above.)"
 }
 
 install_binary_from_source() {
@@ -435,23 +490,40 @@ main() {
 
   print_banner
 
+  # Resolve skill mode only when we are actually going to touch skills.
+  if [ "$NO_SKILLS" != "1" ]; then
+    resolve_skill_mode
+  fi
+
   if [ -n "$source_root" ]; then
     install_binary_from_source "$source_root"
     if [ "$NO_SKILLS" != "1" ]; then
-      install_skills_local "$source_root"
+      if [ "$SKILL_MODE" = "multi" ]; then
+        print_multi_mode_notice
+      else
+        install_skills_local "$source_root"
+      fi
     fi
   elif [ "$SKILLS_ONLY" = "1" ]; then
-    local_root="$(resolve_source_root || true)"
-    if [ -n "$local_root" ]; then
-      install_skills_local "$local_root"
+    if [ "$SKILL_MODE" = "multi" ]; then
+      print_multi_mode_notice
     else
-      install_skills
+      local_root="$(resolve_source_root || true)"
+      if [ -n "$local_root" ]; then
+        install_skills_local "$local_root"
+      else
+        install_skills
+      fi
     fi
   elif [ "$NO_SKILLS" = "1" ]; then
     install_binary
   else
     install_binary
-    install_skills
+    if [ "$SKILL_MODE" = "multi" ]; then
+      print_multi_mode_notice
+    else
+      install_skills
+    fi
   fi
 
   printf '\n'

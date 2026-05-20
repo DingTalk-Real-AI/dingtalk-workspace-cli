@@ -78,22 +78,30 @@ func runSkillSetup(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	if mode == skillSetupModeMulti {
-		return fmt.Errorf("--mode multi 当前尚未启用（multi skill 内容将在后续 PR 中提供），请先使用 --mode mono")
-	}
-
 	skillSrc, err := resolveSkillSetupSource(source, mode)
 	if err != nil {
 		return err
 	}
 
-	dests, err := resolveSkillSetupTargets(target)
+	dests, err := resolveSkillSetupTargets(target, mode)
 	if err != nil {
 		return err
 	}
 
+	// multi 模式枚举 src 下的子 skill 名，供确认信息与安装步骤共用
+	var multiSkillNames []string
+	if mode == skillSetupModeMulti {
+		multiSkillNames, err = listMultiSkillNames(skillSrc)
+		if err != nil {
+			return err
+		}
+		if len(multiSkillNames) == 0 {
+			return fmt.Errorf("multi 模式下 %s 内未发现含 SKILL.md 的子目录", skillSrc)
+		}
+	}
+
 	if !autoYes {
-		ok, err := confirmSkillSetup(out, mode, skillSrc, dests)
+		ok, err := confirmSkillSetup(out, mode, skillSrc, dests, multiSkillNames)
 		if err != nil {
 			return err
 		}
@@ -103,13 +111,41 @@ func runSkillSetup(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	installed, skipped, err := installSkillToHomes(skillSrc, dests, out, errOut)
+	var installed, skipped int
+	switch mode {
+	case skillSetupModeMono:
+		installed, skipped, err = installSkillToHomes(skillSrc, dests, out, errOut)
+	case skillSetupModeMulti:
+		installed, skipped, err = installMultiSkillToHomes(skillSrc, multiSkillNames, dests, out, errOut)
+	default:
+		return fmt.Errorf("内部错误：未知 mode %q", mode)
+	}
 	if err != nil {
 		return err
 	}
 
 	fmt.Fprintf(out, "\n✅ Skill 安装完成（mode=%s, installed=%d, skipped=%d）\n", mode, installed, skipped)
 	return nil
+}
+
+// listMultiSkillNames returns sorted names of subdirectories under src that
+// contain a SKILL.md file (i.e. valid multi-mode skill bundles).
+func listMultiSkillNames(src string) ([]string, error) {
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return nil, fmt.Errorf("无法读取 multi skill 源目录 %s: %w", src, err)
+	}
+	var names []string
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(src, e.Name(), "SKILL.md")); err == nil {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names)
+	return names, nil
 }
 
 // resolveSkillSetupMode resolves the mode either from the flag or via an
@@ -221,7 +257,11 @@ func isSkillSourceRoot(path, mode string) bool {
 // resolveSkillSetupTargets returns the list of absolute Agent home destinations.
 // If target == "all", returns every agent home whose parent directory exists.
 // Otherwise returns the single matching home (whether or not it currently exists).
-func resolveSkillSetupTargets(target string) ([]string, error) {
+//
+// 末段约定：
+//   - mono  → <agent-home>/dws   （单 skill，整个 src 拷成一个 dws 目录）
+//   - multi → <agent-home>       （安装时把 src 下每个子目录拷成兄弟 skill）
+func resolveSkillSetupTargets(target, mode string) ([]string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("无法解析用户 HOME: %w", err)
@@ -229,17 +269,25 @@ func resolveSkillSetupTargets(target string) ([]string, error) {
 
 	target = strings.ToLower(strings.TrimSpace(target))
 	if target == "" || target == "all" {
-		return detectExistingAgentHomes(home), nil
+		return detectExistingAgentHomes(home, mode), nil
 	}
 
 	rel, ok := agentSkillPaths[target]
 	if !ok {
 		return nil, fmt.Errorf("不支持的 --target 值: %s（可选 all, %s）", target, supportedTargets())
 	}
-	return []string{filepath.Join(home, rel, "dws")}, nil
+	return []string{agentHomeForMode(filepath.Join(home, rel), mode)}, nil
 }
 
-func detectExistingAgentHomes(home string) []string {
+// agentHomeForMode appends the mode-specific tail segment to an agent home base.
+func agentHomeForMode(base, mode string) string {
+	if mode == skillSetupModeMulti {
+		return base
+	}
+	return filepath.Join(base, "dws")
+}
+
+func detectExistingAgentHomes(home, mode string) []string {
 	var out []string
 	for i, rel := range skillSetupAgentHomes {
 		base := filepath.Join(home, rel)
@@ -249,18 +297,32 @@ func detectExistingAgentHomes(home string) []string {
 				continue
 			}
 		}
-		out = append(out, filepath.Join(base, "dws"))
+		out = append(out, agentHomeForMode(base, mode))
 	}
 	if len(out) == 0 {
-		out = append(out, filepath.Join(home, ".agents", "skills", "dws"))
+		out = append(out, agentHomeForMode(filepath.Join(home, ".agents", "skills"), mode))
 	}
 	return out
 }
 
-func confirmSkillSetup(out io.Writer, mode, src string, dests []string) (bool, error) {
-	fmt.Fprintf(out, "\n📦 将安装 skill：\n  mode: %s\n  source: %s\n  destinations:\n", mode, src)
+func confirmSkillSetup(out io.Writer, mode, src string, dests []string, multiSkillNames []string) (bool, error) {
+	fmt.Fprintf(out, "\n📦 将安装 skill：\n  mode: %s\n  source: %s\n", mode, src)
+	if mode == skillSetupModeMulti {
+		fmt.Fprintf(out, "  将装 %d 个独立 skill（按子目录平铺到 <agent-home>/<skill-name>/）：\n", len(multiSkillNames))
+		for _, n := range multiSkillNames {
+			fmt.Fprintf(out, "    · %s\n", n)
+		}
+	}
+	fmt.Fprintln(out, "  destinations:")
 	for _, d := range dests {
 		fmt.Fprintf(out, "    - %s\n", d)
+	}
+	// 列出互斥清理：装 mode 前要把对面 mode 的残留删掉
+	fmt.Fprintln(out, "  互斥清理（确认后才执行）：")
+	for _, d := range dests {
+		for _, victim := range mutualExclusionVictims(d, mode) {
+			fmt.Fprintf(out, "    × 将删除 %s\n", victim)
+		}
 	}
 
 	if !isInteractiveTerminal() {
@@ -283,9 +345,58 @@ func confirmSkillSetup(out io.Writer, mode, src string, dests []string) (bool, e
 	return confirm, nil
 }
 
+// mutualExclusionVictims returns the paths that should be removed before
+// installing into dest under the given mode, to prevent leftover files from
+// the opposite mode from co-existing.
+//
+//   - mono dest is <agent-home>/dws  → multi 残留是 <agent-home>/dingtalk-*
+//   - multi dest is <agent-home>     → mono 残留是 <agent-home>/dws
+func mutualExclusionVictims(dest, mode string) []string {
+	switch mode {
+	case skillSetupModeMono:
+		// dest = <agent-home>/dws → agent-home = parent
+		agentHome := filepath.Dir(dest)
+		entries, err := os.ReadDir(agentHome)
+		if err != nil {
+			return nil
+		}
+		var victims []string
+		for _, e := range entries {
+			if e.IsDir() && strings.HasPrefix(e.Name(), "dingtalk-") {
+				victims = append(victims, filepath.Join(agentHome, e.Name()))
+			}
+		}
+		sort.Strings(victims)
+		return victims
+	case skillSetupModeMulti:
+		// dest = <agent-home> → mono 残留是 dest/dws
+		monoPath := filepath.Join(dest, "dws")
+		if _, err := os.Stat(monoPath); err == nil {
+			return []string{monoPath}
+		}
+		return nil
+	}
+	return nil
+}
+
+// cleanupMutualExclusion best-effort removes the opposite-mode leftovers.
+// Failures emit a warning to errOut but never abort the install.
+func cleanupMutualExclusion(dest, mode string, out, errOut io.Writer) {
+	for _, victim := range mutualExclusionVictims(dest, mode) {
+		if err := os.RemoveAll(victim); err != nil {
+			fmt.Fprintf(errOut, "  ⚠️  互斥清理失败（继续安装） %s: %v\n", victim, err)
+			continue
+		}
+		fmt.Fprintf(out, "  × 已清理对面模式残留 %s\n", victim)
+	}
+}
+
 func installSkillToHomes(src string, dests []string, out, errOut io.Writer) (installed, skipped int, err error) {
 	sort.Strings(dests)
 	for _, dest := range dests {
+		// 先做互斥清理：装 mono 前先把同级 dingtalk-* 子目录全部干掉
+		cleanupMutualExclusion(dest, skillSetupModeMono, out, errOut)
+
 		if err := os.RemoveAll(dest); err != nil {
 			fmt.Fprintf(errOut, "  ✗ 清理失败 %s: %v\n", dest, err)
 			skipped++
@@ -303,6 +414,41 @@ func installSkillToHomes(src string, dests []string, out, errOut io.Writer) (ins
 		}
 		fmt.Fprintf(out, "  ✓ %s\n", dest)
 		installed++
+	}
+	return installed, skipped, nil
+}
+
+// installMultiSkillToHomes installs each subdir of src (dingtalk-*) into
+// dest as a sibling skill directory. installed/skipped is counted per
+// (agent-home × sub-skill) pair so the user sees granular progress.
+func installMultiSkillToHomes(src string, skillNames []string, dests []string, out, errOut io.Writer) (installed, skipped int, err error) {
+	sort.Strings(dests)
+	for _, dest := range dests {
+		// 互斥清理：装 multi 前先把 dest/dws/ 整个删除（mono 残留）
+		cleanupMutualExclusion(dest, skillSetupModeMulti, out, errOut)
+
+		if err := os.MkdirAll(dest, 0o755); err != nil {
+			fmt.Fprintf(errOut, "  ✗ Agent 目录创建失败 %s: %v\n", dest, err)
+			skipped += len(skillNames)
+			continue
+		}
+
+		for _, name := range skillNames {
+			subSrc := filepath.Join(src, name)
+			subDest := filepath.Join(dest, name)
+			if err := os.RemoveAll(subDest); err != nil {
+				fmt.Fprintf(errOut, "  ✗ 清理失败 %s: %v\n", subDest, err)
+				skipped++
+				continue
+			}
+			if err := copyDir(subSrc, subDest); err != nil {
+				fmt.Fprintf(errOut, "  ✗ 拷贝失败 %s: %v\n", subDest, err)
+				skipped++
+				continue
+			}
+			fmt.Fprintf(out, "  ✓ %s\n", subDest)
+			installed++
+		}
 	}
 	return installed, skipped, nil
 }
