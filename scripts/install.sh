@@ -222,6 +222,7 @@ install_binary_from_source() {
 install_skills_local() {
   root="$1"
   skill_src="${root}/skills/mono"
+  multi_src="${root}/skills/multi"
 
   if [ ! -d "$skill_src" ]; then
     say "⚠️  Local skills directory not found: ${skill_src}"
@@ -234,7 +235,55 @@ install_skills_local() {
 
   install_skills_to_homes "$skill_src"
 
+  # Cache multi source for later `dws skill setup --mode multi`.
+  if [ -d "$multi_src" ]; then
+    cache_multi_skills "$multi_src"
+  fi
+
+  # Also cache a mono copy so `dws skill setup --mode mono` has a fallback
+  # under ~/.dws/skills/mono when invoked without --source.
+  cache_mono_skills "$skill_src"
+
   return 0
+}
+
+# cache_multi_skills copies the multi/ tree (per-product skills) into
+# ~/.dws/skills/multi/ so that `dws skill setup --mode multi` can find a
+# source without needing the source checkout or a re-download.
+cache_multi_skills() {
+  src="$1"
+  cache_dir="${HOME}/.dws/skills/multi"
+
+  if [ ! -d "$src" ]; then
+    return 0
+  fi
+
+  rm -rf "$cache_dir"
+  mkdir -p "$cache_dir"
+  cp -R "$src/"* "$cache_dir/" 2>/dev/null || cp -r "$src/"* "$cache_dir/" 2>/dev/null || true
+
+  file_count="$(find "$cache_dir" -type f | wc -l | tr -d ' ')"
+  case "$cache_dir" in
+    "$HOME"/*) label="~/${cache_dir#$HOME/}" ;;
+    *)         label="$cache_dir" ;;
+  esac
+  say "✅ Cached multi skills → ${label} (${file_count} files)"
+}
+
+# cache_mono_skills mirrors cache_multi_skills for the mono tree. Keeping the
+# two modes symmetrical means `dws skill setup` can fall back to ~/.dws/skills
+# regardless of which mode the user picks later.
+cache_mono_skills() {
+  src="$1"
+  cache_dir="${HOME}/.dws/skills/mono"
+
+  if [ ! -d "$src" ]; then
+    return 0
+  fi
+
+  rm -rf "$cache_dir"
+  mkdir -p "$cache_dir"
+  cp -R "$src/"* "$cache_dir/" 2>/dev/null || cp -r "$src/"* "$cache_dir/" 2>/dev/null || true
 }
 
 # Install skill tree into all agent homes (same rules as build/npm/install.js installSkillsToHomes).
@@ -458,8 +507,14 @@ install_skills() {
     err "Cannot extract release skill archive and no local source checkout found."
   fi
 
+  # New release layout puts mono content both at the zip root (for backward
+  # compatibility with older installers) and under ./mono/, with multi/ as a
+  # sibling. Prefer ./mono/ when present so we never miss SKILL.md, then fall
+  # back to the legacy nested $SKILL_NAME/ shape, then the zip root.
   skill_src="$extract_root"
-  if [ -f "$extract_root/$SKILL_NAME/SKILL.md" ]; then
+  if [ -d "$extract_root/mono" ] && [ -f "$extract_root/mono/SKILL.md" ]; then
+    skill_src="$extract_root/mono"
+  elif [ -f "$extract_root/$SKILL_NAME/SKILL.md" ]; then
     skill_src="$extract_root/$SKILL_NAME"
   fi
   if [ ! -f "$skill_src/SKILL.md" ]; then
@@ -476,6 +531,15 @@ install_skills() {
   fi
 
   install_skills_to_homes "$skill_src"
+
+  # Cache the multi tree (if present in the release asset) so a later
+  # `dws skill setup --mode multi` can find a source without re-downloading.
+  if [ -d "$extract_root/multi" ]; then
+    cache_multi_skills "$extract_root/multi"
+  fi
+
+  # And cache mono too for symmetry with --mode mono fallbacks.
+  cache_mono_skills "$skill_src"
 
   rm -rf "$tmpdir_skills"
 }

@@ -310,6 +310,138 @@ func TestBuildEntrypointsUseStripLdflags(t *testing.T) {
 	}
 }
 
+// TestInstallScriptsCacheMultiSkills verifies install.sh / install.ps1 /
+// install-skills.sh / build/npm/install.js all carry the wiring that caches
+// the multi/ tree to ~/.dws/skills/multi/ during install. This is what lets
+// `dws skill setup --mode multi` find a source on a fresh machine.
+func TestInstallScriptsCacheMultiSkills(t *testing.T) {
+	t.Parallel()
+
+	checks := []struct {
+		relPath string
+		wants   []string
+	}{
+		{
+			relPath: filepath.Join("..", "..", "scripts", "install.sh"),
+			wants: []string{
+				"cache_multi_skills",
+				"${HOME}/.dws/skills/multi",
+				"cache_mono_skills",
+			},
+		},
+		{
+			relPath: filepath.Join("..", "..", "scripts", "install.ps1"),
+			wants: []string{
+				"Cache-MultiSkills",
+				".dws\\skills\\multi",
+				"Cache-MonoSkills",
+			},
+		},
+		{
+			relPath: filepath.Join("..", "..", "scripts", "install-skills.sh"),
+			wants: []string{
+				"${DWS_CACHE_ROOT}/skills/multi",
+				"${DWS_CACHE_ROOT}/skills/mono",
+			},
+		},
+		{
+			relPath: filepath.Join("..", "..", "build", "npm", "install.js"),
+			wants: []string{
+				"cacheUserSkills",
+				".dws",
+				"\"multi\"",
+				"\"mono\"",
+			},
+		},
+	}
+
+	for _, tc := range checks {
+		scriptPath, err := filepath.Abs(tc.relPath)
+		if err != nil {
+			t.Fatalf("Abs(%s) error = %v", tc.relPath, err)
+		}
+		data, err := os.ReadFile(scriptPath)
+		if err != nil {
+			t.Fatalf("ReadFile(%s) error = %v", scriptPath, err)
+		}
+		text := string(data)
+		for _, want := range tc.wants {
+			if !strings.Contains(text, want) {
+				t.Fatalf("%s missing %q (needed for multi-skill caching)", scriptPath, want)
+			}
+		}
+	}
+}
+
+// TestInstallScriptCachesMultiEndToEnd runs install.sh in source-checkout mode
+// with a fake HOME, then verifies that ~/.dws/skills/multi/ ends up populated
+// with the per-product skills from skills/multi/.
+func TestInstallScriptCachesMultiEndToEnd(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	fakeHome := filepath.Join(root, "home")
+	installDir := filepath.Join(root, "bin")
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatalf("Abs(install.sh) error = %v", err)
+	}
+
+	stubRoot := filepath.Join(root, "stubs")
+	repoRoot, _ := filepath.Abs(filepath.Join("..", ".."))
+	makeStub := `#!/bin/sh
+set -eu
+dir=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -C) dir="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+[ -n "$dir" ] && printf 'fake-binary\n' > "$dir/dws"
+`
+	mustWriteFile(t, filepath.Join(stubRoot, "make"), []byte(makeStub), 0o755)
+	mustWriteFile(t, filepath.Join(stubRoot, "go"), []byte("#!/bin/sh\ntrue\n"), 0o755)
+
+	cmd := exec.Command("sh", scriptPath)
+	cmd.Env = append(os.Environ(),
+		"HOME="+fakeHome,
+		"PATH="+stubRoot+":"+os.Getenv("PATH"),
+		"DWS_INSTALL_DIR="+installDir,
+	)
+	output, err := cmd.CombinedOutput()
+
+	// Clean up the fake binary created in the real repo root
+	_ = os.Remove(filepath.Join(repoRoot, "dws"))
+
+	if err != nil {
+		t.Fatalf("install.sh error = %v\noutput:\n%s", err, string(output))
+	}
+
+	// Verify multi cache was populated. We expect dingtalk-* subdirs.
+	multiCache := filepath.Join(fakeHome, ".dws", "skills", "multi")
+	entries, err := os.ReadDir(multiCache)
+	if err != nil {
+		t.Fatalf("ReadDir(%s) error = %v\noutput:\n%s", multiCache, err, string(output))
+	}
+	foundDingtalk := 0
+	for _, e := range entries {
+		if e.IsDir() && strings.HasPrefix(e.Name(), "dingtalk-") {
+			foundDingtalk++
+		}
+	}
+	if foundDingtalk == 0 {
+		t.Fatalf("no dingtalk-* entries under %s: %v\noutput:\n%s", multiCache, entries, string(output))
+	}
+
+	// And verify mono cache.
+	monoCacheSkill := filepath.Join(fakeHome, ".dws", "skills", "mono", "SKILL.md")
+	if _, err := os.Stat(monoCacheSkill); err != nil {
+		t.Fatalf("missing mono cache SKILL.md at %s: %v", monoCacheSkill, err)
+	}
+}
+
 func mustWriteFile(t *testing.T, path string, data []byte, mode os.FileMode) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

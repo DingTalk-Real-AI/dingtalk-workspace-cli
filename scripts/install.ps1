@@ -356,6 +356,7 @@ function Install-Binary {
 function Install-SkillsLocal {
     param([string]$Root)
     $skillSrc = Join-Path (Join-Path $Root "skills") "mono"
+    $multiSrc = Join-Path (Join-Path $Root "skills") "multi"
 
     if (!(Test-Path $skillSrc)) {
         Write-Say "⚠️  Local skills directory not found: $skillSrc"
@@ -367,6 +368,41 @@ function Install-SkillsLocal {
     Write-Say "📦 Installing agent skills from local source: $skillSrc"
 
     Install-SkillsToHomes -SkillSrc $skillSrc -Root $HOME
+
+    if (Test-Path $multiSrc) {
+        Cache-MultiSkills -Source $multiSrc
+    }
+    Cache-MonoSkills -Source $skillSrc
+}
+
+# Cache-MultiSkills mirrors install.sh cache_multi_skills: copies the multi/
+# tree to ~/.dws/skills/multi/ so `dws skill setup --mode multi` can find a
+# source without needing the source checkout or a re-download.
+function Cache-MultiSkills {
+    param([string]$Source)
+
+    if (!(Test-Path $Source)) { return }
+
+    $cacheDir = Join-Path $HOME ".dws\skills\multi"
+    if (Test-Path $cacheDir) {
+        Remove-Item -Path $cacheDir -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
+    $count = Copy-DirRecursive -Source $Source -Destination $cacheDir
+    Write-Say "✅ Cached multi skills → $cacheDir ($count files)"
+}
+
+function Cache-MonoSkills {
+    param([string]$Source)
+
+    if (!(Test-Path $Source)) { return }
+
+    $cacheDir = Join-Path $HOME ".dws\skills\mono"
+    if (Test-Path $cacheDir) {
+        Remove-Item -Path $cacheDir -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
+    Copy-DirRecursive -Source $Source -Destination $cacheDir | Out-Null
 }
 
 function Install-SkillsToHomes {
@@ -465,8 +501,12 @@ function Install-Skills {
         $extractRoot = Join-Path $tmpDir "skills"
         Expand-Archive -Path $zipPath -DestinationPath $extractRoot -Force
 
+        # Prefer the explicit mono/ subtree; fall back to legacy nested or zip root.
         $skillSrc = $extractRoot
-        if (Test-Path (Join-Path $extractRoot "$SkillName\SKILL.md")) {
+        $monoRoot = Join-Path $extractRoot "mono"
+        if ((Test-Path $monoRoot) -and (Test-Path (Join-Path $monoRoot "SKILL.md"))) {
+            $skillSrc = $monoRoot
+        } elseif (Test-Path (Join-Path $extractRoot "$SkillName\SKILL.md")) {
             $skillSrc = Join-Path $extractRoot $SkillName
         }
 
@@ -482,6 +522,14 @@ function Install-Skills {
         }
 
         Install-SkillsToHomes -SkillSrc $skillSrc -Root $HOME
+
+        # Cache the multi/ tree (and a mono copy) under ~/.dws/skills so that
+        # subsequent `dws skill setup --mode multi|mono` can find a source.
+        $multiRoot = Join-Path $extractRoot "multi"
+        if (Test-Path $multiRoot) {
+            Cache-MultiSkills -Source $multiRoot
+        }
+        Cache-MonoSkills -Source $skillSrc
     } finally {
         Remove-Item -Path $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
     }

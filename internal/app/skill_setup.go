@@ -226,6 +226,12 @@ func skillSourceCandidates(explicit, subdir string) []string {
 	if wd, err := os.Getwd(); err == nil {
 		roots = append(roots, filepath.Join(wd, "skills", subdir))
 	}
+	// User-level cache populated by install.sh / install.ps1 / npm install.js
+	// from the dws-skills.zip release asset. Lets `dws skill setup` find a
+	// source even when the user has no source checkout on disk.
+	if home, err := os.UserHomeDir(); err == nil {
+		roots = append(roots, filepath.Join(home, ".dws", "skills", subdir))
+	}
 	return roots
 }
 

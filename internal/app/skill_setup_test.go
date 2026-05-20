@@ -69,6 +69,10 @@ func TestResolveSkillSetupSourceFindsMonoRoot(t *testing.T) {
 func TestResolveSkillSetupSourceErrorWhenMissing(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("DWS_SKILL_SOURCE", "")
+	// Isolate HOME so the ~/.dws/skills/<mode>/ fallback (added by the release
+	// pipeline cache work) does not pick up real cached content on the
+	// developer machine.
+	t.Setenv("HOME", t.TempDir())
 	_, err := resolveSkillSetupSource(tmp, skillSetupModeMono)
 	if err == nil {
 		t.Fatalf("expected error when source missing")
@@ -282,6 +286,64 @@ func TestSkillSetupMutualExclusion(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "已清理对面模式残留") {
 		t.Fatalf("expected cleanup log line on mono install, got stdout=%q", stdout.String())
+	}
+}
+
+// TestSkillSourceCandidatesIncludesUserCache verifies that the user-level
+// cache populated by install.sh / install.ps1 / npm install.js is part of the
+// fallback candidate list, so `dws skill setup` can find a source on a fresh
+// machine without --source.
+func TestSkillSourceCandidatesIncludesUserCache(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("UserHomeDir error = %v", err)
+	}
+
+	for _, subdir := range []string{"mono", "multi"} {
+		got := skillSourceCandidates("", subdir)
+		want := filepath.Join(home, ".dws", "skills", subdir)
+		found := false
+		for _, c := range got {
+			if c == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("skillSourceCandidates(%q) missing %q; got %v", subdir, want, got)
+		}
+	}
+}
+
+// TestResolveSkillSetupSourceFallsBackToUserCache verifies that when no
+// --source / DWS_SKILL_SOURCE / source checkout is available, the resolver
+// successfully discovers ~/.dws/skills/multi/ as the source.
+func TestResolveSkillSetupSourceFallsBackToUserCache(t *testing.T) {
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+	t.Setenv("DWS_SKILL_SOURCE", "")
+
+	cacheRoot := filepath.Join(fakeHome, ".dws", "skills", "multi")
+	for _, n := range []string{"dingtalk-aitable", "dingtalk-doc"} {
+		if err := os.MkdirAll(filepath.Join(cacheRoot, n), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(cacheRoot, n, "SKILL.md"), []byte("# "+n), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Run resolver from a tempdir that has no skills/ on disk, simulating a
+	// fresh user machine without a source checkout.
+	scratch := t.TempDir()
+	t.Chdir(scratch)
+
+	got, err := resolveSkillSetupSource("", skillSetupModeMulti)
+	if err != nil {
+		t.Fatalf("expected user-cache fallback to succeed, got err=%v", err)
+	}
+	if got != cacheRoot {
+		t.Fatalf("expected %s, got %s", cacheRoot, got)
 	}
 }
 
