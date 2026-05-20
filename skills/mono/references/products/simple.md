@@ -11,11 +11,11 @@
 Usage:
   dws devdoc article search [flags]
 Example:
-  dws devdoc article search --keyword "OAuth2 接入" --page 1 --size 10
+  dws devdoc article search --query "OAuth2 接入" --page 1 --size 10
 Flags:
-      --keyword string   搜索关键词 (必填)
-      --page string      页码 (默认 1)
-      --size string      每页数量 (默认 10)
+      --query string   搜索关键词 (必填)
+      --page string    页码 (默认 1)
+      --size string    每页数量 (默认 10)
 ```
 
 ---

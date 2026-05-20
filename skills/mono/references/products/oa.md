@@ -26,15 +26,15 @@ Flags:
 Usage:
   dws oa approval list-initiated [flags]
 Example:
-  dws oa approval list-initiated
-  dws oa approval list-initiated --process-code <processCode> --max-results 20
-  dws oa approval list-initiated --start "2026-03-01T00:00:00+08:00" --end "2026-03-31T23:59:59+08:00" --next-token <nextToken>
+  dws oa approval list-initiated --process-code <processCode> --start "2026-03-01T00:00:00+08:00"
+  dws oa approval list-initiated --process-code <processCode> --start "2026-03-01T00:00:00+08:00" --end "2026-03-31T23:59:59+08:00" --max-results 20
+  dws oa approval list-initiated --process-code <processCode> --start "2026-03-01T00:00:00+08:00" --next-token <nextToken>
 Flags:
-      --process-code string   按指定表单/流程模板过滤 (可选)
-      --start string          发起开始时间 ISO-8601 (可选)
-      --end string            发起结束时间 ISO-8601 (可选)
-      --max-results string    每页条数 (可选)
-      --next-token string     分页 token (首页留空)
+      --process-code string   审批表单 processCode (必填) — 来自 dws oa approval list-forms
+      --start string          发起开始时间 ISO-8601 (必填)
+      --end string            发起结束时间 ISO-8601 (可选, 缺省查到当前)
+      --max-results int       每页大小 (最大 20, 默认 20)
+      --next-token int        分页游标 (首次传 0)
 ```
 
 查询当前用户作为申请人发起的审批，用来查"我报销到哪一步了"、"我之前提的请假单"。
@@ -164,9 +164,9 @@ dws oa approval reject  --instance-id <processInstanceId> --task-id <taskId> --r
 # 5. 查看流程记录 — 谁何时做了什么
 dws oa approval records --instance-id <processInstanceId> --format json
 
-# 6. 查我发起的审批 / 按模板过滤
-dws oa approval list-initiated --format json
-dws oa approval list-initiated --process-code <processCode> --format json
+# 6. 查我发起的审批（--process-code 和 --start 都是必填，processCode 先 list-forms 拿到）
+dws oa approval list-initiated --process-code <processCode> --start "2026-03-01T00:00:00+08:00" --format json
+dws oa approval list-initiated --process-code <processCode> --start "2026-03-01T00:00:00+08:00" --end "2026-03-31T23:59:59+08:00" --format json
 
 # 7. 能发起哪些表单
 dws oa approval list-forms --cursor 0 --size 20 --format json

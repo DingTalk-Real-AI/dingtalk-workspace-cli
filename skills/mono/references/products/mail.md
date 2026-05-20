@@ -14,7 +14,7 @@ Example:
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `mailboxes` | `List[]` | 邮箱列表，每条包含邮箱地址、账号类型、所属企业 |
+| `emailAccounts` | `List[]` | 邮箱列表，每条含 `email` / `type` / `orgName`；type 取值 `PERSONAL`（个人邮箱）/ `ORGANIZATION`（企业邮箱） |
 
 ### 搜索邮件 (KQL 语法)
 ```
