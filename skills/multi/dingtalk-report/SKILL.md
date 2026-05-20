@@ -26,7 +26,7 @@ metadata:
 |--------|------|
 | "今天收到的日志" | `python scripts/report_received_today.py` |
 | "看日志模版" | `dws report template list` → `dws report template detail --name "<模版名>"` |
-| "提交日报 / 周报（按模版）" | `dws report create --template-id <id> --contents-file <tmp.json>` |
+| "提交日报 / 周报（按模版）" | `dws report create --template-id <id> --contents '[...]' |
 | "我已发送的日志" | `dws report sent --start <ISO> --end <ISO>` |
 | "日志已读统计" | `dws report stats --report-id <id>` |
 | "生成日报 / 周报 / 月报 / 主题报告" | 见 [05-reporting.md](references/05-reporting.md) recipe |

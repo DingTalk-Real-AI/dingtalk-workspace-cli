@@ -122,7 +122,7 @@ CLI 列表命令只返回 JSON-first 数据，不把 Markdown 表作为裸文本
 
 1. `dws report template list --format json` — 取 `report_template_id` 与可见模版名
 2. `dws report template detail --name "<模版名>" --format json` — 取 `result.report_template_fields[]`，每项含 `field_name` / `field_sort` / `field_type`
-3. `dws report create --template-id <id> --contents-file <tmp.json> --format json` — contents 数组按上面「字段映射」严格对齐第 2 步：`field_name → key`，`field_sort → sort`，`field_type → type`，再填 `content` 与 `contentType`；CLI 创建成功后会自动反查详情并追加钉钉打开链接字段，返回中直接取 `reportId` 与 `dingtalkOpenMarkdownLink` / `dingtalkOpenUrl`
+3. `dws report create --template-id <id> --contents '[...]' --format json` — contents 数组按上面「字段映射」严格对齐第 2 步：`field_name → key`，`field_sort → sort`，`field_type → type`，再填 `content` 与 `contentType`；CLI 创建成功后会自动反查详情并追加钉钉打开链接字段，返回中直接取 `reportId` 与 `dingtalkOpenMarkdownLink` / `dingtalkOpenUrl`
 4. 仅当第 3 步返回中缺少 `dingtalkOpenUrl` 时，执行 `dws report detail --report-id <reportId> --format json` 补取 `result.url`（`dingtalk://...` 协议深链接）。final reply 中优先使用 `dingtalkOpenMarkdownLink`，否则用 `[在钉钉中查看日志](dingtalkOpenUrl)`。**禁止把 raw `dingtalk://...` URL 原样写进回复**，必须包成 markdown link 让用户可点击跳转钉钉客户端
 
 跳步风险（已实证）：
@@ -130,7 +130,7 @@ CLI 列表命令只返回 JSON-first 数据，不把 Markdown 表作为裸文本
 - 跳过第 1 步直接编 templateId → 服务端返回 `PARAM_ERROR`，且**不告诉你哪个 ID 错**；
 - 跳过第 2 步用 LLM 经验编 `key` 名 → 服务端返回 `PARAM_ERROR`，且**不告诉你哪个字段错**；服务端 PARAM_ERROR 信号弱，事后无法定位，**只能靠前置 schema 同步避免**；
 - 未取到 `dingtalkOpenUrl` 且不补查 detail → 用户拿不到跳转链接，无法在钉钉客户端打开刚提交的日志查看 / 修改；
-- 用 `--contents` 直传长 JSON → shell 引号转义破坏 JSON → `INPUT_INVALID_JSON`。**长内容务必走 `--contents-file <path>` 或 `--contents -` (stdin)**。
+- 用 `--contents` 直传长 JSON → shell 引号转义破坏 JSON → `INPUT_INVALID_JSON`。**长内容务必走 `--contents -` (stdin)，e.g. `echo "$json" | dws report create ... --contents -`**。
 - contents JSON 大小限制为 10MB，**不支持分批次提交**。超过限制需精简内容或拆分为多个独立日志提交。
 
 推荐：Agent 在多轮场景中应在内存里持久化第 1/2 步的结果，避免每轮重新跑。
@@ -161,7 +161,7 @@ Usage:
   dws report create [flags]
 Example:
   # 推荐：长内容走文件，避免 shell 引号问题
-  dws report create --template-id <templateId> --contents-file ./report.json --format json
+  dws report create --template-id <templateId> --contents '[...]' --format json
 
   # stdin 输入
   cat report.json | dws report create --template-id <templateId> --contents - --format json
@@ -172,8 +172,7 @@ Example:
     --format json
 Flags:
       --template-id string    日志模版 ID (必填)，从 template list 返回中取
-      --contents string       日志内容 JSON 数组 (必填，或用 --contents-file)；传 `-` 表示从 stdin 读取
-      --contents-file string  从文件读取 contents JSON（推荐用于含中文/换行/Markdown 的长内容）
+      --contents string       日志内容 JSON 数组 (必填)；含中文换行/markdown 时建议用 stdin: --contents - 配合 echo "$json" | dws report create ...
       --dd-from string        创建来源标识 (默认 dws)
       --to-chat               是否发送到日志接收人单聊 (默认 false，传本 flag 则为 true)
       --to-user-ids string    接收人 userId，逗号分隔 (可选)
@@ -191,7 +190,7 @@ Flags:
 
 **字段名对齐**：`template detail` 返回 `result.report_template_fields[].{field_name, field_sort, field_type}`（snake_case），拼 `--contents` 时 **逐一映射**：`field_name → key`、`field_sort → sort`、`field_type → type`，再填 `content` 与 `contentType`。**不要自己编 key 名**，必须从 detail 返回值取，否则服务端会返回不可定位的 `PARAM_ERROR`。
 
-**长内容传参优先级**：`--contents-file <path>` > `--contents -` (stdin) > `--contents '<json>'`。任何含中文换行 / Markdown / 引号的场景都应走 `--contents-file` 避免 shell 引号转义。
+**长内容传参**：含中文换行 / Markdown / 引号的场景用 stdin：`echo "$json" | dws report create --template-id <id> --contents - --format json`，避免 shell 引号转义。
 
 ### 获取日志详情
 ```
@@ -302,8 +301,8 @@ dws report template list --format json
 # 2. 按名称查看模版详情（含字段定义）
 dws report template detail --name "日报" --format json
 
-# 2b. 创建日志（从步骤 1/2 取 templateId 与 contents 字段）— 推荐 --contents-file 传入避免 shell 引号
-dws report create --template-id <templateId> --contents-file ./report.json --format json
+# 2b. 创建日志（从步骤 1/2 取 templateId 与 contents 字段）— 推荐 --contents '[...]' shell 引号
+dws report create --template-id <templateId> --contents '[...]' --format json
 # create 成功会自动反查详情并追加 dingtalkOpenMarkdownLink / dingtalkOpenUrl；
 # final reply 直接使用 dingtalkOpenMarkdownLink: [在钉钉中查看日志](dingtalk://...)
 
@@ -361,8 +360,7 @@ dws report sent --cursor 0 --size 20 --format json
 
 | Code | ExitCode | 真实含义 | 建议动作 |
 |------|---------|---------|---------|
-| `INPUT_INVALID_JSON` | 3 | `--contents` 或 `--contents-file` 内容非合法 JSON | 检查 JSON 数组结构，每项必须是 object，含 `key`/`sort`/`content`/`contentType`/`type` 五个字段 |
-| `INPUT_FILE_NOT_FOUND` | 3 | `--contents-file` 路径不存在 / sandbox OS 风格不匹配（macOS 路径在 Windows 沙箱）| 先确认 sandbox OS 与路径风格；改写到 `os.tmpdir()` 等可移植目录 |
+| `INPUT_INVALID_JSON` | 3 | `--contents` 内容非合法 JSON | 检查 JSON 数组结构，每项必须是 object，含 `key`/`sort`/`content`/`contentType`/`type` 五个字段；含中文/换行时改用 stdin (`--contents -`) |
 | `INPUT_MISSING_PARAM` | 3 | `--template-id` / `--contents` 必填缺失 | 显式传值；从 `template list` 取合法 templateId |
 | `INPUT_TOO_LARGE` | 3 | contents JSON 超过 10MB 限制 | **不支持分批次提交**。需精简内容或拆分为多个独立日志分别提交 |
 | `MCP_TOOL_ERROR` | 1 | 服务端业务错（含 `server_error_code: PARAM_ERROR`，覆盖 templateId 错 / 字段名错 / 字段值错 / contents 空等多种形态）| 查看 `server_error_code` / `technical_detail`；服务端不区分具体子错因，按提交链路重新走 `template list → template detail → create`；连续 ≥ 2 次仍失败必须停止重试，降级 final_reply |
@@ -374,7 +372,7 @@ dws report sent --cursor 0 --size 20 --format json
 
 1. 同一 templateId 连续 ≥ 3 次返回 PARAM_ERROR / INVALID_CONTENTS 类错误，且每次重试只是改 contents 字段名 / 格式而未重读 schema；
 2. 出现服务端不可读的 PARAM_ERROR（technical_detail 仅含 `root.success当前值`）—— 即使只 1 次也应停止；
-3. 出现 `INPUT_FILE_NOT_FOUND` 后下一次重试仍未先 `ls` 验证路径存在性。
+3. 长 contents 通过 stdin 传入仍持续报 `INPUT_INVALID_JSON`（说明 JSON 本身格式错，重试无意义）
 
 降级 final_reply 模板：
 

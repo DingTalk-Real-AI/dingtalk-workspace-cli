@@ -69,7 +69,7 @@ dws contact user get --ids <userId> --format json
 # → 提取 orgAuthEmail 字段
 
 # 路径 2：contact user search
-dws contact user search --keyword "姓名" --format json
+dws contact user search --query "姓名" --format json
 # → 提取用户邮箱字段
 ```
 
@@ -181,7 +181,7 @@ Flags:
 用户说"给(某人名字)发邮件" / "查询某人发给我的邮件" / "查询发给某人的邮件" →
   **第一步**：并发同时发起以下两路查询，取最先返回有效邮箱的结果；若两路均无，ask_human：
     1. `aisearch person --keyword <姓名>` → `contact user get --ids <userId>`，提取 `orgAuthEmail`
-    2. `contact user search --keyword <姓名>`，提取用户邮箱字段
+    2. `contact user search --query <姓名>`，提取用户邮箱字段
   **第二步**：用获得的目标邮箱拼入 KQL（如 `from:<email>` 或 `to:<email>`）执行 `message search`，或用于 `message send`
 用户说"发带附件的邮件" → 当前 CLI 不支持附件参数，告知用户限制并建议在钉钉客户端手动操作
 用户说"回复邮件 / 转发邮件 / 批量移动邮件 / 删除邮件 / 草稿管理 / 列文件夹 / 列标签 / 下载附件 / 查看会话线程" → 当前 CLI 未实现这些命令，不要编造；告知用户在钉钉客户端处理
@@ -226,5 +226,5 @@ dws mail message send --from user@company.com --to colleague@company.com \
 - `--cc` 抄送人支持多人，逗号分隔
 - 收件人邮箱获取：用户只知道同事名字时，**并发**同时执行以下两路查询，取最先返回有效邮箱的结果，无需等待另一路完成：
   1. `dws aisearch person --keyword "名字" --dimension name` → `dws contact user get --ids <userId>`，提取 `orgAuthEmail`
-  2. `dws contact user search --keyword "名字"`，提取用户邮箱字段
+  2. `dws contact user search --query "名字"`，提取用户邮箱字段
   若两路均无有效邮箱，必须 ask_human 请用户手动提供收件人邮箱，严禁臆测和假设

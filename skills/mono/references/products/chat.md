@@ -178,8 +178,8 @@ Flags:
 Usage:
   dws chat search [flags]
 Example:
-  dws chat search --keyword "项目冲刺"
-  dws chat search --keyword "项目冲刺" --limit 20 --cursor 0
+  dws chat search --query "项目冲刺"
+  dws chat search --query "项目冲刺" --limit 20 --cursor 0
 Flags:
       --keyword string   搜索关键词 (必填，旧版别名: --query)
       --limit int        每页返回数量（默认 20）
@@ -636,7 +636,7 @@ Usage:
   dws chat group transfer-owner [flags]
 Example:
   dws chat group transfer-owner --group <openConversationId> --new-owner <openDingTalkId>
-  # 查询群 ID: dws chat search --keyword "群名"
+  # 查询群 ID: dws chat search --query "群名"
   # 查询 openDingTalkId: dws contact user search --query "姓名"
 Flags:
       --group string       群聊 openConversationId (必填)
@@ -774,7 +774,7 @@ Usage:
   dws chat message recall [flags]
 Example:
   dws chat message recall --group <openConversationId> --msg-id <openMessageId>
-  # 查询会话 ID: dws chat search --keyword "群名"
+  # 查询会话 ID: dws chat search --query "群名"
   # 消息 ID 可通过 dws chat message list 获取（字段名 openMessageId）
 Flags:
       --group string    会话 openConversationId (必填，支持单聊/群聊)
@@ -905,7 +905,7 @@ Flags:
 注意:
   - 所有参数均为可选，但至少需要指定一个搜索条件
   - --sender-ids 和 --at-ids 传 openDingTalkId（非 userId），可通过 `dws contact user search --query "姓名"` 获取
-  - 群聊 openConversationId 通过 `dws chat search --keyword "群名"` 获取；单聊 openConversationId 通过 `dws chat conversation-info --open-dingtalk-id <openDingTalkId>` 获取
+  - 群聊 openConversationId 通过 `dws chat search --query "群名"` 获取；单聊 openConversationId 通过 `dws chat conversation-info --open-dingtalk-id <openDingTalkId>` 获取
   - 时间支持多种 ISO-8601 格式，如 "2026-03-10T00:00:00+08:00"、"2026-03-10 14:00:00"、"2026-03-10" 等
   - 翻页：hasMore=true 时，用返回的 nextCursor 作为下次 --cursor
   - 替代关系：完全替代 search（严格超集）；大部分替代 list-by-sender（按 openDingTalkId 搜索）和 list-mentions（--at-me 覆盖核心功能）；不能替代 list-focused（「特别关注」是独立维度）
@@ -1241,7 +1241,7 @@ Flags:
 
 ```bash
 # 1. 搜索群 — 提取 openconversation_id
-dws chat search --keyword "项目冲刺" --format json
+dws chat search --query "项目冲刺" --format json
 
 # 2. 拉取群消息
 dws chat message list --group <openconversation_id> --time "2025-03-01 00:00:00" --format json
@@ -1299,7 +1299,7 @@ dws chat message recall-by-bot --robot-code <robot-code> --group <openconversati
 dws chat bot search --name "项目提醒" --format json
 
 # Step 2: 搜索群 — 提取 openConversationId
-dws chat search --keyword "项目群" --format json
+dws chat search --query "项目群" --format json
 
 # Step 3: 将机器人添加到群（需当前用户对该群有管理权限）
 dws chat group members add-bot --id <openConversationId> --robot-code <robotCode> --format json
@@ -1408,7 +1408,7 @@ dws chat message send --group <openconversation_id> \
 - `chat group member-role` 系列管理群自定义角色：list 查列表，add 创建，update 改名，remove 删除；set-user 覆盖某人全部角色（传空 --role-ids 则清除），remove-user 仅移除指定角色，query-user 查询某人当前角色；--user 传 openDingTalkId（非 userId）
 - `chat list-categories` 列出当前用户自定义会话分类（无参数）
 - `chat list-conversations` 按分类拉取会话列表，需 --category-id（字符串，由 list-categories 返回）
-- **如何获取 openConversationId**（上层已有则直接用，不必重复查）：群聊 `dws chat search --keyword "群名"`；单聊 `dws chat conversation-info --open-dingtalk-id <openDingTalkId>`
+- **如何获取 openConversationId**（上层已有则直接用，不必重复查）：群聊 `dws chat search --query "群名"`；单聊 `dws chat conversation-info --open-dingtalk-id <openDingTalkId>`
 - **如何获取 openDingTalkId**：知道姓名 → `dws contact user search --query "姓名"`；只有 userId → 先 `dws contact user get --ids <userId>` 拿姓名，再 search
 
 ## 自动化脚本

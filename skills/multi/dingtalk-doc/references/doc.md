@@ -288,7 +288,7 @@ Flags:
 Usage:
   dws doc delete [flags]
 Example:
-  dws doc delete --node <DOC_ID> --format json    # 查询 nodeId: dws doc search --keyword "..." 或 dws doc list
+  dws doc delete --node <DOC_ID> --format json    # 查询 nodeId: dws doc search --query "..." 或 dws doc list
 Flags:
       --node string   文档/文件 ID 或 URL (必填)
 ```

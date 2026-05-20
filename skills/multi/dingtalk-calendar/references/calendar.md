@@ -26,7 +26,7 @@
 日程实例（event instance）：日程的具体时间实例，可以通过event list指令查询时间段内的所有实例。1个普通日程和对应1个Instance，而1个重复性日程(SeriesMaster)对应N个Instance（同属一个日程序列）。
   - 同一个日程序列具有相同的iCalUid，并且重复性日程，其eventId和iCalUid的值相同。因此可以通过重复性日程实例的iCalUid得到重复性日程(SeriesMaster)的eventId
 重复规则（recurrence rule）：定义重复性日程的重复规则。
-参会人（attendee）：日程的参与者。常用通讯录工具查询userId，dws contact user search --keyword "姓名"。
+参会人（attendee）：日程的参与者。常用通讯录工具查询userId，dws contact user search --query "姓名"。
 响应状态（response）：参会人对日程的回应，包括：未响应、接受、待定、拒绝。
 忙闲时间（busy）：查询用户在指定时间段的忙闲状态，查询会议室在指定时间段的预定状态，用于会议时间协调。
 会议室（room）：room是 会议室 ，room可视为日程的资源类参会人，需要加入日程完成预订。注意和location区分，location只是地点，和room不同。
