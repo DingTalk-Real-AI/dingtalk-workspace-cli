@@ -50,6 +50,8 @@ Usage:
 Example:
   dws doc info --node <DOC_ID>
   dws doc info --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>"
+  dws doc info --node "https://alidocs.dingtalk.com/document/edit?dentryKey=<DENTRY_KEY>"
+  dws doc info --node "https://alidocs.dingtalk.com/document/preview?dentryKey=<DENTRY_KEY>"
 Flags:
       --node string   文档 ID 或 URL (必填)
 ```
@@ -61,6 +63,8 @@ Usage:
 Example:
   dws doc read --node <DOC_ID>
   dws doc read --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>"
+  dws doc read --node "https://alidocs.dingtalk.com/document/edit?dentryKey=<DENTRY_KEY>"
+  dws doc read --node "https://alidocs.dingtalk.com/document/preview?dentryKey=<DENTRY_KEY>"
 Flags:
       --node string   文档 ID 或 URL (必填)
 ```
@@ -328,12 +332,14 @@ Flags:
 |------|------|----------------|
 | `alidocs.dingtalk.com/i/nodes/{id}` | `https://alidocs.dingtalk.com/i/nodes/9E05BDRVQePjzLkZt2p2vE7kV63zgkYA` | 取 URL 路径最后一段：`9E05BDRVQePjzLkZt2p2vE7kV63zgkYA` |
 | `alidocs.dingtalk.com/i/nodes/{id}?queryParams` | `https://alidocs.dingtalk.com/i/nodes/abc123?doc_type=wiki_doc` | 忽略 query 参数，取路径最后一段：`abc123` |
+| `alidocs.dingtalk.com/document/{edit\|preview}?...&dentryKey={key}` | `https://alidocs.dingtalk.com/document/edit?dentryKey=wo1g3x54FzVEJ5yE` | **不要提取 `dentryKey` 单独使用**，必须将完整 URL 原样传给 `--node` |
 
 ### 提取规则
 
 1. 匹配 URL 中 `alidocs.dingtalk.com` 域名
-2. 取 URL path 的最后一段作为 DOC_ID（去掉 query string 和 fragment）
-3. 提取出的 DOC_ID 可直接用于所有 `--node` 参数，也可将完整 URL 传给 `--node`（CLI 会自动解析）
+2. 路径为 `/i/nodes/{id}` 时，取 URL path 的最后一段作为 DOC_ID（去掉 query string 和 fragment）
+3. 路径为 `/document/edit` 或 `/document/preview` 且 query 含 `dentryKey` 时，**禁止**提取 `dentryKey` 当 DOC_ID；将整段 URL 原样传给 `--node`，CLI 会自动解析（追踪参数如 `utm_source`、`chInfo` 也不必清理）
+4. 提取出的 DOC_ID 可直接用于所有 `--node` 参数，也可将完整 URL 传给 `--node`（CLI 会自动解析）
 
 ### 处理流程
 
@@ -532,17 +538,22 @@ dws doc rename --node <DOC_ID> --name "项目周报 v2" --format json
 | `file create` | `nodeId` | 后续 read / update / block 操作的 --node（仅 adoc 支持 read/update，axls/amind 等类型用各自产品的命令） |
 | `copy` / `move` | 新 `nodeId`（copy）或原 nodeId（move） | 后续 read / info 等的 --node |
 
-## nodeId 双格式说明
+## nodeId 多格式说明
 
-所有 `--node` 参数同时支持两种格式，系统自动识别：
+所有 `--node` 参数同时支持以下格式，系统自动识别：
 - **文档 ID**: 字母数字字符串，如 `9E05BDRVQePjzLkZt2p2vE7kV63zgkYA`
 - **文档 URL**: `https://alidocs.dingtalk.com/i/nodes/{dentryUuid}`，如 `https://alidocs.dingtalk.com/i/nodes/9E05BDRVQePjzLkZt2p2vE7kV63zgkYA`
+- **文档链接（edit/preview）**: `https://alidocs.dingtalk.com/document/{edit|preview}?...&dentryKey={key}`（必须传入完整 URL，不要提取其中的 query 参数单独使用）
 
-两种方式等价，以下命令效果相同：
+以下命令效果相同：
 ```bash
 dws doc read --node 9E05BDRVQePjzLkZt2p2vE7kV63zgkYA
 dws doc read --node "https://alidocs.dingtalk.com/i/nodes/9E05BDRVQePjzLkZt2p2vE7kV63zgkYA"
+dws doc read --node "https://alidocs.dingtalk.com/document/edit?dentryKey=wo1g3x54FzVEJ5yE"
+dws doc read --node "https://alidocs.dingtalk.com/document/preview?cid=74993670680&type=d&docKey=Pd6l2Z7V8ZWydl7M&dentryKey=rBGBr2r1HmwanAGW"
 ```
+
+> **注意**：`document/edit` 和 `document/preview` 格式 URL 中的 `dentryKey` 参数值不是合法的独立 nodeId，禁止提取后单独使用，必须传入完整 URL。URL 中可能包含 `utm_source`、`chInfo` 等追踪参数，无需手动去除，直接传入完整 URL 即可。
 
 `--folder` 参数同样支持文件夹 URL 或 ID。
 
