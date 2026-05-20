@@ -9,20 +9,32 @@
 | 子命令 | 用途 |
 |-------|------|
 | `group create` | 创建内部群 |
-| `group members` | 查看群成员列表 |
+| `group members list` | 查看群成员列表 |
 | `group members add` | 添加群成员 |
 | `group members remove` | 移除群成员（⚠️ 危险操作） |
 | `group members add-bot` | 添加机器人到群 |
 | `group rename` | 修改群名称 |
-| `search` | 搜索群会话 |
-| `search-common` | 搜索共同群 |
-| `conversation-info` | 获取会话基础信息（单聊/群聊） |
+| `group get-by-group-id` | 按数字群号获取会话信息（群号转 openConversationId） |
+| `group transfer-owner` | 转让群主 |
+| `group invite-url` | 获取群邀请链接 |
+| `group quit` | 退出群聊 |
+| `group update-icon` | 更新群头像 |
+| `group update-settings` | 更新群设置 |
+| `group set-admin` | 设置/取消群管理员 |
+| `group member-role` | 群自定义角色（add / list / update / remove / set-user / remove-user / query-user） |
 
 ### message (会话消息管理)
 
 | 子命令 | 用途 |
 |-------|------|
-| `message send` | 以当前用户身份发群消息或单聊消息 |
+| `message send` | 以当前用户身份发消息（群聊或单聊） |
+| `message recall` | 撤回当前用户自己发出的消息 |
+| `message send-by-bot` | 机器人发消息（群聊或批量单聊） |
+| `message recall-by-bot` | 机器人撤回消息 |
+| `message send-by-webhook` | 自定义机器人 Webhook 发消息 |
+| `message send-card` / `update-card` | 创建并推送流式卡片，配合更新内容 |
+| `message reply` | 引用回复消息（单聊/群聊均可） |
+| `message forward` | 转发单条消息（源/目标会话均支持单聊/群聊） |
 | `message list` | 拉取群聊或单聊会话消息 |
 | `message list-all` | 按时间范围拉取当前用户所有会话消息 |
 | `message list-topic-replies` | 拉取群话题回复消息列表 |
@@ -30,17 +42,35 @@
 | `message list-mentions` | 拉取 @我 的消息 |
 | `message list-focused` | 拉取特别关注人的消息 |
 | `message list-unread-conversations` | 获取未读会话列表 |
+| `message list-by-ids` | 按消息 ID 批量获取消息 |
 | `message search` | 按关键词搜索消息 |
-| `message send-by-bot` | 机器人发消息（群聊或批量单聊） |
-| `message recall-by-bot` | 机器人撤回消息 |
-| `message send-by-webhook` | 自定义机器人 Webhook 发消息 |
+| `message search-advanced` | 多维度搜索消息（推荐首选，严格超集） |
+| `message query-send-status` | 查询消息发送状态（按 openTaskId） |
+| `message query-read-status` | 查询消息已读/未读状态 |
+| `message add-emoji` / `remove-emoji` | 给消息添加/移除 emoji 表情回应 |
+| `message add-text-emotion` / `remove-text-emotion` | 添加/移除文字表情回应 |
+| `message create-text-emotion` | 创建文字表情模板（返回 emotionId 供 add-text-emotion 使用） |
+
+### chat 顶级命令
+
+| 子命令 | 用途 |
+|-------|------|
+| `search` | 根据关键词搜索群聊 |
+| `search-common` | 搜索共同群 |
+| `conversation-info` | 获取会话基础信息（含 newCSpaceIdIM） |
 | `list-top-conversations` | 拉取置顶会话列表 |
+| `set-top` | 设置/取消会话置顶 |
+| `mute` | 会话消息免打扰开关 |
+| `group-mute` | 群全员禁言开关 |
+| `group-mute-member` | 群成员禁言开关 |
+| `list-categories` | 列出用户自定义会话分类 |
+| `list-conversations` | 按分类拉取会话列表 |
 
 ### bot (机器人管理)
 
 | 子命令 | 用途 |
 |-------|------|
-| `bot search` | 搜索我的机器人 |
+| `bot search` | 搜索我创建的机器人 |
 
 ---
 
@@ -142,16 +172,22 @@ Flags:
 
 ## search — 搜索群会话
 
-根据名称搜索会话列表。
+根据关键词搜索群聊会话，分页返回匹配的群列表。
 
 ```
 Usage:
   dws chat search [flags]
 Example:
-  dws chat search --query "项目冲刺"
+  dws chat search --keyword "项目冲刺"
+  dws chat search --keyword "项目冲刺" --limit 20 --cursor 0
 Flags:
-      --cursor string   分页游标 (首页留空)
-      --query string    搜索关键词 (必填)
+      --keyword string   搜索关键词 (必填，旧版别名: --query)
+      --limit int        每页返回数量（默认 20）
+      --cursor string    分页游标（默认 "0"，翻页传 nextCursor）
+
+注意:
+  - 旧版命令使用 `--query`，新版统一改为 `--keyword`；`--query` 仍可作为别名使用
+  - 翻页：hasMore=true 时，用返回的 nextCursor 作为下次 --cursor
 ```
 
 ---
@@ -574,6 +610,529 @@ Flags:
 
 ---
 
+---
+
+## group get-by-group-id — 按数字群号获取会话信息
+
+当用户只提供数字群号而非 openConversationId 时，用此命令把群号转换为 openConversationId，再调用其他需要 openConversationId 的命令。
+
+```
+Usage:
+  dws chat group get-by-group-id [flags]
+Example:
+  dws chat group get-by-group-id --group-id 12345678
+Flags:
+      --group-id string   群号 (必填，数字字符串)
+```
+
+---
+
+## group transfer-owner — 转让群主
+
+将群主身份转让给群内其他成员。--new-owner 传新群主的 openDingTalkId。
+
+```
+Usage:
+  dws chat group transfer-owner [flags]
+Example:
+  dws chat group transfer-owner --group <openConversationId> --new-owner <openDingTalkId>
+  # 查询群 ID: dws chat search --keyword "群名"
+  # 查询 openDingTalkId: dws contact user search --query "姓名"
+Flags:
+      --group string       群聊 openConversationId (必填)
+      --new-owner string   新群主 openDingTalkId (必填)
+```
+
+---
+
+## group invite-url — 获取群邀请链接
+
+获取指定群聊的邀请加入链接。可选 --expires-seconds 指定链接有效期（秒），0 表示永久有效，不传则使用服务端默认值。
+
+```
+Usage:
+  dws chat group invite-url [flags]
+Example:
+  dws chat group invite-url --group <openConversationId>
+  dws chat group invite-url --group <openConversationId> --expires-seconds 86400
+  dws chat group invite-url --group <openConversationId> --expires-seconds 0
+Flags:
+      --group string            群聊 openConversationId (必填)
+      --expires-seconds int     链接有效期（秒），0=永久有效，不传使用服务端默认值
+```
+
+---
+
+## group quit — 退出群聊
+
+当前用户退出指定群聊。
+
+```
+Usage:
+  dws chat group quit [flags]
+Example:
+  dws chat group quit --group <openConversationId>
+Flags:
+      --group string   群聊 openConversationId (必填)
+```
+
+---
+
+## group update-icon — 更新群头像
+
+更新指定群聊的群头像，--icon-media-id 传通过 media upload 获取的 mediaId。
+
+```
+Usage:
+  dws chat group update-icon [flags]
+Example:
+  dws chat group update-icon --group <openConversationId> --icon-media-id <mediaId>
+Flags:
+      --group string           群聊 openConversationId (必填)
+      --icon-media-id string   群头像 mediaId (必填，先用 media upload 上传获取)
+```
+
+---
+
+## group update-settings — 更新群设置
+
+--setting-key 指定设置项，--status 指定值（通常 "0"=关闭，"1"=开启；含义随 settingKey 变化）。
+
+支持的 settingKey: `authority`、`joinValidation`、`onlyAdminCanAtAll`、`searchable`、`addFriendForbidden`、`toolbarStatus`、`pluginCustomizeVerify`、`onlyAdminCanDING`、`allMembersCanCreateMcsConf`、`onlyAdminCanSetMsgTop`、`onlyAdminCanPinMsg`、`onlyAdminCanSendFile`、`allMembersCanCreateCalendar`、`groupEmailDisabled`、`groupRedEnvelopeSwitch`、`groupLiveAuthority`、`groupBillAuthority`
+
+```
+Usage:
+  dws chat group update-settings [flags]
+Example:
+  dws chat group update-settings --group <openConversationId> --setting-key searchable --status 1
+  dws chat group update-settings --group <openConversationId> --setting-key onlyAdminCanAtAll --status 0
+Flags:
+      --group string         群聊 openConversationId (必填)
+      --setting-key string   群设置项 key (必填)
+      --status string        设置值: "0"=关闭, "1"=开启 (必填，字符串类型)
+```
+
+---
+
+## group set-admin — 设置/取消群管理员
+
+默认设为管理员，传 --off 取消。--users 传目标成员的 openDingTalkId 列表（逗号分隔）。
+
+```
+Usage:
+  dws chat group set-admin [flags]
+Example:
+  dws chat group set-admin --group <openConversationId> --users openDingTalkId1,openDingTalkId2
+  dws chat group set-admin --group <openConversationId> --users openDingTalkId1 --off
+Flags:
+      --group string   群聊 openConversationId (必填)
+      --users string   目标成员 openDingTalkId 列表 (必填，逗号分隔)
+      --off            传 --off 取消管理员（默认设为管理员）
+```
+
+---
+
+## group member-role — 群自定义角色
+
+`group member-role` 系列命令用于管理群的自定义身份/角色标签。包含 7 个子命令：
+
+- `list` — 列出群自定义角色
+- `add` — 新增群自定义角色
+- `update` — 更新群自定义角色名称
+- `remove` — 删除群自定义角色
+- `set-user` — 给成员设置自定义角色（覆盖语义，传空则清除该成员所有角色）
+- `remove-user` — 移除成员的指定自定义角色（不影响其他角色）
+- `query-user` — 查询成员当前持有的所有自定义角色
+
+```
+Usage:
+  dws chat group member-role list --group <openConversationId>
+  dws chat group member-role add --group <openConversationId> --name "管理员"
+  dws chat group member-role update --group <openConversationId> --role-id <openRoleId> --name "新名称"
+  dws chat group member-role remove --group <openConversationId> --role-id <openRoleId>
+  dws chat group member-role set-user --group <openConversationId> --user <openDingTalkId> --role-ids roleId1,roleId2
+  dws chat group member-role remove-user --group <openConversationId> --user <openDingTalkId> --role-ids roleId1
+  dws chat group member-role query-user --group <openConversationId> --user <openDingTalkId>
+
+注意:
+  - --user 传 openDingTalkId（不是 userId），可通过 `dws contact user search --query "姓名"` 获取
+  - --role-id 来源于 `member-role list` 返回的 openRoleId
+  - `set-user` 是覆盖语义：传空 --role-ids 则清除该用户所有角色
+  - `remove-user` 是增量语义：仅移除指定角色，不影响其他角色
+```
+
+---
+
+## message recall — 撤回当前用户自己发出的消息
+
+撤回当前用户以个人身份发出的消息，需要会话 ID（openConversationId）和消息 ID（openMessageId）。
+
+> 与 `recall-by-bot` 的区别：本命令通过 IM 接口撤回**当前用户自己发出的消息**（需要 openConversationId + openMessageId）。`recall-by-bot` 通过机器人接口撤回**机器人发出的消息**（需要 robot-code + processQueryKey）。
+
+```
+Usage:
+  dws chat message recall [flags]
+Example:
+  dws chat message recall --group <openConversationId> --msg-id <openMessageId>
+  # 查询会话 ID: dws chat search --keyword "群名"
+  # 消息 ID 可通过 dws chat message list 获取（字段名 openMessageId）
+Flags:
+      --group string    会话 openConversationId (必填，支持单聊/群聊)
+      --msg-id string   消息 openMessageId (必填)
+
+注意:
+  - --group 的别名: --id, --chat, --conversation-id (均可替代 --group)
+  - 仅支持撤回当前用户以个人身份发出的消息，不能撤回他人发送的或机器人发出的消息
+```
+
+---
+
+## message reply — 引用回复消息
+
+以当前用户身份引用某条消息并回复，**单聊与群聊均可**。需指定会话 ID、被引用消息 ID、被引用消息发送者 openDingTalkId、回复正文。
+
+```
+Usage:
+  dws chat message reply [flags]
+Example:
+  dws chat message reply --conversation-id <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --text "收到，马上处理"
+Flags:
+      --conversation-id string   会话 openConversationId (必填，支持单聊/群聊)
+      --ref-msg-id string        被引用的消息 openMessageId (必填，由 message list 返回)
+      --ref-sender string        被引用消息发送者 openDingTalkId (必填)
+      --text string              回复正文 (必填)
+      --uuid string              幂等 UUID (可选)
+
+注意:
+  - --conversation-id 单聊和群聊使用同一字段；目前回复类型仅支持 text
+```
+
+---
+
+## message forward — 转发消息
+
+转发单条消息，**源/目标会话均支持单聊/群聊**，常见组合：群→群、群→单、单→群、单→单。
+
+```
+Usage:
+  dws chat message forward [flags]
+Example:
+  dws chat message forward --src-conversation-id <srcOpenConversationId> --msg-id <openMessageId> --dest-conversation-id <destOpenConversationId>
+Flags:
+      --src-conversation-id string    源会话 openConversationId (必填)
+      --msg-id string                 源消息 openMessageId (必填，由 message list 返回)
+      --dest-conversation-id string   目标会话 openConversationId (必填)
+```
+
+---
+
+## message list-by-ids — 按消息 ID 批量获取消息
+
+根据消息 ID 列表批量获取消息内容（最多 50 条）。
+
+```
+Usage:
+  dws chat message list-by-ids [flags]
+Example:
+  dws chat message list-by-ids --msg-ids msgId1,msgId2,msgId3
+Flags:
+      --msg-ids string   消息 openMessageId 列表 (必填，逗号分隔，最多 50 条)
+```
+
+---
+
+## message query-send-status — 查询消息发送状态
+
+查询通过 `message send` 等命令发送的消息的发送状态。需要传入发送时返回的 openTaskId。
+
+```
+Usage:
+  dws chat message query-send-status [flags]
+Example:
+  dws chat message query-send-status --open-task-id <openTaskId>
+Flags:
+      --open-task-id string   消息任务 ID openTaskId (必填，来自 send/send-by-bot 返回值)
+```
+
+---
+
+## message query-read-status — 查询消息已读/未读状态
+
+查询指定会话中消息的已读/未读状态（**仅消息发送者**可查询自己发出的消息）。
+
+```
+Usage:
+  dws chat message query-read-status [flags]
+Example:
+  dws chat message query-read-status --group <openConversationId> --msg-id <openMessageId>
+Flags:
+      --group string    会话 openConversationId (必填，群聊或单聊均可)
+      --msg-id string   消息 openMessageId (必填，必须是当前用户发送的消息)
+
+注意:
+  - 仅消息发送者可查询自己发出的消息的已读/未读状态；查询他人发的消息会报错
+  - --msg-id 从 `dws chat message list` 返回的消息列表中获取（字段名 openMessageId）
+```
+
+---
+
+## message search-advanced — 多维度搜索消息（推荐首选）
+
+> 推荐：这是消息搜索的首选接口。它可以完全替代 `chat message search`（keyword 可选 vs 必填，支持多个会话 vs 单个），大部分替代 `chat message list-by-sender`（通过 --sender-ids 按 openDingTalkId 搜索）和 `chat message list-mentions`（通过 --at-me 搜索 @我 的消息）。仅在以下场景需要退回其他命令：按 userId（非 openDingTalkId）搜发送者时用 list-by-sender，拉取「特别关注人」消息时用 list-focused。
+
+支持按关键词、发送者、@我、@指定人、指定会话、时间范围等多维度组合搜索消息。所有参数均为可选，至少指定一个搜索条件。
+
+```
+Usage:
+  dws chat message search-advanced [flags]
+Example:
+  dws chat message search-advanced --keyword "周报" --start "2026-04-01T00:00:00+08:00" --end "2026-04-15T00:00:00+08:00"
+  dws chat message search-advanced --sender-ids <openDingTalkId1>,<openDingTalkId2> --start "2026-04-01T00:00:00+08:00" --end "2026-04-15T00:00:00+08:00"
+  dws chat message search-advanced --at-me --start "2026-04-01T00:00:00+08:00" --end "2026-04-15T00:00:00+08:00"
+  dws chat message search-advanced --at-ids <openDingTalkId1>,<openDingTalkId2> --conversation-ids <openConversationId1>,<openConversationId2> --limit 50 --cursor 0
+  dws chat message search-advanced --conversation-ids <单聊openConversationId> --keyword "合同" --start "2026-04-01T00:00:00+08:00" --end "2026-04-15T00:00:00+08:00"
+Flags:
+      --keyword string            搜索关键词（可选）
+      --sender-ids string         发送者 openDingTalkId 列表，逗号分隔（可选）
+      --at-me                     只搜索 @我 的消息（可选，默认 false）
+      --at-ids string             @指定人的 openDingTalkId 列表，逗号分隔（可选）
+      --conversation-ids string   会话 openConversationId 列表，逗号分隔（可选，群聊或单聊均可，不传则搜索所有会话）
+      --start string              开始时间，ISO-8601 格式（可选）
+      --end string                结束时间，ISO-8601 格式（可选）
+      --cursor string             分页游标（默认 "0"）
+      --limit int                 每页返回数量（默认 100）
+
+注意:
+  - 所有参数均为可选，但至少需要指定一个搜索条件
+  - --sender-ids 和 --at-ids 传 openDingTalkId（非 userId），可通过 `dws contact user search --query "姓名"` 获取
+  - 群聊 openConversationId 通过 `dws chat search --keyword "群名"` 获取；单聊 openConversationId 通过 `dws chat conversation-info --open-dingtalk-id <openDingTalkId>` 获取
+  - 时间支持多种 ISO-8601 格式，如 "2026-03-10T00:00:00+08:00"、"2026-03-10 14:00:00"、"2026-03-10" 等
+  - 翻页：hasMore=true 时，用返回的 nextCursor 作为下次 --cursor
+  - 替代关系：完全替代 search（严格超集）；大部分替代 list-by-sender（按 openDingTalkId 搜索）和 list-mentions（--at-me 覆盖核心功能）；不能替代 list-focused（「特别关注」是独立维度）
+```
+
+---
+
+## 表情回应（emoji / 文字表情）
+
+钉钉消息支持两种"表情回应"：内置 emoji 表情 + 自定义文字表情。优先用 emoji（参见 [chat-emoji-list.md](chat-emoji-list.md) 中的 199 个默认名称，如「赞」「鼓掌」「感谢」），命中即用 `add-emoji`；未命中先用 `create-text-emotion` 创建文字表情拿到 emotionId，再 `add-text-emotion` 贴上。
+
+### message add-emoji — 给消息添加 emoji 表情回应
+
+```
+Usage:
+  dws chat message add-emoji [flags]
+Example:
+  dws chat message add-emoji --group <openConversationId> --msg-id <openMessageId> --emoji "赞"
+  dws chat message add-emoji --group <openConversationId> --msg-id <openMessageId> --emoji "鼓掌"
+Flags:
+      --group string    会话 openConversationId (必填，支持单聊/群聊)
+      --msg-id string   消息 openMessageId (必填)
+      --emoji string    emoji 表情名称 (必填，参见 chat-emoji-list.md 的 name 字段)
+```
+
+### message remove-emoji — 移除 emoji 表情回应
+
+```
+Usage:
+  dws chat message remove-emoji [flags]
+Example:
+  dws chat message remove-emoji --group <openConversationId> --msg-id <openMessageId> --emoji "赞"
+Flags:
+      --group string    会话 openConversationId (必填，支持单聊/群聊)
+      --msg-id string   消息 openMessageId (必填)
+      --emoji string    emoji 表情名称 (必填)
+```
+
+### message create-text-emotion — 创建文字表情（获取 emotionId）
+
+当 chat-emoji-list.md 中没有所需表情时，先创建再贴。
+
+```
+Usage:
+  dws chat message create-text-emotion [flags]
+Example:
+  dws chat message create-text-emotion --emotion-name "赞" --text "nice"
+  dws chat message create-text-emotion --emotion-name "感谢" --text "感谢" --background-id im_bg_5
+Flags:
+      --emotion-name string    表情名称 (必填)
+      --text string            文字内容 (必填)
+      --background-id string   背景 ID（可选，不传则由服务端默认分配）
+```
+
+### message add-text-emotion — 添加文字表情回应
+
+需要先通过 `create-text-emotion` 创建拿到 emotionId 才能贴。六个参数全部必填。
+
+```
+Usage:
+  dws chat message add-text-emotion [flags]
+Example:
+  dws chat message add-text-emotion --group <openConversationId> --msg-id <openMessageId> --emotion-id <emotionId> --emotion-name "赞" --text "nice" --background-id im_bg_5
+Flags:
+      --group string           会话 openConversationId (必填，支持单聊/群聊)
+      --msg-id string          消息 openMessageId (必填)
+      --emotion-id string      表情 ID (必填，通过 create-text-emotion 获取)
+      --emotion-name string    表情名称 (必填)
+      --text string            文字内容 (必填)
+      --background-id string   背景 ID (必填)
+```
+
+### message remove-text-emotion — 移除文字表情回应
+
+```
+Usage:
+  dws chat message remove-text-emotion [flags]
+Example:
+  dws chat message remove-text-emotion --group <openConversationId> --msg-id <openMessageId> --emotion-id <emotionId> --emotion-name "赞" --text "nice" --background-id <backgroundId>
+Flags:
+      --group string           会话 openConversationId (必填)
+      --msg-id string          消息 openMessageId (必填)
+      --emotion-id string      表情 ID (必填)
+      --emotion-name string    表情名称 (必填)
+      --text string            文字内容 (必填)
+      --background-id string   背景 ID (必填)
+```
+
+---
+
+## message send-card — 创建并推送流式卡片
+
+向群聊或单聊发送流式卡片消息。群聊传 --group，单聊传 --user（openDingTalkId），二者互斥。
+
+**⚠️ 必须配套使用 `update-card`：** 创建卡片后通过 `update-card` 推送内容更新，**最后一次更新必须将 `--flow-status` 设为 3（finish）**，否则卡片会一直停在"生成中"加载态。
+
+flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成(FINISH)，4=执行中(EXECUTING)，5=错误(ERROR)。
+
+```
+Usage:
+  dws chat message send-card [flags]
+Example:
+  dws chat message send-card --group <openConversationId>
+  dws chat message send-card --user <openDingTalkId>
+  dws chat message send-card --group <openConversationId> --card-template-id <templateId> --card-data '{"key":"value"}'
+Flags:
+      --group string              群聊 openConversationId（群聊时必填，与 --user 互斥）
+      --user string               单聊接收者 openDingTalkId（单聊时必填，与 --group 互斥）
+      --card-template-id string   卡片模板 ID（可选）
+      --card-data string          卡片数据 JSON（可选）
+```
+
+## message update-card — 流式更新卡片内容
+
+--biz-id 为 send-card 返回的业务 ID，--flow-status 控制流式状态。**最后一次更新必须将 --flow-status 设为 3（finish）**。
+
+```
+Usage:
+  dws chat message update-card [flags]
+Example:
+  dws chat message update-card --biz-id <bizId> --content "更新的卡片内容" --flow-status 2
+  dws chat message update-card --biz-id <bizId> --content "最终内容" --flow-status 3
+Flags:
+      --biz-id string    卡片业务 ID (必填，来自 send-card 返回的 bizId)
+      --content string   卡片消息内容 (必填)
+      --flow-status int  流式状态 (必填，1/2/3/4/5)
+```
+
+---
+
+## set-top — 设置/取消会话置顶
+
+设置/取消会话置顶（**单聊/群聊均可**）。默认置顶，传 --off 取消置顶。
+
+```
+Usage:
+  dws chat set-top [flags]
+Example:
+  dws chat set-top --group <openConversationId>
+  dws chat set-top --group <openConversationId> --off
+Flags:
+      --group string   会话 openConversationId (必填，支持单聊/群聊)
+      --off            传 --off 取消置顶（默认置顶）
+```
+
+---
+
+## mute — 会话消息免打扰
+
+开启或关闭会话消息免打扰（**单聊/群聊均可**）。默认开启，传 --off 关闭免打扰。
+
+```
+Usage:
+  dws chat mute [flags]
+Example:
+  dws chat mute --group <openConversationId>
+  dws chat mute --group <openConversationId> --off
+Flags:
+      --group string   会话 openConversationId (必填，支持单聊/群聊)
+      --off            传 --off 关闭免打扰（默认开启）
+```
+
+---
+
+## group-mute — 群全员禁言
+
+全员禁言/取消全员禁言。默认禁言，传 --off 取消。
+
+```
+Usage:
+  dws chat group-mute [flags]
+Example:
+  dws chat group-mute --group <openConversationId>
+  dws chat group-mute --group <openConversationId> --off
+Flags:
+      --group string   群聊 openConversationId (必填)
+      --off            传 --off 取消全员禁言（默认开启）
+```
+
+---
+
+## group-mute-member — 群成员禁言
+
+指定群成员禁言/解除禁言。默认禁言，传 --off 解除。
+
+--mute-time 为禁言时长（毫秒），仅禁言时必填，常用值：300000（5 分钟）、3600000（1 小时）、86400000（1 天）、604800000（1 周）、2592000000（30 天）。
+
+```
+Usage:
+  dws chat group-mute-member [flags]
+Example:
+  dws chat group-mute-member --group <openConversationId> --users openDingTalkId1,openDingTalkId2 --mute-time 3600000
+  dws chat group-mute-member --group <openConversationId> --users openDingTalkId1 --off
+Flags:
+      --group string     群聊 openConversationId (必填)
+      --users string     被禁言成员 openDingTalkId 列表 (必填，逗号分隔)
+      --mute-time int    禁言时长（毫秒，仅禁言时必填）
+      --off              传 --off 解除禁言（默认禁言）
+```
+
+---
+
+## list-categories — 列出用户自定义会话分类
+
+获取当前用户的所有自定义会话分类。
+
+```
+Usage:
+  dws chat list-categories
+Example:
+  dws chat list-categories
+```
+
+## list-conversations — 按分类拉取会话列表
+
+根据分类 ID 拉取该分类下的会话列表。分类 ID 通过 `list-categories` 获取。
+
+```
+Usage:
+  dws chat list-conversations [flags]
+Example:
+  dws chat list-conversations --category-id <categoryId>
+Flags:
+      --category-id string   分类 ID (必填，由 list-categories 返回)
+```
+
+
 ## 意图判断
 
 用户说"建群/创建群聊" → `chat group create`
@@ -601,6 +1160,40 @@ Flags:
 用户说"我和XX的共同群/我们都在哪些群/查共同群" → `chat search-common`
 用户说"置顶会话/置顶消息/我的置顶/查看置顶" → `chat list-top-conversations`
 用户说"获取会话信息/会话详情/会话元数据" → `chat conversation-info`
+用户说"撤回我发的消息/撤回消息" → `chat message recall`（IM 接口撤回当前用户自己发出的消息，需要 openConversationId + openMessageId）
+用户说"撤回机器人发的消息/机器人撤回消息" → `chat message recall-by-bot`（机器人接口撤回机器人发出的消息，需要 robot-code + processQueryKey）
+用户说"引用回复/回复消息/引用消息回复" → `chat message reply`
+用户说"转发消息/转发一条消息/把消息转发到另一个群" → `chat message forward`
+用户说"消息已读未读/谁看了消息/查读状态/消息读取状态" → `chat message query-read-status`
+用户说"查询消息发送状态/消息发没发成功/消息状态" → `chat message query-send-status`
+用户说"多维度搜索消息/按发送者搜消息/按人搜消息/指定多个群搜索/@我的消息搜索" → `chat message search-advanced`（推荐首选，支持多维度组合搜索）
+用户说"批量查消息/按ID查消息/根据消息ID查" → `chat message list-by-ids`
+用户说"emoji回应/表情回应/给消息加表情" → `chat message add-emoji`
+用户说"取消emoji回应/移除表情回应" → `chat message remove-emoji`
+用户说"文字表情回应/添加文字表情" → `chat message add-text-emotion`
+用户说"取消文字表情回应/移除文字表情" → `chat message remove-text-emotion`
+用户说"创建文字表情/新建文字表情" → `chat message create-text-emotion`
+用户说"流式卡片/AI 卡片/发送卡片" → `chat message send-card` → `chat message update-card`（必须配合 update-card，最后一次 --flow-status 必须为 3 finish）
+用户说"置顶会话/取消置顶/会话置顶（操作）" → `chat set-top`（设置/取消置顶），`chat list-top-conversations`（查看置顶列表）
+用户说"免打扰/消息免打扰/静音/开启免打扰/关闭免打扰" → `chat mute`
+用户说"全员禁言/群禁言/解除禁言" → `chat group-mute`
+用户说"禁言某人/指定成员禁言/解除某人禁言" → `chat group-mute-member`
+用户说"设管理员/取消管理员/设置群管理员" → `chat group set-admin`
+用户说"转让群主/换群主/群主转让" → `chat group transfer-owner`
+用户说"群邀请链接/入群链接/加群链接" → `chat group invite-url`
+用户说"退出群聊/我要退群" → `chat group quit`
+用户说"改群头像/更新群头像" → `chat group update-icon`
+用户说"群设置/修改群设置" → `chat group update-settings`
+用户说"根据群号查群信息/群号查群/群号转 openConversationId" → `chat group get-by-group-id`（用户提供数字群号时把它转为 openConversationId）
+用户说"查看群身份/群的自定义身份列表/群成员角色" → `chat group member-role list`
+用户说"创建/添加群身份/添加群角色" → `chat group member-role add`
+用户说"修改群身份名称/改群角色名" → `chat group member-role update`
+用户说"删除群身份/删群角色" → `chat group member-role remove`
+用户说"给某人设置群身份/设定用户角色" → `chat group member-role set-user`
+用户说"移除某人的群身份/撤销群角色" → `chat group member-role remove-user`
+用户说"查询某人的群身份/某人在群里有什么身份" → `chat group member-role query-user`
+用户说"查看会话分类/自定义分类" → `chat list-categories`
+用户说"某个分类下的会话/分类会话列表" → `chat list-conversations`
 
 关键区分:
 - `chat message list` — 拉取指定会话的消息（需指定 --group 或 --user），按时间点 + 方向翻页
@@ -620,6 +1213,29 @@ Flags:
 - `chat message recall-by-bot` — 通过机器人撤回已发送的消息
 - `chat conversation-info` — 按会话 ID 获取单聊/群聊的基础元数据（名称、类型、成员数等）
 - `chat bot search` — 搜索当前用户名下的机器人，拿到 robotCode 用于 send-by-bot / recall-by-bot / group members add-bot
+- `chat message recall` — 通过 IM 接口撤回当前用户自己发出的消息（需 --group + --msg-id；--group 接受 --conversation-id 别名）
+- `chat message reply` — 引用回复消息（单聊/群聊均可），以当前用户身份，需 --conversation-id + --ref-msg-id + --ref-sender + --text
+- `chat message forward` — 转发单条消息（源/目标会话均支持单聊/群聊），需 --src-conversation-id + --msg-id + --dest-conversation-id
+- `chat message list-by-ids` — 按消息 ID 列表批量查询（最多 50 条）
+- `chat message query-send-status` — 查询消息发送状态，需 --open-task-id（send 返回值）
+- `chat message query-read-status` — 查询消息的已读/未读状态（仅消息发送者可查询自己发的消息），需 --group + --msg-id
+- `chat message search-advanced` — 多维度搜索消息（推荐首选，是 search 的严格超集，可叠加 keyword/sender-ids/at-me/at-ids/conversation-ids/start/end）
+- `chat message add-emoji` / `remove-emoji` — 对消息添加/移除 emoji 表情回应（参考 chat-emoji-list.md 的 199 个默认表情）
+- `chat message add-text-emotion` / `remove-text-emotion` — 添加/移除文字表情回应
+- `chat message create-text-emotion` — 创建文字表情模板，返回 emotionId 供 add-text-emotion 使用
+- `chat message send-card` / `update-card` — 流式卡片，必须配套使用；最后一次 update-card 的 --flow-status 必须为 3 (finish)
+- `chat set-top` — 设置/取消会话置顶（单聊/群聊均可），默认置顶，--off 取消
+- `chat mute` — 开启/关闭会话消息免打扰（单聊/群聊均可），默认开启，--off 关闭
+- `chat group-mute` — 群全员禁言开关，默认开启，--off 关闭
+- `chat group-mute-member` — 指定群成员禁言，需 --users + --mute-time（毫秒，仅禁言时必填），--off 解除
+- `chat group set-admin` — 设置/取消群管理员，默认设为管理员，--off 取消
+- `chat group transfer-owner` — 转让群主
+- `chat group invite-url` — 获取群邀请链接，可选 --expires-seconds（0=永久）
+- `chat group quit` — 当前用户退出群聊
+- `chat group update-icon` / `update-settings` — 更新群头像 / 群设置
+- `chat group get-by-group-id` — 把数字群号转为 openConversationId
+- `chat group member-role` — 群自定义角色管理（list/add/update/remove/set-user/remove-user/query-user）
+- `chat list-categories` / `list-conversations` — 自定义会话分类列表 / 按分类拉会话
 
 ## 核心工作流
 
@@ -732,14 +1348,21 @@ dws chat message send --group <openconversation_id> \
 |------|-------------|------|
 | `chat search` | `openConversationId` | message send/list、group members 等的 --group |
 | `chat group create` | `openConversationId` | 同上 |
+| `chat group get-by-group-id` | `openConversationId` | 把数字群号转换后给 message send/list 等命令使用 |
 | `chat message list-all` | `nextCursor` | 下次 list-all 的 --cursor |
+| `chat message search` / `search-advanced` | `nextCursor` | 下次 message search/search-advanced 的 --cursor |
 | `aisearch person` | `userId` | message send 的 --user、--at-users、send-by-bot 的 --users、list-by-sender 的 --sender-user-id |
-| `aisearch person` → `contact user get` | `openDingTalkId` | list-by-sender 的 --sender-open-dingtalk-id、message send/list 的 --open-dingtalk-id |
+| `aisearch person` → `contact user get` | `openDingTalkId` | list-by-sender 的 --sender-open-dingtalk-id、message send/list 的 --open-dingtalk-id、search-advanced 的 --sender-ids/--at-ids、reply 的 --ref-sender、group transfer-owner 的 --new-owner、group set-admin / group-mute-member 的 --users、group member-role 系列的 --user |
 | `chat bot search` | `robotCode` | send-by-bot / recall-by-bot 的 --robot-code、group members add-bot 的 --robot-code |
 | `chat message send-by-bot` | `processQueryKey` | recall-by-bot 的 --keys |
-| `chat conversation-info` | `openConversationId` / 成员信息 | 作为 message send/list 等后续操作的会话上下文确认 |
-| `chat message search` | `nextCursor` | 下次 message search 的 --cursor |
+| `chat message send` | `openTaskId` | query-send-status 的 --open-task-id |
+| `chat message list` | `openMessageId` | recall 的 --msg-id、reply 的 --ref-msg-id、forward 的 --msg-id、query-read-status 的 --msg-id、list-by-ids 的 --msg-ids、add-emoji/add-text-emotion 的 --msg-id |
+| `chat conversation-info` | `openConversationId` / `newCSpaceIdIM` | 作为 message send/list 等后续操作的会话上下文；newCSpaceIdIM 用于 drive upload 的 --space-id |
 | `chat search-common` | `openConversationId` | message send/list 等的 --group |
+| `chat list-categories` | `categoryId` | list-conversations 的 --category-id |
+| `chat group member-role list` | `openRoleId` | group member-role update/remove/set-user/remove-user 的 --role-id / --role-ids |
+| `chat message create-text-emotion` | `emotionId` | add-text-emotion 的 --emotion-id |
+| `chat message send-card` | `bizId` | update-card 的 --biz-id |
 | `drive download` | 下载链接 | message send 的 Markdown 图片/链接语法 |
 
 ## 注意事项
@@ -757,6 +1380,36 @@ dws chat message send --group <openconversation_id> \
 - `send-by-bot` 群聊传 `--group`，单聊传 `--users`，二者互斥且必选其一
 - `recall-by-bot` 群聊传 `--group` + `--keys`，单聊仅传 `--keys`（不传 `--group` 即为单聊撤回）
 - `send-by-webhook` 支持 `--at-all`、`--at-mobiles`、`--at-users` 进行 @ 操作，但需在 `--text` 中包含 `@userId` 或 `@手机号` 才能生效
+
+- **发消息前参数审查（必须执行）**：发消息（`message send`、`send-by-bot`、`send-by-webhook`、`send-card`、`reply`、`forward`）是严肃操作，发错人/发错群会导致严重问题。执行前 agent 必须把全部参数（收件人/群、消息内容、@对象、消息类型等）与用户的原始需求逐一对比，确认每个参数都能从原始需求中找到明确依据；存在任何不明确/有歧义/原始需求中未提及的参数，必须先向用户确认，严禁自行假设
+- **消息换行符**：`message send` / `send-by-bot` / `send-by-webhook` 的 `--text` 按 Markdown 渲染，换行有两层要求，缺一不可：(1) 必须使用**真实换行符** `U+000A`，而非字面量字符串 `\n`；(2) Markdown 单换行不产生换行，需用空行（连续两个真实换行符）做段落分隔，或行尾两空格 + 换行 / `<br>` 做硬换行
+- `chat message recall` 撤回当前用户自己发的消息，--group + --msg-id 必填；与 `recall-by-bot`（撤回机器人消息，--robot-code + --keys）区分
+- `chat message reply` 引用回复（单聊/群聊均可），需 --conversation-id + --ref-msg-id + --ref-sender + --text；目前回复类型仅支持 text
+- `chat message forward` 转发消息（源/目标会话单聊群聊均可），需 --src-conversation-id + --msg-id + --dest-conversation-id
+- `chat message query-send-status` 查询消息发送状态，需 --open-task-id（send 返回值）
+- `chat message query-read-status` 查询消息已读/未读状态，仅消息发送者可查询自己发的消息，需 --group + --msg-id
+- `chat message search-advanced` 多维度搜索（推荐首选），所有参数可选但至少传一个；--sender-ids / --at-ids 传 openDingTalkId
+- `chat message list-by-ids` --msg-ids 逗号分隔，最多 50 条
+- `chat message add-emoji` / `remove-emoji` 需 --group + --msg-id + --emoji；--emoji 取自 chat-emoji-list.md 的 name 列
+- `chat message add-text-emotion` / `remove-text-emotion` 六个参数全部必填：--group + --msg-id + --emotion-id + --emotion-name + --text + --background-id
+- `chat message create-text-emotion` 创建文字表情模板，返回 emotionId；--background-id 可选
+- `chat message send-card` 创建并推送流式卡片，群聊传 --group，单聊传 --user（openDingTalkId）；**必须配合 update-card 使用，最后一次 update-card 的 --flow-status 必须为 3（finish）**，否则卡片会一直显示"生成中"
+- `chat set-top` 设置/取消会话置顶（单聊/群聊均可），需 --group，默认置顶，--off 取消
+- `chat mute` 开启/关闭会话消息免打扰（单聊/群聊均可），需 --group，默认开启，--off 关闭
+- `chat group-mute` 群全员禁言开关，需 --group，默认开启，--off 关闭
+- `chat group-mute-member` 指定成员禁言，需 --group + --users（openDingTalkId 逗号分隔）+ --mute-time（毫秒，仅禁言时必填，常用 300000/3600000/86400000/604800000/2592000000），--off 解除
+- `chat group set-admin` 设置/取消群管理员，需 --group + --users（openDingTalkId 逗号分隔），默认设为管理员，--off 取消
+- `chat group transfer-owner` 转让群主，需 --group + --new-owner（openDingTalkId）
+- `chat group invite-url` 获取群邀请链接，需 --group，可选 --expires-seconds（0=永久有效）
+- `chat group quit` 退出群聊，需 --group
+- `chat group update-icon` 更新群头像，需 --group + --icon-media-id（mediaId）
+- `chat group update-settings` 更新群设置，需 --group + --setting-key + --status（字符串类型 "0"/"1"）
+- `chat group get-by-group-id` 把数字群号转换为 openConversationId，需 --group-id（数字字符串）
+- `chat group member-role` 系列管理群自定义角色：list 查列表，add 创建，update 改名，remove 删除；set-user 覆盖某人全部角色（传空 --role-ids 则清除），remove-user 仅移除指定角色，query-user 查询某人当前角色；--user 传 openDingTalkId（非 userId）
+- `chat list-categories` 列出当前用户自定义会话分类（无参数）
+- `chat list-conversations` 按分类拉取会话列表，需 --category-id（字符串，由 list-categories 返回）
+- **如何获取 openConversationId**（上层已有则直接用，不必重复查）：群聊 `dws chat search --keyword "群名"`；单聊 `dws chat conversation-info --open-dingtalk-id <openDingTalkId>`
+- **如何获取 openDingTalkId**：知道姓名 → `dws contact user search --query "姓名"`；只有 userId → 先 `dws contact user get --ids <userId>` 拿姓名，再 search
 
 ## 自动化脚本
 
