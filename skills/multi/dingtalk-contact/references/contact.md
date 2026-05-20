@@ -6,6 +6,11 @@
 >
 > **CRITICAL — 根部门**：钉钉根部门 `deptId=1`。`dept` 系列命令查根部门统一传 `--id 1` 或 `--ids 1`，不要传 `self / me / root / 0`。
 
+
+> ⚠️ **CLI 暴露状态（开源 dws v1.0.30）**：本文档列出的 `contact label list` / `label get` / `label list-members` / `relation` 等子命令在开源 dws v1.0.30 未暴露。开源 `dws contact` 仅暴露 3 个子命令：`dept` / `search` / `user`。角色/label 相关查询请改用：
+> - 角色成员 → `dws aisearch person --keyword "<角色名>" --dimension label`
+> - 部门成员 → `dws contact dept list-members --id <deptId>`
+
 ## 命令总览
 
 ### user (人员查询)

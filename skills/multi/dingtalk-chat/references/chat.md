@@ -28,7 +28,7 @@
 | 子命令 | 用途 |
 |-------|------|
 | `message send` | 以当前用户身份发消息（群聊或单聊） |
-| `message recall` | 撤回当前用户自己发出的消息 |
+| `message recall-by-bot` | 撤回机器人发出的消息（开源 dws v1.0.30 不提供撤回普通用户消息的命令）|
 | `message send-by-bot` | 机器人发消息（群聊或批量单聊） |
 | `message recall-by-bot` | 机器人撤回消息 |
 | `message send-by-webhook` | 自定义机器人 Webhook 发消息 |
@@ -763,26 +763,24 @@ Usage:
 
 ---
 
-## message recall — 撤回当前用户自己发出的消息
+## message recall-by-bot — 撤回机器人发出的消息
 
-撤回当前用户以个人身份发出的消息，需要会话 ID（openConversationId）和消息 ID（openMessageId）。
+> **能力范围说明**：开源 dws v1.0.30 仅提供 **机器人消息撤回**（`recall-by-bot`），不提供"撤回当前用户自己发出的消息"的命令。如果你想撤回的是普通用户消息，请在钉钉客户端长按消息撤回。
 
-> 与 `recall-by-bot` 的区别：本命令通过 IM 接口撤回**当前用户自己发出的消息**（需要 openConversationId + openMessageId）。`recall-by-bot` 通过机器人接口撤回**机器人发出的消息**（需要 robot-code + processQueryKey）。
+撤回机器人发出的消息，需要机器人 robotCode 和消息 processQueryKey。群聊撤回还需要 `--group <openConversationId>`。
 
 ```
 Usage:
-  dws chat message recall [flags]
+  dws chat message recall-by-bot [flags]
 Example:
-  dws chat message recall --group <openConversationId> --msg-id <openMessageId>
-  # 查询会话 ID: dws chat search --query "群名"
-  # 消息 ID 可通过 dws chat message list 获取（字段名 openMessageId）
+  # 群聊撤回机器人消息
+  dws chat message recall-by-bot --robot-code <robot-code> --group <openConversationId> --keys <processQueryKey>
+  # 单聊撤回机器人消息（不传 --group）
+  dws chat message recall-by-bot --robot-code <robot-code> --keys key1,key2
 Flags:
-      --group string    会话 openConversationId (必填，支持单聊/群聊)
-      --msg-id string   消息 openMessageId (必填)
-
-注意:
-  - --group 的别名: --id, --chat, --conversation-id (均可替代 --group)
-  - 仅支持撤回当前用户以个人身份发出的消息，不能撤回他人发送的或机器人发出的消息
+      --robot-code string   机器人 Code (必填)
+      --group string        群会话 openConversationId (群聊撤回必填；单聊撤回不传)
+      --keys string         逗号分隔的消息 processQueryKey 列表 (必填)
 ```
 
 ---
@@ -1160,7 +1158,7 @@ Flags:
 用户说"我和XX的共同群/我们都在哪些群/查共同群" → `chat search-common`
 用户说"置顶会话/置顶消息/我的置顶/查看置顶" → `chat list-top-conversations`
 用户说"获取会话信息/会话详情/会话元数据" → `chat conversation-info`
-用户说"撤回我发的消息/撤回消息" → `chat message recall`（IM 接口撤回当前用户自己发出的消息，需要 openConversationId + openMessageId）
+用户说"撤回我发的消息/撤回消息" → `chat message recall-by-bot`（仅能撤回机器人消息；撤回用户自己发的消息开源 dws v1.0.30 暂不支持，需在钉钉客户端长按撤回）
 用户说"撤回机器人发的消息/机器人撤回消息" → `chat message recall-by-bot`（机器人接口撤回机器人发出的消息，需要 robot-code + processQueryKey）
 用户说"引用回复/回复消息/引用消息回复" → `chat message reply`
 用户说"转发消息/转发一条消息/把消息转发到另一个群" → `chat message forward`
@@ -1213,7 +1211,7 @@ Flags:
 - `chat message recall-by-bot` — 通过机器人撤回已发送的消息
 - `chat conversation-info` — 按会话 ID 获取单聊/群聊的基础元数据（名称、类型、成员数等）
 - `chat bot search` — 搜索当前用户名下的机器人，拿到 robotCode 用于 send-by-bot / recall-by-bot / group members add-bot
-- `chat message recall` — 通过 IM 接口撤回当前用户自己发出的消息（需 --group + --msg-id；--group 接受 --conversation-id 别名）
+- `chat message recall-by-bot` — 撤回机器人发出的消息（需 --robot-code + --keys；群聊另加 --group）。撤回用户自己的消息开源 dws v1.0.30 不支持
 - `chat message reply` — 引用回复消息（单聊/群聊均可），以当前用户身份，需 --conversation-id + --ref-msg-id + --ref-sender + --text
 - `chat message forward` — 转发单条消息（源/目标会话均支持单聊/群聊），需 --src-conversation-id + --msg-id + --dest-conversation-id
 - `chat message list-by-ids` — 按消息 ID 列表批量查询（最多 50 条）

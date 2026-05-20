@@ -1,3 +1,6 @@
+> ⚠️ **CLI 暴露状态（开源 dws v1.0.30）**：本文档列出的 `doc export` / `doc export get` / `doc permission add` 等子命令在开源 dws 未暴露。开源 `dws doc` 暴露的子命令：`block / comment / copy / create / download / file / folder / info / list / move / read / rename / search / update / upload`。导出功能用 `dws doc download`；权限管理在开源版本由 wiki 容器级 (`dws wiki member`) 控制，节点级 doc 权限暂不支持。
+
+
 # 文档 (doc) 命令参考
 
 ## 查询命令帮助

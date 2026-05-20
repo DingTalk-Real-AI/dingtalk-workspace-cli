@@ -1,5 +1,7 @@
 # 日历 (calendar) 命令参考
 
+> ⚠️ **CLI 暴露状态（开源 dws v1.0.30）**：本文档部分子命令在开源 dws 未暴露。**真实存在**的 calendar 子命令仅 4 个：`event` / `participant` / `room` / `busy`。文档中提到的 `attendee`（用 `participant` 替代）、`book`（不存在）、`attachment`（不存在）、`event list-mine`（用 `event list --user-id <self>` 替代）等命令开源版本跑会 fall back 到父级 help。
+
 ## CLI 命令树与黄金路径
 
 - **二级子命令（必选其一）**：`event`（日程）、`attendee`（参会人）、`room`（会议室）、`busy`（闲忙）、`attachment`（日程附件）、`book`（用户日历列表）。`dws calendar` 后**必须**紧跟上述之一；**禁止**只执行 `dws calendar`（无子命令）。

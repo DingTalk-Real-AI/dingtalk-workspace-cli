@@ -1,7 +1,9 @@
 # 考勤报表导出参考 (attendance-report)
 
+> ⚠️ **CLI 暴露状态（开源 dws v1.0.30）**：本文档大量描述的命令 (`attendance check record/result`, `attendance report columns/query-data/query-leave`, `attendance schedule export`, `attendance vacation balance`) **在开源 dws v1.0.30 未暴露**。开源 `dws attendance` 仅暴露 4 个只读子命令：`record / rules / shift / summary`。本文档保留是因为内部 wukong 版本支持这些能力，开源用户跑这些命令会 fall back 到父级 help，导出报表请在钉钉客户端使用考勤应用。
+
 > 本文档由 `attendance.md` 路由调用。当用户提到"考勤报表"、"导出考勤"、"出勤汇总"、"考勤明细"、"迟到早退统计"、"全员考勤数据"、"某月考勤统计"、"考勤表格"、"考勤 Excel" 时，应阅读本文档执行。
-> 不适用于：个人单日打卡查询（用 `attendance check record`）、班次查询（用 `attendance schedule get`）、假期余额（用 `vacation balance`）、审批进度（用 `oa`）。
+> 不适用于：个人单日打卡查询（开源用 `attendance record get`）、班次查询（开源用 `attendance shift list`）、汇总（开源用 `attendance summary`）、审批进度（用 `oa`）。
 
 ##  强制门禁（必须先读完本文档才能执行）
 

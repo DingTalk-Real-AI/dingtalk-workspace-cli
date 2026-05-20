@@ -1,5 +1,8 @@
 # 钉盘 (drive) 命令参考
 
+> ⚠️ **CLI 暴露状态（开源 dws v1.0.30）**：本文档列出的 `drive list-spaces` 与单步 `drive upload` 命令在开源 dws 未暴露。开源 `dws drive` 仅有 6 个子命令：`commit / download / info / list / mkdir / upload-info`。上传文件必须走两步：(1) `drive upload-info` 拿到 upload URL → (2) HTTP PUT 文件 → (3) `drive commit` 注册。本文档保留 `drive upload` 段是因为内部 wukong 版本提供了封装；开源用户跑会 fall back 到 `dws drive` 父级 help。
+
+
 ## 查询命令帮助
 
 当你不确定某个命令的具体参数、格式或可选项时，**优先执行 `--help` 查询**，不要猜测参数名或凭记忆编造。

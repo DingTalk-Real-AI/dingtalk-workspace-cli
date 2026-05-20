@@ -47,7 +47,7 @@ metadata:
 - 块级编辑固定顺序：`doc block list --node <nodeId>` → 选 `blockId` → `doc block insert/update/delete` → `doc block list` 验证。删除块必须已有用户明确删除意图或二次确认。
 - 插入引用块、代码块、表格、分栏、附件、图片时，优先读 [doc.md](references/doc.md) 对应小节，不要只停在"准备查看 help"。说出"我将插入..."后必须立即执行对应 terminal 调用。
 - 用户要求多个子文档/附件/块操作时，按 checklist 串行完成；最后一条 assistant 消息不能停在"接下来我要..."，必须有实际工具调用或明确失败原因。
-- 用户说"读取并下载/导出"时，先 `doc info --node ... --format json` 判断类型：在线文档用 `doc export`，普通文件用 `doc download`。
+- 用户说"读取并下载/导出"时，统一用 `doc download --node ... --output <path>`（开源 v1.0.30 无 `doc export` 命令）。
 - 所有 dws 命令带 `--format json`；仅参数不确定时查 `--help`，不要把完整 help 当成最终结果。
 
 ## 危险操作
