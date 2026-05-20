@@ -15,6 +15,9 @@ metadata:
 
 <!-- SAFETY_PREAMBLE_INJECT -->
 
+> ⚠️ **命令可用性可能因企业服务发现配置而异**。本文档列出的命令基于 dws envelope schema 与本仓库 v1.0.30 实测，但部分命令的 cobra 子命令暴露与否还取决于你的企业 MCP gateway 是否注册了对应 tool。如果跑某条命令报 `unknown command` 或 fall back 到父级 help，说明当前账号企业未开通该能力。实际调用前可用 `dws <cmd> --help` 或 `--dry-run` 验证。
+
+
 > 命令参考：[chat.md](references/chat.md)；表情：[chat-emoji-list.md](references/chat-emoji-list.md)；剧本：[01-messaging.md](references/01-messaging.md)。
 
 ## 意图表
@@ -22,7 +25,7 @@ metadata:
 | 用户说 | 命令 |
 |--------|------|
 | "发消息给张三" | `dws chat message send --open-dingtalk-id <id> --title "<标题>" --text "<内容>"` |
-| "发到XX群" | `dws chat search --query "<群名>"` → `dws chat message send --group <openConversationId> --title "<标题>" --text "<内容>"` |
+| "发到XX群" | `dws chat search --keyword "<群名>"` → `dws chat message send --group <openConversationId> --title "<标题>" --text "<内容>"` |
 | "建群" / "拉人进群" | `dws chat group create` / `dws chat group members add` |
 | "改群名" / "踢人" | `dws chat group rename` / `dws chat group members remove --yes`（踢人不可逆，确认目标后加 --yes）|
 | "@我消息" / "查群聊记录" | `dws chat message list` |

@@ -18,21 +18,12 @@ dws minutes
 │   ├── transcription --id <uuid>
 │   ├── keywords --id <uuid>
 │   ├── todos --id <uuid>
-│   ├── audio --id <uuid>
 │   └── batch --ids <uuid1,uuid2>
 ├── update <subcommand>              # 二级：update 后必须跟子命令名
 │   ├── title --id <uuid> --title "..."
 │   └── summary --id <uuid> --content "..."
-├── record <subcommand>              # 二级：record 后必须跟子命令名
-│   ├── start
-│   ├── pause --id <uuid>
-│   ├── resume --id <uuid>
-│   └── stop --id <uuid>
 ├── speaker <subcommand>
-│   ├── replace --id <uuid> --from "..." --to "..."
-│   └── summary <subcommand>
-│       ├── create --ids <uuid1,uuid2>
-│       └── get --ids <uuid1,uuid2>
+│   └── replace --id <uuid> --from "..." --to "..."
 ├── mind-graph <subcommand>
 │   ├── create --id <uuid>
 │   └── status --id <uuid>
@@ -43,6 +34,8 @@ dws minutes
     ├── complete --session-id <sid>
     └── cancel --session-id <sid>
 ```
+
+> **能力范围说明**：当前 `dws minutes` 顶层不支持 `record`（录音控制 start/pause/resume/stop），`speaker` 下不存在 `summary` 子命令组（create/get），`get` 下不存在 `audio` 子命令。涉及"开始/暂停/结束录音"、"发言人段落总结"、"获取音频地址"等诉求时，**禁止编造命令**，应回退到引导用户在钉钉听记 App 内操作。
 
 **高频错误命令 vs 正确命令对照（真实 badcase 提炼）：**
 
@@ -671,53 +664,6 @@ Flags:
       --title string   新标题 (必填)
 ```
 
-### 发起听记（开始录音）
-```
-Usage:
-  dws minutes record start [flags]
-Example:
-  dws minutes record start
-  dws minutes record start --session-id <sessionId>
-Flags:
-      --session-id string   AI 助理会话 ID (可选)
-```
-
-### 暂停听记录音
-```
-Usage:
-  dws minutes record pause [flags]
-Example:
-  dws minutes record pause --id <taskUuid>
-  dws minutes record pause --id <taskUuid> --session-id <sessionId>
-Flags:
-      --id string           听记 taskUuid (必填)
-      --session-id string   AI 助理会话 ID (可选)
-```
-
-### 恢复听记录音
-```
-Usage:
-  dws minutes record resume [flags]
-Example:
-  dws minutes record resume --id <taskUuid>
-  dws minutes record resume --id <taskUuid> --session-id <sessionId>
-Flags:
-      --id string           听记 taskUuid (必填)
-      --session-id string   AI 助理会话 ID (可选)
-```
-
-### 结束听记录音
-```
-Usage:
-  dws minutes record stop [flags]
-Example:
-  dws minutes record stop --id <taskUuid>
-  dws minutes record stop --id <taskUuid> --session-id <sessionId>
-Flags:
-      --id string           听记 taskUuid (必填)
-      --session-id string   AI 助理会话 ID (可选)
-```
-
 ### 更新纪要内容
 ```
 Usage:
@@ -788,95 +734,6 @@ Flags:
 - 此命令支持替换**任意发言人**，包括已关联通讯录信息的发言人（如"张三"、"李四"等真实姓名），不仅限于"发言人1"之类的占位符
 - `--from` 填写当前听记中显示的发言人名称（无论是"发言人1"还是真实姓名），`--to` 填写要替换成的目标名称
 - 如果用户希望将发言人关联到通讯录中的具体联系人，可通过 `--target-uid` 传入目标用户的钉钉 UID
-
-### 触发创建发言人段落总结任务
-```
-Usage:
-  dws minutes speaker summary create [flags]
-Example:
-  dws minutes speaker summary create --ids <uuid1,uuid2>
-  dws minutes speaker summary create --task-uuids <uuid1,uuid2>
-Flags:
-      --ids string          听记 taskUuid 列表，逗号分隔 (必填)
-      --task-uuids string   --ids 的别名，同样接受逗号分隔的 taskUuid 列表
-```
-
-触发创建发言人的段落总结任务，将听记中每位发言人的所有发言内容汇总总结。触发后需调用 `speaker summary get` 查询总结结果。
-
-> **参数别名说明**：`--ids` 和 `--task-uuids` 等价，均可使用。推荐统一用 `--ids`。
-
-### 查询发言人段落总结结果
-```
-Usage:
-  dws minutes speaker summary get [flags]
-Example:
-  dws minutes speaker summary get --ids <uuid1,uuid2>
-  dws minutes speaker summary get --task-uuids <uuid1,uuid2>
-Flags:
-      --ids string          听记 taskUuid 列表，逗号分隔 (必填)
-      --task-uuids string   --ids 的别名，同样接受逗号分隔的 taskUuid 列表
-```
-
-查询发言人段落总结任务的结果，返回每位发言人的发言汇总。需先调用 `speaker summary create` 触发任务。
-
-> **参数别名说明**：`--ids` 和 `--task-uuids` 等价，均可使用。推荐统一用 `--ids`。
-
-**speaker summary 异步轮询策略（必须严格遵守）：**
-
-`speaker summary create` 只是触发后端异步任务，**不会立即返回总结结果**。AI 必须按以下策略轮询 `speaker summary get`：
-
-1. 调用 `speaker summary create --ids <uuids>` 触发任务
-2. **等待至少 5 秒**后，首次调用 `speaker summary get --ids <uuids>` 查询结果
-3. 如果返回结果为空（无内容），**继续等待 5 秒**后重试
-4. **最大轮询次数不超过 20 次**（即最长等待约 100 秒）
-5. 如果 20 次轮询后仍然为空，视为**任务未完成或无内容**，告知用户："发言人段落总结任务可能仍在处理中，请稍后再试。"
-
-```
-伪代码：
-speaker summary create --ids <uuids>
-wait 5s
-for i in 1..20:
-    result = speaker summary get --ids <uuids>
-    if result 不为空:
-        break  # 拿到结果，继续后续流程
-    wait 5s
-if 仍为空:
-    告知用户任务可能仍在处理中
-```
-
-**严禁**：
-- 调用 `create` 后立即调用 `get`（不等待）——后端异步任务需要时间生成
-- 只轮询 1-2 次就放弃——正常任务可能需要 10-30 秒
-- 轮询超过 20 次——避免无限等待
-
-**speaker summary 典型应用场景 — 通过发言主题匹配发言人：**
-
-当用户只知道某个人的发言主题或关联内容（如"讲战略规划的那个人是谁"），但不知道对应的发言人编号时，可以通过 speaker summary 获取每位发言人的段落总结，再用关键词匹配确认身份。
-
-**完整链路（发言人段落总结 → 关键词匹配 → 确认 → 替换）：**
-
-1. **确定听记 taskUuid**：从 `list mine/all` 或用户提供的 URL 中获取
-2. **触发发言人段落总结**：`dws minutes speaker summary create --ids <taskUuid> --format json`
-3. **延迟轮询获取结果**：等待 5s 后调用 `dws minutes speaker summary get --ids <taskUuid> --format json`，最多轮询 20 次
-4. **AI 按发言人分组展示总结**：将每位发言人的段落总结以结构化方式呈现给用户
-5. **关键词匹配**：从用户描述中抽取关键词（如"战略规划"、"供应链"），在各发言人的段落总结中做模糊匹配
-6. **引导用户确认**：
-   - 唯一高置信命中 → "『发言人1』的段落总结涉及『战略规划、AI化转型』，很可能就是你说的『李总』，确认替换吗？"
-   - 多候选 → 列出所有命中的发言人编号 + 匹配的总结关键词，让用户挑选
-   - 无匹配 → 请用户补充更具体的关键词
-7. **用户确认后执行替换**：`dws minutes speaker replace --id <taskUuid> --from "发言人1" --to "李总"`
-
-**自然语言触发示例：**
-
-| Query | AI 处理策略 |
-|-------|-----------|
-| "帮我看看这个会议里每个人主要说了什么" | speaker summary create → 轮询 get → 按发言人分组展示 |
-| "讲战略规划的那个人是谁" | speaker summary create → 轮询 get → 关键词匹配 → 引导确认 |
-| "帮我把每个发言人的核心观点总结一下" | speaker summary create → 轮询 get → 结构化输出 |
-| "我想知道会上谁讲了供应链相关内容" | speaker summary create → 轮询 get → "供应链"关键词匹配 |
-| "那个讲招聘进度的人应该是张三" | speaker summary create → 轮询 get → "招聘进度"匹配 → 确认 → speaker replace |
-
-> **与 `get transcription` 聚类方案的区别**：`speaker summary` 是后端 AI 生成的结构化总结，信息密度更高、匹配更精准；而 `get transcription` 聚类是 AI 在本地按 speakerNick 分组原文再提取要点，适合需要看原文细节的场景。两者可配合使用：先用 speaker summary 快速定位，再用 transcription 看具体原文。
 
 ### 添加个人热词
 ```
@@ -959,34 +816,6 @@ Flags:
 取消 `upload create` 创建的上传会话，释放服务端资源。用于在上传前或上传失败后取消会话。
 
 ## 意图判断
-
-### 发起听记
-用户说"开始听记/开始录音/发起一个听记/启动听记/开始听记录这次会议/我要开始听记了/录音开始/我要听记" → `record start`
-
-**自然语言示例：**
-- "开始听记开启听记"
-- "开始录音"
-- "发起一个听记"
-- "启动听记"
-- "开始听记录这次会议"
-- "我要开始听记了"
-- "录音开始"
-
-### 暂停/继续录制
-用户说"暂停一下/暂停录音" → `record pause`
-用户说"继续/继续录音" → `record resume`
-
-**自然语言示例：**
-- "暂停一下"
-- "继续"
-
-### 结束录制
-用户说"结束听记/结束录音/停止录音/结束" → `record stop`
-
-**自然语言示例：**
-- "结束听记"
-- "结束录音"
-- "停止"
 
 ### 文件转听记
 用户说"把文件转成听记/上传音频文件/上传录音/把这个 mp3 转成听记/帮我把会议录音转写一下/把附件里的音频文件做转写" → `upload create` → HTTP PUT → `upload complete`
@@ -1181,7 +1010,7 @@ Flags:
 用户说"原文/转写/录音文字/逐字稿" → `get transcription`（**默认拉取全部原文**，自动翻页直到拉完，**拉完后必须主动询问用户是否按发言人聚类**，详见 [获取听记语音转写原文](#获取听记语音转写原文) 的"四阶段工作流"）
 用户说"会议待办/听记待办/待办事项" → `get todos`
 用户说"批量查询/查多个听记" → `get batch`
-用户说"音频地址/音频链接/录音文件/下载录音/音频下载/视频文件/媒体地址" → `get audio`
+用户说"音频地址/音频链接/录音文件/下载录音/音频下载/视频文件/媒体地址" → 当前 CLI 未实现 `get audio` 子命令，引导用户在钉钉听记 App 中下载
 
 **转写原文拉取时机判断（必须遵守）：**
 - **明确要看原文** → 调用 `get transcription`，自动翻页拉取所有原文；**累积超过 12000 字符时暂停，询问用户是否继续**
@@ -1199,12 +1028,6 @@ Flags:
 - "这个听记有哪些待办"
 - "帮我提取一下会议的关键词"
 - "帮我看看这个听记的基本信息"
-- "把这个听记的录音文件给我"
-- "帮我下载这个听记的音频"
-- "这个听记的音频地址是什么"
-- "我想下载这次会议的录音"
-- "帮我拿一下这个听记的视频文件"
-- "给我这个听记的媒体下载链接"
 
 ### 修改听记标题
 用户说"改听记标题/重命名听记/修改标题" → `update title`
@@ -1221,9 +1044,6 @@ Flags:
 ## 核心工作流
 
 ```bash
-# 0. 发起听记（开始录音）
-dws minutes record start --format json
-
 # 1. 查看我的听记列表 — 提取 taskUuid
 dws minutes list mine --format json
 dws minutes list mine --max 10 --next-token <nextToken> --format json
@@ -1249,19 +1069,11 @@ dws minutes speaker replace --id <taskUuid> --from "发言人1" --to "李总" --
 # 4. 提取待办事项
 dws minutes get todos --id <taskUuid> --format json
 
-# 4b. 获取音频/视频地址（用于下载或播放原始媒体文件）
-dws minutes get audio --id <taskUuid> --format json
-
 # 5. 修改标题
 dws minutes update title --id <taskUuid> --title "新标题" --format json
 
 # 6. 更新纪要内容
 dws minutes update summary --id <taskUuid> --content "新的纪要内容" --format json
-
-# 7. 录音控制（基于 start 返回的 taskUuid）
-dws minutes record pause --id <taskUuid> --format json
-dws minutes record resume --id <taskUuid> --format json
-dws minutes record stop --id <taskUuid> --format json
 
 # 8. 思维导图
 dws minutes mind-graph create --id <taskUuid> --format json
@@ -1269,12 +1081,6 @@ dws minutes mind-graph status --id <taskUuid> --format json
 
 # 9. 替换发言人
 dws minutes speaker replace --id <taskUuid> --from "张三" --to "李四" --format json
-
-# 9b. 发言人段落总结（异步：create 触发 → 延迟 5s → 轮询 get，最多 20 次）
-dws minutes speaker summary create --ids <taskUuid1,taskUuid2> --format json
-# 等待至少 5 秒...
-dws minutes speaker summary get --ids <taskUuid1,taskUuid2> --format json
-# 若返回为空，继续等待 5s 后重试，最多 20 次
 
 # 10. 添加个人热词
 dws minutes hot-word add --words "OKR,钉钉,Copilot" --format json
@@ -1301,14 +1107,12 @@ dws minutes upload cancel --session-id <sessionId> --format json
 | `list shared` | `taskUuid`、`nextToken` | get/update 的 --id；翻页时 --next-token |
 | `list all` | `taskUuid`、`nextToken` | get/update 的 --id；翻页时 --next-token |
 | `get batch` | 各听记 `taskUuid` | 进一步查询详情 |
-| `get audio` | 音频/视频 OSS 地址 | 用 HTTP GET 下载录音文件 / 在浏览器播放 |
-| `record start` | `taskUuid`/`uuid` | record pause/resume/stop 的 --id |
 | `upload create` | `sessionId`、`presignedUrl` | HTTP PUT 上传文件；upload complete/cancel 的 --session-id |
 | `mind-graph create` | 任务状态 | mind-graph status 轮询 |
 
 ## 错误响应诊断指南
 
-当 `get info` / `get summary` / `get transcription` / `get todos` / `get keywords` / `get audio` 返回异常时，按以下决策表快速判断原因并决定下一步动作，避免盲目重试浪费轮次：
+当 `get info` / `get summary` / `get transcription` / `get todos` / `get keywords` / `get batch` 返回异常时，按以下决策表快速判断原因并决定下一步动作，避免盲目重试浪费轮次：
 
 ### 错误快速决策表
 
@@ -1330,7 +1134,7 @@ dws minutes upload cancel --session-id <sessionId> --format json
 
 ### Flag 别名兼容说明
 
-所有需要传入 taskUuid 的子命令（`get info/summary/keywords/transcription/todos/audio`、`mind-graph create/status` 等）均支持以下 flag 名称，自动降级到 `--id`：
+所有需要传入 taskUuid 的子命令（`get info/summary/keywords/transcription/todos/batch`、`mind-graph create/status`、`update title/summary` 等）均支持以下 flag 名称，自动降级到 `--id`：
 
 | Flag 名称 | 状态 | 说明 |
 |-----------|------|------|
@@ -1456,8 +1260,6 @@ loop:
 
 ## 注意事项
 - `taskUuid` 是听记的唯一标识，所有 get/update 操作均以此为入参
-- `record start` 对应 MCP 工具 `execute_listening_note_command` 的 `cmd=create`，通常会返回可继续控制录音的 `taskUuid/uuid`
-- `record pause` / `record resume` / `record stop` 对应 `cmd=pause/resume/end`，需要传入 `--id`（映射 MCP 入参 `uuid`）
 - 如果用户传入听记 URL（格式: `https://shanji.dingtalk.com/app/transcribes/<taskUuid>`），直接从路径末段提取 taskUuid 作为 `--id` 参数，无需再调用 list 查询
 - `list mine`、`list shared`、`list all` 统一走 `list_by_keyword_and_time_range` 链路，通过 `belongingConditionId` 区分（`created` / `shared` / `noLimit`）
 - 三个 list 命令均支持 `--max`、`--next-token` 分页及 `--query`、`--start`、`--end` 筛选
@@ -1466,7 +1268,6 @@ loop:
 - `get transcription` 的 `--direction` 控制时间排序: 0=正序(默认), 1=倒序；当用户明确要求查看/分析转写原文时，默认自动翻页拉取全部原文（不需要用户手动说"拉第一页"），如果用户意图不是专门看原文（如查列表、看摘要），则不应主动调用此命令
 - `get transcription` 默认按"时间线"返回各段落，**拉完后 AI 必须主动追问用户"是否需要按发言人分组聚类并提取核心内容"**；用户确认后 AI 在本地完成聚类与摘要，并进一步引导用户通过关键词模糊匹配（如"李总主要讲了战略规划"）确认"发言人编号 ↔ 真实姓名"的映射，最终调用 `speaker replace` 写回。完整工作流见对应命令章节的"四阶段工作流"
 - `get batch` 支持一次查询多个听记，用逗号分隔 taskUuid
-- `get audio` 返回听记原始音频/视频文件的 OSS 地址，操作人需拥有该听记"读"权限及以上；以下场景不返回地址：听记已被删除、A1 无痕模式听记、临存过期的听记（媒体未准备好或临时存储已过期）
 - `update summary` 全量覆盖纪要内容，不触发 AI 重新生成；适用于手动编辑或 AI Agent 修改纪要
 - `mind-graph create` 触发异步任务，需通过 `mind-graph status` 轮询状态（0=进行中，1=成功，2=失败）
 - `speaker replace` 精确匹配源发言人昵称，替换所有段落并自动更新纪要和待办中的发言人信息
@@ -1485,7 +1286,7 @@ loop:
 
 | 错误类型 | 错误信息特征 | 恢复动作 | 严禁行为 |
 |----------|-------------|----------|----------|
-| 命令结构错误 | `unknown command "info"` / `unknown command "get"` (后无子命令) / `error[validation]: unknown flag: --start` (在 `list` 而非 `list mine/shared/all` 上) | **立即参照本文档顶部"命令层级结构"纠正**。常见错误：① `dws minutes info` → 应为 `dws minutes get info`；② `dws minutes get --id` → `get` 后缺子命令，应为 `get info/summary/transcription` 等；③ `dws minutes list --start` → `list` 后缺 scope，应为 `list mine/shared/all --start` | 严禁在命令结构报错后只换参数名不修正命令层级；严禁把 `get` 当作独立命令使用（后面必须跟 info/summary/transcription/keywords/todos/audio/batch） |
+| 命令结构错误 | `unknown command "info"` / `unknown command "get"` (后无子命令) / `error[validation]: unknown flag: --start` (在 `list` 而非 `list mine/shared/all` 上) | **立即参照本文档顶部"命令层级结构"纠正**。常见错误：① `dws minutes info` → 应为 `dws minutes get info`；② `dws minutes get --id` → `get` 后缺子命令，应为 `get info/summary/transcription/keywords/todos/batch` 等；③ `dws minutes list --start` → `list` 后缺 scope，应为 `list mine/shared/all --start` | 严禁在命令结构报错后只换参数名不修正命令层级；严禁把 `get` 当作独立命令使用（后面必须跟 info/summary/transcription/keywords/todos/batch） |
 | 参数名错误 | `unknown flag: --task-uuid` / `unknown flag: --uuid` / `unknown flag: --start-time` / `unknown flag: --end-time` | 立即调用 `dws minutes <子命令> --help` 查询正确参数名；minutes 模块统一用 `--id`，时间统一用 `--start` / `--end`（不是 `--start-time` / `--end-time`） | 严禁用同一个错误的参数名重试；严禁在不同子命令间尝试 --uuid / --task-uuid / --id 三种名称反复试错；严禁凭记忆猜测参数名，必须查 --help |
 | UUID 无效 | `taskUuid is invalid` / `dingOpenErrcode=300` | **第一时间切换策略**：调用 `dws minutes list mine --max 10 --format json` 获取真实可用的 uuid 列表，让用户选择或自动匹配最相关的一条。**真实案例中模型用同一个错 uuid 重试了 20 次全部失败——这是 minutes 模块失败率最高的错误模式，必须零容忍** | 严禁用同一个无效 uuid 重试哪怕 1 次（errcode=300 是不可重试错误）；严禁从历史对话/文档/链接中猜测 uuid；严禁从十六进制编码字符串里截取部分数字拼凑新 uuid；严禁不切 list 就放弃 |
 | 命令返回空 stdout | `get summary` / `get transcription` 返回空内容（stdout 为空，error_msg 也为空） | 1) 先调用 `dws minutes get info --id <uuid> --format json` 确认听记是否存在且状态正常；2) 如果 info 也为空或报错，说明 uuid 本身有问题，回退到 list 命令重新获取 | 严禁在 stdout 为空时重复调用同一命令超过 2 次；严禁把空返回当作"没有内容"直接告知用户而不做任何排查 |

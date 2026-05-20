@@ -42,8 +42,8 @@ Flags:
 Usage:
   dws wiki space get [flags]
 Example:
-  dws wiki space get --workspace <workspaceId> --format json
-  dws wiki space get --workspace "https://alidocs.dingtalk.com/i/spaces/xxx/overview" --format json
+  dws wiki space get --id <workspaceId> --format json
+  dws wiki space get --id "https://alidocs.dingtalk.com/i/spaces/xxx/overview" --format json
 Flags:
       --workspace string   知识库 ID 或 URL (必填)
 ```
@@ -75,7 +75,7 @@ Usage:
 Example:
   dws wiki space search --keyword "产品文档" --format json
   dws wiki space search --keyword "技术方案" --limit 20 --format json
-  dws wiki space search --type myWikiSpace --format json
+  dws wiki space list --type myWikiSpace --format json
 Flags:
       --keyword string     搜索关键词 (--type myWikiSpace 时可省略)
       --type string        知识库类型: myWikiSpace 时直接返回「我的文档」，省略则搜索组织知识库
@@ -139,7 +139,7 @@ Flags:
 - 用户说"查看知识库/知识库详情" → `space get`
 - 用户说"我的知识库/知识库列表/有哪些知识库" → `space list`
 - 用户说"搜索知识库/找知识库" → `space search`
-- 用户说"我的文档/个人空间" → `space search --type myWikiSpace` 或 `space list --type myWikiSpace`
+- 用户说"我的文档/个人空间" → `space list --type myWikiSpace`
 - 用户说"把知识库分享给某人/给某人加入知识库/邀请进知识库" → `member add`（需 `--workspace` + `--user` + `--role`）
 - 用户说"修改某人在知识库的权限/调整成员角色" → `member update`
 - 用户说"知识库有哪些成员/查看知识库成员" → `member list`
@@ -163,13 +163,13 @@ dws wiki space list --type myWikiSpace --format json
 dws wiki space search --keyword "产品" --format json
 
 # 搜索「我的文档」
-dws wiki space search --type myWikiSpace --format json
+dws wiki space list --type myWikiSpace --format json
 
 # 创建知识库
 dws wiki space create --name "新项目文档" --description "项目相关文档归档" --format json
 
 # 查看知识库详情
-dws wiki space get --workspace <workspaceId> --format json
+dws wiki space get --id <workspaceId> --format json
 
 # ── 工作流: 给知识库加成员 ──
 

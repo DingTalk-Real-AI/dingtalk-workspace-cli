@@ -278,9 +278,9 @@ Example:
   # 拉取群聊中某个时间点之后的消息
   dws chat message list --group <openconversation_id> --time "2025-03-01 00:00:00"
   # 拉取单聊消息（通过 userId）
-  dws chat message list --user <userId> --time "2025-03-01 00:00:00" --limit 50
+  dws chat message list-direct --user <userId> --time "2025-03-01 00:00:00" --limit 50
   # 拉取单聊消息（通过 openDingTalkId）
-  dws chat message list --open-dingtalk-id <openDingTalkId> --time "2025-03-01 00:00:00" --limit 50
+  dws chat message list-direct --open-dingtalk-id <openDingTalkId> --time "2025-03-01 00:00:00" --limit 50
   # 拉取某个时间点之前的消息（向过去翻页）
   dws chat message list --group <openconversation_id> --time "2025-03-01 00:00:00" --forward=false
 Flags:
@@ -1144,7 +1144,7 @@ Flags:
 用户说"改群名" → `chat group rename`
 用户说"聊天记录/会话消息/拉取会话" → `chat message list`
 用户说"某人发给我的消息/指定发送者/某人的消息" → `chat message list-by-sender`（用户未明确说"单聊"时优先使用，跨单聊/群聊）
-用户说"拉取和某人的单聊记录/单聊消息" → `chat message list --user`（用户明确说"单聊"时使用）
+用户说"拉取和某人的单聊记录/单聊消息" → `chat message list-direct --user`（用户明确说"单聊"时使用）
 用户说"@我的消息/at我的/提及我的" → `chat message list-mentions`
 用户说"未读消息会话/未读会话列表/我的未读会话" → `chat message list-unread-conversations`
 用户说"发群消息(以个人身份)" → `chat message send --group`
@@ -1197,7 +1197,7 @@ Flags:
 
 关键区分:
 - `chat message list` — 拉取指定会话的消息（需指定 --group 或 --user），按时间点 + 方向翻页
-- `chat message list --user` — list 的单聊模式，拉取与指定用户的单聊记录（用户明确说"单聊""私聊"时使用）
+- `chat message list-direct --user` — list 的单聊模式，拉取与指定用户的单聊记录（用户明确说"单聊""私聊"时使用）
 - `chat message list-by-sender` — 搜索指定发送者发给我的消息，跨所有会话（单聊+群聊均包含，用户只说"某人发的消息"时优先使用）
 - `chat message list-mentions` — 拉取 @我 的消息（跨单聊/群聊，可选指定群）
 - `chat message list-unread-conversations` — 拉取当前用户存在未读消息的会话列表（可选 `--count`）
@@ -1241,7 +1241,7 @@ Flags:
 
 ```bash
 # 1. 搜索群 — 提取 openconversation_id
-dws chat search --query "项目冲刺" --format json
+dws chat search --keyword "项目冲刺" --format json
 
 # 2. 拉取群消息
 dws chat message list --group <openconversation_id> --time "2025-03-01 00:00:00" --format json
@@ -1299,7 +1299,7 @@ dws chat message recall-by-bot --robot-code <robot-code> --group <openconversati
 dws chat bot search --name "项目提醒" --format json
 
 # Step 2: 搜索群 — 提取 openConversationId
-dws chat search --query "项目群" --format json
+dws chat search --keyword "项目群" --format json
 
 # Step 3: 将机器人添加到群（需当前用户对该群有管理权限）
 dws chat group members add-bot --id <openConversationId> --robot-code <robotCode> --format json

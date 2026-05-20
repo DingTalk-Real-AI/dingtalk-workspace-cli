@@ -1,5 +1,7 @@
 # 在线电子表格 (sheet) 命令参考
 
+> ⚠️ **CLI 暴露状态（v1.0.30）**：本文档部分命令对应的 MCP tool 已在 envelope schema 注册，但 cobra CLI 尚未暴露为子命令，调用会回退到 `dws sheet` 顶层 help。当前 v1.0.30 上**真正可调用的子命令**为：`create / new / list / info / range read / range update / append / find / replace / add-dimension / insert-dimension / delete-dimension / move-dimension / update-dimension / merge-cells / unmerge-cells / write-image / filter-view (create / list / update / delete / update-criteria / delete-criteria)`。本文档中描述的 `copy_sheet / update_sheet / submit_export_job / query_export_job / create_filter / get_filter / update_filter / delete_filter / set_filter_criteria / clear_filter_criteria / sort_filter` 当前不可用，跑会 fall back 到 help，请勿直接调用——保留这些段是因为它们是已规划的能力，未来版本会暴露。
+
 ## 适用范围（重要）
 
 `sheet` 产品**仅支持钉钉在线电子表格**（`contentType=ALIDOC`、`extension=axls`），**不支持**上传的 `xlsx` / `xls` / `xlsm` / `csv` 等本地表格文件。

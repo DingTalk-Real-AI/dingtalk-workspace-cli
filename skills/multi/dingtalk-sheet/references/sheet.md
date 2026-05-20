@@ -1,5 +1,7 @@
 # 电子表格 (sheet) 命令参考
 
+> ⚠️ **CLI 暴露状态（v1.0.30）**：本文档部分章节描述的命令尚未在开源 CLI 暴露。当前 v1.0.30 可调用：`create / new / list / info / range read / range update / append / find / replace / add-dimension / insert-dimension / delete-dimension / move-dimension / update-dimension / merge-cells / unmerge-cells / write-image / filter-view (create / list / update / delete / update-criteria / delete-criteria)`。**尚未暴露**：`copy / update / export / media-upload / create-float-image / get-float-image / list-float-images / update-float-image / delete-float-image / set-dropdown / get-dropdown / delete-dropdown / range set-style / range batch-set-style / filter-view info / filter-view list-criteria / filter-view get-criteria`，跑这些命令会 fall back 到 `dws sheet` 帮助页面，请勿当作可用接口调用。文档保留是因为它们是已规划的能力。
+
 ## 适用范围（重要）
 
 `sheet` 产品线仅支持钉钉在线电子表格（`contentType=ALIDOC`、`extension=axls`），不支持上传的 `xlsx` / `xls` / `xlsm` / `csv` 等本地表格文件。

@@ -25,7 +25,7 @@
 - `dws report list` = 查询当前用户收到的日志，也就是别人发给我的日志。
 - `dws report sent` = 查询当前用户创建或发出的日志。
 - 用户要“最近一周收到的日志”时必须用 `dws report list --start "<YYYY-MM-DDT00:00:00+08:00>" --end "<YYYY-MM-DDT23:59:59+08:00>" --cursor 0 --size 20 --format json`，不要换成 `sent`，不要回答“API 不支持收到的日志”。
-- `dws report inbox` 是 `dws report list` 的兼容入口，两者语义等价；新计划优先使用 `list`，已有计划生成 `inbox` 也可以直接执行。
+- `dws report inbox` 当前 CLI 未实现——禁止编造，所有「收到的日志」诉求必须走 `dws report list --start ... --end ...`。
 
 | 用户意图 | 第一条有效指令 | 后续动作 |
 |----------|----------------|----------|
@@ -39,7 +39,7 @@
 效率约束：
 
 - 不要先调用 `dws report --help` / `dws report list --help`。本页已经给出可执行命令。
-- 查询收到的日志优先使用规范命令 `dws report list`；`dws report inbox` 作为兼容入口可用，语义等价。
+- 查询收到的日志必须用 `dws report list --start ... --end ...`；当前 CLI 没有 `dws report inbox` 子命令。
 - 不要为了格式化结果创建脚本。直接从 JSON 里抽取关键字段，返回用户可读列表。
 - 对“最近一周”这类常用查询，直接把当前日期换算成 7 天窗口后执行一次 `report list`；如返回分页标记再继续翻页。
 
@@ -67,7 +67,6 @@ dws report list --date 2026-05-11 --format json
 
 ```bash
 dws report list --start "2026-05-04T00:00:00+08:00" --end "2026-05-11T23:59:59+08:00" --cursor 0 --size 20 --format json
-dws report inbox --start "2026-05-04T00:00:00+08:00" --end "2026-05-11T23:59:59+08:00" --cursor 0 --size 20 --format json
 ```
 
 快速决策：
@@ -79,8 +78,6 @@ dws report detail --report-id <reportId> --format json
 
 # 我收到的日志
 dws report list --start "<YYYY-MM-DDT00:00:00+08:00>" --end "<YYYY-MM-DDT23:59:59+08:00>" --cursor 0 --size 20 --format json
-# 兼容入口，等价于 list
-dws report inbox --start "<YYYY-MM-DDT00:00:00+08:00>" --end "<YYYY-MM-DDT23:59:59+08:00>" --cursor 0 --size 20 --format json
 dws report detail --report-id <reportId> --format json
 
 # 已知 reportId
@@ -103,7 +100,7 @@ dws report detail --report-id <reportId> --format json
 | 查看详情 | 从 `_internalDetailCommands[].command` 取内部详情命令；面向用户展示为“查看详情”，不要展示命令本身 |
 | 钉钉链接 | 详情接口返回 `dingtalkOpenMarkdownLink` / `dingtalkOpenUrl` / `result.url` 后，展示成 markdown 链接 |
 
-CLI 列表命令只返回 JSON-first 数据，不把 Markdown 表作为裸文本直接输出。`report list` / `report inbox` 会对当前页 `result[]` 中所有带 `reportId` 的日志逐条调用 `dws report detail --report-id <reportId> --format json`，但只从 detail 中取 `日期`、`标题`、`发送人`、`状态`、`钉钉链接` 等元信息；**列表接口禁止返回日志正文、完整内容或日志内容摘要**。返回 JSON 会携带 `agentDisplayRequired=true`、`agentDisplayRequiredColumns`、`agentDisplayLinkColumn=钉钉链接`、`agentDisplayMarkdownRequired=true`、`agentDisplayMarkdown`、`agentDisplayMarkdownHeader` 等字段；这些是面向 Agent 的强制展示合同，不是可选建议。Agent 必须在 final reply 直接原样输出 `agentDisplayMarkdown`，让客户端按 Markdown 渲染出带可点击 `钉钉链接` 列的表格；不要自行重组列，不要改表头，不要退化成四列表。`list` / `inbox` 表头必须逐字使用 `| 日期 | 标题 | 发送人 | 状态 | 钉钉链接 |`。凡用户说“列出 / 找到 / 查询 / 搜索 / 看看日志”，默认都要在 final reply 渲染 Markdown 表；只有用户明确表示“不关心列表内容 / 只要原始 JSON / 只要数量 / 只要 ID”时，才可以不渲染表。推荐用户可读输出：
+CLI 列表命令只返回 JSON-first 数据，不把 Markdown 表作为裸文本直接输出。`report list` 会对当前页 `result[]` 中所有带 `reportId` 的日志逐条调用 `dws report detail --report-id <reportId> --format json`，但只从 detail 中取 `日期`、`标题`、`发送人`、`状态`、`钉钉链接` 等元信息；**列表接口禁止返回日志正文、完整内容或日志内容摘要**。返回 JSON 会携带 `agentDisplayRequired=true`、`agentDisplayRequiredColumns`、`agentDisplayLinkColumn=钉钉链接`、`agentDisplayMarkdownRequired=true`、`agentDisplayMarkdown`、`agentDisplayMarkdownHeader` 等字段；这些是面向 Agent 的强制展示合同，不是可选建议。Agent 必须在 final reply 直接原样输出 `agentDisplayMarkdown`，让客户端按 Markdown 渲染出带可点击 `钉钉链接` 列的表格；不要自行重组列，不要改表头，不要退化成四列表。`list` 表头必须逐字使用 `| 日期 | 标题 | 发送人 | 状态 | 钉钉链接 |`。凡用户说“列出 / 找到 / 查询 / 搜索 / 看看日志”，默认都要在 final reply 渲染 Markdown 表；只有用户明确表示“不关心列表内容 / 只要原始 JSON / 只要数量 / 只要 ID”时，才可以不渲染表。推荐用户可读输出：
 
 | 日期 | 标题 | 发送人 | 状态 | 钉钉链接 |
 |------|------|--------|------|----------|
@@ -111,11 +108,11 @@ CLI 列表命令只返回 JSON-first 数据，不把 Markdown 表作为裸文本
 
 操作列规则：
 
-- `list` / `inbox` 列表阶段：每条 `result[]` 只带 `日期` / `标题` / `发送人` / `状态` / `钉钉链接` 五个展示字段；使用 `result[].钉钉链接` 作为可点击操作列。禁止额外返回或展示 `日志内容` / `日志内容摘要`。如果用户点名某一条或说“打开第 N 条/看正文”，Agent 用 `_internalDetailCommands[N].command` 调 `dws report detail --report-id ... --format json`。
+- `list` 列表阶段：每条 `result[]` 只带 `日期` / `标题` / `发送人` / `状态` / `钉钉链接` 五个展示字段；使用 `result[].钉钉链接` 作为可点击操作列。禁止额外返回或展示 `日志内容` / `日志内容摘要`。如果用户点名某一条或说“打开第 N 条/看正文”，Agent 用 `_internalDetailCommands[N].command` 调 `dws report detail --report-id ... --format json`。
 - 详情阶段：`detail` 返回里如果有 `dingtalkOpenMarkdownLink`，优先把操作列替换为该 markdown 链接；否则用 `dingtalkOpenUrl` 或 `result.url` 包成 `[在钉钉中查看日志](url)`。
 - `钉钉链接` 是强制列：禁止省略、改名、合并到标题里，也禁止改成不含链接列的摘要表。
 - 不要在用户表格里展示 `_internalDetailCommands`、raw `reportId`、raw `dingtalk://...`。链接必须是 markdown 可点击文本。
-- `dws report list` / `dws report inbox` 默认会对当前页所有可查看日志自动补 `detail`，但只返回日期、标题、发送人、状态与可点击钉钉链接；需要正文时必须显式调用 `dws report detail --report-id ... --format json`。
+- `dws report list` 默认会对当前页所有可查看日志自动补 `detail`，但只返回日期、标题、发送人、状态与可点击钉钉链接；需要正文时必须显式调用 `dws report detail --report-id ... --format json`。
 
 只有在用户明确要求“给我日志 ID / 方便我后续查询”时，才额外展示 `reportId`。否则 final reply 应保留可读信息，并说明“需要看正文或打开钉钉，我可以继续打开某一条”。
 
@@ -219,10 +216,8 @@ Flags:
 ```
 Usage:
   dws report list [flags]
-  dws report inbox [flags]   # 兼容入口，等价于 list
 Example:
   dws report list --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --cursor 0 --size 20
-  dws report inbox --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --cursor 0 --size 20
   # 禁止：--start-date / --end-date / --date
   # 从列表结果提取 reportId 后，再查正文
   dws report detail --report-id <reportId>
@@ -233,7 +228,7 @@ Flags:
       --start string    开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00) (必填)
 ```
 
-`list` / `inbox` 默认返回 JSON-first 结构：不会把 Markdown 表作为裸文本直接输出，但 JSON 里会返回 `agentDisplayMarkdown`。Agent 必须在 final reply 直接原样输出 `agentDisplayMarkdown`，让客户端按 Markdown 渲染出表格；不要基于个人偏好重新摘要。表头固定且必须逐字为 `| 日期 | 标题 | 发送人 | 状态 | 钉钉链接 |`，并按返回顺序展示（CLI 已按创建时间从近到远排序）。返回 JSON 中的 `agentDisplayRequired=true`、`agentDisplayRequiredColumns`、`agentDisplayLinkColumn=钉钉链接`、`agentDisplayMarkdownRequired=true`、`agentDisplayMarkdownHeader` 都是强制展示合同。凡用户说“列出 / 找到 / 查询 / 搜索 / 看看日志”，final reply 默认必须渲染这张 Markdown 表；只有用户明确表示“不关心列表内容 / 只要原始 JSON / 只要数量 / 只要 ID”时，才可以不渲染表。`result[]` 每项都包含且只展示这五个字段：`日期`、`标题`、`发送人`、`状态`、`钉钉链接`。`钉钉链接` 是强制可点击 markdown 链接列，禁止省略、改名、合并到标题里；`list` / `inbox` 禁止返回或展示 `日志内容` / `日志内容摘要`。`reportId` 不在主结果里，只通过 `_internalDetailCommands` 保留给 Agent 后续调用 `detail` / `stats`；final reply 禁止展示 `_internalDetailCommands`、毫秒时间戳、raw ID 或日志正文。
+`list` 默认返回 JSON-first 结构：不会把 Markdown 表作为裸文本直接输出，但 JSON 里会返回 `agentDisplayMarkdown`。Agent 必须在 final reply 直接原样输出 `agentDisplayMarkdown`，让客户端按 Markdown 渲染出表格；不要基于个人偏好重新摘要。表头固定且必须逐字为 `| 日期 | 标题 | 发送人 | 状态 | 钉钉链接 |`，并按返回顺序展示（CLI 已按创建时间从近到远排序）。返回 JSON 中的 `agentDisplayRequired=true`、`agentDisplayRequiredColumns`、`agentDisplayLinkColumn=钉钉链接`、`agentDisplayMarkdownRequired=true`、`agentDisplayMarkdownHeader` 都是强制展示合同。凡用户说“列出 / 找到 / 查询 / 搜索 / 看看日志”，final reply 默认必须渲染这张 Markdown 表；只有用户明确表示“不关心列表内容 / 只要原始 JSON / 只要数量 / 只要 ID”时，才可以不渲染表。`result[]` 每项都包含且只展示这五个字段：`日期`、`标题`、`发送人`、`状态`、`钉钉链接`。`钉钉链接` 是强制可点击 markdown 链接列，禁止省略、改名、合并到标题里；`list` 禁止返回或展示 `日志内容` / `日志内容摘要`。`reportId` 不在主结果里，只通过 `_internalDetailCommands` 保留给 Agent 后续调用 `detail` / `stats`；final reply 禁止展示 `_internalDetailCommands`、毫秒时间戳、raw ID 或日志正文。
 
 ### 获取日志统计数据
 ```

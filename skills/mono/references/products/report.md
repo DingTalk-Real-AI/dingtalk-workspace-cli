@@ -68,9 +68,9 @@ Usage:
 Example:
   dws report list --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --cursor 0 --size 20
 Flags:
-      --cursor string   分页游标 (必填)
+      --cursor int      分页游标，首次传 0 (可选，默认 0)
       --end string      结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00) (必填)
-      --size string     每页大小 (必填)
+      --size int        每页条数，最大 20 (可选，默认 20)
       --start string    开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00) (必填)
 ```
 

@@ -41,10 +41,11 @@ Usage:
   dws skill search [flags]
 Example:
   dws skill search --query "周报"
-  dws skill search --query "日报" --source "OrgInternal"
+  dws skill search --query "日报" --scopes "OrgInternal"
+  dws skill search --query "日报" --scopes "DingtalkMarket OrgInternal"
 Flags:
       --query string     搜索关键词 (必填)
-      --source string    查询范围，空格分隔。备选值：DingtalkMarket（钉钉市场）、OrgInternal（企业内部）。为空默认查市场技能
+      --scopes string    查询范围，空格分隔。备选值：DingtalkMarket（钉钉市场）、OrgInternal（企业内部）。为空默认查市场技能
 ```
 
 返回字段:
@@ -61,19 +62,21 @@ Flags:
 
 前置: 已登录钉钉（未登录会由系统自动触发授权；可用 `dws auth status` 确认）（调用技能市场接口需 access token）。
 
-兼容提示: `dws skill find` 会提示改用 `dws skill search --query <关键词>`。`--scopes` 已废弃，请使用 `--source`。
+兼容提示: `dws skill find` 会提示改用 `dws skill search --query <关键词>`。
 
 ### 安装技能
 
 ```
 Usage:
-  dws skill install [flags]
+  dws skill install <skillId> <target> [flags]
 Example:
-  dws skill install --skill-id <skillId>
-  dws skill install --skill-id <skillId> --force
-Flags:
-      --skill-id string   技能 ID（必填，从 search 结果获取）
-      --force              强制安装安全检测未通过的技能（默认拒绝）
+  dws skill install skill-123 claude     # 安装到 ~/.claude/skills/
+  dws skill install skill-123 cursor     # 安装到 ~/.cursor/skills/
+  dws skill install skill-123 codex      # 安装到 ~/.codex/skills/
+  dws skill install skill-123 .          # 安装到当前目录
+Args:
+  <skillId>   技能 ID（必填，从 search 结果获取）
+  <target>    目标 Agent：claude / cursor / codex / qoder / opencode 或 . 表示当前目录
 ```
 
 流程: 下载技能包 → 解压 → 调用 real-cli 注册到悟空 SkillStore。
@@ -82,45 +85,15 @@ Flags:
 
 前置: 已登录钉钉（未登录会由系统自动触发授权；可用 `dws auth status` 确认）；悟空 App 已安装。
 
-兼容提示: `dws skill add` 会提示改用 `dws skill install --skill-id <id>`。
+兼容提示: `dws skill add` 会提示改用 `dws skill install <skillId> <target>`（位置参数）。
 
-### 发布技能
-
-```
-Usage:
-  dws skill publish <path> [flags]
-Example:
-  dws skill publish ./my-skill --name my-skill
-  dws skill publish ./my-skill --name my-skill --version 1.0.0 --changelog "首次发布"
-参数:
-  path   本地技能目录或 .zip 文件（必填）
-Flags:
-      --name string                 技能唯一标识，企业/官方市场全局唯一（必填）
-      --version string              版本号，合法 semver（如 1.0.0）
-      --changelog string            变更日志
-      --display-name string         人类可读的显示名称
-      --display-description string  人类可读的描述
-```
-
-流程: 读取 `SKILL.md` 中 `name` → 打包为 `{name}.zip`（zip 顶层为 `{name}/` 文件夹）→ 上传钉盘 → 调用发布 API → 安全检测。
-
-权限校验:
-- `name` 已存在且非创建者 → 报错 "市场已有该 skill name，请重新定义技能的唯一标识"
-- `name` 已存在且是创建者 → 校验 `version` 是否递增，递增则正常上传
-
-安全检测: 发布后技能进入安全检测流程，检测完成后显示安全结果。
-
-前置: 已登录钉钉（未登录会由系统自动触发授权；可用 `dws auth status` 确认）；`path` 为目录时需含有效 `SKILL.md`（含 `name` 字段）。
-
-兼容提示: `dws skill upload` 会提示改用 `dws skill publish <path>`。
-
-环境: 技能 API 默认 `https://aihub.dingtalk.com`；可通过 `DWS_SKILL_API_HOST` 覆盖。
+环境: 技能 API 默认 `https://mcp.dingtalk.com`；可通过 `DWS_SKILL_API_HOST` 覆盖。
 
 ## 意图判断
 
 - 用户说"开发文档/API 文档/接口文档/调用报错" → `devdoc article search`
 - 用户说"直播/我的直播" → `live stream list`
-- 用户说"搜索技能/找技能/安装技能/发布技能/上传技能到企业库/技能市场" → `skill search` / `skill install` / `skill publish`（按步骤衔接）
+- 用户说"搜索技能/找技能/安装技能/技能市场" → `skill search` / `skill install`（按步骤衔接）
 
 ## 上下文传递表
 
