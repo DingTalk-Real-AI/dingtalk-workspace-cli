@@ -22,11 +22,11 @@ metadata:
 | 用户说 | 命令 |
 |--------|------|
 | "待我处理的审批 / 7 天内待审" | `python scripts/oa_pending_review.py --days 7` |
-| "查审批详情" | `dws oa approval get --id <approvalId>` |
-| "同意 / 拒绝审批" | `dws oa approval approve --id <id> --yes` / `reject --id <id> --yes`（需用户确认） |
+| "查审批详情" | `dws oa approval detail --instance-id <processInstanceId>` |
+| "同意 / 拒绝审批" | `dws oa approval approve --instance-id <id> --task-id <taskId>` / `reject --instance-id <id> --task-id <taskId> --remark "<原因>"`（需用户确认） |
 | "批量同意 / 批量拒绝" | `python scripts/oa_batch_approve.py --action approve --days 7` |
-| "撤销审批" | `dws oa approval revoke --id <id>` |
-| "我已发起的审批" | `dws oa approval list-mine` |
+| "撤销审批" | `dws oa approval revoke --instance-id <id>` |
+| "我已发起的审批" | `dws oa approval list-initiated --process-code <code> --start "<ISO-8601>"`（processCode 来自 `dws oa approval list-forms`） |
 
 ## 危险操作
 

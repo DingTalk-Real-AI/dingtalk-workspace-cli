@@ -1,6 +1,6 @@
 ---
 name: dingtalk-skill
-description: 悟空技能管理（搜索 / 安装 / 发布技能）。Use when 用户说 搜索技能/找技能/安装技能/发布技能/上传技能到企业库/技能市场/企业技能库。注意：这是元 skill —— 它管理的是 dws 平台上的其他 skill。命令前缀：dws skill。
+description: 悟空技能管理（搜索 / 安装技能）。Use when 用户说 搜索技能/找技能/安装技能/技能市场/企业技能库。注意：这是元 skill —— 它管理的是 dws 平台上的其他 skill。命令前缀：dws skill。
 cli_version: ">=0.2.14"
 metadata:
   category: product
@@ -21,14 +21,9 @@ metadata:
 
 | 用户说 | 命令 |
 |--------|------|
-| "搜索技能 / 找技能" | `dws skill search --query "<关键词>" [--source DingtalkMarket\|OrgInternal]` |
-| "安装技能" | `dws skill install --skill-id <id> [--force]` |
-| "发布技能 / 上传技能到企业库" | `dws skill publish <path> --name <skillName> --version <semver> [--changelog "..."]` |
-
-## 安全检测
-
-- `securityStatus=failed` 的技能默认拒绝安装；只有明确 `--force` 才能强装
-- 发布后进入安全检测流程
+| "搜索技能 / 找技能" | `dws skill search --query "<关键词>" [--scopes "DingtalkMarket OrgInternal"]` |
+| "下载技能包到本地临时目录" | `dws skill get --skill-id <id>` |
+| "安装技能到 Agent 目录" | `dws skill install <skillId> <target>`（target: claude / cursor / codex / opencode / qoder / .） |
 
 ## 环境
 
@@ -37,5 +32,3 @@ metadata:
 ## 兼容提示
 
 - `dws skill find` → 用 `dws skill search --query <关键词>`
-- `dws skill add` → 用 `dws skill install --skill-id <id>`
-- `dws skill upload` → 用 `dws skill publish <path>`

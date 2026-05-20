@@ -25,7 +25,7 @@ metadata:
 | "约会议（含参会人 + 会议室）" | `python scripts/calendar_schedule_meeting.py --title "<主题>" --start "<起>" --end "<止>" [--users <ids>] [--book-room]` |
 | "多人共同空闲" | `python scripts/calendar_free_slot_finder.py --users <ids> --date <yyyy-MM-dd>` |
 | "查闲忙" | `dws calendar event list --start "<ISO>" --end "<ISO>"` |
-| "加参会人" / "订房" / "取消" | `dws calendar attendee add` / `room add` / `event delete` |
+| "加参会人" / "订房" / "取消" | `dws calendar participant add` / `room add` / `event delete` |
 
 ## 执行硬约束
 
@@ -33,8 +33,8 @@ metadata:
 - 用户明确说"帮我订一个空闲会议室"时，`room search` 返回可用会议室后直接选择第一个可预订且不需要自定义审批的 `roomId` 执行 `room add`；不要把选择权抛回用户导致任务停住。
 - 已有日程订房：`dws calendar room search --start ... --end ... --format json` → `dws calendar room add --event <EVENT_ID> --rooms <ROOM_ID> --format json` → `event get` 或 `room/busy` 验证。
 - 换会议室：先 `room delete --event <EVENT_ID> --rooms <OLD_ROOM_ID>`，再 `room add --event <EVENT_ID> --rooms <NEW_ROOM_ID>`，最后回查；不要只更新 `--location`。
-- 参会人变化用 `attendee add/delete`，日程描述变化用 `event update --desc`，删除日程用 `event delete --id`。用户当前消息已明确要求删除/取消时可直接执行；否则先确认。
-- 脚本失败或参数不完整时，立即降级到明确的 `dws calendar event/attendee/room` 命令，不要停在"我要查看用法"。
+- 参会人变化用 `participant add/delete`，日程描述变化用 `event update --desc`，删除日程用 `event delete --id`。用户当前消息已明确要求删除/取消时可直接执行；否则先确认。
+- 脚本失败或参数不完整时，立即降级到明确的 `dws calendar event/participant/room` 命令，不要停在"我要查看用法"。
 - 所有 dws 命令带 `--format json`；查询时间必须显式 `--start` / `--end`。
 
 ## 跨产品协作

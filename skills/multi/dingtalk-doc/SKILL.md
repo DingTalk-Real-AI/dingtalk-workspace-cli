@@ -22,7 +22,7 @@ metadata:
 - 创建文档只用 `--name`，不要写 `--title`。
 - 目标文件夹只用 `--folder <文档文件夹nodeId或URL>`，不要写 `--parent` / `--parent-node` / `--parent-id`。
 - 目标知识库只用 `--workspace <workspaceId或URL>`，不要写 `--space-id` / `--spaceId`。
-- 文档内容只用 `--content` / `--content-file`，不要写 `--markdown`。
+- 文档内容：`create` 只接 `--markdown`，不要写 `--content` / `--content-file`；`update` 只接 `--content` / `--content-file`，不要写 `--markdown`。
 - 复杂内容（换行、表格、代码块、长 Markdown）先写临时 `.md`，再用 `--content-file`，不要把大段 Markdown 塞进命令行。
 - 每次 `create` / `update` / `block insert` / `media insert` 后必须 `dws doc read` 或 `dws doc block list` 回读关键内容。
 
@@ -30,7 +30,7 @@ metadata:
 
 | 用户说 | 命令 |
 |--------|------|
-| "创建文档（短内容）" | `dws doc create --name "<标题>" --content "<内容>"` |
+| "创建文档（短内容）" | `dws doc create --name "<标题>" --markdown "<内容>"` |
 | "创建+写入（长内容自动分块）" | `python scripts/doc_create_and_write.py --name "<标题>" --content "<内容>" [--mode append\|overwrite]` |
 | "搜文档" | `dws doc search --query "<关键词>"` |
 | "读文档内容" | `dws doc read --node <nodeId>` |
@@ -40,7 +40,7 @@ metadata:
 ## 评测/多步文档短路径
 
 - 知识库「评测记录」下按日期文件夹执行：`dws wiki space search --keyword "评测记录" --format json` → `dws doc list --workspace <WS_ID> --format json` → 找 `评测-doc-YYYYMMDD`；不存在则 `dws doc folder create --name "评测-doc-YYYYMMDD" --workspace <WS_ID> --format json`。
-- 在目标文件夹创建文字文档：`dws doc create --name "<标题>" --folder <FOLDER_NODE_ID> --content-file <tmp.md> --format json`。拿到 `nodeId` 后立即回读。
+- 在目标文件夹创建文字文档：`dws doc create --name "<标题>" --folder <FOLDER_NODE_ID> --markdown "$(cat <tmp.md>)" --format json`。拿到 `nodeId` 后立即回读。
 - 块级编辑固定顺序：`doc block list --node <nodeId>` → 选 `blockId` → `doc block insert/update/delete` → `doc block list` 验证。删除块必须已有用户明确删除意图或二次确认。
 - 插入引用块、代码块、表格、分栏、附件、图片时，优先读 [doc.md](references/doc.md) 对应小节，不要只停在"准备查看 help"。说出"我将插入..."后必须立即执行对应 terminal 调用。
 - 用户要求多个子文档/附件/块操作时，按 checklist 串行完成；最后一条 assistant 消息不能停在"接下来我要..."，必须有实际工具调用或明确失败原因。

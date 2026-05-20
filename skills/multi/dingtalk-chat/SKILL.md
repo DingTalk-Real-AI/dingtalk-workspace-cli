@@ -21,14 +21,16 @@ metadata:
 
 | 用户说 | 命令 |
 |--------|------|
-| "发消息给张三" | `dws chat message send --open-dingtalk-id <id> --text "<内容>"` |
-| "发到XX群" | `dws chat search --query "<群名>"` → `dws chat message send --group <openConversationId> --text "<内容>"` |
+| "发消息给张三" | `dws chat message send --open-dingtalk-id <id> --title "<标题>" --text "<内容>"` |
+| "发到XX群" | `dws chat search --query "<群名>"` → `dws chat message send --group <openConversationId> --title "<标题>" --text "<内容>"` |
 | "建群" / "拉人进群" | `dws chat group create` / `dws chat group members add` |
-| "改群名" / "踢人" | `dws chat group rename` / `dws chat group members remove` |
+| "改群名" / "踢人" | `dws chat group rename` / `dws chat group members remove --yes`（踢人不可逆，确认目标后加 --yes）|
 | "@我消息" / "查群聊记录" | `dws chat message list` |
-| "用机器人发消息" | `dws chat message send-by-bot --robot-code <code> --group <id>` |
-| "Webhook 推一条" | `dws chat message send-by-webhook --token <token>` |
-| "撤回消息" | `dws chat message recall --client-msg-id <id>` |
+| "用机器人发消息" | `dws chat message send-by-bot --robot-code <code> --group <id> --title "<标题>" --text "<内容>"` |
+| "Webhook 推一条" | `dws chat message send-by-webhook --token <token> --title "<标题>" --text "<内容>"` |
+| "撤回消息" | `dws chat message recall --group <openConversationId> --msg-id <openMessageId>` |
+
+> **注**：v1.0.30 起 `chat message send / send-by-bot / send-by-webhook` 全部强制 `--title` 必填（单聊群聊都要）。
 
 ## 跨产品协作
 

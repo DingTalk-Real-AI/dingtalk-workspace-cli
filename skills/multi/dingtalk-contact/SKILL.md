@@ -1,6 +1,6 @@
 ---
 name: dingtalk-contact
-description: 钉钉通讯录精确查询（按 userId 查详情、部门搜索、部门成员列表、角色 label、查自己信息）。Use when 用户说 查部门/部门成员/我的信息/按工号查/按 userId 查/orgAuthEmail/角色ID/角色成员/管理员角色/财务人员/HR人员。Distinct from dingtalk-aisearch(模糊搜人首选：找同事/查上下级/谁负责)。命令前缀：dws contact。
+description: 钉钉通讯录精确查询（按 userId 查详情、部门搜索、部门成员列表、查自己信息）。Use when 用户说 查部门/部门成员/我的信息/按工号查/按 userId 查/orgAuthEmail。Distinct from dingtalk-aisearch(模糊搜人首选：找同事/查上下级/谁负责)。命令前缀：dws contact。
 cli_version: ">=0.2.14"
 metadata:
   category: product
@@ -26,9 +26,6 @@ metadata:
 | "按部门名拉成员" | `python scripts/contact_dept_members.py --query "<部门名>"` |
 | "搜部门" | `dws contact dept search --query "<关键词>"` |
 | "部门成员列表" | `dws contact dept list-members --ids <deptId>` |
-| "列出企业角色 / 有哪些角色" | `dws contact label list` |
-| "按角色名查角色ID" | `dws contact label get --names "<角色名>"` |
-| "查某角色下有哪些成员" | `dws contact label list-members --id <labelId>` |
 
 ## 评测高频硬约束
 
@@ -37,7 +34,6 @@ metadata:
 - 精确找人、按工号、按手机号：先用 `dws aisearch person --keyword "<完整输入>" --dimension name/jobNumber/phone --format json` 或对应 `contact user search/search-mobile`；拿到 `userId` 后必须 `dws contact user get --ids <userId> --format json` 补部门/职位/邮箱。
 - 查询直属主管/上下级时，如果 `contact user get` 没返回明确主管字段，必须继续 `dws aisearch person --keyword "<完整姓名或工号>" --dimension supervisor --format json`，不要停在"可能需要进一步查询"。
 - 多个同名候选时，批量 `contact user get --ids id1,id2,... --format json` 获取部门/职位后再消歧；不要默认取第一个。
-- 用户查询企业角色、角色ID、角色成员，或“管理员/财务/HR/主管”等角色类型人员时，走 `contact label list/get/list-members`；不要用 `dept list-members` 筛字段替代。
 
 ## 跨产品协作
 

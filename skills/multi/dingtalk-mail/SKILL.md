@@ -21,8 +21,7 @@ metadata:
 
 | 用户说 | 命令 |
 |--------|------|
-| "发邮件给 a@b.com" | `dws mail message send --to a@b.com --subject "<标题>" --body "<正文>"` |
-| "回复 / 全部回复 / 转发" | `dws mail message reply` / `reply-all` / `forward` |
+| "发邮件给 a@b.com" | `dws mail message send --from <自己邮箱> --to a@b.com --subject "<标题>" --body "<正文>"` |
 | "今天未读邮件" | `python scripts/mail_unread_summary.py` |
 | "带抄送发送" | `python scripts/mail_send_with_cc.py --to a@b.com --cc c@d.com --subject "<标题>" --body "<正文>"` |
 
@@ -30,8 +29,7 @@ metadata:
 
 - 用户要"完整内容/看看这封邮件/正文"时，`message search` 命中后必须继续调用 `dws mail message get --email <邮箱> --id <messageId> --format json`；不要只列候选后停下。
 - 搜到多封邮件时，若用户给了明确主题、附件名、发件人或时间线索，先选最匹配的一封执行 `message get`；只有同等候选无法判断时才询问用户。
-- 附件链路固定三步：`message search` → `attachment list --email <邮箱> --id <messageId>` → `attachment download --email <邮箱> --message-id <messageId> --attachment-id <attachmentId> --name <文件名>`；不存在批量下载命令。
-- 写入类操作（发送、回复、转发、删除、批量移动）按安全策略确认；只读查看、搜索、附件列表、下载不需要确认。
+- 写入类操作（发送）按安全策略确认；只读查看、搜索不需要确认。
 - 所有 `dws mail` 命令加 `--format json`，并复用同一封邮件的 `messageId`，不要重新搜索导致目标漂移。
 
 ## 跨产品协作

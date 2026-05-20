@@ -24,8 +24,7 @@ metadata:
 | "DING 张三" / "应用内紧急通知" | `dws ding message send --type app --users <userId> --content "<内容>"` |
 | "短信 DING" | `dws ding message send --type sms --users <userId> --content "<内容>"` |
 | "电话 DING" / "电话叫人" | `dws ding message send --type call --users <userId> --content "<内容>"` |
-| "撤回 DING" | `dws ding message recall --open-ding-id <id>` |
-| "DING 历史 / 接收状态" | `dws ding message list` / `dws ding message receiver-status` |
+| "撤回 DING" | `dws ding message recall --id <openDingId>` |
 
 ## 跨产品协作
 
