@@ -85,9 +85,7 @@ Usage:
   dws calendar event list [flags]
 Example:
   dws calendar event list --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T18:00:00+08:00"
-  dws calendar event list --calendar-id primary
 Flags:
-      --calendar-id string   日历 ID (默认 primary 主日历，仅在查询其他日历本时填写；通过 `book list` 获取)
       --end string           结束时间 ISO-8601 (例如 2026-03-10T18:00:00+08:00)
       --start string         开始时间 ISO-8601 (例如 2026-03-10T14:00:00+08:00)
 ```
@@ -104,10 +102,9 @@ Usage:
   dws calendar event get [flags]
 Example:
   dws calendar event get --id <EVENT_ID>
-  dws calendar event get --id <EVENT_ID> --calendar-id primary
+  dws calendar event get --id <EVENT_ID>
 Flags:
       --id string            日程 ID (必填)
-      --calendar-id string   日历 ID (默认 primary 主日历)
 ```
 
 ### 创建日程
@@ -415,7 +412,7 @@ Flags:
 
 用户说"查下xxx的日程安排":
 - 查询是否有共享关系 -> `book list`
-  - 场景1: 共享日历本中有来自 xxx 的，且权限大于reader，那么通过 `event list --calendar-id <xxx的日历本id> `可查到xxx完整的日程安排
+  - 场景1: 共享日历本相关查询在开源 dws v1.0.30 暂不支持（`--calendar-id` 未暴露）；默认查询 primary 主日历
   - 场景2: 共享日历本中没有来自 xxx 的。那么通过 `busy search -- <USER_ID>`，查询xxx的忙闲安排
 
 ## 核心工作流
@@ -483,7 +480,7 @@ dws calendar event list --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15
 | `event respond` | 响应结果 | — |
 | `room search` | `rooms[].roomId` | room add 的 --rooms 或 event create 的 --rooms |
 | `room list-groups` | `groups[].groupId` | room search 的 --group-id |
-| `book list` | `id`（如 `primary`） | event list/get 的 --calendar-id |
+
 | 钉盘上传 | 文件 `fileId` | attachment add 的 --files `<fileId>:<name>` |
 
 ## 注意事项
@@ -501,7 +498,7 @@ dws calendar event list --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15
 - **搜房无结果**：在符合早停/用户限定范围内，`room search`（含按分组逐组查）全部返回空或无空闲 → 应**直接向用户报错/说明失败**并结束订房；**禁止**假设 roomId、禁止无合法 `roomId` 时调用 `room add` / `event create --rooms` 试探、禁止用 `event get` 等绕路推断 roomId
 - **评测 / 自动化断言**：凡涉及 `room add` / `event create --rooms` 的流程，`--rooms` 只能填上游 `room search`（或等价接口）返回 JSON 中的 **`rooms[].roomId`**；不得以会议室展示名、楼层文案或用户口语当作 `roomId`
 - **附件**：`attachment add` 仅负责挂载，**不上传**文件；fileId 必须先通过钉盘流程取得；`--files` 多附件用 `<fileId>:<name>` 元素逗号分隔
-- **日历本**：`book list` 返回的 `id` 才是合法 `calendarId`；如无明确说明，`event list` / `event get` 都不要带 `--calendar-id`，让接口默认走 primary 主日历
+- **日历本**：开源 dws v1.0.30 `event list` / `event get` 不接受 `--calendar-id`，固定查 primary 主日历
 - **已弃用入参**：`--max-results`（event list / list-mine）在新 MCP schema 中被移除；CLI 仍接受但**不会**透传到 MCP；模型生成命令时**禁止**继续使用
 
 ## 自动化脚本
