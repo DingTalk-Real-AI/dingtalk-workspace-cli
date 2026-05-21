@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -580,18 +581,55 @@ func validateNewBinary(binaryPath, expectedVersion string) error {
 		return fmt.Errorf("设置执行权限失败: %w", err)
 	}
 
-	// Try running the binary
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	out, err := exec.CommandContext(ctx, binaryPath, "version").CombinedOutput()
+	out, err := tryExecVersion(binaryPath)
 	if err != nil {
-		return fmt.Errorf("二进制无法执行: %w", err)
+		// Apple Silicon kills unsigned arm64 binaries with SIGKILL via amfid.
+		// Repair the binary in-place (ad-hoc codesign + drop quarantine) and retry once.
+		if runtime.GOOS == "darwin" && isLikelyAMFIKill(err) {
+			if repairErr := repairDarwinBinary(binaryPath); repairErr == nil {
+				out, err = tryExecVersion(binaryPath)
+			}
+		}
+		if err != nil {
+			return fmt.Errorf("二进制无法执行: %w", err)
+		}
 	}
 
 	if !strings.Contains(string(out), expectedVersion) {
 		// Not fatal, version format might differ
 		fmt.Printf("\n  注意: 版本输出中未包含 %s", expectedVersion)
+	}
+	return nil
+}
+
+func tryExecVersion(binaryPath string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return exec.CommandContext(ctx, binaryPath, "version").CombinedOutput()
+}
+
+// isLikelyAMFIKill returns true when err looks like macOS amfid SIGKILL'ing an
+// unsigned binary. Go reports this as "signal: killed".
+func isLikelyAMFIKill(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "signal: killed") || strings.Contains(msg, "signal: kill")
+}
+
+// repairDarwinBinary applies an ad-hoc codesign and clears the quarantine xattr.
+// Used as a self-heal step when an unsigned binary is killed by amfid on Apple Silicon.
+func repairDarwinBinary(binaryPath string) error {
+	// Best-effort: strip quarantine. Failure is fine (attribute often absent).
+	_ = exec.Command("xattr", "-d", "com.apple.quarantine", binaryPath).Run()
+
+	if _, err := exec.LookPath("codesign"); err != nil {
+		return fmt.Errorf("codesign 不可用: %w", err)
+	}
+	out, err := exec.Command("codesign", "--force", "--sign", "-", binaryPath).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("codesign 失败: %v: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }
