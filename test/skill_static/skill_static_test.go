@@ -10,10 +10,10 @@
 // Run explicitly with: `go test -tags skill_verify ./test/skill_static/...`
 //
 // Layer A of the skill verification matrix:
-//   1. Every backtick `dws ...` command in skills/**/*.md is parsed.
-//   2. For each, the sub-command path (tokens before first --flag) is
-//      checked against `dws <parent> --help`'s "Available Commands" list.
-//   3. Every flag used must appear in the leaf command's help text.
+//  1. Every backtick `dws ...` command in skills/**/*.md is parsed.
+//  2. For each, the sub-command path (tokens before first --flag) is
+//     checked against `dws <parent> --help`'s "Available Commands" list.
+//  3. Every flag used must appear in the leaf command's help text.
 //
 // The test deliberately tolerates a small whitelist of intentional
 // anti-pattern references (e.g. "dws minutes detail" appearing in the
