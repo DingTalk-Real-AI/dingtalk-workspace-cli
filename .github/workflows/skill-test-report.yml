@@ -1,0 +1,168 @@
+name: Skill Test Report
+
+# Standalone end-to-end test report job.
+#
+# Purpose: run the cli_to_mcp pytest suite under a real DingTalk tenant,
+# generate a per-product Markdown matrix, and surface it directly on the
+# GitHub Actions run page (Job Summary tab) plus as a downloadable artifact.
+#
+# Why standalone: this job hits the real DingTalk MCP gateway and needs a
+# logged-in token. Putting it inside the main CI would either expose the
+# token to every fork-PR (security risk) or always skip (waste).
+# So it runs:
+#   - on demand (workflow_dispatch)
+#   - on a nightly schedule (so report stays fresh)
+#   - on push to branches the maintainers own (not fork PRs)
+#
+# Token plumbing: when DWS_TEST_AUTH_BLOB secret is set, the job decodes
+# it into ~/.dws/auth/dingding.json before pytest runs. If the secret is
+# missing or empty, the job skips cleanly via the conftest token guard
+# — no false-positive failures.
+
+on:
+  workflow_dispatch:
+    inputs:
+      products:
+        description: "Optional comma-separated product allowlist (default = all)"
+        required: false
+        default: ""
+  schedule:
+    - cron: "0 18 * * *"  # 02:00 Asia/Shanghai daily
+  push:
+    branches:
+      - main
+    paths:
+      - "skills/**"
+      - "test/cli_to_mcp/**"
+      - ".github/workflows/skill-test-report.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  skill-test-report:
+    name: Skill E2E Test Report
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - name: Build dws binary
+        run: |
+          go build -o /tmp/dws ./cmd
+          /tmp/dws version
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pytest dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pytest
+
+      - name: Inject DingTalk auth token (if available)
+        env:
+          DWS_TEST_AUTH_BLOB: ${{ secrets.DWS_TEST_AUTH_BLOB }}
+        run: |
+          if [ -n "$DWS_TEST_AUTH_BLOB" ]; then
+            mkdir -p "$HOME/.dws/auth"
+            echo "$DWS_TEST_AUTH_BLOB" > "$HOME/.dws/auth/dingding.json"
+            chmod 600 "$HOME/.dws/auth/dingding.json"
+            echo "✓ dws auth token written from secret"
+          else
+            echo "⚠ DWS_TEST_AUTH_BLOB secret is not configured."
+            echo "   The pytest conftest will skip the entire session via _require_dws_token."
+          fi
+
+      - name: Verify dws login state
+        id: auth_state
+        run: |
+          export PATH="/tmp:$PATH"
+          if dws auth status --format json 2>/dev/null | grep -q '"token_valid":true'; then
+            echo "token_valid=true" >> "$GITHUB_OUTPUT"
+            echo "✓ token valid — proceeding with full test suite"
+          else
+            echo "token_valid=false" >> "$GITHUB_OUTPUT"
+            echo "⚠ no valid token; the test runner will skip and report 'no token' status"
+          fi
+
+      - name: Run cli_to_mcp test suite
+        id: run_tests
+        continue-on-error: true
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          export PATH="/tmp:$PATH"
+          cd test/cli_to_mcp/testcases
+          # Optional product filter from manual dispatch input
+          if [ -n "${{ github.event.inputs.products }}" ]; then
+            export DWS_TEST_PRODUCTS="${{ github.event.inputs.products }}"
+          fi
+          python3 run_all_tests.py 2>&1 | tee /tmp/runner_output.log
+          # Move the timestamped report to a stable filename so the
+          # next step can find it without guessing.
+          latest_report="$(ls -t test_report_*.md 2>/dev/null | head -1)"
+          if [ -n "$latest_report" ]; then
+            cp "$latest_report" /tmp/skill_test_report.md
+            echo "report_file=$latest_report" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish report to GitHub Job Summary
+        if: always()
+        run: |
+          {
+            echo "# 📊 DWS Skill E2E Test Report"
+            echo ""
+            echo "**Triggered by:** \`${{ github.event_name }}\` on \`${{ github.ref_name }}\`"
+            echo "**Commit:** \`${{ github.sha }}\`"
+            echo "**Auth state:** ${{ steps.auth_state.outputs.token_valid == 'true' && '🔐 token_valid=true (real-tenant run)' || '⚠ no valid token — suite skipped' }}"
+            echo ""
+            if [ -f /tmp/skill_test_report.md ]; then
+              cat /tmp/skill_test_report.md
+            else
+              echo "## ⚠️ No report generated"
+              echo ""
+              echo "Last 80 lines of runner output:"
+              echo ""
+              echo '```'
+              tail -80 /tmp/runner_output.log 2>/dev/null || echo "(no output captured)"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload full test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: skill-test-report-${{ github.run_id }}
+          path: |
+            /tmp/skill_test_report.md
+            /tmp/runner_output.log
+            test/cli_to_mcp/testcases/test_report_*.md
+            test/cli_to_mcp/testcases/**/last_run.log
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Mark job state from test runner
+        run: |
+          # If the runner step set continue-on-error and itself failed
+          # we still want this final step to reflect overall pass/fail
+          # so the GitHub UI shows a proper red/green indicator.
+          if [ "${{ steps.run_tests.outcome }}" = "failure" ] && [ "${{ steps.auth_state.outputs.token_valid }}" = "true" ]; then
+            echo "::error ::cli_to_mcp test suite reported failures — see Job Summary above."
+            exit 1
+          fi
+          if [ "${{ steps.auth_state.outputs.token_valid }}" != "true" ]; then
+            echo "::notice ::Suite was skipped (no DWS_TEST_AUTH_BLOB secret). Configure the secret to enable real-tenant runs."
+            exit 0
+          fi
+          echo "::notice ::All product test cases passed."
