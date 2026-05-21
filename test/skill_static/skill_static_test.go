@@ -1,6 +1,13 @@
+//go:build skill_verify
+// +build skill_verify
+
 // Package skill_static_test verifies that every `dws ...` command example
 // referenced in skill documentation can actually be dispatched by the
 // open-source dws CLI binary (cobra Available Commands check).
+//
+// Build tag rationale: this test depends on a real `dws` binary being
+// reachable via PATH, which the default `go test ./...` doesn't guarantee.
+// Run explicitly with: `go test -tags skill_verify ./test/skill_static/...`
 //
 // Layer A of the skill verification matrix:
 //   1. Every backtick `dws ...` command in skills/**/*.md is parsed.
