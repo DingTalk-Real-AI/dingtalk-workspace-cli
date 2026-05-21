@@ -412,7 +412,7 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 | 日志 | `report` | 7 | `create` `list` `detail` `template` `stats` `sent` | 创建日志、收发列表、模版、详情、统计 |
 | AI 表格 | `aitable` | 41 | `base` `table` `record` `field` `view` `dashboard` `chart` `import` `export` `attachment` `template` | Base / 数据表 / 记录 / 字段 / 视图 全量 CRUD；图表 + 仪表盘（含分享配置）；数据导入导出；附件；模板 |
 | 文档 | `doc` | 21 | `search` `list` `info` `read` `create` `update` `upload` `download` `copy` `move` `rename` `file` `folder` `block` `comment` | 搜索 / 读写文档、文件与文件夹创建、块级编辑、评论（list / create / reply / create-inline）、上传 / 下载 |
-| 钉盘 | `drive` | 6 | `list` `info` `download` `mkdir` `upload-info` `commit` | 钉盘文件操作：列表、详情、下载、创建文件夹、两阶段上传 |
+| 钉盘 | `drive` | 9 | `list` `list-spaces` `info` `download` `mkdir` `upload` `upload-info` `commit` `delete` | 钉盘文件操作：列出空间、文件列表 / 详情 / 下载、创建文件夹、一键 `upload`（三步合成）或两阶段 `upload-info` + `commit`、删除 |
 | AI 听记 | `minutes` | 19 | `list` `get` `update` `mind-graph` `speaker` `hot-word` `upload` | 听记列表（我创建 / 共享给我）、详情（info / summary / keywords / transcription / todos / batch）、标题/摘要更新、思维导图、发言人替换、热词、上传会话 |
 | 邮箱 | `mail` | 4 | `mailbox` `message` | 邮箱地址列表、KQL 邮件搜索、邮件详情、发送邮件 |
 | 在线电子表格 | `sheet` | 34 | `range` `filter-view`（顶层：`create` `new` `list` `info` `find` `replace` `append` `merge-cells` `unmerge-cells` `add-dimension` `insert-dimension` `delete-dimension` `move-dimension` `update-dimension` `write-image` `copy_sheet` `update_sheet` `submit_export_job` `query_export_job` `create_filter` `get_filter` `update_filter` `delete_filter` `set_filter_criteria` `clear_filter_criteria` `sort_filter`） | 在线电子表格（`contentType=ALIDOC`、`extension=axls`）：工作表 CRUD、区域读写/追加、行列操作、合并、查找替换、命名筛选视图 + 表级筛选、写入图片、异步导出（`submit_export_job` + `query_export_job`，v1.0.25 暂无合并的 `export` 命令） |
@@ -423,7 +423,7 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 | 直播 | `live` | 1 | `stream` | 钉钉直播：查看我的直播列表 |
 | Raw API | `api` | 1 | — | 直接调用任意钉钉 OpenAPI（api / oapi 双形态），自动管理应用级 Token |
 
-> **19 个产品，209 条命令。** 完整命令清单（带描述与使用场景）：[`docs/command-index.md`](./docs/command-index.md)。运行 `dws --help` 查看顶层命令树，或 `dws <service> --help` 查看子命令。
+> **19 个产品，212 条命令。** 完整命令清单（带描述与使用场景）：[`docs/command-index.md`](./docs/command-index.md)。运行 `dws --help` 查看顶层命令树，或 `dws <service> --help` 查看子命令。
 
 > **关于 `chat bot`**：机器人能力（`send-by-bot` / `recall-by-bot` / `add-bot` / `send-by-webhook` / bot 搜索）已合并到对应的 `chat` 子树下（例如 `dws chat message send-by-bot`、`dws chat group members add-bot`），保持 agent 视角下的命令面扁平易发现。不再有独立的顶层 `bot` 产品。
 
