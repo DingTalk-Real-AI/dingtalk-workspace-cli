@@ -1,0 +1,54 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.3, pytest-9.0.3, pluggy-1.6.0 -- /opt/homebrew/opt/python@3.13/bin/python3.13
+cachedir: .pytest_cache
+rootdir: /Users/zhengyubai/Desktop/codehub/dws-wukong/auto-test/cli_to_mcp/testcases
+collecting ... collected 9 items
+
+aiapp/test_01_aiapp.py::TestAiappCreate::test_create_basic PASSED        [ 11%]
+aiapp/test_01_aiapp.py::TestAiappCreate::test_create_with_skills PASSED  [ 22%]
+aiapp/test_01_aiapp.py::TestAiappCreate::test_create_chinese_prompt PASSED [ 33%]
+aiapp/test_01_aiapp.py::TestAiappQuery::test_query_created_app PASSED    [ 44%]
+aiapp/test_01_aiapp.py::TestAiappQuery::test_query_invalid_id PASSED     [ 55%]
+aiapp/test_01_aiapp.py::TestAiappQuery::test_query_returns_status PASSED [ 66%]
+aiapp/test_01_aiapp.py::TestAiappModify::test_modify_prompt PASSED       [ 77%]
+aiapp/test_01_aiapp.py::TestAiappModify::test_modify_with_skills PASSED  [ 88%]
+aiapp/test_01_aiapp.py::TestAiappModify::test_modify_invalid_thread PASSED [100%]
+
+============================== 9 passed in 4.57s ===============================
+
+
+=== CLI 真实报错（run_raw 捕获，兼容 pytest 失败格式） ===
+E   Failed: dws returned non-JSON:
+E     cmd:    dws aiapp query --task-id INVALID_99999 -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "query ai app task failed: {\"detail\":\"Invalid task_id: must be a UUID\"}",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "000300",
+    "server_key": "aiapp",
+    "trace_id": "2106d98117760728428432411e0a6f"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws aiapp modify --prompt X --thread-id INVALID_99999 -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "create ai app task failed: {\"detail\":\"Invalid thread_id: must be a UUID\"}",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "000300",
+    "server_key": "aiapp",
+    "trace_id": "0bab027317760728446092759e07a4"
+  }
+}
+E     stderr: 
+

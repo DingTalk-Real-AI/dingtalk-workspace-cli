@@ -1,0 +1,314 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.3, pytest-9.0.3, pluggy-1.6.0 -- /opt/homebrew/opt/python@3.13/bin/python3.13
+cachedir: .pytest_cache
+rootdir: /Users/zhengyubai/Desktop/codehub/dws-wukong/auto-test/cli_to_mcp/testcases
+collecting ... collected 42 items
+
+calendar/test_01_event.py::TestEventList::test_list_default PASSED       [  2%]
+calendar/test_01_event.py::TestEventList::test_list_with_time_range PASSED [  4%]
+calendar/test_01_event.py::TestEventList::test_list_empty_range PASSED   [  7%]
+calendar/test_01_event.py::TestEventGet::test_get_returns_detail PASSED  [  9%]
+calendar/test_01_event.py::TestEventGet::test_get_contains_summary PASSED [ 11%]
+calendar/test_01_event.py::TestEventGet::test_get_invalid_id PASSED      [ 14%]
+calendar/test_01_event.py::TestEventCreate::test_create_basic PASSED     [ 16%]
+calendar/test_01_event.py::TestEventCreate::test_create_with_desc PASSED [ 19%]
+calendar/test_01_event.py::TestEventCreate::test_create_verify_via_get PASSED [ 21%]
+calendar/test_01_event.py::TestEventUpdate::test_update_title PASSED     [ 23%]
+calendar/test_01_event.py::TestEventUpdate::test_update_time PASSED      [ 26%]
+calendar/test_01_event.py::TestEventUpdate::test_update_only_end_time PASSED [ 28%]
+calendar/test_01_event.py::TestEventDelete::test_delete_lifecycle PASSED [ 30%]
+calendar/test_01_event.py::TestEventDelete::test_delete_invalid_id PASSED [ 33%]
+calendar/test_01_event.py::TestEventDelete::test_delete_and_redelete PASSED [ 35%]
+calendar/test_02_participant.py::TestParticipantList::test_list_participants PASSED [ 38%]
+calendar/test_02_participant.py::TestParticipantList::test_list_contains_creator PASSED [ 40%]
+calendar/test_02_participant.py::TestParticipantList::test_list_invalid_event PASSED [ 42%]
+calendar/test_02_participant.py::TestParticipantAdd::test_add_participant PASSED [ 45%]
+calendar/test_02_participant.py::TestParticipantAdd::test_add_multiple_users PASSED [ 47%]
+calendar/test_02_participant.py::TestParticipantAdd::test_add_to_invalid_event PASSED [ 50%]
+calendar/test_02_participant.py::TestParticipantDelete::test_remove_then_verify PASSED [ 52%]
+calendar/test_02_participant.py::TestParticipantDelete::test_remove_invalid_user PASSED [ 54%]
+calendar/test_02_participant.py::TestParticipantDelete::test_remove_from_invalid_event PASSED [ 57%]
+calendar/test_03_room.py::TestRoomSearch::test_search_returns_list PASSED [ 59%]
+calendar/test_03_room.py::TestRoomSearch::test_search_different_time_ranges PASSED [ 61%]
+calendar/test_03_room.py::TestRoomSearch::test_search_past_time_range PASSED [ 64%]
+calendar/test_03_room.py::TestRoomAdd::test_add_room_to_event SKIPPED    [ 66%]
+calendar/test_03_room.py::TestRoomAdd::test_add_invalid_room PASSED      [ 69%]
+calendar/test_03_room.py::TestRoomAdd::test_add_to_invalid_event PASSED  [ 71%]
+calendar/test_03_room.py::TestRoomDelete::test_delete_room_from_event PASSED [ 73%]
+calendar/test_03_room.py::TestRoomDelete::test_delete_from_invalid_event PASSED [ 76%]
+calendar/test_03_room.py::TestRoomDelete::test_delete_multiple_rooms PASSED [ 78%]
+calendar/test_03_room.py::TestRoomListGroups::test_list_groups_returns_data PASSED [ 80%]
+calendar/test_03_room.py::TestRoomListGroups::test_list_groups_is_list PASSED [ 83%]
+calendar/test_03_room.py::TestRoomListGroups::test_list_groups_idempotent PASSED [ 85%]
+calendar/test_04_busy.py::TestBusySearch::test_query_self_busy PASSED    [ 88%]
+calendar/test_04_busy.py::TestBusySearch::test_query_multiple_users PASSED [ 90%]
+calendar/test_04_busy.py::TestBusySearch::test_query_past_range PASSED   [ 92%]
+calendar/test_90_calendar_param_regression.py::TestCalendarParamRegression::test_event_create_time_with_space_separator PASSED [ 95%]
+calendar/test_90_calendar_param_regression.py::TestCalendarParamRegression::test_event_create_time_without_timezone PASSED [ 97%]
+calendar/test_90_calendar_param_regression.py::TestCalendarParamRegression::test_room_add_invalid_room_should_fail PASSED [100%]
+
+=========================== short test summary info ============================
+SKIPPED [1] calendar/test_03_room.py:82: No available meeting rooms to test
+======================== 41 passed, 1 skipped in 32.33s ========================
+
+
+=== CLI 真实报错（run_raw 捕获，兼容 pytest 失败格式） ===
+E   Failed: dws returned non-JSON:
+E     cmd:    dws calendar event get --id INVALID_EVENT_ID_99999 -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "business error: success=false",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_key": "calendar",
+    "trace_id": "2106d98117760727473963569e0af2"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws calendar event delete --id INVALID_99999 --yes -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "Event not exist",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "300014",
+    "server_key": "calendar",
+    "trace_id": "2104a64c17760727595216139e0a8b"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws calendar participant list --event INVALID_EVENT_99999 -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "business error: code SYSTEM ERROR",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "SYSTEM ERROR",
+    "server_key": "calendar",
+    "trace_id": "0b5deb3217760727623716914e0c07"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws calendar participant add --event INVALID_EVENT_99999 --users 035665695811868955452 -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "code: 300000, developerMessage: Event does not exist.",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "300000",
+    "server_key": "calendar",
+    "trace_id": "2127d89817760727640746002e09fc"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws calendar participant delete --event V25kMmdHbnliVnZwLzR3dGU5eFBLZz09 --users 035665695811868955452 --yes -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "code: 300000, developerMessage: can not remove organizer.",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "300000",
+    "server_key": "calendar",
+    "trace_id": "0b5deb3217760727644918438e0c28"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws calendar participant delete --event V25kMmdHbnliVnZwLzR3dGU5eFBLZz09 --users NON_EXISTENT_USER_ID --yes -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "code: 300000, developerMessage: user id is required",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "300000",
+    "server_key": "calendar",
+    "trace_id": "2127d89817760727649453023e0a1f"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws calendar participant delete --event INVALID_EVENT_99999 --users 035665695811868955452 --yes -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "code: 300000, developerMessage: Event does not exist.",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "300000",
+    "server_key": "calendar",
+    "trace_id": "2127d89817760727653764929e0a81"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws calendar room search --start 2025-01-01T09:00:00+08:00 --end 2025-01-01T10:00:00+08:00 -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "filterStartTime can not less current time",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "400002",
+    "server_key": "calendar",
+    "trace_id": "0b5deb3217760727671156512e0be6"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws calendar room add --event V25kMmdHbnliVnZwLzR3dGU5eFBLZz09 --rooms INVALID_ROOM_99999 -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "code: 300000, developerMessage: roomId invalid",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "300000",
+    "server_key": "calendar",
+    "trace_id": "0bb7c36217760727679364389e04a7"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws calendar room add --event INVALID_EVENT_99999 --rooms ROOM_DUMMY -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "code: 300014, developerMessage: Event does not exist.",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "300014",
+    "server_key": "calendar",
+    "trace_id": "2104a64c17760727683584247e0a69"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws calendar room delete --event V25kMmdHbnliVnZwLzR3dGU5eFBLZz09 --rooms NON_EXISTENT_ROOM --yes -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "code: 300000, developerMessage: roomId invalid",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "300000",
+    "server_key": "calendar",
+    "trace_id": "0b5deb3217760727687871772e0c8b"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws calendar room delete --event INVALID_EVENT_99999 --rooms ROOM_DUMMY --yes -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "code: 300000, developerMessage: Event does not exist.",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "300000",
+    "server_key": "calendar",
+    "trace_id": "0b5deb3217760727692027522e0c07"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws calendar room delete --event V25kMmdHbnliVnZwLzR3dGU5eFBLZz09 --rooms R1,R2,R3 --yes -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "code: 300000, developerMessage: roomId invalid",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "300000",
+    "server_key": "calendar",
+    "trace_id": "0b5deb3217760727696258811e0c28"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws calendar event create --title 时间格式测试 --start 2026-03-23 14:00:00 --end 2026-03-23 15:00:00 -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "code: 300000, developerMessage: Invalid start dateTime format.",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "300000",
+    "server_key": "calendar",
+    "trace_id": "2127d89817760727729074118e0a02"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws calendar event create --title 无时区测试 --start 2026-03-23T14:00:00 --end 2026-03-23T15:00:00 -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "code: 300000, developerMessage: Invalid start dateTime format.",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "300000",
+    "server_key": "calendar",
+    "trace_id": "0bb7c36217760727733844805e04a7"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws calendar room add --event-id INVALID_EVENT --room-id INVALID_ROOM --start 2026-04-13T18:32:53+08:00 --end 2026-04-13T19:32:53+08:00 -f json
+E     stdout: 
+E     stderr: Error: unknown flag: --room-id
+

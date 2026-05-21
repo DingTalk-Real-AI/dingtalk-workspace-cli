@@ -1,0 +1,128 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.3, pytest-9.0.3, pluggy-1.6.0 -- /opt/homebrew/opt/python@3.13/bin/python3.13
+cachedir: .pytest_cache
+rootdir: /Users/zhengyubai/Desktop/codehub/dws-wukong/auto-test/cli_to_mcp/testcases
+collecting ... collected 21 items
+
+doc/test_01_space.py::TestDocList::test_list_root_returns_nodes PASSED   [  4%]
+doc/test_01_space.py::TestDocList::test_list_root_has_success PASSED     [  9%]
+doc/test_01_space.py::TestDocList::test_list_idempotent PASSED           [ 14%]
+doc/test_01_space.py::TestDocSearch::test_search_recent PASSED           [ 19%]
+doc/test_01_space.py::TestDocSearch::test_search_with_query PASSED       [ 23%]
+doc/test_01_space.py::TestDocSearch::test_search_no_match PASSED         [ 28%]
+doc/test_02_file.py::TestDocCreate::test_create_basic PASSED             [ 33%]
+doc/test_02_file.py::TestDocCreate::test_create_chinese_name PASSED      [ 38%]
+doc/test_02_file.py::TestDocCreate::test_create_with_markdown PASSED     [ 42%]
+doc/test_02_file.py::TestFileCreate::test_create_adoc PASSED             [ 47%]
+doc/test_02_file.py::TestFileCreate::test_create_folder_via_file PASSED  [ 52%]
+doc/test_02_file.py::TestFileCreate::test_create_missing_type PASSED     [ 57%]
+doc/test_02_file.py::TestDocRead::test_read_invalid_node PASSED          [ 61%]
+doc/test_02_file.py::TestDocUpdate::test_update_invalid_node PASSED      [ 66%]
+doc/test_03_node.py::TestFolderCreate::test_create_folder PASSED         [ 71%]
+doc/test_03_node.py::TestFolderCreate::test_create_folder_chinese_name PASSED [ 76%]
+doc/test_03_node.py::TestFolderCreate::test_create_folder_invalid_parent PASSED [ 80%]
+doc/test_90_doc_param_regression.py::TestDocParamRegression::test_search_keyword_alias PASSED [ 85%]
+doc/test_90_doc_param_regression.py::TestDocParamRegression::test_create_title_alias PASSED [ 90%]
+doc/test_90_doc_param_regression.py::TestDocParamRegression::test_read_wrong_url_flag PASSED [ 95%]
+doc/test_90_doc_param_regression.py::TestDocParamRegression::test_read_wrong_id_flag PASSED [100%]
+
+============================= 21 passed in 13.86s ==============================
+
+
+=== CLI 真实报错（run_raw 捕获，兼容 pytest 失败格式） ===
+E   Failed: dws returned non-JSON:
+E     cmd:    dws doc file create --name missing_type -f json
+E     stdout: {
+  "error": {
+    "category": "internal",
+    "code": 5,
+    "message": "missing required flag(s): --type\n  usage: dws doc file create [flags]\n  example:\n  dws doc file create --name \"项目周报\" --type adoc\n  dws doc file create --name \"数据统计\" --type axls --folder FOLDER_ID\n  dws doc file create --name \"思维导图\" --type amind --workspace WS_ID\n  dws doc file create --name \"子文件夹\" --type folder"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws doc read --node INVALID_NODE_99999 -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "nodeId 格式不合法，非 URL 格式时 nodeId 须为 dentryUuid：32 位字母数字字符串（如 gpG2NdyVX3Bja20zCAM7eXZmWMwvDqPk）。收到：INVALID_NODE_99999（18 个字符）。",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "invalidRequest.inputArgs.invalid",
+    "server_key": "doc",
+    "trace_id": "2106d98117760727943611503e0a68"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws doc update --node INVALID_NODE_99999 --markdown hello -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "nodeId 格式不合法，非 URL 格式时 nodeId 须为 dentryUuid：32 位字母数字字符串（如 gpG2NdyVX3Bja20zCAM7eXZmWMwvDqPk）。收到：INVALID_NODE_99999（18 个字符）。",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "invalidRequest.inputArgs.invalid",
+    "server_key": "doc",
+    "trace_id": "0bab027317760727947867051e0807"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws doc folder create --folder INVALID_99999 --name error_test -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "nodeId 格式不合法，非 URL 格式时 nodeId 须为 dentryUuid：32 位字母数字字符串（如 gpG2NdyVX3Bja20zCAM7eXZmWMwvDqPk）。收到：INVALID_99999（13 个字符）。",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "invalidRequest.inputArgs.invalid",
+    "server_key": "doc",
+    "trace_id": "213ee25c17760727962293037e0acd"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws doc read --url https://invalid.example.com -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "can't parse argument number: dentryUuid",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "invalidRequest.inputArgs.invalid",
+    "server_key": "doc",
+    "trace_id": "2106d98117760727981232574e0a69"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws doc read --id INVALID -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "nodeId 格式不合法，非 URL 格式时 nodeId 须为 dentryUuid：32 位字母数字字符串（如 gpG2NdyVX3Bja20zCAM7eXZmWMwvDqPk）。收到：INVALID（7 个字符）。",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "invalidRequest.inputArgs.invalid",
+    "server_key": "doc",
+    "trace_id": "2106d98117760727985081805e0a68"
+  }
+}
+E     stderr: 
+

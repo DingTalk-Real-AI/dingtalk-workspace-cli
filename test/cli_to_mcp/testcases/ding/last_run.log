@@ -1,0 +1,99 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.3, pytest-9.0.3, pluggy-1.6.0 -- /opt/homebrew/opt/python@3.13/bin/python3.13
+cachedir: .pytest_cache
+rootdir: /Users/zhengyubai/Desktop/codehub/dws-wukong/auto-test/cli_to_mcp/testcases
+collecting ... collected 6 items
+
+ding/test_01_message.py::TestDingMessageSend::test_send_app_ding FAILED  [ 16%]
+ding/test_01_message.py::TestDingMessageSend::test_send_with_type FAILED [ 33%]
+ding/test_01_message.py::TestDingMessageSend::test_send_invalid_robot PASSED [ 50%]
+ding/test_01_message.py::TestDingMessageRecall::test_recall_sent FAILED  [ 66%]
+ding/test_01_message.py::TestDingMessageRecall::test_recall_invalid_id PASSED [ 83%]
+ding/test_01_message.py::TestDingMessageRecall::test_recall_missing_robot PASSED [100%]
+
+=================================== FAILURES ===================================
+____________________ TestDingMessageSend.test_send_app_ding ____________________
+ding/test_01_message.py:27: in test_send_app_ding
+    data = dws.run(
+conftest.py:67: in run
+    self._assert_success(data, cmd)
+conftest.py:151: in _assert_success
+    pytest.fail(
+E   Failed: Expected success:
+E     cmd:  /usr/local/bin/dws ding message send --robot-code dingdiwdtolfjiih8lfw --users 035665695811868955452 --content CLI自动化DING 1776072837 -f json
+E     resp: {"error": {"category": "api", "code": 1, "hint": "The API returned a business-level error. Check required parameters and values.", "message": "ding server quota insufficient", "operation": "tools/call", "reason": "business_error", "server_key": "ding", "trace_id": "2106d98117760728380432005e0a6f"}}
+---------------------------- Captured stdout setup -----------------------------
+DWS_CMD: /usr/local/bin/dws contact user get-self -f json
+----------------------------- Captured stdout call -----------------------------
+DWS_CMD: /usr/local/bin/dws ding message send --robot-code dingdiwdtolfjiih8lfw --users 035665695811868955452 --content 'CLI自动化DING 1776072837' -f json
+___________________ TestDingMessageSend.test_send_with_type ____________________
+ding/test_01_message.py:37: in test_send_with_type
+    data = dws.run(
+conftest.py:67: in run
+    self._assert_success(data, cmd)
+conftest.py:151: in _assert_success
+    pytest.fail(
+E   Failed: Expected success:
+E     cmd:  /usr/local/bin/dws ding message send --robot-code dingdiwdtolfjiih8lfw --type app --users 035665695811868955452 --content 类型测试 -f json
+E     resp: {"error": {"category": "api", "code": 1, "hint": "The API returned a business-level error. Check required parameters and values.", "message": "ding server quota insufficient", "operation": "tools/call", "reason": "business_error", "server_key": "ding", "trace_id": "213ee25c17760728385326157e0b11"}}
+----------------------------- Captured stdout call -----------------------------
+DWS_CMD: /usr/local/bin/dws ding message send --robot-code dingdiwdtolfjiih8lfw --type app --users 035665695811868955452 --content '类型测试' -f json
+____________________ TestDingMessageRecall.test_recall_sent ____________________
+ding/test_01_message.py:66: in test_recall_sent
+    send = dws.run(
+conftest.py:67: in run
+    self._assert_success(data, cmd)
+conftest.py:151: in _assert_success
+    pytest.fail(
+E   Failed: Expected success:
+E     cmd:  /usr/local/bin/dws ding message send --robot-code dingdiwdtolfjiih8lfw --users 035665695811868955452 --content 待撤回 1776072838 -f json
+E     resp: {"error": {"category": "api", "code": 1, "hint": "The API returned a business-level error. Check required parameters and values.", "message": "ding server quota insufficient", "operation": "tools/call", "reason": "business_error", "server_key": "ding", "trace_id": "213ee25c17760728394146226e0b11"}}
+----------------------------- Captured stdout call -----------------------------
+DWS_CMD: /usr/local/bin/dws ding message send --robot-code dingdiwdtolfjiih8lfw --users 035665695811868955452 --content '待撤回 1776072838' -f json
+========================= 3 failed, 3 passed in 2.70s ==========================
+
+
+=== CLI 真实报错（run_raw 捕获，兼容 pytest 失败格式） ===
+E   Failed: dws returned non-JSON:
+E     cmd:    dws ding message send --robot-code INVALID --users 035665695811868955452 --content X -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "robotCode is in not valid or not in the org",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_key": "ding",
+    "trace_id": "213ee25c17760728390048576e0b33"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws ding message recall --robot-code dingdiwdtolfjiih8lfw --id INVALID_99999 -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "system error",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_key": "ding",
+    "trace_id": "213ee25c17760728398608382e0b32"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws ding message recall --id SOME_ID -f json
+E     stdout: {
+  "error": {
+    "category": "internal",
+    "code": 5,
+    "message": "flag --robot-code is required (or set DINGTALK_DING_ROBOT_CODE env var)"
+  }
+}
+E     stderr: 
+

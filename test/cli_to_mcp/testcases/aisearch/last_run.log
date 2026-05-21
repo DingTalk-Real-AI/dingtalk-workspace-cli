@@ -1,0 +1,13 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.3, pytest-9.0.3, pluggy-1.6.0 -- /opt/homebrew/opt/python@3.13/bin/python3.13
+cachedir: .pytest_cache
+rootdir: /Users/zhengyubai/Desktop/codehub/dws-wukong/auto-test/cli_to_mcp/testcases
+collecting ... collected 3 items
+
+aisearch/test_01_search.py::TestAisearchSearch::test_search_basic SKIPPED [ 33%]
+aisearch/test_01_search.py::TestAisearchSearch::test_search_user_query SKIPPED [ 66%]
+aisearch/test_01_search.py::TestAisearchSearch::test_search_no_match SKIPPED [100%]
+
+=========================== short test summary info ============================
+SKIPPED [3] aisearch/test_01_search.py: aisearch service removed from dws CLI
+============================== 3 skipped in 0.00s ==============================

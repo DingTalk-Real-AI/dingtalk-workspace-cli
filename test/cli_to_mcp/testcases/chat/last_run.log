@@ -1,0 +1,841 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.5, pytest-9.0.3, pluggy-1.6.0 -- /Users/zouyihua/im_codes/dws-wukong/auto-test/cli_to_mcp/.venv/bin/python3
+cachedir: .pytest_cache
+rootdir: /Users/zouyihua/im_codes/dws-wukong/auto-test/cli_to_mcp/testcases
+collecting ... collected 78 items
+
+chat/test_01_group.py::TestGroupCreate::test_create_basic FAILED         [  1%]
+chat/test_01_group.py::TestGroupCreate::test_create_chinese_name FAILED  [  2%]
+chat/test_01_group.py::TestGroupCreate::test_create_missing_users PASSED [  3%]
+chat/test_01_group.py::TestGroupTransferOwner::test_transfer_basic SKIPPED [  5%]
+chat/test_01_group.py::TestGroupTransferOwner::test_transfer_missing_group SKIPPED [  6%]
+chat/test_01_group.py::TestGroupTransferOwner::test_transfer_invalid_group SKIPPED [  7%]
+chat/test_01_group.py::TestGroupInviteUrl::test_get_invite_url_basic SKIPPED [  8%]
+chat/test_01_group.py::TestGroupInviteUrl::test_get_invite_url_missing_group PASSED [ 10%]
+chat/test_01_group.py::TestGroupInviteUrl::test_get_invite_url_invalid_group PASSED [ 11%]
+chat/test_02_message.py::TestChatMessageSendByBot::test_send_to_group SKIPPED [ 12%]
+chat/test_02_message.py::TestChatMessageSendByBot::test_send_to_users FAILED [ 14%]
+chat/test_02_message.py::TestChatMessageSendByBot::test_send_invalid_robot SKIPPED [ 15%]
+chat/test_02_message.py::TestChatMessageSendByBot::test_send_missing_group_and_users PASSED [ 16%]
+chat/test_02_message.py::TestChatMessageSendByBot::test_send_both_group_and_users SKIPPED [ 17%]
+chat/test_02_message.py::TestChatMessageSendByWebhook::test_send_basic FAILED [ 19%]
+chat/test_02_message.py::TestChatMessageSendByWebhook::test_send_with_at_all FAILED [ 20%]
+chat/test_02_message.py::TestChatMessageSendByWebhook::test_send_invalid_token PASSED [ 21%]
+chat/test_03_recall.py::TestChatMessageRecallByBot::test_recall_group_message SKIPPED [ 23%]
+chat/test_03_recall.py::TestChatMessageRecallByBot::test_recall_single_chat_message FAILED [ 24%]
+chat/test_03_recall.py::TestChatMessageRecallByBot::test_recall_invalid_key SKIPPED [ 25%]
+chat/test_03_recall.py::TestChatMessageRecallByBot::test_recall_invalid_robot SKIPPED [ 26%]
+chat/test_03_recall.py::TestChatMessageRecallByBot::test_recall_missing_keys SKIPPED [ 28%]
+chat/test_03_recall.py::TestChatMessageRecall::test_recall_basic SKIPPED [ 29%]
+chat/test_03_recall.py::TestChatMessageRecall::test_recall_alias_group SKIPPED [ 30%]
+chat/test_03_recall.py::TestChatMessageRecall::test_recall_missing_conversation_id SKIPPED [ 32%]
+chat/test_03_recall.py::TestChatMessageRecall::test_recall_missing_msg_id SKIPPED [ 33%]
+chat/test_03_recall.py::TestChatMessageRecall::test_recall_invalid_msg_id SKIPPED [ 34%]
+chat/test_04_bot.py::TestChatBotSearch::test_search_default PASSED       [ 35%]
+chat/test_04_bot.py::TestChatBotSearch::test_search_with_page PASSED     [ 37%]
+chat/test_04_bot.py::TestChatBotSearch::test_search_with_size PASSED     [ 38%]
+chat/test_04_bot.py::TestChatBotSearch::test_search_with_name PASSED     [ 39%]
+chat/test_05_text_emotion.py::TestCreateTextEmotion::test_create_basic SKIPPED [ 41%]
+chat/test_05_text_emotion.py::TestCreateTextEmotion::test_create_with_background_id SKIPPED [ 42%]
+chat/test_05_text_emotion.py::TestCreateTextEmotion::test_create_missing_emotion_name PASSED [ 43%]
+chat/test_05_text_emotion.py::TestCreateTextEmotion::test_create_missing_text PASSED [ 44%]
+chat/test_05_text_emotion.py::TestAddTextEmotion::test_add_basic SKIPPED [ 46%]
+chat/test_05_text_emotion.py::TestAddTextEmotion::test_add_with_group_alias SKIPPED [ 47%]
+chat/test_05_text_emotion.py::TestAddTextEmotion::test_add_missing_conversation_id SKIPPED [ 48%]
+chat/test_05_text_emotion.py::TestRemoveTextEmotion::test_remove_basic SKIPPED [ 50%]
+chat/test_05_text_emotion.py::TestRemoveTextEmotion::test_remove_missing_msg_id SKIPPED [ 51%]
+chat/test_05_text_emotion.py::TestRemoveTextEmotion::test_remove_invalid_msg_id SKIPPED [ 52%]
+chat/test_06_unread.py::TestChatMessageListUnreadConversations::test_list_unread_conversations PASSED [ 53%]
+chat/test_06_unread.py::TestChatMessageListUnreadConversations::test_list_unread_conversations_with_count PASSED [ 55%]
+chat/test_06_unread.py::TestChatMessageListUnreadConversations::test_list_unread_conversations_invalid_count PASSED [ 56%]
+chat/test_07_mute.py::TestChatMute::test_mute_enable SKIPPED (TEST_O...) [ 57%]
+chat/test_07_mute.py::TestChatMute::test_mute_disable SKIPPED (TEST_...) [ 58%]
+chat/test_07_mute.py::TestChatMute::test_mute_with_id_alias SKIPPED      [ 60%]
+chat/test_07_mute.py::TestChatMute::test_mute_missing_conversation_id PASSED [ 61%]
+chat/test_07_mute.py::TestChatMute::test_mute_invalid_conversation_id PASSED [ 62%]
+chat/test_08_search_advanced.py::TestChatMessageSearchAdvanced::test_search_with_keyword SKIPPED [ 64%]
+chat/test_08_search_advanced.py::TestChatMessageSearchAdvanced::test_search_no_params SKIPPED [ 65%]
+chat/test_08_search_advanced.py::TestChatMessageSearchAdvanced::test_search_pagination SKIPPED [ 66%]
+chat/test_08_search_advanced.py::TestChatMessageSearchAdvanced::test_search_with_cursor SKIPPED [ 67%]
+chat/test_08_search_advanced.py::TestChatMessageSearchAdvanced::test_search_by_conversation_id SKIPPED [ 69%]
+chat/test_08_search_advanced.py::TestChatMessageSearchAdvanced::test_search_at_me SKIPPED [ 70%]
+chat/test_08_search_advanced.py::TestChatMessageSearchAdvanced::test_search_with_time_range SKIPPED [ 71%]
+chat/test_08_search_advanced.py::TestChatMessageSearchAdvanced::test_search_limit_zero PASSED [ 73%]
+chat/test_09_query_send_status.py::TestChatMessageQuerySendStatus::test_missing_open_task_id PASSED [ 74%]
+chat/test_09_query_send_status.py::TestChatMessageQuerySendStatus::test_invalid_open_task_id PASSED [ 75%]
+chat/test_09_query_send_status.py::TestChatMessageQuerySendStatus::test_empty_open_task_id PASSED [ 76%]
+chat/test_10_list_by_ids.py::TestChatMessageListByIds::test_single_msg_id SKIPPED [ 78%]
+chat/test_10_list_by_ids.py::TestChatMessageListByIds::test_single_msg_id_fields SKIPPED [ 79%]
+chat/test_10_list_by_ids.py::TestChatMessageListByIds::test_multiple_msg_ids SKIPPED [ 80%]
+chat/test_10_list_by_ids.py::TestChatMessageListByIds::test_invalid_msg_id PASSED [ 82%]
+chat/test_10_list_by_ids.py::TestChatMessageListByIds::test_missing_msg_ids PASSED [ 83%]
+chat/test_11_emoji.py::TestChatMessageAddEmoji::test_add_emoji_basic SKIPPED [ 84%]
+chat/test_11_emoji.py::TestChatMessageAddEmoji::test_add_emoji_alias_group SKIPPED [ 85%]
+chat/test_11_emoji.py::TestChatMessageAddEmoji::test_add_emoji_alias_id SKIPPED [ 87%]
+chat/test_11_emoji.py::TestChatMessageAddEmoji::test_add_emoji_missing_conversation_id SKIPPED [ 88%]
+chat/test_11_emoji.py::TestChatMessageAddEmoji::test_add_emoji_missing_msg_id SKIPPED [ 89%]
+chat/test_11_emoji.py::TestChatMessageAddEmoji::test_add_emoji_missing_emoji SKIPPED [ 91%]
+chat/test_11_emoji.py::TestChatMessageRemoveEmoji::test_remove_emoji_basic SKIPPED [ 92%]
+chat/test_11_emoji.py::TestChatMessageRemoveEmoji::test_remove_emoji_alias_chat SKIPPED [ 93%]
+chat/test_11_emoji.py::TestChatMessageRemoveEmoji::test_remove_emoji_idempotent SKIPPED [ 94%]
+chat/test_11_emoji.py::TestChatMessageRemoveEmoji::test_remove_emoji_missing_conversation_id SKIPPED [ 96%]
+chat/test_11_emoji.py::TestChatMessageRemoveEmoji::test_remove_emoji_missing_msg_id SKIPPED [ 97%]
+chat/test_11_emoji.py::TestChatMessageRemoveEmoji::test_remove_emoji_missing_emoji SKIPPED [ 98%]
+chat/test_90_chat_param_regression.py::TestChatSearchParamRegression::test_search_missing_query PASSED [100%]
+
+=================================== FAILURES ===================================
+______________________ TestGroupCreate.test_create_basic _______________________
+conftest.py:53: in run
+    data = json.loads(result.stdout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.5/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/__init__.py:346: in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.5/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:345: in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.5/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:363: in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+E   json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+During handling of the above exception, another exception occurred:
+chat/test_01_group.py:22: in test_create_basic
+    data = dws.run(
+conftest.py:60: in run
+    pytest.fail(
+E   Failed: dws returned non-JSON:
+E     cmd:    /Users/zouyihua/.real/.bin/dws/bin/dws chat group create --name CLI_Test_Group_1777442018_2f9626 --users 318617 -f json
+E     stdout: 
+E     stderr: {
+E     "code": "PAT_MEDIUM_RISK_NO_PERMISSION",
+E     "data": {
+E       "authRequestId": null,
+E       "clientId": null,
+E       "clientSecret": null,
+E       "desc": null,
+E       "flowId": null,
+E       "grantOptions": [
+E         "session",
+E         "permanent"
+E       ],
+E       "requiredScopes": [
+E         {
+E           "displayName": "创建群聊",
+E           "productCode": "chat",
+E           "productName": "会话与群聊",
+E           "resourceType": null,
+E           "scope": "chat.group:create"
+E         }
+E       ],
+E       "unifiedAppId": null,
+E       "uri": null
+E     },
+E     "success"
+---------------------------- Captured stdout setup -----------------------------
+DWS_CMD: /Users/zouyihua/.real/.bin/dws/bin/dws contact user get-self -f json
+----------------------------- Captured stdout call -----------------------------
+DWS_CMD: /Users/zouyihua/.real/.bin/dws/bin/dws chat group create --name CLI_Test_Group_1777442018_2f9626 --users 318617 -f json
+___________________ TestGroupCreate.test_create_chinese_name ___________________
+conftest.py:53: in run
+    data = json.loads(result.stdout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.5/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/__init__.py:346: in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.5/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:345: in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.5/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:363: in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+E   json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+During handling of the above exception, another exception occurred:
+chat/test_01_group.py:35: in test_create_chinese_name
+    data = dws.run(
+conftest.py:60: in run
+    pytest.fail(
+E   Failed: dws returned non-JSON:
+E     cmd:    /Users/zouyihua/.real/.bin/dws/bin/dws chat group create --name 测试群_1777442020_1684b8 --users 318617 -f json
+E     stdout: 
+E     stderr: {
+E     "code": "PAT_MEDIUM_RISK_NO_PERMISSION",
+E     "data": {
+E       "authRequestId": null,
+E       "clientId": null,
+E       "clientSecret": null,
+E       "desc": null,
+E       "flowId": null,
+E       "grantOptions": [
+E         "session",
+E         "permanent"
+E       ],
+E       "requiredScopes": [
+E         {
+E           "displayName": "创建群聊",
+E           "productCode": "chat",
+E           "productName": "会话与群聊",
+E           "resourceType": null,
+E           "scope": "chat.group:create"
+E         }
+E       ],
+E       "unifiedAppId": null,
+E       "uri": null
+E     },
+E     "success"
+----------------------------- Captured stdout call -----------------------------
+DWS_CMD: /Users/zouyihua/.real/.bin/dws/bin/dws chat group create --name '测试群_1777442020_1684b8' --users 318617 -f json
+_________________ TestChatMessageSendByBot.test_send_to_users __________________
+conftest.py:53: in run
+    data = json.loads(result.stdout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.5/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/__init__.py:346: in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.5/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:345: in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.5/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:363: in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+E   json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+During handling of the above exception, another exception occurred:
+chat/test_02_message.py:32: in test_send_to_users
+    data = dws.run(
+conftest.py:60: in run
+    pytest.fail(
+E   Failed: dws returned non-JSON:
+E     cmd:    /Users/zouyihua/.real/.bin/dws/bin/dws chat message send-by-bot --robot-code dingdiwdtolfjiih8lfw --users 318617 --title 机器人单聊 --text 单聊消息 1777442023 -f json
+E     stdout: 
+E     stderr: {
+E     "code": "PAT_MEDIUM_RISK_NO_PERMISSION",
+E     "data": {
+E       "authRequestId": null,
+E       "clientId": null,
+E       "clientSecret": null,
+E       "desc": null,
+E       "flowId": null,
+E       "grantOptions": [
+E         "session",
+E         "permanent"
+E       ],
+E       "requiredScopes": [
+E         {
+E           "displayName": "机器人发消息",
+E           "productCode": "chat",
+E           "productName": "会话与群聊",
+E           "resourceType": null,
+E           "scope": "chat.message:send-by-bot"
+E         }
+E       ],
+E       "unifiedAppId": null,
+E       "uri": null
+E     },
+----------------------------- Captured stdout call -----------------------------
+DWS_CMD: /Users/zouyihua/.real/.bin/dws/bin/dws chat message send-by-bot --robot-code dingdiwdtolfjiih8lfw --users 318617 --title '机器人单聊' --text '单聊消息 1777442023' -f json
+_________________ TestChatMessageSendByWebhook.test_send_basic _________________
+conftest.py:53: in run
+    data = json.loads(result.stdout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.5/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/__init__.py:346: in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.5/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:345: in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.5/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:363: in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+E   json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+During handling of the above exception, another exception occurred:
+chat/test_02_message.py:92: in test_send_basic
+    data = dws.run(
+conftest.py:60: in run
+    pytest.fail(
+E   Failed: dws returned non-JSON:
+E     cmd:    /Users/zouyihua/.real/.bin/dws/bin/dws chat message send-by-webhook --token 8710dbbfa8b8b63a02ddfe41ae428b838d2f5e998e0ec446196981d97e7d5350 --title Webhook测试_1777442024 --text 这是 Webhook 发送的消息 -f json
+E     stdout: 
+E     stderr: {
+E     "code": "PAT_MEDIUM_RISK_NO_PERMISSION",
+E     "data": {
+E       "authRequestId": null,
+E       "clientId": null,
+E       "clientSecret": null,
+E       "desc": null,
+E       "flowId": null,
+E       "grantOptions": [
+E         "session",
+E         "permanent"
+E       ],
+E       "requiredScopes": [
+E         {
+E           "displayName": "Webhook发群消息",
+E           "productCode": "chat",
+E           "productName": "会话与群聊",
+E           "resourceType": null,
+E           "scope": "chat.message:send-by-webhook"
+E         }
+E       ],
+E       "unifiedAppId": null,
+E       "uri": nul
+----------------------------- Captured stdout call -----------------------------
+DWS_CMD: /Users/zouyihua/.real/.bin/dws/bin/dws chat message send-by-webhook --token 8710dbbfa8b8b63a02ddfe41ae428b838d2f5e998e0ec446196981d97e7d5350 --title 'Webhook测试_1777442024' --text '这是 Webhook 发送的消息' -f json
+______________ TestChatMessageSendByWebhook.test_send_with_at_all ______________
+conftest.py:53: in run
+    data = json.loads(result.stdout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.5/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/__init__.py:346: in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.5/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:345: in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.5/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:363: in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+E   json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+During handling of the above exception, another exception occurred:
+chat/test_02_message.py:104: in test_send_with_at_all
+    data = dws.run(
+conftest.py:60: in run
+    pytest.fail(
+E   Failed: dws returned non-JSON:
+E     cmd:    /Users/zouyihua/.real/.bin/dws/bin/dws chat message send-by-webhook --token 8710dbbfa8b8b63a02ddfe41ae428b838d2f5e998e0ec446196981d97e7d5350 --title Webhook AT测试 --text @所有人 这是 @ 所有人 的消息 --at-all -f json
+E     stdout: 
+E     stderr: {
+E     "code": "PAT_MEDIUM_RISK_NO_PERMISSION",
+E     "data": {
+E       "authRequestId": null,
+E       "clientId": null,
+E       "clientSecret": null,
+E       "desc": null,
+E       "flowId": null,
+E       "grantOptions": [
+E         "session",
+E         "permanent"
+E       ],
+E       "requiredScopes": [
+E         {
+E           "displayName": "Webhook发群消息",
+E           "productCode": "chat",
+E           "productName": "会话与群聊",
+E           "resourceType": null,
+E           "scope": "chat.message:send-by-webhook"
+E         }
+E       ],
+E       "unifiedAppId": null,
+E       "uri": nul
+----------------------------- Captured stdout call -----------------------------
+DWS_CMD: /Users/zouyihua/.real/.bin/dws/bin/dws chat message send-by-webhook --token 8710dbbfa8b8b63a02ddfe41ae428b838d2f5e998e0ec446196981d97e7d5350 --title 'Webhook AT测试' --text '@所有人 这是 @ 所有人 的消息' --at-all -f json
+__________ TestChatMessageRecallByBot.test_recall_single_chat_message __________
+conftest.py:53: in run
+    data = json.loads(result.stdout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.5/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/__init__.py:346: in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.5/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:345: in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.5/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:363: in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+E   json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+During handling of the above exception, another exception occurred:
+chat/test_03_recall.py:41: in test_recall_single_chat_message
+    send = dws.run(
+conftest.py:60: in run
+    pytest.fail(
+E   Failed: dws returned non-JSON:
+E     cmd:    /Users/zouyihua/.real/.bin/dws/bin/dws chat message send-by-bot --robot-code dingdiwdtolfjiih8lfw --users 318617 --title 待撤回单聊 --text 单聊撤回测试 1777442026 -f json
+E     stdout: 
+E     stderr: {
+E     "code": "PAT_MEDIUM_RISK_NO_PERMISSION",
+E     "data": {
+E       "authRequestId": null,
+E       "clientId": null,
+E       "clientSecret": null,
+E       "desc": null,
+E       "flowId": null,
+E       "grantOptions": [
+E         "session",
+E         "permanent"
+E       ],
+E       "requiredScopes": [
+E         {
+E           "displayName": "机器人发消息",
+E           "productCode": "chat",
+E           "productName": "会话与群聊",
+E           "resourceType": null,
+E           "scope": "chat.message:send-by-bot"
+E         }
+E       ],
+E       "unifiedAppId": null,
+E       "uri": null
+E     },
+----------------------------- Captured stdout call -----------------------------
+DWS_CMD: /Users/zouyihua/.real/.bin/dws/bin/dws chat message send-by-bot --robot-code dingdiwdtolfjiih8lfw --users 318617 --title '待撤回单聊' --text '单聊撤回测试 1777442026' -f json
+=========================== short test summary info ============================
+SKIPPED [1] chat/test_01_group.py:61: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_01_group.py:89: Cannot resolve openDingTalkId: contact user get returned non-JSON. Set TEST_OPEN_DINGTALK_ID to run transfer-owner tests. stderr={
+  "code": "PAT_MEDIUM_RISK_NO_PERMISSION",
+  "data": {
+    "authRequestId": null,
+    "clientId": null,
+    "clientSecret": null,
+    "desc": null,
+    "flowId": null,
+    "grantOptions": [
+      "s
+SKIPPED [1] chat/test_01_group.py:101: Cannot resolve openDingTalkId: contact user get returned non-JSON. Set TEST_OPEN_DINGTALK_ID to run transfer-owner tests. stderr={
+  "code": "PAT_MEDIUM_RISK_NO_PERMISSION",
+  "data": {
+    "authRequestId": null,
+    "clientId": null,
+    "clientSecret": null,
+    "desc": null,
+    "flowId": null,
+    "grantOptions": [
+      "s
+SKIPPED [1] chat/test_01_group.py:118: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_02_message.py:19: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_02_message.py:41: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_02_message.py:70: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_03_recall.py:17: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_03_recall.py:58: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_03_recall.py:67: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_03_recall.py:81: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_03_recall.py:106: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_03_recall.py:130: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_03_recall.py:141: TEST_MSG_ID not set, skipping text emotion tests
+SKIPPED [1] chat/test_03_recall.py:150: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_03_recall.py:159: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_05_text_emotion.py:21: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_05_text_emotion.py:34: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_05_text_emotion.py:74: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_05_text_emotion.py:87: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_05_text_emotion.py:100: TEST_MSG_ID not set, skipping text emotion tests
+SKIPPED [1] chat/test_05_text_emotion.py:120: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_05_text_emotion.py:133: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_05_text_emotion.py:149: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_07_mute.py:14: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_07_mute.py:22: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_07_mute.py:31: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_08_search_advanced.py:22: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_08_search_advanced.py:34: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_08_search_advanced.py:45: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_08_search_advanced.py:58: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_08_search_advanced.py:70: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_08_search_advanced.py:82: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_08_search_advanced.py:94: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_10_list_by_ids.py:18: TEST_MSG_ID not set, skipping text emotion tests
+SKIPPED [1] chat/test_10_list_by_ids.py:29: TEST_MSG_ID not set, skipping text emotion tests
+SKIPPED [1] chat/test_10_list_by_ids.py:42: TEST_MSG_ID not set, skipping text emotion tests
+SKIPPED [1] chat/test_11_emoji.py:19: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_11_emoji.py:29: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_11_emoji.py:39: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_11_emoji.py:49: TEST_MSG_ID not set, skipping text emotion tests
+SKIPPED [1] chat/test_11_emoji.py:59: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_11_emoji.py:69: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_11_emoji.py:83: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_11_emoji.py:101: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_11_emoji.py:111: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_11_emoji.py:122: TEST_MSG_ID not set, skipping text emotion tests
+SKIPPED [1] chat/test_11_emoji.py:132: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+SKIPPED [1] chat/test_11_emoji.py:142: TEST_OPENCONVERSATION_ID not set, skipping chat group tests
+================== 6 failed, 23 passed, 49 skipped in 21.98s ===================
+
+
+=== CLI 真实报错（run_raw 捕获，兼容 pytest 失败格式） ===
+E   Failed: dws returned non-JSON:
+E     cmd:    dws chat group create --name CLI_Test_NoUser_1777442021_36c424 -f json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "internal",
+    "code": 5,
+    "message": "required flag(s) \"users\" not set"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws contact user get --ids 318617 -f json
+E     stdout: 
+E     stderr: {
+  "code": "PAT_MEDIUM_RISK_NO_PERMISSION",
+  "data": {
+    "authRequestId": null,
+    "clientId": null,
+    "clientSecret": null,
+    "desc": null,
+    "flowId": null,
+    "grantOptions": [
+      "session",
+      "permanent"
+    ],
+    "requiredScopes": [
+      {
+        "displayName": "批量获取用户详情",
+        "productCode": "contact",
+        "productName": "通讯录",
+        "resourceType": null,
+        "scope": "contact.user:get"
+      }
+    ],
+    "unifiedAppId": null,
+    "uri": null
+  },
+  "success": false
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws chat group invite-url -f json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "internal",
+    "code": 5,
+    "message": "required flag(s) \"group\" not set"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws chat group invite-url --group INVALID_CONV_99999 -f json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "[UNCLASSIFIED] openConversationId is required\n  hint: Use --verbose for detailed error logs",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "PARAM_ERROR",
+    "server_key": "im",
+    "trace_id": "212b872a17774420231827181e0f0b"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws chat message send-by-bot --robot-code dingdiwdtolfjiih8lfw --title X --text X -f json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "internal",
+    "code": 5,
+    "message": "--group or --users is required"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws chat message send-by-webhook --token INVALID_TOKEN_99999 --title X --text X -f json
+E     stdout: 
+E     stderr: {
+  "code": "PAT_MEDIUM_RISK_NO_PERMISSION",
+  "data": {
+    "authRequestId": null,
+    "clientId": null,
+    "clientSecret": null,
+    "desc": null,
+    "flowId": null,
+    "grantOptions": [
+      "session",
+      "permanent"
+    ],
+    "requiredScopes": [
+      {
+        "displayName": "Webhook发群消息",
+        "productCode": "chat",
+        "productName": "会话与群聊",
+        "resourceType": null,
+        "scope": "chat.message:send-by-webhook"
+      }
+    ],
+    "unifiedAppId": null,
+    "uri": null
+  },
+  "success": false
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws chat message create-text-emotion --text nice -f json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "internal",
+    "code": 5,
+    "message": "required flag(s) \"emotion-name\" not set"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws chat message create-text-emotion --emotion-name 赞 -f json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "internal",
+    "code": 5,
+    "message": "required flag(s) \"text\" not set"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws chat message list-unread-conversations --count invalid -f json
+E     stdout: 
+E     stderr: Error: invalid argument "invalid" for "--count" flag: strconv.ParseInt: parsing "invalid": invalid syntax
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws chat mute -f json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "internal",
+    "code": 5,
+    "message": "flag --conversation-id is required\n  hint: dws chat mute --conversation-id \u003copenConversationId\u003e"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws chat mute --conversation-id INVALID_CONV_99999 -f json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "[UNCLASSIFIED] openConversationId is required\n  hint: Use --verbose for detailed error logs",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "PARAM_ERROR",
+    "server_key": "im",
+    "trace_id": "212b872a17774420348052054e0f0a"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws chat message search-advanced --keyword 测试 --limit 0 -f json
+E     stdout: {
+  "arguments": [],
+  "errorCode": null,
+  "errorMsg": null,
+  "result": {
+    "conversationMessagesList": [
+      {
+        "messages": [
+          {
+            "content": "{\"textContent\":{\"text\":\"[s]@王清玉(玉澜) 这个cr麻烦看一下哈，相关测试报告已补充\\nhttps://code.alibaba-inc.com/dingtalk-workspace/dws-wukong/codereview/27135454?file=57f4f14c0875907e58a6c37da8a81acc18eea835\u0026spm=21540d8c.72d39c61.0.0.11f4c9ca91PTRa\u0026tab=changes\"},\"contentType\":1}",
+            "createTime": "2026-04-29 13:53:14",
+            "openConversationId": "cidoB1qRQSpiMFCBOIBg95lUA==",
+            "openMessageId": "msgIKudhQN6z8FA2YXK1jucWw==",
+            "sender": "薄云（主用钉）"
+          },
+          {
+            "content": "{\"textContent\":{\"text\":\"[s]@王先锋(昊淼) @王清玉(玉澜) 邮箱新增3个接口需要合入今天的版本，麻烦帮忙cr下，相关测试报告已补充\\nhttps://code.alibaba-inc.com/dingtalk-workspace/dws-wukong/codereview/27152531?file=c9c9adf1fbb964dd666cc1d4067e4983b0cd427d\"},\"contentType\":1}",
+            "createTime": "2026-04-29 13:44:09",
+            "openConversationId": "cidoB1qRQSpiMFCBOIBg95lUA==",
+            "openMessageId": "msgtM4UIRdNIILSsfxIfQa1Gw==",
+            "sender": "李志超不常用"
+          },
+          {
+            "content": "{\"textContent\":{\"text\":\"[s]@王先锋(昊淼) dws命令测试预发环境接口吗.\"},\"contentType\":1}",
+            "createTime": "2026-04-29 10:32:42",
+            "openConversationId": "cidoB1qRQSpiMFCBOIBg95lUA==",
+            "openMessageId": "msgnnMDBfF1QbK1iS2rsw5h7g==",
+            "sender": "语洁"
+          },
+          {
+            "content": "{\"textContent\":{\"text\":\"[s]@戈蔚(戈蔚) 目前可以单独打悟空测试包方式。 还一个指令服务发现方案目前还在灰度中，支持组织灰度，目前针对指令不太复杂的场景，你们是哪个产品，可以单聊对下。\"},\"contentType\":1200}",
+            "createTime": "2026-04-29 10:05:44",
+            "openConversationId": "cidoB1qRQSpiMFCBOIBg95lUA==",
+            "openMessageId": "msgi/ihbm/FzD0Dk5MBtV8zZA==",
+            "sender": "昊淼"
+          },
+          {
+            "content": "{\"textContent\":{\"text\":\"[s]@147867 @563023723 im新增13个接口需要合入今天的版本，麻烦帮忙cr下，测试报告已放文档\\nhttps://code.alibaba-inc.com/dingtalk-workspace/dws-wukong/codereview/27140589\"},\"contentType\":1}",
+            "createTime": "2026-04-29 09:32:31",
+            "openConversationId": "cidoB1qRQSpiMFCBOIBg95lUA==",
+            "openMessageId": "msgeEd7tMBPXyoq5BuCuMIgyw==",
+            "sender": "知欢"
+          },
+          {
+            "content": "{\"textContent\":{\"text\":\"[s]https://code.alibaba-inc.com/dingtalk-workspace/dws-wukong/codereview/27142894?file=9e1b03901836ccbf1053ede8d6f541ef264efcd4\u0026tab=detail @王清玉(玉澜) @王先锋(昊淼) doc/wiki新增添加 、更新、拉取权限列表，测试截图已补充，请帮忙cr，需要集成到今天的包里面\"},\"contentType\":3100}",
+            "createTime": "2026-04-29 09:14:02",
+            "openConversationId": "cidoB1qRQSpiMFCBOIBg95lUA==",
+            "openMessageId": "msgEXlgZsRsLxJNMgkza9imJw==",
+            "sender": "李媛"
+          },
+          {
+            "content": "{\"textContent\":{\"text\":\"[s][图片]\\n这个是刚才测试的\\n[图片]\\n这个是本地deploy的 测试的时候的\"},\"contentType\":3100}",
+            "createTime": "2026-04-28 17:22:43",
+            "openConversationId": "cidoB1qRQSpiMFCBOIBg95lUA==",
+            "openMessageId": "msgoXN10eLM4WJENCYFi7eo+Q==",
+            "sender": "龙衔"
+          }
+        ],
+        "openConversationId": "cidoB1qRQSpiMFCBOIBg95lUA==",
+        "singleChat": false,
+        "title": "DWS内部发布\u0026CR直通车"
+      },
+      {
+        "messages": [
+          {
+            "content": "{\"textContent\":{\"text\":\"[s]你本地运行换一个账号，测试账号全部都能通过吗？[可爱]\"},\"contentType\":1}",
+            "createTime": "2026-04-29 13:48:56",
+            "openConversationId": "cid2CMtRuPnuvILvFoZd4krxEUqqUxdJxG/OxacuIRDXM0=",
+            "openMessageId": "msgirwR9tyaRQWJq1jBGuC5CQ==",
+            "sender": "汀葻"
+          },
+          {
+            "content": "{\"textContent\":{\"text\":\"[s]一天要上线十几个，根本没有时间加这么多测试\"},\"contentType\":1}",
+            "createTime": "2026-04-29 13:36:10",
+            "openConversationId": "cid2CMtRuPnuvILvFoZd4krxEUqqUxdJxG/OxacuIRDXM0=",
+            "openMessageId": "msgY3B4gBCaccCjhCce3PGf5w==",
+            "sender": "知欢"
+          },
+          {
+            "content": "{\"textContent\":{\"text\":\"[s]尽量建立不强依赖于账号的用例，即每一次都是从新建群到拉人，设计人指定当前账号，测试账号名字是是wukong01，还可以使用wukong02、汀葻 都可以用于你的用例集\\n\\nim可能是有特殊的地方，特殊的case你标注一下，我晚点运行下。\"},\"contentType\":1200}",
+            "createTime": "2026-04-29 13:33:08",
+            "openConversationId": "cid2CMtRuPnuvILvFoZd4krxEUqqUxdJxG/OxacuIRDXM0=",
+            "openMessageId": "msgnLR62V/6q/kwRJotg4UI1g==",
+            "sender": "汀葻"
+          },
+          {
+            "content": "{\"textContent\":{\"text\":\"[s]远程ci只建测试账号没有用吧，我们有些和测试群测试消息绑定的\"},\"contentType\":1}",
+            "createTime": "2026-04-29 12:19:23",
+            "openConversationId": "cid2CMtRuPnuvILvFoZd4krxEUqqUxdJxG/OxacuIRDXM0=",
+            "openMessageId": "msgvT/aapXSp546TSQYm1Hr3A==",
+            "sender": "知欢"
+          },
+          {
+            "content": "{\"textContent\":{\"text\":\"[s]https://code.alibaba-inc.com/dingtalk-workspace/dws-wukong/ci/jobs?pipelineId=152514\u0026pipelineRunId=38601016\u0026createType=yaml\\n[Image]\\n\\nim这里在develop上之前都是100%通过的，我们的测试账号运行的结果[Love]\\n 你这个权限问题，可能要具体分析下，是否是你本地运行时的账号问题，比如没有授权PAT\"},\"contentType\":3100}",
+            "createTime": "2026-04-29 12:07:45",
+            "openConversationId": "cid2CMtRuPnuvILvFoZd4krxEUqqUxdJxG/OxacuIRDXM0=",
+            "openMessageId": "msgSyOK7P3rgE7lkOuJXWFvKA==",
+            "sender": "汀葻"
+          },
+          {
+            "content": "{\"textContent\":{\"text\":\"[s]远端Ci我们建了一个测试账号，做了环境维护\"},\"contentType\":1200}",
+            "createTime": "2026-04-29 11:44:57",
+            "openConversationId": "cid2CMtRuPnuvILvFoZd4krxEUqqUxdJxG/OxacuIRDXM0=",
+            "openMessageId": "msg2O//ahFMSIWViELMB5W+gA==",
+            "sender": "汀葻"
+          },
+          {
+            "content": "{\"textContent\":{\"text\":\"[s]而且用自己的账号测试，以后这个测试用例只能我来跑了，其他人跑都会失败？\"},\"contentType\":1}",
+            "createTime": "2026-04-29 11:38:39",
+            "openConversationId": "cid2CMtRuPnuvILvFoZd4krxEUqqUxdJxG/OxacuIRDXM0=",
+            "openMessageId": "msgapJeiMsF7vlcUSW2yxeWlg==",
+            "sender": "知欢"
+          },
+          {
+            "content": "{\"textContent\":{\"text\":\"[s]这个是拿自己的账号去做测试吗？到时候我钉钉里面全部是这些测试群了，严重影响我的正常使用\"},\"contentType\":1}",
+            "createTime": "2026-04-29 11:31:49",
+            "openConversationId": "cid2CMtRuPnuvILvFoZd4krxEUqqUxdJxG/OxacuIRDXM0=",
+            "openMessageId": "msgVQcZM+gIjsJ8nQA5uYqV9g==",
+            "sender": "知欢"
+          },
+          {
+            "content": "{\"textContent\":{\"text\":\"[s]有些测试是不可逆的，比如转让群主\"},\"contentType\":1}",
+            "createTime": "2026-04-29 11:27:13",
+            "openConversationId": "cid2CMtRuPnuvILvFoZd4krxEUqqUxdJxG/OxacuIRDXM0=",
+            "openMessageId": "msgWgvnWZ5mWxtk5+qraVA18g==",
+            "sender": "知欢"
+          },
+          {
+            "content": "{\"textContent\":{\"text\":\"[s]可以看下这里哈，让AI帮忙使用skill生成，并且本地测试或push要达到100%\"},\"contentType\":1200}",
+            "createTime": "2026-04-29 11:11:13",
+            "openConversationId": "cid2CMtRuPnuvILvFoZd4krxEUqqUxdJxG/OxacuIRDXM0=",
+            "openMessageId": "msgRCIb6NiY6ywWY/gY3F5kAg==",
+            "sender": "汀葻"
+          }
+        ],
+        "openConversationId": "cid2CMtRuPnuvILvFoZd4krxEUqqUxdJxG/OxacuIRDXM0=",
+        "singleChat": true,
+        "title": "汀葻"
+      },
+      {
+        "messages": [
+          {
+            "content": "{\"textContent\":{\"text\":\"[s]检测到应用正在发布，已自动开启变更风险守护\\nlippi-doc-admin\\n线上\\n与果\\n2026-04-29 12:55:56\\n152446706\\n部署中\\n•变更概述 ：本次变更修改了 90 个文件，新增 12934 ，删除 68 行代码。\\n•高风险类 ： UnifiedQueryServiceImpl.java ，新增205行，集中实现核心查询逻辑，涉及多模块集成，且无对应单元测试覆盖，变更集中度高，存在潜在功能风险。\\n•风险等级 ：🟡 中 ，变更主要集中于统一查询功能的实现与接口扩展，虽新增为主、测试类有补充，但核心服务层缺乏单测覆盖，且 AccessControlInterceptor 存在删改，需警惕权限控制影响，综合评估为中风险。 \\n\"},\"contentType\":2950}",
+            "createTime": "2026-04-29 12:56:01",
+            "openConversationId": "cid1rP8LUdYX55+pAbn/SAugg==",
+            "open
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws chat message query-send-status -f json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "internal",
+    "code": 5,
+    "message": "required flag(s) \"open-task-id\" not set"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws chat message query-send-status --open-task-id INVALID_TASK_ID_99999 -f json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "[UNCLASSIFIED] openTaskId解密失败\n  hint: Use --verbose for detailed error logs",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "PARAM_ERROR",
+    "server_key": "im",
+    "trace_id": "213d1ca017774420374542694e0a64"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws chat message query-send-status --open-task-id '' -f json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "internal",
+    "code": 5,
+    "message": "missing required flag(s): --open-task-id\n  usage: dws chat message query-send-status [flags]\n  example:\n  dws chat message query-send-status --open-task-id \u003copenTaskId\u003e\n  # openTaskId 由 dws chat message send 返回"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws chat message list-by-ids --msg-ids INVALID_MSG_ID_99999 -f json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "[UNCLASSIFIED] invalid openMsgId: INVALID_MSG_ID_99999\n  hint: Use --verbose for detailed error logs",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "PARAM_ERROR",
+    "server_key": "im",
+    "trace_id": "212b872a17774420385845719e0f6e"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws chat message list-by-ids -f json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "internal",
+    "code": 5,
+    "message": "required flag(s) \"msg-ids\" not set"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws chat search -f json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "internal",
+    "code": 5,
+    "message": "flag --query is required\n  hint: dws chat search --query \"test\""
+  }
+}
+

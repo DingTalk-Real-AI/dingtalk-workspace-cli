@@ -1,0 +1,61 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.3, pytest-9.0.3, pluggy-1.6.0 -- /opt/homebrew/opt/python@3.13/bin/python3.13
+cachedir: .pytest_cache
+rootdir: /Users/shinkai/cli-workspace/dws-wukong/auto-test/cli_to_mcp/testcases
+collecting ... collected 16 items
+
+attendance/test_01_attendance.py::TestAttendanceRecord::test_get_record_today PASSED [  6%]
+attendance/test_01_attendance.py::TestAttendanceRecord::test_get_record_specific_date PASSED [ 12%]
+attendance/test_01_attendance.py::TestAttendanceRecord::test_get_record_recent_date PASSED [ 18%]
+attendance/test_01_attendance.py::TestAttendanceShiftList::test_list_shifts_basic PASSED [ 25%]
+attendance/test_01_attendance.py::TestAttendanceShiftList::test_list_shifts_multiple_users PASSED [ 31%]
+attendance/test_01_attendance.py::TestAttendanceShiftList::test_list_shifts_recent_range PASSED [ 37%]
+attendance/test_01_attendance.py::TestAttendanceSummary::test_summary_basic PASSED [ 43%]
+attendance/test_01_attendance.py::TestAttendanceSummary::test_summary_returns_structured_response PASSED [ 50%]
+attendance/test_01_attendance.py::TestAttendanceClassSearch::test_class_search_no_args PASSED [ 56%]
+attendance/test_01_attendance.py::TestAttendanceClassSearch::test_class_search_filter_type_all PASSED [ 62%]
+attendance/test_01_attendance.py::TestAttendanceClassSearch::test_class_search_filter_type_mine_own PASSED [ 68%]
+attendance/test_01_attendance.py::TestAttendanceClassSearch::test_class_search_with_pagination PASSED [ 75%]
+attendance/test_01_attendance.py::TestAttendanceClassSearch::test_class_search_with_name_filter PASSED [ 81%]
+attendance/test_01_attendance.py::TestAttendanceRules::test_rules_basic PASSED [ 87%]
+attendance/test_01_attendance.py::TestAttendanceRules::test_rules_past_date PASSED [ 93%]
+attendance/test_01_attendance.py::TestAttendanceRules::test_rules_idempotent PASSED [100%]
+
+============================= 16 passed in 14.20s ==============================
+
+
+=== CLI 真实报错（run_raw 捕获，兼容 pytest 失败格式） ===
+E   Failed: dws returned non-JSON:
+E     cmd:    dws attendance summary --user 035665695811868955452 --date 2026-04-13 09:00:00 -f json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "[UNCLASSIFIED] business error: success=false\n  hint: Use --verbose for detailed error logs",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "C0002",
+    "server_key": "attendance",
+    "trace_id": "0b5deb3217768278430331497e08cd"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws attendance summary --user 035665695811868955452 --date 2026-04-01 09:00:00 -f json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "[UNCLASSIFIED] business error: success=false\n  hint: Use --verbose for detailed error logs",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "C0002",
+    "server_key": "attendance",
+    "trace_id": "2127d89817768278435691099e079b"
+  }
+}
+

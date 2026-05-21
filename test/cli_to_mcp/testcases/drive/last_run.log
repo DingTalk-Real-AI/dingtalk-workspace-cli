@@ -1,0 +1,658 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.9.6, pytest-8.4.2, pluggy-1.6.0 -- /Applications/Xcode.app/Contents/Developer/usr/bin/python3
+cachedir: .pytest_cache
+rootdir: /Users/huyz/Documents/data/dingding/dws/dws-wukong/auto-test/cli_to_mcp/testcases
+plugins: anyio-4.12.1, langsmith-0.4.37
+collecting ... collected 33 items
+
+drive/test_04_drive_delete.py::TestDriveDeleteParamErrors::test_delete_requires_file_id PASSED [  3%]
+drive/test_04_drive_delete.py::TestDriveDeleteParamErrors::test_delete_invalid_file_id PASSED [  6%]
+drive/test_04_drive_delete.py::TestDriveDeleteParamErrors::test_delete_wrong_flag_dentry_id PASSED [  9%]
+drive/test_04_drive_delete.py::TestDriveDeleteParamErrors::test_delete_with_numeric_dentry_id_should_fail PASSED [ 12%]
+drive/test_04_drive_delete.py::TestDriveDeleteBasic::test_delete_creates_then_deletes_with_yes PASSED [ 15%]
+drive/test_04_drive_delete.py::TestDriveDeleteBasic::test_delete_with_short_yes_alias PASSED [ 18%]
+drive/test_04_drive_delete.py::TestDriveDeleteIdempotency::test_delete_twice_does_not_panic PASSED [ 21%]
+drive/test_05_drive_info_doc_routing.py::TestDriveInfoParamErrors::test_info_requires_file_id PASSED [ 24%]
+drive/test_05_drive_info_doc_routing.py::TestDriveInfoParamErrors::test_info_invalid_file_id PASSED [ 27%]
+drive/test_05_drive_info_doc_routing.py::TestDriveInfoDocRouting::test_adoc_file_routes_to_doc_info SKIPPED [ 30%]
+drive/test_05_drive_info_doc_routing.py::TestDriveInfoDocRouting::test_adoc_file_returns_real_name SKIPPED [ 33%]
+drive/test_05_drive_info_doc_routing.py::TestDriveInfoDocRouting::test_adoc_file_preserves_drive_fields SKIPPED [ 36%]
+drive/test_05_drive_info_doc_routing.py::TestDriveInfoNoRouting::test_non_doc_file_no_routing PASSED [ 39%]
+drive/test_06_drive_download.py::TestDriveDownloadParamErrors::test_download_requires_file_id PASSED [ 42%]
+drive/test_06_drive_download.py::TestDriveDownloadParamErrors::test_download_requires_output PASSED [ 45%]
+drive/test_06_drive_download.py::TestDriveDownloadParamErrors::test_download_invalid_file_id PASSED [ 48%]
+drive/test_06_drive_download.py::TestDriveDownloadBasic::test_download_to_file_path PASSED [ 51%]
+drive/test_06_drive_download.py::TestDriveDownloadBasic::test_download_to_directory SKIPPED [ 54%]
+drive/test_90_drive_param_regression.py::TestDriveParamRegression::test_upload_info_wrong_size_flag PASSED [ 57%]
+drive/test_90_drive_param_regression.py::TestDriveParamRegression::test_tree_list_wrong_path_flag PASSED [ 60%]
+drive/test_90_drive_param_regression.py::TestDriveParamRegression::test_list_should_not_hit_parsefloat_panic PASSED [ 63%]
+drive/test_90_drive_param_regression.py::TestDriveParamRegression::test_list_spaces_basic PASSED [ 66%]
+drive/test_90_drive_param_regression.py::TestDriveParamRegression::test_list_spaces_with_space_type_myspace PASSED [ 69%]
+drive/test_90_drive_param_regression.py::TestDriveParamRegression::test_list_spaces_with_limit PASSED [ 72%]
+drive/test_90_drive_param_regression.py::TestDriveParamRegression::test_list_spaces_with_max PASSED [ 75%]
+drive/test_90_drive_param_regression.py::TestDriveParamRegression::test_list_spaces_with_next_token PASSED [ 78%]
+drive/test_90_drive_param_regression.py::TestDriveCrossProductAlias::test_info_accepts_node_alias PASSED [ 81%]
+drive/test_90_drive_param_regression.py::TestDriveCrossProductAlias::test_download_accepts_node_alias PASSED [ 84%]
+drive/test_90_drive_param_regression.py::TestDriveCrossProductAlias::test_delete_accepts_node_alias PASSED [ 87%]
+drive/test_90_drive_param_regression.py::TestDriveCrossProductAlias::test_list_accepts_folder_alias PASSED [ 90%]
+drive/test_90_drive_param_regression.py::TestDriveCrossProductAlias::test_upload_accepts_folder_alias PASSED [ 93%]
+drive/test_90_drive_param_regression.py::TestDriveCrossProductAlias::test_mkdir_accepts_folder_alias PASSED [ 96%]
+drive/test_90_drive_param_regression.py::TestDriveCrossProductAlias::test_upload_rejects_name_flag PASSED [100%]
+
+=========================== short test summary info ============================
+SKIPPED [1] drive/test_05_drive_info_doc_routing.py:100: 钉盘中未找到钉钉文档类型文件（adoc/axls/amind/adraw），跳过
+SKIPPED [1] drive/test_05_drive_info_doc_routing.py:127: 钉盘中未找到钉钉文档类型文件，跳过
+SKIPPED [1] drive/test_05_drive_info_doc_routing.py:151: 钉盘中未找到钉钉文档类型文件，跳过
+SKIPPED [1] drive/test_06_drive_download.py:149: 下载失败（可能是环境问题）: {
+  "error": {
+    "category": "internal",
+    "code": 5,
+    "message": "failed to create output file: open /var/folders/g7/6zhr6nwn1clg5vd8dnk5xn540000gn/t/tmp004fltc0: is a directory"
+  }
+}
+======================== 29 passed, 4 skipped in 14.00s ========================
+
+
+=== STDERR ===
+/Users/huyz/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+
+
+=== CLI 真实报错（run_raw 捕获，兼容 pytest 失败格式） ===
+E   Failed: dws returned non-JSON:
+E     cmd:    dws-pre-binary drive delete --yes --format json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "缺少必要参数 nodeId，请提供文档标识符，可以是：1）文档链接 URL，如 https://alidocs.dingtalk.com/i/nodes/{dentryUuid}；2）dentryUuid（32 位字母数字字符串）。",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "invalidRequest.inputArgs.invalid",
+    "server_key": "doc",
+    "trace_id": "213ee25c17793316228277238e08c1"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws-pre-binary drive delete --node INVALID_UUID_99999 --yes --format json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "nodeId 格式不合法，非 URL 格式时 nodeId 须为 dentryUuid：32 位字母数字字符串（如 gpG2NdyVX3Bja20zCAM7eXZmWMwvDqPk）。收到：INVALID_UUID_99999（18 个字符）。",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "invalidRequest.inputArgs.invalid",
+    "server_key": "doc",
+    "trace_id": "0bb7c36217793316231898757e0758"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws-pre-binary drive delete --dentry-id some-uuid --yes --format json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "actions": [
+      "Run 'dws drive delete --help' for valid flags"
+    ],
+    "available_flags": [
+      "client-id",
+      "client-secret",
+      "debug",
+      "dry-run",
+      "fields",
+      "format",
+      "help",
+      "jq",
+      "mock",
+      "node",
+      "timeout",
+      "verbose",
+      "yes"
+    ],
+    "category": "validation",
+    "cause": "unknown flag: --dentry-id",
+    "code": 3,
+    "hint": "Run 'dws drive delete --help' to see available options",
+    "message": "unknown flag: --dentry-id",
+    "reason": "unknown_flag"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws-pre-binary drive delete --node 99999999999999999 --yes --format json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "nodeId 格式不合法，非 URL 格式时 nodeId 须为 dentryUuid：32 位字母数字字符串（如 gpG2NdyVX3Bja20zCAM7eXZmWMwvDqPk）。收到：99999999999999999（17 个字符）。",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "invalidRequest.inputArgs.invalid",
+    "server_key": "doc",
+    "trace_id": "0bab027317793316236155983e092c"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws-pre-binary drive delete --node GZLxjv9VGqg3b0rmC10o42eL86EDybno --yes --format json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "internal server error",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "internalError",
+    "server_key": "doc",
+    "trace_id": "0b5deb3217793316267588661e087f"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws-pre-binary drive info --format json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "缺少必要参数 request。Please provide a valid request object for tool 'get_file_info'.",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "invalidRequest.inputArgs.invalid",
+    "server_key": "drive",
+    "trace_id": "0b5deb3217793316271897631e08ee"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws-pre-binary drive info --node INVALID_UUID_XXXXXX --format json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "指定的文件或文件夹不存在，请确认 fileId 正确且该文件未被删除。fileId：INVALID_UUID_XXXXXX",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "invalidRequest.resource.notFound",
+    "server_key": "drive",
+    "trace_id": "0bb7c36217793316275361283e0757"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws-pre-binary drive download --output /tmp/test.txt --format json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "缺少必要参数 request。Please provide a valid request object for tool 'download_file'.",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "invalidRequest.inputArgs.invalid",
+    "server_key": "drive",
+    "trace_id": "2127d89817793316302024464e0756"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws-pre-binary drive download --node some-uuid --format json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "指定的文件或文件夹不存在，请确认 fileId 正确且该文件未被删除。fileId：some-uuid",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "invalidRequest.resource.notFound",
+    "server_key": "drive",
+    "trace_id": "0bb7c36217793316305444434e07fd"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws-pre-binary drive download --node INVALID_UUID_XXXXXX --output /var/folders/g7/6zhr6nwn1clg5vd8dnk5xn540000gn/T/tmpo3i8rcmk/invalid_test.bin --format json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "指定的文件或文件夹不存在，请确认 fileId 正确且该文件未被删除。fileId：INVALID_UUID_XXXXXX",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "invalidRequest.resource.notFound",
+    "server_key": "drive",
+    "trace_id": "0bb7c36217793316309171458e0757"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws-pre-binary drive download --node mweZ92PV6M5vo9eQiKvwLXmgWxEKBD6p --output /var/folders/g7/6zhr6nwn1clg5vd8dnk5xn540000gn/T/tmp02u8q7gv/download_test.pdf --format json
+E     stdout: 
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws-pre-binary drive download --node mweZ92PV6M5vo9eQiKvwLXmgWxEKBD6p --output /var/folders/g7/6zhr6nwn1clg5vd8dnk5xn540000gn/T/tmp004fltc0 --format json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "internal",
+    "code": 5,
+    "message": "failed to create output file: open /var/folders/g7/6zhr6nwn1clg5vd8dnk5xn540000gn/T/tmp004fltc0: is a directory"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws-pre-binary drive upload-info --file-name demo.txt --size 50000 --format json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "actions": [
+      "Run 'dws drive upload-info --help' for valid flags"
+    ],
+    "available_flags": [
+      "client-id",
+      "client-secret",
+      "debug",
+      "dry-run",
+      "fields",
+      "file-name",
+      "file-size",
+      "format",
+      "help",
+      "jq",
+      "mime-type",
+      "mock",
+      "parent-id",
+      "space-id",
+      "timeout",
+      "verbose",
+      "yes"
+    ],
+    "category": "validation",
+    "cause": "unknown flag: --size",
+    "code": 3,
+    "hint": "Run 'dws drive upload-info --help' to see available options",
+    "message": "unknown flag: --size",
+    "reason": "unknown_flag"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws-pre-binary drive tree list --path / --format json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "actions": [
+      "Run 'dws drive --help' for valid flags"
+    ],
+    "available_flags": [
+      "client-id",
+      "client-secret",
+      "debug",
+      "dry-run",
+      "fields",
+      "format",
+      "help",
+      "jq",
+      "mock",
+      "timeout",
+      "verbose",
+      "yes"
+    ],
+    "category": "validation",
+    "cause": "unknown flag: --path",
+    "code": 3,
+    "hint": "Run 'dws drive --help' to see available options",
+    "message": "unknown flag: --path",
+    "reason": "unknown_flag"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws-pre-binary drive list --format json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "缺少必要参数 request。Please provide a valid request object for tool 'list_files'.",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "invalidRequest.inputArgs.invalid",
+    "server_key": "drive",
+    "trace_id": "2127d89817793316328717015e07bd"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws-pre-binary drive info --node FAKE_DENTRY_UUID --format json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "指定的文件或文件夹不存在，请确认 fileId 正确且该文件未被删除。fileId：FAKE_DENTRY_UUID",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "invalidRequest.resource.notFound",
+    "server_key": "drive",
+    "trace_id": "0bb7c36217793316351217346e079a"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws-pre-binary drive download --node FAKE_DENTRY_UUID --output /tmp/ --format json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "internal",
+    "code": 5,
+    "message": "failed to create output file: open /tmp/: is a directory"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws-pre-binary drive delete --node FAKE_DENTRY_UUID --format json
+E     stdout: 
+E     stderr: ⚠️  This is a destructive operation.
+Confirm? (yes/no): Operation cancelled
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws-pre-binary drive list --folder FAKE_PARENT_UUID --format json
+E     stdout: {
+  "arguments": [],
+  "errorCode": null,
+  "errorMsg": null,
+  "result": {
+    "items": [
+      {
+        "createTime": 1779329335000,
+        "dentryId": "222058324366",
+        "docUrl": "https://alidocs.dingtalk.com/i/nodes/NDoBb60VLQXrnx7bsBx4KkmlJlemrZQ3",
+        "fileId": "NDoBb60VLQXrnx7bsBx4KkmlJlemrZQ3",
+        "modifyTime": 1779329335000,
+        "name": "CLI_DriveDelete_Test_1779329329_b37a9b",
+        "path": "/CLI_DriveDelete_Test_1779329329_b37a9b",
+        "status": "NORMAL",
+        "type": "FOLDER"
+      },
+      {
+        "createTime": 1779329329000,
+        "dentryId": "222060186941",
+        "docUrl": "https://alidocs.dingtalk.com/i/nodes/1zknDm0WRam3BKyPTxgaQdLk8BQEx5rG",
+        "fileId": "1zknDm0WRam3BKyPTxgaQdLk8BQEx5rG",
+        "modifyTime": 1779329329000,
+        "name": "CLI_DriveDelete_Test_1779329323_04c6c7",
+        "path": "/CLI_DriveDelete_Test_1779329323_04c6c7",
+        "status": "NORMAL",
+        "type": "FOLDER"
+      },
+      {
+        "createTime": 1779329324000,
+        "dentryId": "222059942760",
+        "docUrl": "https://alidocs.dingtalk.com/i/nodes/1DKw2zgV2PxR5eBdHPQoeyD48B5r9YAn",
+        "fileId": "1DKw2zgV2PxR5eBdHPQoeyD48B5r9YAn",
+        "modifyTime": 1779329324000,
+        "name": "CLI_DriveDelete_Test_1779329320_9e2c01",
+        "path": "/CLI_DriveDelete_Test_1779329320_9e2c01",
+        "status": "NORMAL",
+        "type": "FOLDER"
+      },
+      {
+        "createTime": 1779327470000,
+        "dentryId": "222049535365",
+        "docUrl": "https://alidocs.dingtalk.com/i/nodes/l6Pm2Db8D4v3qnXzt9nzweao8xLq0Ee4",
+        "fileId": "l6Pm2Db8D4v3qnXzt9nzweao8xLq0Ee4",
+        "modifyTime": 1779327470000,
+        "name": "CLI_DriveDelete_Test_1779327466_17634a",
+        "path": "/CLI_DriveDelete_Test_1779327466_17634a",
+        "status": "NORMAL",
+        "type": "FOLDER"
+      },
+      {
+        "createTime": 1779327469000,
+        "dentryId": "222049145368",
+        "docUrl": "https://alidocs.dingtalk.com/i/nodes/nYMoO1rWxazDOBY3TzbOgwq0V47Z3je9",
+        "fileId": "nYMoO1rWxazDOBY3TzbOgwq0V47Z3je9",
+        "modifyTime": 1779327469000,
+        "name": "CLI_DriveDelete_Test_1779327465_bf6124",
+        "path": "/CLI_DriveDelete_Test_1779327465_bf6124",
+        "status": "NORMAL",
+        "type": "FOLDER"
+      },
+      {
+        "createTime": 1779327468000,
+        "dentryId": "222050971062",
+        "docUrl": "https://alidocs.dingtalk.com/i/nodes/b9Y4gmKWrPj7kBmnHjMdQaojJGXn6lpz",
+        "fileId": "b9Y4gmKWrPj7kBmnHjMdQaojJGXn6lpz",
+        "modifyTime": 1779327468000,
+        "name": "CLI_DriveDelete_Test_1779327463_39f5a5",
+        "path": "/CLI_DriveDelete_Test_1779327463_39f5a5",
+        "status": "NORMAL",
+        "type": "FOLDER"
+      },
+      {
+        "createTime": 1778826134000,
+        "dentryId": "221401078218",
+        "docUrl": "https://alidocs.dingtalk.com/i/nodes/nYMoO1rWxazDOBY3Tzoox1DeV47Z3je9",
+        "fileId": "nYMoO1rWxazDOBY3Tzoox1DeV47Z3je9",
+        "modifyTime": 1778826134000,
+        "name": "CLI_DriveDelete_Test_1778826133_9b77dc",
+        "path": "/CLI_DriveDelete_Test_1778826133_9b77dc",
+        "status": "NORMAL",
+        "type": "FOLDER"
+      },
+      {
+        "createTime": 1778826133000,
+        "dentryId": "221400962732",
+        "docUrl": "https://alidocs.dingtalk.com/i/nodes/0eMKjyp813yR6LleH4EE2XAlVxAZB1Gv",
+        "fileId": "0eMKjyp813yR6LleH4EE2XAlVxAZB1Gv",
+        "modifyTime": 1778826133000,
+        "name": "CLI_DriveDelete_Test_1778826132_c79e2d",
+        "path": "/CLI_DriveDelete_Test_1778826132_c79e2d",
+        "status": "NORMAL",
+        "type": "FOLDER"
+      },
+      {
+        "createTime": 1778738927000,
+        "dentryId": "221248365844",
+        "docUrl": "https://alidocs.dingtalk.com/i/nodes/7QG4Yx2JpLg7jqZaCgAY54Q3J9dEq3XD",
+        "fileId": "7QG4Yx2JpLg7jqZaCgAY54Q3J9dEq3XD",
+        "modifyTime": 1778738927000,
+        "name": "CLI_DriveDelete_Test_1778738926_f7afdc",
+        "path": "/CLI_DriveDelete_Test_1778738926_f7afdc",
+        "status": "NORMAL",
+        "type": "FOLDER"
+      },
+      {
+        "createTime": 1778738926000,
+        "dentryId": "221250504062",
+        "docUrl": "https://alidocs.dingtalk.com/i/nodes/4lgGw3P8vRpvdB0rhpqGEQOL85daZ90D",
+        "fileId": "4lgGw3P8vRpvdB0rhpqGEQOL85daZ90D",
+        "modifyTime": 1778738926000,
+        "name": "CLI_DriveDelete_Test_1778738925_679c00",
+        "path": "/CLI_DriveDelete_Test_1778738925_679c00",
+        "status": "NORMAL",
+        "type": "FOLDER"
+      },
+      {
+        "createTime": 1778738833000,
+        "dentryId": "221249468520",
+        "docUrl": "https://alidocs.dingtalk.com/i/nodes/R4GpnMqJzGaMnByxua5KQoGQ8Ke0xjE3",
+        "fileId": "R4GpnMqJzGaMnByxua5KQoGQ8Ke0xjE3",
+        "modifyTime": 1778738833000,
+        "name": "CLI_DriveDelete_Test_1778738832_291ce3",
+        "path": "/CLI_DriveDelete_Test_1778738832_291ce3",
+        "status": "NORMAL",
+        "type": "FOLDER"
+      },
+      {
+        "createTime": 1778738448000,
+        "dentryId": "221248845375",
+        "docUrl": "https://alidocs.dingtalk.com/i/nodes/ZQYprEoWonDeM5zZtDlPqGAp81waOeDk",
+        "fileId": "ZQYprEoWonDeM5zZtDlPqGAp81waOeDk",
+        "modifyTime": 1778738448000,
+        "name": "CLI_DriveDelete_Test_1778738447_11fc8c",
+        "path": "/CLI_DriveDelete_Test_1778738447_11fc8c",
+        "status": "NORMAL",
+        "type": "FOLDER"
+      },
+      {
+        "createTime": 1778657065000,
+        "dentryId": "221115087188",
+        "docUrl": "https://alidocs.dingtalk.com/i/nodes/4lgGw3P8vRpvdB0rhpYnbb0v85daZ90D",
+        "fileId": "4lgGw3P8vRpvdB0rhpYnbb0v85daZ90D",
+        "modifyTime": 1778658326000,
+        "name": "评测-drive-20260513",
+        "path": "/评测-drive-20260513",
+        "status": "NORMAL",
+        "type": "FOLDER"
+      },
+      {
+        "createTime": 1778658192000,
+        "dentryId": "221119596529",
+        "docUrl": "https://alidocs.dingtalk.com/i/nodes/mweZ92PV6M5vo9eQiKvwLXmgWxEKBD6p",
+        "extension": "pdf",
+        "fileId": "mweZ92PV6M5vo9eQiKvwLXmgWxEKBD6p",
+        "fileSize": 23,
+        "modifyTime": 1778658192000,
+        "name": "生命周期测试.pdf",
+        "path": "/生命周期测试.pdf",
+        "status": "NORMAL",
+        "type": "FILE"
+      },
+      {
+        "createTime": 1778656154000,
+        "dentryId": "221114556631",
+        "docUrl": "https://alidocs.dingtalk.com/i/nodes/NDoBb60VLQXrnx7bsB7n6a3NJlemrZQ3",
+        "extension": "xlsx",
+        "fileId": "NDoBb60VLQXrnx7bsB7n6a3NJlemrZQ3",
+        "fileSize": 10987,
+        "modifyTime": 1778656154000,
+        "name": "sales_data.xlsx",
+        "path": "/sales_data.xlsx",
+        "status": "NORMAL",
+        "type": "FILE"
+      },
+      {
+        "createTime": 1778655824000,
+        "dentryId": "221110765959",
+        "docUrl": "https://alidocs.dingtalk.com/i/nodes/wva2dxOW4YPK54A1H0bY91OGVbkz3BRL",
+        "extension": "png",
+        "fileId": "wva2dxOW4YPK54A1H0bY91OGVbkz3BRL",
+        "fileSize": 188412,
+        "modifyTime": 1778655824000,
+        "name": "sales_analysis_dashboard.png",
+        "path": "/sales_analysis_dashboard.png",
+        "status": "NORMAL",
+        "type": "FILE"
+      },
+      {
+        "createTime": 1778655388000,
+        "dentryId": "221110899061",
+        "docUrl": "https://alidocs.dingtalk.com/i/nodes/Exel2BLV5zw45vG6CmYpoyRAJgk9rpMq",
+        "fileId": "Exel2BLV5zw45vG6CmYpoyRAJgk9rpMq",
+        "modifyTime": 1778655388000,
+        "name": "CLI_DriveDelete_Test_1778655387_943315",
+        "path": "/CLI_DriveDelete_Test_1778655387_943315",
+        "status": "NORMAL",
+        "type": "FOLDER"
+      },
+      {
+        "createTime": 1778654497000,
+        "dentryId": "221105314403",
+        "docUrl": "https://alidocs.dingtalk.com/i/nodes/7dx2rn0JbYBZwmK4H2KZdAxEVMGjLRb3",
+        "extension": "png",
+        "fileId": "7dx2rn0JbYBZwmK4H2KZdAxEVMGjLRb3",
+        "fileSize": 2835405,
+        "modifyTime": 1778654497000,
+        "name": "dog.png",
+        "path": "/dog.png",
+        "status": "NORMAL"
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws-pre-binary drive upload --file /tmp/nonexist.txt --folder FAKE_PARENT_UUID --format json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "validation",
+    "code": 3,
+    "message": "文件不存在或无法读取: /tmp/nonexist.txt"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws-pre-binary drive mkdir --name test-dir --folder FAKE_PARENT_UUID --format json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "参数 parentId 格式不合法，须为 dentryUuid：32 位字母数字字符串（如 pGBa2Lm8aeGay94YuDllbe2K8gN7R35y）。收到：FAKE_PARENT_UUID（16 个字符）。",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_error_code": "invalidRequest.inputArgs.invalid",
+    "server_key": "drive",
+    "trace_id": "0b5deb3217793316361753713e08f9"
+  }
+}
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws-pre-binary drive upload --file /tmp/nonexist.txt --name report.pdf --format json
+E     stdout: 
+E     stderr: {
+  "error": {
+    "actions": [
+      "Run 'dws drive upload --help' for valid flags"
+    ],
+    "available_flags": [
+      "client-id",
+      "client-secret",
+      "debug",
+      "dry-run",
+      "fields",
+      "file",
+      "file-name",
+      "folder",
+      "format",
+      "help",
+      "jq",
+      "mime-type",
+      "mock",
+      "space-id",
+      "timeout",
+      "verbose",
+      "yes"
+    ],
+    "category": "validation",
+    "cause": "unknown flag: --name",
+    "code": 3,
+    "hint": "Run 'dws drive upload --help' to see available options",
+    "message": "unknown flag: --name",
+    "reason": "unknown_flag"
+  }
+}
+

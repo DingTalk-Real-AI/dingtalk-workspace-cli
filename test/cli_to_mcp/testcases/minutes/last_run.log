@@ -1,0 +1,168 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.3, pytest-9.0.3, pluggy-1.6.0 -- /opt/homebrew/opt/python@3.13/bin/python3.13
+cachedir: .pytest_cache
+rootdir: /Users/zhengyubai/Desktop/codehub/dws-wukong/auto-test/cli_to_mcp/testcases
+collecting ... collected 30 items
+
+minutes/test_01_minutes.py::TestMinutesListMine::test_list_mine PASSED   [  3%]
+minutes/test_01_minutes.py::TestMinutesListMine::test_list_mine_has_valid_structure PASSED [  6%]
+minutes/test_01_minutes.py::TestMinutesListMine::test_list_mine_idempotent PASSED [ 10%]
+minutes/test_01_minutes.py::TestMinutesListShared::test_list_shared PASSED [ 13%]
+minutes/test_01_minutes.py::TestMinutesListShared::test_list_shared_structure PASSED [ 16%]
+minutes/test_01_minutes.py::TestMinutesListShared::test_list_shared_idempotent PASSED [ 20%]
+minutes/test_01_minutes.py::TestMinutesGetInfo::test_get_info SKIPPED    [ 23%]
+minutes/test_01_minutes.py::TestMinutesGetInfo::test_get_info_contains_title SKIPPED [ 26%]
+minutes/test_01_minutes.py::TestMinutesGetInfo::test_get_info_invalid PASSED [ 30%]
+minutes/test_01_minutes.py::TestMinutesGetSummary::test_get_summary SKIPPED [ 33%]
+minutes/test_01_minutes.py::TestMinutesGetSummary::test_get_summary_structure SKIPPED [ 36%]
+minutes/test_01_minutes.py::TestMinutesGetSummary::test_get_summary_invalid PASSED [ 40%]
+minutes/test_02_minutes_detail.py::TestMinutesGetKeywords::test_get_keywords SKIPPED [ 43%]
+minutes/test_02_minutes_detail.py::TestMinutesGetKeywords::test_keywords_structure SKIPPED [ 46%]
+minutes/test_02_minutes_detail.py::TestMinutesGetKeywords::test_keywords_invalid PASSED [ 50%]
+minutes/test_02_minutes_detail.py::TestMinutesGetTranscription::test_get_transcription SKIPPED [ 53%]
+minutes/test_02_minutes_detail.py::TestMinutesGetTranscription::test_transcription_structure SKIPPED [ 56%]
+minutes/test_02_minutes_detail.py::TestMinutesGetTranscription::test_transcription_invalid PASSED [ 60%]
+minutes/test_02_minutes_detail.py::TestMinutesGetTodos::test_get_todos SKIPPED [ 63%]
+minutes/test_02_minutes_detail.py::TestMinutesGetTodos::test_todos_structure SKIPPED [ 66%]
+minutes/test_02_minutes_detail.py::TestMinutesGetTodos::test_todos_invalid PASSED [ 70%]
+minutes/test_02_minutes_detail.py::TestMinutesGetBatch::test_batch_single SKIPPED [ 73%]
+minutes/test_02_minutes_detail.py::TestMinutesGetBatch::test_batch_multiple SKIPPED [ 76%]
+minutes/test_02_minutes_detail.py::TestMinutesGetBatch::test_batch_invalid PASSED [ 80%]
+minutes/test_02_minutes_detail.py::TestMinutesUpdateTitle::test_update_title SKIPPED [ 83%]
+minutes/test_02_minutes_detail.py::TestMinutesUpdateTitle::test_update_chinese_title SKIPPED [ 86%]
+minutes/test_02_minutes_detail.py::TestMinutesUpdateTitle::test_update_title_invalid PASSED [ 90%]
+minutes/test_90_minutes_param_regression.py::TestMinutesParamRegression::test_list_wrong_max_flag PASSED [ 93%]
+minutes/test_90_minutes_param_regression.py::TestMinutesParamRegression::test_get_summary_wrong_task_uuid_flag PASSED [ 96%]
+minutes/test_90_minutes_param_regression.py::TestMinutesParamRegression::test_get_info_wrong_url_flag PASSED [100%]
+
+=========================== short test summary info ============================
+SKIPPED [1] minutes/test_01_minutes.py:93: No minutes available
+SKIPPED [1] minutes/test_01_minutes.py:100: No minutes available
+SKIPPED [1] minutes/test_01_minutes.py:122: No minutes available
+SKIPPED [1] minutes/test_01_minutes.py:129: No minutes available
+SKIPPED [1] minutes/test_02_minutes_detail.py:40: No minutes available
+SKIPPED [1] minutes/test_02_minutes_detail.py:47: No minutes available
+SKIPPED [1] minutes/test_02_minutes_detail.py:69: No minutes available
+SKIPPED [1] minutes/test_02_minutes_detail.py:77: No minutes available
+SKIPPED [1] minutes/test_02_minutes_detail.py:101: No minutes available
+SKIPPED [1] minutes/test_02_minutes_detail.py:108: No minutes available
+SKIPPED [1] minutes/test_02_minutes_detail.py:130: No minutes available
+SKIPPED [1] minutes/test_02_minutes_detail.py:137: No minutes available
+SKIPPED [1] minutes/test_02_minutes_detail.py:157: No minutes available
+SKIPPED [1] minutes/test_02_minutes_detail.py:165: No minutes available
+======================== 16 passed, 14 skipped in 9.33s ========================
+
+
+=== CLI 真实报错（run_raw 捕获，兼容 pytest 失败格式） ===
+E   Failed: dws returned non-JSON:
+E     cmd:    dws minutes get info --id INVALID -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "taskUuid is invalid",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_key": "minutes",
+    "trace_id": "2132f5ca17760728162055440e09f7"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws minutes get summary --id INVALID -f json
+E     stdout: {
+  "error": {
+    "category": "internal",
+    "code": 1,
+    "message": "[MCP_TOOL_ERROR] {\"dingOpenErrcode\":\"300\",\"errorMsg\":\"taskUuid is invalid\",\"result\":{},\"success\":\"false\",\"trace_id\":\"2132f5ca17760728165903122e0a4e\"}"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws minutes get keywords --id INVALID -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "taskUuid is invalid",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_key": "minutes",
+    "trace_id": "213ee25c17760728179466946e0b32"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws minutes get transcription --id INVALID -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "P_ParamsError",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_key": "minutes",
+    "trace_id": "213ee25c17760728183467832e0b54"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws minutes get todos --id INVALID -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "taskUuid is invalid",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_key": "minutes",
+    "trace_id": "0bab027317760728187495485e0780"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws minutes update title --id INVALID --title X -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "taskUuid is invalid",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_key": "minutes",
+    "trace_id": "213ee25c17760728195447072e0b32"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws minutes get summary --task-uuid 7632756964323339 -f json
+E     stdout: 
+E     stderr: Error: unknown flag: --task-uuid
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws minutes get info --url https://example.com -f json
+E     stdout: {
+  "error": {
+    "category": "api",
+    "code": 1,
+    "hint": "The API returned a business-level error. Check required parameters and values.",
+    "message": "taskUuid is invalid",
+    "operation": "tools/call",
+    "reason": "business_error",
+    "server_key": "minutes",
+    "trace_id": "2106d98117760728204814091e0a69"
+  }
+}
+E     stderr: 
+

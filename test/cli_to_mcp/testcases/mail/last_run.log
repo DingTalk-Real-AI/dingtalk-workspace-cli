@@ -1,0 +1,453 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.3, pytest-9.0.3, pluggy-1.6.0 -- /Users/zhengyubai/Desktop/codehub/dws-wukong/.venv/bin/python3
+cachedir: .pytest_cache
+rootdir: /Users/zhengyubai/Desktop/codehub01/dws-wukong/auto-test/cli_to_mcp/testcases
+collecting ... collected 15 items
+
+mail/test_01_mail.py::TestMailboxList::test_list_returns_data PASSED     [  6%]
+mail/test_01_mail.py::TestMailboxList::test_list_idempotent PASSED       [ 13%]
+mail/test_01_mail.py::TestMailboxList::test_list_non_empty PASSED        [ 20%]
+mail/test_01_mail.py::TestMailboxList::test_list_consistent_with_get_self FAILED [ 26%]
+mail/test_01_mail.py::TestMailMessageSearch::test_search_inbox PASSED    [ 33%]
+mail/test_01_mail.py::TestMailMessageSearch::test_search_by_subject PASSED [ 40%]
+mail/test_01_mail.py::TestMailMessageSearch::test_search_with_date PASSED [ 46%]
+mail/test_01_mail.py::TestMailMessageGet::test_get_first_email SKIPPED   [ 53%]
+mail/test_01_mail.py::TestMailMessageGet::test_get_invalid_id PASSED     [ 60%]
+mail/test_01_mail.py::TestMailMessageGet::test_get_invalid_email PASSED  [ 66%]
+mail/test_01_mail.py::TestMailMessageSend::test_send_to_self PASSED      [ 73%]
+mail/test_01_mail.py::TestMailMessageSend::test_send_with_cc PASSED      [ 80%]
+mail/test_01_mail.py::TestMailMessageSend::test_send_invalid_from PASSED [ 86%]
+mail/test_90_mail_param_regression.py::TestMailParamRegression::test_search_sticky_size_flag FAILED [ 93%]
+mail/test_90_mail_param_regression.py::TestMailParamRegression::test_send_wrong_sender_flag FAILED [100%]
+
+=================================== FAILURES ===================================
+______________ TestMailboxList.test_list_consistent_with_get_self ______________
+../../../../../codehub/dws-wukong/auto-test/cli_to_mcp/testcases/mail/test_01_mail.py:69: in test_list_consistent_with_get_self
+    assert org_email in emails, (
+E   AssertionError: get-self 返回 orgAuthEmail=wukong01@5ndvhfpe.dingmail.work，但 mailbox list emailAccounts 中未包含该邮箱: ['1i2-hgmfj0xkbl@dingtalk.com']
+E   assert 'wukong01@5ndvhfpe.dingmail.work' in ['1i2-hgmfj0xkbl@dingtalk.com']
+----------------------------- Captured stdout call -----------------------------
+DWS_CMD: /usr/local/bin/dws contact user get-self -f json
+DWS_CMD: /usr/local/bin/dws mail mailbox list -f json
+_____________ TestMailParamRegression.test_search_sticky_size_flag _____________
+../../../../../codehub/dws-wukong/auto-test/cli_to_mcp/testcases/mail/test_90_mail_param_regression.py:15: in test_search_sticky_size_flag
+    assert result.returncode != 0 or "error" in (result.stdout + result.stderr).lower()
+E   assert (0 != 0 or 'error' in '{\n  "messages": [\n    {\n      "ccrecipients": [],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "dzzzzzznqzm",\n      "receiveddatetime": "2026-04-22t09:47:00z",\n      "subject": "抄送测试_1776851219",\n      "summary": "抄送测试邮件。",\n      "torecipients": []\n    },\n    {\n      "ccrecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "dzzzzzznqzn",\n      "receiveddatetime": "2026-04-22t09:47:00z",\n      "subject": "抄送测试_1776851219",\n      "summary": "抄送测试邮件。",\n      "torecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    },\n    {\n      "ccrecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "dzzzzzznqzp",\n      "receiveddatetime": "2026-04-22t09:46:58z",\n      "subject": "cli测试邮件_1776851217",\n      "summary": "这是 cli 自动化测试邮件。",\n      "torecipients": [\n        ...ect": "抄送测试_1776844207",\n      "summary": "抄送测试邮件。",\n      "torecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    },\n    {\n      "ccrecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "dzzzzzznqzq",\n      "receiveddatetime": "2026-04-22t07:50:06z",\n      "subject": "cli测试邮件_1776844206",\n      "summary": "这是 cli 自动化测试邮件。",\n      "torecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    },\n    {\n      "ccrecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "dzzzzzznqzr",\n      "receiveddatetime": "2026-04-22t07:50:06z",\n      "subject": "cli测试邮件_1776844206",\n      "summary": "这是 cli 自动化测试邮件。",\n      "torecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    }\n  ],\n  "nextcursor": "$",\n  "success": "true",\n  "total": "16"\n}\n')
+E    +  where 0 = CompletedProcess(args=['/usr/local/bin/dws', 'mail', 'message', 'search', '--email', '1i2-hgmfj0xkbl@dingtalk.com', '--query', 'subject:"测试"', '--size20', '-f', 'json'], returncode=0, stdout='{\n  "messages": [\n    {\n      "ccRecipients": [],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "DzzzzzzNqZM",\n      "receivedDateTime": "2026-04-22T09:47:00Z",\n      "subject": "抄送测试_1776851219",\n      "summary": "抄送测试邮件。",\n      "toRecipients": []\n    },\n    {\n      "ccRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "DzzzzzzNqZN",\n      "receivedDateTime": "2026-04-22T09:47:00Z",\n      "subject": "抄送测试_1776851219",\n      "summary": "抄送测试邮件。",\n      "toRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    },\n    {\n      "ccRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },...1776844207",\n      "summary": "抄送测试邮件。",\n      "toRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    },\n    {\n      "ccRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "DzzzzzzNqZq",\n      "receivedDateTime": "2026-04-22T07:50:06Z",\n      "subject": "CLI测试邮件_1776844206",\n      "summary": "这是 CLI 自动化测试邮件。",\n      "toRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    },\n    {\n      "ccRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "DzzzzzzNqZr",\n      "receivedDateTime": "2026-04-22T07:50:06Z",\n      "subject": "CLI测试邮件_1776844206",\n      "summary": "这是 CLI 自动化测试邮件。",\n      "toRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    }\n  ],\n  "nextCursor": "$",\n  "success": "true",\n  "total": "16"\n}\n', stderr='').returncode
+E    +  and   '{\n  "messages": [\n    {\n      "ccrecipients": [],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "dzzzzzznqzm",\n      "receiveddatetime": "2026-04-22t09:47:00z",\n      "subject": "抄送测试_1776851219",\n      "summary": "抄送测试邮件。",\n      "torecipients": []\n    },\n    {\n      "ccrecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "dzzzzzznqzn",\n      "receiveddatetime": "2026-04-22t09:47:00z",\n      "subject": "抄送测试_1776851219",\n      "summary": "抄送测试邮件。",\n      "torecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    },\n    {\n      "ccrecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "dzzzzzznqzp",\n      "receiveddatetime": "2026-04-22t09:46:58z",\n      "subject": "cli测试邮件_1776851217",\n      "summary": "这是 cli 自动化测试邮件。",\n      "torecipients": [\n        ...ect": "抄送测试_1776844207",\n      "summary": "抄送测试邮件。",\n      "torecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    },\n    {\n      "ccrecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "dzzzzzznqzq",\n      "receiveddatetime": "2026-04-22t07:50:06z",\n      "subject": "cli测试邮件_1776844206",\n      "summary": "这是 cli 自动化测试邮件。",\n      "torecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    },\n    {\n      "ccrecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "dzzzzzznqzr",\n      "receiveddatetime": "2026-04-22t07:50:06z",\n      "subject": "cli测试邮件_1776844206",\n      "summary": "这是 cli 自动化测试邮件。",\n      "torecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    }\n  ],\n  "nextcursor": "$",\n  "success": "true",\n  "total": "16"\n}\n' = <built-in method lower of str object at 0x11e80c800>()
+E    +    where <built-in method lower of str object at 0x11e80c800> = ('{\n  "messages": [\n    {\n      "ccRecipients": [],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "DzzzzzzNqZM",\n      "receivedDateTime": "2026-04-22T09:47:00Z",\n      "subject": "抄送测试_1776851219",\n      "summary": "抄送测试邮件。",\n      "toRecipients": []\n    },\n    {\n      "ccRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "DzzzzzzNqZN",\n      "receivedDateTime": "2026-04-22T09:47:00Z",\n      "subject": "抄送测试_1776851219",\n      "summary": "抄送测试邮件。",\n      "toRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    },\n    {\n      "ccRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "DzzzzzzNqZP",\n      "receivedDateTime": "2026-04-22T09:46:58Z",\n      "subject": "CLI测试邮件_1776851217",\n      "summary": "这是 CLI 自动化测试邮件。",\n      "toRecipients": [\n        ...ect": "抄送测试_1776844207",\n      "summary": "抄送测试邮件。",\n      "toRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    },\n    {\n      "ccRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "DzzzzzzNqZq",\n      "receivedDateTime": "2026-04-22T07:50:06Z",\n      "subject": "CLI测试邮件_1776844206",\n      "summary": "这是 CLI 自动化测试邮件。",\n      "toRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    },\n    {\n      "ccRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "DzzzzzzNqZr",\n      "receivedDateTime": "2026-04-22T07:50:06Z",\n      "subject": "CLI测试邮件_1776844206",\n      "summary": "这是 CLI 自动化测试邮件。",\n      "toRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    }\n  ],\n  "nextCursor": "$",\n  "success": "true",\n  "total": "16"\n}\n' + '').lower
+E    +      where '{\n  "messages": [\n    {\n      "ccRecipients": [],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "DzzzzzzNqZM",\n      "receivedDateTime": "2026-04-22T09:47:00Z",\n      "subject": "抄送测试_1776851219",\n      "summary": "抄送测试邮件。",\n      "toRecipients": []\n    },\n    {\n      "ccRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "DzzzzzzNqZN",\n      "receivedDateTime": "2026-04-22T09:47:00Z",\n      "subject": "抄送测试_1776851219",\n      "summary": "抄送测试邮件。",\n      "toRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    },\n    {\n      "ccRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "DzzzzzzNqZP",\n      "receivedDateTime": "2026-04-22T09:46:58Z",\n      "subject": "CLI测试邮件_1776851217",\n      "summary": "这是 CLI 自动化测试邮件。",\n      "toRecipients": [\n        ...ect": "抄送测试_1776844207",\n      "summary": "抄送测试邮件。",\n      "toRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    },\n    {\n      "ccRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "DzzzzzzNqZq",\n      "receivedDateTime": "2026-04-22T07:50:06Z",\n      "subject": "CLI测试邮件_1776844206",\n      "summary": "这是 CLI 自动化测试邮件。",\n      "toRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    },\n    {\n      "ccRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "DzzzzzzNqZr",\n      "receivedDateTime": "2026-04-22T07:50:06Z",\n      "subject": "CLI测试邮件_1776844206",\n      "summary": "这是 CLI 自动化测试邮件。",\n      "toRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    }\n  ],\n  "nextCursor": "$",\n  "success": "true",\n  "total": "16"\n}\n' = CompletedProcess(args=['/usr/local/bin/dws', 'mail', 'message', 'search', '--email', '1i2-hgmfj0xkbl@dingtalk.com', '--query', 'subject:"测试"', '--size20', '-f', 'json'], returncode=0, stdout='{\n  "messages": [\n    {\n      "ccRecipients": [],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "DzzzzzzNqZM",\n      "receivedDateTime": "2026-04-22T09:47:00Z",\n      "subject": "抄送测试_1776851219",\n      "summary": "抄送测试邮件。",\n      "toRecipients": []\n    },\n    {\n      "ccRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "DzzzzzzNqZN",\n      "receivedDateTime": "2026-04-22T09:47:00Z",\n      "subject": "抄送测试_1776851219",\n      "summary": "抄送测试邮件。",\n      "toRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    },\n    {\n      "ccRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },...1776844207",\n      "summary": "抄送测试邮件。",\n      "toRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    },\n    {\n      "ccRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "DzzzzzzNqZq",\n      "receivedDateTime": "2026-04-22T07:50:06Z",\n      "subject": "CLI测试邮件_1776844206",\n      "summary": "这是 CLI 自动化测试邮件。",\n      "toRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    },\n    {\n      "ccRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "DzzzzzzNqZr",\n      "receivedDateTime": "2026-04-22T07:50:06Z",\n      "subject": "CLI测试邮件_1776844206",\n      "summary": "这是 CLI 自动化测试邮件。",\n      "toRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    }\n  ],\n  "nextCursor": "$",\n  "success": "true",\n  "total": "16"\n}\n', stderr='').stdout
+E    +      and   '' = CompletedProcess(args=['/usr/local/bin/dws', 'mail', 'message', 'search', '--email', '1i2-hgmfj0xkbl@dingtalk.com', '--query', 'subject:"测试"', '--size20', '-f', 'json'], returncode=0, stdout='{\n  "messages": [\n    {\n      "ccRecipients": [],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "DzzzzzzNqZM",\n      "receivedDateTime": "2026-04-22T09:47:00Z",\n      "subject": "抄送测试_1776851219",\n      "summary": "抄送测试邮件。",\n      "toRecipients": []\n    },\n    {\n      "ccRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "DzzzzzzNqZN",\n      "receivedDateTime": "2026-04-22T09:47:00Z",\n      "subject": "抄送测试_1776851219",\n      "summary": "抄送测试邮件。",\n      "toRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    },\n    {\n      "ccRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },...1776844207",\n      "summary": "抄送测试邮件。",\n      "toRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    },\n    {\n      "ccRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "DzzzzzzNqZq",\n      "receivedDateTime": "2026-04-22T07:50:06Z",\n      "subject": "CLI测试邮件_1776844206",\n      "summary": "这是 CLI 自动化测试邮件。",\n      "toRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    },\n    {\n      "ccRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ],\n      "from": {\n        "email": "1i2-hgmfj0xkbl@dingtalk.com",\n        "name": ""\n      },\n      "id": "DzzzzzzNqZr",\n      "receivedDateTime": "2026-04-22T07:50:06Z",\n      "subject": "CLI测试邮件_1776844206",\n      "summary": "这是 CLI 自动化测试邮件。",\n      "toRecipients": [\n        {\n          "email": null,\n          "name": null\n        }\n      ]\n    }\n  ],\n  "nextCursor": "$",\n  "success": "true",\n  "total": "16"\n}\n', stderr='').stderr
+----------------------------- Captured stdout call -----------------------------
+DWS_CMD: /usr/local/bin/dws mail message search --email 1i2-hgmfj0xkbl@dingtalk.com --query 'subject:"测试"' --size20 -f json
+_____________ TestMailParamRegression.test_send_wrong_sender_flag ______________
+../../../../../codehub/dws-wukong/auto-test/cli_to_mcp/testcases/mail/test_90_mail_param_regression.py:26: in test_send_wrong_sender_flag
+    assert result.returncode != 0 or "error" in (result.stdout + result.stderr).lower()
+E   assert (0 != 0 or 'error' in '{\n  "messageid": "dzzzzzznqzl",\n  "success": "true"\n}\n')
+E    +  where 0 = CompletedProcess(args=['/usr/local/bin/dws', 'mail', 'message', 'send', '--sender', '1i2-hgmfj0xkbl@dingtalk.com', '--to', '1i2-hgmfj0xkbl@dingtalk.com', '--subject', 'X', '--body', 'X', '-f', 'json'], returncode=0, stdout='{\n  "messageId": "DzzzzzzNqZL",\n  "success": "true"\n}\n', stderr='').returncode
+E    +  and   '{\n  "messageid": "dzzzzzznqzl",\n  "success": "true"\n}\n' = <built-in method lower of str object at 0x105d5b8d0>()
+E    +    where <built-in method lower of str object at 0x105d5b8d0> = ('{\n  "messageId": "DzzzzzzNqZL",\n  "success": "true"\n}\n' + '').lower
+E    +      where '{\n  "messageId": "DzzzzzzNqZL",\n  "success": "true"\n}\n' = CompletedProcess(args=['/usr/local/bin/dws', 'mail', 'message', 'send', '--sender', '1i2-hgmfj0xkbl@dingtalk.com', '--to', '1i2-hgmfj0xkbl@dingtalk.com', '--subject', 'X', '--body', 'X', '-f', 'json'], returncode=0, stdout='{\n  "messageId": "DzzzzzzNqZL",\n  "success": "true"\n}\n', stderr='').stdout
+E    +      and   '' = CompletedProcess(args=['/usr/local/bin/dws', 'mail', 'message', 'send', '--sender', '1i2-hgmfj0xkbl@dingtalk.com', '--to', '1i2-hgmfj0xkbl@dingtalk.com', '--subject', 'X', '--body', 'X', '-f', 'json'], returncode=0, stdout='{\n  "messageId": "DzzzzzzNqZL",\n  "success": "true"\n}\n', stderr='').stderr
+----------------------------- Captured stdout call -----------------------------
+DWS_CMD: /usr/local/bin/dws mail message send --sender 1i2-hgmfj0xkbl@dingtalk.com --to 1i2-hgmfj0xkbl@dingtalk.com --subject X --body X -f json
+=========================== short test summary info ============================
+SKIPPED [1] ../../../../../codehub/dws-wukong/auto-test/cli_to_mcp/testcases/mail/test_01_mail.py:122: No messages in inbox
+=================== 3 failed, 11 passed, 1 skipped in 12.17s ===================
+
+
+=== CLI 真实报错（run_raw 捕获，兼容 pytest 失败格式） ===
+E   Failed: dws returned non-JSON:
+E     cmd:    dws mail message get --email 1i2-hgmfj0xkbl@dingtalk.com --id INVALID_99999 -f json
+E     stdout: {
+  "error": {
+    "category": "internal",
+    "code": 1,
+    "message": "[MCP_TOOL_ERROR] {\"errorCode\":\"1001\",\"errorMsg\":\"The mail is not exist\",\"message\":{\"ccRecipients\":null,\"toRecipients\":null},\"success\":\"false\",\"trace_id\":\"2104a64c17768512172591734e08a3\"}"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws mail message get --email invalid@nowhere.test --id X -f json
+E     stdout: {
+  "error": {
+    "category": "internal",
+    "code": 1,
+    "message": "[MCP_TOOL_ERROR] {\"errorCode\":\"1001\",\"errorMsg\":\"User has no permission to access this email: invalid@nowhere.test\",\"message\":{\"ccRecipients\":null,\"toRecipients\":null},\"success\":\"false\",\"trace_id\":\"2104a64c17768512179028178e081a\"}\n  hint: 请确认邮箱地址正确，查看可用邮箱: dws mail mailbox list"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws mail message send --from invalid@nowhere.test --to 1i2-hgmfj0xkbl@dingtalk.com --subject X --body X -f json
+E     stdout: {
+  "error": {
+    "category": "internal",
+    "code": 1,
+    "message": "[MCP_TOOL_ERROR] {\"errorCode\":\"1001\",\"errorMsg\":\"User has no permission to access this email: invalid@nowhere.test\",\"success\":\"false\",\"trace_id\":\"2127d89817768512212695452e0757\"}\n  hint: 请确认邮箱地址正确，查看可用邮箱: dws mail mailbox list"
+  }
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws mail message search --email 1i2-hgmfj0xkbl@dingtalk.com --query 'subject:测试' --size20 -f json
+E     stdout: {
+  "messages": [
+    {
+      "ccRecipients": [],
+      "from": {
+        "email": "1i2-hgmfj0xkbl@dingtalk.com",
+        "name": ""
+      },
+      "id": "DzzzzzzNqZM",
+      "receivedDateTime": "2026-04-22T09:47:00Z",
+      "subject": "抄送测试_1776851219",
+      "summary": "抄送测试邮件。",
+      "toRecipients": []
+    },
+    {
+      "ccRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ],
+      "from": {
+        "email": "1i2-hgmfj0xkbl@dingtalk.com",
+        "name": ""
+      },
+      "id": "DzzzzzzNqZN",
+      "receivedDateTime": "2026-04-22T09:47:00Z",
+      "subject": "抄送测试_1776851219",
+      "summary": "抄送测试邮件。",
+      "toRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ]
+    },
+    {
+      "ccRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ],
+      "from": {
+        "email": "1i2-hgmfj0xkbl@dingtalk.com",
+        "name": ""
+      },
+      "id": "DzzzzzzNqZP",
+      "receivedDateTime": "2026-04-22T09:46:58Z",
+      "subject": "CLI测试邮件_1776851217",
+      "summary": "这是 CLI 自动化测试邮件。",
+      "toRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ]
+    },
+    {
+      "ccRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ],
+      "from": {
+        "email": "1i2-hgmfj0xkbl@dingtalk.com",
+        "name": ""
+      },
+      "id": "DzzzzzzNqZQ",
+      "receivedDateTime": "2026-04-22T09:46:58Z",
+      "subject": "CLI测试邮件_1776851217",
+      "summary": "这是 CLI 自动化测试邮件。",
+      "toRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ]
+    },
+    {
+      "ccRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ],
+      "from": {
+        "email": "1i2-hgmfj0xkbl@dingtalk.com",
+        "name": ""
+      },
+      "id": "DzzzzzzNqZV",
+      "receivedDateTime": "2026-04-22T08:17:01Z",
+      "subject": "抄送测试_1776845820",
+      "summary": "抄送测试邮件。",
+      "toRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ]
+    },
+    {
+      "ccRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ],
+      "from": {
+        "email": "1i2-hgmfj0xkbl@dingtalk.com",
+        "name": ""
+      },
+      "id": "DzzzzzzNqZW",
+      "receivedDateTime": "2026-04-22T08:17:01Z",
+      "subject": "抄送测试_1776845820",
+      "summary": "抄送测试邮件。",
+      "toRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ]
+    },
+    {
+      "ccRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ],
+      "from": {
+        "email": "1i2-hgmfj0xkbl@dingtalk.com",
+        "name": ""
+      },
+      "id": "DzzzzzzNqZY",
+      "receivedDateTime": "2026-04-22T08:17:00Z",
+      "subject": "CLI测试邮件_1776845819",
+      "summary": "这是 CLI 自动化测试邮件。",
+      "toRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ]
+    },
+    {
+      "ccRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ],
+      "from": {
+        "email": "1i2-hgmfj0xkbl@dingtalk.com",
+        "name": ""
+      },
+      "id": "DzzzzzzNqZZ",
+      "receivedDateTime": "2026-04-22T08:17:00Z",
+      "subject": "CLI测试邮件_1776845819",
+      "summary": "这是 CLI 自动化测试邮件。",
+      "toRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ]
+    },
+    {
+      "ccRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ],
+      "from": {
+        "email": "1i2-hgmfj0xkbl@dingtalk.com",
+        "name": ""
+      },
+      "id": "DzzzzzzNqZe",
+      "receivedDateTime": "2026-04-22T08:14:37Z",
+      "subject": "抄送测试_1776845677",
+      "summary": "抄送测试邮件。",
+      "toRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ]
+    },
+    {
+      "ccRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ],
+      "from": {
+        "email": "1i2-hgmfj0xkbl@dingtalk.com",
+        "name": ""
+      },
+      "id": "DzzzzzzNqZf",
+      "receivedDateTime": "2026-04-22T08:14:37Z",
+      "subject": "抄送测试_1776845677",
+      "summary": "抄送测试邮件。",
+      "toRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ]
+    },
+    {
+      "ccRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ],
+      "from": {
+        "email": "1i2-hgmfj0xkbl@dingtalk.com",
+        "name": ""
+      },
+      "id": "DzzzzzzNqZh",
+      "receivedDateTime": "2026-04-22T08:14:36Z",
+      "subject": "CLI测试邮件_1776845676",
+      "summary": "这是 CLI 自动化测试邮件。",
+      "toRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ]
+    },
+    {
+      "ccRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ],
+      "from": {
+        "email": "1i2-hgmfj0xkbl@dingtalk.com",
+        "name": ""
+      },
+      "id": "DzzzzzzNqZi",
+      "receivedDateTime": "2026-04-22T08:14:36Z",
+      "subject": "CLI测试邮件_1776845676",
+      "summary": "这是 CLI 自动化测试邮件。",
+      "toRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ]
+    },
+    {
+      "ccRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ],
+      "from": {
+        "email": "1i2-hgmfj0xkbl@dingtalk.com",
+        "name": ""
+      },
+      "id": "DzzzzzzNqZn",
+      "receivedDateTime": "2026-04-22T07:50:08Z",
+      "subject": "抄送测试_1776844207",
+      "summary": "抄送测试邮件。",
+      "toRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ]
+    },
+    {
+      "ccRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ],
+      "from": {
+        "email": "1i2-hgmfj0xkbl@dingtalk.com",
+        "name": ""
+      },
+      "id": "DzzzzzzNqZo",
+      "receivedDateTime": "2026-04-22T07:50:08Z",
+      "subject": "抄送测试_1776844207",
+      "summary": "抄送测试邮件。",
+      "toRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ]
+    },
+    {
+      "ccRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ],
+      "from": {
+        "email": "1i2-hgmfj0xkbl@dingtalk.com",
+        "name": ""
+      },
+      "id": "DzzzzzzNqZq",
+      "receivedDateTime": "2026-04-22T07:50:06Z",
+      "subject": "CLI测试邮件_1776844206",
+      "summary": "这是 CLI 自动化测试邮件。",
+      "toRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ]
+    },
+    {
+      "ccRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ],
+      "from": {
+        "email": "1i2-hgmfj0xkbl@dingtalk.com",
+        "name": ""
+      },
+      "id": "DzzzzzzNqZr",
+      "receivedDateTime": "2026-04-22T07:50:06Z",
+      "subject": "CLI测试邮件_1776844206",
+      "summary": "这是 CLI 自动化测试邮件。",
+      "toRecipients": [
+        {
+          "email": null,
+          "name": null
+        }
+      ]
+    }
+  ],
+  "nextCursor": "$",
+  "success": "true",
+  "total": "16"
+}
+E     stderr: 
+
+E   Failed: dws returned non-JSON:
+E     cmd:    dws mail message send --sender 1i2-hgmfj0xkbl@dingtalk.com --to 1i2-hgmfj0xkbl@dingtalk.com --subject X --body X -f json
+E     stdout: {
+  "messageId": "DzzzzzzNqZL",
+  "success": "true"
+}
+E     stderr: 
+

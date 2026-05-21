@@ -1,0 +1,19 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.3, pytest-9.0.3, pluggy-1.6.0 -- /opt/homebrew/opt/python@3.13/bin/python3.13
+cachedir: .pytest_cache
+rootdir: /Users/zhengyubai/Desktop/codehub/dws-wukong/auto-test/cli_to_mcp/testcases
+collecting ... collected 3 items
+
+report/test_90_report_param_regression.py::TestReportParamRegression::test_sent_sticky_cursor_and_size PASSED [ 33%]
+report/test_90_report_param_regression.py::TestReportParamRegression::test_list_wrong_limit_flag PASSED [ 66%]
+report/test_90_report_param_regression.py::TestReportParamRegression::test_inbox_wrong_date_flag PASSED [100%]
+
+============================== 3 passed in 1.02s ===============================
+
+
+=== CLI 真实报错（run_raw 捕获，兼容 pytest 失败格式） ===
+E   Failed: dws returned non-JSON:
+E     cmd:    dws report inbox --date 2026-03-22 -f json
+E     stdout: 
+E     stderr: Error: unknown flag: --date
+

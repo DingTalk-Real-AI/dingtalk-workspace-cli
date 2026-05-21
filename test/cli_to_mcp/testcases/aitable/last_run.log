@@ -1,0 +1,65 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.3, pytest-9.0.3, pluggy-1.6.0 -- /opt/homebrew/opt/python@3.13/bin/python3.13
+cachedir: .pytest_cache
+rootdir: /Users/zhengyubai/Desktop/codehub/dws-wukong/auto-test/cli_to_mcp/testcases
+collecting ... collected 45 items
+
+aitable/test_01_base.py::TestBaseList::test_list_returns_bases PASSED    [  2%]
+aitable/test_01_base.py::TestBaseList::test_list_with_limit PASSED       [  4%]
+aitable/test_01_base.py::TestBaseList::test_list_pagination PASSED       [  6%]
+aitable/test_01_base.py::TestBaseSearch::test_search_existing_base FAILED [  8%]
+aitable/test_01_base.py::TestBaseSearch::test_search_returns_structure PASSED [ 11%]
+aitable/test_01_base.py::TestBaseSearch::test_search_no_match PASSED     [ 13%]
+aitable/test_01_base.py::TestBaseGet::test_get_returns_structure PASSED  [ 15%]
+aitable/test_01_base.py::TestBaseUpdate::test_update_status_should_be_success PASSED [ 17%]
+aitable/test_01_base.py::TestBaseUpdate::test_update_name_effective PASSED [ 20%]
+aitable/test_01_base.py::TestBaseUpdate::test_update_with_desc PASSED    [ 22%]
+aitable/test_01_base.py::TestBaseCreateDelete::test_create_and_delete_lifecycle PASSED [ 24%]
+aitable/test_01_base.py::TestBaseCreateDelete::test_create_with_template PASSED [ 26%]
+aitable/test_02_table.py::TestTableGet::test_get_all_tables PASSED       [ 28%]
+aitable/test_02_table.py::TestTableGet::test_get_by_specific_ids PASSED  [ 31%]
+aitable/test_02_table.py::TestTableCreate::test_create_with_multiple_field_types PASSED [ 33%]
+aitable/test_02_table.py::TestTableCreate::test_create_minimal_table PASSED [ 35%]
+aitable/test_02_table.py::TestTableUpdate::test_rename_table PASSED      [ 37%]
+aitable/test_02_table.py::TestTableDelete::test_delete_table PASSED      [ 40%]
+aitable/test_03_field.py::TestFieldGet::test_get_all_fields PASSED       [ 42%]
+aitable/test_03_field.py::TestFieldGet::test_get_by_field_ids PASSED     [ 44%]
+aitable/test_03_field.py::TestFieldCreate::test_create_text_field PASSED [ 46%]
+aitable/test_03_field.py::TestFieldCreate::test_create_multiple_types PASSED [ 48%]
+aitable/test_03_field.py::TestFieldCreate::test_create_currency_field PASSED [ 51%]
+aitable/test_03_field.py::TestFieldCreate::test_create_progress_field PASSED [ 53%]
+aitable/test_03_field.py::TestFieldUpdate::test_update_field_name PASSED [ 55%]
+aitable/test_03_field.py::TestFieldDelete::test_delete_field PASSED      [ 57%]
+aitable/test_04_record.py::TestRecordCreate::test_create_single_record PASSED [ 60%]
+aitable/test_04_record.py::TestRecordCreate::test_create_batch_records PASSED [ 62%]
+aitable/test_04_record.py::TestRecordCreate::test_create_minimal_record PASSED [ 64%]
+aitable/test_04_record.py::TestRecordQuery::test_query_all PASSED        [ 66%]
+aitable/test_04_record.py::TestRecordQuery::test_query_by_record_ids PASSED [ 68%]
+aitable/test_04_record.py::TestRecordQuery::test_query_with_keyword PASSED [ 71%]
+aitable/test_04_record.py::TestRecordQuery::test_query_with_limit PASSED [ 73%]
+aitable/test_04_record.py::TestRecordQuery::test_query_with_field_ids PASSED [ 75%]
+aitable/test_04_record.py::TestRecordUpdate::test_update_record PASSED   [ 77%]
+aitable/test_04_record.py::TestRecordDelete::test_delete_records PASSED  [ 80%]
+aitable/test_05_template.py::TestTemplateSearch::test_search_common_keyword PASSED [ 82%]
+aitable/test_05_template.py::TestTemplateSearch::test_search_with_limit PASSED [ 84%]
+aitable/test_05_template.py::TestTemplateSearch::test_search_pagination PASSED [ 86%]
+aitable/test_05_template.py::TestTemplateSearch::test_search_no_result PASSED [ 88%]
+aitable/test_90_aitable_param_regression.py::TestAitableParamRegression::test_base_search_wrong_keyword_flag PASSED [ 91%]
+aitable/test_90_aitable_param_regression.py::TestAitableParamRegression::test_record_query_wrong_query_flag PASSED [ 93%]
+aitable/test_90_aitable_param_regression.py::TestAitableParamRegression::test_base_get_wrong_base_flag PASSED [ 95%]
+aitable/test_90_aitable_param_regression.py::TestAitableParamRegression::test_base_get_wrong_id_flag PASSED [ 97%]
+aitable/test_90_aitable_param_regression.py::TestAitableParamRegression::test_field_create_invalid_fields_json PASSED [100%]
+
+=================================== FAILURES ===================================
+___________________ TestBaseSearch.test_search_existing_base ___________________
+aitable/test_01_base.py:68: in test_search_existing_base
+    assert test_base_id in found_ids, (
+E   AssertionError: Base gpG2NdyVXQox97N9UAzPaz7lJMwvDqPk (CLI_Test_Base_1776072665_ca1248) not found in search results after 10s. This indicates a search indexing consistency issue. Got: []
+E   assert 'gpG2NdyVXQox97N9UAzPaz7lJMwvDqPk' in []
+---------------------------- Captured stdout setup -----------------------------
+DWS_CMD: /usr/local/bin/dws aitable base create --name CLI_Test_Base_1776072665_ca1248 -f json
+
+[SETUP] Created test Base: gpG2NdyVXQox97N9UAzPaz7lJMwvDqPk (CLI_Test_Base_1776072665_ca1248)
+----------------------------- Captured stdout call -----------------------------
+DWS_CMD: /usr/local/bin/dws aitable base search --query CLI_Test_Base_1776072665_ca1248 -f json
+=================== 1 failed, 44 passed in 67.42s (0:01:07) ====================

@@ -1,0 +1,11 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.3, pytest-9.0.3, pluggy-1.6.0 -- /opt/homebrew/opt/python@3.13/bin/python3.13
+cachedir: .pytest_cache
+rootdir: /Users/zhengyubai/Desktop/codehub/dws-wukong/auto-test/cli_to_mcp/testcases
+collecting ... collected 3 items
+
+live/test_01_stream.py::TestLiveStreamList::test_list_returns_data PASSED [ 33%]
+live/test_01_stream.py::TestLiveStreamList::test_list_idempotent PASSED  [ 66%]
+live/test_01_stream.py::TestLiveStreamList::test_list_has_finish_field PASSED [100%]
+
+============================== 3 passed in 1.57s ===============================
