@@ -248,8 +248,9 @@ function Resolve-SkillMode {
     if ($isInteractive) {
         Write-Host ""
         Write-Say "Select skill installation mode:"
-        Write-Say "  1) mono   — install one bundled dws skill (default)"
-        Write-Say "  2) multi  — split each product into its own skill (run 'dws skill setup --mode multi' afterwards)"
+        Write-Say "  1) mono                  — install one bundled dws skill (stable / recommended)"
+        Write-Say "  2) multi 🧪 EXPERIMENTAL — split each product into its own skill (preview; run 'dws skill setup --mode multi' afterwards)"
+        Write-Say "     ⚠ multi is not yet stable — interface, naming and cross-skill references may change"
         $choice = Read-Host "  Choice [1]"
         switch ($choice) {
             ""      { $script:SkillMode = "mono" }
@@ -271,7 +272,11 @@ function Resolve-SkillMode {
 
 function Write-MultiModeNotice {
     Write-Say ""
-    Write-Say "📣 Skill mode: multi — automatic skill install skipped."
+    Write-Say "🧪 Skill mode: multi (EXPERIMENTAL / preview) — automatic skill install skipped."
+    Write-Say "   ⚠ multi is not yet stable. 20 product-scoped skills pass dispatch verifier,"
+    Write-Say "     but interface, naming and cross-skill references may change in future releases."
+    Write-Say "     For production / shared environments, use mono mode (--mode mono)."
+    Write-Say ""
     Write-Say "   To install split skills, run:"
     Write-Say "     $BinName skill setup --mode multi"
     Write-Say "   (One skill per product family; requires the dws binary installed above.)"

@@ -70,8 +70,10 @@ The installer ships skills in one of two layouts. CLI commands (`dws aitable ...
 
 | Mode | What gets installed | Best for |
 |------|----------------------|----------|
-| **mono** (recommended, default) | One `dws` skill covering all products | Cross-product workflows; single entry point |
-| **multi** (experimental) | 29 per-product skills (`dingtalk-aitable`, `dingtalk-calendar`, `dingtalk-chat`, ...) | Single-product tasks; smaller context per call |
+| **mono** (stable, default) | One `dws` skill covering all products | Cross-product workflows; single entry point |
+| **multi** 🧪 **EXPERIMENTAL** | 20 per-product skills (`dingtalk-aitable`, `dingtalk-calendar`, `dingtalk-chat`, ...) | Single-product tasks; smaller context per call |
+
+> 🧪 **`multi` is currently EXPERIMENTAL / preview.** 20 product-scoped skills all pass the dispatch verifier, but interface, naming and cross-skill references may change in future releases. For production / shared environments, prefer `mono`. File issues if you hit problems.
 
 How to pick:
 
@@ -252,7 +254,7 @@ dws aitable record query --base-id BASE_ID --table-id TABLE_ID --limit 10
 The repo ships a complete Agent Skill system under `skills/`, now organized into two layouts:
 
 - `skills/mono/` — single-skill layout (one `SKILL.md` + `references/products/`), recommended default.
-- `skills/multi/` — per-product skills (`dingtalk-aitable/`, `dingtalk-calendar/`, `dingtalk-chat/`, ... 29 products in total), each with its own `SKILL.md`. **Experimental.**
+- `skills/multi/` — per-product skills (`dingtalk-aitable/`, `dingtalk-calendar/`, `dingtalk-chat/`, ... 20 products in total), each with its own `SKILL.md`. 🧪 **EXPERIMENTAL / preview — see banner in each multi `SKILL.md` for caveats.**
 
 After installing, AI tools like Claude Code / Cursor can operate DingTalk directly through natural language:
 

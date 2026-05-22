@@ -70,8 +70,10 @@ irm https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/ma
 
 | 模式 | 安装内容 | 适合场景 |
 |------|----------|----------|
-| **mono**（推荐，默认） | 一个 `dws` skill，覆盖全部产品 | 跨产品组合操作；单一入口召唤 |
-| **multi**（实验中） | 29 个独立产品 skill（`dingtalk-aitable` / `dingtalk-calendar` / `dingtalk-chat` ...） | 单产品任务；每次召唤上下文更小 |
+| **mono**（稳定，默认） | 一个 `dws` skill，覆盖全部产品 | 跨产品组合操作；单一入口召唤 |
+| **multi** 🧪 **试验版 / Preview** | 20 个独立产品 skill（`dingtalk-aitable` / `dingtalk-calendar` / `dingtalk-chat` ...） | 单产品任务；每次召唤上下文更小 |
+
+> 🧪 **multi 模式当前为 EXPERIMENTAL（试验版 / Preview）**。20 个独立 skill 全部通过 dispatch verifier，但接口、命名、跨 skill 引用后续可能调整。生产 / 共享环境建议优先用 `mono`。问题请提 issue 反馈。
 
 怎么选：
 
@@ -252,7 +254,7 @@ dws aitable record query --base-id BASE_ID --table-id TABLE_ID --limit 10
 仓库内置完整的 Agent Skill 体系（`skills/` 目录），目前重组为两套布局：
 
 - `skills/mono/` — 单 skill 布局（一个 `SKILL.md` + `references/products/`），默认推荐。
-- `skills/multi/` — 每个产品一个独立 skill（`dingtalk-aitable/` / `dingtalk-calendar/` / `dingtalk-chat/` ... 共 29 个），每个 skill 自带 `SKILL.md`。**实验中。**
+- `skills/multi/` — 每个产品一个独立 skill（`dingtalk-aitable/` / `dingtalk-calendar/` / `dingtalk-chat/` ... 共 20 个），每个 skill 自带 `SKILL.md`。🧪 **试验版 / Preview — 各 multi `SKILL.md` 头部有详细注意事项。**
 
 安装之后，Claude Code / Cursor 等 AI 工具就能通过自然语言直接操作钉钉：
 

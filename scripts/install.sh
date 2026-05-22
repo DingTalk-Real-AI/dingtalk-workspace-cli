@@ -165,8 +165,9 @@ resolve_skill_mode() {
   if [ -t 0 ] && [ -t 1 ]; then
     printf '\n'
     say "Select skill installation mode:"
-    say "  1) mono   — install one bundled dws skill (default)"
-    say "  2) multi  — split each product into its own skill (run 'dws skill setup --mode multi' afterwards)"
+    say "  1) mono                  — install one bundled dws skill (stable / recommended)"
+    say "  2) multi 🧪 EXPERIMENTAL — split each product into its own skill (preview; run 'dws skill setup --mode multi' afterwards)"
+    say "     ⚠ multi is not yet stable — interface, naming and cross-skill references may change"
     printf '  Choice [1]: '
     read choice || choice=""
     case "$choice" in
@@ -186,7 +187,11 @@ resolve_skill_mode() {
 
 print_multi_mode_notice() {
   say ""
-  say "📣 Skill mode: multi — automatic skill install skipped."
+  say "🧪 Skill mode: multi (EXPERIMENTAL / preview) — automatic skill install skipped."
+  say "   ⚠ multi is not yet stable. 20 product-scoped skills pass dispatch verifier,"
+  say "     but interface, naming and cross-skill references may change in future releases."
+  say "     For production / shared environments, use mono mode (--mode mono)."
+  say ""
   say "   To install split skills, run:"
   say "     ${BIN_NAME} skill setup --mode multi"
   say "   (One skill per product family; requires the dws binary installed above.)"

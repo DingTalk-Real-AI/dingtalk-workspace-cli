@@ -46,8 +46,10 @@ func newSkillSetupCommand() *cobra.Command {
 		Long: `安装 dws 自身 skill 文档到 AI Agent 目录（如 ~/.claude/skills/、~/.cursor/skills/ 等）。
 
 支持两种模式：
-  mono   单 skill（推荐）—— 总入口 SKILL.md + references/products/
-  multi  多 skill（实验中）—— 按产品拆 N 个独立 skill
+  mono                  单 skill（稳定 / 推荐）—— 总入口 SKILL.md + references/products/
+  multi  🧪 EXPERIMENTAL  多 skill（试验版 / Preview）—— 按产品拆 N 个独立 skill
+                         尚未达到 stable 标准，接口、命名与跨 skill 引用可能变动；
+                         生产前请评估，问题请提 issue 反馈
 
 不带 --mode 时进入交互式询问；不带 --target 时铺到所有检测到的 Agent 目录。`,
 		Example: `  dws skill setup                                # 交互式
@@ -109,6 +111,8 @@ func runSkillSetup(cmd *cobra.Command, _ []string) error {
 			fmt.Fprintln(out, "已取消。")
 			return nil
 		}
+	} else if mode == skillSetupModeMulti {
+		fmt.Fprintln(errOut, "🧪 multi 模式当前为 EXPERIMENTAL（试验版 / Preview）—— 接口与布局可能变动，稳定版请用 --mode mono")
 	}
 
 	var installed, skipped int
@@ -172,10 +176,10 @@ func resolveSkillSetupMode(mode string, autoYes bool, out io.Writer) (string, er
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("选择 dws skill 安装模式").
-				Description("mono = 单 skill 入口（推荐）；multi = 按产品拆分（实验中）").
+				Description("mono = 单 skill 入口（稳定 / 推荐）\nmulti = 按产品拆分（🧪 EXPERIMENTAL / 试验版，未达 stable，接口可能变动）").
 				Options(
-					huh.NewOption("mono — 单 skill（推荐）", skillSetupModeMono),
-					huh.NewOption("multi — 多 skill（实验中）", skillSetupModeMulti),
+					huh.NewOption("mono — 单 skill（稳定 / 推荐）", skillSetupModeMono),
+					huh.NewOption("multi — 多 skill（🧪 EXPERIMENTAL · 试验版）", skillSetupModeMulti),
 				).
 				Value(&choice),
 		),
@@ -312,6 +316,15 @@ func detectExistingAgentHomes(home, mode string) []string {
 }
 
 func confirmSkillSetup(out io.Writer, mode, src string, dests []string, multiSkillNames []string) (bool, error) {
+	if mode == skillSetupModeMulti {
+		fmt.Fprintln(out, "\n🧪 ─────────────────────────────────────────────────────────────")
+		fmt.Fprintln(out, "    multi 模式当前为 EXPERIMENTAL（试验版 / Preview）")
+		fmt.Fprintln(out, "    · 20 个 dingtalk-* 子 skill 跑过 verifier，可用但未达 stable")
+		fmt.Fprintln(out, "    · 跨 skill 引用、bundle 命名、目录布局后续可能调整")
+		fmt.Fprintln(out, "    · 不建议在生产 / 共享环境直接落地；问题请提 issue 反馈")
+		fmt.Fprintln(out, "    稳定版请用 --mode mono")
+		fmt.Fprintln(out, "🧪 ─────────────────────────────────────────────────────────────")
+	}
 	fmt.Fprintf(out, "\n📦 将安装 skill：\n  mode: %s\n  source: %s\n", mode, src)
 	if mode == skillSetupModeMulti {
 		fmt.Fprintf(out, "  将装 %d 个独立 skill（按子目录平铺到 <agent-home>/<skill-name>/）：\n", len(multiSkillNames))
