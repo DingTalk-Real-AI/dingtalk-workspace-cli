@@ -7,8 +7,11 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -426,5 +429,82 @@ func TestNewUpgradeCommand_Help(t *testing.T) {
 	}
 	if !strings.Contains(help, "--rollback") {
 		t.Error("help should contain --rollback")
+	}
+}
+
+// --- isLikelyAMFIKill ---
+
+func TestIsLikelyAMFIKill(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil error", nil, false},
+		{"signal killed (real Go format)", errors.New("signal: killed"), true},
+		{"signal kill variant", errors.New("signal: kill"), true},
+		{"unrelated error", errors.New("exit status 1"), false},
+		{"file not found", errors.New("no such file or directory"), false},
+		{"wrapped killed in middle", errors.New("exec: signal: killed: cleanup"), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isLikelyAMFIKill(tt.err); got != tt.want {
+				t.Errorf("isLikelyAMFIKill(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+// --- validateNewBinary self-heal (darwin only) ---
+//
+// On macOS, an unsigned arm64 binary is SIGKILL'd by amfid. This test verifies
+// validateNewBinary recovers via repairDarwinBinary (ad-hoc codesign) and
+// successfully re-executes the binary. We use go itself as a stand-in for the
+// new dws binary — it's a real signed Mach-O we can strip and re-sign.
+
+func TestValidateNewBinary_RecoversFromUnsignedDarwin(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("amfid SIGKILL only happens on macOS")
+	}
+	if _, err := exec.LookPath("codesign"); err != nil {
+		t.Skip("codesign not available")
+	}
+
+	// Build a fresh dws binary into a temp dir.
+	tmpDir := t.TempDir()
+	bin := filepath.Join(tmpDir, "dws-test")
+
+	// Locate repo root from this test file's location.
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Join(wd, "..", "..")
+	cmd := exec.Command("go", "build", "-o", bin, "./cmd")
+	cmd.Dir = repoRoot
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("go build failed: %v\n%s", err, out)
+	}
+
+	// Strip signature to reproduce the unsigned state from CI cross-compilation.
+	if out, err := exec.Command("codesign", "--remove-signature", bin).CombinedOutput(); err != nil {
+		t.Fatalf("strip signature: %v\n%s", err, out)
+	}
+
+	// Sanity: confirm direct exec is killed.
+	if _, err := tryExecVersion(bin); err == nil {
+		t.Skip("unsigned binary executed without amfid kill — likely Intel Mac or SIP disabled")
+	}
+
+	// validateNewBinary should self-heal and succeed.
+	if err := validateNewBinary(bin, "dev"); err != nil {
+		t.Fatalf("validateNewBinary did not recover: %v", err)
+	}
+
+	// Verify the binary now has an ad-hoc signature.
+	out, _ := exec.Command("codesign", "-dv", bin).CombinedOutput()
+	if !strings.Contains(string(out), "Signature=adhoc") {
+		t.Errorf("expected adhoc signature, got: %s", out)
 	}
 }

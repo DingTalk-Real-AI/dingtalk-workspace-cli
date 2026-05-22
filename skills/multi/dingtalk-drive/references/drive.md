@@ -1,6 +1,9 @@
 # 钉盘 (drive) 命令参考
 
-> ✅ **CLI 对齐状态（开源 dws v1.0.30）**：本文档已对齐开源 dws 实际暴露的 6 个子命令：`commit / download / info / list / mkdir / upload-info`。上传文件必须走两步：(1) `drive upload-info` 拿到 upload URL → (2) HTTP PUT 文件 → (3) `drive commit` 注册。单步 `drive upload` 命令在开源 v1.0.30 不存在；钉盘 space 枚举 (`list-spaces`) 也未暴露。
+> ✅ **CLI 对齐状态（开源 dws v1.0.31+）**：本文档对齐开源 dws 实际暴露的 9 个子命令：`commit / delete / download / info / list / list-spaces / mkdir / upload / upload-info`。
+> - 单步上传：`drive upload` 一条命令自动完成三步（推荐）
+> - 手动三步：`drive upload-info` → 客户端 HTTP PUT → `drive commit`（适合自定义流式上传）
+> - `list-spaces` 和 `delete` 由企业服务发现 envelope 注册（list_spaces / delete_document toolOverrides），不同企业 MCP gateway 暴露情况可能不一致，调用前可用 `--help` / `--dry-run` 验证。
 
 
 ## 查询命令帮助
@@ -23,6 +26,20 @@ dws drive download --help
 - 不确定某个功能是否存在时 → `dws drive --help` 查看命令列表
 
 ## 命令总览
+
+### 列出钉盘空间
+
+```
+Usage:
+  dws drive list-spaces [flags]
+Example:
+  dws drive list-spaces --format json
+Flags:
+      (无 flag；返回当前用户可访问的所有钉盘空间，含「我的文件」和团队空间)
+```
+
+> 适用场景：复制/移动文件到「我的文件」或团队空间根目录时取 `rootFolderId`；或者枚举用户可访问的所有 space。
+> 由 envelope toolOverrides (`drive.list_spaces`) 注册，部分企业 MCP gateway 可能未开通。
 
 ### 获取文件/文件夹列表
 
@@ -86,6 +103,45 @@ Flags:
       --space-id string    目标空间 ID，不传则使用「我的文件」 (可选)
 ```
 
+### 一键上传 (三步合成)
+
+```
+Usage:
+  dws drive upload [flags]
+Example:
+  dws drive upload --file ./report.pdf
+  dws drive upload --file ./slides.pptx --file-name "Q1汇报.pptx"
+  dws drive upload --file ./data.xlsx --folder <dentryUuid>
+Flags:
+      --file string        本地文件路径 (必填)
+      --file-name string   文件显示名称 (默认使用本地文件名)
+      --folder string      父节点 ID (dentryUuid)，不传则上传到空间根目录
+      --space-id string    目标空间 ID，不传则使用「我的文件」
+      --mime-type string   文件 MIME 类型，不传则自动推断
+```
+
+> 客户端胶水命令：内部自动完成 `upload-info` → HTTP PUT 到 OSS → `commit_upload` 三步。
+> 优先用 `upload`；只在需要自己控制 HTTP PUT 时才走两步流程。
+> `--folder` 接受 `dentryUuid`（UUID 格式），禁止传纯数字 `dentryId`。
+
+### 删除文件/文件夹到回收站
+
+> **CAUTION:** 不可逆操作 — 执行前必须向用户确认。
+
+```
+Usage:
+  dws drive delete [flags]
+Example:
+  dws drive delete --file-id <dentryUuid> --yes --format json
+Flags:
+      --file-id string    文件或文件夹 ID (必填，UUID 格式 dentryUuid)
+      --space-id string   文件所属空间 ID (可选)
+      --yes               跳过二次确认；自动化脚本里不要默认带上
+```
+
+> 由 envelope toolOverrides 注册（`drive.delete_document` 路由到 doc MCP 服务）；不同企业 MCP gateway 可能不暴露，调用前用 `--help` 验证。
+> 软删除（进回收站），但仍需向用户明确确认；UI 侧从回收站还原即可。
+
 ## 意图判断
 
 用户说"我的文件/钉盘/网盘/云盘" → `list`
@@ -140,9 +196,9 @@ dws drive delete --file-id <dentryUuid> --yes --format json
 
 | 目标位置 | 参数传递方式 | 前置步骤 |
 |---------|-----------|---------|
-| 未指定目标（默认） | `--folder <rootFolderId>` | rootFolderId 需在钉盘 UI 中拿；开源 v1.0.30 暂无 `list-spaces` 命令枚举空间 |
+| 未指定目标（默认） | `--folder <rootFolderId>` | 先 `dws drive list-spaces` 取「我的文件」的 `rootFolderId` |
 | 知识库空间根目录 | `--workspace <workspaceId>` | 无需额外步骤，直接传入 workspaceId |
-| 钉盘 space 根目录 | `--folder <rootFolderId>` | rootFolderId 来自钉盘 UI 或 `dws drive list --space-id <id>` 返回的父目录 |
+| 钉盘 space 根目录 | `--folder <rootFolderId>` | 先 `dws drive list-spaces` 取目标 space 的 `rootFolderId` |
 | 钉盘 space 下的子文件夹 | `--folder <fileId>` | 先 `dws drive list --space-id <spaceId>` 逐层浏览，获取目标文件夹的 `fileId`（dentryUuid 格式） |
 
 ### 工作流示例
@@ -152,7 +208,7 @@ dws drive delete --file-id <dentryUuid> --yes --format json
 # 1. 获取源文件 dentryUuid
 dws drive list --space-id <SPACE_ID> --format json
 # 2. 获取「我的文件」个人空间的 rootFolderId
-# dws drive list-spaces 在开源 v1.0.30 未暴露；用 dws drive list 替代
+dws drive list-spaces --format json
 # 3. 用「我的文件」的 rootFolderId 作为 --folder
 dws doc copy --node <源文件dentryUuid> --folder <我的文件rootFolderId> --format json
 
@@ -201,7 +257,7 @@ dws doc copy --node <源文件dentryUuid> --folder <目标文件夹fileId> --for
 - 不传 `--parent-id` 时默认操作空间根目录
 - `--parent-id` 只能使用父文件夹的 `dentryUuid`。不要把 `drive info` 返回的数字型 `dentryId` 当作父目录；`dentryId` 只用于 `chat message send --dentry-id`
 - `--order-by` 支持: `createTime`、`modifyTime`、`name`
-- **上传文件必须使用 `dws drive upload-info` + `dws drive commit` 两步流程**（开源 v1.0.30 没有 `drive upload` 单步封装）
+- **上传文件首选 `dws drive upload` 单步命令**（v1.0.31 起开源 dws 提供胶水命令）；如需自定义流式上传可走 `upload-info` + `commit` 两步
 - `--file-name` 必须包含扩展名（如 `report.pdf`）
 
 ## 自动化脚本

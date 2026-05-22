@@ -12,7 +12,7 @@
 | `xlsx` / `xls` / `xlsm` / `csv` 等本地表格文件 | 必须用 `dws doc download --node <ID> --output <路径>` 先下载到本地再解析处理，禁止调用任何 `sheet` 子命令（sheet 底层 MCP 工具仅认 `axls`，传入 xlsx 节点会直接报错） |
 | 想把在线表格导出为 xlsx | 开源 v1.0.30 暂不支持 CLI 导出，请在钉钉客户端导出 |
 
-> 用户直接粘贴原始 `alidocs` URL 时必须先 probe：先执行 `dws doc info --node <URL> --format json`，按 `dws-shared/references/url-patterns.md` 的「alidocs URL 类型探测流程」校验 `contentType` 和 `extension`：
+> 用户直接粘贴原始 `alidocs` URL 时必须先 probe：先执行 `dws doc info --node <URL> --format json`，按 [url-patterns.md](./url-patterns.md) 的「alidocs URL 类型探测流程」校验 `contentType` 和 `extension`：
 > - 仅当 `contentType=ALIDOC` 且 `extension=axls` 时，才继续走 `sheet`
 > - 如果是 `xlsx` / `xls` / `xlsm` / `csv`，立即转向 `dws doc download`，并告知用户"这是本地表格文件，已为你下载到本地处理"
 
@@ -29,9 +29,9 @@ dws doc info --node "<URL>" --format json
 根据返回路由：
 - `contentType=ALIDOC` + `extension=axls` → 继续走 `sheet`
 - `contentType≠ALIDOC` + `extension=xlsx` / `xls` / `xlsm` / `csv` → 转向 `dws doc download --node <ID> --output <路径>`，禁止调用任何 sheet 子命令
-- 其他类型 → 按 `dws-shared/references/url-patterns.md` 的「alidocs URL 类型探测流程」路由
+- 其他类型 → 按 [url-patterns.md](./url-patterns.md) 的「alidocs URL 类型探测流程」路由
 
-补充：如果这是用户直接提供的原始 `alidocs` URL，先按 `dws-shared/references/url-patterns.md` 的「alidocs URL 类型探测流程」probe 一次确认真实类型，再判断是否继续走 `sheet`。
+补充：如果这是用户直接提供的原始 `alidocs` URL，先按 [url-patterns.md](./url-patterns.md) 的「alidocs URL 类型探测流程」probe 一次确认真实类型，再判断是否继续走 `sheet`。
 
 ### 支持的 URL 格式
 
@@ -48,7 +48,7 @@ dws doc info --node "<URL>" --format json
    - 路径包含 `/i/nodes/` → 取 URL path 的最后一段作为 NODE_ID（去掉 query string 和 fragment）
    - 路径包含 `/spreadsheetv2/` → **不要提取 path segment**，必须将完整 URL 原样传给 `--node` 参数（因为 path 中的短 ID 不是合法的 nodeId，MCP 服务端会自行解析完整 URL）
 3. 对于 `/i/nodes/` 格式，提取出的 NODE_ID 可直接用于所有 `--node` 参数，也可将完整 URL 传给 `--node`（CLI 会自动解析）
-4. 对用户直接提供的原始 `alidocs` URL，先按 `dws-shared/references/url-patterns.md` 的「alidocs URL 类型探测流程」probe；只有 probe 确认 `contentType=ALIDOC` 且 `extension=axls` 时，才继续留在 `sheet`；如果 `extension=xlsx` / `xls` / `xlsm` / `csv`，必须转向 `dws doc download`，不能走任何 sheet 命令
+4. 对用户直接提供的原始 `alidocs` URL，先按 [url-patterns.md](./url-patterns.md) 的「alidocs URL 类型探测流程」probe；只有 probe 确认 `contentType=ALIDOC` 且 `extension=axls` 时，才继续留在 `sheet`；如果 `extension=xlsx` / `xls` / `xlsm` / `csv`，必须转向 `dws doc download`，不能走任何 sheet 命令
 
 ## 查询命令帮助
 

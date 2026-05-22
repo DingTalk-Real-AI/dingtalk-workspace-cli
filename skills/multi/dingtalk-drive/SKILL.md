@@ -24,12 +24,15 @@ metadata:
 
 | 用户说 | 命令 |
 |--------|------|
+| "看钉盘空间 / 团队文件 / 有哪些 space" | `dws drive list-spaces` |
 | "看钉盘文件 / 文件夹列表" | `dws drive list --space-id <spaceId> [--parent-id <fileId>]` |
 | "钉盘目录树" | `python scripts/drive_tree_list.py --depth 2` |
 | "查文件元数据" | `dws drive info --space-id <spaceId> --file-id <fileId>` |
 | "下载文件" | `dws drive download --space-id <spaceId> --file-id <fileId>` |
-| "上传文件（两步）" | `dws drive upload-info --space-id <spaceId> --file-name <名> --file-size <bytes> [--parent-id <fileId>]` → `dws drive commit --space-id <spaceId> --upload-id <uploadId> --file-name <名> --file-size <bytes> [--parent-id <fileId>]` |
+| "上传本地文件（首选一键）" | `dws drive upload --file ./report.pdf [--folder <fileId>]` |
+| "上传文件（手动三步）" | `dws drive upload-info --space-id <spaceId> --file-name <名> --file-size <bytes> [--parent-id <fileId>]` → 客户端 HTTP PUT → `dws drive commit --space-id <spaceId> --upload-id <uploadId> --file-name <名> --file-size <bytes> [--parent-id <fileId>]` |
 | "建文件夹" | `dws drive mkdir --space-id <spaceId> --name "<名称>" [--parent-id <fileId>]` |
+| "删除文件 / 移到回收站（需确认）" | `dws drive delete --file-id <fileId> --yes` |
 
 ## 评测高频硬约束
 

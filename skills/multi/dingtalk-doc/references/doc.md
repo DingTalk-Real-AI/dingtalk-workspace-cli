@@ -76,6 +76,8 @@ Usage:
 Example:
   dws doc info --node <DOC_ID>
   dws doc info --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>"
+  dws doc info --node "https://alidocs.dingtalk.com/document/edit?dentryKey=<DENTRY_KEY>"
+  dws doc info --node "https://alidocs.dingtalk.com/document/preview?dentryKey=<DENTRY_KEY>"
 Flags:
       --node string   文档 ID 或 URL (必填)
 ```
@@ -87,6 +89,8 @@ Usage:
 Example:
   dws doc read --node <DOC_ID>
   dws doc read --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>"
+  dws doc read --node "https://alidocs.dingtalk.com/document/edit?dentryKey=<DENTRY_KEY>"
+  dws doc read --node "https://alidocs.dingtalk.com/document/preview?dentryKey=<DENTRY_KEY>"
 Flags:
       --node string   文档 ID 或 URL (必填)
 ```
@@ -491,7 +495,7 @@ Flags:
 
 当用户输入包含钉钉文档 URL 时，**必须先识别并提取 DOC_ID**，再判断意图。
 
-补充：如果这是用户直接提供的原始 `alidocs` URL，必须先按 `dws-shared/references/url-patterns.md` 的「alidocs URL 类型探测流程」probe 一次确认真实类型，再判断是否继续走 `doc`。
+补充：如果这是用户直接提供的原始 `alidocs` URL，必须先按 [url-patterns.md](./url-patterns.md) 的「alidocs URL 类型探测流程」probe 一次确认真实类型，再判断是否继续走 `doc`。
 
 ### 支持的 URL 格式
 
@@ -499,13 +503,15 @@ Flags:
 |------|------|----------------|
 | `alidocs.dingtalk.com/i/nodes/{id}` | `https://alidocs.dingtalk.com/i/nodes/9E05BDRVQePjzLkZt2p2vE7kV63zgkYA` | 取 URL 路径最后一段：`9E05BDRVQePjzLkZt2p2vE7kV63zgkYA` |
 | `alidocs.dingtalk.com/i/nodes/{id}?queryParams` | `https://alidocs.dingtalk.com/i/nodes/abc123?doc_type=wiki_doc` | 忽略 query 参数，取路径最后一段：`abc123` |
+| `alidocs.dingtalk.com/document/{edit\|preview}?...&dentryKey={key}` | `https://alidocs.dingtalk.com/document/edit?dentryKey=wo1g3x54FzVEJ5yE` | **不要提取 `dentryKey` 单独使用**，必须将完整 URL 原样传给 `--node` |
 
 ### 提取规则
 
 1. 匹配 URL 中 `alidocs.dingtalk.com` 域名
-2. 取 URL path 的最后一段作为 DOC_ID（去掉 query string 和 fragment）
-3. 提取出的 DOC_ID 可直接用于所有 `--node` 参数，也可将完整 URL 传给 `--node`（CLI 会自动解析）
-4. 对用户直接提供的原始 `alidocs` URL，先按 `dws-shared/references/url-patterns.md` 的「alidocs URL 类型探测流程」执行 probe；只有 probe 确认是 `adoc` / `file` / `folder` 时，才继续走 `doc`
+2. 路径为 `/i/nodes/{id}` 时，取 URL path 的最后一段作为 DOC_ID（去掉 query string 和 fragment）
+3. 路径为 `/document/edit` 或 `/document/preview` 且 query 含 `dentryKey` 时，**禁止**提取 `dentryKey` 当 DOC_ID；将整段 URL 原样传给 `--node`，CLI 会自动解析（追踪参数如 `utm_source`、`chInfo` 也不必清理）
+4. 提取出的 DOC_ID 可直接用于所有 `--node` 参数，也可将完整 URL 传给 `--node`（CLI 会自动解析）
+5. 对用户直接提供的原始 `alidocs` URL（特别是 `/i/nodes/` 格式），先按 [url-patterns.md](./url-patterns.md) 的「alidocs URL 类型探测流程」执行 probe；只有 probe 确认是 `adoc` / `file` / `folder` 时，才继续走 `doc`
 
 ### ID 边界与参数映射
 
@@ -604,7 +610,7 @@ Flags:
 > - "把**某篇文档**授权给某人" → `doc permission add`（节点级，包括「我的文档」下的文档都支持）
 > - "把**某个知识库**整体授权给某人" → `wiki member add`（容器级，但**「我的文档」个人空间不支持**）
 
-> 补充：如果用户直接粘贴的是原始 `alidocs` URL，先按 `dws-shared/references/url-patterns.md` 的「alidocs URL 类型探测流程」probe；只有 probe 确认是 `adoc` / `file` / `folder` 后，才继续按下列意图执行。
+> 补充：如果用户直接粘贴的是原始 `alidocs` URL，先按 [url-patterns.md](./url-patterns.md) 的「alidocs URL 类型探测流程」probe；只有 probe 确认是 `adoc` / `file` / `folder` 后，才继续按下列意图执行。
 
 **用户直接粘贴文档 URL（无其他指令）**:
 - 默认 → `read`（读取文档内容）

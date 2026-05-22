@@ -4,6 +4,19 @@
 
 ## 命令总览
 
+### 列出钉盘空间
+```
+Usage:
+  dws drive list-spaces [flags]
+Example:
+  dws drive list-spaces --format json
+Flags:
+      (无 flag；返回当前用户可访问的所有钉盘空间)
+```
+
+> 适用场景：复制/移动文件到「我的文件」或团队空间根目录时，先取 `rootFolderId`；或者枚举用户可访问的团队空间。
+> 注意：由企业服务发现 envelope 注册；个别企业 MCP gateway 可能未开通，调用前可用 `dws drive list-spaces --help` / `--dry-run` 验证。
+
 ### 列出钉盘目录
 ```
 Usage:
@@ -87,15 +100,55 @@ Flags:
       --conflict-handler string   同名冲突策略: AUTO_RENAME / OVERWRITE / RETURN_DENTRY_IF_EXIST (默认 AUTO_RENAME)
 ```
 
+### 一键上传 (三步合成)
+```
+Usage:
+  dws drive upload [flags]
+Example:
+  dws drive upload --file ./report.pdf
+  dws drive upload --file ./slides.pptx --file-name "Q1汇报.pptx"
+  dws drive upload --file ./data.xlsx --folder <dentryUuid>
+Flags:
+      --file string        本地文件路径 (必填)
+      --file-name string   文件显示名称 (默认使用本地文件名)
+      --folder string      父节点 ID (dentryUuid)，不传则上传到空间根目录
+      --space-id string    目标空间 ID，不传则使用「我的文件」
+      --mime-type string   文件 MIME 类型，不传则自动推断
+```
+
+> 客户端胶水命令：内部自动完成 `upload-info` → HTTP PUT 到 OSS → `commit_upload` 三步。
+> 适合大多数本地文件上传场景，无需 Agent 自己发 HTTP PUT。
+> 注意：`--folder` 接受 `dentryUuid`（UUID 格式），不要传纯数字 `dentryId`。
+
+### 删除文件/文件夹到回收站
+
+> **CAUTION:** 不可逆操作 — 执行前必须向用户确认。
+
+```
+Usage:
+  dws drive delete [flags]
+Example:
+  dws drive delete --file-id <dentryUuid> --yes --format json
+Flags:
+      --file-id string    文件或文件夹 ID (必填，UUID 格式 dentryUuid)
+      --space-id string   文件所属空间 ID (可选)
+      --yes               跳过二次确认 (危险操作，建议先与用户确认)
+```
+
+> 由企业服务发现 envelope 注册（路由到 doc 服务的 `delete_document` tool）；不同企业 MCP gateway 可能不暴露，调用前可用 `dws drive delete --help` 验证。
+> 删除是软删除（进回收站），但仍需用户明确确认；不要在自动化脚本里默认带 `--yes`。
+
 ## 意图判断
 
+用户说"钉盘有什么空间/团队文件/列空间" → `list-spaces`
 用户说"钉盘有什么文件/列钉盘/看钉盘目录" → `list`
 用户说"钉盘文件详情/文件信息" → `info` (需 fileId)
 用户说"新建钉盘目录/钉盘里建文件夹" → `mkdir`
 用户说"下载钉盘文件/把这个文件拿下来" → `download` 拿临时 URL，再由 Agent 自行发起 HTTP GET
 用户说"上传文件到钉盘/把本地文件传钉盘":
-- 三步走: `upload-info` → HTTP PUT 到预签名 URL → `commit`
-- **没有**一条聚合命令可以完成；必须完整走完三步
+- **首选 `upload`**：一条命令自动完成三步（适合本地文件直接上传）
+- 也可手动三步：`upload-info` → HTTP PUT 到预签名 URL → `commit`（适合自定义流式上传，或不想在客户端做 HTTP PUT 的场景）
+用户说"删除钉盘文件/移到回收站" → `delete`（不可逆，必须确认）
 
 关键区分:
 - drive(钉盘云存储，面向文件二进制) vs doc(在线文档/知识库，面向富文本内容)
@@ -162,8 +215,8 @@ dws drive mkdir --name "2026 Q1 归档" --format json
 
 ## 注意事项
 
-- 上传是**三步**流程：`upload-info` → 客户端 HTTP PUT 到预签名 URL → `commit`。**没有**自动聚合命令，跳过任何一步都会失败
-- Step 2 的 HTTP PUT 必须把 upload-info 返回的 `headers` 全部回传，`Content-Type` 通常要留空；只有 PUT 返回 200 才能调 `commit`
+- 上传两条路径：**首选** `upload` 一条命令搞定（内部走三步）；如果需要自己控制 HTTP PUT，可走 `upload-info` → 客户端 HTTP PUT → `commit` 三步
+- 用三步流程时，Step 2 的 HTTP PUT 必须把 upload-info 返回的 `headers` 全部回传，`Content-Type` 通常要留空；只有 PUT 返回 200 才能调 `commit`
 - 上传凭证 (`uploadId`) 有过期时间，拿到后尽快 commit；过期需重新调 `upload-info`
 - `download` 只返回临时 URL（几分钟级别有效期），不会把文件落地；要真正下载到本地必须再发 HTTP GET
 - `--parent-id` 在 upload-info / commit 中要保持一致，否则 commit 会报位置不匹配

@@ -18,7 +18,11 @@ metadata:
 > ⚠️ **命令可用性可能因企业服务发现配置而异**。本文档列出的命令基于 dws envelope schema 与本仓库 v1.0.30 实测，但部分命令的 cobra 子命令暴露与否还取决于你的企业 MCP gateway 是否注册了对应 tool。如果跑某条命令报 `unknown command` 或 fall back 到父级 help，说明当前账号企业未开通该能力。实际调用前可用 `dws <cmd> --help` 或 `--dry-run` 验证。
 
 
-> 命令参考：[sheet.md](references/sheet.md)。
+> 命令参考：[sheet.md](references/sheet.md)；URL 识别与类型探测：[url-patterns.md](references/url-patterns.md)。
+
+## URL 预检（含 alidocs URL 时必读）
+
+输入含 `alidocs.dingtalk.com` URL 时，该域名下存在多种路径格式：`/i/p/...`（分享短链）、`/i/nodes/...`（节点链接，类型需探测）、`/spreadsheetv2/...`（电子表格直链，直接路由到 `sheet`）、`/document/edit|preview?dentryKey=...`（文档链接，路由到 `dingtalk-doc`）等。**必须先读 [url-patterns.md](references/url-patterns.md) 中的「alidocs URL 分流决策」**，按规则识别 URL 类型；仅当确认是在线电子表格（`/spreadsheetv2/...` 或 `i/nodes/` 且 probe 出 `contentType=ALIDOC` + `extension=axls`）时，才继续走本 skill 的命令。
 
 ## 意图表
 

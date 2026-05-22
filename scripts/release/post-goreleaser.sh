@@ -195,6 +195,74 @@ create_skills_zip() {
   rm -rf "$staging"
 }
 
+# ---------- darwin ad-hoc signing ----------
+#
+# Unsigned arm64 binaries are SIGKILL'd by amfid on Apple Silicon (macOS 11+).
+# We unpack each dws-darwin-*.tar.gz, ad-hoc sign the dws binary, repack
+# deterministically, and rewrite the corresponding line in checksums.txt.
+
+sign_one_darwin_binary() {
+  bin="$1"
+  if command -v codesign >/dev/null 2>&1; then
+    codesign --force --sign - "$bin"
+    return
+  fi
+  if command -v rcodesign >/dev/null 2>&1; then
+    rcodesign sign "$bin"
+    return
+  fi
+  err "neither codesign nor rcodesign found — install rcodesign (cargo install apple-codesign) to ad-hoc sign darwin builds"
+}
+
+update_checksum_entry() {
+  filename="$1"
+  new_sha="$2"
+  checksum_path="$DIST_DIR/checksums.txt"
+  [ -f "$checksum_path" ] || return 0
+  tmp="$(mktemp)"
+  grep -v "  ${filename}\$" "$checksum_path" > "$tmp" 2>/dev/null || true
+  printf '%s  %s\n' "$new_sha" "$filename" >> "$tmp"
+  mv "$tmp" "$checksum_path"
+}
+
+sign_darwin_archives() {
+  work="$(mktemp -d)"
+  found_any=0
+  for archive in "$DIST_DIR"/dws-darwin-*.tar.gz; do
+    [ -f "$archive" ] || continue
+    found_any=1
+    name="$(basename "$archive")"
+    say "  signing $name"
+
+    stage="$work/${name%.tar.gz}"
+    rm -rf "$stage"
+    mkdir -p "$stage"
+    tar -xzf "$archive" -C "$stage"
+
+    bin="$stage/dws"
+    if [ ! -f "$bin" ]; then
+      err "dws binary not found inside $name after extraction"
+    fi
+    sign_one_darwin_binary "$bin"
+
+    # Repack deterministically: sorted file order, zeroed owner/mtime so
+    # rerunning the script produces byte-identical archives (and sha256s).
+    (
+      cd "$stage" \
+        && tar --sort=name --owner=0 --group=0 --numeric-owner \
+              --mtime='2020-01-01 00:00Z' \
+              -czf "$archive.new" .
+    )
+    mv "$archive.new" "$archive"
+
+    update_checksum_entry "$name" "$(sha256_file "$archive")"
+  done
+  rm -rf "$work"
+  if [ "$found_any" -eq 0 ]; then
+    say "  (no darwin archives found, skipping)"
+  fi
+}
+
 write_checksums() {
   checksum_path="$DIST_DIR/checksums.txt"
   # Append skills zip checksum to goreleaser's checksums file
@@ -206,6 +274,9 @@ write_checksums() {
 # ---------- main ----------
 
 version="$(resolve_version)"
+
+say "==> Ad-hoc signing darwin binaries"
+sign_darwin_archives
 
 say "==> Creating skills zip"
 create_skills_zip
