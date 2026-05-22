@@ -87,6 +87,9 @@ func extractCommands(root string) ([]cmdRef, error) {
 	if more, err = filepath.Glob(skillsDir + "/mono/references/products/*.md"); err == nil {
 		files = append(files, more...)
 	}
+	if more, err = filepath.Glob(skillsDir + "/mono/references/*.md"); err == nil {
+		files = append(files, more...)
+	}
 	if more, err = filepath.Glob(skillsDir + "/multi/*/SKILL.md"); err == nil {
 		files = append(files, more...)
 	}

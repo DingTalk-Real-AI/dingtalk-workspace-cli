@@ -32,7 +32,7 @@ metadata:
 | "上传本地文件（首选一键）" | `dws drive upload --file ./report.pdf [--folder <fileId>]` |
 | "上传文件（手动三步）" | `dws drive upload-info --space-id <spaceId> --file-name <名> --file-size <bytes> [--parent-id <fileId>]` → 客户端 HTTP PUT → `dws drive commit --space-id <spaceId> --upload-id <uploadId> --file-name <名> --file-size <bytes> [--parent-id <fileId>]` |
 | "建文件夹" | `dws drive mkdir --space-id <spaceId> --name "<名称>" [--parent-id <fileId>]` |
-| "删除文件 / 移到回收站（需确认）" | `dws drive delete --file-id <fileId> --yes` |
+| "删除文件 / 移到回收站（需确认）" | `dws drive delete --node <dentryUuid> --yes` |
 
 ## 评测高频硬约束
 

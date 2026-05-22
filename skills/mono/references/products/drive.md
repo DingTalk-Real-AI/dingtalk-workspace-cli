@@ -10,8 +10,11 @@ Usage:
   dws drive list-spaces [flags]
 Example:
   dws drive list-spaces --format json
+  dws drive list-spaces --space-type org --max 50 --format json
 Flags:
-      (无 flag；返回当前用户可访问的所有钉盘空间)
+      --cursor string       分页游标 (从上次结果的 nextToken 获取)
+      --max string          每页数量
+      --space-type string   空间类型过滤
 ```
 
 > 适用场景：复制/移动文件到「我的文件」或团队空间根目录时，先取 `rootFolderId`；或者枚举用户可访问的团队空间。
@@ -128,11 +131,12 @@ Flags:
 Usage:
   dws drive delete [flags]
 Example:
-  dws drive delete --file-id <dentryUuid> --yes --format json
+  dws drive delete --node <dentryUuid> --yes --format json
 Flags:
-      --file-id string    文件或文件夹 ID (必填，UUID 格式 dentryUuid)
-      --space-id string   文件所属空间 ID (可选)
-      --yes               跳过二次确认 (危险操作，建议先与用户确认)
+      --node string   文件或文件夹 nodeId（dentryUuid 格式，必填）
+
+Global Flags:
+      --yes   跳过二次确认 (危险操作，建议先与用户确认)
 ```
 
 > 由企业服务发现 envelope 注册（路由到 doc 服务的 `delete_document` tool）；不同企业 MCP gateway 可能不暴露，调用前可用 `dws drive delete --help` 验证。

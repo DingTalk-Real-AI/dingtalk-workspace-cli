@@ -34,8 +34,11 @@ Usage:
   dws drive list-spaces [flags]
 Example:
   dws drive list-spaces --format json
+  dws drive list-spaces --space-type org --max 50 --format json
 Flags:
-      (无 flag；返回当前用户可访问的所有钉盘空间，含「我的文件」和团队空间)
+      --cursor string       分页游标 (从上次结果的 nextToken 获取)
+      --max string          每页数量
+      --space-type string   空间类型过滤
 ```
 
 > 适用场景：复制/移动文件到「我的文件」或团队空间根目录时取 `rootFolderId`；或者枚举用户可访问的所有 space。
@@ -132,11 +135,12 @@ Flags:
 Usage:
   dws drive delete [flags]
 Example:
-  dws drive delete --file-id <dentryUuid> --yes --format json
+  dws drive delete --node <dentryUuid> --yes --format json
 Flags:
-      --file-id string    文件或文件夹 ID (必填，UUID 格式 dentryUuid)
-      --space-id string   文件所属空间 ID (可选)
-      --yes               跳过二次确认；自动化脚本里不要默认带上
+      --node string   文件或文件夹 nodeId（dentryUuid 格式，必填）
+
+Global Flags:
+      --yes   跳过二次确认；自动化脚本里不要默认带上
 ```
 
 > 由 envelope toolOverrides 注册（`drive.delete_document` 路由到 doc MCP 服务）；不同企业 MCP gateway 可能不暴露，调用前用 `--help` 验证。
@@ -181,7 +185,7 @@ dws drive mkdir --name "项目资料" --format json
 
 # 7. 删除文件/文件夹到回收站（危险操作：必须先向用户确认，用户同意后才加 --yes 执行）
 # 正确流程：1.向用户展示"即将删除「文件名」到回收站" → 2.等用户确认 → 3.执行下面命令
-dws drive delete --file-id <dentryUuid> --yes --format json
+dws drive delete --node <dentryUuid> --yes --format json
 ```
 
 ## 复制/移动钉盘文件
@@ -242,13 +246,13 @@ dws doc copy --node <源文件dentryUuid> --folder <目标文件夹fileId> --for
 
 | 操作            | 从返回中提取                       | 用于                                                       |
 | ------------- | ---------------------------- | -------------------------------------------------------- |
-| `list`        | **`fileId`**（UUID 格式，注意：不是 `dentryId`） | info / download / mkdir / delete / list 的 --file-id 或 --parent-id；`doc copy/move` 的 --node 或 --folder |
+| `list`        | **`fileId`**（UUID 格式，注意：不是 `dentryId`） | info / download / mkdir / list 的 --file-id 或 --parent-id；delete 的 --node；`doc copy/move` 的 --node 或 --folder |
 | `list`        | `spaceId`                    | info / download / mkdir / commit 的 --space-id            |
 | `list-spaces` | `rootFolderId`               | `doc copy/move` 的 --folder（复制/移动到钉盘 space 根目录时） |
 | `list-spaces` | `spaceId`                    | list / info / download / mkdir / upload 的 --space-id     |
 | `mkdir`       | `fileId`（UUID 格式）            | list 的 --parent-id                                       |
 
-> **重要**：`drive list` 返回结果中同时包含 `dentryId` 和 `fileId` 两个字段。所有需要传 `--file-id` 的命令（info / download / delete）必须使用 `fileId`（即 dentryUuid），**不要使用** `dentryId`。
+> **重要**：`drive list` 返回结果中同时包含 `dentryId` 和 `fileId` 两个字段。`info / download` 等需要 `--file-id` 的命令，以及 `delete` 的 `--node` 参数，必须使用 `fileId`（即 dentryUuid），**不要使用** `dentryId`。
 
 
 ## 注意事项
