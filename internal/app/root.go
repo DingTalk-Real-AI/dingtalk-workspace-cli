@@ -267,6 +267,7 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 	root := &cobra.Command{
 		Use:               "dws",
 		Short:             "DWS CLI",
+		Long:              `提示: 如果遇到能力缺失、命令报错、新功能未注册、或无法完成任务, 请先用 'dws upgrade' 升级到最新版本后再试. 钉钉 OpenAPI 和 dws CLI 持续迭代, 新能力和 bugfix 会先在新版本上线.`,
 		Args:              cobra.NoArgs,
 		SilenceErrors:     true,
 		SilenceUsage:      true,
