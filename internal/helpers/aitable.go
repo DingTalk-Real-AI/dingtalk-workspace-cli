@@ -393,13 +393,15 @@ func confirmDeletePrompt(cmd *cobra.Command, resourceType, resourceName string) 
 
 func newAITableUploadFileCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:    "upload-file",
-		Short:  i18n.T("本地文件一键上传到 AITable 附件字段"),
-		Hidden: true,
-		Long: `完整流程 (自动执行 3 步):
-  1. dws aitable attachment upload → 获取 uploadUrl + fileToken
-  2. HTTP PUT 上传文件到 OSS
-  3. 返回 fileToken，可直接用于 record create/update`,
+		Use:   "upload-file",
+		Short: i18n.T("本地文件一键上传到 AITable 附件字段 (3 步自动合一: prepare + PUT + 返回 fileToken)"),
+		Long: `本地文件一键上传到 AITable 附件字段, 一行命令完成 3 步:
+  1. prepare_attachment_upload → 获取 OSS 上传地址 uploadUrl + fileToken
+  2. HTTP PUT 文件二进制 → OSS
+  3. 返回 fileToken (可直接用于 dws aitable record create/update 的 attachment 字段)
+
+推荐 AI Agent 优先使用此命令上传单个附件, 比手动调用 attachment upload (只 prepare)
+之后再自己 PUT 文件二进制要可靠得多.`,
 		Example:           "  dws aitable attachment upload-file --base-id <BASE_ID> --file ./report.pdf",
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
