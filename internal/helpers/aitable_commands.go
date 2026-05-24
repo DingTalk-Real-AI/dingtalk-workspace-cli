@@ -594,8 +594,17 @@ func newAitableTemplateSearchCommand(runner executor.Runner) *cobra.Command {
 
 func newAITableAttachmentUploadCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:               "upload",
-		Short:             i18n.T("准备附件上传"),
+		Use:   "upload",
+		Short: i18n.T("准备附件上传 (仅返回 uploadUrl + fileToken, 不上传文件)"),
+		Long: i18n.T(`准备附件上传 — 3 步流程的第 1 步.
+
+本命令只调用 prepare_attachment_upload, 返回 OSS 上传地址 uploadUrl 和 fileToken,
+不实际上传文件二进制. 拿到响应后你还需要:
+  2. HTTP PUT 文件二进制 → uploadUrl
+  3. 把 fileToken 填到 record 的 attachment 字段, 格式 [{"fileToken":"ft_xxx"}]
+
+推荐 AI Agent 直接用 'dws aitable attachment upload-file --base-id X --file ./report.pdf'
+一行完成 3 步, 不用自己处理 HTTP PUT 二进制.`),
 		Example:           "  dws aitable attachment upload --base-id BASE_ID --file-name report.pdf --size 1024",
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,

@@ -14,6 +14,8 @@
 package app
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
@@ -122,4 +124,28 @@ func commandNames(cmds []*cobra.Command) []string {
 		names = append(names, c.Name())
 	}
 	return names
+}
+
+// TestRenderRootHelpIncludesLong guards that renderRootHelp surfaces the
+// root command's Long description in `dws --help` output. The custom
+// SetHelpFunc in root_help.go replaces cobra's default help template, which
+// previously caused root.Long to be silently dropped. The production
+// root.Long carries the "use 'dws upgrade' if a command is missing or
+// failing" hint that AI agents rely on when they cannot find a suitable
+// command — if this test fails after a help-rendering change, agents will
+// silently lose that guidance.
+func TestRenderRootHelpIncludesLong(t *testing.T) {
+	const sentinel = "SENTINEL-LONG-MUST-APPEAR-IN-HELP"
+	root := &cobra.Command{
+		Use:  "dws",
+		Long: sentinel,
+	}
+	var out bytes.Buffer
+	root.SetOut(&out)
+
+	renderRootHelp(root)
+
+	if !strings.Contains(out.String(), sentinel) {
+		t.Fatalf("renderRootHelp must render root.Long verbatim in --help output; got:\n%s", out.String())
+	}
 }

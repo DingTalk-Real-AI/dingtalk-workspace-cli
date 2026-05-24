@@ -82,6 +82,16 @@ func renderRootHelp(root *cobra.Command) {
 		_, _ = fmt.Fprintln(w)
 	}
 	_, _ = fmt.Fprintln(w, `Use "dws <service> --help" for more information about a discovered MCP service or "dws <command> --help" for utility commands.`)
+
+	// Render root.Long after the command list so agents see the upgrade
+	// hint (or any other root-level guidance) after browsing all available
+	// commands and concluding none of them fit. Cobra's default help template
+	// would render Long automatically; the custom SetHelpFunc above replaces
+	// it and dropped this, so we restore it explicitly here.
+	if long := strings.TrimSpace(root.Long); long != "" {
+		_, _ = fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w, long)
+	}
 }
 
 // resolveVisibleProducts returns the set of top-level product IDs that should

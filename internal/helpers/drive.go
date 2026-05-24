@@ -190,7 +190,7 @@ func runDriveUpload(cmd *cobra.Command, runner executor.Runner) error {
 
 	// Step 2: HTTP PUT to OSS
 	fmt.Fprintln(os.Stderr, "[2/3] 上传文件到 OSS...")
-	if err := httpPutDriveFile(cmd.Context(), resourceURL, ossHeaders, absPath, fileSize, mimeType); err != nil {
+	if err := httpPutDriveFile(cmd.Context(), resourceURL, ossHeaders, absPath, fileSize); err != nil {
 		return err
 	}
 
@@ -303,7 +303,26 @@ func parseDriveUploadInfo(resp map[string]any) (resourceURL, uploadID string, he
 	return
 }
 
-func httpPutDriveFile(ctx context.Context, resourceURL string, headers map[string]string, filePath string, fileSize int64, fallbackMIME string) error {
+// httpPutDriveFile uploads the file at filePath to a DingTalk drive OSS presigned URL.
+//
+// PROTOCOL CONTRACT: the headers map is authoritative. It contains the exact
+// and complete set of HTTP headers required for the upload. An empty map means
+// "no client-side headers needed" (this is the normal case for DingTalk drive,
+// where the signature is embedded in the URL query string).
+//
+// DO NOT add Content-Type or any other client-inferred header here. DingTalk
+// drive uses OSS v1 presigned URLs whose StringToSign includes the Content-Type
+// header that the server saw at signing time (typically empty). Any client-side
+// addition of Content-Type makes the signature computed by OSS at PUT time
+// differ from the server's presignature → 403 SignatureDoesNotMatch.
+//
+// If a future OSS endpoint requires header-based signing (Authorization header
+// instead of URL signing), introduce a separate helper rather than reintroducing
+// a fallback here. The aitable attachment upload helper in aitable.go does set
+// Content-Type because its OSS endpoint uses a different signing mode where the
+// server includes the client-declared mime in its signature computation; do not
+// unify the two helpers without re-validating both endpoints.
+func httpPutDriveFile(ctx context.Context, resourceURL string, headers map[string]string, filePath string, fileSize int64) error {
 	f, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("无法打开文件: %w", err)
@@ -315,15 +334,8 @@ func httpPutDriveFile(ctx context.Context, resourceURL string, headers map[strin
 		return fmt.Errorf("构建 OSS 上传请求失败: %w", err)
 	}
 	req.ContentLength = fileSize
-	hasContentType := false
 	for k, v := range headers {
 		req.Header.Set(k, v)
-		if strings.EqualFold(k, "Content-Type") {
-			hasContentType = true
-		}
-	}
-	if !hasContentType && fallbackMIME != "" {
-		req.Header.Set("Content-Type", fallbackMIME)
 	}
 
 	client := &http.Client{Timeout: 10 * time.Minute}
