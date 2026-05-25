@@ -14,7 +14,7 @@
 |------------|------|
 | 文档权限管理 | ⚠️ 已通过 transitional helper 部分支持：`dws doc permission add/update/list` 可用（调 `add_permission`/`update_permission`/`list_permission` MCP tool）；待 mse 注册对应 toolOverride 后此条删除 |
 | 删除整篇文档/文件 | ⚠️ 已通过 transitional helper 支持：`dws doc delete --node <ID> --yes`（调 `delete_document`）；待 mse 注册后此条删除 |
-| 文档导出为 docx | 当前不支持服务端导出在线文档为 docx 文件。如需保存，请在钉钉客户端使用"导出"功能 |
+| 文档导出为 docx | ⚠️ 已通过 transitional helper 支持：`dws doc export --node <ID> --output ./x.docx`（内置渐进式退避轮询 + 自动下载，调 `submit_export_job` / `query_export_job` MCP tool）；待 mse 注册对应 toolOverride 后此条删除 |
 | 媒体附件下载/插入 | ⚠️ 已通过 transitional helper 支持：`dws doc media download/insert`（前者调 `download_doc_attachment`，后者 3 步流水线）；待 mse 注册后 download 条可删，insert 因含本地 HTTP PUT 永久 helper |
 
 ## aitable
