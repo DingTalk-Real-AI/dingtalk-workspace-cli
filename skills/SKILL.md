@@ -142,6 +142,7 @@ dws schema <path> --jq '.tool.required'      # 只看必填字段
 3. 仍然失败，报告完整错误信息给用户，禁止自行尝试替代方案
 4. 认证失败时，参考 [global-reference.md](./references/global-reference.md) 中的认证章节处理
 5. 各产品高频错误及排查流程见 [error-codes.md](./references/error-codes.md)
+6. 遇到 [capability-limits.md](./references/capability-limits.md) 中列出的「已知不支持操作」时，**直接告知用户不支持并建议在钉钉客户端操作**，不要重试或变通
 
 
 ## 详细参考 (按需读取)
@@ -156,3 +157,9 @@ dws schema <path> --jq '.tool.required'      # 只看必填字段
 - [scripts/](./scripts/) — 各产品批量/复合操作脚本（AI表格批量导入导出、AI应用创建轮询、日历、机器人消息、通讯录、考勤、日志、待办、文档创建并写入、钉盘目录树等）
 - [references/products/aitable/](./references/products/aitable/) — AI表格细分章节（单元格值/字段属性/公式/筛选排序/导入导出/仪表盘/记录增删改查/错误恢复/最佳实践）
 - [references/products/aitable-record-ops.md](./references/products/aitable-record-ops.md) — AI表格记录操作专项说明
+- [references/capability-limits.md](./references/capability-limits.md) — 已知能力限制（doc/aitable/chat/minutes，遇到时直接告知用户不支持）
+- [references/best_practices/](./references/best_practices/) — 玉渊场景 recipe 行动指南
+  - [04-document.md](./references/best_practices/04-document.md) — 文档场景（write-doc / search-docs / migrate-doc / update-doc-section / doc-to-message 等）
+  - [06-data-analytics.md](./references/best_practices/06-data-analytics.md) — AI表格数据分析（read-aitable / generate-data-report / create-aitable-record / update-aitable-record / search-aitable-template）
+  - [_common/conventions.md](./references/best_practices/_common/conventions.md) — 批量查询、多源并行采集、字段术语等通用规范
+  - [_common/recipe-conventions.md](./references/best_practices/_common/recipe-conventions.md) — recipe 元规范
