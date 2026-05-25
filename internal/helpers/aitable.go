@@ -157,7 +157,35 @@ func (aitableHandler) Command(runner executor.Runner) *cobra.Command {
 		newAITableUploadFileCommand(runner),
 	)
 
-	root.AddCommand(base, table, field, record, template, attachment)
+	// export / import group：覆盖 mse 默认行为，提供同步轮询 + 自动 IO
+	export := &cobra.Command{
+		Use:               "export",
+		Short:             i18n.T("AI 表格数据导出（异步任务）"),
+		Args:              cobra.NoArgs,
+		TraverseChildren:  true,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+	export.AddCommand(newAitableExportDataCommand(runner))
+
+	importCmd := &cobra.Command{
+		Use:               "import",
+		Short:             i18n.T("AI 表格数据导入（异步任务）"),
+		Args:              cobra.NoArgs,
+		TraverseChildren:  true,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+	importCmd.AddCommand(
+		newAitableImportUploadCommand(runner),
+		newAitableImportDataCommand(runner),
+	)
+
+	root.AddCommand(base, table, field, record, template, attachment, export, importCmd)
 
 	// 顶层别名：dws aitable search/list/create/info → base search/list/create/get
 	// 每个 alias 复用现有 constructor，独立 cobra.Command 实例（避免与 base.* 共享 flag 指针）

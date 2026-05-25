@@ -112,3 +112,40 @@ dws contact user search --query "张三" --format json
 # 2. 创建待办
 dws todo task create --title "任务内容" --executors <USER_ID> --format json
 ```
+
+---
+
+## 玉澜域专项路由
+
+> 内容生产域（aitable / doc / drive / wiki / aiapp / devdoc）的易混淆场景。
+> 落地范围：dws-opensource 玉澜分支（feat/align-yuyuan）的 helpers。
+
+### alidocs URL 路由（先 probe，再走对应产品）
+
+| 用户说 / 给出的信息 | 真实意图 | 应该用 | 不要用 |
+|---------------------|----------|--------|--------|
+| 粘贴 `alidocs.dingtalk.com/i/nodes/<UUID>` 原始 URL | 先识别节点类型 | `dws doc info --node <URL>` → 按 `extension` 路由（adoc/axls/able） | 直接 `sheet` / `aitable` |
+| "读一下这个 xlsx 附件" / xlsx 节点链接 | 下载本地表格文件 | `dws doc download --node <URL>` | `sheet range read` |
+| "把这个在线表格导出为 xlsx" | axls → xlsx 格式转换 | `dws sheet export`（待吴淼 W-01 落地）| `dws doc download` |
+| `/i/p/` 开头的分享短链 | 短链兜底 | `read_url` 工具 | 任何 `dws doc *` |
+| "删了这个 alidocs 文档" | 节点删除 | `dws doc delete --node <URL> --yes` | 在客户端操作（已支持） |
+| "把这份文档导出 docx" | 异步导出 + 下载 | `dws doc export --node <URL> --output ./x.docx` | 自己拼 docs.dingtalk OSS URL |
+| "把这个文档分享给张三可编辑" | 节点级授权 | `dws doc permission add --node <URL> --user <UID> --role EDITOR` | `dws wiki member add`（容器级，不是节点级） |
+| "下载文档里那张图" | 拿附件 OSS URL | `dws doc media download --node <URL> --resource-id <ID>` | `doc download` |
+| "把这张截图插到文档" | 上传 + 插块 | `dws doc media insert --node <URL> --file ./x.png` | 自己 PUT |
+
+### aitable 导入路由（用户原话决定走哪条链路）
+
+| 用户说... | 真实意图 | 应该用 | 不要用 |
+|-----------|----------|--------|--------|
+| "把 Excel 导入 AI 表格" / "把这个 xlsx 变成多维表" | **文件导入任务**（新建表） | `python scripts/aitable_import_via_task.py <baseId> <file>` 或 `dws aitable import upload --file ./x.xlsx` + `dws aitable import data --import-id <ID>` | `import_records.py`（除非用户指明追加到已有表） |
+| "把这批数据追加到『XXX』表" | 已有 tableId 的批量写入 | `python scripts/import_records.py <baseId> <tableId> <file>` | `aitable_import_via_task.py` |
+| "Excel 列名和表字段对不上但要追加" | 文件导入 + 字段映射 | `dws aitable import data --import-id <ID> --table-id <TBL> --field-mapping '{"目标":"源"}'` | 手动改 Excel 表头 |
+
+### aitable 列表 / 翻页路由
+
+| 用户说... | 真实意图 | 应该用 | 不要用 |
+|-----------|----------|--------|--------|
+| "把这张表的全部记录列给我" / "列完" / "所有记录" | 全量翻页（数据驱动决策时不能漏数据） | `dws aitable record query --base-id B --table-id T --all` | 单次 `record query` 后凭直觉判断（90% 漏数据） |
+| "导出某张表/某个视图为 xlsx" | 同步导出 + 自动落盘 | `dws aitable export data --base-id B --scope view --table-id T --view-id V --output ./v.xlsx` | 自己拿 taskId 后 GET downloadUrl |
+

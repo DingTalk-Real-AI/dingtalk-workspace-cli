@@ -920,6 +920,42 @@ https://alidocs.dingtalk.com/i/nodes/{baseId}?xxx=yyy
 
 - 详见 [field-rules.md](../field-rules.md) 和 [error-codes.md](../error-codes.md)
 
+## 导入数据：两条链路怎么选
+
+| 用户原话 | 链路 | 命令 / 脚本 | 行为 |
+|---------|------|------------|------|
+| "把这个 Excel 导入到 AI 表格"（无指定目标表） | **文件导入任务**链路 | `python scripts/aitable_import_via_task.py <baseId> <file>` 或 `dws aitable import upload --base-id B --file ./x.xlsx` + `dws aitable import data --import-id <ID>` | 服务端解析文件，**新建数据表**，自动识别表头 |
+| "把这个 Excel 导入新表 / 自动建表" | 同上 | 同上 | 同上 |
+| "把这批记录追加到已有的『成员表』里" | **记录批量写入**链路 | `python scripts/import_records.py <baseId> <tableId> <file>` | 走 `record create`，**写入已有 tableId**，需要字段名匹配 |
+| "Excel 列名和表字段对不上但要追加" | 文件导入任务 + 追加模式 | `dws aitable import upload --base-id B --file ./x.xlsx` → `dws aitable import data --import-id <ID> --table-id <TBL> --field-mapping '{"目标":"源"}'` | 服务端按映射追加 |
+
+## 导入失败排查
+
+| 现象 | 根因 | 解决 |
+|------|------|------|
+| OSS 返回 `SignatureDoesNotMatch` / 403 | PUT 时没把 `Content-Type` 设为空 | 用 `dws aitable import upload --file ./x.xlsx`（含 helper 自动清空）；自己写 curl 时必须 `-H "Content-Type:"` |
+| `Failed to build import sheet infos from preview data` | Excel 列名与目标表字段名 0 匹配 | 让 Excel 表头与字段名一致，或显式传 `--field-mapping` |
+| CSV 文件无法用 `--header-row` / `--src-sheet-name` | CSV 无 Sheet 概念，表头固定第一行 | 需要表头自定义或多 Sheet 时改用 xlsx |
+| `--format json` 触发 `INVALID_EXPORT_FORMAT` | `aitable export data` 的 `--export-format` 是导出格式（excel/attachment），`--format json` 才是 CLI 输出格式 | **不要混淆**：`--export-format excel` 控制服务端导出物，`--format json` 控制 CLI stdout 渲染 |
+| 任务一直 PROCESSING 不返回 | 默认 5 分钟轮询超时，大表可能不够 | 加 `--timeout-sec 900` 提到 15 分钟；或拿到 `taskId` 后用 `dws aitable export data --task-id <ID>` 续等 |
+
+## 导出数据：仅有一条链路
+
+`dws aitable export data` —— CLI 内置同步轮询 + 渐进式退避 +（可选）自动落盘：
+
+```bash
+# 导出全表 + 附件，自动落盘
+dws aitable export data --base-id B --scope all --export-format excel_and_attachment --output ./b.xlsx
+
+# 导出单表（仅 xlsx）
+dws aitable export data --base-id B --scope table --table-id T --export-format excel --output ./t.xlsx
+
+# 大表场景：超时后续等
+dws aitable export data --base-id B --task-id <ID> --output ./b.xlsx
+```
+
+高级场景（异步任务多步组合 / 多 base 批量 / 按视图导出）请用 `python scripts/aitable_export_via_task.py <baseId> --scope all|table|view`。
+
 ## 相关产品
 
 - [doc](./doc.md) — 富文本文档编辑，不是结构化数据表格

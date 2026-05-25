@@ -22,6 +22,7 @@
 | 不支持的操作 | 说明 |
 |------------|------|
 | 创建公式/查找引用等高级字段类型 | 部分高级字段类型暂不支持 API 创建 |
+| 自己 PUT 文件时 Content-Type 不为空 | OSS 签名机制要求 PUT 请求的 `Content-Type` 头**必须清空**，否则返回 `SignatureDoesNotMatch` / HTTP 403。这**不是 dws 限制**，是阿里云 OSS 行为。解决：`dws aitable import upload --file ./x.xlsx` 已内置正确处理；自己写 `curl` 时必须传 `-H "Content-Type:"`（注意冒号后是空值） |
 
 ## minutes
 
