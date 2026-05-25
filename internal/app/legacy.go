@@ -57,6 +57,7 @@ func newLegacyPublicCommands(ctx context.Context, runner executor.Runner) []*cob
 	// Keep each hook narrowly scoped to one product so the open-source
 	// command surface remains predictable from the envelope alone.
 	helpers.AttachReportLegacyInboxAlias(merged, runner)
+	helpers.AttachReportListReadableEnrichment(merged, runner)
 	return merged
 }
 
