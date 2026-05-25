@@ -1060,7 +1060,6 @@ func compatFlagName(raw string) string {
 	return strings.Trim(builder.String(), "-")
 }
 
-
 // validateRequireTogether enforces "either all set, or all unset" semantics
 // for each group of flag aliases. Returns a validation error pointing at the
 // first failing group; nil if every group satisfies the check or no groups

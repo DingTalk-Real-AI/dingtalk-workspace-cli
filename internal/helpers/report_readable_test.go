@@ -28,12 +28,12 @@ func TestEnrichReportListContent_InboxStripsContent(t *testing.T) {
 		"result": map[string]any{
 			"list": []any{
 				map[string]any{
-					"reportId":     "R-1",
-					"reportName":   "周报",
-					"creatorName":  "张三",
-					"createTime":   float64(1747900800000), // 2025-05-22T16:00:00 UTC; locale-dependent display
-					"readStatus":   false,
-					"content":      "本周完成 enrichment helpers",
+					"reportId":        "R-1",
+					"reportName":      "周报",
+					"creatorName":     "张三",
+					"createTime":      float64(1747900800000), // 2025-05-22T16:00:00 UTC; locale-dependent display
+					"readStatus":      false,
+					"content":         "本周完成 enrichment helpers",
 					"dingtalkOpenUrl": "https://example.dingtalk.com/r/1",
 				},
 			},
@@ -87,12 +87,12 @@ func TestEnrichReportListContent_OutboxKeepsContent(t *testing.T) {
 		"result": map[string]any{
 			"list": []any{
 				map[string]any{
-					"reportId":     "R-9",
-					"reportName":   "日报",
-					"creatorName":  "李四",
-					"createTime":   float64(1747900800000),
-					"readStatus":   true,
-					"content":      "完成 outbox enrichment 测试",
+					"reportId":        "R-9",
+					"reportName":      "日报",
+					"creatorName":     "李四",
+					"createTime":      float64(1747900800000),
+					"readStatus":      true,
+					"content":         "完成 outbox enrichment 测试",
 					"dingtalkOpenUrl": "https://example.dingtalk.com/r/9",
 				},
 			},

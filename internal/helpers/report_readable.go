@@ -15,14 +15,15 @@
 // `report outbox list`.
 //
 // What this file adds:
+//
 //   - EnrichReportListContent: pure function that walks an MCP `content`
 //     response, finds the report items list, and overlays five extra fields
 //     the agent layer relies on:
-//         success
-//         count
-//         agentDisplayContentIncluded   (bool — inbox false, outbox true)
-//         agentDisplayColumns           ([]string — wukong-aligned column set)
-//         agentDisplayMarkdown          (string — markdown table)
+//     success
+//     count
+//     agentDisplayContentIncluded   (bool — inbox false, outbox true)
+//     agentDisplayColumns           ([]string — wukong-aligned column set)
+//     agentDisplayMarkdown          (string — markdown table)
 //     The function never mutates the input map in-place; it returns a fresh
 //     map so callers (including tests) can compare before/after safely.
 //
@@ -34,12 +35,13 @@
 //     enrichment only fires when the output is JSON.
 //
 // Why a post-merge hook (mirroring AttachReportLegacyInboxAlias):
-//   the envelope already publishes `report inbox` and `report outbox` as
-//   groups with a `list` leaf each; the open-source CLI cannot add a same-
-//   named helper leaf (MergeHardcodedLeaves would reject it as a shape
-//   mismatch with the envelope). Wrapping the existing leaf's RunE keeps the
-//   envelope as the single source of truth for flags/schema while letting us
-//   layer wukong-equivalent enrichment on top.
+//
+//	the envelope already publishes `report inbox` and `report outbox` as
+//	groups with a `list` leaf each; the open-source CLI cannot add a same-
+//	named helper leaf (MergeHardcodedLeaves would reject it as a shape
+//	mismatch with the envelope). Wrapping the existing leaf's RunE keeps the
+//	envelope as the single source of truth for flags/schema while letting us
+//	layer wukong-equivalent enrichment on top.
 package helpers
 
 import (
@@ -505,15 +507,15 @@ func reportCellForMarkdown(s string) string {
 // envelope-built `report inbox list` and `report outbox list` leaves.
 //
 // Mechanism (decorator over the leaf's existing RunE):
-//   1. Replace leaf.RunE with a closure that delegates to the original RunE.
-//   2. Before delegating, redirect cmd.SetOut() to an in-memory buffer when
-//      the resolved output format is JSON (the only format the agent display
-//      schema cares about).
-//   3. After the original RunE returns, unmarshal the captured bytes, locate
-//      the MCP `content` payload, call EnrichReportListContent, and write
-//      the enriched JSON to the leaf's original stdout.
-//   4. For non-JSON formats (raw / table / csv / ...) we never replace stdout,
-//      so behaviour stays byte-for-byte identical to the unwrapped envelope.
+//  1. Replace leaf.RunE with a closure that delegates to the original RunE.
+//  2. Before delegating, redirect cmd.SetOut() to an in-memory buffer when
+//     the resolved output format is JSON (the only format the agent display
+//     schema cares about).
+//  3. After the original RunE returns, unmarshal the captured bytes, locate
+//     the MCP `content` payload, call EnrichReportListContent, and write
+//     the enriched JSON to the leaf's original stdout.
+//  4. For non-JSON formats (raw / table / csv / ...) we never replace stdout,
+//     so behaviour stays byte-for-byte identical to the unwrapped envelope.
 //
 // `runner` is accepted for API symmetry with AttachReportLegacyInboxAlias —
 // the wrapper itself does not invoke runner; the wrapped RunE already does.
