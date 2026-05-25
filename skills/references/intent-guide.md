@@ -115,9 +115,106 @@ dws todo task create --title "任务内容" --executors <USER_ID> --format json
 
 ---
 
+## 玉澜域核心混淆场景
+
+> 内容生产域 6 个产品之间最容易选错的 4 类场景。命中率直接决定 LLM
+> 第一步是否走对路径。
+
+### aitable vs doc vs sheet — 数据表格 vs 文档内容 vs 电子表格
+
+**用 `aitable` 的场景**：
+- "创建一个表格记录团队成员信息" — 结构化数据，有行列
+- "在表格里加一列'状态'字段" — 字段/列操作
+- "查一下表格里所有优先级为高的记录" — 数据筛选和查询
+- "用项目管理模板建一个表" — 模板创建
+- 用户提到"多维表"、"Base"、"数据表"、"记录"
+
+**用 `doc` 的场景**：
+- "帮我写个会议纪要" — 富文本内容创作
+- "看一下这个文档链接的内容" — 阅读文档
+- "在知识库创建一个文件夹" — 文档空间管理
+- 用户提到"文档"、"知识库"、"写文档"
+
+**用 `sheet` 的场景**：
+- "创建一个电子表格" — 创建 Excel 式在线表格
+- "帮我读一下这个表格 A1 到 D10 的数据" — 按单元格区域读取
+- "在 B2 写入一个 SUM 公式" — 写入公式/值到单元格
+- "帮我看看这个表格有哪些工作表" — 工作表管理
+- 用户提到"电子表格"、"Excel"、"工作表"、"Sheet"、"单元格"、"公式"
+
+**三者判断关键**：
+- 有字段定义/记录增删改查/数据筛选 → `aitable`
+- 纯文本/Markdown/富文本编辑 → `doc`
+- 单元格区域读写/公式/多工作表 → `sheet`
+
+**易误判场景**：
+- "在知识库中新建一个表格" — 指在钉钉文档空间创建表格类型节点 → `doc`（不是 `aitable`）
+- "帮我建个表记录项目进度" — 指创建结构化数据表 → `aitable`
+
+### xlsx vs axls — 本地表格文件 vs 在线电子表格
+
+alidocs 链接表面长得一样（`https://alidocs.dingtalk.com/i/nodes/{id}`），
+但节点类型完全不同。sheet 产品线只服务 axls（在线电子表格），
+xlsx / xls / xlsm / csv 等本地表格文件必须走 `dws doc download`，
+严禁错路由。
+
+**用 `sheet` 的场景（axls，钉钉在线电子表格）**：
+- `dws doc info --node <URL>` 返回 `contentType=ALIDOC` + `extension=axls`
+- 用户在钉钉文档空间直接"新建电子表格"得到的节点
+- 所有 sheet 子命令（`list` / `range read` / `range write` / `export` 等）仅服务这类节点
+
+**用 `dws doc download` 的场景（xlsx / xls / xlsm / csv 本地表格文件）**：
+- `dws doc info --node <URL>` 返回 `contentType=DOCUMENT` + `extension=xlsx` / `xls` / `xlsm` / `csv`
+- 用户把本地 Excel 文件上传到文档空间得到的节点，本质是"文件 + 预览"，非在线表格
+- sheet 命令直接调用会报错，必须先 `dws doc download --node <URL>` 下载到本地再解析处理
+
+**判断关键**：
+- 未知 alidocs URL → 必须先 `dws doc info --node <URL> --format json` 探测 `contentType` 与 `extension`
+- `contentType=ALIDOC` + `extension=axls` → `sheet`
+- `contentType=DOCUMENT` + `extension=xlsx` / `xls` / `xlsm` / `csv` → `dws doc download`
+- 用户说"把在线表格导出为 xlsx 文件" → `dws sheet export`（axls → xlsx 的格式转换，不是读取 xlsx）
+
+**易误判场景**：
+- 用户粘贴一个 alidocs 链接说"读一下这个表格" — 不能直接调 `sheet range read`，必须先 probe 再按 `extension` 路由
+- 用户说"读一下这个 xlsx 文件里的数据" — 走 `dws doc download` 下载后本地解析，不要走 `sheet`
+- 用户说"把这个在线表格导出为 xlsx" — 走 `dws sheet export`，不要走 `dws doc download`（后者只能下载已有的 xlsx 节点，无法从 axls 生成）
+
+详见 [url-patterns.md](./url-patterns.md) 和 [sheet.md 适用范围](./products/sheet.md)。
+
+### devdoc vs doc search — 两种搜索
+
+**用 `devdoc` 的场景**：
+- "API 调用报错 403 怎么解决" — 开发调试问题
+- "搜一下 OAuth2 接入文档" — 开放平台技术文档
+- "CLI 命令出错了怎么办" — CLI 使用错误
+- 用户提到"开发"、"API"、"调用错误"
+
+**用 `doc search` 的场景**：
+- "在我的文档里搜一下'项目方案'" — 搜索文档标题和内容
+- 用户明确说"我的文档"、"知识库里搜"
+
+**判断关键**：搜开发文档→ `devdoc`；搜用户自己的文档→ `doc search`
+
+### drive vs doc — 文件存储 vs 文档内容
+
+**用 `drive` 的场景**：
+- "把这个 PDF 传到钉盘" — 上传文件
+- "下载那个 Excel 附件" — 下载文件
+- "看一下钉盘根目录有什么文件" — 浏览文件列表
+- 用户提到"钉盘"、"网盘"、"上传"、"下载"
+
+**用 `doc` 的场景**：
+- "读一下这个文档的内容" — 读取文档 Markdown
+- "帮我写入一段话到文档里" — 编辑文档内容
+- "在知识库里搜索会议纪要" — 搜索文档
+- 用户提到"文档内容"、"知识库"
+
+**判断关键**：文件存储/传输→ `drive`；文档内容读写→ `doc`
+
+---
+
 ## 玉澜域专项路由
 
-> 内容生产域（aitable / doc / drive / wiki / aiapp / devdoc）的易混淆场景。
 > 落地范围：dws-opensource 玉澜分支（feat/align-yuyuan）的 helpers。
 
 ### alidocs URL 路由（先 probe，再走对应产品）

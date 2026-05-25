@@ -147,6 +147,51 @@ dws drive mkdir --name "2026 Q1 归档" --format json
 # 2. 再走 "工作流 2" 把每个文件上传到该目录
 ```
 
+## 复制/移动钉盘文件
+
+钉盘本身没有 copy/move 命令，需使用 `dws doc copy` / `dws doc move` 实现跨场景搬运。
+
+> **关键陷阱：字段选择**
+> `drive list` 返回中有 `dentryId`（数字格式，如 `220335325118`）和 `fileId`（UUID 格式，如 `ZgpG2NdyVXYOR2D5UGDok65MJMwvDqPk`）两个字段。
+> **必须使用 `fileId`（UUID 格式）**作为 `--node` 和 `--folder` 的参数值。
+> **禁止使用 `dentryId`（数字格式）**，传入数字格式会导致命令失败。
+
+> **能力限制**：钉盘场域下，仅支持将文件复制/移动到文件夹下，**不支持文档下嵌套文档**。
+
+### 目标位置参数规则
+
+| 目标位置 | 参数传递方式 | 前置步骤 |
+|---------|-----------|---------|
+| 未指定目标（默认） | `--folder <rootFolderId>` | 先 `dws drive list-spaces --space-type mySpace` 获取「我的文件」的 `rootFolderId` |
+| 知识库空间根目录 | `--workspace <workspaceId>` | 无需额外步骤，直接传入 workspaceId |
+| 钉盘 space 根目录 | `--folder <rootFolderId>` | 先 `dws drive list-spaces` 获取目标 space 的 `rootFolderId` |
+| 钉盘 space 下的子文件夹 | `--folder <fileId>` | 先 `dws drive list --space-id <spaceId>` 逐层浏览，获取目标文件夹的 `fileId`（dentryUuid 格式） |
+
+### 工作流示例
+
+```bash
+# ── 场景默认: 用户未指定目标位置 → 复制/移动到「我的文件」根目录 ──
+dws drive list --space-id <SPACE_ID> --format json                       # 获取源文件 dentryUuid
+dws drive list-spaces --space-type mySpace --format json                 # 获取「我的文件」rootFolderId
+dws doc copy --node <源文件dentryUuid> --folder <我的文件rootFolderId> --format json
+
+# ── 场景 A: 复制钉盘文件到知识库空间根目录 ──
+dws drive list --space-id <SPACE_ID> --format json
+dws doc copy --node <源文件dentryUuid> --workspace <TARGET_WS_ID> --format json
+
+# ── 场景 B: 移动钉盘文件到另一个钉盘 space 根目录 ──
+dws drive list --space-id <SOURCE_SPACE_ID> --format json
+dws drive list-spaces --format json
+dws doc move --node <源文件dentryUuid> --folder <目标space的rootFolderId> --format json
+# 注意：移动到其他 space 时只传 --folder，不传 --workspace
+
+# ── 场景 C: 复制钉盘文件到钉盘 space 下的子文件夹 ──
+dws drive list --space-id <SOURCE_SPACE_ID> --format json
+dws drive list --space-id <TARGET_SPACE_ID> --format json
+dws drive list --space-id <TARGET_SPACE_ID> --folder <父文件夹dentryUuid> --format json  # 目标深层级时逐层浏览
+dws doc copy --node <源文件dentryUuid> --folder <目标文件夹fileId> --format json
+```
+
 ## 上下文传递表
 
 | 操作 | 从返回中提取 | 用于 |
