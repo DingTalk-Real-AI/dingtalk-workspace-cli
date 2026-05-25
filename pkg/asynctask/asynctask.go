@@ -143,13 +143,34 @@ func Resume(ctx context.Context, jobID string, queryFn QueryFunc, opts Options) 
 	start := time.Now()
 	attempt := 0
 
+	var lastErr error
+
 	for {
 		attempt++
 
+		// 超时检查前置：保证 Timeout < backoff[0] 也能正常返回 TIMEOUT，不会卡在 sleep
+		if time.Now().After(deadline) {
+			msg := fmt.Sprintf("task did not complete within %v; resume with the original jobID %s", timeout, jobID)
+			if lastErr != nil {
+				msg += fmt.Sprintf(" (last query error: %v)", lastErr)
+			}
+			return FinalResult{
+				JobID:    jobID,
+				Status:   StatusTimeout,
+				Message:  msg,
+				Attempts: attempt - 1,
+				Elapsed:  time.Since(start),
+			}, nil
+		}
+
 		// 等待间隔（首次也等，避免提交后立即查询，给服务端处理时间）
+		// sleep 长度上限取 deadline 剩余时间，避免 sleep 后再发现已超时
 		interval := backoff[len(backoff)-1] // 序列耗尽后用最后一个
 		if attempt-1 < len(backoff) {
 			interval = backoff[attempt-1]
+		}
+		if remain := time.Until(deadline); remain > 0 && interval > remain {
+			interval = remain
 		}
 		select {
 		case <-ctx.Done():
@@ -157,25 +178,17 @@ func Resume(ctx context.Context, jobID string, queryFn QueryFunc, opts Options) 
 		case <-time.After(interval):
 		}
 
-		// 超时检查
-		if time.Now().After(deadline) {
-			return FinalResult{
-				JobID:    jobID,
-				Status:   StatusTimeout,
-				Message:  fmt.Sprintf("task did not complete within %v; use --job-id %s to resume", timeout, jobID),
-				Attempts: attempt,
-				Elapsed:  time.Since(start),
-			}, nil
-		}
-
 		qr, err := queryFn(ctx, jobID)
 		if err != nil {
-			// 单次查询失败不立即放弃，下一轮重试；但保留 error 给最后兜底
+			// 单次查询失败不立即放弃，下一轮重试；保存 error 给最后兜底（superseded
+			// by 下次成功；timeout 时会把它附到 Message 帮助排查）
+			lastErr = err
 			if opts.ProgressFn != nil {
 				opts.ProgressFn(attempt, "", time.Since(start))
 			}
 			continue
 		}
+		lastErr = nil
 
 		if opts.ProgressFn != nil {
 			opts.ProgressFn(attempt, qr.Status, time.Since(start))

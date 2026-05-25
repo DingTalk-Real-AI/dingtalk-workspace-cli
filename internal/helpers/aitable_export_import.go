@@ -409,19 +409,21 @@ func runAitableImportData(cmd *cobra.Command, runner executor.Runner) error {
 		))
 	}
 
-	// 单 importId 任务，submit = 触发查询；后续轮询用同样 tool
-	first := true
+	// 单 importId 任务，submit = 触发查询；后续轮询用同样 tool。
+	// 关键：建表参数 tableId/fieldMapping 必须在"已成功提交"前重复传——首次 RPC
+	// 失败时 asynctask.Resume 会保留 lastErr 重试，建表参数不能在首次调用就消费掉
+	// 否则重试永远丢参数（agent #1 P0-3 修复）。
+	submitted := false
 	queryFn := func(ctx context.Context, jobID string) (asynctask.QueryResult, error) {
 		params := map[string]any{"importId": jobID}
-		if first {
-			// 首次调用带建表参数
+		if !submitted {
+			// 未确认提交前每次都带建表参数；服务端幂等接受重复提交
 			if tableID != "" {
 				params["tableId"] = tableID
 			}
 			if fieldMapping != "" {
 				params["fieldMapping"] = fieldMapping
 			}
-			first = false
 		}
 		result, err := runner.Run(ctx, executor.NewHelperInvocation(
 			cobracmd.LegacyCommandPath(cmd), "aitable", "import_data", params,
@@ -429,6 +431,8 @@ func runAitableImportData(cmd *cobra.Command, runner executor.Runner) error {
 		if err != nil {
 			return asynctask.QueryResult{}, err
 		}
+		// 服务端确认收到（无 err）后切到纯轮询模式
+		submitted = true
 		return parseAitableImportQueryResult(result.Response), nil
 	}
 

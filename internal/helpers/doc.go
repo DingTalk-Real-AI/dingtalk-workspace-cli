@@ -297,14 +297,16 @@ func extractDocExportJobID(resp map[string]any) string {
 }
 
 // parseDocExportQueryResult 把 query_export_job 的响应转成 asynctask.QueryResult。
+// 注意：必须复用 normalizeAsyncStatus（来自 aitable_export_import.go），否则服务端
+// 返回 SUCCEED / DONE / FINISHED / FAILURE 等变体时，asynctask.Resume 会走 default
+// 分支当成 PROCESSING 继续等到超时。
 func parseDocExportQueryResult(resp map[string]any) asynctask.QueryResult {
 	src := unwrapDocResp(resp)
 	statusRaw, _ := src["status"].(string)
-	status := asynctask.Status(strings.ToUpper(strings.TrimSpace(statusRaw)))
 	msg, _ := src["message"].(string)
 	url, _ := src["downloadUrl"].(string)
 	return asynctask.QueryResult{
-		Status:      status,
+		Status:      normalizeAsyncStatus(statusRaw, url != ""),
 		DownloadURL: url,
 		Message:     msg,
 		Raw:         src,

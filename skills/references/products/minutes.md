@@ -365,5 +365,5 @@ dws minutes upload cancel --session-id <sessionId> --format json
 
 | 脚本 | 场景 | 用法 |
 |------|------|------|
-| [minutes_recent_summary.py](../../scripts/minutes_recent_summary.py) | 获取最近听记的 AI 摘要并合并 | `python minutes_recent_summary.py --max 5` |
-| [minutes_extract_todos.py](../../scripts/minutes_extract_todos.py) | 从听记中提取待办事项汇总 | `python minutes_extract_todos.py --max 5` |
+| `minutes_recent_summary.py`（开源版未引入；可手动用 `dws minutes list` + `dws minutes summary get` 组合） | 获取最近听记的 AI 摘要并合并 | `python minutes_recent_summary.py --max 5` |
+| `minutes_extract_todos.py`（开源版未引入；可手动用 `dws minutes todo list` 拼装） | 从听记中提取待办事项汇总 | `python minutes_extract_todos.py --max 5` |
