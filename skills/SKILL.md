@@ -33,7 +33,7 @@ cli_version: ">=1.0.15"
 | `contact`         | 通讯录：用户查询(当前用户/搜索/详情/手机号)/部门查询(搜索/成员列表)              | [contact.md](./references/products/contact.md)                 |
 | `devdoc`          | 开放平台文档：搜索开发文档                                        | [devdoc.md](./references/products/devdoc.md)                   |
 | `ding`            | DING消息：发送/撤回（应用内/短信/电话）                              | [ding.md](./references/products/ding.md)                       |
-| `doc`             | 钉钉文档：搜索/浏览/读写/块级编辑/评论/文件创建/复制/移动/重命名                | [doc.md](./references/products/doc.md)                         |
+| `doc`             | 钉钉文档：搜索/浏览/读写/块级编辑/评论/文件创建/复制/移动/重命名/**删除/导出 docx/权限管理/媒体上传下载**       | [doc.md](./references/products/doc.md)                         |
 | `drive`           | 钉钉云盘：文件列表/元数据/文件夹/上传(两步)/下载                        | [drive.md](./references/products/drive.md)                     |
 | `minutes`         | AI听记：听记列表/摘要/关键词/转写/待办/思维导图/发言人/热词/上传                | [minutes.md](./references/products/minutes.md)                 |
 | `oa`              | OA审批：待办/我发起的/表单模板/详情/审批流水/同意/拒绝/撤销                   | [oa.md](./references/products/oa.md)                           |
@@ -89,7 +89,9 @@ cli_version: ">=1.0.15"
 | `calendar` | `room delete` | 取消会议室预定 |
 | `chat` | `group members remove` | 移除群成员 |
 | `chat` | `message recall-by-bot` | 撤回机器人已发消息 |
-| `doc` | `block delete` | 删除文档块（不可恢复） |
+| `doc` | `delete` | **删除整篇文档/文件**到回收站（与 `block delete` 不同，本命令删除整个 node） |
+| `doc` | `block delete` | 删除文档单个块（不可恢复） |
+| `doc` | `permission update` | 修改协作者权限（降权可能影响他人访问） |
 | `ding` | `message recall` | 撤回已发 DING 消息 |
 | `oa` | `approval revoke` | 撤销自己发起的审批实例 |
 | `oa` | `approval reject` | 拒绝待审批（需加明确理由） |
