@@ -114,13 +114,13 @@ func doRegisterDocExportFlags(cmd *cobra.Command) {
 	cmd.Flags().Int("timeout-sec", 300, i18n.T("整体轮询超时（秒），默认 300"))
 }
 
-// TRANSITIONAL: 等 mse 把 submit_doc_export_job / query_doc_export_job 加入
+// TRANSITIONAL: 等 mse 把 submit_export_job / query_export_job 加入
 // doc toolOverrides 后，本节 helper 可整体删除。工单：plan/mse-yuyuan-patch.md
 // 改动 2.2。
 //
 // 设计：用 pkg/asynctask.Submit 串起来：
-//  1. 调 submit_doc_export_job 拿 jobId
-//  2. 渐进式退避轮询 query_doc_export_job 直到 SUCCESS / FAILED / 超时
+//  1. 调 submit_export_job 拿 jobId
+//  2. 渐进式退避轮询 query_export_job 直到 SUCCESS / FAILED / 超时
 //  3. SUCCESS 且 --output 传入时，自动 GET downloadUrl 落盘
 //
 // 不传 --output 时只输出 downloadUrl + jobId，调用方自行决定后续。
@@ -140,7 +140,7 @@ func runDocExport(cmd *cobra.Command, runner executor.Runner) error {
 	submitFn := func(ctx context.Context) (string, error) {
 		params := map[string]any{"nodeId": nodeID}
 		result, err := runner.Run(ctx, executor.NewHelperInvocation(
-			cobracmd.LegacyCommandPath(cmd), "doc", "submit_doc_export_job", params,
+			cobracmd.LegacyCommandPath(cmd), "doc", "submit_export_job", params,
 		))
 		if err != nil {
 			return "", err
@@ -150,7 +150,7 @@ func runDocExport(cmd *cobra.Command, runner executor.Runner) error {
 
 	queryFn := func(ctx context.Context, jobID string) (asynctask.QueryResult, error) {
 		result, err := runner.Run(ctx, executor.NewHelperInvocation(
-			cobracmd.LegacyCommandPath(cmd), "doc", "query_doc_export_job",
+			cobracmd.LegacyCommandPath(cmd), "doc", "query_export_job",
 			map[string]any{"jobId": jobID},
 		))
 		if err != nil {
@@ -161,7 +161,7 @@ func runDocExport(cmd *cobra.Command, runner executor.Runner) error {
 
 	if commandDryRun(cmd) {
 		return writeCommandPayload(cmd, executor.NewHelperInvocation(
-			cobracmd.LegacyCommandPath(cmd), "doc", "submit_doc_export_job",
+			cobracmd.LegacyCommandPath(cmd), "doc", "submit_export_job",
 			map[string]any{"nodeId": nodeID, "__async__": true, "__output__": output},
 		))
 	}
@@ -233,7 +233,7 @@ func newDocExportGetCommand(runner executor.Runner) *cobra.Command {
 
 			queryFn := func(ctx context.Context, jobID string) (asynctask.QueryResult, error) {
 				result, err := runner.Run(ctx, executor.NewHelperInvocation(
-					cobracmd.LegacyCommandPath(cmd), "doc", "query_doc_export_job",
+					cobracmd.LegacyCommandPath(cmd), "doc", "query_export_job",
 					map[string]any{"jobId": jobID},
 				))
 				if err != nil {
@@ -244,7 +244,7 @@ func newDocExportGetCommand(runner executor.Runner) *cobra.Command {
 
 			if commandDryRun(cmd) {
 				return writeCommandPayload(cmd, executor.NewHelperInvocation(
-					cobracmd.LegacyCommandPath(cmd), "doc", "query_doc_export_job",
+					cobracmd.LegacyCommandPath(cmd), "doc", "query_export_job",
 					map[string]any{"jobId": jobID},
 				))
 			}
@@ -284,7 +284,7 @@ func newDocExportGetCommand(runner executor.Runner) *cobra.Command {
 	return cmd
 }
 
-// extractDocExportJobID 从 submit_doc_export_job 响应里抽 jobId。
+// extractDocExportJobID 从 submit_export_job 响应里抽 jobId。
 func extractDocExportJobID(resp map[string]any) string {
 	src := unwrapDocResp(resp)
 	if id, ok := src["jobId"].(string); ok && id != "" {
@@ -296,7 +296,7 @@ func extractDocExportJobID(resp map[string]any) string {
 	return ""
 }
 
-// parseDocExportQueryResult 把 query_doc_export_job 的响应转成 asynctask.QueryResult。
+// parseDocExportQueryResult 把 query_export_job 的响应转成 asynctask.QueryResult。
 func parseDocExportQueryResult(resp map[string]any) asynctask.QueryResult {
 	src := unwrapDocResp(resp)
 	statusRaw, _ := src["status"].(string)
