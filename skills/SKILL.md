@@ -160,8 +160,18 @@ dws schema <path> --jq '.tool.required'      # 只看必填字段
 - [references/products/aitable/](./references/products/aitable/) — AI表格细分章节（单元格值/字段属性/公式/筛选排序/导入导出/仪表盘/记录增删改查/错误恢复/最佳实践）
 - [references/products/aitable-record-ops.md](./references/products/aitable-record-ops.md) — AI表格记录操作专项说明
 - [references/capability-limits.md](./references/capability-limits.md) — 已知能力限制（doc/aitable/chat/minutes，遇到时直接告知用户不支持）
-- [references/best_practices/](./references/best_practices/) — 玉渊场景 recipe 行动指南
-  - [04-document.md](./references/best_practices/04-document.md) — 文档场景（write-doc / search-docs / migrate-doc / update-doc-section / doc-to-message 等）
-  - [06-data-analytics.md](./references/best_practices/06-data-analytics.md) — AI表格数据分析（read-aitable / generate-data-report / create-aitable-record / update-aitable-record / search-aitable-template）
+- [references/best_practices/](./references/best_practices/) — 全场景 recipe 行动指南（11 个编号场景 + lite 速查）
+  - [01-messaging.md](./references/best_practices/01-messaging.md) — 消息沟通
+  - [02-task.md](./references/best_practices/02-task.md) — 任务管理（todo）
+  - [03-meeting.md](./references/best_practices/03-meeting.md) — 会议日程（日历 + 会议室）
+  - [04-document.md](./references/best_practices/04-document.md) — 文档场景（write-doc / search-docs / migrate-doc / update-doc-section / doc-to-message / delete-old-doc / export-doc-as-docx / grant-doc-access / insert-image-to-doc / template-based-generation 等）
+  - [05-reporting.md](./references/best_practices/05-reporting.md) — 工作汇报（钉钉日志 / 文档周报选路）
+  - [06-data-analytics.md](./references/best_practices/06-data-analytics.md) — AI表格数据分析（read-aitable / generate-data-report / create-aitable-record / update-aitable-record / export-aitable-to-xlsx / primary-doc-from-record 等）
+  - [07-minutes.md](./references/best_practices/07-minutes.md) — 听记与会后
+  - [08-directory.md](./references/best_practices/08-directory.md) — 通讯录（组织架构）
+  - [09-mail.md](./references/best_practices/09-mail.md) — 邮件
+  - [10-minutes-speaker-match.md](./references/best_practices/10-minutes-speaker-match.md) — 听记发言人智能匹配
+  - [11-minutes-speaker-correct.md](./references/best_practices/11-minutes-speaker-correct.md) — 听记发言人识别与标注
+  - [lite-recipes.md](./references/best_practices/lite-recipes.md) — Lite Recipe 速查（核心流程判定为 lite 后直接执行）
   - [_common/conventions.md](./references/best_practices/_common/conventions.md) — 批量查询、多源并行采集、字段术语等通用规范
   - [_common/recipe-conventions.md](./references/best_practices/_common/recipe-conventions.md) — recipe 元规范
