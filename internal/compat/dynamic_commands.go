@@ -216,6 +216,10 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 			// target flags may be registered lazily by buildFlagsFromDetailSchema.
 			applyFlagConstraints(cmd, override)
 
+			// §mail-hook: product-specific CLI-side validators (see
+			// mail_hooks.go for the full rationale). No-op for non-mail.
+			installMailHook(cmd, canonicalProduct, toolName, runner)
+
 			// §1.4: Add to the right parent group
 			attachToGroup(rootCmd, override.Group, groupCmds, cmd)
 		}
