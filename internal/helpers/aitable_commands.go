@@ -14,7 +14,9 @@
 package helpers
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -22,6 +24,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/paging"
 	"github.com/spf13/cobra"
 )
 
@@ -415,9 +418,23 @@ func newAitableFieldUpdateCommand(runner executor.Runner) *cobra.Command {
 
 func newAitableRecordQueryCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:               "query",
-		Short:             i18n.T("查询记录"),
-		Example:           "  dws aitable record query --base-id BASE_ID --table-id TABLE_ID --keyword 关键词 --limit 50",
+		Use:   "query",
+		Short: i18n.T("查询记录"),
+		Long: i18n.T(`查询 AI 表格记录。
+
+默认行为：返回单页数据（受 --limit 控制，未传时由服务端默认）。
+传入 --all 时自动翻页累计全部数据，受 --page-limit 安全阀控制（默认 50 页）。
+
+翻页输出契约（仅 --all 时）：
+  - records  - 累计所有页的记录
+  - hasMore  - true 表示触发 page-limit 或中途出错，需用 --cursor <X> 续拉
+  - cursor   - 续拉用的下一页 cursor（hasMore=true 时有效）
+  - partial  - true 表示中途某页失败，records 是失败前已累计的数据
+  - pages    - 实际翻了多少页`),
+		Example: `  dws aitable record query --base-id B --table-id T --limit 50
+  dws aitable record query --base-id B --table-id T --all
+  dws aitable record query --base-id B --table-id T --all --page-limit 0    # 不限制
+  dws aitable record query --base-id B --table-id T --all --cursor <SAVED>  # 接续上次断点`,
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -430,40 +447,52 @@ func newAitableRecordQueryCommand(runner executor.Runner) *cobra.Command {
 				return err
 			}
 
-			params := map[string]any{
+			// 构建单页查询参数
+			baseParams := map[string]any{
 				"baseId":  baseID,
 				"tableId": tableID,
 			}
 			if recordIDs := aitableStringFlag(cmd, "record-ids"); recordIDs != "" {
-				params["recordIds"] = parseAitableCSVValues(recordIDs)
+				baseParams["recordIds"] = parseAitableCSVValues(recordIDs)
 			}
 			if fieldIDs := aitableStringFlag(cmd, "field-ids"); fieldIDs != "" {
-				params["fieldIds"] = parseAitableCSVValues(fieldIDs)
+				baseParams["fieldIds"] = parseAitableCSVValues(fieldIDs)
 			}
 			if filtersRaw := aitableStringFlag(cmd, "filters"); filtersRaw != "" {
 				filters, err := parseAitableJSONObject(filtersRaw, "filters")
 				if err != nil {
 					return err
 				}
-				params["filters"] = filters
+				baseParams["filters"] = filters
 			}
 			if sortRaw := aitableStringFlag(cmd, "sort"); sortRaw != "" {
 				sortValue, err := parseAitableJSONArray(sortRaw, "sort")
 				if err != nil {
 					return err
 				}
-				params["sort"] = sortValue
+				baseParams["sort"] = sortValue
 			}
 			if keyword := aitableFlagOrFallback(cmd, "query", "keyword"); keyword != "" {
-				params["keyword"] = keyword
+				baseParams["keyword"] = keyword
 			}
 			if limit, _ := cmd.Flags().GetInt("limit"); limit > 0 {
-				params["limit"] = limit
+				baseParams["limit"] = limit
 			}
-			if cursor := aitableStringFlag(cmd, "cursor"); cursor != "" {
-				params["cursor"] = cursor
+
+			fetchAll, _ := cmd.Flags().GetBool("all")
+			initialCursor := aitableStringFlag(cmd, "cursor")
+
+			// 非 --all 模式：保持原行为（单页查询）
+			if !fetchAll {
+				params := cloneMap(baseParams)
+				if initialCursor != "" {
+					params["cursor"] = initialCursor
+				}
+				return runAitableTool(cmd, runner, "query_records", params)
 			}
-			return runAitableTool(cmd, runner, "query_records", params)
+
+			// --all 模式：用 pkg/paging 循环
+			return runRecordQueryAll(cmd, runner, baseParams, initialCursor)
 		},
 	}
 	preferLegacyLeaf(cmd)
@@ -478,7 +507,18 @@ func newAitableRecordQueryCommand(runner executor.Runner) *cobra.Command {
 	_ = cmd.Flags().MarkHidden("keyword")
 	cmd.Flags().Int("limit", 0, i18n.T("单次最大记录数"))
 	cmd.Flags().String("cursor", "", i18n.T("分页游标"))
+	cmd.Flags().Bool("all", false, i18n.T("自动翻页获取全部记录（受 --page-limit 上限）"))
+	cmd.Flags().Int("page-limit", 50, i18n.T("自动翻页最大页数（默认 50 ≈ 5000 条），0 表示无限制"))
 	return cmd
+}
+
+// cloneMap 浅拷贝 map[string]any，避免在循环中共享底层 map 导致 cursor 覆写问题。
+func cloneMap(m map[string]any) map[string]any {
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
 }
 
 func newAitableRecordCreateCommand(runner executor.Runner) *cobra.Command {
@@ -733,4 +773,99 @@ func parseAitableJSONObject(raw, flagName string) (map[string]any, error) {
 		return nil, apperrors.NewValidation(fmt.Sprintf("--%s JSON parse failed: %v", flagName, err))
 	}
 	return value, nil
+}
+
+// runRecordQueryAll 实现 dws aitable record query --all：用 pkg/paging 反复调
+// query_records 直到拉完 / 触发 page-limit / 中途失败优雅降级。
+//
+// 输出契约（写到 stdout 的 JSON）：
+//
+//	{
+//	  "records": [...累计所有页...],
+//	  "hasMore": true|false,
+//	  "cursor":  "下一页 cursor，hasMore=true 时有效",
+//	  "partial": true|false,
+//	  "pages":   实际翻了多少页
+//	}
+func runRecordQueryAll(cmd *cobra.Command, runner executor.Runner, baseParams map[string]any, initialCursor string) error {
+	pageLimit, _ := cmd.Flags().GetInt("page-limit")
+
+	// dry-run 模式：只打印第一次请求的预览，不实际循环
+	if commandDryRun(cmd) {
+		params := cloneMap(baseParams)
+		if initialCursor != "" {
+			params["cursor"] = initialCursor
+		}
+		params["__paging__"] = map[string]any{"all": true, "pageLimit": pageLimit}
+		return writeCommandPayload(cmd, executor.NewHelperInvocation(
+			cobracmd.LegacyCommandPath(cmd), "aitable", "query_records", params,
+		))
+	}
+
+	fetcher := func(ctx context.Context, cursor string) (paging.Page, error) {
+		params := cloneMap(baseParams)
+		if cursor != "" {
+			params["cursor"] = cursor
+		}
+		invocation := executor.NewHelperInvocation(
+			cobracmd.LegacyCommandPath(cmd), "aitable", "query_records", params,
+		)
+		result, err := runner.Run(ctx, invocation)
+		if err != nil {
+			return paging.Page{}, err
+		}
+		records, nextCursor := extractRecordsAndCursor(result.Response)
+		return paging.Page{Records: records, NextCursor: nextCursor}, nil
+	}
+
+	res := paging.FetchAll(cmd.Context(), fetcher, paging.Options{
+		PageLimit:     pageLimit,
+		InitialCursor: initialCursor,
+	})
+
+	// 组装输出
+	output := map[string]any{
+		"records": res.Records,
+		"hasMore": res.HasMore,
+		"pages":   res.Pages,
+	}
+	if res.LastCursor != "" {
+		output["cursor"] = res.LastCursor
+	}
+	if res.Partial {
+		output["partial"] = true
+	}
+	// 因 page-limit 截断不算错误，其它错误透传到 stderr 提示但不退出 1（保留已拉数据）
+	if res.Err != nil && !errors.Is(res.Err, paging.ErrPageLimitReached) {
+		fmt.Fprintf(cmd.ErrOrStderr(), "warning: %v (returned %d records before failure)\n", res.Err, len(res.Records))
+	}
+
+	return writeCommandPayload(cmd, output)
+}
+
+// extractRecordsAndCursor 从 query_records MCP 响应里抽出 records 数组与 nextCursor。
+// 兼容两种包装：result.Response 直接含 records / 经 content/data 二次包装。
+func extractRecordsAndCursor(resp map[string]any) ([]any, string) {
+	if resp == nil {
+		return nil, ""
+	}
+	src := resp
+	if content, ok := src["content"].(map[string]any); ok && len(content) > 0 {
+		src = content
+	}
+	data, _ := src["data"].(map[string]any)
+	if data == nil {
+		data = src
+	}
+	records, _ := data["records"].([]any)
+	cursor, _ := data["nextCursor"].(string)
+	if cursor == "" {
+		// 容错：部分上游可能用 cursor / pageToken 字段名
+		if c, ok := data["cursor"].(string); ok {
+			cursor = c
+		} else if c, ok := data["pageToken"].(string); ok {
+			cursor = c
+		}
+	}
+	return records, cursor
 }
