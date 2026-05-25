@@ -215,6 +215,19 @@ type CLIToolOverride struct {
 	// inner slice becomes one cobra.MarkFlagsOneRequired call. Typically
 	// paired with MutuallyExclusive to enforce "exactly one of".
 	RequireOneOf [][]string `json:"requireOneOf,omitempty"`
+	// RequireTogether groups flag aliases that must all be set together (or
+	// all left unset). Each inner slice becomes one PreRunE cross-field check
+	// reporting "--a and --b must be set together (or both omitted)". Used
+	// for envelope-driven leaves where cobra has no first-class operator
+	// (the only built-in pair APIs are mutually-exclusive / one-required).
+	// Example: [["start","end"]] on `contact user dismission search`.
+	RequireTogether [][]string `json:"requireTogether,omitempty"`
+	// RejectPositional, when true, attaches cobra.NoArgs to the generated
+	// leaf so any unexpected positional argument is rejected at parse time
+	// (non-zero exit). Only honored on leaves with no positional bindings;
+	// leaves declaring `flags.*.positional: true` ignore this field because
+	// their arity is governed by the positional binding count.
+	RejectPositional bool `json:"rejectPositional,omitempty"`
 	// RedirectTo, when non-empty, turns this entry into a stub command that
 	// prints the redirect target instead of invoking a tool. All other
 	// fields (Flags / BodyWrapper / IsSensitive / ServerOverride) are

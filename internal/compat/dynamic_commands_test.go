@@ -1053,11 +1053,17 @@ func TestBuildDynamicCommands_Hints(t *testing.T) {
 
 	out := &strings.Builder{}
 	purge.SetOut(out)
-	if err := purge.RunE(purge, nil); err != nil {
-		t.Fatalf("runE: %v", err)
+	// Hint commands intentionally exit non-zero so AI agents / scripts
+	// notice the redirect; the error message carries the canonical path.
+	err := purge.RunE(purge, nil)
+	if err == nil {
+		t.Fatalf("hint RunE should return an error to surface non-zero exit, got nil")
+	}
+	if !strings.Contains(err.Error(), "dws chat message delete-all") {
+		t.Fatalf("hint error missing target, got %q", err.Error())
 	}
 	if !strings.Contains(out.String(), "dws chat message delete-all") {
-		t.Fatalf("hint output missing target, got %q", out.String())
+		t.Fatalf("hint stdout missing target, got %q", out.String())
 	}
 }
 
