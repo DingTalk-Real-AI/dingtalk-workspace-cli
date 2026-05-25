@@ -1,0 +1,57 @@
+{
+  "command_path": "aitable base get",
+  "description": "获取 AI 表格信息",
+  "product": "aitable",
+  "product_id": "aitable",
+  "case_count": 2,
+  "flags_required": [
+    "base-id"
+  ],
+  "flags_optional": [],
+  "positional_args": [],
+  "generated_at": "2026-03-17T10:24:46.893762",
+  "test_cases": [
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable base get",
+      "test_id": "aitable_aitable_base_get_001",
+      "user_intent": "获取 AI 表格 base123 的信息",
+      "category": "basic",
+      "difficulty": "easy",
+      "tags": [
+        "basic",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable base get --base-id base123 --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "base",
+        "get",
+        "--base-id",
+        "base123"
+      ]
+    },
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable base get",
+      "test_id": "aitable_aitable_base_get_002",
+      "user_intent": "查看一下 ID 为 base456 的多维表格的详情",
+      "category": "paraphrase",
+      "difficulty": "easy",
+      "tags": [
+        "paraphrase",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable base get --base-id base456 --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "base",
+        "get",
+        "--base-id",
+        "base456"
+      ]
+    }
+  ]
+}

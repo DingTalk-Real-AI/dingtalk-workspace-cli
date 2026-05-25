@@ -1,0 +1,57 @@
+{
+  "product_id": "aiapp",
+  "product_name": "aiapp",
+  "priority": "P2",
+  "total_commands": 3,
+  "total_test_cases": 10,
+  "generated_at": "2026-03-17T10:24:46.892727",
+  "reference_source": "dingtalk-workspace/references/products/aiapp.md",
+  "difficulty_distribution": {
+    "easy": 7,
+    "medium": 3
+  },
+  "category_distribution": {
+    "basic": 3,
+    "optional_flags": 6,
+    "paraphrase": 1
+  },
+  "commands": [
+    {
+      "command_path": "aiapp create",
+      "title": "创建 AI 应用",
+      "flags_required": [
+        "prompt"
+      ],
+      "flags_optional": [
+        "skills",
+        "attachments"
+      ],
+      "positional_args": [],
+      "file": "aiapp_create_testcases.json"
+    },
+    {
+      "command_path": "aiapp query",
+      "title": "查询 AI 应用",
+      "flags_required": [
+        "task-id"
+      ],
+      "flags_optional": [],
+      "positional_args": [],
+      "file": "aiapp_query_testcases.json"
+    },
+    {
+      "command_path": "aiapp modify",
+      "title": "修改 AI 应用",
+      "flags_required": [
+        "prompt",
+        "thread-id"
+      ],
+      "flags_optional": [
+        "skills",
+        "attachments"
+      ],
+      "positional_args": [],
+      "file": "aiapp_modify_testcases.json"
+    }
+  ]
+}

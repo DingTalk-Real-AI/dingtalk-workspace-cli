@@ -1,0 +1,115 @@
+{
+  "command_path": "aiapp modify",
+  "description": "修改 AI 应用",
+  "product": "aiapp",
+  "product_id": "aiapp",
+  "case_count": 4,
+  "flags_required": [
+    "prompt",
+    "thread-id"
+  ],
+  "flags_optional": [
+    "skills",
+    "attachments"
+  ],
+  "positional_args": [],
+  "generated_at": "2026-03-17T10:24:46.892592",
+  "test_cases": [
+    {
+      "product": "aiapp",
+      "product_id": "aiapp",
+      "command_path": "aiapp modify",
+      "test_id": "aiapp_aiapp_modify_001",
+      "user_intent": "修改 AI 应用，prompt 为 改为翻译应用",
+      "category": "basic",
+      "difficulty": "easy",
+      "tags": [
+        "basic",
+        "aiapp"
+      ],
+      "expected_cli_command": "dws aiapp modify --prompt 改为翻译应用 --thread-id <threadId> --format json",
+      "expected_cliflat_array": [
+        "aiapp",
+        "modify",
+        "--prompt",
+        "改为翻译应用",
+        "--thread-id",
+        "<threadId>"
+      ]
+    },
+    {
+      "product": "aiapp",
+      "product_id": "aiapp",
+      "command_path": "aiapp modify",
+      "test_id": "aiapp_aiapp_modify_002",
+      "user_intent": "修改 AI 应用，新的 prompt 为 新描述, 并挂载技能 s1,s2",
+      "category": "optional_flags",
+      "difficulty": "easy",
+      "tags": [
+        "optional",
+        "aiapp"
+      ],
+      "expected_cli_command": "dws aiapp modify --prompt 新描述 --thread-id <threadId> --skills s1,s2 --format json",
+      "expected_cliflat_array": [
+        "aiapp",
+        "modify",
+        "--prompt",
+        "新描述",
+        "--thread-id",
+        "<threadId>",
+        "--skills",
+        "s1,s2"
+      ]
+    },
+    {
+      "product": "aiapp",
+      "product_id": "aiapp",
+      "command_path": "aiapp modify",
+      "test_id": "aiapp_aiapp_modify_003",
+      "user_intent": "修改 AI 应用，根据新图片优化首页视觉风格, 带上附件 homepage.png",
+      "category": "optional_flags",
+      "difficulty": "easy",
+      "tags": [
+        "optional",
+        "aiapp"
+      ],
+      "expected_cli_command": "dws aiapp modify --prompt 根据新图片优化首页视觉风格 --thread-id <threadId> --attachments '[{\"name\":\"homepage.png\",\"type\":\"image/png\",\"url\":\"https://tmp/homepage.png\"}]' --format json",
+      "expected_cliflat_array": [
+        "aiapp",
+        "modify",
+        "--prompt",
+        "根据新图片优化首页视觉风格",
+        "--thread-id",
+        "<threadId>",
+        "--attachments",
+        "[{\"name\":\"homepage.png\",\"type\":\"image/png\",\"url\":\"https://tmp/homepage.png\"}]"
+      ]
+    },
+    {
+      "product": "aiapp",
+      "product_id": "aiapp",
+      "command_path": "aiapp modify",
+      "test_id": "aiapp_aiapp_modify_004",
+      "user_intent": "修改 AI 应用，增加个库存大盘图表页, 挂载技能 s1,s2 并带上附件 spec.png",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional",
+        "aiapp"
+      ],
+      "expected_cli_command": "dws aiapp modify --prompt 增加个库存大盘图表页 --thread-id <threadId> --skills s1,s2 --attachments '[{\"name\":\"spec.png\",\"type\":\"image/png\",\"url\":\"https://tmp/spec.png\"}]' --format json",
+      "expected_cliflat_array": [
+        "aiapp",
+        "modify",
+        "--prompt",
+        "增加个库存大盘图表页",
+        "--thread-id",
+        "<threadId>",
+        "--skills",
+        "s1,s2",
+        "--attachments",
+        "[{\"name\":\"spec.png\",\"type\":\"image/png\",\"url\":\"https://tmp/spec.png\"}]"
+      ]
+    }
+  ]
+}

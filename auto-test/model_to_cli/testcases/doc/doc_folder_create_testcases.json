@@ -1,0 +1,110 @@
+{
+  "command_path": "doc folder create",
+  "description": "创建文件夹",
+  "product": "doc",
+  "product_id": "doc",
+  "case_count": 4,
+  "flags_required": [
+    "name"
+  ],
+  "flags_optional": [
+    "folder",
+    "workspace"
+  ],
+  "positional_args": [],
+  "generated_at": "2026-03-17T10:24:46.909375",
+  "test_cases": [
+    {
+      "product": "doc",
+      "product_id": "doc",
+      "command_path": "doc folder create",
+      "test_id": "doc_doc_folder_create_001",
+      "user_intent": "在我的文档根目录创建一个文件夹叫 项目资料",
+      "category": "basic",
+      "difficulty": "easy",
+      "tags": [
+        "basic",
+        "doc"
+      ],
+      "expected_cli_command": "dws doc folder create --name 项目资料 --format json",
+      "expected_cliflat_array": [
+        "doc",
+        "folder",
+        "create",
+        "--name",
+        "项目资料"
+      ]
+    },
+    {
+      "product": "doc",
+      "product_id": "doc",
+      "command_path": "doc folder create",
+      "test_id": "doc_doc_folder_create_002",
+      "user_intent": "在文件夹 folder123 下创建一个子文件夹叫 子目录",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional",
+        "doc"
+      ],
+      "expected_cli_command": "dws doc folder create --name 子目录 --folder folder123 --format json",
+      "expected_cliflat_array": [
+        "doc",
+        "folder",
+        "create",
+        "--folder",
+        "folder123",
+        "--name",
+        "子目录"
+      ]
+    },
+    {
+      "product": "doc",
+      "product_id": "doc",
+      "command_path": "doc folder create",
+      "test_id": "doc_doc_folder_create_003",
+      "user_intent": "在知识库 ws456 里创建一个文件夹叫 Q2规划",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional",
+        "doc"
+      ],
+      "expected_cli_command": "dws doc folder create --name Q2规划 --workspace ws456 --format json",
+      "expected_cliflat_array": [
+        "doc",
+        "folder",
+        "create",
+        "--name",
+        "Q2规划",
+        "--workspace",
+        "ws456"
+      ]
+    },
+    {
+      "product": "doc",
+      "product_id": "doc",
+      "command_path": "doc folder create",
+      "test_id": "doc_doc_folder_create_004",
+      "user_intent": "在知识库 ws789 的文件夹 folder123 下创建 Q3归档 文件夹",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional_flags",
+        "doc"
+      ],
+      "expected_cli_command": "dws doc folder create --folder folder123 --name Q3归档 --workspace ws789 --format json",
+      "expected_cliflat_array": [
+        "doc",
+        "folder",
+        "create",
+        "--folder",
+        "folder123",
+        "--name",
+        "Q3归档",
+        "--workspace",
+        "ws789"
+      ]
+    }
+  ]
+}

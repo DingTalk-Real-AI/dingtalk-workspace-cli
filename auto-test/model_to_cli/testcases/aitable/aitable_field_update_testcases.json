@@ -1,0 +1,130 @@
+{
+  "command_path": "aitable field update",
+  "description": "更新字段",
+  "product": "aitable",
+  "product_id": "aitable",
+  "case_count": 4,
+  "flags_required": [
+    "base-id",
+    "field-id",
+    "table-id"
+  ],
+  "flags_optional": [
+    "config",
+    "name"
+  ],
+  "positional_args": [],
+  "generated_at": "2026-03-17T10:24:46.894949",
+  "test_cases": [
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable field update",
+      "test_id": "aitable_aitable_field_update_001",
+      "user_intent": "更新字段，name 为 新字段名称",
+      "category": "basic",
+      "difficulty": "easy",
+      "tags": [
+        "basic",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable field update --base-id <BASE_ID> --field-id <FIELD_ID> --table-id <TABLE_ID> --name \"新字段名称\" --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "field",
+        "update",
+        "--base-id",
+        "<BASE_ID>",
+        "--field-id",
+        "<FIELD_ID>",
+        "--table-id",
+        "<TABLE_ID>",
+        "--name",
+        "新字段名称"
+      ]
+    },
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable field update",
+      "test_id": "aitable_aitable_field_update_002",
+      "user_intent": "把 base123 的 table456 中字段 fld1 的名字改为 状态字段",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable field update --base-id base123 --table-id table456 --field-id fld1 --name 状态字段 --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "field",
+        "update",
+        "--base-id",
+        "base123",
+        "--field-id",
+        "fld1",
+        "--name",
+        "状态字段",
+        "--table-id",
+        "table456"
+      ]
+    },
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable field update",
+      "test_id": "aitable_aitable_field_update_003",
+      "user_intent": "更新字段 fld2 的配置，将选项值改为 JSON 配置",
+      "category": "optional_flags",
+      "difficulty": "hard",
+      "tags": [
+        "optional",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable field update --base-id base123 --table-id table456 --field-id fld2 --config '{\"options\":[{\"name\":\"进行中\"}]}' --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "field",
+        "update",
+        "--base-id",
+        "base123",
+        "--config",
+        "{\"options\":[{\"name\":\"进行中\"}]}",
+        "--field-id",
+        "fld2",
+        "--table-id",
+        "table456"
+      ]
+    },
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable field update",
+      "test_id": "aitable_aitable_field_update_004",
+      "user_intent": "同时更新 base123 的 table456 中字段 fld3 的名称为 优先级 并修改其选项配置",
+      "category": "optional_flags",
+      "difficulty": "hard",
+      "tags": [
+        "optional_flags",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable field update --base-id base123 --table-id table456 --field-id fld3 --name 优先级 --config '{\"options\":[{\"name\":\"高\"},{\"name\":\"中\"},{\"name\":\"低\"}]}' --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "field",
+        "update",
+        "--base-id",
+        "base123",
+        "--config",
+        "{\"options\":[{\"name\":\"高\"},{\"name\":\"中\"},{\"name\":\"低\"}]}",
+        "--field-id",
+        "fld3",
+        "--name",
+        "优先级",
+        "--table-id",
+        "table456"
+      ]
+    }
+  ]
+}

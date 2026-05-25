@@ -1,0 +1,67 @@
+{
+  "command_path": "aitable record create",
+  "description": "新增记录",
+  "product": "aitable",
+  "product_id": "aitable",
+  "case_count": 2,
+  "flags_required": [
+    "base-id",
+    "records",
+    "table-id"
+  ],
+  "flags_optional": [],
+  "positional_args": [],
+  "generated_at": "2026-03-17T10:24:46.895301",
+  "test_cases": [
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable record create",
+      "test_id": "aitable_aitable_record_create_001",
+      "user_intent": "在 base123 的 table456 中新增一条记录，任务名称为 开发需求评审，优先级为高",
+      "category": "basic",
+      "difficulty": "easy",
+      "tags": [
+        "basic",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable record create --base-id base123 --table-id table456 --records '[{\"cells\":{\"任务名称\":\"开发需求评审\",\"优先级\":\"高\"}}]' --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "record",
+        "create",
+        "--base-id",
+        "base123",
+        "--records",
+        "[{\"cells\":{\"任务名称\":\"开发需求评审\",\"优先级\":\"高\"}}]",
+        "--table-id",
+        "table456"
+      ]
+    },
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable record create",
+      "test_id": "aitable_aitable_record_create_002",
+      "user_intent": "往 base789 的 tblABC 里加一条记录，数据是姓名张三、部门研发",
+      "category": "paraphrase",
+      "difficulty": "easy",
+      "tags": [
+        "paraphrase",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable record create --base-id base789 --table-id tblABC --records '[{\"cells\":{\"姓名\":\"张三\",\"部门\":\"研发\"}}]' --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "record",
+        "create",
+        "--base-id",
+        "base789",
+        "--records",
+        "[{\"cells\":{\"姓名\":\"张三\",\"部门\":\"研发\"}}]",
+        "--table-id",
+        "tblABC"
+      ]
+    }
+  ]
+}

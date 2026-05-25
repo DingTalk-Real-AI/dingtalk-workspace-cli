@@ -1,0 +1,78 @@
+{
+  "command_path": "doc move",
+  "description": "移动文档/文件到指定位置",
+  "product": "doc",
+  "product_id": "doc",
+  "case_count": 5,
+  "flags_required": [
+    "node"
+  ],
+  "flags_optional": [
+    "folder",
+    "workspace"
+  ],
+  "positional_args": [],
+  "generated_at": "2026-04-17T09:30:00.000000",
+  "test_cases": [
+    {
+      "product": "doc",
+      "product_id": "doc",
+      "command_path": "doc move",
+      "test_id": "doc_doc_move_001",
+      "user_intent": "把文档abc123移动到文件夹folder456",
+      "category": "basic",
+      "difficulty": "easy",
+      "tags": ["basic", "doc"],
+      "expected_cli_command": "dws doc move --node abc123 --folder folder456 --format json",
+      "expected_cliflat_array": ["doc", "move", "--node", "abc123", "--folder", "folder456"]
+    },
+    {
+      "product": "doc",
+      "product_id": "doc",
+      "command_path": "doc move",
+      "test_id": "doc_doc_move_002",
+      "user_intent": "移动文档abc123到知识库ws789",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": ["optional_flags", "doc"],
+      "expected_cli_command": "dws doc move --node abc123 --workspace ws789 --format json",
+      "expected_cliflat_array": ["doc", "move", "--node", "abc123", "--workspace", "ws789"]
+    },
+    {
+      "product": "doc",
+      "product_id": "doc",
+      "command_path": "doc move",
+      "test_id": "doc_doc_move_003",
+      "user_intent": "把这个文档 https://alidocs.dingtalk.com/i/nodes/abc123 搬到文件夹folder456",
+      "category": "url_input",
+      "difficulty": "medium",
+      "tags": ["url_input", "doc"],
+      "expected_cli_command": "dws doc move --node \"https://alidocs.dingtalk.com/i/nodes/abc123\" --folder folder456 --format json",
+      "expected_cliflat_array": ["doc", "move", "--node", "https://alidocs.dingtalk.com/i/nodes/abc123", "--folder", "folder456"]
+    },
+    {
+      "product": "doc",
+      "product_id": "doc",
+      "command_path": "doc move",
+      "test_id": "doc_doc_move_004",
+      "user_intent": "把项目周报转移到归档目录archiveFolder下",
+      "category": "colloquial",
+      "difficulty": "medium",
+      "tags": ["colloquial", "doc"],
+      "expected_cli_command": "dws doc move --node <需先搜索获取nodeId> --folder archiveFolder --format json",
+      "expected_cliflat_array": ["doc", "move", "--node", "<nodeId>", "--folder", "archiveFolder"]
+    },
+    {
+      "product": "doc",
+      "product_id": "doc",
+      "command_path": "doc move",
+      "test_id": "doc_doc_move_005",
+      "user_intent": "移动文档doc123到文件夹target和知识库wsABC",
+      "category": "all_flags",
+      "difficulty": "medium",
+      "tags": ["all_flags", "doc"],
+      "expected_cli_command": "dws doc move --node doc123 --folder target --workspace wsABC --format json",
+      "expected_cliflat_array": ["doc", "move", "--node", "doc123", "--folder", "target", "--workspace", "wsABC"]
+    }
+  ]
+}

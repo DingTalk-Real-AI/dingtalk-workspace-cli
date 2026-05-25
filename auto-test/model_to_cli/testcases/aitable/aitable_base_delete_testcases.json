@@ -1,0 +1,61 @@
+{
+  "command_path": "aitable base delete",
+  "description": "删除 AI 表格",
+  "product": "aitable",
+  "product_id": "aitable",
+  "case_count": 2,
+  "flags_required": [
+    "base-id"
+  ],
+  "flags_optional": [
+    "reason"
+  ],
+  "positional_args": [],
+  "generated_at": "2026-03-17T10:24:46.894132",
+  "test_cases": [
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable base delete",
+      "test_id": "aitable_aitable_base_delete_001",
+      "user_intent": "删除 AI 表格",
+      "category": "basic",
+      "difficulty": "easy",
+      "tags": [
+        "basic",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable base delete --base-id <BASE_ID> --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "base",
+        "delete",
+        "--base-id",
+        "<BASE_ID>"
+      ]
+    },
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable base delete",
+      "test_id": "aitable_aitable_base_delete_002",
+      "user_intent": "删除AI表格base123，原因是项目已结项",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional_flags",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable base delete --base-id base123 --reason \"项目已结项\" --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "base",
+        "delete",
+        "--base-id",
+        "base123",
+        "--reason",
+        "项目已结项"
+      ]
+    }
+  ]
+}

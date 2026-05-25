@@ -1,0 +1,61 @@
+{
+  "command_path": "aitable base create",
+  "description": "创建 AI 表格",
+  "product": "aitable",
+  "product_id": "aitable",
+  "case_count": 2,
+  "flags_required": [
+    "name"
+  ],
+  "flags_optional": [
+    "template-id"
+  ],
+  "positional_args": [],
+  "generated_at": "2026-03-17T10:24:46.893884",
+  "test_cases": [
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable base create",
+      "test_id": "aitable_aitable_base_create_001",
+      "user_intent": "创建 AI 表格，name 为 项目跟踪",
+      "category": "basic",
+      "difficulty": "easy",
+      "tags": [
+        "basic",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable base create --name 项目跟踪 --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "base",
+        "create",
+        "--name",
+        "项目跟踪"
+      ]
+    },
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable base create",
+      "test_id": "aitable_aitable_base_create_002",
+      "user_intent": "用模板tpl123创建一个AI表格叫项目管理",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional_flags",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable base create --name \"项目管理\" --template-id tpl123 --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "base",
+        "create",
+        "--name",
+        "项目管理",
+        "--template-id",
+        "tpl123"
+      ]
+    }
+  ]
+}

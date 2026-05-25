@@ -1,0 +1,66 @@
+{
+  "command_path": "aitable field get",
+  "description": "获取字段详情",
+  "product": "aitable",
+  "product_id": "aitable",
+  "case_count": 2,
+  "flags_required": [
+    "base-id",
+    "table-id"
+  ],
+  "flags_optional": [
+    "field-ids"
+  ],
+  "positional_args": [],
+  "generated_at": "2026-03-17T10:24:46.894712",
+  "test_cases": [
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable field get",
+      "test_id": "aitable_aitable_field_get_001",
+      "user_intent": "获取数据表 base123 的 table456 的所有字段详情",
+      "category": "basic",
+      "difficulty": "easy",
+      "tags": [
+        "basic",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable field get --base-id base123 --table-id table456 --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "field",
+        "get",
+        "--base-id",
+        "base123",
+        "--table-id",
+        "table456"
+      ]
+    },
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable field get",
+      "test_id": "aitable_aitable_field_get_002",
+      "user_intent": "只获取字段 fld1,fld2 的详情，表格 ID 是 table456，AI 表格 ID 是 base123",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable field get --base-id base123 --table-id table456 --field-ids fld1,fld2 --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "field",
+        "get",
+        "--base-id",
+        "base123",
+        "--field-ids",
+        "fld1,fld2",
+        "--table-id",
+        "table456"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,100 @@
+{
+  "command_path": "aitable base list",
+  "description": "获取 AI 表格列表",
+  "product": "aitable",
+  "product_id": "aitable",
+  "case_count": 4,
+  "flags_required": [],
+  "flags_optional": [
+    "cursor",
+    "limit"
+  ],
+  "positional_args": [],
+  "generated_at": "2026-03-17T10:24:46.893398",
+  "test_cases": [
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable base list",
+      "test_id": "aitable_aitable_base_list_001",
+      "user_intent": "获取我的 AI 表格列表",
+      "category": "basic",
+      "difficulty": "easy",
+      "tags": [
+        "basic",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable base list --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "base",
+        "list"
+      ]
+    },
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable base list",
+      "test_id": "aitable_aitable_base_list_002",
+      "user_intent": "获取 AI 表格列表，每页5个",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional_flags",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable base list --limit 5 --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "base",
+        "list",
+        "--limit",
+        "5"
+      ]
+    },
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable base list",
+      "test_id": "aitable_aitable_base_list_003",
+      "user_intent": "获取 AI 表格列表，从游标 NEXT_CURSOR 继续翻页",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional_flags",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable base list --cursor NEXT_CURSOR --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "base",
+        "list",
+        "--cursor",
+        "NEXT_CURSOR"
+      ]
+    },
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable base list",
+      "test_id": "aitable_aitable_base_list_004",
+      "user_intent": "分页获取 AI 表格列表，从 NEXT_CURSOR 开始每页5个",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional_flags",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable base list --limit 5 --cursor NEXT_CURSOR --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "base",
+        "list",
+        "--cursor",
+        "NEXT_CURSOR",
+        "--limit",
+        "5"
+      ]
+    }
+  ]
+}

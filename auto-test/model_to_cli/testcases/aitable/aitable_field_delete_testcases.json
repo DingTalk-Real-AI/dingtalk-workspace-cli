@@ -1,0 +1,67 @@
+{
+  "command_path": "aitable field delete",
+  "description": "删除字段",
+  "product": "aitable",
+  "product_id": "aitable",
+  "case_count": 2,
+  "flags_required": [
+    "base-id",
+    "field-id",
+    "table-id"
+  ],
+  "flags_optional": [],
+  "positional_args": [],
+  "generated_at": "2026-03-17T10:24:46.895065",
+  "test_cases": [
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable field delete",
+      "test_id": "aitable_aitable_field_delete_001",
+      "user_intent": "删除 base123 的 table456 中的字段 fld789",
+      "category": "basic",
+      "difficulty": "easy",
+      "tags": [
+        "basic",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable field delete --base-id base123 --field-id fld789 --table-id table456 --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "field",
+        "delete",
+        "--base-id",
+        "base123",
+        "--field-id",
+        "fld789",
+        "--table-id",
+        "table456"
+      ]
+    },
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable field delete",
+      "test_id": "aitable_aitable_field_delete_002",
+      "user_intent": "把 base456 的 tblXYZ 里那个字段 fldABC 删掉",
+      "category": "paraphrase",
+      "difficulty": "easy",
+      "tags": [
+        "paraphrase",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable field delete --base-id base456 --field-id fldABC --table-id tblXYZ --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "field",
+        "delete",
+        "--base-id",
+        "base456",
+        "--field-id",
+        "fldABC",
+        "--table-id",
+        "tblXYZ"
+      ]
+    }
+  ]
+}

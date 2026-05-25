@@ -1,0 +1,78 @@
+{
+  "command_path": "doc copy",
+  "description": "复制文档/文件到指定位置",
+  "product": "doc",
+  "product_id": "doc",
+  "case_count": 5,
+  "flags_required": [
+    "node"
+  ],
+  "flags_optional": [
+    "folder",
+    "workspace"
+  ],
+  "positional_args": [],
+  "generated_at": "2026-04-17T09:30:00.000000",
+  "test_cases": [
+    {
+      "product": "doc",
+      "product_id": "doc",
+      "command_path": "doc copy",
+      "test_id": "doc_doc_copy_001",
+      "user_intent": "把文档abc123复制到文件夹folder456",
+      "category": "basic",
+      "difficulty": "easy",
+      "tags": ["basic", "doc"],
+      "expected_cli_command": "dws doc copy --node abc123 --folder folder456 --format json",
+      "expected_cliflat_array": ["doc", "copy", "--node", "abc123", "--folder", "folder456"]
+    },
+    {
+      "product": "doc",
+      "product_id": "doc",
+      "command_path": "doc copy",
+      "test_id": "doc_doc_copy_002",
+      "user_intent": "复制文档abc123到知识库ws789",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": ["optional_flags", "doc"],
+      "expected_cli_command": "dws doc copy --node abc123 --workspace ws789 --format json",
+      "expected_cliflat_array": ["doc", "copy", "--node", "abc123", "--workspace", "ws789"]
+    },
+    {
+      "product": "doc",
+      "product_id": "doc",
+      "command_path": "doc copy",
+      "test_id": "doc_doc_copy_003",
+      "user_intent": "把这个文档 https://alidocs.dingtalk.com/i/nodes/abc123 复制到文件夹folder456",
+      "category": "url_input",
+      "difficulty": "medium",
+      "tags": ["url_input", "doc"],
+      "expected_cli_command": "dws doc copy --node \"https://alidocs.dingtalk.com/i/nodes/abc123\" --folder folder456 --format json",
+      "expected_cliflat_array": ["doc", "copy", "--node", "https://alidocs.dingtalk.com/i/nodes/abc123", "--folder", "folder456"]
+    },
+    {
+      "product": "doc",
+      "product_id": "doc",
+      "command_path": "doc copy",
+      "test_id": "doc_doc_copy_004",
+      "user_intent": "拷贝一份项目周报到归档文件夹archiveFolder",
+      "category": "colloquial",
+      "difficulty": "medium",
+      "tags": ["colloquial", "doc"],
+      "expected_cli_command": "dws doc copy --node <需先搜索获取nodeId> --folder archiveFolder --format json",
+      "expected_cliflat_array": ["doc", "copy", "--node", "<nodeId>", "--folder", "archiveFolder"]
+    },
+    {
+      "product": "doc",
+      "product_id": "doc",
+      "command_path": "doc copy",
+      "test_id": "doc_doc_copy_005",
+      "user_intent": "复制文档doc123，不指定目标位置",
+      "category": "minimal",
+      "difficulty": "easy",
+      "tags": ["minimal", "doc"],
+      "expected_cli_command": "dws doc copy --node doc123 --format json",
+      "expected_cliflat_array": ["doc", "copy", "--node", "doc123"]
+    }
+  ]
+}
