@@ -88,10 +88,10 @@ def build_start_args(args: argparse.Namespace) -> list[str]:
         args.base_id,
         "--scope",
         args.scope,
-        "--format",
+        "--export-format",
         args.export_format,
-        "--timeout-ms",
-        str(args.timeout_ms),
+        "--timeout-sec",
+        str(args.timeout_sec),
     ]
     if args.table_id:
         cmd.extend(["--table-id", args.table_id])
@@ -107,9 +107,8 @@ def main() -> None:
     parser.add_argument("--table-id", help="scope=table/view 时必填")
     parser.add_argument("--view-id", help="scope=view 时必填")
     parser.add_argument("--export-format", default="excel", choices=sorted(ALLOWED_FORMATS), help="导出格式")
-    parser.add_argument("--timeout-ms", type=int, default=1000, help="单次等待毫秒数，默认 1000")
-    parser.add_argument("--poll-timeout-ms", type=int, default=3000, help="轮询等待毫秒数，默认 3000")
-    parser.add_argument("--max-polls", type=int, default=10, help="最大轮询次数，默认 10")
+    parser.add_argument("--timeout-sec", type=int, default=300, help="CLI 内置轮询整体超时（秒），默认 300（5 分钟）")
+    parser.add_argument("--max-polls", type=int, default=10, help="（兼容旧参数，开源 CLI 内置轮询不再使用）")
     parser.add_argument("--output", help="本地保存路径（不传则按 fileName 保存到当前目录）")
     parser.add_argument("--dws", default="dws", help="dws 可执行文件路径，默认 dws")
     parser.add_argument("--no-download", action="store_true", help="仅返回 downloadUrl，不下载文件")
@@ -153,10 +152,10 @@ def main() -> None:
                 args.base_id,
                 "--task-id",
                 task_id,
-                "--timeout-ms",
-                str(args.poll_timeout_ms),
+                "--timeout-sec",
+                str(args.timeout_sec),
             ],
-            timeout_sec=max(120, int(args.poll_timeout_ms / 1000) + 60),
+            timeout_sec=max(120, args.timeout_sec + 60),
         )
         if rc2 != 0:
             fail(f"export_data 轮询失败: {err2 or out2}", rc2)
