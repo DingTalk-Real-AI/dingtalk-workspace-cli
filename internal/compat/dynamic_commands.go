@@ -220,6 +220,10 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 			// mail_hooks.go for the full rationale). No-op for non-mail.
 			installMailHook(cmd, canonicalProduct, toolName, runner)
 
+			// §todo-hook: product-specific CLI-side validators (see
+			// todo_hooks.go for the full rationale). No-op for non-todo.
+			installTodoHook(cmd, canonicalProduct, toolName)
+
 			// §1.4: Add to the right parent group
 			attachToGroup(rootCmd, override.Group, groupCmds, cmd)
 		}
