@@ -1,5 +1,28 @@
 # 文档 (doc) 命令参考
 
+## 查询命令帮助
+
+当你不确定某个命令的具体参数、格式或可选项时，**优先执行 `--help` 查询**，不要猜测参数名或凭记忆编造。
+
+```bash
+# 查看 doc 下所有子命令
+dws doc --help
+
+# 查看具体命令的完整参数说明
+dws doc list --help
+dws doc create --help
+dws doc block insert --help
+
+# 查看子命令组下的所有命令
+dws doc block --help
+dws doc permission --help
+```
+
+规则：
+- 参数名不确定时 → 先 `--help`，再调用
+- 报错 "unknown flag" 时 → `--help` 确认正确的 flag 名称
+- 不确定某个功能是否存在时 → `dws doc --help` 查看命令列表
+
 ## 命令总览
 
 ### 搜索文档
@@ -322,6 +345,236 @@ Flags:
       --mention string      被 @ 的用户 uid 列表，逗号分隔
 ```
 
+### 文件内容获取路由规则
+
+> 当用户请求"分析/查看/读取某个文件内容"时，**必须先调用 `dws doc info` 获取文件元数据**，再根据返回的 `contentType` 和 `extension` 字段选择对应链路：
+
+| contentType | extension | 操作 | 命令 |
+|-------------|-----------|------|------|
+| ALIDOC | adoc | 在线获取 Markdown 内容 | `dws doc read --node <ID>` |
+| ALIDOC | axls | 在线读取表格数据 | `dws sheet get-all-sheets` → `dws sheet get-range` |
+| ALIDOC | able | 在线查询多维表格记录 | `dws aitable get-tables` → `dws aitable query-records` |
+| 非 ALIDOC | — | **不支持在线分析** | 告知用户需下载到本地后查看 |
+
+**关键规则**：非 ALIDOC 类型文件（PDF/Word/图片/视频等）不支持在线分析，用户可以选择下载后本地查看。
+
+### 格式保留度声明（adoc ↔ markdown lossy projection）
+
+`dws doc read --format json` 返回的 `markdown` 字段是钉钉 adoc 文档的**有损投影**。源 adoc 中以下富格式属性在 markdown 这一层**没有对应表达，会被丢弃**：
+
+- 行高（row height）
+- 单元格背景色（cell background color）
+- 字体大小（font size）
+- 字体颜色的**渐变形态**（`radial-gradient` / `linear-gradient` — 文本会以 `<span style="color: radial-gradient(...)">` 字面保留，但 CSS `color` 不接受渐变，浏览器无法渲染，**字符串保留但语义已死**）
+- 块级缩进 / 表格列宽
+- 合并单元格状态
+- checkbox 视觉样式（颜色、形状）
+- 任何 SVG / 嵌入式画板的渲染细节
+
+**硬指引（任何 contentType=ALIDOC 文档都适用）**：
+
+- 当用户要求"按模板生成同形态变体 / 参照这个生成 / 复刻 / 仿照这个文档"时，**禁止**走 `dws doc read → create_file → dws doc create` 链路——这条链路会做两次 lossy projection（adoc → markdown 丢一次，markdown → adoc 重建再丢一次），最终交付物只有文本内容，富格式全部失真。
+- 正确路径：`dws doc copy`（adoc 层面整文档保形复制）+ `dws doc rename` + `dws doc block list / dws doc block update`（在副本上做局部修改）。详见 [best_practices/04-document.md](../best_practices/04-document.md#template-based-generation) 的 `template-based-generation` recipe。
+- 当用户提到 `行高 / 颜色 / 字号 / 表格样式 / 周末高亮` 等富格式诉求时，agent 必须在动手前显式声明能力边界："这些属性 markdown 无法表达，需走 copy + block update 路径"，避免静默走破坏链。
+
+### 内容写入管道（create / update 共用）
+
+> **关键原则**：CLI 内置自动分片。超长内容（>10000 字符）自动按 markdown 结构切分后逐片写入，对调用方透明。写入完成后由调用方自行决定是否回读确认。
+
+#### 输入方式选择
+
+| 场景 | 推荐方式 | 说明 |
+|------|---------|------|
+| 短文本（<2KB，无换行/表格/特殊字符） | `--content "..."` | 字面量传入，最简单 |
+| 长文本（≥2KB）、含换行、含表格 | `--content-file ./file.md` | **必须**用文件路径，避免 shell escape 和截断 |
+| 含特殊字符（`"`、`\`、`$`、`` ` ``） | `--content-file ./file.md` | 字面量传入会被 shell 转义破坏 |
+| 管道/heredoc 输入 | `--content -` 或 `cat file \| dws doc ...` | 从 stdin 读取 |
+
+#### 自动分片行为
+
+当内容超过 10000 字符时，CLI 自动执行：
+1. **create**: 先创建空文档拿 `nodeId`，再按 markdown 标题边界切分后逐片 append
+2. **update (overwrite)**: 第一片用 overwrite，后续片用 append
+3. **update (append)**: 所有片段用 append
+
+分片策略按优先级：H1 标题 → H2 标题 → H3 标题 → 空行（段落边界）→ 硬切（保留表格/代码块完整性）
+
+如果某片写入超时，自动将分片大小减半重试（最小 5000 字符，低于此值报错）。
+
+#### 输出格式
+
+写入成功后输出 JSON（混合 `[INFO]` 进度行）：
+
+```json
+{"success": true, "nodeId": "xxx", "chunksWritten": 3}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `nodeId` | 文档节点 ID，可用于后续读取或追加 |
+| `chunksWritten` | 实际写入的分片数（1 = 单次写入） |
+
+#### 内容完整性验证（必读）
+
+CLI **不会**自动执行回读验证。**Agent 必须在文档写入完成后主动回读确认**——这是硬约束，不是建议：
+
+1. 使用 `dws doc read --node <nodeId>` 读取写入后的文档内容
+2. 检查关键段落是否完整、顺序是否正确
+3. 如发现内容缺失或异常，使用 `dws doc update --mode append` 补写缺失部分
+
+> **何时回读**：每次 create / update 操作完成后**必须**回读。
+> - 单次写入（≤10000 字符）：写完立即回读一次
+> - 分片写入（>10000 字符）：所有分片写完后回读一次全文，校验关键标题与段落完整性
+> - 破坏性 overwrite（`--mode overwrite --yes`）：**必须**回读，确认 overwrite 未被后端静默降级为 append（详见 [best_practices/04-document.md "doc update 回读校验规范"](../best_practices/04-document.md#doc-update-回读校验规范)）
+> - 连续多次编辑同一文档：可在全部编辑完成后统一回读一次
+>
+> **禁止**在未回读的情况下直接向用户报告"已完成 / 更新成功"。Agent 自陈"完成"必须基于回读结果，而非工具调用的 `success=true` 字段。
+
+#### 进度输出示例
+
+```
+[INFO] 内容较长 (25000 字符)，自动分片写入...
+[INFO] 已创建空文档 (nodeId=abc123)，开始分片写入...
+[INFO] 写入分片 (1/3)，10000 字符...
+[INFO] 写入分片 (2/3)，10000 字符...
+[INFO] 写入分片 (3/3)，5000 字符...
+[INFO] 全部 3 个分片写入完成
+{"success": true, "nodeId": "abc123", "chunksWritten": 3}
+```
+
+#### CONTENT_TRUNCATED 错误
+
+当分片写入持续超时且减半到最小阈值仍失败时，返回 `CONTENT_TRUNCATED` 错误码。应对策略：
+1. 检查网络和后端服务状态
+2. 已写入的部分内容可通过 `dws doc read --node <NODE_ID>` 查看
+3. 从断点处手动用 `dws doc update --mode append` 继续追加
+
+### 删除文档/文件到回收站
+
+> **CAUTION:** 不可逆操作 — 执行前必须向用户确认。
+
+```
+Usage:
+  dws doc delete [flags]
+Example:
+  dws doc delete --node <DOC_ID> --format json    # 查询 nodeId: dws doc search --query "..." 或 dws doc list
+Flags:
+      --node string   文档/文件 ID 或 URL (必填)
+```
+
+权限要求: 对文档有"管理"权限。
+
+### 下载文档附件
+```
+Usage:
+  dws doc media download [flags]
+Example:
+  dws doc media download --node <DOC_ID> --resource-id <RESOURCE_ID>
+  dws doc media download --node "https://alidocs.dingtalk.com/i/nodes/xxx" --resource-id <RESOURCE_ID>
+Flags:
+      --node string          目标文档的标识，支持传入 URL 或 ID (必填)
+      --resource-id string   附件资源 ID，可通过 dws doc block list 获取 (必填)
+```
+
+### 上传附件并插入文档
+```
+Usage:
+  dws doc media insert [flags]
+Example:
+  dws doc media insert --node <DOC_ID> --file ./report.pdf
+  dws doc media insert --node <DOC_ID> --file ./data.bin --name "数据文件.dat" --mime-type application/octet-stream
+  dws doc media insert --node <DOC_ID> --file ./image.png --ref-block <BLOCK_ID> --where before
+Flags:
+      --node string        目标文档的标识，支持传入 URL 或 ID (必填)
+      --file string        本地文件路径 (必填)
+      --name string        附件显示名称 (默认使用文件名)
+      --mime-type string   文件 MIME 类型 (默认根据扩展名推断)
+      --index int          插入位置索引
+      --where string       相对位置: before / after (配合 --ref-block)
+      --ref-block string   参考块 ID (配合 --where)
+```
+
+### 添加文档权限（节点级授权）
+```
+Usage:
+  dws doc permission add [flags]
+Example:
+  dws doc permission add --node <DOC_ID> --users uid1 --role READER
+  dws doc permission add --node <DOC_ID> --users uid1,uid2 --role EDITOR
+  dws doc permission add --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>" --users uid1 --role MANAGER
+Flags:
+      --node string        目标文档/文件夹的 ID 或 URL (必填)
+      --users strings      被授权的用户 userId 列表，逗号分隔 (必填，单次最多 30 个)
+      --role string        授予的角色 (必填，大小写敏感，必须全大写): MANAGER (管理者) / EDITOR (可编辑) / DOWNLOADER (可下载) / READER (可阅读)
+      --workspace string   所属知识库 ID (选填，仅用于辅助构造返回的 docUrl，业务实际依赖 nodeId)
+```
+
+> **重要约束**：
+> - 仅支持 USER 类型授权。
+> - 角色枚举严格大写：MANAGER / EDITOR / DOWNLOADER / READER（OWNER 不可通过此接口添加）。
+> - 操作者需在该节点具备「可编辑（EDITOR）」及以上角色（OWNER / MANAGER / EDITOR）。
+> - 授权对象是文档节点本身，不需要也不应该用 `wiki member add`（那个是知识库容器级授权）。
+
+### 修改文档权限（节点级）
+```
+Usage:
+  dws doc permission update [flags]
+Example:
+  dws doc permission update --node <DOC_ID> --users uid1 --role EDITOR
+  dws doc permission update --node <DOC_ID> --users uid1,uid2 --role READER
+Flags:
+      --node string        目标文档/文件夹的 ID 或 URL (必填)
+      --users strings      目标用户 userId 列表，逗号分隔 (必填，单次最多 30 个)
+      --role string        新角色 (必填，大小写敏感，必须全大写): MANAGER / EDITOR / DOWNLOADER / READER
+      --workspace string   所属知识库 ID (选填)
+```
+
+### 列出文档权限（节点级）
+```
+Usage:
+  dws doc permission list [flags]
+Example:
+  dws doc permission list --node <DOC_ID>
+  dws doc permission list --node <DOC_ID> --limit 50
+  dws doc permission list --node <DOC_ID> --filter-role EDITOR
+Flags:
+      --node string          目标文档/文件夹的 ID 或 URL (必填)
+      --workspace string     所属知识库 ID (选填)
+      --limit int             返回数量上限，最大 200 (默认 50)
+      --filter-role string   按角色过滤: MANAGER / EDITOR / DOWNLOADER / READER (选填)
+```
+
+> 接口不支持游标分页，使用 `--limit` 一次性拉取。
+
+### 导出在线文档为 docx（一体化命令）
+```
+Usage:
+  dws doc export [flags]
+Example:
+  dws doc export --node "https://alidocs.dingtalk.com/i/nodes/xxx" --output ./exported.docx
+  dws doc export --node <DOC_ID> --output ~/downloads/
+Flags:
+      --node string           要导出的文档标识，支持文档 URL 或 dentryUuid (必填)
+      --output string         本地保存路径，文件路径或目录 (必填)
+      --export-format string  导出格式，当前仅支持 docx (默认)
+```
+
+CLI 内部自动完成：提交导出任务 → 渐进式退避轮询（最多约 5 分钟）→ 成功后自动下载文件。
+**只需一条命令，无需手动轮询。**
+
+### 查询导出任务结果（手动兜底）
+```
+Usage:
+  dws doc export get [flags]
+Example:
+  dws doc export get --job-id <JOB_ID>
+Flags:
+      --job-id string   导出任务 ID (必填)
+```
+
+仅在 `dws doc export` 超时或中断后，用于手动查询任务状态。通常不需要调用。
+
+
 ## URL 识别与 DOC_ID 提取
 
 当用户输入包含钉钉文档 URL 时，**必须先识别并提取 DOC_ID**，再判断意图。
@@ -556,6 +809,54 @@ dws doc read --node "https://alidocs.dingtalk.com/document/preview?cid=749936706
 > **注意**：`document/edit` 和 `document/preview` 格式 URL 中的 `dentryKey` 参数值不是合法的独立 nodeId，禁止提取后单独使用，必须传入完整 URL。URL 中可能包含 `utm_source`、`chInfo` 等追踪参数，无需手动去除，直接传入完整 URL 即可。
 
 `--folder` 参数同样支持文件夹 URL 或 ID。
+
+## 长 Markdown 写入
+
+**核心规则**：含多行、表格、`\n` 或长度 >2KB 的 Markdown **必须**通过 `--content-file` 或 `--content -`（stdin）传入，禁止直接作为 `--content` 命令行字符串——shell escape 会破坏换行和表格，且命令行长度受限。
+
+`dws doc create` 和 `dws doc update` 支持两种内容来源（`--content-file` 优先于 `--content`）：
+
+| 形式 | 说明 |
+|------|------|
+| `--content "..."` | 字面量（仅推荐短文本 <2KB 且无换行/表格） |
+| `--content -` | 从 stdin 读取（可配合 heredoc/pipe） |
+| `--content-file path` | 从文件读取（UTF-8），推荐 |
+
+### 短/中等长度（< 200KB）— 单步创建
+
+```bash
+# 1. 把内容写入 UTF-8 文本文件：
+#    Linux/Mac: /tmp/<name>.md；Windows: %TEMP%\<name>.md
+# 2. 一步创建+写入：
+dws doc create --name "<文档名>" --content-file <tmp> [--folder <ID>] [--workspace <ID>]
+```
+
+### 超长（> 200KB 兜底）— 创建空文档 + 分片追加
+
+```bash
+# 1. 创建空文档拿 nodeId
+dws doc create --name "<文档名>" [--folder/--workspace]  # → nodeId
+
+# 2. 按 markdown 标题或段落边界切成 ≤200KB 的片段（不要切断表格）
+# 3. 逐个追加：
+dws doc update --node <nodeId> --content-file <part> --mode append
+```
+
+### stdin 变体
+
+```bash
+# pipe
+cat report.md | dws doc update --node <DOC_ID> --content - --mode append
+
+# heredoc（真实换行，含表格）
+dws doc update --node <DOC_ID> --mode append --content - <<'EOF'
+## 追加段落
+
+| 列1 | 列2 |
+|---|---|
+| a | b |
+EOF
+```
 
 ## 注意事项
 
