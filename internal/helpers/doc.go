@@ -14,6 +14,7 @@
 package helpers
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,6 +27,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/asynctask"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/spf13/cobra"
 )
@@ -83,10 +85,244 @@ func (docHandler) Command(runner executor.Runner) *cobra.Command {
 		newDocPermissionListCommand(runner),
 	)
 
+	export := &cobra.Command{
+		Use:               "export",
+		Short:             i18n.T("文档导出（异步任务）"),
+		Args:              cobra.NoArgs,
+		TraverseChildren:  true,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runDocExport(cmd, runner)
+		},
+	}
+	export.AddCommand(newDocExportGetCommand(runner))
+
 	root.AddCommand(media)
 	root.AddCommand(permission)
+	root.AddCommand(export)
 	root.AddCommand(newDocDeleteCommand(runner))
+	preferLegacyLeaf(export) // export 同时是一体化命令本身（含 RunE）
+	doRegisterDocExportFlags(export)
 	return root
+}
+
+// doRegisterDocExportFlags 把 export 一体化命令的 flag 注册分离出来，
+// 便于和 export get 子命令的 flag 分离管理。
+func doRegisterDocExportFlags(cmd *cobra.Command) {
+	cmd.Flags().String("node", "", i18n.T("目标文档 nodeId / URL (必填)"))
+	cmd.Flags().String("output", "", i18n.T("本地落盘路径（可选，提供则自动下载 docx 到本地）"))
+	cmd.Flags().Int("timeout-sec", 300, i18n.T("整体轮询超时（秒），默认 300"))
+}
+
+// TRANSITIONAL: 等 mse 把 submit_doc_export_job / query_doc_export_job 加入
+// doc toolOverrides 后，本节 helper 可整体删除。工单：plan/mse-yuyuan-patch.md
+// 改动 2.2。
+//
+// 设计：用 pkg/asynctask.Submit 串起来：
+//  1. 调 submit_doc_export_job 拿 jobId
+//  2. 渐进式退避轮询 query_doc_export_job 直到 SUCCESS / FAILED / 超时
+//  3. SUCCESS 且 --output 传入时，自动 GET downloadUrl 落盘
+//
+// 不传 --output 时只输出 downloadUrl + jobId，调用方自行决定后续。
+
+func runDocExport(cmd *cobra.Command, runner executor.Runner) error {
+	nodeID, _ := cmd.Flags().GetString("node")
+	if strings.TrimSpace(nodeID) == "" {
+		// 没传 --node 时按 group 命令处理（打 help）
+		if !cmd.Flags().Changed("node") && !cmd.Flags().Changed("output") {
+			return cmd.Help()
+		}
+		return apperrors.NewValidation("--node is required")
+	}
+	output, _ := cmd.Flags().GetString("output")
+	timeoutSec, _ := cmd.Flags().GetInt("timeout-sec")
+
+	submitFn := func(ctx context.Context) (string, error) {
+		params := map[string]any{"nodeId": nodeID}
+		result, err := runner.Run(ctx, executor.NewHelperInvocation(
+			cobracmd.LegacyCommandPath(cmd), "doc", "submit_doc_export_job", params,
+		))
+		if err != nil {
+			return "", err
+		}
+		return extractDocExportJobID(result.Response), nil
+	}
+
+	queryFn := func(ctx context.Context, jobID string) (asynctask.QueryResult, error) {
+		result, err := runner.Run(ctx, executor.NewHelperInvocation(
+			cobracmd.LegacyCommandPath(cmd), "doc", "query_doc_export_job",
+			map[string]any{"jobId": jobID},
+		))
+		if err != nil {
+			return asynctask.QueryResult{}, err
+		}
+		return parseDocExportQueryResult(result.Response), nil
+	}
+
+	if commandDryRun(cmd) {
+		return writeCommandPayload(cmd, executor.NewHelperInvocation(
+			cobracmd.LegacyCommandPath(cmd), "doc", "submit_doc_export_job",
+			map[string]any{"nodeId": nodeID, "__async__": true, "__output__": output},
+		))
+	}
+
+	fmt.Fprintf(os.Stderr, i18n.T("[1/3] 提交导出任务 (node=%s)...\n"), nodeID)
+	res, err := asynctask.Submit(cmd.Context(), submitFn, queryFn, asynctask.Options{
+		Timeout: time.Duration(timeoutSec) * time.Second,
+		ProgressFn: func(attempt int, status asynctask.Status, elapsed time.Duration) {
+			fmt.Fprintf(os.Stderr, i18n.T("[2/3] 轮询任务（第 %d 次，状态=%s，已耗时 %s）\n"),
+				attempt, status, elapsed.Round(time.Second))
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	out := map[string]any{
+		"jobId":  res.JobID,
+		"status": string(res.Status),
+	}
+	if res.DownloadURL != "" {
+		out["downloadUrl"] = res.DownloadURL
+	}
+	if res.Message != "" {
+		out["message"] = res.Message
+	}
+
+	switch res.Status {
+	case asynctask.StatusSuccess:
+		if output != "" && res.DownloadURL != "" {
+			fmt.Fprintf(os.Stderr, i18n.T("[3/3] 下载到本地：%s\n"), output)
+			if err := asynctask.Download(cmd.Context(), res.DownloadURL, output); err != nil {
+				return fmt.Errorf(i18n.T("download failed: %w"), err)
+			}
+			out["output"] = output
+		}
+	case asynctask.StatusFailed:
+		return apperrors.NewValidation(fmt.Sprintf("export failed: %s", res.Message))
+	case asynctask.StatusTimeout:
+		fmt.Fprintf(os.Stderr, i18n.T("⚠️ 任务超时，请用 dws doc export get --job-id %s 继续等待\n"), res.JobID)
+	}
+
+	return writeCommandPayload(cmd, out)
+}
+
+func newDocExportGetCommand(runner executor.Runner) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "get",
+		Short: i18n.T("查询导出任务结果（兜底，dws doc export 已自动轮询）"),
+		Long: i18n.T(`根据 jobId 查询文档导出任务的执行结果。
+
+通常不需要手动调用 —— dws doc export 已内置自动轮询。
+仅在导出命令超时或中断后，用于手动查询任务状态/续等。
+
+任务状态：
+  PROCESSING  处理中
+  SUCCESS     导出成功，返回 downloadUrl
+  FAILED      导出失败`),
+		Example:           "  dws doc export get --job-id <JOB_ID>",
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			jobID, _ := cmd.Flags().GetString("job-id")
+			if strings.TrimSpace(jobID) == "" {
+				return apperrors.NewValidation("--job-id is required")
+			}
+			output, _ := cmd.Flags().GetString("output")
+			timeoutSec, _ := cmd.Flags().GetInt("timeout-sec")
+
+			queryFn := func(ctx context.Context, jobID string) (asynctask.QueryResult, error) {
+				result, err := runner.Run(ctx, executor.NewHelperInvocation(
+					cobracmd.LegacyCommandPath(cmd), "doc", "query_doc_export_job",
+					map[string]any{"jobId": jobID},
+				))
+				if err != nil {
+					return asynctask.QueryResult{}, err
+				}
+				return parseDocExportQueryResult(result.Response), nil
+			}
+
+			if commandDryRun(cmd) {
+				return writeCommandPayload(cmd, executor.NewHelperInvocation(
+					cobracmd.LegacyCommandPath(cmd), "doc", "query_doc_export_job",
+					map[string]any{"jobId": jobID},
+				))
+			}
+
+			res, err := asynctask.Resume(cmd.Context(), jobID, queryFn, asynctask.Options{
+				Timeout: time.Duration(timeoutSec) * time.Second,
+			})
+			if err != nil {
+				return err
+			}
+			out := map[string]any{
+				"jobId":  res.JobID,
+				"status": string(res.Status),
+			}
+			if res.DownloadURL != "" {
+				out["downloadUrl"] = res.DownloadURL
+			}
+			if res.Message != "" {
+				out["message"] = res.Message
+			}
+			if res.Status == asynctask.StatusSuccess && output != "" && res.DownloadURL != "" {
+				if err := asynctask.Download(cmd.Context(), res.DownloadURL, output); err != nil {
+					return fmt.Errorf(i18n.T("download failed: %w"), err)
+				}
+				out["output"] = output
+			}
+			if res.Status == asynctask.StatusFailed {
+				return apperrors.NewValidation(fmt.Sprintf("export failed: %s", res.Message))
+			}
+			return writeCommandPayload(cmd, out)
+		},
+	}
+	preferLegacyLeaf(cmd)
+	cmd.Flags().String("job-id", "", i18n.T("导出任务 ID (必填)"))
+	cmd.Flags().String("output", "", i18n.T("本地落盘路径（可选，提供则自动下载 docx 到本地）"))
+	cmd.Flags().Int("timeout-sec", 300, i18n.T("整体轮询超时（秒），默认 300"))
+	return cmd
+}
+
+// extractDocExportJobID 从 submit_doc_export_job 响应里抽 jobId。
+func extractDocExportJobID(resp map[string]any) string {
+	src := unwrapDocResp(resp)
+	if id, ok := src["jobId"].(string); ok && id != "" {
+		return id
+	}
+	if id, ok := src["taskId"].(string); ok && id != "" {
+		return id
+	}
+	return ""
+}
+
+// parseDocExportQueryResult 把 query_doc_export_job 的响应转成 asynctask.QueryResult。
+func parseDocExportQueryResult(resp map[string]any) asynctask.QueryResult {
+	src := unwrapDocResp(resp)
+	statusRaw, _ := src["status"].(string)
+	status := asynctask.Status(strings.ToUpper(strings.TrimSpace(statusRaw)))
+	msg, _ := src["message"].(string)
+	url, _ := src["downloadUrl"].(string)
+	return asynctask.QueryResult{
+		Status:      status,
+		DownloadURL: url,
+		Message:     msg,
+		Raw:         src,
+	}
+}
+
+// unwrapDocResp 处理两种包装层次：result.Response 直接含字段 / 含 content.data。
+func unwrapDocResp(resp map[string]any) map[string]any {
+	if resp == nil {
+		return map[string]any{}
+	}
+	if content, ok := resp["content"].(map[string]any); ok && len(content) > 0 {
+		resp = content
+	}
+	if data, ok := resp["data"].(map[string]any); ok && len(data) > 0 {
+		return data
+	}
+	return resp
 }
 
 // TRANSITIONAL: 等 mse 把 add_permission / update_permission /
