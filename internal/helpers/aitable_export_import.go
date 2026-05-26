@@ -476,13 +476,18 @@ func runAitableImportData(cmd *cobra.Command, runner executor.Runner) error {
 	return writeCommandPayload(cmd, out)
 }
 
-// ── 共用工具 ────────────────────────────────────────────────
+// ── 导入上传工具 ────────────────────────────────────────────────
 
-// putFileToOSS PUT 本地文件到 OSS uploadUrl，关键：**Content-Type 必须为空**，
-// 否则 OSS 签名验证会触发 SignatureDoesNotMatch。
+// putFileToOSS PUT 本地文件到 aitable import uploadUrl。
 //
-// 这是 Agent 自己写 PUT 时 90%+ 失败的根因。本 helper 把它正确实现一次，
-// 后续 doc media insert / aitable attachment upload-file 也复用此函数。
+// Protocol contract: import upload URLs are signed with an empty Content-Type.
+// Do not add a client-inferred Content-Type header here; doing so changes the
+// string OSS verifies and can trigger SignatureDoesNotMatch.
+//
+// This helper is intentionally scoped to aitable import upload. Other DingTalk
+// OSS-backed flows, such as doc media insert or aitable attachment upload, may
+// have different header contracts from their prepare APIs and must use helpers
+// that preserve those product-specific rules.
 func putFileToOSS(ctx context.Context, uploadURL, filePath string, fileSize int64) error {
 	f, err := os.Open(filePath)
 	if err != nil {
