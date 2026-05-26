@@ -52,6 +52,7 @@ type DeviceFlowProvider struct {
 	logger          *slog.Logger
 	Output          io.Writer
 	httpClient      *http.Client
+	NoBrowser       bool
 }
 
 func NewDeviceFlowProvider(configDir string, logger *slog.Logger) *DeviceFlowProvider {
@@ -205,7 +206,7 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 	}
 	dfPrintDeviceCodeBox(p.output(), authResp)
 
-	if authResp.VerificationURIComplete != "" {
+	if authResp.VerificationURIComplete != "" && !p.NoBrowser {
 		if bErr := openBrowser(authResp.VerificationURIComplete); bErr != nil && p.logger != nil {
 			p.logger.Debug("could not open browser", "error", bErr)
 		}

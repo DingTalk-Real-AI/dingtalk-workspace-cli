@@ -42,6 +42,7 @@ type OAuthProvider struct {
 	logger     *slog.Logger
 	Output     io.Writer
 	httpClient *http.Client
+	NoBrowser  bool
 }
 
 // NewOAuthProvider creates a new OAuth provider.
@@ -393,8 +394,10 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 	if p.logger != nil {
 		p.logger.Debug("authorization URL", "url", authURL)
 	}
-	if err := openBrowser(authURL); err != nil && p.logger != nil {
-		p.logger.Warn(i18n.T("无法自动打开浏览器"), "error", err)
+	if !p.NoBrowser {
+		if err := openBrowser(authURL); err != nil && p.logger != nil {
+			p.logger.Warn(i18n.T("无法自动打开浏览器"), "error", err)
+		}
 	}
 
 	_, _ = fmt.Fprintln(p.output(), "")
