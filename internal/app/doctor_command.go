@@ -205,7 +205,7 @@ func doctorCheckNetwork(ctx context.Context, w io.Writer, jsonOut bool, timeout 
 		r := checkResult{
 			Name:    "network",
 			Status:  statusFail,
-			Message: fmt.Sprintf("%s 不可达: %v", baseURL, err),
+			Message: fmt.Sprintf("mcp.dingtalk.com 不可达: %v", err),
 			Hint:    "请检查网络连接或代理设置",
 		}
 		if !jsonOut {
@@ -217,7 +217,7 @@ func doctorCheckNetwork(ctx context.Context, w io.Writer, jsonOut bool, timeout 
 	r := checkResult{
 		Name:    "network",
 		Status:  statusPass,
-		Message: fmt.Sprintf("%s 可达 (延迟 %dms)", baseURL, latency.Milliseconds()),
+		Message: fmt.Sprintf("mcp.dingtalk.com 可达 (延迟 %dms)", latency.Milliseconds()),
 	}
 	if !jsonOut {
 		printCheckResult(w, r)
