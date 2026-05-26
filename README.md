@@ -64,6 +64,27 @@ irm https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/ma
 ```
 
 <details>
+<summary><strong>Skill mode: mono vs multi</strong></summary>
+
+The installer ships skills in one of two layouts. CLI commands (`dws aitable ...`, `dws calendar ...`) are identical in both modes — only the agent-side skill layout differs.
+
+| Mode | What gets installed | Best for |
+|------|----------------------|----------|
+| **mono** (stable, default) | One `dws` skill covering all products | Cross-product workflows; single entry point |
+| **multi** 🧪 **EXPERIMENTAL** | 20 per-product skills (`dingtalk-aitable`, `dingtalk-calendar`, `dingtalk-chat`, ...) | Single-product tasks; smaller context per call |
+
+> 🧪 **`multi` is currently EXPERIMENTAL / preview.** 20 product-scoped skills all pass the dispatch verifier, but interface, naming and cross-skill references may change in future releases. For production / shared environments, prefer `mono`. File issues if you hit problems.
+
+How to pick:
+
+- **Quick install** (one-liner above): non-interactive, installs `mono`.
+- **TTY install** (download then run): `curl -O .../install.sh && bash install.sh` — prompts `1) mono  2) multi` (default 1).
+- **Override via env**: `DWS_SKILL_MODE=multi curl -fsSL ... | sh`.
+- **Switch later**: `dws skill setup --mode multi` (or `--mode mono`) — re-run any time.
+
+</details>
+
+<details>
 <summary>Other install methods</summary>
 
 **npm** (requires Node.js (npm/npx)):
@@ -230,26 +251,56 @@ dws aitable record query --base-id BASE_ID --table-id TABLE_ID --limit 10
 
 ### Agent Skills
 
-The repo ships a complete Agent Skill system (`skills/`). After installing, AI tools like Claude Code / Cursor can operate DingTalk directly through natural language:
+The repo ships a complete Agent Skill system under `skills/`, now organized into two layouts:
+
+- `skills/mono/` — single-skill layout (one `SKILL.md` + `references/products/`), recommended default.
+- `skills/multi/` — per-product skills (`dingtalk-aitable/`, `dingtalk-calendar/`, `dingtalk-chat/`, ... 20 products in total), each with its own `SKILL.md`. 🧪 **EXPERIMENTAL / preview — see banner in each multi `SKILL.md` for caveats.**
+
+After installing, AI tools like Claude Code / Cursor can operate DingTalk directly through natural language:
 
 ```bash
-# Install skills into current project
+# Install skills into current project (defaults to mono)
 curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install-skills.sh | sh
 ```
 
 > `install.sh` installs to `$HOME/.agents/skills/dws` (global); `install-skills.sh` installs to `./.agents/skills/dws` (current project).
 
-**What's included:**
+**Switching or re-installing with `dws skill setup`:**
+
+```bash
+# Interactive: prompts for mode + target agents
+dws skill setup
+
+# Install mono skill to every detected agent home (claude / cursor / codex / opencode / qoder)
+dws skill setup --mode mono --target all --yes
+
+# Install multi skills to a single agent home
+dws skill setup --mode multi --target cursor --yes
+
+# Point at a local source tree (e.g. a fork or work-in-progress)
+DWS_SKILL_SOURCE=/path/to/skills dws skill setup --mode multi
+```
+
+| Flag | Values | Description |
+|------|--------|-------------|
+| `--mode` | `mono` \| `multi` | Skill layout; defaults to interactive prompt |
+| `--target` | `all` \| `claude` \| `cursor` \| `codex` \| `opencode` \| `qoder` | Where to install; `all` covers every detected agent home |
+| `--source` | path | Local source directory (overrides bundled skills) |
+| `--yes` | — | Skip confirmation prompts |
+
+Env vars: `DWS_SKILL_MODE=mono|multi` (also honored by `install.sh` / `install.ps1`), `DWS_SKILL_SOURCE=<path>`.
+
+**What's included (mono layout):**
 
 | Component | Path | Description |
 |-----------|------|-------------|
-| Master Skill | `SKILL.md` | Intent routing, decision tree, safety rules, error handling |
-| Product references | `references/products/*.md` | Per-product command reference (aitable, chat, calendar, etc.) |
-| Intent guide | `references/intent-guide.md` | Disambiguation for confusing scenarios (e.g. report vs todo) |
-| Global reference | `references/global-reference.md` | Auth, output formats, global flags |
-| Error codes | `references/error-codes.md` | Error codes + debugging workflows |
-| Recovery guide | `references/recovery-guide.md` | `RECOVERY_EVENT_ID` handling |
-| Ready-made scripts | `scripts/*.py` | 13 batch operation scripts (see below) |
+| Master Skill | `skills/mono/SKILL.md` | Intent routing, decision tree, safety rules, error handling |
+| Product references | `skills/mono/references/products/*.md` | Per-product command reference (aitable, chat, calendar, etc.) |
+| Intent guide | `skills/mono/references/intent-guide.md` | Disambiguation for confusing scenarios (e.g. report vs todo) |
+| Global reference | `skills/mono/references/global-reference.md` | Auth, output formats, global flags |
+| Error codes | `skills/mono/references/error-codes.md` | Error codes + debugging workflows |
+| Recovery guide | `skills/mono/references/recovery-guide.md` | `RECOVERY_EVENT_ID` handling |
+| Ready-made scripts | `skills/mono/scripts/*.py` | 13 batch operation scripts (see below) |
 
 <details>
 <summary><strong>Ready-made scripts</strong> — 13 Python scripts for common multi-step workflows</summary>
@@ -410,7 +461,7 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 | Attendance | `attendance` | 4 | `record` `shift` `summary` `rules` | Clock-in records, shift schedules, attendance summary, group rules |
 | Ding | `ding` | 2 | `message` | Send / recall DING messages |
 | Report | `report` | 7 | `create` `list` `detail` `template` `stats` `sent` | Create reports, sent/received list, templates, statistics |
-| AI Tables | `aitable` | 41 | `base` `table` `record` `field` `view` `dashboard` `chart` `import` `export` `attachment` `template` | Full CRUD for Bases / datasheets / records / fields / views; charts & dashboards with public-share configs; data import/export; attachments; templates |
+| AI Tables | `aitable` | 42 | `base` `table` `record` `field` `view` `dashboard` `chart` `import` `export` `attachment` `template` | Full CRUD for Bases / datasheets / records / fields / views; charts & dashboards with public-share configs; data import/export; attachments (prepare-only `upload` + one-shot `upload-file`); templates |
 | Doc | `doc` | 21 | `search` `list` `info` `read` `create` `update` `upload` `download` `copy` `move` `rename` `file` `folder` `block` `comment` | Search / read / write docs, file & folder create, block-level editing, comments (list / create / reply / create-inline), upload / download |
 | Drive | `drive` | 9 | `list` `list-spaces` `info` `download` `mkdir` `upload` `upload-info` `commit` `delete` | DingTalk drive file ops: list spaces, list / info / download, create folders, one-shot `upload` (three-step composite) or two-phase `upload-info` + `commit`, delete |
 | Minutes | `minutes` | 19 | `list` `get` `update` `mind-graph` `speaker` `hot-word` `upload` | List AI meeting notes (mine / shared), details (info / summary / keywords / transcription / todos / batch), title/summary updates, mind map, speaker replace, hot-word, upload session |
@@ -423,14 +474,15 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 | Live | `live` | 1 | `stream` | DingTalk live streaming: list my lives |
 | Raw API | `api` | 1 | — | Call any DingTalk OpenAPI directly (api / oapi dual-form), with automatic app-level token management |
 
-> **212 commands across 19 products.** Full listing with descriptions and usage scenarios: [`docs/command-index.md`](./docs/command-index.md). Run `dws --help` for the top-level tree, or `dws <service> --help` for subcommands.
+> **213 commands across 19 products.** Full listing with descriptions and usage scenarios: [`docs/command-index.md`](./docs/command-index.md). Run `dws --help` for the top-level tree, or `dws <service> --help` for subcommands.
 
 > **Note on `chat bot`**: bot capabilities (`send-by-bot` / `recall-by-bot` / `add-bot` / `send-by-webhook` / bot search) are merged into the relevant `chat` subtrees (e.g. `dws chat message send-by-bot`, `dws chat group members add-bot`) so the agent-facing command surface stays flat and discoverable. There is no longer a separate top-level `bot` product.
 
 <details>
 <summary>Coming soon</summary>
 
-`conference` (video meetings)
+- `conference` (video meetings)
+- Multi-skill mode (experimental) — per-product skills under `skills/multi/`; opt in via `dws skill setup --mode multi`
 
 </details>
 

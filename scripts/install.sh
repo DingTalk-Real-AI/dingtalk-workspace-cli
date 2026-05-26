@@ -14,6 +14,7 @@
 #   DWS_VERSION       — version to install             (default: latest)
 #   DWS_NO_SKILLS     — set to 1 to skip skills install
 #   DWS_SKILLS_ONLY   — set to 1 to install only skills (skip binary)
+#   DWS_SKILL_MODE    — mono | multi (default: prompt if TTY, else mono)
 #
 # Agent skills paths follow build/npm/install.js AGENT_DIRS (order and entries must match).
 
@@ -27,6 +28,7 @@ VERSION="${DWS_VERSION:-latest}"
 NO_SKILLS="${DWS_NO_SKILLS:-0}"
 SKILLS_ONLY="${DWS_SKILLS_ONLY:-0}"
 SKILL_NAME="dws"
+SKILL_MODE=""
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -137,6 +139,64 @@ print_banner() {
   printf '\n'
 }
 
+# ── Skill Mode Resolution ────────────────────────────────────────────────────
+#
+# Priority (highest first):
+#   1. DWS_SKILL_MODE env var (mono | multi, case-insensitive)
+#   2. Interactive prompt when both stdin and stdout are TTYs (default: mono)
+#   3. Fallback: mono (non-TTY without env var, e.g. curl | sh)
+resolve_skill_mode() {
+  if [ -n "${DWS_SKILL_MODE:-}" ]; then
+    raw="$DWS_SKILL_MODE"
+    # Lower-case without bash-specific ${var,,}; tr is POSIX.
+    normalized="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')"
+    case "$normalized" in
+      mono|multi)
+        SKILL_MODE="$normalized"
+        say "Skill mode: ${SKILL_MODE} (from DWS_SKILL_MODE)"
+        return 0
+        ;;
+      *)
+        err "Invalid DWS_SKILL_MODE='${raw}'. Use 'mono' or 'multi'."
+        ;;
+    esac
+  fi
+
+  if [ -t 0 ] && [ -t 1 ]; then
+    printf '\n'
+    say "Select skill installation mode:"
+    say "  1) mono                  — install one bundled dws skill (stable / recommended)"
+    say "  2) multi 🧪 EXPERIMENTAL — split each product into its own skill (preview; run 'dws skill setup --mode multi' afterwards)"
+    say "     ⚠ multi is not yet stable — interface, naming and cross-skill references may change"
+    printf '  Choice [1]: '
+    read choice || choice=""
+    case "$choice" in
+      ""|1|mono)  SKILL_MODE="mono" ;;
+      2|multi)    SKILL_MODE="multi" ;;
+      *)
+        say "Unrecognized choice '${choice}', defaulting to mono."
+        SKILL_MODE="mono"
+        ;;
+    esac
+    say "Skill mode: ${SKILL_MODE}"
+    return 0
+  fi
+
+  SKILL_MODE="mono"
+}
+
+print_multi_mode_notice() {
+  say ""
+  say "🧪 Skill mode: multi (EXPERIMENTAL / preview) — automatic skill install skipped."
+  say "   ⚠ multi is not yet stable. 20 product-scoped skills pass dispatch verifier,"
+  say "     but interface, naming and cross-skill references may change in future releases."
+  say "     For production / shared environments, use mono mode (--mode mono)."
+  say ""
+  say "   To install split skills, run:"
+  say "     ${BIN_NAME} skill setup --mode multi"
+  say "   (One skill per product family; requires the dws binary installed above.)"
+}
+
 install_binary_from_source() {
   root="$1"
 
@@ -166,7 +226,8 @@ install_binary_from_source() {
 
 install_skills_local() {
   root="$1"
-  skill_src="${root}/skills"
+  skill_src="${root}/skills/mono"
+  multi_src="${root}/skills/multi"
 
   if [ ! -d "$skill_src" ]; then
     say "⚠️  Local skills directory not found: ${skill_src}"
@@ -179,7 +240,55 @@ install_skills_local() {
 
   install_skills_to_homes "$skill_src"
 
+  # Cache multi source for later `dws skill setup --mode multi`.
+  if [ -d "$multi_src" ]; then
+    cache_multi_skills "$multi_src"
+  fi
+
+  # Also cache a mono copy so `dws skill setup --mode mono` has a fallback
+  # under ~/.dws/skills/mono when invoked without --source.
+  cache_mono_skills "$skill_src"
+
   return 0
+}
+
+# cache_multi_skills copies the multi/ tree (per-product skills) into
+# ~/.dws/skills/multi/ so that `dws skill setup --mode multi` can find a
+# source without needing the source checkout or a re-download.
+cache_multi_skills() {
+  src="$1"
+  cache_dir="${HOME}/.dws/skills/multi"
+
+  if [ ! -d "$src" ]; then
+    return 0
+  fi
+
+  rm -rf "$cache_dir"
+  mkdir -p "$cache_dir"
+  cp -R "$src/"* "$cache_dir/" 2>/dev/null || cp -r "$src/"* "$cache_dir/" 2>/dev/null || true
+
+  file_count="$(find "$cache_dir" -type f | wc -l | tr -d ' ')"
+  case "$cache_dir" in
+    "$HOME"/*) label="~/${cache_dir#$HOME/}" ;;
+    *)         label="$cache_dir" ;;
+  esac
+  say "✅ Cached multi skills → ${label} (${file_count} files)"
+}
+
+# cache_mono_skills mirrors cache_multi_skills for the mono tree. Keeping the
+# two modes symmetrical means `dws skill setup` can fall back to ~/.dws/skills
+# regardless of which mode the user picks later.
+cache_mono_skills() {
+  src="$1"
+  cache_dir="${HOME}/.dws/skills/mono"
+
+  if [ ! -d "$src" ]; then
+    return 0
+  fi
+
+  rm -rf "$cache_dir"
+  mkdir -p "$cache_dir"
+  cp -R "$src/"* "$cache_dir/" 2>/dev/null || cp -r "$src/"* "$cache_dir/" 2>/dev/null || true
 }
 
 # Install skill tree into all agent homes (same rules as build/npm/install.js installSkillsToHomes).
@@ -403,8 +512,14 @@ install_skills() {
     err "Cannot extract release skill archive and no local source checkout found."
   fi
 
+  # New release layout puts mono content both at the zip root (for backward
+  # compatibility with older installers) and under ./mono/, with multi/ as a
+  # sibling. Prefer ./mono/ when present so we never miss SKILL.md, then fall
+  # back to the legacy nested $SKILL_NAME/ shape, then the zip root.
   skill_src="$extract_root"
-  if [ -f "$extract_root/$SKILL_NAME/SKILL.md" ]; then
+  if [ -d "$extract_root/mono" ] && [ -f "$extract_root/mono/SKILL.md" ]; then
+    skill_src="$extract_root/mono"
+  elif [ -f "$extract_root/$SKILL_NAME/SKILL.md" ]; then
     skill_src="$extract_root/$SKILL_NAME"
   fi
   if [ ! -f "$skill_src/SKILL.md" ]; then
@@ -422,6 +537,15 @@ install_skills() {
 
   install_skills_to_homes "$skill_src"
 
+  # Cache the multi tree (if present in the release asset) so a later
+  # `dws skill setup --mode multi` can find a source without re-downloading.
+  if [ -d "$extract_root/multi" ]; then
+    cache_multi_skills "$extract_root/multi"
+  fi
+
+  # And cache mono too for symmetry with --mode mono fallbacks.
+  cache_mono_skills "$skill_src"
+
   rm -rf "$tmpdir_skills"
 }
 
@@ -435,23 +559,40 @@ main() {
 
   print_banner
 
+  # Resolve skill mode only when we are actually going to touch skills.
+  if [ "$NO_SKILLS" != "1" ]; then
+    resolve_skill_mode
+  fi
+
   if [ -n "$source_root" ]; then
     install_binary_from_source "$source_root"
     if [ "$NO_SKILLS" != "1" ]; then
-      install_skills_local "$source_root"
+      if [ "$SKILL_MODE" = "multi" ]; then
+        print_multi_mode_notice
+      else
+        install_skills_local "$source_root"
+      fi
     fi
   elif [ "$SKILLS_ONLY" = "1" ]; then
-    local_root="$(resolve_source_root || true)"
-    if [ -n "$local_root" ]; then
-      install_skills_local "$local_root"
+    if [ "$SKILL_MODE" = "multi" ]; then
+      print_multi_mode_notice
     else
-      install_skills
+      local_root="$(resolve_source_root || true)"
+      if [ -n "$local_root" ]; then
+        install_skills_local "$local_root"
+      else
+        install_skills
+      fi
     fi
   elif [ "$NO_SKILLS" = "1" ]; then
     install_binary
   else
     install_binary
-    install_skills
+    if [ "$SKILL_MODE" = "multi" ]; then
+      print_multi_mode_notice
+    else
+      install_skills
+    fi
   fi
 
   printf '\n'

@@ -235,10 +235,96 @@ func TestPostGoreleaserUsesFlattenedSkillsSourceRoot(t *testing.T) {
 	}
 
 	text := string(data)
-	if !strings.Contains(text, `cd "$ROOT/skills"`) {
-		t.Fatalf("post-goreleaser.sh missing flattened skills source root:\n%s", text)
+	// The new layout copies skills/mono/ to staging root + staging/mono/, so we
+	// no longer have a single `cd "$ROOT/skills/mono"`. Instead verify the
+	// staging-based create_skills_zip references both source trees explicitly.
+	for _, want := range []string{
+		`cp -R "$ROOT/skills/mono/." "$staging/"`,
+		`cp -R "$ROOT/skills/mono/." "$staging/mono/"`,
+		`cp -R "$ROOT/skills/multi/." "$staging/multi/"`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("post-goreleaser.sh missing skills layout line %q:\n%s", want, text)
+		}
 	}
 	if strings.Contains(text, `cd "$ROOT/skills/dws"`) {
 		t.Fatalf("post-goreleaser.sh still references legacy nested skills root:\n%s", text)
+	}
+}
+
+// TestPostGoreleaserSkillsZipLayout exercises create_skills_zip end-to-end:
+// runs post-goreleaser.sh against a tempdir, unzips dws-skills.zip, and
+// verifies that the new zip layout contains (a) mono content at the root for
+// backward compatibility, (b) an explicit mono/ subtree, and (c) a multi/
+// subtree carrying per-product skills.
+func TestPostGoreleaserSkillsZipLayout(t *testing.T) {
+	t.Parallel()
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "post-goreleaser.sh"))
+	if err != nil {
+		t.Fatalf("Abs(post-goreleaser.sh) error = %v", err)
+	}
+
+	root := t.TempDir()
+	distDir := filepath.Join(root, "dist")
+
+	hostOS := runtime.GOOS
+	hostArch := runtime.GOARCH
+	archiveName := "dws-" + hostOS + "-" + hostArch + ".tar.gz"
+	if hostOS == "windows" {
+		archiveName = "dws-" + hostOS + "-" + hostArch + ".zip"
+	}
+	seedDistArtifacts(t, distDir, []string{archiveName})
+
+	cmd := exec.Command("sh", scriptPath)
+	cmd.Env = append(os.Environ(),
+		"DWS_PACKAGE_DIST_DIR="+distDir,
+		"DWS_RELEASE_BASE_URL=https://downloads.example.com/dws/releases/v0.0.0",
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("post-goreleaser.sh error = %v\noutput:\n%s", err, string(output))
+	}
+
+	skillsZip := filepath.Join(distDir, "dws-skills.zip")
+	extractDir := filepath.Join(root, "skills-extract")
+	if err := os.MkdirAll(extractDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s) = %v", extractDir, err)
+	}
+	if out, err := exec.Command("unzip", "-q", skillsZip, "-d", extractDir).CombinedOutput(); err != nil {
+		t.Fatalf("unzip dws-skills.zip error = %v: %s", err, string(out))
+	}
+
+	// Backward compat: zip root must carry mono content.
+	for _, rel := range []string{"SKILL.md", "references", "scripts"} {
+		if _, err := os.Stat(filepath.Join(extractDir, rel)); err != nil {
+			t.Fatalf("zip root missing %s (backward compat broken): %v", rel, err)
+		}
+	}
+	// Explicit mono/ subdir.
+	if _, err := os.Stat(filepath.Join(extractDir, "mono", "SKILL.md")); err != nil {
+		t.Fatalf("zip missing mono/SKILL.md: %v", err)
+	}
+	// multi/ subtree with at least one per-product skill.
+	multiEntries, err := os.ReadDir(filepath.Join(extractDir, "multi"))
+	if err != nil {
+		t.Fatalf("ReadDir multi/ error = %v", err)
+	}
+	if len(multiEntries) == 0 {
+		t.Fatalf("multi/ is empty; expected per-product skills")
+	}
+	foundDingtalk := false
+	for _, e := range multiEntries {
+		if e.IsDir() && strings.HasPrefix(e.Name(), "dingtalk-") {
+			foundDingtalk = true
+			skillFile := filepath.Join(extractDir, "multi", e.Name(), "SKILL.md")
+			if _, err := os.Stat(skillFile); err != nil {
+				t.Fatalf("missing %s: %v", skillFile, err)
+			}
+			break
+		}
+	}
+	if !foundDingtalk {
+		t.Fatalf("multi/ does not contain any dingtalk-* skill: %v", multiEntries)
 	}
 }

@@ -168,10 +168,31 @@ stage_homebrew_formula() {
 create_skills_zip() {
   skills_zip="$DIST_DIR/dws-skills.zip"
   rm -f "$skills_zip"
+
+  staging="$(mktemp -d)"
+  # Layout inside dws-skills.zip:
+  #   <root>/SKILL.md + references/ + scripts/   ← copy of mono/, kept at root
+  #                                                 for backward compatibility
+  #                                                 with older install scripts
+  #                                                 that look for SKILL.md at
+  #                                                 the zip root.
+  #   <root>/mono/                               ← explicit mono source tree
+  #   <root>/multi/                              ← multi source tree (one
+  #                                                 subdir per product skill)
+  cp -R "$ROOT/skills/mono/." "$staging/"
+  mkdir -p "$staging/mono"
+  cp -R "$ROOT/skills/mono/." "$staging/mono/"
+  mkdir -p "$staging/multi"
+  if [ -d "$ROOT/skills/multi" ]; then
+    cp -R "$ROOT/skills/multi/." "$staging/multi/"
+  fi
+
   (
-    cd "$ROOT/skills"
+    cd "$staging"
     env -u LC_ALL -u LC_CTYPE LANG=C LC_ALL=C LC_CTYPE=C zip -qr "$skills_zip" .
   )
+
+  rm -rf "$staging"
 }
 
 # ---------- darwin ad-hoc signing ----------

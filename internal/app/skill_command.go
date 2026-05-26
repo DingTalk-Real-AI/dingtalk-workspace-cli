@@ -24,6 +24,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -85,22 +86,78 @@ type CliSkillDTO struct {
 
 // agentSkillPaths maps target names to their relative skill installation paths.
 // These paths are relative to the user's home directory.
+//
+// Source of truth for both `dws skill install <skillId> <target>` and
+// `dws skill setup --target <name>`. Every entry in skillSetupAgentHomes
+// (skill_setup.go) MUST have a matching path value here — enforced by
+// TestAgentSkillPathsCoversSetupHomes.
 var agentSkillPaths = map[string]string{
+	// `agents` is the generic-agent sentinel: install scripts and `setup`
+	// special-case ~/.agents/skills as a no-checks-required fallback so a
+	// fresh machine without any IDE/agent registry still gets skills.
+	"agents":   ".agents/skills",
 	"qoder":    ".qoder/skills",
 	"claude":   ".claude/skills",
 	"cursor":   ".cursor/skills",
 	"codex":    ".codex/skills",
 	"opencode": filepath.Join(".config", "opencode", "skills"),
+	// IDE / agent registries also probed by `dws skill setup --target all`.
+	"gemini":   ".gemini/skills",
+	"github":   ".github/skills",
+	"windsurf": ".windsurf/skills",
+	"augment":  ".augment/skills",
+	"cline":    ".cline/skills",
+	"amp":      ".amp/skills",
+	"kiro":     ".kiro/skills",
+	"trae":     ".trae/skills",
+	"openclaw": ".openclaw/skills",
+	"hermes":   ".hermes/skills",
 }
 
-// supportedTargets returns a comma-separated list of supported targets.
+// supportedTargets returns a sorted, comma-separated list of supported
+// targets. Sorted so help text and error messages stay stable across runs
+// (Go map iteration order is intentionally randomized).
 func supportedTargets() string {
 	targets := make([]string, 0, len(agentSkillPaths)+1)
 	for target := range agentSkillPaths {
 		targets = append(targets, target)
 	}
+	sort.Strings(targets)
 	targets = append(targets, ".")
 	return strings.Join(targets, ", ")
+}
+
+// longestAgentTargetName returns the character count of the longest target
+// name in agentSkillPaths. Used by --help formatting to keep the "." entry
+// vertically aligned with named targets.
+func longestAgentTargetName() int {
+	n := 0
+	for name := range agentSkillPaths {
+		if len(name) > n {
+			n = len(name)
+		}
+	}
+	return n
+}
+
+// formatAgentSkillPathsForHelp renders agentSkillPaths as an aligned
+// "  <name> -> ~/<path>" block, sorted by name, for use in --help output.
+// Keeps `dws skill install --help` in sync with the map without hand-edits.
+func formatAgentSkillPathsForHelp() string {
+	names := make([]string, 0, len(agentSkillPaths))
+	maxWidth := 0
+	for n := range agentSkillPaths {
+		names = append(names, n)
+		if len(n) > maxWidth {
+			maxWidth = len(n)
+		}
+	}
+	sort.Strings(names)
+	var b strings.Builder
+	for _, n := range names {
+		fmt.Fprintf(&b, "  %-*s -> ~/%s/\n", maxWidth, n, agentSkillPaths[n])
+	}
+	return b.String()
 }
 
 func buildSkillCommand() *cobra.Command {
@@ -122,6 +179,7 @@ func buildSkillCommand() *cobra.Command {
 		newSkillSearchCommand(),
 		newSkillFindHintCommand(),
 		newSkillAddHintCommand(),
+		newSkillSetupCommand(),
 	)
 	return cmd
 }
@@ -179,17 +237,15 @@ func newSkillInstallCommand() *cobra.Command {
   target    安装目标（必填），支持: %s
 
 安装路径:
-  qoder    -> ~/.qoder/skills/
-  claude   -> ~/.claude/skills/
-  cursor   -> ~/.cursor/skills/
-  codex    -> ~/.codex/skills/
-  opencode -> ~/.config/opencode/skills/
-  .        -> 当前目录
+%s  .%s -> 当前目录
 
 示例:
-  dws skill install skill-123 qoder     # 安装到 ~/.qoder/skills/
   dws skill install skill-123 claude    # 安装到 ~/.claude/skills/
-  dws skill install skill-123 .         # 安装到当前目录`, supportedTargets()),
+  dws skill install skill-123 qoder     # 安装到 ~/.qoder/skills/
+  dws skill install skill-123 .         # 安装到当前目录`,
+			supportedTargets(),
+			formatAgentSkillPathsForHelp(),
+			strings.Repeat(" ", longestAgentTargetName()-1)),
 		Args:              cobra.ExactArgs(2),
 		DisableAutoGenTag: true,
 		RunE:              runSkillAdd,
