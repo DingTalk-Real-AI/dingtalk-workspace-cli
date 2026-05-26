@@ -100,6 +100,11 @@ func (docHandler) Command(runner executor.Runner) *cobra.Command {
 	root.AddCommand(media)
 	root.AddCommand(permission)
 	root.AddCommand(export)
+	root.AddCommand(newDocSearchCommand(runner))
+	root.AddCommand(newDocListCommand(runner))
+	root.AddCommand(newDocReadCommand(runner))
+	root.AddCommand(newDocCreateCommand(runner))
+	root.AddCommand(newDocUpdateCommand(runner))
 	root.AddCommand(newDocDeleteCommand(runner))
 	preferLegacyLeaf(export) // export 同时是一体化命令本身（含 RunE）
 	doRegisterDocExportFlags(export)
@@ -112,6 +117,389 @@ func doRegisterDocExportFlags(cmd *cobra.Command) {
 	cmd.Flags().String("node", "", i18n.T("目标文档 nodeId / URL (必填)"))
 	cmd.Flags().String("output", "", i18n.T("本地落盘路径（可选，提供则自动下载 docx 到本地）"))
 	cmd.Flags().Int("timeout-sec", 300, i18n.T("整体轮询超时（秒），默认 300"))
+}
+
+func newDocSearchCommand(runner executor.Runner) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:               "search",
+		Short:             i18n.T("搜索文档"),
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			params := map[string]any{}
+			if keyword := docFlagOrFallback(cmd, "query", "keyword"); keyword != "" {
+				params["keyword"] = keyword
+			}
+			addDocCSVParam(cmd, params, "extensions", "extensions")
+			addDocIntParam(cmd, params, "createdTimeFrom", "created-from")
+			addDocIntParam(cmd, params, "createdTimeTo", "created-to")
+			addDocIntParam(cmd, params, "visitedTimeFrom", "visited-from")
+			addDocIntParam(cmd, params, "visitedTimeTo", "visited-to")
+			addDocCSVParam(cmd, params, "creatorUserIds", "creator-uids")
+			addDocCSVParam(cmd, params, "editorUserIds", "editor-uids")
+			addDocCSVParam(cmd, params, "mentionedUserIds", "mentioned-uids")
+			addDocCSVParam(cmd, params, "workspaceIds", "workspace-ids", "workspace")
+			addDocIntParam(cmd, params, "pageSize", "page-size")
+			addDocStringParam(cmd, params, "pageToken", "page-token")
+			return runDocTool(cmd, runner, "doc", "search_documents", params)
+		},
+	}
+	preferLegacyLeaf(cmd)
+	cmd.Flags().String("query", "", i18n.T("搜索关键词"))
+	addDocHiddenStringFlag(cmd, "keyword", "--query alias")
+	cmd.Flags().String("extensions", "", i18n.T("扩展名，逗号分隔"))
+	cmd.Flags().Int64("created-from", 0, i18n.T("创建时间起点"))
+	cmd.Flags().Int64("created-to", 0, i18n.T("创建时间终点"))
+	cmd.Flags().Int64("visited-from", 0, i18n.T("访问时间起点"))
+	cmd.Flags().Int64("visited-to", 0, i18n.T("访问时间终点"))
+	cmd.Flags().String("creator-uids", "", i18n.T("创建人 userId，逗号分隔"))
+	cmd.Flags().String("editor-uids", "", i18n.T("编辑人 userId，逗号分隔"))
+	cmd.Flags().String("mentioned-uids", "", i18n.T("提及 userId，逗号分隔"))
+	cmd.Flags().String("workspace-ids", "", i18n.T("Workspace ID，逗号分隔"))
+	addDocHiddenStringFlag(cmd, "workspace", "--workspace-ids alias")
+	cmd.Flags().Int("page-size", 0, i18n.T("每页数量"))
+	cmd.Flags().String("page-token", "", i18n.T("分页 token"))
+	return cmd
+}
+
+func newDocListCommand(runner executor.Runner) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:               "list",
+		Short:             i18n.T("列出文档节点"),
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			params := map[string]any{}
+			if folder := docFlagOrFallback(cmd, "folder", "parent-id", "node", "file-id", "nodee"); folder != "" {
+				params["folderId"] = normalizeDocNodeID(folder)
+			}
+			if workspace := docFlagOrFallback(cmd, "workspace", "workspace-id"); workspace != "" {
+				params["workspaceId"] = workspace
+			}
+			addDocIntParam(cmd, params, "pageSize", "page-size")
+			addDocStringParam(cmd, params, "pageToken", "page-token")
+			return runDocTool(cmd, runner, "doc", "list_nodes", params)
+		},
+	}
+	preferLegacyLeaf(cmd)
+	cmd.Flags().String("folder", "", i18n.T("父文件夹 nodeId / URL"))
+	addDocHiddenStringFlag(cmd, "parent-id", "--folder alias")
+	addDocHiddenStringFlag(cmd, "node", "--folder alias")
+	addDocHiddenStringFlag(cmd, "file-id", "--folder alias")
+	addDocHiddenStringFlag(cmd, "nodee", "--folder alias")
+	cmd.Flags().String("workspace", "", i18n.T("Workspace ID"))
+	addDocHiddenStringFlag(cmd, "workspace-id", "--workspace alias")
+	cmd.Flags().Int("page-size", 0, i18n.T("每页数量"))
+	cmd.Flags().String("page-token", "", i18n.T("分页 token"))
+	return cmd
+}
+
+func newDocReadCommand(runner executor.Runner) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:               "read",
+		Short:             i18n.T("读取文档内容"),
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			nodeID, err := docRequiredNode(cmd)
+			if err != nil {
+				return err
+			}
+			return runDocTool(cmd, runner, "doc", "get_document_content", map[string]any{"nodeId": nodeID})
+		},
+	}
+	preferLegacyLeaf(cmd)
+	addDocNodeFlags(cmd)
+	return cmd
+}
+
+func newDocCreateCommand(runner executor.Runner) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:               "create",
+		Short:             i18n.T("创建文档"),
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name, err := docRequiredFlagOrFallback(cmd, "name", "title")
+			if err != nil {
+				return err
+			}
+			params := map[string]any{"name": name}
+			if folder := docFlagOrFallback(cmd, "folder", "parent-id", "parent-folder-id", "parent-folder"); folder != "" {
+				params["folderId"] = normalizeDocNodeID(folder)
+			}
+			if workspace := docFlagOrFallback(cmd, "workspace", "workspace-id"); workspace != "" {
+				params["workspaceId"] = workspace
+			}
+			content, err := docResolveContent(cmd)
+			if err != nil {
+				return err
+			}
+			if content != "" {
+				params["markdown"] = content
+			}
+			return runDocTool(cmd, runner, "doc", "create_document", params)
+		},
+	}
+	preferLegacyLeaf(cmd)
+	cmd.Flags().String("name", "", i18n.T("文档名称 (必填)"))
+	addDocHiddenStringFlag(cmd, "title", "--name alias")
+	cmd.Flags().String("folder", "", i18n.T("父文件夹 nodeId / URL"))
+	addDocHiddenStringFlag(cmd, "parent-id", "--folder alias")
+	addDocHiddenStringFlag(cmd, "parent-folder-id", "--folder alias")
+	addDocHiddenStringFlag(cmd, "parent-folder", "--folder alias")
+	cmd.Flags().String("workspace", "", i18n.T("Workspace ID"))
+	addDocHiddenStringFlag(cmd, "workspace-id", "--workspace alias")
+	cmd.Flags().String("content", "", i18n.T("初始 Markdown 内容"))
+	cmd.Flags().String("content-file", "", i18n.T("从文件读取初始 Markdown"))
+	addDocHiddenStringFlag(cmd, "content-path", "--content-file alias")
+	addDocHiddenStringFlag(cmd, "markdown", "--content alias")
+	return cmd
+}
+
+func newDocUpdateCommand(runner executor.Runner) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:               "update",
+		Short:             i18n.T("更新文档内容"),
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			nodeID, err := docRequiredNode(cmd)
+			if err != nil {
+				return err
+			}
+			mode, err := docRequiredFlag(cmd, "mode")
+			if err != nil {
+				return err
+			}
+			content, err := docResolveContent(cmd)
+			if err != nil {
+				return err
+			}
+			if content == "" {
+				return apperrors.NewValidation("--content or --content-file is required")
+			}
+			if docModeRequiresYes(mode) && !docYesFlag(cmd) && !commandDryRun(cmd) {
+				return apperrors.NewValidation("--mode overwrite requires --yes unless --dry-run is set")
+			}
+			params := map[string]any{
+				"nodeId":   nodeID,
+				"mode":     strings.TrimSpace(mode),
+				"markdown": content,
+			}
+			addDocIntParam(cmd, params, "index", "index")
+			return runDocTool(cmd, runner, "doc", "update_document", params)
+		},
+	}
+	preferLegacyLeaf(cmd)
+	addDocNodeFlags(cmd)
+	cmd.Flags().String("content", "", i18n.T("Markdown 内容"))
+	cmd.Flags().String("content-file", "", i18n.T("从文件读取 Markdown"))
+	addDocHiddenStringFlag(cmd, "content-path", "--content-file alias")
+	addDocHiddenStringFlag(cmd, "markdown", "--content alias")
+	cmd.Flags().String("mode", "", i18n.T("更新模式: append / overwrite"))
+	cmd.Flags().Int("index", 0, i18n.T("append 插入位置"))
+	return cmd
+}
+
+func runDocTool(cmd *cobra.Command, runner executor.Runner, product, tool string, params map[string]any) error {
+	result, err := docInvocationResult(cmd, runner, product, tool, params)
+	if err != nil {
+		return err
+	}
+	return writeCommandPayload(cmd, result)
+}
+
+func docInvocationResult(cmd *cobra.Command, runner executor.Runner, product, tool string, params map[string]any) (executor.Result, error) {
+	invocation := executor.NewHelperInvocation(cobracmd.LegacyCommandPath(cmd), product, tool, params)
+	invocation.DryRun = commandDryRun(cmd)
+	return runner.Run(cmd.Context(), invocation)
+}
+
+func addDocNodeFlags(cmd *cobra.Command) {
+	cmd.Flags().String("node", "", i18n.T("文档 nodeId / URL"))
+	addDocHiddenStringFlag(cmd, "url", "--node alias")
+	addDocHiddenStringFlag(cmd, "id", "--node alias")
+	addDocHiddenStringFlag(cmd, "node-id", "--node alias")
+	addDocHiddenStringFlag(cmd, "doc-id", "--node alias")
+	addDocHiddenStringFlag(cmd, "file-id", "--node alias")
+}
+
+func addDocHiddenStringFlag(cmd *cobra.Command, name, usage string) {
+	cmd.Flags().String(name, "", usage)
+	_ = cmd.Flags().MarkHidden(name)
+}
+
+func docRequiredNode(cmd *cobra.Command) (string, error) {
+	nodeID, err := docRequiredFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
+	if err != nil {
+		return "", err
+	}
+	return normalizeDocNodeID(nodeID), nil
+}
+
+func docResolveContent(cmd *cobra.Command) (string, error) {
+	if path := docFlagOrFallback(cmd, "content-file", "content-path"); path != "" {
+		return docReadContent(path)
+	}
+	raw := docFlagOrFallback(cmd, "content", "markdown")
+	if raw == "-" {
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return "", apperrors.NewValidation("read stdin: " + err.Error())
+		}
+		return string(data), nil
+	}
+	return raw, nil
+}
+
+func docReadContent(path string) (string, error) {
+	if path == "-" {
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return "", apperrors.NewValidation("read stdin: " + err.Error())
+		}
+		return string(data), nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", apperrors.NewValidation("read " + path + ": " + err.Error())
+	}
+	return string(data), nil
+}
+
+func normalizeDocNodeID(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" || !strings.Contains(value, "://") {
+		return value
+	}
+	parts := strings.FieldsFunc(value, func(r rune) bool {
+		return r == '/' || r == '?' || r == '#'
+	})
+	for i, part := range parts {
+		if part == "nodes" && i+1 < len(parts) && strings.TrimSpace(parts[i+1]) != "" {
+			return strings.TrimSpace(parts[i+1])
+		}
+	}
+	return value
+}
+
+func docStringFlag(cmd *cobra.Command, name string) string {
+	if value, err := cmd.Flags().GetString(name); err == nil && strings.TrimSpace(value) != "" {
+		return strings.TrimSpace(value)
+	}
+	return ""
+}
+
+func docFlagOrFallback(cmd *cobra.Command, primary string, aliases ...string) string {
+	if value := docStringFlag(cmd, primary); value != "" {
+		return value
+	}
+	for _, alias := range aliases {
+		if value := docStringFlag(cmd, alias); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func docRequiredFlag(cmd *cobra.Command, name string) (string, error) {
+	if value := docStringFlag(cmd, name); value != "" {
+		return value, nil
+	}
+	return "", apperrors.NewValidation("--" + name + " is required")
+}
+
+func docRequiredFlagOrFallback(cmd *cobra.Command, primary string, aliases ...string) (string, error) {
+	if value := docFlagOrFallback(cmd, primary, aliases...); value != "" {
+		return value, nil
+	}
+	return "", apperrors.NewValidation("--" + primary + " is required")
+}
+
+func docIntFlagOrFallback(cmd *cobra.Command, primary string, aliases ...string) int {
+	names := append([]string{primary}, aliases...)
+	for _, name := range names {
+		flag := cmd.Flags().Lookup(name)
+		if flag == nil || !flag.Changed {
+			continue
+		}
+		value, err := cmd.Flags().GetInt(name)
+		if err == nil && value > 0 {
+			return value
+		}
+	}
+	for _, name := range names {
+		value, err := cmd.Flags().GetInt(name)
+		if err == nil && value > 0 {
+			return value
+		}
+	}
+	return 0
+}
+
+func docModeRequiresYes(mode string) bool {
+	return strings.EqualFold(strings.TrimSpace(mode), "overwrite")
+}
+
+func docYesFlag(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+	if value, err := cmd.Flags().GetBool("yes"); err == nil {
+		return value
+	}
+	if value, err := cmd.InheritedFlags().GetBool("yes"); err == nil {
+		return value
+	}
+	if root := cmd.Root(); root != nil {
+		if value, err := root.PersistentFlags().GetBool("yes"); err == nil {
+			return value
+		}
+	}
+	return false
+}
+
+func addDocStringParam(cmd *cobra.Command, params map[string]any, paramName string, flags ...string) {
+	for _, flag := range flags {
+		if value := docStringFlag(cmd, flag); value != "" {
+			params[paramName] = value
+			return
+		}
+	}
+}
+
+func addDocCSVParam(cmd *cobra.Command, params map[string]any, paramName string, flags ...string) {
+	for _, flag := range flags {
+		if value := docStringFlag(cmd, flag); value != "" {
+			params[paramName] = docCSV(value)
+			return
+		}
+	}
+}
+
+func addDocIntParam(cmd *cobra.Command, params map[string]any, paramName string, flag string) {
+	if !cmd.Flags().Changed(flag) {
+		return
+	}
+	if value, err := cmd.Flags().GetInt(flag); err == nil {
+		params[paramName] = value
+		return
+	}
+	if value, err := cmd.Flags().GetInt64(flag); err == nil {
+		params[paramName] = value
+	}
+}
+
+func docCSV(raw string) []string {
+	parts := strings.Split(raw, ",")
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if value := strings.TrimSpace(part); value != "" {
+			values = append(values, value)
+		}
+	}
+	return values
 }
 
 // TRANSITIONAL: 等 mse 把 submit_export_job / query_export_job 加入
@@ -451,9 +839,9 @@ func newDocPermissionListCommand(runner executor.Runner) *cobra.Command {
 				return apperrors.NewValidation("--node is required")
 			}
 			params := map[string]any{"nodeId": nodeID}
-			if v, _ := cmd.Flags().GetInt("max-results"); cmd.Flags().Changed("max-results") {
+			if v := docIntFlagOrFallback(cmd, "max-results", "limit", "page-size"); v > 0 {
 				if v < 1 || v > 200 {
-					return apperrors.NewValidation("--max-results must be between 1 and 200")
+					return apperrors.NewValidation("--max-results/--limit/--page-size must be between 1 and 200")
 				}
 				params["maxResults"] = v
 			}
@@ -488,6 +876,10 @@ func newDocPermissionListCommand(runner executor.Runner) *cobra.Command {
 	preferLegacyLeaf(cmd)
 	cmd.Flags().String("node", "", i18n.T("目标节点 nodeId / URL (必填)"))
 	cmd.Flags().Int("max-results", 30, i18n.T("返回成员数上限，默认 30，最大 200"))
+	cmd.Flags().Int("limit", 0, i18n.T("--max-results 的兼容别名"))
+	cmd.Flags().Int("page-size", 0, i18n.T("--max-results 的兼容别名"))
+	_ = cmd.Flags().MarkHidden("limit")
+	_ = cmd.Flags().MarkHidden("page-size")
 	cmd.Flags().String("filter-role", "", i18n.T("按角色过滤（逗号分隔）: OWNER / MANAGER / EDITOR / DOWNLOADER / READER"))
 	cmd.Flags().String("workspace", "", i18n.T("目标知识库 ID 或 URL（选填）"))
 	return cmd

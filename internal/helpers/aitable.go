@@ -124,6 +124,7 @@ func (aitableHandler) Command(runner executor.Runner) *cobra.Command {
 	}
 	record.AddCommand(
 		newAitableRecordQueryCommand(runner),
+		newAitableRecordGetCommand(runner),
 		newAitableRecordCreateCommand(runner),
 		newAitableRecordUpdateCommand(runner),
 		newAitableRecordDeleteCommand(runner),
@@ -185,7 +186,31 @@ func (aitableHandler) Command(runner executor.Runner) *cobra.Command {
 		newAitableImportDataCommand(runner),
 	)
 
-	root.AddCommand(base, table, field, record, template, attachment, export, importCmd)
+	chart := &cobra.Command{
+		Use:               "chart",
+		Short:             i18n.T("图表管理"),
+		Args:              cobra.NoArgs,
+		TraverseChildren:  true,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+	chart.AddCommand(newAitableChartCreateCommand(runner))
+
+	view := &cobra.Command{
+		Use:               "view",
+		Short:             i18n.T("视图管理"),
+		Args:              cobra.NoArgs,
+		TraverseChildren:  true,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+	view.AddCommand(newAitableViewCreateCommand(runner))
+
+	root.AddCommand(base, table, field, record, template, attachment, export, importCmd, chart, view)
 
 	// 顶层别名：dws aitable search/list/create/info → base search/list/create/get
 	// 每个 alias 复用现有 constructor，独立 cobra.Command 实例（避免与 base.* 共享 flag 指针）

@@ -14,6 +14,7 @@
 package helpers
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net/http"
@@ -21,7 +22,115 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 )
+
+type driveCommandRunner struct {
+	last   executor.Invocation
+	result executor.Result
+	err    error
+}
+
+func (r *driveCommandRunner) Run(_ context.Context, invocation executor.Invocation) (executor.Result, error) {
+	r.last = invocation
+	if r.err != nil {
+		return executor.Result{}, r.err
+	}
+	if r.result.Response != nil {
+		r.result.Invocation = invocation
+		return r.result, nil
+	}
+	return executor.Result{Invocation: invocation}, nil
+}
+
+func TestDriveListPageSizeAliasMapsMaxResults(t *testing.T) {
+	t.Parallel()
+
+	runner := &driveCommandRunner{}
+	cmd := newDriveListCommand(runner)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"--page-size", "20"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut.String())
+	}
+	if runner.last.Tool != "list_files" {
+		t.Fatalf("tool = %q, want list_files", runner.last.Tool)
+	}
+	if got := runner.last.Params["maxResults"]; got != float64(20) {
+		t.Fatalf("maxResults = %#v, want 20", got)
+	}
+}
+
+func TestDriveDownloadOutputDirectoryUsesServerFileName(t *testing.T) {
+	t.Parallel()
+
+	wantBody := []byte("download body")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("method = %s, want GET", r.Method)
+		}
+		_, _ = w.Write(wantBody)
+	}))
+	defer server.Close()
+
+	runner := &driveCommandRunner{
+		result: executor.Result{
+			Response: map[string]any{
+				"content": map[string]any{
+					"result": map[string]any{
+						"resourceUrl": server.URL + "/url-derived.bin",
+						"fileName":    "server-name.txt",
+					},
+				},
+			},
+		},
+	}
+	outputDir := t.TempDir()
+	cmd := newDriveDownloadCommand(runner)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"--file-id", "FILE_001", "--output", outputDir})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut.String())
+	}
+	gotPath := filepath.Join(outputDir, "server-name.txt")
+	gotBody, err := os.ReadFile(gotPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", gotPath, err)
+	}
+	if string(gotBody) != string(wantBody) {
+		t.Fatalf("downloaded body = %q, want %q", string(gotBody), string(wantBody))
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, "url-derived.bin")); !os.IsNotExist(err) {
+		t.Fatalf("URL-derived filename should not be used, stat error = %v", err)
+	}
+}
+
+func TestParseDriveDownloadInfoUsesNameWhenFileNameAbsent(t *testing.T) {
+	t.Parallel()
+
+	resourceURL, filename, _, err := parseDriveDownloadInfo(map[string]any{
+		"result": map[string]any{
+			"downloadUrl": "https://example.com/fallback.bin",
+			"name":        "server-name-from-name.txt",
+		},
+	})
+	if err != nil {
+		t.Fatalf("parseDriveDownloadInfo() error = %v", err)
+	}
+	if resourceURL != "https://example.com/fallback.bin" {
+		t.Fatalf("resourceURL = %q, want fallback URL", resourceURL)
+	}
+	if filename != "server-name-from-name.txt" {
+		t.Fatalf("filename = %q, want server-name-from-name.txt", filename)
+	}
+}
 
 // TestHttpPutDriveFile_NoContentTypeWhenServerHeadersEmpty guards the fix for
 // the SignatureDoesNotMatch bug on DingTalk drive presigned OSS uploads.
