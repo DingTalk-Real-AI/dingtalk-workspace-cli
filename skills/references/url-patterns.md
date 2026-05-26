@@ -125,3 +125,39 @@ dws doc list --folder "https://alidocs.dingtalk.com/i/nodes/ghi789" --format jso
 - 用户只粘贴 URL，无其他上下文
 - 用户指令与 URL 实际类型可能不一致（如说"文档"但实际是表格）
 - 用户直接粘贴的是原始 `alidocs` URL，且没有上游命令返回来确认类型
+
+---
+
+## alidocs URL probe 后能力矩阵
+
+> 给 Agent 在用户问"那能不能 XXX"时使用——一眼看出该节点类型支持哪些操作。
+> 标 ⚠️ 的项是当前 dws-opensource 用 transitional helper 实现（feat/align-yuyuan 分支），mse 端 toolOverride 落地后转为动态生成。
+
+| extension / contentType | 读取 | 写入 | 删除 | 导出 | 权限 | 媒体 |
+|-------------------------|------|------|------|------|------|------|
+| **adoc**（在线文档） | `doc read` | `doc update` / `doc block update` | ⚠️ `doc delete` | ⚠️ `doc export` (→ docx) | ⚠️ `doc permission *` | ⚠️ `doc media download/insert` |
+| **axls**（在线电子表格） | `sheet range read` / `sheet list` | `sheet range write` / `sheet append` | ⚠️ `doc delete`（节点删除） | `sheet submit_export_job` + `sheet query_export_job`（待吴淼 W-01 收敛为单命令 `sheet export`） | ⚠️ `doc permission *`（节点级，跨产品） | 不适用 |
+| **able**（在线多维表） | `aitable base get` / `aitable record query` | `aitable record create/update` | ⚠️ `doc delete`（节点删除）或 `aitable base delete --yes` | `aitable export data --output ./x.xlsx` | ⚠️ `doc permission *`（节点级） | `aitable attachment upload-file` |
+| **xlsx / xls / xlsm / csv**（本地表格文件） | `doc download` → 本地用 xlsx skill 解析 | 不支持服务端写（先下载改本地再上传） | ⚠️ `doc delete`（节点删除） | 不需要（本身就是 xlsx） | ⚠️ `doc permission *` | 不适用 |
+| **普通文件** (nodeType=file) | `doc download` | 不支持服务端写 | ⚠️ `doc delete` | 不需要 | ⚠️ `doc permission *` | 不适用 |
+| **文件夹** (nodeType=folder) | `doc list --folder <URL>` | `doc create --folder <URL> ...` | ⚠️ `doc delete` | 不适用 | ⚠️ `doc permission *` | 不适用 |
+| **分享短链** `/i/p/<short>` | `read_url` 兜底（外部工具） | 不适用 | 不适用 | 不适用 | 不适用 | 不适用 |
+
+### 使用方式
+
+```
+Agent 流程：
+  1. 用户给 URL  →  dws doc info --node <URL>           （路由起点）
+  2. 拿到 extension / contentType / nodeType
+  3. 在本矩阵查"能做什么 / 不能做什么"
+  4. 不能做的直接告知用户（参考 capability-limits.md），不要重试
+```
+
+### 跨产品授权的关键判断
+
+| 用户说 | 路由 | 不要混淆 |
+|--------|------|---------|
+| "把这个文档/表格/多维表分享给张三" | **节点级**：`doc permission add --node <URL> --user <UID> --role EDITOR` | 不是 `wiki member add` |
+| "把张三加到这个知识库" | **容器级**：`wiki member add --workspace <WS> --user <UID> --role <ROLE>` | 不是 `doc permission add` |
+
+> 区分依据：**doc permission 作用于单个 node（document / file / folder）；wiki member 作用于整个 workspace 容器**。同一用户在 workspace 是 EDITOR、在某个 node 上仍可被单独提升为 MANAGER（节点级覆盖容器级）。

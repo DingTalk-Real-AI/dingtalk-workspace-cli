@@ -1,0 +1,55 @@
+{
+  "command_path": "doc read",
+  "description": "读取文档内容",
+  "product": "doc",
+  "product_id": "doc",
+  "case_count": 2,
+  "flags_required": [
+    "node"
+  ],
+  "flags_optional": [],
+  "positional_args": [],
+  "generated_at": "2026-03-17T10:24:46.908903",
+  "test_cases": [
+    {
+      "product": "doc",
+      "product_id": "doc",
+      "command_path": "doc read",
+      "test_id": "doc_doc_read_001",
+      "user_intent": "读取文档 doc123 的全部内容",
+      "category": "basic",
+      "difficulty": "easy",
+      "tags": [
+        "basic",
+        "doc"
+      ],
+      "expected_cli_command": "dws doc read --node doc123 --format json",
+      "expected_cliflat_array": [
+        "doc",
+        "read",
+        "--node",
+        "doc123"
+      ]
+    },
+    {
+      "product": "doc",
+      "product_id": "doc",
+      "command_path": "doc read",
+      "test_id": "doc_doc_read_002",
+      "user_intent": "帮我看看 docXYZ 这个文档里写了什么",
+      "category": "paraphrase",
+      "difficulty": "easy",
+      "tags": [
+        "paraphrase",
+        "doc"
+      ],
+      "expected_cli_command": "dws doc read --node docXYZ --format json",
+      "expected_cliflat_array": [
+        "doc",
+        "read",
+        "--node",
+        "docXYZ"
+      ]
+    }
+  ]
+}

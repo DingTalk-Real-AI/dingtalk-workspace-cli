@@ -1,0 +1,80 @@
+{
+  "command_path": "drive upload",
+  "description": "上传本地文件到钉盘（三步自动完成）",
+  "product": "drive",
+  "product_id": "drive",
+  "case_count": 5,
+  "flags_required": [
+    "file"
+  ],
+  "flags_optional": [
+    "file-name",
+    "space-id",
+    "mime-type",
+    "folder"
+  ],
+  "positional_args": [],
+  "generated_at": "2026-04-17T10:26:00.000000",
+  "test_cases": [
+    {
+      "product": "drive",
+      "product_id": "drive",
+      "command_path": "drive upload",
+      "test_id": "drive_upload_001",
+      "user_intent": "上传report.pdf到钉盘",
+      "category": "basic",
+      "difficulty": "easy",
+      "tags": ["basic", "drive"],
+      "expected_cli_command": "dws drive upload --file ./report.pdf --format json",
+      "expected_cliflat_array": ["drive", "upload", "--file", "./report.pdf"]
+    },
+    {
+      "product": "drive",
+      "product_id": "drive",
+      "command_path": "drive upload",
+      "test_id": "drive_upload_002",
+      "user_intent": "把slides.pptx上传到钉盘，显示名称为Q1汇报.pptx",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": ["optional_flags", "drive"],
+      "expected_cli_command": "dws drive upload --file ./slides.pptx --file-name \"Q1汇报.pptx\" --format json",
+      "expected_cliflat_array": ["drive", "upload", "--file", "./slides.pptx", "--file-name", "Q1汇报.pptx"]
+    },
+    {
+      "product": "drive",
+      "product_id": "drive",
+      "command_path": "drive upload",
+      "test_id": "drive_upload_003",
+      "user_intent": "上传data.xlsx到指定文件夹dentry123",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": ["optional_flags", "drive"],
+      "expected_cli_command": "dws drive upload --file ./data.xlsx --folder dentry123 --format json",
+      "expected_cliflat_array": ["drive", "upload", "--file", "./data.xlsx", "--folder", "dentry123"]
+    },
+    {
+      "product": "drive",
+      "product_id": "drive",
+      "command_path": "drive upload",
+      "test_id": "drive_upload_004",
+      "user_intent": "帮我把本地的合同.docx传到网盘",
+      "category": "colloquial",
+      "difficulty": "medium",
+      "tags": ["colloquial", "drive"],
+      "expected_cli_command": "dws drive upload --file ./合同.docx --format json",
+      "expected_cliflat_array": ["drive", "upload", "--file", "./合同.docx"]
+    },
+    {
+      "product": "drive",
+      "product_id": "drive",
+      "command_path": "drive upload",
+      "test_id": "drive_upload_005",
+      "user_intent": "上传image.png到空间space456的根目录",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": ["optional_flags", "drive"],
+      "expected_cli_command": "dws drive upload --file ./image.png --space-id space456 --format json",
+      "expected_cliflat_array": ["drive", "upload", "--file", "./image.png", "--space-id", "space456"]
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "command_path": "aitable field create",
+  "description": "创建字段",
+  "product": "aitable",
+  "product_id": "aitable",
+  "case_count": 2,
+  "flags_required": [
+    "base-id",
+    "fields",
+    "table-id"
+  ],
+  "flags_optional": [],
+  "positional_args": [],
+  "generated_at": "2026-03-17T10:24:46.894829",
+  "test_cases": [
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable field create",
+      "test_id": "aitable_aitable_field_create_001",
+      "user_intent": "在 base123 的 table456 里创建一个单选字段 状态，选项有待办、进行中、已完成",
+      "category": "basic",
+      "difficulty": "easy",
+      "tags": [
+        "basic",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable field create --base-id base123 --table-id table456 --fields '[{\"fieldName\":\"状态\",\"type\":\"singleSelect\",\"config\":{\"options\":[{\"name\":\"待办\"},{\"name\":\"进行中\"},{\"name\":\"已完成\"}]}}]' --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "field",
+        "create",
+        "--base-id",
+        "base123",
+        "--fields",
+        "[{\"fieldName\":\"状态\",\"type\":\"singleSelect\",\"config\":{\"options\":[{\"name\":\"待办\"},{\"name\":\"进行中\"},{\"name\":\"已完成\"}]}}]",
+        "--table-id",
+        "table456"
+      ]
+    },
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable field create",
+      "test_id": "aitable_aitable_field_create_002",
+      "user_intent": "给 base789 的 tblABC 新加一个文本字段叫 备注",
+      "category": "paraphrase",
+      "difficulty": "easy",
+      "tags": [
+        "paraphrase",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable field create --base-id base789 --table-id tblABC --fields '[{\"fieldName\":\"备注\",\"type\":\"text\"}]' --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "field",
+        "create",
+        "--base-id",
+        "base789",
+        "--fields",
+        "[{\"fieldName\":\"备注\",\"type\":\"text\"}]",
+        "--table-id",
+        "tblABC"
+      ]
+    }
+  ]
+}

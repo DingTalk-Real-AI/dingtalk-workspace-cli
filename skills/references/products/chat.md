@@ -762,8 +762,8 @@ dws chat message send --group <openconversation_id> \
 
 | 脚本 | 场景 | 用法 |
 |------|------|------|
-| [chat_export_messages.py](../../scripts/chat_export_messages.py) | 导出群聊消息到 JSON 文件 | `python chat_export_messages.py --query "项目冲刺" --time "2026-03-10 00:00:00"` |
-| [chat_history_with_user.py](../../scripts/chat_history_with_user.py) | 查询与某人的单聊聊天记录 | `python chat_history_with_user.py --name "张三" --time "2026-03-10 00:00:00"` |
+| `chat_export_messages.py`（开源版未引入；可手动用 `dws chat message list` 翻页后写入文件） | 导出群聊消息到 JSON 文件 | `python chat_export_messages.py --query "项目冲刺" --time "2026-03-10 00:00:00"` |
+| `chat_history_with_user.py`（开源版未引入；可手动用 `dws chat search` + `dws chat message list` 组合） | 查询与某人的单聊聊天记录 | `python chat_history_with_user.py --name "张三" --time "2026-03-10 00:00:00"` |
 
 ## 相关产品
 

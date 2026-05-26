@@ -1,0 +1,106 @@
+{
+  "command_path": "drive mkdir",
+  "description": "创建文件夹",
+  "product": "drive",
+  "product_id": "drive",
+  "case_count": 4,
+  "flags_required": [
+    "name"
+  ],
+  "flags_optional": [
+    "folder",
+    "space-id"
+  ],
+  "positional_args": [],
+  "generated_at": "2026-03-17T10:24:46.911795",
+  "test_cases": [
+    {
+      "product": "drive",
+      "product_id": "drive",
+      "command_path": "drive mkdir",
+      "test_id": "drive_drive_mkdir_001",
+      "user_intent": "创建文件夹，name 为 项目资料",
+      "category": "basic",
+      "difficulty": "easy",
+      "tags": [
+        "basic",
+        "drive"
+      ],
+      "expected_cli_command": "dws drive mkdir --name 项目资料 --format json",
+      "expected_cliflat_array": [
+        "drive",
+        "mkdir",
+        "--name",
+        "项目资料"
+      ]
+    },
+    {
+      "product": "drive",
+      "product_id": "drive",
+      "command_path": "drive mkdir",
+      "test_id": "drive_drive_mkdir_002",
+      "user_intent": "在空间spaceABC下创建一个文件夹叫项目文档",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional_flags",
+        "drive"
+      ],
+      "expected_cli_command": "dws drive mkdir --name \"项目文档\" --space-id spaceABC --format json",
+      "expected_cliflat_array": [
+        "drive",
+        "mkdir",
+        "--name",
+        "项目文档",
+        "--space-id",
+        "spaceABC"
+      ]
+    },
+    {
+      "product": "drive",
+      "product_id": "drive",
+      "command_path": "drive mkdir",
+      "test_id": "drive_drive_mkdir_003",
+      "user_intent": "在文件夹 parent789 下创建文件夹 子目录",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional_flags",
+        "drive"
+      ],
+      "expected_cli_command": "dws drive mkdir --name 子目录 --folder parent789 --format json",
+      "expected_cliflat_array": [
+        "drive",
+        "mkdir",
+        "--name",
+        "子目录",
+        "--folder",
+        "parent789"
+      ]
+    },
+    {
+      "product": "drive",
+      "product_id": "drive",
+      "command_path": "drive mkdir",
+      "test_id": "drive_drive_mkdir_004",
+      "user_intent": "在空间 spaceXYZ 的文件夹 parentABC 下新建文件夹 项目存档",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional_flags",
+        "drive"
+      ],
+      "expected_cli_command": "dws drive mkdir --name 项目存档 --folder parentABC --space-id spaceXYZ --format json",
+      "expected_cliflat_array": [
+        "drive",
+        "mkdir",
+        "--name",
+        "项目存档",
+        "--folder",
+        "parentABC",
+        "--space-id",
+        "spaceXYZ"
+      ]
+    }
+  ]
+}

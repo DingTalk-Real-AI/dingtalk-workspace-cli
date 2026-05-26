@@ -1,0 +1,61 @@
+{
+  "command_path": "aitable base search",
+  "description": "搜索 AI 表格",
+  "product": "aitable",
+  "product_id": "aitable",
+  "case_count": 2,
+  "flags_required": [
+    "query"
+  ],
+  "flags_optional": [
+    "cursor"
+  ],
+  "positional_args": [],
+  "generated_at": "2026-03-17T10:24:46.893615",
+  "test_cases": [
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable base search",
+      "test_id": "aitable_aitable_base_search_001",
+      "user_intent": "搜索 AI 表格，query 为 项目管理",
+      "category": "basic",
+      "difficulty": "easy",
+      "tags": [
+        "basic",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable base search --query 项目管理 --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "base",
+        "search",
+        "--query",
+        "项目管理"
+      ]
+    },
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable base search",
+      "test_id": "aitable_aitable_base_search_002",
+      "user_intent": "搜索名为 销售 的 AI 表格，从游标 cursor123 开始翻页",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable base search --query 销售 --cursor cursor123 --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "base",
+        "search",
+        "--cursor",
+        "cursor123",
+        "--query",
+        "销售"
+      ]
+    }
+  ]
+}

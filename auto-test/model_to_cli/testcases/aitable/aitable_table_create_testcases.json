@@ -1,0 +1,67 @@
+{
+  "command_path": "aitable table create",
+  "description": "创建数据表",
+  "product": "aitable",
+  "product_id": "aitable",
+  "case_count": 2,
+  "flags_required": [
+    "base-id",
+    "fields",
+    "name"
+  ],
+  "flags_optional": [],
+  "positional_args": [],
+  "generated_at": "2026-03-17T10:24:46.894364",
+  "test_cases": [
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable table create",
+      "test_id": "aitable_aitable_table_create_001",
+      "user_intent": "在 base123 中创建一张名为 任务表 的数据表，包含文本字段任务名称和单选字段优先级",
+      "category": "basic",
+      "difficulty": "medium",
+      "tags": [
+        "basic",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable table create --base-id base123 --name 任务表 --fields '[{\"fieldName\":\"任务名称\",\"type\":\"text\"},{\"fieldName\":\"优先级\",\"type\":\"singleSelect\",\"config\":{\"options\":[{\"name\":\"高\"},{\"name\":\"中\"},{\"name\":\"低\"}]}}]' --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "table",
+        "create",
+        "--base-id",
+        "base123",
+        "--fields",
+        "[{\"fieldName\":\"任务名称\",\"type\":\"text\"},{\"fieldName\":\"优先级\",\"type\":\"singleSelect\",\"config\":{\"options\":[{\"name\":\"高\"},{\"name\":\"中\"},{\"name\":\"低\"}]}}]",
+        "--name",
+        "任务表"
+      ]
+    },
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable table create",
+      "test_id": "aitable_aitable_table_create_002",
+      "user_intent": "帮我在多维表格 base456 里新建一张叫 人员信息 的表，字段有姓名和部门",
+      "category": "paraphrase",
+      "difficulty": "medium",
+      "tags": [
+        "paraphrase",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable table create --base-id base456 --name 人员信息 --fields '[{\"fieldName\":\"姓名\",\"type\":\"text\"},{\"fieldName\":\"部门\",\"type\":\"text\"}]' --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "table",
+        "create",
+        "--base-id",
+        "base456",
+        "--fields",
+        "[{\"fieldName\":\"姓名\",\"type\":\"text\"},{\"fieldName\":\"部门\",\"type\":\"text\"}]",
+        "--name",
+        "人员信息"
+      ]
+    }
+  ]
+}

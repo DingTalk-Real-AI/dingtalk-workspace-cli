@@ -1,0 +1,223 @@
+{
+  "product_id": "aitable",
+  "product_name": "aitable",
+  "priority": "P2",
+  "total_commands": 16,
+  "total_test_cases": 41,
+  "generated_at": "2026-03-17T10:24:46.895411",
+  "reference_source": "dingtalk-workspace/references/products/aitable.md",
+  "difficulty_distribution": {
+    "easy": 20,
+    "medium": 16,
+    "hard": 5
+  },
+  "category_distribution": {
+    "basic": 16,
+    "optional_flags": 19,
+    "paraphrase": 6
+  },
+  "commands": [
+    {
+      "command_path": "aitable base list",
+      "title": "获取 AI 表格列表",
+      "flags_required": [],
+      "flags_optional": [
+        "cursor",
+        "limit"
+      ],
+      "positional_args": [],
+      "file": "aitable_base_list_testcases.json"
+    },
+    {
+      "command_path": "aitable base search",
+      "title": "搜索 AI 表格",
+      "flags_required": [
+        "query"
+      ],
+      "flags_optional": [
+        "cursor"
+      ],
+      "positional_args": [],
+      "file": "aitable_base_search_testcases.json"
+    },
+    {
+      "command_path": "aitable base get",
+      "title": "获取 AI 表格信息",
+      "flags_required": [
+        "base-id"
+      ],
+      "flags_optional": [],
+      "positional_args": [],
+      "file": "aitable_base_get_testcases.json"
+    },
+    {
+      "command_path": "aitable base create",
+      "title": "创建 AI 表格",
+      "flags_required": [
+        "name"
+      ],
+      "flags_optional": [
+        "template-id"
+      ],
+      "positional_args": [],
+      "file": "aitable_base_create_testcases.json"
+    },
+    {
+      "command_path": "aitable base update",
+      "title": "更新 AI 表格",
+      "flags_required": [
+        "base-id",
+        "name"
+      ],
+      "flags_optional": [
+        "desc"
+      ],
+      "positional_args": [],
+      "file": "aitable_base_update_testcases.json"
+    },
+    {
+      "command_path": "aitable base delete",
+      "title": "删除 AI 表格",
+      "flags_required": [
+        "base-id"
+      ],
+      "flags_optional": [
+        "reason"
+      ],
+      "positional_args": [],
+      "file": "aitable_base_delete_testcases.json"
+    },
+    {
+      "command_path": "aitable table get",
+      "title": "获取数据表",
+      "flags_required": [
+        "base-id"
+      ],
+      "flags_optional": [
+        "table-ids"
+      ],
+      "positional_args": [],
+      "file": "aitable_table_get_testcases.json"
+    },
+    {
+      "command_path": "aitable table create",
+      "title": "创建数据表",
+      "flags_required": [
+        "base-id",
+        "fields",
+        "name"
+      ],
+      "flags_optional": [],
+      "positional_args": [],
+      "file": "aitable_table_create_testcases.json"
+    },
+    {
+      "command_path": "aitable table update",
+      "title": "更新数据表",
+      "flags_required": [
+        "base-id",
+        "name",
+        "table-id"
+      ],
+      "flags_optional": [],
+      "positional_args": [],
+      "file": "aitable_table_update_testcases.json"
+    },
+    {
+      "command_path": "aitable table delete",
+      "title": "删除数据表",
+      "flags_required": [
+        "base-id",
+        "table-id"
+      ],
+      "flags_optional": [
+        "reason"
+      ],
+      "positional_args": [],
+      "file": "aitable_table_delete_testcases.json"
+    },
+    {
+      "command_path": "aitable field get",
+      "title": "获取字段详情",
+      "flags_required": [
+        "base-id",
+        "table-id"
+      ],
+      "flags_optional": [
+        "field-ids"
+      ],
+      "positional_args": [],
+      "file": "aitable_field_get_testcases.json"
+    },
+    {
+      "command_path": "aitable field create",
+      "title": "创建字段",
+      "flags_required": [
+        "base-id",
+        "fields",
+        "table-id"
+      ],
+      "flags_optional": [],
+      "positional_args": [],
+      "file": "aitable_field_create_testcases.json"
+    },
+    {
+      "command_path": "aitable field update",
+      "title": "更新字段",
+      "flags_required": [
+        "base-id",
+        "field-id",
+        "table-id"
+      ],
+      "flags_optional": [
+        "config",
+        "name"
+      ],
+      "positional_args": [],
+      "file": "aitable_field_update_testcases.json"
+    },
+    {
+      "command_path": "aitable field delete",
+      "title": "删除字段",
+      "flags_required": [
+        "base-id",
+        "field-id",
+        "table-id"
+      ],
+      "flags_optional": [],
+      "positional_args": [],
+      "file": "aitable_field_delete_testcases.json"
+    },
+    {
+      "command_path": "aitable record query",
+      "title": "查询记录",
+      "flags_required": [
+        "base-id",
+        "table-id"
+      ],
+      "flags_optional": [
+        "cursor",
+        "field-ids",
+        "filters",
+        "keyword",
+        "limit",
+        "record-ids",
+        "sort"
+      ],
+      "positional_args": [],
+      "file": "aitable_record_query_testcases.json"
+    },
+    {
+      "command_path": "aitable record create",
+      "title": "新增记录",
+      "flags_required": [
+        "base-id",
+        "records",
+        "table-id"
+      ],
+      "flags_optional": [],
+      "positional_args": [],
+      "file": "aitable_record_create_testcases.json"
+    }
+  ]
+}

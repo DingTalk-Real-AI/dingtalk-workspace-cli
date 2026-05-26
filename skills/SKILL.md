@@ -18,12 +18,14 @@ cli_version: ">=1.0.15"
 - 危险操作必须先向用户确认，用户同意后才加 `--yes` 执行
 - 单次批量操作不超过 30 条记录
 - 所有命令必须**严格遵循**对应产品参考文档里面规定的参数格式（如：如果有参数值，则参数和参数值之间至少用一个空格隔开）
+- **脚本优先**：[scripts/](./scripts/) 下的 `python scripts/<name>.py` 已封装翻页/轮询/批量逻辑，遇到对应场景（如 AI 表格批量导入导出、AI 应用创建轮询、文档创建后写内容、钉盘目录树等）**优先调用脚本**而非手写多步命令。脚本均支持 `--dry-run` 预览、`--format json` 输出，失败时回退到手动步骤
 
 
 ## 产品总览
 
 | 产品                | 用途                                                   | 参考文件                                                           |
 |-------------------|------------------------------------------------------|----------------------------------------------------------------|
+| `aiapp`           | AI应用：创建/查询/修改AI应用                                       | [aiapp.md](./references/products/aiapp.md)                     |
 | `aitable`         | AI表格：Base/数据表/字段/记录/视图/附件/图表/仪表盘/导入导出/模板搜索            | [aitable.md](./references/products/aitable.md)                 |
 | `attendance`      | 考勤：打卡结果/打卡流水/考勤组查询/考勤规则/汇总统计/假期类型/假期余额（P0 已落地，部分管理类命令仍属 P1） | [attendance.md](./references/products/attendance.md)           |
 | `calendar`        | 日历：日历列表/日程/参与者/附件/响应/会议室/闲忙查询/时间建议                  | [calendar.md](./references/products/calendar.md)               |
@@ -31,7 +33,7 @@ cli_version: ">=1.0.15"
 | `contact`         | 通讯录：用户查询(当前用户/搜索/详情/手机号)/部门查询(搜索/成员列表)              | [contact.md](./references/products/contact.md)                 |
 | `devdoc`          | 开放平台文档：搜索开发文档                                        | [devdoc.md](./references/products/devdoc.md)                   |
 | `ding`            | DING消息：发送/撤回（应用内/短信/电话）                              | [ding.md](./references/products/ding.md)                       |
-| `doc`             | 钉钉文档：搜索/浏览/读写/块级编辑/评论/文件创建/复制/移动/重命名                | [doc.md](./references/products/doc.md)                         |
+| `doc`             | 钉钉文档：搜索/浏览/读写/块级编辑/评论/文件创建/复制/移动/重命名/**删除/导出 docx/权限管理/媒体上传下载**       | [doc.md](./references/products/doc.md)                         |
 | `drive`           | 钉钉云盘：文件列表/元数据/文件夹/上传(两步)/下载                        | [drive.md](./references/products/drive.md)                     |
 | `minutes`         | AI听记：听记列表/摘要/关键词/转写/待办/思维导图/发言人/发言人段落总结/热词/录音控制/成员权限/上传 | [minutes.md](./references/products/minutes.md)                 |
 | `oa`              | OA审批：待处理/详情/同意/拒绝/撤销/记录/已发起/任务/转交/评论/抄送              | [oa.md](./references/products/oa.md)                           |
@@ -43,6 +45,7 @@ cli_version: ">=1.0.15"
 
 ## 意图判断决策树
 
+用户提到"AI应用/创建应用/生成系统/做工具/管理后台/低代码" → `aiapp`
 用户提到"表格/多维表/AI表格/记录/数据/视图/图表/仪表盘" → `aitable`
 用户提到"考勤/打卡/排班" → `attendance`
 用户提到"日程/日历/会议室/约会/时间建议" → `calendar`
@@ -86,7 +89,9 @@ cli_version: ">=1.0.15"
 | `calendar` | `room delete` | 取消会议室预定 |
 | `chat` | `group members remove` | 移除群成员 |
 | `chat` | `message recall-by-bot` | 撤回机器人已发消息 |
-| `doc` | `block delete` | 删除文档块（不可恢复） |
+| `doc` | `delete` | **删除整篇文档/文件**到回收站（与 `block delete` 不同，本命令删除整个 node） |
+| `doc` | `block delete` | 删除文档单个块（不可恢复） |
+| `doc` | `permission update` | 修改协作者权限（降权可能影响他人访问） |
 | `ding` | `message recall` | 撤回已发 DING 消息 |
 | `oa` | `approval revoke` | 撤销自己发起的审批实例 |
 | `oa` | `approval reject` | 拒绝待审批（需加明确理由） |
@@ -139,6 +144,7 @@ dws schema <path> --jq '.tool.required'      # 只看必填字段
 3. 仍然失败，报告完整错误信息给用户，禁止自行尝试替代方案
 4. 认证失败时，参考 [global-reference.md](./references/global-reference.md) 中的认证章节处理
 5. 各产品高频错误及排查流程见 [error-codes.md](./references/error-codes.md)
+6. 遇到 [capability-limits.md](./references/capability-limits.md) 中列出的「已知不支持操作」时，**直接告知用户不支持并建议在钉钉客户端操作**，不要重试或变通
 
 
 ## 详细参考 (按需读取)
@@ -150,4 +156,22 @@ dws schema <path> --jq '.tool.required'      # 只看必填字段
 - [references/field-rules.md](./references/field-rules.md) — AI表格字段类型规则
 - [references/error-codes.md](./references/error-codes.md) — 错误码 + 调试流程
 - [references/recovery-guide.md](./references/recovery-guide.md) — recovery 闭环、`RECOVERY_EVENT_ID`、`execute/finalize` 规范
-- [scripts/](./scripts/) — 各产品批量操作脚本（AI表格/日历/机器人消息/通讯录/考勤/日志/待办等）
+- [scripts/](./scripts/) — 各产品批量/复合操作脚本（AI表格批量导入导出、AI应用创建轮询、日历、机器人消息、通讯录、考勤、日志、待办、文档创建并写入、钉盘目录树等）
+- [references/products/aitable/](./references/products/aitable/) — AI表格细分章节（单元格值/字段属性/公式/筛选排序/导入导出/仪表盘/记录增删改查/错误恢复/最佳实践）
+- [references/products/aitable-record-ops.md](./references/products/aitable-record-ops.md) — AI表格记录操作专项说明
+- [references/capability-limits.md](./references/capability-limits.md) — 已知能力限制（doc/aitable/chat/minutes，遇到时直接告知用户不支持）
+- [references/best_practices/](./references/best_practices/) — 全场景 recipe 行动指南（11 个编号场景 + lite 速查）
+  - [01-messaging.md](./references/best_practices/01-messaging.md) — 消息沟通
+  - [02-task.md](./references/best_practices/02-task.md) — 任务管理（todo）
+  - [03-meeting.md](./references/best_practices/03-meeting.md) — 会议日程（日历 + 会议室）
+  - [04-document.md](./references/best_practices/04-document.md) — 文档场景（write-doc / search-docs / migrate-doc / update-doc-section / doc-to-message / delete-old-doc / export-doc-as-docx / grant-doc-access / insert-image-to-doc / template-based-generation 等）
+  - [05-reporting.md](./references/best_practices/05-reporting.md) — 工作汇报（钉钉日志 / 文档周报选路）
+  - [06-data-analytics.md](./references/best_practices/06-data-analytics.md) — AI表格数据分析（read-aitable / generate-data-report / create-aitable-record / update-aitable-record / export-aitable-to-xlsx / primary-doc-from-record 等）
+  - [07-minutes.md](./references/best_practices/07-minutes.md) — 听记与会后
+  - [08-directory.md](./references/best_practices/08-directory.md) — 通讯录（组织架构）
+  - [09-mail.md](./references/best_practices/09-mail.md) — 邮件
+  - [10-minutes-speaker-match.md](./references/best_practices/10-minutes-speaker-match.md) — 听记发言人智能匹配
+  - [11-minutes-speaker-correct.md](./references/best_practices/11-minutes-speaker-correct.md) — 听记发言人识别与标注
+  - [lite-recipes.md](./references/best_practices/lite-recipes.md) — Lite Recipe 速查（核心流程判定为 lite 后直接执行）
+  - [_common/conventions.md](./references/best_practices/_common/conventions.md) — 批量查询、多源并行采集、字段术语等通用规范
+  - [_common/recipe-conventions.md](./references/best_practices/_common/recipe-conventions.md) — recipe 元规范

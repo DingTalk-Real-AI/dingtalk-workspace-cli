@@ -1,0 +1,62 @@
+{
+  "command_path": "doc block delete",
+  "description": "删除块元素",
+  "product": "doc",
+  "product_id": "doc",
+  "case_count": 2,
+  "flags_required": [
+    "node",
+    "block-id"
+  ],
+  "flags_optional": [],
+  "positional_args": [],
+  "generated_at": "2026-03-17T10:24:46.910421",
+  "test_cases": [
+    {
+      "product": "doc",
+      "product_id": "doc",
+      "command_path": "doc block delete",
+      "test_id": "doc_doc_block_delete_001",
+      "user_intent": "删除文档 doc123 中的块元素 blk456",
+      "category": "basic",
+      "difficulty": "easy",
+      "tags": [
+        "basic",
+        "doc"
+      ],
+      "expected_cli_command": "dws doc block delete --node doc123 --block-id blk456 --format json",
+      "expected_cliflat_array": [
+        "doc",
+        "block",
+        "delete",
+        "--block-id",
+        "blk456",
+        "--node",
+        "doc123"
+      ]
+    },
+    {
+      "product": "doc",
+      "product_id": "doc",
+      "command_path": "doc block delete",
+      "test_id": "doc_doc_block_delete_002",
+      "user_intent": "把文档 docXYZ 里 id 为 blkABC 的段落删掉",
+      "category": "paraphrase",
+      "difficulty": "easy",
+      "tags": [
+        "paraphrase",
+        "doc"
+      ],
+      "expected_cli_command": "dws doc block delete --node docXYZ --block-id blkABC --format json",
+      "expected_cliflat_array": [
+        "doc",
+        "block",
+        "delete",
+        "--block-id",
+        "blkABC",
+        "--node",
+        "docXYZ"
+      ]
+    }
+  ]
+}

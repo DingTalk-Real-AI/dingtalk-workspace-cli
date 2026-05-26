@@ -1,0 +1,153 @@
+{
+  "command_path": "doc create",
+  "description": "创建文档",
+  "product": "doc",
+  "product_id": "doc",
+  "case_count": 6,
+  "flags_required": [
+    "name"
+  ],
+  "flags_optional": [
+    "folder",
+    "workspace",
+    "markdown"
+  ],
+  "positional_args": [],
+  "generated_at": "2026-03-17T10:24:46.909104",
+  "test_cases": [
+    {
+      "product": "doc",
+      "product_id": "doc",
+      "command_path": "doc create",
+      "test_id": "doc_doc_create_001",
+      "user_intent": "创建文档，name 为 项目周报",
+      "category": "basic",
+      "difficulty": "easy",
+      "tags": [
+        "basic",
+        "doc"
+      ],
+      "expected_cli_command": "dws doc create --name 项目周报 --format json",
+      "expected_cliflat_array": [
+        "doc",
+        "create",
+        "--name",
+        "项目周报"
+      ]
+    },
+    {
+      "product": "doc",
+      "product_id": "doc",
+      "command_path": "doc create",
+      "test_id": "doc_doc_create_002",
+      "user_intent": "在文件夹folder123下创建一个文档叫项目方案，初始内容是# 项目方案",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional_flags",
+        "doc"
+      ],
+      "expected_cli_command": "dws doc create --name \"项目方案\" --folder folder123 --content \"# 项目方案\" --format json",
+      "expected_cliflat_array": [
+        "doc",
+        "create",
+        "--folder",
+        "folder123",
+        "--content",
+        "# 项目方案",
+        "--name",
+        "项目方案"
+      ]
+    },
+    {
+      "product": "doc",
+      "product_id": "doc",
+      "command_path": "doc create",
+      "test_id": "doc_doc_create_003",
+      "user_intent": "在知识库 ws123 中创建一个文档叫 知识库文档",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional",
+        "doc"
+      ],
+      "expected_cli_command": "dws doc create --name 知识库文档 --workspace ws123 --format json",
+      "expected_cliflat_array": [
+        "doc",
+        "create",
+        "--name",
+        "知识库文档",
+        "--workspace",
+        "ws123"
+      ]
+    },
+    {
+      "product": "doc",
+      "product_id": "doc",
+      "command_path": "doc create",
+      "test_id": "doc_doc_create_004",
+      "user_intent": "在文件夹 folderXYZ 下新建一个文档，名称是技术方案",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional_flags",
+        "doc"
+      ],
+      "expected_cli_command": "dws doc create --folder folderXYZ --name 技术方案 --format json",
+      "expected_cliflat_array": [
+        "doc",
+        "create",
+        "--folder",
+        "folderXYZ",
+        "--name",
+        "技术方案"
+      ]
+    },
+    {
+      "product": "doc",
+      "product_id": "doc",
+      "command_path": "doc create",
+      "test_id": "doc_doc_create_005",
+      "user_intent": "创建文档 开发日志，初始内容为 ## 今日进展",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional_flags",
+        "doc"
+      ],
+      "expected_cli_command": "dws doc create --content \"## 今日进展\" --name 开发日志 --format json",
+      "expected_cliflat_array": [
+        "doc",
+        "create",
+        "--content",
+        "## 今日进展",
+        "--name",
+        "开发日志"
+      ]
+    },
+    {
+      "product": "doc",
+      "product_id": "doc",
+      "command_path": "doc create",
+      "test_id": "doc_doc_create_006",
+      "user_intent": "在知识库 ws456 新建文档 技术方案，初始内容是 # 技术方案",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional_flags",
+        "doc"
+      ],
+      "expected_cli_command": "dws doc create --content \"# 技术方案\" --name 技术方案 --workspace ws456 --format json",
+      "expected_cliflat_array": [
+        "doc",
+        "create",
+        "--content",
+        "# 技术方案",
+        "--name",
+        "技术方案",
+        "--workspace",
+        "ws456"
+      ]
+    }
+  ]
+}

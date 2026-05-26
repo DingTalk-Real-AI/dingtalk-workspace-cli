@@ -1,0 +1,203 @@
+{
+  "command_path": "aitable record query",
+  "description": "查询记录",
+  "product": "aitable",
+  "product_id": "aitable",
+  "case_count": 7,
+  "flags_required": [
+    "base-id",
+    "table-id"
+  ],
+  "flags_optional": [
+    "cursor",
+    "field-ids",
+    "filters",
+    "keyword",
+    "limit",
+    "record-ids",
+    "sort"
+  ],
+  "positional_args": [],
+  "generated_at": "2026-03-17T10:24:46.895179",
+  "test_cases": [
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable record query",
+      "test_id": "aitable_aitable_record_query_001",
+      "user_intent": "查询记录",
+      "category": "basic",
+      "difficulty": "easy",
+      "tags": [
+        "basic",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID> --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "record",
+        "query",
+        "--base-id",
+        "<BASE_ID>",
+        "--table-id",
+        "<TABLE_ID>"
+      ]
+    },
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable record query",
+      "test_id": "aitable_aitable_record_query_002",
+      "user_intent": "在base123的table456中搜索包含待处理的记录，每页5条",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional_flags",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable record query --base-id base123 --table-id table456 --keyword \"待处理\" --limit 5 --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "record",
+        "query",
+        "--base-id",
+        "base123",
+        "--keyword",
+        "待处理",
+        "--limit",
+        "5",
+        "--table-id",
+        "table456"
+      ]
+    },
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable record query",
+      "test_id": "aitable_aitable_record_query_003",
+      "user_intent": "按 ID 查询 base123 的 table456 中指定记录 rec1,rec2",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional_flags",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable record query --base-id base123 --table-id table456 --record-ids rec1,rec2 --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "record",
+        "query",
+        "--base-id",
+        "base123",
+        "--record-ids",
+        "rec1,rec2",
+        "--table-id",
+        "table456"
+      ]
+    },
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable record query",
+      "test_id": "aitable_aitable_record_query_004",
+      "user_intent": "查询 base123 的 table456 中的记录，只返回字段 fld1,fld2",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional_flags",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable record query --base-id base123 --table-id table456 --field-ids fld1,fld2 --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "record",
+        "query",
+        "--base-id",
+        "base123",
+        "--field-ids",
+        "fld1,fld2",
+        "--table-id",
+        "table456"
+      ]
+    },
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable record query",
+      "test_id": "aitable_aitable_record_query_005",
+      "user_intent": "查询 base123 的 table456 中的记录，按字段 fld1 降序排列",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional_flags",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable record query --base-id base123 --table-id table456 --sort '[{\"fieldId\":\"fld1\",\"order\":\"desc\"}]' --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "record",
+        "query",
+        "--base-id",
+        "base123",
+        "--sort",
+        "[{\"fieldId\":\"fld1\",\"order\":\"desc\"}]",
+        "--table-id",
+        "table456"
+      ]
+    },
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable record query",
+      "test_id": "aitable_aitable_record_query_006",
+      "user_intent": "查询 base123 的 table456 中状态为进行中的记录",
+      "category": "optional_flags",
+      "difficulty": "hard",
+      "tags": [
+        "optional_flags",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable record query --base-id base123 --table-id table456 --filters '{\"operator\":\"and\",\"operands\":[{\"operator\":\"eq\",\"operands\":[\"fldStatus\",\"进行中\"]}]}' --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "record",
+        "query",
+        "--base-id",
+        "base123",
+        "--filters",
+        "{\"operator\":\"and\",\"operands\":[{\"operator\":\"eq\",\"operands\":[\"fldStatus\",\"进行中\"]}]}",
+        "--table-id",
+        "table456"
+      ]
+    },
+    {
+      "product": "aitable",
+      "product_id": "aitable",
+      "command_path": "aitable record query",
+      "test_id": "aitable_aitable_record_query_007",
+      "user_intent": "在 base123 的 table456 中搜索关键词 项目评审，只返回字段 fld1,fld2，每页10条",
+      "category": "optional_flags",
+      "difficulty": "hard",
+      "tags": [
+        "optional_flags",
+        "aitable"
+      ],
+      "expected_cli_command": "dws aitable record query --base-id base123 --table-id table456 --keyword 项目评审 --limit 10 --field-ids fld1,fld2 --format json",
+      "expected_cliflat_array": [
+        "aitable",
+        "record",
+        "query",
+        "--base-id",
+        "base123",
+        "--field-ids",
+        "fld1,fld2",
+        "--keyword",
+        "项目评审",
+        "--limit",
+        "10",
+        "--table-id",
+        "table456"
+      ]
+    }
+  ]
+}

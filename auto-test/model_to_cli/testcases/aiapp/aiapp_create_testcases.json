@@ -1,0 +1,106 @@
+{
+  "command_path": "aiapp create",
+  "description": "创建 AI 应用",
+  "product": "aiapp",
+  "product_id": "aiapp",
+  "case_count": 4,
+  "flags_required": [
+    "prompt"
+  ],
+  "flags_optional": [
+    "skills",
+    "attachments"
+  ],
+  "positional_args": [],
+  "generated_at": "2026-03-17T10:24:46.892241",
+  "test_cases": [
+    {
+      "product": "aiapp",
+      "product_id": "aiapp",
+      "command_path": "aiapp create",
+      "test_id": "aiapp_aiapp_create_001",
+      "user_intent": "创建 AI 应用，prompt 为 创建一个天气查询应用",
+      "category": "basic",
+      "difficulty": "easy",
+      "tags": [
+        "basic",
+        "aiapp"
+      ],
+      "expected_cli_command": "dws aiapp create --prompt 创建一个天气查询应用 --format json",
+      "expected_cliflat_array": [
+        "aiapp",
+        "create",
+        "--prompt",
+        "创建一个天气查询应用"
+      ]
+    },
+    {
+      "product": "aiapp",
+      "product_id": "aiapp",
+      "command_path": "aiapp create",
+      "test_id": "aiapp_aiapp_create_002",
+      "user_intent": "创建 AI 应用，prompt 为 翻译应用, 并挂载技能 s1,s2",
+      "category": "optional_flags",
+      "difficulty": "easy",
+      "tags": [
+        "optional",
+        "aiapp"
+      ],
+      "expected_cli_command": "dws aiapp create --prompt 翻译应用 --skills s1,s2 --format json",
+      "expected_cliflat_array": [
+        "aiapp",
+        "create",
+        "--prompt",
+        "翻译应用",
+        "--skills",
+        "s1,s2"
+      ]
+    },
+    {
+      "product": "aiapp",
+      "product_id": "aiapp",
+      "command_path": "aiapp create",
+      "test_id": "aiapp_aiapp_create_003",
+      "user_intent": "创建 AI 应用，prompt 为 根据附件里的 Excel 创建一个仓库管理应用, 带上附件 warehouse.xlsx",
+      "category": "optional_flags",
+      "difficulty": "easy",
+      "tags": [
+        "optional",
+        "aiapp"
+      ],
+      "expected_cli_command": "dws aiapp create --prompt 根据附件里的 Excel 创建一个仓库管理应用 --attachments '[{\"name\":\"warehouse.xlsx\",\"type\":\"excel\",\"url\":\"https://tmp/warehouse.xlsx\"}]' --format json",
+      "expected_cliflat_array": [
+        "aiapp",
+        "create",
+        "--prompt",
+        "根据附件里的 Excel 创建一个仓库管理应用",
+        "--attachments",
+        "[{\"name\":\"warehouse.xlsx\",\"type\":\"excel\",\"url\":\"https://tmp/warehouse.xlsx\"}]"
+      ]
+    },
+    {
+      "product": "aiapp",
+      "product_id": "aiapp",
+      "command_path": "aiapp create",
+      "test_id": "aiapp_aiapp_create_004",
+      "user_intent": "创建 AI 应用，prompt 为 复杂应用, 挂载技能 s1,s2 并带上附件 warehouse.xlsx",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional",
+        "aiapp"
+      ],
+      "expected_cli_command": "dws aiapp create --prompt 复杂应用 --skills s1,s2 --attachments '[{\"name\":\"warehouse.xlsx\",\"type\":\"excel\",\"url\":\"https://tmp/warehouse.xlsx\"}]' --format json",
+      "expected_cliflat_array": [
+        "aiapp",
+        "create",
+        "--prompt",
+        "复杂应用",
+        "--skills",
+        "s1,s2",
+        "--attachments",
+        "[{\"name\":\"warehouse.xlsx\",\"type\":\"excel\",\"url\":\"https://tmp/warehouse.xlsx\"}]"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "command_path": "drive info",
+  "description": "获取文件元数据信息",
+  "product": "drive",
+  "product_id": "drive",
+  "case_count": 2,
+  "flags_required": [
+    "node"
+  ],
+  "flags_optional": [
+    "space-id"
+  ],
+  "positional_args": [],
+  "generated_at": "2026-03-17T10:24:46.911484",
+  "test_cases": [
+    {
+      "product": "drive",
+      "product_id": "drive",
+      "command_path": "drive info",
+      "test_id": "drive_drive_info_001",
+      "user_intent": "获取文件 file123 的元数据信息",
+      "category": "basic",
+      "difficulty": "easy",
+      "tags": [
+        "basic",
+        "drive"
+      ],
+      "expected_cli_command": "dws drive info --node file123 --format json",
+      "expected_cliflat_array": [
+        "drive",
+        "info",
+        "--node",
+        "file123"
+      ]
+    },
+    {
+      "product": "drive",
+      "product_id": "drive",
+      "command_path": "drive info",
+      "test_id": "drive_drive_info_002",
+      "user_intent": "查一下网盘 space1 里文件 file789 的详细信息",
+      "category": "optional_flags",
+      "difficulty": "medium",
+      "tags": [
+        "optional",
+        "drive"
+      ],
+      "expected_cli_command": "dws drive info --node file789 --space-id space1 --format json",
+      "expected_cliflat_array": [
+        "drive",
+        "info",
+        "--node",
+        "file789",
+        "--space-id",
+        "space1"
+      ]
+    }
+  ]
+}
