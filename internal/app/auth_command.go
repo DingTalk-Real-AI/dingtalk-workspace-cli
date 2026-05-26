@@ -14,7 +14,9 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,6 +27,7 @@ import (
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -55,6 +58,8 @@ func buildAuthCommand() *cobra.Command {
 	cmd.AddCommand(
 		newAuthLogoutCommand(),
 		newAuthStatusCommand(),
+		newAuthExportCommand(),
+		newAuthImportCommand(),
 		newAuthExchangeCommand(),
 		newAuthResetCommand(),
 	)
@@ -277,6 +282,13 @@ func newAuthStatusCommand() *cobra.Command {
 				} else {
 					fmt.Fprintf(w, "%-16s%s\n", "状态:", "已登录 ✅")
 				}
+				if tokenData != nil {
+					if tokenData.IsRefreshTokenValid() {
+						fmt.Fprintf(w, "%-16s%s\n", "Refresh Token:", "有效 ✅")
+					} else {
+						fmt.Fprintf(w, "%-16s%s\n", "Refresh Token:", "缺失或已过期 ⚠️")
+					}
+				}
 				if updatedAt := authStatusUpdatedAt(tokenData); updatedAt != "" {
 					fmt.Fprintf(w, "%-16s%s\n", "有效期:", updatedAt)
 				}
@@ -289,6 +301,113 @@ func newAuthStatusCommand() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func newAuthExportCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:               "export",
+		Short:             "导出可迁移认证包",
+		Long: `导出包含 refresh token 与解密材料的认证包，便于在另一台 Linux 沙箱中导入。
+
+包内包含 ~/.local/share/dws-cli 加密 keychain 与 ~/.dws 必要配置，不含 token 明文。
+
+示例:
+  dws auth export -o dws-auth.tar.gz
+  dws auth export --base64 > dws-auth.b64`,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			output, err := cmd.Flags().GetString("output")
+			if err != nil {
+				return apperrors.NewInternal("failed to read --output")
+			}
+			asBase64, err := cmd.Flags().GetBool("base64")
+			if err != nil {
+				return apperrors.NewInternal("failed to read --base64")
+			}
+
+			var bundle bytes.Buffer
+			if err := authpkg.ExportPortableAuthBundle(defaultConfigDir(), &bundle); err != nil {
+				return apperrors.NewInternal(fmt.Sprintf("failed to export auth bundle: %v", err))
+			}
+
+			output = strings.TrimSpace(output)
+			if asBase64 {
+				payload := []byte(base64.StdEncoding.EncodeToString(bundle.Bytes()) + "\n")
+				if output == "" {
+					_, err := cmd.OutOrStdout().Write(payload)
+					return err
+				}
+				if err := helpers.AtomicWrite(output, payload, config.FilePerm); err != nil {
+					return apperrors.NewInternal(fmt.Sprintf("failed to write auth bundle: %v", err))
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "[OK] 已导出认证包: %s\n", output)
+				return nil
+			}
+
+			if output == "" {
+				return apperrors.NewValidation("--output is required unless --base64 is used")
+			}
+			if err := helpers.AtomicWrite(output, bundle.Bytes(), config.FilePerm); err != nil {
+				return apperrors.NewInternal(fmt.Sprintf("failed to write auth bundle: %v", err))
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "[OK] 已导出认证包: %s\n", output)
+			return nil
+		},
+	}
+	cmd.Flags().StringP("output", "o", "", "Output auth bundle path")
+	cmd.Flags().Bool("base64", false, "Encode bundle as base64 for copy/paste")
+	return cmd
+}
+
+func newAuthImportCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:               "import",
+		Short:             "导入可迁移认证包",
+		Long: `从 dws auth export 生成的 tar.gz 或 base64 文件恢复认证。
+
+导入后请运行 dws auth status 确认 refresh token 仍有效。
+
+示例:
+  dws auth import -i dws-auth.tar.gz
+  dws auth import -i dws-auth.b64 --base64`,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			input, err := cmd.Flags().GetString("input")
+			if err != nil {
+				return apperrors.NewInternal("failed to read --input")
+			}
+			input = strings.TrimSpace(input)
+			if input == "" {
+				return apperrors.NewValidation("--input is required")
+			}
+			asBase64, err := cmd.Flags().GetBool("base64")
+			if err != nil {
+				return apperrors.NewInternal("failed to read --base64")
+			}
+
+			payload, err := os.ReadFile(input)
+			if err != nil {
+				return apperrors.NewInternal(fmt.Sprintf("failed to read auth bundle: %v", err))
+			}
+			if asBase64 {
+				payload, err = base64.StdEncoding.DecodeString(strings.TrimSpace(string(payload)))
+				if err != nil {
+					return apperrors.NewValidation(fmt.Sprintf("invalid base64 auth bundle: %v", err))
+				}
+			}
+			if err := authpkg.ImportPortableAuthBundle(defaultConfigDir(), bytes.NewReader(payload)); err != nil {
+				return apperrors.NewInternal(fmt.Sprintf("failed to import auth bundle: %v", err))
+			}
+			ResetRuntimeTokenCache()
+			clearCompatCache()
+			fmt.Fprintln(cmd.OutOrStdout(), "[OK] 已导入认证包")
+			fmt.Fprintln(cmd.OutOrStdout(), "请运行 dws auth status 验证登录状态")
+			return nil
+		},
+	}
+	cmd.Flags().StringP("input", "i", "", "Input auth bundle path")
+	cmd.Flags().Bool("base64", false, "Decode input as base64 before import")
+	return cmd
 }
 
 func newAuthExchangeCommand() *cobra.Command {

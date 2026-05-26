@@ -15,15 +15,78 @@ package app
 
 import (
 	"bytes"
+	"os"
 	"errors"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 )
+
+func TestAuthExportImportBase64RoundTrip(t *testing.T) {
+	sourceKeychain := filepath.Join(t.TempDir(), "source-keychain")
+	sourceConfig := filepath.Join(t.TempDir(), ".dws")
+	t.Setenv(keychain.StorageDirEnv, sourceKeychain)
+	t.Setenv("DWS_CONFIG_DIR", sourceConfig)
+
+	original := &authpkg.TokenData{
+		AccessToken:  "access-cli",
+		RefreshToken: "refresh-cli",
+		ExpiresAt:    time.Now().Add(-time.Hour),
+		RefreshExpAt: time.Now().Add(24 * time.Hour),
+		ClientID:     "client-cli",
+		Source:       "mcp",
+	}
+	if err := authpkg.SaveTokenData(sourceConfig, original); err != nil {
+		t.Fatalf("SaveTokenData() error = %v", err)
+	}
+
+	exportCmd := NewRootCommand()
+	var exported bytes.Buffer
+	exportCmd.SetOut(&exported)
+	exportCmd.SetErr(&bytes.Buffer{})
+	exportCmd.SetArgs([]string{"auth", "export", "--base64"})
+	if err := exportCmd.Execute(); err != nil {
+		t.Fatalf("auth export --base64 error = %v", err)
+	}
+	if strings.TrimSpace(exported.String()) == "" {
+		t.Fatal("auth export --base64 produced empty output")
+	}
+
+	targetRoot := t.TempDir()
+	inputPath := filepath.Join(targetRoot, "dws-auth.b64")
+	if err := os.WriteFile(inputPath, []byte(exported.String()), 0o600); err != nil {
+		t.Fatalf("write input bundle error = %v", err)
+	}
+
+	targetKeychain := filepath.Join(targetRoot, "target-keychain")
+	targetConfig := filepath.Join(targetRoot, ".dws")
+	t.Setenv(keychain.StorageDirEnv, targetKeychain)
+	t.Setenv("DWS_CONFIG_DIR", targetConfig)
+
+	importCmd := NewRootCommand()
+	importCmd.SetOut(&bytes.Buffer{})
+	importCmd.SetErr(&bytes.Buffer{})
+	importCmd.SetArgs([]string{"auth", "import", "--input", inputPath, "--base64"})
+	if err := importCmd.Execute(); err != nil {
+		t.Fatalf("auth import --base64 error = %v", err)
+	}
+
+	loaded, err := authpkg.LoadTokenData(targetConfig)
+	if err != nil {
+		t.Fatalf("LoadTokenData() after CLI import error = %v", err)
+	}
+	if loaded.RefreshToken != original.RefreshToken {
+		t.Fatalf("refresh token = %q, want %q", loaded.RefreshToken, original.RefreshToken)
+	}
+	if !loaded.IsRefreshTokenValid() {
+		t.Fatal("refresh token should remain valid after CLI import")
+	}
+}
 
 func TestAuthStatusRefreshFailureLeavesStoredTokenIntact(t *testing.T) {
 	// Isolate keychain storage to a per-test directory so the saved
