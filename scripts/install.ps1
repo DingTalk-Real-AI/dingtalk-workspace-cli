@@ -17,6 +17,7 @@
 #   DWS_ARCH          — architecture override          (amd64 or arm64)
 #   DWS_NO_SKILLS     — set to 1 to skip skills install
 #   DWS_SKILLS_ONLY   — set to 1 to install only skills
+#   DWS_SKILL_MODE    — mono | multi (default: prompt if TTY, else mono)
 #
 # Agent skills paths follow build/npm/install.js AGENT_DIRS (order and entries must match).
 
@@ -29,6 +30,7 @@ $Version = if ($env:DWS_VERSION) { $env:DWS_VERSION } else { "latest" }
 $NoSkills = $env:DWS_NO_SKILLS -eq "1"
 $SkillsOnly = $env:DWS_SKILLS_ONLY -eq "1"
 $SkillName = "dws"
+$SkillMode = ""
 
 # Agent skill base directories (same order as build/npm/install.js AGENT_DIRS).
 $AgentDirs = @(
@@ -219,6 +221,67 @@ function Write-Banner {
     Write-Host ""
 }
 
+# ── Skill Mode Resolution ────────────────────────────────────────────────────
+#
+# Priority (highest first):
+#   1. DWS_SKILL_MODE env var (mono | multi, case-insensitive)
+#   2. Interactive prompt when both stdin and stdout are TTYs (default: mono)
+#   3. Fallback: mono (non-TTY without env var, e.g. irm | iex)
+function Resolve-SkillMode {
+    if ($env:DWS_SKILL_MODE) {
+        $normalized = $env:DWS_SKILL_MODE.ToLower()
+        if ($normalized -eq "mono" -or $normalized -eq "multi") {
+            $script:SkillMode = $normalized
+            Write-Say "Skill mode: $SkillMode (from DWS_SKILL_MODE)"
+            return
+        }
+        Write-Err "Invalid DWS_SKILL_MODE='$($env:DWS_SKILL_MODE)'. Use 'mono' or 'multi'."
+    }
+
+    $isInteractive = $false
+    try {
+        $isInteractive = ([Console]::IsInputRedirected -eq $false) -and ([Console]::IsOutputRedirected -eq $false)
+    } catch {
+        $isInteractive = $false
+    }
+
+    if ($isInteractive) {
+        Write-Host ""
+        Write-Say "Select skill installation mode:"
+        Write-Say "  1) mono                  — install one bundled dws skill (stable / recommended)"
+        Write-Say "  2) multi 🧪 EXPERIMENTAL — split each product into its own skill (preview; run 'dws skill setup --mode multi' afterwards)"
+        Write-Say "     ⚠ multi is not yet stable — interface, naming and cross-skill references may change"
+        $choice = Read-Host "  Choice [1]"
+        switch ($choice) {
+            ""      { $script:SkillMode = "mono" }
+            "1"     { $script:SkillMode = "mono" }
+            "mono"  { $script:SkillMode = "mono" }
+            "2"     { $script:SkillMode = "multi" }
+            "multi" { $script:SkillMode = "multi" }
+            default {
+                Write-Say "Unrecognized choice '$choice', defaulting to mono."
+                $script:SkillMode = "mono"
+            }
+        }
+        Write-Say "Skill mode: $SkillMode"
+        return
+    }
+
+    $script:SkillMode = "mono"
+}
+
+function Write-MultiModeNotice {
+    Write-Say ""
+    Write-Say "🧪 Skill mode: multi (EXPERIMENTAL / preview) — automatic skill install skipped."
+    Write-Say "   ⚠ multi is not yet stable. 20 product-scoped skills pass dispatch verifier,"
+    Write-Say "     but interface, naming and cross-skill references may change in future releases."
+    Write-Say "     For production / shared environments, use mono mode (--mode mono)."
+    Write-Say ""
+    Write-Say "   To install split skills, run:"
+    Write-Say "     $BinName skill setup --mode multi"
+    Write-Say "   (One skill per product family; requires the dws binary installed above.)"
+}
+
 # ── Install Binary ───────────────────────────────────────────────────────────
 
 function Install-Binary {
@@ -297,7 +360,8 @@ function Install-Binary {
 
 function Install-SkillsLocal {
     param([string]$Root)
-    $skillSrc = Join-Path $Root "skills"
+    $skillSrc = Join-Path (Join-Path $Root "skills") "mono"
+    $multiSrc = Join-Path (Join-Path $Root "skills") "multi"
 
     if (!(Test-Path $skillSrc)) {
         Write-Say "⚠️  Local skills directory not found: $skillSrc"
@@ -309,6 +373,41 @@ function Install-SkillsLocal {
     Write-Say "📦 Installing agent skills from local source: $skillSrc"
 
     Install-SkillsToHomes -SkillSrc $skillSrc -Root $HOME
+
+    if (Test-Path $multiSrc) {
+        Cache-MultiSkills -Source $multiSrc
+    }
+    Cache-MonoSkills -Source $skillSrc
+}
+
+# Cache-MultiSkills mirrors install.sh cache_multi_skills: copies the multi/
+# tree to ~/.dws/skills/multi/ so `dws skill setup --mode multi` can find a
+# source without needing the source checkout or a re-download.
+function Cache-MultiSkills {
+    param([string]$Source)
+
+    if (!(Test-Path $Source)) { return }
+
+    $cacheDir = Join-Path $HOME ".dws\skills\multi"
+    if (Test-Path $cacheDir) {
+        Remove-Item -Path $cacheDir -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
+    $count = Copy-DirRecursive -Source $Source -Destination $cacheDir
+    Write-Say "✅ Cached multi skills → $cacheDir ($count files)"
+}
+
+function Cache-MonoSkills {
+    param([string]$Source)
+
+    if (!(Test-Path $Source)) { return }
+
+    $cacheDir = Join-Path $HOME ".dws\skills\mono"
+    if (Test-Path $cacheDir) {
+        Remove-Item -Path $cacheDir -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
+    Copy-DirRecursive -Source $Source -Destination $cacheDir | Out-Null
 }
 
 function Install-SkillsToHomes {
@@ -407,8 +506,12 @@ function Install-Skills {
         $extractRoot = Join-Path $tmpDir "skills"
         Expand-Archive -Path $zipPath -DestinationPath $extractRoot -Force
 
+        # Prefer the explicit mono/ subtree; fall back to legacy nested or zip root.
         $skillSrc = $extractRoot
-        if (Test-Path (Join-Path $extractRoot "$SkillName\SKILL.md")) {
+        $monoRoot = Join-Path $extractRoot "mono"
+        if ((Test-Path $monoRoot) -and (Test-Path (Join-Path $monoRoot "SKILL.md"))) {
+            $skillSrc = $monoRoot
+        } elseif (Test-Path (Join-Path $extractRoot "$SkillName\SKILL.md")) {
             $skillSrc = Join-Path $extractRoot $SkillName
         }
 
@@ -424,6 +527,14 @@ function Install-Skills {
         }
 
         Install-SkillsToHomes -SkillSrc $skillSrc -Root $HOME
+
+        # Cache the multi/ tree (and a mono copy) under ~/.dws/skills so that
+        # subsequent `dws skill setup --mode multi|mono` can find a source.
+        $multiRoot = Join-Path $extractRoot "multi"
+        if (Test-Path $multiRoot) {
+            Cache-MultiSkills -Source $multiRoot
+        }
+        Cache-MonoSkills -Source $skillSrc
     } finally {
         Remove-Item -Path $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
     }
@@ -435,18 +546,34 @@ $SourceRoot = Resolve-SourceRoot
 
 Write-Banner
 
+if (!$NoSkills) {
+    Resolve-SkillMode
+}
+
 if ($SourceRoot -and !$SkillsOnly -and ($Version -eq "latest")) {
     Install-BinaryFromSource -Root $SourceRoot
     if (!$NoSkills) {
-        Install-SkillsLocal -Root $SourceRoot
+        if ($SkillMode -eq "multi") {
+            Write-MultiModeNotice
+        } else {
+            Install-SkillsLocal -Root $SourceRoot
+        }
     }
 } elseif ($SkillsOnly) {
-    Install-Skills
+    if ($SkillMode -eq "multi") {
+        Write-MultiModeNotice
+    } else {
+        Install-Skills
+    }
 } elseif ($NoSkills) {
     Install-Binary
 } else {
     Install-Binary
-    Install-Skills
+    if ($SkillMode -eq "multi") {
+        Write-MultiModeNotice
+    } else {
+        Install-Skills
+    }
 }
 
 Write-Host ""

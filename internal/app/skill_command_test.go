@@ -452,11 +452,38 @@ func TestFetchSkillDownloadInfoUnauthorized(t *testing.T) {
 func TestSupportedTargets(t *testing.T) {
 	targets := supportedTargets()
 
-	// Should contain all predefined targets
-	expectedTargets := []string{"qoder", "claude", "cursor", "codex", "opencode", "."}
+	// Should contain all predefined targets — including the agents/* sentinel
+	// and the IDE/agent registries we share with skillSetupAgentHomes.
+	expectedTargets := []string{
+		"agents", "claude", "cursor", "codex", "opencode", "qoder",
+		"gemini", "github", "windsurf", "augment", "cline",
+		"amp", "kiro", "trae", "openclaw", "hermes",
+		".",
+	}
 	for _, expected := range expectedTargets {
 		if !strings.Contains(targets, expected) {
 			t.Errorf("supportedTargets() should contain %s, got: %s", expected, targets)
+		}
+	}
+}
+
+// TestAgentSkillPathsCoversSetupHomes guards against drift between
+// agentSkillPaths (used by `dws skill install` and `dws skill setup
+// --target <name>`) and skillSetupAgentHomes (used by `dws skill setup
+// --target all` to detect candidate agent homes).
+//
+// Every path in skillSetupAgentHomes MUST be reachable via at least one
+// entry in agentSkillPaths — otherwise `--target all` would silently
+// install into agent homes that the user cannot address by name.
+func TestAgentSkillPathsCoversSetupHomes(t *testing.T) {
+	paths := make(map[string]bool, len(agentSkillPaths))
+	for _, p := range agentSkillPaths {
+		paths[p] = true
+	}
+	for _, home := range skillSetupAgentHomes {
+		if !paths[home] {
+			t.Errorf("skillSetupAgentHomes entry %q has no matching agentSkillPaths value — "+
+				"add it to agentSkillPaths so users can address it via --target <name>", home)
 		}
 	}
 }

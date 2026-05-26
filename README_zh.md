@@ -64,6 +64,27 @@ irm https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/ma
 ```
 
 <details>
+<summary><strong>Skill 模式：mono 与 multi</strong></summary>
+
+安装时可以选择两种 skill 组织方式。两种模式下 CLI 命令完全一样（`dws aitable ...` / `dws calendar ...`），区别只在 Agent 那边读到的 skill 文档结构。
+
+| 模式 | 安装内容 | 适合场景 |
+|------|----------|----------|
+| **mono**（稳定，默认） | 一个 `dws` skill，覆盖全部产品 | 跨产品组合操作；单一入口召唤 |
+| **multi** 🧪 **试验版 / Preview** | 20 个独立产品 skill（`dingtalk-aitable` / `dingtalk-calendar` / `dingtalk-chat` ...） | 单产品任务；每次召唤上下文更小 |
+
+> 🧪 **multi 模式当前为 EXPERIMENTAL（试验版 / Preview）**。20 个独立 skill 全部通过 dispatch verifier，但接口、命名、跨 skill 引用后续可能调整。生产 / 共享环境建议优先用 `mono`。问题请提 issue 反馈。
+
+怎么选：
+
+- **快速安装**（上方一行 curl）：非交互，默认装 `mono`。
+- **TTY 安装**（先下载再执行）：`curl -O .../install.sh && bash install.sh`，会弹出 `1) mono  2) multi` 选项（默认 1）。
+- **环境变量覆盖**：`DWS_SKILL_MODE=multi curl -fsSL ... | sh`。
+- **装完之后再切换**：`dws skill setup --mode multi`（或 `--mode mono`），随时重跑都行。
+
+</details>
+
+<details>
 <summary>其他安装方式</summary>
 
 **npm**（需要 Node.js（npm/npx））：
@@ -230,26 +251,56 @@ dws aitable record query --base-id BASE_ID --table-id TABLE_ID --limit 10
 
 ### Agent Skills
 
-仓库内置完整的 Agent Skill 体系（`skills/`），安装后 Claude Code / Cursor 等 AI 工具可通过自然语言直接操作钉钉：
+仓库内置完整的 Agent Skill 体系（`skills/` 目录），目前重组为两套布局：
+
+- `skills/mono/` — 单 skill 布局（一个 `SKILL.md` + `references/products/`），默认推荐。
+- `skills/multi/` — 每个产品一个独立 skill（`dingtalk-aitable/` / `dingtalk-calendar/` / `dingtalk-chat/` ... 共 20 个），每个 skill 自带 `SKILL.md`。🧪 **试验版 / Preview — 各 multi `SKILL.md` 头部有详细注意事项。**
+
+安装之后，Claude Code / Cursor 等 AI 工具就能通过自然语言直接操作钉钉：
 
 ```bash
-# 安装 skills 到当前项目
+# 安装 skills 到当前项目（默认 mono）
 curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install-skills.sh | sh
 ```
 
 > `install.sh` 安装到 `$HOME/.agents/skills/dws`（全局）；`install-skills.sh` 安装到 `./.agents/skills/dws`（当前项目）。
 
-**包含内容：**
+**用 `dws skill setup` 切换或重装：**
+
+```bash
+# 交互式：提示选模式 + 目标 Agent
+dws skill setup
+
+# 把 mono skill 铺到所有检测到的 Agent home（claude / cursor / codex / opencode / qoder）
+dws skill setup --mode mono --target all --yes
+
+# 只装到某一个 Agent home
+dws skill setup --mode multi --target cursor --yes
+
+# 指定本地源目录（比如 fork 或正在改的版本）
+DWS_SKILL_SOURCE=/path/to/skills dws skill setup --mode multi
+```
+
+| 参数 | 取值 | 说明 |
+|------|------|------|
+| `--mode` | `mono` \| `multi` | skill 布局，不指定则交互式询问 |
+| `--target` | `all` \| `claude` \| `cursor` \| `codex` \| `opencode` \| `qoder` | 安装目标，`all` 表示铺到所有检测到的 Agent home |
+| `--source` | 路径 | 本地源目录（覆盖内置 skills） |
+| `--yes` | — | 跳过确认提示 |
+
+环境变量：`DWS_SKILL_MODE=mono|multi`（`install.sh` / `install.ps1` 也认）、`DWS_SKILL_SOURCE=<路径>`。
+
+**包含内容（mono 布局）：**
 
 | 组件 | 路径 | 说明 |
 |------|------|------|
-| 主 Skill | `SKILL.md` | 意图路由、决策树、安全规则、错误处理 |
-| 产品参考 | `references/products/*.md` | 各产品命令详细参考（aitable、chat、calendar 等） |
-| 意图指南 | `references/intent-guide.md` | 易混淆场景消歧（如 report vs todo） |
-| 全局参考 | `references/global-reference.md` | 认证、输出格式、全局 flag |
-| 错误码 | `references/error-codes.md` | 错误码 + 调试流程 |
-| Recovery 指南 | `references/recovery-guide.md` | `RECOVERY_EVENT_ID` 处理 |
-| 现成脚本 | `scripts/*.py` | 13 个批量操作脚本（见下方） |
+| 主 Skill | `skills/mono/SKILL.md` | 意图路由、决策树、安全规则、错误处理 |
+| 产品参考 | `skills/mono/references/products/*.md` | 各产品命令详细参考（aitable、chat、calendar 等） |
+| 意图指南 | `skills/mono/references/intent-guide.md` | 易混淆场景消歧（如 report vs todo） |
+| 全局参考 | `skills/mono/references/global-reference.md` | 认证、输出格式、全局 flag |
+| 错误码 | `skills/mono/references/error-codes.md` | 错误码 + 调试流程 |
+| Recovery 指南 | `skills/mono/references/recovery-guide.md` | `RECOVERY_EVENT_ID` 处理 |
+| 现成脚本 | `skills/mono/scripts/*.py` | 13 个批量操作脚本（见下方） |
 
 <details>
 <summary><strong>现成脚本</strong> — 13 个 Python 脚本，覆盖常见多步工作流</summary>
@@ -410,7 +461,7 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 | 考勤 | `attendance` | 4 | `record` `shift` `summary` `rules` | 打卡记录、排班查询、考勤摘要、考勤组规则 |
 | DING | `ding` | 2 | `message` | 发送 / 撤回 DING 消息 |
 | 日志 | `report` | 7 | `create` `list` `detail` `template` `stats` `sent` | 创建日志、收发列表、模版、详情、统计 |
-| AI 表格 | `aitable` | 41 | `base` `table` `record` `field` `view` `dashboard` `chart` `import` `export` `attachment` `template` | Base / 数据表 / 记录 / 字段 / 视图 全量 CRUD；图表 + 仪表盘（含分享配置）；数据导入导出；附件；模板 |
+| AI 表格 | `aitable` | 42 | `base` `table` `record` `field` `view` `dashboard` `chart` `import` `export` `attachment` `template` | Base / 数据表 / 记录 / 字段 / 视图 全量 CRUD；图表 + 仪表盘（含分享配置）；数据导入导出；附件（仅获取凭证的 `upload` + 一键上传 `upload-file`）；模板 |
 | 文档 | `doc` | 21 | `search` `list` `info` `read` `create` `update` `upload` `download` `copy` `move` `rename` `file` `folder` `block` `comment` | 搜索 / 读写文档、文件与文件夹创建、块级编辑、评论（list / create / reply / create-inline）、上传 / 下载 |
 | 钉盘 | `drive` | 9 | `list` `list-spaces` `info` `download` `mkdir` `upload` `upload-info` `commit` `delete` | 钉盘文件操作：列出空间、文件列表 / 详情 / 下载、创建文件夹、一键 `upload`（三步合成）或两阶段 `upload-info` + `commit`、删除 |
 | AI 听记 | `minutes` | 19 | `list` `get` `update` `mind-graph` `speaker` `hot-word` `upload` | 听记列表（我创建 / 共享给我）、详情（info / summary / keywords / transcription / todos / batch）、标题/摘要更新、思维导图、发言人替换、热词、上传会话 |
@@ -423,14 +474,15 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 | 直播 | `live` | 1 | `stream` | 钉钉直播：查看我的直播列表 |
 | Raw API | `api` | 1 | — | 直接调用任意钉钉 OpenAPI（api / oapi 双形态），自动管理应用级 Token |
 
-> **19 个产品，212 条命令。** 完整命令清单（带描述与使用场景）：[`docs/command-index.md`](./docs/command-index.md)。运行 `dws --help` 查看顶层命令树，或 `dws <service> --help` 查看子命令。
+> **19 个产品，213 条命令。** 完整命令清单（带描述与使用场景）：[`docs/command-index.md`](./docs/command-index.md)。运行 `dws --help` 查看顶层命令树，或 `dws <service> --help` 查看子命令。
 
 > **关于 `chat bot`**：机器人能力（`send-by-bot` / `recall-by-bot` / `add-bot` / `send-by-webhook` / bot 搜索）已合并到对应的 `chat` 子树下（例如 `dws chat message send-by-bot`、`dws chat group members add-bot`），保持 agent 视角下的命令面扁平易发现。不再有独立的顶层 `bot` 产品。
 
 <details>
 <summary>即将推出</summary>
 
-`conference`（视频会议）
+- `conference`（视频会议）
+- 多 skill 模式（实验中）— 每产品一个独立 skill，位于 `skills/multi/`，通过 `dws skill setup --mode multi` 启用
 
 </details>
 

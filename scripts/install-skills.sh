@@ -18,6 +18,7 @@ REPO="DingTalk-Real-AI/dingtalk-workspace-cli"
 VERSION="${DWS_VERSION:-latest}"
 SKILL_NAME="dws"
 ROOT="${DWS_SKILLS_ROOT:-$PWD}"
+DWS_CACHE_ROOT="${DWS_CACHE_ROOT:-$HOME/.dws}"
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -170,8 +171,11 @@ main() {
   curl -fsSL "$ASSET_URL" -o "$TMPDIR_WORK/dws-skills.zip"
   extract_zip "$TMPDIR_WORK/dws-skills.zip" "$TMPDIR_WORK/extracted"
 
+  # Prefer the explicit mono/ subtree; fall back to legacy nested or zip root.
   SKILL_SRC="$TMPDIR_WORK/extracted"
-  if [ -f "$TMPDIR_WORK/extracted/${SKILL_NAME}/SKILL.md" ]; then
+  if [ -d "$TMPDIR_WORK/extracted/mono" ] && [ -f "$TMPDIR_WORK/extracted/mono/SKILL.md" ]; then
+    SKILL_SRC="$TMPDIR_WORK/extracted/mono"
+  elif [ -f "$TMPDIR_WORK/extracted/${SKILL_NAME}/SKILL.md" ]; then
     SKILL_SRC="$TMPDIR_WORK/extracted/${SKILL_NAME}"
   fi
 
@@ -183,6 +187,23 @@ main() {
   printf '\n'
   printf '  Installing under root: %s\n' "$ROOT"
   install_skills_to_root "$SKILL_SRC" "$ROOT"
+
+  # Cache multi/ (and a mono copy) under ~/.dws/skills so that subsequent
+  # `dws skill setup --mode multi|mono` invocations can find a source.
+  if [ -d "$TMPDIR_WORK/extracted/multi" ]; then
+    cache_dir="${DWS_CACHE_ROOT}/skills/multi"
+    rm -rf "$cache_dir"
+    mkdir -p "$cache_dir"
+    cp -R "$TMPDIR_WORK/extracted/multi/"* "$cache_dir/" 2>/dev/null || \
+      cp -r "$TMPDIR_WORK/extracted/multi/"* "$cache_dir/" 2>/dev/null || true
+    file_count="$(find "$cache_dir" -type f | wc -l | tr -d ' ')"
+    printf '  ✅ Cached multi skills → %s (%s files)\n' "$cache_dir" "$file_count"
+  fi
+  mono_cache="${DWS_CACHE_ROOT}/skills/mono"
+  rm -rf "$mono_cache"
+  mkdir -p "$mono_cache"
+  cp -R "$SKILL_SRC/"* "$mono_cache/" 2>/dev/null || \
+    cp -r "$SKILL_SRC/"* "$mono_cache/" 2>/dev/null || true
 
   printf '\n'
   printf '  📖 Skill includes:\n'

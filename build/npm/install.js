@@ -136,11 +136,36 @@ function installSkillsToHomes(skillRoot) {
   }
 }
 
+// cacheUserSkills copies the mono and multi trees out of the freshly extracted
+// dws-skills.zip into ~/.dws/skills/{mono,multi}/ so that `dws skill setup`
+// can fall back to a user-local cache when --source is not provided. mono is
+// already installed into agent homes by installSkillsToHomes; the cache is
+// purely a source-of-truth for the setup command.
+function cacheUserSkills(extractedSkillsRoot) {
+  const cacheBase = path.join(os.homedir(), ".dws", "skills");
+
+  const monoSource = fs.existsSync(path.join(extractedSkillsRoot, "mono", "SKILL.md"))
+    ? path.join(extractedSkillsRoot, "mono")
+    : extractedSkillsRoot;
+  const monoCache = path.join(cacheBase, "mono");
+  fs.rmSync(monoCache, { recursive: true, force: true });
+  copyChildren(monoSource, monoCache);
+
+  const multiSource = path.join(extractedSkillsRoot, "multi");
+  if (fs.existsSync(multiSource) && fs.statSync(multiSource).isDirectory()) {
+    const multiCache = path.join(cacheBase, "multi");
+    fs.rmSync(multiCache, { recursive: true, force: true });
+    copyChildren(multiSource, multiCache);
+  }
+}
+
 function main() {
   const packageRoot = __dirname;
   const assetsDir = path.join(packageRoot, "assets");
   const vendorDir = path.join(packageRoot, "vendor");
-  const skillDir = path.join(packageRoot, "share", "skills", "dws");
+  // Extract dws-skills.zip into a staging directory so we can split mono/
+  // (installed to agent homes) from multi/ (cached for later setup use).
+  const skillsStaging = path.join(packageRoot, "share", "skills");
   const assetName = PLATFORM_MAP[`${process.platform}-${process.arch}`];
   if (!assetName) {
     throw new Error(`unsupported platform: ${process.platform}/${process.arch}`);
@@ -156,8 +181,16 @@ function main() {
   }
 
   extractArchive(archivePath, vendorDir);
-  extractSkills(skillsPath, skillDir);
-  installSkillsToHomes(skillDir);
+  extractSkills(skillsPath, skillsStaging);
+
+  // For backward compatibility, the zip root carries a copy of mono content
+  // (SKILL.md + references/ + scripts/). Prefer the explicit mono/ subdir
+  // when present; fall back to the staging root otherwise.
+  const monoRoot = fs.existsSync(path.join(skillsStaging, "mono", "SKILL.md"))
+    ? path.join(skillsStaging, "mono")
+    : skillsStaging;
+  installSkillsToHomes(monoRoot);
+  cacheUserSkills(skillsStaging);
 }
 
 main();
