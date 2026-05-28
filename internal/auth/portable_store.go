@@ -31,6 +31,37 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
+// PortableImportReport summarizes bundle metadata consumed during import.
+type PortableImportReport struct {
+	BundleOS   string
+	OSMismatch bool
+}
+
+// PortableExportSupported reports whether the current platform can produce a
+// bundle that includes the file-based DEK required for import elsewhere.
+func PortableExportSupported() bool {
+	if runtime.GOOS != "darwin" {
+		return true
+	}
+	return os.Getenv(keychain.DisableKeychainEnv) != ""
+}
+
+// PortableAuthTargetPopulated reports whether local auth files would be
+// overwritten by a portable import.
+func PortableAuthTargetPopulated(configDir string) bool {
+	if TokenDataExistsKeychain() {
+		return true
+	}
+	if _, err := os.Stat(filepath.Join(configDir, "app.json")); err == nil {
+		return true
+	}
+	encPath := filepath.Join(keychain.StorageDir(keychain.Service), keychain.AccountToken+".enc")
+	if _, err := os.Stat(encPath); err == nil {
+		return true
+	}
+	return false
+}
+
 const portableAuthManifest = "manifest.json"
 
 type portableAuthBundleManifest struct {
@@ -47,6 +78,9 @@ type portableAuthBundleManifest struct {
 func ExportPortableAuthBundle(configDir string, w io.Writer) error {
 	if w == nil {
 		return fmt.Errorf("missing output writer")
+	}
+	if !PortableExportSupported() {
+		return fmt.Errorf("portable export unavailable on macOS while DEK is in system Keychain; set %s=1, re-login, then export", keychain.DisableKeychainEnv)
 	}
 	keychainDir := keychain.StorageDir(keychain.Service)
 	if _, err := os.Stat(keychainDir); err != nil {
@@ -87,37 +121,40 @@ func ExportPortableAuthBundle(configDir string, w io.Writer) error {
 
 // ImportPortableAuthBundle extracts a tar.gz auth bundle into the current
 // config and keychain locations.
-func ImportPortableAuthBundle(configDir string, r io.Reader) error {
+func ImportPortableAuthBundle(configDir string, r io.Reader) (PortableImportReport, error) {
 	if r == nil {
-		return fmt.Errorf("missing input reader")
+		return PortableImportReport{}, fmt.Errorf("missing input reader")
 	}
 	gz, err := gzip.NewReader(r)
 	if err != nil {
-		return fmt.Errorf("open auth bundle: %w", err)
+		return PortableImportReport{}, fmt.Errorf("open auth bundle: %w", err)
 	}
 	defer gz.Close()
 
 	tr := tar.NewReader(gz)
 	keychainDir := keychain.StorageDir(keychain.Service)
+	var manifest portableAuthBundleManifest
+	manifestRead := false
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("read auth bundle: %w", err)
+			return PortableImportReport{}, fmt.Errorf("read auth bundle: %w", err)
 		}
 		if hdr == nil {
 			continue
 		}
 		cleanName, err := cleanPortableName(hdr.Name)
 		if err != nil {
-			return err
+			return PortableImportReport{}, err
 		}
 		if cleanName == portableAuthManifest {
-			if _, err := io.Copy(io.Discard, tr); err != nil {
-				return fmt.Errorf("read auth bundle manifest: %w", err)
+			if err := json.NewDecoder(tr).Decode(&manifest); err != nil {
+				return PortableImportReport{}, fmt.Errorf("read auth bundle manifest: %w", err)
 			}
+			manifestRead = true
 			continue
 		}
 
@@ -130,16 +167,21 @@ func ImportPortableAuthBundle(configDir string, r io.Reader) error {
 			rel := strings.TrimPrefix(cleanName, "config/")
 			target, err = safeJoin(configDir, rel)
 		default:
-			return fmt.Errorf("unsupported auth bundle path %q", hdr.Name)
+			return PortableImportReport{}, fmt.Errorf("unsupported auth bundle path %q", hdr.Name)
 		}
 		if err != nil {
-			return err
+			return PortableImportReport{}, err
 		}
 		if err := extractPortableEntry(target, hdr, tr); err != nil {
-			return err
+			return PortableImportReport{}, err
 		}
 	}
-	return nil
+	report := PortableImportReport{}
+	if manifestRead {
+		report.BundleOS = manifest.OS
+		report.OSMismatch = manifest.OS != "" && manifest.OS != runtime.GOOS
+	}
+	return report, nil
 }
 
 func portableConfigFiles(configDir string) ([]string, error) {
@@ -279,7 +321,7 @@ func extractPortableEntry(target string, hdr *tar.Header, r io.Reader) error {
 			return fmt.Errorf("create auth bundle directory: %w", err)
 		}
 		return os.Chmod(target, config.DirPerm)
-	case tar.TypeReg, tar.TypeRegA:
+	case tar.TypeReg:
 		if err := os.MkdirAll(filepath.Dir(target), config.DirPerm); err != nil {
 			return fmt.Errorf("create auth bundle directory: %w", err)
 		}
