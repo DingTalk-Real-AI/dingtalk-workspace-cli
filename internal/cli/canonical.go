@@ -222,9 +222,27 @@ func newProductCommand(product ir.CanonicalProduct, runner executor.Runner, engi
 	if shortDescription == "" {
 		shortDescription = product.ID
 	}
-	aliases := make([]string, 0, 1)
-	if preferred := preferredProductRouteToken(product); preferred != "" && preferred != product.ID {
-		aliases = append(aliases, preferred)
+	aliases := make([]string, 0, 2)
+	seenAlias := map[string]bool{product.ID: true}
+	addAlias := func(s string) {
+		s = strings.TrimSpace(s)
+		if s == "" || seenAlias[s] {
+			return
+		}
+		seenAlias[s] = true
+		aliases = append(aliases, s)
+	}
+	if preferred := preferredProductRouteToken(product); preferred != "" {
+		addAlias(preferred)
+	}
+	// Consume only cli.Aliases (canonical alternate-name field).
+	// cli.Prefixes is the tool-name-prefix pool consumed by deriveCommandName;
+	// treating prefixes[1:] as aliases over-registers names the wukong edition
+	// does not expose, breaking cross-edition parity.
+	if product.CLI != nil {
+		for _, a := range product.CLI.Aliases {
+			addAlias(a)
+		}
 	}
 
 	cmd := &cobra.Command{

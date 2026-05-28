@@ -102,7 +102,7 @@ Flags:
 
 ## 重名消歧
 
-> **CAUTION:** 多人同名时禁止默认选第一个 — 须追加 `contact user get --ids userId1,userId2,...` 获取部门/职位后请用户确认。详见 [08-directory.md](../../dingtalk-contact/references/08-directory.md)「多命中」。
+> **CAUTION:** 多人同名时禁止默认选第一个 — 须追加 `contact user get --ids userId1,userId2,...` 获取部门/职位后请用户确认。详见 [08-directory.md](../best_practices/08-directory.md)「多命中」。
 
 ---
 

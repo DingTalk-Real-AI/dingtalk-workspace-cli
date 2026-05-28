@@ -4,12 +4,7 @@
 > 不存在 `contact search`、`contact find`、`contact list`、`contact get`、`contact user find/list`。
 > 构造命令前必须确认路径在下方「命令总览」中存在；不确定时，**根据意图对照下方「意图判断」选择正确命令**。
 >
-> **CRITICAL — 根部门**：钉钉根部门 `deptId=1`。`dept` 系列命令查根部门统一传 `--id 1` 或 `--ids 1`，不要传 `self / me / root / 0`。
-
-
-> ⚠️ **CLI 暴露状态（开源 dws v1.0.30）**：本文档列出的 `contact label list` / `label get` / `label list-members` / `relation` 等子命令在开源 dws v1.0.30 未暴露。开源 `dws contact` 仅暴露 3 个子命令：`dept` / `search` / `user`。角色/label 相关查询请改用：
-> - 角色成员 → `dws aisearch person --keyword "<角色名>" --dimension label`
-> - 部门成员 → `dws contact dept list-members --id <deptId>`
+> **CRITICAL — 根部门**：钉钉根部门 `deptId=1`。`dept` 系列命令查根部门统一传 `--dept 1` 或 `--depts 1`，不要传 `self / me / root / 0`。
 
 ## 命令总览
 
@@ -73,6 +68,62 @@ Notes:
   - **禁止**将 `self/me/current/whoami` 作为 userId 传入；查自己请用 `dws contact user get-self`
 ```
 
+### profile (用户档案 / 花名册)
+
+#### 查询花名册有权限的字段列表
+```
+Usage:
+  dws contact user profile fields
+Example:
+  dws contact user profile fields
+Flags:
+  无
+```
+
+查询花名册有权限的字段列表，根据当前用户查询花名册有权限的字段列表。认证信息（corpId、optUserId）由系统自动注入，无需手动传入。
+
+#### 查询员工花名册字段信息（个人档案）
+```
+Usage:
+  dws contact user profile get [flags]
+Example:
+  dws contact user profile get --staff-id STAFF_ID
+  dws contact user profile get --staff-id STAFF_ID --fields fieldCode1,fieldCode2
+Flags:
+      --staff-id string  查询员工 ID（可选）
+      --fields string    指定字段集合, 逗号分隔, 可通过 profile fields 获取（可选）
+```
+
+查询员工花名册字段信息，根据当前用户指定员工和字段列表，查询相应管理范围内员工的字段值信息。
+花名册字段包含：试用/转正信息、个人/家庭信息、学历信息、银行卡/合同信息、紧急联系人和其他企业自定义信息。
+
+> **与 `contact user get` 的区别**：`user get` 返回组织管理信息（部门、主管、管理员权限），`user profile get` 返回个人档案信息（学历、家庭、银行卡等）。
+
+### dismission (离职员工)
+
+#### 分页获取离职员工列表
+```
+Usage:
+  dws contact user dismission search [flags]
+Example:
+  dws contact user dismission search
+  dws contact user dismission search --name "张三"
+  dws contact user dismission search --start 2026-01-01 --end 2026-03-31
+  dws contact user dismission search --depts 123456,789012 --page 1 --limit 50
+Flags:
+      --name string      员工姓名，模糊搜索（可选）
+      --start string     离职日期查询范围开始，格式 YYYY-MM-DD（可选）
+      --end string       离职日期查询范围结束，格式 YYYY-MM-DD（可选）
+      --depts string     部门 ID 列表，逗号分隔（可选）
+      --hide-retirement  是否隐藏退休，默认 true（可选）
+      --hide-partner     是否隐藏合作伙伴，默认 false（可选）
+      --page int         页码，从 1 开始（可选，默认 1）
+      --limit int        页大小，200 以内（可选，默认 20）
+```
+
+查询离职员工列表，支持按员工姓名、离职日期范围、部门进行过滤。认证信息（corpId、optUserId）由系统自动注入，无需手动传入。
+`--start` 和 `--end` 必须同时设置或同时不设置，不允许只传其中一个。
+
 ### dept (部门查询)
 
 #### 搜索部门
@@ -90,11 +141,11 @@ Flags:
 Usage:
   dws contact dept get-info [flags]
 Example:
-  dws contact dept get-info --id 12345
+  dws contact dept get-info --dept 12345
 Flags:
-      --id string   部门 ID (必填)
+      --dept string   部门 ID (必填)
 Notes:
-  - **钉钉根部门 `deptId=1`**；查根部门用 `--id 1`
+  - **钉钉根部门 `deptId=1`**；查根部门用 `--dept 1`
 ```
 
 #### 查看子部门
@@ -102,17 +153,17 @@ Notes:
 Usage:
   dws contact dept list-children [flags]
 Example:
-  dws contact dept list-children --id 1           # 枚举根部门下的一级部门
-  dws contact dept list-children --id 12345       # 枚举指定部门的直属子部门
+  dws contact dept list-children --dept 1           # 枚举根部门下的一级部门
+  dws contact dept list-children --dept 12345       # 枚举指定部门的直属子部门
 Flags:
-      --id string   父部门 ID (必填)
+      --dept string   父部门 ID (必填)
 Returns:
   success          bool     调用是否成功
   result           list     直属子部门列表，每项包含以下字段：
     deptId         int      子部门 ID
     deptName       string   子部门名称
 Notes:
-  - **钉钉根部门 `deptId=1`**；查询一级部门请用 `--id 1`
+  - **钉钉根部门 `deptId=1`**；查询一级部门请用 `--dept 1`
   - 仅返回**直属**（直接下一级）子部门，不递归；需要逐层下钻请对子 deptId 继续调用本命令
   - 受组织架构可见性控制：仅返回调用者**有权限查看**的子部门
   - 父部门不可见或无子部门时返回 result=[] 空列表（非错误）
@@ -123,20 +174,66 @@ Notes:
 Usage:
   dws contact dept list-members [flags]
 Example:
-  dws contact dept list-members --ids 12345,67890
-  dws contact dept list-members --ids 1              # 根部门
+  dws contact dept list-members --depts 12345,67890
+  dws contact dept list-members --depts 1              # 根部门
 Flags:
-      --ids string   部门 ID 列表，逗号分隔 (必填)
+      --depts string   部门 ID 列表，逗号分隔 (必填)
 Notes:
-  - **钉钉根部门 `deptId=1`**；查根部门直属成员用 `--ids 1`
+  - **钉钉根部门 `deptId=1`**；查根部门直属成员用 `--depts 1`
   - 仅返回**本部门**直接成员，**不含下级部门**成员；需含下级请先 `dept list-children` 枚举子部门，再对子 deptId 分别/合并调用 `list-members`
-  - 受组织架构可见性控制；`--ids` 支持逗号分隔批量查询多个部门
+  - 受组织架构可见性控制；`--depts` 支持逗号分隔批量查询多个部门
   - 跨层级成员展开见 [08-directory.md](./08-directory.md) 的 `cross-level-dept-members` recipe
+```
+
+### label (角色查询)
+
+> **角色ID = labelId**：用户提到"角色ID"时，均指通讯录 label 系统中的角色ID，**不是部门ID也不是userId**。查角色成员用 `label list-members --id <角色ID>`，不要传给 `dept get-info` 或 `user get`。
+
+#### 获取企业所有角色列表
+```
+Usage:
+  dws contact label list
+Example:
+  dws contact label list
+Flags:
+  无
+Notes:
+  - 无需参数，返回当前企业全部角色列表（labelId、labelName等）
+  - 用于不知道准确角色名称时先浏览全部角色
+  - 典型场景：用户说“企业所有主管/查所有管理员/财务人员有哪些”→ 先 label list 浏览全部角色，匹配目标角色后 label list-members 获取成员
+```
+
+#### 根据角色名称查询角色
+```
+Usage:
+  dws contact label get [flags]
+Example:
+  dws contact label get --names "管理员"
+  dws contact label get --names "管理员,财务"
+Flags:
+      --names string   角色名称，逗号分隔 (必填)
+Notes:
+  - 精确匹配角色名称，不支持模糊搜索
+  - 支持同时查询多个角色名称，逗号分隔
+  - 无需分页
+```
+
+#### 查询角色下的成员
+```
+Usage:
+  dws contact label list-members [flags]
+Example:
+  dws contact label list-members --id 12345
+Flags:
+      --id string   角色 ID (必填)
+Notes:
+  - 根据角色ID直接查询成员列表；已有角色ID时直接用 `--id <labelId>`
+  - 不知道角色ID时：先 `dws contact label get --names "角色名"` 或 `dws contact label list` 获取 labelId
 ```
 
 ## 意图判断
 
-> **搜人首选 `aisearch person`**：凡是“找人/搜人/找同事/谁负责/上级/下级”均优先用 `aisearch person`，详见 `dingtalk-aisearch/references/aisearch.md`，以下场景才用 contact。
+> **搜人首选 `aisearch person`**：凡是“找人/搜人/找同事/谁负责/上级/下级”均优先用 [aisearch person](../../dingtalk-aisearch/references/aisearch.md)，以下场景才用 contact。
 
 用户说"我是谁/我的信息/我的 userId/当前用户/本人/self/me/whoami" → `user get-self`（无需参数；禁止用 `user get --ids me/self` 代替）
 用户需要 userId 给其他产品使用（发消息/建待办/约日程）→ `user search`（按名字）或 `user search-mobile`（按手机号）
@@ -179,7 +276,7 @@ Notes:
 > [!IMPORTANT]
 > **易混淆硬规则**：`relation list-my-followings` **只**返回"我特别关注的人员列表"（一组 openDingTalkId），**不**返回任何消息内容。
 >
-> **禁止路由到本命令的场景**（query 中同时包含『关注/特别关注/星标』和以下任一消息域动词/名词时，必须路由到 `chat message list-focused`，详见 `dingtalk-chat/references/chat.md`）：
+> **禁止路由到本命令的场景**（query 中同时包含『关注/特别关注/星标』和以下任一消息域动词/名词时，必须路由到 [`chat message list-focused`](../../dingtalk-chat/references/chat.md)）：
 > - 动词类：**发**了什么、**说**了什么/啥、**聊**了什么、**讲**了什么
 > - 名词类：**消息**、**聊天**、**动态**、**最新内容**
 >
@@ -205,13 +302,13 @@ dws contact user search --query "张三" --format json
 dws contact dept search --query "技术部" --format json
 
 # 4. 查看部门详情（部门ID、名称、人数）
-dws contact dept get-info --id <deptId> --format json
+dws contact dept get-info --dept <deptId> --format json
 
 # 5. 查看直属子部门 — 提取子 deptId 列表
-dws contact dept list-children --id <父deptId> --format json
+dws contact dept list-children --dept <父deptId> --format json
 
 # 6. 查看部门成员
-dws contact dept list-members --ids <deptId> --format json
+dws contact dept list-members --depts <deptId> --format json
 
 # 7. 获取企业所有角色列表 — 不知道角色名时先浏览
 dws contact label list --format json
@@ -250,13 +347,13 @@ dws contact user dismission search --depts 123456,789012 --hide-retirement=false
 | `user profile fields` | `fieldCode` | profile get 的 --fields |
 | `label list` | `labelId` / `labelName` | `label get --names` 或 `label list-members --id` |
 | `label get` | `labelId` | `label list-members` 的 --id |
-| `dept search/list-children` | `deptId` | dept get-info/list-children/list-members 的 --id/--ids |
+| `dept search/list-children` | `deptId` | dept get-info/list-children/list-members 的 --dept/--depts |
 | `dept search/list-children` | `deptId` | dismission search 的 --depts |
 
 ## 注意事项
 
 - `user get-self` 是获取 userId 的最快方式，其他产品的 --users/--executor 都需要 userId
-- `user get --ids` 和 `dept list-members --ids` 都支持批量查询，逗号分隔
+- `user get --ids` 和 `dept list-members --depts` 都支持批量查询，逗号分隔
 - `user get` 返回组织管理信息（部门、主管、管理员权限），`user profile get` 返回个人档案信息（学历、家庭、银行卡等），注意区分
 - `user profile get` 的 `--staff-id` 可通过 `user get-self`、`user search` 或 `aisearch person` 获取
 - `user profile get` 的 `--fields` 可通过 `user profile fields` 获取可用字段 code 列表；不填则查询所有可见字段

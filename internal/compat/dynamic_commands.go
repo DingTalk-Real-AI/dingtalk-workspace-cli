@@ -94,6 +94,21 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 		}
 
 		rootCmd := NewGroupCommand(cmdName, cli.Description)
+		// Register Portal-declared aliases so e.g. `dws log` ≡ `dws report`.
+		// Source: cli.Aliases is the canonical alternate-name field (e.g.
+		// report.aliases=["log"]). Do NOT derive aliases from cli.Prefixes —
+		// that field is the "MCP tool name prefix pool" consumed by
+		// deriveCommandName() to strip prefixes when generating sub-command
+		// names; treating prefixes[1:] as product aliases over-registers
+		// names like `task`/`approval`/`document` that the wukong edition
+		// does not expose, breaking cross-edition consistency.
+		for _, a := range cli.Aliases {
+			a = strings.TrimSpace(a)
+			if a == "" || a == cmdName {
+				continue
+			}
+			rootCmd.Aliases = append(rootCmd.Aliases, a)
+		}
 		// §1.5: cli.hidden → entire service hidden
 		if cli.Hidden {
 			rootCmd.Hidden = true
