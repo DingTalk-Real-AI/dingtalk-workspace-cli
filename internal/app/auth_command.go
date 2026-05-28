@@ -336,6 +336,9 @@ func newAuthExportCommand() *cobra.Command {
 					keychain.DisableKeychainEnv,
 				))
 			}
+			if !authpkg.PortableAuthSourceReady() {
+				return apperrors.NewValidation("尚未登录，请先运行 dws auth login")
+			}
 
 			var bundle bytes.Buffer
 			if err := authpkg.ExportPortableAuthBundle(defaultConfigDir(), &bundle); err != nil {

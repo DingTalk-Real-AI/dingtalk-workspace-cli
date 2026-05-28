@@ -15,6 +15,7 @@ package auth
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -37,6 +38,25 @@ func TestPortableExportSupported(t *testing.T) {
 	t.Setenv(keychain.DisableKeychainEnv, "1")
 	if !PortableExportSupported() {
 		t.Fatal("PortableExportSupported() should be true when file DEK is enabled")
+	}
+}
+
+func TestExportPortableAuthBundleRequiresAuthToken(t *testing.T) {
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	keychainRoot := filepath.Join(t.TempDir(), "empty-keychain")
+	if err := os.MkdirAll(filepath.Join(keychainRoot, keychain.Service), 0o700); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	t.Setenv(keychain.StorageDirEnv, keychainRoot)
+	configDir := filepath.Join(t.TempDir(), ".dws")
+
+	var bundle bytes.Buffer
+	err := ExportPortableAuthBundle(configDir, &bundle)
+	if err == nil {
+		t.Fatal("ExportPortableAuthBundle() should fail without auth-token.enc")
+	}
+	if bundle.Len() != 0 {
+		t.Fatalf("ExportPortableAuthBundle() wrote %d bytes, want 0", bundle.Len())
 	}
 }
 

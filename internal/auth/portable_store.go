@@ -62,6 +62,16 @@ func PortableAuthTargetPopulated(configDir string) bool {
 	return false
 }
 
+// PortableAuthSourceReady reports whether encrypted auth token exists for export.
+func PortableAuthSourceReady() bool {
+	return portableAuthSourcePopulated(keychain.StorageDir(keychain.Service))
+}
+
+func portableAuthSourcePopulated(keychainDir string) bool {
+	_, err := os.Stat(filepath.Join(keychainDir, keychain.AccountToken+".enc"))
+	return err == nil
+}
+
 const portableAuthManifest = "manifest.json"
 
 type portableAuthBundleManifest struct {
@@ -85,6 +95,9 @@ func ExportPortableAuthBundle(configDir string, w io.Writer) error {
 	keychainDir := keychain.StorageDir(keychain.Service)
 	if _, err := os.Stat(keychainDir); err != nil {
 		return fmt.Errorf("auth keychain directory is not available: %w", err)
+	}
+	if !portableAuthSourcePopulated(keychainDir) {
+		return fmt.Errorf("auth token is not available for export; run dws auth login first")
 	}
 
 	gz := gzip.NewWriter(w)

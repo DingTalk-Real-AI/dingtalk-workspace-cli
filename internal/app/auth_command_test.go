@@ -61,7 +61,7 @@ func TestAuthExportImportBase64RoundTrip(t *testing.T) {
 
 	targetRoot := t.TempDir()
 	inputPath := filepath.Join(targetRoot, "dws-auth.b64")
-	if err := os.WriteFile(inputPath, []byte(exported.String()), 0o600); err != nil {
+	if err := os.WriteFile(inputPath, exported.Bytes(), 0o600); err != nil {
 		t.Fatalf("write input bundle error = %v", err)
 	}
 
