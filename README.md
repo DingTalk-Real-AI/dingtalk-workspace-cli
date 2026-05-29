@@ -203,6 +203,26 @@ Credentials are securely persisted after first login (Keychain). Subsequent runs
 
 </details>
 
+<details>
+<summary><strong>Migrate auth between Linux sandboxes</strong></summary>
+
+Copying only `~/.dws/app.json` does not carry the refresh token; access tokens expire after ~2 hours. Use the official export/import flow:
+
+```bash
+# Sandbox A (already logged in)
+dws auth export -o /tmp/dws-auth.tar.gz
+# Or for copy/paste: dws auth export --base64 -o /tmp/dws-auth.b64
+
+# Sandbox B
+dws auth import -i /tmp/dws-auth.tar.gz
+# Or: dws auth import -i /tmp/dws-auth.b64 --base64
+dws auth status   # confirm "Refresh Token: valid"
+```
+
+The bundle includes the encrypted keychain under `~/.local/share/dws-cli` (with `auth-token.enc` and `dek`) plus required `~/.dws` config files.
+
+</details>
+
 ## Quick Start
 
 ```bash

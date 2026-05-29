@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and this project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **`dws auth export` / `dws auth import`** — portable auth bundle for migrating Linux sandbox credentials. Exports the encrypted keychain (`~/.local/share/dws-cli`, including `auth-token.enc` and `dek`) plus required `~/.dws` config so refresh tokens survive import; copying only `app.json` leaves access tokens expiring after ~2 hours. Supports `-o` / `-i` tar.gz paths and `--base64` for copy/paste between sandboxes. `dws auth status` now shows refresh-token validity in table output.
+
 ## [1.0.32] - 2026-05-25
 
 Two user-visible regressions resolved plus two AI-agent discoverability fixes. `dws drive upload` was returning `HTTP 403 SignatureDoesNotMatch` for any file whose MIME detects to a non-empty value — basically every real file — because the helper added a client-side `Content-Type` fallback whenever `drive.get_upload_info` returned an empty headers map. DingTalk drive's OSS presigned PUT URLs are signed against an empty `Content-Type` at signing time, so any client-supplied header makes the signature OSS recomputes diverge from the server-signed one, and the PUT is rejected (#347). On Apple Silicon, `dws upgrade` was aborting at the "解压并验证" step with `signal: killed` because GoReleaser cross-compiles `darwin/arm64` binaries on `ubuntu-latest` with no codesign step, and macOS 11+ `amfid` SIGKILLs unsigned arm64 binaries on first exec (#339) — the release pipeline now ad-hoc signs every darwin tarball, and the upgrade client self-heals if it ever encounters an unsigned binary again. On the AI-agent discoverability side, `dws aitable attachment upload-file` (the one-shot prepare + PUT + commit composite) is no longer hidden from `--help` — agents that only browse the command tree were getting stuck at the prepare-only `attachment upload` step, which returns an upload URL + fileToken but doesn't actually upload. And `dws --help` itself now surfaces the missing-command upgrade hint that the custom `renderRootHelp` had been silently dropping from cobra's `root.Long`.

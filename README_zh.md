@@ -203,6 +203,26 @@ dws auth login --client-id <your-app-key> --client-secret <your-app-secret>
 
 </details>
 
+<details>
+<summary><strong>沙箱间迁移登录态（Linux）</strong></summary>
+
+仅拷贝 `~/.dws/app.json` 无法带走 refresh token；access token 约 2 小时后会失效。请使用官方导出/导入：
+
+```bash
+# A 沙箱（已登录）
+dws auth export -o /tmp/dws-auth.tar.gz
+# 或便于分片复制：dws auth export --base64 -o /tmp/dws-auth.b64
+
+# B 沙箱
+dws auth import -i /tmp/dws-auth.tar.gz
+# 或：dws auth import -i /tmp/dws-auth.b64 --base64
+dws auth status   # 确认 Refresh Token: 有效
+```
+
+包内包含 `~/.local/share/dws-cli` 加密 keychain（含 `auth-token.enc` 与 `dek`）及 `~/.dws` 必要配置。
+
+</details>
+
 ## 快速开始
 
 ```bash
