@@ -1495,7 +1495,21 @@ func registerStdioServer(p *plugin.Plugin, sc plugin.StdioServerClient, runner e
 }
 
 // discoverStdioTools performs the blocking Initialize + ListTools handshake
-// on a stdio MCP subprocess. Returns nil on any error (logged at Warn level).
+// on a stdio MCP subprocess. Returns nil on any error.
+//
+// Logging policy: handshake failures are logged at Debug level (not Warn).
+// Rationale: this handshake runs as a startup-phase best-effort cache
+// refresh on EVERY `dws` invocation regardless of the user-invoked
+// subcommand, so a failure here (e.g. the conference-local plugin requiring
+// the DingTalk desktop client to be running) is unrelated to the success of
+// most commands. When a user actually invokes the affected plugin's
+// command, runner.go's tools/call path returns a fully structured
+// `[API] business error` (with category / code / message / operation /
+// reason) — that is the authoritative error signal. Surfacing the
+// startup-phase WARN to stderr would only duplicate the diagnostic and
+// pollute JSON output under `--format json 2>&1`. Operators who need this
+// visibility can enable verbose/debug logging.
+//
 // The default 2s budget comfortably accommodates Python/Node runtimes whose
 // interpreter + dependency load dominates the first response. Operators with
 // heavier startup chains can relax further via DWS_PLUGIN_COLD_TIMEOUT.
@@ -1504,13 +1518,13 @@ func discoverStdioTools(p *plugin.Plugin, sc plugin.StdioServerClient, timeouts 
 	defer cancel()
 
 	if _, err := sc.Client.Initialize(ctx); err != nil {
-		slog.Warn("plugin: stdio initialize failed",
+		slog.Debug("plugin: stdio initialize failed",
 			"plugin", p.Manifest.Name, "server", sc.Key, "error", err)
 		return nil
 	}
 	toolsResult, err := sc.Client.ListTools(ctx)
 	if err != nil {
-		slog.Warn("plugin: stdio ListTools failed",
+		slog.Debug("plugin: stdio ListTools failed",
 			"plugin", p.Manifest.Name, "server", sc.Key, "error", err)
 		return nil
 	}
