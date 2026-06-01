@@ -265,7 +265,7 @@ func BuildCatalog(runtimeServers []discovery.RuntimeServer) Catalog {
 				InputSchema:     inputSchema,
 				OutputSchema:    cloneMap(tool.OutputSchema),
 				Sensitive:       sensitive,
-				Auth:            extractToolAuthMetadata(inputSchema),
+				Auth:            extractToolAuthMetadata(inputSchema, productID),
 				Annotations:     deriveAnnotations(sensitive),
 				Hidden:          toolHidden[tool.Name],
 				FlagHints:       cloneFlagHints(toolFlagHints[tool.Name]),
@@ -325,13 +325,13 @@ func BuildCatalog(runtimeServers []discovery.RuntimeServer) Catalog {
 	return Catalog{Products: products}
 }
 
-func extractToolAuthMetadata(schema map[string]any) *ToolAuthMetadata {
+func extractToolAuthMetadata(schema map[string]any, productID string) *ToolAuthMetadata {
 	raw := any(nil)
 	if len(schema) > 0 {
 		raw = schema["x-dingtalk-auth"]
 	}
 	if raw == nil {
-		return nil
+		return productGrantAuthMetadata(productID)
 	}
 	data, err := json.Marshal(raw)
 	if err != nil {
@@ -346,6 +346,35 @@ func extractToolAuthMetadata(schema map[string]any) *ToolAuthMetadata {
 		return nil
 	}
 	return &metadata
+}
+
+func productGrantAuthMetadata(productID string) *ToolAuthMetadata {
+	productID = strings.TrimSpace(productID)
+	if productID == "" {
+		return nil
+	}
+	metadata := ToolAuthMetadata{
+		Version:     "v1",
+		ProductCode: productID,
+		Domain:      productID,
+		GrantProductCodes: []string{
+			productID,
+		},
+		Source:          "dws-product-fallback",
+		AuthMetaVersion: "v1",
+	}
+	metadata.AuthMetaHash = toolAuthMetaHash(metadata)
+	return &metadata
+}
+
+func toolAuthMetaHash(metadata ToolAuthMetadata) string {
+	metadata.AuthMetaHash = ""
+	data, err := json.Marshal(metadata)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(data)
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 func (c Catalog) FindProduct(id string) (CanonicalProduct, bool) {

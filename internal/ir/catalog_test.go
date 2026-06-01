@@ -265,6 +265,46 @@ func TestBuildCatalogCarriesDingTalkAuthMetadata(t *testing.T) {
 	}
 }
 
+func TestBuildCatalogFallsBackToProductGrantAuthMetadata(t *testing.T) {
+	t.Parallel()
+
+	catalog := BuildCatalog([]discovery.RuntimeServer{
+		{
+			Server: market.ServerDescriptor{
+				Key:         "calendar-key",
+				DisplayName: "日历",
+				Endpoint:    "https://example.com/server/calendar",
+				CLI: market.CLIOverlay{
+					Command: "calendar",
+				},
+			},
+			Tools: []transport.ToolDescriptor{
+				{
+					Name:        "list_calendar_events",
+					InputSchema: map[string]any{"type": "object"},
+				},
+			},
+		},
+	})
+
+	tool, ok := catalog.Products[0].FindTool("list_calendar_events")
+	if !ok {
+		t.Fatalf("FindTool(list_calendar_events) = not found")
+	}
+	if tool.Auth == nil {
+		t.Fatal("tool.Auth = nil")
+	}
+	if tool.Auth.ProductCode != "calendar" {
+		t.Fatalf("ProductCode = %q, want calendar", tool.Auth.ProductCode)
+	}
+	if got := tool.Auth.GrantProductCodes; len(got) != 1 || got[0] != "calendar" {
+		t.Fatalf("GrantProductCodes = %#v, want calendar", got)
+	}
+	if tool.Auth.Source != "dws-product-fallback" {
+		t.Fatalf("Source = %q, want dws-product-fallback", tool.Auth.Source)
+	}
+}
+
 func TestBuildCatalogCarriesToolOverrideGroupAndFlagOverlay(t *testing.T) {
 	t.Parallel()
 
