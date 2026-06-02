@@ -1624,7 +1624,9 @@ func runDocExport(cmd *cobra.Command, runner executor.Runner) error {
 		return apperrors.NewValidation("--output is required")
 	}
 	timeoutSec, _ := cmd.Flags().GetInt("timeout-sec")
-	progressOut := cmd.OutOrStdout()
+	// 进度文案走 stderr，与 aitable export 等同类异步命令一致；stdout 仅留给
+	// writeCommandPayload 的结构化 JSON，否则会污染 agent / MCP / `| jq` 的解析。
+	progressOut := cmd.ErrOrStderr()
 	emitProgress := func(format string, args ...any) {
 		msg := fmt.Sprintf(i18n.T(format), args...)
 		fmt.Fprint(progressOut, msg)
