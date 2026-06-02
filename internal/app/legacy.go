@@ -218,11 +218,7 @@ func loadDynamicCommands(ctx context.Context, runner executor.Runner) []*cobra.C
 			if edURL := strings.TrimSpace(edition.Get().DiscoveryURL); edURL != "" {
 				slog.Info("loadDynamicCommands: sync discovery fetch", "partition", partition, "url", edURL)
 			} else {
-				baseURL := cli.DefaultMarketBaseURL
-				if discoveryBaseURLOverride != "" {
-					baseURL = discoveryBaseURLOverride
-				}
-				slog.Info("loadDynamicCommands: sync market catalog fetch", "partition", partition, "base_url", baseURL)
+				slog.Info("loadDynamicCommands: sync market catalog fetch", "partition", partition, "base_url", DiscoveryBaseURL())
 			}
 		}
 		fetchStart := time.Now()
@@ -460,7 +456,7 @@ func DiscoveryBaseURL() string {
 	if discoveryBaseURLOverride != "" {
 		return discoveryBaseURLOverride
 	}
-	return cli.DefaultMarketBaseURL
+	return config.GetMCPBaseURL()
 }
 
 // ipv4HTTPClient returns an HTTP client that forces IPv4 connections with

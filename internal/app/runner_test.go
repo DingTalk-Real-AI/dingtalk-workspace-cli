@@ -328,6 +328,30 @@ func TestResolveIdentityHeadersForwardsAgentCode(t *testing.T) {
 	}
 }
 
+func TestResolveIdentityHeadersSessionEnvPriority(t *testing.T) {
+	setupRuntimeCommandTest(t)
+	t.Setenv(envDingtalkSessionID, "ding-session")
+	t.Setenv(envDWSSessionID, "dws-session")
+	t.Setenv(envRewindSessionID, "rewind-session")
+
+	headers := resolveIdentityHeaders()
+	if got := headers["x-dingtalk-session-id"]; got != "ding-session" {
+		t.Fatalf("x-dingtalk-session-id = %q, want DINGTALK_SESSION_ID", got)
+	}
+
+	t.Setenv(envDingtalkSessionID, "")
+	headers = resolveIdentityHeaders()
+	if got := headers["x-dingtalk-session-id"]; got != "dws-session" {
+		t.Fatalf("x-dingtalk-session-id = %q, want DWS_SESSION_ID", got)
+	}
+
+	t.Setenv(envDWSSessionID, "")
+	headers = resolveIdentityHeaders()
+	if got := headers["x-dingtalk-session-id"]; got != "rewind-session" {
+		t.Fatalf("x-dingtalk-session-id = %q, want REWIND_SESSION_ID", got)
+	}
+}
+
 func TestDocDownloadPreflightRejectsAXLSBeforeDownloadPAT(t *testing.T) {
 	setupRuntimeCommandTest(t)
 	t.Setenv("DWS_ALLOW_HTTP_ENDPOINTS", "1")

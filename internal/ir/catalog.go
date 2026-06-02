@@ -98,12 +98,32 @@ type ToolDescriptor struct {
 	InputSchema     map[string]any         `json:"input_schema,omitempty"`
 	OutputSchema    map[string]any         `json:"output_schema,omitempty"`
 	Sensitive       bool                   `json:"sensitive"`
+	Auth            *ToolAuthMetadata      `json:"auth,omitempty"`
 	Annotations     *ToolAnnotations       `json:"annotations,omitempty"`
 	Hidden          bool                   `json:"hidden,omitempty"`
 	FlagHints       map[string]CLIFlagHint `json:"flag_hints,omitempty"`
 	FlagOverlay     map[string]FlagOverlay `json:"flag_overlay,omitempty"`
 	SourceServerKey string                 `json:"source_server_key"`
 	CanonicalPath   string                 `json:"canonical_path"`
+}
+
+type ToolAuthMetadata struct {
+	Version              string   `json:"version,omitempty"`
+	ProductCode          string   `json:"productCode,omitempty"`
+	Domain               string   `json:"domain,omitempty"`
+	ClientObservedScopes []string `json:"clientObservedScopes,omitempty"`
+	RequiredScopes       []string `json:"requiredScopes,omitempty"`
+	RequiredPermissions  []string `json:"requiredPermissions,omitempty"`
+	RecommendedScopes    []string `json:"recommendedScopes,omitempty"`
+	ExcludedScopes       []string `json:"excludedScopes,omitempty"`
+	GrantProductCodes    []string `json:"grantProductCodes,omitempty"`
+	RiskHint             string   `json:"riskHint,omitempty"`
+	RiskAction           string   `json:"riskAction,omitempty"`
+	ConfirmationRequired bool     `json:"confirmationRequired,omitempty"`
+	Identities           []string `json:"identities,omitempty"`
+	Source               string   `json:"source,omitempty"`
+	AuthMetaVersion      string   `json:"authMetaVersion,omitempty"`
+	AuthMetaHash         string   `json:"authMetaHash,omitempty"`
 }
 
 func BuildCatalog(runtimeServers []discovery.RuntimeServer) Catalog {
@@ -237,15 +257,17 @@ func BuildCatalog(runtimeServers []discovery.RuntimeServer) Catalog {
 			if cliName == "" {
 				cliName = tool.Name
 			}
+			inputSchema := cloneMap(tool.InputSchema)
 			tools = append(tools, ToolDescriptor{
 				RPCName:         tool.Name,
 				CLIName:         cliName,
 				Group:           strings.TrimSpace(toolGroup[tool.Name]),
 				Title:           title,
 				Description:     description,
-				InputSchema:     cloneMap(tool.InputSchema),
+				InputSchema:     inputSchema,
 				OutputSchema:    cloneMap(tool.OutputSchema),
 				Sensitive:       sensitive,
+				Auth:            extractToolAuthMetadata(inputSchema, productID),
 				Annotations:     deriveAnnotations(sensitive),
 				Hidden:          toolHidden[tool.Name],
 				FlagHints:       cloneFlagHints(toolFlagHints[tool.Name]),
@@ -305,6 +327,76 @@ func BuildCatalog(runtimeServers []discovery.RuntimeServer) Catalog {
 	}
 
 	return Catalog{Products: products}
+}
+
+func extractToolAuthMetadata(schema map[string]any, productID string) *ToolAuthMetadata {
+	raw := any(nil)
+	if len(schema) > 0 {
+		raw = schema["x-dingtalk-auth"]
+	}
+	if raw == nil {
+		return productGrantAuthMetadata(productID)
+	}
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return nil
+	}
+	var metadata ToolAuthMetadata
+	if err := json.Unmarshal(data, &metadata); err != nil {
+		return nil
+	}
+	if !hasMeaningfulToolAuthMetadata(metadata) {
+		return nil
+	}
+	return &metadata
+}
+
+func hasMeaningfulToolAuthMetadata(metadata ToolAuthMetadata) bool {
+	return strings.TrimSpace(metadata.Version) != "" ||
+		strings.TrimSpace(metadata.ProductCode) != "" ||
+		strings.TrimSpace(metadata.Domain) != "" ||
+		len(metadata.ClientObservedScopes) > 0 ||
+		len(metadata.RequiredScopes) > 0 ||
+		len(metadata.RequiredPermissions) > 0 ||
+		len(metadata.RecommendedScopes) > 0 ||
+		len(metadata.ExcludedScopes) > 0 ||
+		len(metadata.GrantProductCodes) > 0 ||
+		strings.TrimSpace(metadata.RiskHint) != "" ||
+		strings.TrimSpace(metadata.RiskAction) != "" ||
+		metadata.ConfirmationRequired ||
+		len(metadata.Identities) > 0 ||
+		strings.TrimSpace(metadata.Source) != "" ||
+		strings.TrimSpace(metadata.AuthMetaVersion) != "" ||
+		strings.TrimSpace(metadata.AuthMetaHash) != ""
+}
+
+func productGrantAuthMetadata(productID string) *ToolAuthMetadata {
+	productID = strings.TrimSpace(productID)
+	if productID == "" {
+		return nil
+	}
+	metadata := ToolAuthMetadata{
+		Version:     "v1",
+		ProductCode: productID,
+		Domain:      productID,
+		GrantProductCodes: []string{
+			productID,
+		},
+		Source:          "dws-product-fallback",
+		AuthMetaVersion: "v1",
+	}
+	metadata.AuthMetaHash = toolAuthMetaHash(metadata)
+	return &metadata
+}
+
+func toolAuthMetaHash(metadata ToolAuthMetadata) string {
+	metadata.AuthMetaHash = ""
+	data, err := json.Marshal(metadata)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(data)
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 func (c Catalog) FindProduct(id string) (CanonicalProduct, bool) {

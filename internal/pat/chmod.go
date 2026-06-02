@@ -29,37 +29,45 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
+const (
+	sessionIDEnvDingtalk = "DINGTALK_SESSION_ID"
+	sessionIDEnvDWS      = "DWS_SESSION_ID"
+	sessionIDEnvRewind   = "REWIND_SESSION_ID"
+)
+
 // resolveSessionIDFromEnv returns the effective session id from environment
-// variables. Resolution order:
-//  1. DWS_SESSION_ID (primary, stable env name).
-//  2. REWIND_SESSION_ID (compatibility alias; kept only so hosts that
+// variables. Resolution order matches the MCP header resolver:
+//  1. DINGTALK_SESSION_ID (primary gateway header env).
+//  2. DWS_SESSION_ID (stable CLI/session-grant env name).
+//  3. REWIND_SESSION_ID (compatibility alias; kept only so hosts that
 //     already inject the legacy trace triple keep working without code
 //     churn).
 //
-// When both are set to different non-empty values, DWS_SESSION_ID wins
-// silently. We deliberately do NOT log either raw session id value or
-// any derived fingerprint: this resolver is invoked by `dws pat chmod`
-// session grants, and any stderr / ~/.dws/logs capture of those
-// identifiers can land verbatim in attached troubleshooting bundles.
-// Hosts that need to detect a mismatch between the two env vars must do
-// so on the host side before invoking the CLI.
+// When multiple env vars are set to different non-empty values, the first
+// one above wins silently. We deliberately do NOT log either raw session id
+// value or any derived fingerprint: this resolver is invoked by `dws pat
+// chmod` session grants, and any stderr / ~/.dws/logs capture of those
+// identifiers can land verbatim in attached troubleshooting bundles. Hosts
+// that need to detect a mismatch must do so before invoking the CLI.
 func resolveSessionIDFromEnv() string {
-	if dws := os.Getenv("DWS_SESSION_ID"); dws != "" {
-		return dws
+	for _, key := range []string{sessionIDEnvDingtalk, sessionIDEnvDWS, sessionIDEnvRewind} {
+		if value := os.Getenv(key); value != "" {
+			return value
+		}
 	}
-	return os.Getenv("REWIND_SESSION_ID")
+	return ""
 }
 
 // agentCodeEnv is the canonical (and only) environment variable name
 // used as a per-shell fallback for the --agentCode flag on `dws pat *`
 // commands.
 //
-// Why: agent hosts typically set their business agent code once when
-// spawning a long-lived shell / sub-process; requiring `--agentCode` on
-// every command in that shell forces the host to rewrite every argv.
-// Exposing DINGTALK_DWS_AGENTCODE lets the host export the code once and
-// let the CLI resolve it on every pat subcommand. The flag always wins
-// when both are set so scripted one-offs remain deterministic.
+// Why: agent hosts may set their business agent code once when spawning
+// a long-lived shell / sub-process. Exposing DINGTALK_DWS_AGENTCODE lets
+// the host export the code once and let the CLI resolve it on every pat
+// subcommand. The flag always wins when both are set so scripted one-offs
+// remain deterministic. When neither flag nor env is set, the request is
+// sent without agentCode and lippi-pat-core applies its default agentCode.
 //
 // Namespace note: DWS_AGENTCODE / DINGTALK_AGENTCODE / REWIND_AGENTCODE
 // are explicitly NOT consumed. The legacy DWS_AGENTCODE alias was
@@ -139,9 +147,18 @@ const (
 	// patGrantToolName is the English-first wire name for the PAT grant tool.
 	patGrantToolName = "pat.grant"
 
+	// patBatchGrantToolName is the English-first wire name for PAT batch grant.
+	patBatchGrantToolName = "pat.batch_grant"
+
+	// patBatchPlanToolName is the English-first wire name for PAT batch plan.
+	patBatchPlanToolName = "pat.batch_plan"
+
 	// patGrantToolNameLegacyAlias is retained for server builds that still
 	// expose only the legacy Chinese display name.
 	patGrantToolNameLegacyAlias = "个人授权"
+
+	patBatchUnsupportedCode      = "PAT_BATCH_AUTH_UNSUPPORTED"
+	patBatchUnsupportedCodeLower = "pat_batch_auth_unsupported"
 )
 
 var validGrantTypes = map[string]bool{
@@ -155,6 +172,12 @@ var validGrantTypes = map[string]bool{
 // var) so multiple RegisterCommands invocations never share mutable flag /
 // RunE state across concurrent tests.
 func newChmodCommand(c edition.ToolCaller) *cobra.Command {
+	var recommend bool
+	var productFlags []string
+	var productsFlag []string
+	var domainFlags []string
+	var domainsFlag []string
+
 	chmodCmd := &cobra.Command{
 		Use:   "chmod <scope>...",
 		Short: "授予指定权限",
@@ -167,33 +190,58 @@ grantType 规则:
   once       一次性，执行一次后自动失效
   session    当前会话有效（默认），需要 --session-id
   permanent  永久有效`,
-		Args: cobra.MinimumNArgs(1),
-		Example: `  dws pat chmod aitable.record:read --agentCode agt-xxxx --grant-type session --session-id session-xxx
-  dws pat chmod chat.message:list --grant-type once --agentCode agt-xxxx
-  dws pat chmod aitable.record:read aitable.record:write --agentCode agt-xxxx --grant-type permanent`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			productCodes := collectChmodProductCodes(productFlags, productsFlag, domainFlags, domainsFlag)
+			if len(args) > 0 || recommend || len(productCodes) > 0 {
+				return nil
+			}
+			return cobra.MinimumNArgs(1)(cmd, args)
+		},
+		Example: `  dws pat chmod aitable.record:read --grant-type session --session-id session-xxx
+  dws pat chmod chat.message:list --grant-type once
+  dws pat chmod aitable.record:read aitable.record:write --grant-type permanent
+  dws pat chmod --products calendar,aitable --grant-type session --session-id session-xxx
+  dws pat chmod --recommend --grant-type session --session-id session-xxx`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			flagVal, _ := cmd.Flags().GetString("agentCode")
-			agentCode, err := resolveAgentCode(flagVal, true)
+			agentCode, err := resolveAgentCode(flagVal, false)
 			if err != nil {
 				return err
 			}
 			scopes := args
+			productCodes := collectChmodProductCodes(productFlags, productsFlag, domainFlags, domainsFlag)
+			usesPlan := recommend || len(productCodes) > 0
 			grantType, _ := cmd.Flags().GetString("grant-type")
 			sessionID, _ := cmd.Flags().GetString("session-id")
+			if sessionID == "" {
+				sessionID = resolveSessionIDFromEnv()
+			}
 
 			if !validGrantTypes[grantType] {
 				return fmt.Errorf("invalid --grant-type %q, must be one of: once, session, permanent", grantType)
 			}
 
-			if grantType == "session" && sessionID == "" && resolveSessionIDFromEnv() == "" {
-				return fmt.Errorf("--session-id is required when --grant-type is session\n  hint: dws pat chmod <scope> --agentCode <id> --grant-type session --session-id <id>")
+			if grantType == "session" && sessionID == "" {
+				return fmt.Errorf("--session-id is required when --grant-type is session\n  hint: dws pat chmod <scope> --grant-type session --session-id <id>")
 			}
 
 			if c != nil && c.DryRun() {
+				if usesPlan {
+					planArgs := buildBatchPlanArgs(scopes, productCodes, recommend, grantType, sessionID, true)
+					result, err := callPATBatchPlan(cmd.Context(), c, agentCode, sessionID, planArgs)
+					if err != nil {
+						return fmt.Errorf("pat chmod plan failed: %w", err)
+					}
+					return handleToolResult(cmd, c, result)
+				}
 				bold := color.New(color.FgYellow, color.Bold)
 				bold.Println("[DRY-RUN] Preview only, not executed:")
-				fmt.Printf("%-16s%s\n", "Tool:", patGrantToolName)
-				fmt.Printf("%-16s%s\n", "AgentCode:", agentCode)
+				fmt.Printf("%-16s%s\n", "Tool:", patBatchGrantToolName)
+				if agentCode != "" {
+					fmt.Printf("%-16s%s\n", "AgentCode:", agentCode)
+				} else {
+					fmt.Printf("%-16s%s\n", "AgentCode:", "(server default)")
+				}
 				fmt.Printf("%-16s%v\n", "Scope:", scopes)
 				fmt.Printf("%-16s%s\n", "GrantType:", grantType)
 				if sessionID != "" {
@@ -206,15 +254,33 @@ grantType 规则:
 				return fmt.Errorf("internal error: tool runtime not initialized")
 			}
 
-			if sessionID == "" {
-				sessionID = resolveSessionIDFromEnv()
+			if usesPlan {
+				planArgs := buildBatchPlanArgs(scopes, productCodes, recommend, grantType, sessionID, true)
+				planResult, err := callPATBatchPlan(cmd.Context(), c, agentCode, sessionID, planArgs)
+				if err != nil {
+					return fmt.Errorf("pat chmod plan failed: %w", err)
+				}
+				scopes, err = extractSelectedScopes(planResult)
+				if err != nil {
+					return err
+				}
+				if len(scopes) == 0 {
+					return handleToolResult(cmd, c, planResult)
+				}
 			}
-			toolArgs := map[string]any{
-				"agentCode": agentCode,
+			batchArgs := map[string]any{
 				"scopes":    scopes,
 				"grantType": grantType,
 			}
+			toolArgs := map[string]any{
+				"scopes":    scopes,
+				"grantType": grantType,
+			}
+			if agentCode != "" {
+				toolArgs["agentCode"] = agentCode
+			}
 			if sessionID != "" {
+				batchArgs["sessionId"] = sessionID
 				toolArgs["sessionId"] = sessionID
 			}
 			// Legacy server schema accepted singular "scope"; clone the
@@ -230,25 +296,209 @@ grantType 规则:
 			}
 
 			ctx := context.Background()
-			result, err := callPATToolWithLegacyFallback(ctx, c, "pat", patGrantToolName, patGrantToolNameLegacyAlias, toolArgs, legacyToolArgs)
+			result, err := callPATBatchGrantWithLegacyFallback(
+				ctx,
+				c,
+				agentCode,
+				sessionID,
+				batchArgs,
+				toolArgs,
+				legacyToolArgs,
+			)
 			if err != nil {
 				return fmt.Errorf("pat chmod failed: %w", err)
 			}
 
-			return handleToolResult(result)
+			return handleToolResult(cmd, c, result)
 		},
 	}
 
-	// --agentCode is required, but we deliberately do NOT call
-	// MarkFlagRequired here. The agent code may also come from the
-	// DINGTALK_DWS_AGENTCODE env var; cobra's MarkFlagRequired would
-	// refuse to run before our resolver has a chance to consume the env.
 	chmodCmd.Flags().String("agentCode", "",
-		"Agent 唯一标识（必填；亦可通过 env DINGTALK_DWS_AGENTCODE 注入，flag 优先）")
+		"Agent 唯一标识（可选；不填则由服务端写入默认 AgentCode；env DINGTALK_DWS_AGENTCODE 可注入，flag 优先）")
 	chmodCmd.Flags().String("grant-type", "session", "授权策略: once|session|permanent")
 	chmodCmd.Flags().String("session-id", "", "会话标识（session 模式下必填）")
+	chmodCmd.Flags().StringArrayVar(&productFlags, "product", nil, "产品编码，可重复；与 --products 等价")
+	chmodCmd.Flags().StringSliceVar(&productsFlag, "products", nil, "产品编码列表，逗号分隔")
+	chmodCmd.Flags().StringArrayVar(&domainFlags, "domain", nil, "产品域/产品编码，可重复；按产品 scope 模板批量授权")
+	chmodCmd.Flags().StringSliceVar(&domainsFlag, "domains", nil, "产品域/产品编码列表，逗号分隔")
+	chmodCmd.Flags().BoolVar(&recommend, "recommend", false, "使用推荐 scope 集合批量授权")
 
 	return chmodCmd
+}
+
+func collectChmodProductCodes(groups ...[]string) []string {
+	seen := map[string]bool{}
+	result := make([]string, 0)
+	for _, group := range groups {
+		for _, raw := range group {
+			for _, part := range strings.Split(raw, ",") {
+				code := strings.TrimSpace(part)
+				if code == "" || seen[code] {
+					continue
+				}
+				seen[code] = true
+				result = append(result, code)
+			}
+		}
+	}
+	return result
+}
+
+func withPATContextEnv(agentCode, sessionID string, fn func() (*edition.ToolResult, error)) (*edition.ToolResult, error) {
+	restore := map[string]*string{}
+	setEnv := func(key, value string) {
+		if value == "" {
+			return
+		}
+		if _, seen := restore[key]; !seen {
+			if old, ok := os.LookupEnv(key); ok {
+				oldCopy := old
+				restore[key] = &oldCopy
+			} else {
+				restore[key] = nil
+			}
+		}
+		_ = os.Setenv(key, value)
+	}
+	setEnv(agentCodeEnv, agentCode)
+	setEnv(sessionIDEnvDingtalk, sessionID)
+	setEnv(sessionIDEnvDWS, sessionID)
+	defer func() {
+		for key, old := range restore {
+			if old == nil {
+				_ = os.Unsetenv(key)
+				continue
+			}
+			_ = os.Setenv(key, *old)
+		}
+	}()
+	return fn()
+}
+
+func callPATBatchGrantWithLegacyFallback(
+	ctx context.Context,
+	c edition.ToolCaller,
+	agentCode string,
+	sessionID string,
+	batchArgs map[string]any,
+	canonicalGrantArgs map[string]any,
+	legacyGrantArgs map[string]any,
+) (*edition.ToolResult, error) {
+	if c == nil {
+		return nil, fmt.Errorf("internal error: tool runtime not initialized")
+	}
+	result, err := withPATContextEnv(agentCode, sessionID, func() (*edition.ToolResult, error) {
+		return c.CallTool(ctx, "pat", patBatchGrantToolName, batchArgs)
+	})
+	if err == nil && !isPATBatchUnsupportedResult(result) {
+		return result, nil
+	}
+	if err != nil && !isPATBatchUnsupportedError(err) && !isToolNotRegisteredError(err) {
+		return nil, err
+	}
+	return withPATContextEnv(agentCode, sessionID, func() (*edition.ToolResult, error) {
+		return callPATToolWithLegacyFallback(
+			ctx,
+			c,
+			"pat",
+			patGrantToolName,
+			patGrantToolNameLegacyAlias,
+			canonicalGrantArgs,
+			legacyGrantArgs,
+		)
+	})
+}
+
+func callPATBatchPlan(ctx context.Context, c edition.ToolCaller, agentCode, sessionID string, args map[string]any) (*edition.ToolResult, error) {
+	if c == nil {
+		return nil, fmt.Errorf("internal error: tool runtime not initialized")
+	}
+	return withPATContextEnv(agentCode, sessionID, func() (*edition.ToolResult, error) {
+		return c.CallTool(ctx, "pat", patBatchPlanToolName, args)
+	})
+}
+
+func buildBatchPlanArgs(scopes []string, productCodes []string, recommend bool, grantType string, sessionID string, dryRun bool) map[string]any {
+	args := map[string]any{
+		"scopes":       scopes,
+		"productCodes": productCodes,
+		"recommend":    recommend,
+		"grantType":    grantType,
+		"dryRun":       dryRun,
+	}
+	if sessionID != "" {
+		args["sessionId"] = sessionID
+	}
+	return args
+}
+
+func extractSelectedScopes(result *edition.ToolResult) ([]string, error) {
+	text := firstToolResultText(result)
+	if text == "" {
+		return nil, fmt.Errorf("empty PAT batch plan result")
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(text), &body); err != nil {
+		return nil, fmt.Errorf("parsing PAT batch plan result: %w", err)
+	}
+	data, _ := body["data"].(map[string]any)
+	if data == nil {
+		return nil, fmt.Errorf("PAT batch plan result missing data.selectedScopes")
+	}
+	rawScopes, _ := data["selectedScopes"].([]any)
+	if len(rawScopes) == 0 {
+		if allGranted, _ := data["allGranted"].(bool); allGranted {
+			return []string{}, nil
+		}
+		return nil, fmt.Errorf("PAT batch plan selectedScopes is empty")
+	}
+	scopes := make([]string, 0, len(rawScopes))
+	for _, raw := range rawScopes {
+		scope, ok := raw.(string)
+		if ok && strings.TrimSpace(scope) != "" {
+			scopes = append(scopes, scope)
+		}
+	}
+	if len(scopes) == 0 {
+		if allGranted, _ := data["allGranted"].(bool); allGranted {
+			return []string{}, nil
+		}
+		return nil, fmt.Errorf("PAT batch plan selectedScopes is empty")
+	}
+	return scopes, nil
+}
+
+func firstToolResultText(result *edition.ToolResult) string {
+	if result == nil {
+		return ""
+	}
+	for _, c := range result.Content {
+		if c.Type == "text" && strings.TrimSpace(c.Text) != "" {
+			return strings.TrimSpace(c.Text)
+		}
+	}
+	return ""
+}
+
+func isPATBatchUnsupportedResult(result *edition.ToolResult) bool {
+	text := firstToolResultText(result)
+	if text == "" {
+		return false
+	}
+	var body map[string]any
+	if json.Unmarshal([]byte(text), &body) != nil {
+		return false
+	}
+	for _, key := range []string{"code", "errorCode", "error_code"} {
+		if code, ok := body[key].(string); ok && strings.EqualFold(strings.TrimSpace(code), patBatchUnsupportedCode) {
+			return true
+		}
+	}
+	return false
+}
+
+func isPATBatchUnsupportedError(err error) bool {
+	return err != nil && strings.Contains(normalizedPATErrorText(err), patBatchUnsupportedCodeLower)
 }
 
 // callPATToolWithLegacyFallback invokes the canonical PAT grant tool first,
@@ -406,7 +656,7 @@ func containsAny(msg string, needles ...string) bool {
 }
 
 // handleToolResult processes a ToolResult and writes output to stdout.
-func handleToolResult(result *edition.ToolResult) error {
+func handleToolResult(cmd *cobra.Command, caller edition.ToolCaller, result *edition.ToolResult) error {
 	if result == nil {
 		return fmt.Errorf("empty tool result")
 	}
@@ -417,9 +667,153 @@ func handleToolResult(result *edition.ToolResult) error {
 		if respErr := apperrors.ClassifyMCPResponseText(c.Text); respErr != nil {
 			return respErr
 		}
+		if !shouldEmitRawPATResult(cmd) {
+			if summary := formatPATAuthorizationSummary(c.Text, caller); summary != "" {
+				fmt.Print(summary)
+				return nil
+			}
+		}
 		fmt.Println(c.Text)
 		return nil
 	}
 	data, _ := json.Marshal(result)
 	return fmt.Errorf("empty PAT authorization result: %s", string(data))
+}
+
+func shouldEmitRawPATResult(cmd *cobra.Command) bool {
+	if commandBoolFlag(cmd, "verbose") {
+		return true
+	}
+	if !commandFlagChanged(cmd, "format") {
+		return false
+	}
+	format := strings.ToLower(strings.TrimSpace(commandStringFlag(cmd, "format")))
+	return format == "json" || format == "raw"
+}
+
+func commandBoolFlag(cmd *cobra.Command, name string) bool {
+	if cmd == nil {
+		return false
+	}
+	if flag := cmd.Flags().Lookup(name); flag != nil {
+		value, err := cmd.Flags().GetBool(name)
+		return err == nil && value
+	}
+	root := cmd.Root()
+	if root == nil {
+		return false
+	}
+	value, err := root.PersistentFlags().GetBool(name)
+	return err == nil && value
+}
+
+func commandFlagChanged(cmd *cobra.Command, name string) bool {
+	if cmd == nil {
+		return false
+	}
+	if flag := cmd.Flags().Lookup(name); flag != nil && flag.Changed {
+		return true
+	}
+	root := cmd.Root()
+	if root == nil {
+		return false
+	}
+	flag := root.PersistentFlags().Lookup(name)
+	return flag != nil && flag.Changed
+}
+
+func commandStringFlag(cmd *cobra.Command, name string) string {
+	if cmd == nil {
+		return ""
+	}
+	if flag := cmd.Flags().Lookup(name); flag != nil {
+		value, _ := cmd.Flags().GetString(name)
+		return value
+	}
+	root := cmd.Root()
+	if root == nil {
+		return ""
+	}
+	value, _ := root.PersistentFlags().GetString(name)
+	return value
+}
+
+func formatPATAuthorizationSummary(text string, caller edition.ToolCaller) string {
+	var body map[string]any
+	if err := json.Unmarshal([]byte(text), &body); err != nil {
+		return ""
+	}
+	data, _ := body["data"].(map[string]any)
+	if data == nil {
+		return ""
+	}
+
+	lines := []string{"PAT authorization"}
+	if code := stringField(body, "code"); code != "" {
+		lines = append(lines, "status: "+code)
+	} else if success, ok := body["success"].(bool); ok {
+		lines = append(lines, fmt.Sprintf("success: %v", success))
+	}
+	if agentCode := stringField(data, "agentCode"); agentCode != "" {
+		lines = append(lines, "agentCode: "+agentCode)
+	}
+	if grantType := stringField(data, "grantType"); grantType != "" {
+		lines = append(lines, "grantType: "+grantType)
+	}
+	if allGranted, ok := data["allGranted"].(bool); ok {
+		lines = append(lines, fmt.Sprintf("allGranted: %v", allGranted))
+	}
+
+	appendCountLine := func(label, key string) {
+		if count, ok := countField(data, key); ok {
+			lines = append(lines, fmt.Sprintf("%s: %d", label, count))
+		}
+	}
+	appendCountLine("items", "items")
+	appendCountLine("selected", "selectedScopes")
+	appendCountLine("granted", "grantedScopes")
+	appendCountLine("alreadyGranted", "alreadyGrantedScopes")
+	appendCountLine("skipped", "skippedScopes")
+	appendCountLine("pending", "pendingScopes")
+
+	lines = append(lines, "suggestion: "+patAuthorizationSuggestion(data, caller))
+	lines = append(lines, "hint: use --format json or --verbose for full scope details")
+	return strings.Join(lines, "\n") + "\n"
+}
+
+func patAuthorizationSuggestion(data map[string]any, caller edition.ToolCaller) string {
+	if allGranted, ok := data["allGranted"].(bool); ok && allGranted {
+		return "no action needed"
+	}
+	if count, ok := countField(data, "selectedScopes"); ok && count > 0 {
+		if caller != nil && caller.DryRun() {
+			return "rerun this command without --dry-run to grant selected scopes"
+		}
+		return "selected scopes are ready to grant"
+	}
+	if count, ok := countField(data, "pendingScopes"); ok && count > 0 {
+		return "complete authorization, then retry the command"
+	}
+	return "check auth status or rerun with --format json for details"
+}
+
+func countField(data map[string]any, key string) (int, bool) {
+	raw, ok := data[key]
+	if !ok {
+		return 0, false
+	}
+	switch v := raw.(type) {
+	case []any:
+		return len(v), true
+	case []string:
+		return len(v), true
+	}
+	return 0, false
+}
+
+func stringField(data map[string]any, key string) string {
+	if value, ok := data[key].(string); ok {
+		return strings.TrimSpace(value)
+	}
+	return ""
 }
