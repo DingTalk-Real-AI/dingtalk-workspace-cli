@@ -104,3 +104,41 @@ dws aitable record query --base-id X --table-id Y \
 ```bash
 --sort '[{"fieldId":"fldPriority","direction":"desc"},{"fieldId":"fldCreatedAt","direction":"asc"}]'
 ```
+
+---
+
+## view update --config 中的 filter / sort 格式
+
+> **重要区分**：`record query --filters` 和 `view update --config` 中的 filter **格式不同**！
+
+| 场景 | filter 格式 | 说明 |
+|------|-------------|------|
+| `record query --filters` | **对象**：`{"operator":"and","operands":[...]}` | 直接传最外层逻辑对象 |
+| `view update --config` 的 filter | **数组**：`[{"operator":"and","operands":[...]}]` | 外面多一层数组包裹 |
+| `view update --config` 的 sort | **数组**：`[{"fieldId":"X","direction":"asc"}]` | 与 record query --sort 一致 |
+
+### 正确示例
+
+```bash
+# view update 设置筛选（filter 是数组）
+dws aitable view update --base-id X --table-id Y --view-id Z \
+  --config '{"filter":[{"operator":"and","operands":[{"operator":"eq","operands":["fldStatus","待处理"]}]}]}'
+
+# view update 设置排序（sort 是数组）
+dws aitable view update --base-id X --table-id Y --view-id Z \
+  --config '{"sort":[{"fieldId":"fldPriority","direction":"desc"}]}'
+
+# 同时设置 filter + sort + visibleFieldIds
+dws aitable view update --base-id X --table-id Y --view-id Z \
+  --config '{"filter":[{"operator":"and","operands":[{"operator":"eq","operands":["fldStatus","进行中"]}]}],"sort":[{"fieldId":"fldDate","direction":"asc"}],"visibleFieldIds":["fld1","fld2","fld3"]}'
+```
+
+### CLI 自动容错
+
+CLI 会自动修正以下常见错误格式（不会报错，但建议直接使用正确格式）：
+
+| 错误写法 | CLI 自动修正为 |
+|----------|---------------|
+| `"filter":{"operator":"and",...}` （对象） | `"filter":[{"operator":"and",...}]` （数组） |
+| `"sort":{"fieldId":"X","direction":"asc"}` （对象） | `"sort":[{"fieldId":"X","direction":"asc"}]` （数组） |
+| 子条件用 MCP 简写 `{"fieldId":"X","operator":"eq","value":"Y"}` | 自动转为 `{"operator":"eq","operands":["X","Y"]}` |

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -133,6 +134,7 @@ func (docHandler) Command(runner executor.Runner) *cobra.Command {
 	root.AddCommand(newDocReadCommand(runner))
 	root.AddCommand(newDocCreateCommand(runner))
 	root.AddCommand(newDocUpdateCommand(runner))
+	root.AddCommand(newDocUploadCommand(runner))
 	root.AddCommand(newDocDownloadCommand(runner))
 	root.AddCommand(newDocCopyCommand(runner))
 	root.AddCommand(newDocMoveCommand(runner))
@@ -160,7 +162,8 @@ func newDocGroup(use, short string) *cobra.Command {
 // 便于和 export get 子命令的 flag 分离管理。
 func doRegisterDocExportFlags(cmd *cobra.Command) {
 	addDocNodeFlags(cmd)
-	cmd.Flags().String("output", "", i18n.T("本地落盘路径（可选，提供则自动下载 docx 到本地）"))
+	cmd.Flags().String("output", "", i18n.T("本地落盘路径（必填；传目录时自动生成 docx 文件名）"))
+	cmd.Flags().String("export-format", "", i18n.T("导出格式，当前仅支持 docx（悟空兼容）"))
 	cmd.Flags().Int("timeout-sec", 300, i18n.T("整体轮询超时（秒），默认 300"))
 }
 
@@ -184,8 +187,10 @@ func newDocSearchCommand(runner executor.Runner) *cobra.Command {
 			addDocCSVParam(cmd, params, "editorUserIds", "editor-uids")
 			addDocCSVParam(cmd, params, "mentionedUserIds", "mentioned-uids")
 			addDocCSVParam(cmd, params, "workspaceIds", "workspace-ids", "workspace")
-			addDocIntParam(cmd, params, "pageSize", "page-size")
-			addDocStringParam(cmd, params, "pageToken", "page-token")
+			if pageSize := docIntFlagOrFallback(cmd, "page-size", "limit"); pageSize > 0 {
+				params["pageSize"] = pageSize
+			}
+			addDocStringParam(cmd, params, "pageToken", "page-token", "cursor")
 			return runDocTool(cmd, runner, "doc", "search_documents", params)
 		},
 	}
@@ -203,7 +208,10 @@ func newDocSearchCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("workspace-ids", "", i18n.T("Workspace ID，逗号分隔"))
 	addDocHiddenStringFlag(cmd, "workspace", "--workspace-ids alias")
 	cmd.Flags().Int("page-size", 0, i18n.T("每页数量"))
+	cmd.Flags().Int("limit", 0, i18n.T("--page-size 的悟空兼容别名"))
+	_ = cmd.Flags().MarkHidden("limit")
 	cmd.Flags().String("page-token", "", i18n.T("分页 token"))
+	addDocHiddenStringFlag(cmd, "cursor", "--page-token 的悟空兼容别名")
 	return cmd
 }
 
@@ -221,8 +229,10 @@ func newDocListCommand(runner executor.Runner) *cobra.Command {
 			if workspace := docFlagOrFallback(cmd, "workspace", "workspace-id"); workspace != "" {
 				params["workspaceId"] = workspace
 			}
-			addDocIntParam(cmd, params, "pageSize", "page-size")
-			addDocStringParam(cmd, params, "pageToken", "page-token")
+			if pageSize := docIntFlagOrFallback(cmd, "page-size", "limit"); pageSize > 0 {
+				params["pageSize"] = pageSize
+			}
+			addDocStringParam(cmd, params, "pageToken", "page-token", "cursor")
 			return runDocTool(cmd, runner, "doc", "list_nodes", params)
 		},
 	}
@@ -235,7 +245,10 @@ func newDocListCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("workspace", "", i18n.T("Workspace ID"))
 	addDocHiddenStringFlag(cmd, "workspace-id", "--workspace alias")
 	cmd.Flags().Int("page-size", 0, i18n.T("每页数量"))
+	cmd.Flags().Int("limit", 0, i18n.T("--page-size 的悟空兼容别名"))
+	_ = cmd.Flags().MarkHidden("limit")
 	cmd.Flags().String("page-token", "", i18n.T("分页 token"))
+	addDocHiddenStringFlag(cmd, "cursor", "--page-token 的悟空兼容别名")
 	return cmd
 }
 
@@ -250,11 +263,24 @@ func newDocReadCommand(runner executor.Runner) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runDocTool(cmd, runner, "doc", "get_document_content", map[string]any{"nodeId": nodeID})
+			params := map[string]any{"nodeId": nodeID}
+			format, err := docContentFormat(cmd, "markdown", "jsonml")
+			if err != nil {
+				return err
+			}
+			if format != "" {
+				params["format"] = format
+			}
+			if output := docStringFlag(cmd, "output"); output != "" {
+				params["__output__"] = output
+			}
+			return runDocTool(cmd, runner, "doc", "get_document_content", params)
 		},
 	}
 	preferLegacyLeaf(cmd)
 	addDocNodeFlags(cmd)
+	cmd.Flags().String("content-format", "", i18n.T("输出格式: markdown / jsonml"))
+	cmd.Flags().String("output", "", i18n.T("输出到本地文件路径（JSONML 场景透传）"))
 	return cmd
 }
 
@@ -300,7 +326,43 @@ func newDocCreateCommand(runner executor.Runner) *cobra.Command {
 				return err
 			}
 			if content != "" {
-				params["markdown"] = content
+				format, err := docContentFormat(cmd, "markdown", "jsonml")
+				if err != nil {
+					return err
+				}
+				if format == "jsonml" {
+					jsonml, err := prepareDocJSONMLBody(cmd, content)
+					if err != nil {
+						return err
+					}
+					createResult, err := docInvocationResult(cmd, runner, "doc", "create_document", params)
+					if err != nil {
+						return err
+					}
+					nodeID := docFirstStringRecursive(createResult.Response, "nodeId", "nodeID", "id")
+					if nodeID == "" {
+						return apperrors.NewValidation("创建文档成功但无法提取 nodeId")
+					}
+					updateResult, err := docInvocationResult(cmd, runner, "doc", "update_document", map[string]any{
+						"nodeId": nodeID,
+						"format": "jsonml",
+						"jsonml": jsonml,
+						"mode":   "overwrite",
+					})
+					if err != nil {
+						return err
+					}
+					return writeCommandPayload(cmd, updateResult)
+				} else {
+					if sniffJsonMLLike(content) {
+						fmt.Fprintln(cmd.ErrOrStderr(), `warning: 输入内容看起来是 JSONML 结构；若要按 JSONML 解析，请加 --content-format jsonml，否则将按 markdown 解析。`)
+					}
+					params["markdown"] = content
+				}
+			} else if format, err := docContentFormat(cmd, "markdown", "jsonml"); err != nil {
+				return err
+			} else if format != "" {
+				params["format"] = format
 			}
 			return runDocTool(cmd, runner, "doc", "create_document", params)
 		},
@@ -318,6 +380,8 @@ func newDocCreateCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("content-file", "", i18n.T("从文件读取初始 Markdown"))
 	addDocHiddenStringFlag(cmd, "content-path", "--content-file alias")
 	addDocHiddenStringFlag(cmd, "markdown", "--content alias")
+	cmd.Flags().String("content-format", "", i18n.T("内容格式: markdown / jsonml"))
+	addDocJSONMLControlFlags(cmd)
 	return cmd
 }
 
@@ -347,11 +411,31 @@ func newDocUpdateCommand(runner executor.Runner) *cobra.Command {
 				return apperrors.NewValidation("--mode overwrite requires --yes unless --dry-run is set")
 			}
 			params := map[string]any{
-				"nodeId":   nodeID,
-				"mode":     strings.TrimSpace(mode),
-				"markdown": content,
+				"nodeId": nodeID,
+				"mode":   strings.TrimSpace(mode),
 			}
-			addDocIntParam(cmd, params, "index", "index")
+			format, err := docContentFormat(cmd, "markdown", "jsonml")
+			if err != nil {
+				return err
+			}
+			if format == "jsonml" {
+				if strings.TrimSpace(mode) == "append" {
+					return apperrors.NewValidation("--content-format jsonml 当前仅支持 --mode overwrite，append 模式将在后续版本支持")
+				}
+				jsonml, err := prepareDocJSONMLBody(cmd, content)
+				if err != nil {
+					return err
+				}
+				params["format"] = "jsonml"
+				params["jsonml"] = jsonml
+				addDocIntParam(cmd, params, "revision", "revision")
+			} else {
+				if sniffJsonMLLike(content) {
+					fmt.Fprintln(cmd.ErrOrStderr(), `warning: 输入内容看起来是 JSONML 结构；若要按 JSONML 解析，请加 --content-format jsonml，否则将按 markdown 解析。`)
+				}
+				params["markdown"] = content
+				addDocIntParam(cmd, params, "index", "index")
+			}
 			return runDocTool(cmd, runner, "doc", "update_document", params)
 		},
 	}
@@ -363,6 +447,9 @@ func newDocUpdateCommand(runner executor.Runner) *cobra.Command {
 	addDocHiddenStringFlag(cmd, "markdown", "--content alias")
 	cmd.Flags().String("mode", "", i18n.T("更新模式: append / overwrite"))
 	cmd.Flags().Int("index", 0, i18n.T("append 插入位置"))
+	cmd.Flags().String("content-format", "", i18n.T("内容格式: markdown / jsonml"))
+	cmd.Flags().Int("revision", 0, i18n.T("文档编辑版本号（JSONML 场景透传）"))
+	addDocJSONMLControlFlags(cmd)
 	return cmd
 }
 
@@ -387,6 +474,216 @@ func newDocDownloadCommand(runner executor.Runner) *cobra.Command {
 	addDocNodeFlags(cmd)
 	cmd.Flags().String("output", "", i18n.T("本地输出路径 (必填)"))
 	return cmd
+}
+
+func newDocUploadCommand(runner executor.Runner) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "upload",
+		Short: i18n.T("上传文件到钉钉文档或知识库"),
+		Long: i18n.T(`将本地文件上传到钉钉文档或知识库（三步自动完成）。
+
+流程：
+  1. 获取上传凭证 (get_file_upload_info)
+  2. HTTP PUT 上传文件到 OSS
+  3. 提交文件入库 (commit_uploaded_file)
+
+上传位置优先级：--folder > --workspace > 默认文档根目录。`),
+		Example: `  dws doc upload --file ./report.pdf
+  dws doc upload --file ./slides.pptx --name "Q1汇报.pptx" --folder DOC_FOLDER_NODE_ID
+  dws doc upload --file ./data.xlsx --workspace WS_ID --convert`,
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runDocUpload(cmd, runner)
+		},
+	}
+	preferLegacyLeaf(cmd)
+	cmd.Flags().String("file", "", i18n.T("本地文件路径 (必填)"))
+	cmd.Flags().String("name", "", i18n.T("文件显示名称（默认使用本地文件名）"))
+	cmd.Flags().String("folder", "", i18n.T("目标文档文件夹 nodeId 或 alidocs 文件夹 URL"))
+	addDocHiddenStringFlag(cmd, "parent-id", "--folder alias")
+	addDocHiddenStringFlag(cmd, "parent-folder", "--folder alias")
+	addDocHiddenStringFlag(cmd, "parent-folder-id", "--folder alias")
+	cmd.Flags().String("workspace", "", i18n.T("目标知识库 ID 或 URL"))
+	addDocHiddenStringFlag(cmd, "workspace-id", "--workspace alias")
+	cmd.Flags().Bool("convert", false, i18n.T("是否转换为钉钉在线文档"))
+	return cmd
+}
+
+func runDocUpload(cmd *cobra.Command, runner executor.Runner) error {
+	filePath, err := docRequiredFlag(cmd, "file")
+	if err != nil {
+		return err
+	}
+	absPath, err := filepath.Abs(filePath)
+	if err != nil {
+		return apperrors.NewValidation(i18n.T("无法解析文件路径: ") + err.Error())
+	}
+	info, err := os.Stat(absPath)
+	if err != nil {
+		return apperrors.NewValidation(i18n.T("文件不存在: ") + absPath)
+	}
+	if info.IsDir() {
+		return apperrors.NewValidation(i18n.T("不是文件: ") + absPath)
+	}
+	fileSize := info.Size()
+	if fileSize <= 0 {
+		return apperrors.NewValidation(i18n.T("文件为空"))
+	}
+
+	name := docStringFlag(cmd, "name")
+	if name == "" {
+		name = filepath.Base(absPath)
+	} else if filepath.Ext(name) == "" {
+		if ext := filepath.Ext(absPath); ext != "" {
+			name += ext
+		}
+	}
+
+	folder := docFlagOrFallback(cmd, "folder", "parent-id", "parent-folder", "parent-folder-id")
+	if folder != "" {
+		folder = normalizeDocNodeID(folder)
+	}
+	workspace := docFlagOrFallback(cmd, "workspace", "workspace-id")
+	step1Params := map[string]any{}
+	if folder != "" {
+		step1Params["folderId"] = folder
+	}
+	if workspace != "" {
+		step1Params["workspaceId"] = workspace
+	}
+
+	commitParams := map[string]any{
+		"name":     name,
+		"fileSize": float64(fileSize),
+	}
+	if folder != "" {
+		commitParams["folderId"] = folder
+	}
+	if workspace != "" {
+		commitParams["workspaceId"] = workspace
+	}
+	if convert, _ := cmd.Flags().GetBool("convert"); convert {
+		commitParams["convertToOnlineDoc"] = true
+	}
+
+	if commandDryRun(cmd) {
+		return writeCommandPayload(cmd, map[string]any{
+			"dry_run": true,
+			"step_1_get_file_upload_info": executor.NewHelperInvocation(
+				cobracmd.LegacyCommandPath(cmd), "doc", "get_file_upload_info", step1Params,
+			),
+			"step_2_http_put_oss": "PUT file bytes to resourceUrl with returned headers",
+			"step_3_commit_uploaded_file": executor.NewHelperInvocation(
+				cobracmd.LegacyCommandPath(cmd), "doc", "commit_uploaded_file", commitParams,
+			),
+			"file": absPath,
+			"name": name,
+			"size": fileSize,
+		})
+	}
+
+	progressOut := cmd.ErrOrStderr()
+	fmt.Fprintf(progressOut, i18n.T("[1/3] 获取文件上传凭证 (%s, %d 字节)...\n"), name, fileSize)
+	step1Result, err := runner.Run(cmd.Context(), executor.NewHelperInvocation(
+		cobracmd.LegacyCommandPath(cmd), "doc", "get_file_upload_info", step1Params,
+	))
+	if err != nil {
+		return fmt.Errorf(i18n.T("获取上传凭证失败: %w"), err)
+	}
+	resourceURL, uploadKey, headers, err := extractDocFileUploadInfo(step1Result.Response)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintln(progressOut, i18n.T("[2/3] 上传文件到 OSS..."))
+	if err := httpPutDriveFile(cmd.Context(), resourceURL, headers, absPath, fileSize); err != nil {
+		return err
+	}
+
+	fmt.Fprintln(progressOut, i18n.T("[3/3] 提交文件入库..."))
+	commitParams["uploadKey"] = uploadKey
+	result, err := runner.Run(cmd.Context(), executor.NewHelperInvocation(
+		cobracmd.LegacyCommandPath(cmd), "doc", "commit_uploaded_file", commitParams,
+	))
+	if err != nil {
+		return fmt.Errorf(i18n.T("提交文件入库失败: %w"), err)
+	}
+	return writeCommandPayload(cmd, result)
+}
+
+func extractDocFileUploadInfo(resp map[string]any) (resourceURL, uploadKey string, headers map[string]string, err error) {
+	data := unwrapDocUploadResp(resp)
+	resourceURL, _ = data["resourceUrl"].(string)
+	if resourceURL == "" {
+		resourceURL, _ = data["uploadUrl"].(string)
+	}
+	if resourceURL == "" {
+		if urls, ok := data["resourceUrls"].([]any); ok && len(urls) > 0 {
+			if first, ok := urls[0].(map[string]any); ok {
+				resourceURL, _ = first["url"].(string)
+				if len(headers) == 0 {
+					headers = stringMapFromAny(first["headers"])
+				}
+			}
+		}
+	}
+	uploadKey, _ = data["uploadKey"].(string)
+	if uploadKey == "" {
+		uploadKey, _ = data["uploadId"].(string)
+	}
+	if len(headers) == 0 {
+		headers = stringMapFromAny(data["headers"])
+	}
+	if headers == nil {
+		headers = map[string]string{}
+	}
+	if resourceURL == "" || uploadKey == "" {
+		err = apperrors.NewValidation(fmt.Sprintf("get_file_upload_info 返回不完整: resourceUrl=%q, uploadKey=%q", resourceURL, uploadKey))
+		return
+	}
+	return
+}
+
+func unwrapDocUploadResp(resp map[string]any) map[string]any {
+	if resp == nil {
+		return map[string]any{}
+	}
+	data := resp
+	for {
+		if content, ok := data["content"].(map[string]any); ok && len(content) > 0 {
+			data = content
+			continue
+		}
+		if result, ok := data["result"].(map[string]any); ok && len(result) > 0 {
+			data = result
+			continue
+		}
+		if inner, ok := data["data"].(map[string]any); ok && len(inner) > 0 {
+			data = inner
+			continue
+		}
+		return data
+	}
+}
+
+func stringMapFromAny(raw any) map[string]string {
+	headers := map[string]string{}
+	if m, ok := raw.(map[string]any); ok {
+		for k, v := range m {
+			if s, ok := v.(string); ok && s != "" {
+				headers[k] = s
+			}
+		}
+	}
+	if m, ok := raw.(map[string]string); ok {
+		for k, v := range m {
+			if v != "" {
+				headers[k] = v
+			}
+		}
+	}
+	return headers
 }
 
 func newDocFileCreateCommand(runner executor.Runner) *cobra.Command {
@@ -537,6 +834,14 @@ func newDocBlockListCommand(runner executor.Runner) *cobra.Command {
 			addDocIntParam(cmd, params, "startIndex", "start-index")
 			addDocIntParam(cmd, params, "endIndex", "end-index")
 			addDocStringParam(cmd, params, "blockType", "block-type")
+			format, err := docContentFormat(cmd, "element", "jsonml")
+			if err != nil {
+				return err
+			}
+			if format != "" {
+				params["format"] = format
+			}
+			addDocStringParam(cmd, params, "blockId", "block-id")
 			return runDocTool(cmd, runner, "doc", "list_document_blocks", params)
 		},
 	}
@@ -545,6 +850,8 @@ func newDocBlockListCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().Int("start-index", 0, i18n.T("起始块索引"))
 	cmd.Flags().Int("end-index", 0, i18n.T("结束块索引"))
 	cmd.Flags().String("block-type", "", i18n.T("块类型"))
+	cmd.Flags().String("content-format", "", i18n.T("输出格式: element / jsonml"))
+	cmd.Flags().String("block-id", "", i18n.T("块 ID（JSONML 场景透传）"))
 	return cmd
 }
 
@@ -559,14 +866,49 @@ func newDocBlockInsertCommand(runner executor.Runner) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			element, err := docBuildBlockElement(cmd)
+			params := map[string]any{"nodeId": nodeID}
+			format, err := docContentFormat(cmd, "element", "jsonml")
 			if err != nil {
 				return err
 			}
-			params := map[string]any{"nodeId": nodeID, "element": element}
-			addDocIntParam(cmd, params, "index", "index")
-			addDocStringParam(cmd, params, "where", "where")
-			addDocStringParam(cmd, params, "referenceBlockId", "ref-block")
+			if format == "jsonml" {
+				jsonml, err := docRequiredFlag(cmd, "element")
+				if err != nil {
+					return err
+				}
+				normalized, err := prepareDocJSONMLNode(cmd, jsonml)
+				if err != nil {
+					return err
+				}
+				params["format"] = "jsonml"
+				params["jsonml"] = normalized
+				if refBlock := docStringFlag(cmd, "ref-block"); refBlock != "" {
+					params["referenceBlockId"] = refBlock
+					where := normalizeDocInsertWhere(docStringFlag(cmd, "where"))
+					if where == "" {
+						where = "after"
+					}
+					params["where"] = where
+				}
+				if parentBlock := docStringFlag(cmd, "parent-block"); parentBlock != "" {
+					params["referenceBlockId"] = parentBlock
+				}
+				addDocIntParam(cmd, params, "index", "index")
+			} else {
+				if elementRaw := docStringFlag(cmd, "element"); elementRaw != "" && sniffJsonMLLike(elementRaw) {
+					fmt.Fprintln(cmd.ErrOrStderr(), `warning: --element 内容看起来是 JSONML 结构；若要按 JSONML 解析，请加 --content-format jsonml，否则将按 element 解析。`)
+				}
+				element, err := docBuildBlockElement(cmd)
+				if err != nil {
+					return err
+				}
+				params["element"] = element
+				addDocIntParam(cmd, params, "index", "index")
+				if where := normalizeDocInsertWhere(docStringFlag(cmd, "where")); where != "" {
+					params["where"] = where
+				}
+				addDocStringParam(cmd, params, "referenceBlockId", "ref-block")
+			}
 			return runDocTool(cmd, runner, "doc", "insert_document_block", params)
 		},
 	}
@@ -575,10 +917,17 @@ func newDocBlockInsertCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("element", "", i18n.T("块 element JSON"))
 	cmd.Flags().String("text", "", i18n.T("段落文本快捷参数"))
 	cmd.Flags().String("heading", "", i18n.T("标题文本快捷参数"))
+	cmd.Flags().String("type", "", i18n.T("块类型快捷参数: paragraph/blockquote/callout/code/orderedList/unorderedList/columns/divider"))
+	cmd.Flags().String("list-id", "", i18n.T("列表 ID；orderedList/unorderedList 多项连续插入时使用同一个 ID"))
+	cmd.Flags().String("language", "", i18n.T("代码块语言；配合 --type code/codeBlock"))
+	cmd.Flags().Int("columns", 2, i18n.T("分栏数量；配合 --type columns"))
 	cmd.Flags().Int("level", 1, i18n.T("标题级别"))
 	cmd.Flags().Int("index", 0, i18n.T("插入索引"))
 	cmd.Flags().String("where", "", i18n.T("插入位置"))
 	cmd.Flags().String("ref-block", "", i18n.T("参考块 ID"))
+	cmd.Flags().String("content-format", "", i18n.T("输入格式: element / jsonml"))
+	cmd.Flags().String("parent-block", "", i18n.T("父容器块 ID（JSONML 场景透传）"))
+	addDocJSONMLControlFlags(cmd)
 	return cmd
 }
 
@@ -597,15 +946,36 @@ func newDocBlockUpdateCommand(runner executor.Runner) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			element, err := docBuildBlockElement(cmd)
+			params := map[string]any{
+				"nodeId":  nodeID,
+				"blockId": blockID,
+			}
+			format, err := docContentFormat(cmd, "element", "jsonml")
 			if err != nil {
 				return err
 			}
-			return runDocTool(cmd, runner, "doc", "update_document_block", map[string]any{
-				"nodeId":  nodeID,
-				"blockId": blockID,
-				"element": element,
-			})
+			if format == "jsonml" {
+				jsonml, err := docRequiredFlag(cmd, "element")
+				if err != nil {
+					return err
+				}
+				normalized, err := prepareDocJSONMLNode(cmd, jsonml)
+				if err != nil {
+					return err
+				}
+				params["format"] = "jsonml"
+				params["jsonml"] = normalized
+			} else {
+				if elementRaw := docStringFlag(cmd, "element"); elementRaw != "" && sniffJsonMLLike(elementRaw) {
+					fmt.Fprintln(cmd.ErrOrStderr(), `warning: --element 内容看起来是 JSONML 结构；若要按 JSONML 解析，请加 --content-format jsonml，否则将按 element 解析。`)
+				}
+				element, err := docBuildBlockElement(cmd)
+				if err != nil {
+					return err
+				}
+				params["element"] = element
+			}
+			return runDocTool(cmd, runner, "doc", "update_document_block", params)
 		},
 	}
 	preferLegacyLeaf(cmd)
@@ -614,7 +984,13 @@ func newDocBlockUpdateCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("element", "", i18n.T("块 element JSON"))
 	cmd.Flags().String("text", "", i18n.T("段落文本快捷参数"))
 	cmd.Flags().String("heading", "", i18n.T("标题文本快捷参数"))
+	cmd.Flags().String("type", "", i18n.T("块类型快捷参数: paragraph/blockquote/callout/code/orderedList/unorderedList/columns/divider"))
+	cmd.Flags().String("list-id", "", i18n.T("列表 ID；orderedList/unorderedList 多项连续插入时使用同一个 ID"))
+	cmd.Flags().String("language", "", i18n.T("代码块语言；配合 --type code/codeBlock"))
+	cmd.Flags().Int("columns", 2, i18n.T("分栏数量；配合 --type columns"))
 	cmd.Flags().Int("level", 1, i18n.T("标题级别"))
+	cmd.Flags().String("content-format", "", i18n.T("输入格式: element / jsonml"))
+	addDocJSONMLControlFlags(cmd)
 	return cmd
 }
 
@@ -660,8 +1036,10 @@ func newDocCommentListCommand(runner executor.Runner) *cobra.Command {
 				return err
 			}
 			params := map[string]any{"nodeId": nodeID}
-			addDocIntParam(cmd, params, "pageSize", "page-size")
-			addDocStringParam(cmd, params, "nextToken", "next-token")
+			if pageSize := docIntFlagOrFallback(cmd, "page-size", "limit"); pageSize > 0 {
+				params["pageSize"] = pageSize
+			}
+			addDocStringParam(cmd, params, "nextToken", "next-token", "cursor")
 			addDocStringParam(cmd, params, "commentType", "type")
 			addDocStringParam(cmd, params, "resolveStatus", "resolve-status")
 			return runDocTool(cmd, runner, "doc-comment", "list_comments", params)
@@ -670,7 +1048,10 @@ func newDocCommentListCommand(runner executor.Runner) *cobra.Command {
 	preferLegacyLeaf(cmd)
 	addDocNodeFlags(cmd)
 	cmd.Flags().Int("page-size", 0, i18n.T("每页数量"))
+	cmd.Flags().Int("limit", 0, i18n.T("--page-size 的悟空兼容别名"))
+	_ = cmd.Flags().MarkHidden("limit")
 	cmd.Flags().String("next-token", "", i18n.T("下一页 token"))
+	addDocHiddenStringFlag(cmd, "cursor", "--next-token 的悟空兼容别名")
 	cmd.Flags().String("type", "", i18n.T("评论类型"))
 	cmd.Flags().String("resolve-status", "", i18n.T("解决状态"))
 	return cmd
@@ -720,7 +1101,9 @@ func newDocCommentReplyCommand(runner executor.Runner) *cobra.Command {
 			}
 			params := map[string]any{"nodeId": nodeID, "content": content}
 			addDocStringParam(cmd, params, "replyCommentKey", "comment-key")
-			addDocStringParam(cmd, params, "emoji", "emoji")
+			if emoji, _ := cmd.Flags().GetBool("emoji"); emoji {
+				params["emoji"] = true
+			}
 			addDocCSVParam(cmd, params, "mentionedUserIds", "mention")
 			return runDocTool(cmd, runner, "doc-comment", "reply_comment", params)
 		},
@@ -729,7 +1112,7 @@ func newDocCommentReplyCommand(runner executor.Runner) *cobra.Command {
 	addDocNodeFlags(cmd)
 	cmd.Flags().String("content", "", i18n.T("回复内容 (必填)"))
 	cmd.Flags().String("comment-key", "", i18n.T("评论 key"))
-	cmd.Flags().String("emoji", "", i18n.T("表情"))
+	cmd.Flags().Bool("emoji", false, i18n.T("是否作为表情贴图回复"))
 	cmd.Flags().String("mention", "", i18n.T("提及 userId，逗号分隔"))
 	return cmd
 }
@@ -790,6 +1173,9 @@ func docBuildBlockElement(cmd *cobra.Command) (any, error) {
 			},
 		}, nil
 	}
+	if blockType := docStringFlag(cmd, "type"); blockType != "" {
+		return docBuildTypedBlockElement(cmd, blockType)
+	}
 	if text := docStringFlag(cmd, "text"); text != "" {
 		return map[string]any{
 			"blockType": "paragraph",
@@ -799,6 +1185,151 @@ func docBuildBlockElement(cmd *cobra.Command) (any, error) {
 		}, nil
 	}
 	return nil, apperrors.NewValidation("block content required: --text, --heading, or --element")
+}
+
+func docBuildTypedBlockElement(cmd *cobra.Command, blockType string) (any, error) {
+	text := docStringFlag(cmd, "text")
+	normalized := normalizeDocBlockType(blockType)
+	switch normalized {
+	case "paragraph":
+		if text == "" {
+			return nil, apperrors.NewValidation("--text is required when --type paragraph")
+		}
+		return map[string]any{
+			"blockType": "paragraph",
+			"paragraph": map[string]any{"text": text},
+		}, nil
+	case "heading":
+		if text == "" {
+			return nil, apperrors.NewValidation("--text is required when --type heading; or use --heading")
+		}
+		level, _ := cmd.Flags().GetInt("level")
+		if level < 1 || level > 6 {
+			level = 1
+		}
+		return map[string]any{
+			"blockType": "heading",
+			"heading":   map[string]any{"text": text, "level": level},
+		}, nil
+	case "blockquote":
+		if text == "" {
+			return nil, apperrors.NewValidation("--text is required when --type blockquote")
+		}
+		return map[string]any{
+			"blockType":  "blockquote",
+			"blockquote": map[string]any{"text": text},
+		}, nil
+	case "callout":
+		if text == "" {
+			return nil, apperrors.NewValidation("--text is required when --type callout")
+		}
+		return map[string]any{
+			"blockType": "callout",
+			"callout":   map[string]any{"text": text},
+		}, nil
+	case "codeBlock":
+		if text == "" {
+			return nil, apperrors.NewValidation("--text is required when --type code")
+		}
+		codeBlock := map[string]any{"text": text}
+		if language := docStringFlag(cmd, "language"); language != "" {
+			codeBlock["language"] = language
+		}
+		return map[string]any{
+			"blockType": "codeBlock",
+			"codeBlock": codeBlock,
+		}, nil
+	case "orderedList", "unorderedList":
+		if text == "" {
+			return nil, apperrors.NewValidation("--text is required when --type orderedList/unorderedList")
+		}
+		listID := docStringFlag(cmd, "list-id")
+		if listID == "" {
+			listID = "list-1"
+		}
+		return map[string]any{
+			"blockType": normalized,
+			normalized:  map[string]any{"list": map[string]any{"listId": listID}},
+			"children":  []any{map[string]any{"text": text}},
+		}, nil
+	case "columns":
+		count, _ := cmd.Flags().GetInt("columns")
+		if count < 2 {
+			count = 2
+		}
+		parts := splitDocColumnsText(text, count)
+		children := make([]any, 0, count)
+		for i := 0; i < count; i++ {
+			childText := ""
+			if i < len(parts) {
+				childText = parts[i]
+			}
+			children = append(children, map[string]any{
+				"blockType": "paragraph",
+				"paragraph": map[string]any{"text": childText},
+			})
+		}
+		return map[string]any{
+			"blockType": "columns",
+			"columns":   map[string]any{"size": count},
+			"children":  children,
+		}, nil
+	case "divider":
+		return map[string]any{"blockType": "divider"}, nil
+	default:
+		return nil, apperrors.NewValidation(fmt.Sprintf("unsupported --type %q; use --element for advanced block JSON", blockType))
+	}
+}
+
+func normalizeDocBlockType(blockType string) string {
+	switch strings.ToLower(strings.TrimSpace(blockType)) {
+	case "p", "text", "paragraph":
+		return "paragraph"
+	case "h", "heading", "title":
+		return "heading"
+	case "quote", "blockquote":
+		return "blockquote"
+	case "callout", "highlight", "notice":
+		return "callout"
+	case "code", "codeblock", "code_block", "code-block":
+		return "codeBlock"
+	case "orderedlist", "ordered-list", "ol", "numberedlist", "numbered-list":
+		return "orderedList"
+	case "unorderedlist", "unordered-list", "ul", "bulletlist", "bullet-list":
+		return "unorderedList"
+	case "columns", "column":
+		return "columns"
+	case "divider", "hr", "line":
+		return "divider"
+	default:
+		return strings.TrimSpace(blockType)
+	}
+}
+
+func splitDocColumnsText(text string, count int) []string {
+	if text == "" {
+		return nil
+	}
+	parts := strings.Split(text, "||")
+	if len(parts) == 1 {
+		parts = strings.Split(text, "|")
+	}
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+	if len(parts) > count {
+		parts = parts[:count]
+	}
+	return parts
+}
+
+func normalizeDocInsertWhere(where string) string {
+	switch strings.ToLower(strings.TrimSpace(where)) {
+	case "", "end", "tail", "append", "末尾":
+		return ""
+	default:
+		return strings.TrimSpace(where)
+	}
 }
 
 func runDocTool(cmd *cobra.Command, runner executor.Runner, product, tool string, params map[string]any) error {
@@ -822,6 +1353,11 @@ func addDocNodeFlags(cmd *cobra.Command) {
 	addDocHiddenStringFlag(cmd, "node-id", "--node alias")
 	addDocHiddenStringFlag(cmd, "doc-id", "--node alias")
 	addDocHiddenStringFlag(cmd, "file-id", "--node alias")
+}
+
+func addDocJSONMLControlFlags(cmd *cobra.Command) {
+	cmd.Flags().Bool("fix-jsonml", false, i18n.T("启用全部 JSONML 修复（含 JSON 语法修复 + 结构修复），推荐 agent 调用时使用"))
+	cmd.Flags().Bool("no-fix-jsonml", false, i18n.T("关闭全部 JSONML 修复（跳过 JSON 语法修复和结构修复），用于排查原始错误"))
 }
 
 func addDocHiddenStringFlag(cmd *cobra.Command, name, usage string) {
@@ -902,6 +1438,66 @@ func docFlagOrFallback(cmd *cobra.Command, primary string, aliases ...string) st
 	return ""
 }
 
+func docContentFormat(cmd *cobra.Command, allowed ...string) (string, error) {
+	format := docStringFlag(cmd, "content-format")
+	if format == "" {
+		return "", nil
+	}
+	for _, candidate := range allowed {
+		if format == candidate {
+			return format, nil
+		}
+	}
+	if format == "json" {
+		return "", apperrors.NewValidation(fmt.Sprintf("--content-format json 无效。这里的 --content-format 指文档内容格式，不是 CLI 输出格式；CLI 输出格式由顶层 -f/--format 控制。本命令接受: %s", renderDocAllowedFormats(allowed)))
+	}
+	return "", apperrors.NewValidation(fmt.Sprintf("--content-format 取值 %q 无效，仅接受: %s", format, renderDocAllowedFormats(allowed)))
+}
+
+func renderDocAllowedFormats(allowed []string) string {
+	parts := make([]string, 0, len(allowed))
+	for _, allowedFormat := range allowed {
+		if allowedFormat != "" {
+			parts = append(parts, allowedFormat)
+		}
+	}
+	return strings.Join(parts, ", ")
+}
+
+func docFirstStringRecursive(v any, keys ...string) string {
+	keySet := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		keySet[key] = struct{}{}
+	}
+	var walk func(any) string
+	walk = func(cur any) string {
+		switch x := cur.(type) {
+		case map[string]any:
+			for _, key := range keys {
+				if value, ok := x[key].(string); ok && strings.TrimSpace(value) != "" {
+					return strings.TrimSpace(value)
+				}
+			}
+			for key, value := range x {
+				if _, direct := keySet[key]; direct {
+					continue
+				}
+				if found := walk(value); found != "" {
+					return found
+				}
+			}
+		case []any:
+			for _, item := range x {
+				if found := walk(item); found != "" {
+					return found
+				}
+			}
+		}
+		return ""
+	}
+	return walk(v)
+}
+
 func docRequiredFlag(cmd *cobra.Command, name string) (string, error) {
 	if value := docStringFlag(cmd, name); value != "" {
 		return value, nil
@@ -977,16 +1573,19 @@ func addDocCSVParam(cmd *cobra.Command, params map[string]any, paramName string,
 	}
 }
 
-func addDocIntParam(cmd *cobra.Command, params map[string]any, paramName string, flag string) {
-	if !cmd.Flags().Changed(flag) {
-		return
-	}
-	if value, err := cmd.Flags().GetInt(flag); err == nil {
-		params[paramName] = value
-		return
-	}
-	if value, err := cmd.Flags().GetInt64(flag); err == nil {
-		params[paramName] = value
+func addDocIntParam(cmd *cobra.Command, params map[string]any, paramName string, flags ...string) {
+	for _, flag := range flags {
+		if !cmd.Flags().Changed(flag) {
+			continue
+		}
+		if value, err := cmd.Flags().GetInt(flag); err == nil {
+			params[paramName] = value
+			return
+		}
+		if value, err := cmd.Flags().GetInt64(flag); err == nil {
+			params[paramName] = value
+			return
+		}
 	}
 }
 
@@ -1008,9 +1607,7 @@ func docCSV(raw string) []string {
 // 设计：用 pkg/asynctask.Submit 串起来：
 //  1. 调 submit_export_job 拿 jobId
 //  2. 渐进式退避轮询 query_export_job 直到 SUCCESS / FAILED / 超时
-//  3. SUCCESS 且 --output 传入时，自动 GET downloadUrl 落盘
-//
-// 不传 --output 时只输出 downloadUrl + jobId，调用方自行决定后续。
+//  3. SUCCESS 后自动 GET downloadUrl 落盘到必填的 --output 路径。
 
 func runDocExport(cmd *cobra.Command, runner executor.Runner) error {
 	nodeID := docFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
@@ -1023,17 +1620,32 @@ func runDocExport(cmd *cobra.Command, runner executor.Runner) error {
 	}
 	nodeID = normalizeDocNodeID(nodeID)
 	output, _ := cmd.Flags().GetString("output")
+	if strings.TrimSpace(output) == "" {
+		return apperrors.NewValidation("--output is required")
+	}
 	timeoutSec, _ := cmd.Flags().GetInt("timeout-sec")
+	progressOut := cmd.ErrOrStderr()
+	exportFormat := strings.TrimSpace(docStringFlag(cmd, "export-format"))
+	if exportFormat != "" && !strings.EqualFold(exportFormat, "docx") {
+		return apperrors.NewValidation("--export-format only supports docx")
+	}
 
 	submitFn := func(ctx context.Context) (string, error) {
 		params := map[string]any{"nodeId": nodeID}
+		if exportFormat != "" {
+			params["exportFormat"] = exportFormat
+		}
 		result, err := runner.Run(ctx, executor.NewHelperInvocation(
 			cobracmd.LegacyCommandPath(cmd), "doc", "submit_export_job", params,
 		))
 		if err != nil {
 			return "", err
 		}
-		return extractDocExportJobID(result.Response), nil
+		jobID := extractDocExportJobID(result.Response)
+		if jobID != "" {
+			fmt.Fprintf(progressOut, "jobId: %s\n", jobID)
+		}
+		return jobID, nil
 	}
 
 	queryFn := func(ctx context.Context, jobID string) (asynctask.QueryResult, error) {
@@ -1048,17 +1660,21 @@ func runDocExport(cmd *cobra.Command, runner executor.Runner) error {
 	}
 
 	if commandDryRun(cmd) {
+		params := map[string]any{"nodeId": nodeID, "__async__": true, "__output__": output}
+		if exportFormat != "" {
+			params["exportFormat"] = exportFormat
+		}
 		return writeCommandPayload(cmd, executor.NewHelperInvocation(
 			cobracmd.LegacyCommandPath(cmd), "doc", "submit_export_job",
-			map[string]any{"nodeId": nodeID, "__async__": true, "__output__": output},
+			params,
 		))
 	}
 
-	fmt.Fprintf(os.Stderr, i18n.T("[1/3] 提交导出任务 (node=%s)...\n"), nodeID)
+	fmt.Fprintf(progressOut, i18n.T("[1/3] 提交导出任务 (node=%s)...\n"), nodeID)
 	res, err := asynctask.Submit(cmd.Context(), submitFn, queryFn, asynctask.Options{
 		Timeout: time.Duration(timeoutSec) * time.Second,
 		ProgressFn: func(attempt int, status asynctask.Status, elapsed time.Duration) {
-			fmt.Fprintf(os.Stderr, i18n.T("[2/3] 轮询任务（第 %d 次，状态=%s，已耗时 %s）\n"),
+			fmt.Fprintf(progressOut, i18n.T("[2/3] 第 %d/30 次查询（状态=%s，已耗时 %s）\n"),
 				attempt, status, elapsed.Round(time.Second))
 		},
 	})
@@ -1079,20 +1695,59 @@ func runDocExport(cmd *cobra.Command, runner executor.Runner) error {
 
 	switch res.Status {
 	case asynctask.StatusSuccess:
-		if output != "" && res.DownloadURL != "" {
-			fmt.Fprintf(os.Stderr, i18n.T("[3/3] 下载到本地：%s\n"), output)
-			if err := asynctask.Download(cmd.Context(), res.DownloadURL, output); err != nil {
+		if res.DownloadURL != "" {
+			outputPath := resolveDocExportOutputPath(output, res.DownloadURL, res.JobID)
+			fmt.Fprintf(progressOut, i18n.T("[3/3] 下载文件到：%s\n"), outputPath)
+			if err := asynctask.Download(cmd.Context(), res.DownloadURL, outputPath); err != nil {
 				return fmt.Errorf(i18n.T("download failed: %w"), err)
 			}
-			out["output"] = output
+			out["output"] = outputPath
+			fmt.Fprintln(progressOut, i18n.T("导出完成"))
 		}
 	case asynctask.StatusFailed:
 		return apperrors.NewValidation(fmt.Sprintf("export failed: %s", res.Message))
 	case asynctask.StatusTimeout:
-		fmt.Fprintf(os.Stderr, i18n.T("⚠️ 任务超时，请用 dws doc export get --job-id %s 继续等待\n"), res.JobID)
+		fmt.Fprintf(progressOut, i18n.T("任务超时，请用 dws doc export get --job-id %s 继续等待\n"), res.JobID)
 	}
 
 	return writeCommandPayload(cmd, out)
+}
+
+func resolveDocExportOutputPath(outputPath, downloadURL, jobID string) string {
+	if info, statErr := os.Stat(outputPath); statErr == nil && info.IsDir() {
+		return filepath.Join(outputPath, docExportFilename(downloadURL, jobID))
+	}
+	return outputPath
+}
+
+func docExportFilename(downloadURL, jobID string) string {
+	if parsed, err := url.Parse(downloadURL); err == nil {
+		name := cleanDocExportFilename(filepath.Base(parsed.Path))
+		if name != "" {
+			if decoded, decodeErr := url.PathUnescape(name); decodeErr == nil {
+				if decodedName := cleanDocExportFilename(decoded); decodedName != "" {
+					return decodedName
+				}
+			}
+			return name
+		}
+	}
+	if jobID != "" {
+		return "doc_export_" + jobID + ".docx"
+	}
+	return "doc_export.docx"
+}
+
+func cleanDocExportFilename(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	name = filepath.Base(strings.ReplaceAll(name, "\\", "/"))
+	if name == "" || name == "." || name == "/" {
+		return ""
+	}
+	return name
 }
 
 func newDocExportGetCommand(runner executor.Runner) *cobra.Command {
@@ -1115,6 +1770,9 @@ func newDocExportGetCommand(runner executor.Runner) *cobra.Command {
 			jobID, _ := cmd.Flags().GetString("job-id")
 			if strings.TrimSpace(jobID) == "" {
 				return apperrors.NewValidation("--job-id is required")
+			}
+			if !docExportJobIDLooksValid(jobID) {
+				return apperrors.NewValidation("--job-id must be a numeric export job ID")
 			}
 			output, _ := cmd.Flags().GetString("output")
 			timeoutSec, _ := cmd.Flags().GetInt("timeout-sec")
@@ -1154,10 +1812,11 @@ func newDocExportGetCommand(runner executor.Runner) *cobra.Command {
 				out["message"] = res.Message
 			}
 			if res.Status == asynctask.StatusSuccess && output != "" && res.DownloadURL != "" {
-				if err := asynctask.Download(cmd.Context(), res.DownloadURL, output); err != nil {
+				outputPath := resolveDocExportOutputPath(output, res.DownloadURL, res.JobID)
+				if err := asynctask.Download(cmd.Context(), res.DownloadURL, outputPath); err != nil {
 					return fmt.Errorf(i18n.T("download failed: %w"), err)
 				}
-				out["output"] = output
+				out["output"] = outputPath
 			}
 			if res.Status == asynctask.StatusFailed {
 				return apperrors.NewValidation(fmt.Sprintf("export failed: %s", res.Message))
@@ -1170,6 +1829,19 @@ func newDocExportGetCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("output", "", i18n.T("本地落盘路径（可选，提供则自动下载 docx 到本地）"))
 	cmd.Flags().Int("timeout-sec", 300, i18n.T("整体轮询超时（秒），默认 300"))
 	return cmd
+}
+
+func docExportJobIDLooksValid(jobID string) bool {
+	jobID = strings.TrimSpace(jobID)
+	if jobID == "" {
+		return false
+	}
+	for _, r := range jobID {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // extractDocExportJobID 从 submit_export_job 响应里抽 jobId。

@@ -27,17 +27,19 @@ metadata:
 
 | 用户说 | 命令 |
 |--------|------|
-| "创建知识库" | `dws wiki space create --name "<名称>" [--description "<描述>"]` |
-| "搜索知识库空间" | `dws wiki space search --keyword "<关键词>" [--limit <1-20>]` |
+| "创建知识库" | `dws wiki space create --name "<名称>" [--desc "<描述>"]` |
+| "搜索知识库空间" | `dws wiki space search --query "<关键词>" [--limit <1-20>]` |
 | "我的文档 / 个人知识库" | `dws wiki space list --type myWikiSpace` |
 | "列出组织知识库" | `dws wiki space list [--type orgWikiSpace] [--limit <1-50>]` |
 
 ## 评测高频硬约束
 
-- `space search` 用 `--keyword`，不要用 `--query`；`search` 支持 `--type myWikiSpace` 查询个人知识库，但按类型列出空间优先走 `space list --type myWikiSpace/orgWikiSpace`。
+- `space search` 用 `--query`；`search` 支持 `--type myWikiSpace` 查询个人知识库，但按类型列出空间优先走 `space list --type myWikiSpace/orgWikiSpace`。
 - 用户说"我的文档/个人空间/my workspace"时优先用 `dws wiki space list --type myWikiSpace --format json`。
-- 用户给空关键词时，不要构造空 `--keyword ""`；若语义是我的文档则走 `space list --type myWikiSpace`，否则请用户补关键词。
+- 用户给空关键词时，不要构造空 `--query ""`；若语义是我的文档则走 `space list --type myWikiSpace`，否则请用户补关键词。
 - 搜到空间后复用返回的 `workspaceId/id`，知识库内具体文档的创建、搜索、读写切到 `dingtalk-doc`，不要在 `wiki` 下编造 doc 子命令。
+- `workspaceId` 是知识库空间 ID，只能用于 `wiki space/member --workspace`、`doc --workspace` 或 `doc search --workspace-ids`；不要传给 `doc list --folder`，也不要使用不存在的 `--space-id`。
+- 读取知识库内指定文档固定链路：`wiki space search/list` 取 `workspaceId` → `doc search --query "<文档名>" --workspace-ids <workspaceId>` 取 `nodeId` → `doc read --node <nodeId>`。
 - 所有 `dws wiki` 命令加 `--format json`。
 
 ## 跨产品协作

@@ -19,9 +19,10 @@
 | 命令 | 用途 | 必填参数 | 路由提醒 |
 |------|------|----------|----------|
 | `base list` | 列出最近访问的 Base | — | 仅返回最近访问过的，优先用 `base search` |
-| `base search` | 按名称搜索 Base | `--query` | 关键词 ≥2 字符 |
+| `base search` | 搜索 Base；不传关键词时列出最近 Base | — | 可选 `--query`；不传时走 list_bases |
 | `base get` | 获取 Base 信息（含 tables 列表） | `--base-id` | 用户给 URL 时提取末尾 ID |
 | `base create` | 创建 Base | `--name` | 创建后直接用返回的 baseId |
+| `base copy` | 复制 Base 到目标文件夹 | `--base-id` `--target-folder-id` | 目标必须是 `dws doc folder create/list` 返回的文档文件夹 `nodeId`；不要传钉盘数字 `dentryId`，也不要用手工新建 base/table 代替 |
 | `base update` | 更新 Base 名称 | `--base-id` `--name` | — |
 | `base delete` | 删除 Base | `--base-id` | 不可逆 |
 
@@ -30,7 +31,7 @@
 | 命令 | 用途 | 必填参数 | 路由提醒 |
 |------|------|----------|----------|
 | `table get` | 获取表结构（字段+视图目录） | `--base-id` | 不传 `--table-ids` 返回全部表 |
-| `table create` | 创建数据表 | `--base-id` `--name` `--fields` | fields 为 JSON 数组，至少 1 个 |
+| `table create` | 创建数据表 | `--base-id` `--name` | `--fields` 可选；不传时创建空字段表 |
 | `table update` | 重命名表 | `--base-id` `--table-id` `--name` | — |
 | `table delete` | 删除表 | `--base-id` `--table-id` | 不可逆 |
 
@@ -50,7 +51,7 @@
 | `record query` | 查询/搜索记录 | [aitable-record-query.md](./aitable/aitable-record-query.md) | 先 `table get` 拿 fieldId；`--all` 自动翻页；filters 结构见 reference |
 | `record get` | 按 ID 取记录（`record query --record-ids` 的窄别名） | [aitable-record-query.md](./aitable/aitable-record-query.md) | 已知 recordId 时首选；必填 `--record-ids`（单次最多 100 条）；未暴露 filters/sort/query/cursor/limit |
 | `record create` | 新增记录 | [aitable-record-create.md](./aitable/aitable-record-create.md) | cells key 必须是 fieldId 不是字段名；单次最多 100 条 |
-| `record update` | 更新记录 | [aitable-record-update.md](./aitable/aitable-record-update.md) | 需先 query 拿 recordId；只传需改字段；**没有** `--record-id` `--cells` flag |
+| `record update` | 更新记录（每条独立 cells） | [aitable-record-update.md](./aitable/aitable-record-update.md) | 需先 query 拿 recordId；只传需改字段；`--records` 是 `[{recordId,cells},...]` 数组；同一组值批量更新也用此命令展开 records |
 | `record delete` | 删除记录 | [aitable-record-delete.md](./aitable/aitable-record-delete.md) | 不可逆，需先 query 确认 |
 
 ### view (视图管理)
@@ -58,7 +59,8 @@
 | 命令 | 用途 | 必填参数 | 路由提醒 |
 |------|------|----------|----------|
 | `view get` | 获取视图配置 | `--base-id` `--table-id` | 不传 `--view-ids` 返回全部视图 |
-| `view create` | 创建视图 | `--base-id` `--table-id` `--view-type` | 类型: Grid/Kanban/Gantt/Calendar/Gallery/FormDesigner |
+| `view list` | 列出全部视图（`view get` 不传 `--view-ids` 的别名） | `--base-id` `--table-id` | 与 `view get` 完全等价；只需视图列表时优先 |
+| `view create` | 创建视图 | `--base-id` `--table-id` `--view-type` | 类型: Grid/Kanban/Gantt/Calendar/Gallery/FormDesigner；可选 `--name` 指定视图名称（未传时自动生成）、`--config` 传初始配置 JSON |
 | `view update` | 更新视图（**调整字段顺序的入口**） | `--base-id` `--table-id` `--view-id` | `visibleFieldIds` 重排字段顺序 |
 | `view delete` | 删除视图 | `--base-id` `--table-id` `--view-id` | 不可删最后一个/锁定视图 |
 
@@ -66,12 +68,19 @@
 
 > **view update --config 支持的 key 白名单**（传入其他 key 会报错）：
 > - `visibleFieldIds` — 视图可见字段列表及顺序（首列字段必须保留在第一位）
-> - `filter` — 筛选规则列表
-> - `sort` — 排序规则列表
-> - `group` — 分组规则列表
+> - `filter` — 筛选规则**数组**（⚠️ 注意是数组 `[...]`，不是对象 `{...}`）
+> - `sort` — 排序规则**数组**
+> - `group` — 分组规则**数组**
 > - `fieldWidths` — 列宽映射（仅 Grid 视图有效）
 >
+> **filter/sort/group 必须传数组格式**，不要和 `record query --filters`（对象格式）混淆。详见 [aitable-filter-sort.md](./aitable/aitable-filter-sort.md) § view update 章节。
+> CLI 会自动容错（对象→数组 wrap），但建议直接使用正确格式。
+>
 > 不支持 `formInfo`、`requiredFields`、`conditionalRules` 等 FormDesigner 高级配置，这些 key 会被服务端忽略。
+
+### 表单视图 → 详见 [aitable-form.md](./aitable/aitable-form.md)
+
+悟空命令面不暴露 `form` 命令组；表单按 `viewType=FormDesigner` 的视图处理，创建/查看/更新/删除都使用 `view` 命令。
 
 ### dashboard & chart → 详见 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)
 
@@ -102,12 +111,23 @@
 |------|------|----------|
 | `template search` | 搜索模板 | `--query` |
 
+## 评测执行硬约束
+
+- 多轮任务必须执行到用户要求的最后一步；不要只回复"现在开始/下一步执行"，也不要在创建 base/table/field 后提前结束。
+- 每个写操作后用 `base get`、`table get`、`field get`、`record query` 或对应 `view get/list` 读回验证真实 ID 与结果。
+- 字段批量 JSON 推荐 `fieldName`；CLI 兼容 `name`，但 skill 生成时不要主动使用 `name`。字段类型统一用小写/规范值，如 `text`、`number`、`singleSelect`、`attachment`。
+- 成员/负责人字段类型使用 `user`，不要生成 `member`。
+- 复制 AI 表格必须调用 `dws aitable base copy --base-id <BASE_ID> --target-folder-id <FOLDER_NODE_ID> --format json`。目标目录必须是 `dws doc folder create` 或 `dws doc list` 返回的文档文件夹 `nodeId`；不要传 `drive list` 返回的数字 `dentryId`，不要用新建 base/table 的手工方式代替 `base copy`。
+- 用户未指定目标文件夹时：先 `dws doc info --node <BASE_ID> --format json` 取 `workspaceId`，再 `dws doc folder create --workspace <WORKSPACE_ID> --name "AI表格副本" --format json` 创建目标文件夹，最后把返回的 `nodeId` 传给 `base copy`。
+- 导入 Excel/CSV 前先用 `find` 或 `ls` 确认真实文件路径；遇到中文文件名乱码或路径不匹配时，重新查找实际文件，不要停在解释阶段。
+
 ## 意图判断
 
 用户说"表格/多维表/AI表格":
 - 查看/查找/列表 → `base search`（优先）或 `base list`（仅浏览最近访问）
 - 详情 → `base get`
 - 创建 → `base create`
+- 复制 → `base copy`，必须调用 `dws aitable base copy --base-id <BASE_ID> --target-folder-id <FOLDER_NODE_ID> --format json`；若无目标文件夹，先 `doc info --node <BASE_ID>` 取 `workspaceId`，再 `doc folder create --workspace <WORKSPACE_ID>` 创建文档文件夹作为目标。服务端返回 `Invalid target folder ID` 时，改用 `doc folder create` 新建目标文件夹后重试一次；不要手工重建副本。
 - 修改 → `base update`
 - 删除 → `base delete`
 
@@ -127,8 +147,16 @@
 - 查看/搜索 → `record query`（读 [aitable-record-query.md](./aitable/aitable-record-query.md)）
 - 已知 recordId 反查字段值 → `record get`（按 ID 取专用，等价 `record query --record-ids`）
 - 添加/写入 → `record create`（读 [aitable-record-create.md](./aitable/aitable-record-create.md)）
-- 修改/更新 → `record update`（读 [aitable-record-update.md](./aitable/aitable-record-update.md)）
+- 修改/更新（每条独立 cells） → `record update`（读 [aitable-record-update.md](./aitable/aitable-record-update.md)）
+- **批量更新同一字段值**（统一标记/统一改值） → `record update --records '[{"recordId":"rec1","cells":{...}},{"recordId":"rec2","cells":{...}}]'`
 - 删除 → `record delete`
+
+用户说"视图/view":
+- 列出/查看全部视图 → `view list`（或 `view get` 不传 --view-ids，二者等价）
+- 看某个视图详情 → `view get --view-ids <ID>`
+- 创建 → `view create`
+- 修改（含"调整字段顺序/隐藏字段"） → `view update --config '{"visibleFieldIds":[...]}'`
+- 删除 → `view delete`
 
 用户说"筛选/过滤/filter" → 读 [aitable-filter-sort.md](./aitable/aitable-filter-sort.md)
 
@@ -137,6 +165,8 @@
 用户说"公式/formula/计算字段/派生指标" → 读 [aitable-formula-guide.md](./aitable/aitable-formula-guide.md)
 
 用户说"查找引用/lookup/filterUp/跨表" → 读 [aitable-formula-guide.md](./aitable/aitable-formula-guide.md)（§5.4 跨表引用）
+
+用户说"表单/form/收集表/问卷/催办填写" → 读 [aitable-form.md](./aitable/aitable-form.md)，使用 `view create --view-type FormDesigner`
 
 用户说"仪表盘/图表/chart" → 读 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)
 
@@ -160,7 +190,7 @@ dws aitable base search --query "项目" --format json
 dws aitable base get --base-id <BASE_ID> --format json
 
 # 3. 获取表结构 — 提取 fieldId
-dws aitable table get --base-id <BASE_ID> --table-id <TABLE_ID> --format json
+dws aitable table get --base-id <BASE_ID> --table-ids <TABLE_ID> --format json
 
 # 4. 查询记录
 dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID> --format json

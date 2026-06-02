@@ -98,7 +98,7 @@ func newWikiSpaceCreateCommand(runner executor.Runner) *cobra.Command {
 				return err
 			}
 			params := map[string]any{"name": name}
-			if description := wikiFlagOrFallback(cmd, "description"); description != "" {
+			if description := wikiFlagOrFallback(cmd, "desc", "description"); description != "" {
 				params["description"] = description
 			}
 			if icon := wikiFlagOrFallback(cmd, "icon"); icon != "" {
@@ -109,7 +109,8 @@ func newWikiSpaceCreateCommand(runner executor.Runner) *cobra.Command {
 	}
 	preferLegacyLeaf(cmd)
 	cmd.Flags().String("name", "", "知识库名称 (必填)")
-	cmd.Flags().String("description", "", "知识库描述")
+	cmd.Flags().String("desc", "", "知识库描述")
+	addWikiHiddenStringFlag(cmd, "description", "--desc 的兼容别名")
 	cmd.Flags().String("icon", "", "知识库图标标识")
 	return cmd
 }
@@ -151,21 +152,22 @@ func newWikiSpaceListCommand(runner executor.Runner) *cobra.Command {
 			if spaceType := wikiFlagOrFallback(cmd, "type"); spaceType != "" {
 				params["wikiSpaceType"] = spaceType
 			}
-			if limit := wikiIntFlagOrFallback(cmd, "limit", "page-size"); limit > 0 {
+			if limit := wikiFlagOrFallback(cmd, "limit", "page-size"); limit != "" {
 				params["pageSize"] = limit
 			}
-			if pageToken := wikiFlagOrFallback(cmd, "page-token"); pageToken != "" {
+			if pageToken := wikiFlagOrFallback(cmd, "cursor", "page-token"); pageToken != "" {
 				params["pageToken"] = pageToken
 			}
 			return runWikiTool(cmd, runner, "list_wikiSpaces", params)
 		},
 	}
 	preferLegacyLeaf(cmd)
-	cmd.Flags().String("type", "", "知识库类型: myWikiSpace / orgWikiSpace")
-	cmd.Flags().Int("limit", 0, "每页数量")
-	cmd.Flags().Int("page-size", 0, "--limit 的兼容别名")
+	cmd.Flags().String("type", "orgWikiSpace", "知识库类型: myWikiSpace / orgWikiSpace")
+	cmd.Flags().String("limit", "", "每页数量 1-50 (默认 20)")
+	cmd.Flags().String("page-size", "", "--limit 的兼容别名")
 	_ = cmd.Flags().MarkHidden("page-size")
-	cmd.Flags().String("page-token", "", "分页游标")
+	cmd.Flags().String("cursor", "", "分页游标")
+	addWikiHiddenStringFlag(cmd, "page-token", "--cursor 的兼容别名")
 	return cmd
 }
 
@@ -173,18 +175,18 @@ func newWikiSpaceSearchCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "search",
 		Short: "搜索知识库",
-		Example: `  dws wiki space search --keyword 产品文档
-  dws wiki space search --keyword 技术方案 --limit 20
+		Example: `  dws wiki space search --query 产品文档
+  dws wiki space search --query 技术方案 --limit 20
   dws wiki space search --type myWikiSpace`,
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			keyword, _ := cmd.Flags().GetString("keyword")
+			keyword := wikiFlagOrFallback(cmd, "query", "keyword")
 			spaceType, _ := cmd.Flags().GetString("type")
-			limit, _ := cmd.Flags().GetInt("limit")
+			limit, _ := cmd.Flags().GetString("limit")
 
 			params := map[string]any{}
-			if limit > 0 {
+			if strings.TrimSpace(limit) != "" {
 				params["pageSize"] = limit
 			}
 
@@ -202,9 +204,10 @@ func newWikiSpaceSearchCommand(runner executor.Runner) *cobra.Command {
 		},
 	}
 	preferLegacyLeaf(cmd)
-	cmd.Flags().String("keyword", "", "搜索关键词")
+	cmd.Flags().String("query", "", "搜索关键词")
+	addWikiHiddenStringFlag(cmd, "keyword", "--query 的兼容别名")
 	cmd.Flags().String("type", "", "知识库类型；仅 --type myWikiSpace 支持无 keyword 查询个人知识库")
-	cmd.Flags().Int("limit", 0, "返回数量")
+	cmd.Flags().String("limit", "", "返回数量 1-20 (默认 10)")
 	return cmd
 }
 
@@ -219,7 +222,7 @@ func newWikiMemberAddCommand(runner executor.Runner) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			user, err := wikiRequiredFlagOrFallback(cmd, "user", "users")
+			user, err := wikiRequiredFlagOrFallback(cmd, "users", "user")
 			if err != nil {
 				return err
 			}
@@ -236,8 +239,8 @@ func newWikiMemberAddCommand(runner executor.Runner) *cobra.Command {
 	}
 	preferLegacyLeaf(cmd)
 	addWikiWorkspaceFlag(cmd)
-	cmd.Flags().String("user", "", "用户 userId 列表，逗号分隔 (必填)")
-	addWikiHiddenStringFlag(cmd, "users", "--user 的兼容别名")
+	cmd.Flags().String("users", "", "用户 userId 列表，逗号分隔 (必填)")
+	addWikiHiddenStringFlag(cmd, "user", "--users 的兼容别名")
 	cmd.Flags().String("role", "", "权限角色 (必填)")
 	return cmd
 }
@@ -253,7 +256,7 @@ func newWikiMemberUpdateCommand(runner executor.Runner) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			user, err := wikiRequiredFlagOrFallback(cmd, "user", "uid")
+			user, err := wikiRequiredFlagOrFallback(cmd, "users", "user", "uid")
 			if err != nil {
 				return err
 			}
@@ -270,8 +273,9 @@ func newWikiMemberUpdateCommand(runner executor.Runner) *cobra.Command {
 	}
 	preferLegacyLeaf(cmd)
 	addWikiWorkspaceFlag(cmd)
-	cmd.Flags().String("user", "", "用户 userId 列表，逗号分隔 (必填)")
-	addWikiHiddenStringFlag(cmd, "uid", "--user 的兼容别名")
+	cmd.Flags().String("users", "", "用户 userId 列表，逗号分隔 (必填)")
+	addWikiHiddenStringFlag(cmd, "user", "--users 的兼容别名")
+	addWikiHiddenStringFlag(cmd, "uid", "--users 的兼容别名")
 	cmd.Flags().String("role", "", "权限角色 (必填)")
 	return cmd
 }

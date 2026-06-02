@@ -51,7 +51,31 @@ func TestWikiSpaceSearchWithKeywordUsesSearchTool(t *testing.T) {
 	if got := runner.last.Params["keyword"]; got != "产品文档" {
 		t.Fatalf("keyword = %#v, want 产品文档", got)
 	}
-	if got := runner.last.Params["pageSize"]; got != 5 {
+	if got := runner.last.Params["pageSize"]; got != "5" {
+		t.Fatalf("pageSize = %#v, want 5", got)
+	}
+}
+
+func TestWikiSpaceSearchAcceptsWukongQueryAlias(t *testing.T) {
+	t.Parallel()
+
+	runner := &wikiCommandRunner{}
+	cmd := wikiHandler{}.Command(runner)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"space", "search", "--query", "产品文档", "--limit", "5"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut.String())
+	}
+	if runner.last.Tool != "search_wikiSpaces" {
+		t.Fatalf("tool = %q, want search_wikiSpaces", runner.last.Tool)
+	}
+	if got := runner.last.Params["keyword"]; got != "产品文档" {
+		t.Fatalf("keyword = %#v, want 产品文档", got)
+	}
+	if got := runner.last.Params["pageSize"]; got != "5" {
 		t.Fatalf("pageSize = %#v, want 5", got)
 	}
 }
@@ -151,6 +175,54 @@ func TestWikiSpaceGetWorkspaceAliases(t *testing.T) {
 	}
 }
 
+func TestWikiSpaceCreateAcceptsWukongDescAlias(t *testing.T) {
+	t.Parallel()
+
+	runner := &wikiCommandRunner{}
+	cmd := wikiHandler{}.Command(runner)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"space", "create", "--name", "技术方案", "--desc", "团队技术方案归档"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut.String())
+	}
+	if runner.last.Tool != "create_wikiSpace" {
+		t.Fatalf("tool = %q, want create_wikiSpace", runner.last.Tool)
+	}
+	if got := runner.last.Params["description"]; got != "团队技术方案归档" {
+		t.Fatalf("description = %#v, want 团队技术方案归档", got)
+	}
+}
+
+func TestWikiSpaceListAcceptsWukongCursorAlias(t *testing.T) {
+	t.Parallel()
+
+	runner := &wikiCommandRunner{}
+	cmd := wikiHandler{}.Command(runner)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"space", "list", "--type", "orgWikiSpace", "--limit", "50", "--cursor", "TOKEN_001"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut.String())
+	}
+	if runner.last.Tool != "list_wikiSpaces" {
+		t.Fatalf("tool = %q, want list_wikiSpaces", runner.last.Tool)
+	}
+	if got := runner.last.Params["wikiSpaceType"]; got != "orgWikiSpace" {
+		t.Fatalf("wikiSpaceType = %#v, want orgWikiSpace", got)
+	}
+	if got := runner.last.Params["pageSize"]; got != "50" {
+		t.Fatalf("pageSize = %#v, want 50", got)
+	}
+	if got := runner.last.Params["pageToken"]; got != "TOKEN_001" {
+		t.Fatalf("pageToken = %#v, want TOKEN_001", got)
+	}
+}
+
 func TestWikiMemberAddUsesWorkspaceIDAlias(t *testing.T) {
 	t.Parallel()
 
@@ -177,6 +249,39 @@ func TestWikiMemberAddUsesWorkspaceIDAlias(t *testing.T) {
 	}
 	if got := runner.last.Params["roleId"]; got != "READER" {
 		t.Fatalf("roleId = %#v, want READER", got)
+	}
+	users, ok := runner.last.Params["userIds"].([]string)
+	if !ok {
+		t.Fatalf("userIds type = %T, want []string", runner.last.Params["userIds"])
+	}
+	if strings.Join(users, ",") != "uid1,uid2" {
+		t.Fatalf("userIds = %#v, want uid1,uid2", users)
+	}
+}
+
+func TestWikiMemberUpdateAcceptsWukongUsersAlias(t *testing.T) {
+	t.Parallel()
+
+	runner := &wikiCommandRunner{}
+	cmd := wikiHandler{}.Command(runner)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{
+		"member", "update",
+		"--workspace", "WS_001",
+		"--users", "uid1,uid2",
+		"--role", "editor",
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut.String())
+	}
+	if runner.last.Tool != "update_member" {
+		t.Fatalf("tool = %q, want update_member", runner.last.Tool)
+	}
+	if got := runner.last.Params["roleId"]; got != "EDITOR" {
+		t.Fatalf("roleId = %#v, want EDITOR", got)
 	}
 	users, ok := runner.last.Params["userIds"].([]string)
 	if !ok {

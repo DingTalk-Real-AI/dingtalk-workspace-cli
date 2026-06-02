@@ -10,6 +10,7 @@
 - `field create --name --type --config` 中 config 单独传 JSON 字符串
 - `field update --config` 只传 config 部分
 - 不需要 config 的类型（如 text、checkbox、attachment）可省略 config 字段
+- 成员/负责人字段类型使用 `user`，不要使用 `member`；字段类型不要写 `Text`/`Number`，统一写规范值 `text`/`number`
 
 ## 2. 字段类型速查
 
@@ -234,5 +235,6 @@ AI 字段不使用 config，而使用独立的 `--ai-config` 参数。详见 [ai
 | options 更新时只传新增项 | 全量覆盖，旧选项全部丢失 |
 | formula 字段尝试写入值 | 只读字段，record create/update 会报错 |
 | linkedTableId 传表名而非 ID | 必须传 tableId（如 `tblXXX`），不接受表名 |
+| 成员字段使用 `member` | 不支持；人员/负责人/成员字段统一使用 `user` |
 | progress 值写入 50 表示 50% | 实际应写入 0.5（range 0~1） |
 | rating 值超出 max | 写入会报错 |

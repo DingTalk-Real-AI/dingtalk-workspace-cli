@@ -93,17 +93,10 @@ func TestAITableUploadFileUnwrapsRuntimeContent(t *testing.T) {
 	}
 }
 
-// TestAITableUploadFileCommandIsDiscoverable guards that the upload-file
-// command stays visible via --help. It was previously marked Hidden:true,
-// which caused AI agents (e.g. Lobster) to discover only the prepare-only
-// `attachment upload` command and get stuck after step 1, falling back to
-// "please use the UI to upload". Keeping this command discoverable is the
-// single change that unlocks the end-to-end attachment upload flow for
-// agents that only read --help.
-func TestAITableUploadFileCommandIsDiscoverable(t *testing.T) {
+func TestAITableUploadFileCommandIsHiddenFromWukongSurface(t *testing.T) {
 	runner := &uploadFileRunner{}
 	cmd := newAITableUploadFileCommand(runner)
-	if cmd.Hidden {
-		t.Fatalf("upload-file command must not be Hidden: AI agents discover it via --help; hiding it strands them after step 1 (see commit message for full rationale)")
+	if !cmd.Hidden {
+		t.Fatalf("upload-file command must stay hidden from the Wukong-aligned command surface")
 	}
 }

@@ -246,7 +246,9 @@ func (c *helpCache) get(sub string) string {
 var availableRe = regexp.MustCompile(`(?s)Available Commands:\n((?:\s+\S.*\n)+)`)
 
 // usagePathRe extracts the command path from cobra Usage line:
-//   "Usage:\n  dws report inbox list [flags]" → "report inbox list"
+//
+//	"Usage:\n  dws report inbox list [flags]" → "report inbox list"
+//
 // Used to detect top-level alias dispatch (envelope-declared cli.Aliases /
 // cli.Prefixes[1:]): if the actual Usage path has the same token count as
 // the documented sub but a different first token, sub is a registered alias.

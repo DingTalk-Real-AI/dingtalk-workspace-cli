@@ -32,7 +32,7 @@ Flags:
 
 ```bash
 # 先获取 fieldId
-dws aitable table get --base-id <BASE_ID> --table-id <TABLE_ID> --format json
+dws aitable table get --base-id <BASE_ID> --table-ids <TABLE_ID> --format json
 # 从返回中提取 fieldId（如 fldABC123）
 
 # 再用 fieldId 写入记录

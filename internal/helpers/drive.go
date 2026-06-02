@@ -59,8 +59,8 @@ func (driveHandler) Name() string {
 func (driveHandler) Command(runner executor.Runner) *cobra.Command {
 	root := &cobra.Command{
 		Use:               "drive",
-		Short:             "钉盘扩展命令（合并到 dws drive 命令树）",
-		Long:              "钉盘扩展子命令: 文件列表、详情、下载、创建文件夹、上传流程、删除等。",
+		Short:             "钉盘文件管理",
+		Long:              `钉盘：列出文件/文件夹、获取元数据、下载链接、创建文件夹、获取上传信息、提交上传。`,
 		Args:              cobra.NoArgs,
 		TraverseChildren:  true,
 		DisableAutoGenTag: true,
@@ -68,6 +68,7 @@ func (driveHandler) Command(runner executor.Runner) *cobra.Command {
 			return cmd.Help()
 		},
 	}
+	preferLegacyLeaf(root)
 	root.AddCommand(
 		newDriveListCommand(runner),
 		newDriveListSpacesCommand(runner),
@@ -78,7 +79,6 @@ func (driveHandler) Command(runner executor.Runner) *cobra.Command {
 		newDriveCommitCommand(runner),
 		newDriveUploadCommand(runner),
 		newDriveDeleteCommand(runner),
-		newDriveTreeCommand(runner),
 	)
 	return root
 }
@@ -87,24 +87,26 @@ func (driveHandler) Command(runner executor.Runner) *cobra.Command {
 
 func newDriveListCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:               "list",
-		Short:             "获取文件/文件夹列表",
+		Use:   "list",
+		Short: "获取文件/文件夹列表",
+		Example: `  dws drive list --limit 20
+  dws drive list --limit 20 --folder <dentryUuid> --order-by name --order asc`,
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			maxResults := driveIntFlagOrFallback(cmd, "max", "limit", "page-size")
+			maxResults := driveIntFlagOrFallback(cmd, "limit", "max", "page-size")
 			if maxResults <= 0 {
 				maxResults = 20
 			}
 			params := map[string]any{"maxResults": float64(maxResults)}
 			addDriveStringParam(cmd, params, "spaceId", "space-id")
-			if parentID := driveFlagOrFallback(cmd, "parent-id", "folder"); parentID != "" {
+			if parentID := driveFlagOrFallback(cmd, "folder", "parent-id"); parentID != "" {
 				if err := validateDriveParentID(parentID); err != nil {
 					return err
 				}
 				params["parentId"] = parentID
 			}
-			addDriveStringParam(cmd, params, "nextToken", "next-token", "cursor")
+			addDriveStringParam(cmd, params, "nextToken", "cursor", "next-token")
 			addDriveStringParam(cmd, params, "orderBy", "order-by")
 			addDriveStringParam(cmd, params, "order", "order")
 			if thumbnail, _ := cmd.Flags().GetBool("thumbnail"); thumbnail {
@@ -114,33 +116,41 @@ func newDriveListCommand(runner executor.Runner) *cobra.Command {
 		},
 	}
 	preferLegacyLeaf(cmd)
-	cmd.Flags().Int("max", 20, "每页返回数量，默认 20，最大 100")
-	cmd.Flags().Int("limit", 0, "--max 的兼容别名")
-	_ = cmd.Flags().MarkHidden("limit")
-	cmd.Flags().Int("page-size", 0, "--max 的兼容别名")
+	cmd.Flags().Int("limit", 20, "每页返回数量，默认 20，最大 100 (可选)")
+	cmd.Flags().Int("max", 0, "--limit 的别名（向后兼容）")
+	_ = cmd.Flags().MarkHidden("max")
+	cmd.Flags().Int("page-size", 0, "--limit 的兼容别名")
 	_ = cmd.Flags().MarkHidden("page-size")
-	cmd.Flags().String("space-id", "", "空间 ID，不传则使用「我的文件」")
-	cmd.Flags().String("parent-id", "", "父节点 ID (dentryUuid)")
-	addDriveHiddenStringFlag(cmd, "folder", "--parent-id 的兼容别名")
-	cmd.Flags().String("next-token", "", "分页游标")
-	addDriveHiddenStringFlag(cmd, "cursor", "--next-token 的兼容别名")
-	cmd.Flags().String("order-by", "", "排序字段")
-	cmd.Flags().String("order", "", "排序方向: asc|desc")
-	cmd.Flags().Bool("thumbnail", false, "是否返回缩略图信息")
+	cmd.Flags().String("space-id", "", "空间 ID，不传则使用「我的文件」对应 spaceId (可选)")
+	cmd.Flags().String("folder", "", "父节点 ID (dentryUuid)，不传则列出空间根目录 (可选)")
+	addDriveHiddenStringFlag(cmd, "parent-id", "--folder 的兼容别名")
+	cmd.Flags().String("cursor", "", "分页游标，首次不传 (可选)")
+	addDriveHiddenStringFlag(cmd, "next-token", "--cursor 的兼容别名")
+	cmd.Flags().String("order-by", "", "排序字段: createTime|modifyTime|name (可选)")
+	cmd.Flags().String("order", "", "排序方向: asc|desc，默认 desc (可选)")
+	cmd.Flags().Bool("thumbnail", false, "是否返回缩略图信息 (可选)")
 	return cmd
 }
 
 func newDriveListSpacesCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:               "list-spaces",
-		Short:             "获取钉盘空间列表",
+		Use:   "list-spaces",
+		Short: "获取钉盘空间列表",
+		Long: `列出当前用户可访问的钉盘空间，返回 spaceId、spaceName、rootFolderId 等信息。
+
+spaceType 筛选规则:
+  orgSpace（默认）: 返回企业空间列表，支持 nextToken 分页
+  mySpace: 返回用户的"我的文件"个人空间（单个）`,
+		Example: `  dws drive list-spaces
+  dws drive list-spaces --space-type mySpace
+  dws drive list-spaces --space-type orgSpace --limit 20 --cursor <TOKEN>`,
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			params := map[string]any{}
-			maxResults, _ := cmd.Flags().GetInt("max")
-			if !cmd.Flags().Changed("max") {
-				if limit, _ := cmd.Flags().GetInt("limit"); limit > 0 {
+			maxResults, _ := cmd.Flags().GetInt("limit")
+			if !cmd.Flags().Changed("limit") {
+				if limit, _ := cmd.Flags().GetInt("max"); limit > 0 {
 					maxResults = limit
 				}
 			}
@@ -148,28 +158,33 @@ func newDriveListSpacesCommand(runner executor.Runner) *cobra.Command {
 				params["maxResults"] = float64(maxResults)
 			}
 			addDriveStringParam(cmd, params, "spaceType", "space-type")
-			addDriveStringParam(cmd, params, "nextToken", "next-token", "cursor")
+			addDriveStringParam(cmd, params, "nextToken", "cursor", "next-token")
 			return runDriveInvocation(cmd, runner, "drive", "list_spaces", params)
 		},
 	}
 	preferLegacyLeaf(cmd)
-	cmd.Flags().Int("max", 20, "每页返回数量")
-	cmd.Flags().Int("limit", 0, "--max 的兼容别名")
-	_ = cmd.Flags().MarkHidden("limit")
-	cmd.Flags().String("space-type", "", "空间类型: orgSpace|mySpace")
-	cmd.Flags().String("next-token", "", "分页游标")
-	addDriveHiddenStringFlag(cmd, "cursor", "--next-token 的兼容别名")
+	cmd.Flags().Int("limit", 20, "每页返回数量 (默认 20，最大 50)，仅 spaceType 为 orgSpace 时有效")
+	cmd.Flags().Int("max", 0, "--limit 的兼容别名")
+	_ = cmd.Flags().MarkHidden("max")
+	cmd.Flags().String("space-type", "", "空间类型: orgSpace=企业空间(默认), mySpace=我的文件 (可选)")
+	cmd.Flags().String("cursor", "", "分页游标，仅企业空间支持分页 (可选)")
+	addDriveHiddenStringFlag(cmd, "next-token", "--cursor 的兼容别名")
 	return cmd
 }
 
 func newDriveInfoCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:               "info",
-		Short:             "获取文件元数据信息",
+		Use:   "info",
+		Short: "获取文件元数据信息",
+		Long: `获取钉盘文件/文件夹的元数据信息。
+
+如果目标文件属于钉钉文档（在线文档/表格/脑图等），会自动跟进调用
+钉钉文档接口获取更准确的文档信息（如真实文档名称），并合并输出。`,
+		Example:           `  dws drive info --node <dentryUuid>  # 查询 fileId: dws drive list`,
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fileID, err := driveRequiredFlagOrFallback(cmd, "file-id", "node")
+			fileID, err := driveRequiredFlagOrFallback(cmd, "node", "file-id")
 			if err != nil {
 				return err
 			}
@@ -179,16 +194,26 @@ func newDriveInfoCommand(runner executor.Runner) *cobra.Command {
 		},
 	}
 	preferLegacyLeaf(cmd)
-	cmd.Flags().String("file-id", "", "节点 ID (dentryUuid) (必填)")
-	addDriveHiddenStringFlag(cmd, "node", "--file-id 的兼容别名")
-	cmd.Flags().String("space-id", "", "节点所属空间 ID")
+	cmd.Flags().String("node", "", "节点 ID (dentryUuid) (必填)")
+	addDriveHiddenStringFlag(cmd, "file-id", "--node 的兼容别名")
+	cmd.Flags().String("space-id", "", "节点所属空间 ID (可选)")
 	return cmd
 }
 
 func newDriveDownloadCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:               "download",
-		Short:             "下载钉盘文件到本地",
+		Use:   "download",
+		Short: "下载钉盘文件到本地",
+		Long: `下载钉盘中的文件到本地（两步下载流程）。
+
+流程:
+  1. 获取下载 URL 和签名请求头 (download_file)
+  2. HTTP GET 下载文件二进制内容到本地
+
+--output 指定本地保存路径，可以是文件路径或目录。
+如果指定目录，文件名从下载 URL 中自动推断。`,
+		Example: `  dws drive download --node <dentryUuid> --output ./report.pdf
+  dws drive download --node <dentryUuid> --output ~/downloads/`,
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -196,17 +221,19 @@ func newDriveDownloadCommand(runner executor.Runner) *cobra.Command {
 		},
 	}
 	preferLegacyLeaf(cmd)
-	cmd.Flags().String("file-id", "", "文件 ID (dentryUuid) (必填)")
-	addDriveHiddenStringFlag(cmd, "node", "--file-id 的兼容别名")
-	cmd.Flags().String("space-id", "", "文件所属空间 ID")
+	cmd.Flags().String("node", "", "文件 ID (dentryUuid) (必填)")
+	addDriveHiddenStringFlag(cmd, "file-id", "--node 的兼容别名")
+	cmd.Flags().String("space-id", "", "文件所属空间 ID (可选)")
 	cmd.Flags().String("output", "", "本地保存路径 (文件路径或目录，必填)")
 	return cmd
 }
 
 func newDriveMkdirCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:               "mkdir",
-		Short:             "创建文件夹",
+		Use:   "mkdir",
+		Short: "创建文件夹",
+		Example: `  dws drive mkdir --name "项目资料"
+  dws drive mkdir --name "子目录" --folder <dentryUuid>`,
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -216,7 +243,7 @@ func newDriveMkdirCommand(runner executor.Runner) *cobra.Command {
 			}
 			params := map[string]any{"name": name}
 			addDriveStringParam(cmd, params, "spaceId", "space-id")
-			if parentID := driveFlagOrFallback(cmd, "parent-id", "folder"); parentID != "" {
+			if parentID := driveFlagOrFallback(cmd, "folder", "parent-id"); parentID != "" {
 				if err := validateDriveParentID(parentID); err != nil {
 					return err
 				}
@@ -226,17 +253,19 @@ func newDriveMkdirCommand(runner executor.Runner) *cobra.Command {
 		},
 	}
 	preferLegacyLeaf(cmd)
-	cmd.Flags().String("name", "", "文件夹名称 (必填)")
-	cmd.Flags().String("space-id", "", "目标空间 ID")
-	cmd.Flags().String("parent-id", "", "父节点 ID (dentryUuid)")
-	addDriveHiddenStringFlag(cmd, "folder", "--parent-id 的兼容别名")
+	cmd.Flags().String("name", "", "文件夹名称，最长 50 字符 (必填)")
+	cmd.Flags().String("space-id", "", "目标空间 ID，不传则使用「我的文件」 (可选)")
+	cmd.Flags().String("folder", "", "父节点 ID (dentryUuid)，不传则在空间根目录下创建 (可选)")
+	addDriveHiddenStringFlag(cmd, "parent-id", "--folder 的兼容别名")
 	return cmd
 }
 
 func newDriveUploadInfoCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:               "upload-info",
-		Short:             "获取文件上传信息",
+		Use:   "upload-info",
+		Short: "获取文件上传信息",
+		Example: `  dws drive upload-info --file-name "报告.pdf" --file-size 102400
+  dws drive upload-info --file-name "readme.txt" --file-size 1024 --folder <dentryUuid>`,
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -246,11 +275,6 @@ func newDriveUploadInfoCommand(runner executor.Runner) *cobra.Command {
 			}
 			fileSize, _ := cmd.Flags().GetInt64("file-size")
 			if fileSize <= 0 {
-				if size, _ := cmd.Flags().GetInt64("size"); size > 0 {
-					fileSize = size
-				}
-			}
-			if fileSize <= 0 {
 				return apperrors.NewValidation("--file-size is required and must be a positive integer")
 			}
 			params := map[string]any{
@@ -259,7 +283,7 @@ func newDriveUploadInfoCommand(runner executor.Runner) *cobra.Command {
 			}
 			addDriveStringParam(cmd, params, "spaceId", "space-id")
 			addDriveStringParam(cmd, params, "mimeType", "mime-type")
-			if parentID := driveFlagOrFallback(cmd, "parent-id", "folder"); parentID != "" {
+			if parentID := driveFlagOrFallback(cmd, "folder", "parent-id"); parentID != "" {
 				if err := validateDriveParentID(parentID); err != nil {
 					return err
 				}
@@ -269,71 +293,13 @@ func newDriveUploadInfoCommand(runner executor.Runner) *cobra.Command {
 		},
 	}
 	preferLegacyLeaf(cmd)
-	cmd.Flags().String("file-name", "", "文件名 (必填)")
+	cmd.Flags().String("file-name", "", "文件名，须包含扩展名，如 报告.pdf (必填)")
 	cmd.Flags().Int64("file-size", 0, "文件大小（字节）(必填)")
-	cmd.Flags().Int64("size", 0, "--file-size 的兼容别名")
-	_ = cmd.Flags().MarkHidden("size")
-	cmd.Flags().String("space-id", "", "目标空间 ID")
-	cmd.Flags().String("mime-type", "", "文件 MIME 类型")
-	cmd.Flags().String("parent-id", "", "父节点 ID (dentryUuid)")
-	addDriveHiddenStringFlag(cmd, "folder", "--parent-id 的兼容别名")
-	return cmd
-}
-
-func newDriveTreeCommand(runner executor.Runner) *cobra.Command {
-	tree := &cobra.Command{
-		Use:               "tree",
-		Short:             "目录树兼容命令",
-		Args:              cobra.NoArgs,
-		TraverseChildren:  true,
-		DisableAutoGenTag: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return cmd.Help()
-		},
-	}
-	preferLegacyLeaf(tree)
-	tree.AddCommand(newDriveTreeListCommand(runner))
-	return tree
-}
-
-func newDriveTreeListCommand(runner executor.Runner) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:               "list",
-		Short:             "按路径列目录（兼容别名）",
-		Args:              cobra.NoArgs,
-		DisableAutoGenTag: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			maxResults, _ := cmd.Flags().GetInt("max")
-			if !cmd.Flags().Changed("max") {
-				if limit, _ := cmd.Flags().GetInt("limit"); limit > 0 {
-					maxResults = limit
-				}
-			}
-			if maxResults <= 0 {
-				maxResults = 20
-			}
-			params := map[string]any{"maxResults": float64(maxResults)}
-			addDriveStringParam(cmd, params, "spaceId", "space-id")
-			if parentID := driveFlagOrFallback(cmd, "parent-id", "folder"); parentID != "" {
-				if err := validateDriveParentID(parentID); err != nil {
-					return err
-				}
-				params["parentId"] = parentID
-			}
-			addDriveStringParam(cmd, params, "nextToken", "next-token", "cursor")
-			return runDriveInvocation(cmd, runner, "drive", "list_files", params)
-		},
-	}
-	preferLegacyLeaf(cmd)
-	cmd.Flags().String("path", "", "目录路径；当前仅作为兼容输入，根路径 / 映射到默认列表")
-	cmd.Flags().Int("max", 20, "每页返回数量，默认 20，最大 100")
-	cmd.Flags().Int("limit", 0, "--max 的兼容别名")
-	_ = cmd.Flags().MarkHidden("limit")
-	cmd.Flags().String("space-id", "", "空间 ID")
-	cmd.Flags().String("parent-id", "", "父节点 ID (dentryUuid)")
-	addDriveHiddenStringFlag(cmd, "folder", "--parent-id 的兼容别名")
-	cmd.Flags().String("next-token", "", "分页游标")
-	addDriveHiddenStringFlag(cmd, "cursor", "--next-token 的兼容别名")
+	_ = cmd.MarkFlagRequired("file-size")
+	cmd.Flags().String("space-id", "", "目标空间 ID，不传则使用「我的文件」 (可选)")
+	cmd.Flags().String("mime-type", "", "文件 MIME 类型，如 application/pdf，不传则自动推断 (可选)")
+	cmd.Flags().String("folder", "", "父节点 ID (dentryUuid)，不传则上传到空间根目录 (可选)")
+	addDriveHiddenStringFlag(cmd, "parent-id", "--folder 的兼容别名")
 	return cmd
 }
 
@@ -341,6 +307,7 @@ func newDriveCommitCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "commit",
 		Short:             "提交文件上传",
+		Example:           `  dws drive commit --file-name "报告.pdf" --file-size 102400 --upload-id <uploadId>`,
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -362,8 +329,7 @@ func newDriveCommitCommand(runner executor.Runner) *cobra.Command {
 				"uploadId": uploadID,
 			}
 			addDriveStringParam(cmd, params, "spaceId", "space-id")
-			addDriveStringParam(cmd, params, "conflictHandler", "conflict-handler")
-			if parentID := driveFlagOrFallback(cmd, "parent-id", "folder"); parentID != "" {
+			if parentID := driveFlagOrFallback(cmd, "folder", "parent-id"); parentID != "" {
 				if err := validateDriveParentID(parentID); err != nil {
 					return err
 				}
@@ -373,13 +339,13 @@ func newDriveCommitCommand(runner executor.Runner) *cobra.Command {
 		},
 	}
 	preferLegacyLeaf(cmd)
-	cmd.Flags().String("file-name", "", "文件名 (必填)")
-	cmd.Flags().Int64("file-size", 0, "文件大小（字节）(必填)")
-	cmd.Flags().String("upload-id", "", "上传 ID (必填)")
-	cmd.Flags().String("space-id", "", "空间 ID")
-	cmd.Flags().String("parent-id", "", "父节点 ID (dentryUuid)")
-	addDriveHiddenStringFlag(cmd, "folder", "--parent-id 的兼容别名")
-	cmd.Flags().String("conflict-handler", "", "冲突处理策略")
+	cmd.Flags().String("file-name", "", "文件名（含扩展名），须与 get_upload_info 时一致 (必填)")
+	cmd.Flags().Int64("file-size", 0, "文件大小（字节），须与 get_upload_info 时一致 (必填)")
+	_ = cmd.MarkFlagRequired("file-size")
+	cmd.Flags().String("upload-id", "", "上传 ID，来自 get_upload_info 返回的 uploadId (必填)")
+	cmd.Flags().String("space-id", "", "空间 ID，不传则使用「我的文件」 (可选)")
+	cmd.Flags().String("folder", "", "父节点 ID (dentryUuid)，不传则提交到根目录 (可选)")
+	addDriveHiddenStringFlag(cmd, "parent-id", "--folder 的兼容别名")
 	return cmd
 }
 
@@ -389,13 +355,14 @@ func newDriveUploadCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "upload",
 		Short: "上传本地文件到钉盘",
-		Long: `将本地文件上传到钉盘（三步自动完成）：
+		Long: `将本地文件上传到钉盘（三步自动完成）。
 
-  1. drive get_upload_info  → 获取 OSS 上传凭证 (resourceUrl + uploadId + headers)
-  2. HTTP PUT 文件二进制   → OSS
-  3. drive commit_upload    → 提交文件入库
+流程:
+  1. 获取 OSS 上传凭证 (get_upload_info)
+  2. HTTP PUT 上传文件二进制到 OSS
+  3. 提交文件入库 (commit_upload)
 
---folder 指定父目录 dentryUuid，不传则上传到空间根目录。`,
+上传位置: --folder 指定父目录，不传则上传到空间根目录。`,
 		Example: `  dws drive upload --file ./report.pdf
   dws drive upload --file ./slides.pptx --file-name "Q1汇报.pptx"
   dws drive upload --file ./data.xlsx --folder <dentryUuid>`,
@@ -409,9 +376,9 @@ func newDriveUploadCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("file", "", "本地文件路径 (必填)")
 	cmd.Flags().String("file-name", "", "文件显示名称 (默认使用文件名)")
 	addDriveHiddenStringFlag(cmd, "name", "--file-name 的兼容别名")
-	cmd.Flags().String("space-id", "", "目标空间 ID，不传则使用「我的文件」")
-	cmd.Flags().String("mime-type", "", "文件 MIME 类型，不传则自动推断")
-	cmd.Flags().String("folder", "", "父节点 ID (dentryUuid)，不传则上传到空间根目录")
+	cmd.Flags().String("space-id", "", "目标空间 ID，不传则使用「我的文件」 (可选)")
+	cmd.Flags().String("mime-type", "", "文件 MIME 类型，不传则自动推断 (可选)")
+	cmd.Flags().String("folder", "", "父节点 ID (dentryUuid)，不传则上传到空间根目录 (可选)")
 	addDriveHiddenStringFlag(cmd, "parent-id", "--folder 的兼容别名")
 	return cmd
 }
@@ -530,12 +497,20 @@ func runDriveUpload(cmd *cobra.Command, runner executor.Runner) error {
 
 func newDriveDeleteCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:               "delete",
-		Short:             "删除文件/文件夹到回收站",
+		Use:   "delete",
+		Short: "删除文件/文件夹到回收站",
+		Long: `将钉盘中的文件或文件夹移入回收站。
+
+注意: 这是一个危险操作，文件将被移入回收站。执行前需要确认，或传入 --yes 跳过确认。
+--node 对应 drive list 返回的 fileId 字段（即 dentryUuid）。
+
+权限要求: 对文档有"管理"权限。`,
+		Example: `  dws drive delete --node <dentryUuid> --yes    # 查询 fileId: dws drive list
+  dws drive delete --node <dentryUuid>           # 交互式确认后删除`,
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fileID, err := driveRequiredFlagOrFallback(cmd, "file-id", "node")
+			fileID, err := driveRequiredFlagOrFallback(cmd, "node", "file-id")
 			if err != nil {
 				return err
 			}
@@ -547,8 +522,8 @@ func newDriveDeleteCommand(runner executor.Runner) *cobra.Command {
 		},
 	}
 	preferLegacyLeaf(cmd)
-	cmd.Flags().String("file-id", "", "文件/文件夹 ID (dentryUuid)，即 drive list 返回的 fileId (必填)")
-	addDriveHiddenStringFlag(cmd, "node", "--file-id 的兼容别名")
+	cmd.Flags().String("node", "", "文件/文件夹 ID (dentryUuid)，即 drive list 返回的 fileId (必填)")
+	addDriveHiddenStringFlag(cmd, "file-id", "--node 的兼容别名")
 	cmd.Flags().BoolP("yes", "y", false, "跳过确认直接删除")
 	return cmd
 }
@@ -592,7 +567,7 @@ func runDriveInfo(cmd *cobra.Command, runner executor.Runner, params map[string]
 }
 
 func runDriveDownload(cmd *cobra.Command, runner executor.Runner) error {
-	fileID, err := driveRequiredFlagOrFallback(cmd, "file-id", "node")
+	fileID, err := driveRequiredFlagOrFallback(cmd, "node", "file-id")
 	if err != nil {
 		return err
 	}

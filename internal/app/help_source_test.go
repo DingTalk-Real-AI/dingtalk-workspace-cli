@@ -56,7 +56,6 @@ func TestRootCommandDoesNotInjectPatchedHelpCommands(t *testing.T) {
 
 	root := NewRootCommand()
 	for _, path := range []string{
-		"doc upload",
 		"chat message list-topic-replies",
 		"minutes list all",
 	} {

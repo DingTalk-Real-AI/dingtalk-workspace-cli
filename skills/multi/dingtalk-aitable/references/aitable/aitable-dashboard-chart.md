@@ -33,11 +33,11 @@ dws aitable chart get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --chart-
 | 命令 | 用途 | 必填参数 |
 |------|------|----------|
 | `chart get` | 获取图表详情 | `--base-id` `--dashboard-id` `--chart-id` |
-| `chart create` | 创建图表 | `--base-id` `--dashboard-id` `--config` |
+| `chart create` | 创建图表 | `--base-id` `--dashboard-id` `--config` `--layout` |
 | `chart update` | 更新图表配置 | `--base-id` `--dashboard-id` `--chart-id` `--config` |
 | `chart delete` | 删除图表 | `--base-id` `--dashboard-id` `--chart-id` `--yes` |
 | `chart widgets-example` | 查看图表 widgets 配置模板 | 无 |
 
 ## 配置获取流程
 
-创建图表前，必须先调用 `chart widgets-example` 查看配置模板，了解每种图表类型需要的字段结构，然后根据实际 tableId 和 fieldId 填充配置。
+创建图表前，必须先调用 `chart widgets-example` 查看配置模板，了解每种图表类型需要的字段结构，然后根据实际 tableId 和 fieldId 填充配置；同时必须传 `--layout` 指定图表位置和尺寸，例如 `--layout '{"x":0,"y":0,"w":6,"h":4}'`。
