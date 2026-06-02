@@ -6,13 +6,25 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.33] - 2026-06-02
+
+This release merges the multi-contributor `pre-mcp-discovery` feature branch into `main` as a single squash (#391), bringing a large batch of new product surface — full DingTalk **docs** (`doc`), **knowledge base** (`wiki`), **AI app** (`aiapp`), AI-table **forms** + **import/export**, and reworked **mail** / **todo** / **report** command trees — while keeping service discovery pinned to production `https://mcp.dingtalk.com` (the branch's `pre-mcp.dingtalk.com` endpoint change was deliberately excluded; the four host constants in `skill_command.go` / `auth/endpoints.go` / `cli/loader.go` / `market/registry.go` stay on prod). It also folds in the portable auth bundle (`dws auth export` / `import`, #357) and PAT batch authorization (#389).
+
 ### Added
 
-- **`dws auth export` / `dws auth import`** — portable auth bundle for migrating Linux sandbox credentials. Exports the encrypted keychain (`~/.local/share/dws-cli`, including `auth-token.enc` and `dek`) plus required `~/.dws` config so refresh tokens survive import; copying only `app.json` leaves access tokens expiring after ~2 hours. Supports `-o` / `-i` tar.gz paths and `--base64` for copy/paste between sandboxes. `dws auth status` now shows refresh-token validity in table output.
+- **`dws doc` — full DingTalk document command family** (#387, #362, #388, #390; `internal/helpers/doc.go`, `internal/helpers/doc_jsonml.go`, `internal/helpers/docjsonml/`) — search / list / info / read / create / update / upload / download / copy / move / rename, plus `file`, `folder`, `block`-level editing and `comment` (list / create / reply / create-inline). Authoring supports both DocxXML and a JSONML format with a v2 schema validator (`docjsonml/jsonml-schema-v2.json` + `doc_jsonml_validate_v2.go`). Document export and OA alignment land here.
+- **`dws wiki` — knowledge base management** (`internal/helpers/wiki.go`, `internal/helpers/wiki_proxy.go`) — knowledge space `create` / `get` / `list` / `search` and member `add` / `list` / `update`, routed through a wiki proxy server.
+- **`dws aiapp` — AI application lifecycle** (`internal/helpers/aiapp.go`) — `create` (with prompt / attachments / skills), `query` by task ID, `modify` by thread ID.
+- **`dws aitable` forms + import/export** (`internal/helpers/aitable_form.go`, `internal/helpers/aitable_export_import.go`) — datasheet form management and full record import/export, the latter driven through the async-task helper for large datasets.
+- **Reworked `chat` / `report` / `todo` / `contact` / `mail` command trees aligned to the Wukong baseline** (#355; `internal/compat/mail_hooks.go`, `internal/compat/todo_hooks.go`, `internal/helpers/report_readable.go`) — mail and todo gain dedicated compat hooks; `report` gains a human-readable rendering path alongside the raw JSON, plus deprecation shims for the old report shape.
+- **`dws auth export` / `dws auth import`** (#357) — portable auth bundle for migrating Linux sandbox credentials. Exports the encrypted keychain (`~/.local/share/dws-cli`, including `auth-token.enc` and `dek`) plus required `~/.dws` config so refresh tokens survive import; copying only `app.json` leaves access tokens expiring after ~2 hours. Supports `-o` / `-i` tar.gz paths and `--base64` for copy/paste between sandboxes. `dws auth status` now shows refresh-token validity in table output.
+- **Async-task and paging infrastructure** (`pkg/asynctask/`, `pkg/paging/`) — shared helpers underpinning long-running operations (e.g. aitable import/export, doc export) and cursor/page traversal.
 
 ### Changed
 
-- **Breaking: `dws pat chmod` now prints a compact authorization summary by default** — scripts that parse the raw MCP JSON response from stdout must pass `--format json` or `--verbose` to preserve the previous machine-readable payload. The summary keeps the grant status, agentCode, grantType, scope counts, and next-action hint without dumping full scope detail.
+- **`envelope` now registers `cli.Aliases` as cobra aliases** (#391) — discovery-generated commands expose their declared aliases natively in the command tree, with accompanying command-structure and JSON-parsing cleanups.
+- **Breaking: `dws pat chmod` prints a compact authorization summary by default, and gains batch authorization flows** (#389; `internal/pat/chmod.go`) — scripts that parse the raw MCP JSON from stdout must now pass `--format json` or `--verbose` to keep the machine-readable payload; the default summary keeps grant status, agentCode, grantType, scope counts, and a next-action hint. New batch grant/plan flows (`pat.batch_grant` / `pat.batch_plan`) authorize multiple products in one session, fall back to the legacy single-grant path when the server reports `PAT_BATCH_AUTH_UNSUPPORTED`, use the server's default `agentCode` when none is given, and surface per-tool authorization metadata for grant planning.
+- **Skill packs synced to the Wukong-aligned content** across attendance / calendar / minutes / oa / sheet and others (#391).
 
 ## [1.0.32] - 2026-05-25
 
