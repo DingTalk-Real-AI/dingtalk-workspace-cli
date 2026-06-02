@@ -1624,7 +1624,11 @@ func runDocExport(cmd *cobra.Command, runner executor.Runner) error {
 		return apperrors.NewValidation("--output is required")
 	}
 	timeoutSec, _ := cmd.Flags().GetInt("timeout-sec")
-	progressOut := cmd.ErrOrStderr()
+	progressOut := cmd.OutOrStdout()
+	emitProgress := func(format string, args ...any) {
+		msg := fmt.Sprintf(i18n.T(format), args...)
+		fmt.Fprint(progressOut, msg)
+	}
 	exportFormat := strings.TrimSpace(docStringFlag(cmd, "export-format"))
 	if exportFormat != "" && !strings.EqualFold(exportFormat, "docx") {
 		return apperrors.NewValidation("--export-format only supports docx")
@@ -1643,7 +1647,8 @@ func runDocExport(cmd *cobra.Command, runner executor.Runner) error {
 		}
 		jobID := extractDocExportJobID(result.Response)
 		if jobID != "" {
-			fmt.Fprintf(progressOut, "jobId: %s\n", jobID)
+			emitProgress("    任务已提交，jobId: %s\n", jobID)
+			emitProgress("[2/3] 等待导出完成...\n")
 		}
 		return jobID, nil
 	}
@@ -1670,11 +1675,11 @@ func runDocExport(cmd *cobra.Command, runner executor.Runner) error {
 		))
 	}
 
-	fmt.Fprintf(progressOut, i18n.T("[1/3] 提交导出任务 (node=%s)...\n"), nodeID)
+	emitProgress("[1/3] 提交导出任务...\n")
 	res, err := asynctask.Submit(cmd.Context(), submitFn, queryFn, asynctask.Options{
 		Timeout: time.Duration(timeoutSec) * time.Second,
 		ProgressFn: func(attempt int, status asynctask.Status, elapsed time.Duration) {
-			fmt.Fprintf(progressOut, i18n.T("[2/3] 第 %d/30 次查询（状态=%s，已耗时 %s）\n"),
+			emitProgress("    第 %d/30 次查询（状态=%s，已耗时 %s）\n",
 				attempt, status, elapsed.Round(time.Second))
 		},
 	})
@@ -1697,17 +1702,17 @@ func runDocExport(cmd *cobra.Command, runner executor.Runner) error {
 	case asynctask.StatusSuccess:
 		if res.DownloadURL != "" {
 			outputPath := resolveDocExportOutputPath(output, res.DownloadURL, res.JobID)
-			fmt.Fprintf(progressOut, i18n.T("[3/3] 下载文件到：%s\n"), outputPath)
+			emitProgress("[3/3] 下载文件到 %s ...\n", outputPath)
 			if err := asynctask.Download(cmd.Context(), res.DownloadURL, outputPath); err != nil {
 				return fmt.Errorf(i18n.T("download failed: %w"), err)
 			}
 			out["output"] = outputPath
-			fmt.Fprintln(progressOut, i18n.T("导出完成"))
+			emitProgress("导出完成: %s\n", outputPath)
 		}
 	case asynctask.StatusFailed:
 		return apperrors.NewValidation(fmt.Sprintf("export failed: %s", res.Message))
 	case asynctask.StatusTimeout:
-		fmt.Fprintf(progressOut, i18n.T("任务超时，请用 dws doc export get --job-id %s 继续等待\n"), res.JobID)
+		emitProgress("任务超时，请用 dws doc export get --job-id %s 继续等待\n", res.JobID)
 	}
 
 	return writeCommandPayload(cmd, out)
