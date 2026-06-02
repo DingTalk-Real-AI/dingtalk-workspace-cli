@@ -265,6 +265,9 @@ dws schema --jq '.products[] | {id, tool_count: (.tools | length)}'
 # Step 2: Inspect target tool's parameter schema
 dws schema aitable.query_records --jq '.tool.parameters'
 
+# Optional: inspect DingTalk authorization metadata for PAT planning
+dws schema aitable.query_records --jq '.tool.auth'
+
 # Step 3: Construct the correct call
 dws aitable record query --base-id BASE_ID --table-id TABLE_ID --limit 10
 ```
@@ -443,6 +446,7 @@ dws aitable record query --base-id BASE_ID --table-id TABLE_ID --fields invocati
 dws schema                                              # list all products and tools
 dws schema aitable.query_records                        # view parameter schema
 dws schema aitable.query_records --jq '.tool.required'   # view required fields
+dws schema aitable.query_records --jq '.tool.auth'       # view authorization metadata
 dws schema --jq '.products[].id'                        # extract all product IDs
 ```
 

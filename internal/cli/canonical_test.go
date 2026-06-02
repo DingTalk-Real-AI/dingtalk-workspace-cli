@@ -147,6 +147,12 @@ func TestCompactToolEmitsExtendedFields(t *testing.T) {
 			},
 		},
 		Annotations: &ir.ToolAnnotations{DestructiveHint: &destructive},
+		Auth: &ir.ToolAuthMetadata{
+			ProductCode:         "calendar",
+			RequiredPermissions: []string{"Calendar.Event.Write"},
+			GrantProductCodes:   []string{"calendar"},
+			AuthMetaHash:        "sha256:test",
+		},
 		FlagOverlay: map[string]ir.FlagOverlay{
 			"receiverUserIdList": {Alias: "users", Transform: "csv_to_array"},
 		},
@@ -170,6 +176,13 @@ func TestCompactToolEmitsExtendedFields(t *testing.T) {
 	}
 	if _, ok := out["annotations"]; !ok {
 		t.Errorf("annotations missing, keys = %v", keysOf(out))
+	}
+	auth, ok := out["auth"].(*ir.ToolAuthMetadata)
+	if !ok {
+		t.Fatalf("auth type = %T", out["auth"])
+	}
+	if auth.RequiredPermissions[0] != "Calendar.Event.Write" {
+		t.Errorf("auth required permissions = %#v", auth.RequiredPermissions)
 	}
 	overlay, ok := out["flag_overlay"].(map[string]ir.FlagOverlay)
 	if !ok {
