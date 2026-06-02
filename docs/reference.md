@@ -76,6 +76,7 @@ Canonical 路径先匹配；落空后走 CLI 路径（product → group.. → cl
 | `parameters` / `required` | MCP 输入 JSON Schema 的 properties / required |
 | `output_schema` | MCP 输出 Schema（上游下发时才有） |
 | `sensitive` | 敏感写操作，需 `--yes` 确认 |
+| `auth` | DingTalk 授权元数据，包括 `requiredScopes` / `requiredPermissions` / `recommendedScopes` / `grantProductCodes` / `riskAction` / `confirmationRequired` |
 | `annotations.destructive_hint` | 对齐 MCP 2025+ annotations，目前从 `sensitive` 映射 |
 | `flag_overlay[param]` | CLI 层对 MCP 参数的改写：`alias` / `transform` / `transform_args` / `env_default` / `default` / `hidden` |
 
@@ -85,6 +86,7 @@ Canonical 路径先匹配；落空后走 CLI 路径（product → group.. → cl
 
 ```bash
 dws schema ding.send_ding_message --jq '.tool.flag_overlay'       # 只看 overlay
+dws schema calendar.create_event --jq '.tool.auth'                # 只看授权元数据
 dws schema --jq '.products[] | {id, count: (.tools|length)}'      # 各产品工具数
 dws schema aitable.delete_base --jq '.tool.annotations'           # 敏感操作提示
 ```

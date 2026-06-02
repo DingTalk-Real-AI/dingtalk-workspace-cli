@@ -88,6 +88,8 @@ const (
 	envDingtalkTraceID   = "DINGTALK_TRACE_ID"
 	envDingtalkSessionID = "DINGTALK_SESSION_ID"
 	envDingtalkMessageID = "DINGTALK_MESSAGE_ID"
+	envDWSSessionID      = "DWS_SESSION_ID"
+	envRewindSessionID   = "REWIND_SESSION_ID"
 
 	// Environment variables for third-party channel integration
 	envDWSChannel = "DWS_CHANNEL"
@@ -162,6 +164,7 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 	if r.loader == nil || r.transport == nil {
 		return r.fallback.Run(ctx, invocation)
 	}
+	r.transport.ExtraHeaders = resolveIdentityHeaders()
 
 	// Mock mode: skip catalog validation, use a placeholder endpoint.
 	if r.globalFlags != nil && r.globalFlags.Mock {
@@ -677,11 +680,18 @@ func resolveIdentityHeaders() map[string]string {
 	// open-source edition pins to edition.DefaultOSSClawType via the
 	// MergeHeaders hook below) and it does NOT influence the host-owned
 	// PAT decision (driven solely by DINGTALK_DWS_AGENTCODE).
+	sessionID := os.Getenv(envDingtalkSessionID)
+	if sessionID == "" {
+		sessionID = os.Getenv(envDWSSessionID)
+	}
+	if sessionID == "" {
+		sessionID = os.Getenv(envRewindSessionID)
+	}
 	envHeaders := map[string]string{
 		"x-dingtalk-agent":          os.Getenv(envDingtalkAgent),
 		"x-dingtalk-dws-agent-code": strings.TrimSpace(os.Getenv(authpkg.AgentCodeEnv)),
 		"x-dingtalk-trace-id":       os.Getenv(envDingtalkTraceID),
-		"x-dingtalk-session-id":     os.Getenv(envDingtalkSessionID),
+		"x-dingtalk-session-id":     sessionID,
 		"x-dingtalk-message-id":     os.Getenv(envDingtalkMessageID),
 	}
 	for k, v := range envHeaders {
