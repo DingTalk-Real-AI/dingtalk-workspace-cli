@@ -351,8 +351,8 @@ func TestNestedShortHelpDoesNotRequirePINOrLogin(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatalf("Execute(devdoc article search -h) error = %v", err)
 	}
-	if !strings.Contains(out.String(), "devdoc/search") {
-		t.Fatalf("nested short help output missing command title:\n%s", out.String())
+	if !strings.Contains(out.String(), "搜索开放平台文档") || !strings.Contains(out.String(), "dws devdoc article search") {
+		t.Fatalf("nested short help output missing command help:\n%s", out.String())
 	}
 }
 

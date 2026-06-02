@@ -73,6 +73,8 @@ func (aitableHandler) Command(runner executor.Runner) *cobra.Command {
 		newAitableBaseCreateCommand(runner),
 		newAitableBaseUpdateCommand(runner),
 		newAitableBaseDeleteCommand(runner),
+		newAitableBaseGetPrimaryDocIdCommand(runner),
+		newAitableBaseCopyCommand(runner),
 	)
 
 	table := &cobra.Command{
@@ -90,6 +92,7 @@ func (aitableHandler) Command(runner executor.Runner) *cobra.Command {
 		newAitableTableCreateCommand(runner),
 		newAitableTableUpdateCommand(runner),
 		newAitableTableDeleteCommand(runner),
+		newAitableTableListAlias(runner),
 	)
 
 	field := &cobra.Command{
@@ -107,6 +110,7 @@ func (aitableHandler) Command(runner executor.Runner) *cobra.Command {
 		newAitableFieldCreateCommand(runner),
 		newAitableFieldUpdateCommand(runner),
 		newAitableFieldDeleteCommand(runner),
+		newAitableFieldListAlias(runner),
 	)
 
 	record := &cobra.Command{
@@ -121,9 +125,12 @@ func (aitableHandler) Command(runner executor.Runner) *cobra.Command {
 	}
 	record.AddCommand(
 		newAitableRecordQueryCommand(runner),
+		newAitableRecordGetCommand(runner),
 		newAitableRecordCreateCommand(runner),
 		newAitableRecordUpdateCommand(runner),
+		newAitableRecordBatchUpdateCommand(runner),
 		newAitableRecordDeleteCommand(runner),
+		newAitableRecordListAlias(runner),
 	)
 
 	template := &cobra.Command{
@@ -153,8 +160,229 @@ func (aitableHandler) Command(runner executor.Runner) *cobra.Command {
 		newAITableUploadFileCommand(runner),
 	)
 
-	root.AddCommand(base, table, field, record, template, attachment)
+	// export / import group：覆盖 mse 默认行为，提供同步轮询 + 自动 IO
+	export := &cobra.Command{
+		Use:               "export",
+		Short:             i18n.T("AI 表格数据导出（异步任务）"),
+		Args:              cobra.NoArgs,
+		TraverseChildren:  true,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+	export.AddCommand(newAitableExportDataCommand(runner))
+
+	importCmd := &cobra.Command{
+		Use:               "import",
+		Short:             i18n.T("AI 表格数据导入（异步任务）"),
+		Args:              cobra.NoArgs,
+		TraverseChildren:  true,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+	importCmd.AddCommand(
+		newAitableImportUploadCommand(runner),
+		newAitableImportDataCommand(runner),
+	)
+
+	chart := &cobra.Command{
+		Use:               "chart",
+		Short:             i18n.T("图表管理"),
+		Args:              cobra.NoArgs,
+		TraverseChildren:  true,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+	chartShare := &cobra.Command{
+		Use:               "share",
+		Short:             i18n.T("图表分享管理"),
+		Args:              cobra.NoArgs,
+		TraverseChildren:  true,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+	chartShare.AddCommand(
+		newAitableChartShareGetCommand(runner),
+		newAitableChartShareUpdateCommand(runner),
+	)
+	chart.AddCommand(
+		newAitableChartGetCommand(runner),
+		newAitableChartCreateCommand(runner),
+		newAitableChartUpdateCommand(runner),
+		newAitableChartDeleteCommand(runner),
+		newAitableChartWidgetsExampleCommand(runner),
+		chartShare,
+	)
+
+	dashboard := &cobra.Command{
+		Use:               "dashboard",
+		Short:             i18n.T("仪表盘管理"),
+		Args:              cobra.NoArgs,
+		TraverseChildren:  true,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+	dashboardShare := &cobra.Command{
+		Use:               "share",
+		Short:             i18n.T("仪表盘分享管理"),
+		Args:              cobra.NoArgs,
+		TraverseChildren:  true,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+	dashboardShare.AddCommand(
+		newAitableDashboardShareGetCommand(runner),
+		newAitableDashboardShareUpdateCommand(runner),
+	)
+	dashboard.AddCommand(
+		newAitableDashboardGetCommand(runner),
+		newAitableDashboardCreateCommand(runner),
+		newAitableDashboardUpdateCommand(runner),
+		newAitableDashboardDeleteCommand(runner),
+		newAitableDashboardConfigExampleCommand(runner),
+		dashboardShare,
+	)
+
+	view := &cobra.Command{
+		Use:               "view",
+		Short:             i18n.T("视图管理"),
+		Args:              cobra.NoArgs,
+		TraverseChildren:  true,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+	view.AddCommand(
+		newAitableViewGetCommand(runner),
+		newAitableViewListCommand(runner),
+		newAitableViewCreateCommand(runner),
+		newAitableViewUpdateCommand(runner),
+		newAitableViewDeleteCommand(runner),
+	)
+
+	root.AddCommand(base, table, field, record, newAitableFormCommand(runner), template, attachment, export, importCmd, dashboard, chart, view)
+
+	// 顶层别名：dws aitable search/list/create/info → base search/list/create/get
+	// 每个 alias 复用现有 constructor，独立 cobra.Command 实例（避免与 base.* 共享 flag 指针）
+	root.AddCommand(
+		newAitableSearchAlias(runner),
+		newAitableListAlias(runner),
+		newAitableCreateAlias(runner),
+		newAitableInfoAlias(runner),
+	)
 	return root
+}
+
+func newAitableSearchAlias(runner executor.Runner) *cobra.Command {
+	cmd := newAitableBaseSearchCommand(runner)
+	cmd.Use = "search"
+	cmd.Short = i18n.T("搜索 AI 表格（dws aitable base search 的别名）")
+	cmd.Example = "  dws aitable search --query 项目管理"
+	return cmd
+}
+
+func newAitableListAlias(runner executor.Runner) *cobra.Command {
+	cmd := newAitableBaseListCommand(runner)
+	cmd.Use = "list"
+	cmd.Short = i18n.T("获取 AI 表格列表（dws aitable base list 的别名）")
+	cmd.Example = "  dws aitable list\n  dws aitable list --limit 5"
+	return cmd
+}
+
+func newAitableCreateAlias(runner executor.Runner) *cobra.Command {
+	cmd := newAitableBaseCreateCommand(runner)
+	cmd.Use = "create"
+	cmd.Short = i18n.T("创建 AI 表格（dws aitable base create 的别名）")
+	cmd.Example = "  dws aitable create --name 项目跟踪"
+	return cmd
+}
+
+func newAitableInfoAlias(runner executor.Runner) *cobra.Command {
+	cmd := newAitableBaseGetCommand(runner)
+	cmd.Use = "info"
+	cmd.Short = i18n.T("获取 AI 表格信息（dws aitable base get 的别名）")
+	cmd.Example = "  dws aitable info --base-id BASE_ID"
+	return cmd
+}
+
+// TRANSITIONAL: 等 mse 把 get_tables / get_fields / query_records 三条
+// toolOverride 加上 `cliAliases: ["list"]` 字段后，下面 3 个 helper 可整体
+// 删除——CLI discovery 会自动把 list 注册为对应命令的 cobra alias。
+// 工单：plan/mse-yuyuan-patch.md 改动 1.2。
+
+func newAitableTableListAlias(runner executor.Runner) *cobra.Command {
+	cmd := newAitableTableGetCommand(runner)
+	cmd.Use = "list"
+	cmd.Short = i18n.T("获取数据表信息（dws aitable table get 的别名）")
+	cmd.Example = "  dws aitable table list --base-id BASE_ID\n  dws aitable table list --base-id BASE_ID --table-ids tbl1,tbl2"
+	return cmd
+}
+
+func newAitableFieldListAlias(runner executor.Runner) *cobra.Command {
+	cmd := newAitableFieldGetCommand(runner)
+	cmd.Use = "list"
+	cmd.Short = i18n.T("获取字段列表（dws aitable field get 的别名）")
+	cmd.Example = "  dws aitable field list --base-id BASE_ID --table-id TABLE_ID"
+	return cmd
+}
+
+func newAitableRecordListAlias(runner executor.Runner) *cobra.Command {
+	cmd := newAitableRecordQueryCommand(runner)
+	cmd.Use = "list"
+	cmd.Short = i18n.T("获取记录列表（dws aitable record query 的别名）")
+	cmd.Example = "  dws aitable record list --base-id BASE_ID --table-id TABLE_ID"
+	return cmd
+}
+
+// TRANSITIONAL: 等 mse 把 get_base_primary_doc_id 加入 aitable toolOverrides
+// 后，本 helper 可整体删除——CLI discovery 会自动生成等价命令。
+// 工单：plan/mse-yuyuan-patch.md 改动 1。
+func newAitableBaseGetPrimaryDocIdCommand(runner executor.Runner) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "get-primary-doc-id",
+		Short: i18n.T("获取主键文档 ID"),
+		Long: i18n.T(`根据 baseId / tableId / recordId 获取主键文档对应的 dentryUuid。
+当 AI 表格使用文档类型作为主键字段时，可凭此 uuid 进一步获取文档内容或执行其它操作。`),
+		Example:           "  dws aitable base get-primary-doc-id --base-id BASE_ID --table-id TABLE_ID --record-id RECORD_ID",
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			baseID, err := aitableRequiredFlagOrFallback(cmd, "base-id", "base")
+			if err != nil {
+				return err
+			}
+			tableID, err := aitableRequiredFlag(cmd, "table-id")
+			if err != nil {
+				return err
+			}
+			recordID, err := aitableRequiredFlag(cmd, "record-id")
+			if err != nil {
+				return err
+			}
+			return runAitableTool(cmd, runner, "get_base_primary_doc_id", map[string]any{
+				"baseId":   baseID,
+				"tableId":  tableID,
+				"recordId": recordID,
+			})
+		},
+	}
+	preferLegacyLeaf(cmd)
+	cmd.Flags().String("base-id", "", i18n.T("Base ID (必填)"))
+	cmd.Flags().String("table-id", "", i18n.T("Table ID (必填)"))
+	cmd.Flags().String("record-id", "", i18n.T("Record ID (必填)"))
+	return cmd
 }
 
 // ── base delete ────────────────────────────────────────────
@@ -262,7 +490,7 @@ func newAitableFieldDeleteCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			baseID, _ := cmd.Flags().GetString("base-id")
+			baseID := aitableFlagOrFallback(cmd, "base-id", "base")
 			tableID, _ := cmd.Flags().GetString("table-id")
 			fieldID, _ := cmd.Flags().GetString("field-id")
 			if strings.TrimSpace(baseID) == "" {
@@ -298,6 +526,7 @@ func newAitableFieldDeleteCommand(runner executor.Runner) *cobra.Command {
 	}
 	preferLegacyLeaf(cmd)
 	cmd.Flags().String("base-id", "", i18n.T("Base ID (必填)"))
+	addAitableHiddenStringFlag(cmd, "base", "--base-id 的兼容别名")
 	cmd.Flags().String("table-id", "", i18n.T("数据表 ID (必填)"))
 	cmd.Flags().String("field-id", "", i18n.T("字段 ID (必填)"))
 
@@ -330,12 +559,7 @@ func newAitableRecordDeleteCommand(runner executor.Runner) *cobra.Command {
 			if !confirmDeletePrompt(cmd, i18n.T("记录"), recordIDsStr) {
 				return nil
 			}
-			var recordIDs []any
-			for _, id := range strings.Split(recordIDsStr, ",") {
-				if s := strings.TrimSpace(id); s != "" {
-					recordIDs = append(recordIDs, s)
-				}
-			}
+			recordIDs := parseAitableCSVValues(recordIDsStr)
 			params := map[string]any{
 				"baseId":    baseID,
 				"tableId":   tableID,
@@ -404,6 +628,7 @@ func newAITableUploadFileCommand(runner executor.Runner) *cobra.Command {
 之后再自己 PUT 文件二进制要可靠得多.`,
 		Example:           "  dws aitable attachment upload-file --base-id <BASE_ID> --file ./report.pdf",
 		Args:              cobra.NoArgs,
+		Hidden:            true,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			baseId, _ := cmd.Flags().GetString("base-id")

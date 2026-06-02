@@ -105,6 +105,18 @@ type Route struct {
 	// (rename / drop / columns) before the formatter emits it. Wired up from
 	// CLIToolOverride.OutputFormat. See discovery-schema-v3 §2.5.
 	OutputTransform func(map[string]any) map[string]any
+	// RejectPositional forces cobra.NoArgs on the generated leaf when no
+	// positional bindings exist, so stray positional tokens (e.g.
+	// `dws contact label list unexpected`) exit non-zero. Sourced from
+	// CLIToolOverride.RejectPositional. Ignored when the leaf already
+	// declares positional bindings — their arity validator wins.
+	RejectPositional bool
+	// RequireTogether groups flag aliases that must all be set together (or
+	// all left unset). Each inner slice produces one PreRunE cross-field
+	// check. Sourced from CLIToolOverride.RequireTogether. Unknown flag
+	// names are logged and skipped at command-build time (consistent with
+	// applyFlagConstraints semantics).
+	RequireTogether [][]string
 }
 
 type CommandFactory func(runner executor.Runner) *cobra.Command
@@ -172,7 +184,16 @@ func NewDirectCommand(route Route, runner executor.Runner) *cobra.Command {
 	var argsValidator cobra.PositionalArgs = cobra.ArbitraryArgs
 	switch {
 	case totalMax == 0:
-		argsValidator = cobra.ArbitraryArgs
+		// No positional bindings: default to ArbitraryArgs unless the
+		// envelope explicitly asked for strict no-positional. We only
+		// honor RejectPositional in this branch because leaves with
+		// positional bindings already get a stricter validator below;
+		// flipping them to NoArgs would silently break valid invocations.
+		if route.RejectPositional {
+			argsValidator = cobra.NoArgs
+		} else {
+			argsValidator = cobra.ArbitraryArgs
+		}
 	case strictMin > 0 && strictMin == totalMax:
 		argsValidator = cobra.MinimumNArgs(strictMin)
 	case strictMin > 0:
@@ -221,6 +242,12 @@ func NewDirectCommand(route Route, runner executor.Runner) *cobra.Command {
 		Hidden:            route.Hidden,
 		Args:              argsValidator,
 		DisableAutoGenTag: true,
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			// Envelope-declared cross-field "must be set together" checks.
+			// Returns the first failing group so users see one actionable
+			// error per invocation (mirrors cobra's MarkFlagsOneRequired UX).
+			return validateRequireTogether(cmd, route.RequireTogether)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonPayload, err := cmd.Flags().GetString("json")
 			if err != nil {
@@ -1031,4 +1058,43 @@ func compatFlagName(raw string) string {
 		}
 	}
 	return strings.Trim(builder.String(), "-")
+}
+
+// validateRequireTogether enforces "either all set, or all unset" semantics
+// for each group of flag aliases. Returns a validation error pointing at the
+// first failing group; nil if every group satisfies the check or no groups
+// were declared. Unknown flag names in a group are skipped silently — the
+// envelope load path already warned about them when applyFlagConstraints
+// validated the same shape for MutuallyExclusive / RequireOneOf.
+func validateRequireTogether(cmd *cobra.Command, groups [][]string) error {
+	for _, group := range groups {
+		set := make([]string, 0, len(group))
+		unset := make([]string, 0, len(group))
+		for _, raw := range group {
+			name := strings.TrimSpace(raw)
+			if name == "" {
+				continue
+			}
+			if cmd.Flags().Lookup(name) == nil {
+				continue
+			}
+			if cobracmd.FlagChanged(cmd, name) {
+				set = append(set, name)
+			} else {
+				unset = append(unset, name)
+			}
+		}
+		if len(set) == 0 || len(unset) == 0 {
+			continue
+		}
+		// Render a stable, human-readable list of the group's flag names so
+		// the error matches what the user typed. Example output:
+		//   --start 和 --end 必须同时设置或同时不设置
+		return apperrors.NewValidation(fmt.Sprintf(
+			"--%s 和 --%s 必须同时设置或同时不设置",
+			strings.Join(set, " --"),
+			strings.Join(unset, " --"),
+		))
+	}
+	return nil
 }

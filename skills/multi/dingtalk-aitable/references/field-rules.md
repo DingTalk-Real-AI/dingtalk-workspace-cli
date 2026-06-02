@@ -34,22 +34,6 @@
 > - **漏传的字段不会被隐藏**，而是会被 API 自动追加到列表末尾
 > - **读写命名不一致**：写入键名 `visibleFieldIds`，但读出（`view get`）时该字段在 view 里叫 `columns`——校验顺序时请看 `views[].columns`
 
-## field create 高频错误 flag（LLM 极易踩坑）
-
-> 以下是 LLM 生成命令时**最常犯的 flag 错误**，每个都会返回 `unknown flag` 或被静默忽略。
-> **CLI 只接受 `--name` / `--type` / `--config`（单字段模式）或 `--fields`（批量模式），没有其他 flag 表达字段名 / 类型 / 选项。**
-
-| 错误写法（LLM 直觉） | 正确写法 | 说明 |
-|---|---|---|
-| `--field-name "状态"` | `--name "状态"` | 没有 `--field-name`，flag 就是 `--name` |
-| `--field-type singleSelect` | `--type singleSelect` | 没有 `--field-type` |
-| `--options "进行中,已完成,已归档"` | `--config '{"options":[{"name":"进行中"},{"name":"已完成"},{"name":"已归档"}]}'` | **没有 `--options` flag**，选项必须嵌套在 `--config` 的 JSON 里 |
-| `--property '{"options":...}'` | `--config '{"options":...}'` | 没有 `--property`，对应 flag 是 `--config` |
-| `--select-options "高,中,低"` | `--config '{"options":[{"name":"高"},{"name":"中"},{"name":"低"}]}'` | 同上，没有任何逗号分隔的简写语法 |
-| `--field-config '{...}'` | `--config '{...}'` | 没有 `--field-config` |
-
-> **记忆口诀**：`field create` 的参数只有 4 个单词—— **name / type / config / fields**，其他任何变体拼写都是错的。
-
 ## 字段创建时设置 config（重要）
 
 创建 singleSelect/multipleSelect 字段时，**必须设置选项 (options)**：
@@ -99,17 +83,9 @@ dws aitable table create --base-id <BASE_ID> --name "产品图片" \
 
 ## 记录写入格式（record create / record update）
 
-> 以下是 **记录写入** 时 cells 的格式，不是字段创建的格式。
-
-| 类型 | 写入格式 | 读取返回格式 |
-|------|----------|-------------|
-| text | `"fldXXX":"文本值"` | `"fldXXX":"文本值"` |
-| number | `"fldXXX":123` | `"fldXXX":123` |
-| singleSelect | `"fldXXX":"选项名"` (必须是已存在的选项) | `"fldXXX":{"id":"x","name":"选项名"}` |
-| multipleSelect | `"fldXXX":["选项1","选项2"]` (必须是已存在的选项) | `"fldXXX":[{"id":"x","name":"选项1"}]` |
-| date | `"fldXXX":"2026-03-04"` 或 Unix ms | `"fldXXX":1709510400000` (ms) |
-| user | `"fldXXX":[{"userId":"123"}]` | `"fldXXX":{"uid":"123"}` |
-| attachment | `[{"fileToken":"<token>"}]` — 需先通过 `attachment upload` 获取，见下方 ⬇️ | `[{"url":"...","filename":"...","size":N}]` |
+> 各字段类型的完整写入/读取格式规范请参考：[aitable-cell-value.md](./products/aitable/aitable-cell-value.md)
+>
+> 该文件是 cellValue 格式的 **source of truth**，包含所有字段类型的详细示例和注意事项。
 
 ## ⚠️ 附件上传完整流程（必读！）
 

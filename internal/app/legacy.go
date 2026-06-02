@@ -51,7 +51,14 @@ func newLegacyPublicCommands(ctx context.Context, runner executor.Runner) []*cob
 
 	dynamicCmds := loadDynamicCommands(ctx, runner)
 	helperCmds := helpers.NewPublicCommands(runner)
-	return mergeTopLevelCommands(pickCommands(dynamicCmds, helperCmds))
+	merged := mergeTopLevelCommands(pickCommands(dynamicCmds, helperCmds))
+	// Post-merge product hooks: tasks the envelope cannot express on its
+	// own (e.g. dual-role group+leaf semantics for deprecated aliases).
+	// Keep each hook narrowly scoped to one product so the open-source
+	// command surface remains predictable from the envelope alone.
+	helpers.AttachReportLegacyInboxAlias(merged, runner)
+	helpers.AttachReportListReadableEnrichment(merged, runner)
+	return merged
 }
 
 // pickCommands returns the union of dynamic and helpers commands. For

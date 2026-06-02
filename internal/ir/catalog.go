@@ -38,10 +38,12 @@ type LifecycleInfo struct {
 }
 
 type ProductCLIMetadata struct {
-	Command string `json:"command,omitempty"`
-	Group   string `json:"group,omitempty"`
-	Hidden  bool   `json:"hidden,omitempty"`
-	Skip    bool   `json:"skip,omitempty"`
+	Command  string   `json:"command,omitempty"`
+	Group    string   `json:"group,omitempty"`
+	Hidden   bool     `json:"hidden,omitempty"`
+	Skip     bool     `json:"skip,omitempty"`
+	Aliases  []string `json:"aliases,omitempty"`
+	Prefixes []string `json:"prefixes,omitempty"`
 }
 
 type CLIFlagHint struct {
@@ -268,13 +270,15 @@ func BuildCatalog(runtimeServers []discovery.RuntimeServer) Catalog {
 			lifecyclePtr = &lifecycleCopy
 		}
 		cliMeta := ProductCLIMetadata{
-			Command: strings.TrimSpace(runtimeServer.Server.CLI.Command),
-			Group:   strings.TrimSpace(runtimeServer.Server.CLI.Group),
-			Hidden:  runtimeServer.Server.CLI.Hidden,
-			Skip:    runtimeServer.Server.CLI.Skip,
+			Command:  strings.TrimSpace(runtimeServer.Server.CLI.Command),
+			Group:    strings.TrimSpace(runtimeServer.Server.CLI.Group),
+			Hidden:   runtimeServer.Server.CLI.Hidden,
+			Skip:     runtimeServer.Server.CLI.Skip,
+			Aliases:  append([]string(nil), runtimeServer.Server.CLI.Aliases...),
+			Prefixes: append([]string(nil), runtimeServer.Server.CLI.Prefixes...),
 		}
 		var cliPtr *ProductCLIMetadata
-		if cliMeta.Command != "" || cliMeta.Group != "" || cliMeta.Hidden || cliMeta.Skip {
+		if cliMeta.Command != "" || cliMeta.Group != "" || cliMeta.Hidden || cliMeta.Skip || len(cliMeta.Aliases) > 0 || len(cliMeta.Prefixes) > 0 {
 			cliCopy := cliMeta
 			cliPtr = &cliCopy
 		}

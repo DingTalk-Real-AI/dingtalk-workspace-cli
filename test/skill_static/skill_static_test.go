@@ -43,6 +43,7 @@ var (
 		"dws minutes detail":        true, // minutes.md anti-pattern table
 		"dws minutes info":          true, // (top-level, not under `get`)
 		"dws minutes summary":       true,
+		"dws minutes transcribe":    true, // minutes.md anti-pattern table: LLM 凭印象编造的子命令，正解是 `get transcription`
 		"dws minutes transcription": true,
 		"dws report inbox":          true, // explicit "禁止编造" warnings
 		"dws skill add":             true, // backward-compat stub, exists but not in Available Commands
@@ -244,6 +245,23 @@ func (c *helpCache) get(sub string) string {
 
 var availableRe = regexp.MustCompile(`(?s)Available Commands:\n((?:\s+\S.*\n)+)`)
 
+// usagePathRe extracts the command path from cobra Usage line:
+//
+//	"Usage:\n  dws report inbox list [flags]" → "report inbox list"
+//
+// Used to detect top-level alias dispatch (envelope-declared cli.Aliases /
+// cli.Prefixes[1:]): if the actual Usage path has the same token count as
+// the documented sub but a different first token, sub is a registered alias.
+var usagePathRe = regexp.MustCompile(`(?m)^Usage:\s*\n\s+dws\s+(.+?)(?:\s+\[flags\]|\s+\[command\]|\s*$)`)
+
+func extractUsagePath(helpText string) string {
+	m := usagePathRe.FindStringSubmatch(helpText)
+	if len(m) < 2 {
+		return ""
+	}
+	return strings.TrimSpace(m[1])
+}
+
 func parseAvailable(helpText string) []string {
 	m := availableRe.FindStringSubmatch(helpText)
 	if m == nil {
@@ -311,6 +329,22 @@ func TestSkillCommandsDispatch(t *testing.T) {
 		// In that case Usage line is "Usage:\n  <sub> [flags]\n  <sub> [command]"
 		if strings.Contains(subHelp, "Usage:\n  "+sub+" [flags]\n  "+sub+" [command]") {
 			continue
+		}
+
+		// Top-level alias rewrite: envelope-declared aliases (e.g. report.aliases=["log"],
+		// im.prefixes=["chat","im"]) make `dws log inbox list` dispatch to `dws report
+		// inbox list`. Cobra prints the canonical path in Usage. If the Usage path has
+		// the same token count as sub (minus the "dws" prefix) but a different first
+		// token, sub is a registered alias path — treat as valid.
+		if actualPath := extractUsagePath(subHelp); actualPath != "" {
+			actualTokens := strings.Fields(actualPath)
+			subTokens := strings.Fields(sub)
+			if len(subTokens) > 0 && subTokens[0] == "dws" {
+				subTokens = subTokens[1:]
+			}
+			if len(actualTokens) == len(subTokens) && len(actualTokens) > 0 && actualTokens[0] != subTokens[0] {
+				continue // alias dispatched cleanly to canonical product
+			}
 		}
 
 		// Otherwise verify by looking at parent's Available Commands
