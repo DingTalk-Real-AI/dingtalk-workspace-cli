@@ -197,11 +197,11 @@ func TestDefaultFetchServersLimit(t *testing.T) {
 func TestGetMCPBaseURLUsesConfigFile(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", dir)
-	if err := os.WriteFile(filepath.Join(dir, "mcp_url"), []byte("https://pre-mcp.dingtalk.com\n"), FilePerm); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "mcp_url"), []byte("https://custom-mcp.example.com\n"), FilePerm); err != nil {
 		t.Fatalf("WriteFile(mcp_url) error = %v", err)
 	}
-	if got := GetMCPBaseURL(); got != "https://pre-mcp.dingtalk.com" {
-		t.Fatalf("GetMCPBaseURL() = %q, want prepub URL", got)
+	if got := GetMCPBaseURL(); got != "https://custom-mcp.example.com" {
+		t.Fatalf("GetMCPBaseURL() = %q, want configured URL", got)
 	}
 }
 

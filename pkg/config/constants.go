@@ -188,7 +188,7 @@ func DefaultConfigDir() string {
 }
 
 // GetMCPBaseURL returns the MCP base URL with priority:
-//  1. ~/.dws/mcp_url file content (for pre-release environment)
+//  1. ~/.dws/mcp_url file content (for custom environment)
 //  2. Default value (https://mcp.dingtalk.com)
 func GetMCPBaseURL() string {
 	mcpURLPath := filepath.Join(DefaultConfigDir(), "mcp_url")
