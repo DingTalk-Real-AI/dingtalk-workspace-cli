@@ -94,11 +94,17 @@ func (r *runtimeRunner) emitAudit(ctx context.Context, execID, endpoint string,
 		ev.Client.AgentID = id.AgentID
 		ev.Client.Source = id.Source
 	}
-	// TODO(audit): host_agent (DINGTALK_AGENT) / channel (DWS_CHANNEL) /
-	// agent_code (DINGTALK_DWS_AGENTCODE) are caller-supplied env vars —
-	// FORGEABLE, so they are intentionally NOT recorded here. Add them only
-	// once the gateway returns a SIGNED agent identity bound to the token, so
-	// the audit can't be spoofed. See docs/audit.md "TODO".
+	// Channel (DWS_CHANNEL): which integration/agent is driving dws. SEMI-trusted
+	// — the gateway validates channel membership against allowedChannels (an
+	// unregistered channel is rejected), so it isn't an arbitrary label; but it
+	// is not yet cryptographically bound, so a registered channel could still
+	// impersonate another. Recorded so audit can group by "which agent called".
+	ev.Client.Channel = strings.TrimSpace(os.Getenv(envDWSChannel))
+	// TODO(audit): host_agent (DINGTALK_AGENT) / agent_code
+	// (DINGTALK_DWS_AGENTCODE) are plain caller-supplied env labels — FULLY
+	// FORGEABLE, so they are intentionally NOT recorded here. Add them (and
+	// upgrade channel to fully-trusted) only once the gateway returns a SIGNED
+	// agent identity bound to the token. See docs/audit.md "TODO".
 
 	ev.Device = collectDeviceCached()
 

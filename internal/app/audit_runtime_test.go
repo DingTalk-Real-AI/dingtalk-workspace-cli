@@ -61,6 +61,7 @@ func TestEmitAudit_PopulatesAllObtainableFields(t *testing.T) {
 	t.Setenv(audit.EnvForwardURL, srv.URL)
 	t.Setenv(audit.EnvForwardRedact, "none") // org's own sink: ship verbatim
 	t.Setenv(audit.EnvNLIntent, "把上周的战略会听记导出到桌面")
+	t.Setenv(envDWSChannel, "openclaw") // which agent/channel is driving dws
 
 	var file bytes.Buffer
 	r := &runtimeRunner{
@@ -119,6 +120,10 @@ func TestEmitAudit_PopulatesAllObtainableFields(t *testing.T) {
 	// client.cli_version is the compiled-in version (trustworthy, dws-managed).
 	if local.Client.CLIVersion != version {
 		t.Errorf("client.cli_version = %q, want %q", local.Client.CLIVersion, version)
+	}
+	// client.channel comes from DWS_CHANNEL (which agent/channel is calling).
+	if local.Client.Channel != "openclaw" {
+		t.Errorf("client.channel = %q, want %q", local.Client.Channel, "openclaw")
 	}
 
 	// --- forward sink received the same trace ---

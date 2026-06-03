@@ -87,16 +87,24 @@ type Org struct {
 	Name   string `json:"name,omitempty"`
 }
 
-// Client identifies the dws install + version. Only TRUSTWORTHY fields live
-// here: AgentID/Source are dws-managed install state, CLIVersion is compiled
-// in — none are caller-asserted-per-call.
+// Client identifies the dws install, version, and the integration channel.
 //
-// Deliberately ABSENT (forgeable, env-asserted by the caller — see audit TODO):
-// host_agent (DINGTALK_AGENT), channel (DWS_CHANNEL), agent_code
-// (DINGTALK_DWS_AGENTCODE). They will be added only once the gateway can hand
-// back a SIGNED agent identity so they can't be spoofed.
+// Trust tiers:
+//   - AgentID/Source/CLIVersion: dws-managed install state / compiled-in —
+//     not caller-asserted-per-call.
+//   - Channel (DWS_CHANNEL): SEMI-trusted. The gateway validates channel
+//     membership against allowedChannels (an unregistered channel is rejected,
+//     see auth.classifyDenialReason), so it can't be an arbitrary value — but
+//     it is NOT yet cryptographically bound, so one registered channel could
+//     still impersonate another. Recorded for "which agent/channel called",
+//     flagged as semi-trusted until the gateway signs it (see audit TODO).
+//
+// Deliberately ABSENT (fully forgeable, plain env labels — see audit TODO):
+// host_agent (DINGTALK_AGENT), agent_code (DINGTALK_DWS_AGENTCODE). Added only
+// once the gateway hands back a SIGNED agent identity.
 type Client struct {
 	AgentID    string `json:"agent_id,omitempty"`    // 装机标识: install-time UUID (x-dws-agent-id)
+	Channel    string `json:"channel,omitempty"`     // 渠道/哪个 agent: DWS_CHANNEL (网关校验 membership, 半可信)
 	Source     string `json:"source,omitempty"`      // identity source, 默认 "dws"
 	CLIVersion string `json:"cli_version,omitempty"` // dws 版本
 }
@@ -213,7 +221,7 @@ func (e *Event) Redact(level RedactLevel, salt string) *Event {
 			Timestamp:     cp.Timestamp,
 			TraceID:       cp.TraceID,
 			Org:           Org{CorpID: cp.Org.CorpID},
-			Client:        Client{CLIVersion: cp.Client.CLIVersion}, // version is an ops dimension; drop the install id
+			Client:        Client{CLIVersion: cp.Client.CLIVersion, Channel: cp.Client.Channel}, // version + channel are ops dimensions; drop the install id
 			Module:        cp.Module,
 			Command:       cp.Command,
 			Subcommand:    cp.Subcommand,
