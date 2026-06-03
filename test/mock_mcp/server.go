@@ -24,7 +24,7 @@ func NewServer(fixture Fixture) (*Server, error) {
 
 	s := &Server{Fixture: fixture}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/cli/discovery/apis", s.serveMarketServers)
+	mux.HandleFunc("/cli/discovery/apis/bamboo", s.serveMarketServers)
 	mux.HandleFunc("/mcp/market/detail", s.serveMarketDetail)
 	mux.HandleFunc("/", s.serveMCP)
 
@@ -45,7 +45,7 @@ func DefaultServer() *Server {
 }
 
 func (s *Server) MarketURL() string {
-	return s.URL + "/cli/discovery/apis"
+	return s.URL + "/cli/discovery/apis/bamboo"
 }
 
 func (s *Server) DetailURL(mcpID int) string {

@@ -315,7 +315,6 @@ def run_test(test_case: TestCase) -> dict:
 def get_reference_file(product: str) -> str:
     """Get the reference file for a product"""
     product_to_file = {
-        'aiapp': 'aiapp.md',
         'aitable': 'aitable.md',
         'attendance': 'attendance.md',
         'calendar': 'calendar.md',

@@ -71,9 +71,9 @@ irm https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/ma
 | 模式 | 安装内容 | 适合场景 |
 |------|----------|----------|
 | **mono**（稳定，默认） | 一个 `dws` skill，覆盖全部产品 | 跨产品组合操作；单一入口召唤 |
-| **multi** 🧪 **试验版 / Preview** | 20 个独立产品 skill（`dingtalk-aitable` / `dingtalk-calendar` / `dingtalk-chat` ...） | 单产品任务；每次召唤上下文更小 |
+| **multi** 🧪 **试验版 / Preview** | 19 个独立产品 skill（`dingtalk-aitable` / `dingtalk-calendar` / `dingtalk-chat` ...） | 单产品任务；每次召唤上下文更小 |
 
-> 🧪 **multi 模式当前为 EXPERIMENTAL（试验版 / Preview）**。20 个独立 skill 全部通过 dispatch verifier，但接口、命名、跨 skill 引用后续可能调整。生产 / 共享环境建议优先用 `mono`。问题请提 issue 反馈。
+> 🧪 **multi 模式当前为 EXPERIMENTAL（试验版 / Preview）**。19 个独立 skill 全部通过 dispatch verifier，但接口、命名、跨 skill 引用后续可能调整。生产 / 共享环境建议优先用 `mono`。问题请提 issue 反馈。
 
 怎么选：
 
@@ -274,7 +274,7 @@ dws aitable record query --base-id BASE_ID --table-id TABLE_ID --limit 10
 仓库内置完整的 Agent Skill 体系（`skills/` 目录），目前重组为两套布局：
 
 - `skills/mono/` — 单 skill 布局（一个 `SKILL.md` + `references/products/`），默认推荐。
-- `skills/multi/` — 每个产品一个独立 skill（`dingtalk-aitable/` / `dingtalk-calendar/` / `dingtalk-chat/` ... 共 20 个），每个 skill 自带 `SKILL.md`。🧪 **试验版 / Preview — 各 multi `SKILL.md` 头部有详细注意事项。**
+- `skills/multi/` — 每个产品一个独立 skill（`dingtalk-aitable/` / `dingtalk-calendar/` / `dingtalk-chat/` ... 共 19 个），每个 skill 自带 `SKILL.md`。🧪 **试验版 / Preview — 各 multi `SKILL.md` 头部有详细注意事项。**
 
 安装之后，Claude Code / Cursor 等 AI 工具就能通过自然语言直接操作钉钉：
 
@@ -490,11 +490,10 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 | 知识库 | `wiki` | 21 | `space` `member` `node` `doc` `file` | 知识库管理：空间（`create` / `get` / `list` / `search`）、成员（`add` / `list` / `update`）、节点树、文档与文件 |
 | 开发者文档 | `devdoc` | 1 | `article` | 搜索钉钉开放平台文档 |
 | AI 搜问 | `aisearch` | 3 | `person` | 企业人员搜索：按姓名 / 部门 / 职位 / 职责 / 上级 / 下级 / 手机号 / 工号 多维度过滤（单命令） |
-| AI 应用 | `aiapp` | 4 | — | AI 应用生命周期：`create`（含 prompt / attachments / skills）/ `query`（按任务 ID）/ `modify`（按 thread ID） |
 | 直播 | `live` | 1 | `stream` | 钉钉直播：查看我的直播列表 |
 | Raw API | `api` | 1 | — | 直接调用任意钉钉 OpenAPI（api / oapi 双形态），自动管理应用级 Token |
 
-> **19 个产品，334 条命令。** 完整命令清单（带描述与使用场景）：[`docs/command-index.md`](./docs/command-index.md)。运行 `dws --help` 查看顶层命令树，或 `dws <service> --help` 查看子命令。
+> **18 个产品，330 条命令。** 完整命令清单（带描述与使用场景）：[`docs/command-index.md`](./docs/command-index.md)。运行 `dws --help` 查看顶层命令树，或 `dws <service> --help` 查看子命令。
 
 > **关于 `chat bot`**：机器人能力（`send-by-bot` / `recall-by-bot` / `add-bot` / `send-by-webhook` / bot 搜索）已合并到对应的 `chat` 子树下（例如 `dws chat message send-by-bot`、`dws chat group members add-bot`），保持 agent 视角下的命令面扁平易发现。不再有独立的顶层 `bot` 产品。
 

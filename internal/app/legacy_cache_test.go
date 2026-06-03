@@ -359,7 +359,7 @@ func TestLoadDynamicCommandsDoesNotSynchronouslyFetchDetailMetadata(t *testing.T
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.URL.Path == "/cli/discovery/apis":
+		case r.URL.Path == "/cli/discovery/apis/bamboo":
 			payload := map[string]any{
 				"metadata": map[string]any{"count": 2, "nextCursor": ""},
 				"servers": []any{
@@ -433,7 +433,7 @@ func TestLoadDynamicCommandsDoesNotSynchronouslyFetchDetailMetadataWhenRegistryT
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.URL.Path == "/cli/discovery/apis":
+		case r.URL.Path == "/cli/discovery/apis/bamboo":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"metadata": map[string]any{"count": 2, "nextCursor": ""},
 				"servers": []any{

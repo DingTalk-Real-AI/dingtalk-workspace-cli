@@ -33,6 +33,12 @@ import (
 const (
 	defaultBaseURL      = "https://mcp.dingtalk.com"
 	registryMetadataKey = "com.dingtalk.mcp.registry/metadata"
+
+	// discoveryAPIPath is the path appended to BaseURL when fetching the
+	// MCP server list. Kept as a single constant so the version-coded
+	// segment (".../bamboo") lives in one place and future version bumps
+	// only touch here. See registry_test.go for the matching fixture path.
+	discoveryAPIPath = "/cli/discovery/apis/bamboo"
 )
 
 type Client struct {
@@ -544,7 +550,7 @@ func (c *Client) FetchServersFromURL(ctx context.Context, fullURL string) (ListR
 }
 
 func (c *Client) fetchServersPage(ctx context.Context, limit int, cursor string) (ListResponse, error) {
-	reqURL, err := url.Parse(c.BaseURL + "/cli/discovery/apis")
+	reqURL, err := url.Parse(c.BaseURL + discoveryAPIPath)
 	if err != nil {
 		return ListResponse{}, apperrors.NewDiscovery("failed to build market servers URL")
 	}

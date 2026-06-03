@@ -210,7 +210,7 @@ func TestDiscoverAllRuntimeKeepsWorkingServersWhenOneFails(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	mux.HandleFunc("/cli/discovery/apis", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/cli/discovery/apis/bamboo", func(w http.ResponseWriter, r *http.Request) {
 		payload := market.ListResponse{
 			Metadata: market.ListMetadata{Count: 2},
 			Servers: []market.ServerEnvelope{

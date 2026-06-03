@@ -17,11 +17,11 @@ func TestMain(m *testing.M) {
 	absFixture, _ := filepath.Abs("testdata/empty_catalog.json")
 	os.Setenv(cli.CatalogFixtureEnv, absFixture)
 
-	// Serve the local servers.json fixture at /cli/discovery/apis so that
+	// Serve the local servers.json fixture at /cli/discovery/apis/bamboo so that
 	// the dynamic command generator can build CLI commands without network
-	// access. FetchServers calls {baseURL}/cli/discovery/apis.
+	// access. FetchServers calls {baseURL}/cli/discovery/apis/bamboo.
 	mux := http.NewServeMux()
-	mux.HandleFunc("/cli/discovery/apis", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/cli/discovery/apis/bamboo", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "testdata/servers.json")
 	})
 	srv := httptest.NewServer(mux)
