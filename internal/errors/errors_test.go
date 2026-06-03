@@ -98,27 +98,6 @@ func TestPrintJSON_AvailableFlags(t *testing.T) {
 	}
 }
 
-func TestPrintJSONKeepsURLAmpersandsReadable(t *testing.T) {
-	t.Parallel()
-
-	rawURL := "https://example.com/auth?flowId=flow-copy&userCode=QZYH-D64W"
-	var b strings.Builder
-	if err := PrintJSON(&b, NewAuth(
-		"authorize at "+rawURL,
-		WithHint(rawURL),
-	)); err != nil {
-		t.Fatalf("PrintJSON() error = %v", err)
-	}
-
-	got := b.String()
-	if strings.Contains(got, `\u0026`) {
-		t.Fatalf("PrintJSON should keep URL ampersands readable, got %q", got)
-	}
-	if !strings.Contains(got, "&userCode=QZYH-D64W") {
-		t.Fatalf("PrintJSON output missing readable URL separator, got %q", got)
-	}
-}
-
 func TestPrintHuman(t *testing.T) {
 	t.Parallel()
 

@@ -69,23 +69,6 @@ func TestWriteNDJSON(t *testing.T) {
 	}
 }
 
-func TestWriteNDJSONKeepsURLAmpersandsReadable(t *testing.T) {
-	rawURL := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3Dflow-copy%26userCode%3DQZYH-D64W#/personalAuthorization?flowId=flow-copy&userCode=QZYH-D64W"
-	payload := []any{map[string]any{"authorizationUrl": rawURL}}
-
-	var buf bytes.Buffer
-	if err := Write(&buf, FormatNDJSON, payload); err != nil {
-		t.Fatalf("Write(ndjson) error = %v", err)
-	}
-	got := buf.String()
-	if strings.Contains(got, `\u0026`) {
-		t.Fatalf("ndjson output should keep URL ampersands readable, got: %s", got)
-	}
-	if !strings.Contains(got, "&userCode=QZYH-D64W") {
-		t.Fatalf("ndjson output missing readable URL separator, got: %s", got)
-	}
-}
-
 func TestWriteCSV(t *testing.T) {
 	cases := []struct {
 		name    string

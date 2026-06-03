@@ -231,23 +231,6 @@ func TestApplyJQFieldAccess(t *testing.T) {
 	}
 }
 
-func TestApplyJQKeepsURLAmpersandsReadable(t *testing.T) {
-	rawURL := "https://example.com/auth?flowId=flow-copy&userCode=QZYH-D64W"
-	payload := map[string]any{"authorizationUrl": rawURL}
-
-	var buf bytes.Buffer
-	if err := ApplyJQ(&buf, payload, "."); err != nil {
-		t.Fatalf("ApplyJQ error: %v", err)
-	}
-	got := buf.String()
-	if strings.Contains(got, `\u0026`) {
-		t.Fatalf("jq output should keep URL ampersands readable, got: %s", got)
-	}
-	if !strings.Contains(got, "&userCode=QZYH-D64W") {
-		t.Fatalf("jq output missing readable URL separator, got: %s", got)
-	}
-}
-
 func TestApplyJQArrayIteration(t *testing.T) {
 	payload := map[string]any{
 		"items": []any{

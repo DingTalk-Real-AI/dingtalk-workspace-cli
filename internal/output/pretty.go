@@ -14,12 +14,12 @@
 package output
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
 	"strings"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
 	"github.com/fatih/color"
 )
 
@@ -212,7 +212,7 @@ func writeSchemaToolPretty(
 	if out, ok := tool["output_schema"].(map[string]any); ok && len(out) > 0 {
 		fmt.Fprintln(w)
 		fmt.Fprintf(w, "%s\n", bold("Output schema"))
-		b, _ := jsonutil.MarshalIndent(out, "  ", "  ")
+		b, _ := json.MarshalIndent(out, "  ", "  ")
 		fmt.Fprintf(w, "  %s\n", string(b))
 	}
 

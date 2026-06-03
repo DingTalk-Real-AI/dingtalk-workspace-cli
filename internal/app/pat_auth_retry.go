@@ -14,6 +14,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	stderrors "errors"
@@ -32,7 +33,6 @@ import (
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat"
 	"github.com/fatih/color"
 )
@@ -230,7 +230,7 @@ func enrichPATErrorWithOpenBrowser(raw string, openBrowser bool) string {
 	}
 	data["openBrowser"] = openBrowser
 
-	encoded, err := jsonutil.Marshal(payload)
+	encoded, err := marshalSingleLineJSONNoHTMLEscape(payload)
 	if err != nil {
 		return raw
 	}
@@ -596,7 +596,7 @@ func enrichPATErrorForHostControl(raw string) string {
 	apperrors.ApplyHostMutations(payload)
 
 	// stderr JSON MUST be single-line.
-	encoded, err := jsonutil.Marshal(payload)
+	encoded, err := marshalSingleLineJSONNoHTMLEscape(payload)
 	if err != nil {
 		return raw
 	}
@@ -630,11 +630,25 @@ func buildPATScopeJSON(scopeErr *PatScopeError, includeHostControl bool) string 
 		"data":    data,
 	}
 	// stderr JSON MUST be single-line.
-	b, err := jsonutil.Marshal(payload)
+	b, err := json.Marshal(payload)
 	if err != nil {
 		return `{"success":false,"code":"PAT_SCOPE_AUTH_REQUIRED"}`
 	}
 	return string(b)
+}
+
+func marshalSingleLineJSONNoHTMLEscape(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	out := buf.Bytes()
+	if len(out) > 0 && out[len(out)-1] == '\n' {
+		out = out[:len(out)-1]
+	}
+	return out, nil
 }
 
 // pollPatDeviceFlow polls the PAT device flow status endpoint until a terminal

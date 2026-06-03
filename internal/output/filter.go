@@ -20,7 +20,6 @@ import (
 	"strings"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
 	"github.com/itchyny/gojq"
 )
 
@@ -172,7 +171,7 @@ func ApplyJQ(w io.Writer, payload any, expr string) error {
 		}
 		first = false
 
-		data, marshalErr := jsonutil.MarshalIndent(value, "", "  ")
+		data, marshalErr := json.MarshalIndent(value, "", "  ")
 		if marshalErr != nil {
 			return apperrors.NewInternal("failed to encode --jq result")
 		}

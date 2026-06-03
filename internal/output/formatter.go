@@ -22,7 +22,6 @@ import (
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -258,7 +257,7 @@ func rootPersistentFlags(cmd *cobra.Command) *pflag.FlagSet {
 
 // WriteJSON marshals payload as indented JSON and writes it to w.
 func WriteJSON(w io.Writer, payload any) error {
-	data, err := jsonutil.MarshalIndent(payload, "", "  ")
+	data, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return apperrors.NewInternal("failed to encode command output as JSON")
 	}
@@ -271,7 +270,7 @@ func writeRaw(w io.Writer, payload any) error {
 		_, err := fmt.Fprintln(w, SanitizeForTerminal(text))
 		return err
 	}
-	data, err := jsonutil.Marshal(payload)
+	data, err := json.Marshal(payload)
 	if err != nil {
 		return apperrors.NewInternal("failed to encode raw command output")
 	}
@@ -545,7 +544,7 @@ func formatValue(value any) string {
 	case string:
 		return SanitizeForTerminal(typed)
 	default:
-		data, err := jsonutil.Marshal(typed)
+		data, err := json.Marshal(typed)
 		if err != nil {
 			return SanitizeForTerminal(fmt.Sprintf("%v", typed))
 		}

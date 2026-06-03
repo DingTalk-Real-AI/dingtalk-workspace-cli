@@ -17,8 +17,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"io"
-
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
 )
 
 // writeNDJSON renders payload as newline-delimited JSON (https://ndjson.org):
@@ -42,7 +40,7 @@ func writeNDJSON(w io.Writer, payload any) error {
 	}
 
 	bw := bufio.NewWriter(w)
-	enc := jsonutil.NewEncoder(bw)
+	enc := json.NewEncoder(bw)
 	// json.Encoder.Encode already appends a trailing newline per call.
 
 	switch v := normalized.(type) {
