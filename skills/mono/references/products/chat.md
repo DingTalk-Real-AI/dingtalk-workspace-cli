@@ -1099,6 +1099,33 @@ search 与 find 选择指南:
 | 额外返回 openDingTalkId | 无 | 有（可用于给机器人发单聊消息） |
 | 触发词 | "我创建的""我的""我自己的" | "搜索机器人""找机器人""查机器人" |
 
+#### 创建【新】机器人 — 通过 OpenClaw 连接器（dws 无原生创建命令）
+
+范围: `dws chat bot` 只能**搜索**（search / find）和**拉机器人进群**（group members add-bot），**不能创建**机器人。
+要"给我建一个新机器人/给 agent 接入钉钉/接入 OpenClaw"，走官方连接器 `@dingtalk-real-ai/dingtalk-connector`（Hermes / OpenClaw 原生方式），它会免控制台一键建号并以 Stream 模式接入 agent（无需公网 IP / Webhook）。
+典型触发词: "给我建个机器人""创建一个机器人""给 agent 接个钉钉机器人""接入 OpenClaw""provision a bot"。
+
+固定路线（前置闸门 → 创建 → 交叉验证，缺一步不算闭环）:
+
+```
+# 1. 前置闸门：确认 OpenClaw 已安装且版本达标（< 2026.4.9 直接告知用户先升级，不要硬跑 npx）
+openclaw -v            # 需 OpenClaw CLI ≥ 2026.4.9
+
+# 2. 创建：连接器在终端渲染钉钉二维码；手机钉钉扫码 → 点「一键创建新机器人」→ 自动建号 + 授权 + Stream 接入
+npx -y @dingtalk-real-ai/dingtalk-connector install
+
+# 3. 验证 channel 已 running
+openclaw channels status --deep | grep DingTalk
+
+# 4. 交叉验证：连接器新建的机器人，dws 应当能搜到（两个独立工具看到同一个 robotCode 才算真创建成功）
+dws chat bot search --format json
+```
+
+注意:
+  - 这条 recipe 依赖 dws 之外的前置（OpenClaw 运行时 + npm 网络 + 手机扫码），**不是纯 dws 能闭环的**；前置不满足时明确告知用户，不要伪造创建成功。
+  - 创建成功后，发消息/拉群仍走上面的 `chat message send-by-bot` / `group members add-bot`，用 `dws chat bot search` 返回的 `robotCode`。
+  - 安全: 机器人在你的授权范围内以你的身份行事，按个人助理对待，勿用于无人值守的生产部署。
+
 ### category (会话分组管理)
 
 #### 获取用户自定义会话分组
