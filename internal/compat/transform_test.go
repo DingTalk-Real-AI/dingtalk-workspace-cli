@@ -285,3 +285,84 @@ func TestInvertBoolTransform(t *testing.T) {
 		}
 	}
 }
+
+// TestStringToInt64_NumericString covers the happy path: callers pass an
+// integer-shaped string (the common CLI case where every flag arrives as text)
+// and the transform promotes it to int64 so the MCP body carries a number.
+func TestStringToInt64_NumericString(t *testing.T) {
+	t.Parallel()
+	got, err := ApplyTransform("12345", "string_to_int64", nil)
+	if err != nil {
+		t.Fatalf("expected numeric string to parse, got err: %v", err)
+	}
+	if got != int64(12345) {
+		t.Fatalf("expected int64(12345), got %T %v", got, got)
+	}
+}
+
+// TestStringToInt64_NumericPassthrough covers the case where an upstream
+// schema-typed flag already produced an integer (e.g. via pflag.Int64) — the
+// transform should be a no-op and not double-convert.
+func TestStringToInt64_NumericPassthrough(t *testing.T) {
+	t.Parallel()
+	cases := []any{int(7), int32(7), int64(7), float64(7)}
+	for _, in := range cases {
+		got, err := ApplyTransform(in, "string_to_int64", nil)
+		if err != nil {
+			t.Errorf("expected pass-through for %T(%v), got err: %v", in, in, err)
+			continue
+		}
+		if got != int64(7) {
+			t.Errorf("expected int64(7), got %T %v (input %T)", got, got, in)
+		}
+	}
+}
+
+// TestStringToInt64_PlaceholderRejected guards the wukong-aligned error wording
+// for LLM/AI-agent placeholders. Each of these values must surface a
+// validation error pointing at the canonical root deptId=1; if they fell
+// through silently the MCP server would return success=true with empty data
+// and the caller would never learn they sent garbage.
+func TestStringToInt64_PlaceholderRejected(t *testing.T) {
+	t.Parallel()
+	placeholders := []string{"self", "me", "我", "root", "0", "SELF", "Me"}
+	for _, p := range placeholders {
+		_, err := ApplyTransform(p, "string_to_int64", nil)
+		if err == nil {
+			t.Errorf("placeholder %q should reject, got nil error", p)
+			continue
+		}
+		msg := err.Error()
+		if !strings.Contains(msg, "根部门") || !strings.Contains(msg, "deptId=1") {
+			t.Errorf("placeholder %q error should mention 根部门/deptId=1, got %q", p, msg)
+		}
+	}
+}
+
+// TestStringToInt64_NonNumericRejected ensures non-integer strings are
+// surfaced as validation errors (exit code 2) rather than forwarded to the
+// MCP as a quoted string, which the upstream would reject anyway.
+func TestStringToInt64_NonNumericRejected(t *testing.T) {
+	t.Parallel()
+	_, err := ApplyTransform("abc", "string_to_int64", nil)
+	if err == nil {
+		t.Fatalf("non-numeric input should reject, got nil error")
+	}
+	if !strings.Contains(err.Error(), "必须是整数") {
+		t.Errorf("expected `必须是整数` in error, got %q", err.Error())
+	}
+}
+
+// TestStringToInt64_EmptyPassthrough mirrors the other transforms' contract:
+// empty input is a no-op so optional flags that weren't provided don't trip
+// the placeholder/format guards.
+func TestStringToInt64_EmptyPassthrough(t *testing.T) {
+	t.Parallel()
+	got, err := ApplyTransform("", "string_to_int64", nil)
+	if err != nil {
+		t.Fatalf("empty string should pass through, got err: %v", err)
+	}
+	if got != "" {
+		t.Errorf("expected empty string pass-through, got %v", got)
+	}
+}

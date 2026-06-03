@@ -1,6 +1,8 @@
 package cli_compat_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"testing"
 )
 
@@ -27,6 +29,20 @@ func TestAitableBaseSearch_should_call_search_bases(t *testing.T) {
 	})
 	assertToolName(t, cap, "search_bases")
 	assertToolArg(t, cap, "query", "项目管理")
+}
+
+func TestAitableBaseSearch_without_query_should_call_list_bases(t *testing.T) {
+	cap := setupTestDeps(t, "aitable")
+	root := buildRoot()
+	if err := execCmd(t, root, []string{"aitable", "base", "search"}, map[string]string{
+		"cursor": "NEXT_CURSOR",
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertToolName(t, cap, "list_bases")
+	assertToolArg(t, cap, "cursor", "NEXT_CURSOR")
+	assertArgNotPresent(t, cap, "query")
+	assertCallCount(t, cap, 1)
 }
 
 // ── base get ────────────────────────────────────────────────
@@ -149,6 +165,18 @@ func TestAitableTableCreate_should_call_create_table(t *testing.T) {
 	assertToolArg(t, cap, "tableName", "任务表")
 }
 
+func TestAitableTableCreate_without_fields_should_pass_empty_fields(t *testing.T) {
+	cap := setupTestDeps(t, "aitable")
+	root := buildRoot()
+	if err := execCmd(t, root, []string{"aitable", "table", "create"}, map[string]string{
+		"base-id": "B1", "name": "空字段表",
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertToolName(t, cap, "create_table")
+	assertToolArg(t, cap, "fields", []any{})
+}
+
 // ── table update ────────────────────────────────────────────
 
 func TestAitableTableUpdate_should_call_update_table(t *testing.T) {
@@ -245,6 +273,37 @@ func TestAitableFieldUpdate_should_pass_config_json(t *testing.T) {
 	assertToolArg(t, cap, "config", expected)
 }
 
+func TestAitableFieldUpdate_should_pass_ai_config_json(t *testing.T) {
+	cap := setupTestDeps(t, "aitable")
+	root := buildRoot()
+	if err := execCmd(t, root, []string{"aitable", "field", "update"}, map[string]string{
+		"base-id":   "B1",
+		"table-id":  "T1",
+		"field-id":  "F1",
+		"ai-config": `{"outputType":"text","prompt":[{"type":"text","value":"请总结"}]}`,
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	expected := map[string]any{
+		"outputType": "text",
+		"prompt":     []any{map[string]any{"type": "text", "value": "请总结"}},
+	}
+	assertToolName(t, cap, "update_field")
+	assertToolArg(t, cap, "aiConfig", expected)
+}
+
+func TestAitableFieldUpdate_without_mutation_should_fail_before_call(t *testing.T) {
+	cap := setupTestDeps(t, "aitable")
+	root := buildRoot()
+	err := execCmd(t, root, []string{"aitable", "field", "update"}, map[string]string{
+		"base-id": "B1", "table-id": "T1", "field-id": "F1",
+	})
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	assertCallCount(t, cap, 0)
+}
+
 // ── field delete ────────────────────────────────────────────
 
 func TestAitableFieldDelete_should_call_delete_field(t *testing.T) {
@@ -277,6 +336,26 @@ func TestAitableRecordQuery_should_pass_record_ids(t *testing.T) {
 		"base-id": "B1", "table-id": "T1", "record-ids": "rec1,rec2",
 	})
 	assertToolArg(t, cap, "recordIds", []string{"rec1", "rec2"})
+}
+
+func TestAitableRecordQuery_should_normalize_sort_order_and_query_keyword(t *testing.T) {
+	cap := setupTestDeps(t, "aitable")
+	root := buildRoot()
+	if err := execCmd(t, root, []string{"aitable", "record", "query"}, map[string]string{
+		"base-id":  "B1",
+		"table-id": "T1",
+		"query":    "待办",
+		"sort":     `[{"fieldId":"fld_due","order":"desc"}]`,
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertToolName(t, cap, "query_records")
+	assertToolArg(t, cap, "keyword", "待办")
+	assertArgNotPresent(t, cap, "query")
+	assertToolArg(t, cap, "sort", []any{map[string]any{
+		"fieldId":   "fld_due",
+		"direction": "desc",
+	}})
 }
 
 // ── record create ───────────────────────────────────────────
@@ -314,6 +393,7 @@ func TestAitableRecordDelete_should_call_delete_records(t *testing.T) {
 	})
 	assertToolName(t, cap, "delete_records")
 	assertToolArg(t, cap, "recordIds", []string{"rec1", "rec2"})
+	assertCallCount(t, cap, 1)
 }
 
 // ── template search ─────────────────────────────────────────
@@ -326,4 +406,119 @@ func TestAitableTemplateSearch_should_call_search_templates(t *testing.T) {
 	})
 	assertToolName(t, cap, "search_templates")
 	assertToolArg(t, cap, "query", "项目管理")
+}
+
+// ── export data ─────────────────────────────────────────────
+
+func TestAitableExportData_should_match_wukong_flag_surface(t *testing.T) {
+	root := buildRoot()
+	cmd, _, err := root.Find([]string{"aitable", "export", "data"})
+	if err != nil {
+		t.Fatalf("find export data command: %v", err)
+	}
+	for _, name := range []string{"base-id", "scope", "format", "task-id", "table-id", "view-id", "timeout-ms"} {
+		if cmd.Flags().Lookup(name) == nil {
+			t.Fatalf("expected --%s flag to exist", name)
+		}
+	}
+	for _, name := range []string{"export-format", "output", "timeout-sec"} {
+		if cmd.Flags().Lookup(name) != nil {
+			t.Fatalf("flag --%s should not be exposed by Wukong-compatible export data", name)
+		}
+	}
+}
+
+func TestAitableExportData_should_call_export_data_with_wukong_payload(t *testing.T) {
+	cap := setupTestDeps(t, "aitable")
+	root := buildRoot()
+
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&bytes.Buffer{})
+	root.SetArgs([]string{
+		"aitable", "export", "data",
+		"--base-id", "B1",
+		"--scope", "table",
+		"--table-id", "T1",
+		"--format", "excel",
+		"--timeout-ms", "1000",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var inv struct {
+		Invocation struct {
+			Tool   string         `json:"tool"`
+			Params map[string]any `json:"params"`
+			DryRun bool           `json:"dry_run"`
+		} `json:"invocation"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &inv); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v\noutput:\n%s", err, out.String())
+	}
+	if inv.Invocation.Tool != "" && !inv.Invocation.DryRun {
+		cap.record(inv.Invocation.Tool, inv.Invocation.Params, "")
+	}
+
+	assertToolName(t, cap, "export_data")
+	assertToolArg(t, cap, "baseId", "B1")
+	assertToolArg(t, cap, "scope", "table")
+	assertToolArg(t, cap, "tableId", "T1")
+	assertToolArg(t, cap, "format", "excel")
+	assertToolArg(t, cap, "timeoutMs", 1000)
+	assertArgNotPresent(t, cap, "__async__")
+	assertArgNotPresent(t, cap, "__output__")
+	assertCallCount(t, cap, 1)
+}
+
+// ── view ────────────────────────────────────────────────────
+
+func TestAitableViewCreate_should_pass_sub_type_description_and_config(t *testing.T) {
+	cap := setupTestDeps(t, "aitable")
+	root := buildRoot()
+	if err := execCmd(t, root, []string{"aitable", "view", "create"}, map[string]string{
+		"base-id":       "B1",
+		"table-id":      "T1",
+		"view-type":     "Grid",
+		"view-sub-type": "Grid",
+		"name":          "视图名",
+		"desc":          `{"content":[]}`,
+		"config":        `{"visibleFieldIds":["fld1","fld2"]}`,
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertToolName(t, cap, "create_view")
+	assertToolArg(t, cap, "viewSubType", "Grid")
+	assertToolArg(t, cap, "viewDescription", map[string]any{"content": []any{}})
+	assertToolArg(t, cap, "config", map[string]any{"visibleFieldIds": []any{"fld1", "fld2"}})
+}
+
+func TestAitableViewUpdate_should_pass_description(t *testing.T) {
+	cap := setupTestDeps(t, "aitable")
+	root := buildRoot()
+	if err := execCmd(t, root, []string{"aitable", "view", "update"}, map[string]string{
+		"base-id":  "B1",
+		"table-id": "T1",
+		"view-id":  "V1",
+		"desc":     `{"content":[]}`,
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertToolName(t, cap, "update_view")
+	assertToolArg(t, cap, "viewDescription", map[string]any{"content": []any{}})
+}
+
+func TestAitableSurface_should_not_expose_open_source_only_commands(t *testing.T) {
+	root := buildRoot()
+	for _, path := range [][]string{
+		{"aitable", "record", "batch-update"},
+		{"aitable", "attachment", "upload-file"},
+		{"aitable", "form"},
+	} {
+		cmd, _, err := root.Find(path)
+		if err == nil && cmd != nil && !cmd.Hidden {
+			t.Fatalf("command %v should not be visible in Wukong-compatible surface", path)
+		}
+	}
 }

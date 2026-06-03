@@ -115,8 +115,18 @@ func isUnknownCommandError(err error) bool {
 }
 
 // flagErrorWithSuggestions provides helpful suggestions for common flag mistakes.
+//
+// 所有 flag 解析错误都会在 message 末尾追加 "See '<CommandPath> --help' for usage."，
+// 与 docker / kubectl / gh / wukong CLI 的 UX 一致，方便用户/agent 复制完整命令查 help。
+// 装在 root 的 FlagErrorFunc 通过 cobra 的 parent fallback 机制覆盖全命令树
+// （cobra.Command.FlagErrorFunc 沿 c.parent 递归向上查找）。
 func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 	errMsg := err.Error()
+	// 尾部 hint：换行 + See '...' for usage.
+	// JSON 输出时 \n 会被序列化为字面 \n，文本输出时换行；
+	// 无论哪种格式，子串 "--help' for usage." 都可被检索到。
+	tail := fmt.Sprintf("\nSee '%s --help' for usage.", cmd.CommandPath())
+	msgWithTail := errMsg + tail
 
 	// Common flag aliases and suggestions
 	suggestions := map[string]string{
@@ -135,7 +145,7 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 	for flag, suggestion := range suggestions {
 		if strings.Contains(errMsg, "unknown flag: "+flag) {
 			return apperrors.NewValidation(
-				errMsg,
+				msgWithTail,
 				apperrors.WithHint(suggestion),
 				apperrors.WithReason("unknown_flag"),
 				apperrors.WithCause(err),
@@ -149,7 +159,7 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 		fix := cmdutil.SuggestFlagFix(cmd, err)
 		if fix.Suggestion != "" {
 			return apperrors.NewValidation(
-				errMsg,
+				msgWithTail,
 				apperrors.WithHint(fix.Suggestion),
 				apperrors.WithReason("unknown_flag"),
 				apperrors.WithCause(err),
@@ -159,7 +169,10 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 		}
 	}
 
-	return err
+	// Fallback：未命中已知别名 / SuggestFlagFix 未给建议的 flag 解析错误
+	// （missing required / ambiguous / unknown shorthand 等），仍包尾部 hint，
+	// 行为对齐 wukong / docker / kubectl。
+	return fmt.Errorf("%s%s", errMsg, tail)
 }
 
 func printExecutionError(root *cobra.Command, stdout, stderr io.Writer, err error) error {
@@ -1495,22 +1508,38 @@ func registerStdioServer(p *plugin.Plugin, sc plugin.StdioServerClient, runner e
 }
 
 // discoverStdioTools performs the blocking Initialize + ListTools handshake
-// on a stdio MCP subprocess. Returns nil on any error (logged at Warn level).
+// on a stdio MCP subprocess. Returns nil on any error (logged at Debug level).
 // The default 2s budget comfortably accommodates Python/Node runtimes whose
 // interpreter + dependency load dominates the first response. Operators with
 // heavier startup chains can relax further via DWS_PLUGIN_COLD_TIMEOUT.
+//
+// A handshake failure here is an EXPECTED, benign outcome for an optional local
+// plugin: e.g. the conference plugin reports "本地服务未就绪" whenever the
+// DingTalk desktop client isn't running, which is the common case for anyone
+// not actively recording a meeting. Discovery simply yields no tools and the
+// run proceeds — commands that ship toolOverrides still register up-front via
+// registerStdioServerFromOverlay (Phase A), so availability is unaffected.
+//
+// These run during command-tree construction (NewRootCommandWithEngine), which
+// happens BEFORE PersistentPreRunE applies --debug/--verbose via
+// configureLogLevel. So a Warn here printed to stderr on EVERY invocation
+// regardless of flags, polluting output and misleading callers into treating it
+// as the cause of an unrelated command error (e.g. an auth or PARAM_ERROR from a
+// completely different server). Logging at Debug keeps the discovery miss out of
+// normal output; surfacing it would require configuring the log level before the
+// tree is built, which we deliberately avoid this close to release.
 func discoverStdioTools(p *plugin.Plugin, sc plugin.StdioServerClient, timeouts pluginColdTimeouts) []transport.ToolDescriptor {
 	ctx, cancel := context.WithTimeout(context.Background(), timeouts.stdio)
 	defer cancel()
 
 	if _, err := sc.Client.Initialize(ctx); err != nil {
-		slog.Warn("plugin: stdio initialize failed",
+		slog.Debug("plugin: stdio initialize failed",
 			"plugin", p.Manifest.Name, "server", sc.Key, "error", err)
 		return nil
 	}
 	toolsResult, err := sc.Client.ListTools(ctx)
 	if err != nil {
-		slog.Warn("plugin: stdio ListTools failed",
+		slog.Debug("plugin: stdio ListTools failed",
 			"plugin", p.Manifest.Name, "server", sc.Key, "error", err)
 		return nil
 	}

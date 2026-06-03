@@ -51,7 +51,14 @@ func newLegacyPublicCommands(ctx context.Context, runner executor.Runner) []*cob
 
 	dynamicCmds := loadDynamicCommands(ctx, runner)
 	helperCmds := helpers.NewPublicCommands(runner)
-	return mergeTopLevelCommands(pickCommands(dynamicCmds, helperCmds))
+	merged := mergeTopLevelCommands(pickCommands(dynamicCmds, helperCmds))
+	// Post-merge product hooks: tasks the envelope cannot express on its
+	// own (e.g. dual-role group+leaf semantics for deprecated aliases).
+	// Keep each hook narrowly scoped to one product so the open-source
+	// command surface remains predictable from the envelope alone.
+	helpers.AttachReportLegacyInboxAlias(merged, runner)
+	helpers.AttachReportListReadableEnrichment(merged, runner)
+	return merged
 }
 
 // pickCommands returns the union of dynamic and helpers commands. For
@@ -211,11 +218,7 @@ func loadDynamicCommands(ctx context.Context, runner executor.Runner) []*cobra.C
 			if edURL := strings.TrimSpace(edition.Get().DiscoveryURL); edURL != "" {
 				slog.Info("loadDynamicCommands: sync discovery fetch", "partition", partition, "url", edURL)
 			} else {
-				baseURL := cli.DefaultMarketBaseURL
-				if discoveryBaseURLOverride != "" {
-					baseURL = discoveryBaseURLOverride
-				}
-				slog.Info("loadDynamicCommands: sync market catalog fetch", "partition", partition, "base_url", baseURL)
+				slog.Info("loadDynamicCommands: sync market catalog fetch", "partition", partition, "base_url", DiscoveryBaseURL())
 			}
 		}
 		fetchStart := time.Now()
@@ -453,7 +456,7 @@ func DiscoveryBaseURL() string {
 	if discoveryBaseURLOverride != "" {
 		return discoveryBaseURLOverride
 	}
-	return cli.DefaultMarketBaseURL
+	return config.GetMCPBaseURL()
 }
 
 // ipv4HTTPClient returns an HTTP client that forces IPv4 connections with

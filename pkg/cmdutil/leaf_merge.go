@@ -89,6 +89,10 @@ func MergeHardcodedLeaves(dynamicRoot, hardcodedRoot *cobra.Command) *cobra.Comm
 				dynamicRoot.AddCommand(hc)
 			}
 			// else: envelope is authority; hardcoded leaf is ignored.
+		case !IsLeafCmd(hc) && !IsLeafCmd(dyn) && OverridePriority(hc) > OverridePriority(dyn):
+			hardcodedRoot.RemoveCommand(hc)
+			dynamicRoot.RemoveCommand(dyn)
+			dynamicRoot.AddCommand(hc)
 		case !IsLeafCmd(hc) && !IsLeafCmd(dyn):
 			MergeHardcodedLeaves(dyn, hc)
 		case IsLeafCmd(dyn) && !IsLeafCmd(hc) && OverridePriority(hc) > OverridePriority(dyn):

@@ -203,6 +203,26 @@ dws auth login --client-id <your-app-key> --client-secret <your-app-secret>
 
 </details>
 
+<details>
+<summary><strong>沙箱间迁移登录态（Linux）</strong></summary>
+
+仅拷贝 `~/.dws/app.json` 无法带走 refresh token；access token 约 2 小时后会失效。请使用官方导出/导入：
+
+```bash
+# A 沙箱（已登录）
+dws auth export -o /tmp/dws-auth.tar.gz
+# 或便于分片复制：dws auth export --base64 -o /tmp/dws-auth.b64
+
+# B 沙箱
+dws auth import -i /tmp/dws-auth.tar.gz
+# 或：dws auth import -i /tmp/dws-auth.b64 --base64
+dws auth status   # 确认 Refresh Token: 有效
+```
+
+包内包含 `~/.local/share/dws-cli` 加密 keychain（含 `auth-token.enc` 与 `dek`）及 `~/.dws` 必要配置。
+
+</details>
+
 ## 快速开始
 
 ```bash
@@ -453,28 +473,28 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 
 | 服务 | 命令 | 命令数 | 子命令 | 描述 |
 |------|------|:------:|--------|------|
-| 通讯录 | `contact` | 6 | `user` `dept` | 按姓名/手机号搜索、批量查询、部门树、当前用户信息 |
-| 群聊 | `chat`（别名 `im`）| 57 | `message` `group` `bot` `conversation-info` `search` `search-common` `list-top-conversations` `group-mute` `group-mute-member` `mute` `set-top` `list-categories` `list-conversations` | 消息（发送 / 回复 / 列表 / list-all / 按发送者 / @我 / 关注 / 未读 / 话题回复 / 搜索 / 高级搜索 / 转发 / 卡片 / 表情与文本表情反应 / 撤回 / 已读与发送状态查询）、群增删改 + 成员管理（成员增 / 删 / 查 / `add-bot`、成员角色增删改查、邀请链接、群图标、群设置、转让群主、设置管理员、退群）、机器人身份消息（`send-by-bot` / `recall-by-bot` / `send-by-webhook`）、会话信息查询、共同群聊、群/成员/会话免打扰、会话置顶、会话分类 |
-| 日历 | `calendar` | 14 | `event` `room` `participant` `busy` | 日程 CRUD + 建议时间 + 附件、会议室预订、闲忙查询、参与者管理 |
-| 待办 | `todo` | 6 | `task` | 创建、列表、修改、完成、详情、删除 |
-| 审批 | `oa` | 9 | `approval` | 同意 / 拒绝 / 撤销、待我审批 / 我发起的、流程列表、操作记录 |
+| 通讯录 | `contact` | 15 | `user` `dept` `label` `relation` | 按姓名 / 手机号 / 工号搜索、批量查询、部门树、角色标签、人员关系、花名册与离职、当前用户信息 |
+| 群聊 | `chat`（别名 `im`）| 65 | `message` `group` `bot` `conversation-info` `search` `search-common` `list-top-conversations` `group-mute` `group-mute-member` `mute` `set-top` `list-categories` `list-conversations` | 消息（发送 / 回复 / 列表 / list-all / 按发送者 / @我 / 关注 / 未读 / 话题回复 / 搜索 / 高级搜索 / 转发 / 卡片 / 表情与文本表情反应 / 撤回 / 已读与发送状态查询）、群增删改 + 成员管理（成员增 / 删 / 查 / `add-bot`、成员角色增删改查、邀请链接、群图标、群设置、转让群主、设置管理员、退群）、机器人身份消息（`send-by-bot` / `recall-by-bot` / `send-by-webhook`）、会话信息查询、共同群聊、群/成员/会话免打扰、会话置顶、会话分类 |
+| 日历 | `calendar` | 17 | `event` `room` `participant` `busy` | 日程 CRUD + 建议时间 + 附件、会议室预订、闲忙查询、参与者管理 |
+| 待办 | `todo` | 16 | `task` `comment` | 创建、列表、修改、完成、详情、删除，以及任务评论 |
+| 审批 | `oa` | 15 | `approval` | 同意 / 拒绝 / 撤销 / 转交、待我审批 / 我发起 / 已提交 / 已办 / 抄送、流程表单、评论、操作记录 |
 | 考勤 | `attendance` | 4 | `record` `shift` `summary` `rules` | 打卡记录、排班查询、考勤摘要、考勤组规则 |
 | DING | `ding` | 2 | `message` | 发送 / 撤回 DING 消息 |
-| 日志 | `report` | 7 | `create` `list` `detail` `template` `stats` `sent` | 创建日志、收发列表、模版、详情、统计 |
-| AI 表格 | `aitable` | 42 | `base` `table` `record` `field` `view` `dashboard` `chart` `import` `export` `attachment` `template` | Base / 数据表 / 记录 / 字段 / 视图 全量 CRUD；图表 + 仪表盘（含分享配置）；数据导入导出；附件（仅获取凭证的 `upload` + 一键上传 `upload-file`）；模板 |
-| 文档 | `doc` | 21 | `search` `list` `info` `read` `create` `update` `upload` `download` `copy` `move` `rename` `file` `folder` `block` `comment` | 搜索 / 读写文档、文件与文件夹创建、块级编辑、评论（list / create / reply / create-inline）、上传 / 下载 |
+| 日志 | `report` | 20 | `create` `submit` `list` `detail` `template` `stats` `inbox` `outbox` `entry` | 创建 / 提交日志、收发（收件箱 / 发件箱）列表、模版（获取 / 列表）、详情、统计、单条获取 |
+| AI 表格 | `aitable` | 52 | `base` `table` `record` `field` `view` `dashboard` `chart` `import` `export` `attachment` `template` `form` | Base / 数据表 / 记录 / 字段 / 视图 全量 CRUD；图表 + 仪表盘（含分享配置）；数据导入导出；附件（仅获取凭证的 `upload` + 一键上传 `upload-file`）；数据表表单；模板 |
+| 文档 | `doc` | 28 | `search` `list` `info` `read` `create` `update` `upload` `download` `copy` `move` `rename` `file` `folder` `block` `comment` | 搜索 / 读写文档、文件与文件夹创建、块级编辑、评论（list / create / reply / create-inline）、上传 / 下载 |
 | 钉盘 | `drive` | 9 | `list` `list-spaces` `info` `download` `mkdir` `upload` `upload-info` `commit` `delete` | 钉盘文件操作：列出空间、文件列表 / 详情 / 下载、创建文件夹、一键 `upload`（三步合成）或两阶段 `upload-info` + `commit`、删除 |
 | AI 听记 | `minutes` | 19 | `list` `get` `update` `mind-graph` `speaker` `hot-word` `upload` | 听记列表（我创建 / 共享给我）、详情（info / summary / keywords / transcription / todos / batch）、标题/摘要更新、思维导图、发言人替换、热词、上传会话 |
-| 邮箱 | `mail` | 4 | `mailbox` `message` | 邮箱地址列表、KQL 邮件搜索、邮件详情、发送邮件 |
-| 在线电子表格 | `sheet` | 34 | `range` `filter-view`（顶层：`create` `new` `list` `info` `find` `replace` `append` `merge-cells` `unmerge-cells` `add-dimension` `insert-dimension` `delete-dimension` `move-dimension` `update-dimension` `write-image` `copy_sheet` `update_sheet` `submit_export_job` `query_export_job` `create_filter` `get_filter` `update_filter` `delete_filter` `set_filter_criteria` `clear_filter_criteria` `sort_filter`） | 在线电子表格（`contentType=ALIDOC`、`extension=axls`）：工作表 CRUD、区域读写/追加、行列操作、合并、查找替换、命名筛选视图 + 表级筛选、写入图片、异步导出（`submit_export_job` + `query_export_job`，v1.0.25 暂无合并的 `export` 命令） |
-| 知识库 | `wiki` | 7 | `space` `member` | 知识库管理：空间 `create` / `get` / `list` / `search` + 成员 `add` / `list` / `update` |
+| 邮箱 | `mail` | 18 | `mailbox` `message` `draft` `folder` `tag` `thread` `attachment` `user` | 邮箱地址列表、KQL 邮件搜索、读取与发送邮件、草稿、文件夹、标签、会话、附件、通讯录用户搜索 |
+| 在线电子表格 | `sheet` | 23 | `range` `filter-view`（顶层：`create` `new` `list` `info` `read` `get` `update` `find` `replace` `append` `merge-cells` `unmerge-cells` `add-dimension` `insert-dimension` `delete-dimension` `move-dimension` `update-dimension` `write-image`） | 在线电子表格（`contentType=ALIDOC`、`extension=axls`）：工作表 CRUD、区域读写/追加、行列操作、合并/取消合并、查找替换、命名筛选视图 + 表级筛选、写入图片 |
+| 知识库 | `wiki` | 21 | `space` `member` `node` `doc` `file` | 知识库管理：空间（`create` / `get` / `list` / `search`）、成员（`add` / `list` / `update`）、节点树、文档与文件 |
 | 开发者文档 | `devdoc` | 1 | `article` | 搜索钉钉开放平台文档 |
-| AI 搜问 | `aisearch` | 1 | `person` | 企业人员搜索：按姓名 / 部门 / 职位 / 职责 / 上级 / 下级 / 手机号 / 工号 多维度过滤（单命令） |
-| AI 应用 | `aiapp` | 3 | — | AI 应用生命周期：`create`（含 prompt / attachments / skills）/ `query`（按任务 ID）/ `modify`（按 thread ID） |
+| AI 搜问 | `aisearch` | 3 | `person` | 企业人员搜索：按姓名 / 部门 / 职位 / 职责 / 上级 / 下级 / 手机号 / 工号 多维度过滤（单命令） |
+| AI 应用 | `aiapp` | 4 | — | AI 应用生命周期：`create`（含 prompt / attachments / skills）/ `query`（按任务 ID）/ `modify`（按 thread ID） |
 | 直播 | `live` | 1 | `stream` | 钉钉直播：查看我的直播列表 |
 | Raw API | `api` | 1 | — | 直接调用任意钉钉 OpenAPI（api / oapi 双形态），自动管理应用级 Token |
 
-> **19 个产品，213 条命令。** 完整命令清单（带描述与使用场景）：[`docs/command-index.md`](./docs/command-index.md)。运行 `dws --help` 查看顶层命令树，或 `dws <service> --help` 查看子命令。
+> **19 个产品，334 条命令。** 完整命令清单（带描述与使用场景）：[`docs/command-index.md`](./docs/command-index.md)。运行 `dws --help` 查看顶层命令树，或 `dws <service> --help` 查看子命令。
 
 > **关于 `chat bot`**：机器人能力（`send-by-bot` / `recall-by-bot` / `add-bot` / `send-by-webhook` / bot 搜索）已合并到对应的 `chat` 子树下（例如 `dws chat message send-by-bot`、`dws chat group members add-bot`），保持 agent 视角下的命令面扁平易发现。不再有独立的顶层 `bot` 产品。
 

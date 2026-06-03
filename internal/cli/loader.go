@@ -113,7 +113,7 @@ const (
 	CatalogFixtureEnv    = "DWS_CATALOG_FIXTURE"
 	CacheDirEnv          = "DWS_CACHE_DIR"
 	PluginColdTimeoutEnv = "DWS_PLUGIN_COLD_TIMEOUT"
-	DefaultMarketBaseURL = "https://mcp.dingtalk.com"
+	DefaultMarketBaseURL = config.DefaultMCPBaseURL
 
 	// defaultDiscoveryTimeout bounds the time spent on live registry discovery.
 	// Tightened to 4s so a slow/unreachable discovery endpoint cannot block
@@ -203,7 +203,7 @@ func (l EnvironmentLoader) Load(ctx context.Context) (ir.Catalog, error) {
 	// eliminating the historical split where the command tree came from
 	// Wukong Portal while runtime endpoint resolution silently read the
 	// open-source Market cache (see fix-wukong-endpoint-partition plan).
-	baseURL := DefaultMarketBaseURL
+	baseURL := config.GetMCPBaseURL()
 	if editionURL := strings.TrimSpace(edition.Get().DiscoveryURL); editionURL != "" {
 		baseURL = editionURL
 	}

@@ -37,5 +37,17 @@ func defaultHooks() *Hooks {
 			base["claw-type"] = DefaultOSSClawType
 			return base
 		},
+		SupplementServers: openSupplementServers,
+	}
+}
+
+func openSupplementServers() []ServerInfo {
+	return []ServerInfo{
+		{
+			ID:       "aitable-form",
+			Name:     "AI 多维表(表单)",
+			Endpoint: "https://pre-mcp-gw.dingtalk.com/server/bb2984ee6b10c1560b4fe943ca620f646bed31f215c551a53abf040b52591a95",
+			Prefixes: []string{"form", "share_form"},
+		},
 	}
 }

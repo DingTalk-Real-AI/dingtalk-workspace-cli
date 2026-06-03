@@ -1,7 +1,5 @@
 # 待办 (todo) 命令参考
 
-> ⚠️ **CLI 暴露状态（v1.0.30）**：当前可调用：`task list / task get / task create / task update / task done / task delete`。**尚未暴露**：`task add-executor / remove-executor / add-participant / remove-participant / create-sub / add-reminder / reset-reminder`，以及 `todo comment` 整个子命令组（add / delete / list），跑这些命令会 fall back 到 `dws todo` 帮助页面，请勿当作可用接口调用。文档保留是因为它们是已规划的能力。
-
 ## 命令总览
 
 ### 创建待办

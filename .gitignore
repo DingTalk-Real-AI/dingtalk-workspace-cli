@@ -31,3 +31,6 @@ _docs
 dws.zip
 *.code-workspace
 /dingtalk-workspace.zip
+
+# envelope/discovery.pre.json synced via Portal, not git-tracked
+/envelope/discovery.pre.json

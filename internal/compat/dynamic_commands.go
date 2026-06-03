@@ -24,6 +24,7 @@ import (
 	"time"
 	"unicode"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
@@ -93,6 +94,21 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 		}
 
 		rootCmd := NewGroupCommand(cmdName, cli.Description)
+		// Register Portal-declared aliases so e.g. `dws log` ≡ `dws report`.
+		// Source: cli.Aliases is the canonical alternate-name field (e.g.
+		// report.aliases=["log"]). Do NOT derive aliases from cli.Prefixes —
+		// that field is the "MCP tool name prefix pool" consumed by
+		// deriveCommandName() to strip prefixes when generating sub-command
+		// names; treating prefixes[1:] as product aliases over-registers
+		// names like `task`/`approval`/`document` that the wukong edition
+		// does not expose, breaking cross-edition consistency.
+		for _, a := range cli.Aliases {
+			a = strings.TrimSpace(a)
+			if a == "" || a == cmdName {
+				continue
+			}
+			rootCmd.Aliases = append(rootCmd.Aliases, a)
+		}
 		// §1.5: cli.hidden → entire service hidden
 		if cli.Hidden {
 			rootCmd.Hidden = true
@@ -186,6 +202,14 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 				// CLIName / Group / Flags surface above still applies.
 				Pipeline:   append([]market.PipelineStep(nil), override.Pipeline...),
 				Normalizer: normalizer,
+				// §P2.argstrict: envelope opt-in for cobra.NoArgs on leaves
+				// without positional bindings. NewDirectCommand falls back to
+				// ArbitraryArgs when this is false (legacy behavior).
+				RejectPositional: override.RejectPositional,
+				// §P2.requiretogether: envelope-driven cross-field check
+				// ("either all set, or all unset"). NewDirectCommand wires
+				// this into the leaf's PreRunE via validateRequireTogether.
+				RequireTogether: append([][]string(nil), override.RequireTogether...),
 			}
 
 			// §5.1: isSensitive → need --yes confirmation
@@ -206,6 +230,14 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 			// §P2.flagconstraints: must run AFTER schema enrichment because the
 			// target flags may be registered lazily by buildFlagsFromDetailSchema.
 			applyFlagConstraints(cmd, override)
+
+			// §mail-hook: product-specific CLI-side validators (see
+			// mail_hooks.go for the full rationale). No-op for non-mail.
+			installMailHook(cmd, canonicalProduct, toolName, runner)
+
+			// §todo-hook: product-specific CLI-side validators (see
+			// todo_hooks.go for the full rationale). No-op for non-todo.
+			installTodoHook(cmd, canonicalProduct, toolName)
 
 			// §1.4: Add to the right parent group
 			attachToGroup(rootCmd, override.Group, groupCmds, cmd)
@@ -950,6 +982,14 @@ func buildRedirectCommand(name, description, target string) *cobra.Command {
 
 // buildHintCommand returns a stub sub-command that prints a redirect hint
 // to the canonical command path declared by the overlay's hintCommands entry.
+//
+// The command exits non-zero (validation error) when invoked, mirroring the
+// hardcoded helper helpers' cmdutil.HintSubCmd contract: hints should signal
+// "this is not a real command, please use X instead" loudly enough that
+// AI agents and scripts notice the failure and switch to the canonical path.
+// The redirect message is printed to stdout for backward compatibility; the
+// returned error carries the same "use: <target>" text so JSON-mode users
+// and exit-code-aware callers both see actionable output.
 func buildHintCommand(name string, def market.CLIHintDef) *cobra.Command {
 	target := strings.TrimSpace(def.Target)
 	short := strings.TrimSpace(def.Description)
@@ -967,12 +1007,12 @@ func buildHintCommand(name string, def market.CLIHintDef) *cobra.Command {
 		DisableFlagParsing: true,
 		DisableAutoGenTag:  true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if target != "" {
-				fmt.Fprintf(cmd.OutOrStdout(), "Please use: %s\n", target)
-			} else {
+			if target == "" {
 				_ = cmd.Help()
+				return apperrors.NewValidation(fmt.Sprintf("use: %s --help", cmd.Parent().CommandPath()))
 			}
-			return nil
+			fmt.Fprintf(cmd.OutOrStdout(), "Please use: %s\n", target)
+			return apperrors.NewValidation(fmt.Sprintf("use: %s", target))
 		},
 	}
 	return cmd

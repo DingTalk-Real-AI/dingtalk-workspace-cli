@@ -9,6 +9,10 @@ dws auth login
 # 查看状态
 dws auth status
 
+# 沙箱间迁移登录态（Linux，含 refresh token）
+dws auth export -o dws-auth.tar.gz
+dws auth import -i dws-auth.tar.gz
+
 # 退出
 dws auth logout
 

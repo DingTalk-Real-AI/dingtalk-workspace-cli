@@ -26,10 +26,36 @@ Flags:
       --robot-code string   机器人 ID (必填, 或设 DINGTALK_DING_ROBOT_CODE)
 ```
 
+### 查询 DING 消息历史
+```
+Usage:
+  dws ding message list [flags]
+Example:
+  dws ding message list
+  dws ding message list --type UNREAD
+  dws ding message list --type SEND --cursor 10
+Flags:
+      --cursor int     分页游标 (首次传 0, 翻页传返回的 nextCursor)
+      --type string    消息类型: ALL / UNREAD / SEND / NEW_COMMENT / DELETED (可选, 不传返回全部)
+```
+
+### 查看 DING 接收状态
+```
+Usage:
+  dws ding message receiver-status [flags]
+Example:
+  dws ding message receiver-status --ding-id <OPEN_DING_ID>
+  # 查询 dingId: dws ding message list
+Flags:
+      --ding-id string   DING 消息 openDingId (必填)
+```
+
 ## 意图判断
 
 用户说"DING 一下/紧急通知/电话提醒" → `message send`
 用户说"撤回 DING" → `message recall`
+用户说"DING 消息/查 DING/DING 历史/我的 DING" → `message list`
+用户说"DING 接收状态/谁收到了 DING/DING 已读" → `message receiver-status`
 
 关键区分:
 - ding(紧急提醒, 支持电话/短信) vs bot(常规群/单聊消息)
@@ -51,6 +77,7 @@ dws ding message recall --robot-code <ROBOT_CODE> --id <OPEN_DING_ID> --format j
 | 操作 | 提取 | 用于 |
 |------|------|------|
 | `message send` | `openDingId` | message recall 的 --id |
+| `message list` | `openDingId` | message receiver-status 的 --ding-id |
 ## 注意事项
 - `--robot-code` 从钉钉开放平台 **应用管理 → 机器人** 中获取，也可设环境变量 `DINGTALK_DING_ROBOT_CODE`
 - sms/call 类型有通信费用，使用前需和用户确认

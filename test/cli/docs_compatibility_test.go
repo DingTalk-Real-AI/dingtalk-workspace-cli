@@ -31,16 +31,9 @@ func TestDWSDocsCommandTreeCoverage(t *testing.T) {
 	}
 
 	index := buildCommandIndex(app.NewRootCommand())
-	// Commands documented in baseline but intentionally not implemented.
-	excluded := map[string]struct{}{
-		"dws auth export": {},
-	}
 	missing := make([]string, 0)
 	for _, path := range docPaths {
 		if _, ok := index[path]; ok {
-			continue
-		}
-		if _, ok := excluded[path]; ok {
 			continue
 		}
 		missing = append(missing, path)
@@ -64,19 +57,12 @@ func TestDWSDocsLocalFlagsCoverage(t *testing.T) {
 	docLeafSet := leafCommandSet(docPaths)
 
 	index := buildCommandIndex(app.NewRootCommand())
-	// Commands documented in baseline but intentionally not implemented.
-	excluded := map[string]struct{}{
-		"dws auth export": {},
-	}
 	missing := make([]string, 0)
 	fallbackMatched := 0
 	explicitMatched := 0
 
 	for _, tc := range docFlags {
 		if _, isLeaf := docLeafSet[tc.CommandPath]; !isLeaf {
-			continue
-		}
-		if _, ok := excluded[tc.CommandPath]; ok {
 			continue
 		}
 		cmd, ok := index[tc.CommandPath]

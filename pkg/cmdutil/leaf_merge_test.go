@@ -159,6 +159,32 @@ func TestMergeHardcodedLeaves_RecurseGroups(t *testing.T) {
 	}
 }
 
+func TestMergeHardcodedLeaves_HigherPriorityHardcodedGroupOverridesDynamicGroup(t *testing.T) {
+	t.Parallel()
+	dynGroup := newGroup("export",
+		newLeaf("get", "dynamic"),
+	)
+	dyn := newGroup("root", dynGroup)
+	hcGroup := newGroup("export",
+		newLeaf("get", "hardcoded"),
+	)
+	SetOverridePriority(hcGroup, 100)
+	hc := newGroup("root", hcGroup)
+
+	MergeHardcodedLeaves(dyn, hc)
+
+	got := findChildByName(dyn, "export")
+	if got != hcGroup {
+		t.Fatal("expected high-priority hardcoded group to replace dynamic group")
+	}
+	if get := findChildByName(got, "get"); get == nil || get.Short != "hardcoded" {
+		t.Fatalf("expected hardcoded export.get after replacement, got %+v", get)
+	}
+	if findChildByName(hc, "export") != nil {
+		t.Fatal("expected hardcoded group to be detached from donor root")
+	}
+}
+
 func TestMergeHardcodedLeaves_ShapeMismatch_KeepsDynamic(t *testing.T) {
 	t.Parallel()
 	// Dynamic declares `cmd` as a group; hardcoded declares `cmd` as a leaf.

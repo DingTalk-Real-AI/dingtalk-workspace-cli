@@ -1,19 +1,17 @@
 # 日历 (calendar) 命令参考
 
-> ✅ **CLI 对齐状态（开源 dws v1.0.30）**：本文档已对齐开源 dws 实际暴露的 4 个子命令组：`event` / `participant` / `room` / `busy`。`attendee`（已统一为 `participant`）、`book` / `attachment` 已从开源 cli 暴露面剔除（钉钉客户端可用，cli 不提供）；`event list-mine` 用 `event list --user-id <self>` 替代。
-
 ## CLI 命令树与黄金路径
 
-- **二级子命令（必选其一）**：`event`（日程）、`participant`（参会人）、`room`（会议室）、`busy`（闲忙）。`dws calendar` 后**必须**紧跟上述之一；**禁止**只执行 `dws calendar`（无子命令）。
+- **二级子命令（必选其一）**：`event`（日程）、`attendee`（参会人）、`room`（会议室）、`busy`（闲忙）、`attachment`（日程附件）、`book`（用户日历列表）。`dws calendar` 后**必须**紧跟上述之一；**禁止**只执行 `dws calendar`（无子命令）。
 - **个人日程 / 给自己留时间块 / 专注时段**：统一走 **`dws calendar event create`**。当前**没有**单独的 `personal schedule create` / `calendar create` 命令。
 - **查日程列表**：`dws calendar event list --start "<ISO-8601>" --end "<ISO-8601>" --format json`，或优先使用脚本 `python scripts/calendar_today_agenda.py [today|tomorrow|week]`（见文末「自动化脚本」）。
-- 注：用户日历本列表（`calendar book`）在开源 v1.0.30 未暴露。
+- **查用户日历本列表**：`dws calendar book list`（返回主日历 `id == "primary"` 等）。**重要**可以查询他人共享给自己的日历本，根据日历本id可以进一步查询对方的日程信息。
 - **CLI 不存在**独立的 `dws calendar list`；若误跑无子命令的 `dws calendar`，会打印整段 Usage，**切勿**将该段 help 当作工具结果再次塞进对话（会急剧增加 token 与首字延迟）。
 - **必须**遵循指令说明进行调用。**绝对禁止**使用虚构指令，使用虚构参数。
 
 ## 反模式（禁止）
-1. **禁止**执行 `dws calendar` 且不带二级子命令（会刷出大量帮助文本）。合法二级子命令：`event` / `participant` / `room` / `busy`。
-2. **禁止**使用不存在的子命令试探（如臆造 `dws calendar list`）；需要日程列表时一律使用 **`dws calendar event list`**（带 `--start` / `--end`，见下文「查询日程列表」示例）。
+1. **禁止**执行 `dws calendar` 且不带二级子命令（会刷出大量帮助文本）。合法二级子命令：`event` / `attendee` / `room` / `busy` / `attachment` / `book`。
+2. **禁止**使用不存在的子命令试探（如臆造 `dws calendar list`）；需要日程列表时一律使用 **`dws calendar event list`**（带 `--start` / `--end`，见下文「查询日程列表」示例）；需要日历本列表时使用 **`dws calendar book list`**。
 3. **禁止**将完整 `--help`/Usage 输出作为「观察」重复提交给模型；若误触，应直接改用本节黄金路径中的合法命令并重试。
 4. **禁止**继续使用已弃用的 `--max-results` 参数 —— 它们仍可被解析但**会被丢弃**，不再透传到 MCP，模型生成命令时也不要再带。
 5. **禁止**为已有日程重新创建日程来预订会议室。若日程已存在（同一会话中刚创建、或用户明确指向某日程），必须使用 `room add --event <已有EVENT_ID> --rooms <ROOM_ID>` 追加会议室，**绝不能**再调一次 `event create --rooms`（会创建重复日程）。
@@ -28,7 +26,7 @@
 日程实例（event instance）：日程的具体时间实例，可以通过event list指令查询时间段内的所有实例。1个普通日程和对应1个Instance，而1个重复性日程(SeriesMaster)对应N个Instance（同属一个日程序列）。
   - 同一个日程序列具有相同的iCalUid，并且重复性日程，其eventId和iCalUid的值相同。因此可以通过重复性日程实例的iCalUid得到重复性日程(SeriesMaster)的eventId
 重复规则（recurrence rule）：定义重复性日程的重复规则。
-参会人（attendee）：日程的参与者。常用通讯录工具查询userId，dws contact user search --query "姓名"。
+参会人（attendee）：日程的参与者。常用通讯录工具查询userId，dws contact user search --keyword "姓名"。
 响应状态（response）：参会人对日程的回应，包括：未响应、接受、待定、拒绝。
 忙闲时间（busy）：查询用户在指定时间段的忙闲状态，查询会议室在指定时间段的预定状态，用于会议时间协调。
 会议室（room）：room是 会议室 ，room可视为日程的资源类参会人，需要加入日程完成预订。注意和location区分，location只是地点，和room不同。
@@ -45,8 +43,10 @@ dws calendar event list [flags]
 dws calendar event suggest [flags]
 ```
 
+### attendee 相关三级子命令
+```
 # 日程中参会人操作：添加 ｜ 删除 ｜ 查询
-dws calendar participant [add|delete|list] [flags]
+dws calendar attendee [add|delete|list] [flags]
 ```
 
 ### room 相关三级子命令
@@ -68,10 +68,14 @@ dws calendar room delete [flags]
 dws calendar busy search [flags]
 ```
 
+### attachment 相关三级子命令
+```
 # 把已上传到钉盘的文件挂到日程上（不负责上传，只负责挂载）
 dws calendar attachment add [flags]
 ```
 
+### book 相关三级子命令
+```
 # 查询当前用户的所有日历，结果范围：用户自己的日历、已订阅的公共/团队日历、他人共享的日历。
 dws calendar book list [flags]
 ```
@@ -85,7 +89,9 @@ Usage:
   dws calendar event list [flags]
 Example:
   dws calendar event list --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T18:00:00+08:00"
+  dws calendar event list --calendar-id primary
 Flags:
+      --calendar-id string   日历 ID (默认 primary 主日历，仅在查询其他日历本时填写；通过 `book list` 获取)
       --end string           结束时间 ISO-8601 (例如 2026-03-10T18:00:00+08:00)
       --start string         开始时间 ISO-8601 (例如 2026-03-10T14:00:00+08:00)
 ```
@@ -95,6 +101,7 @@ Flags:
 **默认行为**：不传 `--start` / `--end` 时，默认返回今天的日程（00:00:00 ~ 23:59:59）。
 **权限**：查询共享日历下的日程时，至少要有reader权限。
 
+补充：当前用户的个人日程也可用 `dws calendar event list-mine` 查询，参数与 `event list` 一致。
 
 ### 获取日程详情
 ```
@@ -102,9 +109,10 @@ Usage:
   dws calendar event get [flags]
 Example:
   dws calendar event get --id <EVENT_ID>
-  dws calendar event get --id <EVENT_ID>
+  dws calendar event get --id <EVENT_ID> --calendar-id primary
 Flags:
       --id string            日程 ID (必填)
+      --calendar-id string   日历 ID (默认 primary 主日历)
 ```
 
 ### 创建日程
@@ -181,7 +189,7 @@ Flags:
       --location string                 地点信息（纯文本备注，如‘3号楼A区’；**不等于**预订会议室）
       --free-busy string                修改此日程的忙碌状态，无需修改则不传。busy - 在忙闲视图中，此日程时间段为忙碌; free - 此日程不占用忙闲
 ```
-> 支持修改标题、描述、时间、地点、忙碌状态等。如需修改会议室，请使用 dws calendar room [add|delete]；如需修改参会人，请使用 dws calendar participant [add|delete]
+> 支持修改标题、描述、时间、地点、忙碌状态等。如需修改会议室，请使用 dws calendar room [add|delete]；如需修改参会人，请使用 dws calendar attendee [add|delete]
 
 ### 删除日程
 
@@ -199,9 +207,9 @@ Flags:
 ### 查看参会人
 ```
 Usage:
-  dws calendar participant list [flags]
+  dws calendar attendee list [flags]
 Example:
-  dws calendar participant list --event <EVENT_ID>
+  dws calendar attendee list --event <EVENT_ID>
 Flags:
       --event string   日程 ID (必填)
 ```
@@ -209,10 +217,10 @@ Flags:
 ### 添加参会人
 ```
 Usage:
-  dws calendar participant add [flags]
+  dws calendar attendee add [flags]
 Example:
-  dws calendar participant add --event <EVENT_ID> --attendees <USER_ID_1>,<USER_ID_2>
-  dws calendar participant add --event <EVENT_ID> --attendees <USER_ID> --optional
+  dws calendar attendee add --event <EVENT_ID> --attendees <USER_ID_1>,<USER_ID_2>
+  dws calendar attendee add --event <EVENT_ID> --attendees <USER_ID> --optional
 Flags:
       --event string       日程 ID (必填)
       --attendees string   参会人 userId 列表，逗号分隔 (必填，最多500人)
@@ -225,9 +233,9 @@ Flags:
 
 ```
 Usage:
-  dws calendar participant delete [flags]
+  dws calendar attendee delete [flags]
 Example:
-  dws calendar participant delete --event <EVENT_ID> --attendees <USER_ID> --yes
+  dws calendar attendee delete --event <EVENT_ID> --attendees <USER_ID> --yes
 Flags:
       --event string       日程 ID (必填)
       --attendees string   参会人 userId 列表，逗号分隔 (必填)
@@ -273,7 +281,7 @@ Flags:
 
 > 如果知道roomId，想查该会议室的预订记录，直接用dws calendar busy search 指令
 
----
+--- 
 
 ### 预定会议室
 ```
@@ -309,11 +317,35 @@ Usage:
   dws calendar room list-groups [flags]
 Example:
   dws calendar room list-groups
-  dws calendar room list-groups --page-size 20 --page-index 0
+  dws calendar room list-groups --limit 20 --page 0
 Flags:
-      --page-index string  分页起始位置 (可选，不填默认 0)
-      --page-size string   页大小 (可选，不填默认 100，超过 100 按 100 处理)
+      --limit string       页大小 (可选，不填默认 100，超过 100 按 100 处理)
+      --page string        分页起始位置 (可选，不填默认 0)
 ```
+
+### 添加日程附件
+```
+Usage:
+  dws calendar attachment add [flags]
+Example:
+  dws calendar attachment add --event <EVENT_ID> --files <FILE_ID>:report.pdf,<FILE_ID2>:slides.pptx
+Flags:
+      --event string   日程 ID (必填)
+      --files string   附件列表，格式 <fileId>:<name>，多项逗号分隔 (必填)
+```
+
+> 上传文件得到 `fileId` 需配合钉盘相关流程；本命令只负责把已上传的文件挂载到日程上。
+
+### 查询用户日历列表
+```
+Usage:
+  dws calendar book list [flags]
+Example:
+  dws calendar book list
+```
+> 通过此接口可查询当前用户的日历列表，包含 主日历本、他人共享的日历、订阅的公共/团队日历。
+> 共享日历本中有来自 xxx 的，且权限大于reader，那么通过 `event list --calendar-id <xxx的日历本id> `可查到xxx完整的日程安排
+> 主日历 `id` 固定为 `primary`，绝大多数日程操作都默认走主日历，只有当用户明确要求查/写其他日历本时才需要带 `--calendar-id`。
 
 ### 查询用户 / 会议室闲忙状态
 ```
@@ -412,7 +444,7 @@ Flags:
 
 用户说"查下xxx的日程安排":
 - 查询是否有共享关系 -> `book list`
-  - 场景1: 共享日历本相关查询在开源 dws v1.0.30 暂不支持（`--calendar-id` 未暴露）；默认查询 primary 主日历
+  - 场景1: 共享日历本中有来自 xxx 的，且权限大于reader，那么通过 `event list --calendar-id <xxx的日历本id> `可查到xxx完整的日程安排
   - 场景2: 共享日历本中没有来自 xxx 的。那么通过 `busy search -- <USER_ID>`，查询xxx的忙闲安排
 
 ## 核心工作流
@@ -447,7 +479,7 @@ dws calendar event create --title "Q1 复盘会" \
   --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15:00:00+08:00" --format json
 
 # Step 2: 添加参会人（必须用 Step 1 返回的 eventId）
-dws calendar participant add --event <EVENT_ID> --attendees userId1,userId2 --format json
+dws calendar attendee add --event <EVENT_ID> --attendees userId1,userId2 --format json
 
 # Step 3: 搜索空闲会议室
 dws calendar room search --start ... --end ... --format json
@@ -480,7 +512,7 @@ dws calendar event list --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15
 | `event respond` | 响应结果 | — |
 | `room search` | `rooms[].roomId` | room add 的 --rooms 或 event create 的 --rooms |
 | `room list-groups` | `groups[].groupId` | room search 的 --group-id |
-
+| `book list` | `id`（如 `primary`） | event list/get 的 --calendar-id |
 | 钉盘上传 | 文件 `fileId` | attachment add 的 --files `<fileId>:<name>` |
 
 ## 注意事项
@@ -493,23 +525,23 @@ dws calendar event list --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15
 - `event suggest` 根据参会人闲忙自动推荐合适时间，适合会议时间未确定时使用
 - 创建日程**支持**通过 `--rooms` 一步预定会议室（`event create --rooms roomId1,roomId2`）；若创建后再加，仍可用 `room add`
 - `room search` 不带 `--group-id` 时查根目录；企业会议室超过 100 条会报错，此时需先 `room list-groups` 获取分组，再按分组逐一查询
-- `room list-groups` 支持 `--page-size` / `--page-index` 分页（schema 类型为字符串）
+- `room list-groups` 支持 `--limit` / `--page` 分页（schema 类型为字符串）
 - **`event create --rooms` / `room add --rooms` 的唯一合法来源**：最近一次（同一会话、同一时段窗口）`room search` 返回体中的 `roomId`；禁止把用户自然语言会议室名当 `roomId` 传入（否则会 `roomId invalid` 等错误）
 - **搜房无结果**：在符合早停/用户限定范围内，`room search`（含按分组逐组查）全部返回空或无空闲 → 应**直接向用户报错/说明失败**并结束订房；**禁止**假设 roomId、禁止无合法 `roomId` 时调用 `room add` / `event create --rooms` 试探、禁止用 `event get` 等绕路推断 roomId
 - **评测 / 自动化断言**：凡涉及 `room add` / `event create --rooms` 的流程，`--rooms` 只能填上游 `room search`（或等价接口）返回 JSON 中的 **`rooms[].roomId`**；不得以会议室展示名、楼层文案或用户口语当作 `roomId`
 - **附件**：`attachment add` 仅负责挂载，**不上传**文件；fileId 必须先通过钉盘流程取得；`--files` 多附件用 `<fileId>:<name>` 元素逗号分隔
-- **日历本**：开源 dws v1.0.30 `event list` / `event get` 不接受 `--calendar-id`，固定查 primary 主日历
+- **日历本**：`book list` 返回的 `id` 才是合法 `calendarId`；如无明确说明，`event list` / `event get` 都不要带 `--calendar-id`，让接口默认走 primary 主日历
 - **已弃用入参**：`--max-results`（event list / list-mine）在新 MCP schema 中被移除；CLI 仍接受但**不会**透传到 MCP；模型生成命令时**禁止**继续使用
 
 ## 自动化脚本
 
 | 脚本 | 场景 | 用法 |
 |------|------|------|
-| [calendar_today_agenda.py](../scripts/calendar_today_agenda.py) | 查看今天/明天/本周日程安排 | `python calendar_today_agenda.py today` |
-| [calendar_schedule_meeting.py](../scripts/calendar_schedule_meeting.py) | 一键创建日程+添加参会人+预定会议室；搜房失败时输出明确原因并返回非零退出码 | `python calendar_schedule_meeting.py --title "复盘会" --start "2026-03-15T14:00" --end "2026-03-15T15:00" --users userId1 --book-room` |
-| [calendar_free_slot_finder.py](../scripts/calendar_free_slot_finder.py) | 查询多人共同空闲时段 | `python calendar_free_slot_finder.py --users userId1,userId2 --date 2026-03-15` |
+| [calendar_today_agenda.py](../../scripts/calendar_today_agenda.py) | 查看今天/明天/本周日程安排 | `python calendar_today_agenda.py today` |
+| [calendar_schedule_meeting.py](../../scripts/calendar_schedule_meeting.py) | 一键创建日程+添加参会人+预定会议室；搜房失败时输出明确原因并返回非零退出码 | `python calendar_schedule_meeting.py --title "复盘会" --start "2026-03-15T14:00" --end "2026-03-15T15:00" --users userId1 --book-room` |
+| [calendar_free_slot_finder.py](../../scripts/calendar_free_slot_finder.py) | 查询多人共同空闲时段 | `python calendar_free_slot_finder.py --users userId1,userId2 --date 2026-03-15` |
 
 ## 相关产品
 
-- `dingtalk-conference` (`references/conference.md`) — 视频会议发起/预约/邀请入会/会中控制；日历日程、参会人、会议室管理仍用 calendar
-- `dingtalk-contact` (`references/contact.md`) — 搜索同事 userId，用于 attendee add --attendees
+- [conference](./simple.md) — 仅视频会议预约（返回入会链接），不含参会人/会议室管理
+- [contact](./contact.md) — 搜索同事 userId，用于 attendee add --attendees

@@ -34,8 +34,8 @@ func RegisterCommands(root *cobra.Command, c edition.ToolCaller) {
   dws pat browser-policy    配置 PAT 浏览器打开策略
 
 能力说明：
-  --format 只控制 PAT 撞墙时的输出形态；当 --format json 时，
-  CLI 只返回结构化 JSON，不混入非结构化文本。
+  pat chmod 默认输出轻量授权摘要；显式 --format json / --verbose 时，
+  才返回服务端完整 JSON（含逐 scope 明细），便于机器校验。
   浏览器是否打开由本地 PAT 策略单独决定，与 json / non-json 独立。
   生效时会优先按 DINGTALK_DWS_AGENTCODE 读取 agent 策略，再回退到默认策略。
   写入 agent 策略需显式传 --agentCode；不传则写入全局默认策略。

@@ -110,8 +110,8 @@ func NewSchemaCommand(loader CatalogLoader) *cobra.Command {
 		Long: `查看已发现的 MCP 产品和工具的 Schema 元数据。
 
 不带参数时列出所有产品及其工具数量；带路径时输出该工具的完整
-输入 Schema（JSON Schema 格式）、输出 Schema、MCP 注解和 CLI
-层的 flag overlay（alias/transform/env_default）。
+输入 Schema（JSON Schema 格式）、输出 Schema、授权元数据、MCP
+注解和 CLI 层的 flag overlay（alias/transform/env_default）。
 
 路径支持三种写法：
   product.rpc_name           规范路径 (e.g. ding.send_ding_message)
@@ -123,6 +123,7 @@ func NewSchemaCommand(loader CatalogLoader) *cobra.Command {
   dws schema ding.send_ding_message         # 规范路径
   dws schema "ding message send"            # CLI 路径（空格）
   dws schema --cli-path "ding message send" # 同上，显式 flag（脚本友好）
+  dws schema calendar.create_event --jq '.tool.auth'
   dws schema -f pretty ding.send_ding_message  # ANSI 彩色分区展示
   dws schema --jq '.tool.flag_overlay'      # 只看 CLI overlay`,
 		Args:              cobra.MaximumNArgs(1),
@@ -222,9 +223,27 @@ func newProductCommand(product ir.CanonicalProduct, runner executor.Runner, engi
 	if shortDescription == "" {
 		shortDescription = product.ID
 	}
-	aliases := make([]string, 0, 1)
-	if preferred := preferredProductRouteToken(product); preferred != "" && preferred != product.ID {
-		aliases = append(aliases, preferred)
+	aliases := make([]string, 0, 2)
+	seenAlias := map[string]bool{product.ID: true}
+	addAlias := func(s string) {
+		s = strings.TrimSpace(s)
+		if s == "" || seenAlias[s] {
+			return
+		}
+		seenAlias[s] = true
+		aliases = append(aliases, s)
+	}
+	if preferred := preferredProductRouteToken(product); preferred != "" {
+		addAlias(preferred)
+	}
+	// Consume only cli.Aliases (canonical alternate-name field).
+	// cli.Prefixes is the tool-name-prefix pool consumed by deriveCommandName;
+	// treating prefixes[1:] as aliases over-registers names the wukong edition
+	// does not expose, breaking cross-edition parity.
+	if product.CLI != nil {
+		for _, a := range product.CLI.Aliases {
+			addAlias(a)
+		}
 	}
 
 	cmd := &cobra.Command{
@@ -784,6 +803,9 @@ func compactTool(t ir.ToolDescriptor) map[string]any {
 	}
 	if t.Annotations != nil {
 		tool["annotations"] = t.Annotations
+	}
+	if t.Auth != nil {
+		tool["auth"] = t.Auth
 	}
 	if len(t.FlagOverlay) > 0 {
 		tool["flag_overlay"] = t.FlagOverlay

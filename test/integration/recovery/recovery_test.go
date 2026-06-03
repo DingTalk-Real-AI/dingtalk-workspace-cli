@@ -25,6 +25,9 @@ func TestRecoveryClosedLoopDoesNotRecursivelyCaptureExecuteFailures(t *testing.T
 	server, calls := newRecoveryRuntimeServer(t)
 	defer server.Close()
 
+	app.SetDiscoveryBaseURL(server.URL)
+	t.Cleanup(func() { app.SetDiscoveryBaseURL("") })
+
 	t.Setenv("DINGTALK_AITABLE_MCP_URL", server.URL+"/server/aitable")
 	t.Setenv("DINGTALK_DEVDOC_MCP_URL", server.URL+"/server/devdoc")
 	t.Setenv(cli.CatalogFixtureEnv, writeRecoveryCatalogFixture(t, server.URL))
