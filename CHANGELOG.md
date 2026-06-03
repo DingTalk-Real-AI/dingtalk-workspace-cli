@@ -6,6 +6,10 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Removed
+
+- **`dws aiapp` — AI application product taken offline** — removed the `aiapp` product surface (`create` / `query` / `modify`) from the CLI: deleted `internal/helpers/aiapp.go`, dropped it from the generator coverage targets and `knownRegistryProducts`, removed the `aiapp` skill references (mono `references/products/aiapp.md` + `dingtalk-aiapp` multi skill), and unpublished the `aiapp` server from the service-discovery envelope. Product count drops from 19 to 18.
+
 ## [1.0.33] - 2026-06-02
 
 This release merges the multi-contributor `pre-mcp-discovery` feature branch into `main` as a single squash (#391), bringing a large batch of new product surface — full DingTalk **docs** (`doc`), **knowledge base** (`wiki`), **AI app** (`aiapp`), AI-table **forms** + **import/export**, and reworked **mail** / **todo** / **report** command trees — while keeping service discovery pinned to production `https://mcp.dingtalk.com` (the branch's `pre-mcp.dingtalk.com` endpoint change was deliberately excluded; the four host constants in `skill_command.go` / `auth/endpoints.go` / `cli/loader.go` / `market/registry.go` stay on prod). It also folds in the portable auth bundle (`dws auth export` / `import`, #357) and PAT batch authorization (#389).
