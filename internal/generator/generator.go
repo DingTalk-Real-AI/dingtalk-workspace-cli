@@ -82,7 +82,6 @@ var writeOperationTokens = map[string]struct{}{
 }
 
 var legacy17CoverageTargets = []string{
-	"aiapp",
 	"aitable",
 	"attendance",
 	"calendar",
@@ -102,7 +101,6 @@ var legacy17CoverageTargets = []string{
 }
 
 var extended22CoverageTargets = []string{
-	"aiapp",
 	"aitable",
 	"attendance",
 	"calendar",
