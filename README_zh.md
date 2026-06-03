@@ -328,6 +328,48 @@ DWS_SKILL_SOURCE=/path/to/skills dws skill setup --mode multi
 ## 功能特性
 
 <details>
+<summary><strong>事件订阅</strong> — 实时订阅钉钉 Stream 事件，驱动事件触发的 Agent</summary>
+
+`dws event consume` 通过钉钉 Stream 长连接订阅事件（IM 消息、审批状态变更、通讯录/日历/考勤生命周期），将每条事件以 NDJSON 一行输出到 stdout。隐藏 bus daemon（按需 fork）独占一个 ClientID 的云端连接；多个 consumer 进程通过本地 Unix Socket / Windows Named Pipe 共享。
+
+> **前置条件**：bot-only。`dws config init`（keychain）或设 env var `DWS_CLIENT_ID` + `DWS_CLIENT_SECRET`（CI/容器友好）。**不需要 `dws auth login`**。
+
+```bash
+# 监听 IM 消息，Agent 友好的 compact 格式
+dws event consume --event-types im.message.receive_v1 --compact --quiet
+
+# 一次性运行：收 10 条或 30 秒
+dws event consume --max-events 10 --duration 30s
+
+# 多路由：im 持久化到 ./im/、approval 到 ./approval/、其它走 stdout
+dws event consume \
+  --route '^im\.=dir:./im/' \
+  --route '^approval\.=dir:./approval/'
+
+# systemd / k8s 友好（不 fork）
+dws event consume --foreground --quiet
+
+# Status / list / stop
+dws event status                  # bus 健康 + per-event-type 计数
+dws event list --all              # 列所有 ClientID 的 consumer
+dws event stop                    # 优雅 SIGTERM
+```
+
+| 特性 | 说明 |
+|------|------|
+| Daemon + 多消费者 | 一个 ClientID 一个 bus，第一次 `consume` 时自动 fork；N 个 consumer 通过 UDS/Named Pipe 共享 |
+| Hello 下推过滤 | `--event-types` + `--filter` 正则在 bus 层评估，减少 IPC 投递量 |
+| Dedup | event_id LRU 吸收 Stream 重连重投递 |
+| 状态可观测 | `status` 显示 source state（inferred）、per-event-type received/dropped、orphan 检测 |
+| 输出格式 | `ndjson` (默认) / `json` / `pretty` / `raw` / `compact`（IM/审批/通讯录/日历/考勤都有专用 processor）|
+| 跨平台 | macOS/Linux 用 Unix Socket，Windows 用 Named Pipe |
+| Env var 调参 | `DWS_EVENT_BUS_IDLE_TIMEOUT` / `DWS_EVENT_CONSUMER_BUFFER` / `DWS_EVENT_DEDUP_LRU` / `DWS_EVENT_DROP_WARN_PCT` |
+
+配合 `claude -p` 或任意 LLM CLI 可以快速搭出自动回复机器人 — 详见 `skills/multi/dingtalk-event/SKILL.md` 含完整管道示例和 systemd unit 模板。
+
+</details>
+
+<details>
 <summary><strong>Raw API 调用</strong> — 直接调用钉钉 OpenAPI</summary>
 
 `dws api` 让你直接调用任意钉钉 OpenAPI，无需 SDK，Token 自动获取和刷新。

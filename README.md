@@ -328,6 +328,48 @@ Env vars: `DWS_SKILL_MODE=mono|multi` (also honored by `install.sh` / `install.p
 ## Features
 
 <details>
+<summary><strong>Event Subscription</strong> — real-time DingTalk Stream events for event-driven agents</summary>
+
+`dws event consume` subscribes to DingTalk Stream events (IM messages, approval state changes, contact/calendar/attendance lifecycle) over a managed WebSocket long-connection and emits each event as one NDJSON line on stdout. A hidden bus daemon (auto-forked) holds the single cloud connection per ClientID; multiple consumer processes share it over a local Unix Socket / Windows Named Pipe.
+
+> **Prerequisite**: bot-only auth. Either `dws config init` (keychain) or set `DWS_CLIENT_ID` + `DWS_CLIENT_SECRET` env vars (CI/container friendly). No `dws auth login` required.
+
+```bash
+# Listen for IM messages, agent-friendly compact format
+dws event consume --event-types im.message.receive_v1 --compact --quiet
+
+# Run-once: collect 10 events or 30s
+dws event consume --max-events 10 --duration 30s
+
+# Multi-route: persist im events to ./im/, approval to ./approval/, rest to stdout
+dws event consume \
+  --route '^im\.=dir:./im/' \
+  --route '^approval\.=dir:./approval/'
+
+# systemd / k8s friendly (no fork)
+dws event consume --foreground --quiet
+
+# Status / list / stop
+dws event status                  # bus health + per-event-type counters
+dws event list --all              # active consumers across all ClientIDs
+dws event stop                    # graceful SIGTERM
+```
+
+| Feature | Details |
+|---------|---------|
+| Daemon + multi-consumer | Single bus per ClientID auto-forked on first `consume`; N consumers share it via UDS/Named Pipe |
+| Hello-time filter pushdown | `--event-types` + `--filter` regex evaluated at the bus, not after IPC delivery |
+| Dedup | event_id LRU absorbs Stream redelivery on reconnect |
+| State observability | `status` shows source state (inferred), per-event-type received/dropped, orphan detection |
+| Output formats | `ndjson` (default) / `json` / `pretty` / `raw` / `compact` (per-type processors for IM/approval/contact/calendar/attendance) |
+| Cross-platform | Unix Socket on macOS/Linux, Windows Named Pipe on Windows |
+| Tunable env vars | `DWS_EVENT_BUS_IDLE_TIMEOUT` / `DWS_EVENT_CONSUMER_BUFFER` / `DWS_EVENT_DEDUP_LRU` / `DWS_EVENT_DROP_WARN_PCT` |
+
+Pair with `claude -p` or any LLM CLI for auto-reply agents — see `skills/multi/dingtalk-event/SKILL.md` for the full pipeline guide and a systemd unit template.
+
+</details>
+
+<details>
 <summary><strong>Raw API Access</strong> — call any DingTalk OpenAPI directly</summary>
 
 `dws api` lets you call any DingTalk OpenAPI without an SDK. Tokens are automatically acquired and refreshed.

@@ -43,6 +43,7 @@ cli_version: ">=1.0.15"
 | `sheet`           | 在线电子表格(axls)：工作表 CRUD/区域读写/行列增删/合并/查找替换/筛选视图/导出(两步)/图片 | [sheet.md](./references/products/sheet.md)                     |
 | `todo`            | 待办：创建(含优先级/截止时间/循环)/查询/修改/标记完成/删除                   | [todo.md](./references/products/todo.md)                       |
 | `wiki`            | 知识库：空间创建/详情/列表/搜索 + 成员管理                                | [wiki.md](./references/products/wiki.md)                       |
+| `event`           | 事件订阅：Stream 长连接订阅消息/审批/通讯录/日历事件，NDJSON 输出（实时驱动 Agent）| [event.md](./references/products/event.md)                     |
 
 ## 意图判断决策树
 
@@ -62,6 +63,7 @@ cli_version: ">=1.0.15"
 用户提到"在线电子表格/钉钉表格/axls/工作表/单元格读写/合并单元格/筛选视图/导出 xlsx" → `sheet`
 用户提到"待办/TODO/任务提醒/循环待办" → `todo`
 用户提到"知识库/wiki/团队空间/知识库成员管理" → `wiki`
+用户提到"实时监听/订阅事件/事件流/event consume/接收新消息/驱动 Agent/聊天机器人监听/审批触发/通讯录变更" → `event`
 
 关键区分: aitable(数据表格) vs todo(待办任务)
 关键区分: report(钉钉日志/日报周报) vs todo(待办任务)
