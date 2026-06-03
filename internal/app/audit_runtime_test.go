@@ -116,6 +116,10 @@ func TestEmitAudit_PopulatesAllObtainableFields(t *testing.T) {
 	if local.Device.OS == "" {
 		t.Error("device.os should always be set")
 	}
+	// client.cli_version is the compiled-in version (trustworthy, dws-managed).
+	if local.Client.CLIVersion != version {
+		t.Errorf("client.cli_version = %q, want %q", local.Client.CLIVersion, version)
+	}
 
 	// --- forward sink received the same trace ---
 	if len(forwarded) == 0 {

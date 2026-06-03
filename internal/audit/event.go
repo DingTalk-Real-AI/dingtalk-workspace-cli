@@ -35,7 +35,8 @@ import (
 )
 
 // SchemaVersion is bumped on any breaking change to Event's JSON shape.
-const SchemaVersion = "1"
+// v2 adds the Client block (agent_id / host_agent / channel / cli_version).
+const SchemaVersion = "2"
 
 // Direction enumerates where data flowed as a result of the command.
 type Direction string
@@ -86,6 +87,20 @@ type Org struct {
 	Name   string `json:"name,omitempty"`
 }
 
+// Client identifies the dws install + version. Only TRUSTWORTHY fields live
+// here: AgentID/Source are dws-managed install state, CLIVersion is compiled
+// in — none are caller-asserted-per-call.
+//
+// Deliberately ABSENT (forgeable, env-asserted by the caller — see audit TODO):
+// host_agent (DINGTALK_AGENT), channel (DWS_CHANNEL), agent_code
+// (DINGTALK_DWS_AGENTCODE). They will be added only once the gateway can hand
+// back a SIGNED agent identity so they can't be spoofed.
+type Client struct {
+	AgentID    string `json:"agent_id,omitempty"`    // 装机标识: install-time UUID (x-dws-agent-id)
+	Source     string `json:"source,omitempty"`      // identity source, 默认 "dws"
+	CLIVersion string `json:"cli_version,omitempty"` // dws 版本
+}
+
 // Device identifies the machine. DeviceID/SerialNo are NEW collection and
 // count as personal information under PIPL — both are empty unless the operator
 // explicitly opts in (see collector).
@@ -130,6 +145,7 @@ type Event struct {
 
 	Actor  Actor  `json:"actor"`
 	Org    Org    `json:"org"`
+	Client Client `json:"client"`
 	Device Device `json:"device"`
 	Intent Intent `json:"intent"`
 
@@ -186,6 +202,7 @@ func (e *Event) Redact(level RedactLevel, salt string) *Event {
 		cp.Target.Name = hashed(cp.Target.Name, salt)
 		cp.Target.Summary = ""
 		cp.Device.SerialNo = hashed(cp.Device.SerialNo, salt)
+		cp.Client.AgentID = hashed(cp.Client.AgentID, salt)
 		cp.Flow.PeerIDs = hashEach(cp.Flow.PeerIDs, salt)
 		return &cp
 	case RedactMinimal:
@@ -196,6 +213,7 @@ func (e *Event) Redact(level RedactLevel, salt string) *Event {
 			Timestamp:     cp.Timestamp,
 			TraceID:       cp.TraceID,
 			Org:           Org{CorpID: cp.Org.CorpID},
+			Client:        Client{CLIVersion: cp.Client.CLIVersion}, // version is an ops dimension; drop the install id
 			Module:        cp.Module,
 			Command:       cp.Command,
 			Subcommand:    cp.Subcommand,

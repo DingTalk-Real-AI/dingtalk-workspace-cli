@@ -78,11 +78,27 @@ func (r *runtimeRunner) emitAudit(ctx context.Context, execID, endpoint string,
 
 	ev := audit.New(time.Now(), execID)
 
-	// Actor + Org from the persisted token (fully obtainable).
+	// Actor + Org from the persisted token — TRUSTWORTHY: the token is
+	// validated by the gateway, so corp_id / user_id can't be spoofed by the
+	// caller. (user_id is only present when the login flow captured it.)
 	if td, err := authpkg.LoadTokenData(defaultConfigDir()); err == nil && td != nil {
 		ev.Actor = audit.Actor{UserID: td.UserID, Name: td.UserName}
 		ev.Org = audit.Org{CorpID: td.CorpID, Name: td.CorpName}
 	}
+
+	// Client: dws-managed install identity + compiled-in version. TRUSTWORTHY
+	// (not caller-asserted per call). Load (not EnsureExists) so auditing never
+	// creates identity state as a side effect.
+	ev.Client.CLIVersion = version
+	if id := authpkg.Load(defaultConfigDir()); id != nil {
+		ev.Client.AgentID = id.AgentID
+		ev.Client.Source = id.Source
+	}
+	// TODO(audit): host_agent (DINGTALK_AGENT) / channel (DWS_CHANNEL) /
+	// agent_code (DINGTALK_DWS_AGENTCODE) are caller-supplied env vars —
+	// FORGEABLE, so they are intentionally NOT recorded here. Add them only
+	// once the gateway returns a SIGNED agent identity bound to the token, so
+	// the audit can't be spoofed. See docs/audit.md "TODO".
 
 	ev.Device = collectDeviceCached()
 

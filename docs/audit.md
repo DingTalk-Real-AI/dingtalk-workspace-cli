@@ -28,18 +28,26 @@ dws 可以为**每一次命令调用**生成一条结构化审计记录，用于
 
 ## 字段
 
-| 字段 | 含义 | 来源 |
-|---|---|---|
-| `ts` / `trace_id` | 时间 / 唯一 trace | CLI（`trace_id` == 传输层 execution_id） |
-| `actor` | 用户 id / 姓名 | 登录 token |
-| `org` | 组织 corp_id / 名称 | 登录 token |
-| `device` | os / hostname / device_id / sn_no | 本机；`device_id`/`sn_no` 需 opt-in |
-| `intent` | 自然语言原文 + `provenance` | 仅 agent 层可注入，标记 `provenance=agent`，CLI 无法验真 |
-| `module` / `command` / `subcommand` | 操作模块 / skill 命令 / 子命令 | CLI |
-| `subcommand_desc` | 子命令介绍 | 命令 catalog |
-| `target` | 操作对象 id / 名称 / 摘要 / 敏感度 | 调用参数 + catalog（`sensitive` → `confidential`） |
-| `flow` | 数据流向 + api + 本地路径 / endpoint / peer ids | 调用参数推断 |
-| `outcome` / `err_class` / `exit_code` | 成败与错误分类 | CLI |
+字段按**可信度**分两类，只有可信字段会被记录：
+
+**① 可信字段（已上）** —— token 验证 / dws 自管 / dws 实测，调用方无法 per-call 伪造：
+
+| 字段 | 含义 | 来源 | 可信原因 |
+|---|---|---|---|
+| `ts` / `trace_id` | 时间 / 唯一 trace | CLI（`trace_id` == 传输层 execution_id） | dws 实测 |
+| `actor` | 用户 id / 姓名 | 登录 token | 网关验签，`user_id` 仅登录流程捕获时有 |
+| `org` | 组织 corp_id / 名称 | 登录 token | 网关验签，不可伪造 |
+| `client` | `agent_id`（装机 id）/ `source` / `cli_version` | identity.json + 编译版本 | dws 自管/编译注入，非调用方自报 |
+| `device` | os / hostname / device_id / sn_no | 本机；`device_id`/`sn_no` 需 opt-in | 读真硬件 |
+| `intent` | 自然语言原文 + `provenance` | 仅 agent 层注入 | **标记 `provenance=agent`，明示不可验真** |
+| `module` / `command` / `subcommand` | 操作模块 / skill 命令 / 子命令 | CLI 解析实际执行的命令 | dws 实测 |
+| `subcommand_desc` | 子命令介绍 | 命令 catalog | 线上 catalog |
+| `target` | 操作对象 id / 名称 / 摘要 / 敏感度 | 调用参数 + catalog（`sensitive` → `confidential`） | dws 实测 |
+| `flow` | 数据流向 + api + 本地路径 / endpoint / peer ids | 调用参数推断 | dws 实测 |
+| `outcome` / `err_class` / `exit_code` | 成败与错误分类 | CLI | dws 实测 |
+
+**② 暂不上字段（可伪造，待网关签名）** —— 见下方 TODO：
+`host_agent`（装在哪个 agent，`DINGTALK_AGENT`）、`channel`（渠道，`DWS_CHANNEL`）、`agent_code`（`DINGTALK_DWS_AGENTCODE`）。这三个是调用方自报的环境变量，`export` 即可冒充，**不可信，故先不记录**。
 
 ### `flow.direction` 取值
 
@@ -77,9 +85,27 @@ dws minutes export --minute-id m-77 --output ~/Desktop/q2.md --format json
 tail -n1 ~/.dws/logs/audit.jsonl | jq .   # 路径随 DWS_CONFIG_DIR / edition 变化
 ```
 
+## 日志存在哪里 / 能否中心化收集
+
+- **默认：每个用户自己机器上**，`<configDir>/logs/audit.jsonl`，不开转发就不出本机。
+- **要中心化收集**：配置 `DWS_AUDIT_FORWARD_URL` 指向一个收集端点，每个用户每次调用就会 POST 一条上去。
+  - **企业合规场景**：endpoint 指向**企业自己的审计库**，钉钉/厂商不持有数据（推荐，合规干净）。
+  - **平台侧统一收集（钉钉这边收）**：技术上可行——把 endpoint 指向钉钉的审计 ingest 服务即可；
+    但这等于厂商集中持有用户操作数据，必须 **opt-in + 明确告知**，否则就是开源 CLI 最忌讳的“偷偷上报”。
+    建议拆成两条：**合规全量审计 → 企业自有 sink**；**匿名极简遥测（`minimal` 档）→ 钉钉平台**做运维监控，
+    隐私边界才清楚。
+- 不管哪种，本地文件始终是源头真相；转发是尽力而为，丢了可从本地文件回补。
+
+## TODO
+
+- **网关签名的 agent 身份**：`host_agent` / `channel` / `agent_code` 目前是调用方自报的环境变量、可伪造，
+  故暂不记录。待网关能回带一个**与 token 绑定的签名 agent 凭证**后再加入审计，确保“装在哪个 agent / 哪个渠道”不可冒充。
+- **`actor.user_id` 稳定化**：让登录流程把 `user_id` 落进 token，使其每次都非空（当前仅部分登录流程捕获）。
+
 ## 隐私与合规
 
 - `device_id` / `sn_no` 是 PIPL 下的个人信息，**默认不采集**，企业需显式开启并告知用户。
 - 自然语言原文只有上层 agent 能提供，审计记录里以 `provenance=agent` 标注，
   表明该字段非 CLI 实测、不可验真。
 - 富审计数据是**企业的合规资产**，应进入企业自有 sink；dws 不提供任何厂商默认收集端点。
+- `host_agent` / `channel` / `agent_code` 等调用方自报字段在网关签名前**不记录**，避免可伪造数据混入审计。
