@@ -1105,9 +1105,9 @@ search 与 find 选择指南:
 要"给我建一个新机器人 / 给 agent 接入钉钉"，走官方 Connector `@dingtalk-real-ai/dingtalk-connector`。它**分两层**——建号宿主无关，收发按宿主接入，不要把它当成 OpenClaw 专属：
 
 - **① 建号（host-agnostic）**: `npx -y @dingtalk-real-ai/dingtalk-connector install` 走钉钉 OpenAPI 设备授权（扫码一键建号），**与具体 agent 宿主无关**，任何能跑 Node 的环境都能建号。
-- **② 收→回（按宿主接入）**: 让机器人真正"收消息 → 回消息"需要一个宿主运行时。
-  - **OpenClaw 及其 fork（如 Hermes）**: 开箱即用，Connector 以 Stream 模式接入（无公网 IP / Webhook）。
-  - **其它主流 agent（Claude / Cursor / Codex / …）**: 通过宿主暴露的 **OpenAI Chat Completions endpoint** 接入（Connector 把钉钉消息桥接到该端点）。
+- **② 收→回（运行时）**: 让机器人真正"收消息 → 回消息"需要一个 agent 运行时。**这条 recipe（建号指南）随 dws skill 安装到 dws 支持的全部主流 agent**——Claude Code / Cursor / Codex / Qoder / opencode / Gemini / Windsurf / Cline / Kiro / Trae / Hermes / OpenClaw 等（约 14 个 agent home，见 `dws skill setup` 目标），它们都能驱动上面的建号流程。运行时桥接有两条**对等**路径：
+  - **OpenClaw 及其 fork（如 Hermes）**: 走 Connector 的 `openclaw/plugin-sdk` channel 契约，Stream 模式直连（无公网 IP / Webhook）。
+  - **其它 agent（Claude Code / Cursor / Codex / Qoder / …）**: 通过宿主暴露的 **OpenAI Chat Completions endpoint** 桥接（Connector 把钉钉消息转给该端点，agent 回流）；与 DEAP 架构同源。
 
 典型触发词: "给我建个机器人""创建一个机器人""给 agent 接个钉钉机器人""接入 OpenClaw / Hermes""provision a bot"。
 
@@ -1130,7 +1130,7 @@ dws chat bot search --format json
 ```
 
 注意:
-  - **分层理解**：建号是钉钉 OpenAPI 能力，宿主无关；收→回依赖宿主运行时——今天 OpenClaw 及其 fork（Hermes）开箱即用，其它主流 agent 经 OpenAI-compatible endpoint 接入。**不要因为包名含 openclaw 就以为只支持 OpenClaw**（`peerDependencies.openclaw` 标记为 optional）。
+  - **分层理解**：① 建号是钉钉 OpenAPI 能力，宿主无关；② 这条 skill 指南覆盖 dws 支持的全部主流 agent（Claude Code / Cursor / Codex / Qoder / opencode / Gemini / Windsurf / Cline / Kiro / Trae / Hermes / OpenClaw 等，约 14 个 agent home）；③ 收→回运行时有两条**对等**路径（`openclaw/plugin-sdk` 契约 / OpenAI-compatible endpoint）。**不是只支持 OpenClaw**（`peerDependencies.openclaw` 标记为 optional）。
   - 这条 recipe 依赖 dws 之外的前置（宿主运行时 + npm 网络 + 手机扫码），**不是纯 dws 能闭环的**；前置不满足时明确告知用户，不要伪造创建成功。
   - 创建成功后，发消息/拉群仍走上面的 `chat message send-by-bot` / `group members add-bot`，用 `dws chat bot search` 返回的 `robotCode`。
   - 安全: 机器人在你的授权范围内以你的身份行事，按个人助理对待，勿用于无人值守的生产部署。
