@@ -1099,30 +1099,39 @@ search 与 find 选择指南:
 | 额外返回 openDingTalkId | 无 | 有（可用于给机器人发单聊消息） |
 | 触发词 | "我创建的""我的""我自己的" | "搜索机器人""找机器人""查机器人" |
 
-#### 创建【新】机器人 — 通过 OpenClaw 连接器（dws 无原生创建命令）
+#### 创建【新】机器人 — 通过钉钉官方 Connector（dws 无原生创建命令，宿主无关）
 
 范围: `dws chat bot` 只能**搜索**（search / find）和**拉机器人进群**（group members add-bot），**不能创建**机器人。
-要"给我建一个新机器人/给 agent 接入钉钉/接入 OpenClaw"，走官方连接器 `@dingtalk-real-ai/dingtalk-connector`（Hermes / OpenClaw 原生方式），它会免控制台一键建号并以 Stream 模式接入 agent（无需公网 IP / Webhook）。
-典型触发词: "给我建个机器人""创建一个机器人""给 agent 接个钉钉机器人""接入 OpenClaw""provision a bot"。
+要"给我建一个新机器人 / 给 agent 接入钉钉"，走官方 Connector `@dingtalk-real-ai/dingtalk-connector`。它**分两层**——建号宿主无关，收发按宿主接入，不要把它当成 OpenClaw 专属：
 
-固定路线（前置闸门 → 创建 → 交叉验证，缺一步不算闭环）:
+- **① 建号（host-agnostic）**: `npx -y @dingtalk-real-ai/dingtalk-connector install` 走钉钉 OpenAPI 设备授权（扫码一键建号），**与具体 agent 宿主无关**，任何能跑 Node 的环境都能建号。
+- **② 收→回（按宿主接入）**: 让机器人真正"收消息 → 回消息"需要一个宿主运行时。
+  - **OpenClaw 及其 fork（如 Hermes）**: 开箱即用，Connector 以 Stream 模式接入（无公网 IP / Webhook）。
+  - **其它主流 agent（Claude / Cursor / Codex / …）**: 通过宿主暴露的 **OpenAI Chat Completions endpoint** 接入（Connector 把钉钉消息桥接到该端点）。
+
+典型触发词: "给我建个机器人""创建一个机器人""给 agent 接个钉钉机器人""接入 OpenClaw / Hermes""provision a bot"。
+
+固定路线（前置闸门 → 建号 → 按宿主接入 → 交叉验证，缺一步不算闭环）:
 
 ```
-# 1. 前置闸门：确认 OpenClaw 已安装且版本达标（< 2026.4.9 直接告知用户先升级，不要硬跑 npx）
-openclaw -v            # 需 OpenClaw CLI ≥ 2026.4.9
+# 1. 前置闸门：确认存在【任一】受支持的宿主运行时，而不是硬卡 openclaw
+#    OpenClaw / Hermes 系（Stream 宿主，≥ 2026.4.9）：openclaw -v
+#    其它 agent：确认有一个 OpenAI Chat Completions endpoint 可桥接
+openclaw -v 2>/dev/null || echo "无 OpenClaw/Hermes 宿主 → 改用 OpenAI-compatible endpoint 接入（见上层②）"
 
-# 2. 创建：连接器在终端渲染钉钉二维码；手机钉钉扫码 → 点「一键创建新机器人」→ 自动建号 + 授权 + Stream 接入
+# 2. 建号（宿主无关）：终端渲染钉钉二维码 → 手机钉钉扫码 → 一键创建新机器人 → 自动建号 + 授权
 npx -y @dingtalk-real-ai/dingtalk-connector install
 
-# 3. 验证 channel 已 running
-openclaw channels status --deep | grep DingTalk
+# 3. 按宿主验证接入：OpenClaw / Hermes 系 → channel 应 running + connected
+openclaw channels status --deep | grep -i dingtalk
 
-# 4. 交叉验证：连接器新建的机器人，dws 应当能搜到（两个独立工具看到同一个 robotCode 才算真创建成功）
+# 4. 交叉验证（宿主无关）：新建机器人 dws 应当能搜到（两个独立工具看到同一 robotCode 才算真成功）
 dws chat bot search --format json
 ```
 
 注意:
-  - 这条 recipe 依赖 dws 之外的前置（OpenClaw 运行时 + npm 网络 + 手机扫码），**不是纯 dws 能闭环的**；前置不满足时明确告知用户，不要伪造创建成功。
+  - **分层理解**：建号是钉钉 OpenAPI 能力，宿主无关；收→回依赖宿主运行时——今天 OpenClaw 及其 fork（Hermes）开箱即用，其它主流 agent 经 OpenAI-compatible endpoint 接入。**不要因为包名含 openclaw 就以为只支持 OpenClaw**（`peerDependencies.openclaw` 标记为 optional）。
+  - 这条 recipe 依赖 dws 之外的前置（宿主运行时 + npm 网络 + 手机扫码），**不是纯 dws 能闭环的**；前置不满足时明确告知用户，不要伪造创建成功。
   - 创建成功后，发消息/拉群仍走上面的 `chat message send-by-bot` / `group members add-bot`，用 `dws chat bot search` 返回的 `robotCode`。
   - 安全: 机器人在你的授权范围内以你的身份行事，按个人助理对待，勿用于无人值守的生产部署。
 

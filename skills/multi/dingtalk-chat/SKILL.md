@@ -1,6 +1,6 @@
 ---
 name: dingtalk-chat
-description: 钉钉群聊与消息。Use when 用户提到 发消息/单聊/群聊/建群/拉人进群/改群名/搜索群/群成员管理/@消息/撤回消息/机器人群发/Webhook通知/发图片或文件到群/搜机器人/查我的机器人/创建机器人/给agent接入钉钉机器人/接入OpenClaw。Distinct from dingtalk-ding(紧急DING消息/短信/电话)、dingtalk-mail(邮件)、dingtalk-edu-group(班级群)。命令前缀：dws chat。
+description: 钉钉群聊与消息。Use when 用户提到 发消息/单聊/群聊/建群/拉人进群/改群名/搜索群/群成员管理/@消息/撤回消息/机器人群发/Webhook通知/发图片或文件到群/搜机器人/查我的机器人/创建机器人/给agent接入钉钉机器人/接入OpenClaw或Hermes/provision bot。Distinct from dingtalk-ding(紧急DING消息/短信/电话)、dingtalk-mail(邮件)、dingtalk-edu-group(班级群)。命令前缀：dws chat。
 cli_version: ">=0.2.14"
 metadata:
   category: product
@@ -36,7 +36,7 @@ metadata:
 | "Webhook 推一条" | `dws chat message send-by-webhook --token <token> --title "<标题>" --text "<内容>"` |
 | "撤回机器人消息" | `dws chat message recall-by-bot --robot-code <code> --group <openConversationId> --keys <processQueryKey>`（只能撤回机器人发的；撤回普通用户消息开源 dws v1.0.30 暂不支持）|
 | "搜机器人" / "查我创建的机器人" | `dws chat bot find --query "<关键词>"`（全部可用，带 openDingTalkId）/ `dws chat bot search`（仅我创建的）|
-| "给我建个机器人" / "给 agent 接入钉钉" / "接入 OpenClaw" | dws 无原生创建命令，走 OpenClaw 连接器：`npx -y @dingtalk-real-ai/dingtalk-connector install` → 扫码一键建号 → `dws chat bot search` 交叉验证。固定路线见 [chat.md](references/chat.md) 「创建【新】机器人」节 |
+| "给我建个机器人" / "给 agent 接入钉钉" / "接入 OpenClaw/Hermes" | dws 无原生创建命令，走官方 Connector（**宿主无关**）：`npx -y @dingtalk-real-ai/dingtalk-connector install` 扫码一键建号（host-agnostic）→ 收发按宿主接入（OpenClaw/Hermes 开箱即用，其它 agent 经 OpenAI-compatible endpoint）→ `dws chat bot search` 交叉验证。固定路线见 [chat.md](references/chat.md) 「创建【新】机器人」节 |
 
 > **注**：v1.0.30 起 `chat message send / send-by-bot / send-by-webhook` 全部强制 `--title` 必填（单聊群聊都要）。
 
@@ -46,4 +46,4 @@ metadata:
 - 要发图片/文件 → 先 `dt_media_upload` 上传 → `python scripts/extract_media_id.py "<URL>"` 提取 mediaId → 再用 `--media-id`
 - 紧急升级（应用内/短信/电话）→ 切到 `dingtalk-ding`
 - 发邮件 → 切到 `dingtalk-mail`
-- 要**新建**机器人 / 给 agent 接入钉钉 → dws 只能搜不能建，交给官方连接器 `@dingtalk-real-ai/dingtalk-connector`（见 [chat.md](references/chat.md) 「创建【新】机器人」节），建完用 `dws chat bot search` 交叉验证
+- 要**新建**机器人 / 给 agent 接入钉钉 → dws 只能搜不能建，交给官方 Connector `@dingtalk-real-ai/dingtalk-connector`（**宿主无关**：建号通用，收→回 OpenClaw/Hermes 开箱、其它主流 agent 经 OpenAI-compatible endpoint 接入；见 [chat.md](references/chat.md) 「创建【新】机器人」节），建完用 `dws chat bot search` 交叉验证
