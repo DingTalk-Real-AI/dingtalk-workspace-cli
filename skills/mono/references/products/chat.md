@@ -1111,7 +1111,7 @@ search 与 find 选择指南:
 
 典型触发词: "给我建个机器人""创建一个机器人""给 agent 接个钉钉机器人""接入 OpenClaw / Hermes""provision a bot"。
 
-固定路线（前置闸门 → 建号 → 按宿主接入 → 交叉验证，缺一步不算闭环）:
+固定路线（前置闸门 → 建号 → 按宿主接入 → **审批闸门** → 交叉验证，缺一步不算闭环）:
 
 ```
 # 1. 前置闸门：确认存在【任一】受支持的宿主运行时，而不是硬卡 openclaw
@@ -1122,16 +1122,29 @@ openclaw -v 2>/dev/null || echo "无 OpenClaw/Hermes 宿主 → 改用 OpenAI-co
 # 2. 建号（宿主无关）：终端渲染钉钉二维码 → 手机钉钉扫码 → 一键创建新机器人 → 自动建号 + 授权
 npx -y @dingtalk-real-ai/dingtalk-connector install
 
-# 3. 按宿主验证接入：OpenClaw / Hermes 系 → channel 应 running + connected
+# 3. 接入状态：OpenClaw / Hermes 系 → channel 显示 running
+#    ⚠️ 注意：connected 只是 stream WS 连上，≠ 机器人能收发（真实判定见第 5 步）
 openclaw channels status --deep | grep -i dingtalk
 
-# 4. 交叉验证（宿主无关）：新建机器人 dws 应当能搜到（两个独立工具看到同一 robotCode 才算真成功）
-dws chat bot search --format json
+# 4. 身份交叉验证：用新应用凭据查它名下机器人，拿 robotName（appKey ≠ robotCode）
+dws chat bot search --client-id <新clientId> --client-secret <新secret> --format json
+
+# 5. 审批闸门【关键：建号 ≠ 可用】：robot 发消息能力需开通 scope qyapi_robot_sendmsg
+#    device-auth SUCCESS / 能换 token 只代表【应用凭据】有效，不代表【机器人能收发】，必须探测真实能力：
+TOKEN=$(curl -s -X POST 'https://api.dingtalk.com/v1.0/oauth2/accessToken' \
+  -H 'Content-Type: application/json' -d '{"appKey":"<新clientId>","appSecret":"<新secret>"}' | jq -r .accessToken)
+curl -s -X POST 'https://api.dingtalk.com/v1.0/robot/groupMessages/send' \
+  -H "x-acs-dingtalk-access-token: $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"robotCode":"<新clientId>","openConversationId":"__probe__","msgKey":"sampleText","msgParam":"{\"content\":\"probe\"}"}'
+#  → Forbidden.AccessDenied ...qyapi_robot_sendmsg = 审批未过：照报错里给的
+#    open-dev.dingtalk.com/appscope/apply?content=<appKey>%23qyapi_robot_sendmsg 开通后再用
+#  → 参数类错误（非 AccessDenied）            = scope 已通，机器人可收发
 ```
 
 注意:
   - **分层理解**：① 建号是钉钉 OpenAPI 能力，宿主无关；② 这条 skill 指南覆盖 dws 支持的全部主流 agent（Claude Code / Cursor / Codex / Qoder / opencode / Gemini / Windsurf / Cline / Kiro / Trae / Hermes / OpenClaw 等，约 14 个 agent home）；③ 收→回运行时有两条**对等**路径（`openclaw/plugin-sdk` 契约 / OpenAI-compatible endpoint）。**不是只支持 OpenClaw**（`peerDependencies.openclaw` 标记为 optional）。
-  - 这条 recipe 依赖 dws 之外的前置（宿主运行时 + npm 网络 + 手机扫码），**不是纯 dws 能闭环的**；前置不满足时明确告知用户，不要伪造创建成功。
+  - **建号 ≠ 可用（血泪闸门，最易踩）**：device-auth 返回 `SUCCESS` / 能换 `access_token` 只代表【应用凭据】生效；机器人真正收发还需 `qyapi_robot_sendmsg` 等 robot scope **审批开通**。`openclaw channels status` 显示 `connected` 只是 stream WS 连上，**不是** DingTalk 的能力回执——**绝不能拿它当"建联成功"**。唯一可靠判定 = 第 5 步真实能力探测；开通入口就在钉钉返回的报错里：`open-dev.dingtalk.com/appscope/apply?content=<appKey>%23qyapi_robot_sendmsg`。
+  - 这条 recipe 依赖 dws 之外的前置（宿主运行时 + npm 网络 + 手机扫码 + **robot scope 审批**），**不是纯 dws 能闭环的**；前置不满足时明确告知用户，不要伪造创建成功。
   - 创建成功后，发消息/拉群仍走上面的 `chat message send-by-bot` / `group members add-bot`，用 `dws chat bot search` 返回的 `robotCode`。
   - 安全: 机器人在你的授权范围内以你的身份行事，按个人助理对待，勿用于无人值守的生产部署。
 
