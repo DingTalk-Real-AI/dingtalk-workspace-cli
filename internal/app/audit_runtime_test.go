@@ -36,8 +36,8 @@ func auditTestCatalog() ir.Catalog {
 		ID: "minutes",
 		Tools: []ir.ToolDescriptor{{
 			RPCName:     "export",
-			Title:       "导出听记",
-			Description: "导出听记纪要为本地文件",
+			Title:       "Export minutes",
+			Description: "Export meeting minutes to a local file",
 			Sensitive:   true,
 		}},
 	}}}
@@ -60,7 +60,7 @@ func TestEmitAudit_PopulatesAllObtainableFields(t *testing.T) {
 	t.Setenv(audit.EnvEnabled, "true")
 	t.Setenv(audit.EnvForwardURL, srv.URL)
 	t.Setenv(audit.EnvForwardRedact, "none") // org's own sink: ship verbatim
-	t.Setenv(audit.EnvNLIntent, "把上周的战略会听记导出到桌面")
+	t.Setenv(audit.EnvNLIntent, "export last week's strategy review minutes to the desktop")
 	t.Setenv(envDWSChannel, "openclaw") // which agent/channel is driving dws
 
 	var file bytes.Buffer
@@ -75,7 +75,7 @@ func TestEmitAudit_PopulatesAllObtainableFields(t *testing.T) {
 		CanonicalPath:    "minutes export",
 		Params: map[string]any{
 			"minuteId": "m-77",
-			"name":     "Q2 战略会",
+			"name":     "Q2 Strategy Review",
 			"output":   "/Users/x/Desktop/q2.md",
 		},
 	}
@@ -92,10 +92,10 @@ func TestEmitAudit_PopulatesAllObtainableFields(t *testing.T) {
 		"module":          {local.Module, "minutes"},
 		"command":         {local.Command, "minutes"},
 		"subcommand":      {local.Subcommand, "export"},
-		"subcommand_desc": {local.SubcommandDesc, "导出听记纪要为本地文件"},
+		"subcommand_desc": {local.SubcommandDesc, "Export meeting minutes to a local file"},
 		"target.id":       {local.Target.ID, "m-77"},
-		"target.name":     {local.Target.Name, "Q2 战略会"},
-		"intent.nl":       {local.Intent.NLInput, "把上周的战略会听记导出到桌面"},
+		"target.name":     {local.Target.Name, "Q2 Strategy Review"},
+		"intent.nl":       {local.Intent.NLInput, "export last week's strategy review minutes to the desktop"},
 		"outcome":         {local.Outcome, "ok"},
 		"flow.localpath":  {local.Flow.LocalPath, "/Users/x/Desktop/q2.md"},
 		"flow.api":        {local.Flow.API, "export"},

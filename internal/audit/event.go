@@ -103,10 +103,10 @@ type Org struct {
 // host_agent (DINGTALK_AGENT), agent_code (DINGTALK_DWS_AGENTCODE). Added only
 // once the gateway hands back a SIGNED agent identity.
 type Client struct {
-	AgentID    string `json:"agent_id,omitempty"`    // 装机标识: install-time UUID (x-dws-agent-id)
-	Channel    string `json:"channel,omitempty"`     // 渠道/哪个 agent: DWS_CHANNEL (网关校验 membership, 半可信)
-	Source     string `json:"source,omitempty"`      // identity source, 默认 "dws"
-	CLIVersion string `json:"cli_version,omitempty"` // dws 版本
+	AgentID    string `json:"agent_id,omitempty"`    // install identity: install-time UUID (x-dws-agent-id)
+	Channel    string `json:"channel,omitempty"`     // channel / which agent: DWS_CHANNEL (gateway validates membership, semi-trusted)
+	Source     string `json:"source,omitempty"`      // identity source, defaults to "dws"
+	CLIVersion string `json:"cli_version,omitempty"` // dws version
 }
 
 // Device identifies the machine. DeviceID/SerialNo are NEW collection and
@@ -157,9 +157,9 @@ type Event struct {
 	Device Device `json:"device"`
 	Intent Intent `json:"intent"`
 
-	Module         string `json:"module"`          // 操作模块: doc / group / minutes / table
-	Command        string `json:"command"`         // skill 命令, e.g. "doc"
-	Subcommand     string `json:"subcommand"`      // skill 子命令, e.g. "create"
+	Module         string `json:"module"`          // operated module: doc / group / minutes / table
+	Command        string `json:"command"`         // skill command, e.g. "doc"
+	Subcommand     string `json:"subcommand"`      // skill subcommand, e.g. "create"
 	SubcommandDesc string `json:"subcommand_desc"` // static, from command catalog
 
 	Target Target `json:"target"`

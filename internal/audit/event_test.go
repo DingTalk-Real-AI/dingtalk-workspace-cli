@@ -24,15 +24,15 @@ import (
 func sampleEvent() *Event {
 	ts := time.Date(2026, 6, 3, 10, 0, 0, 0, time.UTC)
 	e := New(ts, "trace-abc")
-	e.Actor = Actor{UserID: "staff-001", Name: "张三"}
-	e.Org = Org{CorpID: "corp-001", Name: "示例企业"}
+	e.Actor = Actor{UserID: "staff-001", Name: "Zhang San"}
+	e.Org = Org{CorpID: "corp-001", Name: "Example Corp"}
 	e.Device = Device{DeviceID: "dev-9", SerialNo: "C02SN12345", OS: "darwin"}
-	e.Intent.NLInput = "把上周的听记导出到桌面"
+	e.Intent.NLInput = "export last week's minutes to the desktop"
 	e.Module = "minutes"
 	e.Command = "minutes"
 	e.Subcommand = "export"
-	e.SubcommandDesc = "导出听记纪要"
-	e.Target = Target{Type: "minutes", ID: "m-77", Name: "Q2 战略会", Summary: "营收与人事", Sensitivity: SensitivityConfidential}
+	e.SubcommandDesc = "export meeting minutes"
+	e.Target = Target{Type: "minutes", ID: "m-77", Name: "Q2 Strategy Review", Summary: "revenue and headcount", Sensitivity: SensitivityConfidential}
 	e.Flow = Flow{Direction: DirectionLocalExport, LocalPath: "/Users/x/Desktop/q2.md", API: "minutes.export"}
 	e.Outcome = "ok"
 	e.ExitCode = 0
@@ -60,7 +60,7 @@ func TestRedactNone_Verbatim(t *testing.T) {
 func TestRedactHashed_StripsRawPII(t *testing.T) {
 	e := sampleEvent()
 	got := e.Redact(RedactHashed, "salt")
-	if strings.Contains(got.Intent.NLInput, "听记") {
+	if strings.Contains(got.Intent.NLInput, "minutes") {
 		t.Errorf("hashed NL still contains raw text: %q", got.Intent.NLInput)
 	}
 	if got.Device.SerialNo == "C02SN12345" {
@@ -120,7 +120,7 @@ func TestRedactingSink_AppliesLevel(t *testing.T) {
 	if err := s.Emit(sampleEvent()); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(buf.String(), "C02SN12345") || strings.Contains(buf.String(), "听记") {
+	if strings.Contains(buf.String(), "C02SN12345") || strings.Contains(buf.String(), "headcount") {
 		t.Error("forwarder shipped raw PII/content despite RedactMinimal")
 	}
 }

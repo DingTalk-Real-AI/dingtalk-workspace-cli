@@ -1,75 +1,86 @@
-# 操作审计（Audit）
+# Operation Audit
 
-dws 可以为**每一次命令调用**生成一条结构化审计记录，用于满足**企业合规审计**的通用需求
-——任何部署 dws 的企业都可以开启，把员工经 dws 的操作留痕。
+dws can produce a structured audit record for **every command invocation**, to
+meet the general need for **enterprise compliance auditing** — any organization
+deploying dws can turn it on and keep a trail of what employees do through dws.
 
-设计遵循开源惯例，把「产生事件」和「投递事件」分开：
+The design follows open-source norms by separating "producing an event" from
+"delivering an event":
 
-- **通道 A — 本地审计文件**：始终是源头真相，operator 自己拥有、可随时 `grep`。
-- **通道 B — 转发到企业自有 sink**：可选，endpoint 由**部署企业**配置，
-  **绝不写死到厂商**。转发前可按脱敏档位降级。
+- **Channel A — local audit file**: always the source of truth, owned by the
+  operator and `grep`-able at any time.
+- **Channel B — forward to the enterprise's own sink**: optional; the endpoint
+  is configured by the **deploying organization** and is **never hardcoded to a
+  vendor**. Content can be downgraded by redaction tier before forwarding.
 
-> 审计**默认全关**。不设置 `DWS_AUDIT_ENABLED` 时，dws 不产生任何审计数据，
-> 热路径零影响。
+> Auditing is **off by default**. With `DWS_AUDIT_ENABLED` unset, dws produces
+> no audit data and the hot path is unaffected.
 
-## 启用
+## Enabling
 
-| 环境变量 | 说明 | 示例 |
+| Environment variable | Description | Example |
 |---|---|---|
-| `DWS_AUDIT_ENABLED` | 启用本地审计文件 | `true` |
-| `DWS_AUDIT_FORWARD_URL` | 转发目标（企业自有 sink，非厂商默认） | `https://audit.internal.example.com/dws` |
-| `DWS_AUDIT_FORWARD_TOKEN` | 企业 sink 的 Bearer 鉴权 | `xxxxx` |
-| `DWS_AUDIT_FORWARD_REDACT` | 转发脱敏档：`none` / `hashed` / `minimal` | `none` |
-| `DWS_AUDIT_REDACT_SALT` | `hashed` 档的加盐值 | `tenant-salt` |
-| `DWS_AUDIT_DEVICE_FINGERPRINT` | 采集 `device_id` / `sn_no`（PIPL 个人信息，默认关） | `true` |
-| `DWS_AUDIT_NL_INTENT` | 上层 agent 注入的自然语言原文 | `把上周听记导出` |
+| `DWS_AUDIT_ENABLED` | Enable the local audit file | `true` |
+| `DWS_AUDIT_FORWARD_URL` | Forward target (enterprise's own sink, not a vendor default) | `https://audit.internal.example.com/dws` |
+| `DWS_AUDIT_FORWARD_TOKEN` | Bearer token for the enterprise sink | `xxxxx` |
+| `DWS_AUDIT_FORWARD_REDACT` | Forward redaction tier: `none` / `hashed` / `minimal` | `none` |
+| `DWS_AUDIT_REDACT_SALT` | Salt for the `hashed` tier | `tenant-salt` |
+| `DWS_AUDIT_DEVICE_FINGERPRINT` | Collect `device_id` / `sn_no` (PIPL personal information; off by default) | `true` |
+| `DWS_AUDIT_NL_INTENT` | Natural-language input injected by the orchestrating agent | `export last week's minutes` |
 
-本地文件路径：`<configDir>/logs/audit.jsonl`（每行一条 JSON）。
+Local file path: `<configDir>/logs/audit.jsonl` (one JSON object per line).
 
-## 字段
+## Fields
 
-字段按**可信度**分两类，只有可信字段会被记录：
+Fields are split by **trustworthiness**; only trustworthy fields are recorded:
 
-**① 可信字段（已上）** —— token 验证 / dws 自管 / dws 实测，调用方无法 per-call 伪造：
+**① Trustworthy fields (recorded)** — token-verified / dws-managed / dws-measured,
+not forgeable by the caller per call:
 
-| 字段 | 含义 | 来源 | 可信原因 |
+| Field | Meaning | Source | Why trustworthy |
 |---|---|---|---|
-| `ts` / `trace_id` | 时间 / 唯一 trace | CLI（`trace_id` == 传输层 execution_id） | dws 实测 |
-| `actor` | 用户 id / 姓名 | 登录 token | 网关验签，`user_id` 仅登录流程捕获时有 |
-| `org` | 组织 corp_id / 名称 | 登录 token | 网关验签，不可伪造 |
-| `client` | `agent_id`（装机 id）/ `source` / `cli_version` | identity.json + 编译版本 | dws 自管/编译注入，非调用方自报 |
-| `client.channel` | 渠道 / 哪个 agent 在调用（OpenClaw / Qoder…） | `DWS_CHANNEL` | **半可信**：网关按 `allowedChannels` 白名单校验 membership，乱填会被拒；但未做密码学绑定，已登记渠道之间仍可冒充。可按渠道统计，待网关签名后升为完全可信 |
-| `device` | os / hostname / device_id / sn_no | 本机；`device_id`/`sn_no` 需 opt-in | 读真硬件 |
-| `intent` | 自然语言原文 + `provenance` | 仅 agent 层注入 | **标记 `provenance=agent`，明示不可验真** |
-| `module` / `command` / `subcommand` | 操作模块 / skill 命令 / 子命令 | CLI 解析实际执行的命令 | dws 实测 |
-| `subcommand_desc` | 子命令介绍 | 命令 catalog | 线上 catalog |
-| `target` | 操作对象 id / 名称 / 摘要 / 敏感度 | 调用参数 + catalog（`sensitive` → `confidential`） | dws 实测 |
-| `flow` | 数据流向 + api + 本地路径 / endpoint / peer ids | 调用参数推断 | dws 实测 |
-| `outcome` / `err_class` / `exit_code` | 成败与错误分类 | CLI | dws 实测 |
+| `ts` / `trace_id` | time / unique trace | CLI (`trace_id` == transport execution_id) | dws-measured |
+| `actor` | user id / name | login token | gateway-verified; `user_id` present only when the login flow captured it |
+| `org` | org corp_id / name | login token | gateway-verified, unforgeable |
+| `client` | `agent_id` (install id) / `source` / `cli_version` | identity.json + compiled-in version | dws-managed / compiled-in, not caller-asserted |
+| `client.channel` | channel / which agent is calling (OpenClaw / Qoder…) | `DWS_CHANNEL` | **semi-trusted**: the gateway validates membership against the `allowedChannels` allowlist (a bogus value is rejected), but there is no cryptographic binding yet, so one registered channel could still impersonate another. Usable for grouping by channel; upgrade to fully trusted once the gateway signs it |
+| `device` | os / hostname / device_id / sn_no | local machine; `device_id`/`sn_no` require opt-in | reads real hardware |
+| `intent` | natural-language input + `provenance` | injected at the agent layer only | **flagged `provenance=agent`, explicitly unverifiable** |
+| `module` / `command` / `subcommand` | operated module / skill command / subcommand | the command the CLI actually parsed and ran | dws-measured |
+| `subcommand_desc` | subcommand description | command catalog | online catalog |
+| `target` | operated object id / name / summary / sensitivity | call params + catalog (`sensitive` → `confidential`) | dws-measured |
+| `flow` | data direction + api + local path / endpoint / peer ids | inferred from call params | dws-measured |
+| `outcome` / `err_class` / `exit_code` | success/failure and error class | CLI | dws-measured |
 
-**② 暂不上字段（完全可伪造，待网关签名）** —— 见下方 TODO：
-`host_agent`（装在哪个 agent，`DINGTALK_AGENT`）、`agent_code`（`DINGTALK_DWS_AGENTCODE`）。这两个是调用方自报的纯环境变量标签，`export` 即可冒充、网关也不校验，**完全不可信，故先不记录**。
+**② Fields deliberately NOT recorded yet (fully forgeable, pending gateway
+signing)** — see the TODO below: `host_agent` (which agent it is installed in,
+`DINGTALK_AGENT`) and `agent_code` (`DINGTALK_DWS_AGENTCODE`). These are
+plain caller-supplied environment-variable labels — an `export` is enough to
+spoof them and the gateway does not validate them, so they are **fully
+untrusted and therefore not recorded**.
 
-> `channel` 与它们的区别：`channel` 网关有 `allowedChannels` 白名单会校验 membership（半可信，已上）；`host_agent`/`agent_code` 无任何校验（完全可伪造，未上）。
+> Difference vs `channel`: the gateway validates `channel` membership against
+> the `allowedChannels` allowlist (semi-trusted, recorded); `host_agent` /
+> `agent_code` have no validation at all (fully forgeable, not recorded).
 
-### `flow.direction` 取值
+### `flow.direction` values
 
-- `local-export`：参数里带本地路径（如 `--output`），数据落到本机磁盘。
-- `read`：只读命令（list/get/query/search…），无数据移动。
-- `intra-tenant`：数据在租户内对象之间流转，`peer_ids` 收集涉及的人/群/文档 id。
-- `external-api`：流向租户外接口（预留）。
+- `local-export`: params carry a local path (e.g. `--output`); data lands on the local disk.
+- `read`: read-only command (list/get/query/search…), no data movement.
+- `intra-tenant`: data moves between objects inside the tenant; `peer_ids` collects the person/group/doc ids involved.
+- `external-api`: flows to an endpoint outside the tenant (reserved).
 
-## 脱敏档位（仅作用于转发，本地文件始终全量）
+## Redaction tiers (applied to forwarding only; the local file is always full)
 
-| 档位 | 行为 | 适用 |
+| Tier | Behavior | When to use |
 |---|---|---|
-| `none` | 原样转发 | sink 在企业自己信任域内（企业内部审计库） |
-| `hashed` | 自然语言、对象名、序列号、peer ids 替换为加盐哈希，可关联不可还原 | 跨信任域但仍需关联 |
-| `minimal` | 只留维度（命令×版本×成败×方向），丢弃一切内容/身份 | 纯运维监控 |
+| `none` | forward verbatim | sink is inside the enterprise's own trust boundary (its internal audit store) |
+| `hashed` | natural language, object names, serial numbers, peer ids replaced by salted hashes — correlatable but not reversible | crosses a trust boundary but still needs correlation |
+| `minimal` | keep dimensions only (command × version × outcome × direction), drop all content/identity | pure ops monitoring |
 
-## 企业接入示例
+## Enterprise integration example
 
-数据进企业自己的审计库，全字段、含设备指纹：
+Data goes into the enterprise's own audit store, all fields, including device fingerprint:
 
 ```bash
 export DWS_AUDIT_ENABLED=true
@@ -77,93 +88,130 @@ export DWS_AUDIT_FORWARD_URL="https://audit.internal.example.com/dws"
 export DWS_AUDIT_FORWARD_TOKEN="<enterprise-issued-token>"
 export DWS_AUDIT_FORWARD_REDACT=none
 export DWS_AUDIT_DEVICE_FINGERPRINT=true
-# 由上层 agent/skill 在每次调用前注入：
-# export DWS_AUDIT_NL_INTENT="<用户这次的自然语言请求>"
+# Injected by the orchestrating agent/skill before each call:
+# export DWS_AUDIT_NL_INTENT="<the user's natural-language request this time>"
 ```
 
-验证：
+Verify:
 
 ```bash
 dws minutes export --minute-id m-77 --output ~/Desktop/q2.md --format json
-tail -n1 ~/.dws/logs/audit.jsonl | jq .   # 路径随 DWS_CONFIG_DIR / edition 变化
+tail -n1 ~/.dws/logs/audit.jsonl | jq .   # path varies with DWS_CONFIG_DIR / edition
 ```
 
-## 日志存在哪里 / 能否中心化收集
+## Where the log lives / can it be centrally collected
 
-- **默认：每个用户自己机器上**，`<configDir>/logs/audit.jsonl`，不开转发就不出本机。
-- **要中心化收集**：配置 `DWS_AUDIT_FORWARD_URL` 指向一个收集端点，每个用户每次调用就会 POST 一条上去。
-  - **企业合规场景**：endpoint 指向**企业自己的审计库**，钉钉/厂商不持有数据（推荐，合规干净）。
-  - **平台侧统一收集（钉钉这边收）**：技术上可行——把 endpoint 指向钉钉的审计 ingest 服务即可；
-    但这等于厂商集中持有用户操作数据，必须 **opt-in + 明确告知**，否则就是开源 CLI 最忌讳的“偷偷上报”。
-    建议拆成两条：**合规全量审计 → 企业自有 sink**；**匿名极简遥测（`minimal` 档）→ 钉钉平台**做运维监控，
-    隐私边界才清楚。
-- 不管哪种，本地文件始终是源头真相；转发是尽力而为，丢了可从本地文件回补。
+- **Default: on each user's own machine**, `<configDir>/logs/audit.jsonl`; with
+  forwarding off, nothing leaves the machine.
+- **For central collection**: set `DWS_AUDIT_FORWARD_URL` to a collection
+  endpoint, and each user POSTs one record per invocation.
+  - **Enterprise compliance**: point the endpoint at the **enterprise's own
+    audit store**; DingTalk/the vendor holds no data (recommended, clean for compliance).
+  - **Platform-side collection (DingTalk receives it)**: technically possible —
+    point the endpoint at DingTalk's audit ingest service; but that means the
+    vendor centrally holds user operation data, so it must be **opt-in and
+    clearly disclosed**, otherwise it is the "silent reporting" that open-source
+    CLIs most want to avoid. The recommendation is to split into two streams:
+    **full compliance audit → enterprise's own sink**; **anonymous minimal
+    telemetry (`minimal` tier) → DingTalk platform** for ops monitoring, so the
+    privacy boundary is clear.
+- Either way, the local file is always the source of truth; forwarding is
+  best-effort and a loss can be backfilled from the local file.
 
-### 接收端契约
+### Ingest contract
 
-收集端点（`DWS_AUDIT_FORWARD_URL`）只需实现：
+The collection endpoint (`DWS_AUDIT_FORWARD_URL`) only needs to implement:
 
 ```
 POST /
 Content-Type: application/json
-Authorization: Bearer <token>     # 对应 DWS_AUDIT_FORWARD_TOKEN
+Authorization: Bearer <token>     # matches DWS_AUDIT_FORWARD_TOKEN
 X-Dws-Audit-Schema: 2
-Body: 一条审计事件 JSON
-返回 2xx 即成功
+Body: one audit event as JSON
+2xx means success
 ```
 
-任何 HTTP 服务都能接，不需要专用组件。
+Any HTTP service can receive it; no special component required.
 
-### 接入阿里云 SLS（生产推荐）
+### Wiring up Alibaba Cloud SLS (recommended for production)
 
-SLS（日志服务）自带写入 / 存储 / 检索 / Dashboard / 留存，是审计落地的标准选型：
+SLS (Log Service) provides ingestion / storage / search / dashboards / retention
+out of the box, and is the standard choice for landing audit data:
 
-1. SLS 控制台建 **Project** + **Logstore**，设留存天数（合规常用 180/365 天），
-   给 `trace_id` / `command` / `subcommand` / `outcome` / `corp_id` / `agent_id` 开字段索引。
-2. 立一个收 POST 的端点（**函数计算 FC** HTTP 触发器最省运维，或 ECS/K8s），
-   校验 Bearer 后把 body 作为一条日志 `PutLogs` 写进 Logstore（整条 JSON 放 `event` 字段，
-   另抽 `trace_id`/`command`/`outcome`/`corp_id` 做索引列）。
-3. 把 FC 地址作为 `DWS_AUDIT_FORWARD_URL` 下发给各端 dws。
+1. In the SLS console create a **Project** + **Logstore** with a retention
+   period (180/365 days are common for compliance), and index
+   `trace_id` / `command` / `subcommand` / `outcome` / `corp_id` / `agent_id`.
+2. Stand up an endpoint that receives the POST (a **Function Compute (FC)** HTTP
+   trigger is the lowest-ops option, or ECS/K8s): verify the bearer token, then
+   write the body as one log via `PutLogs` (store the full JSON in an `event`
+   field, and promote `trace_id`/`command`/`outcome`/`corp_id` to indexed columns).
+3. Roll out the FC address as `DWS_AUDIT_FORWARD_URL` to each dws install.
 
-之后“谁 / 何时 / 操作了什么 / 成没成 / 数据流向”直接在 SLS 控制台查询与做看板。
+Then "who / when / did what / succeeded or not / data direction" can be queried
+and dashboarded directly in the SLS console.
 
 ## TODO
 
-- **网关签名的 agent 身份（让 `channel` 升为完全可信、`host_agent`/`agent_code` 可上）**：见下方「网关侧支持需求」。
-- **`actor.user_id` 稳定化**：让登录流程把 `user_id` 落进 token，使其每次都非空（当前仅部分登录流程捕获）。
+- **Gateway-signed agent identity (so `channel` becomes fully trusted and
+  `host_agent`/`agent_code` can be recorded)**: see "Gateway-side support
+  requirements" below.
+- **Stabilize `actor.user_id`**: have the login flow persist `user_id` into the
+  token so it is always non-empty (currently captured by only some login flows).
 
-## 网关侧支持需求（给网关团队）
+## Gateway-side support requirements (for the gateway team)
 
-**目标**：让审计里的「哪个 agent / 渠道在调用」不可伪造。
+**Goal**: make "which agent / channel is calling" in the audit unforgeable.
 
-**现状与缺口**：dws 已记录 `client.channel`（来自 `DWS_CHANNEL`）。网关虽有 `allowedChannels` 白名单做 membership 校验（乱填的渠道会被拒），但渠道码只是**明文字符串、未与调用方身份做密码学绑定**，因此**一个已登记渠道可冒充另一个已登记渠道**；`DINGTALK_AGENT` / `DINGTALK_DWS_AGENTCODE` 更是无任何校验的纯标签。要达到「不可伪造」，需网关侧支持三件事：
+**Status and gap**: dws already records `client.channel` (from `DWS_CHANNEL`).
+The gateway does validate membership against the `allowedChannels` allowlist (a
+bogus channel is rejected), but the channel code is just a **plaintext string,
+not cryptographically bound to the caller's identity**, so **one registered
+channel can impersonate another**; `DINGTALK_AGENT` / `DINGTALK_DWS_AGENTCODE`
+are plain labels with no validation at all. To make it "unforgeable", the
+gateway needs to support three things:
 
-1. **签发与 token 绑定的签名 agent 凭证**
-   - dws 完成 OAuth/PAT 鉴权时，网关基于**已验证的 token + 已登记的 channel**，签发一个带签名的凭证（JWT 或 HMAC 串），内含：`channel_code`、`agent_code`、颁发时间、有效期、与 token 绑定的指纹（如 `hash(corp_id+user_id)`）。
-   - 鉴权响应新增字段：`agentCredential`、`agentCredentialExpiry`。
+1. **Issue a signed agent credential bound to the token**
+   - When dws completes OAuth/PAT authentication, the gateway — based on the
+     **verified token + registered channel** — issues a signed credential (a JWT
+     or HMAC string) containing: `channel_code`, `agent_code`, issue time,
+     expiry, and a token-bound fingerprint (e.g. `hash(corp_id+user_id)`).
+   - New auth-response fields: `agentCredential`, `agentCredentialExpiry`.
 
-2. **每次调用校验签名，回带「网关认证过的身份」**
-   - dws 后续每次调用回带 `x-dws-agent-credential` 请求头。
-   - 网关验签（签名 + 有效期 + token 绑定一致性）通过后，在响应回带 `x-dws-verified-channel` / `x-dws-verified-agent`。
-   - dws 审计**记录网关回带的已验证值**，而非本地 env 自报值 → 冒充需伪造网关签名，不可行。
+2. **Verify the signature on every call and return the "gateway-authenticated identity"**
+   - dws sends back an `x-dws-agent-credential` header on every subsequent call.
+   - After the gateway verifies it (signature + expiry + token-binding
+     consistency), it returns `x-dws-verified-channel` / `x-dws-verified-agent`
+     in the response.
+   - dws audit **records the verified values the gateway returns**, not the
+     locally self-asserted env values → impersonation would require forging the
+     gateway's signature, which is infeasible.
 
-3. **渠道注册表 + 接入方身份校验**
-   - 维护 `channel_code → 接入方（OpenClaw / Qoder / …）` 的登记关系；签发凭证时校验接入方身份（接入方 AppKey / 证书），确保 `channel_code` 只能由其真正持有者使用。
+3. **Channel registry + integrator identity check**
+   - Maintain a `channel_code → integrator (OpenClaw / Qoder / …)` registry;
+     when issuing the credential, verify the integrator's identity (its AppKey /
+     certificate) so a `channel_code` can only be used by its true owner.
 
-**接口契约草案**
+**Draft interface contract**
 
-| 位置 | 新增 | 说明 |
+| Location | Added | Description |
 |---|---|---|
-| 鉴权响应 | `agentCredential` / `agentCredentialExpiry` | 与 token 绑定的签名凭证 |
-| 调用请求头 | `x-dws-agent-credential` | dws 回带凭证 |
-| 调用响应头 | `x-dws-verified-channel` / `x-dws-verified-agent` | 网关验签后回带，dws 据此写审计 |
+| auth response | `agentCredential` / `agentCredentialExpiry` | signed credential bound to the token |
+| call request header | `x-dws-agent-credential` | dws returns the credential |
+| call response header | `x-dws-verified-channel` / `x-dws-verified-agent` | returned after the gateway verifies; dws writes these into the audit |
 
-**dws 侧配合（网关就绪后）**：把 `client.channel` 从 env 自报切到「网关回带的已验证值」，并解锁 `host_agent` / `agent_code` 入审计、标记为完全可信。
+**dws-side follow-up (once the gateway is ready)**: switch `client.channel` from
+the self-asserted env value to "the verified value the gateway returns", and
+unlock `host_agent` / `agent_code` into the audit, flagged as fully trusted.
 
-## 隐私与合规
+## Privacy and compliance
 
-- `device_id` / `sn_no` 是 PIPL 下的个人信息，**默认不采集**，企业需显式开启并告知用户。
-- 自然语言原文只有上层 agent 能提供，审计记录里以 `provenance=agent` 标注，
-  表明该字段非 CLI 实测、不可验真。
-- 富审计数据是**企业的合规资产**，应进入企业自有 sink；dws 不提供任何厂商默认收集端点。
-- `host_agent` / `channel` / `agent_code` 等调用方自报字段在网关签名前**不记录**，避免可伪造数据混入审计。
+- `device_id` / `sn_no` are personal information under PIPL, **not collected by
+  default**; the enterprise must explicitly enable them and inform users.
+- Natural-language input can only be provided by the orchestrating agent and is
+  flagged `provenance=agent` in the audit record, indicating it is not
+  CLI-measured and cannot be verified.
+- Rich audit data is the **enterprise's compliance asset** and should go into
+  the enterprise's own sink; dws provides no vendor-default collection endpoint.
+- Caller-self-asserted fields such as `host_agent` / `channel` / `agent_code`
+  are **not recorded** before gateway signing, to keep forgeable data out of the
+  audit.

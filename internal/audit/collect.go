@@ -48,13 +48,13 @@ const (
 
 func init() {
 	for _, it := range []configmeta.ConfigItem{
-		{Name: EnvEnabled, Category: configmeta.CategorySecurity, Description: "启用本地审计日志(JSONL)", Example: "true"},
-		{Name: EnvForwardURL, Category: configmeta.CategorySecurity, Description: "审计转发目标(企业自有 sink，非厂商默认)", Example: "https://audit.internal.example.com/dws"},
-		{Name: EnvForwardToken, Category: configmeta.CategorySecurity, Description: "企业审计 sink 的 Bearer 鉴权", Example: "xxxxx"},
-		{Name: EnvForwardRedact, Category: configmeta.CategorySecurity, Description: "转发脱敏档: none|hashed|minimal", Example: "none"},
-		{Name: EnvRedactSalt, Category: configmeta.CategorySecurity, Description: "hashed 档的加盐值", Example: "tenant-salt"},
-		{Name: EnvDeviceFingerprint, Category: configmeta.CategorySecurity, Description: "采集 device_id/sn_no(PIPL 个人信息，默认关)", Example: "true"},
-		{Name: EnvNLIntent, Category: configmeta.CategorySecurity, Description: "上层 agent 注入的自然语言原文(provenance=agent)", Example: "把上周听记导出"},
+		{Name: EnvEnabled, Category: configmeta.CategorySecurity, Description: "Enable the local audit log (JSONL)", Example: "true"},
+		{Name: EnvForwardURL, Category: configmeta.CategorySecurity, Description: "Audit forward target (enterprise's own sink, not a vendor default)", Example: "https://audit.internal.example.com/dws"},
+		{Name: EnvForwardToken, Category: configmeta.CategorySecurity, Description: "Bearer token for the enterprise audit sink", Example: "xxxxx"},
+		{Name: EnvForwardRedact, Category: configmeta.CategorySecurity, Description: "Forward redaction tier: none|hashed|minimal", Example: "none"},
+		{Name: EnvRedactSalt, Category: configmeta.CategorySecurity, Description: "Salt for the hashed tier", Example: "tenant-salt"},
+		{Name: EnvDeviceFingerprint, Category: configmeta.CategorySecurity, Description: "Collect device_id/sn_no (PIPL personal information; off by default)", Example: "true"},
+		{Name: EnvNLIntent, Category: configmeta.CategorySecurity, Description: "Natural-language input injected by the orchestrating agent (provenance=agent)", Example: "export last week's minutes"},
 	} {
 		configmeta.Register(it)
 	}
