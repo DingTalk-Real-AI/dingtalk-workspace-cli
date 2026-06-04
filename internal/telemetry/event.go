@@ -51,7 +51,7 @@ type Event struct {
 	Command    string `json:"command"`    // skill command
 	Subcommand string `json:"subcommand"` // skill subcommand, e.g. "create"
 
-	Outcome    string `json:"outcome"`            // "ok" | "error"
+	Outcome    string `json:"outcome"`             // "ok" | "error"
 	ErrClass   string `json:"err_class,omitempty"` // error category when outcome=error
 	ExitCode   int    `json:"exit_code"`
 	DurationMS int64  `json:"duration_ms"` // wall-clock latency of the invocation
