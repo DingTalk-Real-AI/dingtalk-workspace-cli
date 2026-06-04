@@ -299,9 +299,12 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 				errReason = retErr.Error()
 			}
 		}
+		dur := time.Since(invokeStart)
 		logging.LogCommandEnd(fl, execID,
 			invocation.CanonicalProduct, invocation.Tool,
-			retErr == nil, time.Since(invokeStart), errCat, errReason)
+			retErr == nil, dur, errCat, errReason)
+		// Anonymous ops telemetry (opt-in, dimensions only). No-op when disabled.
+		emitTelemetry(execID, invocation, retErr == nil, errCat, dur)
 	}()
 
 	// Check if this product has plugin-level auth credentials registered.
