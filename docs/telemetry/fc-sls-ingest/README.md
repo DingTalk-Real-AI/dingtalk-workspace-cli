@@ -1,104 +1,111 @@
-# dws 遥测接收端（函数计算 FC → SLS）
+# dws telemetry ingest (Function Compute → SLS)
 
-这是 [运维遥测](../../telemetry.md) 的**参考接收端**：dws 把一条遥测 JSON POST 过来，
-SLS 不能直接收裸 POST（写入要签名），所以这里垫一个最小 HTTP 服务，校验 token 后用
-`PutLogs` 写进 SLS。部署成函数计算（FC）的 **Web 函数**即可，不用关心 FC handler 签名。
+This is the **reference receiver** for [operational telemetry](../../telemetry.md):
+dws POSTs one telemetry JSON, and SLS cannot accept that raw POST (its write API
+must be signed), so this minimal HTTP service verifies the token and writes to
+SLS via `PutLogs`. Deploy it as a Function Compute (FC) **Web Function** — no
+need to worry about FC handler signatures.
 
 ```
-dws  ──POST 一条 JSON──▶  本服务(FC Web 函数)  ──PutLogs──▶  SLS Logstore  ──▶ 大盘/告警
+dws  ──POST one JSON──▶  this service (FC Web Function)  ──PutLogs──▶  SLS Logstore  ──▶ dashboard/alerts
 ```
 
-## 文件
+## Files
 
-- `app.py` — Flask 服务：`POST /` 校验 Bearer → 解析 JSON → 写 SLS；`GET /` 健康检查
-- `requirements.txt` — 依赖（flask / gunicorn / aliyun-log-python-sdk）
+- `app.py` — Flask service: `POST /` verifies the bearer → parses JSON → writes to SLS; `GET /` is a health check
+- `localsink.py` — zero-dependency local sink for testing without SLS/FC
+- `requirements.txt` — dependencies (flask / gunicorn / aliyun-log-python-sdk)
 
-## 一、先在 SLS 建库（控制台点几下）
+## 1. Create the store in SLS (a few clicks in the console)
 
-1. 建 **Project**（如 `dws-ops`）和 **Logstore**（如 `dws-telemetry`），设留存天数。
-2. 开索引：给 `command` / `subcommand` / `outcome` / `cli_version` / `corp_id` / `channel`
-   设为 **text**；给 `duration_ms` / `exit_code` 设为 **long**（要做 P99 和聚合）。
+1. Create a **Project** (e.g. `dws-ops`) and a **Logstore** (e.g. `dws-telemetry`) with a retention period.
+2. Add indexes: `command` / `subcommand` / `outcome` / `cli_version` / `corp_id` / `channel`
+   as **text**; `duration_ms` / `exit_code` as **long** (for P99 and aggregation).
 
-## 两种运行模式（自动判断）
+## Two run modes (auto-detected)
 
-`app.py` 按环境变量自动切换，**不用改代码**：
+`app.py` switches automatically by environment variable — **no code change**:
 
-| 模式 | 触发条件 | 行为 |
+| Mode | Trigger | Behavior |
 |---|---|---|
-| **dry-run** | 缺任一 SLS 变量，或设 `TELEMETRY_DRYRUN=true` | 收到事件只打到 stdout（FC 会进函数日志），返回 204。**不依赖 aliyun-log SDK**，适合先验证管线 |
-| **SLS** | `SLS_ENDPOINT`+`SLS_PROJECT`+`SLS_LOGSTORE` 都配齐 | 校验后 `PutLogs` 写进 Logstore |
+| **dry-run** | any SLS var missing, or `TELEMETRY_DRYRUN=true` | logs each event to stdout (captured by FC function logs) and returns 204. **No aliyun-log SDK needed**; good for validating the pipeline first |
+| **SLS** | `SLS_ENDPOINT` + `SLS_PROJECT` + `SLS_LOGSTORE` all set | verifies, then `PutLogs` into the Logstore |
 
-`GET /` 健康检查会回显当前模式（`mode=dry-run` / `mode=sls`），部署后一眼可辨。
+`GET /` reports the active mode (`mode=dry-run` / `mode=sls`) — obvious at a glance after deploy.
 
-## 二、部署本服务为 FC Web 函数
+## 2. Deploy as an FC Web Function
 
-1. 函数计算控制台 → 创建函数 → **Web 函数** → Python 运行时。
-2. 上传本目录代码（含 `requirements.txt`，FC 会自动装依赖）。
-3. **启动命令**填：`gunicorn -b 0.0.0.0:9000 app:app`，**监听端口** `9000`。
-4. **先空跑验证（强烈建议）**：第一次只配 `INGEST_TOKEN`，**不配 SLS 变量**（或加
-   `TELEMETRY_DRYRUN=true`）。部署后 `GET /` 应显示 `mode=dry-run`；把 dws 指过来跑
-   几条命令，去 FC 的**函数日志**里能看到 `DRYRUN {...}` 行，就证明"客户端→FC"这段通了。
-   这一步**不需要 SLS、不需要建库、不需要 SDK**。
-5. **再接 SLS**：给函数**绑定一个服务角色**，授权 `AliyunLogFullAccess`（或更小的
-   PutLogs 权限）——这样不用把 AccessKey 写进环境变量，FC 自动注入 STS 临时凭证，
-   `app.py` 已优先读它。然后补上 SLS 环境变量，`GET /` 变成 `mode=sls` 即生效：
+1. FC console → create function → **Web Function** → Python runtime.
+2. Upload this directory (including `requirements.txt`; FC installs deps automatically).
+3. **Startup command**: `gunicorn -b 0.0.0.0:9000 app:app`, **listen port** `9000`.
+4. **Dry-run first (strongly recommended)**: on the first deploy set only
+   `INGEST_TOKEN` and **no SLS vars** (or add `TELEMETRY_DRYRUN=true`). After
+   deploy, `GET /` should show `mode=dry-run`; point dws at it, run a few
+   commands, and look for `DRYRUN {...}` lines in the **FC function logs** — that
+   proves the "client → FC" leg works. This step needs **no SLS, no store, no SDK**.
+5. **Then wire SLS**: bind a **service role** to the function granting
+   `AliyunLogFullAccess` (or a narrower PutLogs permission) — that way no
+   AccessKey goes into env, FC injects STS temporary credentials, and `app.py`
+   reads them preferentially. Then add the SLS environment variables and `GET /`
+   flips to `mode=sls`:
 
-   | 变量 | 值 | 说明 |
+   | Variable | Value | Notes |
    |---|---|---|
-   | `SLS_ENDPOINT` | `cn-hangzhou.log.aliyuncs.com` | 按你的地域改 |
-   | `SLS_PROJECT` | `dws-ops` | 第一步建的 Project |
-   | `SLS_LOGSTORE` | `dws-telemetry` | 第一步建的 Logstore |
-   | `INGEST_TOKEN` | 自己生成一串随机串 | 必须和 dws 侧 `DWS_TELEMETRY_TOKEN` 一致 |
+   | `SLS_ENDPOINT` | `cn-hangzhou.log.aliyuncs.com` | change for your region |
+   | `SLS_PROJECT` | `dws-ops` | the Project from step 1 |
+   | `SLS_LOGSTORE` | `dws-telemetry` | the Logstore from step 1 |
+   | `INGEST_TOKEN` | a random string you generate | must match `DWS_TELEMETRY_TOKEN` on the dws side |
 
-6. 部署后拿到函数的 HTTP 触发器地址（形如 `https://xxx.cn-hangzhou.fcapp.run`）。
+6. After deploy, take the function's HTTP trigger URL (e.g. `https://xxx.cn-hangzhou.fcapp.run`).
 
-## 三、把 dws 接上
+## 3. Wire up dws
 
-在跑 dws 的环境里（或由上层 agent 注入）：
+In the environment that runs dws (or injected by the orchestrating agent):
 
 ```bash
 export DWS_TELEMETRY_ENABLED=true
-export DWS_TELEMETRY_URL="https://xxx.cn-hangzhou.fcapp.run"   # 上一步的函数地址
-export DWS_TELEMETRY_TOKEN="<和 INGEST_TOKEN 相同的随机串>"
+export DWS_TELEMETRY_URL="https://xxx.cn-hangzhou.fcapp.run"   # the function URL from above
+export DWS_TELEMETRY_TOKEN="<same random string as INGEST_TOKEN>"
 ```
 
-跑几条命令，到 SLS Logstore 查询页就能看到一条条记录。
+Run a few commands and you'll see records appear in the SLS Logstore query page.
 
-## 四、本地先验证（可选，不依赖 FC / SLS）
+## 4. Local validation first (optional, no FC / no SLS)
 
-最省事的本地验证用 `localsink.py`（纯标准库，零依赖），见
-[telemetry.md 的「本地测试」](../../telemetry.md#本地测试零依赖不碰-sls)。
+The simplest local check uses `localsink.py` (standard library, zero deps); see
+[the "Local testing" section in telemetry.md](../../telemetry.md#local-testing-zero-dependencies-no-sls).
 
-也可以直接本地跑本服务的 **dry-run 模式**（不配 SLS、不用装 aliyun-log）：
+You can also run this service's **dry-run mode** locally (no SLS, no aliyun-log):
 
 ```bash
 cd docs/telemetry/fc-sls-ingest
-pip install flask                       # dry-run 只需 flask；aliyun-log 仅 SLS 模式才要
-INGEST_TOKEN=dev python3 app.py         # 不配 SLS_* -> 自动 dry-run，监听 :9000
-# 另开一个终端：
-curl -s localhost:9000/                 # 应回显 mode=dry-run
+pip install flask                       # dry-run needs only flask; aliyun-log is for SLS mode
+INGEST_TOKEN=dev python3 app.py         # no SLS_* -> auto dry-run, listens on :9000
+# in another terminal:
+curl -s localhost:9000/                 # should report mode=dry-run
 curl -XPOST localhost:9000/ -H 'Authorization: Bearer dev' \
   -H 'Content-Type: application/json' \
   -d '{"schema_version":"1","command":"doc","outcome":"ok","duration_ms":42}'
-# 返回 204；事件会以 DRYRUN {...} 打印在 app.py 的终端里。
+# returns 204; the event prints as DRYRUN {...} in the app.py terminal.
 ```
 
-要本地连真 SLS 验证，再补 `SLS_ENDPOINT/SLS_PROJECT/SLS_LOGSTORE` 和一组 AccessKey
-（`pip install -r requirements.txt` 装上 aliyun-log），`GET /` 会变成 `mode=sls`。
+To validate against real SLS locally, add `SLS_ENDPOINT/SLS_PROJECT/SLS_LOGSTORE`
+and an AccessKey pair (`pip install -r requirements.txt` for aliyun-log); `GET /`
+becomes `mode=sls`.
 
-## 五、配告警（SLS 控制台 → 告警）
+## 5. Configure alerts (SLS console → Alerts)
 
-| 告警 | 查询（示意） | 触发 |
+| Alert | Query (illustrative) | Trigger |
 |---|---|---|
-| 错误率突增 | `* \| select count_if(outcome='error')*1.0/count(*) as err_rate` | err_rate > 0.05 |
-| P99 延迟超标 | `* \| select approx_percentile(duration_ms, 0.99) as p99` | p99 > 3000 |
-| 某命令大面积失败 | `* \| select command, count_if(outcome='error') c group by command order by c desc` | 单命令 c 突增 |
-| 调用量跌零 | `* \| select count(*) as n` | n == 0（5 分钟窗口） |
+| Error-rate spike | `* \| select count_if(outcome='error')*1.0/count(*) as err_rate` | err_rate > 0.05 |
+| P99 latency breach | `* \| select approx_percentile(duration_ms, 0.99) as p99` | p99 > 3000 |
+| One command failing at scale | `* \| select command, count_if(outcome='error') c group by command order by c desc` | c spikes for one command |
+| Traffic dropped to zero | `* \| select count(*) as n` | n == 0 (5-minute window) |
 
-通知渠道直接选钉钉机器人 webhook。
+Route notifications straight to a DingTalk bot webhook.
 
-## 安全须知
+## Security notes
 
-- `INGEST_TOKEN` 用强随机串，并和 dws 侧保持一致；不要留空。
-- 优先用 FC 服务角色（STS），不要把长期 AccessKey 写进环境变量。
-- 本服务只接**匿名维度**数据，不含用户内容/身份——隐私边界由 dws 客户端保证。
+- Use a strong random `INGEST_TOKEN`, keep it in sync with the dws side, and never leave it empty.
+- Prefer an FC service role (STS); do not put long-lived AccessKeys in env vars.
+- This service only receives **anonymous dimensions** — no user content/identity; the privacy boundary is enforced by the dws client.

@@ -43,7 +43,7 @@ func TestEmitTelemetryWiresEvent(t *testing.T) {
 		CanonicalProduct: "doc",
 		Tool:             "create",
 		// Params carry content; telemetry must NOT read any of it.
-		Params: map[string]any{"title": "Q3 财报", "doc_id": "doc-secret-123"},
+		Params: map[string]any{"title": "Q3-Earnings-Report", "doc_id": "doc-secret-123"},
 	}
 
 	emitTelemetry("trace-xyz", inv, false, "validation", 123*time.Millisecond)
@@ -77,7 +77,7 @@ func TestEmitTelemetryWiresEvent(t *testing.T) {
 
 	// Privacy boundary: no param content may ever leak into the wire payload.
 	raw := string(body)
-	for _, secret := range []string{"Q3 财报", "doc-secret-123", "title"} {
+	for _, secret := range []string{"Q3-Earnings-Report", "doc-secret-123", "title"} {
 		if contains(raw, secret) {
 			t.Errorf("telemetry payload leaked content %q: %s", secret, raw)
 		}

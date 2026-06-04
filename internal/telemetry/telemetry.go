@@ -46,10 +46,10 @@ const defaultTimeout = 1500 * time.Millisecond
 
 func init() {
 	for _, it := range []configmeta.ConfigItem{
-		{Name: EnvEnabled, Category: configmeta.CategoryDebug, Description: "启用匿名运维遥测(仅维度，无内容无身份，默认关)", Example: "true"},
-		{Name: EnvURL, Category: configmeta.CategoryDebug, Description: "遥测上报端点(每次调用 POST 一条 JSON)", Example: "https://telemetry.example.com/dws"},
-		{Name: EnvToken, Category: configmeta.CategoryDebug, Description: "遥测端点的 Bearer 鉴权(可选)", Sensitive: true, Example: "xxxxx"},
-		{Name: EnvTimeoutMS, Category: configmeta.CategoryDebug, Description: "单次上报超时上限(毫秒，默认 1500)", Example: "1500"},
+		{Name: EnvEnabled, Category: configmeta.CategoryDebug, Description: "Enable anonymous ops telemetry (dimensions only, no content/identity; off by default)", Example: "true"},
+		{Name: EnvURL, Category: configmeta.CategoryDebug, Description: "Telemetry ingest endpoint (one JSON event POSTed per command)", Example: "https://telemetry.example.com/dws"},
+		{Name: EnvToken, Category: configmeta.CategoryDebug, Description: "Bearer token for the telemetry endpoint (optional)", Sensitive: true, Example: "xxxxx"},
+		{Name: EnvTimeoutMS, Category: configmeta.CategoryDebug, Description: "Per-POST timeout cap in milliseconds (default 1500)", Example: "1500"},
 	} {
 		configmeta.Register(it)
 	}
