@@ -10,20 +10,64 @@ but deliberately **far smaller**:
   because there are no sensitive fields to redact in the first place.
 - **Independent of audit**: unrelated to `DWS_AUDIT_*`; you can enable telemetry
   without enabling compliance audit.
-- **Off by default**. With `DWS_TELEMETRY_ENABLED` unset, dws produces no
-  telemetry at all — zero impact on the hot path.
+- **Default posture depends on the build** (see [Default posture](#default-posture)):
+  the open-source build is **off** (pure opt-in); a downstream distribution may
+  bake in a default endpoint and ship **on by default**, with a one-time
+  disclosure and an opt-out.
 
-> This is an open-source CLI, so centralized reporting must be **opt-in +
-> explicitly disclosed**. By default, not a single byte is reported.
+> This is an open-source CLI: the **public build never reports a byte and never
+> hardcodes an endpoint**. Any on-by-default behavior lives only in a downstream
+> build that injects its own endpoint — and even then it is disclosed once and
+> can be opted out of.
 
 ## Enabling
 
 | Environment variable | Description | Example |
 |---|---|---|
-| `DWS_TELEMETRY_ENABLED` | Enable telemetry (only takes effect when a URL is also set) | `true` |
-| `DWS_TELEMETRY_URL` | Ingest endpoint; one JSON event is POSTed per invocation | `https://telemetry.example.com/dws` |
+| `DWS_TELEMETRY_ENABLED` | Explicitly enable/disable; overrides the build default either way | `true` / `false` |
+| `DWS_TELEMETRY_DISABLED` | Hard opt-out; wins over everything (the off switch for on-by-default builds) | `true` |
+| `DWS_TELEMETRY_URL` | Ingest endpoint; overrides the build-time default; one JSON event POSTed per invocation | `https://telemetry.example.com/dws` |
 | `DWS_TELEMETRY_TOKEN` | Bearer auth for the endpoint (optional) | `xxxxx` |
 | `DWS_TELEMETRY_TIMEOUT_MS` | Per-report timeout cap, in ms (default 1500) | `1500` |
+
+## Default posture
+
+`Enabled()` resolves like this:
+
+1. `DWS_TELEMETRY_DISABLED=true` → **off** (always wins).
+2. No destination (no `DWS_TELEMETRY_URL` and no baked-in default) → **off**.
+3. `DWS_TELEMETRY_ENABLED` set → its value wins (`true`/`false`).
+4. Otherwise → **on only if the build baked in a default endpoint**; a bare env
+   URL in the open-source build stays opt-in (off until `DWS_TELEMETRY_ENABLED=true`).
+
+**Open-source build** → off; an operator opts in with `DWS_TELEMETRY_ENABLED=true`
+plus a `DWS_TELEMETRY_URL`.
+
+**Downstream "fleet" build (on by default)** → inject a default endpoint at build
+time via `-ldflags`, so every install of that distribution reports to the
+operator's own ingest out of the box (users opt out with
+`DWS_TELEMETRY_DISABLED=true`):
+
+```bash
+go build -ldflags "\
+  -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/telemetry.defaultURL=https://<your-fc-host>/dws \
+  -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/telemetry.defaultToken=<token>" ./cmd
+```
+
+The public repo never hardcodes a real endpoint — only your build does. This
+keeps "code is open source" and "data lands in the operator's own sink"
+decoupled.
+
+### One-time disclosure
+
+The first time telemetry is active on a machine, dws prints a one-time notice to
+stderr and writes a marker (`~/.dws/.telemetry_notice_shown`) so it never repeats:
+
+```
+ℹ️  dws reports anonymous operational telemetry (command, outcome, latency, version
+   — no content, no identity) to help monitor stability. Opt out anytime with
+   DWS_TELEMETRY_DISABLED=true. Details: docs/telemetry.md
+```
 
 ## Reported fields (complete)
 

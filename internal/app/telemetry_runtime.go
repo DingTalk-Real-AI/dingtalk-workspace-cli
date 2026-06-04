@@ -36,6 +36,11 @@ func emitTelemetry(execID string, inv executor.Invocation, ok bool, errClass str
 		return
 	}
 
+	// Disclosure: print the telemetry notice once per machine the first time it
+	// becomes active (required because a downstream build may ship it on by
+	// default). Best-effort; never blocks the command.
+	telemetry.ShowNoticeOnce(defaultConfigDir())
+
 	ev := telemetry.New(time.Now(), execID)
 	ev.CLIVersion = version
 	ev.Channel = os.Getenv(envDWSChannel)

@@ -44,6 +44,35 @@ func TestEnabledRequiresBothSwitchAndURL(t *testing.T) {
 	}
 }
 
+func TestEnabledWithBakedInDefaultEndpoint(t *testing.T) {
+	// Simulate a downstream build that injected a default endpoint via -ldflags.
+	orig := defaultURL
+	defaultURL = "https://fleet.example/dws"
+	t.Cleanup(func() { defaultURL = orig })
+
+	cases := []struct {
+		name, enabled, disabled, url string
+		want                         bool
+	}{
+		{"default on (no env)", "", "", "", true},
+		{"hard opt-out wins", "", "true", "", false},
+		{"hard opt-out beats explicit enable", "true", "true", "", false},
+		{"explicit disable via enabled=false", "false", "", "", false},
+		{"explicit enable", "true", "", "", true},
+		{"env url overrides default, still on", "", "", "https://other.example/dws", true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv(EnvEnabled, c.enabled)
+			t.Setenv(EnvDisabled, c.disabled)
+			t.Setenv(EnvURL, c.url)
+			if got := Enabled(); got != c.want {
+				t.Fatalf("Enabled()=%v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
 func TestNewForwarderFromEnvNilWhenDisabled(t *testing.T) {
 	t.Setenv(EnvEnabled, "")
 	t.Setenv(EnvURL, "")
