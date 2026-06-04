@@ -57,6 +57,68 @@ Body: 一条遥测事件 JSON
 返回 2xx 即成功
 ```
 
+## 本地测试（零依赖，不碰 SLS）
+
+上 SLS 之前，先在本机把整条链路跑通。用 `fc-sls-ingest/localsink.py`
+（纯 Python 标准库，不用 `pip install` 任何东西）当接收端：
+
+```bash
+# 1. 起本地接收端（带一个测试 token）
+cd docs/telemetry/fc-sls-ingest
+TOKEN=dev python3 localsink.py          # 监听 127.0.0.1:8799，落盘 /tmp/dws_telemetry.jsonl
+
+# 2. 另开一个终端，把 dws 指向它
+export DWS_TELEMETRY_ENABLED=true
+export DWS_TELEMETRY_URL=http://127.0.0.1:8799
+export DWS_TELEMETRY_TOKEN=dev
+
+# 3. 跑几条命令（--mock 不联网、不需要真实后端，也会触发上报）
+dws doc create --title 测试 --mock
+dws drive list --mock
+```
+
+接收端会实时打印每条事件，并追加到 `/tmp/dws_telemetry.jsonl`。验证要点：
+
+- 事件含 `command/outcome/duration_ms/cli_version/channel/os` 等维度；
+- 把命令参数（如 `--title 测试`）和报文对照，确认**内容没出现在报文里**；
+- 不带 token POST 应被拒（401）。
+
+落盘后可以本地先模拟一把"大盘"会算的指标：
+
+```bash
+python3 - <<'PY'
+import json, collections
+rows=[json.loads(l) for l in open('/tmp/dws_telemetry.jsonl') if l.strip()]
+by=collections.defaultdict(lambda:{'n':0,'err':0,'dur':[]})
+for r in rows:
+    k=f"{r['command']} {r['subcommand']}"; b=by[k]
+    b['n']+=1; b['err']+=(r['outcome']!='ok'); b['dur'].append(r.get('duration_ms',0))
+for k,v in sorted(by.items(), key=lambda x:-x[1]['n']):
+    d=v['dur']; print(f"{k:<26}调用{v['n']:>4} 失败{v['err']:>3} avg{sum(d)//len(d):>5}ms max{max(d):>5}ms")
+PY
+```
+
+> 说明：遥测只在命令真正进入 MCP 调用阶段才上报。若命令在参数解析层就报错
+> （未到调用），不会产生遥测——这是预期行为。
+
+## 开源代码与内部资源的边界（公私边界）
+
+dws 是开源仓库，但**遥测数据进哪个 SLS、绑哪个内部应用，是部署方自己的事，不进仓库**。
+这条边界是设计出来的，不是巧合：
+
+| | 在哪 | 包含什么 | 进仓库吗 |
+|---|---|---|---|
+| dws 二进制 + 本目录 FC/local 参考代码 | 公开仓库 | 只会 POST 到 `DWS_TELEMETRY_URL`；**无 endpoint、无密钥、无应用名** | ✅ |
+| SLS Project / FC 实例 / 真实 URL+token | 部署方内部基础设施 | 真实地址、鉴权、日志库；阿里内部还需绑定一个内部应用 | ❌ 永不进仓库，靠环境变量注入 |
+
+代码里**绝不硬编码任何厂商上报地址**，URL 一律运行时从环境变量读取。所以"代码公开"
+与"数据落到部署方内部 SLS"天然解耦：换部署方只是换一组环境变量，仓库无需改动，
+也看不到任何一方的真实配置。
+
+> 阿里内部场景：SLS Project 需挂在一个 AONE 应用下（资源治理要求）。把它绑到 dws
+> 后端所属的应用（如钉钉 MCP 网关应用）即可；这个绑定关系、真实 URL 与 token 全部
+> 留在内部，公开仓库不感知。
+
 ## 接入阿里云 SLS（生产推荐）
 
 SLS（日志服务）自带写入 / 存储 / 检索 / Dashboard / 告警，是运维监控的标准选型：
