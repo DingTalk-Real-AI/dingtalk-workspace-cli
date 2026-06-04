@@ -24,8 +24,14 @@ import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8799"))
+# HOST: 127.0.0.1 (default, local-only/safe). Set HOST=0.0.0.0 to accept POSTs
+# from other machines on your LAN — e.g. to use THIS computer as a small central
+# collector that teammates' dws report into (token auth strongly recommended then).
+HOST = os.environ.get("HOST", "127.0.0.1")
 TOKEN = os.environ.get("TOKEN", "")
 OUTFILE = os.environ.get("OUTFILE", "/tmp/dws_telemetry.jsonl")
+# APPEND=1 keeps history across restarts (central collector); default truncates.
+APPEND = os.environ.get("APPEND", "") not in ("", "0", "false", "no")
 
 _count = 0
 
@@ -67,8 +73,9 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    open(OUTFILE, "w").close()  # truncate previous run
-    auth = f"(bearer required: {TOKEN!r})" if TOKEN else "(no auth)"
-    print(f"dws local telemetry sink listening on http://127.0.0.1:{PORT}  {auth}")
-    print(f"capturing to {OUTFILE}\n")
-    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    if not APPEND:
+        open(OUTFILE, "w").close()  # truncate previous run (test default)
+    auth = f"(bearer required: {TOKEN!r})" if TOKEN else "(no auth — set TOKEN!)"
+    print(f"dws local telemetry sink listening on http://{HOST}:{PORT}  {auth}")
+    print(f"capturing to {OUTFILE}  (append={APPEND})\n")
+    ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
