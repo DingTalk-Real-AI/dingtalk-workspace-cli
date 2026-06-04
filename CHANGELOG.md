@@ -6,6 +6,10 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Added
+
+- **`dws report entry submit --sender-user-id <userId>` supports delegated report submission** (#406) — report submissions without the flag continue through MCP `report.create_report`; submissions with the flag use DingTalk OAPI `POST /topapi/report/create` and map the requested sender to `create_report_param.userid`. The OAPI route requires the caller's own AppKey/AppSecret and the “管理员工日志数据” permission, supports dry-run previews, and never falls back to MCP after an OAPI error so a report cannot silently be submitted as the wrong employee. The deprecated `dws report create` path receives the same flag.
+
 ## [1.0.34] - 2026-06-03
 
 ### Changed

@@ -176,14 +176,25 @@ Example:
   dws report entry submit --template-id <templateId> \
     --contents '[{"key":"今日完成","sort":"0","content":"完成了需求评审","contentType":"markdown","type":"1"}]' \
     --format json
+
+  # 以指定员工为发送人代提交（需要自有应用凭证和“管理员工日志数据”权限）
+  dws report entry submit --sender-user-id <userId> \
+    --template-id <templateId> --contents-file ./report.json --format json
 Flags:
       --template-id string    日志模版 ID (必填)，从 template list 返回中取
       --contents string       日志内容 JSON 数组 (必填，或用 --contents-file)；传 `-` 表示从 stdin 读取
       --contents-file string  从文件读取 contents JSON（推荐用于含中文/换行/Markdown 的长内容）
       --dd-from string        创建来源标识 (默认 dws)
+      --sender-user-id string 日志发送人 userId；设置后使用自有应用凭证通过钉钉 OAPI 代提交
       --to-chat               是否发送到日志接收人单聊 (默认 false，传本 flag 则为 true)
       --to-user-ids string    接收人 userId，逗号分隔 (可选)
 ```
+
+**发送人路由规则**：
+
+- 不传 `--sender-user-id`：保持原行为，通过 MCP `report.create_report` 以当前登录用户提交。
+- 传 `--sender-user-id`：通过钉钉 OAPI `POST /topapi/report/create` 代指定员工提交；不会在失败时回退 MCP，避免日志显示为错误发送人。
+- OAPI 路径需要自有应用 AppKey/AppSecret（`--client-id` / `--client-secret`、环境变量或 `dws auth login`）和“管理员工日志数据”权限。默认 MCP 凭证不支持该路径。
 
 
 **`contents` 数组元素**（与 MCP `create_report` 一致）：

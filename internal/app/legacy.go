@@ -58,6 +58,7 @@ func newLegacyPublicCommands(ctx context.Context, runner executor.Runner) []*cob
 	// command surface remains predictable from the envelope alone.
 	helpers.AttachReportLegacyInboxAlias(merged, runner)
 	helpers.AttachReportListReadableEnrichment(merged, runner)
+	helpers.AttachReportSenderSubmission(merged, newReportSenderOAPISubmitter())
 	return merged
 }
 
