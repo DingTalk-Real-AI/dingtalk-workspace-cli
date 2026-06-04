@@ -730,6 +730,13 @@ func TestCleanPATJSON_PreservesOpaqueURIVerbatim(t *testing.T) {
 
 	result := cleanPATJSON(body, "PAT_MEDIUM_RISK_NO_PERMISSION")
 
+	if strings.Contains(result, `\u0026`) {
+		t.Fatalf("cleanPATJSON should keep URL ampersands readable for mobile copy/linkify, got: %s", result)
+	}
+	if !strings.Contains(result, "&userCode=Q8RY-X6E9") {
+		t.Fatalf("cleanPATJSON output missing readable fragment separator, got: %s", result)
+	}
+
 	var parsed map[string]any
 	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
 		t.Fatalf("unmarshal cleanPATJSON output: %v\nraw=%s", err, result)
