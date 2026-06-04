@@ -15,6 +15,7 @@ package audit
 
 import (
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
@@ -44,7 +45,14 @@ const (
 	// EnvNLIntent carries the user's natural-language request, injected by the
 	// orchestrating agent/skill. The CLI cannot verify it (provenance=agent).
 	EnvNLIntent = "DWS_AUDIT_NL_INTENT"
+	// EnvMaxAgeDays sets how many days of rotated audit files to keep. The file
+	// rotates per calendar day (audit-YYYY-MM-DD.jsonl); files older than this
+	// are pruned. 0 (or negative) keeps everything.
+	EnvMaxAgeDays = "DWS_AUDIT_MAX_AGE_DAYS"
 )
+
+// DefaultMaxAgeDays is the retention applied when EnvMaxAgeDays is unset.
+const DefaultMaxAgeDays = 30
 
 func init() {
 	for _, it := range []configmeta.ConfigItem{
@@ -55,6 +63,7 @@ func init() {
 		{Name: EnvRedactSalt, Category: configmeta.CategorySecurity, Description: "Salt for the hashed tier", Example: "tenant-salt"},
 		{Name: EnvDeviceFingerprint, Category: configmeta.CategorySecurity, Description: "Collect device_id/sn_no (PIPL personal information; off by default)", Example: "true"},
 		{Name: EnvNLIntent, Category: configmeta.CategorySecurity, Description: "Natural-language input injected by the orchestrating agent (provenance=agent)", Example: "export last week's minutes"},
+		{Name: EnvMaxAgeDays, Category: configmeta.CategorySecurity, Description: "Days of dated audit files to keep (0 = keep all)", DefaultValue: "30", Example: "30"},
 	} {
 		configmeta.Register(it)
 	}
@@ -73,6 +82,20 @@ func DeviceFingerprintEnabled() bool {
 // NLIntent returns the agent-injected natural-language request (may be empty).
 func NLIntent() string {
 	return os.Getenv(EnvNLIntent)
+}
+
+// MaxAgeDays returns the audit-file retention in days. Unset/invalid falls back
+// to DefaultMaxAgeDays; an explicit 0 (or negative) means keep everything.
+func MaxAgeDays() int {
+	v := strings.TrimSpace(os.Getenv(EnvMaxAgeDays))
+	if v == "" {
+		return DefaultMaxAgeDays
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return DefaultMaxAgeDays
+	}
+	return n
 }
 
 // redactLevelFromEnv maps the env string to a RedactLevel (default none).

@@ -27,27 +27,27 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
-const auditFileName = "audit.jsonl"
+// auditFilePrefix is the base name of the dated audit files
+// (`<prefix>-YYYY-MM-DD.jsonl`).
+const auditFilePrefix = "audit"
 
 // setupAuditSink builds the active audit sink. When auditing is disabled
 // (DWS_AUDIT_ENABLED unset) it returns audit.NopSink so emit is always safe.
 // The local file lives next to the diagnostic log but is a SEPARATE file —
 // audit and debug logs must not be conflated. The forwarder (if configured)
 // targets the organization's own endpoint, never a vendor default.
+//
+// The local file is date-rotated (audit-YYYY-MM-DD.jsonl) so it never grows
+// unbounded; files older than DWS_AUDIT_MAX_AGE_DAYS are pruned. The writer
+// opens lazily on first write, so a read-only home simply yields a write error
+// per event while a configured forwarder still works.
 func setupAuditSink() audit.Sink {
 	if !audit.Enabled() {
 		return audit.NopSink{}
 	}
 	logDir := filepath.Join(defaultConfigDir(), "logs")
-	_ = os.MkdirAll(logDir, config.DirPerm)
-	f, err := os.OpenFile(filepath.Join(logDir, auditFileName),
-		os.O_CREATE|os.O_WRONLY|os.O_APPEND, config.FilePerm)
-	if err != nil {
-		// File unavailable (e.g. read-only home): still honor a configured
-		// forwarder by passing a nil writer — BuildSink degrades gracefully.
-		return audit.BuildSink(nil)
-	}
-	return audit.BuildSink(f)
+	w := audit.NewDateRotatingWriter(logDir, auditFilePrefix, audit.MaxAgeDays(), config.FilePerm, config.DirPerm)
+	return audit.BuildSink(w)
 }
 
 // deviceOnce memoizes the device fingerprint: it is process-stable and the

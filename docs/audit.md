@@ -36,34 +36,43 @@ The design separates "producing an event" from "delivering an event":
 | `DWS_AUDIT_REDACT_SALT` | Salt for the `hashed` tier | `tenant-salt` |
 | `DWS_AUDIT_DEVICE_FINGERPRINT` | Collect `device_id` / `sn_no` (PIPL personal information; off by default) | `true` |
 | `DWS_AUDIT_NL_INTENT` | Natural-language input injected by the orchestrating agent | `export last week's minutes` |
+| `DWS_AUDIT_MAX_AGE_DAYS` | Days of dated audit files to keep (0 = keep all) | `30` |
 
 ## Where the file lives
 
-The trail is written to `<config-dir>/logs/audit.jsonl`, and `<config-dir>`
-defaults to `~/.dws`:
+The trail is written to `<config-dir>/logs/`, one file **per calendar day** named
+`audit-YYYY-MM-DD.jsonl`. `<config-dir>` defaults to `~/.dws`:
 
-| OS | Default path |
+| OS | Default path (today's file) |
 |---|---|
-| macOS | `/Users/<you>/.dws/logs/audit.jsonl` |
-| Linux | `/home/<you>/.dws/logs/audit.jsonl` |
-| Windows | `C:\Users\<you>\.dws\logs\audit.jsonl` |
+| macOS | `/Users/<you>/.dws/logs/audit-2026-06-04.jsonl` |
+| Linux | `/home/<you>/.dws/logs/audit-2026-06-04.jsonl` |
+| Windows | `C:\Users\<you>\.dws\logs\audit-2026-06-04.jsonl` |
 
-Override the base directory with `DWS_CONFIG_DIR` (the file then becomes
-`$DWS_CONFIG_DIR/logs/audit.jsonl`). A packaged edition may relocate
-`<config-dir>`; if home cannot be resolved, dws falls back to a `.dws` directory
-next to the executable.
+Override the base directory with `DWS_CONFIG_DIR` (files then live under
+`$DWS_CONFIG_DIR/logs/`). A packaged edition may relocate `<config-dir>`; if home
+cannot be resolved, dws falls back to a `.dws` directory next to the executable.
+
+### Rotation & retention
+
+The file **rotates by date** so it never grows unbounded: each day's events go to
+that day's `audit-YYYY-MM-DD.jsonl`, and files older than the retention window are
+pruned automatically. The window is `DWS_AUDIT_MAX_AGE_DAYS` (default **30**; set
+`0` to keep everything). Long-running modes roll at midnight; the short-lived CLI
+simply writes today's file each invocation.
 
 ### Format: JSONL (one JSON object per line)
 
 The file is **JSONL** — one event per line. This is the mainstream format for
 structured, append-only logs: it never rewrites existing lines, stays
 human-inspectable, and is ingested natively by every log pipeline (`jq`,
-fluentd/Vector, Loki, Splunk, Alibaba Cloud SLS…). Read it directly:
+fluentd/Vector, Loki, Splunk, Alibaba Cloud SLS…). Read it directly (glob across
+days):
 
 ```bash
-tail -n 1 ~/.dws/logs/audit.jsonl | jq .                              # last event, pretty-printed
-jq 'select(.flow.direction=="local-export")' ~/.dws/logs/audit.jsonl  # everything exported to local disk
-jq 'select(.outcome=="error") | {ts,command,subcommand,err_class}' ~/.dws/logs/audit.jsonl
+tail -n 1 ~/.dws/logs/audit-*.jsonl | jq .                              # latest events
+jq 'select(.flow.direction=="local-export")' ~/.dws/logs/audit-*.jsonl  # everything exported to local disk
+jq 'select(.outcome=="error") | {ts,command,subcommand,err_class}' ~/.dws/logs/audit-*.jsonl
 ```
 
 ## Fields
@@ -132,7 +141,7 @@ Verify:
 
 ```bash
 dws minutes export --minute-id m-77 --output ~/Desktop/q2.md --format json
-tail -n1 ~/.dws/logs/audit.jsonl | jq .   # path varies with DWS_CONFIG_DIR / edition
+tail -n1 ~/.dws/logs/audit-*.jsonl | jq .   # path varies with DWS_CONFIG_DIR / edition
 ```
 
 ## Where the log lives / can it be centrally collected
@@ -142,8 +151,8 @@ tail -n1 ~/.dws/logs/audit.jsonl | jq .   # path varies with DWS_CONFIG_DIR / ed
 > record, audit on the **MCP gateway** (every call passes through it); this
 > client-side forwarding is for convenience of investigation, not enforcement.
 
-- **Default: on each user's own machine**, `<config-dir>/logs/audit.jsonl`; with
-  forwarding off, nothing leaves the machine.
+- **Default: on each user's own machine**, `<config-dir>/logs/audit-YYYY-MM-DD.jsonl`;
+  with forwarding off, nothing leaves the machine.
 - **For central collection**: set `DWS_AUDIT_FORWARD_URL` to a collection
   endpoint, and each user POSTs one record per invocation.
   - **Enterprise compliance**: point the endpoint at the **enterprise's own
