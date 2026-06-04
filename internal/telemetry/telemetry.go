@@ -49,6 +49,10 @@ const (
 	EnvToken = "DWS_TELEMETRY_TOKEN"
 	// EnvTimeoutMS bounds how long a single POST may block command exit.
 	EnvTimeoutMS = "DWS_TELEMETRY_TIMEOUT_MS"
+	// EnvFile is the lightest sink: when set, each event is appended as one JSON
+	// line to this local file instead of being POSTed — no server, no network.
+	// Ideal for local/per-machine stability monitoring. Takes precedence over URL.
+	EnvFile = "DWS_TELEMETRY_FILE"
 )
 
 // Build-time defaults, empty in the open-source build so telemetry stays opt-in
@@ -78,9 +82,26 @@ func init() {
 		{Name: EnvURL, Category: configmeta.CategoryDebug, Description: "Telemetry ingest endpoint (overrides the build-time default; one JSON event POSTed per invocation)", Example: "https://telemetry.example.com/dws"},
 		{Name: EnvToken, Category: configmeta.CategoryDebug, Description: "Bearer auth for the telemetry endpoint (optional)", Sensitive: true, Example: "xxxxx"},
 		{Name: EnvTimeoutMS, Category: configmeta.CategoryDebug, Description: "Per-report timeout cap in milliseconds (default 1500)", Example: "1500"},
+		{Name: EnvFile, Category: configmeta.CategoryDebug, Description: "Local file sink: append each event as one JSON line here instead of POSTing (no server). Takes precedence over URL", Example: "~/.dws/telemetry.jsonl"},
 	} {
 		configmeta.Register(it)
 	}
+}
+
+// resolvedFile returns the local file sink path (env only). When set, events are
+// appended to this file instead of POSTed — the lightest, server-less sink.
+func resolvedFile() string {
+	return expandHome(strings.TrimSpace(os.Getenv(EnvFile)))
+}
+
+// expandHome resolves a leading ~ to the user's home directory.
+func expandHome(p string) string {
+	if p == "~" || strings.HasPrefix(p, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, strings.TrimPrefix(p, "~"))
+		}
+	}
+	return p
 }
 
 // resolvedURL returns the effective ingest endpoint: the env override if set,
@@ -112,13 +133,15 @@ func Enabled() bool {
 	if truthy(os.Getenv(EnvDisabled)) {
 		return false
 	}
-	if resolvedURL() == "" {
+	if resolvedURL() == "" && resolvedFile() == "" {
 		return false
 	}
 	if v := strings.TrimSpace(os.Getenv(EnvEnabled)); v != "" {
 		return truthy(v)
 	}
-	return strings.TrimSpace(defaultURL) != ""
+	// On when a default endpoint is baked into the build (downstream distribution)
+	// or a local file sink is explicitly set (user opted into local monitoring).
+	return strings.TrimSpace(defaultURL) != "" || resolvedFile() != ""
 }
 
 // noticeText is the one-time disclosure shown when telemetry is active. Keep it
@@ -147,6 +170,7 @@ func ShowNoticeOnce(configDir string) {
 type Forwarder struct {
 	URL    string
 	Token  string
+	File   string // local file sink; when set, append JSONL instead of POSTing
 	Client *http.Client
 }
 
@@ -160,13 +184,15 @@ func NewForwarderFromEnv() *Forwarder {
 	return &Forwarder{
 		URL:    resolvedURL(),
 		Token:  resolvedToken(),
+		File:   resolvedFile(),
 		Client: &http.Client{Timeout: timeoutFromEnv()},
 	}
 }
 
-// Emit POSTs e as a single JSON object. A nil receiver is a no-op so callers
-// never need a guard. Errors are returned (best-effort) but the bounded client
-// timeout guarantees command exit is never delayed past the configured cap.
+// Emit ships e as a single JSON object. With a file sink configured it appends
+// one JSON line locally (no network); otherwise it POSTs to the URL. A nil
+// receiver is a no-op so callers never need a guard. Errors are returned
+// (best-effort) but never block command exit past the configured timeout.
 func (f *Forwarder) Emit(e *Event) error {
 	if f == nil || e == nil {
 		return nil
@@ -175,6 +201,18 @@ func (f *Forwarder) Emit(e *Event) error {
 	if err != nil {
 		return err
 	}
+
+	// Local file sink (lightest path): append one JSON line, no network.
+	if f.File != "" {
+		fh, openErr := os.OpenFile(f.File, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if openErr != nil {
+			return openErr
+		}
+		defer fh.Close()
+		_, writeErr := fh.Write(append(data, '\n'))
+		return writeErr
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), f.Client.Timeout)
 	defer cancel()
 

@@ -26,6 +26,7 @@ but deliberately **far smaller**:
 |---|---|---|
 | `DWS_TELEMETRY_ENABLED` | Explicitly enable/disable; overrides the build default either way | `true` / `false` |
 | `DWS_TELEMETRY_DISABLED` | Hard opt-out; wins over everything (the off switch for on-by-default builds) | `true` |
+| `DWS_TELEMETRY_FILE` | **Local file sink** — append each event as one JSON line here instead of POSTing (no server, no network). Takes precedence over URL | `~/.dws/telemetry.jsonl` |
 | `DWS_TELEMETRY_URL` | Ingest endpoint; overrides the build-time default; one JSON event POSTed per invocation | `https://telemetry.example.com/dws` |
 | `DWS_TELEMETRY_TOKEN` | Bearer auth for the endpoint (optional) | `xxxxx` |
 | `DWS_TELEMETRY_TIMEOUT_MS` | Per-report timeout cap, in ms (default 1500) | `1500` |
@@ -68,6 +69,35 @@ stderr and writes a marker (`~/.dws/.telemetry_notice_shown`) so it never repeat
    — no content, no identity) to help monitor stability. Opt out anytime with
    DWS_TELEMETRY_DISABLED=true. Details: docs/telemetry.md
 ```
+
+## Local monitoring (lightest — no server, no SLS)
+
+The smallest possible setup: point telemetry at a **local file**. No receiver, no
+FC, no SLS — each machine appends its own events; you aggregate the file whenever.
+
+```bash
+# turn it on (file sink alone enables telemetry)
+export DWS_TELEMETRY_FILE=~/.dws/telemetry.jsonl
+
+# ... use dws normally ...
+
+# one-line stability view (per command: calls / errors / avg latency)
+python3 - <<'PY'
+import json, collections, os
+rows=[json.loads(l) for l in open(os.path.expanduser('~/.dws/telemetry.jsonl')) if l.strip()]
+by=collections.defaultdict(lambda:{'n':0,'err':0,'dur':[]})
+for r in rows:
+    k=f"{r.get('command')}.{r.get('subcommand')}"; b=by[k]
+    b['n']+=1; b['err']+=(r.get('outcome')!='ok'); b['dur'].append(r.get('duration_ms',0))
+print(f"{'command':<28}{'calls':>6}{'err':>5}{'avg_ms':>8}")
+for k,v in sorted(by.items(),key=lambda x:-x[1]['n']):
+    d=v['dur'] or [0]; print(f"{k:<28}{v['n']:>6}{v['err']:>5}{sum(d)//len(d):>8}")
+PY
+```
+
+For a small fleet, collect each machine's `telemetry.jsonl` (rsync/scp) and run
+the same aggregation over the combined files. Scale to the URL→ingest path only
+when you outgrow this.
 
 ## Reported fields (complete)
 

@@ -18,6 +18,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -70,6 +73,59 @@ func TestEnabledWithBakedInDefaultEndpoint(t *testing.T) {
 				t.Fatalf("Enabled()=%v, want %v", got, c.want)
 			}
 		})
+	}
+}
+
+func TestFileSinkAppendsAndEnables(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "telemetry.jsonl")
+	t.Setenv(EnvEnabled, "")
+	t.Setenv(EnvURL, "")
+	t.Setenv(EnvFile, path)
+
+	// A file sink alone is a destination -> enabled (local monitoring opt-in).
+	if !Enabled() {
+		t.Fatal("Enabled()=false, want true when DWS_TELEMETRY_FILE is set")
+	}
+	fwd := NewForwarderFromEnv()
+	if fwd == nil {
+		t.Fatal("expected a forwarder when file sink is set")
+	}
+	if fwd.File != path {
+		t.Fatalf("forwarder File=%q, want %q", fwd.File, path)
+	}
+
+	// Two events -> two JSON lines, no network.
+	for _, oc := range []string{"ok", "error"} {
+		ev := New(time.Unix(0, 0), "t")
+		ev.Command = "doc"
+		ev.Outcome = oc
+		if err := fwd.Emit(ev); err != nil {
+			t.Fatalf("Emit: %v", err)
+		}
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read sink file: %v", err)
+	}
+	lines := 0
+	for _, l := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if strings.TrimSpace(l) == "" {
+			continue
+		}
+		var ev Event
+		if err := json.Unmarshal([]byte(l), &ev); err != nil {
+			t.Fatalf("line not JSON: %q (%v)", l, err)
+		}
+		lines++
+	}
+	if lines != 2 {
+		t.Fatalf("file has %d JSON lines, want 2", lines)
+	}
+
+	// Hard opt-out still wins over a file sink.
+	t.Setenv(EnvDisabled, "true")
+	if Enabled() {
+		t.Fatal("Enabled()=true with DWS_TELEMETRY_DISABLED set, want false")
 	}
 }
 
