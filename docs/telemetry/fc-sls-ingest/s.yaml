@@ -1,0 +1,58 @@
+# Serverless Devs (s) deploy spec for the dws telemetry ingest (FC web function).
+#
+# One-time prep:
+#   s config add                 # add an Aliyun credential alias named "default"
+#   export INGEST_TOKEN=<random> # shared secret (must equal dws-side DWS_TELEMETRY_TOKEN)
+#   # optional — omit for a dry-run-first deploy, add later to write to SLS:
+#   #   export SLS_ENDPOINT=cn-hangzhou.log.aliyuncs.com
+#   #   export SLS_PROJECT=dws-ops
+#   #   export SLS_LOGSTORE=dws-telemetry
+#
+# Deploy:  s build && s deploy -y     (or just ./deploy.sh)
+# URL:     s info                     (look for the http trigger url)
+edition: 3.0.0
+name: dws-telemetry-ingest
+access: default
+
+vars:
+  region: cn-hangzhou        # change to your region
+
+resources:
+  ingest:
+    component: fc3
+    props:
+      region: ${vars.region}
+      functionName: dws-telemetry-ingest
+      description: dws ops telemetry ingest (FC web function -> SLS)
+      runtime: python3.10
+      code: ./
+      handler: app.app          # unused by web functions, but a value is required
+      timeout: 30
+      memorySize: 512
+      cpu: 0.35
+      diskSize: 512
+      instanceConcurrency: 20
+      # Grant SLS write so app.py uses FC-injected STS creds (no AccessKey in env).
+      # Fill in your account uid + a role that has AliyunLogFullAccess (or PutLogs):
+      # role: acs:ram::<your-uid>:role/<role-with-sls-putlogs>
+      environmentVariables:
+        INGEST_TOKEN: ${env('INGEST_TOKEN')}
+        SLS_ENDPOINT: ${env('SLS_ENDPOINT')}
+        SLS_PROJECT: ${env('SLS_PROJECT')}
+        SLS_LOGSTORE: ${env('SLS_LOGSTORE')}
+      customRuntimeConfig:
+        command:
+          - gunicorn
+        args:
+          - "-b"
+          - "0.0.0.0:9000"
+          - "app:app"
+        port: 9000
+      triggers:
+        - triggerName: http
+          triggerType: http
+          triggerConfig:
+            authType: anonymous     # app.py enforces the Bearer token itself
+            methods:
+              - GET
+              - POST
