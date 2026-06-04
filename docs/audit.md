@@ -1,20 +1,29 @@
-# Operation Audit
+# Operation Audit (local diagnostic trail)
 
-dws can produce a structured audit record for **every command invocation**, to
-meet the general need for **enterprise compliance auditing** — any organization
-deploying dws can turn it on and keep a trail of what employees do through dws.
+dws can record a structured line for **every command invocation** as a local
+**diagnostic / troubleshooting trail** — so an operator can reconstruct what a
+machine did through dws, which step failed, and where data went.
 
-The design follows open-source norms by separating "producing an event" from
-"delivering an event":
+> **Scope and limits — read this first.**
+> This is a **best-effort, local** trail. It runs on the user's own machine and
+> is opt-in, so the user can disable or bypass it; it is **not** a tamper-proof,
+> mandatory compliance record. Authoritative, non-bypassable audit belongs on
+> the **MCP gateway** (server side), through which every dws call must pass —
+> that is the system of record. The client-side trail here is a *complement*: it
+> captures local detail the gateway cannot see (e.g. local export paths and the
+> agent-injected natural-language intent), not a replacement.
 
-- **Channel A — local audit file**: always the source of truth, owned by the
-  operator and `grep`-able at any time.
-- **Channel B — forward to the enterprise's own sink**: optional; the endpoint
-  is configured by the **deploying organization** and is **never hardcoded to a
-  vendor**. Content can be downgraded by redaction tier before forwarding.
+The design separates "producing an event" from "delivering an event":
 
-> Auditing is **off by default**. With `DWS_AUDIT_ENABLED` unset, dws produces
-> no audit data and the hot path is unaffected.
+- **Channel A — local file**: the primary use; the trail an operator owns and
+  can `grep`/`jq` at any time.
+- **Channel B — forward to a collector**: optional; the endpoint is configured
+  by the **deployer** and is **never hardcoded to a vendor**. Useful for pulling
+  several machines' trails into one place for investigation. Content can be
+  downgraded by redaction tier before forwarding.
+
+> Off by default. With `DWS_AUDIT_ENABLED` unset, dws produces nothing and the
+> hot path is unaffected.
 
 ## Enabling
 
@@ -28,7 +37,34 @@ The design follows open-source norms by separating "producing an event" from
 | `DWS_AUDIT_DEVICE_FINGERPRINT` | Collect `device_id` / `sn_no` (PIPL personal information; off by default) | `true` |
 | `DWS_AUDIT_NL_INTENT` | Natural-language input injected by the orchestrating agent | `export last week's minutes` |
 
-Local file path: `<configDir>/logs/audit.jsonl` (one JSON object per line).
+## Where the file lives
+
+The trail is written to `<config-dir>/logs/audit.jsonl`, and `<config-dir>`
+defaults to `~/.dws`:
+
+| OS | Default path |
+|---|---|
+| macOS | `/Users/<you>/.dws/logs/audit.jsonl` |
+| Linux | `/home/<you>/.dws/logs/audit.jsonl` |
+| Windows | `C:\Users\<you>\.dws\logs\audit.jsonl` |
+
+Override the base directory with `DWS_CONFIG_DIR` (the file then becomes
+`$DWS_CONFIG_DIR/logs/audit.jsonl`). A packaged edition may relocate
+`<config-dir>`; if home cannot be resolved, dws falls back to a `.dws` directory
+next to the executable.
+
+### Format: JSONL (one JSON object per line)
+
+The file is **JSONL** — one event per line. This is the mainstream format for
+structured, append-only logs: it never rewrites existing lines, stays
+human-inspectable, and is ingested natively by every log pipeline (`jq`,
+fluentd/Vector, Loki, Splunk, Alibaba Cloud SLS…). Read it directly:
+
+```bash
+tail -n 1 ~/.dws/logs/audit.jsonl | jq .                              # last event, pretty-printed
+jq 'select(.flow.direction=="local-export")' ~/.dws/logs/audit.jsonl  # everything exported to local disk
+jq 'select(.outcome=="error") | {ts,command,subcommand,err_class}' ~/.dws/logs/audit.jsonl
+```
 
 ## Fields
 
@@ -101,7 +137,12 @@ tail -n1 ~/.dws/logs/audit.jsonl | jq .   # path varies with DWS_CONFIG_DIR / ed
 
 ## Where the log lives / can it be centrally collected
 
-- **Default: on each user's own machine**, `<configDir>/logs/audit.jsonl`; with
+> Reminder: central collection here is still **best-effort** — the user controls
+> the client and can disable or bypass it. For an **authoritative, mandatory**
+> record, audit on the **MCP gateway** (every call passes through it); this
+> client-side forwarding is for convenience of investigation, not enforcement.
+
+- **Default: on each user's own machine**, `<config-dir>/logs/audit.jsonl`; with
   forwarding off, nothing leaves the machine.
 - **For central collection**: set `DWS_AUDIT_FORWARD_URL` to a collection
   endpoint, and each user POSTs one record per invocation.
@@ -210,8 +251,10 @@ unlock `host_agent` / `agent_code` into the audit, flagged as fully trusted.
 - Natural-language input can only be provided by the orchestrating agent and is
   flagged `provenance=agent` in the audit record, indicating it is not
   CLI-measured and cannot be verified.
-- Rich audit data is the **enterprise's compliance asset** and should go into
-  the enterprise's own sink; dws provides no vendor-default collection endpoint.
+- If forwarded, this trail can carry sensitive operational detail and should go
+  to a collector the **deployer** owns; dws provides no vendor-default endpoint.
+  (Authoritative compliance audit is a gateway-side concern — see "Scope and
+  limits" at the top.)
 - Caller-self-asserted fields such as `host_agent` / `channel` / `agent_code`
   are **not recorded** before gateway signing, to keep forgeable data out of the
   audit.
