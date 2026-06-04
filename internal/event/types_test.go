@@ -60,7 +60,7 @@ func TestRawEvent_DedupKey_NilSafe(t *testing.T) {
 }
 
 func TestClientIDHash_StableAndPathSafe(t *testing.T) {
-	pathSafe := regexp.MustCompile(`^[0-9a-f]{32}$`)
+	pathSafe := regexp.MustCompile(`^[0-9a-f]{16}$`)
 	cases := []string{
 		"ding_abc123",
 		"ding_with_special!@#",
@@ -72,7 +72,7 @@ func TestClientIDHash_StableAndPathSafe(t *testing.T) {
 	for _, in := range cases {
 		got := ClientIDHash(in)
 		if !pathSafe.MatchString(got) {
-			t.Fatalf("ClientIDHash(%q) = %q, not path-safe hex16(32 chars)", in, got)
+			t.Fatalf("ClientIDHash(%q) = %q, not path-safe hex8(16 chars)", in, got)
 		}
 		// Stable
 		if got2 := ClientIDHash(in); got2 != got {

@@ -269,10 +269,21 @@ func newEventBusCommand() *cobra.Command {
 			ctx, cancel := signal.NotifyContext(c.Context(), os.Interrupt, syscall.SIGTERM)
 			defer cancel()
 
+			// Acquire ReadyPipe early so pre-bus.Run failures can signal
+			// 'E' to the parent process instead of silently dying.
+			readyPipe := busctl.ReadyFDFromEnv()
+			failEarly := func(err error) error {
+				if readyPipe != nil {
+					_, _ = readyPipe.Write([]byte{'E'})
+					_ = readyPipe.Close()
+				}
+				return err
+			}
+
 			configDir := defaultConfigDir()
 			resolvedID, secret, _, _, err := authpkg.ResolveAppCredentialsStrict(configDir)
 			if err != nil {
-				return fmt.Errorf("event _bus: %w", err)
+				return failEarly(fmt.Errorf("event _bus: %w", err))
 			}
 			clientID := resolvedID
 			if clientIDOverride != "" {
@@ -288,7 +299,7 @@ func newEventBusCommand() *cobra.Command {
 				ClientSecret: secret,
 			})
 			if err != nil {
-				return err
+				return failEarly(err)
 			}
 
 			// busLogger writes to bus.log inside WorkDir so the daemon's
@@ -310,7 +321,7 @@ func newEventBusCommand() *cobra.Command {
 				Edition:     editionName,
 				Source:      src,
 				IdleTimeout: idleTimeout,
-				ReadyPipe:   busctl.ReadyFDFromEnv(),
+				ReadyPipe:   readyPipe,
 				Logger:      slog.Default(),
 			}
 			// env-var tuning (only fills in fields left at zero; explicit

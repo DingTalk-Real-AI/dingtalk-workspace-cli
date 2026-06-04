@@ -82,16 +82,17 @@ func itoa(n int64) string {
 }
 
 // ClientIDHash returns the path-safe identifier derived from the (possibly
-// unsafe) ClientID string. We use sha256(clientID)[:16] hex-encoded; this is
-// the value placed in filesystem paths and Named Pipe names. The original
-// ClientID is stored in bus.meta and shown in status output. See plan
-// "路径安全" decision in §1.
+// unsafe) ClientID string. We use sha256(clientID)[:8] hex-encoded (16 chars);
+// this is the value placed in filesystem paths and Named Pipe names. 8 bytes
+// (64 bits) is sufficient to distinguish a handful of ClientIDs on one machine
+// while keeping the Unix socket path under macOS's 104-byte sun_path limit.
+// The original ClientID is stored in bus.meta and shown in status output.
 func ClientIDHash(clientID string) string {
 	if clientID == "" {
 		return ""
 	}
 	h := sha256.Sum256([]byte(clientID))
-	return hex.EncodeToString(h[:16])
+	return hex.EncodeToString(h[:8])
 }
 
 // RedactSecret returns a redacted form of a secret string for logging and
