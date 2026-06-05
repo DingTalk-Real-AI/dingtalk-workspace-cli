@@ -3,7 +3,7 @@
 <p align="center"><code>dws</code> — DingTalk Workspace on the command line, built for humans and AI agents.</p>
 
 <p align="center">
-  <img src="https://img.alicdn.com/imgextra/i1/O1CN01oKAc2r28jOyyspcQt_!!6000000007968-2-tps-4096-1701.png" alt="DWS Product Overview" width="100%">
+  <img src="./docs/assets/dws-demo.gif" alt="dws in action: an AI agent operating DingTalk via the CLI" width="100%">
 </p>
 
 <p align="center">
@@ -12,16 +12,29 @@
   <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases"><img src="https://img.shields.io/github/v/release/DingTalk-Real-AI/dingtalk-workspace-cli?color=red&label=release" alt="Latest Release"></a>
   <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/workflows/ci.yml"><img src="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src=".github/badges/coverage.svg" alt="Coverage">
+  <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/stargazers"><img src="https://img.shields.io/github/stars/DingTalk-Real-AI/dingtalk-workspace-cli?style=social" alt="GitHub stars"></a>
 </p>
 
 <p align="center">
   <a href="./README_zh.md">中文版</a> · <a href="./README.md">English</a> · <a href="./docs/reference.md">Reference</a> · <a href="./CHANGELOG.md">Changelog</a>
 </p>
 
-> [!IMPORTANT]
-> **Co-creation Phase**: This project accesses DingTalk enterprise data and requires enterprise admin authorization. Join the DingTalk DWS co-creation group for support and updates. See [Getting Started](#getting-started) below.
->
-> <img src="https://img.alicdn.com/imgextra/i1/O1CN01WJyAsJ1prD2ovQACM_!!6000000005413-2-tps-718-720.png" alt="dws Open Source Community DingTalk Group QR Code" width="150">
+<p align="center"><strong>One CLI gives your AI agent — or you — control over all of DingTalk.</strong><br>
+Send messages, manage calendars, search docs, drive AI Sheets, run approvals — <strong>330 commands across 18 products</strong>, returned as structured JSON an agent can act on. Zero-trust by design: <strong>not a single byte bypasses auth and audit.</strong></p>
+
+```bash
+# Install (macOS / Linux)
+curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install.sh | sh
+
+# Your agent (or you) can now do things like:
+dws contact user search --query "Wei Zhang"        # resolve a person
+dws calendar event list                            # what's on the calendar
+dws aisearch person --query "who owns payments"    # find who owns an area
+```
+
+<p align="center">
+  ⭐ <strong>If dws saves you (or your agent) time, <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli">give it a star</a></strong> — it's the #1 way others discover it.
+</p>
 
 <details>
 <summary><strong>Table of Contents</strong></summary>
@@ -151,6 +164,11 @@ A backup of the current version is automatically created before each upgrade. Us
 </details>
 
 ## Getting Started
+
+> [!IMPORTANT]
+> **Co-creation Phase**: This project accesses DingTalk enterprise data and requires enterprise admin authorization. Join the DingTalk DWS co-creation group for support and updates.
+>
+> <img src="https://img.alicdn.com/imgextra/i1/O1CN01WJyAsJ1prD2ovQACM_!!6000000005413-2-tps-718-720.png" alt="dws Open Source Community DingTalk Group QR Code" width="150">
 
 ```bash
 dws auth login            # browser opens automatically

@@ -3,7 +3,7 @@
 <p align="center"><code>dws</code> — 钉钉工作台命令行工具，为人类和 AI Agent 而生。</p>
 
 <p align="center">
-  <img src="https://img.alicdn.com/imgextra/i1/O1CN01oKAc2r28jOyyspcQt_!!6000000007968-2-tps-4096-1701.png" alt="DWS Product Overview" width="100%">
+  <img src="./docs/assets/dws-demo.gif" alt="dws 实战：AI Agent 通过命令行操作钉钉" width="100%">
 </p>
 
 <p align="center">
@@ -12,16 +12,29 @@
   <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases"><img src="https://img.shields.io/github/v/release/DingTalk-Real-AI/dingtalk-workspace-cli?color=red&label=release" alt="Latest Release"></a>
   <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/workflows/ci.yml"><img src="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src=".github/badges/coverage.svg" alt="Coverage">
+  <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/stargazers"><img src="https://img.shields.io/github/stars/DingTalk-Real-AI/dingtalk-workspace-cli?style=social" alt="GitHub stars"></a>
 </p>
 
 <p align="center">
   <a href="./README_zh.md">中文版</a> · <a href="./README.md">English</a> · <a href="./docs/reference.md">参考手册</a> · <a href="./CHANGELOG.md">更新日志</a>
 </p>
 
-> [!IMPORTANT]
-> **共创阶段**：本项目涉及钉钉企业数据访问，需企业管理员授权后方可使用。欢迎加入钉钉 DWS 共创群获取支持与最新动态。详见下方 [开始使用](#开始使用)。
->
-> <img src="https://img.alicdn.com/imgextra/i1/O1CN01WJyAsJ1prD2ovQACM_!!6000000005413-2-tps-718-720.png" alt="dws 开源沟通群二维码" width="150">
+<p align="center"><strong>一个 CLI，让你的 AI Agent（或你自己）掌控整个钉钉。</strong><br>
+收发消息、管理日程、搜索文档、操作 AI 表格、跑审批 —— <strong>18 个产品、330 条命令</strong>，全部返回 Agent 可直接处理的结构化 JSON。零信任设计：<strong>没有一个字节能绕过鉴权和审计。</strong></p>
+
+```bash
+# 安装（macOS / Linux）
+curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install.sh | sh
+
+# 你的 Agent（或你自己）现在就能这样用：
+dws contact user search --query "张伟"              # 找到一个人
+dws calendar event list                            # 看日程安排
+dws aisearch person --query "谁负责支付系统"        # 按职责找负责人
+```
+
+<p align="center">
+  ⭐ <strong>如果 dws 帮你（或你的 Agent）省了时间，<a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli">点个 star</a></strong> —— 这是让更多人发现它的第一动力。
+</p>
 
 <details>
 <summary><strong>目录</strong></summary>
@@ -151,6 +164,11 @@ dws upgrade -y                 # 跳过确认直接升级
 </details>
 
 ## 开始使用
+
+> [!IMPORTANT]
+> **共创阶段**：本项目涉及钉钉企业数据访问，需企业管理员授权后方可使用。欢迎加入钉钉 DWS 共创群获取支持与最新动态。
+>
+> <img src="https://img.alicdn.com/imgextra/i1/O1CN01WJyAsJ1prD2ovQACM_!!6000000005413-2-tps-718-720.png" alt="dws 开源沟通群二维码" width="150">
 
 ```bash
 dws auth login            # 自动唤起浏览器
