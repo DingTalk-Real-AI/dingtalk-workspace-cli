@@ -466,7 +466,11 @@ func newTodoTaskDeleteCommand(runner executor.Runner) *cobra.Command {
 	preferLegacyLeaf(cmd)
 
 	cmd.Flags().String("task-id", "", i18n.T("待办任务 ID (必填)"))
-	cmd.Flags().Bool("yes", false, i18n.T("跳过确认直接删除"))
+	// Register the -y shorthand locally. The global persistent --yes/-y is
+	// shadowed by this same-named local flag during cobra's persistent-flag
+	// merge, so without the shorthand here `-y` reports "unknown shorthand
+	// flag: 'y'" on this subcommand (#370).
+	cmd.Flags().BoolP("yes", "y", false, i18n.T("跳过确认直接删除"))
 	return cmd
 }
 
