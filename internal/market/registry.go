@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	defaultBaseURL      = "https://mcp.dingtalk.com"
+	defaultBaseURL      = config.DefaultMCPBaseURL
 	registryMetadataKey = "com.dingtalk.mcp.registry/metadata"
 
 	// discoveryAPIPath is the path appended to BaseURL when fetching the

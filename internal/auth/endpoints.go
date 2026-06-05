@@ -129,7 +129,7 @@ func GetDeveloperSettingsURL() string {
 
 // GetMCPBaseURL returns the MCP base URL with priority:
 // 1. ~/.dws/mcp_url file content (for pre-release environment)
-// 2. Default value (https://mcp.dingtalk.com)
+// 2. Default value (https://pre-mcp-gw.dingtalk.com)
 func GetMCPBaseURL() string {
 	return config.GetMCPBaseURL()
 }

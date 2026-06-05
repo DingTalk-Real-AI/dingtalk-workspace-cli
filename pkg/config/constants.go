@@ -163,7 +163,7 @@ const (
 const (
 	// DefaultMCPBaseURL is the DingTalk MCP base URL.
 	// Override at runtime via ~/.dws/mcp_url file.
-	DefaultMCPBaseURL = "https://mcp.dingtalk.com"
+	DefaultMCPBaseURL = "https://pre-mcp-gw.dingtalk.com"
 
 	// DefaultTerminalBaseURL is the DingTalk developer platform base URL.
 	// Override at runtime via ~/.dws/terminal_url file.
@@ -189,7 +189,7 @@ func DefaultConfigDir() string {
 
 // GetMCPBaseURL returns the MCP base URL with priority:
 //  1. ~/.dws/mcp_url file content (for custom environment)
-//  2. Default value (https://mcp.dingtalk.com)
+//  2. Default value (https://pre-mcp-gw.dingtalk.com)
 func GetMCPBaseURL() string {
 	mcpURLPath := filepath.Join(DefaultConfigDir(), "mcp_url")
 	if data, err := os.ReadFile(mcpURLPath); err == nil {
