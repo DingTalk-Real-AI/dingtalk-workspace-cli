@@ -203,6 +203,12 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 				buildFlagsFromDetailSchema(cmd, dt.ToolRequest, override.Flags)
 			}
 
+			// §371: surface envelope-declared flag aliases in --help. Aliases are
+			// registered as hidden cobra flags, so without this they are invisible
+			// to users/agents reading `--help`. Runs after schema enrichment so the
+			// final usage text is what receives the alias suffix.
+			annotateFlagAliases(cmd, override.Flags)
+
 			// §P2.flagconstraints: must run AFTER schema enrichment because the
 			// target flags may be registered lazily by buildFlagsFromDetailSchema.
 			applyFlagConstraints(cmd, override)
@@ -399,6 +405,59 @@ func buildFlagsFromDetailSchema(cmd *cobra.Command, schemaJSON string, flagOverr
 		if requiredSet[key] {
 			_ = cmd.MarkFlagRequired(flagName)
 		}
+	}
+}
+
+// aliasHintMarker prefixes the alias suffix appended to a flag's usage, used
+// both to format and to detect (idempotency) an existing alias hint.
+const aliasHintMarker = "[别名: "
+
+// aliasUsageHint renders a " [别名: --x, --y]" suffix from the hidden alias
+// names of a flag, deduped against the primary flag name and reserved names.
+// Returns "" when there are no surfaceable aliases.
+func aliasUsageHint(aliases []string, primary string) string {
+	seen := map[string]bool{primary: true, "json": true, "params": true}
+	names := make([]string, 0, len(aliases))
+	for _, a := range aliases {
+		a = strings.TrimSpace(a)
+		if a == "" || seen[a] {
+			continue
+		}
+		seen[a] = true
+		names = append(names, "--"+a)
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	return " " + aliasHintMarker + strings.Join(names, ", ") + "]"
+}
+
+// annotateFlagAliases appends an alias hint to the --help usage of each visible
+// primary flag that has envelope-declared aliases (#371). Aliases are otherwise
+// registered as hidden cobra flags, so they never appear in --help and users /
+// agents cannot self-discover them. The primary flag name is derived the same
+// way buildOverrideBindings derives it, so the lookup matches the registered flag.
+func annotateFlagAliases(cmd *cobra.Command, overrides map[string]market.CLIFlagOverride) {
+	for paramName, ov := range overrides {
+		if len(ov.Aliases) == 0 || ov.Hidden {
+			continue
+		}
+		flagName := strings.TrimSpace(ov.Alias)
+		if flagName == "" && !ov.Positional {
+			flagName = compatFlagName(paramName)
+		}
+		if flagName == "" {
+			continue
+		}
+		hint := aliasUsageHint(ov.Aliases, flagName)
+		if hint == "" {
+			continue
+		}
+		f := cmd.Flags().Lookup(flagName)
+		if f == nil || f.Hidden || strings.Contains(f.Usage, aliasHintMarker) {
+			continue
+		}
+		f.Usage = strings.TrimRight(f.Usage, " ") + hint
 	}
 }
 
