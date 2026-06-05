@@ -53,15 +53,17 @@ Reasoning:
 2. `app` is the PRD/user-facing shorthand and can remain as an alias.
 3. The open-source DWS repository is protocol-first; command availability ultimately comes from service discovery or helper commands.
 
-Current branch observation after pulling latest code:
+Branch context:
 
 ```text
 branch: feat/dws-devapp
-tracking: wxianfeng/feat/dws-devapp
-status: latest upstream/main merged; local worktree still has uncommitted design and skill changes
+base: latest upstream/main has been merged into the local design branch
+runtime: devapp command availability still depends on MCP registry publication
 ```
 
-The branch does not yet expose a complete `dws devapp` command tree in the checked-in helper code. The command design below is the target contract for MCP overlay and/or helper implementation.
+The checked-in open-source helper code does not hardcode a complete `dws devapp`
+command tree. The command design below is the target contract for MCP overlay
+and/or helper implementation.
 
 ## 2. Command Tree
 
