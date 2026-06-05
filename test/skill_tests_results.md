@@ -2,8 +2,8 @@
 
 ## Summary
 
-- **Total Test Cases**: 223
-- **Passed**: 223
+- **Total Test Cases**: 227
+- **Passed**: 227
 - **Failed**: 0
 - **Pass Rate**: 100.0%
 
@@ -17,11 +17,11 @@
 | chat | 31 | 31 | 0 | 100.0% |
 | contact | 14 | 14 | 0 | 100.0% |
 | devapp | 21 | 21 | 0 | 100.0% |
-| devdoc | 5 | 5 | 0 | 100.0% |
+| devdoc | 7 | 7 | 0 | 100.0% |
 | ding | 5 | 5 | 0 | 100.0% |
 | report | 26 | 26 | 0 | 100.0% |
 | todo | 30 | 30 | 0 | 100.0% |
-| workbench | 4 | 4 | 0 | 100.0% |
+| workbench | 6 | 6 | 0 | 100.0% |
 
 ## All Test Case Results
 
@@ -1304,6 +1304,22 @@
 - Command path: PASS (devdoc article search)
 - Flags: PASS (1 flags validated)
 
+**devdoc_devdoc_article_search_006** ✅ PASS
+
+- Prompt: 查询开放平台 API 错误码 403 的处理文档
+- Expected: `dws devdoc article search --keyword "API 错误码 403" --format json`
+- Skill Reference: references/products/devdoc.md
+- Command path: PASS (devdoc article search)
+- Flags: PASS (1 flags validated)
+
+**devdoc_devdoc_article_search_007** ✅ PASS
+
+- Prompt: 开放平台机器人发消息接口怎么调用
+- Expected: `dws devdoc article search --keyword "机器人发消息接口" --format json`
+- Skill Reference: references/products/devdoc.md
+- Command path: PASS (devdoc article search)
+- Flags: PASS (1 flags validated)
+
 ### ding
 
 **ding_ding_message_recall_001** ✅ PASS
@@ -1817,6 +1833,14 @@
 - Command path: PASS (workbench app get)
 - Flags: PASS (1 flags validated)
 
+**workbench_workbench_app_get_003** ✅ PASS
+
+- Prompt: 查工作台应用 appXYZ 的详情
+- Expected: `dws workbench app get --ids appXYZ --format json`
+- Skill Reference: references/products/workbench.md
+- Command path: PASS (workbench app get)
+- Flags: PASS (1 flags validated)
+
 **workbench_workbench_app_list_001** ✅ PASS
 
 - Prompt: 查看所有工作台应用列表
@@ -1828,6 +1852,14 @@
 **workbench_workbench_app_list_002** ✅ PASS
 
 - Prompt: 钉钉工作台上有哪些应用
+- Expected: `dws workbench app list --format json`
+- Skill Reference: references/products/workbench.md
+- Command path: PASS (workbench app list)
+- Flags: N/A (no flags specified)
+
+**workbench_workbench_app_list_003** ✅ PASS
+
+- Prompt: 列出所有钉钉工作台应用
 - Expected: `dws workbench app list --format json`
 - Skill Reference: references/products/workbench.md
 - Command path: PASS (workbench app list)

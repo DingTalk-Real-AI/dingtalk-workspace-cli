@@ -20,7 +20,7 @@ external release condition until the rollout checklist in section 13 passes.
 | Mono skill routing | Done in repo | `skills/mono/SKILL.md` routes Open Platform app intents to `devapp`. |
 | Mono product reference | Done in repo | `skills/mono/references/products/devapp.md` summarizes app CRUD, permissions, credentials, events, versions, and troubleshooting. |
 | Multi product skill | Done in repo | `skills/multi/dingtalk-devapp/` defines the standalone `dingtalk-devapp` skill and reference file. |
-| Agent intent test cases | Done in repo | `test/skill_tests.md` includes 21 devapp cases; `test/skill_tests_results.md` reports 21/21 passing. |
+| Agent intent test cases | Done in repo | `test/skill_tests.md` includes 21 devapp cases plus devdoc/workbench counterexamples for the overloaded word `应用`; `test/skill_tests_results.md` reports those cases passing. |
 | Skill test parser | Done in repo | `test/run_skill_tests.py` now preserves the current `#### dws ...` command section for each case. |
 | Static/e2e skill verifier handling | Done in repo | `test/skill_static` and `test/skill_e2e` skip `dws devapp ...` as design-only until the MCP product is published. |
 | Sensitive config guard | Done in repo | `.gitignore` excludes local `docs/mcp/serviceconfig-pre*` files so personal MCP gateway keys are not staged. |
