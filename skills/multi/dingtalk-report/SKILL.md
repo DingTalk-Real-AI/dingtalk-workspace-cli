@@ -30,6 +30,7 @@ metadata:
 | "今天收到的日志" | `python scripts/report_received_today.py` |
 | "看日志模版" | `dws report template list` → `dws report template detail --name "<模版名>"` |
 | "提交日报 / 周报（按模版）" | `dws report create --template-id <id> --contents '[...]' |
+| "以指定员工身份提交日志" | `dws report entry submit --sender-user-id <userId> --template-id <id> --contents-file <file>` |
 | "我已发送的日志" | `dws report sent --start <ISO> --end <ISO>` |
 | "日志已读统计" | `dws report stats --report-id <id>` |
 | "生成日报 / 周报 / 月报 / 主题报告" | 见 [05-reporting.md](references/05-reporting.md) recipe |
@@ -39,6 +40,12 @@ metadata:
 - 查“收到的日志”必须用 `dws report list --start "<ISO>" --end "<ISO>" --cursor 0 --size 20 --format json`，并把“今天 / 最近 30 天”等时间词先展开成完整 ISO 起止时间。
 - 列表返回后，后续 `detail` / `stats` 必须复用同一个 `reportId`；不要重新挑选、猜测或改用标题。
 - 用户要正文时用 `dws report detail --report-id <reportId>`；用户要已读/统计时用 `dws report stats --report-id <reportId>`。
+
+## 指定发送人提交
+
+- 未传 `--sender-user-id` 时，提交继续走默认 MCP `report.create_report`。
+- 传 `--sender-user-id` 时，CLI 改走钉钉 OAPI `/topapi/report/create`，日志发送人是指定的 userId。
+- OAPI 代提交要求配置自有应用 AppKey/AppSecret，并为应用申请“管理员工日志数据”权限；默认 MCP 凭证不能用于此路径。
 
 ## 跨产品协作
 
