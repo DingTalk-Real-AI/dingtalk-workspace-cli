@@ -182,7 +182,10 @@ func printExecutionError(root *cobra.Command, stdout, stderr io.Writer, err erro
 		return writeErr
 	}
 	if wantsJSONErrors(root) {
-		return apperrors.PrintJSON(stderr, err)
+		// In JSON mode the structured error is the command's machine-readable
+		// output, so it goes to stdout (consistent with successful results).
+		// Emitting it to stderr would leave stdout empty and break JSON consumers.
+		return apperrors.PrintJSON(stdout, err)
 	}
 	return apperrors.PrintHumanAt(stderr, err, resolveVerbosity(root))
 }

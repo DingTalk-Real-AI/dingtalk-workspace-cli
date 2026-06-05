@@ -298,6 +298,16 @@ func NewDirectCommand(route Route, runner executor.Runner) *cobra.Command {
 				}
 			}
 			if blocked, _ := params["_blocked"].(bool); blocked {
+				// Non-interactive invocation (piped stdin / scripts / JSON pipelines):
+				// an interactive prompt would emit non-JSON to stderr and block on
+				// stdin. Require an explicit --yes and return a structured error so
+				// machine consumers get a deterministic, parseable result.
+				if cli.StdinIsPipe() {
+					return apperrors.NewValidation(
+						"this is a destructive operation; pass --yes to confirm",
+						apperrors.WithHint("re-run the command with --yes to skip the interactive confirmation"),
+					)
+				}
 				// Interactive confirmation for destructive operations (consistent with Helper commands)
 				fmt.Fprintln(cmd.ErrOrStderr(), "⚠️  This is a destructive operation.")
 				fmt.Fprint(cmd.ErrOrStderr(), "Confirm? (yes/no): ")
