@@ -227,7 +227,7 @@ grantType 规则:
 
 			if c != nil && c.DryRun() {
 				if usesPlan {
-					planArgs := buildBatchPlanArgs(scopes, productCodes, recommend, grantType, sessionID, true)
+					planArgs := buildBatchPlanArgs(scopes, productCodes, recommend, grantType, agentCode, sessionID, true)
 					result, err := callPATBatchPlan(cmd.Context(), c, agentCode, sessionID, planArgs)
 					if err != nil {
 						return fmt.Errorf("pat chmod plan failed: %w", err)
@@ -255,7 +255,7 @@ grantType 规则:
 			}
 
 			if usesPlan {
-				planArgs := buildBatchPlanArgs(scopes, productCodes, recommend, grantType, sessionID, true)
+				planArgs := buildBatchPlanArgs(scopes, productCodes, recommend, grantType, agentCode, sessionID, true)
 				planResult, err := callPATBatchPlan(cmd.Context(), c, agentCode, sessionID, planArgs)
 				if err != nil {
 					return fmt.Errorf("pat chmod plan failed: %w", err)
@@ -277,6 +277,7 @@ grantType 规则:
 				"grantType": grantType,
 			}
 			if agentCode != "" {
+				batchArgs["agentCode"] = agentCode
 				toolArgs["agentCode"] = agentCode
 			}
 			if sessionID != "" {
@@ -418,13 +419,16 @@ func callPATBatchPlan(ctx context.Context, c edition.ToolCaller, agentCode, sess
 	})
 }
 
-func buildBatchPlanArgs(scopes []string, productCodes []string, recommend bool, grantType string, sessionID string, dryRun bool) map[string]any {
+func buildBatchPlanArgs(scopes []string, productCodes []string, recommend bool, grantType string, agentCode string, sessionID string, dryRun bool) map[string]any {
 	args := map[string]any{
 		"scopes":       scopes,
 		"productCodes": productCodes,
 		"recommend":    recommend,
 		"grantType":    grantType,
 		"dryRun":       dryRun,
+	}
+	if agentCode != "" {
+		args["agentCode"] = agentCode
 	}
 	if sessionID != "" {
 		args["sessionId"] = sessionID

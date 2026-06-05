@@ -305,14 +305,17 @@ func TestChmod_productsFlagPlansThenGrantsSelectedScopes(t *testing.T) {
 	if got := fake.calls[0].args["recommend"]; got != false {
 		t.Fatalf("recommend = %#v, want false", got)
 	}
+	if got := fake.calls[0].args["agentCode"]; got != "qoderwork" {
+		t.Fatalf("plan agentCode = %#v, want qoderwork", got)
+	}
 	if fake.calls[1].tool != patBatchGrantToolName {
 		t.Fatalf("second tool = %q, want %q", fake.calls[1].tool, patBatchGrantToolName)
 	}
 	if got := fake.calls[1].args["scopes"]; !stringSliceArgEqual(got, []string{"calendar.event:read", "aitable.record:read"}) {
 		t.Fatalf("grant scopes = %#v, want selected scopes", got)
 	}
-	if _, ok := fake.calls[1].args["agentCode"]; ok {
-		t.Fatalf("batch grant args must not contain agentCode: %#v", fake.calls[1].args)
+	if got := fake.calls[1].args["agentCode"]; got != "qoderwork" {
+		t.Fatalf("grant agentCode = %#v, want qoderwork", got)
 	}
 }
 
@@ -339,11 +342,17 @@ func TestChmod_productsSessionModePassesSessionIDToPlanAndGrant(t *testing.T) {
 	if got := fake.calls[0].args["sessionId"]; got != "session-123" {
 		t.Fatalf("plan sessionId = %#v, want session-123", got)
 	}
+	if got := fake.calls[0].args["agentCode"]; got != "qoderwork" {
+		t.Fatalf("plan agentCode = %#v, want qoderwork", got)
+	}
 	if got := fake.calls[1].args["grantType"]; got != "session" {
 		t.Fatalf("grant grantType = %#v, want session", got)
 	}
 	if got := fake.calls[1].args["sessionId"]; got != "session-123" {
 		t.Fatalf("grant sessionId = %#v, want session-123", got)
+	}
+	if got := fake.calls[1].args["agentCode"]; got != "qoderwork" {
+		t.Fatalf("grant agentCode = %#v, want qoderwork", got)
 	}
 }
 
@@ -371,6 +380,9 @@ func TestChmod_productsDryRunUsesSessionIDFromEnv(t *testing.T) {
 	}
 	if got := fake.calls[0].args["sessionId"]; got != "env-session-123" {
 		t.Fatalf("plan sessionId = %#v, want env-session-123", got)
+	}
+	if got := fake.calls[0].args["agentCode"]; got != "qoderwork" {
+		t.Fatalf("plan agentCode = %#v, want qoderwork", got)
 	}
 }
 
@@ -530,8 +542,8 @@ func TestChmod_agentCode_env_fallback(t *testing.T) {
 	if got := fake.gotAgentEnv; got != "qoderwork" {
 		t.Fatalf("agent env = %q, want %q", got, "qoderwork")
 	}
-	if _, ok := fake.gotArgs["agentCode"]; ok {
-		t.Fatalf("batch argv must not carry agentCode identity field: %#v", fake.gotArgs)
+	if got := fake.gotArgs["agentCode"]; got != "qoderwork" {
+		t.Fatalf("batch argv agentCode = %#v, want qoderwork", got)
 	}
 	if got := fake.gotArgs["scopes"]; !stringSliceArgEqual(got, []string{"aitable.record:read"}) {
 		t.Fatalf("scopes in argv = %#v, want %#v", got, []string{"aitable.record:read"})
@@ -965,8 +977,8 @@ func TestChmod_agentCode_flag_wins_over_env(t *testing.T) {
 	if got := fake.gotAgentEnv; got != "flagval" {
 		t.Fatalf("agent env = %q, want %q (flag must win over env)", got, "flagval")
 	}
-	if _, ok := fake.gotArgs["agentCode"]; ok {
-		t.Fatalf("batch argv must not carry agentCode identity field: %#v", fake.gotArgs)
+	if got := fake.gotArgs["agentCode"]; got != "flagval" {
+		t.Fatalf("batch argv agentCode = %#v, want flagval", got)
 	}
 }
 
