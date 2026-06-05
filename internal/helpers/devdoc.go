@@ -95,9 +95,11 @@ func newDevdocArticleSearchCommand(runner executor.Runner) *cobra.Command {
 				size = 10
 			}
 			return runDevdocTool(cmd, runner, "search_open_platform_docs_rag", map[string]any{
-				"keyword": keyword,
-				"page":    page,
-				"size":    size,
+				"CliRagSearchReqVO": map[string]any{
+					"keyword": keyword,
+					"page":    page,
+					"size":    size,
+				},
 			})
 		},
 	}

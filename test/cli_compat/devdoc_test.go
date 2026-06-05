@@ -22,7 +22,9 @@ func TestDevdocArticleSearch_should_pass_keyword(t *testing.T) {
 	_ = execCmd(t, root, []string{"devdoc", "article", "search"}, map[string]string{
 		"keyword": "openConversationId", "page": "1", "size": "10",
 	})
-	assertToolArg(t, cap, "keyword", "openConversationId")
+	assertNestedToolArg(t, cap, "CliRagSearchReqVO", "keyword", "openConversationId")
+	assertNestedToolArg(t, cap, "CliRagSearchReqVO", "page", float64(1))
+	assertNestedToolArg(t, cap, "CliRagSearchReqVO", "size", float64(10))
 }
 
 func TestDevdocArticleSearch_should_not_call_when_dry_run(t *testing.T) {

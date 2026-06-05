@@ -47,13 +47,17 @@ func TestDevdocArticleSearchAcceptsWukongKeywordAlias(t *testing.T) {
 	if runner.last.Tool != "search_open_platform_docs_rag" {
 		t.Fatalf("tool = %q, want search_open_platform_docs_rag", runner.last.Tool)
 	}
-	if got := runner.last.Params["keyword"]; got != "openConversationId" {
+	body, ok := runner.last.Params["CliRagSearchReqVO"].(map[string]any)
+	if !ok {
+		t.Fatalf("CliRagSearchReqVO = %#v, want object", runner.last.Params["CliRagSearchReqVO"])
+	}
+	if got := body["keyword"]; got != "openConversationId" {
 		t.Fatalf("keyword = %#v, want openConversationId", got)
 	}
-	if got := runner.last.Params["page"]; got != 2 {
+	if got := body["page"]; got != 2 {
 		t.Fatalf("page = %#v, want 2", got)
 	}
-	if got := runner.last.Params["size"]; got != 5 {
+	if got := body["size"]; got != 5 {
 		t.Fatalf("size = %#v, want 5", got)
 	}
 }
@@ -71,7 +75,11 @@ func TestDevdocArticleSearchAcceptsPositionalKeyword(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut.String())
 	}
-	if got := runner.last.Params["keyword"]; got != "MCP" {
+	body, ok := runner.last.Params["CliRagSearchReqVO"].(map[string]any)
+	if !ok {
+		t.Fatalf("CliRagSearchReqVO = %#v, want object", runner.last.Params["CliRagSearchReqVO"])
+	}
+	if got := body["keyword"]; got != "MCP" {
 		t.Fatalf("keyword = %#v, want MCP", got)
 	}
 }
