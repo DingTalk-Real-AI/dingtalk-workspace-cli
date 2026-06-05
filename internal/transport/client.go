@@ -494,8 +494,7 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 }
 
 func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte) (*http.Response, error) {
-	// Strip any query/fragment from the endpoint to prevent parameter injection.
-	endpoint = validate.StripQueryFragment(endpoint)
+	endpoint = sanitizeJSONRPCEndpoint(endpoint)
 	var lastErr error
 	for attempt := 0; attempt <= c.MaxRetries; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
@@ -591,6 +590,31 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte) 
 			Cause: lastErr,
 		}),
 	)
+}
+
+func sanitizeJSONRPCEndpoint(endpoint string) string {
+	parsed, err := url.Parse(strings.TrimSpace(endpoint))
+	if err != nil || parsed.Host == "" {
+		return validate.StripQueryFragment(endpoint)
+	}
+	parsed.Fragment = ""
+	if shouldPreserveEndpointQuery(parsed) {
+		return parsed.String()
+	}
+	parsed.RawQuery = ""
+	return parsed.String()
+}
+
+func shouldPreserveEndpointQuery(parsed *url.URL) bool {
+	if parsed == nil || !strings.EqualFold(parsed.Scheme, "https") {
+		return false
+	}
+	switch strings.ToLower(parsed.Hostname()) {
+	case "mcp-gw.dingtalk.com", "pre-mcp-gw.dingtalk.com":
+		return true
+	default:
+		return false
+	}
 }
 
 func retryable(statusCode int) bool {

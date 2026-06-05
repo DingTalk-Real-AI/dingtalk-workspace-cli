@@ -507,6 +507,56 @@ func TestCallToolClassifiesJSONRPCInvalidParamsAsValidationError(t *testing.T) {
 	}
 }
 
+func TestSanitizeJSONRPCEndpointPreservesDingTalkMCPGatewayQuery(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		endpoint string
+		want     string
+	}{
+		{
+			name:     "prepub gateway",
+			endpoint: "https://pre-mcp-gw.dingtalk.com/server/demo?key=secret#frag",
+			want:     "https://pre-mcp-gw.dingtalk.com/server/demo?key=secret",
+		},
+		{
+			name:     "prod gateway",
+			endpoint: "https://mcp-gw.dingtalk.com/server/demo?key=secret#frag",
+			want:     "https://mcp-gw.dingtalk.com/server/demo?key=secret",
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := sanitizeJSONRPCEndpoint(tt.endpoint); got != tt.want {
+				t.Fatalf("sanitizeJSONRPCEndpoint() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSanitizeJSONRPCEndpointStripsQueryForOtherHosts(t *testing.T) {
+	t.Parallel()
+
+	got := sanitizeJSONRPCEndpoint("https://example.com/server/demo?admin=true#frag")
+	want := "https://example.com/server/demo"
+	if got != want {
+		t.Fatalf("sanitizeJSONRPCEndpoint() = %q, want %q", got, want)
+	}
+}
+
+func TestSanitizeJSONRPCEndpointStripsQueryForHTTPGateway(t *testing.T) {
+	t.Parallel()
+
+	got := sanitizeJSONRPCEndpoint("http://pre-mcp-gw.dingtalk.com/server/demo?key=secret#frag")
+	want := "http://pre-mcp-gw.dingtalk.com/server/demo"
+	if got != want {
+		t.Fatalf("sanitizeJSONRPCEndpoint() = %q, want %q", got, want)
+	}
+}
+
 type testSnapshotRecorder struct {
 	root string
 }
