@@ -8,7 +8,7 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ### Fixed
 
-- **`chat` skill 文档与脚本对齐单聊 `list-direct` / `send-direct` 拆分** (#424) — 钉钉 MCP 服务已把单聊从 `chat message list` 拆成独立命令（`list` 现仅支持群聊，`--user` / `--open-dingtalk-id` 已移除；单聊读取走 `list-direct`，发送走 `send-direct`），但 skill 侧文档与脚本仍在教 `chat message list --user`，照做会报 `unknown flag: --user`，被列为查单聊"优先"方法的 `chat_history_with_user.py` 也随之失效。本次更新：`skills/{mono,multi/dingtalk-chat}/references/products/chat.md` 将 `message list` 改为仅群聊、新增 `list-direct` / `send-direct` 命令文档，并同步意图路由 / 关键区分 / 上下文传递表 / 注意事项；`skills/mono/references/best_practices/01-messaging.md` 的 query-private-chat 由 `list --user` 改为 `list-direct`（multi 版此前已改）；`chat_history_with_user.py`（mono + multi）改调 `list-direct` 并修复返回体解析（解包 `result.messages`、对齐 `createTime/content/sender` 字段，此前会崩在 `'str' object has no attribute 'get'`）。`chat message send --user` 兼容保留不受影响。纯文档/脚本改动，不涉及 CLI 二进制行为。
+- **`chat` skill 文档与脚本对齐单聊 `list-direct`** (#424) — `chat message list` 现仅支持群聊（`--user` / `--open-dingtalk-id` 已移除），单聊读取改用独立命令 `list-direct`，但 skill 侧文档与脚本仍在教 `chat message list --user`，照做会报 `unknown flag: --user`，被列为查单聊"优先"方法的 `chat_history_with_user.py` 也随之失效。本次更新：`skills/{mono,multi/dingtalk-chat}/references/products/chat.md` 将 `message list` 改为仅群聊、新增 `list-direct` 命令文档，并同步意图路由 / 关键区分 / 上下文传递表 / 注意事项；`skills/mono/references/best_practices/01-messaging.md` 的 query-private-chat 由 `list --user` 改为 `list-direct`（multi 版此前已改）；`chat_history_with_user.py`（mono + multi）改调 `list-direct` 并修复返回体解析（解包 `result.messages`、对齐 `createTime/content/sender` 字段，此前会崩在 `'str' object has no attribute 'get'`）。单聊发送仍用 `chat message send --user`（v1.0.34 起单聊发送 rpc 已并入 `send` 命令，无独立 `send-direct`）。纯文档/脚本改动，不涉及 CLI 二进制行为。
 
 ## [1.0.34] - 2026-06-03
 

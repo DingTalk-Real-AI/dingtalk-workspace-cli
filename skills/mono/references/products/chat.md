@@ -386,29 +386,6 @@ Flags:
   - 本命令是 `chat message list` 拆分出的单聊专用命令；查群聊消息请用 `chat message list --group`
 ```
 
-#### 给同事发单聊消息 — 按对方 userId 发送单聊（私聊）消息
-
-**重要：该接口会真实发送消息到对方，不可用于测试或试探性调用。调用前必须确认消息内容和接收对象无误。**
-
-按对方 userId 给同事发单聊消息，**专用于私聊**；如需群发请用 `chat message send --group`。同组织内同事用 --user，非同组织好友用 --open-dingtalk-id，二者互斥。--text 为消息正文（支持 Markdown），--title 为消息标题。
-```
-Usage:
-  dws chat message send-direct [flags]
-Example:
-  dws chat message send-direct --user <对方userId> --title "提醒" --text "请查收"
-  dws chat message send-direct --open-dingtalk-id <openDingTalkId> --title "通知" --text "周会改至明天"
-  # 查询对方 userId / openDingTalkId: dws contact user search --keyword "姓名"
-Flags:
-      --user string              对方 userId（同组织内同事，与 --open-dingtalk-id 二选一）
-      --open-dingtalk-id string  对方 openDingTalkId（非同组织普通好友场景，与 --user 二选一）
-      --text string              消息正文（必填，支持 Markdown）
-      --title string             消息标题（必填）
-
-注意:
-  - --user 与 --open-dingtalk-id 二选一，必须且只能指定其一；同组织同事优先用 --user
-  - send-direct 是单聊专用的发送命令；`chat message send --user`（兼容保留）仍可发单聊，但单聊场景推荐用 send-direct，群聊用 `chat message send --group`
-```
-
 #### 以当前用户身份发送消息 — --group 群聊 / --user 或 --open-dingtalk-id 单聊
 
 **重要：该接口会真实发送消息到目标会话，不可用于测试或试探性调用。调用前必须确认消息内容和接收对象无误。**
@@ -1213,7 +1190,7 @@ Flags:
 用户说"@我的消息/at我的/提及我的" → `chat message list-mentions`
 用户说"未读消息会话/未读会话列表/我的未读会话" → `chat message list-unread-conversations`
 用户说"发群消息(以个人身份)" → `chat message send --group`
-用户说"发单聊消息(以个人身份)" → `chat message send-direct --user`（单聊推荐；有 userId 时）或 `--open-dingtalk-id`（有 openDingTalkId 时）；`chat message send --user` 兼容保留亦可
+用户说"发单聊消息(以个人身份)" → `chat message send --user`（有 userId 时）或 `chat message send --open-dingtalk-id`（有 openDingTalkId 时）
 用户说"机器人发消息/机器人群发" → `chat message send-by-bot`
 用户说"撤回我发的消息/撤回消息" → `chat message recall`（通过 IM 接口撤回当前用户自己发出的消息，需要 openConversationId + openMessageId）
 用户说"撤回机器人发的消息/机器人撤回消息" → `chat message recall-by-bot`（通过机器人接口撤回机器人发出的消息，需要 robot-code + processQueryKey）
@@ -1266,7 +1243,6 @@ Flags:
 - `chat search` — 搜**群/会话名**返回 `openConversationId`，**不**搜消息内容；要搜消息内容请用 `chat message search-advanced`（首选）/ `chat message search` / `list-by-sender` / `list-all`，**勿混淆**
 - `chat message list` — 拉取指定**群聊**的消息（需指定 --group，**仅群聊**），按时间点 + 方向翻页
 - `chat message list-direct` — 单聊专用，拉取与指定用户的单聊（私聊）记录（--user / --open-dingtalk-id；用户明确说"单聊""私聊"时使用）
-- `chat message send-direct` — 单聊专用，给指定同事发单聊（私聊）消息（--user / --open-dingtalk-id）
 - `chat message list-by-sender` — 搜索指定发送者发给我的消息，跨所有会话（单聊+群聊均包含，用户只说"某人发的消息"时优先使用）
 - `chat message list-mentions` — 拉取 @我 的消息（跨单聊/群聊，可选指定群）
 - `chat message list-unread-conversations` — 拉取当前用户存在未读消息的会话列表（可选 `--count`）
@@ -1491,8 +1467,8 @@ Flags:
 | `chat search` | `openConversationId` | message send/list、group members 等的 --group |
 | `chat group create` | `openConversationId` | 同上 |
 | `chat message list-all` | `nextCursor` | 下次 list-all 的 --cursor |
-| `aisearch person` | `userId` | message send 的 --user、list-direct / send-direct 的 --user、send-by-bot 的 --users、send-by-bot 的 --at-user-ids、list-by-sender 的 --sender-user-id |
-| `aisearch person` → `contact user get` | `openDingTalkId` | message send 的 --at-open-dingtalk-ids、--open-dingtalk-id、list-direct / send-direct 的 --open-dingtalk-id、send-by-bot 的 --open-dingtalk-ids、send-by-bot 的 --at-open-dingtalk-ids、list-by-sender 的 --sender-open-dingtalk-id |
+| `aisearch person` | `userId` | message send 的 --user、list-direct 的 --user、send-by-bot 的 --users、send-by-bot 的 --at-user-ids、list-by-sender 的 --sender-user-id |
+| `aisearch person` → `contact user get` | `openDingTalkId` | message send 的 --at-open-dingtalk-ids、--open-dingtalk-id、list-direct 的 --open-dingtalk-id、send-by-bot 的 --open-dingtalk-ids、send-by-bot 的 --at-open-dingtalk-ids、list-by-sender 的 --sender-open-dingtalk-id |
 | `chat bot search` | `robotCode` | send-by-bot / recall-by-bot 的 --robot-code（仅我创建的机器人，无 openDingTalkId） |
 | `chat bot find` | `openDingTalkId` | 给机器人发单聊消息（全部可用机器人，额外返回 openDingTalkId） |
 | `chat message send-by-bot` | `processQueryKey` | recall-by-bot 的 --keys |
