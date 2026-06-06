@@ -338,33 +338,75 @@ Flags:
 
 ### message (会话消息管理)
 
-#### 拉取会话消息内容 — 拉取指定群聊或单聊的会话消息内容
+#### 拉取群聊会话消息内容 — 拉取指定群聊的会话消息内容（仅群聊）
 
---group 指定群聊，--user 指定单聊用户（通过 userId），--open-dingtalk-id 指定单聊用户（通过 openDingTalkId），三者互斥。默认拉取给定时间之后的消息，--forward=false 拉之前的。hasMore=true 时用结果中的边界 createTime 作为下次 --time 翻页。
+--group 指定群聊 openConversationId（**本命令仅支持群聊**；拉取单聊/私聊消息请改用 `chat message list-direct`）。默认拉取给定时间之后的消息，--forward=false 拉之前的。hasMore=true 时用结果中的边界 createTime 作为下次 --time 翻页。
 ```
 Usage:
   dws chat message list [flags]
 Example:
   dws chat message list --group <openconversation_id> --time "2025-03-01 00:00:00"
-  dws chat message list --user <userId> --time "2025-03-01 00:00:00" --limit 50
-  dws chat message list --open-dingtalk-id <openDingTalkId> --time "2025-03-01 00:00:00" --limit 50
+  dws chat message list --group <openconversation_id> --time "2025-03-01 00:00:00" --limit 50
   dws chat message list --group <openconversation_id> --time "2025-03-01 00:00:00" --forward=false
+  # 拉单聊改用 list-direct: dws chat message list-direct --user <userId> --time "2025-03-01 00:00:00"
 Flags:
       --forward                  true=拉给定时间之后的消息，false=拉给定时间之前的消息 (default true)
-      --group string             群聊 openconversation_id（群聊时必填）
+      --group string             群聊 openconversation_id（必填，**仅支持群聊**；查单聊用 chat message list-direct --user <userId>）
       --limit int                返回数量，不传则不限制
       --time string              开始时间，格式: yyyy-MM-dd HH:mm:ss (必填)
-      --user string              单聊用户 userId（单聊时与 --open-dingtalk-id 二选一）
-      --open-dingtalk-id string  单聊用户 openDingTalkId（单聊时与 --user 二选一，适用于三方应用等无法获取 userId 的场景）
 
 注意:
-  - --group、--user、--open-dingtalk-id 三者互斥，只需指定其一：群聊用 --group，单聊用 --user 或 --open-dingtalk-id
-  - --user 和 --open-dingtalk-id 都是发起单聊消息拉取，区别在于用不同格式的用户标识：
-    - --user 传 userId（企业内部应用常用）
-    - --open-dingtalk-id 传 openDingTalkId（三方应用或跨组织场景常用，无法获取 userId 时使用）
+  - 本命令**仅支持群聊**，必须指定 --group；拉取单聊（私聊）消息请改用 `chat message list-direct`（旧版的 `list --user` / `list --open-dingtalk-id` 已不再支持）
   - --group 的别名: --id, --chat, --conversation-id (均可替代 --group)
   - 翻页：hasMore=true 时，用结果中的边界 createTime 作为下次 --time
   - 话题圈消息拉取流程：如果返回的会话消息中包含 openConvThreadId 字段，说明是话题类消息。要获取完整的话题内容，需要两步操作：(1) 先通过 dws chat message list 拉取话题主消息（即话题帖子本身）；(2) 再调用 dws chat message list-topic-replies --group <openConversationId> --topic-id <openConvThreadId> 分页拉取该话题下的所有回复消息。只有话题主消息 + 回复列表合在一起，才是一条话题的完整内容。
+```
+
+#### 拉取单聊消息内容 — 按对方 userId 拉取与某同事的单聊（私聊）历史消息
+
+按对方 userId（或 openDingTalkId）拉取与该同事的单聊会话消息，**专用于私聊**；查群聊请用 `chat message list --group`。同组织内同事用 --user，非同组织好友用 --open-dingtalk-id，二者互斥。默认拉取给定时间之后的消息，--forward=false 拉之前的。hasMore=true 时用结果中的边界 createTime 作为下次 --time 翻页。
+```
+Usage:
+  dws chat message list-direct [flags]
+Example:
+  dws chat message list-direct --user <对方userId> --time "2025-03-01 00:00:00" --limit 50
+  dws chat message list-direct --user <对方userId> --time "2025-03-01 00:00:00" --forward=false
+  dws chat message list-direct --open-dingtalk-id <openDingTalkId> --time "2025-03-01 00:00:00" --limit 20
+  # 查询对方 userId: dws contact user search --keyword "姓名" 或 dws aisearch person --keyword "姓名" --dimension name
+Flags:
+      --forward                  true=从老往新（给定时间之后），false=从新往老（给定时间之前） (default true)
+      --user string              对方 userId（同组织内同事，与 --open-dingtalk-id 二选一）
+      --open-dingtalk-id string  对方 openDingTalkId（非同组织普通好友场景，与 --user 二选一）
+      --limit int                每页返回数量（默认 50）
+      --time string              开始时间，格式: yyyy-MM-dd HH:mm:ss (必填)
+
+注意:
+  - --user 与 --open-dingtalk-id 二选一，必须且只能指定其一；同组织同事优先用 --user
+  - --time 必填；翻页：hasMore=true 时，用结果中的边界 createTime 作为下次 --time
+  - 本命令是 `chat message list` 拆分出的单聊专用命令；查群聊消息请用 `chat message list --group`
+```
+
+#### 给同事发单聊消息 — 按对方 userId 发送单聊（私聊）消息
+
+**重要：该接口会真实发送消息到对方，不可用于测试或试探性调用。调用前必须确认消息内容和接收对象无误。**
+
+按对方 userId 给同事发单聊消息，**专用于私聊**；如需群发请用 `chat message send --group`。同组织内同事用 --user，非同组织好友用 --open-dingtalk-id，二者互斥。--text 为消息正文（支持 Markdown），--title 为消息标题。
+```
+Usage:
+  dws chat message send-direct [flags]
+Example:
+  dws chat message send-direct --user <对方userId> --title "提醒" --text "请查收"
+  dws chat message send-direct --open-dingtalk-id <openDingTalkId> --title "通知" --text "周会改至明天"
+  # 查询对方 userId / openDingTalkId: dws contact user search --keyword "姓名"
+Flags:
+      --user string              对方 userId（同组织内同事，与 --open-dingtalk-id 二选一）
+      --open-dingtalk-id string  对方 openDingTalkId（非同组织普通好友场景，与 --user 二选一）
+      --text string              消息正文（必填，支持 Markdown）
+      --title string             消息标题（必填）
+
+注意:
+  - --user 与 --open-dingtalk-id 二选一，必须且只能指定其一；同组织同事优先用 --user
+  - send-direct 是单聊专用的发送命令；`chat message send --user`（兼容保留）仍可发单聊，但单聊场景推荐用 send-direct，群聊用 `chat message send --group`
 ```
 
 #### 以当前用户身份发送消息 — --group 群聊 / --user 或 --open-dingtalk-id 单聊
@@ -592,7 +634,7 @@ Flags:
 
 注意:
   - 四个参数每次请求都会传递给服务端，cursor 首页传 "0"
-  - 与 chat message list 的区别：list 拉取指定单个会话（群聊或单聊）的消息，list-all 拉取当前用户所有会话的消息
+  - 与 chat message list 的区别：list 拉取指定群聊会话的消息（单聊用 list-direct），list-all 拉取当前用户所有会话的消息
   - 翻页：hasMore=true 时，用响应中的 nextCursor 值作为下次 --cursor 参数继续翻页
   - 时间格式统一为 yyyy-MM-dd HH:mm:ss
 ```
@@ -1147,7 +1189,7 @@ Flags:
 
 用户说"我特别关注的人最近发了什么消息/关注的人最近聊了啥/星标联系人最近的动态" → `chat message list-focused`（零参数一行命令）
 用户说"某人发给我的消息/指定发送者的消息/某人最近的消息" → `chat message list-by-sender --sender-user-id <userId>` 或 `--sender-open-dingtalk-id <openDingTalkId>`（跨单聊+群聊）
-用户说"和某人的单聊聊天记录/拉某人单聊历史" → `chat message list --user <userId>` 或 `--open-dingtalk-id <openDingTalkId>`
+用户说"和某人的单聊聊天记录/拉某人单聊历史" → `chat message list-direct --user <userId>` 或 `--open-dingtalk-id <openDingTalkId>`
 用户说"某个群的聊天记录" → `chat message list --group <openConversationId>`
 用户说"我最近所有消息/我今天的消息" → `chat message list-all --start <ISO> --end <ISO>`
 用户说"@我的消息/提及我的" → `chat message list-mentions --start <ISO> --end <ISO>`
@@ -1167,11 +1209,11 @@ Flags:
 用户说"改群名" → `chat group rename`
 用户说"聊天记录/会话消息/拉取会话" → `chat message list`
 用户说"某人发给我的消息/指定发送者/某人的消息" → `chat message list-by-sender`（用户未明确说"单聊"时优先使用，跨单聊/群聊）
-用户说"拉取和某人的单聊记录/单聊消息" → `chat message list --user`（用户明确说"单聊"时使用）
+用户说"拉取和某人的单聊记录/单聊消息" → `chat message list-direct --user`（单聊专用；用户明确说"单聊"时使用）
 用户说"@我的消息/at我的/提及我的" → `chat message list-mentions`
 用户说"未读消息会话/未读会话列表/我的未读会话" → `chat message list-unread-conversations`
 用户说"发群消息(以个人身份)" → `chat message send --group`
-用户说"发单聊消息(以个人身份)" → `chat message send --user`（有 userId 时）或 `chat message send --open-dingtalk-id`（有 openDingTalkId 时）
+用户说"发单聊消息(以个人身份)" → `chat message send-direct --user`（单聊推荐；有 userId 时）或 `--open-dingtalk-id`（有 openDingTalkId 时）；`chat message send --user` 兼容保留亦可
 用户说"机器人发消息/机器人群发" → `chat message send-by-bot`
 用户说"撤回我发的消息/撤回消息" → `chat message recall`（通过 IM 接口撤回当前用户自己发出的消息，需要 openConversationId + openMessageId）
 用户说"撤回机器人发的消息/机器人撤回消息" → `chat message recall-by-bot`（通过机器人接口撤回机器人发出的消息，需要 robot-code + processQueryKey）
@@ -1222,8 +1264,9 @@ Flags:
 
 关键区分:
 - `chat search` — 搜**群/会话名**返回 `openConversationId`，**不**搜消息内容；要搜消息内容请用 `chat message search-advanced`（首选）/ `chat message search` / `list-by-sender` / `list-all`，**勿混淆**
-- `chat message list` — 拉取指定会话的消息（需指定 --group 或 --user），按时间点 + 方向翻页
-- `chat message list --user` — list 的单聊模式，拉取与指定用户的单聊记录（用户明确说"单聊""私聊"时使用）
+- `chat message list` — 拉取指定**群聊**的消息（需指定 --group，**仅群聊**），按时间点 + 方向翻页
+- `chat message list-direct` — 单聊专用，拉取与指定用户的单聊（私聊）记录（--user / --open-dingtalk-id；用户明确说"单聊""私聊"时使用）
+- `chat message send-direct` — 单聊专用，给指定同事发单聊（私聊）消息（--user / --open-dingtalk-id）
 - `chat message list-by-sender` — 搜索指定发送者发给我的消息，跨所有会话（单聊+群聊均包含，用户只说"某人发的消息"时优先使用）
 - `chat message list-mentions` — 拉取 @我 的消息（跨单聊/群聊，可选指定群）
 - `chat message list-unread-conversations` — 拉取当前用户存在未读消息的会话列表（可选 `--count`）
@@ -1448,8 +1491,8 @@ Flags:
 | `chat search` | `openConversationId` | message send/list、group members 等的 --group |
 | `chat group create` | `openConversationId` | 同上 |
 | `chat message list-all` | `nextCursor` | 下次 list-all 的 --cursor |
-| `aisearch person` | `userId` | message send 的 --user、send-by-bot 的 --users、send-by-bot 的 --at-user-ids、list-by-sender 的 --sender-user-id |
-| `aisearch person` → `contact user get` | `openDingTalkId` | message send 的 --at-open-dingtalk-ids、--open-dingtalk-id、send-by-bot 的 --open-dingtalk-ids、send-by-bot 的 --at-open-dingtalk-ids、list-by-sender 的 --sender-open-dingtalk-id、message list 的 --open-dingtalk-id |
+| `aisearch person` | `userId` | message send 的 --user、list-direct / send-direct 的 --user、send-by-bot 的 --users、send-by-bot 的 --at-user-ids、list-by-sender 的 --sender-user-id |
+| `aisearch person` → `contact user get` | `openDingTalkId` | message send 的 --at-open-dingtalk-ids、--open-dingtalk-id、list-direct / send-direct 的 --open-dingtalk-id、send-by-bot 的 --open-dingtalk-ids、send-by-bot 的 --at-open-dingtalk-ids、list-by-sender 的 --sender-open-dingtalk-id |
 | `chat bot search` | `robotCode` | send-by-bot / recall-by-bot 的 --robot-code（仅我创建的机器人，无 openDingTalkId） |
 | `chat bot find` | `openDingTalkId` | 给机器人发单聊消息（全部可用机器人，额外返回 openDingTalkId） |
 | `chat message send-by-bot` | `processQueryKey` | recall-by-bot 的 --keys |
@@ -1484,7 +1527,7 @@ Flags:
 - `--group` 为群聊会话 ID (openconversation_id)，可从群搜索或群聊信息中获取
 - `chat message send` 的 text 是位置参数（恰好 1 个），非 flag；群聊用 `--group`，单聊用 `--user`（userId）或 `--open-dingtalk-id`（openDingTalkId），三者互斥；纯文本/Markdown 单聊传 `--user` 时直接走 userId 发送能力；`--at-all`、`--at-open-dingtalk-ids` 仅在 `--group` 群聊时生效；富媒体消息通过 `--msg-type` 指定类型（image/file），必须显式指定；发送文件/媒体消息时，必须先根据文件扩展名判断 msgType：图片→image，其他所有→file，不可跳过此判断
 - `chat message list-all` 的四个参数（--start、--end、--limit、--cursor）每次请求都必须传递；翻页时用响应中的 nextCursor 值作为下次 --cursor
-- `chat message list` 的 `--group`、`--user`、`--open-dingtalk-id` 三者互斥，必须且只能指定其一
+- `chat message list` **仅支持群聊**，必须指定 `--group`；拉取单聊用 `chat message list-direct`（`--user` / `--open-dingtalk-id` 二选一）
 - `chat message list-by-sender` 不需要指定单聊/群聊，返回结果自带会话类型标识；`--sender-user-id`（userId）与 `--sender-open-dingtalk-id`（openDingTalkId）二选一；时间用 `--start`/`--end`（ISO-8601），分页用 `--limit`/`--cursor`
 - `chat message list-mentions` 可选 `--group` 指定群聊，不传则查全部；时间用 `--start`/`--end`（ISO-8601），分页用 `--limit`/`--cursor`
 - `chat message list-unread-conversations` 获取当前用户未读会话列表，可选 `--count` 指定返回条数
