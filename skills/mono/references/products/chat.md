@@ -1118,6 +1118,10 @@ search 与 find 选择指南:
 | 额外返回 openDingTalkId | 无 | 有（可用于给机器人发单聊消息） |
 | 触发词 | "我创建的""我的""我自己的" | "搜索机器人""找机器人""查机器人" |
 
+#### 创建机器人 / 建联 — 已独立到 `dws connect` 命令域（不在 chat 下）
+
+建号、Stream 建联、审批不在 `chat` 下，已独立成 `dws connect` 命令域。完整流程（`connect bot create` 建号 / `connect start` 建联 / 渠道自动路由 / 各宿主识别信号 / workbuddy bridge）见 [connect.md](../connect.md)。`chat bot` 仅保留 find/search；拉机器人进群仍走 `group members add-bot`。
+
 ### category (会话分组管理)
 
 #### 获取用户自定义会话分组
