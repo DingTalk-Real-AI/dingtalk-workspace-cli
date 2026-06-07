@@ -12,7 +12,7 @@
   <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases"><img src="https://img.shields.io/github/v/release/DingTalk-Real-AI/dingtalk-workspace-cli?color=red&label=release" alt="Latest Release"></a>
   <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/workflows/ci.yml"><img src="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src=".github/badges/coverage.svg" alt="Coverage">
-  <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/stargazers"><img src="https://img.shields.io/github/stars/DingTalk-Real-AI/dingtalk-workspace-cli?style=social" alt="GitHub stars"></a>
+  <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/stargazers"><img src="https://img.shields.io/github/stars/DingTalk-Real-AI/dingtalk-workspace-cli?label=stars&color=yellow" alt="GitHub stars"></a>
 </p>
 
 <p align="center">
@@ -31,10 +31,6 @@ dws contact user search --query "张伟"              # 找到一个人
 dws calendar event list                            # 看日程安排
 dws aisearch person --query "谁负责支付系统"        # 按职责找负责人
 ```
-
-<p align="center">
-  ⭐ <strong>如果 dws 帮你（或你的 Agent）省了时间，<a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli">点个 star</a></strong> —— 这是让更多人发现它的第一动力。
-</p>
 
 <details>
 <summary><strong>目录</strong></summary>

@@ -12,7 +12,7 @@
   <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases"><img src="https://img.shields.io/github/v/release/DingTalk-Real-AI/dingtalk-workspace-cli?color=red&label=release" alt="Latest Release"></a>
   <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/workflows/ci.yml"><img src="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src=".github/badges/coverage.svg" alt="Coverage">
-  <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/stargazers"><img src="https://img.shields.io/github/stars/DingTalk-Real-AI/dingtalk-workspace-cli?style=social" alt="GitHub stars"></a>
+  <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/stargazers"><img src="https://img.shields.io/github/stars/DingTalk-Real-AI/dingtalk-workspace-cli?label=stars&color=yellow" alt="GitHub stars"></a>
 </p>
 
 <p align="center">
@@ -31,10 +31,6 @@ dws contact user search --query "Wei Zhang"        # resolve a person
 dws calendar event list                            # what's on the calendar
 dws aisearch person --query "who owns payments"    # find who owns an area
 ```
-
-<p align="center">
-  ⭐ <strong>If dws saves you (or your agent) time, <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli">give it a star</a></strong> — it's the #1 way others discover it.
-</p>
 
 <details>
 <summary><strong>Table of Contents</strong></summary>
