@@ -330,6 +330,46 @@ func TestCallToolInjectsAuthHeaders(t *testing.T) {
 	}
 }
 
+// TestCallToolKeyURLKeepsQueryAndOmitsBearer verifies that for a self-contained
+// MCP marketplace URL carrying a pre-authed ?key=<...>, the transport forwards
+// the key verbatim (query preserved) and does NOT attach the session bearer
+// token — the key is the credential. A conflicting bearer makes the gateway
+// resolve the MCP via the caller's discovery context and fail ("MCP不存在").
+func TestCallToolKeyURLKeepsQueryAndOmitsBearer(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("key"); got != "k-secret-123" {
+			t.Fatalf("key query = %q, want k-secret-123 (query must be preserved)", got)
+		}
+		if got := r.Header.Get("Authorization"); got != "" {
+			t.Fatalf("Authorization header = %q, want empty (bearer must be omitted for key URLs)", got)
+		}
+		if got := r.Header.Get("x-user-access-token"); got != "" {
+			t.Fatalf("x-user-access-token = %q, want empty (omitted for key URLs)", got)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      3,
+			"result":  map[string]any{"content": map[string]any{"ok": true}},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.Client())
+	client.AuthToken = "test-token" // present but must be skipped for key URLs
+	client.TrustedDomains = []string{"127.0.0.1"}
+
+	endpoint := server.URL + "?key=k-secret-123"
+	result, err := client.CallTool(context.Background(), endpoint, "create_dingtalk_robot", map[string]any{"appName": "x"})
+	if err != nil {
+		t.Fatalf("CallTool() error = %v", err)
+	}
+	if result.Content["ok"] != true {
+		t.Fatalf("CallTool() content = %#v, want ok=true", result.Content)
+	}
+}
+
 func TestCallToolAcceptsStructuredContentResults(t *testing.T) {
 	t.Parallel()
 

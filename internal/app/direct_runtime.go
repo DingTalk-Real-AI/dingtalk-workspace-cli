@@ -47,6 +47,19 @@ const (
 	defaultPATServerID    = "abc3c880fb90f04b52d1426aaf093766e5fc9ec38411688cbb74df42a584d374"
 )
 
+// Hardcoded built-in endpoint for the DingTalk open-platform app-management MCP
+// server, which hosts the async robot-provisioning tools submit_robot_create_task
+// and query_robot_create_result. This is
+// wired by source (NOT service discovery) per product decision: the helper
+// command `dws connect bot create` routes CanonicalProduct "opendev" here. It is a
+// named gateway alias (no ?key=), so the call is authenticated by the caller's
+// session bearer token — the created robot is owned by the current login. Points
+// at the production open-platform gateway.
+const (
+	robotCreateProductID = "opendev"
+	robotCreateEndpoint  = "https://mcp-gw.dingtalk.com/server/op-app"
+)
+
 func defaultPATServerDescriptor() market.ServerDescriptor {
 	return market.ServerDescriptor{
 		Key:         defaultPATProductID,
@@ -238,6 +251,17 @@ func directRuntimeEndpoint(productID, toolName string) (string, bool) {
 		}
 		if override, ok := productEndpointOverride(candidate); ok {
 			return override, true
+		}
+	}
+
+	// Hardcoded built-in: the robot-provisioning product is pinned to a fixed
+	// MCP server in source (NOT service discovery), per product decision. Placed
+	// after the env-var override but before the dynamic/discovery lookups so the
+	// pinned endpoint stays authoritative even if a same-named product later
+	// shows up in discovery.
+	for _, candidate := range []string{strings.TrimSpace(productID), normalized} {
+		if candidate == robotCreateProductID {
+			return robotCreateEndpoint, true
 		}
 	}
 

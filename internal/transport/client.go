@@ -495,6 +495,13 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 
 func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte) (*http.Response, error) {
 	endpoint = sanitizeJSONRPCEndpoint(endpoint)
+	// MCP marketplace "self-contained" URLs carry a pre-authed ?key=<...> that IS
+	// the credential (bound at issue time to the user+org). sanitizeJSONRPCEndpoint
+	// preserves that query for trusted gateways; here we additionally skip the
+	// session bearer for such endpoints, since a conflicting bearer makes the
+	// gateway resolve the MCP via the caller's discovery context and fail with
+	// "MCP不存在".
+	keyAuthed := endpointHasPreAuthKey(endpoint) && c.isEndpointTrusted(endpoint)
 	var lastErr error
 	for attempt := 0; attempt <= c.MaxRetries; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
@@ -517,10 +524,12 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte) 
 		if c.ExecutionId != "" {
 			req.Header.Set(HeaderExecutionId, c.ExecutionId)
 		}
-		if token := sanitizeBearerToken(c.AuthToken); token != "" {
-			if c.isEndpointTrusted(endpoint) {
-				req.Header.Set("Authorization", "Bearer "+token)
-				req.Header.Set("x-user-access-token", token)
+		if !keyAuthed {
+			if token := sanitizeBearerToken(c.AuthToken); token != "" {
+				if c.isEndpointTrusted(endpoint) {
+					req.Header.Set("Authorization", "Bearer "+token)
+					req.Header.Set("x-user-access-token", token)
+				}
 			}
 		}
 		for key, value := range c.ExtraHeaders {
@@ -741,6 +750,19 @@ func parseRetryAfter(raw string) (time.Duration, bool) {
 		return 0, true
 	}
 	return delay, true
+}
+
+// endpointHasPreAuthKey reports whether the endpoint carries a pre-authed
+// ?key=<...> query parameter, as issued by the DingTalk MCP marketplace for
+// self-contained (user+org-bound) server URLs. Such keys are themselves the
+// credential and must be forwarded verbatim; the session bearer token is
+// omitted for them (see doWithRetry).
+func endpointHasPreAuthKey(endpoint string) bool {
+	parsed, err := url.Parse(endpoint)
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(parsed.Query().Get("key")) != ""
 }
 
 // isEndpointTrusted checks whether the endpoint is HTTPS and belongs to a
