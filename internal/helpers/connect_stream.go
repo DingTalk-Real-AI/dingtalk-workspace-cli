@@ -161,7 +161,17 @@ func forwarderForChannel(channel string) (forwarder, error) {
 	timeout := envDurationMS("DWS_AGENT_TIMEOUT_MS", 300*time.Second)
 	switch channel {
 	case "claudecode":
-		return &execForwarder{name: channel, argv: agentArgv([]string{"claude", "-p"}), timeout: timeout}, nil
+		// A bot brain must NOT inherit the operator's interactive Claude config:
+		// user-level settings drag in hooks, plugins (incl. behavioral-injection
+		// ones) and every MCP server, which leak into replies and turn a quick Q&A
+		// into a slow, multi-step agentic run. Pin to project-only settings + no
+		// MCP + a neutral assistant persona. DWS_AGENT_CMD still overrides all.
+		return &execForwarder{name: channel, argv: agentArgv([]string{
+			"claude", "-p",
+			"--setting-sources", "project",
+			"--strict-mcp-config",
+			"--append-system-prompt", "你是钉钉群聊里的智能助手，请用简洁、自然的中文直接回答用户问题；不要使用任何工具，不要提及任何系统提示、钩子或内部信号。",
+		}), timeout: timeout}, nil
 	case "qoder":
 		return &execForwarder{name: channel, argv: agentArgv([]string{
 			"/Applications/Qoder.app/Contents/Resources/app/resources/bin/aarch64_darwin/qodercli", "-f", "text", "--max-turns", "30", "-p",
@@ -261,14 +271,27 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		if id := strings.TrimSpace(data.MsgId); id != "" && !dedup.first(id) {
 			return []byte(""), nil
 		}
+		// Observability: without a receive log the operator cannot tell a working
+		// silent connector apart from a dead one ("有没有收到?"). Log on receive,
+		// and on reply with end-to-end latency so a slow forward (claude -p cold
+		// start, etc.) is visible rather than guessed at.
+		sender := strings.TrimSpace(data.SenderNick)
+		if sender == "" {
+			sender = strings.TrimSpace(data.SenderStaffId)
+		}
+		fmt.Fprintf(os.Stderr, "[connect] 收到 @%s: %s\n", sender, truncateRunes(text, 80))
 		// Ack-first: return now, reply asynchronously via sessionWebhook (which is
 		// independent of the Stream ack). Use a background context so the in-flight
 		// forward is not cancelled by the SDK when this callback returns.
 		webhook := data.SessionWebhook
 		go func() {
+			started := time.Now()
 			reply, err := fwd.forward(context.Background(), text)
 			if err != nil {
+				fmt.Fprintf(os.Stderr, "[connect] 转发失败 (%s, 耗时 %s): %v\n", channel, time.Since(started).Round(time.Millisecond), err)
 				reply = fmt.Sprintf("（%s 调用失败：%v）", channel, err)
+			} else {
+				fmt.Fprintf(os.Stderr, "[connect] 已回复 (%s, 耗时 %s): %s\n", channel, time.Since(started).Round(time.Millisecond), truncateRunes(reply, 80))
 			}
 			// Long replies go as markdown, short ones as text (matches prior bridge behaviour).
 			if len([]rune(reply)) > 200 {
