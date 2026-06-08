@@ -294,6 +294,7 @@ func (d *msgDedup) first(id string) bool {
 // are also deduplicated by MsgId as defense in depth against redelivery.
 func runStreamConnector(ctx context.Context, channel, clientID, clientSecret string, fwd forwarder) error {
 	replier := chatbot.NewChatbotReplier()
+	cardReplier := newAICardReplier(clientID, clientSecret)
 	dedup := newMsgDedup(10000)
 
 	cli := client.NewStreamClient(
@@ -331,11 +332,19 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 			} else {
 				fmt.Fprintf(os.Stderr, "[connect] 已回复 (%s, 耗时 %s): %s\n", channel, time.Since(started).Round(time.Millisecond), truncateRunes(reply, 80))
 			}
-			// Long replies go as markdown, short ones as text (matches prior bridge behaviour).
-			if len([]rune(reply)) > 200 {
-				_ = replier.SimpleReplyMarkdown(context.Background(), webhook, []byte(channel), []byte(reply))
-			} else {
-				_ = replier.SimpleReplyText(context.Background(), webhook, []byte(reply))
+			// AI-assistant bots (everything `dws connect bot create` provisions)
+			// render replies as a streaming AI card; a plain webhook leaves the
+			// "数据加载中" card stuck. Stream into the card first, and fall back
+			// to a webhook reply only when the card path fails (a plain robot, or
+			// missing card scopes). robotCode == clientID for dws-provisioned bots.
+			if cardErr := cardReplier.reply(context.Background(), data, clientID, reply); cardErr != nil {
+				fmt.Fprintf(os.Stderr, "[connect] 卡片回复失败，回退 webhook (%s): %v\n", channel, cardErr)
+				// Long replies go as markdown, short ones as text (matches prior bridge behaviour).
+				if len([]rune(reply)) > 200 {
+					_ = replier.SimpleReplyMarkdown(context.Background(), webhook, []byte(channel), []byte(reply))
+				} else {
+					_ = replier.SimpleReplyText(context.Background(), webhook, []byte(reply))
+				}
 			}
 		}()
 		return []byte(""), nil
