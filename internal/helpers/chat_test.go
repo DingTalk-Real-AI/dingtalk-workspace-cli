@@ -222,6 +222,55 @@ func TestChatMessageSendForwardsAtMentions(t *testing.T) {
 	}
 }
 
+// TestChatMessageSendContentNotHTMLEscaped guards the @-mention rendering fix:
+// the send_personal_message content must keep literal <@openDingTalkId> / <@all>
+// tokens. If json.Marshal's default HTML escaping is reintroduced, the tokens
+// become <@...> and the DingTalk client renders them as plain text
+// instead of a real @-mention.
+func TestChatMessageSendContentNotHTMLEscaped(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want string // literal token that must survive in content
+	}{
+		{
+			name: "group-at-all",
+			args: []string{"--group", "cid-xyz", "--title", "t", "--text", "<@all> hi", "--at-all"},
+			want: "<@all>",
+		},
+		{
+			name: "group-at-open-dingtalk-id",
+			args: []string{"--group", "cid-xyz", "--title", "t", "--text", "<@op-1> hi", "--at-open-dingtalk-ids", "op-1"},
+			want: "<@op-1>",
+		},
+		{
+			name: "direct-open-dingtalk-id",
+			args: []string{"--open-dingtalk-id", "OP123", "--title", "t", "--text", "<@OP123> hi"},
+			want: "<@OP123>",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &captureRunner{}
+			cmd := newChatMessageSendCommand(runner)
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			cmd.SetArgs(tc.args)
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
+			}
+			content, _ := runner.last.Params["content"].(string)
+			if !strings.Contains(content, tc.want) {
+				t.Fatalf("content %q missing literal %q (HTML-escaped?)", content, tc.want)
+			}
+			if strings.Contains(content, "\\u003c") || strings.Contains(content, "\\u003e") {
+				t.Fatalf("content %q is HTML-escaped; @-mention will not render", content)
+			}
+		})
+	}
+}
+
 // TestChatMessageSendRejectsAtMentionsOutsideGroup ensures we do not silently
 // drop user intent when --at-* is combined with --user / --open-dingtalk-id
 // (single-chat tools have no @-mention semantics, so the flag would never

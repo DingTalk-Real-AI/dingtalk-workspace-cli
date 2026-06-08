@@ -14,6 +14,7 @@
 package helpers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"strings"
@@ -475,11 +476,10 @@ func buildChatMessageSendInvocation(cmd *cobra.Command, args []string) (map[stri
 		if atAll && !strings.Contains(text, "<@all>") {
 			text = "<@all> " + text
 		}
-		b, _ := json.Marshal(map[string]string{"title": title, "text": text})
 		params := map[string]any{
 			"openConversationId": group,
 			"msgType":            "markdown",
-			"content":            string(b),
+			"content":            marshalMessageContent(title, text),
 		}
 		if atAll {
 			params["atAll"] = true
@@ -495,11 +495,10 @@ func buildChatMessageSendInvocation(cmd *cobra.Command, args []string) (map[stri
 		params := map[string]any{"title": title, "text": text, "receiverUserId": user}
 		return params, "send_direct_message_as_user", nil
 	default:
-		b, _ := json.Marshal(map[string]string{"title": title, "text": text})
 		params := map[string]any{
 			"receiverOpenDingTalkId": openID,
 			"msgType":                "markdown",
-			"content":                string(b),
+			"content":                marshalMessageContent(title, text),
 		}
 		if strings.TrimSpace(uuid) != "" {
 			params["uuid"] = uuid
@@ -1010,4 +1009,20 @@ func jsonMarshal(v any) (string, error) {
 		return "", err
 	}
 	return string(b), nil
+}
+
+// marshalMessageContent builds the send_personal_message content payload
+// ({"title","text"}) WITHOUT HTML-escaping < > &. DingTalk's client renders
+// @-mentions by matching literal <@openDingTalkId> / <@all> tokens in the
+// message text; the default json.Marshal escaping turns them into
+// <@...>, which the client shows as plain text instead of a rendered
+// mention. encoding/json offers no escape toggle on Marshal, so use an Encoder.
+func marshalMessageContent(title, text string) string {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	// Encoder errors are impossible for a map[string]string; ignore safely.
+	_ = enc.Encode(map[string]string{"title": title, "text": text})
+	// Encoder.Encode appends a trailing newline; strip it.
+	return strings.TrimRight(buf.String(), "\n")
 }
