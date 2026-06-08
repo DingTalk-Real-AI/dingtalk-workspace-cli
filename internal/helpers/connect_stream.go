@@ -65,6 +65,13 @@ func (f *execForwarder) forward(ctx context.Context, text string) (string, error
 	defer cancel()
 	args := append(append([]string(nil), f.argv[1:]...), text)
 	cmd := exec.CommandContext(ctx, f.argv[0], args...)
+	// Run the agent CLI from a clean, empty directory rather than inheriting the
+	// connector's CWD (often $HOME). Some agents scan the working tree / nearby
+	// config on startup — e.g. `claude -p` takes ~29s from a large $HOME but ~4s
+	// from an empty dir. A slow reply misses DingTalk's AI-assistant response
+	// window and leaves the card stuck on "数据加载中", so keeping the forward
+	// fast is what makes the reply actually render.
+	cmd.Dir = connectWorkDir()
 	if len(f.env) > 0 {
 		cmd.Env = append(os.Environ(), f.env...)
 	}
@@ -80,6 +87,14 @@ func (f *execForwarder) forward(ctx context.Context, text string) (string, error
 		return "", fmt.Errorf("本地 %s agent 调用失败：%s", f.name, truncateRunes(msg, 300))
 	}
 	return "（本地 agent 无文本输出）", nil
+}
+
+// connectWorkDir returns a stable empty directory to run forwarded agent CLIs
+// from, so they don't scan the connector's $HOME/working tree and slow down.
+func connectWorkDir() string {
+	d := filepath.Join(os.TempDir(), "dws-connect-wd")
+	_ = os.MkdirAll(d, 0o755)
+	return d
 }
 
 // locateBinary finds an agent CLI without hardcoding a single path: first by
@@ -283,7 +298,6 @@ func (d *msgDedup) first(id string) bool {
 // are also deduplicated by MsgId as defense in depth against redelivery.
 func runStreamConnector(ctx context.Context, channel, clientID, clientSecret string, fwd forwarder) error {
 	replier := chatbot.NewChatbotReplier()
-	cardReplier := newAICardReplier(clientID, clientSecret)
 	dedup := newMsgDedup(10000)
 
 	cli := client.NewStreamClient(
@@ -321,19 +335,16 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 			} else {
 				fmt.Fprintf(os.Stderr, "[connect] 已回复 (%s, 耗时 %s): %s\n", channel, time.Since(started).Round(time.Millisecond), truncateRunes(reply, 80))
 			}
-			// AI-assistant bots (everything `dws connect bot create` provisions)
-			// render replies as a streaming AI card; a plain webhook leaves the
-			// "数据加载中" card stuck. Stream into the card first, and fall back
-			// to a webhook reply only when the card path fails (a plain robot, or
-			// missing card scopes). robotCode == clientID for dws-provisioned bots.
-			if cardErr := cardReplier.reply(context.Background(), data, clientID, reply); cardErr != nil {
-				fmt.Fprintf(os.Stderr, "[connect] 卡片回复失败，回退 webhook (%s): %v\n", channel, cardErr)
-				// Long replies go as markdown, short ones as text (matches prior bridge behaviour).
-				if len([]rune(reply)) > 200 {
-					_ = replier.SimpleReplyMarkdown(context.Background(), webhook, []byte(channel), []byte(reply))
-				} else {
-					_ = replier.SimpleReplyText(context.Background(), webhook, []byte(reply))
-				}
+			// Reply via the inbound message's sessionWebhook. Plain
+			// text/markdown renders reliably for these AI-assistant ("智能体")
+			// bots — the AI-card path (CreateCard + streaming template) proved
+			// inconsistent, leaving "内容加载失败" on bots whose app isn't
+			// authorized for the shared card template. Long replies go as
+			// markdown, short ones as text.
+			if len([]rune(reply)) > 200 {
+				_ = replier.SimpleReplyMarkdown(context.Background(), webhook, []byte(channel), []byte(reply))
+			} else {
+				_ = replier.SimpleReplyText(context.Background(), webhook, []byte(reply))
 			}
 		}()
 		return []byte(""), nil
