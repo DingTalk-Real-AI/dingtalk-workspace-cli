@@ -31,14 +31,11 @@ import (
 // connect bot create's server-side async provisioning); (3) emit the linking
 // plan for that channel (how the bot reaches the local agent).
 //
-// Channel routing:
-//   - openclaw   → dingtalk-openclaw-connector (plugin-sdk contract / OpenAI-compatible endpoint)
-//   - qoder      → local Qoder (AI coding IDE agent) CLI: qodercli -p
-//   - qoderwork  → local QoderWork (desktop general-purpose office AI agent, non-coding) CLI: qodercli -p
-//   - claudecode → local Claude Code CLI: claude -p
-//   - codebuddy  → headless WorkBuddy engine: codebuddy -p (reuses ~/.workbuddy login, 24/7)
-//   - workbuddy  → current WorkBuddy session assistant (via bridge, HTTP)
-//   - hermes     → official channel
+// Channel routing: every agent channel forwards to its local headless CLI (one
+// shot per message, 24/7), resolved & auto-installed via agentSpecs (see
+// connect_stream.go) — claudecode/codex/gemini/opencode/amp/crush/aider/cursor/
+// goose, plus the desktop-app-bundled qoder/qoderwork/codebuddy/workbuddy.
+// openclaw uses the external connector; hermes the official channel.
 func init() {
 	RegisterPublic(func() Handler {
 		return connectHandler{}
@@ -55,16 +52,15 @@ func (connectHandler) Command(runner executor.Runner) *cobra.Command {
 	return newConnectCommand(runner)
 }
 
-// connectChannels is the set of supported channels.
-var connectChannels = map[string]struct{}{
-	"openclaw":   {},
-	"qoder":      {},
-	"qoderwork":  {},
-	"hermes":     {},
-	"workbuddy":  {},
-	"claudecode": {},
-	"codebuddy":  {},
-}
+// connectChannels is the set of supported channels: the external ones plus every
+// exec-type agent in agentSpecs (kept in sync automatically).
+var connectChannels = func() map[string]struct{} {
+	m := map[string]struct{}{"openclaw": {}, "hermes": {}}
+	for ch := range agentSpecs {
+		m[ch] = struct{}{}
+	}
+	return m
+}()
 
 // resolveConnectChannel resolves the current agent channel using "explicit wins,
 // then signal fallback". Priority: --channel flag > DWS_AGENT_CHANNEL env var >
@@ -123,7 +119,8 @@ func resolveConnectChannel(explicit string) (channel string, detectedBy string) 
 }
 
 // buildConnectPlan returns the linking plan that wires the bot to a channel's
-// local agent.
+// local agent. External channels (openclaw/hermes) have bespoke plans; every
+// exec-type agent (agentSpecs) shares a generic Stream + headless-CLI plan.
 func buildConnectPlan(channel, clientID, robotCode string) map[string]any {
 	switch channel {
 	case "openclaw":
@@ -136,46 +133,6 @@ func buildConnectPlan(channel, clientID, robotCode string) map[string]any {
 				"参考 https://github.com/DingTalk-Real-AI/dingtalk-openclaw-connector",
 			},
 		}
-	case "claudecode":
-		return map[string]any{
-			"method":  "stream-bridge",
-			"summary": "一键背后建号 + Stream 建联，订阅 TOPIC_ROBOT，转发到本地 Claude Code CLI（claude -p \"<text>\"）处理后回复",
-			"steps": []string{
-				"用 clientId/clientSecret 起 Stream，注册 TOPIC_ROBOT 回调",
-				"收到消息 → 调 claude -p \"<text>\" → stdout 作为回复",
-				"经 sessionWebhook 把回复发回钉钉",
-			},
-		}
-	case "codebuddy":
-		return map[string]any{
-			"method":  "stream-bridge",
-			"summary": "转发到无头 codebuddy（WorkBuddy 引擎，复用 ~/.workbuddy 登录、同账号）：每条消息起一个 codebuddy -p，全自动可 7×24，无需占用交互会话",
-			"steps": []string{
-				"自动定位 codebuddy（PATH > WorkBuddy.app 自带），没装则提示安装",
-				"用 clientId/clientSecret 起 Stream，注册 TOPIC_ROBOT 回调",
-				"收到消息 → 调 codebuddy -p \"<text>\"（CODEBUDDY_CONFIG_DIR=~/.workbuddy 复用登录）→ stdout 作为回复",
-				"经 sessionWebhook 把回复发回钉钉",
-			},
-		}
-	case "qoder":
-		return map[string]any{
-			"method":  "stream-bridge",
-			"summary": "转发到本地 Qoder（面向开发者的 AI 编程 IDE agent，类似 Cursor）：qodercli -p，处理代码类任务后回复",
-			"steps": []string{
-				"用 clientId/clientSecret 起 Stream，注册 TOPIC_ROBOT 回调",
-				"收到消息 → 调 Qoder CLI `/Applications/Qoder.app/.../qodercli -p \"<text>\" -f text`（代码/工程任务）→ stdout 作为回复",
-				"经 sessionWebhook 把回复发回钉钉",
-			},
-		}
-	case "qoderwork":
-		return map[string]any{
-			"method":  "stream-bridge",
-			"summary": "转发到「当前 QoderWork 会话助理」（阿里 Qoder 团队的桌面级通用 AI 办公智能体，非编程）：经 agent-session bridge(:18791) 中转进当前会话，不是另起一个 qodercli 一次性实例",
-			"steps": []string{
-				"起 agent-session-bridge.py（BRIDGE_PORT=18791）把消息中转进当前 QoderWork 会话",
-				"用 clientId/clientSecret 起 Stream，注册 TOPIC_ROBOT 回调；收到消息 → 经 bridge 转发到当前 QoderWork 会话助理 → 回复经 sessionWebhook 发回钉钉",
-			},
-		}
 	case "hermes":
 		return map[string]any{
 			"method":  "official-channel",
@@ -185,20 +142,20 @@ func buildConnectPlan(channel, clientID, robotCode string) map[string]any {
 				"将消息路由到 hermes agent 处理后回复",
 			},
 		}
-	case "workbuddy":
+	}
+	if spec, ok := agentSpecs[channel]; ok {
 		return map[string]any{
 			"method":  "stream-bridge",
-			"summary": "一键背后建号(dws connect bot create) + Stream(WebSocket)建联，订阅 TOPIC_ROBOT，转发到「当前 WorkBuddy 会话助理」（经 bridge :18790，不会串到 OpenClaw）",
+			"summary": fmt.Sprintf("Go 原生 Stream 建联，转发到本地 %s 的无头 CLI（每条消息起一个新实例，可 7×24 无人值守）", spec.app),
 			"steps": []string{
-				"dws connect 已用服务端 API 程序化建号拿 clientId/clientSecret（一键背后创建，不走 WorkBuddy 助理设置 UI）",
-				"起 agent-session-bridge.py（默认 :18790）把消息中转进当前 WorkBuddy 会话",
-				"用 clientId/clientSecret 起 Stream，注册 TOPIC_ROBOT 回调；收到消息 → 经 bridge 转发到当前 WorkBuddy 会话助理 → 回复经 sessionWebhook 发回钉钉",
-				"钉钉应用需开通权限：Card.Streaming.Write、Card.Instance.Write、qyapi_robot_sendmsg（参考 https://www.codebuddy.cn/docs/workbuddy/Dingtalk-Guide）",
+				"自动定位 agent CLI（DWS_AGENT_CMD > PATH > app 自带），缺包管理器装的会自动安装、装不了的提示安装",
+				"用 clientId/clientSecret 起 Stream，注册 TOPIC_ROBOT 回调",
+				"收到消息 → 调该 agent 的无头 CLI（如 claude -p / codex exec / codebuddy -p）→ stdout 作为回复",
+				"经 sessionWebhook 把回复发回钉钉",
 			},
 		}
-	default:
-		return map[string]any{"method": "unknown"}
 	}
+	return map[string]any{"method": "unknown"}
 }
 
 // connectExternalCommand returns the connector command (argv) for channels that
@@ -340,10 +297,10 @@ func newConnectStartCommand() *cobra.Command {
 			channelFlag, _ := cmd.Flags().GetString("channel")
 			channel, _ := resolveConnectChannel(channelFlag)
 			if channel == "" {
-				return apperrors.NewValidation("无法探测 agent 渠道；请用 --channel 指定 (openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy) 或设置 DWS_AGENT_CHANNEL")
+				return apperrors.NewValidation("无法探测 agent 渠道；请用 --channel 指定 (openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode|amp|cursor|goose|crush|aider) 或设置 DWS_AGENT_CHANNEL")
 			}
 			if _, ok := connectChannels[channel]; !ok {
-				return apperrors.NewValidation(fmt.Sprintf("未知渠道 %q（支持 openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy）", channel))
+				return apperrors.NewValidation(fmt.Sprintf("未知渠道 %q（支持 openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode|amp|cursor|goose|crush|aider）", channel))
 			}
 			clientID, _ := cmd.Flags().GetString("client-id")
 			clientSecret, _ := cmd.Flags().GetString("client-secret")
@@ -354,7 +311,7 @@ func newConnectStartCommand() *cobra.Command {
 		},
 	}
 	preferLegacyLeaf(cmd)
-	cmd.Flags().String("channel", "auto", "渠道：auto(默认,自动探测)|openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy")
+	cmd.Flags().String("channel", "auto", "渠道：auto(默认,自动探测)|openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode|amp|cursor|goose|crush|aider")
 	cmd.Flags().String("client-id", "", "现成机器人 clientId（AppKey）(必填)")
 	cmd.Flags().String("client-secret", "", "现成机器人 clientSecret（AppSecret）(必填)")
 	return cmd
@@ -377,10 +334,10 @@ func newConnectCommand(runner executor.Runner) *cobra.Command {
 			channelFlag, _ := cmd.Flags().GetString("channel")
 			channel, detectedBy := resolveConnectChannel(channelFlag)
 			if channel == "" {
-				return apperrors.NewValidation("无法探测 agent 渠道；请用 --channel 指定 (openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy) 或设置 DWS_AGENT_CHANNEL")
+				return apperrors.NewValidation("无法探测 agent 渠道；请用 --channel 指定 (openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode|amp|cursor|goose|crush|aider) 或设置 DWS_AGENT_CHANNEL")
 			}
 			if _, ok := connectChannels[channel]; !ok {
-				return apperrors.NewValidation(fmt.Sprintf("未知渠道 %q（支持 openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy）", channel))
+				return apperrors.NewValidation(fmt.Sprintf("未知渠道 %q（支持 openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode|amp|cursor|goose|crush|aider）", channel))
 			}
 
 			clientID, _ := cmd.Flags().GetString("client-id")
@@ -445,7 +402,7 @@ func newConnectCommand(runner executor.Runner) *cobra.Command {
 		},
 	}
 	preferLegacyLeaf(cmd)
-	cmd.Flags().String("channel", "auto", "渠道：auto(默认,自动探测)|openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy")
+	cmd.Flags().String("channel", "auto", "渠道：auto(默认,自动探测)|openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode|amp|cursor|goose|crush|aider")
 	cmd.Flags().String("app-name", "", "新建机器人：智能体应用名称，2~20 字，企业内唯一")
 	cmd.Flags().String("robot-name", "", "新建机器人：承载机器人名称，2~20 字")
 	cmd.Flags().String("desc", "", "新建机器人：功能描述，≤200 字")

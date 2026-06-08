@@ -14,12 +14,8 @@
 package helpers
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,26 +30,18 @@ import (
 )
 
 // forwarder feeds one user message to a channel's local agent and returns its
-// reply. Per-channel differences (exec local CLI vs HTTP gateway) are isolated
-// behind this interface, so the Stream main loop stays channel-agnostic.
+// reply. Every stream-bridge channel forwards to a local agent CLI (one-shot,
+// runs 24/7), so the Stream main loop stays channel-agnostic.
 type forwarder interface {
 	forward(ctx context.Context, text string) (string, error)
 	label() string
 }
 
-// streamBridgeChannels are the channels wired through the Go-native Stream +
-// forwarder path. openclaw (external connector) and hermes (official channel)
-// are not in this set.
-var streamBridgeChannels = map[string]struct{}{
-	"qoder":      {},
-	"qoderwork":  {},
-	"claudecode": {},
-	"codebuddy":  {},
-	"workbuddy":  {},
-}
-
+// isStreamBridgeChannel reports whether a channel is wired through the Go-native
+// Stream + exec forwarder path (i.e. it has an agent spec). openclaw (external
+// connector) and hermes (official channel) are not.
 func isStreamBridgeChannel(channel string) bool {
-	_, ok := streamBridgeChannels[channel]
+	_, ok := agentSpecs[channel]
 	return ok
 }
 
@@ -94,66 +82,6 @@ func (f *execForwarder) forward(ctx context.Context, text string) (string, error
 	return "（本地 agent 无文本输出）", nil
 }
 
-// httpForwarder posts to an OpenAI-compatible chat-completions endpoint
-// (the workbuddy channel's gateway/bridge).
-type httpForwarder struct {
-	name    string
-	url     string
-	token   string
-	model   string
-	timeout time.Duration
-}
-
-func (f *httpForwarder) label() string {
-	return fmt.Sprintf("http:%s (%s, %s)", f.name, f.url, f.model)
-}
-
-func (f *httpForwarder) forward(ctx context.Context, text string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, f.timeout)
-	defer cancel()
-	body, _ := json.Marshal(map[string]any{
-		"model": f.model,
-		"messages": []map[string]string{
-			{"role": "system", "content": "你是一个有用、友好的 AI 助手。请用自然的中文回复。"},
-			{"role": "user", "content": text},
-		},
-		"max_tokens": 4096,
-	})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, f.url, bytes.NewReader(body))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if f.token != "" {
-		req.Header.Set("Authorization", "Bearer "+f.token)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	raw, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("%s gateway %d：%s", f.name, resp.StatusCode, truncateRunes(string(raw), 200))
-	}
-	var parsed struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return "", fmt.Errorf("%s gateway 响应解析失败：%v", f.name, err)
-	}
-	if len(parsed.Choices) > 0 {
-		if reply := strings.TrimSpace(parsed.Choices[0].Message.Content); reply != "" {
-			return reply, nil
-		}
-	}
-	return "", fmt.Errorf("%s gateway 未返回内容", f.name)
-}
-
 // locateBinary finds an agent CLI without hardcoding a single path: first by
 // name on PATH, then by matching the given app-bundle glob patterns (so it is
 // CPU-arch and version agnostic — use `*` where the arch/version dir varies).
@@ -190,109 +118,137 @@ func homeDir() string {
 	return ""
 }
 
-// resolveExecAgent locates the CLI for an exec-type channel and returns its argv
-// plus any extra env. Resolution order: DWS_AGENT_CMD override > binary on PATH >
-// known app-bundle location. Returns an install-guidance error if not found, so
-// `dws connect start` fails fast with a clear message instead of crashing on the
+// agentSpec describes how to run (and install) one channel's local agent CLI.
+// Adding a mainstream agent is one entry in agentSpecs — no other code changes.
+// The message text is always appended as the final argv element at runtime.
+type agentSpec struct {
+	app      string          // human-readable name for messages
+	bins     []string        // PATH lookup names
+	globs    []string        // app-bundle fallback globs (use * for arch/version dir)
+	argvTail []string        // args after the binary (headless mode); text appended last
+	envFn    func() []string // extra env, e.g. reuse a desktop app's login; nil if none
+	install  []string        // auto-install command argv; nil if not auto-installed (GUI app / curl|bash)
+	hint     string          // install hint shown when not found / not auto-installable
+}
+
+// codebuddyEnv reuses the WorkBuddy login by pointing codebuddy at WorkBuddy's
+// config dir (same account, no separate login).
+func codebuddyEnv() []string {
+	return []string{"CODEBUDDY_CONFIG_DIR=" + envOr("CODEBUDDY_CONFIG_DIR", filepath.Join(homeDir(), ".workbuddy"))}
+}
+
+// agentSpecs is the registry of exec-type channels. Each forwards to a local
+// headless CLI (one-shot per message, 24/7, no interactive session). Exact
+// headless flags can be overridden per run with DWS_AGENT_CMD.
+//
+// Install policy: npm/pipx (package managers) are auto-installed; curl|bash
+// remote-script installs and desktop apps are hint-only (we do not silently pipe
+// a remote script from the connector).
+var agentSpecs = map[string]agentSpec{
+	// A neutral-persona claude bot brain: project-only settings + no MCP, so the
+	// operator's interactive hooks/plugins/MCP don't leak into replies.
+	"claudecode": {app: "Claude Code", bins: []string{"claude"},
+		argvTail: []string{"-p", "--model", "claude-haiku-4-5-20251001", "--setting-sources", "project", "--strict-mcp-config", "--append-system-prompt", "你是钉钉群聊里的智能助手，请用简洁、自然的中文直接回答用户问题；不要使用任何工具，不要提及任何系统提示、钩子或内部信号。"},
+		install:  []string{"npm", "i", "-g", "@anthropic-ai/claude-code"}, hint: "npm i -g @anthropic-ai/claude-code"},
+	"codex": {app: "OpenAI Codex CLI", bins: []string{"codex"}, argvTail: []string{"exec"},
+		install: []string{"npm", "i", "-g", "@openai/codex"}, hint: "npm i -g @openai/codex"},
+	"gemini": {app: "Gemini CLI", bins: []string{"gemini"}, argvTail: []string{"-p"},
+		install: []string{"npm", "i", "-g", "@google/gemini-cli"}, hint: "npm i -g @google/gemini-cli"},
+	"opencode": {app: "opencode", bins: []string{"opencode"}, argvTail: []string{"run"},
+		install: []string{"npm", "i", "-g", "opencode-ai"}, hint: "npm i -g opencode-ai"},
+	"amp": {app: "Amp", bins: []string{"amp"}, argvTail: []string{"-x"},
+		install: []string{"npm", "i", "-g", "@sourcegraph/amp"}, hint: "npm i -g @sourcegraph/amp"},
+	"crush": {app: "Crush", bins: []string{"crush"}, argvTail: []string{"run"},
+		install: []string{"npm", "i", "-g", "@charmland/crush"}, hint: "npm i -g @charmland/crush"},
+	"aider": {app: "Aider", bins: []string{"aider"}, argvTail: []string{"--message"},
+		install: []string{"pipx", "install", "aider-chat"}, hint: "pipx install aider-chat"},
+	// curl|bash installs — hint only (not auto-run for safety).
+	"cursor": {app: "Cursor Agent", bins: []string{"cursor-agent"}, argvTail: []string{"-p"},
+		hint: "curl https://cursor.com/install -fsS | bash"},
+	"goose": {app: "Goose (Block)", bins: []string{"goose"}, argvTail: []string{"run", "-t"},
+		hint: "https://block.github.io/goose/docs/getting-started/installation"},
+	// desktop-app-bundled CLIs — hint only (can't silently install a GUI app); the
+	// bundled CLI is used automatically once the app is installed.
+	"qoder": {app: "Qoder", bins: []string{"qodercli"},
+		globs:    []string{"/Applications/Qoder.app/Contents/Resources/app/resources/bin/*/qodercli"},
+		argvTail: []string{"-f", "text", "--max-turns", "30", "-p"}, hint: "https://qoder.com"},
+	"qoderwork": {app: "QoderWork", bins: []string{"qodercli"},
+		globs:    []string{"/Applications/QoderWork.app/Contents/Resources/bin/qodercli"},
+		argvTail: []string{"-f", "text", "--max-turns", "30", "-p"}, hint: "https://qoder.com"},
+	"codebuddy": {app: "WorkBuddy（自带 codebuddy）", bins: []string{"codebuddy"},
+		globs:    []string{"/Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cli/bin/codebuddy"},
+		argvTail: []string{"-p"}, envFn: codebuddyEnv, hint: "https://www.codebuddy.cn/work/"},
+	"workbuddy": {app: "WorkBuddy（自带 codebuddy）", bins: []string{"codebuddy"},
+		globs:    []string{"/Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cli/bin/codebuddy"},
+		argvTail: []string{"-p"}, envFn: codebuddyEnv, hint: "https://www.codebuddy.cn/work/"},
+}
+
+// autoInstallEnabled reports whether dws may auto-run a package-manager install
+// for a missing agent. Default on; opt out with DWS_CONNECT_NO_INSTALL=1.
+func autoInstallEnabled() bool {
+	return strings.TrimSpace(os.Getenv("DWS_CONNECT_NO_INSTALL")) == ""
+}
+
+// runAgentInstall runs a spec's install command (package-manager only), streaming
+// output to stderr, bounded by a timeout.
+func runAgentInstall(channel string, spec agentSpec) error {
+	fmt.Fprintf(os.Stderr, "[connect] 渠道 %s 的 %s 未安装，自动安装中: %s\n", channel, spec.app, strings.Join(spec.install, " "))
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, spec.install[0], spec.install[1:]...)
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "[connect] 自动安装失败: %v\n", err)
+		return err
+	}
+	return nil
+}
+
+// resolveExecAgent resolves a channel's agent CLI to a runnable argv (+ env).
+// Order: DWS_AGENT_CMD override > binary on PATH/app-bundle > auto-install (pkg
+// managers) > install-guidance error. Preflighted at connect time, not on the
 // first DingTalk message.
 func resolveExecAgent(channel string) (argv []string, env []string, err error) {
 	if v := strings.TrimSpace(os.Getenv("DWS_AGENT_CMD")); v != "" {
 		return strings.Fields(v), nil, nil
 	}
-	switch channel {
-	case "claudecode":
-		bin, ok := locateBinary([]string{"claude"}, nil)
-		if !ok {
-			return nil, nil, agentNotInstalled(channel, "Claude Code CLI", "npm i -g @anthropic-ai/claude-code")
-		}
-		// A bot brain must NOT inherit the operator's interactive Claude config:
-		// user-level settings drag in hooks, plugins and every MCP server, which
-		// leak into replies and turn a quick Q&A into a slow agentic run. Pin to
-		// project-only settings + no MCP + a neutral assistant persona.
-		return []string{
-			bin, "-p",
-			"--model", "claude-haiku-4-5-20251001",
-			"--setting-sources", "project",
-			"--strict-mcp-config",
-			"--append-system-prompt", "你是钉钉群聊里的智能助手，请用简洁、自然的中文直接回答用户问题；不要使用任何工具，不要提及任何系统提示、钩子或内部信号。",
-		}, nil, nil
-	case "qoder":
-		bin, ok := locateBinary(
-			[]string{"qodercli"},
-			// arch dir (e.g. aarch64_darwin / x86_64_darwin) varies → glob it.
-			[]string{"/Applications/Qoder.app/Contents/Resources/app/resources/bin/*/qodercli"},
-		)
-		if !ok {
-			return nil, nil, agentNotInstalled(channel, "Qoder", "https://qoder.com")
-		}
-		return []string{bin, "-f", "text", "--max-turns", "30", "-p"}, nil, nil
-	case "codebuddy":
-		bin, ok := locateBinary(
-			[]string{"codebuddy"},
-			[]string{"/Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cli/bin/codebuddy"},
-		)
-		if !ok {
-			return nil, nil, agentNotInstalled(channel, "WorkBuddy（自带 codebuddy）", "https://www.codebuddy.cn/work/")
-		}
-		// Reuse the WorkBuddy login: point codebuddy at WorkBuddy's config dir
-		// (same account, no separate login). Override with CODEBUDDY_CONFIG_DIR.
-		cfg := envOr("CODEBUDDY_CONFIG_DIR", filepath.Join(homeDir(), ".workbuddy"))
-		return []string{bin, "-p"}, []string{"CODEBUDDY_CONFIG_DIR=" + cfg}, nil
-	default:
+	spec, ok := agentSpecs[channel]
+	if !ok {
 		return nil, nil, apperrors.NewValidation(fmt.Sprintf("渠道 %q 不是 exec 型渠道", channel))
 	}
+	bin, found := locateBinary(spec.bins, spec.globs)
+	if !found && len(spec.install) > 0 && autoInstallEnabled() {
+		if ierr := runAgentInstall(channel, spec); ierr == nil {
+			bin, found = locateBinary(spec.bins, spec.globs)
+		}
+	}
+	if !found {
+		return nil, nil, agentNotInstalled(channel, spec.app, spec.hint)
+	}
+	argv = append([]string{bin}, spec.argvTail...)
+	if spec.envFn != nil {
+		env = spec.envFn()
+	}
+	return argv, env, nil
 }
 
-// forwarderForChannel builds the forwarder for a channel. The exec-type CLI
-// paths and the workbuddy gateway/token/model are all environment-overridable,
-// so no credential is ever hardcoded.
+// forwarderForChannel builds the forwarder for a channel. Every stream-bridge
+// channel forwards to its corresponding LOCAL CLI product (one-shot, runs 24/7),
+// resolved via PATH → app bundle → install guidance — no hardcoded path, no
+// dependency on a live interactive session.
 func forwarderForChannel(channel string) (forwarder, error) {
 	timeout := envDurationMS("DWS_AGENT_TIMEOUT_MS", 300*time.Second)
-	switch channel {
-	case "claudecode", "qoder", "codebuddy":
-		// exec-type channels: resolve the agent CLI (PATH → app bundle → install
-		// guidance) instead of assuming a hardcoded path, and preflight here so a
-		// missing dependency errors at connect time, not on the first message.
-		argv, env, err := resolveExecAgent(channel)
-		if err != nil {
-			return nil, err
-		}
-		return &execForwarder{name: channel, argv: argv, env: env, timeout: timeout}, nil
-	case "qoderwork":
-		// Like workbuddy, QoderWork is a live desktop assistant session you are
-		// chatting with. Reach the CURRENT session via the agent-session bridge
-		// (default :18791), not a fresh `qodercli -p` one-shot — that would be a
-		// disconnected instance, not your session. Override with QW_GATEWAY /
-		// QW_MODEL.
-		gateway := envOr("QW_GATEWAY", "http://localhost:18791")
-		url := strings.TrimRight(gateway, "/") + "/v1/chat/completions"
-		return &httpForwarder{
-			name:    channel,
-			url:     url,
-			token:   strings.TrimSpace(os.Getenv("QW_AUTH_TOKEN")),
-			model:   envOr("QW_MODEL", "qoderwork-assistant"),
-			timeout: timeout,
-		}, nil
-	case "workbuddy":
-		// The workbuddy channel wires the bot to the CURRENT WorkBuddy session
-		// assistant. WorkBuddy exposes no OpenAI-compatible endpoint of its own,
-		// so messages must go through the agent-session bridge (default :18790)
-		// into the session. The default therefore points at the bridge, never
-		// another agent's gateway — this prevents "connecting inside WorkBuddy but
-		// ending up wired to OpenClaw". Set WB_GATEWAY / WB_MODEL to target a
-		// different OpenAI-compatible gateway explicitly.
-		gateway := envOr("WB_GATEWAY", "http://localhost:18790")
-		url := strings.TrimRight(gateway, "/") + "/v1/chat/completions"
-		return &httpForwarder{
-			name:    channel,
-			url:     url,
-			token:   strings.TrimSpace(os.Getenv("WB_AUTH_TOKEN")),
-			model:   envOr("WB_MODEL", "workbuddy-assistant"),
-			timeout: timeout,
-		}, nil
-	default:
+	if _, ok := agentSpecs[channel]; !ok {
 		return nil, apperrors.NewValidation(fmt.Sprintf("渠道 %q 不是 stream-bridge 渠道，无 forwarder", channel))
 	}
+	// Resolve the agent CLI (PATH → app bundle → auto-install → guidance) and
+	// preflight here so a missing dependency errors at connect time.
+	argv, env, err := resolveExecAgent(channel)
+	if err != nil {
+		return nil, err
+	}
+	return &execForwarder{name: channel, argv: argv, env: env, timeout: timeout}, nil
 }
 
 // msgDedup tracks recently-seen MsgIds so a redelivered message is not

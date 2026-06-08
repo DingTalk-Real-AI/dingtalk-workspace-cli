@@ -140,10 +140,11 @@ func TestConnectExternalCommand(t *testing.T) {
 
 func TestForwarderForChannel(t *testing.T) {
 	clearChannelEnv(t)
-	// exec-type channels: execForwarder. Use DWS_AGENT_CMD so the test does not
-	// depend on the agent binaries being installed on the test machine.
+	// Every stream-bridge channel now yields an execForwarder (local CLI product,
+	// no bridge/session). Use DWS_AGENT_CMD so the test does not depend on the
+	// agent binaries being installed on the test machine.
 	t.Setenv("DWS_AGENT_CMD", "fake-cli --flag")
-	for _, ch := range []string{"qoder", "claudecode", "codebuddy"} {
+	for ch := range agentSpecs {
 		fwd, err := forwarderForChannel(ch)
 		if err != nil {
 			t.Fatalf("forwarderForChannel(%q) err = %v", ch, err)
@@ -157,38 +158,35 @@ func TestForwarderForChannel(t *testing.T) {
 			t.Errorf("channel %q DWS_AGENT_CMD not applied: argv = %v", ch, ef.argv)
 		}
 	}
-	t.Setenv("DWS_AGENT_CMD", "")
-	// session-bridge channels (reach the current live session via bridge):
-	// httpForwarder, overridable via per-channel env vars.
-	t.Setenv("WB_GATEWAY", "http://localhost:9999")
-	t.Setenv("WB_MODEL", "wb-model")
-	t.Setenv("QW_GATEWAY", "http://localhost:8888")
-	t.Setenv("QW_MODEL", "qw-model")
-	for _, tc := range []struct{ ch, url, model string }{
-		{"workbuddy", "http://localhost:9999/v1/chat/completions", "wb-model"},
-		{"qoderwork", "http://localhost:8888/v1/chat/completions", "qw-model"},
-	} {
-		fwd, err := forwarderForChannel(tc.ch)
-		if err != nil {
-			t.Fatalf("forwarderForChannel(%q) err = %v", tc.ch, err)
-		}
-		hf, ok := fwd.(*httpForwarder)
-		if !ok {
-			t.Fatalf("%s should yield *httpForwarder, got %T", tc.ch, fwd)
-		}
-		if hf.url != tc.url {
-			t.Errorf("%s gateway not applied: url = %q, want %q", tc.ch, hf.url, tc.url)
-		}
-		if hf.model != tc.model {
-			t.Errorf("%s model not applied: model = %q, want %q", tc.ch, hf.model, tc.model)
-		}
+	// Non-agent channel has no forwarder.
+	if _, err := forwarderForChannel("openclaw"); err == nil {
+		t.Error("openclaw should not yield a forwarder")
 	}
-	// DWS_AGENT_CMD overrides exec argv.
-	t.Setenv("DWS_AGENT_CMD", "custom-cli --foo")
-	cf, _ := forwarderForChannel("qoder")
-	ef := cf.(*execForwarder)
-	if !equalStringSlice(ef.argv, []string{"custom-cli", "--foo"}) {
-		t.Errorf("DWS_AGENT_CMD not applied: argv = %v", ef.argv)
+}
+
+func TestAgentSpecsCoverMainstreamAgents(t *testing.T) {
+	// The mainstream agents the bot must support, all present as channels.
+	for _, ch := range []string{
+		"claudecode", "codex", "gemini", "opencode", "amp", "cursor", "goose", "crush", "aider",
+		"qoder", "qoderwork", "codebuddy", "workbuddy",
+	} {
+		spec, ok := agentSpecs[ch]
+		if !ok {
+			t.Errorf("agentSpecs missing channel %q", ch)
+			continue
+		}
+		if len(spec.bins) == 0 {
+			t.Errorf("channel %q has no bins", ch)
+		}
+		if spec.hint == "" {
+			t.Errorf("channel %q has no install hint", ch)
+		}
+		if _, ok := connectChannels[ch]; !ok {
+			t.Errorf("channel %q not in connectChannels", ch)
+		}
+		if !isStreamBridgeChannel(ch) {
+			t.Errorf("channel %q should be stream-bridge", ch)
+		}
 	}
 }
 
