@@ -95,11 +95,9 @@ func newDevdocArticleSearchCommand(runner executor.Runner) *cobra.Command {
 				size = 10
 			}
 			return runDevdocTool(cmd, runner, "search_open_platform_docs_rag", map[string]any{
-				"CliRagSearchReqVO": map[string]any{
-					"keyword": keyword,
-					"page":    page,
-					"size":    size,
-				},
+				"keyword": keyword,
+				"page":    page,
+				"size":    size,
 			})
 		},
 	}
@@ -124,9 +122,11 @@ func newDevdocErrorDiagnoseCommand(runner executor.Runner) *cobra.Command {
 			errorMessage := devdocFlagOrFallback(cmd, "error-message")
 			contextValue := devdocFlagOrFallback(cmd, "context")
 			query := devdocFlagOrFallback(cmd, "query")
-			if query == "" && requestID == "" && errorCode == "" && errorMessage == "" && contextValue == "" {
+			hasPrimaryInput := query != "" || requestID != "" || errorCode != "" || errorMessage != "" || contextValue != ""
+			if !hasPrimaryInput {
 				return apperrors.NewValidation("one of --query, --request-id, --error-code, --error-message, or --context is required")
 			}
+			combinedQuery := devdocJoinQueryParts(query, errorMessage, devdocFlagOrFallback(cmd, "api"), contextValue)
 			page, _ := cmd.Flags().GetInt("page")
 			if page < 1 {
 				page = 1
@@ -139,12 +139,9 @@ func newDevdocErrorDiagnoseCommand(runner executor.Runner) *cobra.Command {
 				"page": page,
 				"size": size,
 			}
-			devdocSetStringParam(params, "query", query)
+			devdocSetStringParam(params, "query", combinedQuery)
 			devdocSetStringParam(params, "requestId", requestID)
 			devdocSetStringParam(params, "errorCode", errorCode)
-			devdocSetStringParam(params, "errorMessage", errorMessage)
-			devdocSetStringParam(params, "apiName", devdocFlagOrFallback(cmd, "api"))
-			devdocSetStringParam(params, "context", contextValue)
 			return runDevdocTool(cmd, runner, "search_open_error_code_rag", params)
 		},
 	}
@@ -153,9 +150,9 @@ func newDevdocErrorDiagnoseCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("request-id", "", "开放平台 requestId")
 	addDevdocHiddenStringFlag(cmd, "trace-id", "--request-id 的兼容别名")
 	cmd.Flags().String("error-code", "", "错误码")
-	cmd.Flags().String("error-message", "", "错误描述")
-	cmd.Flags().String("api", "", "API 名称，作为检索补充信息")
-	cmd.Flags().String("context", "", "额外排查上下文")
+	cmd.Flags().String("error-message", "", "错误描述，会合并进原始问题")
+	cmd.Flags().String("api", "", "API 名称，会合并进原始问题作为补充检索词")
+	cmd.Flags().String("context", "", "额外排查上下文，会合并进原始问题")
 	cmd.Flags().Int("page", 1, "分页页码 (从 1 开始，默认 1)")
 	cmd.Flags().Int("size", 10, "分页大小 (默认 10)")
 	return cmd
@@ -193,6 +190,16 @@ func devdocSetStringParam(params map[string]any, key, value string) {
 	if strings.TrimSpace(value) != "" {
 		params[key] = strings.TrimSpace(value)
 	}
+}
+
+func devdocJoinQueryParts(parts ...string) string {
+	cleaned := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			cleaned = append(cleaned, trimmed)
+		}
+	}
+	return strings.Join(cleaned, " ")
 }
 
 func addDevdocHiddenStringFlag(cmd *cobra.Command, name, usage string) {

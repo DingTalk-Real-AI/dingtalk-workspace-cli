@@ -279,11 +279,9 @@ func (r *recoveryRuntime) Search(ctx context.Context, query string, rc recovery.
 		searchSize = 5
 	)
 	requestArgs := map[string]any{
-		"CliRagSearchReqVO": map[string]any{
-			"keyword": query,
-			"page":    searchPage,
-			"size":    searchSize,
-		},
+		"keyword": query,
+		"page":    searchPage,
+		"size":    searchSize,
 	}
 
 	retrieval := recovery.KnowledgeRetrieval{

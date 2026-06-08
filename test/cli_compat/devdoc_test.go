@@ -22,9 +22,9 @@ func TestDevdocArticleSearch_should_pass_keyword(t *testing.T) {
 	_ = execCmd(t, root, []string{"devdoc", "article", "search"}, map[string]string{
 		"keyword": "openConversationId", "page": "1", "size": "10",
 	})
-	assertNestedToolArg(t, cap, "CliRagSearchReqVO", "keyword", "openConversationId")
-	assertNestedToolArg(t, cap, "CliRagSearchReqVO", "page", float64(1))
-	assertNestedToolArg(t, cap, "CliRagSearchReqVO", "size", float64(10))
+	assertToolArg(t, cap, "keyword", "openConversationId")
+	assertToolArg(t, cap, "page", float64(1))
+	assertToolArg(t, cap, "size", float64(10))
 }
 
 func TestDevdocArticleSearch_should_not_call_when_dry_run(t *testing.T) {
@@ -68,7 +68,7 @@ func TestDevdocErrorDiagnose_should_map_trace_id_alias(t *testing.T) {
 		"trace-id": "trace-abc", "api": "创建日程",
 	})
 	assertToolArg(t, cap, "requestId", "trace-abc")
-	assertToolArg(t, cap, "apiName", "创建日程")
+	assertToolArg(t, cap, "query", "创建日程")
 }
 
 func TestDevdocErrorTroubleshootAlias_should_pass_error_context(t *testing.T) {
@@ -78,8 +78,7 @@ func TestDevdocErrorTroubleshootAlias_should_pass_error_context(t *testing.T) {
 		"error-code": "33012", "error-message": "missing scope", "context": "create calendar failed",
 	})
 	assertToolArg(t, cap, "errorCode", "33012")
-	assertToolArg(t, cap, "errorMessage", "missing scope")
-	assertToolArg(t, cap, "context", "create calendar failed")
+	assertToolArg(t, cap, "query", "missing scope create calendar failed")
 }
 
 func TestDevdocErrorDiagnose_should_not_call_when_dry_run(t *testing.T) {

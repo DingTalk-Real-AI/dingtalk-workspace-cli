@@ -47,17 +47,13 @@ func TestDevdocArticleSearchAcceptsWukongKeywordAlias(t *testing.T) {
 	if runner.last.Tool != "search_open_platform_docs_rag" {
 		t.Fatalf("tool = %q, want search_open_platform_docs_rag", runner.last.Tool)
 	}
-	body, ok := runner.last.Params["CliRagSearchReqVO"].(map[string]any)
-	if !ok {
-		t.Fatalf("CliRagSearchReqVO = %#v, want object", runner.last.Params["CliRagSearchReqVO"])
-	}
-	if got := body["keyword"]; got != "openConversationId" {
+	if got := runner.last.Params["keyword"]; got != "openConversationId" {
 		t.Fatalf("keyword = %#v, want openConversationId", got)
 	}
-	if got := body["page"]; got != 2 {
+	if got := runner.last.Params["page"]; got != 2 {
 		t.Fatalf("page = %#v, want 2", got)
 	}
-	if got := body["size"]; got != 5 {
+	if got := runner.last.Params["size"]; got != 5 {
 		t.Fatalf("size = %#v, want 5", got)
 	}
 }
@@ -75,11 +71,7 @@ func TestDevdocArticleSearchAcceptsPositionalKeyword(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut.String())
 	}
-	body, ok := runner.last.Params["CliRagSearchReqVO"].(map[string]any)
-	if !ok {
-		t.Fatalf("CliRagSearchReqVO = %#v, want object", runner.last.Params["CliRagSearchReqVO"])
-	}
-	if got := body["keyword"]; got != "MCP" {
+	if got := runner.last.Params["keyword"]; got != "MCP" {
 		t.Fatalf("keyword = %#v, want MCP", got)
 	}
 }
@@ -127,8 +119,11 @@ func TestDevdocErrorDiagnoseMapsTraceIDAlias(t *testing.T) {
 	if got := runner.last.Params["requestId"]; got != "trace-abc" {
 		t.Fatalf("requestId = %#v, want trace-abc", got)
 	}
-	if got := runner.last.Params["apiName"]; got != "创建日程" {
-		t.Fatalf("apiName = %#v, want 创建日程", got)
+	if _, ok := runner.last.Params["apiName"]; ok {
+		t.Fatalf("apiName should not be sent, params = %#v", runner.last.Params)
+	}
+	if got := runner.last.Params["query"]; got != "创建日程" {
+		t.Fatalf("query = %#v, want 创建日程", got)
 	}
 }
 
@@ -153,11 +148,14 @@ func TestDevdocErrorDiagnosePassesErrorContext(t *testing.T) {
 	if got := runner.last.Params["errorCode"]; got != "33012" {
 		t.Fatalf("errorCode = %#v, want 33012", got)
 	}
-	if got := runner.last.Params["errorMessage"]; got != "missing scope" {
-		t.Fatalf("errorMessage = %#v, want missing scope", got)
+	if _, ok := runner.last.Params["errorMessage"]; ok {
+		t.Fatalf("errorMessage should not be sent, params = %#v", runner.last.Params)
 	}
-	if got := runner.last.Params["context"]; got != "create calendar failed" {
-		t.Fatalf("context = %#v, want create calendar failed", got)
+	if _, ok := runner.last.Params["context"]; ok {
+		t.Fatalf("context should not be sent, params = %#v", runner.last.Params)
+	}
+	if got := runner.last.Params["query"]; got != "missing scope create calendar failed" {
+		t.Fatalf("query = %#v, want merged error context", got)
 	}
 }
 

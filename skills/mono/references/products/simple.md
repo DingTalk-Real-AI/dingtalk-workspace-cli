@@ -30,9 +30,9 @@ Flags:
       --request-id string      开放平台 requestId
       --trace-id string        requestId 的兼容别名
       --error-code string      错误码
-      --error-message string   错误描述
-      --api string             API 名称
-      --context string         额外排查上下文
+      --error-message string   错误描述，会合并进原始问题
+      --api string             API 名称，会合并进原始问题作为补充检索词
+      --context string         额外排查上下文，会合并进原始问题
       --page int               分页页码 (默认 1)
       --size int               分页大小 (默认 10)
 ```

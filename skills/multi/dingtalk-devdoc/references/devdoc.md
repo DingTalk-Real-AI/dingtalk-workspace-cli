@@ -35,9 +35,9 @@ Flags:
       --request-id string      开放平台 requestId
       --trace-id string        requestId 的兼容别名
       --error-code string      错误码
-      --error-message string   错误描述
-      --api string             API 名称，作为检索补充信息
-      --context string         额外排查上下文
+      --error-message string   错误描述，会合并进原始问题
+      --api string             API 名称，会合并进原始问题作为补充检索词
+      --context string         额外排查上下文，会合并进原始问题
       --page int               分页页码 (从 1 开始，默认 1)
       --size int               分页大小 (默认 10)
 ```
@@ -54,6 +54,7 @@ Flags:
 - devdoc(钉钉**开放平台**开发者文档，面向研发) vs doc(钉钉在线文档，面向普通用户内容)
 - devdoc 只做搜索，不做读取；命中条目返回标题、摘要、文档链接，由 Agent 引用链接或进一步浏览
 - `devdoc error diagnose` 只返回诊断事实、参考资料和链接，不生成 AI 分析结论
+- `--api`、`--error-message`、`--context` 是 CLI 侧易用参数，调用 MCP 时会合并到 `query`；MCP 入参只发送 `query`、`requestId`、`errorCode`、`page`、`size`
 
 ## 核心工作流
 
