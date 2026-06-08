@@ -126,20 +126,19 @@ func buildConnectPlan(channel, clientID, robotCode string) map[string]any {
 	case "openclaw":
 		return map[string]any{
 			"method":  "openclaw-connector",
-			"summary": "通过 dingtalk-openclaw-connector 接入（plugin-sdk 契约 / OpenAI-compatible endpoint）",
+			"summary": "走 dingtalk-openclaw-connector 官方建联，由连接器自己建号 + AI 卡片流式回复（dws 不代建机器人）",
 			"steps": []string{
-				"将 clientId/clientSecret 写入 openclaw.json 的 channels.dingtalk-connector",
-				"openclaw gateway restart",
-				"参考 https://github.com/DingTalk-Real-AI/dingtalk-openclaw-connector",
+				"按 https://github.com/DingTalk-Real-AI/dingtalk-openclaw-connector 设备码扫码注册机器人",
+				"启动 openclaw gateway，由连接器处理消息收发与卡片渲染",
 			},
 		}
 	case "hermes":
 		return map[string]any{
 			"method":  "official-channel",
-			"summary": "通过钉钉官方 channel 渠道建联（hermes agent）",
+			"summary": "走 Hermes 官方 channel 建联，由 Hermes 自己建号 + 原生回复（dws 不代建机器人）",
 			"steps": []string{
-				"用 clientId/clientSecret 走官方 channel 订阅机器人消息",
-				"将消息路由到 hermes agent 处理后回复",
+				"运行 `hermes gateway setup` → 选 DingTalk → QR Code Scan 扫码授权",
+				"`hermes gateway restart`，直接在钉钉里跟新机器人对话",
 			},
 		}
 	}
@@ -275,7 +274,36 @@ func launchConnector(cmd *cobra.Command, channel, clientID, clientSecret string)
 		return runStreamConnector(cmd.Context(), channel, clientID, clientSecret, fwd)
 	}
 
+	// hermes / openclaw run their own official bot provisioning + reply logic
+	// (device-flow QR registration, AI-card streaming). dws must not provision
+	// a robot for them or wrap them in the Stream bridge — their bots are a
+	// different type and only render through their native pipeline. Point the
+	// user at the official tool instead.
+	if guidance := officialChannelGuidance(channel); guidance != "" {
+		fmt.Fprint(cmd.ErrOrStderr(), guidance)
+		return nil
+	}
+
 	return apperrors.NewValidation(fmt.Sprintf("渠道 %q 暂无内置建联；用环境变量 DWS_CONNECT_CMD 指定要运行的连接器", channel))
+}
+
+// officialChannelGuidance returns onboarding instructions for channels that own
+// their bot lifecycle (hermes, openclaw). dws guides the user to the official
+// tool rather than provisioning a robot itself, because a dws-provisioned
+// "智能体" robot does not render through these channels' native reply path.
+func officialChannelGuidance(channel string) string {
+	switch channel {
+	case "hermes":
+		return "[connect] hermes 渠道走 Hermes 官方建联，dws 不代建机器人：\n" +
+			"  1. 运行 `hermes gateway setup` → 选 DingTalk → QR Code Scan，用钉钉扫码授权\n" +
+			"     （设备码注册，自动把 client_id/secret 写入 ~/.hermes/.env）\n" +
+			"  2. `hermes gateway restart`，直接在钉钉里跟新机器人对话\n"
+	case "openclaw":
+		return "[connect] openclaw 渠道走 dingtalk-openclaw-connector 官方建联，dws 不代建机器人：\n" +
+			"  1. 按 https://github.com/DingTalk-Real-AI/dingtalk-openclaw-connector 的设备码扫码注册机器人\n" +
+			"  2. 启动 openclaw gateway，由连接器处理 AI 卡片流式回复\n"
+	}
+	return ""
 }
 
 // newConnectStartCommand implements `dws connect start`: linking only. It uses

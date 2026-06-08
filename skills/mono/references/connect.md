@@ -44,12 +44,17 @@ dws connect start --channel <ch> --client-id <id> --client-secret <secret>
 
 > `workbuddy` 和 `codebuddy` 都转发到 WorkBuddy 的 CLI 产品（codebuddy -p），同账号。
 
-### 外部 / 官方
+### 外部 / 官方（走各自官方流程，dws 不代建机器人）
 
-| 渠道 | 识别信号 | 方式 |
-|------|----------|------|
-| `openclaw` | `DINGTALK_AGENT=DING_DWS_CLAW` | 外部连接器 dingtalk-openclaw-connector |
-| `hermes` | `HERMES_AGENT` | 钉钉官方 channel |
+> **最佳实践：`hermes` / `openclaw` 这两个渠道，机器人由它们自己的官方工具创建并处理，dws 只做引导、不调 `connect bot create` 代建。**
+> 原因：dws `connect bot create` 建的是「智能体」机器人（AI 卡片型），而 Hermes/openclaw 的回复管线是为它们自己注册的机器人设计的——类型不匹配会导致消息卡在「数据加载中」渲染不出。各渠道用各渠道的原生方式，不强行统一。用户扫一次码即可。
+
+| 渠道 | 识别信号 | 官方建联方式 |
+|------|----------|--------------|
+| `hermes` | `HERMES_AGENT` | `hermes gateway setup` → 选 DingTalk → **QR Code Scan** 扫码授权（设备码注册，自动写入 `~/.hermes/.env`）→ `hermes gateway restart`。走 Hermes 原生收发逻辑。 |
+| `openclaw` | `DINGTALK_AGENT=DING_DWS_CLAW` | 按 [dingtalk-openclaw-connector](https://github.com/DingTalk-Real-AI/dingtalk-openclaw-connector) 设备码扫码注册机器人 → 启动 openclaw gateway，由连接器处理 AI 卡片流式回复。 |
+
+`dws connect --channel hermes`（或 openclaw）不会建号，而是直接打印上面的官方建联引导。**其余所有渠道（claudecode/codex/gemini/qoder/workbuddy… 见上文表格）才走 dws 自己的「建号 + Go Stream 转发到本地 CLI」那套。**
 
 ### 依赖解析 + 自动安装
 
