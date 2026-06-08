@@ -24,12 +24,23 @@ dws connect start --channel <ch> --client-id <id> --client-secret <secret>
 |------|----------|--------------|----------|
 | `claudecode` | `CLAUDECODE` | 本地 Claude Code | exec CLI（一次性）：`claude -p <text>` |
 | `qoder` | `QODER_CLI` | 本地 Qoder | exec CLI（一次性）：`qodercli -p` |
+| `codebuddy` | （需显式 `--channel codebuddy`） | 无头 WorkBuddy 引擎（同账号） | exec CLI（一次性）：`codebuddy -p`，可 7×24 |
 | `qoderwork` | `QODERCLI_INTEGRATION_MODE=qoder_work` | **当前 QoderWork 会话助理** | HTTP → bridge `:18791` |
 | `workbuddy` | `WORKBUDDY_CONFIG_DIR` / `WORKBUDDY_APP_NAME` | **当前 WorkBuddy 会话助理** | HTTP → bridge `:18790` |
 | `openclaw` | `DINGTALK_AGENT=DING_DWS_CLAW` | 本地 OpenClaw | 外部连接器 |
 | `hermes` | `HERMES_AGENT` | Hermes | 官方 channel |
 
-> 两类转发：**会话型**（`workbuddy` / `qoderwork`，你正在对话的桌面助理）经 agent-session bridge 接到**当前会话**——不是另起一个一次性 CLI 实例；**一次性型**（`qoder` / `claudecode`）每条消息起一个新 CLI 处理。想接 OpenClaw 就 `--channel openclaw`；**别用 workbuddy/qoderwork 渠道指向别家网关**，否则"在 WorkBuddy 里建联"会把机器人接到别的 agent，渠道语义就错了。
+> 两类转发：**会话型**（`workbuddy` / `qoderwork`，你正在对话的桌面助理）经 agent-session bridge 接到**当前会话**——不是另起一个一次性 CLI 实例；**一次性型**（`qoder` / `claudecode` / `codebuddy`）每条消息起一个新 CLI 处理（适合 7×24 无人值守）。`workbuddy`(接当前会话) 与 `codebuddy`(无头、24/7) 是同一个 WorkBuddy 账号的两种用法。想接 OpenClaw 就 `--channel openclaw`；**别用 workbuddy/qoderwork 渠道指向别家网关**，否则"在 WorkBuddy 里建联"会把机器人接到别的 agent，渠道语义就错了。
+
+### 依赖解析（每个 exec 渠道自动找/提示安装它的 agent CLI）
+
+exec 型渠道**不写死路径**，按 `DWS_AGENT_CMD 覆盖 > PATH > 已知 app 自带 CLI（glob，跨架构/版本）` 的顺序定位;找不到就在**建联时**(不是收消息时)报清楚"请先安装 X：<链接>"。
+
+| 渠道 | 找的 binary | app 自带位置(glob) | 没装的提示 | 复用登录 |
+|------|------------|-------------------|-----------|---------|
+| claudecode | `claude` | （PATH） | `npm i -g @anthropic-ai/claude-code` | — |
+| qoder | `qodercli` | `Qoder.app/.../bin/*/qodercli` | https://qoder.com | — |
+| codebuddy | `codebuddy` | `WorkBuddy.app/.../cli/bin/codebuddy` | https://www.codebuddy.cn/work/ | 设 `CODEBUDDY_CONFIG_DIR=~/.workbuddy` 复用 WorkBuddy 登录，**同账号、不用单独登录** |
 
 ## 建联流程
 

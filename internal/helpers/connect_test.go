@@ -13,7 +13,11 @@
 
 package helpers
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 // clearChannelEnv clears every env var that participates in channel detection
 // (empty == treated as unset), so the test host's own QODER_CLI etc. cannot
@@ -21,7 +25,8 @@ import "testing"
 func clearChannelEnv(t *testing.T) {
 	for _, k := range []string{
 		"DWS_AGENT_CHANNEL", "DINGTALK_AGENT", "OPENCLAW", "OPENCLAW_GATEWAY",
-		"HERMES_AGENT", "HERMES", "QODER_CLI", "QODERCLI_INTEGRATION_MODE", "DWS_CONNECT_CMD",
+		"HERMES_AGENT", "HERMES", "QODER_CLI", "QODERCLI_INTEGRATION_MODE",
+		"DWS_CONNECT_CMD", "DWS_AGENT_CMD",
 		"WORKBUDDY_CONFIG_DIR", "WORKBUDDY_APP_NAME", "CLAUDECODE",
 	} {
 		t.Setenv(k, "")
@@ -65,7 +70,7 @@ func TestResolveConnectChannel(t *testing.T) {
 }
 
 func TestConnectChannelsKnown(t *testing.T) {
-	for _, ch := range []string{"openclaw", "qoder", "qoderwork", "hermes", "workbuddy", "claudecode"} {
+	for _, ch := range []string{"openclaw", "qoder", "qoderwork", "hermes", "workbuddy", "claudecode", "codebuddy"} {
 		if _, ok := connectChannels[ch]; !ok {
 			t.Errorf("channel %q should be in connectChannels", ch)
 		}
@@ -83,6 +88,7 @@ func TestBuildConnectPlanMethod(t *testing.T) {
 		"hermes":     "official-channel",
 		"workbuddy":  "stream-bridge",
 		"claudecode": "stream-bridge",
+		"codebuddy":  "stream-bridge",
 		"weird":      "unknown",
 	}
 	for ch, m := range want {
@@ -106,7 +112,7 @@ func TestConnectExternalCommand(t *testing.T) {
 	})
 	t.Run("stream-bridge channels go Go-native, no external command", func(t *testing.T) {
 		clearChannelEnv(t)
-		for _, ch := range []string{"qoder", "qoderwork", "claudecode", "workbuddy"} {
+		for _, ch := range []string{"qoder", "qoderwork", "claudecode", "codebuddy", "workbuddy"} {
 			if got := connectExternalCommand(ch); got != nil {
 				t.Errorf("stream-bridge channel %q should return nil (Go-native), got %v", ch, got)
 			}
@@ -134,16 +140,24 @@ func TestConnectExternalCommand(t *testing.T) {
 
 func TestForwarderForChannel(t *testing.T) {
 	clearChannelEnv(t)
-	// exec-type channels (fresh one-shot CLI): execForwarder.
-	for _, ch := range []string{"qoder", "claudecode"} {
+	// exec-type channels: execForwarder. Use DWS_AGENT_CMD so the test does not
+	// depend on the agent binaries being installed on the test machine.
+	t.Setenv("DWS_AGENT_CMD", "fake-cli --flag")
+	for _, ch := range []string{"qoder", "claudecode", "codebuddy"} {
 		fwd, err := forwarderForChannel(ch)
 		if err != nil {
 			t.Fatalf("forwarderForChannel(%q) err = %v", ch, err)
 		}
-		if _, ok := fwd.(*execForwarder); !ok {
+		ef, ok := fwd.(*execForwarder)
+		if !ok {
 			t.Errorf("channel %q should yield *execForwarder, got %T", ch, fwd)
+			continue
+		}
+		if !equalStringSlice(ef.argv, []string{"fake-cli", "--flag"}) {
+			t.Errorf("channel %q DWS_AGENT_CMD not applied: argv = %v", ch, ef.argv)
 		}
 	}
+	t.Setenv("DWS_AGENT_CMD", "")
 	// session-bridge channels (reach the current live session via bridge):
 	// httpForwarder, overridable via per-channel env vars.
 	t.Setenv("WB_GATEWAY", "http://localhost:9999")
@@ -196,6 +210,46 @@ func TestMsgDedup(t *testing.T) {
 	// After the reset, a was evicted, so it is treated as new again.
 	if !d.first("a") {
 		t.Fatal("a should be new again after reset")
+	}
+}
+
+func TestLocateBinary(t *testing.T) {
+	// On PATH: sh exists on every unix test host.
+	if _, ok := locateBinary([]string{"sh"}, nil); !ok {
+		t.Error("sh should be found on PATH")
+	}
+	// Miss: nonexistent name + non-matching glob.
+	if _, ok := locateBinary([]string{"definitely-not-a-real-binary-xyz"}, []string{"/no/such/path/*/nope"}); ok {
+		t.Error("should not find a nonexistent binary")
+	}
+	// Glob hit: a real file matched by a wildcard dir.
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "archX")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(sub, "mycli")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := locateBinary([]string{"no-such"}, []string{filepath.Join(dir, "*", "mycli")})
+	if !ok || got != bin {
+		t.Errorf("glob locate = (%q,%v), want (%q,true)", got, ok, bin)
+	}
+}
+
+func TestResolveExecAgentOverride(t *testing.T) {
+	clearChannelEnv(t)
+	t.Setenv("DWS_AGENT_CMD", "my-agent --foo bar")
+	argv, env, err := resolveExecAgent("qoder")
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if !equalStringSlice(argv, []string{"my-agent", "--foo", "bar"}) {
+		t.Errorf("override argv = %v", argv)
+	}
+	if env != nil {
+		t.Errorf("override env should be nil, got %v", env)
 	}
 }
 

@@ -36,6 +36,7 @@ import (
 //   - qoder      → local Qoder (AI coding IDE agent) CLI: qodercli -p
 //   - qoderwork  → local QoderWork (desktop general-purpose office AI agent, non-coding) CLI: qodercli -p
 //   - claudecode → local Claude Code CLI: claude -p
+//   - codebuddy  → headless WorkBuddy engine: codebuddy -p (reuses ~/.workbuddy login, 24/7)
 //   - workbuddy  → current WorkBuddy session assistant (via bridge, HTTP)
 //   - hermes     → official channel
 func init() {
@@ -62,6 +63,7 @@ var connectChannels = map[string]struct{}{
 	"hermes":     {},
 	"workbuddy":  {},
 	"claudecode": {},
+	"codebuddy":  {},
 }
 
 // resolveConnectChannel resolves the current agent channel using "explicit wins,
@@ -141,6 +143,17 @@ func buildConnectPlan(channel, clientID, robotCode string) map[string]any {
 			"steps": []string{
 				"用 clientId/clientSecret 起 Stream，注册 TOPIC_ROBOT 回调",
 				"收到消息 → 调 claude -p \"<text>\" → stdout 作为回复",
+				"经 sessionWebhook 把回复发回钉钉",
+			},
+		}
+	case "codebuddy":
+		return map[string]any{
+			"method":  "stream-bridge",
+			"summary": "转发到无头 codebuddy（WorkBuddy 引擎，复用 ~/.workbuddy 登录、同账号）：每条消息起一个 codebuddy -p，全自动可 7×24，无需占用交互会话",
+			"steps": []string{
+				"自动定位 codebuddy（PATH > WorkBuddy.app 自带），没装则提示安装",
+				"用 clientId/clientSecret 起 Stream，注册 TOPIC_ROBOT 回调",
+				"收到消息 → 调 codebuddy -p \"<text>\"（CODEBUDDY_CONFIG_DIR=~/.workbuddy 复用登录）→ stdout 作为回复",
 				"经 sessionWebhook 把回复发回钉钉",
 			},
 		}
@@ -327,10 +340,10 @@ func newConnectStartCommand() *cobra.Command {
 			channelFlag, _ := cmd.Flags().GetString("channel")
 			channel, _ := resolveConnectChannel(channelFlag)
 			if channel == "" {
-				return apperrors.NewValidation("无法探测 agent 渠道；请用 --channel 指定 (openclaw|qoder|qoderwork|hermes|workbuddy|claudecode) 或设置 DWS_AGENT_CHANNEL")
+				return apperrors.NewValidation("无法探测 agent 渠道；请用 --channel 指定 (openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy) 或设置 DWS_AGENT_CHANNEL")
 			}
 			if _, ok := connectChannels[channel]; !ok {
-				return apperrors.NewValidation(fmt.Sprintf("未知渠道 %q（支持 openclaw|qoder|qoderwork|hermes|workbuddy|claudecode）", channel))
+				return apperrors.NewValidation(fmt.Sprintf("未知渠道 %q（支持 openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy）", channel))
 			}
 			clientID, _ := cmd.Flags().GetString("client-id")
 			clientSecret, _ := cmd.Flags().GetString("client-secret")
@@ -341,7 +354,7 @@ func newConnectStartCommand() *cobra.Command {
 		},
 	}
 	preferLegacyLeaf(cmd)
-	cmd.Flags().String("channel", "auto", "渠道：auto(默认,自动探测)|openclaw|qoder|qoderwork|hermes|workbuddy|claudecode")
+	cmd.Flags().String("channel", "auto", "渠道：auto(默认,自动探测)|openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy")
 	cmd.Flags().String("client-id", "", "现成机器人 clientId（AppKey）(必填)")
 	cmd.Flags().String("client-secret", "", "现成机器人 clientSecret（AppSecret）(必填)")
 	return cmd
@@ -364,10 +377,10 @@ func newConnectCommand(runner executor.Runner) *cobra.Command {
 			channelFlag, _ := cmd.Flags().GetString("channel")
 			channel, detectedBy := resolveConnectChannel(channelFlag)
 			if channel == "" {
-				return apperrors.NewValidation("无法探测 agent 渠道；请用 --channel 指定 (openclaw|qoder|qoderwork|hermes|workbuddy|claudecode) 或设置 DWS_AGENT_CHANNEL")
+				return apperrors.NewValidation("无法探测 agent 渠道；请用 --channel 指定 (openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy) 或设置 DWS_AGENT_CHANNEL")
 			}
 			if _, ok := connectChannels[channel]; !ok {
-				return apperrors.NewValidation(fmt.Sprintf("未知渠道 %q（支持 openclaw|qoder|qoderwork|hermes|workbuddy|claudecode）", channel))
+				return apperrors.NewValidation(fmt.Sprintf("未知渠道 %q（支持 openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy）", channel))
 			}
 
 			clientID, _ := cmd.Flags().GetString("client-id")
@@ -432,7 +445,7 @@ func newConnectCommand(runner executor.Runner) *cobra.Command {
 		},
 	}
 	preferLegacyLeaf(cmd)
-	cmd.Flags().String("channel", "auto", "渠道：auto(默认,自动探测)|openclaw|qoder|qoderwork|hermes|workbuddy|claudecode")
+	cmd.Flags().String("channel", "auto", "渠道：auto(默认,自动探测)|openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy")
 	cmd.Flags().String("app-name", "", "新建机器人：智能体应用名称，2~20 字，企业内唯一")
 	cmd.Flags().String("robot-name", "", "新建机器人：承载机器人名称，2~20 字")
 	cmd.Flags().String("desc", "", "新建机器人：功能描述，≤200 字")
