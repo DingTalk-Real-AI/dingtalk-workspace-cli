@@ -167,7 +167,7 @@ func TestForwarderForChannel(t *testing.T) {
 func TestAgentSpecsCoverMainstreamAgents(t *testing.T) {
 	// The mainstream agents the bot must support, all present as channels.
 	for _, ch := range []string{
-		"claudecode", "codex", "gemini", "opencode", "amp", "cursor", "goose", "crush", "aider",
+		"claudecode", "codex", "gemini", "opencode",
 		"qoder", "qoderwork", "codebuddy", "workbuddy",
 	} {
 		spec, ok := agentSpecs[ch]

@@ -33,8 +33,8 @@ import (
 //
 // Channel routing: every agent channel forwards to its local headless CLI (one
 // shot per message, 24/7), resolved & auto-installed via agentSpecs (see
-// connect_stream.go) — claudecode/codex/gemini/opencode/amp/crush/aider/cursor/
-// goose, plus the desktop-app-bundled qoder/qoderwork/codebuddy/workbuddy.
+// connect_stream.go) — claudecode/codex/gemini/opencode, plus the
+// desktop-app-bundled qoder/qoderwork/codebuddy/workbuddy.
 // openclaw uses the external connector; hermes the official channel.
 func init() {
 	RegisterPublic(func() Handler {
@@ -325,10 +325,10 @@ func newConnectStartCommand() *cobra.Command {
 			channelFlag, _ := cmd.Flags().GetString("channel")
 			channel, _ := resolveConnectChannel(channelFlag)
 			if channel == "" {
-				return apperrors.NewValidation("无法探测 agent 渠道；请用 --channel 指定 (openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode|amp|cursor|goose|crush|aider) 或设置 DWS_AGENT_CHANNEL")
+				return apperrors.NewValidation("无法探测 agent 渠道；请用 --channel 指定 (openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode) 或设置 DWS_AGENT_CHANNEL")
 			}
 			if _, ok := connectChannels[channel]; !ok {
-				return apperrors.NewValidation(fmt.Sprintf("未知渠道 %q（支持 openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode|amp|cursor|goose|crush|aider）", channel))
+				return apperrors.NewValidation(fmt.Sprintf("未知渠道 %q（支持 openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode）", channel))
 			}
 			clientID, _ := cmd.Flags().GetString("client-id")
 			clientSecret, _ := cmd.Flags().GetString("client-secret")
@@ -339,7 +339,7 @@ func newConnectStartCommand() *cobra.Command {
 		},
 	}
 	preferLegacyLeaf(cmd)
-	cmd.Flags().String("channel", "auto", "渠道：auto(默认,自动探测)|openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode|amp|cursor|goose|crush|aider")
+	cmd.Flags().String("channel", "auto", "渠道：auto(默认,自动探测)|openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode")
 	cmd.Flags().String("client-id", "", "现成机器人 clientId（AppKey）(必填)")
 	cmd.Flags().String("client-secret", "", "现成机器人 clientSecret（AppSecret）(必填)")
 	return cmd
@@ -362,10 +362,10 @@ func newConnectCommand(runner executor.Runner) *cobra.Command {
 			channelFlag, _ := cmd.Flags().GetString("channel")
 			channel, detectedBy := resolveConnectChannel(channelFlag)
 			if channel == "" {
-				return apperrors.NewValidation("无法探测 agent 渠道；请用 --channel 指定 (openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode|amp|cursor|goose|crush|aider) 或设置 DWS_AGENT_CHANNEL")
+				return apperrors.NewValidation("无法探测 agent 渠道；请用 --channel 指定 (openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode) 或设置 DWS_AGENT_CHANNEL")
 			}
 			if _, ok := connectChannels[channel]; !ok {
-				return apperrors.NewValidation(fmt.Sprintf("未知渠道 %q（支持 openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode|amp|cursor|goose|crush|aider）", channel))
+				return apperrors.NewValidation(fmt.Sprintf("未知渠道 %q（支持 openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode）", channel))
 			}
 
 			clientID, _ := cmd.Flags().GetString("client-id")
@@ -430,7 +430,7 @@ func newConnectCommand(runner executor.Runner) *cobra.Command {
 		},
 	}
 	preferLegacyLeaf(cmd)
-	cmd.Flags().String("channel", "auto", "渠道：auto(默认,自动探测)|openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode|amp|cursor|goose|crush|aider")
+	cmd.Flags().String("channel", "auto", "渠道：auto(默认,自动探测)|openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode")
 	cmd.Flags().String("app-name", "", "新建机器人：智能体应用名称，2~20 字，企业内唯一")
 	cmd.Flags().String("robot-name", "", "新建机器人：承载机器人名称，2~20 字")
 	cmd.Flags().String("desc", "", "新建机器人：功能描述，≤200 字")

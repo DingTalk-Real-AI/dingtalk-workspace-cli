@@ -28,11 +28,6 @@ dws connect start --channel <ch> --client-id <id> --client-secret <secret>
 | `codex` | `codex` | `codex exec` | `npm i -g @openai/codex` | ✅ npm |
 | `gemini` | `gemini` | `gemini -p` | `npm i -g @google/gemini-cli` | ✅ npm |
 | `opencode` | `opencode` | `opencode run` | `npm i -g opencode-ai` | ✅ npm |
-| `amp` | `amp` | `amp -x` | `npm i -g @sourcegraph/amp` | ✅ npm |
-| `crush` | `crush` | `crush run` | `npm i -g @charmland/crush` | ✅ npm |
-| `aider` | `aider` | `aider --message` | `pipx install aider-chat` | ✅ pipx |
-| `cursor` | `cursor-agent` | `cursor-agent -p` | `curl https://cursor.com/install \| bash` | ⚠️ 提示（curl\|bash 不静默跑） |
-| `goose` | `goose` | `goose run -t` | 官方脚本 | ⚠️ 提示 |
 
 ### 桌面 App 自带 CLI（装 App，CLI 随 App；App 装了就自动接）
 

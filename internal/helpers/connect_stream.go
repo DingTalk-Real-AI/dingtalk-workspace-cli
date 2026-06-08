@@ -156,17 +156,6 @@ var agentSpecs = map[string]agentSpec{
 		install: []string{"npm", "i", "-g", "@google/gemini-cli"}, hint: "npm i -g @google/gemini-cli"},
 	"opencode": {app: "opencode", bins: []string{"opencode"}, argvTail: []string{"run"},
 		install: []string{"npm", "i", "-g", "opencode-ai"}, hint: "npm i -g opencode-ai"},
-	"amp": {app: "Amp", bins: []string{"amp"}, argvTail: []string{"-x"},
-		install: []string{"npm", "i", "-g", "@sourcegraph/amp"}, hint: "npm i -g @sourcegraph/amp"},
-	"crush": {app: "Crush", bins: []string{"crush"}, argvTail: []string{"run"},
-		install: []string{"npm", "i", "-g", "@charmland/crush"}, hint: "npm i -g @charmland/crush"},
-	"aider": {app: "Aider", bins: []string{"aider"}, argvTail: []string{"--message"},
-		install: []string{"pipx", "install", "aider-chat"}, hint: "pipx install aider-chat"},
-	// curl|bash installs — hint only (not auto-run for safety).
-	"cursor": {app: "Cursor Agent", bins: []string{"cursor-agent"}, argvTail: []string{"-p"},
-		hint: "curl https://cursor.com/install -fsS | bash"},
-	"goose": {app: "Goose (Block)", bins: []string{"goose"}, argvTail: []string{"run", "-t"},
-		hint: "https://block.github.io/goose/docs/getting-started/installation"},
 	// desktop-app-bundled CLIs — hint only (can't silently install a GUI app); the
 	// bundled CLI is used automatically once the app is installed.
 	"qoder": {app: "Qoder", bins: []string{"qodercli"},

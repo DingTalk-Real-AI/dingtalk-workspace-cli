@@ -168,11 +168,11 @@ func (r *aiCardReplier) reply(ctx context.Context, data *chatbot.BotCallbackData
 		"outTrackId": outTrackID,
 		"cardData": map[string]any{
 			"cardParamMap": map[string]any{
-				"flowStatus":       "3", // AICardStatus.FINISHED
-				"msgContent":       content,
-				"staticMsgContent": "",
+				"flowStatus":        "3", // AICardStatus.FINISHED
+				"msgContent":        content,
+				"staticMsgContent":  "",
 				"sys_full_json_obj": `{"order":["msgContent"]}`,
-				"config":           `{"autoLayout": true}`,
+				"config":            `{"autoLayout": true}`,
 			},
 		},
 		"cardUpdateOptions": map[string]any{"updateCardDataByKey": true},
