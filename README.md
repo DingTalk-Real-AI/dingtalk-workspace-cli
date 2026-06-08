@@ -477,25 +477,25 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 
 | Service | Command | Commands | Subcommands | Description |
 |---------|---------|:--------:|-------------|-------------|
-| Contact | `contact` | 15 | `user` `dept` `label` `relation` | Users, departments, labels & roles, person relations, roster profiles, current user |
-| Chat / IM | `chat` (alias `im`) | 65 | `message` `group` `bot` `conversation-info` `search` `mute` `set-top` | User & bot messaging, group + member management, message search / list / reactions / recall, conversation mute & pin |
-| Calendar | `calendar` | 17 | `event` `room` `participant` `busy` | Events, meeting rooms, participants, free-busy & suggested times |
-| Todo | `todo` | 16 | `task` `comment` | Tasks (create / list / update / done / delete) and task comments |
-| Approval | `oa` | 15 | `approval` | Approve / reject / revoke / redirect, instance queries, process forms, comments, records |
-| Attendance | `attendance` | 4 | `record` `shift` `summary` `rules` | Clock-in records, shift schedules, summary, group rules |
+| Contact | `contact` | 15 | `user` `dept` `label` `relation` | Search users by name / mobile / job-number, batch query, departments, labels & roles, person relations, roster profile & dismissions, current user |
+| Chat / IM | `chat` (alias `im`) | 65 | `message` `group` `bot` `conversation-info` `search` `search-common` `list-top-conversations` `group-mute` `group-mute-member` `mute` `set-top` `list-categories` `list-conversations` | Messages (send / reply / list / list-all / by-sender / mentions / focused / unread / topic replies / search / advanced search / forward / cards / emoji & text-emotion reactions / recall / read & send status queries), group CRUD + member management (members add / remove / list / `add-bot`, member-role CRUD, invite URL, icon, settings, transfer-owner, set-admin, quit), bot-identity messaging (`send-by-bot` / `recall-by-bot` / `send-by-webhook`), conversation info, common-groups lookup, group/member/conversation mute, conversation set-top, conversation categories |
+| Calendar | `calendar` | 17 | `event` `room` `participant` `busy` | Events CRUD + suggested times + attachments, meeting room booking, free-busy query, participant management |
+| Todo | `todo` | 16 | `task` `comment` | Create / list / update / done / get / delete tasks, plus task comments |
+| Approval | `oa` | 15 | `approval` | Approve / reject / revoke / redirect tasks, pending / initiated / submitted / executed / cc instances, process forms, comments, operation records |
+| Attendance | `attendance` | 4 | `record` `shift` `summary` `rules` | Clock-in records, shift schedules, attendance summary, group rules |
 | Ding | `ding` | 2 | `message` | Send / recall DING messages |
-| Report | `report` | 20 | `create` `submit` `list` `detail` `template` `stats` `inbox` `outbox` | Create / submit reports, inbox & outbox, templates, statistics |
-| AI Tables | `aitable` | 52 | `base` `table` `record` `field` `view` `dashboard` `chart` `import` `export` `attachment` `form` | Bases, datasheets, records, fields, views, charts & dashboards, import / export, attachments, forms, templates |
-| Doc | `doc` | 28 | `search` `read` `create` `update` `file` `folder` `block` `comment` | Search / read / write docs, files & folders, block-level editing, comments |
-| Drive | `drive` | 9 | `list` `list-spaces` `info` `download` `mkdir` `upload` `commit` `delete` | DingTalk drive: spaces, files, folders, upload / download |
-| Minutes | `minutes` | 19 | `list` `get` `update` `mind-graph` `speaker` `hot-word` `upload` | AI meeting notes: list, details, summary / transcription / todos, mind map, upload |
-| Mail | `mail` | 18 | `mailbox` `message` `draft` `folder` `tag` `thread` `attachment` `user` | Mailboxes, KQL search, read & send, drafts, folders, tags, threads, attachments |
-| Sheet | `sheet` | 23 | `range` `filter-view` `find` `replace` `append` `merge-cells` `write-image` | Online spreadsheet (axls): worksheets, range read / write / append, dimension ops, cell merge, find / replace, filter views, image write |
-| Wiki | `wiki` | 21 | `space` `member` `node` `doc` `file` | Knowledge base: spaces, members, node tree, docs & files |
+| Report | `report` | 20 | `create` `submit` `list` `detail` `template` `stats` `inbox` `outbox` `entry` | Create / submit reports, sent & received (inbox / outbox) lists, templates (get / list), statistics, single-entry get |
+| AI Tables | `aitable` | 52 | `base` `table` `record` `field` `view` `dashboard` `chart` `import` `export` `attachment` `template` `form` | Full CRUD for Bases / datasheets / records / fields / views; charts & dashboards with public-share configs; data import/export; attachments (prepare-only `upload` + one-shot `upload-file`); datasheet forms; templates |
+| Doc | `doc` | 28 | `search` `list` `info` `read` `create` `update` `upload` `download` `copy` `move` `rename` `file` `folder` `block` `comment` | Search / read / write docs, file & folder create, block-level editing, comments (list / create / reply / create-inline), upload / download |
+| Drive | `drive` | 9 | `list` `list-spaces` `info` `download` `mkdir` `upload` `upload-info` `commit` `delete` | DingTalk drive file ops: list spaces, list / info / download, create folders, one-shot `upload` (three-step composite) or two-phase `upload-info` + `commit`, delete |
+| Minutes | `minutes` | 19 | `list` `get` `update` `mind-graph` `speaker` `hot-word` `upload` | List AI meeting notes (mine / shared), details (info / summary / keywords / transcription / todos / batch), title/summary updates, mind map, speaker replace, hot-word, upload session |
+| Mail | `mail` | 18 | `mailbox` `message` `draft` `folder` `tag` `thread` `attachment` `user` | List mailboxes, KQL message search, read & send messages, drafts, folders, tags, threads, attachments, address-book user search |
+| Sheet | `sheet` | 23 | `range` `filter-view` (top-level: `create` `new` `list` `info` `read` `get` `update` `find` `replace` `append` `merge-cells` `unmerge-cells` `add-dimension` `insert-dimension` `delete-dimension` `move-dimension` `update-dimension` `write-image`) | Online spreadsheet (`contentType=ALIDOC`, `extension=axls`): worksheet CRUD, range read / write / append, dimension ops, cell merge / unmerge, find / replace, named filter views + sheet-level filters, image write |
+| Wiki | `wiki` | 21 | `space` `member` `node` `doc` `file` | Knowledge base management: spaces (`create` / `get` / `list` / `search`), members (`add` / `list` / `update`), node tree, docs & files |
 | DevDoc | `devdoc` | 1 | `article` | Search the DingTalk Open Platform documentation |
-| AI Search | `aisearch` | 3 | `person` | Enterprise people search, multi-dimension filter |
+| AI Search | `aisearch` | 3 | `person` | Enterprise people search by name / department / position / duty / supervisor / subordinate / phone / job-number (single command, multi-dimension filter) |
 | Live | `live` | 1 | `stream` | DingTalk live streaming: list my lives |
-| Raw API | `api` | 1 | — | Call any DingTalk OpenAPI directly (api / oapi dual-form), auto token management |
+| Raw API | `api` | 1 | — | Call any DingTalk OpenAPI directly (api / oapi dual-form), with automatic app-level token management |
 
 > **330 commands across 18 products.** Full listing with descriptions and usage scenarios: [`docs/command-index.md`](./docs/command-index.md). Run `dws --help` for the top-level tree, or `dws <service> --help` for subcommands.
 

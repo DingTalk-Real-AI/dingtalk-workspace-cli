@@ -473,23 +473,23 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 
 | 服务 | 命令 | 命令数 | 子命令 | 描述 |
 |------|------|:------:|--------|------|
-| 通讯录 | `contact` | 15 | `user` `dept` `label` `relation` | 用户、部门、角色标签、人员关系、花名册、当前用户 |
-| 群聊 | `chat`（别名 `im`）| 65 | `message` `group` `bot` `conversation-info` `search` `mute` `set-top` | 用户与机器人消息、群与成员管理、消息搜索 / 列表 / 表情反应 / 撤回、会话免打扰与置顶 |
-| 日历 | `calendar` | 17 | `event` `room` `participant` `busy` | 日程、会议室、参与者、闲忙查询与建议时间 |
-| 待办 | `todo` | 16 | `task` `comment` | 任务（创建 / 列表 / 修改 / 完成 / 删除）及任务评论 |
-| 审批 | `oa` | 15 | `approval` | 同意 / 拒绝 / 撤销 / 转交、实例查询、流程表单、评论、操作记录 |
-| 考勤 | `attendance` | 4 | `record` `shift` `summary` `rules` | 打卡记录、排班、考勤摘要、考勤组规则 |
+| 通讯录 | `contact` | 15 | `user` `dept` `label` `relation` | 按姓名 / 手机号 / 工号搜索、批量查询、部门树、角色标签、人员关系、花名册与离职、当前用户信息 |
+| 群聊 | `chat`（别名 `im`）| 65 | `message` `group` `bot` `conversation-info` `search` `search-common` `list-top-conversations` `group-mute` `group-mute-member` `mute` `set-top` `list-categories` `list-conversations` | 消息（发送 / 回复 / 列表 / list-all / 按发送者 / @我 / 关注 / 未读 / 话题回复 / 搜索 / 高级搜索 / 转发 / 卡片 / 表情与文本表情反应 / 撤回 / 已读与发送状态查询）、群增删改 + 成员管理（成员增 / 删 / 查 / `add-bot`、成员角色增删改查、邀请链接、群图标、群设置、转让群主、设置管理员、退群）、机器人身份消息（`send-by-bot` / `recall-by-bot` / `send-by-webhook`）、会话信息查询、共同群聊、群/成员/会话免打扰、会话置顶、会话分类 |
+| 日历 | `calendar` | 17 | `event` `room` `participant` `busy` | 日程 CRUD + 建议时间 + 附件、会议室预订、闲忙查询、参与者管理 |
+| 待办 | `todo` | 16 | `task` `comment` | 创建、列表、修改、完成、详情、删除，以及任务评论 |
+| 审批 | `oa` | 15 | `approval` | 同意 / 拒绝 / 撤销 / 转交、待我审批 / 我发起 / 已提交 / 已办 / 抄送、流程表单、评论、操作记录 |
+| 考勤 | `attendance` | 4 | `record` `shift` `summary` `rules` | 打卡记录、排班查询、考勤摘要、考勤组规则 |
 | DING | `ding` | 2 | `message` | 发送 / 撤回 DING 消息 |
-| 日志 | `report` | 20 | `create` `submit` `list` `detail` `template` `stats` `inbox` `outbox` | 创建 / 提交日志、收件箱与发件箱、模版、统计 |
-| AI 表格 | `aitable` | 52 | `base` `table` `record` `field` `view` `dashboard` `chart` `import` `export` `attachment` `form` | Base、数据表、记录、字段、视图、图表与仪表盘、导入导出、附件、表单、模板 |
-| 文档 | `doc` | 28 | `search` `read` `create` `update` `file` `folder` `block` `comment` | 搜索 / 读写文档、文件与文件夹、块级编辑、评论 |
-| 钉盘 | `drive` | 9 | `list` `list-spaces` `info` `download` `mkdir` `upload` `commit` `delete` | 钉盘：空间、文件、文件夹、上传 / 下载 |
-| AI 听记 | `minutes` | 19 | `list` `get` `update` `mind-graph` `speaker` `hot-word` `upload` | 听记列表、详情、摘要 / 逐字稿 / 待办、思维导图、上传 |
-| 邮箱 | `mail` | 18 | `mailbox` `message` `draft` `folder` `tag` `thread` `attachment` `user` | 邮箱、KQL 搜索、读取与发送、草稿、文件夹、标签、会话、附件 |
-| 在线电子表格 | `sheet` | 23 | `range` `filter-view` `find` `replace` `append` `merge-cells` `write-image` | 在线电子表格（axls）：工作表、区域读写 / 追加、行列操作、单元格合并、查找替换、筛选视图、写入图片 |
-| 知识库 | `wiki` | 21 | `space` `member` `node` `doc` `file` | 知识库：空间、成员、节点树、文档与文件 |
+| 日志 | `report` | 20 | `create` `submit` `list` `detail` `template` `stats` `inbox` `outbox` `entry` | 创建 / 提交日志、收发（收件箱 / 发件箱）列表、模版（获取 / 列表）、详情、统计、单条获取 |
+| AI 表格 | `aitable` | 52 | `base` `table` `record` `field` `view` `dashboard` `chart` `import` `export` `attachment` `template` `form` | Base / 数据表 / 记录 / 字段 / 视图 全量 CRUD；图表 + 仪表盘（含分享配置）；数据导入导出；附件（仅获取凭证的 `upload` + 一键上传 `upload-file`）；数据表表单；模板 |
+| 文档 | `doc` | 28 | `search` `list` `info` `read` `create` `update` `upload` `download` `copy` `move` `rename` `file` `folder` `block` `comment` | 搜索 / 读写文档、文件与文件夹创建、块级编辑、评论（list / create / reply / create-inline）、上传 / 下载 |
+| 钉盘 | `drive` | 9 | `list` `list-spaces` `info` `download` `mkdir` `upload` `upload-info` `commit` `delete` | 钉盘文件操作：列出空间、文件列表 / 详情 / 下载、创建文件夹、一键 `upload`（三步合成）或两阶段 `upload-info` + `commit`、删除 |
+| AI 听记 | `minutes` | 19 | `list` `get` `update` `mind-graph` `speaker` `hot-word` `upload` | 听记列表（我创建 / 共享给我）、详情（info / summary / keywords / transcription / todos / batch）、标题/摘要更新、思维导图、发言人替换、热词、上传会话 |
+| 邮箱 | `mail` | 18 | `mailbox` `message` `draft` `folder` `tag` `thread` `attachment` `user` | 邮箱地址列表、KQL 邮件搜索、读取与发送邮件、草稿、文件夹、标签、会话、附件、通讯录用户搜索 |
+| 在线电子表格 | `sheet` | 23 | `range` `filter-view`（顶层：`create` `new` `list` `info` `read` `get` `update` `find` `replace` `append` `merge-cells` `unmerge-cells` `add-dimension` `insert-dimension` `delete-dimension` `move-dimension` `update-dimension` `write-image`） | 在线电子表格（`contentType=ALIDOC`、`extension=axls`）：工作表 CRUD、区域读写/追加、行列操作、合并/取消合并、查找替换、命名筛选视图 + 表级筛选、写入图片 |
+| 知识库 | `wiki` | 21 | `space` `member` `node` `doc` `file` | 知识库管理：空间（`create` / `get` / `list` / `search`）、成员（`add` / `list` / `update`）、节点树、文档与文件 |
 | 开发者文档 | `devdoc` | 1 | `article` | 搜索钉钉开放平台文档 |
-| AI 搜问 | `aisearch` | 3 | `person` | 企业人员搜索，多维度过滤 |
+| AI 搜问 | `aisearch` | 3 | `person` | 企业人员搜索：按姓名 / 部门 / 职位 / 职责 / 上级 / 下级 / 手机号 / 工号 多维度过滤（单命令） |
 | 直播 | `live` | 1 | `stream` | 钉钉直播：查看我的直播列表 |
 | Raw API | `api` | 1 | — | 直接调用任意钉钉 OpenAPI（api / oapi 双形态），自动管理应用级 Token |
 
