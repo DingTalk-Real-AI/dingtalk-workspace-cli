@@ -6,9 +6,14 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.35] - 2026-06-08
+
 ### Fixed
 
+- **`chat message send` 群聊 / 单聊 @ 提及无法渲染** (#433, `internal/helpers/chat.go`) — 以当前用户身份发群消息或 openDingTalkId 单聊（`send_personal_message`）时，正文 `content` 用 `json.Marshal` 打包，其默认开启的 HTML 转义会把 `<@openDingTalkId>` / `<@all>` 中的 `<` `>` 转成 `<` `>`。钉钉客户端靠匹配**字面** `<@...>` token 渲染 @ 提及，转义后匹配不到，于是只显示成纯文本——API 仍返回 `success`，掩盖了问题。修复：新增 `marshalMessageContent`，用 `json.Encoder` + `SetEscapeHTML(false)` 序列化 `{title,text}`，群聊与 openDingTalkId 单聊两条 `send_personal_message` 路径改用它，保留字面 `<@...>`。新增回归测试 `TestChatMessageSendContentNotHTMLEscaped` 断言 content 保留字面 token 且永不被 HTML 转义。真机验证：`@某人` 与 `@所有人` 在客户端均渲染为可点击的蓝色提及。
 - **`chat` skill 文档与脚本对齐单聊 `list-direct`** (#424) — `chat message list` 现仅支持群聊（`--user` / `--open-dingtalk-id` 已移除），单聊读取改用独立命令 `list-direct`，但 skill 侧文档与脚本仍在教 `chat message list --user`，照做会报 `unknown flag: --user`，被列为查单聊"优先"方法的 `chat_history_with_user.py` 也随之失效。本次更新：`skills/{mono,multi/dingtalk-chat}/references/products/chat.md` 将 `message list` 改为仅群聊、新增 `list-direct` 命令文档，并同步意图路由 / 关键区分 / 上下文传递表 / 注意事项；`skills/mono/references/best_practices/01-messaging.md` 的 query-private-chat 由 `list --user` 改为 `list-direct`（multi 版此前已改）；`chat_history_with_user.py`（mono + multi）改调 `list-direct` 并修复返回体解析（解包 `result.messages`、对齐 `createTime/content/sender` 字段，此前会崩在 `'str' object has no attribute 'get'`）。单聊发送仍用 `chat message send --user`（v1.0.34 起单聊发送 rpc 已并入 `send` 命令，无独立 `send-direct`）。纯文档/脚本改动，不涉及 CLI 二进制行为。
+- **`pat chmod` 批量授权未透传 `agentCode`** (#414, `internal/pat/chmod.go`) — 批量授权的 plan / grant 路径（`buildBatchPlanArgs` / `batchArgs`）此前只在单条授权的 `toolArgs` 里带上 `agentCode`，批量调用未携带，导致指定了 `agentCode` 的批量授权按默认 agent 处理。修复：批量 plan / grant 参数也带上 `agentCode`，与单条路径对齐。
+- **`pat` JSON 输出里授权 URL 被转义成不可读** (#401, `internal/pat`) — PAT 错误信息附带的授权 URL 经默认 HTML 转义后，`&` 变成 `&`，在手机端复制 / 识别链接时断裂。修复：PAT 错误增强的 JSON 输出改用 `SetEscapeHTML(false)`（仅收敛到 PAT JSON），保留可读的 `&` 分隔符。
 
 ## [1.0.34] - 2026-06-03
 
