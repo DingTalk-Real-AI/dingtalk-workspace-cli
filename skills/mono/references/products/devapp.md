@@ -174,7 +174,57 @@ MCP tool: `update_app_security_config`
 
 ---
 
-## 五、操作流程
+## 五、机器人
+
+### 新建智能体机器人
+
+```bash
+# 同步创建（返回 agentId/robotCode/clientId/clientSecret）
+dws devapp robot create --app-name 我的智能体 --robot-name 小助手 --desc "处理审批问答" --dry-run --format json
+
+# 异步创建 + 查询
+dws devapp robot submit --app-name 我的智能体 --robot-name 小助手 --desc "处理审批问答" --dry-run --format json
+dws devapp robot result --task-id TASK_ID --format json
+```
+
+MCP tools: `create_dingtalk_robot` / `submit_robot_create_task` / `query_robot_create_result`。`submit` 失败可带原 `--task-id` 重试。
+
+### 现有应用配置机器人
+
+```bash
+dws devapp robot get --unified-app-id ID --format json
+dws devapp robot config --unified-app-id ID --name 小助手 --brief 审批助手 --outgoing-url URL --mode 2 --skills qa,approval --dry-run --format json
+dws devapp robot update --unified-app-id ID --brief "新简介" --dry-run --format json
+dws devapp robot enable --unified-app-id ID --name 小助手 --dry-run --format json
+dws devapp robot offline --unified-app-id ID --dry-run --format json
+```
+
+MCP tools: `get_open_dev_app_robot_config` / `create_open_dev_app_robot_config` / `update_open_dev_app_robot_config` / `enable_open_dev_app_robot` / `offline_open_dev_app_robot`。
+
+配置字段：`--name/--brief/--description/--icon/--outgoing-url(outgoingUrl)/--event-url(chatBotEventUrl)/--mode/--skills(skillList)/--add-scope/--disable-ssl-verify/--i18n-name/--i18n-brief/--i18n-description`。应用未配机器人时 `get` 返回 `robot info is not exist`。
+
+---
+
+## 六、版本发布
+
+```bash
+dws devapp version create --unified-app-id ID --version 1.0.1 --desc "新增机器人能力" --dry-run --format json
+dws devapp version list --unified-app-id ID --page 1 --page-size 20 --format json
+dws devapp version get --unified-app-id ID --version-id VERSION_ID --format json
+dws devapp version check-approval --unified-app-id ID --version-id VERSION_ID --format json
+dws devapp version publish --unified-app-id ID --version-id VERSION_ID --confirm-sensitive --dry-run --format json
+dws devapp version status --unified-app-id ID --version-id VERSION_ID --format json
+```
+
+MCP tools: `create_open_dev_app_version` / `list_open_dev_app_versions` / `get_open_dev_app_version_detail` / `publish_open_dev_app_version` / `get_open_dev_app_version_status`。
+
+- `check-approval` = `publish_open_dev_app_version` 的 `dryRun=true` 预检模式，不实际发布。
+- `publish` 设 `dryRun=false`；含高敏权限需 `--confirm-sensitive`，灰度选人模式用 `--approver USER_ID`。
+- 流程：`permission add`（requiredApproval 写入版本变更）→ `version create` → `check-approval` → `publish` → `status`。
+
+---
+
+## 七、操作流程
 
 ### 创建应用全流程
 
@@ -210,4 +260,3 @@ permission list → permission list --keyword → permission list --scope → pe
 ## 待实现能力
 
 - `dws devapp event list/config` — 事件订阅（待后端发布）
-- `dws devapp version create/check-approval/publish/status` — 版本发布（待后端发布）

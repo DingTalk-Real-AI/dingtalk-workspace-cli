@@ -149,4 +149,4 @@
 
 - 多应用命中时展示候选，不自动选择
 - `ServiceResult.success=false` 原样透传 `errorCode/errorMsg`
-- 待实现的 event/version 命令遇到时报告功能待上线
+- 机器人见 [robot.md](robot.md)，版本发布见 [version.md](version.md)；event 命令仍待上线，遇到时报告功能未实现

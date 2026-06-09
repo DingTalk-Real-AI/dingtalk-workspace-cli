@@ -88,11 +88,25 @@ dws devapp
   permission remove            Remove one authorized permission
   event list                   List event subscription config
   event config                 Configure callback URL, token, aesKey, event types
+  robot create                 Create a new agent app + robot synchronously
+  robot submit                 Submit async robot-create task (supports retry by taskId)
+  robot result                 Query async robot-create task result
+  robot get                    Get robot config of an existing app
+  robot config                 Create robot config on an existing app
+  robot update                 Update robot config
+  robot enable                 Enable / re-enable robot capability
+  robot offline                Offline robot capability
   version create               Save app version
-  version check-approval       Check whether publishing needs approval and approvers
+  version list                 List app versions (paged)
+  version get                  Get one version detail
+  version check-approval       Precheck publish approval requirements (no publish)
   version publish              Submit publish, possibly creating approval
   version status               Poll publish and approval status
 ```
+
+Robot and version commands are hardcoded helper leaves over the `op-app` MCP
+server (same pinned endpoint as the rest of `devapp`, no service discovery).
+`event` is still spec-only and reports unsupported at runtime.
 
 Open-source examples should use `--format json` for agent consumption:
 
@@ -126,9 +140,13 @@ Do not send confirmation fields such as `confirmCreate`, `confirmUpdate`, `confi
 | Permission apply | `devapp permission add` | `apply_open_dev_app_permissions` | `OpenInnerAppPermissionFacade.apply` | Implemented | Hardcoded helper |
 | Permission remove | `devapp permission remove` | `remove_open_dev_app_permission` | `OpenInnerAppPermissionFacade.remove` | Implemented | Hardcoded helper |
 | Events | `devapp event list/config` | `list/config_open_dev_app_events` | Event facade pending | Pending | Spec only |
-| Version publish | `devapp version create/check-approval/publish/status` | `create/check/publish/get_open_dev_app_version_*` | Version facade pending | Pending | Spec only |
+| Robot create | `devapp robot create/submit/result` | `create_dingtalk_robot`/`submit_robot_create_task`/`query_robot_create_result` | Implemented | Hardcoded helper |
+| Robot config | `devapp robot get/config/update/enable/offline` | `get/create/update_open_dev_app_robot_config`, `enable/offline_open_dev_app_robot` | Implemented | Hardcoded helper |
+| Version | `devapp version create/list/get/check-approval/publish/status` | `create/list_open_dev_app_versions`, `get_open_dev_app_version_detail/status`, `publish_open_dev_app_version` | Implemented | Hardcoded helper |
 
-P0 for yulan is app CRUD, permissions, credentials, and web app config. Events and version publish are lifecycle requirements but can be owned by a separate backend slice.
+P0 for yulan is app CRUD, permissions, credentials, and web app config. Robot
+and version are now implemented as hardcoded helper leaves over the same
+`op-app` MCP server; events remain a pending backend slice.
 
 ### 3.1 P0 RPC Contract
 
@@ -992,14 +1010,37 @@ Target event tools:
 | `devapp event list` | `list_open_dev_app_events` | Query current callback and subscribed event types. |
 | `devapp event config` | `configure_open_dev_app_event` | Configure callbackUrl, token, aesKey, eventTypes. |
 
-Target version tools:
+Implemented version tools (verified against the `op-app` MCP `tools/list`):
 
 | CLI | MCP tool | Notes |
 | --- | --- | --- |
-| `devapp version create` | `create_open_dev_app_version` | Save current version draft. |
-| `devapp version check-approval` | `check_open_dev_app_version_approval` | Return whether approval is required and candidate approvers. |
-| `devapp version publish` | `publish_open_dev_app_version` | Submit publish and create approval when needed. |
+| `devapp version create` | `create_open_dev_app_version` | Save a new version from current config (`version`, `description`). |
+| `devapp version list` | `list_open_dev_app_versions` | Paged list (`currentPage`, `pageSize`). |
+| `devapp version get` | `get_open_dev_app_version_detail` | One version detail by `versionId`. |
+| `devapp version check-approval` | `publish_open_dev_app_version` (`dryRun=true`) | Precheck approval requirement / approvers; does not publish. |
+| `devapp version publish` | `publish_open_dev_app_version` (`dryRun=false`) | Publish; `confirmedSensitive` for high-sensitivity scopes, optional `approverUserId`. |
 | `devapp version status` | `get_open_dev_app_version_status` | Poll publish and approval state. |
+
+Note: the MCP `dryRun` field is the server-side approval precheck and maps to
+`version check-approval`. It is distinct from the CLI global `--dry-run` (preview
+without execution). `check-approval` is read-only (no write guard); `publish`
+uses the standard `--dry-run`/`--yes` write guard.
+
+Implemented robot tools:
+
+| CLI | MCP tool | Notes |
+| --- | --- | --- |
+| `devapp robot create` | `create_dingtalk_robot` | Synchronously create a new agent app + robot. |
+| `devapp robot submit` | `submit_robot_create_task` | Async submit; supports retry via original `taskId`. |
+| `devapp robot result` | `query_robot_create_result` | Poll async task by `taskId`. |
+| `devapp robot get` | `get_open_dev_app_robot_config` | Read robot config of an existing app. |
+| `devapp robot config` | `create_open_dev_app_robot_config` | Create robot config on an existing app. |
+| `devapp robot update` | `update_open_dev_app_robot_config` | Update robot config. |
+| `devapp robot enable` | `enable_open_dev_app_robot` | Enable / re-enable robot capability. |
+| `devapp robot offline` | `offline_open_dev_app_robot` | Offline robot capability. |
+
+Robot create/submit and config/update/enable/offline are write operations and
+use the `--dry-run`/`--yes` guard; `get` and `result` are reads.
 
 Stitching rule:
 

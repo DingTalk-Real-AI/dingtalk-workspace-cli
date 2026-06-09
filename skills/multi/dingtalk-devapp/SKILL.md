@@ -1,6 +1,6 @@
 ---
 name: dingtalk-devapp
-description: 钉钉开放平台应用管理。Use when 用户说 开发者后台应用/开放平台应用/企业内部应用/查应用/创建应用/修改应用/删除应用/停用应用/启用应用/应用成员/安全配置/IP白名单/登录重定向/端内免登/agentId/clientId/appKey/appSecret/应用权限/权限点。Distinct from dingtalk-devdoc(开放平台文档搜索) and dingtalk-doc(钉钉云文档)。命令前缀：dws devapp（兼容别名 dws app）。
+description: 钉钉开放平台应用管理。Use when 用户说 开发者后台应用/开放平台应用/企业内部应用/查应用/创建应用/修改应用/删除应用/停用应用/启用应用/应用成员/安全配置/IP白名单/登录重定向/端内免登/agentId/clientId/appKey/appSecret/应用权限/权限点/创建机器人/智能体机器人/机器人配置/机器人回调/应用版本/版本发布/发布审核/选审批人。Distinct from dingtalk-devdoc(开放平台文档搜索) and dingtalk-doc(钉钉云文档)。命令前缀：dws devapp（兼容别名 dws app）。
 cli_version: ">=1.0.15"
 metadata:
   category: product
@@ -27,6 +27,8 @@ metadata:
 - `开放平台应用/开发者后台应用/企业内部应用/内部应用`
 - `agentId/clientId/appKey/appSecret/customKey`
 - `应用权限/权限点/scopeValue/应用成员/安全配置/IP 白名单`
+- `创建机器人/智能体机器人/机器人配置/机器人回调地址`（→ `robot`）
+- `应用版本/版本发布/发布审核/选审批人`（→ `version`）
 
 不要路由到 devapp 的：接口文档→`dingtalk-devdoc`、钉钉文档→`dingtalk-doc`、工作台应用→`workbench app`、审批→`dingtalk-oa`。只说 `应用` 无上下文时先追问。
 
@@ -48,4 +50,6 @@ metadata:
 | 凭证与网页应用 | [credentials-webapp.md](references/credentials-webapp.md) | credentials get / webapp get / webapp config |
 | 权限管理 | [permissions.md](references/permissions.md) | permission list / permission add / permission remove |
 | 成员与安全 | [member-security.md](references/member-security.md) | member list / add / remove / security config |
+| 机器人 | [robot.md](references/robot.md) | robot create / submit / result / get / config / update / enable / offline |
+| 版本发布 | [version.md](references/version.md) | version create / list / get / check-approval / publish / status |
 | 操作流程 | [workflows.md](references/workflows.md) | 创建应用全流程 / 权限全流程 / 生命周期管理 |
