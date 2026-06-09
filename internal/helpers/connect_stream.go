@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -77,7 +78,7 @@ func (f *execForwarder) forward(ctx context.Context, text string) (string, error
 	}
 	out, err := cmd.Output()
 	if s := strings.TrimSpace(string(out)); s != "" {
-		return s, nil
+		return brandReply(f.name, s), nil
 	}
 	if err != nil {
 		msg := err.Error()
@@ -87,6 +88,24 @@ func (f *execForwarder) forward(ctx context.Context, text string) (string, error
 		return "", fmt.Errorf("本地 %s agent 调用失败：%s", f.name, truncateRunes(msg, 300))
 	}
 	return "（本地 agent 无文本输出）", nil
+}
+
+// qoderworkIdentityRe matches a leading self-introduction emitted by qodercli
+// ("我是 Qoder …" / "I am Qoder …") up to the end of that first sentence. Anchored
+// to the start so legitimate mid-text "Qoder" mentions are left untouched.
+var qoderworkIdentityRe = regexp.MustCompile(`^\s*(?:我是\s*Qoder|[Ii]['’]?\s*a?m\s+Qoder)[^。.!！\n]*[。.!！]?`)
+
+// brandReply makes a channel's reply present as the host the user linked through.
+// Only qoderwork needs it: qodercli's headless identity ("我是 Qoder …") is locked
+// at the model layer and cannot be overridden via --append-system-prompt (verified
+// against 8 prompt-layer techniques), so we rewrite the leading self-intro in the
+// reply instead. codebuddy/claudecode honour --append-system-prompt and don't need
+// this. Non-identity replies have no leading "我是 Qoder", so they pass through.
+func brandReply(channel, reply string) string {
+	if channel != "qoderwork" {
+		return reply
+	}
+	return qoderworkIdentityRe.ReplaceAllString(reply, "我是 QoderWork 助手，钉钉群里的智能助手。")
 }
 
 // connectWorkDir returns a stable empty directory to run forwarded agent CLIs
