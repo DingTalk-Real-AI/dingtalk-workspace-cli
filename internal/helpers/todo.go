@@ -466,7 +466,7 @@ func newTodoTaskDeleteCommand(runner executor.Runner) *cobra.Command {
 	preferLegacyLeaf(cmd)
 
 	cmd.Flags().String("task-id", "", i18n.T("待办任务 ID (必填)"))
-	cmd.Flags().Bool("yes", false, i18n.T("跳过确认直接删除"))
+	cmd.Flags().BoolP("yes", "y", false, i18n.T("跳过确认直接删除"))
 	return cmd
 }
 
