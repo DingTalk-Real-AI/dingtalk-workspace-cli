@@ -2,8 +2,8 @@
 
 ## Summary
 
-- **Total Test Cases**: 230
-- **Passed**: 230
+- **Total Test Cases**: 234
+- **Passed**: 234
 - **Failed**: 0
 - **Pass Rate**: 100.0%
 
@@ -16,7 +16,7 @@
 | calendar | 30 | 30 | 0 | 100.0% |
 | chat | 31 | 31 | 0 | 100.0% |
 | contact | 14 | 14 | 0 | 100.0% |
-| devapp | 21 | 21 | 0 | 100.0% |
+| devapp | 25 | 25 | 0 | 100.0% |
 | devdoc | 7 | 7 | 0 | 100.0% |
 | ding | 5 | 5 | 0 | 100.0% |
 | report | 26 | 26 | 0 | 100.0% |
@@ -1190,6 +1190,38 @@
 - Skill Reference: references/products/devapp.md
 - Command path: PASS (devapp credentials get)
 - Flags: PASS (3 flags validated)
+
+**devapp_devapp_member_list_001** ✅ PASS
+
+- Prompt: 查看开放平台应用 UNIFIED_APP_ID 的成员
+- Expected: `dws devapp member list --app-id UNIFIED_APP_ID --format json`
+- Skill Reference: references/products/devapp.md
+- Command path: PASS (devapp member list)
+- Flags: PASS (1 flags validated)
+
+**devapp_devapp_member_add_001** ✅ PASS
+
+- Prompt: 给开放平台应用 UNIFIED_APP_ID 添加开发者成员 userId1,userId2，先预览
+- Expected: `dws devapp member add --app-id UNIFIED_APP_ID --users userId1,userId2 --member-type DEVELOPER --dry-run --format json`
+- Skill Reference: references/products/devapp.md
+- Command path: PASS (devapp member add)
+- Flags: PASS (3 flags validated)
+
+**devapp_devapp_member_remove_001** ✅ PASS
+
+- Prompt: 已确认，从开放平台应用 UNIFIED_APP_ID 移除开发者成员 userId1
+- Expected: `dws devapp member remove --app-id UNIFIED_APP_ID --users userId1 --member-type DEVELOPER --yes --format json`
+- Skill Reference: references/products/devapp.md
+- Command path: PASS (devapp member remove)
+- Flags: PASS (4 flags validated)
+
+**devapp_devapp_security_config_001** ✅ PASS
+
+- Prompt: 给开放平台应用 UNIFIED_APP_ID 配置 IP 白名单 103.211.230.150，先预览
+- Expected: `dws devapp security config --app-id UNIFIED_APP_ID --ip-whitelist 103.211.230.150 --dry-run --format json`
+- Skill Reference: references/products/devapp.md
+- Command path: PASS (devapp security config)
+- Flags: PASS (2 flags validated)
 
 **devapp_devapp_permission_list_001** ✅ PASS
 

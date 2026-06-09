@@ -1,6 +1,6 @@
 ---
 name: dingtalk-devapp
-description: 钉钉开放平台应用管理。Use when 用户说 开发者后台应用/开放平台应用/企业内部应用/查应用/创建应用/修改应用/删除应用/agentId/clientId/appKey/appSecret/应用权限/权限点/事件订阅/版本发布/审核。Distinct from dingtalk-devdoc(开放平台文档搜索) and dingtalk-doc(钉钉云文档)。命令前缀：dws devapp（兼容别名可为 dws app）。
+description: 钉钉开放平台应用管理。Use when 用户说 开发者后台应用/开放平台应用/企业内部应用/查应用/创建应用/修改应用/删除应用/应用成员/安全配置/IP 白名单/登录重定向/端内免登/agentId/clientId/appKey/appSecret/应用权限/权限点/事件订阅/版本发布/审核。Distinct from dingtalk-devdoc(开放平台文档搜索) and dingtalk-doc(钉钉云文档)。命令前缀：dws devapp（兼容别名可为 dws app）。
 cli_version: ">=1.0.15"
 metadata:
   category: product
@@ -31,6 +31,10 @@ metadata:
 | "创建企业内部应用" | `dws devapp create --name "<名称>" --type internal --dry-run --format json`，确认后加 `--yes` |
 | "修改应用名称 / 描述 / 图标" | 先唯一定位应用，再 `dws devapp update --unified-app-id <UNIFIED_APP_ID> ... --dry-run`，确认后加 `--yes` |
 | "删除应用" | 先唯一定位并展示风险，再 `dws devapp delete --unified-app-id <UNIFIED_APP_ID> --yes --format json` |
+| "查看应用成员 / 开发者成员" | `dws devapp member list --app-id <UNIFIED_APP_ID> --format json` |
+| "添加应用成员 / 开发者成员" | `dws devapp member add --app-id <UNIFIED_APP_ID> --users <userId1,userId2> --member-type DEVELOPER --dry-run --format json`，确认后加 `--yes` |
+| "移除应用成员 / 开发者成员" | `dws devapp member remove --app-id <UNIFIED_APP_ID> --users <userId> --member-type DEVELOPER --dry-run --format json`，确认后加 `--yes` |
+| "配置 IP 白名单 / 登录重定向 URL / 端内免登 URL" | `dws devapp security config --app-id <UNIFIED_APP_ID> ... --dry-run --format json`，确认后加 `--yes` |
 | "查询 / 搜索权限点" | `dws devapp permission list --unified-app-id <UNIFIED_APP_ID> --keyword "<关键词>" --format json` |
 | "这个权限覆盖哪些 API" | `dws devapp permission list --unified-app-id <UNIFIED_APP_ID> --scope <scopeValue> --format json` |
 | "申请权限 / 开通权限" | 先从列表拿 `scopeValue`，再 `dws devapp permission add --unified-app-id <UNIFIED_APP_ID> --permissions <scopeValue> --dry-run`，确认后加 `--yes` |
@@ -43,6 +47,7 @@ metadata:
 
 - 用户说 `开放平台应用`、`开发者后台应用`、`企业内部应用`、`内部应用`。
 - 用户提到 `agentId/clientId/appKey/appSecret/customKey`。
+- 用户要处理 `应用成员/开发者成员/成员类型/安全配置/IP 白名单/登录重定向 URL/端内免登 URL`。
 - 用户要处理 `应用权限/权限点/API 权限/APP 或 SNS 权限/事件订阅/应用版本/发布审核`。
 - 当前上下文明确是 yulan 的 OpenDev 应用 CLI 化工作流。
 
@@ -60,7 +65,7 @@ metadata:
 
 - 所有命令加 `--format json`。
 - 写操作先 `--dry-run`，确认后才加 `--yes`。
-- 不把 `confirmCreate/confirmUpdate/confirmDelete/confirmPermission` 作为 MCP 参数。
+- 不把 `confirmCreate/confirmUpdate/confirmDelete/confirmPermission/confirmMember/confirmSecurity` 作为 MCP 参数。
 - 应用名、appKey、customKey 命中多条时不能默认取第一条。
 - 权限申请/取消只接受 `permissions[].scopeValue`，不要传 API 名、API uuid 或分组名。
 - 权限列表默认同时展示 APP 应用权限和 SNS 个人权限；只有用户明确要求时才加 `--scope-type APP|SNS`。

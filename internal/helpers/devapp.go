@@ -493,11 +493,11 @@ func newDevAppMemberAddCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "add",
 		Short:             "添加开放平台应用成员",
-		Example:           "  dws devapp member add --app-id <unifiedAppId> --users userId1,userId2 --member-type DEVELOPER",
+		Example:           "  dws devapp member add --app-id <unifiedAppId> --users userId1,userId2 --member-type DEVELOPER --dry-run",
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDevAppMemberMutation(runner, cmd, devAppMemberAddTool)
+			return runDevAppMemberMutation(runner, cmd, devAppMemberAddTool, "member add")
 		},
 	}
 	registerDevAppMemberMutationFlags(cmd)
@@ -509,11 +509,11 @@ func newDevAppMemberRemoveCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "remove",
 		Short:             "移除开放平台应用成员",
-		Example:           "  dws devapp member remove --app-id <unifiedAppId> --users userId1,userId2 --member-type DEVELOPER",
+		Example:           "  dws devapp member remove --app-id <unifiedAppId> --users userId1,userId2 --member-type DEVELOPER --dry-run",
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDevAppMemberMutation(runner, cmd, devAppMemberRemoveTool)
+			return runDevAppMemberMutation(runner, cmd, devAppMemberRemoveTool, "member remove")
 		},
 	}
 	registerDevAppMemberMutationFlags(cmd)
@@ -526,10 +526,13 @@ func newDevAppSecurityConfigCommand(runner executor.Runner) *cobra.Command {
 		Use:   "config",
 		Short: "更新开放平台应用安全配置",
 		Example: "  dws devapp security config --app-id <unifiedAppId> " +
-			"--ip-whitelist 103.211.230.150 --redirect-url https://example.com/callback --sso-url https://example.com/sso",
+			"--ip-whitelist 103.211.230.150 --redirect-url https://example.com/callback --sso-url https://example.com/sso --dry-run",
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := devAppRequireWriteGuard(cmd, "security config"); err != nil {
+				return err
+			}
 			appID, err := requiredDevAppID(cmd)
 			if err != nil {
 				return err
@@ -565,7 +568,10 @@ func registerDevAppMemberMutationFlags(cmd *cobra.Command) {
 	cmd.Flags().String("member-type", "", "成员类型，如 DEVELOPER (必填)")
 }
 
-func runDevAppMemberMutation(runner executor.Runner, cmd *cobra.Command, tool string) error {
+func runDevAppMemberMutation(runner executor.Runner, cmd *cobra.Command, tool, operation string) error {
+	if err := devAppRequireWriteGuard(cmd, operation); err != nil {
+		return err
+	}
 	appID, err := requiredDevAppID(cmd)
 	if err != nil {
 		return err

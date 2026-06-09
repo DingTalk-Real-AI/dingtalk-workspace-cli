@@ -1,6 +1,6 @@
 # 开放平台应用 (devapp) 命令参考
 
-管理钉钉开放平台企业内部应用。用于应用列表查询、应用详情、创建/修改/删除、凭证读取、权限查询/申请/取消，以及事件订阅和版本发布目标链路。
+管理钉钉开放平台企业内部应用。用于应用列表查询、应用详情、创建/修改/删除、成员管理、安全配置、凭证读取、权限查询/申请/取消，以及事件订阅和版本发布目标链路。
 
 > 当前开源分支已内置 `dws devapp ...` helper 命令树，兼容别名为 `dws app ...`。本能力不依赖 MCP 服务发现或 registry overlay；真实调用 endpoint 由内部 edition 通过 `SupplementServers/StaticServers` 注入。`DINGTALK_DEVAPP_MCP_URL` 仅用于本地调试覆盖，严禁把 endpoint/key 写入仓库。
 > 若 `dws devapp --help` 与本文冲突，以运行时输出为准。
@@ -17,7 +17,7 @@ dws devapp ...
 
 - 所有命令给 Agent 使用时加 `--format json`。
 - 写操作先 `--dry-run` 展示计划；用户确认后才加 `--yes`。
-- MCP/HSF 入参不接收 `confirmCreate/confirmUpdate/confirmDelete/confirmPermission`。
+- MCP/HSF 入参不接收 `confirmCreate/confirmUpdate/confirmDelete/confirmPermission/confirmMember/confirmSecurity`。
 - 应用名、appKey、customKey 命中多条时不能默认选第一条。
 - `corpId/userId` 由 MCP 系统上下文映射，用户不传 `orgId/uid`。
 - `app get` 不读取完整 secret；`clientSecret/appSecret` 只能走 `credentials get`。
@@ -29,6 +29,7 @@ dws devapp ...
 
 - `开放平台应用/开发者后台应用/企业内部应用/内部应用`。
 - `agentId/clientId/appKey/customKey/appSecret/clientSecret`。
+- `应用成员/开发者成员/成员类型/安全配置/IP 白名单/登录重定向 URL/端内免登 URL`。
 - `应用权限/权限点/API 权限/APP 权限/SNS 个人权限/scopeValue`。
 - `事件订阅/callbackUrl/token/aesKey` 且上下文是开放平台应用。
 - `应用版本/版本发布/选审批人/发布审核` 且上下文是开发者后台应用。
@@ -167,6 +168,52 @@ MCP tools: `get_webapp_config`, `set_webapp_config`
 - `webapp get` 在未配置网页应用前可能只返回 `agentId`。
 - `webapp config` 成功后再调用 `webapp get`，应返回 `agentId/h5PageType/homepageLink/pcHomepageLink/ompLink`。
 - `h5PageType` 未显式传入时，后端实测默认返回 `all`。
+
+## 成员管理
+
+```bash
+dws devapp member list --app-id UNIFIED_APP_ID --format json
+dws devapp member add --app-id UNIFIED_APP_ID --users userId1,userId2 --member-type DEVELOPER --dry-run --format json
+dws devapp member add --app-id UNIFIED_APP_ID --users userId1,userId2 --member-type DEVELOPER --yes --format json
+dws devapp member remove --app-id UNIFIED_APP_ID --users userId1 --member-type DEVELOPER --dry-run --format json
+dws devapp member remove --app-id UNIFIED_APP_ID --users userId1 --member-type DEVELOPER --yes --format json
+```
+
+MCP tools: `list_open_dev_app_members`, `add_open_dev_app_members`, `remove_open_dev_app_members`
+
+| CLI | MCP | 说明 |
+| --- | --- | --- |
+| `--app-id` | `unifiedAppId` | 开放平台统一应用 ID。 |
+| `--users` | `memberUserIds` | 添加/移除的用户 userId 列表，支持英文逗号或分号分隔，空白会裁剪。 |
+| `--member-type` | `memberType` | 成员类型，如 `DEVELOPER`；值使用后端枚举。 |
+
+规则：
+
+- `member list` 是查询操作，不需要 `--dry-run` 或 `--yes`。
+- `member add/remove` 是写操作，必须先 `--dry-run`，用户确认后再 `--yes`。
+
+## 安全配置
+
+```bash
+dws devapp security config --app-id UNIFIED_APP_ID --ip-whitelist 103.211.230.150 --dry-run --format json
+dws devapp security config --app-id UNIFIED_APP_ID --redirect-url https://example.com/callback --yes --format json
+dws devapp security config --app-id UNIFIED_APP_ID --ip-whitelist 103.211.230.150,103.211.230.151 --redirect-url https://example.com/callback --sso-url https://example.com/sso --dry-run --format json
+```
+
+MCP tool: `update_app_security_config`
+
+| CLI | MCP | 说明 |
+| --- | --- | --- |
+| `--app-id` | `unifiedAppId` | 开放平台统一应用 ID。 |
+| `--ip-whitelist` | `ipWhiteList` | IP 白名单，支持英文逗号或分号分隔。 |
+| `--redirect-url` | `redirectUrls` | 登录重定向 URL，支持英文逗号或分号分隔。 |
+| `--sso-url` | `otherAuthUrls` | 端内免登 URL，支持英文逗号或分号分隔。 |
+
+规则：
+
+- `security config` 是写操作，必须先 `--dry-run`，用户确认后再 `--yes`。
+- 只下发显式提供且非空的列表字段；未提供的配置不会被覆盖。
+- 当前不表达清空列表语义，不要用空字符串、`[]` 或占位值试图清空配置。
 
 ## 权限列表 / 搜索 / 详情
 

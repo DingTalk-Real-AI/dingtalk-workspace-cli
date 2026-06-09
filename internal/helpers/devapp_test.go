@@ -41,7 +41,7 @@ func TestDevAppMemberCommandsBuildToolParams(t *testing.T) {
 		{
 			name:     "add multiple users",
 			cmd:      "add",
-			args:     []string{"--app-id", "app-001", "--users", "userId1,userId2,userId3,userId4", "--member-type", "DEVELOPER"},
+			args:     []string{"--app-id", "app-001", "--users", "userId1,userId2,userId3,userId4", "--member-type", "DEVELOPER", "--yes"},
 			wantTool: "add_open_dev_app_members",
 			wantParams: map[string]any{
 				"unifiedAppId":  "app-001",
@@ -52,7 +52,7 @@ func TestDevAppMemberCommandsBuildToolParams(t *testing.T) {
 		{
 			name:     "remove trims users",
 			cmd:      "remove",
-			args:     []string{"--app-id", "app-001", "--users", " userId1 , userId2 ", "--member-type", "DEVELOPER"},
+			args:     []string{"--app-id", "app-001", "--users", " userId1 , userId2 ", "--member-type", "DEVELOPER", "--yes"},
 			wantTool: "remove_open_dev_app_members",
 			wantParams: map[string]any{
 				"unifiedAppId":  "app-001",
@@ -65,11 +65,11 @@ func TestDevAppMemberCommandsBuildToolParams(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			runner := &captureRunner{}
-			root := newDevAppCommand(runner)
+			root := newDevAppTestRoot(runner)
 			var out bytes.Buffer
 			root.SetOut(&out)
 			root.SetErr(&out)
-			root.SetArgs(append([]string{"member", tc.cmd}, tc.args...))
+			root.SetArgs(append([]string{"devapp", "member", tc.cmd}, tc.args...))
 
 			if err := root.Execute(); err != nil {
 				t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
@@ -341,19 +341,19 @@ func TestDevAppMemberCommandsValidateRequiredFlags(t *testing.T) {
 		wantErr string
 	}{
 		{name: "list requires app", cmd: "list", args: nil, wantErr: "--app-id is required"},
-		{name: "add requires users", cmd: "add", args: []string{"--app-id", "app-001", "--member-type", "DEVELOPER"}, wantErr: "--users is required"},
-		{name: "add rejects empty users", cmd: "add", args: []string{"--app-id", "app-001", "--users", " , ", "--member-type", "DEVELOPER"}, wantErr: "--users must contain at least one userId"},
-		{name: "remove requires member type", cmd: "remove", args: []string{"--app-id", "app-001", "--users", "userId1"}, wantErr: "--member-type is required"},
+		{name: "add requires users", cmd: "add", args: []string{"--app-id", "app-001", "--member-type", "DEVELOPER", "--dry-run"}, wantErr: "--users is required"},
+		{name: "add rejects empty users", cmd: "add", args: []string{"--app-id", "app-001", "--users", " , ", "--member-type", "DEVELOPER", "--dry-run"}, wantErr: "--users must contain at least one userId"},
+		{name: "remove requires member type", cmd: "remove", args: []string{"--app-id", "app-001", "--users", "userId1", "--dry-run"}, wantErr: "--member-type is required"},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			runner := &captureRunner{}
-			root := newDevAppCommand(runner)
+			root := newDevAppTestRoot(runner)
 			var out bytes.Buffer
 			root.SetOut(&out)
 			root.SetErr(&out)
-			root.SetArgs(append([]string{"member", tc.cmd}, tc.args...))
+			root.SetArgs(append([]string{"devapp", "member", tc.cmd}, tc.args...))
 
 			err := root.Execute()
 			if err == nil {
@@ -371,16 +371,17 @@ func TestDevAppMemberCommandsValidateRequiredFlags(t *testing.T) {
 
 func TestDevAppSecurityConfigBuildsOnlyProvidedLists(t *testing.T) {
 	runner := &captureRunner{}
-	root := newDevAppCommand(runner)
+	root := newDevAppTestRoot(runner)
 	var out bytes.Buffer
 	root.SetOut(&out)
 	root.SetErr(&out)
 	root.SetArgs([]string{
-		"security", "config",
+		"devapp", "security", "config",
 		"--app-id", "app-001",
 		"--ip-whitelist", "103.211.230.150,103.211.230.151",
 		"--redirect-url", "https://example.com/callback",
 		"--sso-url", "https://example.com/sso",
+		"--dry-run",
 	})
 
 	if err := root.Execute(); err != nil {
@@ -406,11 +407,11 @@ func TestDevAppSecurityConfigBuildsOnlyProvidedLists(t *testing.T) {
 
 func TestDevAppSecurityConfigOmitsAbsentOptionalLists(t *testing.T) {
 	runner := &captureRunner{}
-	root := newDevAppCommand(runner)
+	root := newDevAppTestRoot(runner)
 	var out bytes.Buffer
 	root.SetOut(&out)
 	root.SetErr(&out)
-	root.SetArgs([]string{"security", "config", "--app-id", "app-001", "--redirect-url", "https://example.com/callback"})
+	root.SetArgs([]string{"devapp", "security", "config", "--app-id", "app-001", "--redirect-url", "https://example.com/callback", "--dry-run"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
@@ -427,11 +428,11 @@ func TestDevAppSecurityConfigOmitsAbsentOptionalLists(t *testing.T) {
 
 func TestDevAppSecurityConfigRequiresAtLeastOneConfig(t *testing.T) {
 	runner := &captureRunner{}
-	root := newDevAppCommand(runner)
+	root := newDevAppTestRoot(runner)
 	var out bytes.Buffer
 	root.SetOut(&out)
 	root.SetErr(&out)
-	root.SetArgs([]string{"security", "config", "--app-id", "app-001"})
+	root.SetArgs([]string{"devapp", "security", "config", "--app-id", "app-001", "--dry-run"})
 
 	err := root.Execute()
 	if err == nil {
@@ -442,5 +443,47 @@ func TestDevAppSecurityConfigRequiresAtLeastOneConfig(t *testing.T) {
 	}
 	if runner.last.Tool != "" {
 		t.Fatalf("tool = %q, want no invocation", runner.last.Tool)
+	}
+}
+
+func TestDevAppMemberAndSecurityRequireWriteGuard(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "member add",
+			args: []string{"devapp", "member", "add", "--app-id", "app-001", "--users", "userId1", "--member-type", "DEVELOPER"},
+		},
+		{
+			name: "member remove",
+			args: []string{"devapp", "member", "remove", "--app-id", "app-001", "--users", "userId1", "--member-type", "DEVELOPER"},
+		},
+		{
+			name: "security config",
+			args: []string{"devapp", "security", "config", "--app-id", "app-001", "--redirect-url", "https://example.com/callback"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &captureRunner{}
+			root := newDevAppTestRoot(runner)
+			var out bytes.Buffer
+			root.SetOut(&out)
+			root.SetErr(&out)
+			root.SetArgs(tc.args)
+
+			err := root.Execute()
+			if err == nil {
+				t.Fatal("Execute() error = nil, want write guard")
+			}
+			if !strings.Contains(err.Error(), "write operation") {
+				t.Fatalf("error = %q, want write guard", err.Error())
+			}
+			if runner.last.Tool != "" {
+				t.Fatalf("tool = %q, want no invocation", runner.last.Tool)
+			}
+		})
 	}
 }
