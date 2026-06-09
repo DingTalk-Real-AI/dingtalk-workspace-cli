@@ -185,7 +185,7 @@ func TestAitableExportDataDryRunUsesWukongFormatFlags(t *testing.T) {
 		"--base-id", "BASE_001",
 		"--scope", "table",
 		"--table-id", "TBL_001",
-		"--format", "excel",
+		"--export-format", "excel",
 		"--timeout-ms", "1000",
 	})
 
@@ -234,7 +234,7 @@ func TestAitableExportDataRequiresFormatWhenCreatingTask(t *testing.T) {
 	})
 
 	if err := cmd.Execute(); err == nil {
-		t.Fatal("Execute() error = nil, want missing --format validation")
+		t.Fatal("Execute() error = nil, want missing --export-format validation")
 	}
 	if runner.last.Tool != "" {
 		t.Fatalf("tool = %q, want no invocation", runner.last.Tool)
@@ -304,7 +304,7 @@ func TestAitableExportDataLiveCallsExportDataOnce(t *testing.T) {
 		"--base-id", "BASE_001",
 		"--scope", "table",
 		"--table-id", "TBL_001",
-		"--format", "excel",
+		"--export-format", "excel",
 		"--timeout-ms", "1000",
 	})
 
