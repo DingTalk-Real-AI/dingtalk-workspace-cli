@@ -119,6 +119,9 @@ func TestDevdocErrorDiagnoseMapsTraceIDAlias(t *testing.T) {
 	if got := runner.last.Params["requestId"]; got != "trace-abc" {
 		t.Fatalf("requestId = %#v, want trace-abc", got)
 	}
+	if _, ok := runner.last.Params["traceId"]; ok {
+		t.Fatalf("traceId should not be sent, params = %#v", runner.last.Params)
+	}
 	if _, ok := runner.last.Params["apiName"]; ok {
 		t.Fatalf("apiName should not be sent, params = %#v", runner.last.Params)
 	}
@@ -156,6 +159,38 @@ func TestDevdocErrorDiagnosePassesErrorContext(t *testing.T) {
 	}
 	if got := runner.last.Params["query"]; got != "missing scope create calendar failed" {
 		t.Fatalf("query = %#v, want merged error context", got)
+	}
+}
+
+func TestDevdocErrorDiagnoseMergesAllContextIntoQuery(t *testing.T) {
+	t.Parallel()
+
+	runner := &devdocCommandRunner{}
+	cmd := devdocHandler{}.Command(runner)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{
+		"error", "diagnose",
+		"--query", "机器人回调失败",
+		"--error-message", "missing scope",
+		"--api", "创建日程",
+		"--context", "应用无权限",
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut.String())
+	}
+	if got := runner.last.Tool; got != "search_open_error_code_rag" {
+		t.Fatalf("tool = %q, want search_open_error_code_rag", got)
+	}
+	if got := runner.last.Params["query"]; got != "机器人回调失败 missing scope 创建日程 应用无权限" {
+		t.Fatalf("query = %#v, want merged context", got)
+	}
+	for _, key := range []string{"apiName", "errorMessage", "context"} {
+		if _, ok := runner.last.Params[key]; ok {
+			t.Fatalf("%s should not be sent, params = %#v", key, runner.last.Params)
+		}
 	}
 }
 
