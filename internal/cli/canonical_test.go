@@ -72,6 +72,89 @@ func TestBuildFlagSpecsGeneratesOnlySupportedTopLevelFlags(t *testing.T) {
 	}
 }
 
+func TestApplyFlagSpecsSkipsReservedAndInheritedFlags(t *testing.T) {
+	t.Parallel()
+
+	// Simulate the root command with persistent flags (format, yes, timeout)
+	// and a tool command with built-in --json/--params.
+	root := &cobra.Command{Use: "dws"}
+	root.PersistentFlags().StringP("format", "f", "json", "output format")
+	root.PersistentFlags().BoolP("yes", "y", false, "skip confirmation")
+	root.PersistentFlags().Int("timeout", 30, "HTTP timeout")
+
+	cmd := &cobra.Command{Use: "chat-permission-grant"}
+	root.AddCommand(cmd)
+	cmd.Flags().String("json", "", "JSON payload")
+	cmd.Flags().String("params", "", "additional JSON")
+
+	// MCP schema that includes fields colliding with reserved names.
+	specs := BuildFlagSpecs(map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"params":    map[string]any{"type": "string", "description": "命令授权参数"},
+			"json":      map[string]any{"type": "string", "description": "some json field"},
+			"format":    map[string]any{"type": "string", "description": "output format"},
+			"yes":       map[string]any{"type": "boolean", "description": "confirm"},
+			"timeout":   map[string]any{"type": "integer", "description": "timeout sec"},
+			"agentCode": map[string]any{"type": "string", "description": "agent code"},
+			"scope":     map[string]any{"type": "string", "description": "auth scope"},
+		},
+	}, nil)
+
+	// applyFlagSpecs must not panic — previously this panicked with
+	// "flag redefined: params" because reserved names were not skipped.
+	applyFlagSpecs(cmd, specs)
+
+	// Reserved/inherited flags should NOT be re-registered; only
+	// non-conflicting business flags should appear.
+	// Note: BuildFlagSpecs replaces "_" with "-" but does not split camelCase,
+	// so "agentCode" becomes flag name "agentCode" (no underscore to replace).
+	if cmd.Flags().Lookup("agentCode") == nil {
+		t.Error("expected --agentCode flag to be registered")
+	}
+	if cmd.Flags().Lookup("scope") == nil {
+		t.Error("expected --scope flag to be registered")
+	}
+
+	// Verify the reserved names were skipped (still point to the originals).
+	jsonFlag := cmd.Flags().Lookup("json")
+	if jsonFlag == nil || jsonFlag.Usage != "JSON payload" {
+		t.Error("--json should be the original built-in flag, not re-registered from schema")
+	}
+	paramsFlag := cmd.Flags().Lookup("params")
+	if paramsFlag == nil || paramsFlag.Usage != "additional JSON" {
+		t.Error("--params should be the original built-in flag, not re-registered from schema")
+	}
+}
+
+func TestApplyFlagSpecsSkipsCollidingAlias(t *testing.T) {
+	t.Parallel()
+
+	root := &cobra.Command{Use: "dws"}
+	root.PersistentFlags().StringP("format", "f", "json", "output format")
+
+	cmd := &cobra.Command{Use: "test-tool"}
+	root.AddCommand(cmd)
+	cmd.Flags().String("json", "", "JSON payload")
+	cmd.Flags().String("params", "", "additional JSON")
+
+	specs := []FlagSpec{
+		{PropertyName: "myField", FlagName: "my-field", Alias: "format", Kind: flagString, Description: "alias collides with inherited --format"},
+	}
+
+	applyFlagSpecs(cmd, specs)
+
+	if cmd.Flags().Lookup("my-field") == nil {
+		t.Error("expected --my-field flag to be registered")
+	}
+	// The alias "format" collides with the inherited persistent flag,
+	// so it should NOT be registered as a hidden alias.
+	formatFlag := cmd.InheritedFlags().Lookup("format")
+	if formatFlag == nil || formatFlag.Usage != "output format" {
+		t.Error("--format should remain the inherited persistent flag")
+	}
+}
+
 func TestFixtureLoaderLoadsCatalog(t *testing.T) {
 	t.Parallel()
 
