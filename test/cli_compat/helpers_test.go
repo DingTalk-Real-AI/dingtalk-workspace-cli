@@ -224,28 +224,6 @@ func assertToolArg(t *testing.T, cap *mcpCallCapture, key string, expected any) 
 	}
 }
 
-func assertNestedToolArg(t *testing.T, cap *mcpCallCapture, wrapper string, key string, expected any) {
-	t.Helper()
-	last := cap.last()
-	if last == nil {
-		t.Fatalf("expected MCP call with arg %s.%s=%v, but no calls were captured", wrapper, key, expected)
-	}
-	body, ok := last.Args[wrapper].(map[string]any)
-	if !ok {
-		t.Fatalf("expected arg %q to be an object, got %T: %v", wrapper, last.Args[wrapper], last.Args)
-	}
-	got, ok := body[key]
-	if !ok {
-		t.Errorf("expected arg %q inside %q, but it was not present. args: %v", key, wrapper, body)
-		return
-	}
-	gotJSON, _ := json.Marshal(got)
-	expectedJSON, _ := json.Marshal(expected)
-	if string(gotJSON) != string(expectedJSON) {
-		t.Errorf("arg %s.%s: expected %v, got %v", wrapper, key, string(expectedJSON), string(gotJSON))
-	}
-}
-
 func assertArgNotPresent(t *testing.T, cap *mcpCallCapture, key string) {
 	t.Helper()
 	last := cap.last()
