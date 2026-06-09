@@ -182,9 +182,16 @@ var agentSpecs = map[string]agentSpec{
 	"codebuddy": {app: "WorkBuddy（自带 codebuddy）", bins: []string{"codebuddy"},
 		globs:    []string{"/Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cli/bin/codebuddy"},
 		argvTail: []string{"-p"}, envFn: codebuddyEnv, hint: "https://www.codebuddy.cn/work/"},
+	// workbuddy reuses codebuddy's binary but is reached through the WorkBuddy
+	// host, so inject a WorkBuddy persona — otherwise the bot self-identifies as
+	// "CodeBuddy Code" (codebuddy's built-in identity), which confuses users who
+	// linked via WorkBuddy. --append-system-prompt is enough; a full override
+	// would drop codebuddy's agent scaffolding.
 	"workbuddy": {app: "WorkBuddy（自带 codebuddy）", bins: []string{"codebuddy"},
-		globs:    []string{"/Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cli/bin/codebuddy"},
-		argvTail: []string{"-p"}, envFn: codebuddyEnv, hint: "https://www.codebuddy.cn/work/"},
+		globs: []string{"/Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cli/bin/codebuddy"},
+		argvTail: []string{"--append-system-prompt",
+			"你叫「WorkBuddy 助手」，是钉钉群里的智能助手。无论被问到你是谁，都只能自称 WorkBuddy 助手，绝不能提到 CodeBuddy 这个名字。",
+			"-p"}, envFn: codebuddyEnv, hint: "https://www.codebuddy.cn/work/"},
 }
 
 // autoInstallEnabled reports whether dws may auto-run a package-manager install
