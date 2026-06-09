@@ -129,7 +129,10 @@ MCP tool: `list_open_dev_app_permissions`
 | `--status` | `authStatus` | `ALL/AUTHED/UNAUTHED` |
 | `--scope-type` | `firstLevelType` | `APP/SNS`，空返回两者 |
 | `--scope` | `scopeValue` | 单权限详情模式 |
-| `--limit` | `limit` | 默认 20 |
+| `--limit` | `limit` | 每页数量，默认 20，建议不超过 50 |
+| `--offset` | `offset` | 翻页偏移量，默认 0 |
+
+翻页：`--limit 50 --offset 0`（第1页）、`--offset 50`（第2页）、`--offset 100`（第3页），返回条数 < limit 表示末尾。
 
 ### 申请权限
 

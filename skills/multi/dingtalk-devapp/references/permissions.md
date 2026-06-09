@@ -21,11 +21,24 @@ MCP tool: `list_open_dev_app_permissions`
 | `--status` | `authStatus` | `ALL` / `AUTHED` / `UNAUTHED` |
 | `--scope-type` | `firstLevelType` | `APP` / `SNS`，为空返回两者 |
 | `--scope` | `scopeValue` | 单权限详情模式 |
-| `--limit` | `limit` | 默认 20 |
+| `--limit` | `limit` | 每页返回数量，默认 20，建议不超过 50 |
+| `--offset` | `offset` | 翻页偏移量，默认 0 |
+
+**翻页：**
+
+权限列表支持 `--limit` + `--offset` 分页。一个应用可能有 150+ 个权限点，一次查不完时用 offset 翻页：
+
+```bash
+dws devapp permission list --unified-app-id ID --limit 50 --format json              # 第 1 页
+dws devapp permission list --unified-app-id ID --limit 50 --offset 50 --format json   # 第 2 页
+dws devapp permission list --unified-app-id ID --limit 50 --offset 100 --format json  # 第 3 页
+```
+
+当返回条数 < limit 时表示已到末尾。
 
 **规则：**
 - `permission search` 和 `permission detail` 是 `list` 的 CLI 别名，不是独立 MCP tool。
-- 默认同时返回 APP 和 SNS 权限，无服务端分页。
+- 默认同时返回 APP 和 SNS 权限。
 - 列表模式只返回 `apiPreview`；`--scope` 详情模式返回完整 `apiList`。
 
 **scopeValue 选择顺序：**
