@@ -400,25 +400,25 @@ func TestChatMessageReplyForwardsAtMentions(t *testing.T) {
 			wantParams: map[string]any{
 				"atOpenDingTalkIds": []string{"op-1", "op-2"},
 			},
-			wantAbsent: []string{"isAtAll"},
+			wantAbsent: []string{"atAll", "isAtAll"},
 		},
 		{
 			name:      "at-all",
 			extraArgs: []string{"--text", "<@all> 收到，马上处理", "--at-all"},
 			wantParams: map[string]any{
-				"isAtAll": true,
+				"atAll": true,
 			},
-			wantAbsent: []string{"atOpenDingTalkIds"},
+			wantAbsent: []string{"atOpenDingTalkIds", "isAtAll"},
 		},
 		{
 			name:       "without-at-flags",
 			extraArgs:  []string{"--text", "收到，马上处理"},
-			wantAbsent: []string{"atOpenDingTalkIds", "isAtAll"},
+			wantAbsent: []string{"atOpenDingTalkIds", "atAll", "isAtAll"},
 		},
 		{
 			name:       "whitespace-at-open-dingtalk-ids",
 			extraArgs:  []string{"--text", "收到，马上处理", "--at-open-dingtalk-ids", "   "},
-			wantAbsent: []string{"atOpenDingTalkIds", "isAtAll"},
+			wantAbsent: []string{"atOpenDingTalkIds", "atAll", "isAtAll"},
 		},
 	}
 	for _, tc := range cases {
@@ -515,6 +515,9 @@ func assertReplyContent(t *testing.T, raw any, wantText string) {
 	content, ok := raw.(string)
 	if !ok {
 		t.Fatalf("content = %#v, want string", raw)
+	}
+	if strings.Contains(wantText, "<@") && !strings.Contains(content, wantText) {
+		t.Fatalf("raw content = %q, want literal mention text %q", content, wantText)
 	}
 	var got map[string]string
 	if err := json.Unmarshal([]byte(content), &got); err != nil {

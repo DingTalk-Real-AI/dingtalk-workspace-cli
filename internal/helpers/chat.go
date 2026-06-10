@@ -986,7 +986,7 @@ func newChatMessageReplyCommand(runner executor.Runner) *cobra.Command {
 				}
 			}
 			if v, _ := cmd.Flags().GetBool("at-all"); v {
-				params["isAtAll"] = true
+				params["atAll"] = true
 			}
 			inv := executor.NewHelperInvocation(
 				cobracmd.LegacyCommandPath(cmd),
@@ -1014,11 +1014,13 @@ func newChatMessageReplyCommand(runner executor.Runner) *cobra.Command {
 }
 
 func jsonMarshal(v any) (string, error) {
-	b, err := json.Marshal(v)
-	if err != nil {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
 		return "", err
 	}
-	return string(b), nil
+	return strings.TrimRight(buf.String(), "\n"), nil
 }
 
 // marshalMessageContent builds the send_personal_message content payload
