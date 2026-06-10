@@ -37,7 +37,10 @@ func RegisterCommands(root *cobra.Command, c edition.ToolCaller) {
   pat chmod 默认输出轻量授权摘要；显式 --format json / --verbose 时，
   才返回服务端完整 JSON（含逐 scope 明细），便于机器校验。
   浏览器是否打开由本地 PAT 策略单独决定，与 json / non-json 独立。
-  生效时会优先按 DINGTALK_DWS_AGENTCODE 读取 agent 策略，再回退到默认策略。
+  pat chmod 必须传 --agentCode，或设置 DINGTALK_DWS_AGENTCODE /
+  DWS_DINGTALK_AGENTCODE；CLI 会把 agentCode 放入 batch 请求参数，
+  并同步注入 gateway 兼容身份头。
+  浏览器策略生效时会优先按 DINGTALK_DWS_AGENTCODE 读取 agent 策略，再回退到默认策略。
   写入 agent 策略需显式传 --agentCode；不传则写入全局默认策略。
 
 Host-owned PAT 开关：
