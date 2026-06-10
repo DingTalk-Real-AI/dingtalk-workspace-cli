@@ -90,7 +90,7 @@ func degradedHint(reason CatalogDegradedReason, serverCount int) string {
 		if embedded {
 			return "无法连接 MCP 市场，请检查网络"
 		}
-		return "无法连接 MCP 市场 (mcp.dingtalk.com)，请检查网络"
+		return "无法连接 MCP 市场，请检查网络"
 	case DegradedRuntimeAllFailed:
 		if embedded {
 			return fmt.Sprintf("已发现 %d 个服务但连接全部失败，请稍后重试", serverCount)

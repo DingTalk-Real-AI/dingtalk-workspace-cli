@@ -1285,7 +1285,7 @@ func TestSchemaCommandOutputsDegradedOnMarketUnreachable(t *testing.T) {
 
 	degradedErr := &CatalogDegraded{
 		Reason: DegradedMarketUnreachable,
-		Hint:   "无法连接 MCP 市场 (mcp.dingtalk.com)，请检查网络",
+		Hint:   "无法连接 MCP 市场，请检查网络",
 	}
 	cmd := NewSchemaCommand(errorLoader{err: degradedErr})
 
