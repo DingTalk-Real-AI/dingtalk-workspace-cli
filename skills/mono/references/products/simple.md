@@ -12,19 +12,25 @@ Usage:
   dws devdoc article search [flags]
 Example:
   dws devdoc article search --query "OAuth2 接入" --page 1 --size 10
+  dws devdoc article search "openConversationId 群消息回调" --format json
 Flags:
       --query string   搜索关键词 (必填)
       --page string    页码 (默认 1)
       --size string    每页数量 (默认 10)
 ```
 
+能力: `article search` 调用 `search_open_platform_docs_rag`，用于 RAG 检索开放平台官方开发文档。保留 API 名、字段名、scope、errcode、事件名等精确关键词；返回标题、摘要、材料和链接。
+
 ### 错误排查
 ```
 Usage:
   dws devdoc error diagnose [flags]
+  dws devdoc error troubleshoot [flags]
 Example:
   dws devdoc error diagnose --request-id 15r6h45w0muec --format json
+  dws devdoc error diagnose --trace-id 15r6h45w0muec --api "创建日程" --format json
   dws devdoc error diagnose --error-code 33012 --error-message "missing scope" --format json
+  dws devdoc error troubleshoot --query "机器人回调失败" --context "HTTP 403" --format json
 Flags:
       --query string           原始排查问题
       --request-id string      开放平台 requestId
@@ -36,6 +42,8 @@ Flags:
       --page int               分页页码 (默认 1)
       --size int               分页大小 (默认 10)
 ```
+
+排查规则: `error diagnose` 调用 `search_open_error_code_rag`，优先传 requestId / traceId，其次传错误码、错误描述、API 名和上下文。`--api` 只作为补充检索词，不能单独发起排查；`--error-message`、`--api`、`--context` 会合并进 `query`。
 
 ---
 
@@ -118,6 +126,7 @@ Example:
 ## 意图判断
 
 - 用户说"开发文档/API 文档/接口文档" → `devdoc article search`
+- 用户说"RAG 搜开放平台文档/查字段/查 scope/查回调配置" → `devdoc article search`
 - 用户说"调用报错/requestId/traceId/错误码/错误描述" → `devdoc error diagnose`
 - 用户说"审批/请假/报销/出差" → `oa approval`
 - 用户说"同意审批/批准" → `oa approval approve`
@@ -130,8 +139,8 @@ Example:
 
 | 操作 | 从返回中提取 | 用于 |
 |------|-------------|------|
-| `devdoc article search` | 文档链接 | 直接展示给用户 |
-| `devdoc error diagnose` | diagnosticInfo、references、materials | 排查开放平台调用错误 |
+| `devdoc article search` | 标题、摘要、材料、文档链接 | 基于 RAG 命中回答开放平台文档问题 |
+| `devdoc error diagnose` | diagnosticInfo、references、materials | 排查开放平台调用错误；无命中时不要编造原因 |
 | `oa approval list-forms` | processCode | detail / records 等 |
 | `oa approval tasks` | taskId, instanceId | approve / reject |
 | `oa approval list-pending` | instanceId | detail / approve / reject |
