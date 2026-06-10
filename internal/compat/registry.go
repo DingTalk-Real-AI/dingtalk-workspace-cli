@@ -415,6 +415,33 @@ func parseFlagDefault(kind ValueKind, raw string) (defStr string, defInt int, de
 	return
 }
 
+// canRegisterFlag reports whether a long flag named name can be registered
+// on cmd without panicking pflag ("flag redefined"). The reserved payload
+// names are excluded too: ApplyBindings unconditionally registers hidden
+// --json/--params after the bindings loop. The envelope is remote data —
+// a duplicate or reserved name there must degrade to "flag unavailable",
+// never abort the process.
+func canRegisterFlag(cmd *cobra.Command, name string) bool {
+	if name == "" || name == "json" || name == "params" {
+		return false
+	}
+	return cmd.Flags().Lookup(name) == nil
+}
+
+// safeShorthand returns short when it is a single-character shorthand not
+// yet bound on cmd; otherwise "" (drop the shorthand, keep the long flag).
+// pflag panics on both multi-character and duplicate shorthands.
+func safeShorthand(cmd *cobra.Command, short string) string {
+	short = strings.TrimSpace(short)
+	if len(short) != 1 {
+		return ""
+	}
+	if cmd.Flags().ShorthandLookup(short) != nil {
+		return ""
+	}
+	return short
+}
+
 func ApplyBindings(cmd *cobra.Command, bindings []FlagBinding) {
 	for _, binding := range bindings {
 		// Positional bindings are collected from cobra args rather than flags.
@@ -464,7 +491,7 @@ func ApplyBindings(cmd *cobra.Command, bindings []FlagBinding) {
 		defStr, defInt, defFloat, defBool, defSlice := parseFlagDefault(binding.Kind, binding.Default)
 
 		registerHidden := func(name string, suffix string) {
-			if name == "" {
+			if !canRegisterFlag(cmd, name) {
 				return
 			}
 			switch binding.Kind {
@@ -484,19 +511,27 @@ func ApplyBindings(cmd *cobra.Command, bindings []FlagBinding) {
 			_ = cmd.Flags().MarkHidden(name)
 		}
 
+		if !canRegisterFlag(cmd, primary) {
+			// Duplicate or reserved primary name in the envelope. Skip the
+			// whole binding: CollectBindings tolerates the missing flag
+			// (Lookup → nil → continue) and the value can still be supplied
+			// via the --params payload.
+			continue
+		}
+		short := safeShorthand(cmd, binding.Short)
 		switch binding.Kind {
 		case ValueString:
-			cmd.Flags().StringP(primary, binding.Short, defStr, binding.Usage)
+			cmd.Flags().StringP(primary, short, defStr, binding.Usage)
 		case ValueInt:
-			cmd.Flags().IntP(primary, binding.Short, defInt, binding.Usage)
+			cmd.Flags().IntP(primary, short, defInt, binding.Usage)
 		case ValueFloat:
-			cmd.Flags().Float64P(primary, binding.Short, defFloat, binding.Usage)
+			cmd.Flags().Float64P(primary, short, defFloat, binding.Usage)
 		case ValueBool:
-			cmd.Flags().BoolP(primary, binding.Short, defBool, binding.Usage)
+			cmd.Flags().BoolP(primary, short, defBool, binding.Usage)
 		case ValueStringSlice, ValueIntSlice, ValueFloatSlice, ValueBoolSlice:
-			cmd.Flags().StringSliceP(primary, binding.Short, defSlice, binding.Usage)
+			cmd.Flags().StringSliceP(primary, short, defSlice, binding.Usage)
 		case ValueJSON:
-			cmd.Flags().StringP(primary, binding.Short, defStr, binding.Usage+" (JSON)")
+			cmd.Flags().StringP(primary, short, defStr, binding.Usage+" (JSON)")
 		}
 		registerHidden(alias, " (alias)")
 		for _, extra := range extras {
@@ -513,8 +548,12 @@ func ApplyBindings(cmd *cobra.Command, bindings []FlagBinding) {
 			}
 		}
 	}
-	cmd.Flags().String("json", "", "Base JSON object payload for this command")
-	cmd.Flags().String("params", "", "Additional JSON object payload merged after --json")
+	if cmd.Flags().Lookup("json") == nil {
+		cmd.Flags().String("json", "", "Base JSON object payload for this command")
+	}
+	if cmd.Flags().Lookup("params") == nil {
+		cmd.Flags().String("params", "", "Additional JSON object payload merged after --json")
+	}
 	_ = cmd.Flags().MarkHidden("json")
 	_ = cmd.Flags().MarkHidden("params")
 }
@@ -553,12 +592,12 @@ func registerPositionalAliasFlags(cmd *cobra.Command, binding FlagBinding) {
 	defStr, defInt, defFloat, defBool, defSlice := parseFlagDefault(binding.Kind, binding.Default)
 
 	register := func(name string, withShort bool, hidden bool, usageSuffix string) {
-		if name == "" {
+		if !canRegisterFlag(cmd, name) {
 			return
 		}
 		short := ""
 		if withShort {
-			short = binding.Short
+			short = safeShorthand(cmd, binding.Short)
 		}
 		usage := binding.Usage + usageSuffix
 		switch binding.Kind {
