@@ -16,6 +16,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -49,7 +50,38 @@ func newLegacyPublicCommands(ctx context.Context, runner executor.Runner) []*cob
 		return mergeTopLevelCommands(commands)
 	}
 
-	dynamicCmds := loadDynamicCommands(ctx, runner)
+	return buildEnvelopeCommandsSafe(ctx, runner)
+}
+
+// loadDynamicCommandsFn is a test seam for buildEnvelopeCommandsSafe so a
+// panic in the cache-driven build can be simulated without crafting a
+// poisoned on-disk cache.
+var loadDynamicCommandsFn = loadDynamicCommands
+
+// buildEnvelopeCommandsSafe builds the public command set from the discovery
+// envelope, degrading to the hardcoded helper commands when the dynamic
+// build panics.
+//
+// Why this guard exists: the dynamic command tree is constructed from cached
+// discovery data BEFORE Cobra dispatches any command, so a panic here (e.g.
+// a duplicate pflag registration fed by a poisoned cache, as seen before
+// 1.0.32: "chat_permission_grant flag redefined: params") used to abort
+// every invocation — including `dws cache refresh`, the very command that
+// repairs the cache. Recovering locally keeps utility and helper commands
+// alive so users can self-heal instead of manually deleting cache files.
+func buildEnvelopeCommandsSafe(ctx context.Context, runner executor.Runner) (cmds []*cobra.Command) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("buildEnvelopeCommandsSafe: dynamic command build panicked, degrading to built-in commands", "panic", r)
+			fmt.Fprintf(os.Stderr,
+				"Warning: building product commands from the local discovery cache failed: %v\n"+
+					"Product commands are temporarily unavailable; utility commands still work.\n"+
+					"Run 'dws cache refresh' to rebuild the cache.\n", r)
+			cmds = mergeTopLevelCommands(helpers.NewPublicCommands(runner))
+		}
+	}()
+
+	dynamicCmds := loadDynamicCommandsFn(ctx, runner)
 	helperCmds := helpers.NewPublicCommands(runner)
 	merged := mergeTopLevelCommands(pickCommands(dynamicCmds, helperCmds))
 	// Post-merge product hooks: tasks the envelope cannot express on its
