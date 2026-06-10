@@ -3,6 +3,7 @@ package helpers
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -383,5 +384,152 @@ func TestChatMessageSendByBotRoutesToBotProduct(t *testing.T) {
 				t.Fatalf("Tool = %q, want %q", got, tc.wantTool)
 			}
 		})
+	}
+}
+
+func TestChatMessageReplyForwardsAtMentions(t *testing.T) {
+	cases := []struct {
+		name       string
+		extraArgs  []string
+		wantParams map[string]any
+		wantAbsent []string
+	}{
+		{
+			name:      "at-open-dingtalk-ids",
+			extraArgs: []string{"--text", "<@op-1> <@op-2> 收到，马上处理", "--at-open-dingtalk-ids", "op-1, op-2"},
+			wantParams: map[string]any{
+				"atOpenDingTalkIds": []string{"op-1", "op-2"},
+			},
+			wantAbsent: []string{"isAtAll"},
+		},
+		{
+			name:      "at-all",
+			extraArgs: []string{"--text", "<@all> 收到，马上处理", "--at-all"},
+			wantParams: map[string]any{
+				"isAtAll": true,
+			},
+			wantAbsent: []string{"atOpenDingTalkIds"},
+		},
+		{
+			name:       "without-at-flags",
+			extraArgs:  []string{"--text", "收到，马上处理"},
+			wantAbsent: []string{"atOpenDingTalkIds", "isAtAll"},
+		},
+		{
+			name:       "whitespace-at-open-dingtalk-ids",
+			extraArgs:  []string{"--text", "收到，马上处理", "--at-open-dingtalk-ids", "   "},
+			wantAbsent: []string{"atOpenDingTalkIds", "isAtAll"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			args := []string{
+				"--conversation-id", "cid-xyz",
+				"--ref-msg-id", "msg-123",
+				"--ref-sender", "sender-op",
+			}
+			args = append(args, tc.extraArgs...)
+			runner, out, err := runChatMessageReply(t, args...)
+			if err != nil {
+				t.Fatalf("Execute() error = %v\noutput:\n%s", err, out)
+			}
+			if got := runner.last.Tool; got != "send_personal_message" {
+				t.Fatalf("Tool = %q, want send_personal_message", got)
+			}
+			if got := runner.last.CanonicalProduct; got != "group-chat" {
+				t.Fatalf("CanonicalProduct = %q, want group-chat", got)
+			}
+			for key, want := range tc.wantParams {
+				got, ok := runner.last.Params[key]
+				if !ok {
+					t.Fatalf("Params missing %q; got %#v", key, runner.last.Params)
+				}
+				if !equalAny(got, want) {
+					t.Fatalf("Params[%q] = %#v, want %#v", key, got, want)
+				}
+			}
+			for _, key := range tc.wantAbsent {
+				if _, ok := runner.last.Params[key]; ok {
+					t.Fatalf("Params[%q] unexpectedly present; got %#v", key, runner.last.Params)
+				}
+			}
+			assertReplyContent(t, runner.last.Params["content"], tc.extraArgs[1])
+		})
+	}
+}
+
+func TestChatMessageReplyRejectsMissingRequiredFlags(t *testing.T) {
+	cases := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{
+			name:    "missing-conversation-id",
+			args:    []string{"--ref-msg-id", "msg-123", "--ref-sender", "sender-op", "--text", "收到"},
+			wantErr: "--conversation-id is required",
+		},
+		{
+			name:    "missing-ref-msg-id",
+			args:    []string{"--conversation-id", "cid-xyz", "--ref-sender", "sender-op", "--text", "收到"},
+			wantErr: "--ref-msg-id is required",
+		},
+		{
+			name:    "missing-ref-sender",
+			args:    []string{"--conversation-id", "cid-xyz", "--ref-msg-id", "msg-123", "--text", "收到"},
+			wantErr: "--ref-sender is required",
+		},
+		{
+			name:    "missing-text",
+			args:    []string{"--conversation-id", "cid-xyz", "--ref-msg-id", "msg-123", "--ref-sender", "sender-op"},
+			wantErr: "--text is required",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, out, err := runChatMessageReply(t, tc.args...)
+			if err == nil {
+				t.Fatalf("expected error, got nil; output: %s", out)
+			}
+			if got := err.Error(); !strings.Contains(got, tc.wantErr) {
+				t.Fatalf("error = %q, want to contain %q", got, tc.wantErr)
+			}
+		})
+	}
+}
+
+func runChatMessageReply(t *testing.T, args ...string) (*captureRunner, string, error) {
+	t.Helper()
+	runner := &captureRunner{}
+	cmd := newChatMessageReplyCommand(runner)
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs(args)
+	err := cmd.Execute()
+	return runner, out.String(), err
+}
+
+func assertReplyContent(t *testing.T, raw any, wantText string) {
+	t.Helper()
+	content, ok := raw.(string)
+	if !ok {
+		t.Fatalf("content = %#v, want string", raw)
+	}
+	var got map[string]string
+	if err := json.Unmarshal([]byte(content), &got); err != nil {
+		t.Fatalf("content %q is not valid JSON: %v", content, err)
+	}
+	if got["referenceOpenMessageId"] != "msg-123" {
+		t.Fatalf("referenceOpenMessageId = %q, want msg-123", got["referenceOpenMessageId"])
+	}
+	if got["srcMsgSendOpenDingTalkId"] != "sender-op" {
+		t.Fatalf("srcMsgSendOpenDingTalkId = %q, want sender-op", got["srcMsgSendOpenDingTalkId"])
+	}
+	if got["replyMsgType"] != "text" {
+		t.Fatalf("replyMsgType = %q, want text", got["replyMsgType"])
+	}
+	if got["content"] != wantText {
+		t.Fatalf("content = %q, want %q", got["content"], wantText)
 	}
 }

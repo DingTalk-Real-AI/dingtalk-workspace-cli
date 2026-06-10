@@ -940,7 +940,7 @@ func newChatMessageReplyCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "reply",
 		Short:             "引用回复消息（支持单聊/群聊）",
-		Long:              "以当前用户身份引用某条消息并回复。需 --conversation-id 会话 ID、--ref-msg-id 被引用消息 ID、--ref-sender 原发送者 openDingTalkId、--text 回复内容。",
+		Long:              "以当前用户身份引用某条消息并回复。需 --conversation-id 会话 ID、--ref-msg-id 被引用消息 ID、--ref-sender 原发送者 openDingTalkId、--text 回复内容。使用 --at-open-dingtalk-ids / --at-all 时，--text 需包含对应的 <@openDingTalkId> / <@all> 占位符，客户端才会渲染 @。",
 		Example:           `  dws chat message reply --conversation-id <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --text "收到，马上处理"`,
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
@@ -980,6 +980,14 @@ func newChatMessageReplyCommand(runner executor.Runner) *cobra.Command {
 			if uuid, _ := cmd.Flags().GetString("uuid"); strings.TrimSpace(uuid) != "" {
 				params["uuid"] = uuid
 			}
+			if v, _ := cmd.Flags().GetString("at-open-dingtalk-ids"); strings.TrimSpace(v) != "" {
+				if ids := splitCSVStrings(v); len(ids) > 0 {
+					params["atOpenDingTalkIds"] = ids
+				}
+			}
+			if v, _ := cmd.Flags().GetBool("at-all"); v {
+				params["isAtAll"] = true
+			}
 			inv := executor.NewHelperInvocation(
 				cobracmd.LegacyCommandPath(cmd),
 				"group-chat",
@@ -999,6 +1007,8 @@ func newChatMessageReplyCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("ref-msg-id", "", "被引用的消息 openMessageId (必填)")
 	cmd.Flags().String("ref-sender", "", "被引用消息发送者 openDingTalkId (必填)")
 	cmd.Flags().String("text", "", "回复正文 (必填)")
+	cmd.Flags().String("at-open-dingtalk-ids", "", "@指定成员 openDingTalkId 列表，逗号分隔；--text 需包含 <@openDingTalkId> 占位符")
+	cmd.Flags().Bool("at-all", false, "@所有人；--text 需包含 <@all> 占位符")
 	cmd.Flags().String("uuid", "", "可选 uuid（幂等标识）")
 	return cmd
 }
