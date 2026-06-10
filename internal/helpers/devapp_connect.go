@@ -120,6 +120,7 @@ func buildConnectPlan(channel, clientID, robotCode string) map[string]any {
 			"steps": []string{
 				"运行 `hermes gateway setup` → 选 DingTalk → QR Code Scan 扫码授权",
 				"`hermes gateway restart`，直接在钉钉里跟新机器人对话",
+				"回复打了 Done 表情却不显示/卡在'数据加载中'：钉钉按 AI 助理应答窗口渲染回复，超窗的纯文本会被丢弃；回复慢的 agent 需在 hermes 侧启用 AI 卡片（config.yaml 配 platforms.dingtalk.extra.card_template_id），由卡片先占位再流式出字",
 			},
 		}
 	}

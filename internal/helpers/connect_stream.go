@@ -89,8 +89,11 @@ type connectAgentOptions struct {
 	ReplyCard bool
 	// CardTemplate is the AI-card template ID (--card-template /
 	// DWS_CARD_TEMPLATE). Card templates are app-scoped: register one under
-	// your app in the developer console for reliable branded rendering; empty
-	// uses the public openclaw template as a best-effort default.
+	// your app in the developer console for reliable branded rendering. Empty
+	// means no cards — replies stay plain text/markdown with the Thinking/Done
+	// chips (see newAICardClient); pass "public" to opt into the shared
+	// openclaw template (best-effort: shared templates may not render for
+	// every app).
 	CardTemplate string
 }
 
