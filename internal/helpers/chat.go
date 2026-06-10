@@ -986,7 +986,7 @@ func newChatMessageReplyCommand(runner executor.Runner) *cobra.Command {
 				}
 			}
 			if v, _ := cmd.Flags().GetBool("at-all"); v {
-				params["atAll"] = true
+				params["isAtAll"] = true
 			}
 			inv := executor.NewHelperInvocation(
 				cobracmd.LegacyCommandPath(cmd),

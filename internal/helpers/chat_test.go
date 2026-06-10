@@ -406,9 +406,9 @@ func TestChatMessageReplyForwardsAtMentions(t *testing.T) {
 			name:      "at-all",
 			extraArgs: []string{"--text", "<@all> 收到，马上处理", "--at-all"},
 			wantParams: map[string]any{
-				"atAll": true,
+				"isAtAll": true,
 			},
-			wantAbsent: []string{"atOpenDingTalkIds", "isAtAll"},
+			wantAbsent: []string{"atOpenDingTalkIds", "atAll"},
 		},
 		{
 			name:       "without-at-flags",
