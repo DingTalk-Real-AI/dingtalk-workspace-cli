@@ -25,6 +25,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
+	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -58,23 +59,25 @@ func resolveSessionIDFromEnv() string {
 	return ""
 }
 
-// agentCodeEnv is the canonical (and only) environment variable name
-// used as a per-shell fallback for the --agentCode flag on `dws pat *`
-// commands.
+// agentCodeEnv is the canonical environment variable name used as a
+// per-shell fallback for the --agentCode flag on `dws pat *` commands.
 //
 // Why: agent hosts may set their business agent code once when spawning
 // a long-lived shell / sub-process. Exposing DINGTALK_DWS_AGENTCODE lets
 // the host export the code once and let the CLI resolve it on every pat
 // subcommand. The flag always wins when both are set so scripted one-offs
-// remain deterministic. When neither flag nor env is set, the request is
-// sent without agentCode and lippi-pat-core applies its default agentCode.
+// remain deterministic. When neither flag nor env is set, `pat chmod` fails
+// locally instead of letting the server reject the request later. Batch PAT
+// tools receive the resolved agentCode in arguments, while the CLI also keeps
+// exporting it through env for older gateway paths.
 //
-// Namespace note: DWS_AGENTCODE / DINGTALK_AGENTCODE / REWIND_AGENTCODE
-// are explicitly NOT consumed. The legacy DWS_AGENTCODE alias was
-// hard-removed once the public integration surface landed on
-// DINGTALK_DWS_AGENTCODE; hosts must migrate rather than rely on a
-// silent fallback.
-const agentCodeEnv = "DINGTALK_DWS_AGENTCODE"
+// Namespace note: DWS_DINGTALK_AGENTCODE is kept as a compatibility alias for
+// hosts that shipped the reversed prefix early. DWS_AGENTCODE /
+// DINGTALK_AGENTCODE / REWIND_AGENTCODE are explicitly NOT consumed.
+const (
+	agentCodeEnv       = authpkg.AgentCodeEnv
+	agentCodeEnvCompat = authpkg.AgentCodeEnvCompat
+)
 
 // agentCodePattern is the validation regex for any --agentCode value
 // resolved from either the flag or the agent-code env var. It matches
@@ -84,16 +87,12 @@ const agentCodeEnv = "DINGTALK_DWS_AGENTCODE"
 // argument.
 var agentCodePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
-// resolveAgentCodeFromEnv returns the fallback agent code from the
-// canonical DINGTALK_DWS_AGENTCODE env var. The second return value
-// reports the env name that was consumed (for error attribution); it
-// is "" when the env is unset or blank. No legacy aliases are honored.
+// resolveAgentCodeFromEnv returns the fallback agent code from the canonical
+// DINGTALK_DWS_AGENTCODE env var, then the DWS_DINGTALK_AGENTCODE compatibility
+// alias. The second return value reports the env name that was consumed (for
+// error attribution); it is "" when both env vars are unset or blank.
 func resolveAgentCodeFromEnv() (string, string) {
-	primary := strings.TrimSpace(os.Getenv(agentCodeEnv))
-	if primary != "" {
-		return primary, agentCodeEnv
-	}
-	return "", ""
+	return authpkg.AgentCodeFromEnv()
 }
 
 // validateAgentCode rejects agent codes that would be ambiguous or unsafe
@@ -116,7 +115,8 @@ func validateAgentCode(code string) error {
 //
 //  1. explicit --agentCode flag value (highest priority; wins over env)
 //  2. DINGTALK_DWS_AGENTCODE env var (per-shell primary fallback)
-//  3. empty ("") when required=false; typed error when required=true.
+//  3. DWS_DINGTALK_AGENTCODE env var (compatibility fallback)
+//  4. empty ("") when required=false; typed error when required=true.
 //
 // Any non-empty resolved value is validated via validateAgentCode, so
 // callers never have to re-validate.
@@ -128,17 +128,30 @@ func resolveAgentCode(flagVal string, required bool) (string, error) {
 	}
 	if code == "" {
 		if required {
-			return "", fmt.Errorf(
-				"flag --agentCode is required (or set env %s)\n  hint: dws pat chmod <scope>... --agentCode <id>\n  hint: export %s=<id>",
-				agentCodeEnv, agentCodeEnv)
+			return "", apperrors.NewValidation(
+				fmt.Sprintf("flag --agentCode is required (or set env %s or %s)", agentCodeEnv, agentCodeEnvCompat),
+				apperrors.WithReason("missing_agent_code"),
+				apperrors.WithHint(fmt.Sprintf("dws pat chmod <scope>... --agentCode <id>\n  or: export %s=<id>", agentCodeEnv)),
+				apperrors.WithActions(
+					"dws pat chmod <scope>... --agentCode <id>",
+					fmt.Sprintf("export %s=<id>", agentCodeEnv),
+					fmt.Sprintf("export %s=<id>", agentCodeEnvCompat),
+				),
+			)
 		}
 		return "", nil
 	}
 	if err := validateAgentCode(code); err != nil {
 		if envSource != "" {
-			return "", fmt.Errorf("%s env: %w", envSource, err)
+			return "", apperrors.NewValidation(
+				fmt.Sprintf("%s env: %v", envSource, err),
+				apperrors.WithReason("invalid_agent_code"),
+			)
 		}
-		return "", err
+		return "", apperrors.NewValidation(
+			err.Error(),
+			apperrors.WithReason("invalid_agent_code"),
+		)
 	}
 	return code, nil
 }
@@ -159,7 +172,24 @@ const (
 
 	patBatchUnsupportedCode      = "PAT_BATCH_AUTH_UNSUPPORTED"
 	patBatchUnsupportedCodeLower = "pat_batch_auth_unsupported"
+	patForgedIdentityCode        = "PAT_FORGED_IDENTITY_FIELD"
+	patForgedIdentityCodeLower   = "pat_forged_identity_field"
 )
+
+var patBatchMetadataContractCodes = map[string]bool{
+	"pat_batch_auth_metadata_required": true,
+	"pat_batch_scope_not_declared":     true,
+	"pat_batch_product_not_declared":   true,
+}
+
+var patBatchIdentityArgumentKeys = map[string]bool{
+	"agentCode": true,
+	"sessionId": true,
+	"orgId":     true,
+	"uid":       true,
+	"source":    true,
+	"caller":    true,
+}
 
 var validGrantTypes = map[string]bool{
 	"once":      true,
@@ -204,7 +234,7 @@ grantType 规则:
   dws pat chmod --recommend --grant-type session --session-id session-xxx`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			flagVal, _ := cmd.Flags().GetString("agentCode")
-			agentCode, err := resolveAgentCode(flagVal, false)
+			agentCode, err := resolveAgentCode(flagVal, true)
 			if err != nil {
 				return err
 			}
@@ -239,8 +269,6 @@ grantType 规则:
 				fmt.Printf("%-16s%s\n", "Tool:", patBatchGrantToolName)
 				if agentCode != "" {
 					fmt.Printf("%-16s%s\n", "AgentCode:", agentCode)
-				} else {
-					fmt.Printf("%-16s%s\n", "AgentCode:", "(server default)")
 				}
 				fmt.Printf("%-16s%v\n", "Scope:", scopes)
 				fmt.Printf("%-16s%s\n", "GrantType:", grantType)
@@ -315,7 +343,7 @@ grantType 规则:
 	}
 
 	chmodCmd.Flags().String("agentCode", "",
-		"Agent 唯一标识（可选；不填则由服务端写入默认 AgentCode；env DINGTALK_DWS_AGENTCODE 可注入，flag 优先）")
+		"Agent 唯一标识（必填；也可通过 env DINGTALK_DWS_AGENTCODE/DWS_DINGTALK_AGENTCODE 注入，flag 优先；会进入 batch 参数并同步注入兼容 env）")
 	chmodCmd.Flags().String("grant-type", "session", "授权策略: once|session|permanent")
 	chmodCmd.Flags().String("session-id", "", "会话标识（session 模式下必填）")
 	chmodCmd.Flags().StringArrayVar(&productFlags, "product", nil, "产品编码，可重复；与 --products 等价")
@@ -388,13 +416,11 @@ func callPATBatchGrantWithLegacyFallback(
 	if c == nil {
 		return nil, fmt.Errorf("internal error: tool runtime not initialized")
 	}
-	result, err := withPATContextEnv(agentCode, sessionID, func() (*edition.ToolResult, error) {
-		return c.CallTool(ctx, "pat", patBatchGrantToolName, batchArgs)
-	})
-	if err == nil && !isPATBatchUnsupportedResult(result) {
+	result, err := callPATBatchToolWithIdentityFallback(ctx, c, agentCode, sessionID, patBatchGrantToolName, batchArgs)
+	if err == nil && !isPATBatchFallbackResult(result) {
 		return result, nil
 	}
-	if err != nil && !isPATBatchUnsupportedError(err) && !isToolNotRegisteredError(err) {
+	if err != nil && !isPATBatchFallbackError(err) && !isToolNotRegisteredError(err) {
 		return nil, err
 	}
 	return withPATContextEnv(agentCode, sessionID, func() (*edition.ToolResult, error) {
@@ -414,8 +440,19 @@ func callPATBatchPlan(ctx context.Context, c edition.ToolCaller, agentCode, sess
 	if c == nil {
 		return nil, fmt.Errorf("internal error: tool runtime not initialized")
 	}
+	return callPATBatchToolWithIdentityFallback(ctx, c, agentCode, sessionID, patBatchPlanToolName, args)
+}
+
+func callPATBatchToolWithIdentityFallback(ctx context.Context, c edition.ToolCaller, agentCode, sessionID, toolName string, args map[string]any) (*edition.ToolResult, error) {
+	result, err := withPATContextEnv(agentCode, sessionID, func() (*edition.ToolResult, error) {
+		return c.CallTool(ctx, "pat", toolName, args)
+	})
+	if !shouldRetryPATBatchWithoutIdentityArgs(result, err, args) {
+		return result, err
+	}
+	compatArgs := cloneWithoutPATIdentityArgs(args)
 	return withPATContextEnv(agentCode, sessionID, func() (*edition.ToolResult, error) {
-		return c.CallTool(ctx, "pat", patBatchPlanToolName, args)
+		return c.CallTool(ctx, "pat", toolName, compatArgs)
 	})
 }
 
@@ -485,6 +522,25 @@ func firstToolResultText(result *edition.ToolResult) string {
 }
 
 func isPATBatchUnsupportedResult(result *edition.ToolResult) bool {
+	return patBatchResultHasCode(result, func(code string) bool {
+		return strings.EqualFold(code, patBatchUnsupportedCode)
+	})
+}
+
+func isPATBatchFallbackResult(result *edition.ToolResult) bool {
+	return patBatchResultHasCode(result, func(code string) bool {
+		normalized := strings.ToLower(strings.TrimSpace(code))
+		return strings.EqualFold(code, patBatchUnsupportedCode) || patBatchMetadataContractCodes[normalized]
+	})
+}
+
+func isPATForgedIdentityResult(result *edition.ToolResult) bool {
+	return patBatchResultHasCode(result, func(code string) bool {
+		return strings.EqualFold(code, patForgedIdentityCode)
+	})
+}
+
+func patBatchResultHasCode(result *edition.ToolResult, matches func(string) bool) bool {
 	text := firstToolResultText(result)
 	if text == "" {
 		return false
@@ -494,7 +550,7 @@ func isPATBatchUnsupportedResult(result *edition.ToolResult) bool {
 		return false
 	}
 	for _, key := range []string{"code", "errorCode", "error_code"} {
-		if code, ok := body[key].(string); ok && strings.EqualFold(strings.TrimSpace(code), patBatchUnsupportedCode) {
+		if code, ok := body[key].(string); ok && matches(strings.TrimSpace(code)) {
 			return true
 		}
 	}
@@ -503,6 +559,53 @@ func isPATBatchUnsupportedResult(result *edition.ToolResult) bool {
 
 func isPATBatchUnsupportedError(err error) bool {
 	return err != nil && strings.Contains(normalizedPATErrorText(err), patBatchUnsupportedCodeLower)
+}
+
+func isPATBatchFallbackError(err error) bool {
+	if isPATBatchUnsupportedError(err) {
+		return true
+	}
+	text := normalizedPATErrorText(err)
+	for code := range patBatchMetadataContractCodes {
+		if strings.Contains(text, code) {
+			return true
+		}
+	}
+	return false
+}
+
+func isPATForgedIdentityError(err error) bool {
+	return err != nil && strings.Contains(normalizedPATErrorText(err), patForgedIdentityCodeLower)
+}
+
+func shouldRetryPATBatchWithoutIdentityArgs(result *edition.ToolResult, err error, args map[string]any) bool {
+	if !hasPATIdentityArgs(args) {
+		return false
+	}
+	if err != nil {
+		return isPATForgedIdentityError(err)
+	}
+	return isPATForgedIdentityResult(result)
+}
+
+func hasPATIdentityArgs(args map[string]any) bool {
+	for key := range args {
+		if patBatchIdentityArgumentKeys[key] {
+			return true
+		}
+	}
+	return false
+}
+
+func cloneWithoutPATIdentityArgs(args map[string]any) map[string]any {
+	out := make(map[string]any, len(args))
+	for key, value := range args {
+		if patBatchIdentityArgumentKeys[key] {
+			continue
+		}
+		out[key] = value
+	}
+	return out
 }
 
 // callPATToolWithLegacyFallback invokes the canonical PAT grant tool first,

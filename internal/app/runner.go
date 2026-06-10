@@ -111,7 +111,7 @@ func logHostOwnedPATDecisionOnce() {
 	hostOwnedPATDecisionOnce.Do(func() {
 		slog.Debug("runtime.host_owned_pat",
 			"hostOwned", authpkg.HostOwnsPATFlow(),
-			"agentCodeEnvPresent", os.Getenv(authpkg.AgentCodeEnv) != "",
+			"agentCodeEnvPresent", authpkg.AgentCodeEnvPresent(),
 		)
 	})
 }
@@ -696,9 +696,10 @@ func resolveIdentityHeaders() map[string]string {
 	if sessionID == "" {
 		sessionID = os.Getenv(envRewindSessionID)
 	}
+	agentCode, _ := authpkg.AgentCodeFromEnv()
 	envHeaders := map[string]string{
 		"x-dingtalk-agent":          os.Getenv(envDingtalkAgent),
-		"x-dingtalk-dws-agent-code": strings.TrimSpace(os.Getenv(authpkg.AgentCodeEnv)),
+		"x-dingtalk-dws-agent-code": agentCode,
 		"x-dingtalk-trace-id":       os.Getenv(envDingtalkTraceID),
 		"x-dingtalk-session-id":     sessionID,
 		"x-dingtalk-message-id":     os.Getenv(envDingtalkMessageID),
