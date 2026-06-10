@@ -6,6 +6,14 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Added
+
+- **DevDoc RAG CLI commands** (#434, `internal/helpers/devdoc.go`) - `dws devdoc article search` now calls `search_open_platform_docs_rag` and returns the structured RAG payload (`materials`, `references`, `ragContext`) directly from MCP. `dws devdoc error diagnose` (alias `troubleshoot`) is added for open-platform error lookups via `search_open_error_code_rag`, with `--request-id`, compatible hidden `--trace-id`, `--error-code`, `--error-message`, `--api`, `--context`, `--query`, `--page`, and `--size`; CLI-only context fields are merged into `query` so the MCP request contract stays small and stable.
+
+### Fixed
+
+- **DingTalk MCP gateway query handling for DevDoc RAG** (#434, `internal/transport/client.go`, `pkg/config/constants.go`) - streamable HTTP endpoint sanitization now preserves query parameters on trusted DingTalk gateway hosts (`mcp-gw.dingtalk.com` / `pre-mcp-gw.dingtalk.com`) so gateway keys survive discovery and tool calls, while transport debug logs redact query values before printing. The open-source default MCP host remains production `https://mcp.dingtalk.com`; prepub continues to be available through the runtime `~/.dws/mcp_url` override.
+
 ## [1.0.35] - 2026-06-08
 
 ### Fixed
