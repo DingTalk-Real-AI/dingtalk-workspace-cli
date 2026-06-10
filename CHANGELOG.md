@@ -6,6 +6,10 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Added
+
+- **`dws chat message reply` @-mentions** (#359, `internal/helpers/chat.go`) — reply now accepts `--at-open-dingtalk-ids` and `--at-all`, forwarding them to `send_personal_message` as `atOpenDingTalkIds` / `isAtAll`. As with `chat message send`, the reply text must include matching `<@openDingTalkId>` / `<@all>` placeholders for DingTalk clients to render the mention.
+
 ## [1.0.35] - 2026-06-08
 
 ### Fixed

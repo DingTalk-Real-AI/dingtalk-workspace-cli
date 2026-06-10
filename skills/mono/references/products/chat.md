@@ -1532,7 +1532,7 @@ Flags:
 - `chat message create-text-emotion` 创建文字表情模板，返回 emotionId；--background-id 可选，不传由服务端默认分配
 - `chat category list` 无需参数；`category list-conversations` 需传 --category-id（通过 category list 获取）
 - `chat mute` 默认开启免打扰，传 --off 关闭；--conversation-id / --id / --chat 三个别名均可用于传入会话 ID
-- `chat message reply` 引用回复消息（**单聊/群聊均可**），需传 --conversation-id（openConversationId，单聊与群聊使用同一字段）、--ref-msg-id（被引用消息 openMessageId）、--ref-sender（被引用消息发送者 openDingTalkId）、--text（回复内容）；目前回复类型仅支持 text
+- `chat message reply` 引用回复消息（**单聊/群聊均可**），需传 --conversation-id（openConversationId，单聊与群聊使用同一字段）、--ref-msg-id（被引用消息 openMessageId）、--ref-sender（被引用消息发送者 openDingTalkId）、--text（回复内容）；可选 --at-open-dingtalk-ids（逗号分隔）或 --at-all，使用 @ 时 --text 需包含对应的 <@openDingTalkId> / <@all> 占位符；目前回复类型仅支持 text
 - `chat message forward` 转发单条消息（**源/目标会话均支持单聊/群聊**，常见组合：群→群、群→单、单→群、单→单），需传 --src-conversation-id（源会话 openConversationId）、--msg-id（源消息 openMessageId）、--dest-conversation-id（目标会话 openConversationId）
 - `chat set-top` 设置/取消会话置顶（**单聊/群聊均可**），需传 --conversation-id（openConversationId，单聊与群聊使用同一字段），默认置顶，传 --off 取消
 - `chat message reply` 以当前用户身份引用回复，与 `chat message send` 的用户身份发送语义一致
