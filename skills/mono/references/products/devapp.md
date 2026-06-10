@@ -223,6 +223,7 @@ dws devapp robot connect --robot-client-id CLIENT_ID --robot-client-secret CLIEN
 - **会话记忆 `--agent-memory`**（默认开）：同一群/单聊共享 agent 会话，追问保留上下文。仅 claudecode/codebuddy/workbuddy 支持（CLI 有 `--session-id/--resume`）；其余渠道自动无状态。`--agent-memory=false` 关闭。
 - **模型覆盖 `--agent-model`**：claudecode 默认锁 haiku 求快，可改 sonnet/opus 换聪明（env `DWS_AGENT_MODEL`）。
 - **运行目录 `--agent-workdir`**：放知识文件给机器人企业上下文；默认空白临时目录求快（env `DWS_AGENT_WORKDIR`）。
+- **AI 卡片回复 `--reply-card`**（默认开）：思考中→完成状态卡片，同官方渠道体验；失败自动回退普通消息（env `DWS_REPLY_CARD=0` 关闭）。
 - **stream-bridge 渠道**（qoder/qoderwork/claudecode/workbuddy/codex/gemini/opencode）：Go 原生进程内 Stream 转发器，订阅 `TOPIC_ROBOT`，每条 @机器人消息起一个无头 CLI 实例（如 `claude -p`）→ stdout 回钉钉，可 7×24 无人值守。
 - **官方渠道**（openclaw/hermes）：dws 不代建机器人，输出官方 onboarding 指引（连接器自带建号 + AI 卡片回复）。
 - 覆盖项：`DWS_AGENT_CMD`(指定 agent 可执行命令) / `DWS_CONNECT_CMD`(指定外部连接器) / `DWS_CONNECT_NO_INSTALL=1`(关闭缺包自动安装) / `DWS_AGENT_TIMEOUT_MS`。
@@ -245,6 +246,7 @@ MCP tools: `create_open_dev_app_version` / `list_open_dev_app_versions` / `get_o
 - `check-approval` = `publish_open_dev_app_version` 的 `dryRun=true` 预检模式，不实际发布。
 - `publish` 设 `dryRun=false`；含高敏权限需 `--confirm-sensitive`，灰度选人模式用 `--approver USER_ID`。
 - 流程：`permission add`（requiredApproval 写入版本变更）→ `version create` → `check-approval` → `publish` → `status`。
+- **审批人选择**：`check-approval` 返回候选审批人列表（userId+姓名）→ **展示给用户让其选择（不要自行挑选或默认第一个）** → `publish --approver <选中的userId>` 自动向该审批人发起审批 → `version status` 跟踪。机器人等能力需审批通过、应用发布后才可被搜索/加群/路由消息。
 
 ---
 

@@ -139,6 +139,31 @@
 注意：只下发显式提供的字段，未提供的不覆盖。
 ```
 
+## 版本发布与审批（选审批人）
+
+```text
+1. 创建版本（权限变更等已通过 permission add 写入版本）
+   dws devapp version create --unified-app-id <unifiedAppId> --version 1.0.1 --desc "变更说明" --yes --format json
+   → 记录返回的 versionId
+
+2. 审批预检：获取审批要求和候选审批人列表
+   dws devapp version check-approval --unified-app-id <unifiedAppId> --version-id <versionId> --format json
+   → 服务端 dryRun 预检，不实际发布
+   → 返回中包含是否需要审批、候选审批人（userId + 姓名）
+
+3. 把候选审批人列表展示给用户，让用户选择
+   ⚠️ 必须由用户拍板选哪个审批人，agent 不要自行挑选或默认取第一个
+
+4. 用选中的审批人发起发布审批
+   dws devapp version publish --unified-app-id <unifiedAppId> --version-id <versionId> --approver <用户选中的userId> --yes --format json
+   → 含高敏权限时需追加 --confirm-sensitive
+   → 审批流程会自动推送给该审批人
+
+5. 跟踪审批/发布状态
+   dws devapp version status --unified-app-id <unifiedAppId> --version-id <versionId> --format json
+   → 审批通过后应用才正式发布；机器人等能力需发布后才可被搜索/加群/路由消息
+```
+
 ## 通用规则
 
 所有操作遵循：

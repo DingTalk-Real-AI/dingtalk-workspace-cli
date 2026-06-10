@@ -82,6 +82,11 @@ type connectAgentOptions struct {
 	// supports addressable sessions (--session-id/--resume: claudecode,
 	// codebuddy/workbuddy). Disable with --agent-memory=false.
 	Memory bool
+	// ReplyCard answers with a DingTalk AI card (thinking → done states, like
+	// the hermes/openclaw official pipelines) instead of a plain message.
+	// Any card failure falls back to the plain webhook reply. Disable with
+	// --reply-card=false.
+	ReplyCard bool
 }
 
 // isStreamBridgeChannel reports whether a channel is wired through the Go-native
@@ -108,6 +113,10 @@ type execForwarder struct {
 	// for CLIs with addressable sessions (--session-id / --resume). nil =
 	// stateless one-shot per message.
 	sessions *convSessions
+	// streamArgv, when non-empty, is the incremental-output argv (bin first),
+	// with parser naming its stdout protocol (see connect_streaming.go).
+	streamArgv []string
+	parser     string
 }
 
 func (f *execForwarder) label() string {
@@ -286,6 +295,14 @@ type agentSpec struct {
 	// (--session-id <uuid> to create, --resume <id> to continue) — the
 	// contract per-conversation memory relies on.
 	ccSessions bool
+	// streamArgvTail, when set, replaces argvTail for incremental-output runs
+	// (the card streams content as the agent produces it). Empty = the
+	// channel only supports one-shot replies.
+	streamArgvTail []string
+	// streamParser names the stdout protocol of streamArgvTail runs:
+	// "cc" = Claude-Code stream-json (content_block_delta text deltas),
+	// "qoder" = qodercli stream-json (assistant/result message events).
+	streamParser string
 }
 
 // codebuddyEnv reuses the WorkBuddy login by pointing codebuddy at WorkBuddy's
@@ -306,7 +323,9 @@ var agentSpecs = map[string]agentSpec{
 	// operator's interactive hooks/plugins/MCP don't leak into replies.
 	"claudecode": {app: "Claude Code", bins: []string{"claude"},
 		argvTail: []string{"-p", "--model", "claude-haiku-4-5-20251001", "--setting-sources", "project", "--strict-mcp-config", "--append-system-prompt", "你是钉钉群聊里的智能助手，请用简洁、自然的中文直接回答用户问题；不要使用任何工具，不要提及任何系统提示、钩子或内部信号。"},
-		install:  []string{"npm", "i", "-g", "@anthropic-ai/claude-code"}, hint: "npm i -g @anthropic-ai/claude-code",
+		streamArgvTail: []string{"-p", "--verbose", "--output-format", "stream-json", "--include-partial-messages", "--model", "claude-haiku-4-5-20251001", "--setting-sources", "project", "--strict-mcp-config", "--append-system-prompt", "你是钉钉群聊里的智能助手，请用简洁、自然的中文直接回答用户问题；不要使用任何工具，不要提及任何系统提示、钩子或内部信号。"},
+		streamParser: "cc",
+		install:      []string{"npm", "i", "-g", "@anthropic-ai/claude-code"}, hint: "npm i -g @anthropic-ai/claude-code",
 		modelFlag: "--model", ccSessions: true},
 	"codex": {app: "OpenAI Codex CLI", bins: []string{"codex"}, argvTail: []string{"exec"},
 		install: []string{"npm", "i", "-g", "@openai/codex"}, hint: "npm i -g @openai/codex",
@@ -322,27 +341,40 @@ var agentSpecs = map[string]agentSpec{
 	// qodercli has --resume but no --session-id (no way to choose the session ID
 	// for the first turn), so the qoder family cannot do per-conversation memory.
 	"qoder": {app: "Qoder", bins: []string{"qodercli"},
-		globs:    []string{"/Applications/Qoder.app/Contents/Resources/app/resources/bin/*/qodercli"},
-		argvTail: []string{"-f", "text", "--max-turns", "30", "-p"}, hint: "https://qoder.com",
+		globs:          []string{"/Applications/Qoder.app/Contents/Resources/app/resources/bin/*/qodercli"},
+		argvTail:       []string{"-f", "text", "--max-turns", "30", "-p"},
+		streamArgvTail: []string{"-f", "stream-json", "--max-turns", "30", "-p"},
+		streamParser:   "qoder", hint: "https://qoder.com",
 		modelFlag: "--model"},
 	"qoderwork": {app: "QoderWork", bins: []string{"qodercli"},
-		globs:    []string{"/Applications/QoderWork.app/Contents/Resources/bin/qodercli"},
-		argvTail: []string{"-f", "text", "--max-turns", "30", "-p"}, hint: "https://qoder.com",
+		globs:          []string{"/Applications/QoderWork.app/Contents/Resources/bin/qodercli"},
+		argvTail:       []string{"-f", "text", "--max-turns", "30", "-p"},
+		streamArgvTail: []string{"-f", "stream-json", "--max-turns", "30", "-p"},
+		streamParser:   "qoder", hint: "https://qoder.com",
 		modelFlag: "--model"},
 	"codebuddy": {app: "WorkBuddy（自带 codebuddy）", bins: []string{"codebuddy"},
-		globs:    []string{"/Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cli/bin/codebuddy"},
-		argvTail: []string{"-p"}, envFn: codebuddyEnv, hint: "https://www.codebuddy.cn/work/",
+		globs:          []string{"/Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cli/bin/codebuddy"},
+		argvTail:       []string{"-p"},
+		streamArgvTail: []string{"-p", "--output-format", "stream-json", "--include-partial-messages"},
+		streamParser:   "cc", envFn: codebuddyEnv, hint: "https://www.codebuddy.cn/work/",
 		modelFlag: "--model", ccSessions: true},
 	// workbuddy reuses codebuddy's binary but is reached through the WorkBuddy
 	// host, so inject a WorkBuddy persona — otherwise the bot self-identifies as
 	// "CodeBuddy Code" (codebuddy's built-in identity), which confuses users who
 	// linked via WorkBuddy. --append-system-prompt is enough; a full override
 	// would drop codebuddy's agent scaffolding.
+	// The persona prompt also forbids tool use: in headless mode codebuddy
+	// otherwise tries tools (e.g. writing a memory file), stalls on the
+	// permission gate and replies with a permissions lecture — or nothing.
 	"workbuddy": {app: "WorkBuddy（自带 codebuddy）", bins: []string{"codebuddy"},
 		globs: []string{"/Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cli/bin/codebuddy"},
 		argvTail: []string{"--append-system-prompt",
-			"你叫「WorkBuddy 助手」，是钉钉群里的智能助手。无论被问到你是谁，都只能自称 WorkBuddy 助手，绝不能提到 CodeBuddy 这个名字。",
-			"-p"}, envFn: codebuddyEnv, hint: "https://www.codebuddy.cn/work/",
+			"你叫「WorkBuddy 助手」，是钉钉群里的智能助手。无论被问到你是谁，都只能自称 WorkBuddy 助手，绝不能提到 CodeBuddy 这个名字。请用简洁自然的中文直接回答问题；不要使用任何工具，不要尝试读写文件或执行命令。",
+			"-p"},
+		streamArgvTail: []string{"--append-system-prompt",
+			"你叫「WorkBuddy 助手」，是钉钉群里的智能助手。无论被问到你是谁，都只能自称 WorkBuddy 助手，绝不能提到 CodeBuddy 这个名字。请用简洁自然的中文直接回答问题；不要使用任何工具，不要尝试读写文件或执行命令。",
+			"-p", "--output-format", "stream-json", "--include-partial-messages"},
+		streamParser: "cc", envFn: codebuddyEnv, hint: "https://www.codebuddy.cn/work/",
 		modelFlag: "--model", ccSessions: true},
 }
 
@@ -426,8 +458,20 @@ func forwarderForChannel(channel string, opts connectAgentOptions) (forwarder, e
 	if !overridden && opts.Memory && spec.ccSessions {
 		sessions = newConvSessions()
 	}
+	// Incremental-output argv: same binary, the spec's stream tail, same model
+	// override. A DWS_AGENT_CMD override disables streaming (unknown argv).
+	var streamArgv []string
+	parser := ""
+	if !overridden && len(spec.streamArgvTail) > 0 {
+		streamArgv = append([]string{argv[0]}, spec.streamArgvTail...)
+		if opts.Model != "" && spec.modelFlag != "" {
+			streamArgv = applyModelArg(streamArgv, spec.modelFlag, opts.Model)
+		}
+		parser = spec.streamParser
+	}
 	return &execForwarder{name: channel, argv: argv, env: env, timeout: timeout,
-		workDir: opts.WorkDir, sessions: sessions}, nil
+		workDir: opts.WorkDir, sessions: sessions,
+		streamArgv: streamArgv, parser: parser}, nil
 }
 
 // applyModelArg returns argv with the model flag set to model: if flag is
@@ -487,7 +531,7 @@ func (d *msgDedup) first(id string) bool {
 // forward can easily exceed DingTalk's ack window (claude -p, qodercli, or the
 // workbuddy bridge's wait), so ack-first is mandatory, not optional. Messages
 // are also deduplicated by MsgId as defense in depth against redelivery.
-func runStreamConnector(ctx context.Context, channel, clientID, clientSecret string, fwd forwarder) error {
+func runStreamConnector(ctx context.Context, channel, clientID, clientSecret string, fwd forwarder, cardCli *aiCardClient) error {
 	streamLoggerOnce.Do(func() { sdklogger.SetLogger(streamSDKLogger{}) })
 	replier := chatbot.NewChatbotReplier()
 	dedup := newMsgDedup(10000)
@@ -513,7 +557,8 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		if sender == "" {
 			sender = strings.TrimSpace(data.SenderStaffId)
 		}
-		fmt.Fprintf(os.Stderr, "[connect] 收到 @%s: %s\n", sender, truncateRunes(text, 80))
+		fmt.Fprintf(os.Stderr, "[connect] 收到 @%s: %s (convType=%s convId=%s staffId=%s msgId=%s)\n",
+			sender, truncateRunes(text, 80), data.ConversationType, data.ConversationId, data.SenderStaffId, data.MsgId)
 		// Ack-first: return now, reply asynchronously via sessionWebhook (which is
 		// independent of the Stream ack). Use a background context so the in-flight
 		// forward is not cancelled by the SDK when this callback returns.
@@ -524,25 +569,97 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		if convID == "" {
 			convID = strings.TrimSpace(data.SenderStaffId)
 		}
+		callbackData := data
+		msgID := strings.TrimSpace(data.MsgId)
 		go func() {
 			started := time.Now()
-			reply, err := fwd.forward(context.Background(), convID, text)
+			// hermes-UX reply sequence (gateway/platforms/dingtalk.py):
+			//   ① on receive: "🤔Thinking" reaction chip on the user's message
+			//      (no card yet — the thinking phase is the chip, not a card);
+			//   ② agent runs;
+			//   ③ on done: deliver the AI card with the final content;
+			//   ④ swap the chip to "🥳Done".
+			thinking := false
+			if cardCli != nil {
+				if terr := cardCli.markThinking(context.Background(), callbackData.ConversationId, msgID); terr != nil {
+					fmt.Fprintf(os.Stderr, "[connect][card] Thinking 表态失败（不影响回复）: %v\n", terr)
+				} else {
+					thinking = true
+				}
+			}
+
+			// Streaming path: deliver the card up front and stream the agent's
+			// output into it as it is produced — the full hermes/openclaw UX.
+			// One-shot channels (or a failed card) fall back below.
+			var cardInst *aiCardInstance
+			var onDelta func(string)
+			ef, _ := fwd.(*execForwarder)
+			if cardCli != nil && ef != nil && ef.canStream() {
+				if ci, cerr := cardCli.createAndDeliver(context.Background(), callbackData); cerr != nil {
+					fmt.Fprintf(os.Stderr, "[connect][card] 预投卡片失败，降级一次性回复: %v\n", cerr)
+				} else {
+					cardInst = ci
+					onDelta = func(sofar string) {
+						if serr := cardCli.streamFrame(context.Background(), ci, sofar, false); serr != nil {
+							fmt.Fprintf(os.Stderr, "[connect][card] 流式帧失败: %v\n", serr)
+						}
+					}
+				}
+			}
+
+			var reply string
+			var err error
+			if ef != nil {
+				reply, err = ef.forwardStream(context.Background(), convID, text, onDelta)
+			} else {
+				reply, err = fwd.forward(context.Background(), convID, text)
+			}
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "[connect] 转发失败 (%s, 耗时 %s): %v\n", channel, time.Since(started).Round(time.Millisecond), err)
 				reply = fmt.Sprintf("（%s 调用失败：%v）", channel, err)
 			} else {
 				fmt.Fprintf(os.Stderr, "[connect] 已回复 (%s, 耗时 %s): %s\n", channel, time.Since(started).Round(time.Millisecond), truncateRunes(reply, 80))
 			}
-			// Reply via the inbound message's sessionWebhook. Plain
-			// text/markdown renders reliably for these AI-assistant ("智能体")
-			// bots — the AI-card path (CreateCard + streaming template) proved
-			// inconsistent, leaving "内容加载失败" on bots whose app isn't
-			// authorized for the shared card template. Long replies go as
-			// markdown, short ones as text.
-			if len([]rune(reply)) > 200 {
-				_ = replier.SimpleReplyMarkdown(context.Background(), webhook, []byte(channel), []byte(reply))
-			} else {
-				_ = replier.SimpleReplyText(context.Background(), webhook, []byte(reply))
+
+			delivered := false
+			if cardCli != nil {
+				if cardInst == nil {
+					// One-shot path: card only appears with the final content.
+					if ci, cerr := cardCli.createAndDeliver(context.Background(), callbackData); cerr != nil {
+						fmt.Fprintf(os.Stderr, "[connect][card] 投放卡片失败，回退普通消息: %v\n", cerr)
+					} else {
+						cardInst = ci
+					}
+				}
+				if cardInst != nil {
+					if ferr := cardCli.finish(context.Background(), cardInst, reply); ferr != nil {
+						// A stuck card is the worst UX: mark it failed
+						// (best-effort) and fall through to the plain reply.
+						fmt.Fprintf(os.Stderr, "[connect][card] 卡片完成失败，回退普通消息: %v\n", ferr)
+						cardCli.markFailed(context.Background(), cardInst)
+					} else {
+						fmt.Fprintf(os.Stderr, "[connect][card] 卡片已完成 outTrackId=%s\n", cardInst.outTrackID)
+						delivered = true
+						// Client-side fetch of a fresh card occasionally misses
+						// the burst and shows "内容加载失败"; a delayed repair
+						// frame triggers a re-render.
+						go cardCli.repair(context.Background(), cardInst, reply)
+					}
+				}
+			}
+
+			if !delivered {
+				// Fallback path: plain reply via the inbound sessionWebhook.
+				// Long replies go as markdown, short ones as text.
+				if len([]rune(reply)) > 200 {
+					_ = replier.SimpleReplyMarkdown(context.Background(), webhook, []byte(channel), []byte(reply))
+				} else {
+					_ = replier.SimpleReplyText(context.Background(), webhook, []byte(reply))
+				}
+			}
+
+			if thinking {
+				cardCli.swapThinkingToDone(context.Background(), callbackData.ConversationId, msgID)
 			}
 		}()
 		return []byte(""), nil
