@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
+	"github.com/spf13/cobra"
 )
 
 type captureRunner struct {
@@ -305,6 +307,88 @@ func TestChatMessageSendRejectsAtMentionsOutsideGroup(t *testing.T) {
 				t.Fatalf("error = %q, want '...only apply when --group is set'", err.Error())
 			}
 		})
+	}
+}
+
+// TestChatMessageSendCarriesClawType guards the "Send from AI" indicator:
+// every user-identity send path must attach the edition claw identity as the
+// clawType tool argument so the IM server renders the AI-sent label on the
+// delivered message. The open-source build pins it to edition.DefaultOSSClawType
+// ("openClaw"); dropping the parameter (or hardcoding another edition's value,
+// as the reply command once did with "wukong") mislabels or unlabels messages.
+func TestChatMessageSendCarriesClawType(t *testing.T) {
+	cases := []struct {
+		name string
+		make func(runner executor.Runner) *cobra.Command
+		args []string
+	}{
+		{
+			name: "group-markdown",
+			make: newChatMessageSendCommand,
+			args: []string{"--group", "cid-xyz", "--title", "t", "--text", "hello"},
+		},
+		{
+			name: "user-direct",
+			make: newChatMessageSendCommand,
+			args: []string{"--user", "034766", "--title", "t", "--text", "hi"},
+		},
+		{
+			name: "open-dingtalk-id-direct",
+			make: newChatMessageSendCommand,
+			args: []string{"--open-dingtalk-id", "OP123", "--title", "t", "--text", "hi"},
+		},
+		{
+			name: "group-rich-media-image",
+			make: newChatMessageSendCommand,
+			args: []string{"--group", "cid-xyz", "--msg-type", "image", "--media-id", "media-1"},
+		},
+		{
+			name: "reply",
+			make: newChatMessageReplyCommand,
+			args: []string{
+				"--conversation-id", "cid-xyz",
+				"--ref-msg-id", "msg-1",
+				"--ref-sender", "op-1",
+				"--text", "got it",
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &captureRunner{}
+			cmd := tc.make(runner)
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			cmd.SetArgs(tc.args)
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
+			}
+			got, ok := runner.last.Params["clawType"]
+			if !ok {
+				t.Fatalf("Params missing clawType; got %#v", runner.last.Params)
+			}
+			if got != edition.DefaultOSSClawType {
+				t.Fatalf("clawType = %#v, want %q", got, edition.DefaultOSSClawType)
+			}
+		})
+	}
+}
+
+// Robot sends are rendered as bot messages already; they must NOT carry the
+// user-identity clawType argument.
+func TestChatMessageSendByBotOmitsClawType(t *testing.T) {
+	runner := &captureRunner{}
+	cmd := newChatMessageSendByBotCommand(runner)
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--group", "cid-xyz", "--robot-code", "robot-001", "--title", "t", "--text", "x"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
+	}
+	if _, ok := runner.last.Params["clawType"]; ok {
+		t.Fatalf("bot send must not carry clawType; got %#v", runner.last.Params)
 	}
 }
 
