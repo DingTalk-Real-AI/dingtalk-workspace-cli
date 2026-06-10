@@ -206,7 +206,21 @@ scope 格式: <product>.<entity>:<permission>
 grantType 规则:
   once       一次性，执行一次后自动失效
   session    当前会话有效（默认），需要 --session-id
-  permanent  永久有效`,
+  permanent  永久有效
+
+批量授权:
+  dws pat chmod 支持一次传多个 scope 直接批量授予。
+  也支持 --products / --product 按产品编码批量展开 scope 模板，
+  --domains / --domain 按产品域批量展开 scope 模板，
+  --recommend 使用服务端推荐 scope 集合。
+  使用产品 / 域 / 推荐集合时，CLI 会先生成 batch plan，确认
+  selected / skipped / pending，再对 selected scopes 执行 batch grant；
+  --dry-run 只返回授权计划，不写入授权。真正执行批量授权必须显式
+  添加 --yes；未加 --yes 时 CLI 会阻断并提示 agent 先确认。
+
+agentCode 兼容:
+  可通过 --agentCode、DINGTALK_DWS_AGENTCODE 或 DWS_DINGTALK_AGENTCODE
+  指定；未传 agentCode 时，CLI 会省略该字段并由服务端默认兜底。`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			productCodes := collectChmodProductCodes(productFlags, productsFlag, domainFlags, domainsFlag)
 			if len(args) > 0 || recommend || len(productCodes) > 0 {
@@ -216,9 +230,11 @@ grantType 规则:
 		},
 		Example: `  dws pat chmod aitable.record:read --grant-type session --session-id session-xxx
   dws pat chmod chat.message:list --grant-type once
-  dws pat chmod aitable.record:read aitable.record:write --grant-type permanent
-  dws pat chmod --products calendar,aitable --grant-type session --session-id session-xxx
-  dws pat chmod --recommend --grant-type session --session-id session-xxx`,
+  dws pat chmod aitable.record:read aitable.record:write --grant-type permanent --yes
+  dws pat chmod --product calendar --product aitable --grant-type once --dry-run --format json
+  dws pat chmod --products calendar,aitable --grant-type session --session-id session-xxx --yes
+  dws pat chmod --domain calendar --domain chat --grant-type once --yes
+  dws pat chmod --recommend --grant-type session --session-id session-xxx --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			flagVal, _ := cmd.Flags().GetString("agentCode")
 			agentCode, err := resolveAgentCode(flagVal)
@@ -282,6 +298,11 @@ grantType 规则:
 				if len(scopes) == 0 {
 					return handleToolResult(cmd, c, planResult)
 				}
+				if err := requireBatchGrantConfirmation(cmd, true, scopes); err != nil {
+					return err
+				}
+			} else if err := requireBatchGrantConfirmation(cmd, false, scopes); err != nil {
+				return err
 			}
 			batchArgs := map[string]any{
 				"scopes":    scopes,
@@ -333,13 +354,32 @@ grantType 规则:
 		"Agent 唯一标识（可选；也可通过 env DINGTALK_DWS_AGENTCODE/DWS_DINGTALK_AGENTCODE 注入，flag 优先；未传则由服务端默认兜底）")
 	chmodCmd.Flags().String("grant-type", "session", "授权策略: once|session|permanent")
 	chmodCmd.Flags().String("session-id", "", "会话标识（session 模式下必填）")
-	chmodCmd.Flags().StringArrayVar(&productFlags, "product", nil, "产品编码，可重复；与 --products 等价")
-	chmodCmd.Flags().StringSliceVar(&productsFlag, "products", nil, "产品编码列表，逗号分隔")
-	chmodCmd.Flags().StringArrayVar(&domainFlags, "domain", nil, "产品域/产品编码，可重复；按产品 scope 模板批量授权")
-	chmodCmd.Flags().StringSliceVar(&domainsFlag, "domains", nil, "产品域/产品编码列表，逗号分隔")
-	chmodCmd.Flags().BoolVar(&recommend, "recommend", false, "使用推荐 scope 集合批量授权")
+	chmodCmd.Flags().StringArrayVar(&productFlags, "product", nil, "产品编码，可重复；与 --products 等价；执行批量授权需 --yes")
+	chmodCmd.Flags().StringSliceVar(&productsFlag, "products", nil, "产品编码列表，逗号分隔；执行批量授权需 --yes")
+	chmodCmd.Flags().StringArrayVar(&domainFlags, "domain", nil, "产品域/产品编码，可重复；按产品 scope 模板批量授权；执行授权需 --yes")
+	chmodCmd.Flags().StringSliceVar(&domainsFlag, "domains", nil, "产品域/产品编码列表，逗号分隔；执行批量授权需 --yes")
+	chmodCmd.Flags().BoolVar(&recommend, "recommend", false, "使用推荐 scope 集合批量授权；执行授权需 --yes")
 
 	return chmodCmd
+}
+
+func requireBatchGrantConfirmation(cmd *cobra.Command, usesPlan bool, scopes []string) error {
+	if !usesPlan && len(scopes) <= 1 {
+		return nil
+	}
+	if commandBoolFlag(cmd, "yes") {
+		return nil
+	}
+	return apperrors.NewValidation(
+		"batch PAT authorization blocked: explicit user confirmation is required; rerun with --yes only after the user approves the batch grant",
+		apperrors.WithReason("pat_batch_requires_yes"),
+		apperrors.WithHint("先执行 dws pat chmod ... --dry-run --format json 查看 selected/skipped/pending；用户明确确认后再追加 --yes 执行批量授权。"),
+		apperrors.WithActions(
+			"dws pat chmod <scope1> <scope2> ... --grant-type once --yes",
+			"dws pat chmod --products <product1,product2> --grant-type once --yes",
+			"dws pat chmod --recommend --grant-type once --yes",
+		),
+	)
 }
 
 func collectChmodProductCodes(groups ...[]string) []string {

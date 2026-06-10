@@ -267,6 +267,18 @@ func buildChmod(t *testing.T, fake *fakeToolCaller) *cobra.Command {
 	return newChmodCommand(fake)
 }
 
+func attachRootYesFlag(t *testing.T, cmd *cobra.Command, yes bool) {
+	t.Helper()
+	root := &cobra.Command{Use: "dws"}
+	root.PersistentFlags().Bool("yes", false, "skip confirmation")
+	root.AddCommand(cmd)
+	if yes {
+		if err := root.PersistentFlags().Set("yes", "true"); err != nil {
+			t.Fatalf("set root --yes: %v", err)
+		}
+	}
+}
+
 func TestRegisterCommands_OnlyExposesChmodForAuthorization(t *testing.T) {
 	root := &cobra.Command{Use: "dws"}
 	RegisterCommands(root, &fakeToolCaller{})
@@ -289,6 +301,62 @@ func TestRegisterCommands_OnlyExposesChmodForAuthorization(t *testing.T) {
 	}
 }
 
+func TestPATHelpDocumentsBatchAuthorization(t *testing.T) {
+	root := &cobra.Command{Use: "dws"}
+	RegisterCommands(root, &fakeToolCaller{})
+
+	patCmd, _, err := root.Find([]string{"pat"})
+	if err != nil {
+		t.Fatalf("pat command not found: %v", err)
+	}
+	var out strings.Builder
+	patCmd.SetOut(&out)
+	patCmd.SetErr(&out)
+	if err := patCmd.Help(); err != nil {
+		t.Fatalf("pat help error = %v", err)
+	}
+	patHelp := out.String()
+	for _, want := range []string{
+		"支持批量授权",
+		"--products / --product",
+		"--domains / --domain",
+		"--recommend",
+		"DWS_DINGTALK_AGENTCODE",
+		"未传 agentCode 时由服务端默认兜底",
+	} {
+		if !strings.Contains(patHelp, want) {
+			t.Fatalf("pat help missing %q\nhelp:\n%s", want, patHelp)
+		}
+	}
+
+	chmodCmd, _, err := root.Find([]string{"pat", "chmod"})
+	if err != nil {
+		t.Fatalf("pat chmod command not found: %v", err)
+	}
+	out.Reset()
+	chmodCmd.SetOut(&out)
+	chmodCmd.SetErr(&out)
+	if err := chmodCmd.Help(); err != nil {
+		t.Fatalf("pat chmod help error = %v", err)
+	}
+	chmodHelp := out.String()
+	for _, want := range []string{
+		"批量授权:",
+		"一次传多个 scope",
+		"batch plan",
+		"--dry-run 只返回授权计划",
+		"执行批量授权必须显式",
+		"由服务端默认兜底",
+		"aitable.record:read aitable.record:write --grant-type permanent --yes",
+		"dws pat chmod --product calendar --product aitable",
+		"dws pat chmod --domain calendar --domain chat",
+	} {
+		if !strings.Contains(chmodHelp, want) {
+			t.Fatalf("pat chmod help missing %q\nhelp:\n%s", want, chmodHelp)
+		}
+	}
+}
+
 func TestChmod_productsFlagPlansThenGrantsSelectedScopes(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 	fake := &sequenceToolCaller{responses: []string{
@@ -298,6 +366,7 @@ func TestChmod_productsFlagPlansThenGrantsSelectedScopes(t *testing.T) {
 	cmd := newChmodCommand(fake)
 	_ = cmd.Flags().Set("grant-type", "once")
 	_ = cmd.Flags().Set("products", "calendar,aitable")
+	attachRootYesFlag(t, cmd, true)
 
 	if err := cmd.RunE(cmd, nil); err != nil {
 		t.Fatalf("chmod RunE error = %v", err)
@@ -335,6 +404,47 @@ func TestChmod_productsFlagPlansThenGrantsSelectedScopes(t *testing.T) {
 	}
 }
 
+func TestChmod_productsFlagBlocksGrantWithoutYes(t *testing.T) {
+	t.Setenv(agentCodeEnv, "qoderwork")
+	fake := &sequenceToolCaller{responses: []string{
+		`{"success":true,"data":{"selectedScopes":["calendar.event:read","aitable.record:read"]}}`,
+	}}
+	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("grant-type", "once")
+	_ = cmd.Flags().Set("products", "calendar,aitable")
+
+	err := cmd.RunE(cmd, nil)
+	if err == nil {
+		t.Fatal("chmod RunE error = nil, want batch --yes blocker")
+	}
+	if !strings.Contains(err.Error(), "--yes") || !strings.Contains(err.Error(), "batch PAT authorization blocked") {
+		t.Fatalf("error = %q, want explicit batch --yes blocker", err.Error())
+	}
+	if len(fake.calls) != 1 {
+		t.Fatalf("CallTool count = %d, want plan only", len(fake.calls))
+	}
+	if fake.calls[0].tool != patBatchPlanToolName {
+		t.Fatalf("first tool = %q, want %q", fake.calls[0].tool, patBatchPlanToolName)
+	}
+}
+
+func TestChmod_multipleExplicitScopesBlockWithoutYes(t *testing.T) {
+	fake := &fakeToolCaller{resultOK: true}
+	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("grant-type", "once")
+
+	err := cmd.RunE(cmd, []string{"aitable.record:read", "aitable.record:write"})
+	if err == nil {
+		t.Fatal("chmod RunE error = nil, want batch --yes blocker")
+	}
+	if !strings.Contains(err.Error(), "--yes") || !strings.Contains(err.Error(), "batch PAT authorization blocked") {
+		t.Fatalf("error = %q, want explicit batch --yes blocker", err.Error())
+	}
+	if fake.callN != 0 {
+		t.Fatalf("CallTool was invoked %d times; batch without --yes must not grant", fake.callN)
+	}
+}
+
 func TestChmod_productsSessionModePassesIdentityArgsAndCompatEnv(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 	fake := &sequenceToolCaller{responses: []string{
@@ -344,6 +454,7 @@ func TestChmod_productsSessionModePassesIdentityArgsAndCompatEnv(t *testing.T) {
 	cmd := newChmodCommand(fake)
 	_ = cmd.Flags().Set("products", "calendar")
 	_ = cmd.Flags().Set("session-id", "session-123")
+	attachRootYesFlag(t, cmd, true)
 
 	if err := cmd.RunE(cmd, nil); err != nil {
 		t.Fatalf("chmod RunE error = %v", err)
@@ -583,6 +694,7 @@ func TestChmod_recommendFlagPlansThenGrantsWithoutPositionalScopes(t *testing.T)
 	cmd := newChmodCommand(fake)
 	_ = cmd.Flags().Set("grant-type", "once")
 	_ = cmd.Flags().Set("recommend", "true")
+	attachRootYesFlag(t, cmd, true)
 
 	if err := cmd.RunE(cmd, nil); err != nil {
 		t.Fatalf("chmod RunE error = %v", err)
