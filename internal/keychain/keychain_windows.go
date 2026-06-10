@@ -18,6 +18,8 @@ package keychain
 import (
 	"encoding/base64"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"unsafe"
@@ -31,6 +33,20 @@ import (
 // ---------------------------------------------------------------------------
 
 const regRootPath = `Software\DwsCli\keychain`
+
+// StorageDir returns the storage directory for file-based keychain artifacts on Windows.
+func StorageDir(service string) string {
+	if override := os.Getenv(StorageDirEnv); override != "" {
+		return filepath.Join(override, service)
+	}
+	if appData := os.Getenv("APPDATA"); appData != "" {
+		return filepath.Join(appData, "DwsCli", "keychain", service)
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		return filepath.Join(home, "AppData", "Roaming", "DwsCli", "keychain", service)
+	}
+	return filepath.Join(".dws", "keychain", service)
+}
 
 func registryPathForService(service string) string {
 	return regRootPath + `\` + safeRegistryComponent(service)
