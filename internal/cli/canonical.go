@@ -544,8 +544,18 @@ func applyFlagSpecs(cmd *cobra.Command, specs []FlagSpec) {
 		if primary == "" {
 			continue
 		}
+		// Skip schema properties whose derived flag name collides with an
+		// already-registered flag (built-in --json/--params or inherited
+		// persistent flags like --format/--output/--timeout/--yes). Users
+		// can still pass these values via --json '{"params":"..."}'.
+		if cmd.Flags().Lookup(primary) != nil || cmd.InheritedFlags().Lookup(primary) != nil {
+			continue
+		}
 		alias := strings.TrimSpace(spec.Alias)
 		if alias == primary {
+			alias = ""
+		}
+		if alias != "" && (cmd.Flags().Lookup(alias) != nil || cmd.InheritedFlags().Lookup(alias) != nil) {
 			alias = ""
 		}
 
