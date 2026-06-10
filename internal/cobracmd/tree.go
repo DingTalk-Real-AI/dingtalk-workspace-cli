@@ -16,10 +16,13 @@
 package cobracmd
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
 // ChildByName returns the child command with the given name, or nil.
@@ -42,6 +45,12 @@ func FlagChanged(cmd *cobra.Command, name string) bool {
 }
 
 // NewGroupCommand creates a non-leaf parent command that shows help when invoked.
+//
+// An action-less group node has no tool of its own; invoking it directly just
+// lists its subcommands. For humans that means printed usage text. But when the
+// caller explicitly requests JSON output (-f json), usage text breaks the
+// "JSON-only" contract that agents/MCP consumers rely on, so we instead return a
+// structured validation error naming the available subcommands. See issue #422.
 func NewGroupCommand(use, short string) *cobra.Command {
 	return &cobra.Command{
 		Use:               use,
@@ -50,9 +59,50 @@ func NewGroupCommand(use, short string) *cobra.Command {
 		TraverseChildren:  true,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if explicitJSONFormat(cmd) {
+				subs := visibleSubcommandNames(cmd)
+				msg := fmt.Sprintf("%q requires a subcommand", cmd.CommandPath())
+				if len(subs) > 0 {
+					msg = fmt.Sprintf("%s; available: %s", msg, strings.Join(subs, ", "))
+				}
+				return apperrors.NewValidation(msg)
+			}
 			return cmd.Help()
 		},
 	}
+}
+
+// explicitJSONFormat reports whether the user explicitly selected a JSON-family
+// output format via -f/--format. It checks Changed so that a bare group
+// invocation (relying on the default format) still gets human-readable help.
+func explicitJSONFormat(cmd *cobra.Command) bool {
+	pf := cmd.Root().PersistentFlags()
+	if !pf.Changed("format") {
+		return false
+	}
+	f, err := pf.GetString("format")
+	if err != nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(f)) {
+	case "json", "ndjson":
+		return true
+	default:
+		return false
+	}
+}
+
+// visibleSubcommandNames returns the names of the command's non-hidden,
+// non-help subcommands, for surfacing in the action-less JSON error.
+func visibleSubcommandNames(cmd *cobra.Command) []string {
+	var names []string
+	for _, child := range cmd.Commands() {
+		if child.Hidden || child.Name() == "help" || !child.IsAvailableCommand() {
+			continue
+		}
+		names = append(names, child.Name())
+	}
+	return names
 }
 
 // NewHiddenGroupCommand creates a hidden non-leaf parent command.

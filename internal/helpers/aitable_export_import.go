@@ -43,15 +43,15 @@ func newAitableExportDataCommand(runner executor.Runner) *cobra.Command {
 		Use:   "data",
 		Short: i18n.T("导出数据"),
 		Long: i18n.T(`导出 AI 表格数据的统一入口。
-不传 --task-id 时，根据 --scope / --format 创建新的导出任务，并同步等待结果；
+不传 --task-id 时，根据 --scope / --export-format 创建新的导出任务，并同步等待结果；
 若在等待窗口内完成，则直接返回 downloadUrl 和 fileName。
 传入 --task-id 时，继续等待该任务，不会重新创建。
 
 scope 可选值：all（整个 Base）、table（指定数据表）、view（指定视图）。
-format 可选值：excel、attachment、excel_and_attachment、excel_with_inline_images。`),
-		Example: `  dws aitable export data --base-id BASE_ID --scope all --format excel
-  dws aitable export data --base-id BASE_ID --scope table --table-id TABLE_ID --format excel
-  dws aitable export data --base-id BASE_ID --scope view --table-id TABLE_ID --view-id VIEW_ID --format excel
+export-format 可选值：excel、attachment、excel_and_attachment、excel_with_inline_images。`),
+		Example: `  dws aitable export data --base-id BASE_ID --scope all --export-format excel
+  dws aitable export data --base-id BASE_ID --scope table --table-id TABLE_ID --export-format excel
+  dws aitable export data --base-id BASE_ID --scope view --table-id TABLE_ID --view-id VIEW_ID --export-format excel
   dws aitable export data --base-id BASE_ID --task-id TASK_ID
   # 查询 baseId: dws aitable base list`,
 		Args:              cobra.NoArgs,
@@ -64,8 +64,8 @@ format 可选值：excel、attachment、excel_and_attachment、excel_with_inline
 	cmd.Flags().String("base-id", "", i18n.T("Base ID (必填)"))
 	addAitableHiddenStringFlag(cmd, "base", "--base-id 的兼容别名")
 	cmd.Flags().String("scope", "", i18n.T("导出范围：all（整个 Base）、table（指定数据表）、view（指定视图）"))
-	cmd.Flags().String("format", "", i18n.T("导出格式：excel、attachment、excel_and_attachment、excel_with_inline_images"))
-	cmd.Flags().String("task-id", "", i18n.T("已有导出任务 ID，传入后继续等待（忽略 scope/format/table-id/view-id）"))
+	cmd.Flags().String("export-format", "", i18n.T("导出格式：excel、attachment、excel_and_attachment、excel_with_inline_images"))
+	cmd.Flags().String("task-id", "", i18n.T("已有导出任务 ID，传入后继续等待（忽略 scope/export-format/table-id/view-id）"))
 	cmd.Flags().String("table-id", "", i18n.T("Table ID，scope=table 或 scope=view 时必填"))
 	cmd.Flags().String("view-id", "", i18n.T("View ID，scope=view 时必填"))
 	cmd.Flags().Int("timeout-ms", 0, i18n.T("单次等待超时（毫秒），默认 30000，最大 30000"))
@@ -79,7 +79,7 @@ func runAitableExportData(cmd *cobra.Command, runner executor.Runner) error {
 	}
 	taskID, _ := cmd.Flags().GetString("task-id")
 	scope, _ := cmd.Flags().GetString("scope")
-	format, _ := cmd.Flags().GetString("format")
+	format, _ := cmd.Flags().GetString("export-format")
 	tableID, _ := cmd.Flags().GetString("table-id")
 	viewID, _ := cmd.Flags().GetString("view-id")
 	timeoutMS, _ := cmd.Flags().GetInt("timeout-ms")
@@ -93,7 +93,7 @@ func runAitableExportData(cmd *cobra.Command, runner executor.Runner) error {
 			return apperrors.NewValidation("--scope is required")
 		}
 		if strings.TrimSpace(format) == "" {
-			return apperrors.NewValidation("--format is required")
+			return apperrors.NewValidation("--export-format is required")
 		}
 		params["scope"] = scope
 		params["format"] = format
