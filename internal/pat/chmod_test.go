@@ -466,7 +466,7 @@ func TestChmod_batchPlanRetriesWithoutIdentityArgsForCompat(t *testing.T) {
 		},
 		responses: []string{
 			"",
-			`{"success":true,"data":{"allGranted":true,"selectedScopes":[]}}`,
+			`{"success":true,"data":{"agentCode":"qoderwork","allGranted":true,"selectedScopes":[]}}`,
 		},
 	}
 	cmd := newChmodCommand(fake)
@@ -509,7 +509,7 @@ func TestChmod_batchGrantRetriesWithoutIdentityArgsForCompat(t *testing.T) {
 		},
 		responses: []string{
 			"",
-			`{"success":true,"data":{"grantedScopes":["calendar.event:read"]}}`,
+			`{"success":true,"data":{"agentCode":"qoderwork","grantedScopes":["calendar.event:read"]}}`,
 		},
 	}
 	cmd := newChmodCommand(fake)
@@ -532,6 +532,75 @@ func TestChmod_batchGrantRetriesWithoutIdentityArgsForCompat(t *testing.T) {
 	}
 	if got := fake.calls[1].agentEnv; got != "qoderwork" {
 		t.Fatalf("compat retry %s = %q, want qoderwork", agentCodeEnv, got)
+	}
+}
+
+func TestChmod_batchGrantIdentityFallbackRejectsMismatchedAgentCode(t *testing.T) {
+	t.Setenv(agentCodeEnv, "dinglqdkz3mmw2xwvend")
+	fake := &sequenceToolCaller{
+		errs: []error{
+			apperrors.NewAPI("PAT batch identity field 'agentCode' must be derived by gateway.",
+				apperrors.WithReason("business_error"),
+				apperrors.WithServerDiag(apperrors.ServerDiagnostics{
+					ServerErrorCode: patForgedIdentityCode,
+				}),
+			),
+			nil,
+		},
+		responses: []string{
+			"",
+			`{"success":true,"result":{"agentCode":"dingmbw5n9ktkkbbjv3g","grantedScopes":[],"alreadyGrantedScopes":["chat.message:send"]}}`,
+		},
+	}
+	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("grant-type", "permanent")
+
+	err := cmd.RunE(cmd, []string{"chat.message:send"})
+	if err == nil {
+		t.Fatal("chmod RunE error = nil, want identity fallback agentCode mismatch")
+	}
+	if !strings.Contains(err.Error(), "identity fallback returned agentCode") ||
+		!strings.Contains(err.Error(), "dingmbw5n9ktkkbbjv3g") ||
+		!strings.Contains(err.Error(), "dinglqdkz3mmw2xwvend") {
+		t.Fatalf("error = %q, want fallback mismatch details", err.Error())
+	}
+	if len(fake.calls) != 2 {
+		t.Fatalf("CallTool count = %d, want 2", len(fake.calls))
+	}
+	if _, ok := fake.calls[1].args["agentCode"]; ok {
+		t.Fatalf("compat retry should still omit agentCode arg, got %#v", fake.calls[1].args)
+	}
+	if got := fake.calls[1].agentEnv; got != "dinglqdkz3mmw2xwvend" {
+		t.Fatalf("compat retry %s = %q, want requested agentCode", agentCodeEnv, got)
+	}
+}
+
+func TestChmod_batchGrantIdentityFallbackRejectsMissingAgentCode(t *testing.T) {
+	t.Setenv(agentCodeEnv, "dinglqdkz3mmw2xwvend")
+	fake := &sequenceToolCaller{
+		errs: []error{
+			apperrors.NewAPI("PAT batch identity field 'agentCode' must be derived by gateway.",
+				apperrors.WithReason("business_error"),
+				apperrors.WithServerDiag(apperrors.ServerDiagnostics{
+					ServerErrorCode: patForgedIdentityCode,
+				}),
+			),
+			nil,
+		},
+		responses: []string{
+			"",
+			`{"success":true,"data":{"grantedScopes":["chat.message:send"]}}`,
+		},
+	}
+	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("grant-type", "permanent")
+
+	err := cmd.RunE(cmd, []string{"chat.message:send"})
+	if err == nil {
+		t.Fatal("chmod RunE error = nil, want unverifiable fallback error")
+	}
+	if !strings.Contains(err.Error(), "authorization target cannot be verified") {
+		t.Fatalf("error = %q, want unverifiable fallback details", err.Error())
 	}
 }
 

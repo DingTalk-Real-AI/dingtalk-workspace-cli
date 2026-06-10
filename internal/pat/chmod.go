@@ -494,9 +494,16 @@ func callPATBatchToolWithIdentityFallback(ctx context.Context, c edition.ToolCal
 		return result, err
 	}
 	compatArgs := cloneWithoutPATIdentityArgs(args)
-	return withPATContextEnv(agentCode, sessionID, func() (*edition.ToolResult, error) {
+	result, err = withPATContextEnv(agentCode, sessionID, func() (*edition.ToolResult, error) {
 		return c.CallTool(ctx, "pat", toolName, compatArgs)
 	})
+	if err != nil {
+		return result, err
+	}
+	if err := ensurePATIdentityFallbackAgentCode(result, agentCode); err != nil {
+		return result, err
+	}
+	return result, nil
 }
 
 func buildBatchPlanArgs(scopes []string, productCodes []string, recommend bool, grantType string, agentCode string, sessionID string, dryRun bool) map[string]any {
@@ -581,6 +588,29 @@ func ensurePATResultAgentCode(result *edition.ToolResult, expectedAgentCode stri
 	)
 }
 
+func ensurePATIdentityFallbackAgentCode(result *edition.ToolResult, expectedAgentCode string) error {
+	expectedAgentCode = strings.TrimSpace(expectedAgentCode)
+	if expectedAgentCode == "" {
+		return nil
+	}
+	actualAgentCode := patResultAgentCode(result)
+	if actualAgentCode == expectedAgentCode {
+		return nil
+	}
+	if actualAgentCode == "" {
+		return fmt.Errorf(
+			"pat chmod identity fallback did not return agentCode %q; authorization target cannot be verified",
+			expectedAgentCode,
+		)
+	}
+	return fmt.Errorf(
+		"pat chmod identity fallback returned agentCode %q, want %q from --agentCode/%s; authorization was not applied to the requested agent",
+		actualAgentCode,
+		expectedAgentCode,
+		agentCodeEnv,
+	)
+}
+
 func patResultAgentCode(result *edition.ToolResult) string {
 	text := firstToolResultText(result)
 	if text == "" {
@@ -590,11 +620,26 @@ func patResultAgentCode(result *edition.ToolResult) string {
 	if json.Unmarshal([]byte(text), &body) != nil {
 		return ""
 	}
-	data, _ := body["data"].(map[string]any)
-	if data == nil {
-		return ""
+	if code := stringField(body, "agentCode"); code != "" {
+		return code
 	}
-	return stringField(data, "agentCode")
+	data, _ := body["data"].(map[string]any)
+	if data != nil {
+		if code := stringField(data, "agentCode"); code != "" {
+			return code
+		}
+	}
+	resultBody, _ := body["result"].(map[string]any)
+	if resultBody != nil {
+		if code := stringField(resultBody, "agentCode"); code != "" {
+			return code
+		}
+		resultData, _ := resultBody["data"].(map[string]any)
+		if resultData != nil {
+			return stringField(resultData, "agentCode")
+		}
+	}
+	return ""
 }
 
 func isPATBatchUnsupportedResult(result *edition.ToolResult) bool {
