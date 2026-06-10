@@ -340,7 +340,7 @@ func TestPATHelpDocumentsBatchAuthorization(t *testing.T) {
 		"--products / --product",
 		"--domains / --domain",
 		"--recommend",
-		"DWS_DINGTALK_AGENTCODE",
+		"DINGTALK_DWS_AGENTCODE",
 		"未传 agentCode 时由服务端默认兜底",
 	} {
 		if !strings.Contains(patHelp, want) {
@@ -516,7 +516,6 @@ func TestChmod_productsSessionModePassesIdentityArgsAndCompatEnv(t *testing.T) {
 
 func TestChmod_singleScopeReturnsServerAgentCodeInSummary(t *testing.T) {
 	t.Setenv(agentCodeEnv, "")
-	t.Setenv(agentCodeEnvCompat, "")
 	fake := &sequenceToolCaller{responses: []string{
 		`{"success":true,"code":"OK","data":{"agentCode":"dingmbw5n9ktkkbbjv3g","grantType":"once","grantedScopes":["contact.user:get-self"]}}`,
 	}}
@@ -943,8 +942,7 @@ func TestChmod_productsDryRunUsesSessionIDFromEnv(t *testing.T) {
 }
 
 func TestChmod_batchPlanRetriesWithoutIdentityArgsForCompat(t *testing.T) {
-	t.Setenv(agentCodeEnv, "")
-	t.Setenv(agentCodeEnvCompat, "qoderwork")
+	t.Setenv(agentCodeEnv, "qoderwork")
 	fake := &sequenceToolCaller{
 		errs: []error{
 			apperrors.NewAPI("PAT batch identity field 'agentCode' must be derived by gateway.",
@@ -985,8 +983,7 @@ func TestChmod_batchPlanRetriesWithoutIdentityArgsForCompat(t *testing.T) {
 }
 
 func TestChmod_batchGrantRetriesWithoutIdentityArgsForCompat(t *testing.T) {
-	t.Setenv(agentCodeEnv, "")
-	t.Setenv(agentCodeEnvCompat, "qoderwork")
+	t.Setenv(agentCodeEnv, "qoderwork")
 	fake := &sequenceToolCaller{
 		errs: []error{
 			apperrors.NewAPI("PAT batch identity field 'agentCode' must be derived by gateway.",
@@ -1201,9 +1198,9 @@ func TestChmod_agentCode_env_fallback(t *testing.T) {
 	}
 }
 
-func TestChmod_agentCode_compatEnvFallback(t *testing.T) {
+func TestChmod_agentCode_reversedEnvIgnored(t *testing.T) {
 	t.Setenv(agentCodeEnv, "")
-	t.Setenv(agentCodeEnvCompat, "compatwork")
+	t.Setenv("DWS_DINGTALK_AGENTCODE", "compatwork")
 
 	fake := &fakeToolCaller{resultOK: true}
 	cmd := buildChmod(t, fake)
@@ -1215,17 +1212,16 @@ func TestChmod_agentCode_compatEnvFallback(t *testing.T) {
 	if fake.gotTool != patBatchGrantToolName {
 		t.Fatalf("gotTool = %q, want %q", fake.gotTool, patBatchGrantToolName)
 	}
-	if got := fake.gotArgs["agentCode"]; got != "compatwork" {
-		t.Fatalf("batch agentCode = %#v, want compatwork", got)
+	if _, ok := fake.gotArgs["agentCode"]; ok {
+		t.Fatalf("agentCode arg must be omitted; reversed env name must not be consumed: %#v", fake.gotArgs)
 	}
-	if got := fake.gotAgentEnv; got != "compatwork" {
-		t.Fatalf("%s during CallTool = %q, want compatwork", agentCodeEnv, got)
+	if got := fake.gotAgentEnv; got != "" {
+		t.Fatalf("%s during CallTool = %q, want empty because reversed env is ignored", agentCodeEnv, got)
 	}
 }
 
 func TestChmod_withoutAgentCodeLetsServerDefault(t *testing.T) {
 	t.Setenv(agentCodeEnv, "")
-	t.Setenv(agentCodeEnvCompat, "")
 
 	fake := &fakeToolCaller{resultOK: true}
 	cmd := buildChmod(t, fake)
@@ -1706,14 +1702,14 @@ func TestChmod_agentCode_flag_wins_over_env(t *testing.T) {
 	}
 }
 
-// TestChmod_agentCode_legacy_env_not_recognized is a reverse-guard: after
-// the SSOT hard-removal of the DWS_AGENTCODE alias, exporting only the
-// legacy env MUST NOT be consumed as agentCode. The request is still sent so
-// PAT-core can apply its open-source default.
+// TestChmod_agentCode_legacy_env_not_recognized is a reverse-guard: only
+// DINGTALK_DWS_AGENTCODE is consumed as the env fallback. Legacy / draft names
+// MUST NOT be consumed as agentCode. The request is still sent so PAT-core can
+// apply its open-source default.
 func TestChmod_agentCode_legacy_env_not_recognized(t *testing.T) {
 	t.Setenv(agentCodeEnv, "")
-	t.Setenv(agentCodeEnvCompat, "")
 	t.Setenv("DWS_AGENTCODE", "legacyval")
+	t.Setenv("DWS_DINGTALK_AGENTCODE", "draftval")
 
 	fake := &fakeToolCaller{resultOK: true}
 	cmd := buildChmod(t, fake)
@@ -1771,21 +1767,17 @@ func TestResolveAgentCodeFromEnv(t *testing.T) {
 			code, src, "qoderwork", agentCodeEnv)
 	}
 
-	t.Setenv(agentCodeEnvCompat, "compatwork")
-	if code, src := resolveAgentCodeFromEnv(); code != "qoderwork" || src != agentCodeEnv {
-		t.Errorf("resolveAgentCodeFromEnv() = (%q, %q), want primary (%q, %q)",
-			code, src, "qoderwork", agentCodeEnv)
+	// Reverse-guard: the draft reversed spelling is intentionally ignored.
+	t.Setenv(agentCodeEnv, "")
+	t.Setenv("DWS_DINGTALK_AGENTCODE", "compatwork")
+	if code, src := resolveAgentCodeFromEnv(); code != "" || src != "" {
+		t.Errorf("resolveAgentCodeFromEnv() = (%q, %q), want empty — DWS_DINGTALK_AGENTCODE must be ignored",
+			code, src)
 	}
 
+	// Empty primary → ("", "").
 	t.Setenv(agentCodeEnv, "")
-	if code, src := resolveAgentCodeFromEnv(); code != "compatwork" || src != agentCodeEnvCompat {
-		t.Errorf("resolveAgentCodeFromEnv() = (%q, %q), want compat (%q, %q)",
-			code, src, "compatwork", agentCodeEnvCompat)
-	}
-
-	// Empty primary + empty compat → ("", "").
-	t.Setenv(agentCodeEnv, "")
-	t.Setenv(agentCodeEnvCompat, "")
+	t.Setenv("DWS_DINGTALK_AGENTCODE", "")
 	if code, src := resolveAgentCodeFromEnv(); code != "" || src != "" {
 		t.Errorf("resolveAgentCodeFromEnv() = (%q, %q), want empty", code, src)
 	}
@@ -1793,7 +1785,6 @@ func TestResolveAgentCodeFromEnv(t *testing.T) {
 	// Reverse-guard: legacy DWS_AGENTCODE MUST NOT be picked up when the
 	// canonical env is unset — it was hard-removed as a legacy alias.
 	t.Setenv(agentCodeEnv, "")
-	t.Setenv(agentCodeEnvCompat, "")
 	t.Setenv("DWS_AGENTCODE", "legacy")
 	if code, src := resolveAgentCodeFromEnv(); code != "" || src != "" {
 		t.Errorf("resolveAgentCodeFromEnv() = (%q, %q), want empty — legacy DWS_AGENTCODE must be ignored",

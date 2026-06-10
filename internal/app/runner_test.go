@@ -321,7 +321,6 @@ func TestRuntimeRunnerInjectsAuthTokenFromFlag(t *testing.T) {
 func TestResolveIdentityHeadersForwardsAgentCode(t *testing.T) {
 	setupRuntimeCommandTest(t)
 	t.Setenv(authpkg.AgentCodeEnv, " cursor ")
-	t.Setenv(authpkg.AgentCodeEnvCompat, "")
 
 	headers := resolveIdentityHeaders()
 	if got := headers["x-dingtalk-dws-agent-code"]; got != "cursor" {
@@ -329,14 +328,14 @@ func TestResolveIdentityHeadersForwardsAgentCode(t *testing.T) {
 	}
 }
 
-func TestResolveIdentityHeadersForwardsCompatAgentCode(t *testing.T) {
+func TestResolveIdentityHeadersIgnoresReversedAgentCodeEnv(t *testing.T) {
 	setupRuntimeCommandTest(t)
 	t.Setenv(authpkg.AgentCodeEnv, "")
-	t.Setenv(authpkg.AgentCodeEnvCompat, " compat ")
+	t.Setenv("DWS_DINGTALK_AGENTCODE", " compat ")
 
 	headers := resolveIdentityHeaders()
-	if got := headers["x-dingtalk-dws-agent-code"]; got != "compat" {
-		t.Fatalf("x-dingtalk-dws-agent-code = %q, want compat", got)
+	if got := headers["x-dingtalk-dws-agent-code"]; got != "" {
+		t.Fatalf("x-dingtalk-dws-agent-code = %q, want empty because reversed env is ignored", got)
 	}
 }
 
