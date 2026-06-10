@@ -24,7 +24,7 @@
 |---------|----------|----------|
 | 查看几条数据 | `dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID>` | 不要默认 `--all` |
 | 全量拉取/统计 | `dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID> --all` | 不要手动循环 cursor |
-| 全量导出 | `dws aitable export data --base-id <BASE_ID> --scope all --format excel` | 不要 `--all` 拉全量再写文件 |
+| 全量导出 | `dws aitable export data --base-id <BASE_ID> --scope all --export-format excel` | 不要 `--all` 拉全量再写文件 |
 | 文件级导入 | `dws aitable import upload --base-id <BASE_ID> --file-name data.xlsx --file-size <字节数>` + `dws aitable import data --import-id <ID>` | 不要手动解析 xlsx 再逐条写入 |
 | 批量写入多条不同数据 | `dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> --records '[{"cells":{"<FIELD_ID>":"值"}}]'` | 不要一次超过 100 条 |
 | 批量给多条记录写同一组值 | `dws aitable record update --base-id <BASE_ID> --table-id <TABLE_ID> --records '[{"recordId":"rec1","cells":{"<FIELD_ID>":"值"}},{"recordId":"rec2","cells":{"<FIELD_ID>":"值"}}]'` | 不要使用隐藏兼容命令 |
@@ -49,11 +49,11 @@
 
 ## 5. 导入导出与异步任务
 
-- `export data` 的 `--format` 是导出格式，不要在此命令上追加全局 `--format json`。
+- `export data` 的导出格式用 `--export-format`（如 `--export-format excel`）；`--format` 在这里是全局输出格式，两者不要混用。
 - 创建导出任务：
   ```bash
   dws aitable export data --base-id <BASE_ID> --scope table --table-id <TABLE_ID> \
-    --format excel --timeout-ms 1000
+    --export-format excel --timeout-ms 1000
   ```
 - 续等已有导出任务：
   ```bash
