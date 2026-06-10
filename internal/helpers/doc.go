@@ -357,7 +357,13 @@ func newDocCreateCommand(runner executor.Runner) *cobra.Command {
 					if sniffJsonMLLike(content) {
 						fmt.Fprintln(cmd.ErrOrStderr(), `warning: 输入内容看起来是 JSONML 结构；若要按 JSONML 解析，请加 --content-format jsonml，否则将按 markdown 解析。`)
 					}
-					params["markdown"] = content
+					if stripped, ok := stripLeadingDuplicateTitleHeading(content, name); ok {
+						fmt.Fprintln(cmd.ErrOrStderr(), `note: 正文首行与 --name 相同的一级标题已自动移除（文档标题会单独渲染为页面标题，保留会出现两个标题）。`)
+						content = stripped
+					}
+					if content != "" {
+						params["markdown"] = content
+					}
 				}
 			} else if format, err := docContentFormat(cmd, "markdown", "jsonml"); err != nil {
 				return err
@@ -383,6 +389,40 @@ func newDocCreateCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("content-format", "", i18n.T("内容格式: markdown / jsonml"))
 	addDocJSONMLControlFlags(cmd)
 	return cmd
+}
+
+// stripLeadingDuplicateTitleHeading removes a leading markdown ATX H1 whose
+// text equals the document name. The platform already renders the document
+// name as the page title, so a body that opens with the same H1 displays the
+// title twice (the "two headings" effect). Only an exact match (trimmed,
+// case-insensitive) is removed; any other leading H1 is kept as intentional
+// content. Reports whether a heading was stripped.
+func stripLeadingDuplicateTitleHeading(content, name string) (string, bool) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return content, false
+	}
+	body := strings.TrimLeft(content, "\ufeff \t\r\n")
+	line := body
+	rest := ""
+	if idx := strings.IndexByte(body, '\n'); idx >= 0 {
+		line = body[:idx]
+		rest = body[idx+1:]
+	}
+	line = strings.TrimRight(line, " \t\r")
+	if !strings.HasPrefix(line, "# ") {
+		return content, false
+	}
+	heading := strings.TrimSpace(line[2:])
+	// ATX closing sequence ("# Title #") — only trim trailing hashes when
+	// separated by a space, so names that legitimately end with '#' survive.
+	if t := strings.TrimRight(heading, "#"); t != heading && strings.HasSuffix(t, " ") {
+		heading = strings.TrimSpace(t)
+	}
+	if !strings.EqualFold(heading, name) {
+		return content, false
+	}
+	return strings.TrimLeft(rest, "\r\n"), true
 }
 
 func newDocUpdateCommand(runner executor.Runner) *cobra.Command {
