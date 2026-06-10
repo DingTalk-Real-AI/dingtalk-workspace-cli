@@ -682,8 +682,76 @@ func newGenerateSkillsCommand() *cobra.Command {
 	return cmd
 }
 
+// buildMCPCommandFn is a test seam for newMCPCommand so a panic in the
+// catalog-driven canonical build can be simulated without crafting a
+// poisoned on-disk cache.
+var buildMCPCommandFn = cli.NewMCPCommand
+
+// newMCPCommand builds the canonical `dws mcp` tree, self-healing a poisoned
+// cache when the build panics and degrading to an inert stub if that also
+// fails.
+//
+// Why this guard exists: the canonical tree is assembled from cached catalog
+// data BEFORE the legacy command build and before Cobra dispatches anything,
+// so a panic here (e.g. a tool schema property named after the reserved
+// --params flag, as cached during the 1.0.32 incident) used to abort every
+// invocation — including `dws cache refresh` and `dws upgrade` — and was NOT
+// covered by the legacy-path guards (#447/#452). Same two-staged recovery as
+// buildEnvelopeCommandsSafe: quarantine the partition, retry once against a
+// fresh fetch, then degrade with a `dws cache refresh` hint.
 func newMCPCommand(ctx context.Context, loader cli.CatalogLoader, runner executor.Runner, engine *pipeline.Engine) *cobra.Command {
-	return cli.NewMCPCommand(ctx, loader, runner, engine)
+	cmd, panicked := tryBuildMCPCommand(ctx, loader, runner, engine)
+	if panicked == nil {
+		return cmd
+	}
+	slog.Error("newMCPCommand: canonical command build panicked", "panic", panicked)
+
+	quarantined, qErr := cacheStoreFromEnv().QuarantinePartition(editionPartition())
+	if qErr != nil {
+		slog.Error("newMCPCommand: failed to quarantine discovery cache", "error", qErr)
+	}
+	if quarantined != "" {
+		fmt.Fprintf(os.Stderr,
+			"Warning: building canonical commands from the local discovery cache failed: %v\n"+
+				"The cached discovery data was moved to %s; rebuilding from a fresh fetch...\n",
+			panicked, quarantined)
+		cmd, panicked = tryBuildMCPCommand(ctx, loader, runner, engine)
+		if panicked == nil {
+			fmt.Fprintln(os.Stderr, "Canonical commands rebuilt successfully.")
+			return cmd
+		}
+		slog.Error("newMCPCommand: rebuild after cache quarantine panicked again, degrading to a stub", "panic", panicked)
+	}
+
+	fmt.Fprintf(os.Stderr,
+		"Warning: building canonical commands from the local discovery cache failed: %v\n"+
+			"The 'dws mcp' surface is temporarily unavailable; other commands still work.\n"+
+			"Run 'dws cache refresh' to rebuild the cache.\n", panicked)
+	buildErr := apperrors.NewInternal(fmt.Sprintf("canonical command build failed: %v; run 'dws cache refresh'", panicked))
+	stub := &cobra.Command{
+		Use:               "mcp",
+		Short:             "Canonical MCP-derived CLI surface (unavailable)",
+		Hidden:            true,
+		Args:              cobra.ArbitraryArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return buildErr
+		},
+	}
+	return stub
+}
+
+// tryBuildMCPCommand runs one attempt of the canonical build, converting a
+// panic into a return value so the caller can decide between self-heal and
+// degradation.
+func tryBuildMCPCommand(ctx context.Context, loader cli.CatalogLoader, runner executor.Runner, engine *pipeline.Engine) (cmd *cobra.Command, panicked any) {
+	defer func() {
+		if r := recover(); r != nil {
+			cmd = nil
+			panicked = r
+		}
+	}()
+	return buildMCPCommandFn(ctx, loader, runner, engine), nil
 }
 
 // hideNonDirectRuntimeCommands marks top-level product commands as hidden
