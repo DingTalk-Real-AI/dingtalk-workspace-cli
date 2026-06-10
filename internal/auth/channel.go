@@ -19,19 +19,40 @@ import (
 )
 
 const (
-	// AgentCodeEnv is the sole per-spawn environment variable the host injects
-	// to declare "this process is driven by a third-party Agent host, render
-	// authorization UI yourselves".
+	// AgentCodeEnv is the primary per-spawn environment variable the host
+	// injects to declare "this process is driven by a third-party Agent host,
+	// render authorization UI yourselves".
 	AgentCodeEnv = "DINGTALK_DWS_AGENTCODE"
+
+	// AgentCodeEnvCompat is a compatibility alias for hosts that shipped the
+	// reversed prefix before AgentCodeEnv became the public spelling.
+	AgentCodeEnvCompat = "DWS_DINGTALK_AGENTCODE"
 )
+
+// AgentCodeFromEnv returns the effective host agent code and the env name that
+// supplied it. The primary public spelling wins over the compatibility alias.
+func AgentCodeFromEnv() (string, string) {
+	if value := strings.TrimSpace(os.Getenv(AgentCodeEnv)); value != "" {
+		return value, AgentCodeEnv
+	}
+	if value := strings.TrimSpace(os.Getenv(AgentCodeEnvCompat)); value != "" {
+		return value, AgentCodeEnvCompat
+	}
+	return "", ""
+}
+
+func AgentCodeEnvPresent() bool {
+	value, _ := AgentCodeFromEnv()
+	return value != ""
+}
 
 // HostOwnsPATFlow reports whether the current process is running under a
 // third-party Agent host that will render the PAT authorization card
-// itself. The sole trigger is AgentCodeEnv (DINGTALK_DWS_AGENTCODE) being
-// non-empty. The CLI deliberately does not consult any other signal
-// (DINGTALK_AGENT / DWS_CHANNEL / the wire claw-type header) for this
-// decision so that server-side routing tags and the host-owned UI contract
-// remain independent concerns.
+// itself. The trigger is the effective agent-code env (DINGTALK_DWS_AGENTCODE
+// or DWS_DINGTALK_AGENTCODE) being non-empty. The CLI deliberately does not
+// consult any other signal (DINGTALK_AGENT / DWS_CHANNEL / the wire claw-type
+// header) for this decision so that server-side routing tags and the host-owned
+// UI contract remain independent concerns.
 func HostOwnsPATFlow() bool {
-	return strings.TrimSpace(os.Getenv(AgentCodeEnv)) != ""
+	return AgentCodeEnvPresent()
 }

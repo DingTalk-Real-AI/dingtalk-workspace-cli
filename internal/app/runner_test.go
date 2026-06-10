@@ -321,10 +321,22 @@ func TestRuntimeRunnerInjectsAuthTokenFromFlag(t *testing.T) {
 func TestResolveIdentityHeadersForwardsAgentCode(t *testing.T) {
 	setupRuntimeCommandTest(t)
 	t.Setenv(authpkg.AgentCodeEnv, " cursor ")
+	t.Setenv(authpkg.AgentCodeEnvCompat, "")
 
 	headers := resolveIdentityHeaders()
 	if got := headers["x-dingtalk-dws-agent-code"]; got != "cursor" {
 		t.Fatalf("x-dingtalk-dws-agent-code = %q, want cursor", got)
+	}
+}
+
+func TestResolveIdentityHeadersForwardsCompatAgentCode(t *testing.T) {
+	setupRuntimeCommandTest(t)
+	t.Setenv(authpkg.AgentCodeEnv, "")
+	t.Setenv(authpkg.AgentCodeEnvCompat, " compat ")
+
+	headers := resolveIdentityHeaders()
+	if got := headers["x-dingtalk-dws-agent-code"]; got != "compat" {
+		t.Fatalf("x-dingtalk-dws-agent-code = %q, want compat", got)
 	}
 }
 
