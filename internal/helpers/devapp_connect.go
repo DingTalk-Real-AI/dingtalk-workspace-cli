@@ -280,6 +280,7 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 						"credentialSource": "unified-app-id (credentials get, skipped in dry-run)",
 						"unifiedAppId":     unifiedAppID,
 						"agent":            connectAgentOptionsPayload(channel, opts),
+						"cli":              connectCliStatus(channel),
 						"connect":          buildConnectPlan(channel, "", ""),
 					})
 				}
@@ -302,6 +303,7 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 					"credentialSource": resolvedBy,
 					"clientId":         clientID,
 					"agent":            connectAgentOptionsPayload(channel, opts),
+					"cli":              connectCliStatus(channel),
 					"connect":          buildConnectPlan(channel, clientID, ""),
 				})
 			}

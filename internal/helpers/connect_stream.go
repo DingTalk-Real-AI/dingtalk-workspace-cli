@@ -405,6 +405,38 @@ func runAgentInstall(channel string, spec agentSpec) error {
 	return nil
 }
 
+// connectCliStatus reports whether a channel's local CLI dependency is
+// present, without installing anything — the machine-readable preflight that
+// lets an agent check (via --dry-run) and guide the user BEFORE starting the
+// connector. External channels report their own onboarding tool.
+func connectCliStatus(channel string) map[string]any {
+	switch channel {
+	case "openclaw", "hermes":
+		bin := channel
+		_, found := locateBinary([]string{bin}, nil)
+		return map[string]any{
+			"required": bin, "installed": found,
+			"autoInstall": false,
+			"installHint": "渠道 " + channel + " 走官方建联，请先安装并完成其 onboarding",
+		}
+	}
+	spec, ok := agentSpecs[channel]
+	if !ok {
+		return map[string]any{"required": "", "installed": false}
+	}
+	path, found := locateBinary(spec.bins, spec.globs)
+	status := map[string]any{
+		"required":    spec.app,
+		"installed":   found,
+		"autoInstall": len(spec.install) > 0 && autoInstallEnabled(),
+		"installHint": spec.hint,
+	}
+	if found {
+		status["path"] = path
+	}
+	return status
+}
+
 // resolveExecAgent resolves a channel's agent CLI to a runnable argv (+ env).
 // Order: DWS_AGENT_CMD override > binary on PATH/app-bundle > auto-install (pkg
 // managers) > install-guidance error. Preflighted at connect time, not on the

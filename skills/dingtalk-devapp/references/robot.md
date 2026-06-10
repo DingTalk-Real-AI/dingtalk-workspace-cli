@@ -125,6 +125,22 @@ dws devapp robot connect --robot-client-id <clientId> --robot-client-secret <cli
 | `--reply-card` | AI 卡片回复（默认开）：思考中→完成状态，同 hermes/openclaw 官方渠道体验；卡片任一步失败自动回退普通 text/markdown；env `DWS_REPLY_CARD=0` 关闭 |
 | `--card-template` | AI 卡片模板 ID。**模板按应用授权**：去开发者后台→你的应用→AI 卡片设置注册/获取模板 ID（同 hermes 的配置方式），可去掉公共模板的第三方角标；默认用公共模板 best-effort。env `DWS_CARD_TEMPLATE` |
 
+#### 建联前的依赖预检（agent 必做）
+
+渠道背后是本地 agent CLI，用户可能没装。先 `--dry-run` 看 `cli` 字段再决定下一步：
+
+```bash
+dws devapp robot connect --channel <ch> --robot-client-id x --robot-client-secret y --dry-run --format json
+# 输出里的 cli 字段：
+#   "cli": {"required":"Claude Code","installed":false,"autoInstall":true,"installHint":"npm i -g @anthropic-ai/claude-code"}
+```
+
+| cli 状态 | agent 应该做什么 |
+|----------|----------------|
+| `installed: true` | 直接建联 |
+| `installed: false, autoInstall: true` | 告知用户缺哪个 CLI，说明启动建联时会自动 `npm` 安装（或先手动执行 installHint 里的命令再连）；`DWS_CONNECT_NO_INSTALL=1` 可禁自动安装 |
+| `installed: false, autoInstall: false` | **不要直接起连接**——桌面 App 渠道（qoder/qoderwork/workbuddy）需要用户先安装对应 App（installHint 是下载地址），装好后 CLI 随 App 自带；openclaw/hermes 引导用户走官方 onboarding |
+
 - **stream-bridge 渠道**：Go 原生进程内 Stream 转发器，订阅 `TOPIC_ROBOT`，每条 @机器人消息起一个无头 CLI 实例 → stdout 回钉钉，可 7×24 无人值守。
 - **会话记忆**：首条消息 `--session-id <uuid>` 建会话，后续 `--resume <uuid>` 续聊；会话状态在内存里，连接器重启后从新会话开始；某会话坏了会自愈（下条消息换新会话）。
 - **官方渠道**（openclaw/hermes）：dws 不代建机器人，输出官方 onboarding 指引。

@@ -162,3 +162,38 @@ func TestRobotConnectAgentFlagsInDryRun(t *testing.T) {
 		t.Fatalf("dry-run output missing disabled memory:\n%s", out.String())
 	}
 }
+
+// TestRobotConnectDryRunShowsCliStatus checks the dependency preflight agents
+// rely on: dry-run reports whether the channel CLI is installed, with the
+// install hint when missing.
+func TestRobotConnectDryRunShowsCliStatus(t *testing.T) {
+	t.Setenv("DWS_CONNECT_NO_INSTALL", "1")
+	stub := t.TempDir()
+	if err := writeExecStub(stub, "claude"); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", stub)
+
+	run := func(channel string) string {
+		root := newDevAppTestRoot(&captureRunner{})
+		var out bytes.Buffer
+		root.SetOut(&out)
+		root.SetErr(&out)
+		root.SetArgs([]string{"devapp", "robot", "connect", "--channel", channel,
+			"--robot-client-id", "a", "--robot-client-secret", "b", "--dry-run"})
+		if err := root.Execute(); err != nil {
+			t.Fatalf("Execute(%s): %v\n%s", channel, err, out.String())
+		}
+		return out.String()
+	}
+
+	// claude on PATH → installed true with path
+	if got := run("claudecode"); !strings.Contains(got, `"installed": true`) {
+		t.Fatalf("claudecode should be installed:\n%s", got)
+	}
+	// codex NOT on PATH → installed false + hint
+	got := run("codex")
+	if !strings.Contains(got, `"installed": false`) || !strings.Contains(got, "@openai/codex") {
+		t.Fatalf("codex should be missing with hint:\n%s", got)
+	}
+}
