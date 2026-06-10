@@ -87,6 +87,11 @@ type connectAgentOptions struct {
 	// Any card failure falls back to the plain webhook reply. Disable with
 	// --reply-card=false.
 	ReplyCard bool
+	// CardTemplate is the AI-card template ID (--card-template /
+	// DWS_CARD_TEMPLATE). Card templates are app-scoped: register one under
+	// your app in the developer console for reliable branded rendering; empty
+	// uses the public openclaw template as a best-effort default.
+	CardTemplate string
 }
 
 // isStreamBridgeChannel reports whether a channel is wired through the Go-native

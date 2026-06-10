@@ -95,7 +95,7 @@ func TestAICardCreateFinalizeSequence(t *testing.T) {
 	rec, srv := newCardAPIServer(t)
 	withCardAPIBase(t, srv.URL)
 
-	c := newAICardClient("ding-client", "ding-secret")
+	c := newAICardClient("ding-client", "ding-secret", "")
 	card, err := c.createAndDeliver(context.Background(), groupCallback())
 	if err != nil {
 		t.Fatalf("createAndDeliver: %v", err)
@@ -123,7 +123,7 @@ func TestAICardCreateFinalizeSequence(t *testing.T) {
 
 	// create: hermes template + empty "content" param (renders Thinking)
 	create := rec.bodies[0]
-	if create["cardTemplateId"] != aiCardTemplateID || create["callbackType"] != "STREAM" {
+	if create["cardTemplateId"] != defaultAICardTemplateID || create["callbackType"] != "STREAM" {
 		t.Fatalf("create payload wrong: %v", create)
 	}
 	pm := create["cardData"].(map[string]any)["cardParamMap"].(map[string]any)
@@ -164,7 +164,7 @@ func TestAICardDeliverOneToOne(t *testing.T) {
 	rec, srv := newCardAPIServer(t)
 	withCardAPIBase(t, srv.URL)
 
-	c := newAICardClient("ding-client", "ding-secret")
+	c := newAICardClient("ding-client", "ding-secret", "")
 	data := &chatbot.BotCallbackDataModel{ConversationType: "1", SenderStaffId: "staff-9"}
 	if _, err := c.createAndDeliver(context.Background(), data); err != nil {
 		t.Fatalf("createAndDeliver: %v", err)
@@ -186,7 +186,7 @@ func TestAICardCreateFailure(t *testing.T) {
 	withCardAPIBase(t, srv.URL)
 	rec.fail["POST /v1.0/card/instances"] = 500
 
-	c := newAICardClient("ding-client", "ding-secret")
+	c := newAICardClient("ding-client", "ding-secret", "")
 	if _, err := c.createAndDeliver(context.Background(), groupCallback()); err == nil {
 		t.Fatal("want error when card create fails")
 	}
@@ -204,7 +204,7 @@ func TestAICardMarkFailed(t *testing.T) {
 	rec, srv := newCardAPIServer(t)
 	withCardAPIBase(t, srv.URL)
 
-	c := newAICardClient("ding-client", "ding-secret")
+	c := newAICardClient("ding-client", "ding-secret", "")
 	c.markFailed(context.Background(), &aiCardInstance{outTrackID: "dws_x"})
 	last := rec.bodies[len(rec.bodies)-1]
 	pm := last["cardData"].(map[string]any)["cardParamMap"].(map[string]any)
@@ -248,7 +248,7 @@ func TestAICardEmotions(t *testing.T) {
 	rec, srv := newCardAPIServer(t)
 	withCardAPIBase(t, srv.URL)
 
-	c := newAICardClient("ding-client", "ding-secret")
+	c := newAICardClient("ding-client", "ding-secret", "")
 	if err := c.markThinking(context.Background(), "cid-1", "msg-1"); err != nil {
 		t.Fatalf("markThinking: %v", err)
 	}
@@ -278,5 +278,19 @@ func TestAICardEmotions(t *testing.T) {
 	// Missing ids must error (e.g. payloads without MsgId).
 	if err := c.markThinking(context.Background(), "", "msg-1"); err == nil {
 		t.Fatal("want error for missing conversation id")
+	}
+}
+
+// TestAICardCustomTemplate checks --card-template plumbs through to create.
+func TestAICardCustomTemplate(t *testing.T) {
+	rec, srv := newCardAPIServer(t)
+	withCardAPIBase(t, srv.URL)
+
+	c := newAICardClient("ding-client", "ding-secret", "my-own-template.schema")
+	if _, err := c.createAndDeliver(context.Background(), groupCallback()); err != nil {
+		t.Fatalf("createAndDeliver: %v", err)
+	}
+	if rec.bodies[0]["cardTemplateId"] != "my-own-template.schema" {
+		t.Fatalf("cardTemplateId = %v, want custom template", rec.bodies[0]["cardTemplateId"])
 	}
 }

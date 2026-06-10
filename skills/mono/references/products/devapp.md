@@ -224,6 +224,7 @@ dws devapp robot connect --robot-client-id CLIENT_ID --robot-client-secret CLIEN
 - **模型覆盖 `--agent-model`**：claudecode 默认锁 haiku 求快，可改 sonnet/opus 换聪明（env `DWS_AGENT_MODEL`）。
 - **运行目录 `--agent-workdir`**：放知识文件给机器人企业上下文；默认空白临时目录求快（env `DWS_AGENT_WORKDIR`）。
 - **AI 卡片回复 `--reply-card`**（默认开）：思考中→完成状态卡片，同官方渠道体验；失败自动回退普通消息（env `DWS_REPLY_CARD=0` 关闭）。
+- **卡片模板 `--card-template`**：模板按应用授权，建议在开发者后台为自己应用注册 AI 卡片模板并填其 ID（env `DWS_CARD_TEMPLATE`）；默认公共模板 best-effort。
 - **stream-bridge 渠道**（qoder/qoderwork/claudecode/workbuddy/codex/gemini/opencode）：Go 原生进程内 Stream 转发器，订阅 `TOPIC_ROBOT`，每条 @机器人消息起一个无头 CLI 实例（如 `claude -p`）→ stdout 回钉钉，可 7×24 无人值守。
 - **官方渠道**（openclaw/hermes）：dws 不代建机器人，输出官方 onboarding 指引（连接器自带建号 + AI 卡片回复）。
 - 覆盖项：`DWS_AGENT_CMD`(指定 agent 可执行命令) / `DWS_CONNECT_CMD`(指定外部连接器) / `DWS_CONNECT_NO_INSTALL=1`(关闭缺包自动安装) / `DWS_AGENT_TIMEOUT_MS`。

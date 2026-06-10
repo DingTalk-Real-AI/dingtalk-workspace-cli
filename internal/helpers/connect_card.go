@@ -46,12 +46,15 @@ import (
 // Call order: create instance → deliver → flowStatus INPUTING → streaming
 // frames (throttled, isFull) → finalize frame → flowStatus FINISHED.
 const (
-	// aiCardTemplateID is the public AI-card streaming template the openclaw
-	// connector ships with (messaging/card.ts). Verified rendering for OUR
-	// robots live; hermes' own template (c629162a-...) is bound to the Hermes
-	// app and renders "内容加载失败" for any other app — confirmed by A/B on
+	// defaultAICardTemplateID is the public AI-card streaming template the
+	// openclaw connector ships with (messaging/card.ts) — a best-effort
+	// default. Card templates are APP-SCOPED: the reliable production setup is
+	// registering an AI-card template under YOUR app in the DingTalk developer
+	// console (the hermes docs prescribe exactly this) and passing its ID via
+	// --card-template / DWS_CARD_TEMPLATE. Using another app's template (e.g.
+	// hermes' c629162a-...) renders "内容加载失败" — confirmed by live A/B on
 	// the same robot.
-	aiCardTemplateID = "02fcf2f4-5e02-4a85-b672-46d1f715543e.schema"
+	defaultAICardTemplateID = "02fcf2f4-5e02-4a85-b672-46d1f715543e.schema"
 
 	// aiCardMaxContent mirrors hermes' MAX_MESSAGE_LENGTH truncation.
 	aiCardMaxContent = 20000
@@ -70,6 +73,7 @@ var dingtalkCardAPIBase = "https://api.dingtalk.com"
 type aiCardClient struct {
 	clientID     string
 	clientSecret string
+	templateID   string
 	httpClient   *http.Client
 
 	mu       sync.Mutex
@@ -77,10 +81,14 @@ type aiCardClient struct {
 	tokenExp time.Time
 }
 
-func newAICardClient(clientID, clientSecret string) *aiCardClient {
+func newAICardClient(clientID, clientSecret, templateID string) *aiCardClient {
+	if strings.TrimSpace(templateID) == "" {
+		templateID = defaultAICardTemplateID
+	}
 	return &aiCardClient{
 		clientID:     clientID,
 		clientSecret: clientSecret,
+		templateID:   templateID,
 		httpClient:   &http.Client{Timeout: 15 * time.Second},
 	}
 }
@@ -187,7 +195,7 @@ func (c *aiCardClient) callRaw(ctx context.Context, method, path string, payload
 func (c *aiCardClient) createAndDeliver(ctx context.Context, data *chatbot.BotCallbackDataModel) (*aiCardInstance, error) {
 	outTrackID := "dws_" + uuid.NewString()
 	create := map[string]any{
-		"cardTemplateId": aiCardTemplateID,
+		"cardTemplateId": c.templateID,
 		"outTrackId":     outTrackID,
 		"cardData": map[string]any{
 			"cardParamMap": map[string]any{"config": `{"autoLayout":true}`},

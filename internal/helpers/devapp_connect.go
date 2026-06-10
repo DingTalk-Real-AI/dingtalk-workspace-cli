@@ -191,7 +191,7 @@ func launchConnector(cmd *cobra.Command, channel, clientID, clientSecret string,
 		var cardCli *aiCardClient
 		replyStyle := "text/markdown"
 		if opts.ReplyCard {
-			cardCli = newAICardClient(clientID, clientSecret)
+			cardCli = newAICardClient(clientID, clientSecret, opts.CardTemplate)
 			replyStyle = "ai-card(thinking→done, 失败回退普通消息)"
 		}
 		fmt.Fprintf(cmd.ErrOrStderr(), "[connect] channel=%s Go 原生 Stream 建联，转发到 %s，回复样式=%s（Ctrl-C 退出）\n", channel, fwd.label(), replyStyle)
@@ -322,6 +322,7 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("agent-workdir", "", "本地 agent 的运行目录（放知识文件可给机器人上下文；默认空白临时目录，求快）；env: DWS_AGENT_WORKDIR")
 	cmd.Flags().Bool("agent-memory", true, "按会话续聊：同一群/单聊共享 agent 会话上下文（claudecode/codebuddy/workbuddy 支持；--agent-memory=false 关闭）")
 	cmd.Flags().Bool("reply-card", true, "用 AI 卡片回复（思考中→完成状态，同官方渠道体验）；卡片失败自动回退普通消息；--reply-card=false 关闭")
+	cmd.Flags().String("card-template", "", "AI 卡片模板 ID（开发者后台·本应用·AI 卡片设置里获取；模板按应用授权，强烈建议注册自己应用的模板）；env: DWS_CARD_TEMPLATE")
 	return cmd
 }
 
@@ -344,7 +345,12 @@ func connectAgentOptionsFromCommand(cmd *cobra.Command) connectAgentOptions {
 	if v := strings.ToLower(strings.TrimSpace(os.Getenv("DWS_REPLY_CARD"))); v == "0" || v == "false" {
 		replyCard = false
 	}
-	return connectAgentOptions{Model: model, WorkDir: workDir, Memory: memory, ReplyCard: replyCard}
+	cardTemplate := devAppStringFlag(cmd, "card-template")
+	if cardTemplate == "" {
+		cardTemplate = strings.TrimSpace(os.Getenv("DWS_CARD_TEMPLATE"))
+	}
+	return connectAgentOptions{Model: model, WorkDir: workDir, Memory: memory,
+		ReplyCard: replyCard, CardTemplate: cardTemplate}
 }
 
 // connectAgentOptionsPayload renders the effective agent tuning for the
