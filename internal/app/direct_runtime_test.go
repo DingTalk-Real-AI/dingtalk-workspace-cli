@@ -62,7 +62,7 @@ func TestDirectRuntimeEndpoint_DevappEnvOverridePreservesQuery(t *testing.T) {
 	assertEndpoint(t, "devapp", "list_open_dev_apps_by_condition", "https://example.test/server/devapp?key=secret")
 }
 
-func TestDirectRuntimeEndpoint_DevappDynamicServerWithoutRegistry(t *testing.T) {
+func TestDirectRuntimeEndpoint_DevappDynamicServerDoesNotOverrideHardcoded(t *testing.T) {
 	withCleanDynamicRegistry(t)
 	SetDynamicServers([]market.ServerDescriptor{
 		{
@@ -74,10 +74,10 @@ func TestDirectRuntimeEndpoint_DevappDynamicServerWithoutRegistry(t *testing.T) 
 		},
 	})
 
-	assertEndpoint(t, "devapp", "list_open_dev_apps_by_condition", "https://example.test/server/devapp-supplement")
+	assertEndpoint(t, "devapp", "list_open_dev_apps_by_condition", devappEndpoint)
 }
 
-func TestDirectRuntimeEndpoint_DevappEditionSupplementWithoutRegistry(t *testing.T) {
+func TestDirectRuntimeEndpoint_DevappEditionSupplementDoesNotOverrideHardcoded(t *testing.T) {
 	withCleanDynamicRegistry(t)
 	prev := edition.Get()
 	edition.Override(&edition.Hooks{
@@ -95,11 +95,10 @@ func TestDirectRuntimeEndpoint_DevappEditionSupplementWithoutRegistry(t *testing
 	})
 	t.Cleanup(func() { edition.Override(prev) })
 
-	assertEndpoint(t, "devapp", "list_open_dev_apps_by_condition", "https://example.test/server/devapp-edition-supplement?key=secret")
-	assertEndpoint(t, "app", "list_open_dev_apps_by_condition", "https://example.test/server/devapp-edition-supplement?key=secret")
+	assertEndpoint(t, "devapp", "list_open_dev_apps_by_condition", devappEndpoint)
 }
 
-func TestDirectRuntimeEndpoint_DevappEditionStaticWithoutRegistry(t *testing.T) {
+func TestDirectRuntimeEndpoint_DevappEditionStaticDoesNotOverrideHardcoded(t *testing.T) {
 	withCleanDynamicRegistry(t)
 	prev := edition.Get()
 	edition.Override(&edition.Hooks{
@@ -117,7 +116,7 @@ func TestDirectRuntimeEndpoint_DevappEditionStaticWithoutRegistry(t *testing.T) 
 	})
 	t.Cleanup(func() { edition.Override(prev) })
 
-	assertEndpoint(t, "devapp", "list_open_dev_apps_by_condition", "https://example.test/server/devapp-edition-static")
+	assertEndpoint(t, "devapp", "list_open_dev_apps_by_condition", devappEndpoint)
 }
 
 func TestDirectRuntimeEndpoint_DevappEnvOverrideWinsOverEditionSupplement(t *testing.T) {
