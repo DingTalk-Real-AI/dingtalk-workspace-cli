@@ -518,6 +518,16 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 		fmt.Printf(" %s\n", ugGreen("✓"))
 	}
 
+	// Clear discovery-derived caches so the upgraded binary rebuilds its
+	// command tree from a fresh fetch instead of inheriting snapshots written
+	// by the old version — a poisoned snapshot used to lock out every
+	// invocation before the build guards landed (#447 / #449).
+	if purged, purgeErr := cacheStoreFromEnv().PurgeDiscoveryData(); purgeErr != nil {
+		fmt.Printf("       %s %s\n", ugYellow("⚠"), ugDim(fmt.Sprintf("清理发现缓存失败 (可手动运行 dws cache refresh): %v", purgeErr)))
+	} else if len(purged) > 0 {
+		fmt.Printf("       %s %s\n", ugGreen("✓"), ugDim("发现缓存已清空, 新版本首次运行时自动重建"))
+	}
+
 	// Cleanup old backups
 	rm.Cleanup(5)
 
