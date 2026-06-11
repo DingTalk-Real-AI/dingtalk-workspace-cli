@@ -125,6 +125,19 @@ func buildConnectPlan(channel, clientID, robotCode string) map[string]any {
 		}
 	}
 	if spec, ok := agentSpecs[channel]; ok {
+		if channel == "codex" && codexAppServerPlanEnabled() {
+			return map[string]any{
+				"method":  "stream-bridge-codex-app-server",
+				"summary": "Go 原生 Stream 建联，优先转发到本地 Codex app-server 的 thread/turn 协议；失败时降级 codex exec",
+				"steps": []string{
+					"自动定位 Codex CLI（DWS_AGENT_CMD > PATH），默认带 --skip-git-repo-check 避免空白工作目录失败",
+					"用 clientId/clientSecret 起 Stream，注册 TOPIC_ROBOT 回调",
+					"收到消息 → 按 conversationId 映射/恢复 Codex thread → turn/start 获取结构化增量与完成事件",
+					"app-server 失败时降级为 codex exec 一次性回复",
+					"经 AI 卡片或 sessionWebhook 把回复发回钉钉，并记录发送成功/失败",
+				},
+			}
+		}
 		return map[string]any{
 			"method":  "stream-bridge",
 			"summary": fmt.Sprintf("Go 原生 Stream 建联，转发到本地 %s 的无头 CLI（每条消息起一个新实例，可 7×24 无人值守）", spec.app),
@@ -372,7 +385,13 @@ func connectAgentOptionsFromCommand(cmd *cobra.Command) connectAgentOptions {
 func connectAgentOptionsPayload(channel string, opts connectAgentOptions) map[string]any {
 	spec, ok := agentSpecs[channel]
 	memory := "unsupported"
-	if ok && spec.ccSessions {
+	if channel == "codex" && codexAppServerPlanEnabled() {
+		if opts.Memory {
+			memory = "per-conversation-app-server"
+		} else {
+			memory = "disabled"
+		}
+	} else if ok && spec.ccSessions {
 		if opts.Memory {
 			memory = "per-conversation"
 		} else {

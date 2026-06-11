@@ -89,6 +89,7 @@ func TestBuildConnectPlanMethod(t *testing.T) {
 		"workbuddy":  "stream-bridge",
 		"claudecode": "stream-bridge",
 		"codebuddy":  "stream-bridge",
+		"codex":      "stream-bridge-codex-app-server",
 		"weird":      "unknown",
 	}
 	for ch, m := range want {
