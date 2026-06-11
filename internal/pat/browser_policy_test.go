@@ -16,6 +16,7 @@ package pat
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -233,5 +234,32 @@ func TestBrowserPolicyCommand_NoAgentCodeWritesDefaultEvenWhenEnvSet(t *testing.
 	}
 	if got := len(policy.Agents); got != 0 {
 		t.Fatalf("len(policy.Agents) = %d, want 0", got)
+	}
+}
+
+func TestBrowserPolicyCommand_RequiresEnabledFlag(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+
+	cmd := newBrowserPolicyCommand()
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stdout)
+	cmd.SetArgs([]string{"--agentCode", "agt-command"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("browser-policy Execute() error = nil, want missing --enabled error")
+	}
+	if !strings.Contains(err.Error(), "--enabled is required") {
+		t.Fatalf("browser-policy error = %q, want --enabled requirement", err.Error())
+	}
+
+	policy, loadErr := LoadBrowserPolicy(configDir)
+	if loadErr != nil {
+		t.Fatalf("LoadBrowserPolicy error = %v", loadErr)
+	}
+	if policy.Default != nil || len(policy.Agents) != 0 {
+		t.Fatalf("policy was modified despite missing --enabled: %#v", policy)
 	}
 }

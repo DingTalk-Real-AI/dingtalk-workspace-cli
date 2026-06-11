@@ -22,8 +22,8 @@ import (
 // TestHostOwnsPATFlow_OnlySignal is the wire-level guard for the
 // "custom authorization card" contract: the CLI switches to host-owned
 // PAT mode iff the host injects DINGTALK_DWS_AGENTCODE. DINGTALK_AGENT /
-// claw-type is purely a server-side routing tag and must NOT influence
-// the decision, in either direction.
+// claw-type is purely a server-side routing tag and must NOT influence the
+// decision, in either direction.
 //
 // Regression guard: several earlier drafts conflated the two signals,
 // causing third-party Agent hosts that only set DINGTALK_DWS_AGENTCODE
@@ -33,6 +33,7 @@ func TestHostOwnsPATFlow_OnlySignal(t *testing.T) {
 	cases := []struct {
 		name      string
 		agentCode string
+		reversed  string
 		agentEnv  string
 		want      bool
 	}{
@@ -47,6 +48,13 @@ func TestHostOwnsPATFlow_OnlySignal(t *testing.T) {
 			agentCode: "agt-cursor",
 			agentEnv:  "",
 			want:      true,
+		},
+		{
+			name:      "reversed draft agent code only → CLI-owned",
+			agentCode: "",
+			reversed:  "agt-compat",
+			agentEnv:  "",
+			want:      false,
 		},
 		{
 			name:      "agent code + DINGTALK_AGENT=default → host-owned",
@@ -84,6 +92,7 @@ func TestHostOwnsPATFlow_OnlySignal(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv(authpkg.AgentCodeEnv, tc.agentCode)
+			t.Setenv("DWS_DINGTALK_AGENTCODE", tc.reversed)
 			// DINGTALK_AGENT is set purely to demonstrate that it does NOT
 			// influence the host-owned decision. The literal env name is
 			// used here because the auth package no longer exports a
@@ -96,6 +105,15 @@ func TestHostOwnsPATFlow_OnlySignal(t *testing.T) {
 					"HostOwnsPATFlow() = %v, want %v (agentCode=%q, DINGTALK_AGENT=%q)",
 					got, tc.want, tc.agentCode, tc.agentEnv,
 				)
+			}
+			if tc.want {
+				gotCode, gotSource := authpkg.AgentCodeFromEnv()
+				wantCode := tc.agentCode
+				wantSource := authpkg.AgentCodeEnv
+				if gotCode != wantCode || gotSource != wantSource {
+					t.Fatalf("AgentCodeFromEnv() = (%q, %q), want (%q, %q)",
+						gotCode, gotSource, wantCode, wantSource)
+				}
 			}
 		})
 	}

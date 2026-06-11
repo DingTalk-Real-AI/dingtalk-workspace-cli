@@ -102,7 +102,7 @@ func saveBrowserPolicy(configDir string, policy *BrowserPolicy) error {
 }
 
 func ResolveBrowserPolicy(configDir, explicitAgentCode string) (BrowserPolicySelection, error) {
-	agentCode, err := resolveAgentCode(explicitAgentCode, false)
+	agentCode, err := resolveAgentCode(explicitAgentCode)
 	if err != nil {
 		return BrowserPolicySelection{}, err
 	}
