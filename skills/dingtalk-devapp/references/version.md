@@ -36,6 +36,8 @@ dws devapp version list --unified-app-id <unifiedAppId> --page 1 --page-size 20 
 
 MCP tool: `list_open_dev_app_versions`（`--page`→`currentPage`，`--page-size`→`pageSize`）
 
+新应用如果 `version list` 返回空，先执行 `version create`，用返回的 `versionId` 继续 `check-approval/publish`；不要因为列表为空误判无可发布内容。
+
 ## 版本详情
 
 ```bash
@@ -102,11 +104,11 @@ MCP tool: `get_open_dev_app_version_status`。返回版本状态、流程实例 
 | status/versionStatus | 含义 | 下一步 |
 |----------------------|------|--------|
 | `INIT` | 版本已创建或有待发布变更，尚未发布 | 可 `check-approval` / `publish` |
-| `AUDIT` | 发布审核中 | 不要重复发布；用 `version status` 查看 `processStatus/processComment` |
+| `AUDIT` | 发布审核中 | 不要重复发布；即使没有返回 `processStatus`，也按审核中处理 |
 | `RELEASE` | 已发布生效 | 发布完成，可继续验证权限、机器人、网页应用等能力 |
 | `GRAY` | 灰度状态 | 按灰度流程处理；不要当全量已发布 |
 
-审批流程状态字段：`version status` 的 `processStatus` 只在存在审批流程时有值；没有 `processInstanceId` 通常表示无审批流程或尚未提交。
+审批流程状态字段：`version status` 的 `processStatus` 只在存在审批流程且后端透出流程态时有值。`versionStatus=AUDIT` 但没有 `processStatus/processInstanceId` 时，不要判失败，仍表示审核中。
 
 | processStatus | 含义 | 下一步 |
 |---------------|------|--------|

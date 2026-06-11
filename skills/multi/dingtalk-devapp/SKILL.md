@@ -38,7 +38,7 @@ metadata:
 2. 写操作先 `--dry-run`，确认后才加 `--yes`。
 3. 应用名/appKey/customKey 命中多条时展示候选，不取第一条。
 4. 权限申请/取消只接受 `scopeValue`，不传 API 名或分组名。
-5. `app get` 不读完整 secret，secret 走 `credentials get`。
+5. 主动读取密钥走 `credentials get`；任何 `devapp get`/详情返回里的 `clientSecret/appSecret` 都按敏感凭证脱敏，不向用户展开。
 
 ## 开放平台文档 RAG / 错误码排查
 

@@ -57,7 +57,7 @@ dws devapp get --agent-id 123456 --format json
 
 MCP tool: `get_open_dev_app_detail`
 
-详情展示 `agentId/clientId/appKey`，但不能用来读 `clientSecret/appSecret`。
+详情主要用于定位和核验应用。若上游偶尔随详情返回 `clientSecret/appSecret`，必须脱敏处理，不要复制到回答里；主动读取凭证仍走 `credentials get`。
 
 ## 创建应用
 

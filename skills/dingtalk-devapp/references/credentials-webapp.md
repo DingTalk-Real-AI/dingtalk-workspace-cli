@@ -14,7 +14,7 @@ MCP tool: `get_open_dev_app_credentials`
 **规则：**
 - CLI 只传应用定位字段，不传 `showSecret`/`confirmSecret`。
 - 返回可能包含 `clientSecret/appSecret`，输出按敏感凭证处理。
-- 不能用 `devapp get` 代替，即使 get 偶尔返回 secret。
+- 不能用 `devapp get` 代替；如果 `devapp get` 偶尔返回密钥，也只用于内部判断并脱敏，不向用户展开。
 
 关键返回字段：
 
@@ -52,4 +52,4 @@ MCP tool: `set_webapp_config`
 | `--pc-homepage-link` | `pcHomepageLink` | PC 端首页地址 |
 | `--omp-link` | `ompLink` | 管理后台地址 |
 
-至少提供一个配置字段。`h5PageType` 未传入时后端默认返回 `all`。
+至少提供一个配置字段。`h5PageType` 未显式传入时，不要假设固定默认值；配置后以 `webapp get` 回读为准（实跑可能返回 `mobile`）。
