@@ -65,6 +65,12 @@ type forwarder interface {
 	label() string
 }
 
+type streamingForwarder interface {
+	forwarder
+	canStream() bool
+	forwardStream(ctx context.Context, convID, text string, onDelta func(string)) (string, error)
+}
+
 // connectAgentOptions carries the user-facing agent tuning exposed on
 // `devapp robot connect` (and mirrored env vars). Zero value = defaults:
 // channel's built-in model, per-conversation memory on (where the CLI supports
@@ -335,7 +341,7 @@ var agentSpecs = map[string]agentSpec{
 		streamParser:   "cc",
 		install:        []string{"npm", "i", "-g", "@anthropic-ai/claude-code"}, hint: "npm i -g @anthropic-ai/claude-code",
 		modelFlag: "--model", ccSessions: true},
-	"codex": {app: "OpenAI Codex CLI", bins: []string{"codex"}, argvTail: []string{"exec"},
+	"codex": {app: "OpenAI Codex CLI", bins: []string{"codex"}, argvTail: []string{"exec", "--skip-git-repo-check"},
 		install: []string{"npm", "i", "-g", "@openai/codex"}, hint: "npm i -g @openai/codex",
 		modelFlag: "-m"},
 	"gemini": {app: "Gemini CLI", bins: []string{"gemini"}, argvTail: []string{"-p"},
@@ -509,9 +515,13 @@ func forwarderForChannel(channel string, opts connectAgentOptions) (forwarder, e
 		}
 		parser = spec.streamParser
 	}
-	return &execForwarder{name: channel, argv: argv, env: env, timeout: timeout,
+	base := &execForwarder{name: channel, argv: argv, env: env, timeout: timeout,
 		workDir: opts.WorkDir, sessions: sessions,
-		streamArgv: streamArgv, parser: parser}, nil
+		streamArgv: streamArgv, parser: parser}
+	if channel == "codex" && !overridden && codexAppServerEnabled() {
+		return newCodexAppServerForwarder(argv[0], env, timeout, opts, base), nil
+	}
+	return base, nil
 }
 
 // applyModelArg returns argv with the model flag set to model: if flag is
@@ -633,8 +643,8 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 			// One-shot channels (or a failed card) fall back below.
 			var cardInst *aiCardInstance
 			var onDelta func(string)
-			ef, _ := fwd.(*execForwarder)
-			if cardCli != nil && cardCli.hasTemplate() && ef != nil && ef.canStream() {
+			sf, streamable := fwd.(streamingForwarder)
+			if cardCli != nil && cardCli.hasTemplate() && streamable && sf.canStream() {
 				if ci, cerr := cardCli.createAndDeliver(context.Background(), callbackData); cerr != nil {
 					fmt.Fprintf(os.Stderr, "[connect][card] 预投卡片失败，降级一次性回复: %v\n", cerr)
 				} else {
@@ -649,8 +659,8 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 
 			var reply string
 			var err error
-			if ef != nil {
-				reply, err = ef.forwardStream(context.Background(), convID, text, onDelta)
+			if streamable {
+				reply, err = sf.forwardStream(context.Background(), convID, text, onDelta)
 			} else {
 				reply, err = fwd.forward(context.Background(), convID, text)
 			}
@@ -658,7 +668,7 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 				fmt.Fprintf(os.Stderr, "[connect] 转发失败 (%s, 耗时 %s): %v\n", channel, time.Since(started).Round(time.Millisecond), err)
 				reply = fmt.Sprintf("（%s 调用失败：%v）", channel, err)
 			} else {
-				fmt.Fprintf(os.Stderr, "[connect] 已回复 (%s, 耗时 %s): %s\n", channel, time.Since(started).Round(time.Millisecond), truncateRunes(reply, 80))
+				fmt.Fprintf(os.Stderr, "[connect] agent 已生成回复 (%s, 耗时 %s): %s\n", channel, time.Since(started).Round(time.Millisecond), truncateRunes(reply, 80))
 			}
 
 			delivered := false
@@ -691,10 +701,16 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 			if !delivered {
 				// Fallback path: plain reply via the inbound sessionWebhook.
 				// Long replies go as markdown, short ones as text.
+				var sendErr error
 				if len([]rune(reply)) > 200 {
-					_ = replier.SimpleReplyMarkdown(context.Background(), webhook, []byte(channel), []byte(reply))
+					sendErr = replier.SimpleReplyMarkdown(context.Background(), webhook, []byte(channel), []byte(reply))
 				} else {
-					_ = replier.SimpleReplyText(context.Background(), webhook, []byte(reply))
+					sendErr = replier.SimpleReplyText(context.Background(), webhook, []byte(reply))
+				}
+				if sendErr != nil {
+					fmt.Fprintf(os.Stderr, "[connect] 普通消息发送失败 (%s, msgId=%s): %v\n", channel, msgID, sendErr)
+				} else {
+					fmt.Fprintf(os.Stderr, "[connect] 普通消息已发送 (%s, msgId=%s)\n", channel, msgID)
 				}
 			}
 

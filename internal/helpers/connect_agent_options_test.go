@@ -196,4 +196,7 @@ func TestRobotConnectDryRunShowsCliStatus(t *testing.T) {
 	if !strings.Contains(got, `"installed": false`) || !strings.Contains(got, "@openai/codex") {
 		t.Fatalf("codex should be missing with hint:\n%s", got)
 	}
+	if !strings.Contains(got, "per-conversation-app-server") {
+		t.Fatalf("codex dry-run should advertise app-server memory:\n%s", got)
+	}
 }
