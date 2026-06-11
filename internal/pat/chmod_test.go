@@ -68,8 +68,9 @@ func (f *fakeToolCaller) Format() string { return "json" }
 func (f *fakeToolCaller) DryRun() bool   { return f.dryRun }
 
 type recordedToolCall struct {
-	tool string
-	args map[string]any
+	tool     string
+	args     map[string]any
+	agentEnv string
 }
 
 type fallbackToolCaller struct {
@@ -206,7 +207,11 @@ func (s *sequenceToolCaller) CallTool(_ context.Context, _ string, toolName stri
 	for k, v := range args {
 		copied[k] = v
 	}
-	s.calls = append(s.calls, recordedToolCall{tool: toolName, args: copied})
+	s.calls = append(s.calls, recordedToolCall{
+		tool:     toolName,
+		args:     copied,
+		agentEnv: os.Getenv(agentCodeEnv),
+	})
 	response := `{"success":true,"data":{}}`
 	if len(s.responses) >= len(s.calls) {
 		response = s.responses[len(s.calls)-1]
@@ -305,8 +310,11 @@ func TestChmod_productsFlagPlansThenGrantsSelectedScopes(t *testing.T) {
 	if got := fake.calls[0].args["recommend"]; got != false {
 		t.Fatalf("recommend = %#v, want false", got)
 	}
-	if got := fake.calls[0].args["agentCode"]; got != "qoderwork" {
-		t.Fatalf("plan agentCode = %#v, want qoderwork", got)
+	if got := fake.calls[0].agentEnv; got != "qoderwork" {
+		t.Fatalf("plan agent env = %q, want qoderwork", got)
+	}
+	if _, ok := fake.calls[0].args["agentCode"]; ok {
+		t.Fatalf("batch plan args must not carry agentCode identity field: %#v", fake.calls[0].args)
 	}
 	if fake.calls[1].tool != patBatchGrantToolName {
 		t.Fatalf("second tool = %q, want %q", fake.calls[1].tool, patBatchGrantToolName)
@@ -314,8 +322,11 @@ func TestChmod_productsFlagPlansThenGrantsSelectedScopes(t *testing.T) {
 	if got := fake.calls[1].args["scopes"]; !stringSliceArgEqual(got, []string{"calendar.event:read", "aitable.record:read"}) {
 		t.Fatalf("grant scopes = %#v, want selected scopes", got)
 	}
-	if got := fake.calls[1].args["agentCode"]; got != "qoderwork" {
-		t.Fatalf("grant agentCode = %#v, want qoderwork", got)
+	if got := fake.calls[1].agentEnv; got != "qoderwork" {
+		t.Fatalf("grant agent env = %q, want qoderwork", got)
+	}
+	if _, ok := fake.calls[1].args["agentCode"]; ok {
+		t.Fatalf("batch grant args must not carry agentCode identity field: %#v", fake.calls[1].args)
 	}
 }
 
@@ -342,8 +353,11 @@ func TestChmod_productsSessionModePassesSessionIDToPlanAndGrant(t *testing.T) {
 	if got := fake.calls[0].args["sessionId"]; got != "session-123" {
 		t.Fatalf("plan sessionId = %#v, want session-123", got)
 	}
-	if got := fake.calls[0].args["agentCode"]; got != "qoderwork" {
-		t.Fatalf("plan agentCode = %#v, want qoderwork", got)
+	if got := fake.calls[0].agentEnv; got != "qoderwork" {
+		t.Fatalf("plan agent env = %q, want qoderwork", got)
+	}
+	if _, ok := fake.calls[0].args["agentCode"]; ok {
+		t.Fatalf("batch plan args must not carry agentCode identity field: %#v", fake.calls[0].args)
 	}
 	if got := fake.calls[1].args["grantType"]; got != "session" {
 		t.Fatalf("grant grantType = %#v, want session", got)
@@ -351,8 +365,11 @@ func TestChmod_productsSessionModePassesSessionIDToPlanAndGrant(t *testing.T) {
 	if got := fake.calls[1].args["sessionId"]; got != "session-123" {
 		t.Fatalf("grant sessionId = %#v, want session-123", got)
 	}
-	if got := fake.calls[1].args["agentCode"]; got != "qoderwork" {
-		t.Fatalf("grant agentCode = %#v, want qoderwork", got)
+	if got := fake.calls[1].agentEnv; got != "qoderwork" {
+		t.Fatalf("grant agent env = %q, want qoderwork", got)
+	}
+	if _, ok := fake.calls[1].args["agentCode"]; ok {
+		t.Fatalf("batch grant args must not carry agentCode identity field: %#v", fake.calls[1].args)
 	}
 }
 
@@ -381,8 +398,11 @@ func TestChmod_productsDryRunUsesSessionIDFromEnv(t *testing.T) {
 	if got := fake.calls[0].args["sessionId"]; got != "env-session-123" {
 		t.Fatalf("plan sessionId = %#v, want env-session-123", got)
 	}
-	if got := fake.calls[0].args["agentCode"]; got != "qoderwork" {
-		t.Fatalf("plan agentCode = %#v, want qoderwork", got)
+	if got := fake.calls[0].agentEnv; got != "qoderwork" {
+		t.Fatalf("plan agent env = %q, want qoderwork", got)
+	}
+	if _, ok := fake.calls[0].args["agentCode"]; ok {
+		t.Fatalf("batch plan args must not carry agentCode identity field: %#v", fake.calls[0].args)
 	}
 }
 
@@ -523,7 +543,7 @@ func TestChmod_explicitScopesDryRunShowsBatchGrantTool(t *testing.T) {
 
 // TestChmod_agentCode_env_fallback verifies that when --agentCode is
 // omitted but DINGTALK_DWS_AGENTCODE is exported, the resolver picks
-// the env value up and forwards it verbatim in the MCP argv.
+// the env value up and forwards it through the MCP call environment.
 func TestChmod_agentCode_env_fallback(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 
@@ -542,8 +562,8 @@ func TestChmod_agentCode_env_fallback(t *testing.T) {
 	if got := fake.gotAgentEnv; got != "qoderwork" {
 		t.Fatalf("agent env = %q, want %q", got, "qoderwork")
 	}
-	if got := fake.gotArgs["agentCode"]; got != "qoderwork" {
-		t.Fatalf("batch argv agentCode = %#v, want qoderwork", got)
+	if _, ok := fake.gotArgs["agentCode"]; ok {
+		t.Fatalf("batch argv must not carry agentCode identity field: %#v", fake.gotArgs)
 	}
 	if got := fake.gotArgs["scopes"]; !stringSliceArgEqual(got, []string{"aitable.record:read"}) {
 		t.Fatalf("scopes in argv = %#v, want %#v", got, []string{"aitable.record:read"})
@@ -977,8 +997,8 @@ func TestChmod_agentCode_flag_wins_over_env(t *testing.T) {
 	if got := fake.gotAgentEnv; got != "flagval" {
 		t.Fatalf("agent env = %q, want %q (flag must win over env)", got, "flagval")
 	}
-	if got := fake.gotArgs["agentCode"]; got != "flagval" {
-		t.Fatalf("batch argv agentCode = %#v, want flagval", got)
+	if _, ok := fake.gotArgs["agentCode"]; ok {
+		t.Fatalf("batch argv must not carry agentCode identity field: %#v", fake.gotArgs)
 	}
 }
 

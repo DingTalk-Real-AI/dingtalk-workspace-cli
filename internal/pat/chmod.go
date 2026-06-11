@@ -189,7 +189,12 @@ scope 格式: <product>.<entity>:<permission>
 grantType 规则:
   once       一次性，执行一次后自动失效
   session    当前会话有效（默认），需要 --session-id
-  permanent  永久有效`,
+  permanent  永久有效
+
+批量授权:
+  产品线批量授权推荐使用 --recommend --product <productCode[,productCode]>。
+  --products / --domain / --domains 保持兼容；裸 --recommend 保持可用，
+  但会按推荐集合规划，可能跨产品。`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			productCodes := collectChmodProductCodes(productFlags, productsFlag, domainFlags, domainsFlag)
 			if len(args) > 0 || recommend || len(productCodes) > 0 {
@@ -200,6 +205,7 @@ grantType 规则:
 		Example: `  dws pat chmod aitable.record:read --grant-type session --session-id session-xxx
   dws pat chmod chat.message:list --grant-type once
   dws pat chmod aitable.record:read aitable.record:write --grant-type permanent
+  dws pat chmod --recommend --product minutes --grant-type permanent --dry-run
   dws pat chmod --products calendar,aitable --grant-type session --session-id session-xxx
   dws pat chmod --recommend --grant-type session --session-id session-xxx`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -227,7 +233,7 @@ grantType 规则:
 
 			if c != nil && c.DryRun() {
 				if usesPlan {
-					planArgs := buildBatchPlanArgs(scopes, productCodes, recommend, grantType, agentCode, sessionID, true)
+					planArgs := buildBatchPlanArgs(scopes, productCodes, recommend, grantType, sessionID, true)
 					result, err := callPATBatchPlan(cmd.Context(), c, agentCode, sessionID, planArgs)
 					if err != nil {
 						return fmt.Errorf("pat chmod plan failed: %w", err)
@@ -255,7 +261,7 @@ grantType 规则:
 			}
 
 			if usesPlan {
-				planArgs := buildBatchPlanArgs(scopes, productCodes, recommend, grantType, agentCode, sessionID, true)
+				planArgs := buildBatchPlanArgs(scopes, productCodes, recommend, grantType, sessionID, true)
 				planResult, err := callPATBatchPlan(cmd.Context(), c, agentCode, sessionID, planArgs)
 				if err != nil {
 					return fmt.Errorf("pat chmod plan failed: %w", err)
@@ -277,7 +283,6 @@ grantType 规则:
 				"grantType": grantType,
 			}
 			if agentCode != "" {
-				batchArgs["agentCode"] = agentCode
 				toolArgs["agentCode"] = agentCode
 			}
 			if sessionID != "" {
@@ -419,16 +424,13 @@ func callPATBatchPlan(ctx context.Context, c edition.ToolCaller, agentCode, sess
 	})
 }
 
-func buildBatchPlanArgs(scopes []string, productCodes []string, recommend bool, grantType string, agentCode string, sessionID string, dryRun bool) map[string]any {
+func buildBatchPlanArgs(scopes []string, productCodes []string, recommend bool, grantType string, sessionID string, dryRun bool) map[string]any {
 	args := map[string]any{
 		"scopes":       scopes,
 		"productCodes": productCodes,
 		"recommend":    recommend,
 		"grantType":    grantType,
 		"dryRun":       dryRun,
-	}
-	if agentCode != "" {
-		args["agentCode"] = agentCode
 	}
 	if sessionID != "" {
 		args["sessionId"] = sessionID
