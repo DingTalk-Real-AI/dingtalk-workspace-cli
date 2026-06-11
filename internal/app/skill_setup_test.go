@@ -521,6 +521,25 @@ func TestSkillSetupMultiAdditivePreservesSiblings(t *testing.T) {
 	}
 }
 
+// TestSkillSetupHasYesShorthand is a regression test for #370: the local --yes
+// flag on `skill setup` shadows the global persistent --yes/-y during cobra's
+// flag merge, so the -y shorthand must be registered locally too, otherwise
+// `dws skill setup -y` fails with "unknown shorthand flag: 'y'".
+func TestSkillSetupHasYesShorthand(t *testing.T) {
+	cmd := newSkillSetupCommand()
+
+	yesFlag := cmd.Flags().Lookup("yes")
+	if yesFlag == nil {
+		t.Fatal("skill setup command is missing the --yes flag")
+	}
+	if yesFlag.Shorthand != "y" {
+		t.Errorf("--yes shorthand = %q, want %q (regression #370)", yesFlag.Shorthand, "y")
+	}
+	if cmd.Flags().ShorthandLookup("y") == nil {
+		t.Error("-y shorthand is not resolvable on `skill setup` (regression #370)")
+	}
+}
+
 // TestRunSkillSetupRejectsSkillFlagInMonoMode verifies that the new
 // -s/--skill and -x/--exclude flags are gated on --mode multi.
 func TestRunSkillSetupRejectsSkillFlagInMonoMode(t *testing.T) {

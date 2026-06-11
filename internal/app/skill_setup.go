@@ -69,7 +69,10 @@ multi 模式支持按产品挑选：
 	cmd.Flags().String("mode", "", "skill 模式：mono | multi（不指定则交互询问）")
 	cmd.Flags().String("target", "all", "目标 Agent：all | "+supportedTargets())
 	cmd.Flags().String("source", "", "skill 源目录（默认自动查找二进制旁边或当前目录）")
-	cmd.Flags().Bool("yes", false, "跳过所有确认提示")
+	// -y shorthand registered locally: the global persistent --yes/-y is
+	// shadowed by this same-named local flag during cobra's persistent-flag
+	// merge, so without it `-y` fails with "unknown shorthand flag: 'y'" (#370).
+	cmd.Flags().BoolP("yes", "y", false, "跳过所有确认提示")
 	cmd.Flags().StringSliceP("skill", "s", nil, "multi 模式：仅安装指定子 skill（可重复，接受短名 aitable 或全名 dingtalk-aitable）")
 	cmd.Flags().StringSliceP("exclude", "x", nil, "multi 模式：从全装中剔除指定子 skill（可重复，与 --skill 互斥）")
 	return cmd
