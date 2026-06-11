@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/audit"
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -141,6 +142,7 @@ func newCommandRunnerWithFlags(loader cli.CatalogLoader, flags *GlobalFlags) exe
 		scanner:            newRuntimeContentScanner(),
 		enforceContentScan: runtimeFlagEnabled(os.Getenv(runtimeContentScanEnforceEnv), false),
 		includeScanReport:  runtimeFlagEnabled(os.Getenv(runtimeContentScanReportOutputEnv), false),
+		auditSink:          setupAuditSink(),
 	}
 }
 
@@ -152,6 +154,7 @@ type runtimeRunner struct {
 	scanner            safety.Scanner
 	enforceContentScan bool
 	includeScanReport  bool
+	auditSink          audit.Sink
 }
 
 func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation) (executor.Result, error) {
@@ -302,6 +305,12 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		logging.LogCommandEnd(fl, execID,
 			invocation.CanonicalProduct, invocation.Tool,
 			retErr == nil, time.Since(invokeStart), errCat, errReason)
+
+		// Audit: emit one structured record per invocation to the operator's
+		// local file and (if configured) the organization's own audit sink.
+		// No-op unless DWS_AUDIT_ENABLED is set, so the hot path is unaffected
+		// for everyone else.
+		r.emitAudit(ctx, execID, endpoint, invocation, retErr == nil, errCat, invokeStart)
 	}()
 
 	// Check if this product has plugin-level auth credentials registered.
