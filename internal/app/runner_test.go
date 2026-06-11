@@ -328,6 +328,17 @@ func TestResolveIdentityHeadersForwardsAgentCode(t *testing.T) {
 	}
 }
 
+func TestResolveIdentityHeadersIgnoresReversedAgentCodeEnv(t *testing.T) {
+	setupRuntimeCommandTest(t)
+	t.Setenv(authpkg.AgentCodeEnv, "")
+	t.Setenv("DWS_DINGTALK_AGENTCODE", " compat ")
+
+	headers := resolveIdentityHeaders()
+	if got := headers["x-dingtalk-dws-agent-code"]; got != "" {
+		t.Fatalf("x-dingtalk-dws-agent-code = %q, want empty because reversed env is ignored", got)
+	}
+}
+
 func TestResolveIdentityHeadersSessionEnvPriority(t *testing.T) {
 	setupRuntimeCommandTest(t)
 	t.Setenv(envDingtalkSessionID, "ding-session")

@@ -3,7 +3,6 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
@@ -195,16 +194,13 @@ func TestDefaultFetchServersLimit(t *testing.T) {
 	}
 }
 
-func TestGetMCPBaseURLDefaultsToProduction(t *testing.T) {
+func TestGetMCPBaseURLDefaultsToPrepub(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", dir)
 
 	got := GetMCPBaseURL()
-	if got != "https://mcp.dingtalk.com" {
-		t.Fatalf("GetMCPBaseURL() = %q, want production MCP URL", got)
-	}
-	if strings.Contains(got, "pre-mcp") {
-		t.Fatalf("GetMCPBaseURL() = %q, must not default to prepub MCP URL", got)
+	if got != "https://pre-mcp.dingtalk.com" {
+		t.Fatalf("GetMCPBaseURL() = %q, want prepub MCP URL", got)
 	}
 }
 
