@@ -1395,6 +1395,93 @@ func TestBuildDynamicCommands_MultipleAliases_Dedup(t *testing.T) {
 	}
 }
 
+// TestAliasUsageHint covers the pure formatting + dedup of the #371 alias hint.
+func TestAliasUsageHint(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		aliases []string
+		primary string
+		want    string
+	}{
+		{"single", []string{"query"}, "find", " [别名: --query]"},
+		{"multiple", []string{"query", "keyword"}, "find", " [别名: --query, --keyword]"},
+		{"dedup reserved/primary/dup", []string{"query", "json", "params", "find", "query"}, "find", " [别名: --query]"},
+		{"none", nil, "find", ""},
+		{"only reserved", []string{"json", "params"}, "find", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := aliasUsageHint(tc.aliases, tc.primary); got != tc.want {
+				t.Errorf("aliasUsageHint(%v, %q) = %q, want %q", tc.aliases, tc.primary, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestBuildDynamicCommands_AliasesShownInHelp is the integration regression for
+// #371: envelope-declared aliases are registered as hidden flags, so without
+// the help annotation they are invisible in --help. The primary flag's usage
+// must now surface them, while the alias flags themselves stay hidden.
+func TestBuildDynamicCommands_AliasesShownInHelp(t *testing.T) {
+	t.Parallel()
+
+	runner := &captureRunner{}
+	servers := []market.ServerDescriptor{
+		{
+			Endpoint: "https://endpoint-sheet",
+			CLI: market.CLIOverlay{
+				ID:      "sheet",
+				Command: "sheet",
+				ToolOverrides: map[string]market.CLIToolOverride{
+					"find_cells": {
+						CLIName: "find",
+						Flags: map[string]market.CLIFlagOverride{
+							"text": {
+								Alias:       "find", // primary flag name
+								Aliases:     []string{"query"},
+								Description: "搜索文本",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	cmds := BuildDynamicCommands(servers, runner, nil)
+
+	var checked bool
+	for _, sub := range cmds[0].Commands() {
+		if sub.Name() != "find" {
+			continue
+		}
+		checked = true
+		primary := sub.Flags().Lookup("find")
+		if primary == nil {
+			t.Fatal("primary --find flag was not registered")
+		}
+		if !strings.Contains(primary.Usage, "搜索文本") {
+			t.Errorf("primary usage should keep its description, got %q", primary.Usage)
+		}
+		if !strings.Contains(primary.Usage, "--query") || !strings.Contains(primary.Usage, "别名") {
+			t.Errorf("primary usage should surface alias --query, got %q", primary.Usage)
+		}
+		// The alias itself must remain a hidden flag (still usable, not listed).
+		alias := sub.Flags().Lookup("query")
+		if alias == nil {
+			t.Fatal("--query alias flag missing")
+		}
+		if !alias.Hidden {
+			t.Error("--query should remain hidden; only the hint surfaces it")
+		}
+	}
+	if !checked {
+		t.Fatal("find subcommand was not built")
+	}
+}
+
 func TestBuildDynamicCommands_NoParent(t *testing.T) {
 	t.Parallel()
 
