@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
@@ -212,8 +213,22 @@ func launchConnector(cmd *cobra.Command, channel, clientID, clientSecret string,
 				replyStyle = "text/markdown + thinking/done表态（配 --card-template 升级为卡片）"
 			}
 		}
+		extras := &connectExtras{}
+		if opts.KnowledgeDir != "" {
+			kb, kerr := loadKnowledgeBase(opts.KnowledgeDir)
+			if kerr != nil {
+				return kerr
+			}
+			extras.kb = kb
+			fmt.Fprintf(cmd.ErrOrStderr(), "[connect] 知识库已加载：%d 个片段（%s）\n", len(kb.chunks), opts.KnowledgeDir)
+		}
+		if len(opts.AllowedUsers) > 0 || len(opts.AllowedGroups) > 0 || opts.UserRateLimit > 0 {
+			extras.gate = newConnectGate(opts.AllowedUsers, opts.AllowedGroups, opts.UserRateLimit)
+			fmt.Fprintf(cmd.ErrOrStderr(), "[connect] 访问控制：用户白名单 %d、群白名单 %d、限流 %d 条/分钟/人\n",
+				len(opts.AllowedUsers), len(opts.AllowedGroups), opts.UserRateLimit)
+		}
 		fmt.Fprintf(cmd.ErrOrStderr(), "[connect] channel=%s Go 原生 Stream 建联，转发到 %s，回复样式=%s（Ctrl-C 退出）\n", channel, fwd.label(), replyStyle)
-		return runStreamConnector(cmd.Context(), channel, clientID, clientSecret, fwd, cardCli)
+		return runStreamConnector(cmd.Context(), channel, clientID, clientSecret, fwd, cardCli, extras)
 	}
 
 	// hermes / openclaw run their own official bot provisioning + reply logic
@@ -343,6 +358,10 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().Bool("agent-memory", true, "按会话续聊：同一群/单聊共享 agent 会话上下文（claudecode/codebuddy/workbuddy 支持；--agent-memory=false 关闭）")
 	cmd.Flags().Bool("reply-card", true, "用 AI 卡片回复（思考中→完成状态，同官方渠道体验）；卡片失败自动回退普通消息；--reply-card=false 关闭")
 	cmd.Flags().String("card-template", "", "AI 卡片模板 ID（开发者后台·本应用·AI 卡片设置里获取；模板按应用授权，强烈建议注册自己应用的模板）；env: DWS_CARD_TEMPLATE")
+	cmd.Flags().String("knowledge-dir", "", "答疑知识目录（.md/.txt）：每条消息本地检索 top-k 片段拼进 prompt，agent 仍在空目录跑、不拖慢回复；env: DWS_KNOWLEDGE_DIR")
+	cmd.Flags().String("allowed-users", "", "用户白名单 staffId（逗号分隔），配置后仅名单内用户可触发；env: DWS_ALLOWED_USERS")
+	cmd.Flags().String("allowed-groups", "", "群白名单 openConversationId（逗号分隔），配置后仅名单内群可触发；env: DWS_ALLOWED_GROUPS")
+	cmd.Flags().Int("user-rate-limit", 20, "单用户每分钟消息上限（防刷；每条消息都是一次 LLM 调用），0 关闭；env: DWS_USER_RATE_LIMIT")
 	return cmd
 }
 
@@ -374,8 +393,31 @@ func connectAgentOptionsFromCommand(cmd *cobra.Command) connectAgentOptions {
 	if strings.EqualFold(cardTemplate, "public") {
 		cardTemplate = defaultAICardTemplateID
 	}
+	knowledgeDir := devAppStringFlag(cmd, "knowledge-dir")
+	if knowledgeDir == "" {
+		knowledgeDir = strings.TrimSpace(os.Getenv("DWS_KNOWLEDGE_DIR"))
+	}
+	users := devAppStringFlag(cmd, "allowed-users")
+	if users == "" {
+		users = os.Getenv("DWS_ALLOWED_USERS")
+	}
+	groups := devAppStringFlag(cmd, "allowed-groups")
+	if groups == "" {
+		groups = os.Getenv("DWS_ALLOWED_GROUPS")
+	}
+	rateLimit, _ := cmd.Flags().GetInt("user-rate-limit")
+	if !cmd.Flags().Changed("user-rate-limit") {
+		if v := strings.TrimSpace(os.Getenv("DWS_USER_RATE_LIMIT")); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+				rateLimit = n
+			}
+		}
+	}
 	return connectAgentOptions{Model: model, WorkDir: workDir, Memory: memory,
-		ReplyCard: replyCard, CardTemplate: cardTemplate}
+		ReplyCard: replyCard, CardTemplate: cardTemplate,
+		KnowledgeDir: knowledgeDir,
+		AllowedUsers: splitCommaList(users), AllowedGroups: splitCommaList(groups),
+		UserRateLimit: rateLimit}
 }
 
 // connectAgentOptionsPayload renders the effective agent tuning for the

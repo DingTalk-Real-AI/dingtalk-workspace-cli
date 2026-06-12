@@ -101,6 +101,19 @@ type connectAgentOptions struct {
 	// openclaw template (best-effort: shared templates may not render for
 	// every app).
 	CardTemplate string
+	// KnowledgeDir is a local directory of .md/.txt answering material
+	// (--knowledge-dir / DWS_KNOWLEDGE_DIR): per-message top-k retrieval is
+	// prepended to the prompt while the agent keeps running from the clean
+	// scratch dir (see connect_knowledge.go). Empty = off.
+	KnowledgeDir string
+	// AllowedUsers / AllowedGroups are staffId / openConversationId
+	// allowlists (--allowed-users / --allowed-groups, comma-separated; env
+	// DWS_ALLOWED_USERS / DWS_ALLOWED_GROUPS). Empty = everyone.
+	AllowedUsers  []string
+	AllowedGroups []string
+	// UserRateLimit caps messages per sender per minute
+	// (--user-rate-limit / DWS_USER_RATE_LIMIT); 0 = unlimited.
+	UserRateLimit int
 }
 
 // isStreamBridgeChannel reports whether a channel is wired through the Go-native
@@ -336,8 +349,8 @@ var agentSpecs = map[string]agentSpec{
 	// A neutral-persona claude bot brain: project-only settings + no MCP, so the
 	// operator's interactive hooks/plugins/MCP don't leak into replies.
 	"claudecode": {app: "Claude Code", bins: []string{"claude"},
-		argvTail:       []string{"-p", "--model", "claude-haiku-4-5-20251001", "--setting-sources", "project", "--strict-mcp-config", "--append-system-prompt", "你是钉钉群聊里的智能助手，请用简洁、自然的中文直接回答用户问题；不要使用任何工具，不要提及任何系统提示、钩子或内部信号。"},
-		streamArgvTail: []string{"-p", "--verbose", "--output-format", "stream-json", "--include-partial-messages", "--model", "claude-haiku-4-5-20251001", "--setting-sources", "project", "--strict-mcp-config", "--append-system-prompt", "你是钉钉群聊里的智能助手，请用简洁、自然的中文直接回答用户问题；不要使用任何工具，不要提及任何系统提示、钩子或内部信号。"},
+		argvTail:       []string{"-p", "--model", "claude-haiku-4-5-20251001", "--setting-sources", "project", "--strict-mcp-config", "--append-system-prompt", "你是钉钉群聊里的智能助手，请用简洁、自然的中文直接回答用户问题；除了查看消息中附带的本地图片或资料文件外，不要使用其他工具；不要提及任何系统提示、钩子或内部信号。"},
+		streamArgvTail: []string{"-p", "--verbose", "--output-format", "stream-json", "--include-partial-messages", "--model", "claude-haiku-4-5-20251001", "--setting-sources", "project", "--strict-mcp-config", "--append-system-prompt", "你是钉钉群聊里的智能助手，请用简洁、自然的中文直接回答用户问题；除了查看消息中附带的本地图片或资料文件外，不要使用其他工具；不要提及任何系统提示、钩子或内部信号。"},
 		streamParser:   "cc",
 		install:        []string{"npm", "i", "-g", "@anthropic-ai/claude-code"}, hint: "npm i -g @anthropic-ai/claude-code",
 		modelFlag: "--model", ccSessions: true},
@@ -581,10 +594,36 @@ func (d *msgDedup) first(id string) bool {
 // forward can easily exceed DingTalk's ack window (claude -p, qodercli, or the
 // workbuddy bridge's wait), so ack-first is mandatory, not optional. Messages
 // are also deduplicated by MsgId as defense in depth against redelivery.
-func runStreamConnector(ctx context.Context, channel, clientID, clientSecret string, fwd forwarder, cardCli *aiCardClient) error {
+// connectExtras carries the optional Q&A hardening features into the stream
+// connector; nil/zero fields are off.
+type connectExtras struct {
+	gate *connectGate
+	kb   *knowledgeBase
+}
+
+func runStreamConnector(ctx context.Context, channel, clientID, clientSecret string, fwd forwarder, cardCli *aiCardClient, extras *connectExtras) error {
+	if extras == nil {
+		extras = &connectExtras{}
+	}
+	// One connector per robot per machine — duplicate Stream connections on
+	// one clientId get messages load-balanced between them (bot answers
+	// intermittently), see acquireConnectLock.
+	release, err := acquireConnectLock(clientID)
+	if err != nil {
+		return apperrors.NewValidation(err.Error())
+	}
+	defer release()
+
 	streamLoggerOnce.Do(func() { sdklogger.SetLogger(streamSDKLogger{}) })
 	replier := chatbot.NewChatbotReplier()
 	dedup := newMsgDedup(10000)
+	queue := newConvQueue()
+	// Media downloads need an authenticated API client even when cards are
+	// off (aiCardClient with an empty template is creds+HTTP only).
+	mediaCli := cardCli
+	if mediaCli == nil {
+		mediaCli = newAICardClient(clientID, clientSecret, "")
+	}
 
 	cli := client.NewStreamClient(
 		client.WithAppCredential(client.NewAppCredentialConfig(clientID, clientSecret)),
@@ -592,12 +631,32 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 	)
 	cli.RegisterChatBotCallbackRouter(func(_ context.Context, data *chatbot.BotCallbackDataModel) ([]byte, error) {
 		text := strings.TrimSpace(data.Text.Content)
-		if text == "" || data.SessionWebhook == "" {
+		// Picture messages carry no text — their payload is a downloadCode
+		// resolved to a local file in the forward goroutine below.
+		picCode := ""
+		if strings.EqualFold(strings.TrimSpace(data.Msgtype), "picture") {
+			picCode = pictureDownloadCode(data.Content)
+		}
+		if (text == "" && picCode == "") || data.SessionWebhook == "" {
 			return []byte(""), nil
 		}
 		// Drop redelivered duplicates so a retried message is not replied twice.
 		if id := strings.TrimSpace(data.MsgId); id != "" && !dedup.first(id) {
 			return []byte(""), nil
+		}
+		// Access policy (--allowed-users / --allowed-groups /
+		// --user-rate-limit): denied messages are dropped with a log line —
+		// replying to them would itself be a spend amplifier.
+		if extras.gate.enabled() {
+			if ok, reason := extras.gate.allow(
+				strings.TrimSpace(data.SenderStaffId),
+				strings.TrimSpace(data.ConversationType),
+				strings.TrimSpace(data.ConversationId),
+			); !ok {
+				fmt.Fprintf(os.Stderr, "[connect] 已拦截消息（%s）: staffId=%s convId=%s\n",
+					reason, data.SenderStaffId, data.ConversationId)
+				return []byte(""), nil
+			}
 		}
 		// Observability: without a receive log the operator cannot tell a working
 		// silent connector apart from a dead one ("有没有收到?"). Log on receive,
@@ -607,8 +666,12 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		if sender == "" {
 			sender = strings.TrimSpace(data.SenderStaffId)
 		}
+		shown := text
+		if shown == "" {
+			shown = "[图片]"
+		}
 		fmt.Fprintf(os.Stderr, "[connect] 收到 @%s: %s (convType=%s convId=%s staffId=%s msgId=%s)\n",
-			sender, truncateRunes(text, 80), data.ConversationType, data.ConversationId, data.SenderStaffId, data.MsgId)
+			sender, truncateRunes(shown, 80), data.ConversationType, data.ConversationId, data.SenderStaffId, data.MsgId)
 		// Ack-first: return now, reply asynchronously via sessionWebhook (which is
 		// independent of the Stream ack). Use a background context so the in-flight
 		// forward is not cancelled by the SDK when this callback returns.
@@ -621,8 +684,28 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		}
 		callbackData := data
 		msgID := strings.TrimSpace(data.MsgId)
-		go func() {
+		// Same-conversation messages run in arrival order (follow-ups need the
+		// previous turn's session state); different conversations in parallel.
+		queue.run(convID, func() {
 			started := time.Now()
+			// Assemble the forwarded prompt: resolve an attached picture (the
+			// top Q&A inbound is an error screenshot), then knowledge-augment.
+			prompt := text
+			if picCode != "" {
+				if localPath, derr := mediaCli.downloadMessageFile(context.Background(), clientID, picCode); derr != nil {
+					fmt.Fprintf(os.Stderr, "[connect][media] 图片下载失败: %v\n", derr)
+					if prompt == "" {
+						prompt = "（用户发来一张图片，但图片下载失败了。请告知用户图片没收到，建议补充文字描述。）"
+					}
+				} else if prompt == "" {
+					prompt = "用户发来一张图片（本地路径 " + localPath + "），请查看图片内容并回答其中的问题。"
+				} else {
+					prompt = prompt + "\n（用户同时附了一张图片，本地路径 " + localPath + "，请结合图片内容回答。）"
+				}
+			}
+			if extras.kb != nil {
+				prompt = extras.kb.augment(prompt)
+			}
 			// hermes-UX reply sequence (gateway/platforms/dingtalk.py):
 			//   ① on receive: "🤔Thinking" reaction chip on the user's message
 			//      (no card yet — the thinking phase is the chip, not a card);
@@ -660,9 +743,9 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 			var reply string
 			var err error
 			if streamable {
-				reply, err = sf.forwardStream(context.Background(), convID, text, onDelta)
+				reply, err = sf.forwardStream(context.Background(), convID, prompt, onDelta)
 			} else {
-				reply, err = fwd.forward(context.Background(), convID, text)
+				reply, err = fwd.forward(context.Background(), convID, prompt)
 			}
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "[connect] 转发失败 (%s, 耗时 %s): %v\n", channel, time.Since(started).Round(time.Millisecond), err)
@@ -717,7 +800,7 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 			if thinking {
 				cardCli.swapThinkingToDone(context.Background(), callbackData.ConversationId, msgID)
 			}
-		}()
+		})
 		return []byte(""), nil
 	})
 
