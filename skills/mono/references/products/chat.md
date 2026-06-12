@@ -356,7 +356,8 @@ Flags:
 注意:
   - 本命令**仅支持群聊**，必须指定 --group；拉取单聊（私聊）消息请改用 `chat message list-direct`（旧版的 `list --user` / `list --open-dingtalk-id` 已不再支持）
   - --group 的别名: --id, --chat, --conversation-id (均可替代 --group)
-  - 翻页：hasMore=true 时，用结果中的边界 createTime 作为下次 --time
+  - **推荐翻页方式**：使用 `--forward=false`（从新往老翻），用结果中最后一条（最旧）的 createTime 作为下次 --time。返回数组始终按降序排列（最新在 `[0]`，最旧在 `[-1]`），翻页锚点取 `[-1]` 的 createTime。
+  - **`--forward=true` 的已知限制**：API 返回 `createTime >= T` 的消息（含边界），用最后一条的 createTime 作为下页 --time 会返回完全相同的消息，导致无限循环。如需 forward=true，CLI 会自动去除与 --time 相同的边界消息并输出警告，但仍建议优先使用 forward=false。
   - 话题圈消息拉取流程：如果返回的会话消息中包含 openConvThreadId 字段，说明是话题类消息。要获取完整的话题内容，需要两步操作：(1) 先通过 dws chat message list 拉取话题主消息（即话题帖子本身）；(2) 再调用 dws chat message list-topic-replies --group <openConversationId> --topic-id <openConvThreadId> 分页拉取该话题下的所有回复消息。只有话题主消息 + 回复列表合在一起，才是一条话题的完整内容。
 ```
 
@@ -380,7 +381,7 @@ Flags:
 
 注意:
   - --user 与 --open-dingtalk-id 二选一，必须且只能指定其一；同组织同事优先用 --user
-  - --time 必填；翻页：hasMore=true 时，用结果中的边界 createTime 作为下次 --time
+  - --time 必填；推荐使用 `--forward=false`（从新往老翻页）。`--forward=true` 存在边界重复导致无限循环的已知限制（详见 `chat message list` 注意事项）。
   - 本命令是 `chat message list` 拆分出的单聊专用命令；查群聊消息请用 `chat message list --group`
 ```
 
