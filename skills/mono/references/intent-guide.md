@@ -46,9 +46,12 @@
 - "API 调用报错 403 怎么解决" — 走 `devdoc error diagnose`
 - "requestId 15r6h45w0muec 为什么失败" — 走 `devdoc error diagnose --request-id ...`
 - "搜一下 OAuth2 接入文档" — 开放平台技术文档
-- "CLI 命令出错了怎么办" — CLI 使用错误
+- "RAG 查一下机器人回调字段" — 走开放平台文档 RAG 搜索
+- "CLI 命令出错了怎么办" — 不属于 devdoc；按 CLI 错误处理或查本仓库文档
 - 用户提到"开发"、"API"、"接口文档" → `devdoc article search`
 - 用户提到"调用错误"、"错误码"、"requestId"、"traceId" → `devdoc error diagnose`
+
+**判断关键**：devdoc 面向钉钉开放平台开发者资料。文档问答走 `search_open_platform_docs_rag`；开放平台调用错误排查走 `search_open_error_code_rag`。不要把企业内文档、业务数据或 CLI 本身报错路由到 devdoc。
 
 ---
 

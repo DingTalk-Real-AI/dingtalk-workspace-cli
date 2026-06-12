@@ -20,6 +20,17 @@ Flags:
       --size int         分页大小 (默认 10)
 ```
 
+### RAG 检索能力
+
+`dws devdoc article search` 调用开放平台文档 RAG 工具 `search_open_platform_docs_rag`，适合查官方开发文档、OpenAPI 入参/出参、字段含义、鉴权流程、回调配置、配额限制和 SDK 接入说明。
+
+使用原则:
+- 保留用户原话中的精确标识：API 名、OpenAPI 路径、字段名、errcode、scope、事件名、回调名
+- 用户问题很宽泛时，先用场景 + 能力名检索；命中太多再加 API 名、错误码或字段名缩小范围
+- 返回结果是 RAG 命中的标题、摘要、材料和链接；优先引用高相关结果，不要把摘要改写成未验证的官方结论
+- 如果第一页结果弱相关，先换更精确关键词；需要更多候选时再调整 `--page` / `--size`
+- devdoc 只查开放平台开发者资料，不查企业内文档、业务数据或用户自己的钉钉云文档
+
 ### 错误排查
 ```
 Usage:
@@ -50,10 +61,21 @@ Flags:
 用户已经提供 requestId / traceId / 错误码 / 错误描述 / 失败上下文:
 - 走 `devdoc error diagnose`，优先传 `--request-id`，没有 requestId 时传 `--error-code`、`--error-message`、`--query` 或 `--context`
 
+错误排查输入优先级:
+
+| 已知信息 | 推荐命令 | 说明 |
+|----------|----------|------|
+| requestId / traceId | `dws devdoc error diagnose --request-id <ID>` | 最优先；`--trace-id` 是兼容别名，最终按 `requestId` 传给 MCP |
+| 错误码 + 错误描述 | `dws devdoc error diagnose --error-code <CODE> --error-message "<MSG>"` | 错误码进 `errorCode`，错误描述合并进 `query` |
+| API 名 + 失败现象 | `dws devdoc error diagnose --query "<现象>" --api "<API名>" --context "<上下文>"` | `--api` 只补充检索词，不能单独发起排查 |
+| 只有宽泛描述 | `dws devdoc error diagnose --query "<用户原话>"` | 保留原始报错文本，必要时让用户补 requestId 或错误码 |
+
 关键区分:
 - devdoc(钉钉**开放平台**开发者文档，面向研发) vs doc(钉钉在线文档，面向普通用户内容)
 - devdoc 只做搜索，不做读取；命中条目返回标题、摘要、文档链接，由 Agent 引用链接或进一步浏览
-- `devdoc error diagnose` 只返回诊断事实、参考资料和链接，不生成 AI 分析结论
+- `devdoc article search` 底层工具是 `search_open_platform_docs_rag`；`devdoc error diagnose` 底层工具是 `search_open_error_code_rag`
+- `devdoc error diagnose` 只返回诊断事实、参考资料和链接；CLI 本身不生成 AI 分析结论
+- `devdoc error troubleshoot` 是 `devdoc error diagnose` 的别名，行为一致
 - `--api`、`--error-message`、`--context` 是 CLI 侧易用参数，调用 MCP 时会合并到 `query`；MCP 入参只发送 `query`、`requestId`、`errorCode`、`page`、`size`
 
 ## 核心工作流
@@ -71,6 +93,9 @@ dws devdoc article search --query "消息卡片" --page 2 --size 5 --format json
 # 查错误码 / 字段含义
 dws devdoc article search --query "errcode 40078" --format json
 
+# 查 RAG 能力材料，保留精确字段名
+dws devdoc article search --query "openConversationId 群消息回调" --format json
+
 # 已经有 requestId 时排查
 dws devdoc error diagnose --request-id 15r6h45w0muec --format json
 
@@ -79,7 +104,17 @@ dws devdoc error diagnose --trace-id 15r6h45w0muec --api "创建日程" --format
 
 # 只有错误码和错误描述时排查
 dws devdoc error diagnose --error-code 33012 --error-message "missing scope" --format json
+
+# 现象 + API + 运行上下文一起排查
+dws devdoc error troubleshoot --query "机器人回调失败" --api "消息回调" --context "HTTP 403" --format json
 ```
+
+## 返回结果处理
+
+- 面向用户回答时，先说结论置信度，再列出命中的官方参考链接；如果结果只提供参考材料，应明确这是基于 RAG 命中材料的判断
+- 遇到 requestId 查询无结果，不要编造服务端原因；请用户补充错误码、接口名、调用时间、请求参数摘要，或改用错误码/现象继续查
+- 遇到权限、scope、回调、签名、IP 白名单、频控类问题，优先把官方材料里的检查项整理成可执行排查清单
+- 不要因为一次无命中就反复调用同一查询；最多换 1-2 个更精确关键词，仍无结果则如实说明未找到可靠材料
 
 ## 注意事项
 
