@@ -56,6 +56,7 @@
 - "查 appKey/clientId/agentId/appSecret/clientSecret" — 应用身份和凭证
 - "应用权限/权限点/事件订阅/应用版本/发布审核" — 应用配置或发布链路
 - "创建机器人/智能体机器人/机器人配置/机器人回调" — 应用机器人能力（`devapp robot`）
+- "事件订阅/订阅事件/退订事件/eventCode/可订阅事件" — 应用事件订阅（`devapp event`）
 
 **用 `devdoc` 的场景**：
 - "开放平台 API 怎么调用" — 接口文档

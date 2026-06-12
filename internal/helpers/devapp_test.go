@@ -114,7 +114,7 @@ func TestDevAppCommandHasAppAliasAndCoreCommands(t *testing.T) {
 	if !hasAlias {
 		t.Fatalf("Aliases = %v, want app", root.Aliases)
 	}
-	for _, name := range []string{"list", "get", "create", "update", "delete", "inactive", "active", "credentials", "webapp", "permission", "member", "security", "robot", "version"} {
+	for _, name := range []string{"list", "get", "create", "update", "delete", "inactive", "active", "credentials", "webapp", "permission", "member", "security", "robot", "version", "event"} {
 		if _, _, err := root.Find([]string{name}); err != nil {
 			t.Fatalf("missing command %q: %v", name, err)
 		}
@@ -290,6 +290,75 @@ func TestDevAppVersionCommandsBuildToolParams(t *testing.T) {
 	}
 }
 
+func TestDevAppEventCommandsBuildToolParams(t *testing.T) {
+	cases := []struct {
+		name       string
+		args       []string
+		wantTool   string
+		wantParams map[string]any
+	}{
+		{
+			name:       "list",
+			args:       []string{"event", "list", "--unified-app-id", "u-1"},
+			wantTool:   "list_open_dev_app_events",
+			wantParams: map[string]any{"unifiedAppId": "u-1"},
+		},
+		{
+			name:       "subscribe",
+			args:       []string{"event", "subscribe", "--unified-app-id", "u-1", "--event-code", "user_add_org", "--yes"},
+			wantTool:   "subscribe_open_dev_app_event",
+			wantParams: map[string]any{"unifiedAppId": "u-1", "eventCode": "user_add_org"},
+		},
+		{
+			name:       "unsubscribe",
+			args:       []string{"event", "unsubscribe", "--unified-app-id", "u-1", "--event-code", "user_add_org", "--yes"},
+			wantTool:   "unsubscribe_open_dev_app_event",
+			wantParams: map[string]any{"unifiedAppId": "u-1", "eventCode": "user_add_org"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &captureRunner{}
+			root := newDevAppTestRoot(runner)
+			var out bytes.Buffer
+			root.SetOut(&out)
+			root.SetErr(&out)
+			root.SetArgs(append([]string{"devapp"}, tc.args...))
+
+			if err := root.Execute(); err != nil {
+				t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
+			}
+			if got := runner.last.Tool; got != tc.wantTool {
+				t.Fatalf("Tool = %q, want %q", got, tc.wantTool)
+			}
+			if !reflect.DeepEqual(runner.last.Params, tc.wantParams) {
+				t.Fatalf("Params = %#v, want %#v", runner.last.Params, tc.wantParams)
+			}
+		})
+	}
+}
+
+func TestDevAppEventSubscribeRequiresEventCode(t *testing.T) {
+	runner := &captureRunner{}
+	root := newDevAppTestRoot(runner)
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"devapp", "event", "subscribe", "--unified-app-id", "u-1", "--yes"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("Execute() error = nil, want --event-code validation")
+	}
+	if !strings.Contains(err.Error(), "event-code") {
+		t.Fatalf("error = %q, want event-code validation", err.Error())
+	}
+	if runner.last.Tool != "" {
+		t.Fatalf("tool = %q, want no invocation", runner.last.Tool)
+	}
+}
+
 func TestDevAppRobotAndVersionWritesRequireGuard(t *testing.T) {
 	cases := []struct {
 		name string
@@ -300,6 +369,8 @@ func TestDevAppRobotAndVersionWritesRequireGuard(t *testing.T) {
 		{name: "robot offline", args: []string{"devapp", "robot", "offline", "--unified-app-id", "u-1"}},
 		{name: "version create", args: []string{"devapp", "version", "create", "--unified-app-id", "u-1", "--version", "1.0.1"}},
 		{name: "version publish", args: []string{"devapp", "version", "publish", "--unified-app-id", "u-1", "--version-id", "v-1"}},
+		{name: "event subscribe", args: []string{"devapp", "event", "subscribe", "--unified-app-id", "u-1", "--event-code", "user_add_org"}},
+		{name: "event unsubscribe", args: []string{"devapp", "event", "unsubscribe", "--unified-app-id", "u-1", "--event-code", "user_add_org"}},
 	}
 
 	for _, tc := range cases {

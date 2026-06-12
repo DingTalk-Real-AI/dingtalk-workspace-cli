@@ -86,8 +86,9 @@ dws devapp
   permission detail            Show one permission's full API coverage
   permission add               Apply permissions into current app version changes
   permission remove            Remove one authorized permission
-  event list                   List event subscription config
-  event config                 Configure callback URL, token, aesKey, event types
+  event list                   List subscribable events and current subscription state
+  event subscribe              Subscribe one event by eventCode
+  event unsubscribe            Unsubscribe one event by eventCode
   robot create                 Create a new agent app + robot synchronously
   robot submit                 Submit async robot-create task (supports retry by taskId)
   robot result                 Query async robot-create task result
@@ -104,9 +105,8 @@ dws devapp
   version status               Poll publish and approval status
 ```
 
-Robot and version commands are hardcoded helper leaves over the `op-app` MCP
-server (same pinned endpoint as the rest of `devapp`, no service discovery).
-`event` is still spec-only and reports unsupported at runtime.
+Robot, version, and event commands are hardcoded helper leaves over the `op-app`
+MCP server (same pinned endpoint as the rest of `devapp`, no service discovery).
 
 Open-source examples should use `--format json` for agent consumption:
 
@@ -139,14 +139,14 @@ Do not send confirmation fields such as `confirmCreate`, `confirmUpdate`, `confi
 | Permission list | `devapp permission list/search/detail` | `list_open_dev_app_permissions` | `OpenInnerAppPermissionFacade.list` | Implemented | Hardcoded helper |
 | Permission apply | `devapp permission add` | `apply_open_dev_app_permissions` | `OpenInnerAppPermissionFacade.apply` | Implemented | Hardcoded helper |
 | Permission remove | `devapp permission remove` | `remove_open_dev_app_permission` | `OpenInnerAppPermissionFacade.remove` | Implemented | Hardcoded helper |
-| Events | `devapp event list/config` | `list/config_open_dev_app_events` | Event facade pending | Pending | Spec only |
+| Events | `devapp event list/subscribe/unsubscribe` | `list_open_dev_app_events`, `subscribe/unsubscribe_open_dev_app_event` | Implemented | Hardcoded helper |
 | Robot create | `devapp robot create/submit/result` | `create_dingtalk_robot`/`submit_robot_create_task`/`query_robot_create_result` | Implemented | Hardcoded helper |
 | Robot config | `devapp robot get/config/update/enable/offline` | `get/create/update_open_dev_app_robot_config`, `enable/offline_open_dev_app_robot` | Implemented | Hardcoded helper |
 | Version | `devapp version create/list/get/check-approval/publish/status` | `create/list_open_dev_app_versions`, `get_open_dev_app_version_detail/status`, `publish_open_dev_app_version` | Implemented | Hardcoded helper |
 
-P0 for yulan is app CRUD, permissions, credentials, and web app config. Robot
-and version are now implemented as hardcoded helper leaves over the same
-`op-app` MCP server; events remain a pending backend slice.
+P0 for yulan is app CRUD, permissions, credentials, and web app config. Robot,
+version, and event subscription are now all implemented as hardcoded helper
+leaves over the same `op-app` MCP server.
 
 ### 3.1 P0 RPC Contract
 
@@ -1003,12 +1003,20 @@ Rules:
 
 Event and version commands are needed for a full application lifecycle but should not be folded into permission add.
 
-Target event tools:
+Implemented event tools (verified against the `op-app` MCP `tools/list`). The
+real model is "list subscribable events + subscribe/unsubscribe one event by
+`eventCode`", not a single callbackUrl/token/aesKey config call:
 
 | CLI | MCP tool | Notes |
 | --- | --- | --- |
-| `devapp event list` | `list_open_dev_app_events` | Query current callback and subscribed event types. |
-| `devapp event config` | `configure_open_dev_app_event` | Configure callbackUrl, token, aesKey, eventTypes. |
+| `devapp event list` | `list_open_dev_app_events` | Args `unifiedAppId`; returns `pushType` + `events[]` (`eventCode`/`eventName`/`subscribed`). Read. |
+| `devapp event subscribe` | `subscribe_open_dev_app_event` | Args `unifiedAppId` + `eventCode`. Write (`--dry-run`/`--yes`). |
+| `devapp event unsubscribe` | `unsubscribe_open_dev_app_event` | Args `unifiedAppId` + `eventCode`. Write. |
+
+Note: for gray unified apps, subscribe/unsubscribe are staged into version
+metadata and only take effect after `version publish`. The event callback URL
+itself is not part of this model; it lives in robot config (`chatBotEventUrl`,
+exposed as `robot config --event-url`).
 
 Implemented version tools (verified against the `op-app` MCP `tools/list`):
 
@@ -1070,7 +1078,7 @@ Positive `devapp` signals:
 | `开放平台应用`, `开发者后台应用`, `企业内部应用`, `内部应用` | `devapp` |
 | `agentId`, `clientId`, `appKey`, `customKey`, `appSecret`, `clientSecret` | `devapp` |
 | `应用权限`, `权限点`, `API 权限`, `APP/SNS 权限`, `scopeValue` | `devapp permission ...` |
-| `事件订阅`, `callbackUrl`, `token`, `aesKey` in an app context | `devapp event ...` |
+| `事件订阅`, `订阅事件`, `退订事件`, `eventCode`, `可订阅事件` in an app context | `devapp event ...` |
 | `应用版本`, `版本发布`, `选审批人`, `发布审核` in developer backend context | `devapp version ...` |
 | yulan's current `开放平台应用 CLI 化 / dws app` workstream | `devapp` |
 
@@ -1124,8 +1132,8 @@ Intent table:
 | "申请权限/开通权限" | `permission add` | `apply_open_dev_app_permissions` |
 | "取消权限/移除权限" | `permission remove` | `remove_open_dev_app_permission` |
 | "拿 appSecret/clientSecret" | `credentials get` | `get_open_dev_app_credentials` |
-| "配置事件订阅" | `event config` | Pending |
-| "发布/审核/选审批人" | `version ...` | Pending |
+| "查可订阅事件/订阅/退订事件" | `event list/subscribe/unsubscribe` | `list_open_dev_app_events`, `subscribe/unsubscribe_open_dev_app_event` |
+| "发布/审核/选审批人" | `version ...` | `publish_open_dev_app_version` etc. |
 
 Yulan invocation examples:
 
@@ -1135,7 +1143,7 @@ Yulan invocation examples:
 | "把应用图标换成 ICON_RESOURCE" | `dws devapp update --unified-app-id ... --icon ICON_RESOURCE --dry-run --format json` | Icon change is app base info update and must be guarded. |
 | "已确认删除这个开放平台应用" | `dws devapp delete --unified-app-id ... --yes --format json` | Destructive write only after unique app resolution and confirmation. |
 | "手机号权限要申请，虽然需要审核" | `dws devapp permission add --permissions Contact.User.mobile --dry-run/--yes` | `requiredApproval=true` is still appliable; approval moves to version publish. |
-| "配置事件订阅回调" | `dws devapp event config ... --dry-run --format json` | Event subscription is app configuration, not permission or docs search. |
+| "订阅通讯录用户增加事件" | `dws devapp event list ...` then `dws devapp event subscribe --event-code user_add_org --dry-run --format json` | Pick eventCode from list, then subscribe; gray apps need a version publish to take effect. |
 | "保存版本并看审核状态" | `version create`, `check-approval`, `publish`, `status` | Version flow owns approver selection and publish audit state. |
 | "创建 MCP 服务并配置 HSF tool" | OpenDev MCP platform workflow, not `dws devapp create` | MCP connector/tool is a platform artifact, not an enterprise internal app. |
 
@@ -1473,9 +1481,10 @@ the following are true:
 4. Permission list/add/remove smoke cases pass for APP and SNS scopes.
 5. `requiredApproval=true` permission add stages into version changes instead of
    being rejected by the Agent.
-6. Credential access is handled only by `credentials get`; missing event/version
-   tools are reported as unsupported/pending, not silently emulated by other
-   commands.
+6. Credential access is handled only by `credentials get`; event subscription
+   (`event list/subscribe/unsubscribe`) and version flow are implemented over
+   `op-app`, and any still-missing tool is reported as unsupported, not silently
+   emulated by other commands.
 7. No repository doc, skill, log, or fixture contains MCP gateway keys, cookies,
    access tokens, full app secrets, or production app data.
 8. Existing skill setup and generator tests pass.

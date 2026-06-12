@@ -49,6 +49,11 @@ const (
 	devAppVersionDetailTool  = "get_open_dev_app_version_detail"
 	devAppVersionPublishTool = "publish_open_dev_app_version"
 	devAppVersionStatusTool  = "get_open_dev_app_version_status"
+
+	// 事件订阅能力（op-app MCP 工具，硬编码不走服务发现）。
+	devAppEventListTool        = "list_open_dev_app_events"
+	devAppEventSubscribeTool   = "subscribe_open_dev_app_event"
+	devAppEventUnsubscribeTool = "unsubscribe_open_dev_app_event"
 )
 
 func init() {
@@ -72,7 +77,7 @@ func newDevAppCommand(runner executor.Runner) *cobra.Command {
 		Use:               "devapp",
 		Aliases:           []string{"app"},
 		Short:             "开放平台应用",
-		Long:              "管理开放平台开发者应用：查询、详情、创建、更新、启停、删除、权限、网页应用、成员、安全配置、机器人和版本发布。",
+		Long:              "管理开放平台开发者应用：查询、详情、创建、更新、启停、删除、权限、网页应用、成员、安全配置、机器人、版本发布和事件订阅。",
 		Args:              cobra.NoArgs,
 		TraverseChildren:  true,
 		DisableAutoGenTag: true,
@@ -193,6 +198,22 @@ func newDevAppCommand(runner executor.Runner) *cobra.Command {
 		newDevAppVersionStatusCommand(runner),
 	)
 
+	event := &cobra.Command{
+		Use:               "event",
+		Short:             "开放平台应用事件订阅",
+		Args:              cobra.NoArgs,
+		TraverseChildren:  true,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+	event.AddCommand(
+		newDevAppEventListCommand(runner),
+		newDevAppEventSubscribeCommand(runner, "subscribe", "订阅单个事件", devAppEventSubscribeTool),
+		newDevAppEventSubscribeCommand(runner, "unsubscribe", "退订单个事件", devAppEventUnsubscribeTool),
+	)
+
 	root.AddCommand(
 		newDevAppListCommand(runner),
 		newDevAppGetCommand(runner),
@@ -208,6 +229,7 @@ func newDevAppCommand(runner executor.Runner) *cobra.Command {
 		security,
 		robot,
 		version,
+		event,
 	)
 	return root
 }
@@ -1090,6 +1112,58 @@ func requiredDevAppUnifiedID(cmd *cobra.Command) (string, error) {
 		return "", apperrors.NewValidation("--unified-app-id is required")
 	}
 	return appID, nil
+}
+
+// ---------------------------------------------------------------------------
+// 事件订阅能力
+// ---------------------------------------------------------------------------
+
+func newDevAppEventListCommand(runner executor.Runner) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:               "list",
+		Short:             "查询应用可订阅事件列表及订阅状态",
+		Example:           "  dws devapp event list --unified-app-id UNIFIED_APP_ID --format json",
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			appID, err := requiredDevAppUnifiedID(cmd)
+			if err != nil {
+				return err
+			}
+			return runDevAppTool(runner, cmd, devAppEventListTool, map[string]any{"unifiedAppId": appID})
+		},
+	}
+	addDevAppUnifiedIDFlag(cmd)
+	preferLegacyLeaf(cmd)
+	return cmd
+}
+
+func newDevAppEventSubscribeCommand(runner executor.Runner, use, short, tool string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:               use,
+		Short:             short,
+		Example:           "  dws devapp event " + use + " --unified-app-id UNIFIED_APP_ID --event-code user_add_org --dry-run --format json",
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := devAppRequireWriteGuard(cmd, "event "+use); err != nil {
+				return err
+			}
+			appID, err := requiredDevAppUnifiedID(cmd)
+			if err != nil {
+				return err
+			}
+			eventCode := devAppStringFlag(cmd, "event-code")
+			if eventCode == "" {
+				return apperrors.NewValidation("--event-code is required")
+			}
+			return runDevAppTool(runner, cmd, tool, map[string]any{"unifiedAppId": appID, "eventCode": eventCode})
+		},
+	}
+	addDevAppUnifiedIDFlag(cmd)
+	cmd.Flags().String("event-code", "", "事件码 eventCode，见 event list 返回 (必填)")
+	preferLegacyLeaf(cmd)
+	return cmd
 }
 
 func registerDevAppMemberMutationFlags(cmd *cobra.Command) {

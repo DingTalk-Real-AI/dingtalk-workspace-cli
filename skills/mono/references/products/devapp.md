@@ -326,7 +326,24 @@ MCP tools: `create_open_dev_app_version` / `list_open_dev_app_versions` / `get_o
 
 ---
 
-## 七、操作流程
+## 七、事件订阅
+
+```bash
+dws devapp event list --unified-app-id ID --format json
+dws devapp event subscribe --unified-app-id ID --event-code user_add_org --dry-run --format json
+dws devapp event unsubscribe --unified-app-id ID --event-code user_add_org --dry-run --format json
+```
+
+MCP tools: `list_open_dev_app_events` / `subscribe_open_dev_app_event` / `unsubscribe_open_dev_app_event`。
+
+- `event list` 返回 `pushType` 与 `events[]`（每项 `eventCode`/`eventName`/`subscribed`）；订阅/退订只接受 `--event-code`（取自 list 返回），一次一个。
+- 写操作走 `--dry-run`/`--yes` 写保护；`list` 是只读。
+- **灰度统一应用**：`subscribe`/`unsubscribe` 只把变更暂存到版本元数据，需后续 `version create → publish` 发布版本后才生效。订阅后 `event list` 若仍 `subscribed=false`，先发布版本再回读。
+- 回调地址不在此模型内：消息/事件回调地址走机器人配置（`robot config --outgoing-url/--event-url`）。
+
+---
+
+## 八、操作流程
 
 ### 创建应用全流程
 
@@ -358,7 +375,4 @@ permission list → permission list --keyword → permission list --scope → pe
 | `endpoint_not_resolved` | 检查 edition endpoint 注入 |
 | 多应用命中 | 展示候选，停止写操作 |
 | `ServiceResult.success=false` | 透传 `errorCode/errorMsg` |
-
-## 待实现能力
-
-- `dws devapp event list/config` — 事件订阅（待后端发布）
+| 事件订阅后未生效 | 灰度应用需先 `version publish` 发布版本 |
