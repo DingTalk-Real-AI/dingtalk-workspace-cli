@@ -13,7 +13,7 @@
 ```bash
 ARCH=$(uname -m | sed 's/x86_64/amd64/')
 mkdir -p ~/.local/bin
-curl -fsSL -o /tmp/dws.tar.gz "https://github.com/PeterGuy326/dingtalk-workspace-cli/releases/download/v1.0.52-dws-devapp/dws-darwin-${ARCH}.tar.gz"
+curl -fsSL -o /tmp/dws.tar.gz "https://github.com/PeterGuy326/dingtalk-workspace-cli/releases/download/v1.0.53-dws-devapp/dws-darwin-${ARCH}.tar.gz"
 tar xzf /tmp/dws.tar.gz -C ~/.local/bin dws
 export PATH="$HOME/.local/bin:$PATH"
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
@@ -26,14 +26,14 @@ dws version
 
 ```powershell
 New-Item -ItemType Directory -Force "$env:USERPROFILE\dws" | Out-Null
-Invoke-WebRequest -Uri "https://github.com/PeterGuy326/dingtalk-workspace-cli/releases/download/v1.0.52-dws-devapp/dws-windows-amd64.zip" -OutFile "$env:TEMP\dws.zip"
+Invoke-WebRequest -Uri "https://github.com/PeterGuy326/dingtalk-workspace-cli/releases/download/v1.0.53-dws-devapp/dws-windows-amd64.zip" -OutFile "$env:TEMP\dws.zip"
 Expand-Archive -Path "$env:TEMP\dws.zip" -DestinationPath "$env:USERPROFILE\dws" -Force
 [Environment]::SetEnvironmentVariable("Path", "$env:Path;$env:USERPROFILE\dws", "User")
 ```
 
 然后**重新打开一个 PowerShell 窗口**，执行 `dws version` 确认。
 
-> 两个平台装好后都应显示 `dws version v1.0.52-dws-devapp`。其他平台（Linux / Windows ARM）的安装包在 [Releases 页面](https://github.com/PeterGuy326/dingtalk-workspace-cli/releases/tag/v1.0.52-dws-devapp)下载。
+> 两个平台装好后都应显示 `dws version v1.0.53-dws-devapp`。其他平台（Linux / Windows ARM）的安装包在 [Releases 页面](https://github.com/PeterGuy326/dingtalk-workspace-cli/releases/tag/v1.0.53-dws-devapp)下载。
 
 ### 登录钉钉
 
@@ -56,9 +56,10 @@ dws devapp robot create --app-name 我的智能体 --robot-name 小助手 --desc
 ## 第三步：把机器人接上你本地的 AI
 
 ```bash
-dws devapp robot connect --channel auto --robot-client-id <第二步的clientId> --robot-client-secret <第二步的clientSecret>
+dws devapp robot connect --channel auto --robot-client-id dingxxxxxxxxxxxxxxxx --robot-client-secret yyyyyyyyyyyyyyyyyyyy
 ```
 
+- 把 `dingxxxxxxxxxxxxxxxx` 和 `yyyyyyyyyyyyyyyyyyyy` 换成第二步返回的 `clientId` 和 `clientSecret` 的实际值
 - `--channel auto` 自动识别你电脑上装的 AI 工具（Claude Code / Codex / Qoder / Gemini 等）
 - 这个命令是前台运行的：窗口开着机器人在线，关掉窗口机器人下线
 
@@ -82,6 +83,9 @@ dws devapp robot connect --channel auto --robot-client-id <第二步的clientId>
 | `--user-rate-limit 0` | 关闭限流（默认每人每分钟 20 条） |
 
 ## 常见问题
+
+**执行命令报 `zsh: parse error near '\n'`？**
+命令里残留了 `<...>` 尖括号占位符（旧版文档的写法），shell 会把尖括号当成重定向符。把占位符整体替换成实际值、不要保留尖括号，再执行。
 
 **群里 @机器人 没反应？**
 确认第三步的 `robot connect` 窗口还开着——关掉窗口机器人就下线了。
