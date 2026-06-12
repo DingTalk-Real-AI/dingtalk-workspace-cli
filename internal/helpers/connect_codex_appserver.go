@@ -460,6 +460,18 @@ func (c *codexAppServerClient) waitResponse(ctx context.Context, id int) (json.R
 }
 
 func (c *codexAppServerClient) next(ctx context.Context) (codexRPCMessage, error) {
+	// The read loop reports EOF before closing msgs, so when the process
+	// exits right after its last frame both channels are ready and select
+	// would pick one at random — drain buffered frames (e.g. the final
+	// turn/completed) before honoring a read error.
+	select {
+	case msg, ok := <-c.msgs:
+		if !ok {
+			return codexRPCMessage{}, io.EOF
+		}
+		return msg, nil
+	default:
+	}
 	select {
 	case msg, ok := <-c.msgs:
 		if !ok {
