@@ -239,6 +239,10 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 			// todo_hooks.go for the full rationale). No-op for non-todo.
 			installTodoHook(cmd, canonicalProduct, toolName)
 
+			// §chat-hook: post-processing for chat message list forward=true
+			// boundary dedup. No-op for non-chat. See chat_hooks.go (#430).
+			installChatHook(cmd, canonicalProduct, toolName)
+
 			// §1.4: Add to the right parent group
 			attachToGroup(rootCmd, override.Group, groupCmds, cmd)
 		}
