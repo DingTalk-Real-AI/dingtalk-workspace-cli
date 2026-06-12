@@ -116,6 +116,7 @@ func newAuthLoginCommand() *cobra.Command {
 
 				provider := authpkg.NewDeviceFlowProvider(configDir, nil)
 				provider.Output = cmd.ErrOrStderr()
+				provider.NoBrowser, _ = cmd.Flags().GetBool("no-browser")
 				tokenData, err = provider.Login(loginCtx)
 				if err != nil {
 					return apperrors.NewAuth(fmt.Sprintf("device authorization failed: %v", err))
@@ -126,6 +127,7 @@ func newAuthLoginCommand() *cobra.Command {
 
 				provider := authpkg.NewOAuthProvider(configDir, nil)
 				provider.Output = cmd.ErrOrStderr()
+				provider.NoBrowser, _ = cmd.Flags().GetBool("no-browser")
 				configureOAuthProviderCompatibility(provider, configDir)
 				tokenData, err = provider.Login(loginCtx, cfg.Force)
 				if err != nil {
@@ -186,7 +188,6 @@ func newAuthLoginCommand() *cobra.Command {
 	_ = cmd.Flags().MarkHidden("token-url")
 	_ = cmd.Flags().MarkHidden("refresh-url")
 	_ = cmd.Flags().MarkHidden("login-timeout")
-	_ = cmd.Flags().MarkHidden("no-browser")
 	return cmd
 }
 
