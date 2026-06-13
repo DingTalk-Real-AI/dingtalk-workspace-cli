@@ -70,7 +70,7 @@ func TestForwarderProviderBaseURLDropsHaiku(t *testing.T) {
 	//    haiku pin dropped from both argv and streamArgv.
 	cfg := writeClaudeSettings(t, "https://my-proxy.example.com")
 	t.Setenv("CLAUDE_CONFIG_DIR", cfg)
-	fwd, err := forwarderForChannel("claudecode", connectAgentOptions{Memory: true})
+	fwd, err := forwarderForChannel("claudecode", "", connectAgentOptions{Memory: true})
 	if err != nil {
 		t.Fatalf("forwarder (provider): %v", err)
 	}
@@ -82,7 +82,7 @@ func TestForwarderProviderBaseURLDropsHaiku(t *testing.T) {
 	}
 
 	// 2) Provider base URL injected but user picked a model: user's model wins.
-	fwd2, err := forwarderForChannel("claudecode", connectAgentOptions{Model: "my-custom-model"})
+	fwd2, err := forwarderForChannel("claudecode", "", connectAgentOptions{Model: "my-custom-model"})
 	if err != nil {
 		t.Fatalf("forwarder (provider+model): %v", err)
 	}
@@ -95,7 +95,7 @@ func TestForwarderProviderBaseURLDropsHaiku(t *testing.T) {
 
 	// 3) No provider (official login): built-in haiku pin kept.
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir()) // empty dir -> no settings.json
-	fwd3, err := forwarderForChannel("claudecode", connectAgentOptions{})
+	fwd3, err := forwarderForChannel("claudecode", "", connectAgentOptions{})
 	if err != nil {
 		t.Fatalf("forwarder (official): %v", err)
 	}
