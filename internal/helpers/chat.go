@@ -23,6 +23,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
 
@@ -441,7 +442,7 @@ func buildChatMessageSendInvocation(cmd *cobra.Command, args []string) (map[stri
 		default:
 			return nil, "", apperrors.NewValidation("unsupported --msg-type: " + msgType + " (supported: image, file)")
 		}
-		params := map[string]any{"msgType": msgType, "content": contentJSON}
+		params := map[string]any{"msgType": msgType, "content": contentJSON, "clawType": edition.ClawType()}
 		if strings.TrimSpace(uuid) != "" {
 			params["uuid"] = uuid
 		}
@@ -480,6 +481,7 @@ func buildChatMessageSendInvocation(cmd *cobra.Command, args []string) (map[stri
 			"openConversationId": group,
 			"msgType":            "markdown",
 			"content":            marshalMessageContent(title, text),
+			"clawType":           edition.ClawType(),
 		}
 		if atAll {
 			params["atAll"] = true
@@ -492,13 +494,14 @@ func buildChatMessageSendInvocation(cmd *cobra.Command, args []string) (map[stri
 		}
 		return params, "send_personal_message", nil
 	case hasUser:
-		params := map[string]any{"title": title, "text": text, "receiverUserId": user}
+		params := map[string]any{"title": title, "text": text, "receiverUserId": user, "clawType": edition.ClawType()}
 		return params, "send_direct_message_as_user", nil
 	default:
 		params := map[string]any{
 			"receiverOpenDingTalkId": openID,
 			"msgType":                "markdown",
 			"content":                marshalMessageContent(title, text),
+			"clawType":               edition.ClawType(),
 		}
 		if strings.TrimSpace(uuid) != "" {
 			params["uuid"] = uuid
@@ -971,11 +974,13 @@ func newChatMessageReplyCommand(runner executor.Runner) *cobra.Command {
 			if err != nil {
 				return apperrors.NewInternal("marshal reply content: " + err.Error())
 			}
+			// clawType must reflect the actual edition: a hardcoded "wukong"
+			// here made open-source replies render the Wukong AI indicator.
 			params := map[string]any{
 				"openConversationId": convID,
 				"msgType":            "reply",
 				"content":            contentJSON,
-				"clawType":           "wukong",
+				"clawType":           edition.ClawType(),
 			}
 			if uuid, _ := cmd.Flags().GetString("uuid"); strings.TrimSpace(uuid) != "" {
 				params["uuid"] = uuid

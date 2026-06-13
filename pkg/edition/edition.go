@@ -68,6 +68,12 @@ type Hooks struct {
 	Name         string // "open" (default) / overlay identifier
 	ScenarioCode string // injected into x-dingtalk-scenario-code header
 
+	// ClawTypeValue is the claw identity carried in message-send tool
+	// arguments (parameter clawType) so the IM server can render the
+	// "Send from AI" indicator on delivered messages. Empty → falls back
+	// to DefaultOSSClawType; overlays set their own value (e.g. "wukong").
+	ClawTypeValue string
+
 	// --- runtime mode ---
 	IsEmbedded     bool // true when running inside a host application
 	HideAuthLogin  bool // true suppresses the "dws auth login" command
@@ -164,4 +170,15 @@ func Override(h *Hooks) {
 	mu.Lock()
 	defer mu.Unlock()
 	current = h
+}
+
+// ClawType returns the claw identity for the active edition, falling back
+// to DefaultOSSClawType when the overlay does not set one. Message-send
+// helpers attach this value as the clawType tool argument so the IM server
+// can label delivered messages as sent via AI.
+func ClawType() string {
+	if v := Get().ClawTypeValue; v != "" {
+		return v
+	}
+	return DefaultOSSClawType
 }
