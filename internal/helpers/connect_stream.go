@@ -107,6 +107,12 @@ type connectAgentOptions struct {
 	// prepended to the prompt while the agent keeps running from the clean
 	// scratch dir (see connect_knowledge.go). Empty = off.
 	KnowledgeDir string
+	// KnowledgeSource is a typed knowledge source (--knowledge-source):
+	// "wiki:<spaceId>" / "doc:<docId>" pulls a DingTalk knowledge base on
+	// startup, caches it locally, and feeds it into the same retriever as
+	// KnowledgeDir (see connect_knowledge_wiki.go). A bare value is treated as
+	// a local directory. Empty = off; coexists with KnowledgeDir.
+	KnowledgeSource string
 	// AllowedUsers / AllowedGroups are staffId / openConversationId
 	// allowlists (--allowed-users / --allowed-groups, comma-separated; env
 	// DWS_ALLOWED_USERS / DWS_ALLOWED_GROUPS). Empty = everyone.

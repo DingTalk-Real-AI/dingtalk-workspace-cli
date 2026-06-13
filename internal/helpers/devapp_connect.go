@@ -184,7 +184,7 @@ func connectExternalCommand(channel string) []string {
 //  2. stream-bridge channels (qoder/qoderwork/claudecode/workbuddy) → Go-native
 //     in-process Stream + forwarder, no node/external-script dependency;
 //  3. others (hermes etc.) → no built-in linking, advise DWS_CONNECT_CMD.
-func launchConnector(cmd *cobra.Command, channel, clientID, clientSecret string, opts connectAgentOptions) error {
+func launchConnector(cmd *cobra.Command, runner executor.Runner, channel, clientID, clientSecret string, opts connectAgentOptions) error {
 	if argv := connectExternalCommand(channel); len(argv) > 0 {
 		fmt.Fprintf(cmd.ErrOrStderr(), "[connect] channel=%s 启动外部连接器: %s\n", channel, strings.Join(argv, " "))
 		proc := exec.CommandContext(cmd.Context(), argv[0], argv[1:]...)
@@ -221,6 +221,13 @@ func launchConnector(cmd *cobra.Command, channel, clientID, clientSecret string,
 			}
 			extras.kb = kb
 			fmt.Fprintf(cmd.ErrOrStderr(), "[connect] 知识库已加载：%d 个片段（%s）\n", len(kb.chunks), opts.KnowledgeDir)
+		}
+		if opts.KnowledgeSource != "" {
+			if kb, kerr := loadConnectKnowledgeSource(cmd, runner, clientID, opts.KnowledgeSource); kerr != nil {
+				return kerr
+			} else if kb != nil {
+				extras.kb = kb
+			}
 		}
 		if len(opts.AllowedUsers) > 0 || len(opts.AllowedGroups) > 0 || opts.UserRateLimit > 0 {
 			extras.gate = newConnectGate(opts.AllowedUsers, opts.AllowedGroups, opts.UserRateLimit)
@@ -357,7 +364,7 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 			}
 
 			fmt.Fprintf(cmd.ErrOrStderr(), "[connect] channel=%s（%s）凭证来源=%s\n", channel, detectedBy, resolvedBy)
-			return launchConnector(cmd, channel, clientID, clientSecret, opts)
+			return launchConnector(cmd, runner, channel, clientID, clientSecret, opts)
 		},
 	}
 	preferLegacyLeaf(cmd)
@@ -386,6 +393,7 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().Bool("reply-card", true, "用 AI 卡片回复（思考中→完成状态，同官方渠道体验）；卡片失败自动回退普通消息；--reply-card=false 关闭")
 	cmd.Flags().String("card-template", "", "AI 卡片模板 ID（开发者后台·本应用·AI 卡片设置里获取；模板按应用授权，强烈建议注册自己应用的模板）；env: DWS_CARD_TEMPLATE")
 	cmd.Flags().String("knowledge-dir", "", "答疑知识目录（.md/.txt）：每条消息本地检索 top-k 片段拼进 prompt，agent 仍在空目录跑、不拖慢回复；env: DWS_KNOWLEDGE_DIR")
+	cmd.Flags().String("knowledge-source", "", "答疑知识源：wiki:<spaceId> / doc:<docId> 从钉钉知识库拉取并缓存为本地知识（复用 dws doc 能力）；裸值当作本地目录；与 --knowledge-dir 并存；env: DWS_KNOWLEDGE_SOURCE")
 	cmd.Flags().String("allowed-users", "", "用户白名单 staffId（逗号分隔），配置后仅名单内用户可触发；env: DWS_ALLOWED_USERS")
 	cmd.Flags().String("allowed-groups", "", "群白名单 openConversationId（逗号分隔），配置后仅名单内群可触发；env: DWS_ALLOWED_GROUPS")
 	cmd.Flags().Int("user-rate-limit", 20, "单用户每分钟消息上限（防刷；每条消息都是一次 LLM 调用），0 关闭；env: DWS_USER_RATE_LIMIT")
@@ -424,6 +432,10 @@ func connectAgentOptionsFromCommand(cmd *cobra.Command) connectAgentOptions {
 	if knowledgeDir == "" {
 		knowledgeDir = strings.TrimSpace(os.Getenv("DWS_KNOWLEDGE_DIR"))
 	}
+	knowledgeSource := devAppStringFlag(cmd, "knowledge-source")
+	if knowledgeSource == "" {
+		knowledgeSource = strings.TrimSpace(os.Getenv("DWS_KNOWLEDGE_SOURCE"))
+	}
 	users := devAppStringFlag(cmd, "allowed-users")
 	if users == "" {
 		users = os.Getenv("DWS_ALLOWED_USERS")
@@ -442,8 +454,9 @@ func connectAgentOptionsFromCommand(cmd *cobra.Command) connectAgentOptions {
 	}
 	return connectAgentOptions{Model: model, WorkDir: workDir, Memory: memory,
 		ReplyCard: replyCard, CardTemplate: cardTemplate,
-		KnowledgeDir: knowledgeDir,
-		AllowedUsers: splitCommaList(users), AllowedGroups: splitCommaList(groups),
+		KnowledgeDir:    knowledgeDir,
+		KnowledgeSource: knowledgeSource,
+		AllowedUsers:    splitCommaList(users), AllowedGroups: splitCommaList(groups),
 		UserRateLimit: rateLimit}
 }
 
