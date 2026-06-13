@@ -223,18 +223,37 @@ func (f *execForwarder) forward(ctx context.Context, convID, text string) (strin
 // codebuddy and other Claude-Code-family CLIs share these exact flags —
 // verified against `claude --help` / `codebuddy --help`. qodercli only has
 // `--resume` (no way to choose the ID), so the qoder family stays stateless.
-// State is in-memory: a connector restart starts conversations fresh.
+//
+// The map is persisted to disk (path, scoped per clientId) so a connector
+// restart resumes every chat's context instead of starting fresh — the whole
+// point of an always-on digital employee. An empty path keeps the map purely
+// in memory (persistence disabled, e.g. --agent-memory off or no clientId),
+// preserving the original behaviour exactly. Persistence is best-effort: a
+// failed save only logs a warning and never blocks message handling.
 type convSessions struct {
-	mu sync.Mutex
-	m  map[string]string
+	mu   sync.Mutex
+	m    map[string]string
+	path string // on-disk store; empty disables persistence
 }
 
-func newConvSessions() *convSessions {
-	return &convSessions{m: make(map[string]string)}
+// newConvSessions builds the session map, restoring any persisted state from
+// path. A missing or corrupt file degrades to an empty map (see
+// loadConvSessionMap) — it never panics or blocks startup. An empty path means
+// in-memory only.
+func newConvSessions(path string) *convSessions {
+	return &convSessions{m: loadConvSessionMap(path), path: path}
+}
+
+// persistLocked writes the current map to disk. The caller must hold s.mu, so
+// the snapshot marshalled here is race-free and the write is serialized with
+// every other map mutation. It is best-effort (see saveConvSessionMap).
+func (s *convSessions) persistLocked() {
+	saveConvSessionMap(s.path, s.m)
 }
 
 // args returns the session argv fragment for one conversation, minting a new
-// session on first sight.
+// session on first sight. A newly minted mapping is persisted so a restart can
+// resume it.
 func (s *convSessions) args(convID string) []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -243,16 +262,19 @@ func (s *convSessions) args(convID string) []string {
 	}
 	id := uuid.NewString()
 	s.m[convID] = id
+	s.persistLocked()
 	return []string{"--session-id", id}
 }
 
 // reset forgets a conversation's session so the next message starts a fresh
 // one (a new UUID — the old one may or may not exist on the agent side, and a
-// fresh ID is safe either way).
+// fresh ID is safe either way). The removal is persisted so a restart does not
+// resurrect the dropped session.
 func (s *convSessions) reset(convID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.m, convID)
+	s.persistLocked()
 }
 
 // qoderworkIdentityRe matches a leading self-introduction emitted by qodercli
@@ -600,7 +622,7 @@ func resolveExecAgent(channel string) (argv []string, env []string, err error) {
 // resolved via PATH → app bundle → install guidance — no hardcoded path, no
 // dependency on a live interactive session. opts applies the user-facing agent
 // tuning (--agent-model / --agent-workdir / --agent-memory).
-func forwarderForChannel(channel string, opts connectAgentOptions) (forwarder, error) {
+func forwarderForChannel(channel, clientID string, opts connectAgentOptions) (forwarder, error) {
 	timeout := envDurationMS("DWS_AGENT_TIMEOUT_MS", 300*time.Second)
 	spec, ok := agentSpecs[channel]
 	if !ok {
@@ -635,7 +657,10 @@ func forwarderForChannel(channel string, opts connectAgentOptions) (forwarder, e
 	}
 	var sessions *convSessions
 	if !overridden && opts.Memory && spec.ccSessions {
-		sessions = newConvSessions()
+		// Scope the on-disk session store by clientId so multiple bots on one
+		// machine stay isolated; an empty clientId disables persistence and the
+		// map stays in memory (original behaviour).
+		sessions = newConvSessions(connectSessionStorePath(clientID))
 	}
 	// Incremental-output argv: same binary, the spec's stream tail, same model
 	// override. A DWS_AGENT_CMD override disables streaming (unknown argv).

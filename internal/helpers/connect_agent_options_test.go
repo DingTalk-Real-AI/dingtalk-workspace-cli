@@ -30,7 +30,7 @@ func writeExecStub(dir, name string) error {
 // TestConvSessions covers the per-conversation session contract: first message
 // creates (--session-id), follow-ups resume (--resume), reset re-mints.
 func TestConvSessions(t *testing.T) {
-	s := newConvSessions()
+	s := newConvSessions("")
 
 	first := s.args("conv-1")
 	if len(first) != 2 || first[0] != "--session-id" || first[1] == "" {
@@ -91,7 +91,7 @@ func TestForwarderSessionAndModelWiring(t *testing.T) {
 	}
 	t.Setenv("PATH", stub)
 
-	fwd, err := forwarderForChannel("claudecode", connectAgentOptions{Memory: true, Model: "claude-sonnet-4-6"})
+	fwd, err := forwarderForChannel("claudecode", "", connectAgentOptions{Memory: true, Model: "claude-sonnet-4-6"})
 	if err != nil {
 		t.Fatalf("claudecode forwarder: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestForwarderSessionAndModelWiring(t *testing.T) {
 	}
 
 	// qoder family: no addressable sessions -> memory silently unavailable.
-	qf, err := forwarderForChannel("qoder", connectAgentOptions{Memory: true})
+	qf, err := forwarderForChannel("qoder", "", connectAgentOptions{Memory: true})
 	if err != nil {
 		t.Fatalf("qoder forwarder: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestForwarderSessionAndModelWiring(t *testing.T) {
 	}
 
 	// Memory off on a supporting channel.
-	off, err := forwarderForChannel("claudecode", connectAgentOptions{Memory: false})
+	off, err := forwarderForChannel("claudecode", "", connectAgentOptions{Memory: false})
 	if err != nil {
 		t.Fatalf("claudecode memory-off forwarder: %v", err)
 	}

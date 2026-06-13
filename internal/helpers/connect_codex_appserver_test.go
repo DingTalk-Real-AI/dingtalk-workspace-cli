@@ -40,7 +40,7 @@ func TestForwarderForChannelCodexPrefersAppServer(t *testing.T) {
 	writeShellExecutable(t, stub, "codex", "exit 0\n")
 	t.Setenv("PATH", stub)
 
-	fwd, err := forwarderForChannel("codex", connectAgentOptions{Memory: true})
+	fwd, err := forwarderForChannel("codex", "", connectAgentOptions{Memory: true})
 	if err != nil {
 		t.Fatalf("codex forwarder: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestForwarderForChannelCodexPrefersAppServer(t *testing.T) {
 	}
 
 	t.Setenv("DWS_CODEX_APP_SERVER", "0")
-	fwd, err = forwarderForChannel("codex", connectAgentOptions{Memory: true})
+	fwd, err = forwarderForChannel("codex", "", connectAgentOptions{Memory: true})
 	if err != nil {
 		t.Fatalf("codex disabled app-server forwarder: %v", err)
 	}

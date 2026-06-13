@@ -199,7 +199,7 @@ func launchConnector(cmd *cobra.Command, channel, clientID, clientSecret string,
 	}
 
 	if isStreamBridgeChannel(channel) {
-		fwd, err := forwarderForChannel(channel, opts)
+		fwd, err := forwarderForChannel(channel, clientID, opts)
 		if err != nil {
 			return err
 		}

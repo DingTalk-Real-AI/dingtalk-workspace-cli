@@ -146,7 +146,7 @@ func TestForwarderForChannel(t *testing.T) {
 	// agent binaries being installed on the test machine.
 	t.Setenv("DWS_AGENT_CMD", "fake-cli --flag")
 	for ch := range agentSpecs {
-		fwd, err := forwarderForChannel(ch, connectAgentOptions{})
+		fwd, err := forwarderForChannel(ch, "", connectAgentOptions{})
 		if err != nil {
 			t.Fatalf("forwarderForChannel(%q) err = %v", ch, err)
 		}
@@ -160,7 +160,7 @@ func TestForwarderForChannel(t *testing.T) {
 		}
 	}
 	// Non-agent channel has no forwarder.
-	if _, err := forwarderForChannel("openclaw", connectAgentOptions{}); err == nil {
+	if _, err := forwarderForChannel("openclaw", "", connectAgentOptions{}); err == nil {
 		t.Error("openclaw should not yield a forwarder")
 	}
 }
