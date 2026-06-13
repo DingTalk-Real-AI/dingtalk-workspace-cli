@@ -184,8 +184,20 @@ func (f *execForwarder) forward(ctx context.Context, convID, text string) (strin
 		cmd.Env = append(os.Environ(), f.env...)
 	}
 	out, err := cmd.Output()
-	if s := strings.TrimSpace(string(out)); s != "" {
+	s := strings.TrimSpace(string(out))
+	// Guard against a backend error being mistaken for the answer: some agent
+	// CLIs (claude) print "API Error: 4xx ..." to stdout and still exit 0, so a
+	// non-empty stdout is not proof of a real reply. If stdout is a bare backend
+	// error, return an actionable hint instead of forwarding the raw error into
+	// the chat (issue #14: a custom-provider 422 was echoed to the group).
+	if s != "" && !agentReplyIsError(s) {
 		return brandReply(f.name, s), nil
+	}
+	if s != "" && agentReplyIsError(s) {
+		if f.sessions != nil && strings.TrimSpace(convID) != "" {
+			f.sessions.reset(convID)
+		}
+		return agentBackendErrorReply(s), nil
 	}
 	if err != nil {
 		// Self-heal session state: if this conversation's session is broken
@@ -259,6 +271,58 @@ func brandReply(channel, reply string) string {
 		return reply
 	}
 	return qoderworkIdentityRe.ReplaceAllString(reply, "我是 QoderWork 助手，钉钉群里的智能助手。")
+}
+
+// agentReplyIsError reports whether an agent's stdout is a bare backend error
+// rather than a real answer. Claude Code prints provider failures as
+// "API Error: <status> ..." on stdout and may still exit 0, so the connector
+// cannot rely on exit code / non-empty stdout alone. This is a heuristic on the
+// leading marker; a legitimate reply never starts with "API Error:".
+func agentReplyIsError(s string) bool {
+	return strings.HasPrefix(strings.TrimSpace(s), "API Error:")
+}
+
+// agentBackendErrorReply turns a bare backend error into a short, actionable
+// Chinese message for the chat, instead of echoing the raw provider error
+// (issue #14). It keeps only the first line of the raw error, truncated.
+func agentBackendErrorReply(raw string) string {
+	first := strings.TrimSpace(raw)
+	if i := strings.IndexByte(first, byte('\n')); i >= 0 {
+		first = strings.TrimSpace(first[:i])
+	}
+	return fmt.Sprintf("AI 后端调用失败（原始错误：%s）。如果你用的是自定义模型供应商，请用 --agent-model <你供应商支持的模型名> 指定模型后重连。",
+		truncateRunes(first, 160))
+}
+
+// providerBaseURLInjected reports whether a custom Anthropic-compatible provider
+// base URL is in effect for the claude subprocess: either injected via the
+// user's Claude settings (env, see claudeUserSettingsEnv) or already present in
+// the connector's own environment. When it is, the built-in haiku pin must be
+// dropped so the provider's default model is used (it may not map haiku).
+func providerBaseURLInjected(env []string) bool {
+	for _, e := range env {
+		if k, _, ok := strings.Cut(e, "="); ok && strings.TrimSpace(k) == "ANTHROPIC_BASE_URL" {
+			return true
+		}
+	}
+	if v, ok := os.LookupEnv("ANTHROPIC_BASE_URL"); ok && strings.TrimSpace(v) != "" {
+		return true
+	}
+	return false
+}
+
+// stripModelArg removes a flag and its value from argv (the inverse of the
+// insert branch in applyModelArg). Used to drop the built-in --model haiku pin
+// when a custom provider is in effect and the user did not pick a model, so the
+// provider's default model applies. No-op when flag is absent.
+func stripModelArg(argv []string, flag string) []string {
+	for i := 1; i+1 < len(argv); i++ {
+		if argv[i] == flag {
+			out := append([]string(nil), argv[:i]...)
+			return append(out, argv[i+2:]...)
+		}
+	}
+	return append([]string(nil), argv...)
 }
 
 // connectWorkDir returns a stable empty directory to run forwarded agent CLIs
@@ -551,11 +615,23 @@ func forwarderForChannel(channel string, opts connectAgentOptions) (forwarder, e
 	// A DWS_AGENT_CMD override is a fully user-controlled argv: do not splice in
 	// model or session flags we cannot know are valid for it.
 	overridden := strings.TrimSpace(os.Getenv("DWS_AGENT_CMD")) != ""
+	userPickedModel := opts.Model != "" || strings.TrimSpace(os.Getenv("DWS_AGENT_MODEL")) != ""
 	if !overridden && opts.Model != "" {
 		if spec.modelFlag == "" {
 			return nil, apperrors.NewValidation(fmt.Sprintf("渠道 %q 的 agent CLI 不支持模型覆盖（--agent-model）", channel))
 		}
 		argv = applyModelArg(argv, spec.modelFlag, opts.Model)
+	}
+	// Custom-provider default-model fix (issue #14): when a third-party
+	// Anthropic-compatible provider is in effect (ANTHROPIC_BASE_URL injected via
+	// the user's Claude settings or already in our env) and the user did not pick
+	// a model, drop the spec's built-in model pin (claudecode's haiku) so the
+	// provider's default model applies — the provider may not map that exact pin
+	// and would otherwise return an error (a 422 that got echoed into the chat).
+	// Official-login users (no base URL) keep the built-in pin unchanged.
+	dropBuiltinModel := !overridden && !userPickedModel && spec.modelFlag != "" && providerBaseURLInjected(env)
+	if dropBuiltinModel {
+		argv = stripModelArg(argv, spec.modelFlag)
 	}
 	var sessions *convSessions
 	if !overridden && opts.Memory && spec.ccSessions {
@@ -569,6 +645,8 @@ func forwarderForChannel(channel string, opts connectAgentOptions) (forwarder, e
 		streamArgv = append([]string{argv[0]}, spec.streamArgvTail...)
 		if opts.Model != "" && spec.modelFlag != "" {
 			streamArgv = applyModelArg(streamArgv, spec.modelFlag, opts.Model)
+		} else if dropBuiltinModel {
+			streamArgv = stripModelArg(streamArgv, spec.modelFlag)
 		}
 		parser = spec.streamParser
 	}

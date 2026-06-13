@@ -101,6 +101,14 @@ func (f *execForwarder) forwardStream(ctx context.Context, convID, text string, 
 	if finalText == "" {
 		finalText = strings.TrimSpace(acc.String())
 	}
+	// A bare backend error (e.g. claude's "API Error: 4xx ...") must not be
+	// forwarded as the answer (issue #14): return an actionable hint instead.
+	if agentReplyIsError(finalText) {
+		if f.sessions != nil && strings.TrimSpace(convID) != "" {
+			f.sessions.reset(convID)
+		}
+		return agentBackendErrorReply(finalText), nil
+	}
 	if finalText != "" {
 		return brandReply(f.name, finalText), nil
 	}
