@@ -870,6 +870,20 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		// Same-conversation messages run in arrival order (follow-ups need the
 		// previous turn's session state); different conversations in parallel.
 		queue.run(convID, func() {
+			// Digital-twin text approval: if this is the owner replying
+			// 「同意」/「拒绝」 to a pending confirmation in this conversation, route
+			// it to the gate (decide → execute/decline) instead of forwarding it to
+			// the agent. Returns true only when it consumed the message.
+			ownerDecisionReply := func(ctx context.Context, _, t string) error {
+				if len([]rune(t)) > 200 {
+					return replier.SimpleReplyMarkdown(ctx, webhook, []byte(channel), []byte(t))
+				}
+				return replier.SimpleReplyText(ctx, webhook, []byte(t))
+			}
+			if extras.approval.handleOwnerDecision(context.Background(),
+				strings.TrimSpace(callbackData.SenderStaffId), convID, text, ownerDecisionReply) {
+				return
+			}
 			started := time.Now()
 			// Assemble the forwarded prompt: resolve an attached picture (the
 			// top Q&A inbound is an error screenshot), then knowledge-augment.

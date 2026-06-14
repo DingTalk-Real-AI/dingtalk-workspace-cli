@@ -288,6 +288,134 @@ func TestHandleReply_ReadClassBypassesGate(t *testing.T) {
 	}
 }
 
+// TestParseDecisionWord checks whole-message decision parsing: a bare keyword
+// decides, anything else (including a keyword embedded in a sentence) does not.
+func TestParseDecisionWord(t *testing.T) {
+	cases := []struct {
+		in          string
+		wantApprove bool
+		wantOk      bool
+	}{
+		{"同意", true, true},
+		{"  同意  ", true, true},
+		{"通过", true, true},
+		{"Yes", true, true},
+		{"OK", true, true},
+		{"拒绝", false, true},
+		{"no", false, true},
+		{"不同意", false, true},
+		{"同意他的看法", false, false}, // embedded, not a bare decision
+		{"帮我创建个待办", false, false},
+		{"", false, false},
+	}
+	for _, tc := range cases {
+		gotApprove, gotOk := parseDecisionWord(tc.in)
+		if gotOk != tc.wantOk || (tc.wantOk && gotApprove != tc.wantApprove) {
+			t.Fatalf("parseDecisionWord(%q) = (%v,%v), want (%v,%v)", tc.in, gotApprove, gotOk, tc.wantApprove, tc.wantOk)
+		}
+	}
+}
+
+// TestPendingForConv finds the pending request for a conversation and stops
+// returning it once decided.
+func TestPendingForConv(t *testing.T) {
+	gate := newApprovalGate("") // in-memory
+	a := gate.Submit(ApprovalRequest{ConvID: "c1", Summary: "a"})
+	gate.Submit(ApprovalRequest{ConvID: "c2", Summary: "b"})
+
+	if got := gate.pendingForConv("c1"); got == nil || got.ID != a.ID {
+		t.Fatalf("pendingForConv(c1) = %v, want request %s", got, a.ID)
+	}
+	if got := gate.pendingForConv("none"); got != nil {
+		t.Fatalf("pendingForConv(none) = %v, want nil", got)
+	}
+	gate.Decide(a.ID, true, "owner")
+	if got := gate.pendingForConv("c1"); got != nil {
+		t.Fatalf("decided request must not be pending, got %v", got)
+	}
+}
+
+// TestHandleReply_TextMode_OwnerApproves is the text-approval happy path: an
+// action prompts a confirmation (no execution yet); a non-owner "同意" is
+// ignored; the owner's "同意" decides and executes.
+func TestHandleReply_TextMode_OwnerApproves(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	gate := newApprovalGate("ct1")
+	runner := &fakeRunner{}
+	o := newTextApprovalOrchestrator(gate, runner, "owner")
+
+	var replies []string
+	reply := func(_ context.Context, _, text string) error { replies = append(replies, text); return nil }
+
+	out, handled := o.handleReply(context.Background(), "requester", "conv-1", `好的。[[ACTION:todo.create title="交方案"]]`, reply)
+	if !handled || out != "" {
+		t.Fatalf("text-mode action: handled=%v out=%q, want handled with empty out", handled, out)
+	}
+	if runner.count() != 0 {
+		t.Fatalf("must not execute before the owner decides, ran %d", runner.count())
+	}
+	if len(gate.list()) != 1 {
+		t.Fatalf("expected one pending request, got %d", len(gate.list()))
+	}
+	if !strings.Contains(strings.Join(replies, "|"), "需要主人确认") {
+		t.Fatalf("confirmation prompt not posted: %v", replies)
+	}
+
+	// A non-owner saying 同意 must not decide or execute.
+	if o.handleOwnerDecision(context.Background(), "intruder", "conv-1", "同意", reply) {
+		t.Fatal("non-owner must not be able to approve")
+	}
+	if runner.count() != 0 {
+		t.Fatalf("non-owner approval must not execute, ran %d", runner.count())
+	}
+
+	// The owner saying 同意 decides and executes.
+	if !o.handleOwnerDecision(context.Background(), "owner", "conv-1", "同意", reply) {
+		t.Fatal("owner approval must be consumed")
+	}
+	if runner.count() != 1 {
+		t.Fatalf("owner approval must execute exactly once, ran %d", runner.count())
+	}
+	if gate.list()[0].State != approvalExecuted {
+		t.Fatalf("request state = %s, want executed", gate.list()[0].State)
+	}
+}
+
+// TestHandleReply_TextMode_OwnerRejects: the owner's "拒绝" declines without
+// executing.
+func TestHandleReply_TextMode_OwnerRejects(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	gate := newApprovalGate("ct2")
+	runner := &fakeRunner{}
+	o := newTextApprovalOrchestrator(gate, runner, "owner")
+	reply := func(_ context.Context, _, _ string) error { return nil }
+
+	o.handleReply(context.Background(), "requester", "conv-1", `[[ACTION:todo.create title="x"]]`, reply)
+	if !o.handleOwnerDecision(context.Background(), "owner", "conv-1", "拒绝", reply) {
+		t.Fatal("owner rejection must be consumed")
+	}
+	if runner.count() != 0 {
+		t.Fatalf("rejection must NOT execute, ran %d", runner.count())
+	}
+	if gate.list()[0].State != approvalRejected {
+		t.Fatalf("state = %s, want rejected", gate.list()[0].State)
+	}
+}
+
+// TestHandleOwnerDecision_NotADecision: an ordinary owner message (not a bare
+// keyword) is not consumed, so it still reaches the agent.
+func TestHandleOwnerDecision_NotADecision(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	gate := newApprovalGate("ct3")
+	o := newTextApprovalOrchestrator(gate, &fakeRunner{}, "owner")
+	reply := func(_ context.Context, _, _ string) error { return nil }
+	gate.Submit(ApprovalRequest{ConvID: "conv-1", Summary: "x", State: approvalPending})
+
+	if o.handleOwnerDecision(context.Background(), "owner", "conv-1", "顺便帮我查下天气", reply) {
+		t.Fatal("a non-decision owner message must pass through to the agent")
+	}
+}
+
 // list is a tiny test helper to enumerate the gate's requests.
 func (g *approvalGate) list() []*ApprovalRequest {
 	g.mu.Lock()

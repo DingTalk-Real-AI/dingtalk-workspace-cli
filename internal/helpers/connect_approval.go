@@ -197,6 +197,32 @@ func (g *approvalGate) findByOutTrackID(outTrackID string) *ApprovalRequest {
 	return nil
 }
 
+// pendingForConv returns a snapshot of the most-recent still-Pending request in
+// the given conversation, or nil when none is awaiting a decision there. It is
+// the lookup the text-approval mode needs to map an owner's "同意/拒绝" reply
+// (which only carries the conversation, not an approval id) back to its request.
+func (g *approvalGate) pendingForConv(convID string) *ApprovalRequest {
+	convID = strings.TrimSpace(convID)
+	if convID == "" {
+		return nil
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	var best *ApprovalRequest
+	for _, r := range g.reqs {
+		if r.State == approvalPending && r.ConvID == convID {
+			if best == nil || r.CreatedAt.After(best.CreatedAt) {
+				best = r
+			}
+		}
+	}
+	if best == nil {
+		return nil
+	}
+	cp := *best
+	return &cp
+}
+
 // Decide records the owner's call on a Pending request and wakes any Await.
 // It is idempotent and race-safe: a second decision (e.g. a double-tap, or a
 // reject after an approve) is ignored once the request has already been
@@ -481,6 +507,35 @@ func toPlannedAction(act detectedAction, ownerStaffID string) (plannedAction, st
 	default:
 		return plannedAction{}, "", false
 	}
+}
+
+// approveWords / rejectWords are the whole-message replies the text-approval
+// mode treats as the owner's decision. The match is on the ENTIRE trimmed
+// message (case-insensitive) so a casual mention ("同意他的看法") never
+// accidentally approves an action — only a bare "同意" / "拒绝" decides.
+var (
+	approveWords = map[string]struct{}{
+		"同意": {}, "通过": {}, "批准": {}, "确认": {}, "同意执行": {},
+		"approve": {}, "ok": {}, "yes": {}, "y": {},
+	}
+	rejectWords = map[string]struct{}{
+		"拒绝": {}, "驳回": {}, "不行": {}, "不同意": {}, "取消": {}, "否决": {},
+		"reject": {}, "no": {}, "n": {},
+	}
+)
+
+// parseDecisionWord classifies a whole message as an approve/reject decision.
+// It returns (approve, ok): ok is false when the message is not a bare decision
+// keyword, so the caller forwards it to the agent as an ordinary message.
+func parseDecisionWord(msg string) (approve bool, ok bool) {
+	m := strings.ToLower(strings.TrimSpace(msg))
+	if _, yes := approveWords[m]; yes {
+		return true, true
+	}
+	if _, no := rejectWords[m]; no {
+		return false, true
+	}
+	return false, false
 }
 
 // classifyPlannedAction maps a planned command onto its read/write class so the

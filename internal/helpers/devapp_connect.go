@@ -273,12 +273,16 @@ func launchConnector(cmd *cobra.Command, runner executor.Runner, channel, client
 		// template are configured, action requests route to the owner for approval
 		// before executing. Needs a runner to run the approved command directly.
 		if opts.OwnerUserID != "" {
+			gate := newApprovalGate(clientID)
 			if sender := newDingtalkApprovalCardSender(clientID, clientSecret, opts.ApprovalCardTemplate); sender != nil {
-				gate := newApprovalGate(clientID)
 				extras.approval = newApprovalOrchestrator(gate, sender, runner, opts.OwnerUserID)
-				fmt.Fprintf(cmd.ErrOrStderr(), "[connect] 确认闸已开启：主人=%s（执行类请求先卡片审批）\n", opts.OwnerUserID)
+				fmt.Fprintf(cmd.ErrOrStderr(), "[connect] 确认闸已开启：主人=%s（执行类请求先卡片审批，[同意]/[拒绝]按钮）\n", opts.OwnerUserID)
 			} else {
-				fmt.Fprintf(cmd.ErrOrStderr(), "[connect] 已配置 --owner-user-id 但缺 --approval-card-template，确认闸未开启（无审批卡片模板无法渲染按钮）\n")
+				// No card template → fall back to text approval instead of disabling
+				// the gate: the owner confirms by replying 「同意」/「拒绝」 in chat,
+				// so the digital twin works with zero card-platform setup.
+				extras.approval = newTextApprovalOrchestrator(gate, runner, opts.OwnerUserID)
+				fmt.Fprintf(cmd.ErrOrStderr(), "[connect] 确认闸已开启：主人=%s（文本审批：执行类请求由主人回复「同意」/「拒绝」确认；配 --approval-card-template 可升级为卡片按钮）\n", opts.OwnerUserID)
 			}
 		}
 		fmt.Fprintf(cmd.ErrOrStderr(), "[connect] channel=%s Go 原生 Stream 建联，转发到 %s，回复样式=%s（Ctrl-C 退出）\n", channel, fwd.label(), replyStyle)

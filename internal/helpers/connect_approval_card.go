@@ -83,11 +83,19 @@ type approvalOrchestrator struct {
 	runner      approvalRunner
 	ownerUserID string
 	awaitWindow time.Duration
+	// textMode swaps the interactive [Approve]/[Reject] card for a plain-text
+	// confirmation: the bot posts "需要主人确认……" into the conversation and the
+	// owner replies "同意"/"拒绝". Used when no approval-card template is
+	// configured, so the gate works with zero card-platform setup. In this mode
+	// there is no card sender and the decision is captured asynchronously (see
+	// handleOwnerDecision) rather than by blocking on Await.
+	textMode bool
 }
 
-// newApprovalOrchestrator builds the controller. awaitWindow caps how long the
-// connector blocks for the owner's decision before giving up (the request stays
-// Pending on disk, so a late tap still records and executes nothing twice).
+// newApprovalOrchestrator builds the card-mode controller. awaitWindow caps how
+// long the connector blocks for the owner's decision before giving up (the
+// request stays Pending on disk, so a late tap still records and executes
+// nothing twice).
 func newApprovalOrchestrator(gate *approvalGate, sender approvalCardSender, runner approvalRunner, ownerUserID string) *approvalOrchestrator {
 	return &approvalOrchestrator{
 		gate:        gate,
@@ -98,11 +106,23 @@ func newApprovalOrchestrator(gate *approvalGate, sender approvalCardSender, runn
 	}
 }
 
-// enabled reports whether the gate is active: it needs an owner to send the card
-// to and a sender to send it with. Without either, the connector skips the gate
-// entirely and replies normally.
+// newTextApprovalOrchestrator builds the text-mode controller (no card sender).
+// The owner confirms by replying "同意"/"拒绝" in the conversation; the decision
+// is captured by handleOwnerDecision on the next inbound message, so handleReply
+// must NOT block waiting for it.
+func newTextApprovalOrchestrator(gate *approvalGate, runner approvalRunner, ownerUserID string) *approvalOrchestrator {
+	o := newApprovalOrchestrator(gate, nil, runner, ownerUserID)
+	o.textMode = true
+	return o
+}
+
+// enabled reports whether the gate is active. Card mode needs an owner + a card
+// sender; text mode needs an owner only (the conversation is the channel).
 func (o *approvalOrchestrator) enabled() bool {
-	return o != nil && o.ownerUserID != "" && o.sender != nil && o.gate != nil
+	if o == nil || o.ownerUserID == "" || o.gate == nil {
+		return false
+	}
+	return o.sender != nil || o.textMode
 }
 
 // agentSystemHint is appended to the forwarded prompt so the agent emits the
@@ -161,6 +181,77 @@ func (o *approvalOrchestrator) handleReply(ctx context.Context, requester, convI
 		Action:    pa,
 	})
 
+	// Text mode: post a plain-text confirmation into the conversation and return
+	// immediately — the owner's "同意/拒绝" reply is captured asynchronously by
+	// handleOwnerDecision (blocking here would deadlock the per-conversation
+	// worker that must also process that reply).
+	if o.textMode {
+		return o.handleReplyText(ctx, req, reply)
+	}
+	return o.handleReplyCard(ctx, req, convID, reply)
+}
+
+// handleReplyText posts the text-mode confirmation prompt and hands control back
+// to the connector (handled=true). It never blocks: the decision arrives later
+// as an ordinary inbound message routed through handleOwnerDecision.
+func (o *approvalOrchestrator) handleReplyText(ctx context.Context, req *ApprovalRequest, reply approvalReplier) (string, bool) {
+	prompt := fmt.Sprintf("⚠️ 这是执行类操作，需要主人确认：%s\n主人请回复「同意」执行，或「拒绝」取消。", req.Summary)
+	if err := reply(ctx, req.ConvID, prompt); err != nil {
+		fmt.Fprintf(os.Stderr, "[connect][approval] 文本确认提示发送失败: %v\n", err)
+		// Could not even ask: surface it rather than silently dropping or running.
+		return "（需要主人确认，但提示发送失败，本次未执行）", false
+	}
+	fmt.Fprintf(os.Stderr, "[connect][approval] 待主人文本确认 approvalId=%s conv=%s: %s\n",
+		req.ID, req.ConvID, req.Summary)
+	return "", true
+}
+
+// handleOwnerDecision intercepts an inbound message that is the owner replying
+// "同意/拒绝" to a pending text-mode confirmation in this conversation. It
+// returns true when it consumed the message (decided + executed/declined),
+// telling the connector to skip forwarding it to the agent. A non-owner sender,
+// a non-decision message, or no pending request all return false (ordinary
+// message). Only active in text mode.
+func (o *approvalOrchestrator) handleOwnerDecision(ctx context.Context, senderStaffID, convID, text string, reply approvalReplier) bool {
+	if o == nil || !o.textMode || !o.enabled() {
+		return false
+	}
+	if senderStaffID == "" || senderStaffID != o.ownerUserID {
+		return false
+	}
+	approve, ok := parseDecisionWord(text)
+	if !ok {
+		return false
+	}
+	req := o.gate.pendingForConv(convID)
+	if req == nil {
+		return false
+	}
+	decided, deciding := o.gate.Decide(req.ID, approve, senderStaffID)
+	if !deciding {
+		// Already decided (e.g. a double reply): consume the keyword but do not
+		// re-execute.
+		return decided != nil
+	}
+	if !decided.approved() {
+		_ = reply(ctx, convID, "好的，已拒绝，本次不执行。")
+		return true
+	}
+	out, execErr := o.execute(ctx, decided)
+	if execErr != nil {
+		o.gate.markFailed(decided.ID, execErr.Error())
+		_ = reply(ctx, convID, "已同意，但执行失败："+execErr.Error())
+		return true
+	}
+	o.gate.markExecuted(decided.ID)
+	_ = reply(ctx, convID, "已同意，已执行："+decided.Summary+"\n"+out)
+	return true
+}
+
+// handleReplyCard runs the interactive-card flow: deliver the [Approve]/[Reject]
+// card to the owner, block for the decision, then execute-or-decline and report
+// the outcome into the conversation.
+func (o *approvalOrchestrator) handleReplyCard(ctx context.Context, req *ApprovalRequest, convID string, reply approvalReplier) (string, bool) {
 	outTrackID, err := o.sender.SendApprovalCard(ctx, o.ownerUserID, req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[connect][approval] 确认卡片投放失败: %v\n", err)
@@ -170,7 +261,7 @@ func (o *approvalOrchestrator) handleReply(ctx context.Context, requester, convI
 	}
 	o.gate.setOutTrackID(req.ID, outTrackID)
 	fmt.Fprintf(os.Stderr, "[connect][approval] 已向主人 %s 发送确认卡片 approvalId=%s outTrackId=%s: %s\n",
-		o.ownerUserID, req.ID, outTrackID, summary)
+		o.ownerUserID, req.ID, outTrackID, req.Summary)
 
 	// Block for the owner's decision off the connector's per-conversation
 	// worker is fine: the worker already serializes one conversation, and the
