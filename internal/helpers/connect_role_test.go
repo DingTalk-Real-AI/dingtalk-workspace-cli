@@ -220,3 +220,63 @@ func TestLoadRoleConfigs_MissingDir(t *testing.T) {
 		t.Fatalf("expected dir read error, got %v", err)
 	}
 }
+
+// TestApplyRoleConfig_FillsEmptyOptions verifies the role fills options that
+// were not set explicitly: owner, persona, and (additive) knowledge sources.
+func TestApplyRoleConfig_FillsEmptyOptions(t *testing.T) {
+	role := &RoleConfig{
+		Name:             "人事助理",
+		ClientID:         "dingbot1",
+		OwnerUserID:      "owner-from-role",
+		Persona:          "  You are HR.  ",
+		KnowledgeSources: []string{"wiki:1", "./kb/hr"},
+		AllowedScopes:    []string{"todo", "approval"},
+	}
+	got := applyRoleConfig(connectAgentOptions{}, role)
+
+	if got.OwnerUserID != "owner-from-role" {
+		t.Fatalf("owner = %q, want filled from role", got.OwnerUserID)
+	}
+	if got.Persona != "You are HR." { // trimmed
+		t.Fatalf("persona = %q, want trimmed role persona", got.Persona)
+	}
+	if strings.Join(got.KnowledgeSources, ",") != "wiki:1,./kb/hr" {
+		t.Fatalf("knowledge sources = %v, want role's two", got.KnowledgeSources)
+	}
+}
+
+// TestApplyRoleConfig_ExplicitFlagsWin is the headline contract: an option set
+// explicitly (by flag/env) is never overwritten by the role, and role knowledge
+// sources are appended to — not replacing — any already configured.
+func TestApplyRoleConfig_ExplicitFlagsWin(t *testing.T) {
+	role := &RoleConfig{
+		ClientID:         "dingbot1",
+		OwnerUserID:      "owner-from-role",
+		Persona:          "role persona",
+		KnowledgeSources: []string{"wiki:role"},
+	}
+	opts := connectAgentOptions{
+		OwnerUserID:      "owner-from-flag",
+		Persona:          "flag persona",
+		KnowledgeSources: []string{"wiki:flag"},
+	}
+	got := applyRoleConfig(opts, role)
+
+	if got.OwnerUserID != "owner-from-flag" {
+		t.Fatalf("owner = %q, want explicit flag to win", got.OwnerUserID)
+	}
+	if got.Persona != "flag persona" {
+		t.Fatalf("persona = %q, want explicit flag to win", got.Persona)
+	}
+	if strings.Join(got.KnowledgeSources, ",") != "wiki:flag,wiki:role" {
+		t.Fatalf("knowledge sources = %v, want flag then role appended", got.KnowledgeSources)
+	}
+}
+
+// TestApplyRoleConfig_NilRole is a defensive no-op guard.
+func TestApplyRoleConfig_NilRole(t *testing.T) {
+	opts := connectAgentOptions{OwnerUserID: "x"}
+	if got := applyRoleConfig(opts, nil); got.OwnerUserID != "x" {
+		t.Fatalf("nil role must be a no-op, got %+v", got)
+	}
+}

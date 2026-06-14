@@ -169,6 +169,38 @@ func (c *RoleConfig) normalizeAndValidate() error {
 	return nil
 }
 
+// applyRoleConfig folds a loaded role into the connector options, filling only
+// the fields the operator did not set explicitly — an explicit flag/env ALWAYS
+// wins over the role profile, so a role config is a reusable baseline that ad-hoc
+// flags can still override. It is a pure function (no I/O) so it is trivially
+// testable; the caller validates client_id match and reports the merge.
+//
+// Mapped fields:
+//   - OwnerUserID   ← role.OwnerUserID   (only when opts has no owner yet)
+//   - Persona       ← role.Persona       (only when opts has no persona yet)
+//   - KnowledgeSources ← role.KnowledgeSources (appended; the role's sources are
+//     additive to any --knowledge-source/--knowledge-dir already configured)
+//
+// AllowedScopes and ConfirmPolicy are intentionally NOT mapped here: scope
+// enforcement and the auto/remember confirm strategies are a later slice, and we
+// do not want to carry options the runtime does not yet honor. The caller logs
+// them so they are visible.
+func applyRoleConfig(opts connectAgentOptions, role *RoleConfig) connectAgentOptions {
+	if role == nil {
+		return opts
+	}
+	if opts.OwnerUserID == "" {
+		opts.OwnerUserID = role.OwnerUserID
+	}
+	if opts.Persona == "" {
+		opts.Persona = strings.TrimSpace(role.Persona)
+	}
+	if len(role.KnowledgeSources) > 0 {
+		opts.KnowledgeSources = append(opts.KnowledgeSources, role.KnowledgeSources...)
+	}
+	return opts
+}
+
 // LoadRoleConfigs loads every *.yaml / *.yml file directly under dir and indexes
 // the roles by ClientID — the lookup a multi-bot, one-role-per-bot deployment
 // needs. A duplicate ClientID is an error: two roles must not share one bot.

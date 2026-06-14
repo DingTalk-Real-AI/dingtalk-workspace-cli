@@ -199,6 +199,24 @@ func launchConnector(cmd *cobra.Command, runner executor.Runner, channel, client
 	}
 
 	if isStreamBridgeChannel(channel) {
+		// Role config ("digital employee"): when supplied, validate it targets THIS
+		// bot and fold its owner / persona / knowledge into the options that were
+		// not set explicitly (an explicit flag always wins). Done first so the
+		// merged options feed the forwarder, knowledge loading and the gate below.
+		if opts.RoleConfigPath != "" {
+			role, rerr := LoadRoleConfig(opts.RoleConfigPath)
+			if rerr != nil {
+				return rerr
+			}
+			if role.ClientID != clientID {
+				return apperrors.NewValidation(fmt.Sprintf(
+					"角色配置 %q 绑定 client_id=%s，与本次连接的机器人 %s 不一致；一个角色对应一个机器人，请核对凭证或换用对应的角色配置",
+					opts.RoleConfigPath, role.ClientID, clientID))
+			}
+			opts = applyRoleConfig(opts, role)
+			fmt.Fprintf(cmd.ErrOrStderr(), "[connect] 角色已加载：%s（主人=%s｜知识源 +%d｜权限scope=[%s]｜确认策略=%s）\n",
+				role.Name, opts.OwnerUserID, len(role.KnowledgeSources), strings.Join(role.AllowedScopes, ","), role.ConfirmPolicy)
+		}
 		fwd, err := forwarderForChannel(channel, clientID, opts)
 		if err != nil {
 			return err
@@ -213,7 +231,7 @@ func launchConnector(cmd *cobra.Command, runner executor.Runner, channel, client
 				replyStyle = "text/markdown + thinking/done表态（配 --card-template 升级为卡片）"
 			}
 		}
-		extras := &connectExtras{}
+		extras := &connectExtras{persona: opts.Persona}
 		if opts.KnowledgeDir != "" {
 			kb, kerr := loadKnowledgeBase(opts.KnowledgeDir)
 			if kerr != nil {
@@ -227,6 +245,23 @@ func launchConnector(cmd *cobra.Command, runner executor.Runner, channel, client
 				return kerr
 			} else if kb != nil {
 				extras.kb = kb
+			}
+		}
+		// Role-supplied knowledge sources are additive: load each and merge its
+		// chunks into the same retriever (knowledgeBase is just a chunk slice), so
+		// a role can carry several wiki/doc/dir sources without a flag per source.
+		for _, src := range opts.KnowledgeSources {
+			kb, kerr := loadConnectKnowledgeSource(cmd, runner, clientID, src)
+			if kerr != nil {
+				return kerr
+			}
+			if kb == nil {
+				continue
+			}
+			if extras.kb == nil {
+				extras.kb = kb
+			} else {
+				extras.kb.chunks = append(extras.kb.chunks, kb.chunks...)
 			}
 		}
 		if len(opts.AllowedUsers) > 0 || len(opts.AllowedGroups) > 0 || opts.UserRateLimit > 0 {
@@ -411,6 +446,7 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().Int("user-rate-limit", 20, "单用户每分钟消息上限（防刷；每条消息都是一次 LLM 调用），0 关闭；env: DWS_USER_RATE_LIMIT")
 	cmd.Flags().String("owner-user-id", "", "数字分身主人 staffId：开启确认闸后，执行类请求先发卡片给主人审批，同意才执行；env: DWS_OWNER_USER_ID")
 	cmd.Flags().String("approval-card-template", "", "确认闸交互卡片模板 ID（带[同意][拒绝]按钮）；与 --owner-user-id 同时配置才开启确认闸；env: DWS_APPROVAL_CARD_TEMPLATE")
+	cmd.Flags().String("role-config", "", "数字员工角色配置 YAML：用角色的主人/人设/知识源填充未显式给出的选项（显式 flag 优先）；role 的 client_id 必须与本机器人一致；env: DWS_ROLE_CONFIG")
 	return cmd
 }
 
@@ -474,6 +510,10 @@ func connectAgentOptionsFromCommand(cmd *cobra.Command) connectAgentOptions {
 	if approvalTemplate == "" {
 		approvalTemplate = strings.TrimSpace(os.Getenv("DWS_APPROVAL_CARD_TEMPLATE"))
 	}
+	roleConfig := devAppStringFlag(cmd, "role-config")
+	if roleConfig == "" {
+		roleConfig = strings.TrimSpace(os.Getenv("DWS_ROLE_CONFIG"))
+	}
 	return connectAgentOptions{Model: model, WorkDir: workDir, Memory: memory,
 		ReplyCard: replyCard, CardTemplate: cardTemplate,
 		KnowledgeDir:    knowledgeDir,
@@ -481,7 +521,8 @@ func connectAgentOptionsFromCommand(cmd *cobra.Command) connectAgentOptions {
 		AllowedUsers:    splitCommaList(users), AllowedGroups: splitCommaList(groups),
 		UserRateLimit:        rateLimit,
 		OwnerUserID:          owner,
-		ApprovalCardTemplate: approvalTemplate}
+		ApprovalCardTemplate: approvalTemplate,
+		RoleConfigPath:       roleConfig}
 }
 
 // connectAgentOptionsPayload renders the effective agent tuning for the

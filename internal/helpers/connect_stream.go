@@ -132,6 +132,21 @@ type connectAgentOptions struct {
 	// card (--approval-card-template / DWS_APPROVAL_CARD_TEMPLATE). Required for
 	// the gate to render [Approve]/[Reject] buttons; empty = gate off.
 	ApprovalCardTemplate string
+	// RoleConfigPath is a digital-employee role YAML (--role-config /
+	// DWS_ROLE_CONFIG). When set, the role's owner / persona / knowledge sources
+	// fill the corresponding options that were not given explicitly (an explicit
+	// flag/env always wins). The role's client_id must match the connecting bot.
+	// See connect_role.go for the schema. Empty = no role profile.
+	RoleConfigPath string
+	// Persona is a system-prompt fragment prepended to every forwarded prompt to
+	// shape the bot's tone/expertise. Normally sourced from the role config's
+	// `persona`; there is no standalone flag for it. Empty = no persona prefix.
+	Persona string
+	// KnowledgeSources are additional typed knowledge sources (same grammar as
+	// KnowledgeSource) merged into the retriever on startup. Sourced from the
+	// role config's `knowledge_sources`; each is loaded and its chunks appended
+	// to the same knowledge base as KnowledgeDir/KnowledgeSource. Empty = none.
+	KnowledgeSources []string
 }
 
 // isStreamBridgeChannel reports whether a channel is wired through the Go-native
@@ -764,6 +779,9 @@ type connectExtras struct {
 	gate     *connectGate
 	kb       *knowledgeBase
 	approval *approvalOrchestrator
+	// persona is a role's system-prompt fragment prepended to every forwarded
+	// prompt (empty = no prefix). Sourced from RoleConfig.Persona.
+	persona string
 }
 
 func runStreamConnector(ctx context.Context, channel, clientID, clientSecret string, fwd forwarder, cardCli *aiCardClient, extras *connectExtras) error {
@@ -870,6 +888,12 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 			}
 			if extras.kb != nil {
 				prompt = extras.kb.augment(prompt)
+			}
+			// Role persona: prepend the role's system-prompt fragment so the bot
+			// answers in its configured lane/tone. Sits above the knowledge and the
+			// question; a no-op when no role config supplied one.
+			if p := strings.TrimSpace(extras.persona); p != "" {
+				prompt = p + "\n\n" + prompt
 			}
 			// Confirmation gate: when active, ask the agent to declare any
 			// action it would take via a structured [[ACTION:...]] marker
