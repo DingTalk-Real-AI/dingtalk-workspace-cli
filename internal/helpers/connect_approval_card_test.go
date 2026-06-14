@@ -211,6 +211,83 @@ func TestHandleReply_RejectDoesNotExecute(t *testing.T) {
 	}
 }
 
+// TestClassifyPlannedAction verifies the gate's read/write bridge: it classifies
+// on the human command path first and falls back to product + RPC tool name.
+func TestClassifyPlannedAction(t *testing.T) {
+	cases := []struct {
+		name string
+		pa   plannedAction
+		want CmdClass
+	}{
+		{
+			name: "write via legacy path",
+			pa:   plannedAction{Product: "todo", Tool: "create_personal_todo", LegacyPath: "todo task create"},
+			want: CmdClassWrite,
+		},
+		{
+			name: "read via legacy path",
+			pa:   plannedAction{Product: "todo", Tool: "list_personal_todo", LegacyPath: "todo task list"},
+			want: CmdClassRead,
+		},
+		{
+			name: "empty legacy path falls back to product+tool",
+			pa:   plannedAction{Product: "todo", Tool: "create_personal_todo"},
+			want: CmdClassWrite,
+		},
+		{
+			name: "unrecognised path falls back to tool verb",
+			pa:   plannedAction{Product: "todo", Tool: "delete_personal_todo", LegacyPath: "todo xyz123"},
+			want: CmdClassWrite,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := classifyPlannedAction(tc.pa); got != tc.want {
+				t.Fatalf("classifyPlannedAction(%+v) = %s, want %s", tc.pa, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestHandleReply_ReadClassBypassesGate proves the "写类才拦" wiring: when the
+// planned command classifies as read-only, the gate does not engage — no card is
+// sent, nothing runs, and the cleaned reply goes out normally (handled=false).
+// We force the todo.create path to read-class via an override so the test drives
+// the real handleReply → classifyPlannedAction path end to end.
+func TestHandleReply_ReadClassBypassesGate(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	SetCmdClassOverride("todo task create", CmdClassRead)
+	defer SetCmdClassOverride("todo task create", CmdClassUnknown)
+
+	gate := newApprovalGate("c3")
+	sender := &fakeCardSender{}
+	runner := &fakeRunner{}
+	o := newApprovalOrchestrator(gate, sender, runner, "owner")
+
+	reply := func(_ context.Context, _, _ string) error { return nil }
+	agentReply := `好的，已为你查到。[[ACTION:todo.create title="交方案"]]`
+	out, handled := o.handleReply(context.Background(), "requester", "conv-1", agentReply, reply)
+
+	if handled {
+		t.Fatal("a read-class action must NOT be handled by the gate")
+	}
+	if !strings.Contains(out, "已为你查到") || strings.Contains(out, "[[ACTION") {
+		t.Fatalf("read-class reply should be the cleaned text without the marker, got %q", out)
+	}
+	sender.mu.Lock()
+	nSent := len(sender.sent)
+	sender.mu.Unlock()
+	if nSent != 0 {
+		t.Fatalf("read-class action must not send a confirmation card, sent %d", nSent)
+	}
+	if runner.count() != 0 {
+		t.Fatalf("read-class action must not execute, runner ran %d times", runner.count())
+	}
+	if len(gate.list()) != 0 {
+		t.Fatalf("read-class action must not create an approval request, got %d", len(gate.list()))
+	}
+}
+
 // list is a tiny test helper to enumerate the gate's requests.
 func (g *approvalGate) list() []*ApprovalRequest {
 	g.mu.Lock()

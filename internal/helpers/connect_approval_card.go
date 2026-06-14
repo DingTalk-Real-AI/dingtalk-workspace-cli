@@ -145,6 +145,15 @@ func (o *approvalOrchestrator) handleReply(ctx context.Context, requester, convI
 		return cleaned, false
 	}
 
+	// 写类才拦：route the gate-or-not decision through the read/write classifier
+	// instead of gating every detected marker. A definitively read-class action
+	// is safe and bypasses the gate (the marker is stripped and the reply goes
+	// out normally). Write — and Unknown, per the CmdClass safety contract — keep
+	// the owner's sign-off requirement.
+	if classifyPlannedAction(pa) == CmdClassRead {
+		return cleaned, false
+	}
+
 	req := o.gate.Submit(ApprovalRequest{
 		Requester: requester,
 		ConvID:    convID,

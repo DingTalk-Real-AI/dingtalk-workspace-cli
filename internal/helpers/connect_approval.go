@@ -483,6 +483,25 @@ func toPlannedAction(act detectedAction, ownerStaffID string) (plannedAction, st
 	}
 }
 
+// classifyPlannedAction maps a planned command onto its read/write class so the
+// gate can honor the "写类才拦" design: only a write (or Unknown — per the
+// CmdClass safety contract) action needs the owner's sign-off; a read-class
+// action is safe to let through without gating.
+//
+// It classifies on the human command path (LegacyPath, e.g. "todo task create")
+// first, since that is exactly the space-joined segment shape ClassifyDwsCommand
+// expects. When LegacyPath is absent or yields Unknown, it falls back to the
+// product + RPC tool name (e.g. "todo" + "create_personal_todo"), whose leading
+// verb token ("create") the classifier can still recognise.
+func classifyPlannedAction(pa plannedAction) CmdClass {
+	if path := strings.TrimSpace(pa.LegacyPath); path != "" {
+		if c := ClassifyDwsCommand(strings.Fields(path)...); c != CmdClassUnknown {
+			return c
+		}
+	}
+	return ClassifyDwsCommand(pa.Product, pa.Tool)
+}
+
 // parseDueToMillis converts an ISO-8601 due string to epoch millis, accepting
 // the common RFC3339 shapes the agent is asked to emit. Kept local to the gate
 // so detection has no dependency on the cobra todo command's flag plumbing.
