@@ -298,6 +298,16 @@ func NewDirectCommand(route Route, runner executor.Runner) *cobra.Command {
 				}
 			}
 			if blocked, _ := params["_blocked"].(bool); blocked {
+				// Non-interactive stdin (pipe / CI / test harness / AI agent):
+				// we cannot read a confirmation. Previously the prompt below hit
+				// EOF immediately, printed "Operation cancelled" to stderr, left
+				// stdout empty and returned nil with exit 0 — silently no-op'ing
+				// the destructive command while reporting success, and breaking
+				// any -f json caller that parses the empty stdout as a failure.
+				// Refuse with a structured error telling the caller to pass --yes.
+				if fi, err := os.Stdin.Stat(); err != nil || (fi.Mode()&os.ModeCharDevice) == 0 {
+					return apperrors.NewValidation("this is a destructive operation; re-run with --yes to confirm (cannot prompt for confirmation in a non-interactive session)")
+				}
 				// Interactive confirmation for destructive operations (consistent with Helper commands)
 				fmt.Fprintln(cmd.ErrOrStderr(), "⚠️  This is a destructive operation.")
 				fmt.Fprint(cmd.ErrOrStderr(), "Confirm? (yes/no): ")
