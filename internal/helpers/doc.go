@@ -362,7 +362,7 @@ func newDocCreateCommand(runner executor.Runner) *cobra.Command {
 						content = stripped
 					}
 					if content != "" {
-						params["markdown"] = content
+						params["markdown"] = stripDocInputUnsafe(content)
 					}
 				}
 			} else if format, err := docContentFormat(cmd, "markdown", "jsonml"); err != nil {
@@ -473,7 +473,7 @@ func newDocUpdateCommand(runner executor.Runner) *cobra.Command {
 				if sniffJsonMLLike(content) {
 					fmt.Fprintln(cmd.ErrOrStderr(), `warning: 输入内容看起来是 JSONML 结构；若要按 JSONML 解析，请加 --content-format jsonml，否则将按 markdown 解析。`)
 				}
-				params["markdown"] = content
+				params["markdown"] = stripDocInputUnsafe(content)
 				addDocIntParam(cmd, params, "index", "index")
 			}
 			return runDocTool(cmd, runner, "doc", "update_document", params)
