@@ -601,6 +601,74 @@ func TestDeferredExecution_HoldsAndRetries(t *testing.T) {
 	}
 }
 
+// TestConfirmPolicy_Auto: a non-owner request runs without asking under "auto".
+func TestConfirmPolicy_Auto(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	gate := newApprovalGate("ctauto2")
+	runner := &fakeRunner{}
+	notifier := &fakeNotifier{}
+	o := newTextApprovalOrchestrator(gate, runner, "owner", notifier)
+	o.confirmPolicy = "auto"
+
+	_, handled := o.handleReply(context.Background(), "someone", "c1", `[[ACTION:todo.create title="x"]]`, func(_ context.Context, _, _ string) error { return nil })
+	if !handled {
+		t.Fatal("auto policy should handle (run) the action")
+	}
+	if runner.count() != 1 {
+		t.Fatalf("auto policy must execute without asking, ran %d", runner.count())
+	}
+	if gate.list()[0].State != approvalExecuted {
+		t.Fatalf("state=%s want executed", gate.list()[0].State)
+	}
+}
+
+// TestConfirmPolicy_Manual: a non-owner request asks the owner (default).
+func TestConfirmPolicy_Manual(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	gate := newApprovalGate("ctman")
+	runner := &fakeRunner{}
+	notifier := &fakeNotifier{}
+	o := newTextApprovalOrchestrator(gate, runner, "owner", notifier) // no policy = manual
+
+	o.handleReply(context.Background(), "someone", "c1", `[[ACTION:todo.create title="x"]]`, nil)
+	if runner.count() != 0 {
+		t.Fatal("manual policy must NOT execute before the owner decides")
+	}
+	if gate.list()[0].State != approvalPending {
+		t.Fatalf("state=%s want pending (awaiting owner)", gate.list()[0].State)
+	}
+	if !notifier.toUser("owner") {
+		t.Fatal("manual policy should DM the owner for approval")
+	}
+}
+
+// TestConfirmPolicy_Remember: ask once per verb, then reuse the decision.
+func TestConfirmPolicy_Remember(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	gate := newApprovalGate("ctrem")
+	runner := &fakeRunner{}
+	notifier := &fakeNotifier{}
+	o := newTextApprovalOrchestrator(gate, runner, "owner", notifier)
+	o.confirmPolicy = "remember"
+
+	// First todo.create from a non-owner → asks (pending).
+	o.handleReply(context.Background(), "someone", "c1", `[[ACTION:todo.create title="第一次"]]`, nil)
+	if gate.latestPending() == nil {
+		t.Fatal("first request should ask the owner")
+	}
+	// Owner approves → remembered, executes.
+	o.handleOwnerDecision(context.Background(), "owner", "同意")
+	if runner.count() != 1 {
+		t.Fatalf("approved request should execute, ran %d", runner.count())
+	}
+
+	// Second todo.create → reused decision, auto-runs (no new pending).
+	_, handled := o.handleReply(context.Background(), "someone", "c2", `[[ACTION:todo.create title="第二次"]]`, func(_ context.Context, _, _ string) error { return nil })
+	if !handled || runner.count() != 2 {
+		t.Fatalf("remembered approve should auto-run the 2nd request, handled=%v ran=%d", handled, runner.count())
+	}
+}
+
 // TestScopeEnforcement: an action outside the role's allowlist is refused up
 // front (the requester is told, nothing reaches the gate); an in-scope action
 // proceeds; an empty allowlist allows everything.

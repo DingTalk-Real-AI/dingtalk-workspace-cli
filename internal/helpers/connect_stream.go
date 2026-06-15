@@ -158,6 +158,12 @@ type connectAgentOptions struct {
 	// action whose product is not in the list, so a role stays in its lane (an
 	// HR assistant can't touch code/drive). Empty = no scope restriction.
 	RoleScopes []string
+	// ConfirmPolicy is the role's confirmation strategy for OTHERS' action
+	// requests (the owner's own requests always auto-run): "manual" asks the
+	// owner every time, "auto" runs without asking (full trust, still audited),
+	// "remember" asks once per action kind then reuses that decision. Sourced
+	// from RoleConfig.confirm_policy; empty = manual.
+	ConfirmPolicy string
 }
 
 // isStreamBridgeChannel reports whether a channel is wired through the Go-native

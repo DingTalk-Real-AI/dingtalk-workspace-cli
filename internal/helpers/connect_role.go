@@ -201,6 +201,9 @@ func applyRoleConfig(opts connectAgentOptions, role *RoleConfig) connectAgentOpt
 	if len(opts.RoleScopes) == 0 && len(role.AllowedScopes) > 0 {
 		opts.RoleScopes = append([]string(nil), role.AllowedScopes...)
 	}
+	if opts.ConfirmPolicy == "" && role.ConfirmPolicy != "" {
+		opts.ConfirmPolicy = string(role.ConfirmPolicy)
+	}
 	return opts
 }
 

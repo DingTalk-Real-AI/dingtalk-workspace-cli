@@ -285,10 +285,14 @@ func launchConnector(cmd *cobra.Command, runner executor.Runner, channel, client
 			if len(opts.RoleScopes) > 0 {
 				fmt.Fprintf(cmd.ErrOrStderr(), "[connect] 角色能力边界：仅允许 [%s]（其它产品的执行动作会被拒）\n", strings.Join(opts.RoleScopes, ", "))
 			}
+			if opts.ConfirmPolicy != "" && opts.ConfirmPolicy != "manual" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "[connect] 确认策略：%s（manual=每次问 / auto=不问直接做仍留痕 / remember=同类记住上次）\n", opts.ConfirmPolicy)
+			}
 			if sender := newDingtalkApprovalCardSender(clientID, clientSecret, opts.ApprovalCardTemplate); sender != nil {
 				orch := newApprovalOrchestrator(gate, sender, runner, opts.OwnerUserID)
 				orch.audit = audit
 				orch.allowedScopes = opts.RoleScopes
+				orch.confirmPolicy = opts.ConfirmPolicy
 				extras.approval = orch
 				fmt.Fprintf(cmd.ErrOrStderr(), "[connect] 确认闸已开启：主人=%s（执行类请求先卡片审批，[同意]/[拒绝]按钮）\n", opts.OwnerUserID)
 			} else {
@@ -302,6 +306,7 @@ func launchConnector(cmd *cobra.Command, runner executor.Runner, channel, client
 				orch := newTextApprovalOrchestrator(gate, runner, opts.OwnerUserID, notifier)
 				orch.audit = audit
 				orch.allowedScopes = opts.RoleScopes
+				orch.confirmPolicy = opts.ConfirmPolicy
 				extras.approval = orch
 				// Background auto-retry: a deferred backlog (e.g. queued while the
 				// dws login was not yet the owner) drains by itself once the identity

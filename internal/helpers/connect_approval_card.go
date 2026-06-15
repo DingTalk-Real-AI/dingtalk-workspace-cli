@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/open-dingtalk/dingtalk-stream-sdk-go/card"
@@ -190,6 +191,55 @@ type approvalOrchestrator struct {
 	// non-empty, an action whose product is not listed is refused before it ever
 	// reaches the gate, keeping the role in its lane. Empty = no restriction.
 	allowedScopes []string
+	// confirmPolicy governs how OTHERS' requests are confirmed: "manual" (ask
+	// every time, the default), "auto" (run without asking, still audited),
+	// "remember" (ask once per action verb then reuse). The owner's own requests
+	// always auto-run regardless.
+	confirmPolicy string
+	// remembered caches the owner's decision per action verb for the "remember"
+	// policy (verb → approved). Guarded by rememberMu.
+	rememberMu sync.Mutex
+	remembered map[string]bool
+}
+
+// gateDecision decides how to handle a write action: "auto" (run now), "ask"
+// (route to the owner), or "reject" (a remembered rejection). The owner's own
+// requests always auto-run. For others it follows confirmPolicy.
+func (o *approvalOrchestrator) gateDecision(requester, verb string) string {
+	if strings.TrimSpace(requester) != "" && strings.TrimSpace(requester) == o.ownerUserID {
+		return "auto"
+	}
+	switch strings.ToLower(strings.TrimSpace(o.confirmPolicy)) {
+	case "auto":
+		return "auto"
+	case "remember":
+		o.rememberMu.Lock()
+		decided, ok := o.remembered[verb]
+		o.rememberMu.Unlock()
+		if !ok {
+			return "ask"
+		}
+		if decided {
+			return "auto"
+		}
+		return "reject"
+	default: // manual / empty
+		return "ask"
+	}
+}
+
+// rememberDecision records the owner's decision for an action verb so the
+// "remember" policy can reuse it. No-op unless the policy is "remember".
+func (o *approvalOrchestrator) rememberDecision(verb string, approved bool) {
+	if strings.ToLower(strings.TrimSpace(o.confirmPolicy)) != "remember" || strings.TrimSpace(verb) == "" {
+		return
+	}
+	o.rememberMu.Lock()
+	if o.remembered == nil {
+		o.remembered = make(map[string]bool)
+	}
+	o.remembered[verb] = approved
+	o.rememberMu.Unlock()
 }
 
 // scopeAllows reports whether the role may use the given product. An empty
@@ -317,31 +367,40 @@ func (o *approvalOrchestrator) handleReply(ctx context.Context, requester, convI
 		return cleaned, false
 	}
 
-	autoApprove := strings.TrimSpace(requester) != "" && strings.TrimSpace(requester) == o.ownerUserID
+	// Confirmation strategy: owner-self always auto-runs; others follow
+	// confirmPolicy (manual=ask / auto=run / remember=reuse last decision).
+	decision := o.gateDecision(requester, act.Verb)
 	req := o.gate.Submit(ApprovalRequest{
 		Requester:    requester,
 		ConvID:       convID,
 		Summary:      summary,
+		Verb:         act.Verb,
 		Action:       pa,
-		AutoApproved: autoApprove,
+		AutoApproved: decision == "auto",
 	})
 
-	// Owner's own request: asking IS the authorization, so do not bother them
-	// with a second confirmation — execute directly. The record is still
-	// persisted (DecidedBy=owner, auto_approved=true) so every action stays
-	// auditable. Applies in both card and text mode.
-	if autoApprove {
+	switch decision {
+	case "auto":
+		// Asking IS the authorization (owner-self), or the policy pre-authorized
+		// it (auto / remembered-approve). Execute directly; still fully audited.
 		return o.autoApproveAndExecute(ctx, req, convID, reply)
+	case "reject":
+		// Remembered rejection for this action kind — decline without bothering
+		// the owner, and tell the requester.
+		o.gate.Decide(req.ID, false, o.ownerUserID)
+		o.recordAudit(ctx, req.ID)
+		fmt.Fprintf(os.Stderr, "[connect][approval] 记忆策略：%q 此前被拒，自动拒绝 approvalId=%s\n", act.Verb, req.ID)
+		return fmt.Sprintf("（主人此前已拒绝这类操作，本次未执行：%s）", summary), false
+	default: // "ask"
+		// Text mode: privately DM the owner and return immediately — the owner's
+		// "同意/拒绝" reply is captured asynchronously by handleOwnerDecision
+		// (blocking here would deadlock the per-conversation worker that must also
+		// process that reply). The requester (this conversation) sees nothing.
+		if o.textMode {
+			return o.handleReplyText(ctx, req)
+		}
+		return o.handleReplyCard(ctx, req, convID, reply)
 	}
-
-	// Text mode: privately DM the owner and return immediately — the owner's
-	// "同意/拒绝" reply is captured asynchronously by handleOwnerDecision
-	// (blocking here would deadlock the per-conversation worker that must also
-	// process that reply). The requester (this conversation) sees nothing.
-	if o.textMode {
-		return o.handleReplyText(ctx, req)
-	}
-	return o.handleReplyCard(ctx, req, convID, reply)
 }
 
 // autoApproveAndExecute runs an owner's own request without a second
@@ -449,6 +508,9 @@ func (o *approvalOrchestrator) handleOwnerDecision(ctx context.Context, senderSt
 		// re-execute.
 		return decided != nil
 	}
+	// "remember" policy: cache this decision for the action kind so the next
+	// same-verb request reuses it without asking again.
+	o.rememberDecision(decided.Verb, approve)
 	if !decided.approved() {
 		o.recordAudit(ctx, decided.ID)
 		_ = o.notifier.sendOTOText(ctx, []string{o.ownerUserID}, "好的，已拒绝，未执行。")
