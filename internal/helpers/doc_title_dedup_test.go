@@ -159,3 +159,110 @@ func TestDocCreateTitleOnlyContentOmitsMarkdown(t *testing.T) {
 		t.Errorf("markdown param = %v, want omitted", runner.last.Params["markdown"])
 	}
 }
+
+// TestDocCreateStripsDuplicateTitleJSONML verifies the end-to-end JSONML path:
+// `doc create --content-format jsonml` must drop a leading h1 whose text equals
+// --name before forwarding the body to update_document, otherwise the rich
+// document shows the page title twice.
+func TestDocCreateStripsDuplicateTitleJSONML(t *testing.T) {
+	runner := &docCommandRunner{responses: []map[string]any{{"nodeId": "NODE_X"}}}
+	root := newDocTestRoot(runner)
+
+	body := `{"jsonml":[["h1",{},"命令树参考"],["p",{},"正文"]]}`
+	_, errOut, err := executeDocCommand(t, root,
+		"create", "--name", "命令树参考",
+		"--content-format", "jsonml", "--content", body)
+	if err != nil {
+		t.Fatalf("execute: %v\nstderr:\n%s", err, errOut)
+	}
+	if len(runner.all) != 2 {
+		t.Fatalf("calls = %d, want 2 (create + update)", len(runner.all))
+	}
+	if runner.all[1].Tool != "update_document" {
+		t.Fatalf("second tool = %q, want update_document", runner.all[1].Tool)
+	}
+	got, _ := runner.all[1].Params["jsonml"].(string)
+	if strings.Contains(got, "命令树参考") {
+		t.Errorf("jsonml = %q, want duplicate h1 stripped", got)
+	}
+	if !strings.Contains(got, "正文") {
+		t.Errorf("jsonml = %q, want body content kept", got)
+	}
+	if !strings.Contains(errOut, "已自动移除") {
+		t.Errorf("stderr = %q, want a note about the removed heading", errOut)
+	}
+}
+
+// TestStripLeadingDuplicateTitleJSONML covers the JSONML-path counterpart: a
+// leading h1 node whose text equals the document name is removed; everything
+// else is left untouched.
+func TestStripLeadingDuplicateTitleJSONML(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     string
+		docName  string
+		want     string
+		stripped bool
+	}{
+		{
+			name:     "root-wrapped duplicate h1 stripped",
+			body:     `["root",{},["h1",{},"晚会简报"],["p",{},"正文"]]`,
+			docName:  "晚会简报",
+			want:     `["root",{},["p",{},"正文"]]`,
+			stripped: true,
+		},
+		{
+			name:     "nested leaf text matches and stripped",
+			body:     `["root",{},["h1",{"uuid":"x"},["span",{"data-type":"text"},["span",{"data-type":"leaf"},"晚会简报"]]],["p",{},"正文"]]`,
+			docName:  "晚会简报",
+			want:     `["root",{},["p",{},"正文"]]`,
+			stripped: true,
+		},
+		{
+			name:     "bare body without root wrapper",
+			body:     `[["h1",{},"标题"],["p",{},"正文"]]`,
+			docName:  "标题",
+			want:     `[["p",{},"正文"]]`,
+			stripped: true,
+		},
+		{
+			name:     "case insensitive match",
+			body:     `["root",{},["h1",{},"Weekly REPORT"],["p",{},"x"]]`,
+			docName:  "weekly report",
+			want:     `["root",{},["p",{},"x"]]`,
+			stripped: true,
+		},
+		{
+			name:     "distinct heading kept",
+			body:     `["root",{},["h1",{},"背景"],["p",{},"正文"]]`,
+			docName:  "晚会简报",
+			want:     `["root",{},["h1",{},"背景"],["p",{},"正文"]]`,
+			stripped: false,
+		},
+		{
+			name:     "non-h1 leading node kept",
+			body:     `["root",{},["h2",{},"晚会简报"],["p",{},"正文"]]`,
+			docName:  "晚会简报",
+			want:     `["root",{},["h2",{},"晚会简报"],["p",{},"正文"]]`,
+			stripped: false,
+		},
+		{
+			name:     "invalid json untouched",
+			body:     `not json`,
+			docName:  "x",
+			want:     `not json`,
+			stripped: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := stripLeadingDuplicateTitleJSONML(tc.body, tc.docName)
+			if ok != tc.stripped {
+				t.Fatalf("stripped = %v, want %v", ok, tc.stripped)
+			}
+			if got != tc.want {
+				t.Fatalf("body = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

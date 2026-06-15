@@ -335,6 +335,10 @@ func newDocCreateCommand(runner executor.Runner) *cobra.Command {
 					if err != nil {
 						return err
 					}
+					if stripped, ok := stripLeadingDuplicateTitleJSONML(jsonml, name); ok {
+						fmt.Fprintln(cmd.ErrOrStderr(), `note: 正文首个与 --name 相同的一级标题已自动移除（文档标题会单独渲染为页面标题，保留会出现两个标题）。`)
+						jsonml = stripped
+					}
 					createResult, err := docInvocationResult(cmd, runner, "doc", "create_document", params)
 					if err != nil {
 						return err
@@ -423,6 +427,83 @@ func stripLeadingDuplicateTitleHeading(content, name string) (string, bool) {
 		return content, false
 	}
 	return strings.TrimLeft(rest, "\r\n"), true
+}
+
+// stripLeadingDuplicateTitleJSONML is the JSONML-path counterpart of
+// stripLeadingDuplicateTitleHeading. The rich-content path (--content-format
+// jsonml) writes the body verbatim via update_document, so a leading h1 node
+// whose text equals the document name renders the title twice — exactly the
+// problem the markdown path already guards against.
+//
+// jsonmlBody is the marshaled body produced by prepareDocJSONMLBody: a JSON
+// array, either a bare node list or wrapped as ["root", {}, ...nodes]. The
+// first content node is removed only when it is an h1 whose concatenated text
+// (trimmed, case-insensitive) exactly equals name. Any parse failure or
+// non-match returns the input untouched, so this never blocks a valid write.
+func stripLeadingDuplicateTitleJSONML(jsonmlBody, name string) (string, bool) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return jsonmlBody, false
+	}
+	var body []any
+	if err := json.Unmarshal([]byte(jsonmlBody), &body); err != nil {
+		return jsonmlBody, false
+	}
+	// Locate the index of the first content node, skipping a ["root", {}, ...]
+	// wrapper if present.
+	first := 0
+	if len(body) >= 2 {
+		if tag, ok := body[0].(string); ok && tag == "root" {
+			first = 2
+		}
+	}
+	if first >= len(body) {
+		return jsonmlBody, false
+	}
+	node, ok := body[first].([]any)
+	if !ok || len(node) == 0 {
+		return jsonmlBody, false
+	}
+	tag, ok := node[0].(string)
+	if !ok || tag != "h1" {
+		return jsonmlBody, false
+	}
+	if !strings.EqualFold(strings.TrimSpace(jsonmlNodeText(node)), name) {
+		return jsonmlBody, false
+	}
+	body = append(body[:first], body[first+1:]...)
+	out, err := json.Marshal(body)
+	if err != nil {
+		return jsonmlBody, false
+	}
+	return string(out), true
+}
+
+// jsonmlNodeText concatenates all string leaves of a JSONML node, skipping the
+// leading tag name and any attributes object, so ["h1", {..}, ["span", {..},
+// ["span", {..}, "Title"]]] yields "Title".
+func jsonmlNodeText(node any) string {
+	switch v := node.(type) {
+	case string:
+		return v
+	case []any:
+		var b strings.Builder
+		for i, child := range v {
+			// element[0] is the tag name; a map at element[1] is attributes.
+			if i == 0 {
+				if _, isStr := child.(string); isStr {
+					continue
+				}
+			}
+			if _, isMap := child.(map[string]any); isMap {
+				continue
+			}
+			b.WriteString(jsonmlNodeText(child))
+		}
+		return b.String()
+	default:
+		return ""
+	}
 }
 
 func newDocUpdateCommand(runner executor.Runner) *cobra.Command {
