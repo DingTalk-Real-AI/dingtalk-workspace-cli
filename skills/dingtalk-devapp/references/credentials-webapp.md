@@ -8,7 +8,7 @@ dws devapp credentials get --app-key dingxxx --format json
 dws devapp credentials get --name DemoApp --format json
 ```
 
-MCP tool: `get_open_dev_app_credentials`
+MCP tool: `get_dev_app_credentials`
 
 后端 facade: `OpenInnerAppQueryFacade.getCredentials`。
 
@@ -33,7 +33,7 @@ dws devapp webapp get --unified-app-id UNIFIED_APP_ID --format json
 dws devapp webapp get --app-key dingxxx --format json
 ```
 
-MCP tool: `get_webapp_config`
+MCP tool: `get_extension_webapp_config`
 
 未配置网页应用前可能只返回空配置。
 
@@ -44,7 +44,7 @@ dws devapp webapp config --unified-app-id UNIFIED_APP_ID --homepage-url https://
 dws devapp webapp config --unified-app-id UNIFIED_APP_ID --homepage-url https://example.com/mobile --pc-homepage-url https://example.com/pc --yes --format json
 ```
 
-MCP tool: `set_webapp_config`
+MCP tool: `set_extension_webapp_config`
 
 | CLI | MCP | 说明 |
 |-----|-----|------|

@@ -128,17 +128,17 @@ Do not send confirmation fields such as `confirmCreate`, `confirmUpdate`, `confi
 
 | Area | CLI command | MCP tool | Backend HSF facade | Current backend status | Open-source DWS status |
 | --- | --- | --- | --- | --- | --- |
-| App query | `devapp list` | `list_open_dev_app` | `OpenInnerAppQueryFacade.listByCondition` | Implemented | Hardcoded helper |
+| App query | `devapp list` | `list_dev_app` | `OpenInnerAppQueryFacade.listByCondition` | Implemented | Hardcoded helper |
 | App detail | `devapp get` | `get_dev_app` | `OpenInnerAppQueryFacade.getDetail` | Implemented | Hardcoded helper |
 | App create | `devapp create` | `create_dev_app` | `OpenInnerAppManageFacade.create` | Implemented | Hardcoded helper |
 | App update | `devapp update` | `update_dev_app` | `OpenInnerAppManageFacade.update` | Implemented | Hardcoded helper |
 | App delete | `devapp delete` | `delete_dev_app` | `OpenInnerAppManageFacade.delete` | Implemented | Hardcoded helper |
-| Credentials | `devapp credentials get` | `get_open_dev_app_credentials` | `OpenInnerAppQueryFacade.getCredentials` | Implemented | Hardcoded helper |
-| Web app | `devapp webapp get/config` | `get_webapp_config`/`set_webapp_config` | Webapp facade | Implemented | Hardcoded helper; locator fields are `unifiedAppId/appKey`; config fields are `h5PageType/homepageUrl/pcHomepageUrl/ompUrl`. |
-| Permission list | `devapp permission list/search/detail` | `list_open_dev_app_permissions` | `OpenInnerAppPermissionFacade.list` | Implemented | Hardcoded helper |
-| Permission apply | `devapp permission add` | `apply_open_dev_app_permissions` | `OpenInnerAppPermissionFacade.apply` | Implemented | Hardcoded helper |
-| Permission remove | `devapp permission remove` | `remove_open_dev_app_permission` | `OpenInnerAppPermissionFacade.remove` | Implemented | Hardcoded helper |
-| Events | `devapp event list/subscribe/unsubscribe` | `list_dev_app_events`, `subscribe_dev_app_event`, `unsubscribe_dev_app_event` | Implemented | Hardcoded helper |
+| Credentials | `devapp credentials get` | `get_dev_app_credentials` | `OpenInnerAppQueryFacade.getCredentials` | Implemented | Hardcoded helper |
+| Web app | `devapp webapp get/config` | `get_extension_webapp_config`/`set_extension_webapp_config` | Webapp facade | Implemented | Hardcoded helper; locator fields are `unifiedAppId/appKey`; config fields are `h5PageType/homepageUrl/pcHomepageUrl/ompUrl`. |
+| Permission list | `devapp permission list/search/detail` | `list_dev_app_permissions` | `OpenInnerAppPermissionFacade.list` | Implemented | Hardcoded helper |
+| Permission apply | `devapp permission add` | `apply_dev_app_permissions` | `OpenInnerAppPermissionFacade.apply` | Implemented | Hardcoded helper |
+| Permission remove | `devapp permission remove` | `remove_dev_app_permissions` | `OpenInnerAppPermissionFacade.remove` | Implemented | Hardcoded helper |
+| Events | `devapp event list/subscribe/unsubscribe` | `list_open_dev_app_events`, `subscribe/unsubscribe_open_dev_app_event` | Implemented | Hardcoded helper |
 | Robot create | `devapp robot create/submit/result` | `create_dingtalk_robot`/`submit_robot_create_task`/`query_robot_create_result` | Implemented | Hardcoded helper |
 | Robot config | `devapp robot get/config/enable/disable` | `get_dev_app_robot_config`, `set_extension_robot_config`, `enable_dev_app_robot`, `disable_dev_app_robot` | Implemented | Hardcoded helper |
 | Version | `devapp version create/list/get/check-approval/publish/status` | `create_dev_app_version`, `list_dev_app_versions`, `get_dev_app_version_detail`, `publish_dev_app_version`, `get_dev_app_version_status` | Implemented | Hardcoded helper |
@@ -189,7 +189,7 @@ Naming convention:
 
 ### 3.2 P0 Tool Contracts
 
-#### list_open_dev_app
+#### list_dev_app
 
 | Item | Contract |
 | --- | --- |
@@ -342,7 +342,7 @@ The Agent must display the resolved app summary before executing delete with
 `--yes`. The response should include `deleted=true`, the app summary, and raw
 backend fields.
 
-#### list_open_dev_app_permissions
+#### list_dev_app_permissions
 
 | Item | Contract |
 | --- | --- |
@@ -393,7 +393,7 @@ Normalized response should flatten `appScopes` and `snsScopes` into one
 }
 ```
 
-#### apply_open_dev_app_permissions
+#### apply_dev_app_permissions
 
 | Item | Contract |
 | --- | --- |
@@ -430,7 +430,7 @@ skipped scopes:
 `requiredApproval=true` scopes must be accepted when editable and staged into the
 current app version. Approver selection is handled by the version flow.
 
-#### remove_open_dev_app_permission
+#### remove_dev_app_permissions
 
 | Item | Contract |
 | --- | --- |
@@ -484,7 +484,7 @@ Tool override examples:
 ```json
 {
   "toolOverrides": {
-    "list_open_dev_app": {
+    "list_dev_app": {
       "cliName": "list",
       "description": "查询开放平台企业内部应用列表",
       "flags": {
@@ -535,7 +535,7 @@ Tool override examples:
         "name": {"alias": "name"}
       }
     },
-    "list_open_dev_app_permissions": {
+    "list_dev_app_permissions": {
       "cliName": "list",
       "group": "permission",
       "description": "查询开放平台应用权限列表，默认同时返回 APP 应用权限和 SNS 个人权限",
@@ -550,7 +550,7 @@ Tool override examples:
         "cursor": {"alias": "cursor"}
       }
     },
-    "apply_open_dev_app_permissions": {
+    "apply_dev_app_permissions": {
       "cliName": "add",
       "group": "permission",
       "description": "申请开放平台应用权限点；需审核权限写入当前应用版本变更",
@@ -565,7 +565,7 @@ Tool override examples:
         }
       }
     },
-    "remove_open_dev_app_permission": {
+    "remove_dev_app_permissions": {
       "cliName": "remove",
       "group": "permission",
       "description": "取消一个已开通的开放平台应用权限点",
@@ -583,7 +583,7 @@ Tool override examples:
 }
 ```
 
-`permission search/detail` are UX aliases over `list_open_dev_app_permissions`. The helper exposes one canonical MCP call and keeps alias behavior at the CLI layer:
+`permission search/detail` are UX aliases over `list_dev_app_permissions`. The helper exposes one canonical MCP call and keeps alias behavior at the CLI layer:
 
 ```bash
 dws devapp permission list --keyword "机器人发送消息"
@@ -594,8 +594,8 @@ If a helper command is added, map aliases without creating new MCP tools:
 
 | Helper command | Underlying tool | Forced/derived args |
 | --- | --- | --- |
-| `devapp permission search` | `list_open_dev_app_permissions` | Requires `keyword` or `scopeValue`; returns candidate summaries. |
-| `devapp permission detail` | `list_open_dev_app_permissions` | Requires `scopeValue`; returns one scope with full `apiList`. |
+| `devapp permission search` | `list_dev_app_permissions` | Requires `keyword` or `scopeValue`; returns candidate summaries. |
+| `devapp permission detail` | `list_dev_app_permissions` | Requires `scopeValue`; returns one scope with full `apiList`. |
 
 ## 5. App Identity Resolution
 
@@ -737,7 +737,7 @@ dws devapp credentials get --name DemoApp --format json
 Current status:
 
 1. Backend facade is `OpenInnerAppQueryFacade.getCredentials`.
-2. MCP tool is `get_open_dev_app_credentials`.
+2. MCP tool is `get_dev_app_credentials`.
 3. CLI sends only application locator fields and does not add `showSecret`, `confirmSecret`, or masking fields.
 4. The MCP response follows the backend credential contract and may include `clientSecret/appSecret`; callers must treat command output as sensitive.
 
@@ -1079,18 +1079,18 @@ Intent table:
 
 | User intent | Command | Tool |
 | --- | --- | --- |
-| "查应用/搜索应用" | `devapp list` | `list_open_dev_app` |
+| "查应用/搜索应用" | `devapp list` | `list_dev_app` |
 | "看应用详情/clientId/appKey" | `devapp get` | `get_dev_app` |
 | "创建应用" | `devapp create` | `create_dev_app` |
 | "修改名称/描述/图标" | `devapp update` | `update_dev_app` |
 | "删除应用" | `devapp delete` | `delete_dev_app` |
-| "查权限/搜索 API 权限" | `permission list` | `list_open_dev_app_permissions` |
-| "这个权限覆盖哪些 API" | `permission list --scope` | `list_open_dev_app_permissions` |
-| "申请权限/开通权限" | `permission add` | `apply_open_dev_app_permissions` |
-| "取消权限/移除权限" | `permission remove` | `remove_open_dev_app_permission` |
-| "拿 appSecret/clientSecret" | `credentials get` | `get_open_dev_app_credentials` |
-| "查可订阅事件/订阅/退订事件" | `event list/subscribe/unsubscribe` | `list_dev_app_events`, `subscribe_dev_app_event`, `unsubscribe_dev_app_event` |
-| "发布/审核/选审批人" | `version ...` | `publish_dev_app_version` etc. |
+| "查权限/搜索 API 权限" | `permission list` | `list_dev_app_permissions` |
+| "这个权限覆盖哪些 API" | `permission list --scope` | `list_dev_app_permissions` |
+| "申请权限/开通权限" | `permission add` | `apply_dev_app_permissions` |
+| "取消权限/移除权限" | `permission remove` | `remove_dev_app_permissions` |
+| "拿 appSecret/clientSecret" | `credentials get` | `get_dev_app_credentials` |
+| "查可订阅事件/订阅/退订事件" | `event list/subscribe/unsubscribe` | `list_open_dev_app_events`, `subscribe/unsubscribe_open_dev_app_event` |
+| "发布/审核/选审批人" | `version ...` | `publish_open_dev_app_version` etc. |
 
 Yulan invocation examples:
 
@@ -1354,14 +1354,14 @@ P0 debug inputs:
 
 | Tool | Baseline debug input |
 | --- | --- |
-| `list_open_dev_app` | `{"pageSize":10}` |
+| `list_dev_app` | `{"pageSize":10}` |
 | `get_dev_app` | `{"unifiedAppId":"UNIFIED_APP_ID"}` |
 | `create_dev_app` | `{"appName":"DemoApp","appDesc":"internal app"}` |
 | `update_dev_app` | `{"unifiedAppId":"UNIFIED_APP_ID","appDesc":"new desc"}` |
 | `delete_dev_app` | `{"unifiedAppId":"UNIFIED_APP_ID"}` |
-| `list_open_dev_app_permissions` | `{"unifiedAppId":"UNIFIED_APP_ID","authStatus":"ALL","pageSize":20}` |
-| `apply_open_dev_app_permissions` | `{"unifiedAppId":"UNIFIED_APP_ID","scopeValues":["SCOPE_VALUE"]}` |
-| `remove_open_dev_app_permission` | `{"unifiedAppId":"UNIFIED_APP_ID","scopeValue":"SCOPE_VALUE"}` |
+| `list_dev_app_permissions` | `{"unifiedAppId":"UNIFIED_APP_ID","authStatus":"ALL","pageSize":20}` |
+| `apply_dev_app_permissions` | `{"unifiedAppId":"UNIFIED_APP_ID","scopeValues":["SCOPE_VALUE"]}` |
+| `remove_dev_app_permissions` | `{"unifiedAppId":"UNIFIED_APP_ID","scopeValue":"SCOPE_VALUE"}` |
 
 For destructive debug cases, use a disposable application and permission scope.
 Do not use production data in long-lived examples.
@@ -1372,7 +1372,7 @@ After publish, verify the service through MCP before using DWS:
 
 1. Run MCP `initialize`.
 2. Run `tools/list` and confirm all expected P0 tool keys exist.
-3. Call `list_open_dev_app` with only pagination.
+3. Call `list_dev_app` with only pagination.
 4. Call one exact locator scenario, such as `get_dev_app`.
 5. Call permission list with `authStatus=ALL` and confirm APP and SNS scopes are
    both represented.
@@ -1460,7 +1460,7 @@ the following are true:
 | `dws devapp permission list --unified-app-id X --keyword "发送消息" --format json` | Returns candidate `permissions[]`; no automatic apply. |
 | `dws devapp permission add --unified-app-id X --permissions Contact.User.mobile --yes --format json` | Applies or stages permission; `requiredApproval=true` is allowed. |
 | `dws devapp permission remove --unified-app-id X --permission qyapi_robot_sendmsg --yes --format json` | Removes one authorized scope or returns a structured reason. |
-| `dws devapp credentials get --unified-app-id X --format json` | Calls `get_open_dev_app_credentials`; does not use `devapp get` as a secret fallback. |
+| `dws devapp credentials get --unified-app-id X --format json` | Calls `get_dev_app_credentials`; does not use `devapp get` as a secret fallback. |
 | `查应用 appXYZ 的详情` without OpenDev context | Does not blindly route to `devapp`; uses context such as `workbench app get` or asks. |
 | `查询开放平台 API 错误码` | Routes to `devdoc`, not `devapp`. |
 | `创建 MCP 服务并配置 HSF tool` | Uses OpenDev MCP platform workflow, not `dws devapp create`. |

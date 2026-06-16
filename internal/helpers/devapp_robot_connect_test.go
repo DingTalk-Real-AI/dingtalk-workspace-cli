@@ -94,7 +94,7 @@ func TestDevAppRobotConnectValidation(t *testing.T) {
 }
 
 // TestDevAppFetchCredentials checks that --unified-app-id credential resolution
-// reuses get_open_dev_app_credentials and extracts clientId/clientSecret from the
+// reuses get_dev_app_credentials and extracts clientId/clientSecret from the
 // MCP envelope.
 func TestDevAppFetchCredentials(t *testing.T) {
 	runner := &devAppResponseRunner{response: map[string]any{
@@ -119,8 +119,8 @@ func TestDevAppFetchCredentials(t *testing.T) {
 	if id != "ck-123" || secret != "cs-456" {
 		t.Fatalf("got id=%q secret=%q, want ck-123/cs-456", id, secret)
 	}
-	if runner.last.Tool != "get_open_dev_app_credentials" {
-		t.Fatalf("Tool = %q, want get_open_dev_app_credentials", runner.last.Tool)
+	if runner.last.Tool != "get_dev_app_credentials" {
+		t.Fatalf("Tool = %q, want get_dev_app_credentials", runner.last.Tool)
 	}
 	if runner.last.CanonicalProduct != devAppProduct {
 		t.Fatalf("CanonicalProduct = %q, want %q", runner.last.CanonicalProduct, devAppProduct)

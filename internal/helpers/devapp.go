@@ -28,19 +28,19 @@ import (
 const (
 	devAppProduct = "devapp"
 
-	devAppListTool       = "list_open_dev_app"
+	devAppListTool       = "list_dev_app"
 	devAppGetTool        = "get_dev_app"
 	devAppCreateTool     = "create_dev_app"
 	devAppUpdateTool     = "update_dev_app"
 	devAppDeleteTool     = "delete_dev_app"
 	devAppDisableTool    = "disable_dev_app"
 	devAppEnableTool     = "enable_dev_app"
-	devAppCredentialsGet = "get_open_dev_app_credentials"
+	devAppCredentialsGet = "get_dev_app_credentials"
 
-	devAppMemberListTool     = "list_open_dev_app_members"
-	devAppMemberAddTool      = "add_open_dev_app_members"
-	devAppMemberRemoveTool   = "remove_open_dev_app_members"
-	devAppSecurityConfigTool = "update_app_security_config"
+	devAppMemberListTool     = "list_dev_app_members"
+	devAppMemberAddTool      = "add_dev_app_members"
+	devAppMemberRemoveTool   = "remove_dev_app_members"
+	devAppSecurityConfigTool = "update_dev_app_security_config"
 
 	// 机器人能力（op-app MCP 工具，硬编码不走服务发现）。
 	devAppRobotCreateTool    = "create_dingtalk_robot"
@@ -417,7 +417,7 @@ func newDevAppWebappGetCommand(runner executor.Runner) *cobra.Command {
 			if len(params) == 0 {
 				return devAppMcpLocatorRequired(false)
 			}
-			return runDevAppTool(runner, cmd, "get_webapp_config", params)
+			return runDevAppTool(runner, cmd, "get_extension_webapp_config", params)
 		},
 	}
 	addDevAppMcpLocatorFlags(cmd, false)
@@ -460,7 +460,7 @@ func newDevAppWebappConfigCommand(runner executor.Runner) *cobra.Command {
 			if updates == 0 {
 				return apperrors.NewValidation("at least one webapp field is required: --h5-page-type, --homepage-url, --pc-homepage-url, or --omp-url")
 			}
-			return runDevAppTool(runner, cmd, "set_webapp_config", params)
+			return runDevAppTool(runner, cmd, "set_extension_webapp_config", params)
 		},
 	}
 	addDevAppMcpLocatorFlags(cmd, true)
@@ -498,7 +498,7 @@ func newDevAppPermissionListCommand(runner executor.Runner) *cobra.Command {
 			devAppPutString(params, "apiStatus", devAppStringFlag(cmd, "api-status"))
 			devAppPutString(params, "cursor", devAppStringFlag(cmd, "cursor"))
 			devAppPutInt(params, "pageSize", devAppIntFlag(cmd, "page-size"))
-			return runDevAppTool(runner, cmd, "list_open_dev_app_permissions", params)
+			return runDevAppTool(runner, cmd, "list_dev_app_permissions", params)
 		},
 	}
 	addDevAppPermissionLocatorFlags(cmd)
@@ -535,7 +535,7 @@ func newDevAppPermissionAddCommand(runner executor.Runner) *cobra.Command {
 				return apperrors.NewValidation("--permissions is required")
 			}
 			params["scopeValues"] = scopes
-			return runDevAppTool(runner, cmd, "apply_open_dev_app_permissions", params)
+			return runDevAppTool(runner, cmd, "apply_dev_app_permissions", params)
 		},
 	}
 	addDevAppPermissionLocatorFlags(cmd)
@@ -568,7 +568,7 @@ func newDevAppPermissionRemoveCommand(runner executor.Runner) *cobra.Command {
 				return apperrors.NewValidation("--permission is required")
 			}
 			params["scopeValue"] = scope
-			return runDevAppTool(runner, cmd, "remove_open_dev_app_permission", params)
+			return runDevAppTool(runner, cmd, "remove_dev_app_permissions", params)
 		},
 	}
 	addDevAppPermissionLocatorFlags(cmd)
@@ -652,13 +652,13 @@ func newDevAppSecurityConfigCommand(runner executor.Runner) *cobra.Command {
 
 			params := map[string]any{"unifiedAppId": appID}
 			if values := parseDevAppListFlag(cmd, "ip-whitelist"); len(values) > 0 {
-				params["ipWhiteList"] = values
+				params["ipWhitelist"] = values
 			}
 			if values := parseDevAppListFlag(cmd, "redirect-url"); len(values) > 0 {
 				params["redirectUrls"] = values
 			}
 			if values := parseDevAppListFlag(cmd, "sso-url"); len(values) > 0 {
-				params["otherAuthUrls"] = values
+				params["ssoUrls"] = values
 			}
 			if len(params) == 1 {
 				return apperrors.NewValidation("one of --ip-whitelist, --redirect-url, or --sso-url is required")

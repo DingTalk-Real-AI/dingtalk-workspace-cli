@@ -266,7 +266,7 @@ func officialChannelGuidance(channel string) string {
 // newDevAppRobotConnectCommand implements `dws devapp robot connect`: the linking
 // half of provisioning. It takes an existing robot's credentials — either
 // directly via --client-id/--client-secret, or by --unified-app-id (reusing
-// devapp's `get_open_dev_app_credentials` to fetch them) — and starts the
+// devapp's `get_dev_app_credentials` to fetch them) — and starts the
 // channel-aware Stream connector in the foreground. It never provisions a robot;
 // for 建号 run `dws devapp robot create` (or submit/result) first.
 func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
@@ -459,14 +459,14 @@ func connectAgentOptionsPayload(channel string, opts connectAgentOptions) map[st
 	return map[string]any{"model": model, "workdir": workDir, "memory": memory, "replyStyle": replyStyle}
 }
 
-// devAppFetchCredentials reuses devapp's get_open_dev_app_credentials tool to
+// devAppFetchCredentials reuses devapp's get_dev_app_credentials tool to
 // resolve a unified app's clientId/clientSecret, so `robot connect
 // --unified-app-id` need not have the caller paste raw credentials. Note the
 // open platform only returns clientSecret once (at provisioning); if the tool
 // omits it the caller is told to fall back to explicit flags.
 //
 // TODO(verify): the clientId/clientSecret (and appKey/appSecret fallback) field
-// names below are NOT yet confirmed against the real get_open_dev_app_credentials
+// names below are NOT yet confirmed against the real get_dev_app_credentials
 // response — no fixture exists in-repo. Verify against the pre-prod gateway and
 // pin the exact field names before relying on --unified-app-id auto-fetch. The
 // path degrades safely today: an unrecognised shape yields empty strings and the
@@ -475,7 +475,7 @@ func devAppFetchCredentials(runner executor.Runner, cmd *cobra.Command, unifiedA
 	invocation := executor.NewHelperInvocation(
 		cobracmd.LegacyCommandPath(cmd),
 		devAppProduct,
-		"get_open_dev_app_credentials",
+		devAppCredentialsGet,
 		map[string]any{"unifiedAppId": unifiedAppID},
 	)
 	res, err := runner.Run(cmd.Context(), invocation)

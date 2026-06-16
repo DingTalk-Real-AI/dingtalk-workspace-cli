@@ -21,7 +21,7 @@ dws devapp list --app-key dingxxx --format json
 dws devapp list --name DemoApp --page-size 20 --cursor NEXT_CURSOR --format json
 ```
 
-MCP tool: `list_open_dev_app`
+MCP tool: `list_dev_app`
 
 | CLI | MCP | 说明 |
 |-----|-----|------|
