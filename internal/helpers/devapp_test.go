@@ -46,7 +46,7 @@ func TestDevAppMemberCommandsBuildToolParams(t *testing.T) {
 			name:     "list",
 			cmd:      "list",
 			args:     []string{"--app-id", "app-001"},
-			wantTool: "list_open_dev_app_members",
+			wantTool: "list_dev_app_members",
 			wantParams: map[string]any{
 				"unifiedAppId": "app-001",
 			},
@@ -55,7 +55,7 @@ func TestDevAppMemberCommandsBuildToolParams(t *testing.T) {
 			name:     "add multiple users",
 			cmd:      "add",
 			args:     []string{"--app-id", "app-001", "--users", "userId1,userId2,userId3,userId4", "--member-type", "DEVELOPER", "--yes"},
-			wantTool: "add_open_dev_app_members",
+			wantTool: "add_dev_app_members",
 			wantParams: map[string]any{
 				"unifiedAppId":  "app-001",
 				"memberUserIds": []string{"userId1", "userId2", "userId3", "userId4"},
@@ -66,7 +66,7 @@ func TestDevAppMemberCommandsBuildToolParams(t *testing.T) {
 			name:     "remove trims users",
 			cmd:      "remove",
 			args:     []string{"--app-id", "app-001", "--users", " userId1 , userId2 ", "--member-type", "DEVELOPER", "--yes"},
-			wantTool: "remove_open_dev_app_members",
+			wantTool: "remove_dev_app_members",
 			wantParams: map[string]any{
 				"unifiedAppId":  "app-001",
 				"memberUserIds": []string{"userId1", "userId2"},
@@ -876,14 +876,14 @@ func TestDevAppSecurityConfigBuildsOnlyProvidedLists(t *testing.T) {
 	if got := runner.last.CanonicalProduct; got != "devapp" {
 		t.Fatalf("CanonicalProduct = %q, want devapp", got)
 	}
-	if got := runner.last.Tool; got != "update_app_security_config" {
-		t.Fatalf("Tool = %q, want update_app_security_config", got)
+	if got := runner.last.Tool; got != "update_dev_app_security_config" {
+		t.Fatalf("Tool = %q, want update_dev_app_security_config", got)
 	}
 	want := map[string]any{
-		"unifiedAppId":  "app-001",
-		"ipWhiteList":   []string{"192.0.2.10", "192.0.2.11"},
-		"redirectUrls":  []string{"https://callback.example.invalid/callback"},
-		"otherAuthUrls": []string{"https://sso.example.invalid/sso"},
+		"unifiedAppId": "app-001",
+		"ipWhitelist":  []string{"192.0.2.10", "192.0.2.11"},
+		"redirectUrls": []string{"https://callback.example.invalid/callback"},
+		"ssoUrls":      []string{"https://sso.example.invalid/sso"},
 	}
 	if !reflect.DeepEqual(runner.last.Params, want) {
 		t.Fatalf("Params = %#v, want %#v", runner.last.Params, want)

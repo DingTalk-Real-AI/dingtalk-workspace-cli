@@ -37,10 +37,10 @@ const (
 	devAppEnableTool     = "enable_dev_app"
 	devAppCredentialsGet = "get_open_dev_app_credentials"
 
-	devAppMemberListTool     = "list_open_dev_app_members"
-	devAppMemberAddTool      = "add_open_dev_app_members"
-	devAppMemberRemoveTool   = "remove_open_dev_app_members"
-	devAppSecurityConfigTool = "update_app_security_config"
+	devAppMemberListTool     = "list_dev_app_members"
+	devAppMemberAddTool      = "add_dev_app_members"
+	devAppMemberRemoveTool   = "remove_dev_app_members"
+	devAppSecurityConfigTool = "update_dev_app_security_config"
 
 	// 机器人能力（op-app MCP 工具，硬编码不走服务发现）。
 	devAppRobotCreateTool    = "create_dingtalk_robot"
@@ -652,13 +652,13 @@ func newDevAppSecurityConfigCommand(runner executor.Runner) *cobra.Command {
 
 			params := map[string]any{"unifiedAppId": appID}
 			if values := parseDevAppListFlag(cmd, "ip-whitelist"); len(values) > 0 {
-				params["ipWhiteList"] = values
+				params["ipWhitelist"] = values
 			}
 			if values := parseDevAppListFlag(cmd, "redirect-url"); len(values) > 0 {
 				params["redirectUrls"] = values
 			}
 			if values := parseDevAppListFlag(cmd, "sso-url"); len(values) > 0 {
-				params["otherAuthUrls"] = values
+				params["ssoUrls"] = values
 			}
 			if len(params) == 1 {
 				return apperrors.NewValidation("one of --ip-whitelist, --redirect-url, or --sso-url is required")

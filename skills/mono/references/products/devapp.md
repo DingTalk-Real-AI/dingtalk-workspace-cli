@@ -173,7 +173,7 @@ dws devapp member add --app-id UNIFIED_APP_ID --users userId1,userId2 --member-t
 dws devapp member remove --app-id UNIFIED_APP_ID --users userId1 --member-type DEVELOPER --dry-run --format json
 ```
 
-MCP tools: `list_open_dev_app_members` / `add_open_dev_app_members` / `remove_open_dev_app_members`
+MCP tools: `list_dev_app_members` / `add_dev_app_members` / `remove_dev_app_members`
 
 ### 安全配置
 
@@ -181,7 +181,7 @@ MCP tools: `list_open_dev_app_members` / `add_open_dev_app_members` / `remove_op
 dws devapp security config --app-id UNIFIED_APP_ID --ip-whitelist 192.0.2.10 --redirect-url https://callback.example.invalid/callback --dry-run --format json
 ```
 
-MCP tool: `update_app_security_config`
+MCP tool: `update_dev_app_security_config`
 
 ---
 
