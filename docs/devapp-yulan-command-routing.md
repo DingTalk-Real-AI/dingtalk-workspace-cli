@@ -140,7 +140,7 @@ Do not send confirmation fields such as `confirmCreate`, `confirmUpdate`, `confi
 | Permission remove | `devapp permission remove` | `remove_dev_app_permissions` | `OpenInnerAppPermissionFacade.remove` | Implemented | Hardcoded helper |
 | Events | `devapp event list/subscribe/unsubscribe` | `list_open_dev_app_events`, `subscribe/unsubscribe_open_dev_app_event` | Implemented | Hardcoded helper |
 | Robot create | `devapp robot create/submit/result` | `create_dingtalk_robot`/`submit_robot_create_task`/`query_robot_create_result` | Implemented | Hardcoded helper |
-| Robot config | `devapp robot get/config/enable/disable` | `get_dev_app_robot_config`, `set_extension_robot_config`, `enable_dev_app_robot`, `disable_dev_app_robot` | Implemented | Hardcoded helper |
+| Robot config | `devapp robot get/config/enable/disable` | `get_robot_config`, `set_extension_robot_config`, `enable_dev_app_robot`, `disable_dev_app_robot` | Implemented | Hardcoded helper |
 | Version | `devapp version create/list/get/check-approval/publish/status` | `create_dev_app_version`, `list_dev_app_versions`, `get_dev_app_version_detail`, `publish_dev_app_version`, `get_dev_app_version_status` | Implemented | Hardcoded helper |
 
 P0 for yulan is app CRUD, permissions, credentials, and web app config. Robot,
@@ -999,7 +999,7 @@ Implemented robot tools:
 | `devapp robot create` | `create_dingtalk_robot` | Synchronously create a new agent app + robot. |
 | `devapp robot submit` | `submit_robot_create_task` | Async submit; supports retry via original `taskId`. |
 | `devapp robot result` | `query_robot_create_result` | Poll async task by `taskId`. |
-| `devapp robot get` | `get_dev_app_robot_config` | Read robot config of an existing app. |
+| `devapp robot get` | `get_robot_config` | Read robot config of an existing app. |
 | `devapp robot config` | `set_extension_robot_config` | Create or update robot config on an existing app. |
 | `devapp robot enable` | `enable_dev_app_robot` | Enable / re-enable robot capability. |
 | `devapp robot disable` | `disable_dev_app_robot` | Disable robot capability. |

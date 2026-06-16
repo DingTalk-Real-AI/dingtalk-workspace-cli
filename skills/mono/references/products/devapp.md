@@ -219,7 +219,7 @@ dws devapp robot enable --unified-app-id ID --name 小助手 --dry-run --format 
 dws devapp robot disable --unified-app-id ID --dry-run --format json
 ```
 
-MCP tools: `get_dev_app_robot_config` / `set_extension_robot_config` / `enable_dev_app_robot` / `disable_dev_app_robot`。
+MCP tools: `get_robot_config` / `set_extension_robot_config` / `enable_dev_app_robot` / `disable_dev_app_robot`。
 
 配置字段：`--name/--brief/--description/--icon/--outgoing-url(outgoingUrl)/--event-url(chatBotEventUrl)/--mode/--skills(skillList)/--add-scope/--disable-ssl-verify/--i18n-name/--i18n-brief/--i18n-description`。应用未配机器人时 `get` 返回 `robot info is not exist`。
 

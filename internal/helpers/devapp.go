@@ -46,7 +46,7 @@ const (
 	devAppRobotCreateTool    = "create_dingtalk_robot"
 	devAppRobotSubmitTool    = "submit_robot_create_task"
 	devAppRobotResultTool    = "query_robot_create_result"
-	devAppRobotConfigGetTool = "get_dev_app_robot_config"
+	devAppRobotConfigGetTool = "get_robot_config"
 	devAppRobotConfigSetTool = "set_extension_robot_config"
 	devAppRobotEnableTool    = "enable_dev_app_robot"
 	devAppRobotDisableTool   = "disable_dev_app_robot"

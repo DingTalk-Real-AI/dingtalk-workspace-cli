@@ -64,7 +64,7 @@ MCP tools: `submit_robot_create_task` / `query_robot_create_result`
 dws devapp robot get --unified-app-id <unifiedAppId> --format json
 ```
 
-MCP tool: `get_dev_app_robot_config`。返回机器人基础信息、回调地址、模式、状态和技能列表。应用尚未配置机器人时后端会返回 `robot info is not exist`。
+MCP tool: `get_robot_config`。返回机器人基础信息、回调地址、模式、状态和技能列表。应用尚未配置机器人时后端会返回 `robot info is not exist`。
 
 状态判断：
 
