@@ -225,8 +225,11 @@ func enrichPATErrorWithOpenBrowser(raw string, openBrowser bool) string {
 		data = map[string]any{}
 		payload["data"] = data
 	}
-	if rawURI, ok := data["uri"].(string); ok && strings.TrimSpace(rawURI) != "" {
-		data["authorizationUrl"] = apperrors.PATAuthorizationURL(rawURI)
+	if rawURI := patAuthorizationURIFromData(data); rawURI != "" {
+		authURL := apperrors.PATAuthorizationURL(rawURI)
+		data["uri"] = authURL
+		delete(data, "authUrl")
+		delete(data, "authorizationUrl")
 	}
 	data["openBrowser"] = openBrowser
 
@@ -235,6 +238,16 @@ func enrichPATErrorWithOpenBrowser(raw string, openBrowser bool) string {
 		return raw
 	}
 	return string(encoded)
+}
+
+func patAuthorizationURIFromData(data map[string]any) string {
+	for _, key := range []string{"uri", "authUrl", "authorizationUrl"} {
+		value, _ := data[key].(string)
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 // WaitForPatAuthorization polls until the user completes authorization or timeout.
@@ -370,8 +383,8 @@ func openPATAuthorizationURI(rawURI string) error {
 	}
 	// The PAT service returns the complete authorization URL. Treat it as an
 	// opaque string unless it is the known legacy DingTalk hash-route variant.
-	// That variant is normalized by the PAT error contract helper while still
-	// preserving the original data.uri in structured output.
+	// That variant is normalized by the PAT error contract helper before being
+	// printed, opened, or returned in structured output.
 	return openBrowserFunc(apperrors.PATAuthorizationURL(rawURI))
 }
 
@@ -440,12 +453,13 @@ func handlePatAuthCheck(
 	var patData struct {
 		Code string `json:"code"`
 		Data struct {
-			Desc         string `json:"desc"`
-			FlowID       string `json:"flowId"`
-			URI          string `json:"uri"`
-			AuthURL      string `json:"authUrl"`
-			ClientID     string `json:"clientId"`
-			ClientSecret string `json:"clientSecret"`
+			Desc             string `json:"desc"`
+			FlowID           string `json:"flowId"`
+			URI              string `json:"uri"`
+			AuthURL          string `json:"authUrl"`
+			AuthorizationURL string `json:"authorizationUrl"`
+			ClientID         string `json:"clientId"`
+			ClientSecret     string `json:"clientSecret"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(patErr.RawJSON), &patData); err != nil {
@@ -453,6 +467,9 @@ func handlePatAuthCheck(
 	}
 	if patData.Data.URI == "" {
 		patData.Data.URI = patData.Data.AuthURL
+	}
+	if patData.Data.URI == "" {
+		patData.Data.URI = patData.Data.AuthorizationURL
 	}
 
 	slog.Debug("PAT auth check",

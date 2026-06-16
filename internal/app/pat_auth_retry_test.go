@@ -693,8 +693,60 @@ func TestRunDirectPATAuthCheck_JSONModeReturnsStructuredPending(t *testing.T) {
 	if got, _ := data["uri"].(string); got != rawURI {
 		t.Fatalf("data.uri = %q, want %q", got, rawURI)
 	}
+	if _, ok := data["authUrl"]; ok {
+		t.Fatalf("data.authUrl should be omitted from structured PAT output")
+	}
+	if _, ok := data["authorizationUrl"]; ok {
+		t.Fatalf("data.authorizationUrl should be omitted from structured PAT output")
+	}
 	if got, ok := data["openBrowser"].(bool); !ok || got {
 		t.Fatalf("data.openBrowser = %#v, want false", data["openBrowser"])
+	}
+}
+
+func TestRunDirectPATAuthCheck_JSONModeBackfillsSingleURIFromAuthURL(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "")
+	configDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+	if _, err := pat.SetBrowserPolicy(configDir, "", false); err != nil {
+		t.Fatalf("SetBrowserPolicy(default) error = %v", err)
+	}
+
+	rawURL := "https://open-dev.dingtalk.com/fe/old#%2FpersonalAuthorization%3FflowId%3Dflow-json%26userCode%3DABCD-EFGH"
+	wantURL := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3Dflow-json%26userCode%3DABCD-EFGH#/personalAuthorization?flowId=flow-json&userCode=ABCD-EFGH"
+	raw := `{"success":false,"code":"PAT_BATCH_AUTH_PENDING","data":{"flowId":"flow-json","authUrl":"` + rawURL + `","clientId":"test-client-id"}}`
+	err := runDirectPATAuthCheck(context.Background(), &GlobalFlags{Format: "json"},
+		&apperrors.PATError{RawJSON: raw},
+		func(ctx context.Context) error {
+			t.Fatal("retry callback should not run in structured PAT output mode")
+			return nil
+		},
+		&bytes.Buffer{},
+	)
+	if err == nil {
+		t.Fatal("expected structured PATError")
+	}
+	patOut, ok := err.(*apperrors.PATError)
+	if !ok {
+		t.Fatalf("expected *PATError, got %T: %v", err, err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(patOut.RawJSON), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(PAT payload) error = %v\nraw=%s", err, patOut.RawJSON)
+	}
+	if strings.Contains(patOut.RawJSON, `\u0026`) {
+		t.Fatalf("PAT output escaped URL separators: %s", patOut.RawJSON)
+	}
+	data, _ := payload["data"].(map[string]any)
+	if got, _ := data["uri"].(string); got != wantURL {
+		t.Fatalf("data.uri = %q, want %q", got, wantURL)
+	}
+	if _, ok := data["authUrl"]; ok {
+		t.Fatalf("data.authUrl should be omitted after backfilling data.uri")
+	}
+	if _, ok := data["authorizationUrl"]; ok {
+		t.Fatalf("data.authorizationUrl should be omitted after backfilling data.uri")
 	}
 }
 
@@ -1007,8 +1059,11 @@ func TestHandlePatAuthCheck_JSONModeCanOpenBrowserWithoutTextOutput(t *testing.T
 	if got, _ := data["uri"].(string); got != rawURI {
 		t.Fatalf("data.uri = %q, want verbatim %q", got, rawURI)
 	}
-	if got, _ := data["authorizationUrl"].(string); got != rawURI {
-		t.Fatalf("data.authorizationUrl = %q, want %q", got, rawURI)
+	if _, ok := data["authUrl"]; ok {
+		t.Fatalf("data.authUrl should be omitted from json PAT output")
+	}
+	if _, ok := data["authorizationUrl"]; ok {
+		t.Fatalf("data.authorizationUrl should be omitted from json PAT output")
 	}
 	if got, ok := data["openBrowser"].(bool); !ok || !got {
 		t.Fatalf("data.openBrowser = %#v, want true", data["openBrowser"])
@@ -1043,7 +1098,7 @@ func TestHandlePatAuthCheck_NonJSONModeRespectsBrowserPolicy(t *testing.T) {
 		fallback:    mock,
 		globalFlags: &GlobalFlags{Format: "table"},
 	}
-	raw := `{"code":"AGENT_CODE_NOT_EXISTS","data":{"desc":"test auth","flowId":"flow-approved","uri":"https://example.com/pat","clientId":"test-client-id"}}`
+	raw := `{"code":"AGENT_CODE_NOT_EXISTS","data":{"desc":"test auth","flowId":"flow-approved","authorizationUrl":"https://example.com/pat","clientId":"test-client-id"}}`
 
 	var buf bytes.Buffer
 	_, err := handlePatAuthCheck(context.Background(), runner, executor.Invocation{
@@ -1062,6 +1117,12 @@ func TestHandlePatAuthCheck_NonJSONModeRespectsBrowserPolicy(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "需要 PAT 授权") {
 		t.Fatalf("expected human-readable PAT output, got %q", buf.String())
+	}
+	if !strings.Contains(buf.String(), "授权链接: https://example.com/pat") {
+		t.Fatalf("expected authorization URL in human-readable PAT output, got %q", buf.String())
+	}
+	if !strings.Contains(buf.String(), "PAT_AUTHORIZATION_URL=https://example.com/pat") {
+		t.Fatalf("expected PAT_AUTHORIZATION_URL export line, got %q", buf.String())
 	}
 }
 
