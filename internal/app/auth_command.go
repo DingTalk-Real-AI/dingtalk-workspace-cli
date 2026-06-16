@@ -147,7 +147,7 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 					return nil
 				}
 				opts := pat.LoginRecommendOptions{}
-				if !strings.EqualFold(strings.TrimSpace(format), "json") && isInteractiveTerminal() {
+				if authLoginShouldShowRecommendSelector(cmd, format) {
 					opts.ProductSelector = func(products []pat.LoginRecommendProduct) ([]string, error) {
 						return selectLoginRecommendProducts(products)
 					}
@@ -626,6 +626,21 @@ func selectLoginRecommendProducts(products []pat.LoginRecommendProduct) ([]strin
 		return nil, fmt.Errorf("授权业务域选择中止: %w", err)
 	}
 	return selected, nil
+}
+
+func authLoginShouldShowRecommendSelector(cmd *cobra.Command, format string) bool {
+	return authLoginShouldShowRecommendSelectorForTerminal(cmd, format, isInteractiveTerminal())
+}
+
+func authLoginShouldShowRecommendSelectorForTerminal(cmd *cobra.Command, format string, interactive bool) bool {
+	if !interactive {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(format), "json") {
+		return true
+	}
+	flags := cmd.Root().PersistentFlags()
+	return !flags.Changed("format")
 }
 
 func loginRecommendProductLabel(product pat.LoginRecommendProduct) string {

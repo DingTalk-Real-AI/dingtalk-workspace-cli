@@ -26,6 +26,7 @@ import (
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
+	"github.com/spf13/cobra"
 )
 
 func TestAuthExportImportBase64RoundTrip(t *testing.T) {
@@ -178,6 +179,49 @@ func TestAuthStatusRefreshFailureLeavesStoredTokenIntact(t *testing.T) {
 	if !bytes.Contains(out.Bytes(), []byte("\"authenticated\"")) {
 		t.Fatalf("output should still report authenticated status:\n%s", out.String())
 	}
+}
+
+func TestAuthLoginRecommendSelectorRespectsExplicitFormat(t *testing.T) {
+	newRoot := func(t *testing.T) *cobra.Command {
+		t.Helper()
+		root := &cobra.Command{Use: "dws"}
+		root.PersistentFlags().String("format", "json", "")
+		return root
+	}
+
+	t.Run("default json still shows selector for interactive login", func(t *testing.T) {
+		root := newRoot(t)
+		if !authLoginShouldShowRecommendSelectorForTerminal(root, "json", true) {
+			t.Fatal("default json format should still show recommend selector in an interactive terminal")
+		}
+	})
+
+	t.Run("explicit json keeps machine mode", func(t *testing.T) {
+		root := newRoot(t)
+		if err := root.PersistentFlags().Set("format", "json"); err != nil {
+			t.Fatalf("set format: %v", err)
+		}
+		if authLoginShouldShowRecommendSelectorForTerminal(root, "json", true) {
+			t.Fatal("explicit --format json must not show recommend selector")
+		}
+	})
+
+	t.Run("table shows selector", func(t *testing.T) {
+		root := newRoot(t)
+		if err := root.PersistentFlags().Set("format", "table"); err != nil {
+			t.Fatalf("set format: %v", err)
+		}
+		if !authLoginShouldShowRecommendSelectorForTerminal(root, "table", true) {
+			t.Fatal("table format should show recommend selector in an interactive terminal")
+		}
+	})
+
+	t.Run("non interactive skips selector", func(t *testing.T) {
+		root := newRoot(t)
+		if authLoginShouldShowRecommendSelectorForTerminal(root, "json", false) {
+			t.Fatal("non-interactive login should skip recommend selector")
+		}
+	})
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
