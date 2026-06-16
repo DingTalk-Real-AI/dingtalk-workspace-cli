@@ -22,6 +22,21 @@ func TestWriteJSON_Map(t *testing.T) {
 	}
 }
 
+func TestWriteJSON_DoesNotEscapeAmpersands(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	url := "https://open-dev.dingtalk.com/fe/old#/personalAuthorization?flowId=flow&userCode=CODE"
+	if err := WriteJSON(&buf, map[string]any{"authorizationUrl": url}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(buf.String(), `\u0026`) {
+		t.Fatalf("WriteJSON escaped ampersand: %s", buf.String())
+	}
+	if !strings.Contains(buf.String(), "&userCode=CODE") {
+		t.Fatalf("WriteJSON output missing literal ampersand: %s", buf.String())
+	}
+}
+
 func TestWriteJSON_Nil(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
@@ -147,6 +162,20 @@ func TestWriteRaw_NonString(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), `"x"`) {
 		t.Fatalf("missing key: %s", buf.String())
+	}
+}
+
+func TestWriteRaw_DoesNotEscapeAmpersands(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	if err := writeRaw(&buf, map[string]any{"url": "https://example.test/auth?a=1&b=2"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(buf.String(), `\u0026`) {
+		t.Fatalf("writeRaw escaped ampersand: %s", buf.String())
+	}
+	if !strings.Contains(buf.String(), "a=1&b=2") {
+		t.Fatalf("writeRaw output missing literal ampersand: %s", buf.String())
 	}
 }
 

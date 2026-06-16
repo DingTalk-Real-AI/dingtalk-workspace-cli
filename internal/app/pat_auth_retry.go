@@ -32,6 +32,7 @@ import (
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat"
 	"github.com/fatih/color"
 )
@@ -229,7 +230,7 @@ func enrichPATErrorWithOpenBrowser(raw string, openBrowser bool) string {
 	}
 	data["openBrowser"] = openBrowser
 
-	encoded, err := json.Marshal(payload)
+	encoded, err := jsonutil.Marshal(payload)
 	if err != nil {
 		return raw
 	}
@@ -349,6 +350,12 @@ type patRetryingKeyType struct{}
 
 var patRetryingKey = patRetryingKeyType{}
 
+type patRetryRunnerFunc func(context.Context, executor.Invocation) (executor.Result, error)
+
+func (f patRetryRunnerFunc) Run(ctx context.Context, invocation executor.Invocation) (executor.Result, error) {
+	return f(ctx, invocation)
+}
+
 // IsPatRetrying returns true if the current context is already in a PAT retry.
 func IsPatRetrying(ctx context.Context) bool {
 	v, _ := ctx.Value(patRetryingKey).(bool)
@@ -381,6 +388,41 @@ func printPATPollDebugResponse(output io.Writer, statusCode int, body []byte) {
 	fmt.Fprintf(output, "    %s\n", trimmed)
 }
 
+func runDirectPATAuthCheck(
+	ctx context.Context,
+	globalFlags *GlobalFlags,
+	patErr *apperrors.PATError,
+	retry func(context.Context) error,
+	output io.Writer,
+) error {
+	if retry == nil {
+		return patErr
+	}
+	runner := &runtimeRunner{
+		globalFlags: globalFlags,
+		fallback: patRetryRunnerFunc(func(retryCtx context.Context, invocation executor.Invocation) (executor.Result, error) {
+			if err := retry(retryCtx); err != nil {
+				return executor.Result{}, err
+			}
+			invocation.Implemented = true
+			return executor.Result{
+				Invocation: invocation,
+				Response: map[string]any{
+					"ok": true,
+				},
+			}, nil
+		}),
+	}
+	_, err := handlePatAuthCheck(ctx, runner, executor.Invocation{
+		Kind:             "direct_pat_authorization",
+		Stage:            "auth_login_recommend",
+		CanonicalProduct: defaultPATProductID,
+		Tool:             "pat.batch_grant",
+		CanonicalPath:    "pat.batch_grant",
+	}, patErr, defaultConfigDir(), output)
+	return err
+}
+
 // handlePatAuthCheck is called by runner.executeInvocation when a PAT
 // authorization error is detected.  It injects the server-assigned clientId
 // as x-robot-uid header, prints authorization details, opens the browser,
@@ -401,12 +443,16 @@ func handlePatAuthCheck(
 			Desc         string `json:"desc"`
 			FlowID       string `json:"flowId"`
 			URI          string `json:"uri"`
+			AuthURL      string `json:"authUrl"`
 			ClientID     string `json:"clientId"`
 			ClientSecret string `json:"clientSecret"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(patErr.RawJSON), &patData); err != nil {
 		return executor.Result{}, patErr
+	}
+	if patData.Data.URI == "" {
+		patData.Data.URI = patData.Data.AuthURL
 	}
 
 	slog.Debug("PAT auth check",
@@ -595,7 +641,7 @@ func enrichPATErrorForHostControl(raw string) string {
 	apperrors.ApplyHostMutations(payload)
 
 	// stderr JSON MUST be single-line.
-	encoded, err := json.Marshal(payload)
+	encoded, err := jsonutil.Marshal(payload)
 	if err != nil {
 		return raw
 	}
@@ -629,7 +675,7 @@ func buildPATScopeJSON(scopeErr *PatScopeError, includeHostControl bool) string 
 		"data":    data,
 	}
 	// stderr JSON MUST be single-line.
-	b, err := json.Marshal(payload)
+	b, err := jsonutil.Marshal(payload)
 	if err != nil {
 		return `{"success":false,"code":"PAT_SCOPE_AUTH_REQUIRED"}`
 	}

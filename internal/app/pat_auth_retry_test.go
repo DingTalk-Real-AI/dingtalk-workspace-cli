@@ -633,6 +633,71 @@ func TestHandlePatAuthCheck_Approved(t *testing.T) {
 	}
 }
 
+func TestRunDirectPATAuthCheck_ApprovedRetriesCallback(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "")
+	server, _ := setupHandlePATServer(t, "APPROVED", "")
+	defer server.Close()
+
+	patErr := &apperrors.PATError{RawJSON: makePATErrorJSON("flow-direct", "test-client-id")}
+	var retried atomic.Bool
+	var retryHadKey atomic.Bool
+	err := runDirectPATAuthCheck(context.Background(), &GlobalFlags{}, patErr, func(ctx context.Context) error {
+		retried.Store(true)
+		retryHadKey.Store(IsPatRetrying(ctx))
+		return nil
+	}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("runDirectPATAuthCheck error = %v", err)
+	}
+	if !retried.Load() {
+		t.Fatal("expected direct PAT auth retry callback to run")
+	}
+	if !retryHadKey.Load() {
+		t.Fatal("expected direct PAT auth retry context to be marked as PAT retrying")
+	}
+}
+
+func TestRunDirectPATAuthCheck_JSONModeReturnsStructuredPending(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "")
+	configDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+	if _, err := pat.SetBrowserPolicy(configDir, "", false); err != nil {
+		t.Fatalf("SetBrowserPolicy(default) error = %v", err)
+	}
+
+	rawURI := "https://example.com/personalAuthorization?flowId=flow-json&userCode=ABCD-EFGH"
+	raw := `{"success":false,"code":"PAT_BATCH_AUTH_PENDING","data":{"flowId":"flow-json","uri":"` + rawURI + `","authUrl":"` + rawURI + `","clientId":"test-client-id"}}`
+	err := runDirectPATAuthCheck(context.Background(), &GlobalFlags{Format: "json"},
+		&apperrors.PATError{RawJSON: raw},
+		func(ctx context.Context) error {
+			t.Fatal("retry callback should not run in structured PAT output mode")
+			return nil
+		},
+		&bytes.Buffer{},
+	)
+	if err == nil {
+		t.Fatal("expected structured PATError")
+	}
+	patOut, ok := err.(*apperrors.PATError)
+	if !ok {
+		t.Fatalf("expected *PATError, got %T: %v", err, err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(patOut.RawJSON), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(PAT payload) error = %v\nraw=%s", err, patOut.RawJSON)
+	}
+	if got, _ := payload["code"].(string); got != "PAT_BATCH_AUTH_PENDING" {
+		t.Fatalf("code = %q, want PAT_BATCH_AUTH_PENDING", got)
+	}
+	data, _ := payload["data"].(map[string]any)
+	if got, _ := data["uri"].(string); got != rawURI {
+		t.Fatalf("data.uri = %q, want %q", got, rawURI)
+	}
+	if got, ok := data["openBrowser"].(bool); !ok || got {
+		t.Fatalf("data.openBrowser = %#v, want false", data["openBrowser"])
+	}
+}
+
 func TestHandlePatAuthCheck_Rejected(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
 	server, configDir := setupHandlePATServer(t, "REJECTED", "")
@@ -927,6 +992,12 @@ func TestHandlePatAuthCheck_JSONModeCanOpenBrowserWithoutTextOutput(t *testing.T
 	patOut, ok := err.(*apperrors.PATError)
 	if !ok {
 		t.Fatalf("expected *PATError, got %T: %v", err, err)
+	}
+	if strings.Contains(patOut.RawJSON, `\u0026`) {
+		t.Fatalf("PATError RawJSON escaped ampersands in authorization URL: %s", patOut.RawJSON)
+	}
+	if !strings.Contains(patOut.RawJSON, "&userCode=98JV-JSBL") {
+		t.Fatalf("PATError RawJSON missing literal ampersand route separator: %s", patOut.RawJSON)
 	}
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(patOut.RawJSON), &payload); err != nil {

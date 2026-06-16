@@ -344,24 +344,79 @@ func TestChmod_productsFlagPlansThenGrantsSelectedScopes(t *testing.T) {
 	}
 }
 
-func TestChmod_productsFlagRequiresYesBeforeGranting(t *testing.T) {
+func TestChmod_productsFlagWithoutYesStartsBatchAuthorizationFlow(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 	fake := &sequenceToolCaller{responses: []string{
 		`{"success":true,"data":{"selectedScopes":["calendar.event:read"]}}`,
+		`{"success":true,"data":{"pendingScopes":[{"scope":"calendar.event:read"}]}}`,
 	}}
 	cmd := newChmodCommand(fake)
-	_ = cmd.Flags().Set("grant-type", "once")
 	_ = cmd.Flags().Set("products", "calendar")
 
-	err := cmd.RunE(cmd, nil)
-	if err == nil {
-		t.Fatal("chmod RunE error = nil, want --yes validation error")
+	if err := cmd.RunE(cmd, nil); err != nil {
+		t.Fatalf("chmod RunE error = %v", err)
 	}
-	if !strings.Contains(err.Error(), "requires explicit --yes") {
-		t.Fatalf("chmod RunE error = %v, want --yes requirement", err)
+	if len(fake.calls) != 2 {
+		t.Fatalf("CallTool count = %d, want plan + batch flow", len(fake.calls))
 	}
-	if len(fake.calls) != 0 {
-		t.Fatalf("CallTool count = %d, want 0 before explicit --yes", len(fake.calls))
+	if fake.calls[0].tool != patBatchPlanToolName {
+		t.Fatalf("first tool = %q, want %q", fake.calls[0].tool, patBatchPlanToolName)
+	}
+	if got := fake.calls[0].args["caller"]; got != patCallerBatchChmodInteractive {
+		t.Fatalf("plan caller = %#v, want %q", got, patCallerBatchChmodInteractive)
+	}
+	if fake.calls[1].tool != patBatchGrantToolName {
+		t.Fatalf("second tool = %q, want %q", fake.calls[1].tool, patBatchGrantToolName)
+	}
+	if got := fake.calls[1].args["startFlow"]; got != true {
+		t.Fatalf("grant startFlow = %#v, want true", got)
+	}
+	if got := fake.calls[1].args["noWait"]; got != true {
+		t.Fatalf("grant noWait = %#v, want true", got)
+	}
+	if got := fake.calls[1].args["caller"]; got != patCallerBatchChmodInteractive {
+		t.Fatalf("grant caller = %#v, want %q", got, patCallerBatchChmodInteractive)
+	}
+	if got := fake.calls[1].args["grantType"]; got != grantTypePermanent {
+		t.Fatalf("grantType = %#v, want %q for default interactive flow", got, grantTypePermanent)
+	}
+	if got := fake.calls[1].args["scopes"]; !stringSliceArgEqual(got, []string{"calendar.event:read"}) {
+		t.Fatalf("grant scopes = %#v, want selected scope", got)
+	}
+	if got, ok := fake.calls[1].args["clientRequestId"].(string); !ok || strings.TrimSpace(got) == "" {
+		t.Fatalf("grant clientRequestId = %#v, want non-empty string", got)
+	}
+}
+
+func TestChmod_multipleScopesWithoutYesStartsBatchAuthorizationFlow(t *testing.T) {
+	t.Setenv(agentCodeEnv, "qoderwork")
+	fake := &sequenceToolCaller{responses: []string{
+		`{"success":true,"data":{"selectedScopes":["calendar.event:read","aitable.record:write"]}}`,
+		`{"success":true,"data":{"pendingScopes":[{"scope":"calendar.event:read"},{"scope":"aitable.record:write"}]}}`,
+	}}
+	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("grant-type", "permanent")
+
+	if err := cmd.RunE(cmd, []string{"calendar.event:read", "aitable.record:write"}); err != nil {
+		t.Fatalf("chmod RunE error = %v", err)
+	}
+	if len(fake.calls) != 2 {
+		t.Fatalf("CallTool count = %d, want plan + batch flow", len(fake.calls))
+	}
+	if fake.calls[0].tool != patBatchPlanToolName {
+		t.Fatalf("first tool = %q, want %q", fake.calls[0].tool, patBatchPlanToolName)
+	}
+	if got := fake.calls[0].args["scopes"]; !stringSliceArgEqual(got, []string{"calendar.event:read", "aitable.record:write"}) {
+		t.Fatalf("plan scopes = %#v, want explicit scopes", got)
+	}
+	if fake.calls[1].tool != patBatchGrantToolName {
+		t.Fatalf("second tool = %q, want %q", fake.calls[1].tool, patBatchGrantToolName)
+	}
+	if got := fake.calls[1].args["startFlow"]; got != true {
+		t.Fatalf("grant startFlow = %#v, want true", got)
+	}
+	if got := fake.calls[1].args["scopes"]; !stringSliceArgEqual(got, []string{"calendar.event:read", "aitable.record:write"}) {
+		t.Fatalf("grant scopes = %#v, want selected scopes", got)
 	}
 }
 

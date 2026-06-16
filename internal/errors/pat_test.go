@@ -378,6 +378,25 @@ func TestClassifyMCPResponseText_PATAuthRequired(t *testing.T) {
 	}
 }
 
+func TestClassifyMCPResponseText_PATBatchAuthPending(t *testing.T) {
+	t.Parallel()
+	text := `{"success":false,"code":"PAT_BATCH_AUTH_PENDING","data":{"flowId":"flow-1","uri":"https://example.test/auth"}}`
+	err := ClassifyMCPResponseText(text)
+	if err == nil {
+		t.Fatal("expected non-nil error")
+	}
+	var patErr *PATError
+	if !stderrors.As(err, &patErr) {
+		t.Fatalf("expected *PATError, got %T", err)
+	}
+	if !strings.Contains(patErr.RawJSON, "PAT_BATCH_AUTH_PENDING") {
+		t.Errorf("RawJSON should contain PAT_BATCH_AUTH_PENDING, got: %s", patErr.RawJSON)
+	}
+	if !strings.Contains(patErr.RawJSON, "flow-1") {
+		t.Errorf("RawJSON should preserve flowId, got: %s", patErr.RawJSON)
+	}
+}
+
 func TestClassifyMCPResponseText_BusinessError(t *testing.T) {
 	t.Parallel()
 	text := `{"success":false,"errorMsg":"搜索内容不能为空"}`
@@ -729,6 +748,12 @@ func TestCleanPATJSON_PreservesOpaqueURIVerbatim(t *testing.T) {
 	}
 
 	result := cleanPATJSON(body, "PAT_MEDIUM_RISK_NO_PERMISSION")
+	if strings.Contains(result, `\u0026`) {
+		t.Fatalf("cleanPATJSON escaped ampersands in URL: %s", result)
+	}
+	if !strings.Contains(result, "&userCode=Q8RY-X6E9") {
+		t.Fatalf("cleanPATJSON output missing literal ampersand route separator: %s", result)
+	}
 
 	var parsed map[string]any
 	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
@@ -810,6 +835,12 @@ func TestCleanPATJSON_AddsNormalizedAuthorizationURL(t *testing.T) {
 	}
 
 	result := cleanPATJSON(body, "PAT_MEDIUM_RISK_NO_PERMISSION")
+	if strings.Contains(result, `\u0026`) {
+		t.Fatalf("cleanPATJSON escaped ampersands in normalized URL: %s", result)
+	}
+	if !strings.Contains(result, "&userCode=CFTC-27ZN") {
+		t.Fatalf("cleanPATJSON output missing literal ampersand route separator: %s", result)
+	}
 
 	var parsed map[string]any
 	if err := json.Unmarshal([]byte(result), &parsed); err != nil {

@@ -18,9 +18,11 @@ import (
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -170,10 +172,13 @@ const (
 	// expose only the legacy Chinese display name.
 	patGrantToolNameLegacyAlias = "个人授权"
 
-	patBatchUnsupportedCode      = "PAT_BATCH_AUTH_UNSUPPORTED"
-	patBatchUnsupportedCodeLower = "pat_batch_auth_unsupported"
-	patForgedIdentityCode        = "PAT_FORGED_IDENTITY_FIELD"
-	patForgedIdentityCodeLower   = "pat_forged_identity_field"
+	patBatchUnsupportedCode        = "PAT_BATCH_AUTH_UNSUPPORTED"
+	patBatchUnsupportedCodeLower   = "pat_batch_auth_unsupported"
+	patForgedIdentityCode          = "PAT_FORGED_IDENTITY_FIELD"
+	patForgedIdentityCodeLower     = "pat_forged_identity_field"
+	grantTypePermanent             = "permanent"
+	patCallerAuthLoginRecommend    = "auth_login_recommend"
+	patCallerBatchChmodInteractive = "batch_chmod_interactive"
 )
 
 var patBatchMetadataContractCodes = map[string]bool{
@@ -224,7 +229,9 @@ grantType 规则:
 批量授权:
   产品线批量授权推荐使用 --recommend --product <productCode[,productCode]>。
   --products / --domain / --domains 保持兼容；裸 --recommend 保持可用，
-  但会按推荐集合规划，可能跨产品。`,
+  但会按推荐集合规划，可能跨产品。
+  批量授权未传 --yes 时会打开授权确认页；传 --yes 时才直接写入服务端选中的权限。
+  批量授权未显式指定 --grant-type 且没有 session-id 时，会以 permanent 作为本次页面确认后的授权时长。`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			productCodes := collectChmodProductCodes(productFlags, productsFlag, domainFlags, domainsFlag)
 			if len(args) > 0 || recommend || len(productCodes) > 0 {
@@ -246,11 +253,15 @@ grantType 规则:
 			}
 			scopes := args
 			productCodes := collectChmodProductCodes(productFlags, productsFlag, domainFlags, domainsFlag)
-			usesPlan := recommend || len(productCodes) > 0
+			usesPlan := recommend || len(productCodes) > 0 || len(scopes) > 1
 			grantType, _ := cmd.Flags().GetString("grant-type")
 			sessionID, _ := cmd.Flags().GetString("session-id")
 			if sessionID == "" {
 				sessionID = resolveSessionIDFromEnv()
+			}
+			interactiveBatchFlow := usesPlan && !batchAuthorizationConfirmed(cmd)
+			if interactiveBatchFlow && grantType == "session" && sessionID == "" && !cmd.Flags().Changed("grant-type") {
+				grantType = grantTypePermanent
 			}
 
 			if !validGrantTypes[grantType] {
@@ -291,20 +302,11 @@ grantType 规则:
 				return fmt.Errorf("internal error: tool runtime not initialized")
 			}
 
-			if usesPlan && !batchAuthorizationConfirmed(cmd) {
-				return apperrors.NewValidation(
-					"batch PAT authorization requires explicit --yes before granting",
-					apperrors.WithReason("batch_auth_requires_yes"),
-					apperrors.WithHint("rerun with --dry-run to preview scopes, then add --yes to grant"),
-					apperrors.WithActions(
-						"dws pat chmod --recommend --product <product> --grant-type <type> --dry-run",
-						"dws pat chmod --recommend --product <product> --grant-type <type> --yes",
-					),
-				)
-			}
-
 			if usesPlan {
 				planArgs := buildBatchPlanArgs(scopes, productCodes, recommend, grantType, agentCode, sessionID, true)
+				if interactiveBatchFlow {
+					planArgs["caller"] = patCallerBatchChmodInteractive
+				}
 				planResult, err := callPATBatchPlan(cmd.Context(), c, agentCode, sessionID, planArgs)
 				if err != nil {
 					return fmt.Errorf("pat chmod plan failed: %w", err)
@@ -336,6 +338,12 @@ grantType 规则:
 				batchArgs["sessionId"] = sessionID
 				toolArgs["sessionId"] = sessionID
 			}
+			if interactiveBatchFlow {
+				batchArgs["startFlow"] = true
+				batchArgs["noWait"] = true
+				batchArgs["caller"] = patCallerBatchChmodInteractive
+				batchArgs["clientRequestId"] = newBatchClientRequestID("chmod")
+			}
 			// Legacy server schema accepted singular "scope"; clone the
 			// canonical argv and rename the key so the two payloads stay
 			// in lock-step on every other field.
@@ -349,15 +357,27 @@ grantType 规则:
 			}
 
 			ctx := context.Background()
-			result, err := callPATBatchGrantWithLegacyFallback(
-				ctx,
-				c,
-				agentCode,
-				sessionID,
-				batchArgs,
-				toolArgs,
-				legacyToolArgs,
-			)
+			var result *edition.ToolResult
+			if interactiveBatchFlow {
+				result, err = callPATBatchToolWithIdentityFallback(
+					ctx,
+					c,
+					agentCode,
+					sessionID,
+					patBatchGrantToolName,
+					batchArgs,
+				)
+			} else {
+				result, err = callPATBatchGrantWithLegacyFallback(
+					ctx,
+					c,
+					agentCode,
+					sessionID,
+					batchArgs,
+					toolArgs,
+					legacyToolArgs,
+				)
+			}
 			if err != nil {
 				return fmt.Errorf("pat chmod failed: %w", err)
 			}
@@ -523,6 +543,57 @@ func buildBatchPlanArgs(scopes []string, productCodes []string, recommend bool, 
 	return args
 }
 
+// RunLoginRecommendAuthorization plans the server-owned recommended scope set
+// after a successful dws auth login, then starts a batch Device Code Flow for
+// the server-selected grantable scopes. The actual browser open, polling, and
+// retry are handled by the shared PAT runner once PAT_BATCH_AUTH_PENDING is
+// classified as a PAT auth check.
+func RunLoginRecommendAuthorization(ctx context.Context, c edition.ToolCaller, output io.Writer) error {
+	if c == nil {
+		return fmt.Errorf("internal error: tool runtime not initialized")
+	}
+	planArgs := buildBatchPlanArgs(nil, nil, true, grantTypePermanent, "", "", true)
+	planArgs["caller"] = patCallerAuthLoginRecommend
+	planResult, err := callPATBatchPlan(ctx, c, "", "", planArgs)
+	if err != nil {
+		return fmt.Errorf("pat login recommend plan failed: %w", err)
+	}
+	if err := classifyToolResultText(planResult); err != nil {
+		return err
+	}
+	scopes, err := extractSelectedScopesAllowEmpty(planResult)
+	if err != nil {
+		return err
+	}
+	if len(scopes) == 0 {
+		if output != nil {
+			_, _ = fmt.Fprintln(output, "推荐权限已全部授权或没有可授权项")
+		}
+		return nil
+	}
+	grantArgs := map[string]any{
+		"scopes":          scopes,
+		"grantType":       grantTypePermanent,
+		"startFlow":       true,
+		"noWait":          true,
+		"caller":          patCallerAuthLoginRecommend,
+		"clientRequestId": newBatchClientRequestID("auth-login-recommend"),
+	}
+	result, err := callPATBatchToolWithIdentityFallback(ctx, c, "", "", patBatchGrantToolName, grantArgs)
+	if err != nil {
+		return fmt.Errorf("pat login recommend grant failed: %w", err)
+	}
+	return handleToolResultForWriter(output, result, c)
+}
+
+func newBatchClientRequestID(prefix string) string {
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		prefix = "batch"
+	}
+	return fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano())
+}
+
 func extractSelectedScopes(result *edition.ToolResult) ([]string, error) {
 	text := firstToolResultText(result)
 	if text == "" {
@@ -555,6 +626,30 @@ func extractSelectedScopes(result *edition.ToolResult) ([]string, error) {
 			return []string{}, nil
 		}
 		return nil, fmt.Errorf("PAT batch plan selectedScopes is empty")
+	}
+	return scopes, nil
+}
+
+func extractSelectedScopesAllowEmpty(result *edition.ToolResult) ([]string, error) {
+	text := firstToolResultText(result)
+	if text == "" {
+		return nil, fmt.Errorf("empty PAT batch plan result")
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(text), &body); err != nil {
+		return nil, fmt.Errorf("parsing PAT batch plan result: %w", err)
+	}
+	data, _ := body["data"].(map[string]any)
+	if data == nil {
+		return nil, fmt.Errorf("PAT batch plan result missing data.selectedScopes")
+	}
+	rawScopes, _ := data["selectedScopes"].([]any)
+	scopes := make([]string, 0, len(rawScopes))
+	for _, raw := range rawScopes {
+		scope, ok := raw.(string)
+		if ok && strings.TrimSpace(scope) != "" {
+			scopes = append(scopes, scope)
+		}
 	}
 	return scopes, nil
 }
@@ -906,6 +1001,44 @@ func handleToolResult(cmd *cobra.Command, caller edition.ToolCaller, result *edi
 	}
 	data, _ := json.Marshal(result)
 	return fmt.Errorf("empty PAT authorization result: %s", string(data))
+}
+
+func handleToolResultForWriter(w io.Writer, result *edition.ToolResult, caller edition.ToolCaller) error {
+	if result == nil {
+		return fmt.Errorf("empty tool result")
+	}
+	for _, c := range result.Content {
+		if c.Type != "text" || c.Text == "" {
+			continue
+		}
+		if respErr := apperrors.ClassifyMCPResponseText(c.Text); respErr != nil {
+			return respErr
+		}
+		if w == nil {
+			return nil
+		}
+		if summary := formatPATAuthorizationSummary(c.Text, caller); summary != "" {
+			_, _ = fmt.Fprint(w, summary)
+			return nil
+		}
+		_, _ = fmt.Fprintln(w, c.Text)
+		return nil
+	}
+	data, _ := json.Marshal(result)
+	return fmt.Errorf("empty PAT authorization result: %s", string(data))
+}
+
+func classifyToolResultText(result *edition.ToolResult) error {
+	if result == nil {
+		return fmt.Errorf("empty tool result")
+	}
+	for _, c := range result.Content {
+		if c.Type != "text" || c.Text == "" {
+			continue
+		}
+		return apperrors.ClassifyMCPResponseText(c.Text)
+	}
+	return nil
 }
 
 func shouldEmitRawPATResult(cmd *cobra.Command) bool {

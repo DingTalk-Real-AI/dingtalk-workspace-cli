@@ -41,6 +41,7 @@ func writeNDJSON(w io.Writer, payload any) error {
 
 	bw := bufio.NewWriter(w)
 	enc := json.NewEncoder(bw)
+	enc.SetEscapeHTML(false)
 	// json.Encoder.Encode already appends a trailing newline per call.
 
 	switch v := normalized.(type) {

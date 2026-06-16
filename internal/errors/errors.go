@@ -21,6 +21,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
@@ -309,7 +310,7 @@ func PrintJSON(w io.Writer, err error) error {
 	}
 	payload := map[string]any{"error": errorPayload}
 
-	data, marshalErr := json.MarshalIndent(payload, "", "  ")
+	data, marshalErr := jsonutil.MarshalIndent(payload, "", "  ")
 	if marshalErr != nil {
 		_, writeErr := fmt.Fprintf(w, "{\"error\":{\"code\":5,\"category\":\"internal\",\"message\":\"failed to encode error output\"}}\n")
 		return writeErr

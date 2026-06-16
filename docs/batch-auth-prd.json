@@ -1,0 +1,379 @@
+{
+  "title": "DWS Batch Authorization and Login Recommend Flow",
+  "version": "2026-06-16",
+  "owners": {
+    "cli": "dingtalk-workspace-cli",
+    "gateway": "lippi-open-mcpserver-gw",
+    "patCore": "lippi-pat-core-wukong-capability",
+    "bff": "lippi-open-app-dev",
+    "frontend": "lippi-open-dev-front"
+  },
+  "context": {
+    "problem": "DWS login --recommend and product-line batch authorization need a user-visible authorization page instead of silent bulk grants or local --yes-only blocking.",
+    "reference": {
+      "larkCli": {
+        "loginRecommend": "lark-cli auth login --recommend",
+        "domainAll": "lark-cli auth login --domain all",
+        "noWait": "lark-cli auth login --no-wait --json",
+        "deviceCode": "lark-cli auth login --device-code <code>",
+        "exclude": "lark-cli auth login --exclude <scope>",
+        "scopeCatalog": "lark-cli auth scopes",
+        "scopeCheck": "lark-cli auth check --scope <scope...>",
+        "qrCode": "lark-cli auth qrcode <url>"
+      },
+      "ralphCli": {
+        "model": "PRD-driven long-running development with explicit task ledger, progress notes, verification gates, and failure analysis.",
+        "evidence": "ralph v0.16.0 help and /Users/xuan/knowledge/META-ralph-reference.md",
+        "mapping": "This PRD keeps a single SSOT for goals, contracts, tasks, security gates, acceptance criteria, and blocked evidence so implementation can continue across multiple repositories without redefining done."
+      },
+      "existingDingTalkPage": "/src/app/personalAuthorization/index.jsx",
+      "targetPage": "Reuse the personalAuthorization route and render multiple scopes grouped by product."
+    },
+    "accessNotes": [
+      "The frontend GitLab repo was cloned through SSH to /Users/xuan/lippi-open-dev-front and implemented on branch codex/batch-auth-page-flow.",
+      "The DWS PAT BFF lives in /Users/xuan/lippi-open-app-dev and needs to be part of the chain because it owns /dingtalk-workspace-cli/oauth/device/action.",
+      "Acceptance is not complete after local build. It is complete only after prepub package/build succeeds for every changed repo and prepub functional verification passes.",
+      "The referenced DingTalk minutes URL could not be fetched because local dws is not logged in."
+    ]
+  },
+  "goals": [
+    "After dws auth login --recommend succeeds, DWS starts a PAT recommended batch plan and opens the authorization page.",
+    "For PAT batch authorization commands through dws pat chmod without --yes, including multi-scope, product-line, and recommend modes, DWS opens the same authorization page instead of returning a local validation error.",
+    "The server, not the CLI, selects grantable scopes. CLI must grant only selectedScopes from pat.batch_plan.",
+    "Recommended login must never auto-select destructive scopes such as delete, recall, remove, destroy, or drop.",
+    "High-risk scopes remain pending and must not be silently granted."
+  ],
+  "nonGoals": [
+    "Do not trust CLI-provided orgId or uid.",
+    "Do not add a second authorization UI path.",
+    "Do not make high-risk destructive scopes part of default login recommend."
+  ],
+  "userFlows": [
+    {
+      "name": "loginRecommend",
+      "steps": [
+        "User runs dws auth login --recommend.",
+        "CLI completes OAuth loopback or device login and saves token.",
+        "CLI calls pat.batch_plan with recommend=true, grantType=permanent, caller=auth_login_recommend, dryRun=true.",
+        "PAT core loads the recommended set, filters destructive scopes server-side, and returns selectedScopes plus warnings/skipped scopes.",
+        "CLI calls pat.batch_grant with scopes=selectedScopes, startFlow=true, noWait=true, caller=auth_login_recommend.",
+        "PAT core creates a single batch Device Code Flow and returns PAT_BATCH_AUTH_PENDING with flowId/userCode/uri.",
+        "CLI opens uri, polls flow status, and retries the original grant after approval."
+      ]
+    },
+    {
+      "name": "batchChmodWithoutYes",
+      "steps": [
+        "User runs dws pat chmod --recommend --product <product> without --yes.",
+        "CLI plans first, then starts a batch Device Code Flow instead of direct grant.",
+        "The authorization page displays all grantable selected scopes grouped by product.",
+        "Approve writes selected grants; reject leaves all grants unchanged."
+      ]
+    },
+    {
+      "name": "batchChmodWithYes",
+      "steps": [
+        "User runs the same command with --yes.",
+        "CLI continues the existing non-interactive grant path.",
+        "PAT core writes grantable low/medium-risk scopes directly and returns high-risk scopes as pending."
+      ]
+    }
+  ],
+  "larkCliParity": [
+    {
+      "lark": "auth login --recommend",
+      "dws": "dws auth login --recommend",
+      "serverContract": "pat.batch_plan recommend=true caller=auth_login_recommend, then pat.batch_grant selectedScopes startFlow=true noWait=true",
+      "status": "implemented locally in CLI, gateway, PAT core, BFF, and frontend; prepub package and verification pending"
+    },
+    {
+      "lark": "auth login --domain <domain>|all",
+      "dws": "dws pat chmod --product <productCode[,productCode]> or --products <...>",
+      "serverContract": "pat.batch_plan productCodes=[...] resolves service-owned product scope templates",
+      "status": "implemented for PAT chmod product-line flow"
+    },
+    {
+      "lark": "auth login --scope <scopes>",
+      "dws": "dws pat chmod <scope...>",
+      "serverContract": "one scope preserves direct grant behavior; multiple scopes enter batch plan/flow when --yes is absent",
+      "status": "implemented for multi-scope PAT chmod"
+    },
+    {
+      "lark": "auth login --exclude <scope>",
+      "dws": "batch authorization page selectedScopes",
+      "serverContract": "frontend sends selectedScopes; PAT core rejects any selected scope outside flow scopes and treats unchecked flow scopes as rejectedScopes",
+      "status": "implemented locally in PAT core, BFF selectedScopes passthrough, and frontend grouped selection; prepub verification pending"
+    },
+    {
+      "lark": "auth login --no-wait --json and later --device-code",
+      "dws": "PAT_BATCH_AUTH_PENDING JSON with uri/authUrl/flowId/userCode plus polling retry",
+      "serverContract": "host-owned JSON mode returns structured pending and does not block; local interactive mode opens browser and polls",
+      "status": "implemented in CLI retry path and PAT pending response"
+    },
+    {
+      "lark": "auth scopes and auth check",
+      "dws": "pat.batch_plan dryRun and existing PAT auth check result",
+      "serverContract": "plan exposes selected/skipped/pending/already-granted scope sets; check/auth retry carries missing scope and grant options",
+      "status": "partially aligned; no new public scope-catalog command added in this slice"
+    }
+  ],
+  "ralphExecutionPlan": {
+    "project": "dws-batch-authorization-page",
+    "tasks": [
+      {
+        "id": "1",
+        "title": "Build PRD and command parity map",
+        "description": "Use product-design style requirements plus Ralph-style SSOT to map DWS batch authorization against lark-cli.",
+        "steps": [
+          "Define user flows for login recommend, product-line grant, multi-scope grant, yes direct grant, and JSON no-wait mode.",
+          "Record frontend access and DingTalk minutes access blockers explicitly.",
+          "Keep acceptance criteria tied to command outputs and service contracts."
+        ],
+        "done": true
+      },
+      {
+        "id": "2",
+        "title": "Implement DWS CLI batch authorization entry points",
+        "description": "dws auth login --recommend and dws pat chmod batch/product/recommend without --yes start the page-based flow.",
+        "steps": [
+          "Add --recommend to auth login and run PAT recommended plan after login.",
+          "Route product-line, recommend, and multi-scope chmod without --yes to pat.batch_grant startFlow.",
+          "Keep --yes as the explicit direct-write path."
+        ],
+        "done": true
+      },
+      {
+        "id": "3",
+        "title": "Harden gateway identity and caller allowlist",
+        "description": "The gateway must derive orgId/uid from trusted identity and allow intended DWS batch callers.",
+        "steps": [
+          "Keep CLI-provided orgId/uid untrusted.",
+          "Allow dws-cli alongside openclaw for intended batch write callers.",
+          "Preserve caller/source checks for default grant writes."
+        ],
+        "done": true
+      },
+      {
+        "id": "4",
+        "title": "Implement PAT core recommended filtering and batch DCF",
+        "description": "PAT core owns selectedScopes, destructive filtering, batch Device Code Flow, selected approval, and idempotent writes.",
+        "steps": [
+          "Filter destructive recommended scopes server-side for auth_login_recommend.",
+          "Create/reuse one batch flow for selected scopes.",
+          "Approve only selectedScopes and reject out-of-flow selections.",
+          "Fail closed on critical storage failures and leave flow retryable."
+        ],
+        "done": true
+      },
+      {
+        "id": "5",
+        "title": "Implement lippi-open-dev-front batch authorization UI",
+        "description": "Reuse /src/app/personalAuthorization/index.jsx and render grouped product permissions with selectable scopes.",
+        "steps": [
+          "Load flow detail and detect multiple scopes.",
+          "Default-check all server-selected flow scopes.",
+          "Allow product and individual-scope deselection.",
+          "Submit selectedScopes on approve and no orgId/uid.",
+          "Handle PAT_BATCH_PARTIAL_FAILURE by keeping the page retryable."
+        ],
+        "done": true
+      },
+      {
+        "id": "6",
+        "title": "Submit all repos to prepub and verify package plus behavior",
+        "description": "Acceptance only passes after prepub package/build succeeds and prepub functional verification is OK.",
+        "steps": [
+          "Push or submit branches for CLI, gateway, PAT core, BFF, and frontend.",
+          "Trigger prepub package/build for every changed repo.",
+          "Verify prepub deployed versions include the current change set.",
+          "Run login recommend and batch chmod functional checks on prepub.",
+          "Open the prepub authorization page and verify layout and approve/reject callbacks."
+        ],
+        "done": false
+      }
+    ]
+  },
+  "prepubReleaseGate": {
+    "overallStatus": "not_passed_until_prepub_package_and_functional_verification_ok",
+    "changedRepos": [
+      {
+        "repo": "dingtalk-workspace-cli",
+        "localPath": "/Users/xuan/dingtalk-workspace-cli",
+        "branch": "codex/dws-auth-login-recommend",
+        "prepubPackage": "pending",
+        "prepubFunctionalVerification": "pending"
+      },
+      {
+        "repo": "lippi-open-mcpserver-gw",
+        "localPath": "/Users/xuan/lippi-open-mcpserver-gw",
+        "branch": "codex/pat-batch-identity-args-gw",
+        "prepubPackage": "pending",
+        "prepubFunctionalVerification": "pending"
+      },
+      {
+        "repo": "lippi-pat-core-wukong-capability",
+        "localPath": "/Users/xuan/lippi-pat-core-wukong-capability",
+        "branch": "codex/batch-auth-page-flow",
+        "prepubPackage": "blocked_locally_by_internal_maven_http_mirror_until_release_system_or_correct_settings_runs",
+        "prepubFunctionalVerification": "pending"
+      },
+      {
+        "repo": "lippi-open-app-dev",
+        "localPath": "/Users/xuan/lippi-open-app-dev",
+        "branch": "codex/batch-auth-bff-selected-scopes",
+        "prepubPackage": "blocked_locally_by_internal_maven_http_mirror_until_release_system_or_correct_settings_runs",
+        "prepubFunctionalVerification": "pending"
+      },
+      {
+        "repo": "lippi-open-dev-front",
+        "localPath": "/Users/xuan/lippi-open-dev-front",
+        "branch": "codex/batch-auth-page-flow",
+        "prepubPackage": "local_npm_build_passed_prepub_package_pending",
+        "prepubFunctionalVerification": "pending"
+      }
+    ],
+    "requiredEvidence": [
+      "Every changed repo has a pushed branch or prepub release submission tied to the current change set.",
+      "Prepub package/build succeeds for CLI, gateway, PAT core, BFF, and frontend.",
+      "Prepub deployed versions include the selectedScopes frontend-to-BFF-to-PAT core chain.",
+      "Prepub functional verification covers login recommend, chmod without --yes page flow, chmod with --yes direct flow, selectedScopes subset approval, reject, destructive-scope filtering, high-risk pending, and JSON no-wait pending response.",
+      "Prepub UI screenshot matches visualDesignTarget."
+    ]
+  },
+  "serviceContract": {
+    "pat.batch_plan": {
+      "request": {
+        "scopes": "optional string[]",
+        "productCodes": "optional string[]",
+        "recommend": "boolean",
+        "grantType": "once|session|permanent",
+        "dryRun": "boolean",
+        "caller": "auth_login_recommend|batch_chmod_interactive|..."
+      },
+      "response": {
+        "selectedScopes": "server-selected grantable scopes",
+        "skippedScopes": "not grantable or filtered scopes",
+        "pendingScopes": "high-risk scopes requiring separate confirmation",
+        "warnings": "destructive filter and partial selection warnings"
+      }
+    },
+    "pat.batch_grant": {
+      "request": {
+        "scopes": "required string[], must be selectedScopes from plan",
+        "grantType": "once|session|permanent",
+        "startFlow": "boolean; true opens authorization page",
+        "noWait": "boolean; true returns URL immediately",
+        "clientRequestId": "idempotency key",
+        "caller": "auth_login_recommend|batch_chmod_interactive|..."
+      },
+      "pendingResponse": {
+        "success": false,
+        "code": "PAT_BATCH_AUTH_PENDING",
+        "data": {
+          "flowId": "batch device flow id",
+          "userCode": "device user code",
+          "uri": "opaque authorization URL",
+          "authUrl": "same URL for compatibility",
+          "pollIntervalSeconds": 3,
+          "expiresInSeconds": "PatSwitch.deviceCodeFlowTtlSeconds"
+        }
+      }
+    },
+    "deviceFlowDetail": {
+      "route": "personalAuthorization",
+      "fields": [
+        "agentCode",
+        "appName",
+        "appIcon",
+        "userName",
+        "userAvatar",
+        "status",
+        "batchFlow",
+        "defaultGrantType",
+        "scopes[]"
+      ],
+      "scopeFields": [
+        "scope",
+        "displayName",
+        "productCode",
+        "productName",
+        "riskLevel",
+        "effectiveRiskLevel",
+        "riskDesc",
+        "operationSummary"
+      ]
+    },
+    "handleFlowAction": {
+      "request": {
+        "flowId": "required string",
+        "userCode": "required string",
+        "action": "approve|reject",
+        "grantType": "optional once|session|permanent; batch page omits it so PAT core uses defaultGrantType from the flow",
+        "selectedScopes": "required for the new batch page when action=approve; must be a non-empty subset of flow.scopes"
+      },
+      "compatibility": {
+        "selectedScopesNull": "legacy clients approve all flow-stored scopes",
+        "selectedScopesEmpty": "INVALID_PARAMETER",
+        "selectedScopesOutsideFlow": "INVALID_PARAMETER"
+      },
+      "response": {
+        "status": "APPROVED|REJECTED",
+        "approvedScopes": "scopes written by this approve action",
+        "rejectedScopes": "flow scopes not approved by this action"
+      },
+      "errorBehavior": {
+        "approveStorageFailure": "PAT_BATCH_PARTIAL_FAILURE; flow remains PENDING and the page can retry. Once tokens written by the current flow are cleaned by flowId ownership; permanent/session grants rely on transaction rollback and grant idempotency."
+      }
+    }
+  },
+  "frontendRequirements": [
+    "Reuse personalAuthorization page and API detail/action callbacks.",
+    "When scopes length is greater than one, render a grouped batch authorization surface.",
+    "Group by productCode/productName with product-level checkbox and expandable scope details.",
+    "Default checked state is all safe selected scopes.",
+    "Users can uncheck a product group or individual scopes; approving with zero selected scopes is disabled.",
+    "Approve must send selectedScopes matching the current checked scope list.",
+    "Reject rejects the whole flow.",
+    "Do not expose orgId or uid as trusted client input."
+  ],
+  "visualDesignTarget": {
+    "sourceImage": "/var/folders/hz/2sm0ql493cv6jngtjk7xsby00000gp/T/codex-clipboard-7792e4ca-7e4b-446b-8527-f35609d4df12.png",
+    "page": "A white authorization card centered on a light #f5f6fa page, with the footer links below the card.",
+    "card": "Single white card with subtle #f2f2f6 border, soft shadow, 12px radius, desktop visual width about 660px and enough height to show account, permissions, manage tip, and two bottom buttons without scrolling for four product groups.",
+    "header": "Top centered CLI app icon, title DingtalkWorkSpace, and subtitle 请求以下钉钉账号进行授权.",
+    "accountBlock": "Light gray rounded account row below the header, with a blue square DingTalk avatar/tag at left and the current account name next to it.",
+    "permissionBlock": "Light gray rounded permission panel titled 可授权的权限. Product rows use a blue checked checkbox, bold product name, gray count such as 12 项, gray description text, and a right chevron for expandable details.",
+    "selectionBehavior": "All recommended groups are checked by default. Product checkbox toggles the entire group; expanding a product reveals individual scope checkboxes.",
+    "manageTip": "Under the permission panel, show the existing 个人数据授权管理 link text for later review or revoke.",
+    "buttons": "Bottom two-button layout: left outlined white 拒绝 button, right primary blue 同意并授权 button, same height and rounded pill style.",
+    "mobile": "On narrow screens the same hierarchy must remain visible without text overlap; buttons share the available width."
+  },
+  "securityRules": [
+    "Gateway derives orgId and uid from trusted token/header only.",
+    "Gateway allowlist must include openclaw and dws-cli for batch grant callers that are intended to write.",
+    "PAT core applies destructive-scope hard filtering for recommend=true and caller=auth_login_recommend.",
+    "PAT core must use flow-stored scopes as the allowlist and reject any selectedScopes value outside the flow.",
+    "PAT core must only clear pending keys owned by the current flow and leave the flow pending if approve write fails after precheck, so the same authorization page can retry safely.",
+    "Critical approve/reject storage writes must fail closed with PAT_BATCH_PARTIAL_FAILURE instead of reporting success on partial persistence.",
+    "Batch flow approval must be idempotent; repeated approval or retry must not duplicate grants."
+  ],
+  "acceptanceCriteria": [
+    "Prepub package/build succeeds for every changed repo: dingtalk-workspace-cli, lippi-open-mcpserver-gw, lippi-pat-core-wukong-capability, lippi-open-app-dev, and lippi-open-dev-front.",
+    "Prepub deployed versions include the current branch commits for CLI, gateway, PAT core, BFF, and frontend.",
+    "On prepub, dws auth login --recommend opens the batch authorization URL after successful login.",
+    "On prepub, dws pat chmod --recommend --product calendar without --yes opens the authorization URL.",
+    "On prepub, dws pat chmod --recommend --product calendar --yes preserves the existing direct grant behavior.",
+    "On prepub, a recommended config containing a delete/recall/remove/destroy/drop scope returns warnings/skipped scopes and never grants that scope.",
+    "On prepub, approving a batch flow grants only selectedScopes and rejects scopes outside the flow.",
+    "On prepub, rejecting a batch flow writes no new grants.",
+    "On prepub, JSON mode returns structured PAT_BATCH_AUTH_PENDING with uri/openBrowser fields and does not block.",
+    "On prepub, the authorization page visual result matches visualDesignTarget and the provided screenshot style."
+  ],
+  "reviewPlan": {
+    "implementationCommander": "Check end-to-end CLI, gateway, PAT core integration contracts.",
+    "aiNativeUiArchitect": "Requested by goal but no local skill was available; use Product Design and existing frontend constraints as fallback.",
+    "qinzePuaReviewer": "Review security, idempotency, tests, and failure modes.",
+    "muskChiefOperator": "Review the product flow for speed, minimum surface area, and user clarity.",
+    "computerUse": "Verify prepub/front-end page only after frontend repo and build credentials are available."
+  }
+}

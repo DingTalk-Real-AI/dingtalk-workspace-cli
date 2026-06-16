@@ -20,6 +20,8 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
 )
 
 // hostControlProvider returns the host-owned clawType for the current
@@ -146,6 +148,7 @@ var patNoPermissionCodes = map[string]bool{
 //     `dws auth login --scope <data.missingScope>`.
 var patAuthRequiredCodes = map[string]bool{
 	"AGENT_CODE_NOT_EXISTS":   true,
+	"PAT_BATCH_AUTH_PENDING":  true,
 	"PAT_SCOPE_AUTH_REQUIRED": true,
 }
 
@@ -240,7 +243,7 @@ func isBusinessError(body map[string]any) bool {
 // Check order: DWS gateway auth > PAT permission.
 func ClassifyToolResultContent(content map[string]any) error {
 	if _, ok := getDWSGatewayErrorCode(content); ok {
-		raw, _ := json.Marshal(content)
+		raw, _ := jsonutil.Marshal(content)
 		return NewAuth(string(raw),
 			WithReason("gateway_auth_expired"),
 			WithHint(authExpiredHint()),
@@ -462,7 +465,7 @@ func cleanPATJSON(body map[string]any, code string) string {
 	// stderr JSON MUST be a single-line, directly json.Unmarshal-able
 	// payload — pretty-printing would break naïve host parsers that read
 	// stderr line-by-line and fail on leading whitespace.
-	b, err := json.Marshal(out)
+	b, err := jsonutil.Marshal(out)
 	if err != nil {
 		return fmt.Sprintf(`{"success":false,"code":"%s"}`, code)
 	}

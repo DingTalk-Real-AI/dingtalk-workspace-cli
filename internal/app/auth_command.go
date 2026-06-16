@@ -30,18 +30,20 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
 
 type authLoginConfig struct {
-	Token  string
-	Force  bool
-	Device bool
+	Token     string
+	Force     bool
+	Device    bool
+	Recommend bool
 }
 
-func buildAuthCommand() *cobra.Command {
+func buildAuthCommand(patCaller edition.ToolCaller) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "auth",
 		Short:             "认证管理",
@@ -55,7 +57,7 @@ func buildAuthCommand() *cobra.Command {
 	}
 
 	if !edition.Get().HideAuthLogin {
-		cmd.AddCommand(newAuthLoginCommand())
+		cmd.AddCommand(newAuthLoginCommand(patCaller))
 	}
 	cmd.AddCommand(
 		newAuthLogoutCommand(),
@@ -68,7 +70,7 @@ func buildAuthCommand() *cobra.Command {
 	return cmd
 }
 
-func newAuthLoginCommand() *cobra.Command {
+func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "login",
 		Short: "登录钉钉（自动刷新 token，必要时扫码）",
@@ -91,7 +93,8 @@ func newAuthLoginCommand() *cobra.Command {
   dws auth login              # 本机扫码登录 (loopback 流)
   dws auth login --device     # SSH 远程 / 无头环境登录 (设备流)
   dws auth login --force      # 强制重新登录 (忽略缓存 token)
-  dws auth login --token xxx  # 使用指定 token`,
+  dws auth login --token xxx  # 使用指定 token
+  dws auth login --recommend  # 登录成功后打开推荐权限批量授权页`,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := resolveAuthLoginConfig(cmd)
@@ -137,10 +140,32 @@ func newAuthLoginCommand() *cobra.Command {
 			clearCompatCache()
 
 			w := cmd.OutOrStdout()
+			format, _ := cmd.Root().PersistentFlags().GetString("format")
+			runRecommend := func() error {
+				if !cfg.Recommend {
+					return nil
+				}
+				run := func(ctx context.Context) error {
+					return pat.RunLoginRecommendAuthorization(ctx, patCaller, cmd.ErrOrStderr())
+				}
+				err := run(cmd.Context())
+				if patErr := apperrors.AsPatAuthCheckError(err); patErr != nil {
+					return runDirectPATAuthCheck(
+						cmd.Context(),
+						&GlobalFlags{Format: format},
+						patErr,
+						run,
+						cmd.ErrOrStderr(),
+					)
+				}
+				return err
+			}
 
 			// Check if JSON output is requested
-			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if strings.EqualFold(strings.TrimSpace(format), "json") {
+				if err := runRecommend(); err != nil {
+					return err
+				}
 				return writeAuthLoginJSON(w, tokenData, cfg.Force)
 			}
 
@@ -166,12 +191,13 @@ func newAuthLoginCommand() *cobra.Command {
 				}
 			}
 			fmt.Fprintf(w, "Token 将自动刷新，无需重复登录\n")
-			return nil
+			return runRecommend()
 		},
 	}
 	cmd.Flags().String("token", "", "Access token")
 	cmd.Flags().Bool("device", false, "Use device authorization flow")
 	cmd.Flags().Bool("force", false, "Force interactive login (ignore cached token)")
+	cmd.Flags().Bool("recommend", false, "登录成功后批量授权服务端推荐的安全权限")
 	// Hidden compatibility flags
 	cmd.Flags().String("redirect-url", "", "Loopback redirect URL")
 	cmd.Flags().String("scopes", "", "Space-separated DingTalk OAuth scopes")
@@ -572,10 +598,15 @@ func resolveAuthLoginConfig(cmd *cobra.Command) (authLoginConfig, error) {
 	if err != nil {
 		return authLoginConfig{}, apperrors.NewInternal("failed to read --force")
 	}
+	recommend, err := cmd.Flags().GetBool("recommend")
+	if err != nil {
+		return authLoginConfig{}, apperrors.NewInternal("failed to read --recommend")
+	}
 	return authLoginConfig{
-		Token:  strings.TrimSpace(token),
-		Force:  force,
-		Device: device,
+		Token:     strings.TrimSpace(token),
+		Force:     force,
+		Device:    device,
+		Recommend: recommend,
 	}, nil
 }
 
