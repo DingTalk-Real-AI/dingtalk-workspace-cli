@@ -254,7 +254,6 @@ func newDevAppListCommand(runner executor.Runner) *cobra.Command {
 			}
 			devAppPutString(params, "cursor", devAppStringFlag(cmd, "cursor"))
 			devAppPutString(params, "name", devAppFlagOrFallback(cmd, "name", "keyword"))
-			devAppPutString(params, "appKey", devAppStringFlag(cmd, "app-key"))
 			return runDevAppTool(runner, cmd, devAppListTool, params)
 		},
 	}
@@ -263,7 +262,6 @@ func newDevAppListCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("name", "", "应用名称关键词")
 	cmd.Flags().String("keyword", "", "--name 的兼容别名")
 	_ = cmd.Flags().MarkHidden("keyword")
-	cmd.Flags().String("app-key", "", "appKey/clientId")
 	preferLegacyLeaf(cmd)
 	return cmd
 }
@@ -276,14 +274,14 @@ func newDevAppGetCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			params := devAppMcpLocatorParams(cmd, true)
+			params := devAppUnifiedAppIDParams(cmd)
 			if len(params) == 0 {
-				return devAppMcpLocatorRequired(true)
+				return devAppUnifiedAppIDRequired()
 			}
 			return runDevAppTool(runner, cmd, devAppGetTool, params)
 		},
 	}
-	addDevAppMcpLocatorFlags(cmd, true)
+	addDevAppUnifiedAppIDFlag(cmd)
 	preferLegacyLeaf(cmd)
 	return cmd
 }
@@ -332,9 +330,9 @@ func newDevAppUpdateCommand(runner executor.Runner) *cobra.Command {
 			if err := devAppRequireWriteGuard(cmd, "update"); err != nil {
 				return err
 			}
-			params := devAppMcpLocatorParams(cmd, false)
+			params := devAppUnifiedAppIDParams(cmd)
 			if len(params) == 0 {
-				return devAppMcpLocatorRequired(false)
+				return devAppUnifiedAppIDRequired()
 			}
 			updates := 0
 			if v := devAppStringFlag(cmd, "name"); v != "" {
@@ -355,7 +353,7 @@ func newDevAppUpdateCommand(runner executor.Runner) *cobra.Command {
 			return runDevAppTool(runner, cmd, devAppUpdateTool, params)
 		},
 	}
-	addDevAppMcpLocatorFlags(cmd, false)
+	addDevAppUnifiedAppIDFlag(cmd)
 	cmd.Flags().String("name", "", "新的应用名称")
 	cmd.Flags().String("desc", "", "新的应用描述")
 	cmd.Flags().String("icon", "", "新的应用图标 mediaId")
@@ -371,14 +369,14 @@ func newDevAppCredentialsGetCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			params := devAppCredentialsLocatorParams(cmd)
+			params := devAppUnifiedAppIDParams(cmd)
 			if len(params) == 0 {
-				return devAppCredentialsLocatorRequired()
+				return devAppUnifiedAppIDRequired()
 			}
 			return runDevAppTool(runner, cmd, devAppCredentialsGet, params)
 		},
 	}
-	addDevAppCredentialsLocatorFlags(cmd)
+	addDevAppUnifiedAppIDFlag(cmd)
 	preferLegacyLeaf(cmd)
 	return cmd
 }
@@ -393,14 +391,14 @@ func newDevAppLifecycleCommand(runner executor.Runner, use, short, tool string) 
 			if err := devAppRequireWriteGuard(cmd, use); err != nil {
 				return err
 			}
-			params := devAppMcpLocatorParams(cmd, true)
+			params := devAppUnifiedAppIDParams(cmd)
 			if len(params) == 0 {
-				return devAppMcpLocatorRequired(true)
+				return devAppUnifiedAppIDRequired()
 			}
 			return runDevAppTool(runner, cmd, tool, params)
 		},
 	}
-	addDevAppMcpLocatorFlags(cmd, true)
+	addDevAppUnifiedAppIDFlag(cmd)
 	preferLegacyLeaf(cmd)
 	return cmd
 }
@@ -413,14 +411,14 @@ func newDevAppWebappGetCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			params := devAppMcpLocatorParams(cmd, false)
+			params := devAppUnifiedAppIDParams(cmd)
 			if len(params) == 0 {
-				return devAppMcpLocatorRequired(false)
+				return devAppUnifiedAppIDRequired()
 			}
 			return runDevAppTool(runner, cmd, "get_extension_webapp_config", params)
 		},
 	}
-	addDevAppMcpLocatorFlags(cmd, false)
+	addDevAppUnifiedAppIDFlag(cmd)
 	preferLegacyLeaf(cmd)
 	return cmd
 }
@@ -436,9 +434,9 @@ func newDevAppWebappConfigCommand(runner executor.Runner) *cobra.Command {
 			if err := devAppRequireWriteGuard(cmd, "webapp config"); err != nil {
 				return err
 			}
-			params := devAppMcpLocatorParams(cmd, true)
+			params := devAppUnifiedAppIDParams(cmd)
 			if len(params) == 0 {
-				return devAppMcpLocatorRequired(true)
+				return devAppUnifiedAppIDRequired()
 			}
 			updates := 0
 			if v := devAppStringFlag(cmd, "h5-page-type"); v != "" {
@@ -463,7 +461,7 @@ func newDevAppWebappConfigCommand(runner executor.Runner) *cobra.Command {
 			return runDevAppTool(runner, cmd, "set_extension_webapp_config", params)
 		},
 	}
-	addDevAppMcpLocatorFlags(cmd, true)
+	addDevAppUnifiedAppIDFlag(cmd)
 	cmd.Flags().String("h5-page-type", "", "网页应用生效端/页面类型")
 	cmd.Flags().String("homepage-url", "", "移动端首页地址")
 	cmd.Flags().String("homepage-link", "", "--homepage-url 的兼容别名")
@@ -563,17 +561,19 @@ func newDevAppPermissionRemoveCommand(runner executor.Runner) *cobra.Command {
 			if len(params) == 0 {
 				return devAppPermissionLocatorRequired()
 			}
-			scope := devAppFlagOrFallback(cmd, "permission", "scope")
-			if scope == "" {
-				return apperrors.NewValidation("--permission is required")
+			scopes := devAppPermissionRemoveScopes(cmd)
+			if len(scopes) == 0 {
+				return apperrors.NewValidation("--permissions is required")
 			}
-			params["scopeValue"] = scope
+			params["scopeValues"] = scopes
 			return runDevAppTool(runner, cmd, "remove_dev_app_permissions", params)
 		},
 	}
 	addDevAppPermissionLocatorFlags(cmd)
-	cmd.Flags().String("permission", "", "待取消权限点 scopeValue")
-	cmd.Flags().String("scope", "", "--permission 的兼容别名")
+	cmd.Flags().StringSlice("permissions", nil, "待取消权限点 scopeValue，多个用逗号分隔")
+	cmd.Flags().String("permission", "", "--permissions 的兼容别名，单个权限点 scopeValue")
+	cmd.Flags().String("scope", "", "--permissions 的兼容别名，单个权限点 scopeValue")
+	_ = cmd.Flags().MarkHidden("permission")
 	_ = cmd.Flags().MarkHidden("scope")
 	preferLegacyLeaf(cmd)
 	return cmd
@@ -1203,7 +1203,7 @@ func runDevAppTool(runner executor.Runner, cmd *cobra.Command, tool string, para
 	if err != nil {
 		return err
 	}
-	result = normalizeDevAppServiceResult(result)
+	result = normalizeDevAppToolResult(tool, normalizeDevAppServiceResult(result))
 	return writeCommandPayload(cmd, result)
 }
 
@@ -1221,6 +1221,49 @@ func normalizeDevAppServiceResult(result executor.Result) executor.Result {
 	}
 	result.Response["content"] = value
 	return result
+}
+
+func normalizeDevAppToolResult(tool string, result executor.Result) executor.Result {
+	content, ok := result.Response["content"].(map[string]any)
+	if !ok {
+		return result
+	}
+	switch tool {
+	case "remove_dev_app_permissions":
+		normalizeDevAppScopeValueArray(content, "removedScopeValues")
+	case devAppDisableTool:
+		if _, ok := content["disabled"]; !ok {
+			content["disabled"] = true
+		}
+	case devAppEnableTool:
+		if _, ok := content["enabled"]; !ok {
+			content["enabled"] = true
+		}
+	}
+	return result
+}
+
+func normalizeDevAppScopeValueArray(content map[string]any, key string) {
+	values, ok := content[key].([]any)
+	if !ok {
+		return
+	}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		switch typed := value.(type) {
+		case string:
+			if typed != "" {
+				out = append(out, typed)
+			}
+		case map[string]any:
+			if scopeValue, _ := typed["scopeValue"].(string); scopeValue != "" {
+				out = append(out, scopeValue)
+			}
+		}
+	}
+	if len(out) == len(values) {
+		content[key] = out
+	}
 }
 
 func requiredDevAppID(cmd *cobra.Command) (string, error) {
@@ -1274,47 +1317,18 @@ func splitDevAppList(raw string) []string {
 	return values
 }
 
-func addDevAppMcpLocatorFlags(cmd *cobra.Command, includeName bool) {
+func addDevAppUnifiedAppIDFlag(cmd *cobra.Command) {
 	cmd.Flags().String("unified-app-id", "", "统一应用 ID")
-	cmd.Flags().String("app-key", "", "appKey/clientId")
-	if includeName {
-		cmd.Flags().String("name", "", "应用名称关键词；写操作前必须唯一命中")
-	}
 }
 
-func devAppMcpLocatorParams(cmd *cobra.Command, includeName bool) map[string]any {
+func devAppUnifiedAppIDParams(cmd *cobra.Command) map[string]any {
 	params := map[string]any{}
 	devAppPutString(params, "unifiedAppId", devAppStringFlag(cmd, "unified-app-id"))
-	devAppPutString(params, "appKey", devAppStringFlag(cmd, "app-key"))
-	if includeName {
-		devAppPutString(params, "name", devAppStringFlag(cmd, "name"))
-	}
 	return params
 }
 
-func addDevAppCredentialsLocatorFlags(cmd *cobra.Command) {
-	cmd.Flags().String("unified-app-id", "", "统一应用 ID")
-	cmd.Flags().String("app-key", "", "appKey/clientId")
-	cmd.Flags().String("name", "", "应用名称关键词；必须唯一命中")
-}
-
-func devAppCredentialsLocatorParams(cmd *cobra.Command) map[string]any {
-	params := map[string]any{}
-	devAppPutString(params, "unifiedAppId", devAppStringFlag(cmd, "unified-app-id"))
-	devAppPutString(params, "appKey", devAppStringFlag(cmd, "app-key"))
-	devAppPutString(params, "name", devAppStringFlag(cmd, "name"))
-	return params
-}
-
-func devAppCredentialsLocatorRequired() error {
-	return apperrors.NewValidation("one app locator is required: --unified-app-id, --app-key, or --name")
-}
-
-func devAppMcpLocatorRequired(includeName bool) error {
-	if includeName {
-		return apperrors.NewValidation("one app locator is required: --unified-app-id, --app-key, or --name")
-	}
-	return apperrors.NewValidation("one app locator is required: --unified-app-id or --app-key")
+func devAppUnifiedAppIDRequired() error {
+	return apperrors.NewValidation("--unified-app-id is required")
 }
 
 func addDevAppPermissionLocatorFlags(cmd *cobra.Command) {
@@ -1353,6 +1367,20 @@ func devAppYes(cmd *cobra.Command) bool {
 func devAppPermissionScopes(cmd *cobra.Command) []string {
 	values, _ := cmd.Flags().GetStringSlice("permissions")
 	values = append(values, devAppFlagOrFallback(cmd, "scope", "permission"))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		for _, part := range splitDevAppList(value) {
+			if part != "" {
+				out = append(out, part)
+			}
+		}
+	}
+	return out
+}
+
+func devAppPermissionRemoveScopes(cmd *cobra.Command) []string {
+	values, _ := cmd.Flags().GetStringSlice("permissions")
+	values = append(values, devAppFlagOrFallback(cmd, "permission", "scope"))
 	out := make([]string, 0, len(values))
 	for _, value := range values {
 		for _, part := range splitDevAppList(value) {

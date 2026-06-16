@@ -4,20 +4,13 @@
 
 ## 应用定位
 
-写操作前必须定位到唯一应用：
-
-| 优先级 | 标识 | 处理 |
-|--------|------|------|
-| 1 | `--unified-app-id` | 直接使用 |
-| 2 | `--app-key` | appKey/clientId，唯一命中才继续 |
-| 3 | `--name` | 应用名称关键词，写操作必须唯一命中 |
+除列表支持 `--name` 搜索外，详情、修改、启停和删除统一使用 `--unified-app-id` 定位应用。
 
 ## 应用列表
 
 ```bash
 dws devapp list --format json
 dws devapp list --name DemoApp --format json
-dws devapp list --app-key dingxxx --format json
 dws devapp list --name DemoApp --page-size 20 --cursor NEXT_CURSOR --format json
 ```
 
@@ -28,7 +21,6 @@ MCP tool: `list_dev_app`
 | `--page-size` | `pageSize` | 默认 20 |
 | `--cursor` | `cursor` | 游标，首次为空，用上一页 `nextCursor` 继续 |
 | `--name` / `--keyword` | `name` | 应用名搜索 |
-| `--app-key` | `appKey` | appKey/clientId |
 
 ## 应用状态字段
 
@@ -47,8 +39,6 @@ MCP tool: `list_dev_app`
 
 ```bash
 dws devapp get --unified-app-id UNIFIED_APP_ID --format json
-dws devapp get --app-key dingxxx --format json
-dws devapp get --name DemoApp --format json
 ```
 
 MCP tool: `get_dev_app`

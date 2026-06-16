@@ -4,8 +4,6 @@
 
 ```bash
 dws devapp credentials get --unified-app-id UNIFIED_APP_ID --format json
-dws devapp credentials get --app-key dingxxx --format json
-dws devapp credentials get --name DemoApp --format json
 ```
 
 MCP tool: `get_dev_app_credentials`
@@ -30,7 +28,6 @@ MCP tool: `get_dev_app_credentials`
 
 ```bash
 dws devapp webapp get --unified-app-id UNIFIED_APP_ID --format json
-dws devapp webapp get --app-key dingxxx --format json
 ```
 
 MCP tool: `get_extension_webapp_config`

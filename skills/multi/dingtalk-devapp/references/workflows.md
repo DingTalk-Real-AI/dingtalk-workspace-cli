@@ -64,7 +64,7 @@
    → 确认 authed=true
 
 6. 取消不需要的权限
-   dws devapp permission remove --unified-app-id <unifiedAppId> --permission <scopeValue> --dry-run --format json
+   dws devapp permission remove --unified-app-id <unifiedAppId> --permissions <scopeValue> --dry-run --format json
    → 确认后加 --yes
 ```
 

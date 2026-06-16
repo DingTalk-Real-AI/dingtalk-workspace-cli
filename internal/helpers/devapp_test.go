@@ -505,7 +505,7 @@ func TestDevAppListBuildsListByConditionParams(t *testing.T) {
 	var out bytes.Buffer
 	root.SetOut(&out)
 	root.SetErr(&out)
-	root.SetArgs([]string{"list", "--name", "Waker", "--app-key", "dingxxx", "--page-size", "5", "--cursor", "next-1"})
+	root.SetArgs([]string{"list", "--name", "Waker", "--page-size", "5", "--cursor", "next-1"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
@@ -517,7 +517,6 @@ func TestDevAppListBuildsListByConditionParams(t *testing.T) {
 		"pageSize": 5,
 		"cursor":   "next-1",
 		"name":     "Waker",
-		"appKey":   "dingxxx",
 	}
 	if !reflect.DeepEqual(runner.last.Params, want) {
 		t.Fatalf("Params = %#v, want %#v", runner.last.Params, want)
@@ -603,10 +602,10 @@ func TestDevAppLifecycleBuildsLocatorParams(t *testing.T) {
 		wantParams map[string]any
 	}{
 		{
-			name:       "delete by name",
-			args:       []string{"delete", "--name", "Demo", "--yes"},
+			name:       "delete by unified app id",
+			args:       []string{"delete", "--unified-app-id", "u-2", "--yes"},
 			wantTool:   "delete_dev_app",
-			wantParams: map[string]any{"name": "Demo"},
+			wantParams: map[string]any{"unifiedAppId": "u-2"},
 		},
 		{
 			name:       "inactive by unified app id",
@@ -615,10 +614,10 @@ func TestDevAppLifecycleBuildsLocatorParams(t *testing.T) {
 			wantParams: map[string]any{"unifiedAppId": "u-1"},
 		},
 		{
-			name:       "active by app key",
-			args:       []string{"active", "--app-key", "dingxxx", "--yes"},
+			name:       "active by unified app id",
+			args:       []string{"active", "--unified-app-id", "u-3", "--yes"},
 			wantTool:   "enable_dev_app",
-			wantParams: map[string]any{"appKey": "dingxxx"},
+			wantParams: map[string]any{"unifiedAppId": "u-3"},
 		},
 	}
 
@@ -721,11 +720,11 @@ func TestDevAppPermissionCommandsBuildParams(t *testing.T) {
 		},
 		{
 			name:     "remove",
-			args:     []string{"permission", "remove", "--unified-app-id", "u-1", "--permission", "Contact.User.mobile", "--yes"},
+			args:     []string{"permission", "remove", "--unified-app-id", "u-1", "--permissions", "Contact.User.mobile,qyapi_robot_sendmsg", "--yes"},
 			wantTool: "remove_dev_app_permissions",
 			wantParams: map[string]any{
 				"unifiedAppId": "u-1",
-				"scopeValue":   "Contact.User.mobile",
+				"scopeValues":  []string{"Contact.User.mobile", "qyapi_robot_sendmsg"},
 			},
 		},
 	}
@@ -762,11 +761,6 @@ func TestDevAppCredentialsGetBuildsParams(t *testing.T) {
 			name:       "by unified app id",
 			args:       []string{"devapp", "credentials", "get", "--unified-app-id", "u-1"},
 			wantParams: map[string]any{"unifiedAppId": "u-1"},
-		},
-		{
-			name:       "by name",
-			args:       []string{"devapp", "credentials", "get", "--name", "Demo"},
-			wantParams: map[string]any{"name": "Demo"},
 		},
 	}
 
@@ -855,6 +849,45 @@ func TestDevAppUnwrapsSuccessfulServiceResult(t *testing.T) {
 	items, ok := rendered["items"].([]any)
 	if !ok || len(items) != 1 {
 		t.Fatalf("items = %#v, want one item", rendered["items"])
+	}
+}
+
+func TestNormalizeDevAppRemovePermissionScopeValues(t *testing.T) {
+	result := executor.Result{
+		Response: map[string]any{
+			"content": map[string]any{
+				"removedScopeValues": []any{
+					map[string]any{"scopeValue": "qyapi_robot_sendmsg", "scopeName": "机器人发消息"},
+					map[string]any{"scopeValue": "Contact.User.mobile", "scopeName": "手机号"},
+				},
+			},
+		},
+	}
+
+	normalized := normalizeDevAppToolResult("remove_dev_app_permissions", result)
+	content := normalized.Response["content"].(map[string]any)
+	got := content["removedScopeValues"]
+	want := []string{"qyapi_robot_sendmsg", "Contact.User.mobile"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("removedScopeValues = %#v, want %#v", got, want)
+	}
+}
+
+func TestNormalizeDevAppLifecycleResult(t *testing.T) {
+	disable := normalizeDevAppToolResult(devAppDisableTool, executor.Result{
+		Response: map[string]any{"content": map[string]any{"deleted": false}},
+	})
+	disableContent := disable.Response["content"].(map[string]any)
+	if disabled, _ := disableContent["disabled"].(bool); !disabled {
+		t.Fatalf("disabled = %#v, want true", disableContent["disabled"])
+	}
+
+	enable := normalizeDevAppToolResult(devAppEnableTool, executor.Result{
+		Response: map[string]any{"content": map[string]any{"deleted": false}},
+	})
+	enableContent := enable.Response["content"].(map[string]any)
+	if enabled, _ := enableContent["enabled"].(bool); !enabled {
+		t.Fatalf("enabled = %#v, want true", enableContent["enabled"])
 	}
 }
 

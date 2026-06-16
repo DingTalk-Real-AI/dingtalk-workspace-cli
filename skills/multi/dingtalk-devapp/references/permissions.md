@@ -85,10 +85,10 @@ MCP tool: `apply_dev_app_permissions`
 ## 取消权限
 
 ```bash
-dws devapp permission remove --unified-app-id ID --permission qyapi_robot_sendmsg --dry-run --format json
-dws devapp permission remove --unified-app-id ID --permission qyapi_robot_sendmsg --yes --format json
+dws devapp permission remove --unified-app-id ID --permissions qyapi_robot_sendmsg --dry-run --format json
+dws devapp permission remove --unified-app-id ID --permissions Contact.User.mobile,qyapi_robot_sendmsg --yes --format json
 ```
 
 MCP tool: `remove_dev_app_permissions`
 
-一次只取消一个权限点。未开通返回 `NOT_AUTHED`；不可编辑返回 no-edit 原因。
+`--permissions` 传 `scopeValue`，多个逗号分隔，必须来自 `permission list` 的返回。未开通返回 `NOT_AUTHED`；不可编辑返回 no-edit 原因。旧 `--permission/--scope` 仅作为单个权限点兼容别名。
