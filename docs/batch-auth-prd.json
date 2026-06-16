@@ -203,15 +203,15 @@
     ]
   },
   "prepubReleaseGate": {
-    "overallStatus": "not_passed_until_all_current_heads_have_prepub_package_and_functional_verification_ok",
+    "overallStatus": "not_passed_until_gateway_pat_current_heads_redeployed_and_bff_integration_test_resolved",
     "changedRepos": [
       {
         "repo": "dingtalk-workspace-cli",
         "localPath": "/Users/xuan/dingtalk-workspace-cli",
         "branch": "codex/dws-auth-login-recommend",
-        "commit": "5a7c0748e39e62f02ca1296e2a9e513a59a94dbe",
-        "prepubPackage": "pushed to GitHub branch; local go test ./internal/pat ./internal/app passed; blocked_no_aone_app_for_current_github_repo_lippi_dws_release_uses_gitlab_release_repo",
-        "prepubFunctionalVerification": "pending_current_head_e2e"
+        "commit": "9ee8ea552406d1804f062f2f9165a031b1f87ab3",
+        "prepubPackage": "pushed to GitHub branch and rebuilt local default /usr/local/bin/dws -> /Users/xuan/bin/dws from current source; local go test ./internal/app ./internal/pat passed. Still blocked_no_aone_app_for_current_github_repo_lippi_dws_release_uses_gitlab_release_repo for formal prepub package evidence.",
+        "prepubFunctionalVerification": "local_cli_selector_contract_ok; current_head_e2e_pending_server_redeploy"
       },
       {
         "repo": "lippi-open-mcpserver-gw",
@@ -224,8 +224,8 @@
         "aoneCrStatusLabel": "发布中",
         "prepubPipelineId": 66,
         "prepubPipelineInstanceId": 3094877547,
-        "prepubPackage": "pipeline_reached_final_prepub_validation_waiting_state",
-        "prepubFunctionalVerification": "pending"
+        "prepubPackage": "Aone CR 34656146 pipeline 66 instance 3094877547 had build/deploy/integration success and deploy orders 155284562/155284566 succeeded, but that deploy completed before current head a0873a6 was committed; current head is not proven deployed. Final task 3390336920 is WAITING: CR34656146,CR34302328,CR34364191,CR34598300 待验证.",
+        "prepubFunctionalVerification": "pending_current_head_redeploy_or_equivalent_receipt"
       },
       {
         "repo": "lippi-pat-core-wukong-capability",
@@ -240,7 +240,7 @@
         "aoneNewestRevision": "79a8fa5a9e5a4cc20f14efe567680a4b2ab897e3",
         "prepubPipelineId": 66,
         "prepubPipelineInstanceId": 3094928748,
-        "prepubPackage": "CR 34656143 is INTG and now sees newestRevision 79a8fa5a9e5a4cc20f14efe567680a4b2ab897e3; local Java 11 targeted regression passed, but current head prepub redeploy is pending because PAT deployment was intentionally held for user-side conflict handling.",
+        "prepubPackage": "Aone CR 34656143 latest pipeline 66 instance 3094948452 had build/deploy/integration success and deploy order 155318893 succeeded, but that deploy completed before current head 79a8fa5 was committed; current head is not proven deployed. Final task 3390679518 is WAITING: CR34656143 待验证.",
         "prepubFunctionalVerification": "pending_current_head_redeploy"
       },
       {
@@ -256,22 +256,22 @@
         "aoneNewestRevision": "9ac576c77d142b5f4ec318c8d7b8ecf472ea6341",
         "prepubPipelineId": 66,
         "prepubPipelineInstanceId": 3094929764,
-        "prepubPackage": "Build and prepub deploy SUCCESS on 2026-06-16 17:12:43+08:00; Aone prepub integration-test task 3390591557 reported FAIL, while real prepub browser flow through BFF succeeded for login recommend approval.",
-        "prepubFunctionalVerification": "login_recommend_approved_ok"
+        "prepubPackage": "Latest Aone pipeline 66 instance 3095006435 built and deployed current head 9ac576c to prepub/non-prod; deploy orders 155345552 and 155345553 succeeded. Pipeline final status remains FAIL because integration test task 3390939831 failed; validation task 3390939832 remains INIT.",
+        "prepubFunctionalVerification": "pending_bff_integration_test_resolution_or_accepted_exception"
       },
       {
         "repo": "lippi-open-dev-front",
         "localPath": "/Users/xuan/lippi-open-dev-front",
         "branch": "codex/batch-auth-page-flow",
-        "commit": "065178a7011174c14952c89992022968a8a49a7b",
+        "commit": "f33e349b2c29c7ba139e48fdfbdd70759ce3a4c4",
         "aoneAppId": null,
         "aoneCrId": null,
-        "prepubPackage": "O2 assets app does not support pub-env=pre; a1 o2 task create --iteration-id 16804012 --pub-env pre returned unsupported. Non-production daily assets build/deploy succeeded on task 149432667 for commit 065178a7011174c14952c89992022968a8a49a7b, published to dev.g.alicdn.com/dingding/lippi-open-dev-front/5.219.0/. Local npm run build also passed with existing bundle-size warnings only.",
-        "prepubFunctionalVerification": "pending_reload_pre_open_dev_page_after_assets_propagation",
+        "prepubPackage": "O2 assets app still does not support pub-env=pre. Non-production daily assets build/deploy succeeded on task 149432767 for commit f33e349b2c29c7ba139e48fdfbdd70759ce3a4c4, build id 53073038, asset count 203, published to dev.g.alicdn.com/dingding/lippi-open-dev-front/5.219.0/. Local npm run build passed with existing bundle-size warnings only.",
+        "prepubFunctionalVerification": "frontend_daily_cdn_copy_and_account_avatar_priority_ok; full_e2e_pending_server_current_heads",
         "o2AppId": 8780,
         "o2IterationId": 16804012,
-        "o2TaskId": 149432667,
-        "o2FlowId": 114592128,
+        "o2TaskId": 149432767,
+        "o2FlowId": 114592657,
         "o2ReleaseVersion": "5.219.0",
         "o2PublishEnv": "daily"
       }
@@ -345,7 +345,12 @@
       "Frontend O2 non-production task 149432667 succeeded for commit 065178a7011174c14952c89992022968a8a49a7b, flow 114592128, version 5.219.0, pub_env daily. Attempting pub_env pre returned: assets does not support prepub.",
       "Independent cross-repo review found no P0/P1 contract break in CLI -> gateway -> BFF -> PAT -> frontend for selectedScopes. The important contract is that gateway pat.batch_grant takes scopes, while CLI/BFF use selectedScopes only at their own API boundaries before converting/passing to PAT.",
       "CLI recommend login TUI default-selects all product domains before plan/grant, matching the Lark-like pre-authorization selector requirement. Local verification passed with go test ./internal/pat ./internal/app.",
-      "Frontend CDN verification after O2 task 149432667: https://dev.g.alicdn.com/dingding/lippi-open-dev-front/5.219.0/bundle.js contains 个人数据授权管理 and 可授权的权限, and no longer contains 应用授权管理 or 可授权的权限（已选."
+      "Frontend CDN verification after O2 task 149432667: https://dev.g.alicdn.com/dingding/lippi-open-dev-front/5.219.0/bundle.js contains 个人数据授权管理 and 可授权的权限, and no longer contains 应用授权管理 or 可授权的权限（已选.",
+      "2026-06-17 CLI fix: Bacon review found plain dws auth login --recommend skipped the Lark-like product selector because global --format defaults to json. Commit 9ee8ea552406d1804f062f2f9165a031b1f87ab3 changes auth login recommend selector gating so default json still shows the TUI in an interactive terminal, while explicit --format json and non-interactive shells skip it. Verification: go test ./internal/app ./internal/pat passed.",
+      "2026-06-17 local default dws binary refreshed: /usr/local/bin/dws -> /Users/xuan/bin/dws was rebuilt from dingtalk-workspace-cli commit 9ee8ea552406d1804f062f2f9165a031b1f87ab3; dws version --format json reports version dev, edition open.",
+      "2026-06-17 frontend account-row fix: commit f33e349b2c29c7ba139e48fdfbdd70759ce3a4c4 makes the authorization account row prefer userAvatar/userName before orgLogo/orgName to avoid mixed org icon + user name rendering. Verification: npm run build passed with existing bundle-size warnings only.",
+      "Frontend O2 non-production task 149432767 succeeded for commit f33e349b2c29c7ba139e48fdfbdd70759ce3a4c4, flow 114592657, version 5.219.0, pub_env daily, build id 53073038, assetCount 203. CDN bundle contains userAvatar|| and no longer contains the old orgLogo|| account-row priority; old title 可授权的权限（已选 remains absent.",
+      "2026-06-17 server release audit: gateway current head a0873a6 and PAT current head 79a8fa5 are not proven deployed because their successful prepub deploy receipts predate the current commits. BFF current head 9ac576c is deployed, but Aone integration-test task 3390939831 is FAIL. Full prepub e2e remains blocked on gateway/PAT current-head redeploy plus BFF integration-test resolution or accepted exception."
     ]
   },
   "serviceContract": {
@@ -495,5 +500,5 @@
     "muskChiefOperator": "Review the product flow for speed, minimum surface area, and user clarity.",
     "computerUse": "Verify prepub/front-end page only after frontend repo and build credentials are available."
   },
-  "updatedAt": "2026-06-16T23:59:59+08:00"
+  "updatedAt": "2026-06-17T00:42:00+08:00"
 }
