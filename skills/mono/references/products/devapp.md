@@ -195,15 +195,15 @@ MCP tool: `update_app_security_config`
 ### 新建智能体机器人
 
 ```bash
-# 同步创建（返回 agentId/robotCode/clientId/clientSecret）
+# 一条命令创建（自动提交+轮询，返回 agentId/robotCode/clientId/clientSecret）
 dws devapp robot create --app-name 我的智能体 --robot-name 小助手 --desc "处理审批问答" --dry-run --format json
 
-# 异步创建 + 查询
+# 手动异步创建 + 查询（需要自己控制重试节奏时用）
 dws devapp robot submit --app-name 我的智能体 --robot-name 小助手 --desc "处理审批问答" --dry-run --format json
 dws devapp robot result --task-id TASK_ID --format json
 ```
 
-MCP tools: `create_dingtalk_robot` / `submit_robot_create_task` / `query_robot_create_result`。`submit` 失败可带原 `--task-id` 重试。
+MCP tools: `submit_robot_create_task` / `query_robot_create_result`。`create` 内部即走这两个工具（自动轮询直到终态）；`submit` 失败可带原 `--task-id` 重试。同步工具 `create_dingtalk_robot` 服务端动作已失效（issue #35），不再使用。
 
 异步创建任务状态：
 

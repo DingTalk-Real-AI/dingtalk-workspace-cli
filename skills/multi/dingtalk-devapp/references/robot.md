@@ -9,14 +9,14 @@
 
 ## 一、新建智能体机器人
 
-### 同步创建
+### 一条命令创建（推荐）
 
 ```bash
 dws devapp robot create --app-name 我的智能体 --robot-name 小助手 --desc "处理审批问答" --dry-run --format json
 dws devapp robot create --app-name 我的智能体 --robot-name 小助手 --desc "处理审批问答" --yes --format json
 ```
 
-MCP tool: `create_dingtalk_robot`。成功返回 `agentId / robotCode / clientId / clientSecret`（凭据按敏感信息处理）。
+`create` 会自动提交异步创建任务并轮询直到完成，最终返回 `agentId / robotCode / clientId / clientSecret`（凭据按敏感信息处理）。底层走 `submit_robot_create_task` + `query_robot_create_result`（同步工具 `create_dingtalk_robot` 服务端动作已失效，见 issue #35，不再使用）。
 
 | CLI | MCP | 必填 | 说明 |
 |-----|-----|------|------|
