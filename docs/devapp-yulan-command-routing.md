@@ -140,7 +140,7 @@ Do not send confirmation fields such as `confirmCreate`, `confirmUpdate`, `confi
 | Permission apply | `devapp permission add` | `apply_open_dev_app_permissions` | `OpenInnerAppPermissionFacade.apply` | Implemented | Hardcoded helper |
 | Permission remove | `devapp permission remove` | `remove_open_dev_app_permission` | `OpenInnerAppPermissionFacade.remove` | Implemented | Hardcoded helper |
 | Events | `devapp event list/config` | `list/config_open_dev_app_events` | Event facade pending | Pending | Spec only |
-| Robot create | `devapp robot create/submit/result` | `create_dingtalk_robot`/`submit_robot_create_task`/`query_robot_create_result` | Implemented | Hardcoded helper |
+| Robot create | `devapp robot create/submit/result` | `submit_robot_create_task`/`query_robot_create_result` (sync `create_dingtalk_robot` broken server-side, see issue #35) | Implemented | Hardcoded helper |
 | Robot config | `devapp robot get/config/update/enable/offline` | `get/create/update_open_dev_app_robot_config`, `enable/offline_open_dev_app_robot` | Implemented | Hardcoded helper |
 | Version | `devapp version create/list/get/check-approval/publish/status` | `create/list_open_dev_app_versions`, `get_open_dev_app_version_detail/status`, `publish_open_dev_app_version` | Implemented | Hardcoded helper |
 
@@ -1030,7 +1030,7 @@ Implemented robot tools:
 
 | CLI | MCP tool | Notes |
 | --- | --- | --- |
-| `devapp robot create` | `create_dingtalk_robot` | Synchronously create a new agent app + robot. |
+| `devapp robot create` | `submit_robot_create_task` + `query_robot_create_result` | Create a new agent app + robot via the async submit/poll flow (the legacy sync `create_dingtalk_robot` action is broken server-side — see issue #35). |
 | `devapp robot submit` | `submit_robot_create_task` | Async submit; supports retry via original `taskId`. |
 | `devapp robot result` | `query_robot_create_result` | Poll async task by `taskId`. |
 | `devapp robot get` | `get_open_dev_app_robot_config` | Read robot config of an existing app. |

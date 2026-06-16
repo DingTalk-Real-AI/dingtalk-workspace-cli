@@ -129,13 +129,17 @@ func TestDevAppRobotCommandsBuildToolParams(t *testing.T) {
 		wantParams map[string]any
 	}{
 		{
-			name:     "create sync",
+			// create 不再调用失效的同步 create_dingtalk_robot（issue #35），
+			// 改为提交异步 submit_robot_create_task 任务（并补图标占位），随后轮询结果。
+			name:     "create routes to async submit",
 			args:     []string{"robot", "create", "--app-name", "智能体", "--robot-name", "小助手", "--desc", "审批问答", "--yes"},
-			wantTool: "create_dingtalk_robot",
+			wantTool: "submit_robot_create_task",
 			wantParams: map[string]any{
-				"appName":   "智能体",
-				"robotName": "小助手",
-				"desc":      "审批问答",
+				"appName":        "智能体",
+				"robotName":      "小助手",
+				"desc":           "审批问答",
+				"robotMediaId":   "",
+				"previewMediaId": "",
 			},
 		},
 		{
@@ -206,6 +210,85 @@ func TestDevAppRobotCommandsBuildToolParams(t *testing.T) {
 				t.Fatalf("Params = %#v, want %#v", runner.last.Params, tc.wantParams)
 			}
 		})
+	}
+}
+
+// sequencedRobotRunner returns a scripted response per call so we can exercise
+// the create → submit → poll-until-terminal loop without real network calls.
+type sequencedRobotRunner struct {
+	responses []map[string]any
+	calls     []executor.Invocation
+}
+
+func (r *sequencedRobotRunner) Run(_ context.Context, invocation executor.Invocation) (executor.Result, error) {
+	idx := len(r.calls)
+	r.calls = append(r.calls, invocation)
+	resp := map[string]any{}
+	if idx < len(r.responses) {
+		resp = r.responses[idx]
+	} else if len(r.responses) > 0 {
+		resp = r.responses[len(r.responses)-1]
+	}
+	invocation.Implemented = true
+	return executor.Result{Invocation: invocation, Response: resp}, nil
+}
+
+func robotToolResponse(body map[string]any) map[string]any {
+	return map[string]any{"content": map[string]any{"result": body}}
+}
+
+func TestDevAppRobotCreatePollsUntilTerminal(t *testing.T) {
+	runner := &sequencedRobotRunner{
+		responses: []map[string]any{
+			// submit_robot_create_task → task accepted, still pending.
+			robotToolResponse(map[string]any{"taskId": "t-1", "status": "WAITING", "interval": 0.01}),
+			// first poll → still pending.
+			robotToolResponse(map[string]any{"taskId": "t-1", "status": "PROCESSING", "interval": 0.01}),
+			// second poll → terminal, carries credentials.
+			robotToolResponse(map[string]any{"taskId": "t-1", "status": "APPROVAL_REQUIRED", "agentId": "4680653193", "robotCode": "ding-test"}),
+		},
+	}
+	root := newDevAppTestRoot(runner)
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"devapp", "robot", "create", "--app-name", "智能体", "--robot-name", "小助手", "--desc", "审批问答", "--yes"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
+	}
+
+	if len(runner.calls) != 3 {
+		t.Fatalf("expected submit + 2 polls = 3 calls, got %d", len(runner.calls))
+	}
+	if got := runner.calls[0].Tool; got != "submit_robot_create_task" {
+		t.Fatalf("first call tool = %q, want submit_robot_create_task", got)
+	}
+	for i := 1; i < 3; i++ {
+		if got := runner.calls[i].Tool; got != "query_robot_create_result" {
+			t.Fatalf("poll call %d tool = %q, want query_robot_create_result", i, got)
+		}
+		if got, _ := runner.calls[i].Params["taskId"].(string); got != "t-1" {
+			t.Fatalf("poll call %d taskId = %q, want t-1", i, got)
+		}
+	}
+	if !strings.Contains(out.String(), "APPROVAL_REQUIRED") || !strings.Contains(out.String(), "4680653193") {
+		t.Fatalf("final output missing terminal result, got:\n%s", out.String())
+	}
+}
+
+func TestDevAppRobotStatusPending(t *testing.T) {
+	pending := []string{"WAITING", "processing", " Running ", "PENDING", "INIT", "DOING"}
+	for _, s := range pending {
+		if !devAppRobotStatusPending(s) {
+			t.Errorf("status %q should be pending", s)
+		}
+	}
+	terminal := []string{"SUCCESS", "APPROVAL_REQUIRED", "FAILED", "ERROR", "", "unknown"}
+	for _, s := range terminal {
+		if devAppRobotStatusPending(s) {
+			t.Errorf("status %q should be terminal", s)
+		}
 	}
 }
 

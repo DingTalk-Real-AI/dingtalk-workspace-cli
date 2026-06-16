@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -34,6 +35,12 @@ const (
 	devAppSecurityConfigTool = "update_app_security_config"
 
 	// 机器人能力（op-app MCP 工具，硬编码不走服务发现）。
+	//
+	// devAppRobotCreateTool（同步 create_dingtalk_robot）的服务端实现引用了一个
+	// connect-engine 动作模板（detailId G-ACT-...），该模板当前在引擎里已找不到，
+	// 对所有调用方都返回 PARAM_ERROR / "找不到执行动作"（见 issue #35）。因此
+	// `dws devapp robot create` 不再调用它，改用 submit + 轮询 result 的异步路径，
+	// 二者返回的最终结果一致（agentId/clientId/robotCode/clientSecret）。
 	devAppRobotCreateTool       = "create_dingtalk_robot"
 	devAppRobotSubmitTool       = "submit_robot_create_task"
 	devAppRobotResultTool       = "query_robot_create_result"
@@ -663,7 +670,7 @@ func newDevAppSecurityConfigCommand(runner executor.Runner) *cobra.Command {
 func newDevAppRobotCreateCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "create",
-		Short:             "新建钉钉智能体机器人（一次性同步创建应用+机器人）",
+		Short:             "新建钉钉智能体机器人（提交创建任务并等待完成）",
 		Example:           "  dws devapp robot create --app-name 我的智能体 --robot-name 小助手 --desc \"处理审批问答\" --dry-run --format json",
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
@@ -675,7 +682,7 @@ func newDevAppRobotCreateCommand(runner executor.Runner) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runDevAppTool(runner, cmd, devAppRobotCreateTool, params)
+			return runDevAppRobotCreate(runner, cmd, params)
 		},
 	}
 	registerDevAppRobotCreateFlags(cmd)
@@ -839,6 +846,107 @@ func devAppRobotCreateParams(cmd *cobra.Command) (map[string]any, error) {
 	devAppPutString(params, "robotMediaId", devAppStringFlag(cmd, "icon"))
 	devAppPutString(params, "previewMediaId", devAppStringFlag(cmd, "preview"))
 	return params, nil
+}
+
+// runDevAppRobotCreate 实现 `dws devapp robot create`。
+//
+// 同步工具 create_dingtalk_robot 的服务端动作模板已失效（issue #35），因此这里
+// 改走异步路径：submit_robot_create_task 拿 taskId，再按服务端给的 interval 轮询
+// query_robot_create_result 直到任务进入终态，最后输出与同步接口一致的结果
+// （agentId/clientId/robotCode/clientSecret）。用户感知仍是“一条命令建出机器人”。
+func runDevAppRobotCreate(runner executor.Runner, cmd *cobra.Command, params map[string]any) error {
+	// submit_robot_create_task 的 schema 把图标字段标为必填（空值时服务端用默认图标），
+	// 即使用户未提供也补空串占位。
+	if _, ok := params["robotMediaId"]; !ok {
+		params["robotMediaId"] = ""
+	}
+	if _, ok := params["previewMediaId"]; !ok {
+		params["previewMediaId"] = ""
+	}
+
+	// dry-run 直接预览将要提交的 submit 调用（这正是真实会发生的事）。
+	if commandDryRun(cmd) {
+		return runDevAppTool(runner, cmd, devAppRobotSubmitTool, params)
+	}
+
+	legacyPath := cobracmd.LegacyCommandPath(cmd)
+	submitInv := executor.NewHelperInvocation(legacyPath, devAppProduct, devAppRobotSubmitTool, params)
+	submitRes, err := runner.Run(cmd.Context(), submitInv)
+	if err != nil {
+		return err
+	}
+
+	taskID := devAppRobotResultString(submitRes, "taskId")
+	if taskID == "" {
+		// 拿不到 taskId 说明服务端返回结构异常，原样回吐 submit 结果由用户判断。
+		return writeCommandPayload(cmd, submitRes)
+	}
+
+	last := submitRes
+	interval := devAppRobotResultInterval(submitRes)
+	const maxAttempts = 24 // 配合 interval（默认 5s）约 2 分钟内收敛
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if !devAppRobotStatusPending(devAppRobotResultString(last, "status")) {
+			break
+		}
+		select {
+		case <-cmd.Context().Done():
+			return cmd.Context().Err()
+		case <-time.After(interval):
+		}
+		pollInv := executor.NewHelperInvocation(legacyPath, devAppProduct, devAppRobotResultTool, map[string]any{"taskId": taskID})
+		pollRes, pollErr := runner.Run(cmd.Context(), pollInv)
+		if pollErr != nil {
+			return pollErr
+		}
+		last = pollRes
+		if next := devAppRobotResultInterval(pollRes); next > 0 {
+			interval = next
+		}
+	}
+	return writeCommandPayload(cmd, last)
+}
+
+// devAppRobotResultBody 取出工具返回里的业务 result 对象
+// （形如 {"errorCode":null,"result":{...},"success":true} 中的 result）。
+func devAppRobotResultBody(res executor.Result) map[string]any {
+	content, ok := res.Response["content"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	body, _ := content["result"].(map[string]any)
+	return body
+}
+
+func devAppRobotResultString(res executor.Result, key string) string {
+	body := devAppRobotResultBody(res)
+	if body == nil {
+		return ""
+	}
+	value, _ := body[key].(string)
+	return strings.TrimSpace(value)
+}
+
+// devAppRobotResultInterval 读取服务端建议的轮询间隔（秒），缺省 5 秒。
+func devAppRobotResultInterval(res executor.Result) time.Duration {
+	body := devAppRobotResultBody(res)
+	if body != nil {
+		if raw, ok := body["interval"].(float64); ok && raw > 0 {
+			return time.Duration(raw * float64(time.Second))
+		}
+	}
+	return 5 * time.Second
+}
+
+// devAppRobotStatusPending 判断创建任务是否仍在进行中（需要继续轮询）。
+// 已知终态：SUCCESS / APPROVAL_REQUIRED / FAILED / ERROR 等；未知或空状态保守按终态处理，避免死等。
+func devAppRobotStatusPending(status string) bool {
+	switch strings.ToUpper(strings.TrimSpace(status)) {
+	case "WAITING", "PROCESSING", "RUNNING", "PENDING", "INIT", "DOING":
+		return true
+	default:
+		return false
+	}
 }
 
 func registerDevAppRobotConfigFlags(cmd *cobra.Command) {
