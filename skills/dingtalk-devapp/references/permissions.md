@@ -11,7 +11,7 @@ dws devapp permission list --unified-app-id ID --scope-type SNS --format json
 dws devapp permission list --unified-app-id ID --scope qyapi_robot_sendmsg --format json
 ```
 
-MCP tool: `list_open_dev_app_permissions`
+MCP tool: `list_dev_app_permissions`
 
 | CLI | MCP | 说明 |
 |-----|-----|------|
@@ -74,7 +74,7 @@ dws devapp permission add --unified-app-id ID --permissions qyapi_robot_sendmsg 
 dws devapp permission add --unified-app-id ID --permissions Contact.User.mobile,qyapi_robot_sendmsg --yes --format json
 ```
 
-MCP tool: `apply_open_dev_app_permissions`
+MCP tool: `apply_dev_app_permissions`
 
 **规则：**
 - `--permissions` 传 `scopeValue`，多个逗号分隔，必须来自 `permission list` 的返回。
@@ -89,6 +89,6 @@ dws devapp permission remove --unified-app-id ID --permission qyapi_robot_sendms
 dws devapp permission remove --unified-app-id ID --permission qyapi_robot_sendmsg --yes --format json
 ```
 
-MCP tool: `remove_open_dev_app_permission`
+MCP tool: `remove_dev_app_permissions`
 
 一次只取消一个权限点。未开通返回 `NOT_AUTHED`；不可编辑返回 no-edit 原因。

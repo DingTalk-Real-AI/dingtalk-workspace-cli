@@ -490,8 +490,8 @@ func TestDevAppListBuildsListByConditionParams(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 	}
-	if got := runner.last.Tool; got != "list_open_dev_app" {
-		t.Fatalf("Tool = %q, want list_open_dev_app", got)
+	if got := runner.last.Tool; got != "list_dev_app" {
+		t.Fatalf("Tool = %q, want list_dev_app", got)
 	}
 	want := map[string]any{
 		"pageSize": 5,
@@ -634,13 +634,13 @@ func TestDevAppWebappCommandsBuildParams(t *testing.T) {
 		{
 			name:       "get",
 			args:       []string{"webapp", "get", "--unified-app-id", "u-1"},
-			wantTool:   "get_webapp_config",
+			wantTool:   "get_extension_webapp_config",
 			wantParams: map[string]any{"unifiedAppId": "u-1"},
 		},
 		{
 			name:     "config",
 			args:     []string{"webapp", "config", "--unified-app-id", "u-1", "--homepage-url", "https://example.com", "--pc-homepage-url", "https://pc.example.com", "--yes"},
-			wantTool: "set_webapp_config",
+			wantTool: "set_extension_webapp_config",
 			wantParams: map[string]any{
 				"unifiedAppId":  "u-1",
 				"homepageUrl":   "https://example.com",
@@ -681,7 +681,7 @@ func TestDevAppPermissionCommandsBuildParams(t *testing.T) {
 		{
 			name:     "list",
 			args:     []string{"permission", "list", "--unified-app-id", "u-1", "--keyword", "手机号", "--status", "all", "--page-size", "5", "--cursor", "next-1"},
-			wantTool: "list_open_dev_app_permissions",
+			wantTool: "list_dev_app_permissions",
 			wantParams: map[string]any{
 				"unifiedAppId": "u-1",
 				"keyword":      "手机号",
@@ -693,7 +693,7 @@ func TestDevAppPermissionCommandsBuildParams(t *testing.T) {
 		{
 			name:     "add",
 			args:     []string{"permission", "add", "--unified-app-id", "u-1", "--permissions", "Contact.User.mobile,qyapi_robot_sendmsg", "--yes"},
-			wantTool: "apply_open_dev_app_permissions",
+			wantTool: "apply_dev_app_permissions",
 			wantParams: map[string]any{
 				"unifiedAppId": "u-1",
 				"scopeValues":  []string{"Contact.User.mobile", "qyapi_robot_sendmsg"},
@@ -702,7 +702,7 @@ func TestDevAppPermissionCommandsBuildParams(t *testing.T) {
 		{
 			name:     "remove",
 			args:     []string{"permission", "remove", "--unified-app-id", "u-1", "--permission", "Contact.User.mobile", "--yes"},
-			wantTool: "remove_open_dev_app_permission",
+			wantTool: "remove_dev_app_permissions",
 			wantParams: map[string]any{
 				"unifiedAppId": "u-1",
 				"scopeValue":   "Contact.User.mobile",
@@ -743,8 +743,8 @@ func TestDevAppCredentialsGetBuildsParams(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 	}
-	if got := runner.last.Tool; got != "get_open_dev_app_credentials" {
-		t.Fatalf("Tool = %q, want get_open_dev_app_credentials", got)
+	if got := runner.last.Tool; got != "get_dev_app_credentials" {
+		t.Fatalf("Tool = %q, want get_dev_app_credentials", got)
 	}
 	want := map[string]any{"unifiedAppId": "u-1"}
 	if !reflect.DeepEqual(runner.last.Params, want) {

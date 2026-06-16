@@ -148,7 +148,7 @@ Codex 渠道注意：
 |------|------|
 | `--channel` | `auto`(默认,运行时信号自动识别) / openclaw / qoder / qoderwork / hermes / workbuddy / claudecode / codebuddy / codex / gemini / opencode |
 | `--robot-client-id` / `--robot-client-secret` | 现成机器人凭证（clientId=AppKey, clientSecret=AppSecret）。命名带 `robot-` 前缀以避开全局 OAuth `--client-id` flag |
-| `--unified-app-id` | 统一应用 ID，内部调 `get_open_dev_app_credentials` 自动取凭证。⚠️ 字段名待预发真机验证；clientSecret 仅建号时返回一次、未必可取，必要时回退手填 |
+| `--unified-app-id` | 统一应用 ID，内部调 `get_dev_app_credentials` 自动取凭证。⚠️ 字段名待预发真机验证；clientSecret 仅建号时返回一次、未必可取，必要时回退手填 |
 | `--agent-memory` | 按会话续聊（默认开）：同一群/单聊共享 agent 会话，追问保留上下文。仅 claudecode/codebuddy/workbuddy（CLI 有 `--session-id`/`--resume`）；qoder 系/codex/gemini/opencode 无寻址会话，自动保持无状态。`--agent-memory=false` 关闭 |
 | `--agent-model` | 覆盖本地 agent 模型（如 claudecode 默认锁 haiku 求快，可改 `claude-sonnet-4-6` 换聪明）。env: `DWS_AGENT_MODEL` |
 | `--agent-workdir` | agent 运行目录：放知识文件（如 CLAUDE.md）可给机器人企业上下文。默认空白临时目录（冷启动快 ~4s vs 大目录 ~29s，慢了会错过钉钉响应窗口）。env: `DWS_AGENT_WORKDIR` |
