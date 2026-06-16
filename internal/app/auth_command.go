@@ -142,15 +142,20 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 
 			w := cmd.OutOrStdout()
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
+			recommendHumanMode := authLoginShouldUseRecommendHumanMode(cmd, format, cfg.Recommend)
 			runRecommend := func() error {
 				if !cfg.Recommend {
 					return nil
 				}
 				opts := pat.LoginRecommendOptions{}
-				if authLoginShouldShowRecommendSelector(cmd, format) {
+				if recommendHumanMode {
 					opts.ProductSelector = func(products []pat.LoginRecommendProduct) ([]string, error) {
 						return selectLoginRecommendProducts(products)
 					}
+				}
+				retryFormat := format
+				if recommendHumanMode {
+					retryFormat = "table"
 				}
 				run := func(ctx context.Context) error {
 					return pat.RunLoginRecommendAuthorizationWithOptions(ctx, patCaller, cmd.ErrOrStderr(), opts)
@@ -159,7 +164,7 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 				if patErr := apperrors.AsPatAuthCheckError(err); patErr != nil {
 					return runDirectPATAuthCheck(
 						cmd.Context(),
-						&GlobalFlags{Format: format},
+						&GlobalFlags{Format: retryFormat},
 						patErr,
 						run,
 						cmd.ErrOrStderr(),
@@ -169,7 +174,7 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 			}
 
 			// Check if JSON output is requested
-			if strings.EqualFold(strings.TrimSpace(format), "json") {
+			if strings.EqualFold(strings.TrimSpace(format), "json") && !recommendHumanMode {
 				if err := runRecommend(); err != nil {
 					return err
 				}
@@ -629,11 +634,19 @@ func selectLoginRecommendProducts(products []pat.LoginRecommendProduct) ([]strin
 }
 
 func authLoginShouldShowRecommendSelector(cmd *cobra.Command, format string) bool {
-	return authLoginShouldShowRecommendSelectorForTerminal(cmd, format, isInteractiveTerminal())
+	return authLoginShouldUseRecommendHumanModeForTerminal(cmd, format, true, isInteractiveTerminal())
 }
 
 func authLoginShouldShowRecommendSelectorForTerminal(cmd *cobra.Command, format string, interactive bool) bool {
-	if !interactive {
+	return authLoginShouldUseRecommendHumanModeForTerminal(cmd, format, true, interactive)
+}
+
+func authLoginShouldUseRecommendHumanMode(cmd *cobra.Command, format string, recommend bool) bool {
+	return authLoginShouldUseRecommendHumanModeForTerminal(cmd, format, recommend, isInteractiveTerminal())
+}
+
+func authLoginShouldUseRecommendHumanModeForTerminal(cmd *cobra.Command, format string, recommend bool, interactive bool) bool {
+	if !recommend || !interactive {
 		return false
 	}
 	if !strings.EqualFold(strings.TrimSpace(format), "json") {

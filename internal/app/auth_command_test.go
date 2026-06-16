@@ -194,6 +194,9 @@ func TestAuthLoginRecommendSelectorRespectsExplicitFormat(t *testing.T) {
 		if !authLoginShouldShowRecommendSelectorForTerminal(root, "json", true) {
 			t.Fatal("default json format should still show recommend selector in an interactive terminal")
 		}
+		if !authLoginShouldUseRecommendHumanModeForTerminal(root, "json", true, true) {
+			t.Fatal("default json format should use human recommend flow in an interactive terminal")
+		}
 	})
 
 	t.Run("explicit json keeps machine mode", func(t *testing.T) {
@@ -203,6 +206,9 @@ func TestAuthLoginRecommendSelectorRespectsExplicitFormat(t *testing.T) {
 		}
 		if authLoginShouldShowRecommendSelectorForTerminal(root, "json", true) {
 			t.Fatal("explicit --format json must not show recommend selector")
+		}
+		if authLoginShouldUseRecommendHumanModeForTerminal(root, "json", true, true) {
+			t.Fatal("explicit --format json must keep machine-readable recommend flow")
 		}
 	})
 
@@ -214,12 +220,25 @@ func TestAuthLoginRecommendSelectorRespectsExplicitFormat(t *testing.T) {
 		if !authLoginShouldShowRecommendSelectorForTerminal(root, "table", true) {
 			t.Fatal("table format should show recommend selector in an interactive terminal")
 		}
+		if !authLoginShouldUseRecommendHumanModeForTerminal(root, "table", true, true) {
+			t.Fatal("table format should use human recommend flow in an interactive terminal")
+		}
 	})
 
 	t.Run("non interactive skips selector", func(t *testing.T) {
 		root := newRoot(t)
 		if authLoginShouldShowRecommendSelectorForTerminal(root, "json", false) {
 			t.Fatal("non-interactive login should skip recommend selector")
+		}
+		if authLoginShouldUseRecommendHumanModeForTerminal(root, "json", true, false) {
+			t.Fatal("non-interactive login should keep machine-readable recommend flow")
+		}
+	})
+
+	t.Run("without recommend keeps normal login output contract", func(t *testing.T) {
+		root := newRoot(t)
+		if authLoginShouldUseRecommendHumanModeForTerminal(root, "json", false, true) {
+			t.Fatal("login without --recommend should not switch default json to human mode")
 		}
 	})
 }
