@@ -222,16 +222,16 @@
         "repo": "lippi-pat-core-wukong-capability",
         "localPath": "/Users/xuan/lippi-pat-core-wukong-capability",
         "branch": "codex/batch-auth-page-flow",
-        "commit": "db13b19957930e62e8b03d74ac4e8093ea4bf7e7",
+        "commit": "78c1c311e91e2c2d204622b6219b8c1a179b6932",
         "aoneAppId": 312546,
         "aoneCrId": 34656143,
         "aoneCrStatus": "INTG",
         "aoneCrStatusLabel": "发布中",
         "aoneBranchRevision": "b38e29e9e9c0f55dc71762c37d261180cb30692b",
-        "aoneNewestRevision": "db13b19957930e62e8b03d74ac4e8093ea4bf7e7",
+        "aoneNewestRevision": "78c1c311e91e2c2d204622b6219b8c1a179b6932",
         "prepubPipelineId": 66,
         "prepubPipelineInstanceId": 3094877542,
-        "prepubPackage": "paused_by_user_for_pat_core_release_conflict_resolution; local_compile_success_after_tryConsumeOnceTokenFromTair_signature_fix; lippi-pat-core-api_1.0.5-SNAPSHOT_snapshot_deployed; api_module_version_explicitly_aligned_to_1.0.5-SNAPSHOT; lippi-enterprise-soc-api.version_defined_as_1.0.30-SNAPSHOT",
+        "prepubPackage": "latest_aone_build_failed_on_old_release_branch_commit_3555c3aa_missing_PatConnectorQueryService_from_lippi-open-app-dev-api_1.0.103; feature_branch_fixed_to_lippi-open-app-dev.version_1.2.0-SNAPSHOT_and_local_service_compile_passed; rerun_required",
         "prepubFunctionalVerification": "pending"
       },
       {
@@ -273,6 +273,7 @@
       "The Maven warning about requested profile lippi-pat-core is an Aone/Maven parameter warning: the root POM has no profile with id lippi-pat-core. It is not the cause of the Java compilation failure and does not justify a POM change in this slice.",
       "PAT core API version is explicitly aligned: root property lippi-pat-core-api.version is 1.0.5-SNAPSHOT and lippi-pat-core-api/pom.xml project.version evaluates to 1.0.5-SNAPSHOT. Verification passed with Java 11 Maven help:evaluate and lippi-pat-core-api compile.",
       "PAT core root POM now defines lippi-enterprise-soc-api.version as 1.0.30-SNAPSHOT, matching local reference repos /Users/xuan/lippi-pat-core and /Users/xuan/lippi-pat-core-prepub-merge-34465221. Verification passed with Java 11 Maven lippi-pat-core-service compile.",
+      "PAT core Aone build task 3390400102 failed because release branch commit 3555c3aa resolved lippi-open-app-dev-api as 1.0.103, which lacks PatConnectorQueryService and PatConnectorQueryResult. Feature branch commit 78c1c311e91e2c2d204622b6219b8c1a179b6932 changes lippi-open-app-dev.version to 1.2.0-SNAPSHOT, matching /Users/xuan/lippi-pat-core and release merge worktree. Local Java 11 lippi-pat-core-service compile passed and the 1.2.0-SNAPSHOT jar contains both missing classes.",
       "BFF now depends on com.dingtalk.pat:lippi-pat-core-api:1.0.5-SNAPSHOT and uses HandleFlowActionRequest#setSelectedScopes directly. The old reflection fallback has been removed.",
       "BFF local verification passed with Java 11: mvn -pl lippi-open-app-dev-start -am -DskipTests compile -s /Users/xuan/Downloads/settings.xml.",
       "Non-PAT side verification on 2026-06-16 passed: CLI go test ./internal/app ./internal/pat ./internal/errors, gateway py_compile plus diff check, and frontend npm run build with existing bundle-size warnings only."
