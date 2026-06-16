@@ -448,7 +448,7 @@ func TestDevAppRobotOfflineCommandRemoved(t *testing.T) {
 	var out bytes.Buffer
 	root.SetOut(&out)
 	root.SetErr(&out)
-	root.SetArgs([]string{"devapp", "robot", "offline", "--unified-app-id", "u-1", "--yes"})
+	root.SetArgs([]string{"devapp", "robot", "offline"})
 
 	err := root.Execute()
 	if err == nil {
