@@ -583,11 +583,11 @@ func newDevAppMemberListCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "list",
 		Short:             "查询开放平台应用成员",
-		Example:           "  dws devapp member list --app-id <unifiedAppId>",
+		Example:           "  dws devapp member list --unified-app-id <unifiedAppId>",
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			appID, err := requiredDevAppID(cmd)
+			appID, err := requiredDevAppUnifiedIDWithLegacyAppID(cmd)
 			if err != nil {
 				return err
 			}
@@ -596,7 +596,7 @@ func newDevAppMemberListCommand(runner executor.Runner) *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().String("app-id", "", "开放平台统一应用 ID (必填)")
+	addDevAppUnifiedIDFlagWithLegacyAppID(cmd)
 	preferLegacyLeaf(cmd)
 	return cmd
 }
@@ -605,7 +605,7 @@ func newDevAppMemberAddCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "add",
 		Short:             "添加开放平台应用成员",
-		Example:           "  dws devapp member add --app-id <unifiedAppId> --users userId1,userId2 --member-type DEVELOPER --dry-run",
+		Example:           "  dws devapp member add --unified-app-id <unifiedAppId> --users userId1,userId2 --member-type DEVELOPER --dry-run",
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -621,7 +621,7 @@ func newDevAppMemberRemoveCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "remove",
 		Short:             "移除开放平台应用成员",
-		Example:           "  dws devapp member remove --app-id <unifiedAppId> --users userId1,userId2 --member-type DEVELOPER --dry-run",
+		Example:           "  dws devapp member remove --unified-app-id <unifiedAppId> --users userId1,userId2 --member-type DEVELOPER --dry-run",
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -637,7 +637,7 @@ func newDevAppSecurityConfigCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
 		Short: "更新开放平台应用安全配置",
-		Example: "  dws devapp security config --app-id <unifiedAppId> " +
+		Example: "  dws devapp security config --unified-app-id <unifiedAppId> " +
 			"--ip-whitelist 192.0.2.10 --redirect-url https://callback.example.invalid/callback --sso-url https://sso.example.invalid/sso --dry-run",
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
@@ -645,7 +645,7 @@ func newDevAppSecurityConfigCommand(runner executor.Runner) *cobra.Command {
 			if err := devAppRequireWriteGuard(cmd, "security config"); err != nil {
 				return err
 			}
-			appID, err := requiredDevAppID(cmd)
+			appID, err := requiredDevAppUnifiedIDWithLegacyAppID(cmd)
 			if err != nil {
 				return err
 			}
@@ -666,7 +666,7 @@ func newDevAppSecurityConfigCommand(runner executor.Runner) *cobra.Command {
 			return runDevAppTool(runner, cmd, devAppSecurityConfigTool, params)
 		},
 	}
-	cmd.Flags().String("app-id", "", "开放平台统一应用 ID (必填)")
+	addDevAppUnifiedIDFlagWithLegacyAppID(cmd)
 	cmd.Flags().String("ip-whitelist", "", "出口 IP 白名单，多个用逗号或分号分隔")
 	cmd.Flags().String("redirect-url", "", "登录重定向 URL，多个用逗号或分号分隔")
 	cmd.Flags().String("sso-url", "", "端内免登地址，多个用逗号或分号分隔")
@@ -1115,8 +1115,25 @@ func addDevAppUnifiedIDFlag(cmd *cobra.Command) {
 	cmd.Flags().String("unified-app-id", "", "统一应用 ID (必填)")
 }
 
+func addDevAppUnifiedIDFlagWithLegacyAppID(cmd *cobra.Command) {
+	addDevAppUnifiedIDFlag(cmd)
+	cmd.Flags().String("app-id", "", "--unified-app-id 的兼容别名")
+	_ = cmd.Flags().MarkHidden("app-id")
+}
+
 func requiredDevAppUnifiedID(cmd *cobra.Command) (string, error) {
 	appID := devAppStringFlag(cmd, "unified-app-id")
+	if appID == "" {
+		return "", apperrors.NewValidation("--unified-app-id is required")
+	}
+	return appID, nil
+}
+
+func requiredDevAppUnifiedIDWithLegacyAppID(cmd *cobra.Command) (string, error) {
+	appID := devAppStringFlag(cmd, "unified-app-id")
+	if appID == "" {
+		appID = devAppStringFlag(cmd, "app-id")
+	}
 	if appID == "" {
 		return "", apperrors.NewValidation("--unified-app-id is required")
 	}
@@ -1189,7 +1206,7 @@ func devAppEventCodes(cmd *cobra.Command) []string {
 }
 
 func registerDevAppMemberMutationFlags(cmd *cobra.Command) {
-	cmd.Flags().String("app-id", "", "开放平台统一应用 ID (必填)")
+	addDevAppUnifiedIDFlagWithLegacyAppID(cmd)
 	cmd.Flags().String("users", "", "成员 userId 列表，多个用逗号分隔 (必填)")
 	cmd.Flags().String("member-type", "", "成员类型，如 DEVELOPER (必填)")
 }
@@ -1198,7 +1215,7 @@ func runDevAppMemberMutation(runner executor.Runner, cmd *cobra.Command, tool, o
 	if err := devAppRequireWriteGuard(cmd, operation); err != nil {
 		return err
 	}
-	appID, err := requiredDevAppID(cmd)
+	appID, err := requiredDevAppUnifiedIDWithLegacyAppID(cmd)
 	if err != nil {
 		return err
 	}

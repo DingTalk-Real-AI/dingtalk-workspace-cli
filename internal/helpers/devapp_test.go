@@ -45,7 +45,7 @@ func TestDevAppMemberCommandsBuildToolParams(t *testing.T) {
 		{
 			name:     "list",
 			cmd:      "list",
-			args:     []string{"--app-id", "app-001"},
+			args:     []string{"--unified-app-id", "app-001"},
 			wantTool: "list_dev_app_members",
 			wantParams: map[string]any{
 				"unifiedAppId": "app-001",
@@ -54,7 +54,7 @@ func TestDevAppMemberCommandsBuildToolParams(t *testing.T) {
 		{
 			name:     "add multiple users",
 			cmd:      "add",
-			args:     []string{"--app-id", "app-001", "--users", "userId1,userId2,userId3,userId4", "--member-type", "DEVELOPER", "--yes"},
+			args:     []string{"--unified-app-id", "app-001", "--users", "userId1,userId2,userId3,userId4", "--member-type", "DEVELOPER", "--yes"},
 			wantTool: "add_dev_app_members",
 			wantParams: map[string]any{
 				"unifiedAppId":  "app-001",
@@ -65,7 +65,7 @@ func TestDevAppMemberCommandsBuildToolParams(t *testing.T) {
 		{
 			name:     "remove trims users",
 			cmd:      "remove",
-			args:     []string{"--app-id", "app-001", "--users", " userId1 , userId2 ", "--member-type", "DEVELOPER", "--yes"},
+			args:     []string{"--unified-app-id", "app-001", "--users", " userId1 , userId2 ", "--member-type", "DEVELOPER", "--yes"},
 			wantTool: "remove_dev_app_members",
 			wantParams: map[string]any{
 				"unifiedAppId":  "app-001",
@@ -98,6 +98,43 @@ func TestDevAppMemberCommandsBuildToolParams(t *testing.T) {
 				t.Fatalf("Params = %#v, want %#v", runner.last.Params, tc.wantParams)
 			}
 		})
+	}
+}
+
+func TestDevAppMemberCommandsAcceptLegacyAppIDAlias(t *testing.T) {
+	runner := &captureRunner{}
+	root := newDevAppTestRoot(runner)
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"devapp", "member", "list", "--app-id", "app-001"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
+	}
+
+	want := map[string]any{"unifiedAppId": "app-001"}
+	if !reflect.DeepEqual(runner.last.Params, want) {
+		t.Fatalf("Params = %#v, want %#v", runner.last.Params, want)
+	}
+}
+
+func TestDevAppMemberListHelpUsesUnifiedAppID(t *testing.T) {
+	root := newDevAppTestRoot(&captureRunner{})
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"devapp", "member", "list", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
+	}
+	help := out.String()
+	if !strings.Contains(help, "--unified-app-id") {
+		t.Fatalf("help missing --unified-app-id:\n%s", help)
+	}
+	if strings.Contains(help, "--app-id") {
+		t.Fatalf("help should hide legacy --app-id:\n%s", help)
 	}
 }
 
@@ -903,10 +940,10 @@ func TestDevAppMemberCommandsValidateRequiredFlags(t *testing.T) {
 		args    []string
 		wantErr string
 	}{
-		{name: "list requires app", cmd: "list", args: nil, wantErr: "--app-id is required"},
-		{name: "add requires users", cmd: "add", args: []string{"--app-id", "app-001", "--member-type", "DEVELOPER", "--dry-run"}, wantErr: "--users is required"},
-		{name: "add rejects empty users", cmd: "add", args: []string{"--app-id", "app-001", "--users", " , ", "--member-type", "DEVELOPER", "--dry-run"}, wantErr: "--users must contain at least one userId"},
-		{name: "remove requires member type", cmd: "remove", args: []string{"--app-id", "app-001", "--users", "userId1", "--dry-run"}, wantErr: "--member-type is required"},
+		{name: "list requires app", cmd: "list", args: nil, wantErr: "--unified-app-id is required"},
+		{name: "add requires users", cmd: "add", args: []string{"--unified-app-id", "app-001", "--member-type", "DEVELOPER", "--dry-run"}, wantErr: "--users is required"},
+		{name: "add rejects empty users", cmd: "add", args: []string{"--unified-app-id", "app-001", "--users", " , ", "--member-type", "DEVELOPER", "--dry-run"}, wantErr: "--users must contain at least one userId"},
+		{name: "remove requires member type", cmd: "remove", args: []string{"--unified-app-id", "app-001", "--users", "userId1", "--dry-run"}, wantErr: "--member-type is required"},
 	}
 
 	for _, tc := range cases {
@@ -940,7 +977,7 @@ func TestDevAppSecurityConfigBuildsOnlyProvidedLists(t *testing.T) {
 	root.SetErr(&out)
 	root.SetArgs([]string{
 		"devapp", "security", "config",
-		"--app-id", "app-001",
+		"--unified-app-id", "app-001",
 		"--ip-whitelist", "192.0.2.10,192.0.2.11",
 		"--redirect-url", "https://callback.example.invalid/callback",
 		"--sso-url", "https://sso.example.invalid/sso",
@@ -974,7 +1011,7 @@ func TestDevAppSecurityConfigOmitsAbsentOptionalLists(t *testing.T) {
 	var out bytes.Buffer
 	root.SetOut(&out)
 	root.SetErr(&out)
-	root.SetArgs([]string{"devapp", "security", "config", "--app-id", "app-001", "--redirect-url", "https://callback.example.invalid/callback", "--dry-run"})
+	root.SetArgs([]string{"devapp", "security", "config", "--unified-app-id", "app-001", "--redirect-url", "https://callback.example.invalid/callback", "--dry-run"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
@@ -995,7 +1032,7 @@ func TestDevAppSecurityConfigRequiresAtLeastOneConfig(t *testing.T) {
 	var out bytes.Buffer
 	root.SetOut(&out)
 	root.SetErr(&out)
-	root.SetArgs([]string{"devapp", "security", "config", "--app-id", "app-001", "--dry-run"})
+	root.SetArgs([]string{"devapp", "security", "config", "--unified-app-id", "app-001", "--dry-run"})
 
 	err := root.Execute()
 	if err == nil {
@@ -1006,6 +1043,27 @@ func TestDevAppSecurityConfigRequiresAtLeastOneConfig(t *testing.T) {
 	}
 	if runner.last.Tool != "" {
 		t.Fatalf("tool = %q, want no invocation", runner.last.Tool)
+	}
+}
+
+func TestDevAppSecurityConfigAcceptsLegacyAppIDAlias(t *testing.T) {
+	runner := &captureRunner{}
+	root := newDevAppTestRoot(runner)
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"devapp", "security", "config", "--app-id", "app-001", "--redirect-url", "https://callback.example.invalid/callback", "--dry-run"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
+	}
+
+	want := map[string]any{
+		"unifiedAppId": "app-001",
+		"redirectUrls": []string{"https://callback.example.invalid/callback"},
+	}
+	if !reflect.DeepEqual(runner.last.Params, want) {
+		t.Fatalf("Params = %#v, want %#v", runner.last.Params, want)
 	}
 }
 

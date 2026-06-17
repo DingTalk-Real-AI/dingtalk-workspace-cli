@@ -31,14 +31,14 @@
    → 确认后加 --yes
 
 7. 添加开发成员（按需）
-   dws devapp member add --app-id <unifiedAppId> --users <userId> --member-type DEVELOPER --dry-run --format json
+   dws devapp member add --unified-app-id <unifiedAppId> --users <userId> --member-type DEVELOPER --dry-run --format json
    → 确认后加 --yes
 
 8. 验证成员
-   dws devapp member list --app-id <unifiedAppId> --format json
+   dws devapp member list --unified-app-id <unifiedAppId> --format json
 
 9. 配置安全设置（按需）
-   dws devapp security config --app-id <unifiedAppId> --ip-whitelist <IP> --redirect-url <URL> --dry-run --format json
+   dws devapp security config --unified-app-id <unifiedAppId> --ip-whitelist <IP> --redirect-url <URL> --dry-run --format json
    → 确认后加 --yes
 ```
 
@@ -108,28 +108,28 @@
 
 ```text
 1. 查看当前成员
-   dws devapp member list --app-id <unifiedAppId> --format json
+   dws devapp member list --unified-app-id <unifiedAppId> --format json
 
 2. 添加成员
-   dws devapp member add --app-id <unifiedAppId> --users <userId1,userId2> --member-type DEVELOPER --dry-run --format json
+   dws devapp member add --unified-app-id <unifiedAppId> --users <userId1,userId2> --member-type DEVELOPER --dry-run --format json
    → 确认后加 --yes
 
 3. 验证
-   dws devapp member list --app-id <unifiedAppId> --format json
+   dws devapp member list --unified-app-id <unifiedAppId> --format json
 
 4. 移除成员
-   dws devapp member remove --app-id <unifiedAppId> --users <userId> --member-type DEVELOPER --dry-run --format json
+   dws devapp member remove --unified-app-id <unifiedAppId> --users <userId> --member-type DEVELOPER --dry-run --format json
    → 确认后加 --yes
 
 5. 验证
-   dws devapp member list --app-id <unifiedAppId> --format json
+   dws devapp member list --unified-app-id <unifiedAppId> --format json
 ```
 
 ## 安全配置
 
 ```text
 1. 配置 IP 白名单 / 重定向 URL / 免登 URL
-   dws devapp security config --app-id <unifiedAppId> \
+   dws devapp security config --unified-app-id <unifiedAppId> \
      --ip-whitelist 192.0.2.10,192.0.2.11 \
      --redirect-url https://callback.example.invalid/callback \
      --sso-url https://sso.example.invalid/sso \

@@ -1194,7 +1194,7 @@
 **devapp_devapp_member_list_001** ✅ PASS
 
 - Prompt: 查看开放平台应用 UNIFIED_APP_ID 的成员
-- Expected: `dws devapp member list --app-id UNIFIED_APP_ID --format json`
+- Expected: `dws devapp member list --unified-app-id UNIFIED_APP_ID --format json`
 - Skill Reference: references/products/devapp.md
 - Command path: PASS (devapp member list)
 - Flags: PASS (1 flags validated)
@@ -1202,7 +1202,7 @@
 **devapp_devapp_member_add_001** ✅ PASS
 
 - Prompt: 给开放平台应用 UNIFIED_APP_ID 添加开发者成员 userId1,userId2，先预览
-- Expected: `dws devapp member add --app-id UNIFIED_APP_ID --users userId1,userId2 --member-type DEVELOPER --dry-run --format json`
+- Expected: `dws devapp member add --unified-app-id UNIFIED_APP_ID --users userId1,userId2 --member-type DEVELOPER --dry-run --format json`
 - Skill Reference: references/products/devapp.md
 - Command path: PASS (devapp member add)
 - Flags: PASS (3 flags validated)
@@ -1210,7 +1210,7 @@
 **devapp_devapp_member_remove_001** ✅ PASS
 
 - Prompt: 已确认，从开放平台应用 UNIFIED_APP_ID 移除开发者成员 userId1
-- Expected: `dws devapp member remove --app-id UNIFIED_APP_ID --users userId1 --member-type DEVELOPER --yes --format json`
+- Expected: `dws devapp member remove --unified-app-id UNIFIED_APP_ID --users userId1 --member-type DEVELOPER --yes --format json`
 - Skill Reference: references/products/devapp.md
 - Command path: PASS (devapp member remove)
 - Flags: PASS (4 flags validated)
@@ -1218,7 +1218,7 @@
 **devapp_devapp_security_config_001** ✅ PASS
 
 - Prompt: 给开放平台应用 UNIFIED_APP_ID 配置 IP 白名单 192.0.2.10，先预览
-- Expected: `dws devapp security config --app-id UNIFIED_APP_ID --ip-whitelist 192.0.2.10 --dry-run --format json`
+- Expected: `dws devapp security config --unified-app-id UNIFIED_APP_ID --ip-whitelist 192.0.2.10 --dry-run --format json`
 - Skill Reference: references/products/devapp.md
 - Command path: PASS (devapp security config)
 - Flags: PASS (2 flags validated)
