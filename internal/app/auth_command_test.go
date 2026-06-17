@@ -256,6 +256,35 @@ func TestLoginRecommendProductLabelMatchesTUITarget(t *testing.T) {
 	}
 }
 
+func TestResolveAuthLoginConfigReadsInheritedYes(t *testing.T) {
+	root := &cobra.Command{Use: "dws"}
+	root.PersistentFlags().Bool("yes", false, "")
+	login := &cobra.Command{Use: "login"}
+	login.Flags().String("token", "", "")
+	login.Flags().Bool("device", false, "")
+	login.Flags().Bool("force", false, "")
+	login.Flags().Bool("recommend", false, "")
+	root.AddCommand(login)
+
+	if err := root.PersistentFlags().Set("yes", "true"); err != nil {
+		t.Fatalf("set yes: %v", err)
+	}
+	if err := login.Flags().Set("recommend", "true"); err != nil {
+		t.Fatalf("set recommend: %v", err)
+	}
+
+	cfg, err := resolveAuthLoginConfig(login)
+	if err != nil {
+		t.Fatalf("resolveAuthLoginConfig error = %v", err)
+	}
+	if !cfg.Recommend {
+		t.Fatal("Recommend = false, want true")
+	}
+	if !cfg.Yes {
+		t.Fatal("Yes = false, want true")
+	}
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {

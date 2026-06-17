@@ -827,6 +827,37 @@ func TestLoginRecommendAuthorizationWithoutSelectorKeepsSinglePlan(t *testing.T)
 	if fake.calls[1].tool != patBatchGrantToolName {
 		t.Fatalf("second tool = %q, want %q", fake.calls[1].tool, patBatchGrantToolName)
 	}
+	if got := fake.calls[1].args["startFlow"]; got != true {
+		t.Fatalf("startFlow = %#v, want true for unconfirmed recommend login", got)
+	}
+	if got := fake.calls[1].args["noWait"]; got != true {
+		t.Fatalf("noWait = %#v, want true for unconfirmed recommend login", got)
+	}
+}
+
+func TestLoginRecommendAuthorizationConfirmedGrantsDirectly(t *testing.T) {
+	fake := &sequenceToolCaller{responses: []string{
+		`{"success":true,"data":{"items":[{"scope":"calendar.event:read","productCode":"calendar","productName":"日历"}],"selectedScopes":["calendar.event:read"]}}`,
+		`{"success":true,"data":{"grantedScopes":["calendar.event:read"]}}`,
+	}}
+	if err := RunLoginRecommendAuthorizationWithOptions(context.Background(), fake, io.Discard, LoginRecommendOptions{Confirmed: true}); err != nil {
+		t.Fatalf("RunLoginRecommendAuthorizationWithOptions error = %v", err)
+	}
+	if len(fake.calls) != 2 {
+		t.Fatalf("CallTool count = %d, want one plan + grant", len(fake.calls))
+	}
+	if fake.calls[1].tool != patBatchGrantToolName {
+		t.Fatalf("second tool = %q, want %q", fake.calls[1].tool, patBatchGrantToolName)
+	}
+	if _, ok := fake.calls[1].args["startFlow"]; ok {
+		t.Fatalf("startFlow should be omitted for confirmed recommend login")
+	}
+	if _, ok := fake.calls[1].args["noWait"]; ok {
+		t.Fatalf("noWait should be omitted for confirmed recommend login")
+	}
+	if got := fake.calls[1].args["caller"]; got != patCallerAuthLoginRecommend {
+		t.Fatalf("caller = %#v, want %q", got, patCallerAuthLoginRecommend)
+	}
 }
 
 func TestChmod_productsAllGrantedStopsAfterPlan(t *testing.T) {

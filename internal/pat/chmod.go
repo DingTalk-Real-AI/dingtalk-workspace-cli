@@ -35,6 +35,9 @@ import (
 type LoginRecommendOptions struct {
 	// ProductCodes limits the recommend plan to service-owned product domains.
 	ProductCodes []string
+	// Confirmed grants the server-selected recommend scopes directly. When
+	// false, recommend authorization starts the batch confirmation page.
+	Confirmed bool
 	// ProductSelector lets interactive callers present the service-owned domain
 	// list before the final plan. It receives products extracted from the
 	// initial recommend plan and must return the product codes to grant.
@@ -607,10 +610,12 @@ func RunLoginRecommendAuthorizationWithOptions(ctx context.Context, c edition.To
 	grantArgs := map[string]any{
 		"scopes":          scopes,
 		"grantType":       grantTypePermanent,
-		"startFlow":       true,
-		"noWait":          true,
 		"caller":          patCallerAuthLoginRecommend,
 		"clientRequestId": newBatchClientRequestID("auth-login-recommend"),
+	}
+	if !opts.Confirmed {
+		grantArgs["startFlow"] = true
+		grantArgs["noWait"] = true
 	}
 	result, err := callPATBatchToolWithIdentityFallback(ctx, c, "", "", patBatchGrantToolName, grantArgs)
 	if err != nil {

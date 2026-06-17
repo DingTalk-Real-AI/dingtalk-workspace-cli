@@ -42,6 +42,7 @@ type authLoginConfig struct {
 	Force     bool
 	Device    bool
 	Recommend bool
+	Yes       bool
 }
 
 func buildAuthCommand(patCaller edition.ToolCaller) *cobra.Command {
@@ -142,12 +143,12 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 
 			w := cmd.OutOrStdout()
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
-			recommendHumanMode := authLoginShouldUseRecommendHumanMode(cmd, format, cfg.Recommend)
+			recommendHumanMode := !cfg.Yes && authLoginShouldUseRecommendHumanMode(cmd, format, cfg.Recommend)
 			runRecommend := func() error {
 				if !cfg.Recommend {
 					return nil
 				}
-				opts := pat.LoginRecommendOptions{}
+				opts := pat.LoginRecommendOptions{Confirmed: cfg.Yes}
 				if recommendHumanMode {
 					opts.ProductSelector = func(products []pat.LoginRecommendProduct) ([]string, error) {
 						return selectLoginRecommendProducts(products)
@@ -703,11 +704,16 @@ func resolveAuthLoginConfig(cmd *cobra.Command) (authLoginConfig, error) {
 	if err != nil {
 		return authLoginConfig{}, apperrors.NewInternal("failed to read --recommend")
 	}
+	yes := false
+	if cmd.Root() != nil {
+		yes, _ = cmd.Root().PersistentFlags().GetBool("yes")
+	}
 	return authLoginConfig{
 		Token:     strings.TrimSpace(token),
 		Force:     force,
 		Device:    device,
 		Recommend: recommend,
+		Yes:       yes,
 	}, nil
 }
 
