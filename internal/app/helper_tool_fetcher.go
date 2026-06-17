@@ -15,48 +15,77 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 )
 
-// newDevAppToolFetcher returns a cli.HelperToolFetcher that loads the op-app
-// (devapp) MCP tools/list LIVE and projects each tool into a cli.HelperToolSchema
-// (name, description, inputSchema properties/required). It is injected into the
-// schema command so the cli package can render `dws schema dev.*` from real
-// server schema without importing app/transport.
+// newHelperToolFetcher returns a cli.HelperToolFetcher that loads a helper MCP
+// server's tools/list LIVE (by source) and projects each tool into a
+// cli.HelperToolSchema (name, description, inputSchema properties/required). It
+// is injected into the schema command so the cli package can render
+// `dws schema dev.*` from real server schema without importing app/transport.
 //
-// The fetch is memoized per process (sync.Once on success) so repeated
-// `dws schema dev.*` in one invocation hit the network at most once. A failed
+// Sources: "op-app" backs the dev app commands (pinned endpoint); "devdoc"
+// backs `dws dev doc search` (endpoint resolved dynamically, see
+// helperSourceEndpoint). Results are memoized per source per process so
+// repeated `dws schema dev.*` hit the network at most once per source. A failed
 // fetch is not cached, allowing a later retry within the same process.
-func newDevAppToolFetcher() cli.HelperToolFetcher {
+func newHelperToolFetcher() cli.HelperToolFetcher {
 	var (
-		once   sync.Once
-		cached map[string]cli.HelperToolSchema
+		mu     sync.Mutex
+		cached = map[string]map[string]cli.HelperToolSchema{}
 	)
-	return func(ctx context.Context) (map[string]cli.HelperToolSchema, error) {
-		if cached != nil {
-			return cached, nil
+	return func(ctx context.Context, source string) (map[string]cli.HelperToolSchema, error) {
+		mu.Lock()
+		if got, ok := cached[source]; ok {
+			mu.Unlock()
+			return got, nil
 		}
-		schemas, err := fetchDevAppToolSchemas(ctx)
+		mu.Unlock()
+
+		endpoint, err := helperSourceEndpoint(source)
 		if err != nil {
 			return nil, err
 		}
-		once.Do(func() { cached = schemas })
-		return cached, nil
+		schemas, err := fetchHelperToolSchemas(ctx, endpoint)
+		if err != nil {
+			return nil, err
+		}
+		mu.Lock()
+		cached[source] = schemas
+		mu.Unlock()
+		return schemas, nil
 	}
 }
 
-// fetchDevAppToolSchemas performs the live tools/list call against the pinned
-// op-app endpoint and converts the descriptors. Auth and identity headers are
-// resolved the same way the runner does for direct-runtime invocations.
-func fetchDevAppToolSchemas(ctx context.Context) (map[string]cli.HelperToolSchema, error) {
+// helperSourceEndpoint maps a schema source to its MCP endpoint. op-app (dev
+// app) is pinned in source (devappEndpoint); other sources (e.g. devdoc) are
+// resolved the same way the runner resolves a product endpoint — env override →
+// discovery → edition StaticServers/SupplementServers.
+func helperSourceEndpoint(source string) (string, error) {
+	switch source {
+	case "", "op-app", "devapp":
+		return devappEndpoint, nil
+	default:
+		if endpoint, ok := directRuntimeEndpoint(source, ""); ok {
+			return endpoint, nil
+		}
+		return "", fmt.Errorf("no MCP endpoint resolved for source %q (not injected by edition/discovery)", source)
+	}
+}
+
+// fetchHelperToolSchemas performs the live tools/list call against endpoint and
+// converts the descriptors. Auth and identity headers are resolved the same way
+// the runner does for direct-runtime invocations.
+func fetchHelperToolSchemas(ctx context.Context, endpoint string) (map[string]cli.HelperToolSchema, error) {
 	token := resolveRuntimeAuthToken(ctx, "")
 	headers := resolveIdentityHeaders()
 	client := transport.NewClient(nil).WithAuth(token, headers)
 
-	result, err := client.ListTools(ctx, devappEndpoint)
+	result, err := client.ListTools(ctx, endpoint)
 	if err != nil {
 		return nil, err
 	}

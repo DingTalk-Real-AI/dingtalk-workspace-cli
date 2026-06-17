@@ -1372,6 +1372,7 @@ func annotateDevAppTool(cmd *cobra.Command, tool string) *cobra.Command {
 		cmd.Annotations = map[string]string{}
 	}
 	cmd.Annotations["mcp-tool"] = tool
+	cmd.Annotations["mcp-source"] = "op-app"
 	return cmd
 }
 

@@ -71,23 +71,7 @@ dws dev app robot enable --unified-app-id <unifiedAppId> --dry-run --format json
 
 > 旧的独立 `update` 命令已删除（并入 `config`）。
 
-| CLI | 说明 |
-|-----|------|
-| `--name` | 机器人名称 |
-| `--brief` | 简介 |
-| `--desc` | 描述 |
-| `--icon-media-id` | 图标 mediaId |
-| `--outgoing-url` | 消息回调地址 |
-| `--event-callback-url` | 事件回调地址 |
-| `--mode` | 机器人模式枚举（整数） |
-| `--skills` | 技能列表，逗号/分号分隔 |
-| `--add-scope` | 自动添加机器人相关权限 |
-| `--disable-ssl-verify` | 回调关闭 SSL 校验 |
-| `--i18n-name` | 名称国际化 JSON，如 `'{"en_US":"Bot"}'` |
-| `--i18n-brief` | 简介国际化 JSON |
-| `--i18n-description` | 描述国际化 JSON |
-
-至少提供一个配置字段，否则 CLI 报错。
+参数查 `dws schema dev.app.robot.config`；至少提供一个配置字段，否则 CLI 报错。国际化字段（`--i18n-name` 等）传 JSON，如 `'{"en_US":"Bot"}'`。
 
 ### 停用
 

@@ -82,17 +82,21 @@ func (devdocHandler) Command(runner executor.Runner) *cobra.Command {
 
 func newDevdocArticleSearchCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:               "search [keyword]",
-		Short:             "搜索开放平台文档",
+		Use:   "search [keyword]",
+		Short: "搜索开放平台文档",
+		// Bind the devdoc MCP tool so `dws schema dev.doc.search` can fetch this
+		// command's real parameters live from the devdoc server (mcp-source),
+		// the same way dev app commands resolve against op-app.
+		Annotations:       map[string]string{"mcp-tool": devdocArticleSearchTool, "mcp-source": "devdoc"},
 		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			keyword := devdocFlagOrFallback(cmd, "query", "keyword")
+			keyword := devdocFlagOrFallback(cmd, "keyword", "query")
 			if keyword == "" && len(args) > 0 {
 				keyword = strings.TrimSpace(args[0])
 			}
 			if keyword == "" {
-				return apperrors.NewValidation("--query is required")
+				return apperrors.NewValidation("--keyword is required")
 			}
 			page, _ := cmd.Flags().GetInt("page")
 			if page < 1 {
@@ -107,30 +111,33 @@ func newDevdocArticleSearchCommand(runner executor.Runner) *cobra.Command {
 		},
 	}
 	preferLegacyLeaf(cmd)
-	cmd.Flags().String("query", "", "搜索关键词 (必填)")
-	addDevdocHiddenStringFlag(cmd, "keyword", "--query 的悟空兼容别名")
+	// Flag names == MCP param names (keyword/size), so `dws schema dev.doc.search`
+	// shows exactly what the user types. --query/--page-size kept as hidden
+	// back-compat aliases for existing scripts and `dws devdoc`.
+	cmd.Flags().String("keyword", "", "搜索关键词 (必填)")
+	addDevdocHiddenStringFlag(cmd, "query", "--keyword 的别名")
 	cmd.Flags().Int("page", 1, "分页页码 (从 1 开始，默认 1)")
 	cmd.Flags().String("cursor", "", "分页游标，翻页传上次返回的 nextCursor；传入后不再使用 --page")
-	cmd.Flags().Int("page-size", 20, "单页条数 (默认 20)")
-	cmd.Flags().Int("size", 0, "--page-size 的兼容别名")
-	_ = cmd.Flags().MarkHidden("size")
+	cmd.Flags().Int("size", 20, "单页条数 (默认 20)")
+	cmd.Flags().Int("page-size", 0, "--size 的别名")
+	_ = cmd.Flags().MarkHidden("page-size")
 	return cmd
 }
 
-// devdocPageSize reads the page size, accepting --page-size (primary) with
-// --size as a compatibility alias; falls back to 20 when neither is set.
+// devdocPageSize reads the page size, accepting --size (primary, == MCP param)
+// with --page-size as a compatibility alias; falls back to 20 when neither set.
 func devdocPageSize(cmd *cobra.Command) int {
-	if cmd.Flags().Changed("page-size") {
-		if v, _ := cmd.Flags().GetInt("page-size"); v > 0 {
-			return v
-		}
-	}
 	if cmd.Flags().Changed("size") {
 		if v, _ := cmd.Flags().GetInt("size"); v > 0 {
 			return v
 		}
 	}
-	if v, _ := cmd.Flags().GetInt("page-size"); v > 0 {
+	if cmd.Flags().Changed("page-size") {
+		if v, _ := cmd.Flags().GetInt("page-size"); v > 0 {
+			return v
+		}
+	}
+	if v, _ := cmd.Flags().GetInt("size"); v > 0 {
 		return v
 	}
 	return 20

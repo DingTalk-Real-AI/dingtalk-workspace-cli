@@ -42,12 +42,14 @@ type HelperToolSchema struct {
 	Required    []string       // MCP param names that are required
 }
 
-// HelperToolFetcher loads the op-app tools/list LIVE and returns toolName→schema.
-// The schema command injects this so dev_schema.go can resolve a command's
-// MCP tool and render its real schema without the cli package importing app/
-// transport. Implementations should cache per-process so repeated
-// `dws schema dev.*` only hit the network once.
-type HelperToolFetcher func(ctx context.Context) (map[string]HelperToolSchema, error)
+// HelperToolFetcher loads a helper MCP server's tools/list LIVE and returns
+// toolName→schema for the given source (e.g. "op-app" for dev app commands,
+// "devdoc" for dev doc commands). The schema command injects this so
+// dev_schema.go can resolve a command's MCP tool and render its real schema
+// without the cli package importing app/transport. Implementations should
+// cache per-source per-process so repeated `dws schema dev.*` only hit the
+// network once per source.
+type HelperToolFetcher func(ctx context.Context, source string) (map[string]HelperToolSchema, error)
 
 // renderHelperSchema builds the `dws schema` payload for helper-only command
 // subtrees. Returns (payload, true) when the path targets a helper subtree (so
@@ -102,15 +104,21 @@ func renderHelperSchema(ctx context.Context, root *cobra.Command, rawPath string
 // annotation; commands without one (e.g. `dev connect`, `dev doc search`) are
 // not devapp tools and get a clear, non-fatal explanation instead.
 func helperLeafSchema(ctx context.Context, cmd *cobra.Command, fetch HelperToolFetcher) (map[string]any, error) {
-	toolName := ""
+	toolName, source := "", ""
 	if cmd.Annotations != nil {
 		toolName = strings.TrimSpace(cmd.Annotations["mcp-tool"])
+		source = strings.TrimSpace(cmd.Annotations["mcp-source"])
+	}
+	// Default source is op-app (dev app commands); dev doc commands annotate
+	// mcp-source=devdoc to pull from the devdoc MCP server instead.
+	if source == "" {
+		source = "op-app"
 	}
 	path := helperCommandPath(cmd)
 	if toolName == "" {
 		return map[string]any{
 			"path":  path,
-			"error": "no MCP tool for this command (not an op-app tool); schema is unavailable",
+			"error": "no MCP tool bound to this command; schema is unavailable",
 		}, nil
 	}
 	if fetch == nil {
@@ -120,22 +128,22 @@ func helperLeafSchema(ctx context.Context, cmd *cobra.Command, fetch HelperToolF
 		}, nil
 	}
 
-	tools, err := fetch(ctx)
+	tools, err := fetch(ctx, source)
 	if err != nil {
-		return nil, fmt.Errorf("fetch op-app tool schemas: %w", err)
+		return nil, fmt.Errorf("fetch %s tool schemas: %w", source, err)
 	}
 	tool, ok := tools[toolName]
 	if !ok {
 		return map[string]any{
 			"path":  path,
-			"error": fmt.Sprintf("MCP tool %q not found in op-app tools/list", toolName),
+			"error": fmt.Sprintf("MCP tool %q not found in %s tools/list", toolName, source),
 		}, nil
 	}
 
 	return map[string]any{
 		"description": tool.Description,
 		"path":        path,
-		"source":      "mcp:op-app",
+		"source":      "mcp:" + source,
 		"parameters":  helperFlatParameters(tool),
 	}, nil
 }

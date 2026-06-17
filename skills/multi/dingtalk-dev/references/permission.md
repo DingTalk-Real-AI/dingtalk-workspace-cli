@@ -13,15 +13,7 @@ dws dev app permission list --unified-app-id ID --scope-type SNS --format json
 dws dev app permission list --unified-app-id ID --scope-value qyapi_robot_sendmsg --format json
 ```
 
-| CLI | 说明 |
-|-----|------|
-| `--unified-app-id` | 应用定位 |
-| `--keyword` | 权限名/API 名关键词 |
-| `--auth-status` | `ALL` / `AUTHED` / `UNAUTHED` |
-| `--scope-type` | `APP` / `SNS`，为空返回两者 |
-| `--scope-value` | 单权限详情模式 |
-| `--cursor` | 游标令牌：首次留空，续翻传上次 `nextCursor` |
-| `--page-size` | 单页条数，默认 20，建议不超过 50 |
+参数查 `dws schema dev.app.permission.list`。`--scope-value` 传入即进单权限详情模式；`--scope-type` 取 `APP`/`SNS`，留空返回两者；一个应用可能 150+ 权限点，建议 `--page-size` 不超过 50。
 
 **状态判断：**
 

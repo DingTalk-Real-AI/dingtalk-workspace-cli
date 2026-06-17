@@ -61,7 +61,7 @@ func buildHelperTestTree() *cobra.Command {
 // without network. It mirrors the MCP shape: properties keyed by camelCase param
 // name, required[] listing the camelCase names.
 func fakeFetcher(tools map[string]HelperToolSchema) HelperToolFetcher {
-	return func(context.Context) (map[string]HelperToolSchema, error) {
+	return func(context.Context, string) (map[string]HelperToolSchema, error) {
 		return tools, nil
 	}
 }
@@ -218,7 +218,7 @@ func TestRenderHelperSchema_ToolMissingInList(t *testing.T) {
 
 func TestRenderHelperSchema_FetchError(t *testing.T) {
 	root := buildHelperTestTree()
-	failing := func(context.Context) (map[string]HelperToolSchema, error) {
+	failing := func(context.Context, string) (map[string]HelperToolSchema, error) {
 		return nil, errors.New("network down")
 	}
 	_, ok, err := renderHelperSchema(context.Background(), root, "dev app create", failing)

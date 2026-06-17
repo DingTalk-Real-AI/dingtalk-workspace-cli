@@ -23,10 +23,7 @@ dws dev app version create --unified-app-id <unifiedAppId> --version 1.0.1 --des
 dws dev app version create --unified-app-id <unifiedAppId> --version 1.0.1 --desc "新增机器人能力" --yes --format json
 ```
 
-| CLI | 说明 |
-|-----|------|
-| `--version` | 版本号，如 1.0.1 |
-| `--desc` | 版本描述 |
+参数查 `dws schema dev.app.version.create`。
 
 ## 版本列表
 
@@ -68,12 +65,7 @@ dws dev app version publish --unified-app-id <unifiedAppId> --version-id <versio
 dws dev app version publish --unified-app-id <unifiedAppId> --version-id <versionId> --approver-user-id <userId> --yes --format json
 ```
 
-`publish` 是真实发布（区别于 `check-approval` 的预检不发布）。
-
-| CLI | 说明 |
-|-----|------|
-| `--confirmed-sensitive` | 版本含高敏权限时必须确认 |
-| `--approver-user-id` | 灰度选人模式指定审批人 userId |
+`publish` 是真实发布（区别于 `check-approval` 的预检不发布）。参数查 `dws schema dev.app.version.publish`；含高敏权限要加 `--confirmed-sensitive`，灰度选人模式用 `--approver-user-id` 指定审批人。
 
 > 注意：`--dry-run` 是 CLI 层的"预览不执行"开关；服务端的"审批预检"是 `version check-approval`。二者是两个东西：`check-approval` 是只查审批要求不发布，`--dry-run` 是 CLI 要不要真调上游。发布前建议先 `check-approval`。
 

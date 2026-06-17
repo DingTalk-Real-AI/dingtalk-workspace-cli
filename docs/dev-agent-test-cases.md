@@ -117,7 +117,7 @@
 - **覆盖**：`event list` / `subscribe` / `unsubscribe`、`dev doc search`；错误码透传、文档 RAG。
 - **期望（分步）**：
   1. `event subscribe --unified-app-id <id> --event-types chat_add_member_org --callback-url https://example.com/event --dry-run` → `--yes` → `event list` 回读 → `event unsubscribe --event-types chat_add_member_org --dry-run` → `--yes`。事件类型不确定先 `dev doc search` 查。
-  2. 错误码：业务错误 `ServiceResult.success=false` 原样透传 `errorCode/errorMsg`，再 `dev doc search --query "errcode 62012 <message>" --format json` 做官方文档 RAG，结论基于命中条目。
+  2. 错误码：业务错误 `ServiceResult.success=false` 原样透传 `errorCode/errorMsg`，再 `dev doc search --keyword "errcode 62012 <message>" --format json` 做官方文档 RAG，结论基于命中条目。
 - **通过判据**：`--event-types` 逗号分隔共用回调，写操作先 dry-run；不编造事件类型/错误含义；先透传原始错误再走 RAG，结论不臆测、不编不存在的命令。
 - **易错点**：编事件类型名；凭空解释错误码。
 
