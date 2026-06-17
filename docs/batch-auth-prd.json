@@ -220,39 +220,39 @@
         "repo": "dingtalk-workspace-cli",
         "localPath": "/Users/xuan/dingtalk-workspace-cli",
         "branch": "codex/dws-auth-login-recommend",
-        "commit": "d09fca4b9b29c9a85746894956d469a6dfda7ae7",
-        "prepubPackage": "pushed to GitHub branch codex/dws-auth-login-recommend with CLI commit d09fca4b9b29c9a85746894956d469a6dfda7ae7; rebuilt local default /usr/local/bin/dws -> /Users/xuan/bin/dws and /Users/xuan/.local/bin/dws from current source with identical sha256 daf26190d6a95f8fe3c9d2f1a513c6bdf4bdb8791da0f150ddc645b609b8945c. Local go test ./internal/app ./internal/pat passed after the empty all-scope plan guard. Still blocked_no_aone_app_for_current_github_repo_lippi_dws_release_uses_gitlab_release_repo for formal prepub package evidence.",
-        "prepubFunctionalVerification": "local_cli_tui_contract_ok: dws auth login --recommend skips terminal TUI/product-domain selection and directly uses server recommend=true selectedScopes. Interactive default dws auth login without --recommend follows the terminal usage chain after login/org selection: 选择操作, 选择授权范围, then default-all-selected product domains before grant. 推荐授权 uses recommend=true; 全部授权 first discovers products with recommend=true, then replans selected product domains with recommend=false only after selected productCodes are available; a local guard now rejects recommend=false with empty productCodes before any PAT call to avoid PAT_BATCH_AUTH_SCOPE_REQUIRED. explicit --format json and any non-TTY stdin/stdout/stderr keep structured non-interactive mode. prepub_smoke_ok_2026-06-17_22: /usr/local/bin/dws and /Users/xuan/.local/bin/dws auth login --recommend --no-browser --format json both completed against current prepub services without PAT_BATCH_AUTH_SCOPE_REQUIRED and returned 推荐权限已全部授权或没有可授权项 for the current account. local_yes_contract_ok: dws auth login --recommend --yes skips the TUI/browser flow and calls pat.batch_grant without startFlow/noWait, preserving direct recommended direct grant behavior."
+        "commit": "a040b57be722bf8c2cfa983b41c5145a300b54ff",
+        "prepubPackage": "pushed to GitHub branch codex/dws-auth-login-recommend with CLI commit a040b57be722bf8c2cfa983b41c5145a300b54ff; rebuilt local default /usr/local/bin/dws -> /Users/xuan/bin/dws and /Users/xuan/.local/bin/dws from current source with identical sha256 22c18538db5dd7d5d32557e2183646fd6535824fb8bd9eb4b67251b4ec4dfc75. Local focused and broad Go regressions passed after the auth-login wait-only fix. Still blocked_no_aone_app_for_current_github_repo_lippi_dws_release_uses_gitlab_release_repo for formal prepub package evidence.",
+        "prepubFunctionalVerification": "local_cli_tui_contract_ok: dws auth login --recommend skips terminal TUI/product-domain selection and directly uses server recommend=true selectedScopes. Interactive default dws auth login without --recommend follows the terminal usage chain after login/org selection: 选择操作, 选择授权范围, then default-all-selected product domains before grant. 推荐授权 uses recommend=true; 全部授权 first discovers products with recommend=true, then replans selected product domains with recommend=false only after selected productCodes are available; a local guard rejects recommend=false with empty productCodes before any PAT call to avoid PAT_BATCH_AUTH_SCOPE_REQUIRED. explicit --format json and any non-TTY stdin/stdout/stderr keep structured non-interactive mode. local_wait_only_contract_ok: after the auth-login batch authorization page is approved, CLI prints the final success result and returns; it no longer prints 授权完成，正在重试... and no longer re-enters the post-login TUI flow. local_yes_contract_ok: dws auth login --recommend --yes skips the TUI/browser flow and calls pat.batch_grant without startFlow/noWait, preserving direct recommended direct grant behavior."
       },
       {
         "repo": "lippi-open-mcpserver-gw",
         "localPath": "/Users/xuan/lippi-open-mcpserver-gw",
         "branch": "codex/pat-batch-auth-service-gate-20260616",
-        "commit": "a0873a6a98b96eaa86a1e8e9f75726a3f8dc16a9",
+        "commit": "89f6ea8c16cf95678e999d082e3fe94a578d0b6a",
         "aoneAppId": 296391,
         "aoneCrId": 34656146,
         "aoneCrStatus": "INTG",
         "aoneCrStatusLabel": "发布中",
         "prepubPipelineId": 66,
-        "prepubPipelineInstanceId": 3095163678,
-        "prepubPackage": "Aone CR 34656146 pipeline 66 instance 3095163678 has code merge/build/prepub deploy/prepub integration SUCCESS and is WAITING in prepub verification task 3391672208. Deploy orders 155420965/155420967 succeeded at 2026-06-17 19:43-19:46+08:00; host batch checks for order 155420965 show 2/2 success and host lippi-open-mcpserver-gw011089179070.pre.na610 success. CR newestRevision/current head is a0873a6a98b96eaa86a1e8e9f75726a3f8dc16a9.",
-        "prepubFunctionalVerification": "prepub_deploy_and_integration_success; full_batch_auth_e2e_pending"
+        "prepubPipelineInstanceId": 3095206675,
+        "prepubPackage": "Aone CR 34656146 pipeline 66 instance 3095206675 has code merge SUCCESS tasks 3391854522/3391854523, build+scan SUCCESS tasks 3391854524/3391854525, prepub deploy SUCCESS task 3391854526 completed 2026-06-18T02:11:34+08:00, and prepub integration SUCCESS task 3391854527. It is RUNNING/WAITING in prepub verification task 3391854528. CR newestRevision/current pushed head is 89f6ea8c16cf95678e999d082e3fe94a578d0b6a.",
+        "prepubFunctionalVerification": "prepub_deploy_and_integration_success_for_login_recommend_default_compat; full_batch_auth_e2e_pending"
       },
       {
         "repo": "lippi-pat-core-wukong-capability",
         "localPath": "/Users/xuan/lippi-pat-core-wukong-capability",
         "branch": "codex/batch-auth-page-flow",
-        "commit": "79a8fa5a9e5a4cc20f14efe567680a4b2ab897e3",
+        "commit": "dab26d3474ded776e7e1abb6419e75bdb43e75bf",
         "aoneAppId": 312546,
         "aoneCrId": 34656143,
         "aoneCrStatus": "INTG",
         "aoneCrStatusLabel": "发布中",
         "aoneBranchRevision": "b38e29e9e9c0f55dc71762c37d261180cb30692b",
-        "aoneNewestRevision": "79a8fa5a9e5a4cc20f14efe567680a4b2ab897e3",
+        "aoneNewestRevision": "dab26d3474ded776e7e1abb6419e75bdb43e75bf",
         "prepubPipelineId": 66,
-        "prepubPipelineInstanceId": 3095097702,
-        "prepubPackage": "Aone CR 34656143 pipeline 66 instance 3095097702 has code merge/build/prepub deploy/prepub integration SUCCESS and is WAITING in prepub verification task 3391355313. Deploy order 155387876 succeeded at 2026-06-17 15:17-15:19+08:00; host batch checks show 1/1 success on lippi-pat-core033006251249.pre.na620. CR newestRevision/current head is 79a8fa5a9e5a4cc20f14efe567680a4b2ab897e3.",
-        "prepubFunctionalVerification": "prepub_deploy_and_integration_success; full_batch_auth_e2e_pending"
+        "prepubPipelineInstanceId": 3095206676,
+        "prepubPackage": "Aone CR 34656143 pipeline 66 instance 3095206676 has code merge SUCCESS tasks 3391854529/3391854530, build+scan SUCCESS tasks 3391854531/3391854532, prepub deploy SUCCESS task 3391854533 completed 2026-06-18T02:10:33+08:00, and prepub integration SUCCESS task 3391854534. It is RUNNING/WAITING in prepub verification task 3391854535. CR newestRevision/current pushed head is dab26d3474ded776e7e1abb6419e75bdb43e75bf.",
+        "prepubFunctionalVerification": "prepub_deploy_and_integration_success_for_login_recommend_default_compat; full_batch_auth_e2e_pending"
       },
       {
         "repo": "lippi-open-app-dev",
@@ -338,10 +338,10 @@
         "verifiedAt": "2026-06-17T23:10:00+08:00",
         "command": "/usr/local/bin/dws auth login --recommend --no-browser --format json --verbose; /Users/xuan/.local/bin/dws auth login --recommend --no-browser --format json --verbose; DINGTALK_DWS_AGENTCODE=dingmbw5n9ktkkbbjv3g dws pat chmod --recommend --dry-run --format json",
         "result": "both rebuilt dws binary paths exited 0, printed 推荐权限已全部授权或没有可授权项, and returned token_valid=true without PAT_BATCH_AUTH_SCOPE_REQUIRED; pat chmod recommend dry-run returned success=true, code=OK, allGranted=true, items=151, selectedScopes=0, skippedScopes=151. /usr/local/bin/dws, /Users/xuan/bin/dws, and /Users/xuan/.local/bin/dws were rebuilt from current source and share sha256 e6b6fe37e1a7503a3b83486ce830b025f476b6e77ddcb383a1ed237b92f2b31f",
-        "serverPrepubState": "gateway instance 3095163678, PAT instance 3095097702, and BFF instance 3095182503 all have code merge/build/prepub deploy/prepub integration SUCCESS and are WAITING in prepub verification"
+        "serverPrepubState": "gateway instance 3095206675, PAT instance 3095206676, and BFF instance 3095182503 all have code merge/build/prepub deploy/prepub integration SUCCESS and are WAITING in prepub verification"
       },
       "notes": [
-        "2026-06-18 compatibility fix: repeated PAT_BATCH_AUTH_SCOPE_REQUIRED was traced to legacy caller-only login recommend requests. Current prepub SLS for auth_login_recommend shows new CLI requests already carry recommend=true/productCodes=[]/scopes=null and PAT core had 0 recent PAT_BATCH_AUTH_SCOPE_REQUIRED hits; nevertheless gateway branch codex/pat-batch-auth-service-gate-20260616 now normalizes pat.batch_plan caller=auth_login_recommend with no scopes/productCodes/recommend to recommend=true, and PAT core branch codex/batch-auth-page-flow applies the same default only when request.recommend is null. Verification: uv run python -m pytest test/test_pat_batch_bridge.py -q => 27 passed; JAVA_HOME=Azul 11 mvn -pl lippi-pat-core-service -am -Dtest=com.dingtalk.pat.manager.PatBatchAuthManagerTest -DfailIfNoTests=false -DfailIfNoSpecifiedTests=false -Dsurefire.failIfNoSpecifiedTests=false test -s /Users/xuan/Downloads/settings.xml => BUILD SUCCESS, Tests run: 24, Failures: 0, Errors: 0. Full prepub redeploy and e2e remain pending for these new compatibility commits.",
+        "2026-06-18 compatibility fix: repeated PAT_BATCH_AUTH_SCOPE_REQUIRED was traced to legacy caller-only login recommend requests. Current prepub SLS for auth_login_recommend shows new CLI requests already carry recommend=true/productCodes=[]/scopes=null and PAT core had 0 recent PAT_BATCH_AUTH_SCOPE_REQUIRED hits; nevertheless gateway branch codex/pat-batch-auth-service-gate-20260616 now normalizes pat.batch_plan caller=auth_login_recommend with no scopes/productCodes/recommend to recommend=true, and PAT core branch codex/batch-auth-page-flow applies the same default only when request.recommend is null. Verification: uv run python -m pytest test/test_pat_batch_bridge.py -q => 27 passed; JAVA_HOME=Azul 11 mvn -pl lippi-pat-core-service -am -Dtest=com.dingtalk.pat.manager.PatBatchAuthManagerTest -DfailIfNoTests=false -DfailIfNoSpecifiedTests=false -Dsurefire.failIfNoSpecifiedTests=false test -s /Users/xuan/Downloads/settings.xml => BUILD SUCCESS, Tests run: 24, Failures: 0, Errors: 0. Prepub redeploy evidence: gateway Aone pipeline 66 instance 3095206675 and PAT core instance 3095206676 both reached code merge/build/prepub deploy/prepub integration SUCCESS and are waiting only at manual prepub verification.",
         "2026-06-18 CLI interaction fix: auth login post-login authorization now waits for the PAT batch authorization page to complete and then returns; it no longer runs the original TUI/plan/grant function again after APPROVED, so the terminal will not show 授权完成，正在重试... followed by a second 选择要授权的业务域. Verification: env GOCACHE=/tmp/go-cache go test ./internal/app -run 'TestRunDirectPATAuthCheckWaitOnly_ApprovedDoesNotRetry|TestRunDirectPATAuthCheck_ApprovedRetriesCallback|TestAuthLoginPostLoginTUIModeRespectsRecommendAndFormat|TestAuthLoginRecommendSkipsPostLoginTUI' => ok; env GOCACHE=/tmp/go-cache go test ./internal/app ./internal/pat ./internal/errors ./internal/auth ./test/unit => ok. Local default binaries /Users/xuan/bin/dws and /Users/xuan/.local/bin/dws rebuilt from current source with sha256 22c18538db5dd7d5d32557e2183646fd6535824fb8bd9eb4b67251b4ec4dfc75."
       ]
     },
