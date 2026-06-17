@@ -209,9 +209,9 @@
         "repo": "dingtalk-workspace-cli",
         "localPath": "/Users/xuan/dingtalk-workspace-cli",
         "branch": "codex/dws-auth-login-recommend",
-        "commit": "70b9f39715566a8306f8d437cc62ad2f12934449",
-        "prepubPackage": "pushed to GitHub branch and rebuilt local default /usr/local/bin/dws -> /Users/xuan/bin/dws from current source; local go test ./internal/app ./internal/pat passed. Still blocked_no_aone_app_for_current_github_repo_lippi_dws_release_uses_gitlab_release_repo for formal prepub package evidence.",
-        "prepubFunctionalVerification": "local_cli_tui_contract_ok: interactive default dws auth login --recommend uses human TUI mode with all product domains selected before grant; explicit --format json and non-interactive shells keep structured JSON. current_head_e2e_pending_server_redeploy"
+        "commit": "5e1983b3df4a35f2e694972ecfc4207132c79671",
+        "prepubPackage": "pushed to GitHub branch and rebuilt local default /usr/local/bin/dws -> /Users/xuan/bin/dws from current source; local go test ./internal/app ./internal/pat ./internal/errors and go test ./test/unit passed. Still blocked_no_aone_app_for_current_github_repo_lippi_dws_release_uses_gitlab_release_repo for formal prepub package evidence.",
+        "prepubFunctionalVerification": "local_cli_tui_contract_ok: interactive default dws auth login --recommend uses human TUI mode with all product domains selected before grant; TUI label matches MGDone terminal target as productCode + productName + summary; explicit --format json and any non-TTY stdin/stdout/stderr keep structured non-interactive mode. current_head_e2e_pending_server_redeploy"
       },
       {
         "repo": "lippi-open-mcpserver-gw",
@@ -255,8 +255,8 @@
         "aoneBranchRevision": "f4222f3b2acba1899446d338c4b3788b8a58b29f",
         "aoneNewestRevision": "9ac576c77d142b5f4ec318c8d7b8ecf472ea6341",
         "prepubPipelineId": 66,
-        "prepubPipelineInstanceId": 3094929764,
-        "prepubPackage": "Latest Aone pipeline 66 instance 3095006435 built and deployed current head 9ac576c to prepub/non-prod; deploy orders 155345552 and 155345553 succeeded. Pipeline final status remains FAIL because integration test task 3390939831 failed; validation task 3390939832 remains INIT.",
+        "prepubPipelineInstanceId": 3095011879,
+        "prepubPackage": "Latest Aone pipeline 66 instance 3095011879 had code merge/build/prepub deploy SUCCESS, with deploy-order 155348765 completed at 2026-06-17T01:05:26+08:00. However deploy-order 155348765 still records CR 34656145 revision f4222f3b2acba1899446d338c4b3788b8a58b29f, not current head 9ac576c77d142b5f4ec318c8d7b8ecf472ea6341, so current head is not proven deployed. Pipeline final status remains FAIL because integration test task 3390965943 failed; validation task 3390965944 remains INIT.",
         "prepubFunctionalVerification": "pending_bff_integration_test_resolution_or_accepted_exception"
       },
       {
@@ -349,9 +349,11 @@
       "2026-06-17 CLI fix: Bacon review found plain dws auth login --recommend skipped the Lark-like product selector because global --format defaults to json. Commit 9ee8ea552406d1804f062f2f9165a031b1f87ab3 changes auth login recommend selector gating so default json still shows the TUI in an interactive terminal, while explicit --format json and non-interactive shells skip it. Verification: go test ./internal/app ./internal/pat passed.",
       "2026-06-17 local default dws binary refreshed: /usr/local/bin/dws -> /Users/xuan/bin/dws was rebuilt from dingtalk-workspace-cli commit 9ee8ea552406d1804f062f2f9165a031b1f87ab3; dws version --format json reports version dev, edition open.",
       "2026-06-17 CLI follow-up: commit 70b9f39715566a8306f8d437cc62ad2f12934449 changes interactive dws auth login --recommend to use a human recommend flow when --format is not explicitly set. This prevents the PAT authorization wait path from falling back to machine JSON after the TUI. Default interactive behavior is now: login success summary, all-selected product-domain TUI, server re-plan, complete authorization URL print/open, browser approval polling. Explicit --format json and non-interactive shells remain structured/no-block. Verification: go test ./internal/app ./internal/pat passed, and /usr/local/bin/dws -> /Users/xuan/bin/dws was rebuilt from this commit.",
+      "2026-06-17 CLI TUI design follow-up: commit 5e1983b3df4a35f2e694972ecfc4207132c79671 aligns the recommend selector with the MGDone terminal target: title 选择要授权的业务域, description 空格选择 回车确认, default-selected all product domains, and product labels rendered as productCode + productName + summary, e.g. approval   审批 - 审批实例，审批模板，审批任务管理. It also tightens interactive detection to require stdin/stdout/stderr all be TTY so piped systems stay in structured mode. Verification passed: go test ./internal/app ./internal/pat ./internal/errors; go test ./test/unit; /usr/local/bin/dws -> /Users/xuan/bin/dws rebuilt from this commit.",
+      "2026-06-17 MGDone MCP receipt: Cursor mastergo-magic-mcp server was started from /Users/xuan/.cursor/mcp.json with token redacted. tools/list exposed mcp__getDesignSections/mcp__getDsl/mcp__getDesignSvgs/mcp__getDesignTexts. mcp__getDesignSections for fileId=187681481694834, layerId=74:36608 returned design-sections API not available; fallback mcp__getDsl with the same page_id returned an empty nodes/components DSL. Therefore current terminal implementation uses the visible MGDone screenshot target for TUI text/label/control behavior and records that a true layer_id/source_layer_id is still needed for pixel-level DSL extraction.",
       "2026-06-17 frontend account-row fix: commit f33e349b2c29c7ba139e48fdfbdd70759ce3a4c4 makes the authorization account row prefer userAvatar/userName before orgLogo/orgName to avoid mixed org icon + user name rendering. Verification: npm run build passed with existing bundle-size warnings only.",
       "Frontend O2 non-production task 149432767 succeeded for commit f33e349b2c29c7ba139e48fdfbdd70759ce3a4c4, flow 114592657, version 5.219.0, pub_env daily, build id 53073038, assetCount 203. CDN bundle contains userAvatar|| and no longer contains the old orgLogo|| account-row priority; old title 可授权的权限（已选 remains absent.",
-      "2026-06-17 server release audit: gateway current head a0873a6 and PAT current head 79a8fa5 are not proven deployed because their successful prepub deploy receipts predate the current commits. BFF current head 9ac576c is deployed, but Aone integration-test task 3390939831 is FAIL. Full prepub e2e remains blocked on gateway/PAT current-head redeploy plus BFF integration-test resolution or accepted exception."
+      "2026-06-17 server release audit: gateway current head a0873a6 and PAT current head 79a8fa5 are not proven deployed because their successful prepub deploy receipts predate the current commits. BFF current head 9ac576c is also not proven deployed by deploy-order revision: latest pipeline 3095011879 deployed, but deploy-order 155348765 records revision f4222f3b2acba1899446d338c4b3788b8a58b29f and integration-test task 3390965943 is FAIL. Gateway deploy-order 155284562 records revision ffaa951f13a107a08fb04c6246ba99bf7d583477; PAT deploy-order 155318893 records revision b38e29e9e9c0f55dc71762c37d261180cb30692b. Full prepub e2e remains blocked on current-head redeploy plus BFF integration-test resolution or accepted exception."
     ]
   },
   "serviceContract": {
@@ -469,7 +471,8 @@
       "/var/folders/hz/2sm0ql493cv6jngtjk7xsby00000gp/T/codex-clipboard-5aff04a6-9a45-4ba5-8741-b7abcd4f2303.png"
     ],
     "loginRecommendSelector": "After login, interactive dws auth login --recommend presents 选择要授权的业务域 with all product domains selected by default.",
-    "controls": "TUI must support space toggle, up/down navigation, slash filter, enter confirm, and ctrl+a select all through the underlying selector component.",
+    "rowFormat": "Product rows follow the MGDone terminal target: selected checkbox, left-aligned product code, Chinese product name, and short operation summary separated by a plain hyphen, such as approval   审批 - 审批实例，审批模板，审批任务管理.",
+    "controls": "TUI must support space toggle, up/down navigation, slash filter, enter confirm, and ctrl+a select all through the underlying selector component. Description text is 空格选择 回车确认 while the component renders the detailed key hints.",
     "nextStep": "After confirmation, CLI prints or opens the complete encoded authorization URL returned by the server and waits for browser approval."
   },
   "securityRules": [
@@ -501,5 +504,5 @@
     "muskChiefOperator": "Review the product flow for speed, minimum surface area, and user clarity.",
     "computerUse": "Verify prepub/front-end page only after frontend repo and build credentials are available."
   },
-  "updatedAt": "2026-06-17T00:58:00+08:00"
+  "updatedAt": "2026-06-17T15:10:32+08:00"
 }
