@@ -474,7 +474,7 @@ func newCacheCommand() *cobra.Command {
 			if err != nil {
 				return apperrors.NewDiscovery(fmt.Sprintf("cache refresh: fetch server list failed: %v", err))
 			}
-			servers := market.NormalizeServers(resp, "live_market")
+			servers := market.NormalizeServersForBaseURL(resp, "live_market", registryDiscoveryBaseURL())
 			_ = store.SaveRegistry(service.CachePartition(), cache.RegistrySnapshot{Servers: servers})
 
 			selected := selectServersForProduct(servers, product)

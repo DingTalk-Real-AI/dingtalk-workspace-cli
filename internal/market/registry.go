@@ -668,7 +668,12 @@ func isPrivateHost(host string) bool {
 }
 
 func NormalizeServers(response ListResponse, source string) []ServerDescriptor {
+	return NormalizeServersForBaseURL(response, source, "")
+}
+
+func NormalizeServersForBaseURL(response ListResponse, source string, discoveryBaseURL string) []ServerDescriptor {
 	bestByEndpoint := make(map[string]ServerDescriptor)
+	forcePreGateway := isPreMCPBaseURL(discoveryBaseURL)
 
 	for _, envelope := range response.Servers {
 		meta := envelope.Meta.Registry
@@ -681,7 +686,7 @@ func NormalizeServers(response ListResponse, source string) []ServerDescriptor {
 			continue
 		}
 
-		endpoint := NormalizeEndpoint(remoteURL)
+		endpoint := normalizeEndpoint(remoteURL, forcePreGateway)
 		descriptor := ServerDescriptor{
 			Key:         ServerKey(endpoint),
 			DisplayName: strings.TrimSpace(envelope.Server.Name),
@@ -822,10 +827,15 @@ func hasDeprecatedMarker(displayName string) bool {
 }
 
 func NormalizeEndpoint(raw string) string {
+	return normalizeEndpoint(raw, false)
+}
+
+func normalizeEndpoint(raw string, forcePreGateway bool) string {
 	parsed, err := url.Parse(raw)
 	if err != nil {
 		return strings.TrimSpace(raw)
 	}
+	normalizeGatewayHost(parsed, forcePreGateway)
 	parsed.Fragment = ""
 	parsed.Path = strings.TrimRight(parsed.Path, "/")
 	values := parsed.Query()
@@ -844,6 +854,68 @@ func NormalizeEndpoint(raw string) string {
 	}
 	parsed.RawQuery = normalized.Encode()
 	return parsed.String()
+}
+
+func normalizeGatewayHost(parsed *url.URL, forcePreGateway bool) {
+	if parsed == nil {
+		return
+	}
+	host := parsed.Hostname()
+	nextHost, ok := normalizedGatewayHost(host, forcePreGateway)
+	if !ok {
+		return
+	}
+	if port := parsed.Port(); port != "" {
+		parsed.Host = net.JoinHostPort(nextHost, port)
+	} else {
+		parsed.Host = nextHost
+	}
+}
+
+func normalizedGatewayHost(host string, forcePreGateway bool) (string, bool) {
+	host = strings.TrimSpace(strings.ToLower(host))
+	if host == "" {
+		return "", false
+	}
+	if forcePreGateway {
+		switch {
+		case host == "mcp.dingtalk.com" || host == "mcp-gw.dingtalk.com" ||
+			host == "pre-mcp.dingtalk.com" || host == "pre-mcp-gw.dingtalk.com":
+			return "pre-mcp-gw.dingtalk.com", true
+		case strings.HasPrefix(host, "pre-mcp-gw."):
+			return host, true
+		case strings.HasPrefix(host, "pre-mcp."):
+			return strings.Replace(host, "pre-mcp.", "pre-mcp-gw.", 1), true
+		case strings.HasPrefix(host, "mcp-gw."):
+			return strings.Replace(host, "mcp-gw.", "pre-mcp-gw.", 1), true
+		case strings.HasPrefix(host, "mcp."):
+			return strings.Replace(host, "mcp.", "pre-mcp-gw.", 1), true
+		default:
+			return "", false
+		}
+	}
+	switch {
+	case host == "mcp.dingtalk.com":
+		return "mcp-gw.dingtalk.com", true
+	case strings.HasPrefix(host, "pre-mcp."):
+		return strings.Replace(host, "pre-mcp.", "pre-mcp-gw.", 1), true
+	case strings.HasPrefix(host, "mcp."):
+		return strings.Replace(host, "mcp.", "mcp-gw.", 1), true
+	default:
+		return "", false
+	}
+}
+
+func isPreMCPBaseURL(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	return host == "pre-mcp.dingtalk.com" ||
+		host == "pre-mcp-gw.dingtalk.com" ||
+		strings.HasPrefix(host, "pre-mcp.") ||
+		strings.HasPrefix(host, "pre-mcp-gw.")
 }
 
 func ServerKey(endpoint string) string {

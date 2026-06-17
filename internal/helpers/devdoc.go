@@ -82,7 +82,7 @@ func (devdocHandler) Command(runner executor.Runner) *cobra.Command {
 
 func newDevdocArticleSearchCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "search [keyword]",
+		Use:   "search [query]",
 		Short: "搜索开放平台文档",
 		// Bind the devdoc MCP tool so `dws schema dev.doc.search` can fetch this
 		// command's real parameters live from the devdoc server (mcp-source),
@@ -91,11 +91,11 @@ func newDevdocArticleSearchCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			keyword := devdocFlagOrFallback(cmd, "keyword", "query")
-			if keyword == "" && len(args) > 0 {
-				keyword = strings.TrimSpace(args[0])
+			query := devdocFlagOrFallback(cmd, "keyword", "query")
+			if query == "" && len(args) > 0 {
+				query = strings.TrimSpace(args[0])
 			}
-			if keyword == "" {
+			if query == "" {
 				return apperrors.NewValidation("--keyword is required")
 			}
 			page, _ := cmd.Flags().GetInt("page")
@@ -105,17 +105,16 @@ func newDevdocArticleSearchCommand(runner executor.Runner) *cobra.Command {
 			size := devdocPageSize(cmd)
 			cursor := devdocFlagOrFallback(cmd, "cursor")
 			return runDevdocToolWithFallback(cmd, runner, devdocArticleSearchTool,
-				devdocSearchParams(keyword, page, size, cursor),
+				devdocSearchParams(query, page, size, cursor),
 				devdocArticleSearchLegacyTool,
-				devdocLegacySearchParams(keyword, page, size, cursor))
+				devdocLegacySearchParams(query, page, size, cursor))
 		},
 	}
 	preferLegacyLeaf(cmd)
-	// Flag names == MCP param names (keyword/size), so `dws schema dev.doc.search`
-	// shows exactly what the user types. --query/--page-size kept as hidden
-	// back-compat aliases for existing scripts and `dws devdoc`.
+	// The published devdoc RAG action accepts keyword. Keep --query as a hidden
+	// compatibility alias for older scripts.
 	cmd.Flags().String("keyword", "", "搜索关键词 (必填)")
-	addDevdocHiddenStringFlag(cmd, "query", "--keyword 的别名")
+	addDevdocHiddenStringFlag(cmd, "query", "--keyword 的兼容别名")
 	cmd.Flags().Int("page", 1, "分页页码 (从 1 开始，默认 1)")
 	cmd.Flags().String("cursor", "", "分页游标，翻页传上次返回的 nextCursor；传入后不再使用 --page")
 	cmd.Flags().Int("size", 20, "单页条数 (默认 20)")
@@ -215,10 +214,10 @@ func newDevdocErrorDiagnoseCommand(runner executor.Runner) *cobra.Command {
 	return cmd
 }
 
-func devdocSearchParams(keyword string, page int, size int, cursor string) map[string]any {
+func devdocSearchParams(query string, page int, size int, cursor string) map[string]any {
 	params := map[string]any{
-		"keyword":  keyword,
-		"pageSize": size,
+		"keyword": query,
+		"size":    size,
 	}
 	if cursor != "" {
 		params["cursor"] = cursor
@@ -275,8 +274,12 @@ func runDevdocToolWithFallbacks(cmd *cobra.Command, runner executor.Runner, tool
 		return writeCommandPayload(cmd, invocation)
 	}
 	result, err := runner.Run(cmd.Context(), invocation)
+	currentTool := tool
 	for _, fallback := range fallbacks {
-		if err == nil || !isDevdocToolNotFoundError(err) {
+		if err == nil && !shouldFallbackDevdocResult(currentTool, result) {
+			break
+		}
+		if err != nil && !isDevdocToolNotFoundError(err) {
 			break
 		}
 		if fallback.tool == "" {
@@ -293,11 +296,54 @@ func runDevdocToolWithFallbacks(cmd *cobra.Command, runner executor.Runner, tool
 			fallbackParams,
 		)
 		result, err = runner.Run(cmd.Context(), fallbackInvocation)
+		currentTool = fallback.tool
 	}
 	if err != nil {
 		return err
 	}
 	return writeCommandPayload(cmd, result)
+}
+
+func shouldFallbackDevdocResult(tool string, result executor.Result) bool {
+	if tool != devdocArticleSearchTool || !result.Invocation.Implemented {
+		return false
+	}
+	content, ok := result.Response["content"].(map[string]any)
+	if !ok {
+		return false
+	}
+	return isEmptyDevdocArticleRAGContent(content)
+}
+
+func isEmptyDevdocArticleRAGContent(content map[string]any) bool {
+	if hasDevdocArticleRAGPayload(content) {
+		return false
+	}
+	for _, key := range []string{"materials", "references", "ragContext", "result", "success"} {
+		if _, ok := content[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func hasDevdocArticleRAGPayload(content map[string]any) bool {
+	if hasNonEmptyList(content["materials"]) || hasNonEmptyList(content["references"]) || hasNonEmptyString(content["ragContext"]) {
+		return true
+	}
+	result, _ := content["result"].(map[string]any)
+	return hasNonEmptyList(result["items"]) || hasNonEmptyList(result["materials"]) ||
+		hasNonEmptyList(result["references"]) || hasNonEmptyString(result["ragContext"])
+}
+
+func hasNonEmptyList(value any) bool {
+	items, ok := value.([]any)
+	return ok && len(items) > 0
+}
+
+func hasNonEmptyString(value any) bool {
+	text, ok := value.(string)
+	return ok && strings.TrimSpace(text) != ""
 }
 
 func isDevdocToolNotFoundError(err error) bool {
@@ -308,7 +354,6 @@ func isDevdocToolNotFoundError(err error) bool {
 	return strings.Contains(msg, "tool not found") ||
 		strings.Contains(msg, "unknown tool") ||
 		strings.Contains(msg, "mcp_tool_not_found") ||
-		strings.Contains(msg, "tool metadata api error") ||
 		strings.Contains(msg, "未找到指定工具")
 }
 

@@ -24,9 +24,10 @@ import (
 )
 
 type devdocCommandRunner struct {
-	last   executor.Invocation
-	calls  []executor.Invocation
-	errors map[string]error
+	last      executor.Invocation
+	calls     []executor.Invocation
+	errors    map[string]error
+	responses map[string]map[string]any
 }
 
 func (r *devdocCommandRunner) Run(_ context.Context, invocation executor.Invocation) (executor.Result, error) {
@@ -35,6 +36,15 @@ func (r *devdocCommandRunner) Run(_ context.Context, invocation executor.Invocat
 	if r.errors != nil {
 		if err := r.errors[invocation.Tool]; err != nil {
 			return executor.Result{}, err
+		}
+	}
+	if r.responses != nil {
+		if content, ok := r.responses[invocation.Tool]; ok {
+			invocation.Implemented = true
+			return executor.Result{
+				Invocation: invocation,
+				Response:   map[string]any{"content": content},
+			}, nil
 		}
 	}
 	return executor.Result{Invocation: invocation}, nil
@@ -59,11 +69,20 @@ func TestDevdocArticleSearchAcceptsWukongKeywordAlias(t *testing.T) {
 	if got := runner.last.Params["keyword"]; got != "openConversationId" {
 		t.Fatalf("keyword = %#v, want openConversationId", got)
 	}
+	if _, ok := runner.last.Params["query"]; ok {
+		t.Fatalf("query must not be sent to article RAG search: %#v", runner.last.Params)
+	}
 	if got := runner.last.Params["cursor"]; got != "tok-d" {
 		t.Fatalf("cursor = %#v, want tok-d", got)
 	}
-	if got := runner.last.Params["pageSize"]; got != 5 {
-		t.Fatalf("pageSize = %#v, want 5", got)
+	if got := runner.last.Params["size"]; got != 5 {
+		t.Fatalf("size = %#v, want 5", got)
+	}
+	if _, ok := runner.last.Params["pageSize"]; ok {
+		t.Fatalf("pageSize must not be sent to RAG search: %#v", runner.last.Params)
+	}
+	if _, ok := runner.last.Params["CliRagSearchReqVO"]; ok {
+		t.Fatalf("CliRagSearchReqVO wrapper must not be sent to RAG search: %#v", runner.last.Params)
 	}
 }
 
@@ -168,6 +187,12 @@ func TestDevdocErrorDiagnoseFallsBackToArticleSearchTools(t *testing.T) {
 	if got := runner.calls[1].Params["cursor"]; got != "2" {
 		t.Fatalf("RAG fallback cursor = %#v, want 2", got)
 	}
+	if got := runner.calls[1].Params["keyword"]; got != "40014 获取用户信息 req-1" {
+		t.Fatalf("RAG fallback keyword = %#v, want merged diagnostic query", got)
+	}
+	if _, ok := runner.calls[1].Params["query"]; ok {
+		t.Fatalf("RAG fallback query must not be sent: %#v", runner.calls[1].Params)
+	}
 	if _, ok := runner.calls[1].Params["page"]; ok {
 		t.Fatalf("RAG fallback page must be omitted when cursor is set: %#v", runner.calls[1].Params)
 	}
@@ -222,6 +247,139 @@ func TestDevdocArticleSearchFallsBackOnStructuredToolMetadataError(t *testing.T)
 	}
 }
 
+func TestDevdocArticleSearchDoesNotFallbackOnGenericToolMetadataError(t *testing.T) {
+	t.Parallel()
+
+	runner := &devdocCommandRunner{
+		errors: map[string]error{
+			devdocArticleSearchTool: apperrors.NewAPI("business error: success=false",
+				apperrors.WithReason("business_error"),
+				apperrors.WithServerDiag(apperrors.ServerDiagnostics{
+					ServerErrorCode: "PARAM_ERROR",
+					TechnicalDetail: "Tool metadata API error: PARAM_ERROR - 参数不能为空",
+				}),
+			),
+		},
+	}
+	cmd := devdocHandler{}.Command(runner)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"article", "search", "--query", "Webhook"})
+
+	if err := cmd.Execute(); err == nil {
+		t.Fatalf("Execute() error = nil, want metadata PARAM_ERROR")
+	}
+	if len(runner.calls) != 1 {
+		t.Fatalf("calls = %d, want 1", len(runner.calls))
+	}
+	if got := runner.calls[0].Tool; got != devdocArticleSearchTool {
+		t.Fatalf("first tool = %q, want %s", got, devdocArticleSearchTool)
+	}
+}
+
+func TestDevdocArticleSearchFallsBackOnEmptyRAGContent(t *testing.T) {
+	t.Parallel()
+
+	runner := &devdocCommandRunner{
+		responses: map[string]map[string]any{
+			devdocArticleSearchTool: {
+				"materials":  []any{},
+				"references": []any{},
+				"ragContext": nil,
+			},
+			devdocArticleSearchLegacyTool: {
+				"success": true,
+				"result": map[string]any{
+					"items": []any{map[string]any{"title": "OAuth2.0鉴权 - 开放平台"}},
+				},
+			},
+		},
+	}
+	cmd := devdocHandler{}.Command(runner)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"article", "search", "--keyword", "OAuth2", "--size", "2"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut.String())
+	}
+	if len(runner.calls) != 2 {
+		t.Fatalf("calls = %d, want 2", len(runner.calls))
+	}
+	if got := runner.calls[0].Tool; got != devdocArticleSearchTool {
+		t.Fatalf("first tool = %q, want %s", got, devdocArticleSearchTool)
+	}
+	if got := runner.calls[1].Tool; got != devdocArticleSearchLegacyTool {
+		t.Fatalf("second tool = %q, want %s", got, devdocArticleSearchLegacyTool)
+	}
+}
+
+func TestDevdocArticleSearchFallsBackOnPaginationOnlyRAGContent(t *testing.T) {
+	t.Parallel()
+
+	runner := &devdocCommandRunner{
+		responses: map[string]map[string]any{
+			devdocArticleSearchTool: {
+				"success": true,
+				"result":  map[string]any{"nextCursor": "2"},
+			},
+			devdocArticleSearchLegacyTool: {
+				"success": true,
+				"result": map[string]any{
+					"items": []any{map[string]any{"title": "获取用户token - 开放平台"}},
+				},
+			},
+		},
+	}
+	cmd := devdocHandler{}.Command(runner)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"article", "search", "--query", "OAuth2", "--cursor", "3"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut.String())
+	}
+	if len(runner.calls) != 2 {
+		t.Fatalf("calls = %d, want 2", len(runner.calls))
+	}
+	if got := runner.calls[1].Tool; got != devdocArticleSearchLegacyTool {
+		t.Fatalf("second tool = %q, want %s", got, devdocArticleSearchLegacyTool)
+	}
+	if got := runner.calls[1].Params["page"]; got != 3 {
+		t.Fatalf("legacy fallback page = %#v, want cursor-derived page 3", got)
+	}
+}
+
+func TestDevdocArticleSearchKeepsNonEmptyRAGContent(t *testing.T) {
+	t.Parallel()
+
+	runner := &devdocCommandRunner{
+		responses: map[string]map[string]any{
+			devdocArticleSearchTool: {
+				"materials": []any{map[string]any{"title": "OAuth2.0鉴权 - 开放平台"}},
+			},
+		},
+	}
+	cmd := devdocHandler{}.Command(runner)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"article", "search", "--keyword", "OAuth2"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut.String())
+	}
+	if len(runner.calls) != 1 {
+		t.Fatalf("calls = %d, want 1", len(runner.calls))
+	}
+	if got := runner.calls[0].Tool; got != devdocArticleSearchTool {
+		t.Fatalf("first tool = %q, want %s", got, devdocArticleSearchTool)
+	}
+}
+
 func TestDevdocArticleSearchAcceptsPositionalKeyword(t *testing.T) {
 	t.Parallel()
 
@@ -237,5 +395,8 @@ func TestDevdocArticleSearchAcceptsPositionalKeyword(t *testing.T) {
 	}
 	if got := runner.last.Params["keyword"]; got != "MCP" {
 		t.Fatalf("keyword = %#v, want MCP", got)
+	}
+	if _, ok := runner.last.Params["query"]; ok {
+		t.Fatalf("query must not be sent to article RAG search: %#v", runner.last.Params)
 	}
 }

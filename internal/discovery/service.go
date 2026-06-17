@@ -94,7 +94,7 @@ func (s *Service) DiscoverServers(ctx context.Context) ([]market.ServerDescripto
 
 	response, err := s.MarketClient.FetchServers(ctx, 200)
 	if err == nil {
-		servers := market.NormalizeServers(response, "live_market")
+		servers := market.NormalizeServersForBaseURL(response, "live_market", s.MarketClient.BaseURL)
 		_ = s.Cache.SaveRegistry(partition, cache.RegistrySnapshot{Servers: servers})
 		return servers, nil
 	}
