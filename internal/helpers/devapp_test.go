@@ -320,13 +320,13 @@ func TestDevAppEventCommandsBuildToolParams(t *testing.T) {
 		{
 			name:       "subscribe",
 			args:       []string{"event", "subscribe", "--unified-app-id", "u-1", "--event-codes", "user_add_org,org_dept_modify", "--yes"},
-			wantTool:   "subscribe_dev_app_event",
+			wantTool:   "subscribe_dev_app_events",
 			wantParams: map[string]any{"unifiedAppId": "u-1", "eventCodes": []string{"user_add_org", "org_dept_modify"}},
 		},
 		{
 			name:       "unsubscribe",
 			args:       []string{"event", "unsubscribe", "--unified-app-id", "u-1", "--event-codes", "user_add_org", "--yes"},
-			wantTool:   "unsubscribe_dev_app_event",
+			wantTool:   "unsubscribe_dev_app_events",
 			wantParams: map[string]any{"unifiedAppId": "u-1", "eventCodes": []string{"user_add_org"}},
 		},
 	}

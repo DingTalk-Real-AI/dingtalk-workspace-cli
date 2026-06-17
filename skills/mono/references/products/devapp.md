@@ -321,13 +321,13 @@ MCP tools: `create_dev_app_version` / `list_dev_app_versions` / `get_dev_app_ver
 
 ```bash
 dws devapp event list --unified-app-id ID --format json
-dws devapp event subscribe --unified-app-id ID --event-code user_add_org --dry-run --format json
-dws devapp event unsubscribe --unified-app-id ID --event-code user_add_org --dry-run --format json
+dws devapp event subscribe --unified-app-id ID --event-codes user_add_org,org_dept_modify --dry-run --format json
+dws devapp event unsubscribe --unified-app-id ID --event-codes user_add_org,org_dept_modify --dry-run --format json
 ```
 
-MCP tools: `list_dev_app_events` / `subscribe_dev_app_event` / `unsubscribe_dev_app_event`。
+MCP tools: `list_dev_app_events` / `subscribe_dev_app_events` / `unsubscribe_dev_app_events`。
 
-- `event list` 返回 `pushType` 与 `events[]`（每项 `eventCode`/`eventName`/`subscribed`）；订阅/退订只接受 `--event-code`（取自 list 返回），一次一个。
+- `event list` 返回 `pushType` 与 `events[]`（每项 `eventCode`/`eventName`/`subscribed`）；订阅/退订接受 `--event-codes` 逗号分隔列表（取自 list 返回），一次可传多个。
 - 写操作走 `--dry-run`/`--yes` 写保护；`list` 是只读。
 - **灰度统一应用**：`subscribe`/`unsubscribe` 只把变更暂存到版本元数据，需后续 `version create → publish` 发布版本后才生效。订阅后 `event list` 若仍 `subscribed=false`，先发布版本再回读。
 - 回调地址不在此模型内：消息/事件回调地址走机器人配置（`robot config --outgoing-url/--event-url`）。

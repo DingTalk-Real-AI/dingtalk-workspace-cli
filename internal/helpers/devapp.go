@@ -60,8 +60,8 @@ const (
 
 	// 事件订阅能力（op-app MCP 工具，硬编码不走服务发现）。
 	devAppEventListTool        = "list_dev_app_events"
-	devAppEventSubscribeTool   = "subscribe_dev_app_event"
-	devAppEventUnsubscribeTool = "unsubscribe_dev_app_event"
+	devAppEventSubscribeTool   = "subscribe_dev_app_events"
+	devAppEventUnsubscribeTool = "unsubscribe_dev_app_events"
 )
 
 func init() {
@@ -217,8 +217,8 @@ func newDevAppCommand(runner executor.Runner) *cobra.Command {
 	}
 	event.AddCommand(
 		newDevAppEventListCommand(runner),
-		newDevAppEventSubscribeCommand(runner, "subscribe", "订阅单个事件", devAppEventSubscribeTool),
-		newDevAppEventSubscribeCommand(runner, "unsubscribe", "退订单个事件", devAppEventUnsubscribeTool),
+		newDevAppEventSubscribeCommand(runner, "subscribe", "批量订阅事件", devAppEventSubscribeTool),
+		newDevAppEventSubscribeCommand(runner, "unsubscribe", "批量退订事件", devAppEventUnsubscribeTool),
 	)
 
 	root.AddCommand(

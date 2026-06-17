@@ -87,8 +87,8 @@ dws devapp
   permission add               Apply permissions into current app version changes
   permission remove            Remove authorized permissions
   event list                   List subscribable events and current subscription state
-  event subscribe              Subscribe one event by eventCode
-  event unsubscribe            Unsubscribe one event by eventCode
+  event subscribe              Subscribe events by eventCodes
+  event unsubscribe            Unsubscribe events by eventCodes
   robot create                 Create a new agent app + robot synchronously
   robot submit                 Submit async robot-create task (supports retry by taskId)
   robot result                 Query async robot-create task result
@@ -948,14 +948,14 @@ Rules:
 Event and version commands are needed for a full application lifecycle but should not be folded into permission add.
 
 Implemented event tools (verified against the `op-app` MCP `tools/list`). The
-real model is "list subscribable events + subscribe/unsubscribe one event by
-`eventCode`", not a single callbackUrl/token/aesKey config call:
+real model is "list subscribable events + subscribe/unsubscribe events by
+`eventCodes`", not a single callbackUrl/token/aesKey config call:
 
 | CLI | MCP tool | Notes |
 | --- | --- | --- |
 | `devapp event list` | `list_dev_app_events` | Args `unifiedAppId`; returns `pushType` + `events[]` (`eventCode`/`eventName`/`subscribed`). Read. |
-| `devapp event subscribe` | `subscribe_dev_app_event` | Args `unifiedAppId` + `eventCode`. Write (`--dry-run`/`--yes`). |
-| `devapp event unsubscribe` | `unsubscribe_dev_app_event` | Args `unifiedAppId` + `eventCode`. Write. |
+| `devapp event subscribe` | `subscribe_dev_app_events` | Args `unifiedAppId` + `eventCodes`. Write (`--dry-run`/`--yes`). |
+| `devapp event unsubscribe` | `unsubscribe_dev_app_events` | Args `unifiedAppId` + `eventCodes`. Write. |
 
 Note: for gray unified apps, subscribe/unsubscribe are staged into version
 metadata and only take effect after `version publish`. The event callback URL
@@ -1086,7 +1086,7 @@ Yulan invocation examples:
 | "把应用图标换成 ICON_RESOURCE" | `dws devapp update --unified-app-id ... --icon ICON_RESOURCE --dry-run --format json` | Icon change is app base info update and must be guarded. |
 | "已确认删除这个开放平台应用" | `dws devapp delete --unified-app-id ... --yes --format json` | Destructive write only after unique app resolution and confirmation. |
 | "手机号权限要申请，虽然需要审核" | `dws devapp permission add --permissions Contact.User.mobile --dry-run/--yes` | `requiredApproval=true` is still appliable; approval moves to version publish. |
-| "订阅通讯录用户增加事件" | `dws devapp event list ...` then `dws devapp event subscribe --event-code user_add_org --dry-run --format json` | Pick eventCode from list, then subscribe; gray apps need a version publish to take effect. |
+| "订阅通讯录用户增加事件" | `dws devapp event list ...` then `dws devapp event subscribe --event-codes user_add_org --dry-run --format json` | Pick eventCode from list, then subscribe; gray apps need a version publish to take effect. |
 | "保存版本并看审核状态" | `version create`, `check-approval`, `publish`, `status` | Version flow owns approver selection and publish audit state. |
 | "创建 MCP 服务并配置 HSF tool" | OpenDev MCP platform workflow, not `dws devapp create` | MCP connector/tool is a platform artifact, not an enterprise internal app. |
 

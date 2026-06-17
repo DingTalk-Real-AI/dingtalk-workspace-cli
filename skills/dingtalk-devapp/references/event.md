@@ -1,6 +1,6 @@
 # 事件订阅
 
-管理开放平台企业内部应用的事件订阅：列出可订阅事件、按事件码订阅/退订。
+管理开放平台企业内部应用的事件订阅：列出可订阅事件、按事件码列表批量订阅/退订。
 
 > 所有命令通过 `--unified-app-id` 定位应用；`corpId` / `userId` 由 MCP 系统上下文注入，CLI 不传。订阅/退订是写操作，先 `--dry-run`，确认后再 `--yes`。
 
@@ -23,27 +23,27 @@ MCP tool: `list_dev_app_events`。返回 `pushType`（当前推送类型）和 `
 ## 订阅事件
 
 ```bash
-dws devapp event subscribe --unified-app-id <unifiedAppId> --event-code user_add_org --dry-run --format json
-dws devapp event subscribe --unified-app-id <unifiedAppId> --event-code user_add_org --yes --format json
+dws devapp event subscribe --unified-app-id <unifiedAppId> --event-codes user_add_org,org_dept_modify --dry-run --format json
+dws devapp event subscribe --unified-app-id <unifiedAppId> --event-codes user_add_org,org_dept_modify --yes --format json
 ```
 
-MCP tool: `subscribe_dev_app_event`（入参 `unifiedAppId` + `eventCode`，一次订阅一个）。
+MCP tool: `subscribe_dev_app_events`（入参 `unifiedAppId` + `eventCodes`，一次订阅多个事件码）。
 
 ## 退订事件
 
 ```bash
-dws devapp event unsubscribe --unified-app-id <unifiedAppId> --event-code user_add_org --dry-run --format json
-dws devapp event unsubscribe --unified-app-id <unifiedAppId> --event-code user_add_org --yes --format json
+dws devapp event unsubscribe --unified-app-id <unifiedAppId> --event-codes user_add_org,org_dept_modify --dry-run --format json
+dws devapp event unsubscribe --unified-app-id <unifiedAppId> --event-codes user_add_org,org_dept_modify --yes --format json
 ```
 
-MCP tool: `unsubscribe_dev_app_event`（入参 `unifiedAppId` + `eventCode`）。
+MCP tool: `unsubscribe_dev_app_events`（入参 `unifiedAppId` + `eventCodes`，一次退订多个事件码）。
 
 ## 字段映射
 
 | CLI | MCP | 必填 | 说明 |
 |-----|-----|------|------|
 | `--unified-app-id` | `unifiedAppId` | 是 | 统一应用 ID |
-| `--event-code` | `eventCode` | subscribe/unsubscribe 必填 | 事件码，取自 `event list` |
+| `--event-codes` | `eventCodes` | subscribe/unsubscribe 必填 | 事件码列表，逗号分隔，取自 `event list` |
 
 ## 灰度应用需发布版本生效（重要）
 
@@ -67,7 +67,7 @@ event subscribe/unsubscribe   订阅变更写入版本元数据
    → 从返回里挑 eventCode
 
 2. 订阅
-   dws devapp event subscribe --unified-app-id <ID> --event-code <CODE> --dry-run --format json
+   dws devapp event subscribe --unified-app-id <ID> --event-codes <CODE1>,<CODE2> --dry-run --format json
    → 确认后加 --yes
 
 3. 验证
@@ -79,6 +79,6 @@ event subscribe/unsubscribe   订阅变更写入版本元数据
 
 | 情况 | 处理 |
 |------|------|
-| `--event-code` 缺失 | CLI 直接报错，先 `event list` 取事件码 |
+| `--event-codes` 缺失 | CLI 直接报错，先 `event list` 取事件码 |
 | 订阅后 `subscribed` 仍为 false | 灰度应用需先 `version publish` 发布版本 |
 | `ServiceResult.success=false` | 透传 `errorCode/errorMsg` |
