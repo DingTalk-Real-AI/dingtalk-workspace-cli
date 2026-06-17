@@ -339,7 +339,10 @@
         "command": "/usr/local/bin/dws auth login --recommend --no-browser --format json --verbose; /Users/xuan/.local/bin/dws auth login --recommend --no-browser --format json --verbose; DINGTALK_DWS_AGENTCODE=dingmbw5n9ktkkbbjv3g dws pat chmod --recommend --dry-run --format json",
         "result": "both rebuilt dws binary paths exited 0, printed 推荐权限已全部授权或没有可授权项, and returned token_valid=true without PAT_BATCH_AUTH_SCOPE_REQUIRED; pat chmod recommend dry-run returned success=true, code=OK, allGranted=true, items=151, selectedScopes=0, skippedScopes=151. /usr/local/bin/dws, /Users/xuan/bin/dws, and /Users/xuan/.local/bin/dws were rebuilt from current source and share sha256 e6b6fe37e1a7503a3b83486ce830b025f476b6e77ddcb383a1ed237b92f2b31f",
         "serverPrepubState": "gateway instance 3095163678, PAT instance 3095097702, and BFF instance 3095182503 all have code merge/build/prepub deploy/prepub integration SUCCESS and are WAITING in prepub verification"
-      }
+      },
+      "notes": [
+        "2026-06-18 compatibility fix: repeated PAT_BATCH_AUTH_SCOPE_REQUIRED was traced to legacy caller-only login recommend requests. Current prepub SLS for auth_login_recommend shows new CLI requests already carry recommend=true/productCodes=[]/scopes=null and PAT core had 0 recent PAT_BATCH_AUTH_SCOPE_REQUIRED hits; nevertheless gateway branch codex/pat-batch-auth-service-gate-20260616 now normalizes pat.batch_plan caller=auth_login_recommend with no scopes/productCodes/recommend to recommend=true, and PAT core branch codex/batch-auth-page-flow applies the same default only when request.recommend is null. Verification: uv run python -m pytest test/test_pat_batch_bridge.py -q => 27 passed; JAVA_HOME=Azul 11 mvn -pl lippi-pat-core-service -am -Dtest=com.dingtalk.pat.manager.PatBatchAuthManagerTest -DfailIfNoTests=false -DfailIfNoSpecifiedTests=false -Dsurefire.failIfNoSpecifiedTests=false test -s /Users/xuan/Downloads/settings.xml => BUILD SUCCESS, Tests run: 24, Failures: 0, Errors: 0. Full prepub redeploy and e2e remain pending for these new compatibility commits."
+      ]
     },
     "latestDiagnostics": [
       "PAT core Aone compile error at PatAuthCheckService.java:517 was caused by a two-argument tryConsumeOnceTokenFromTair call after the method signature changed to require effective risk level. Current feature and release-merge worktrees use RiskLevelEnum.MEDIUM.getCode() for the high-risk-to-medium DCF bypass path and compile locally.",
@@ -400,6 +403,9 @@
         "skippedScopes": "not grantable or filtered scopes",
         "pendingScopes": "high-risk scopes requiring separate confirmation",
         "warnings": "recommendation filter and partial selection warnings"
+      },
+      "compatibility": {
+        "loginRecommendCallerDefault": "If an older caller sends caller=auth_login_recommend without scopes/productCodes/recommend, gateway and PAT core default the plan to recommend=true. Explicit recommend=false with empty productCodes is still invalid so all-scope mode cannot silently downgrade into recommend mode."
       }
     },
     "pat.batch_grant": {
@@ -539,5 +545,5 @@
     "muskChiefOperator": "Review the product flow for speed, minimum surface area, and user clarity.",
     "computerUse": "Verify prepub/front-end page only after frontend repo and build credentials are available."
   },
-  "updatedAt": "2026-06-17T21:45:11+08:00"
+  "updatedAt": "2026-06-18T00:42:00+08:00"
 }
