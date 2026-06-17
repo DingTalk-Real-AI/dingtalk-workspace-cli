@@ -266,8 +266,8 @@
         "aoneBranchRevision": "f4222f3b2acba1899446d338c4b3788b8a58b29f",
         "aoneNewestRevision": "df53f856c31be3abee220b738022f861cbf78b93",
         "prepubPipelineId": 66,
-        "prepubPipelineInstanceId": 3095177121,
-        "prepubPackage": "Aone CR 34656145 pipeline 66 instance 3095177121 has code merge/build/prepub deploy/prepub integration SUCCESS and is WAITING in prepub verification task 3391737868. The previous code-merge CONFLICT is no longer active. Deploy orders 155428214/155428215 succeeded at 2026-06-17 20:50-21:01+08:00 for 预发环境 and 新加坡预发; task 3391737867 prepub integration completed SUCCESS at 2026-06-17 21:12:24+08:00. CR newestRevision/current head is df53f856c31be3abee220b738022f861cbf78b93.",
+        "prepubPipelineInstanceId": 3095182503,
+        "prepubPackage": "Aone CR 34656145 pipeline 66 instance 3095182503 has code merge/build/prepub deploy/prepub integration SUCCESS and is WAITING in prepub verification task 3391762849. The previous code-merge CONFLICT is no longer active. Deploy orders 155430894/155430896 succeeded at 2026-06-17 21:21-21:32+08:00 for 预发环境 and 新加坡预发; task 3391762848 prepub integration completed SUCCESS at 2026-06-17 21:44:04+08:00. CR newestRevision/current head is df53f856c31be3abee220b738022f861cbf78b93.",
         "prepubFunctionalVerification": "prepub_deploy_and_integration_success; selectedScopes_fail_closed_local_tests_passed; full_batch_auth_e2e_pending"
       },
       {
@@ -335,10 +335,10 @@
         ]
       },
       "currentSmoke": {
-        "verifiedAt": "2026-06-17T21:12:51+08:00",
+        "verifiedAt": "2026-06-17T21:45:11+08:00",
         "command": "/usr/local/bin/dws auth login --recommend --no-browser --format json",
         "result": "exit 0; printed 推荐权限已全部授权或没有可授权项 and returned token_valid=true without PAT_BATCH_AUTH_SCOPE_REQUIRED",
-        "serverPrepubState": "gateway instance 3095163678, PAT instance 3095097702, and BFF instance 3095177121 all have code merge/build/prepub deploy/prepub integration SUCCESS and are WAITING in prepub verification"
+        "serverPrepubState": "gateway instance 3095163678, PAT instance 3095097702, and BFF instance 3095182503 all have code merge/build/prepub deploy/prepub integration SUCCESS and are WAITING in prepub verification"
       }
     },
     "latestDiagnostics": [
@@ -380,7 +380,7 @@
       "2026-06-17 15:46+08:00 Aone recheck: gateway pipeline 66 instance 3095046153 has deploy/integration SUCCESS but deploy orders still show deployed branchRevision ffaa951, one commit behind CR newestRevision/current head a0873a6; PAT pipeline 66 instance 3095097702 has deploy/integration SUCCESS but deploy order 155387876 still shows deployed branchRevision b38e29e, 12 commits behind CR newestRevision/current head 79a8fa5; BFF pipeline 66 instance 3095097708 is WAITING at code merge task 3391355335 with build/deploy INIT, and latest successful deployed revision remains f4222f3, 199 commits behind current head 9ac576c. Therefore PRD acceptance remains not passed until current revisions are demonstrably active and functional verification is rerun.",
       "2026-06-17 16:06+08:00 Aone task drill-down: BFF task 3391355335 progress says 合并代码存在冲突,请查看冲突并解决. componentData.status=CONFLICT and nextSteps instruct resolving change 34571941 from feature/robot-openapi-pop revision db24ed483eaa89a59fd34f763cfb2ee4adf45c06 into release branch releases/20260616153930479_r_release_154450_lippi-open-app-dev-code, then rerunning a1 app pipeline. Gateway verification task 3391110450 is CANCEL; PAT verification task 3391355313 remains WAITING for CR34656143.",
       "2026-06-17 20:22+08:00 BFF contract hardening: commit df53f856c31be3abee220b738022f861cbf78b93 was pushed to codex/batch-auth-bff-selected-scopes. DWSPatAuthRpcService now fail-closes malformed HTTP selectedScopes so bad input cannot be converted into PAT core's legacy null=approve-all DTO semantics. Local Java 11 regression passed with 7 tests in DWSPatAuthRpcServiceTest.",
-      "2026-06-17 21:12+08:00 prepub release recheck: gateway Aone pipeline 66 instance 3095163678, PAT instance 3095097702, and BFF instance 3095177121 all reached code merge, build, prepub deploy, and prepub integration SUCCESS. Latest deploy orders: gateway 155420965/155420967, PAT 155387876, BFF 155428214/155428215. All three remain RUNNING/WAITING at the prepub verification stage, so release gate is not complete. Current CLI smoke /usr/local/bin/dws auth login --recommend --no-browser --format json exited 0 and returned 推荐权限已全部授权或没有可授权项 without PAT_BATCH_AUTH_SCOPE_REQUIRED."
+      "2026-06-17 21:45+08:00 prepub release recheck: gateway Aone pipeline 66 instance 3095163678, PAT instance 3095097702, and latest BFF instance 3095182503 all reached code merge, build, prepub deploy, and prepub integration SUCCESS. Latest deploy orders: gateway 155420965/155420967, PAT 155387876, BFF 155430894/155430896. All three remain RUNNING/WAITING at the prepub verification stage, so release gate is not complete. Current CLI smoke /usr/local/bin/dws auth login --recommend --no-browser --format json exited 0 and returned 推荐权限已全部授权或没有可授权项 without PAT_BATCH_AUTH_SCOPE_REQUIRED."
     ]
   },
   "serviceContract": {
@@ -537,5 +537,5 @@
     "muskChiefOperator": "Review the product flow for speed, minimum surface area, and user clarity.",
     "computerUse": "Verify prepub/front-end page only after frontend repo and build credentials are available."
   },
-  "updatedAt": "2026-06-17T21:12:51+08:00"
+  "updatedAt": "2026-06-17T21:45:11+08:00"
 }
