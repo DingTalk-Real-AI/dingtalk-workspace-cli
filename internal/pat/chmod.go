@@ -647,6 +647,10 @@ func RunLoginRecommendAuthorizationWithOptions(ctx context.Context, c edition.To
 }
 
 func planLoginRecommend(ctx context.Context, c edition.ToolCaller, productCodes []string, recommend bool) (*edition.ToolResult, []string, error) {
+	productCodes = normalizeProductCodes(productCodes)
+	if !recommend && len(productCodes) == 0 {
+		return nil, nil, fmt.Errorf("全部授权需要至少一个授权业务域")
+	}
 	planArgs := buildBatchPlanArgs(nil, productCodes, recommend, grantTypePermanent, "", "", true)
 	planArgs["caller"] = patCallerAuthLoginRecommend
 	planResult, err := callPATBatchPlan(ctx, c, "", "", planArgs)

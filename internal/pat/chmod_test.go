@@ -876,6 +876,22 @@ func TestLoginRecommendAuthorizationAllScopeModePlansAllProductScopes(t *testing
 	}
 }
 
+func TestLoginRecommendAuthorizationAllScopeWithoutProductsFailsBeforePlan(t *testing.T) {
+	fake := &sequenceToolCaller{}
+	err := RunLoginRecommendAuthorizationWithOptions(context.Background(), fake, io.Discard, LoginRecommendOptions{
+		ScopeMode: LoginRecommendScopeAll,
+	})
+	if err == nil {
+		t.Fatal("RunLoginRecommendAuthorizationWithOptions error = nil, want product-domain validation error")
+	}
+	if !strings.Contains(err.Error(), "至少一个授权业务域") {
+		t.Fatalf("error = %v, want product-domain validation error", err)
+	}
+	if len(fake.calls) != 0 {
+		t.Fatalf("CallTool count = %d, want no empty all-scope plan call", len(fake.calls))
+	}
+}
+
 func TestLoginRecommendAuthorizationConfirmedGrantsDirectly(t *testing.T) {
 	fake := &sequenceToolCaller{responses: []string{
 		`{"success":true,"data":{"items":[{"scope":"calendar.event:read","productCode":"calendar","productName":"日历"}],"selectedScopes":["calendar.event:read"]}}`,
