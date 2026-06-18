@@ -97,10 +97,10 @@
 - **用户说**：「把 userId 张三、李四加成这个应用的开发者，加完看下成员列表，回头把李四移除；另外给应用加一个登录重定向地址 https://b.example.com/cb，别把原来的地址冲掉。」
 - **覆盖**：`member list` / `add` / `remove`、`security config`；整组覆盖。
 - **期望（分步）**：
-  1. `member add --unified-app-id <id> --users 张三id,李四id --member-type DEVELOPER --dry-run` → `--yes` → `member list` 回读 → `member remove --users 李四id --member-type DEVELOPER --dry-run` → `--yes`。
-  2. 安全配置：提醒 `--redirect-url` 是**整组覆盖、不是追加**——要保留原地址需把旧+新一起传：`security config --redirect-url <旧1,旧2,新> --dry-run` → `--yes`。
-- **通过判据**：`--users` 逗号分隔、`--member-type` 必填、用 userId 不用姓名；识别整组覆盖语义、避免只传新地址冲掉旧的；未提供的字段（如 ip-whitelist）不动。
-- **易错点**：漏 `--member-type`；security 只传新 redirect-url 把旧的清空。
+  1. `member add --unified-app-id <id> --user-ids 张三id,李四id --member-type DEVELOPER --dry-run` → `--yes` → `member list` 回读 → `member remove --user-ids 李四id --member-type DEVELOPER --dry-run` → `--yes`。
+  2. 安全配置：提醒 `--redirect-urls` 是**整组覆盖、不是追加**——要保留原地址需把旧+新一起传：`security config --redirect-urls <旧1,旧2,新> --dry-run` → `--yes`。
+- **通过判据**：`--user-ids` 逗号分隔、`--member-type` 必填、用 userId 不用姓名；识别整组覆盖语义、避免只传新地址冲掉旧的；未提供的字段（如 ip-whitelist）不动。
+- **易错点**：漏 `--member-type`；security 只传新 redirect-urls 把旧的清空。
 
 ### C8. 机器人建号、配置与本地建联
 - **用户说**：「帮我建一个叫『小助手』的答疑机器人；另外这个现有应用还没机器人，给它也配上并启用；最后把机器人接到我本地的 Claude Code 调试。」

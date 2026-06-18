@@ -799,7 +799,7 @@ func newDevAppMemberAddCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "add",
 		Short:             "添加开放平台应用成员",
-		Example:           "  dws dev app member add --unified-app-id <unifiedAppId> --member-user-ids userId1,userId2 --member-type DEVELOPER --dry-run",
+		Example:           "  dws dev app member add --unified-app-id <unifiedAppId> --user-ids userId1,userId2 --member-type DEVELOPER --dry-run",
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -816,7 +816,7 @@ func newDevAppMemberRemoveCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "remove",
 		Short:             "移除开放平台应用成员",
-		Example:           "  dws dev app member remove --unified-app-id <unifiedAppId> --member-user-ids userId1,userId2 --member-type DEVELOPER --dry-run",
+		Example:           "  dws dev app member remove --unified-app-id <unifiedAppId> --user-ids userId1,userId2 --member-type DEVELOPER --dry-run",
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -1335,7 +1335,9 @@ func requiredDevAppUnifiedID(cmd *cobra.Command) (string, error) {
 
 func registerDevAppMemberMutationFlags(cmd *cobra.Command) {
 	addDevAppUnifiedIDFlag(cmd)
-	cmd.Flags().String("member-user-ids", "", "成员 userId 列表，多个用逗号分隔 (必填)")
+	cmd.Flags().String("user-ids", "", "成员 userId 列表，多个用逗号分隔 (必填)")
+	cmd.Flags().String("member-user-ids", "", "成员 userId 列表，多个用逗号分隔 (兼容旧参数)")
+	_ = cmd.Flags().MarkHidden("member-user-ids")
 	cmd.Flags().String("member-type", "", "成员类型，如 DEVELOPER (必填)")
 }
 
@@ -1357,9 +1359,9 @@ func runDevAppMemberMutation(runner executor.Runner, cmd *cobra.Command, tool, o
 	}
 
 	params := map[string]any{
-		"unifiedAppId":  appID,
-		"memberUserIds": users,
-		"memberType":    memberType,
+		"unifiedAppId": appID,
+		"userIds":      users,
+		"memberType":   memberType,
 	}
 	return runDevAppTool(runner, cmd, tool, params)
 }
@@ -1468,13 +1470,16 @@ func normalizeDevAppScopeValueArray(content map[string]any, key string) {
 }
 
 func requiredDevAppUsers(cmd *cobra.Command) ([]string, error) {
-	usersRaw, _ := cmd.Flags().GetString("member-user-ids")
+	usersRaw, _ := cmd.Flags().GetString("user-ids")
 	if strings.TrimSpace(usersRaw) == "" {
-		return nil, apperrors.NewValidation("--member-user-ids 为必填")
+		usersRaw, _ = cmd.Flags().GetString("member-user-ids")
+	}
+	if strings.TrimSpace(usersRaw) == "" {
+		return nil, apperrors.NewValidation("--user-ids 为必填")
 	}
 	users := splitDevAppList(usersRaw)
 	if len(users) == 0 {
-		return nil, apperrors.NewValidation("--member-user-ids 至少包含一个 userId")
+		return nil, apperrors.NewValidation("--user-ids 至少包含一个 userId")
 	}
 	return users, nil
 }

@@ -54,23 +54,34 @@ func TestDevAppMemberCommandsBuildToolParams(t *testing.T) {
 		{
 			name:     "add multiple users",
 			cmd:      "add",
-			args:     []string{"--unified-app-id", "app-001", "--member-user-ids", "userId1,userId2,userId3,userId4", "--member-type", "DEVELOPER", "--yes"},
+			args:     []string{"--unified-app-id", "app-001", "--user-ids", "userId1,userId2,userId3,userId4", "--member-type", "DEVELOPER", "--yes"},
 			wantTool: "add_dev_app_members",
 			wantParams: map[string]any{
-				"unifiedAppId":  "app-001",
-				"memberUserIds": []string{"userId1", "userId2", "userId3", "userId4"},
-				"memberType":    "DEVELOPER",
+				"unifiedAppId": "app-001",
+				"userIds":      []string{"userId1", "userId2", "userId3", "userId4"},
+				"memberType":   "DEVELOPER",
 			},
 		},
 		{
 			name:     "remove trims users",
 			cmd:      "remove",
-			args:     []string{"--unified-app-id", "app-001", "--member-user-ids", " userId1 , userId2 ", "--member-type", "DEVELOPER", "--yes"},
+			args:     []string{"--unified-app-id", "app-001", "--user-ids", " userId1 , userId2 ", "--member-type", "DEVELOPER", "--yes"},
 			wantTool: "remove_dev_app_members",
 			wantParams: map[string]any{
-				"unifiedAppId":  "app-001",
-				"memberUserIds": []string{"userId1", "userId2"},
-				"memberType":    "DEVELOPER",
+				"unifiedAppId": "app-001",
+				"userIds":      []string{"userId1", "userId2"},
+				"memberType":   "DEVELOPER",
+			},
+		},
+		{
+			name:     "add accepts legacy member user ids flag",
+			cmd:      "add",
+			args:     []string{"--unified-app-id", "app-001", "--member-user-ids", "userId1,userId2", "--member-type", "DEVELOPER", "--yes"},
+			wantTool: "add_dev_app_members",
+			wantParams: map[string]any{
+				"unifiedAppId": "app-001",
+				"userIds":      []string{"userId1", "userId2"},
+				"memberType":   "DEVELOPER",
 			},
 		},
 	}
@@ -758,9 +769,9 @@ func TestDevAppMemberCommandsValidateRequiredFlags(t *testing.T) {
 		wantErr string
 	}{
 		{name: "list requires app", cmd: "list", args: nil, wantErr: "--unified-app-id 为必填"},
-		{name: "add requires users", cmd: "add", args: []string{"--unified-app-id", "app-001", "--member-type", "DEVELOPER", "--dry-run"}, wantErr: "--member-user-ids 为必填"},
-		{name: "add rejects empty users", cmd: "add", args: []string{"--unified-app-id", "app-001", "--member-user-ids", " , ", "--member-type", "DEVELOPER", "--dry-run"}, wantErr: "--member-user-ids 至少包含一个 userId"},
-		{name: "remove requires member type", cmd: "remove", args: []string{"--unified-app-id", "app-001", "--member-user-ids", "userId1", "--dry-run"}, wantErr: "--member-type 为必填"},
+		{name: "add requires users", cmd: "add", args: []string{"--unified-app-id", "app-001", "--member-type", "DEVELOPER", "--dry-run"}, wantErr: "--user-ids 为必填"},
+		{name: "add rejects empty users", cmd: "add", args: []string{"--unified-app-id", "app-001", "--user-ids", " , ", "--member-type", "DEVELOPER", "--dry-run"}, wantErr: "--user-ids 至少包含一个 userId"},
+		{name: "remove requires member type", cmd: "remove", args: []string{"--unified-app-id", "app-001", "--user-ids", "userId1", "--dry-run"}, wantErr: "--member-type 为必填"},
 	}
 
 	for _, tc := range cases {
@@ -870,11 +881,11 @@ func TestDevAppMemberAndSecurityRequireWriteGuard(t *testing.T) {
 	}{
 		{
 			name: "member add",
-			args: []string{"dev", "app", "member", "add", "--unified-app-id", "app-001", "--member-user-ids", "userId1", "--member-type", "DEVELOPER"},
+			args: []string{"dev", "app", "member", "add", "--unified-app-id", "app-001", "--user-ids", "userId1", "--member-type", "DEVELOPER"},
 		},
 		{
 			name: "member remove",
-			args: []string{"dev", "app", "member", "remove", "--unified-app-id", "app-001", "--member-user-ids", "userId1", "--member-type", "DEVELOPER"},
+			args: []string{"dev", "app", "member", "remove", "--unified-app-id", "app-001", "--user-ids", "userId1", "--member-type", "DEVELOPER"},
 		},
 		{
 			name: "security config",
