@@ -52,7 +52,7 @@ metadata:
 
 应用定位统一只用 `--unified-app-id`（--app-key/--name 仅作 list 过滤，不能定位单应用）。旧的 `--agent-id`/`--app-id`/`--custom-key` 定位 flag 已移除——agentId 只是返回字段，不再是入参定位手段。appKey 与 clientId 是同一标识的新旧两名，无需追问区别。
 
-### 生效模型（最重要）
+### 生效模型
 - 改配置不等于线上生效，需审批的变更（如 `requiredApproval=true` 的权限点）先累积在开发态，必须走版本通道才上线：
 ```
 配置变更（permission add / robot config / webapp config ...）

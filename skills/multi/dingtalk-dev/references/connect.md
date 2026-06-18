@@ -1,6 +1,6 @@
 # 本地建联（把机器人接到本地 agent）
 
-> 概念锚点：`dws dev connect` 是 dev 顶层命令，把一个**现成机器人**接到当前渠道的本地 agent CLI 做调试/值守——只建联、不建号。缺机器人先走 robot.md 的 `robot submit`/`result` 建号拿 clientId/clientSecret。
+> `dws dev connect` 是 dev 顶层命令，把一个现成机器人接到当前渠道的本地 agent CLI 做调试/值守——只建联、不建号。缺机器人先走 robot.md 的 `robot submit`/`result` 建号拿 clientId/clientSecret。
 
 ## 起连接
 

@@ -1,117 +1,64 @@
 # 版本发布
 
-> 概念锚点：版本是配置变更生效的唯一通道——改配置 ≠ 上线，发布到 RELEASE 才生效（见 SKILL.md 生效模型）。
+> 版本是配置变更生效的唯一通道——改配置不等于上线，发布到 RELEASE 才生效（见 SKILL.md 生效模型）。
 
-管理开放平台企业内部应用的版本：基于当前配置创建版本、查看版本列表/详情、预检审批、发布、查状态。
-
-> `corpId` / `userId` 由系统上下文自动注入，CLI 不传。所有版本通过 `--unified-app-id` 定位，单个版本再加 `--version-id`。
+管理应用版本：基于当前配置建版本、查列表/详情、预检审批、发布、查状态。参数查 `dws schema dev.app.version.<method>`。版本用 `--unified-app-id` 定位，单个版本再加 `--version-id`；`corpId`/`userId` 系统注入，CLI 不传。
 
 ## 典型流程
 
 ```text
 permission add（requiredApproval=true 写入版本变更）
   → version create        创建版本
-  → version check-approval 预检是否需要审批 / 审批人
+  → version check-approval 预检是否需审批 / 审批人
   → version publish        发布（含高敏权限需 --confirmed-sensitive）
   → version status         轮询发布/审批状态
 ```
 
-## 创建版本
+新应用如果 `version list` 返回空，先 `version create`，用返回的 `versionId` 继续 check-approval/publish；不要因列表空误判无可发布内容。
 
-```bash
-dws dev app version create --unified-app-id <unifiedAppId> --version 1.0.1 --desc "新增机器人能力" --dry-run --format json
-dws dev app version create --unified-app-id <unifiedAppId> --version 1.0.1 --desc "新增机器人能力" --yes --format json
-```
+## check-approval 与 publish
 
-参数查 `dws schema dev.app.version.create`。
+`check-approval` 只查审批要求和候选审批人，不发布。`publish` 是真实发布；含高敏权限要加 `--confirmed-sensitive`，灰度选人模式用 `--approver-user-id` 指定审批人。
 
-## 版本列表
-
-```bash
-dws dev app version list --unified-app-id <unifiedAppId> --page-size 20 --format json
-# 续翻：--cursor <上次出参的 nextCursor>
-```
-
-游标分页：`--cursor`/`--page-size`，出参带 `nextCursor`（空=到底，续翻原样回传）；出参见 SKILL.md「通用出参约定」。
-
-新应用如果 `version list` 返回空，先执行 `version create`，用返回的 `versionId` 继续 `check-approval/publish`；不要因为列表为空误判无可发布内容。
-
-## 版本详情
-
-```bash
-dws dev app version get --unified-app-id <unifiedAppId> --version-id <versionId> --format json
-```
-
-返回版本状态、描述、能力列表、权限点、敏感权限、审批要求和脱敏详情。
-
-## 预检审批（不发布）
-
-```bash
-dws dev app version check-approval --unified-app-id <unifiedAppId> --version-id <versionId> --format json
-```
-
-仅返回审批要求和候选审批人，**不会实际发布**。
-
-## 发布
-
-```bash
-dws dev app version publish --unified-app-id <unifiedAppId> --version-id <versionId> --dry-run --format json
-dws dev app version publish --unified-app-id <unifiedAppId> --version-id <versionId> --yes --format json
-
-# 含高敏权限时必须确认
-dws dev app version publish --unified-app-id <unifiedAppId> --version-id <versionId> --confirmed-sensitive --yes --format json
-
-# 灰度选人模式指定审批人
-dws dev app version publish --unified-app-id <unifiedAppId> --version-id <versionId> --approver-user-id <userId> --yes --format json
-```
-
-`publish` 是真实发布（区别于 `check-approval` 的预检不发布）。参数查 `dws schema dev.app.version.publish`；含高敏权限要加 `--confirmed-sensitive`，灰度选人模式用 `--approver-user-id` 指定审批人。
-
-> 注意：`--dry-run` 是 CLI 层的"预览不执行"开关；服务端的"审批预检"是 `version check-approval`。二者是两个东西：`check-approval` 是只查审批要求不发布，`--dry-run` 是 CLI 要不要真调上游。发布前建议先 `check-approval`。
+区分两个"预检"：`--dry-run` 是 CLI 层的预览不调上游；`check-approval` 是服务端查审批要求不发布。发布前建议先 `check-approval`。
 
 发布响应 `result`：
 
 | result | 含义 | 下一步 |
 |--------|------|--------|
-| `NOT_REQUIRED` | 不需要审批；预检时表示可直接发布，真实发布时表示已直接发布上线 | 真实发布后回读 `version status/get` 验证 `RELEASE` |
-| `APPROVAL_REQUIRED` | 需要审批，通常出现在 `check-approval` 或未指定审批人时 | 查看 `approvalMode/approvalCandidates`，让用户选择审批人后再 `publish --approver-user-id` |
+| `NOT_REQUIRED` | 不需审批；预检=可直接发布，真实发布=已直接上线 | 回读 `version status/get` 验证 `RELEASE` |
+| `APPROVAL_REQUIRED` | 需审批，常见于 `check-approval` 或未指定审批人 | 看 `approvalMode/approvalCandidates`，让用户选审批人后再 `publish --approver-user-id` |
 | `SUBMITTED` | 已提交审批 | 保存 `processId`，轮询 `version status` |
 
 审批模式 `approvalMode`：
 
 | approvalMode | 含义 | 下一步 |
 |--------------|------|--------|
-| `SELECT_APPROVER` | 灰度选人模式，需要在候选审批人中选一个 | 展示候选审批人，不自动选第一个 |
-| `ENTERPRISE_SELF_BUILT` | 企业自建审核模式 | 不传 `--approver-user-id`，按企业自建审核流程等待 |
+| `SELECT_APPROVER` | 灰度选人，需在候选审批人里选一个 | 展示候选，不自动取第一个 |
+| `ENTERPRISE_SELF_BUILT` | 企业自建审核 | 不传 `--approver-user-id`，按企业自建流程等待 |
 
 ## 版本状态
 
-```bash
-dws dev app version status --unified-app-id <unifiedAppId> --version-id <versionId> --format json
-```
-
-返回版本状态、流程实例 ID、审批状态和审批意见。审批详情可能只在钉钉客户端可见。
-
-版本状态字段：`version create/list/get/status` 统一返回 `versionStatus`，对齐版本枚举。
+`version create/list/get/status` 统一返回 `versionStatus`：
 
 | versionStatus | 含义 | 下一步 |
 |---------------|------|--------|
-| `INIT` | 版本已创建或有待发布变更，尚未发布 | 可 `check-approval` / `publish` |
-| `AUDIT` | 发布审核中 | 不要重复发布；即使没有返回 `processStatus`，也按审核中处理 |
-| `RELEASE` | 已发布生效 | 发布完成，可继续验证权限、机器人、网页应用等能力 |
-| `GRAY` | 灰度状态 | 按灰度流程处理；不要当全量已发布 |
+| `INIT` | 已创建或有待发布变更，未发布 | 可 `check-approval`/`publish` |
+| `AUDIT` | 发布审核中 | 不要重复发布；即使没返回 `processStatus` 也按审核中处理 |
+| `RELEASE` | 已发布生效 | 完成，可验证权限/机器人/网页等能力 |
+| `GRAY` | 灰度 | 按灰度流程，不要当全量已发布 |
 
-审批流程状态字段：`version status` 的 `processStatus` 只在存在审批流程且后端透出流程态时有值。`versionStatus=AUDIT` 但没有 `processStatus/processInstanceId` 时，不要判失败，仍表示审核中。
+`version status` 的 `processStatus` 只在存在审批流程且后端透出时有值。`versionStatus=AUDIT` 但没 `processStatus/processInstanceId` 时不要判失败，仍是审核中。
 
 | processStatus | 含义 | 下一步 |
 |---------------|------|--------|
-| `UNDER_REVIEW` | 审批中 | 等待审批，必要时把 `processInstanceId` 给用户去钉钉客户端查看 |
-| `PASS` | 审批通过 | 继续回读版本，确认是否进入 `RELEASE` |
-| `FAIL` | 审批拒绝 | 展示 `processComment`，修改后重新创建/发布版本 |
-| `WITHDRAW` / `CANCEL` | 审批撤回或取消 | 回到发布前状态，重新 `check-approval` / `publish` |
-| `PUBLISH_FAILED` | 审批后发布失败 | 展示错误信息，重新检查版本状态和后端错误 |
+| `UNDER_REVIEW` | 审批中 | 等待，必要时把 `processInstanceId` 给用户去钉钉客户端看 |
+| `PASS` | 审批通过 | 继续回读，确认是否进 `RELEASE` |
+| `FAIL` | 审批拒绝 | 展示 `processComment`，改后重新建/发版本 |
+| `WITHDRAW` / `CANCEL` | 撤回或取消 | 回到发布前，重新 `check-approval`/`publish` |
+| `PUBLISH_FAILED` | 审批后发布失败 | 展示错误，重查版本状态和后端错误 |
 
-遇到未列出的状态值时，不要猜测语义；原样展示状态，并回读 `version get/status` 或查开放平台文档/后台详情。
+遇到未列出的状态值，不要猜语义；原样展示，回读 `version get/status` 或查文档/后台。
 
 ## 错误处理
 

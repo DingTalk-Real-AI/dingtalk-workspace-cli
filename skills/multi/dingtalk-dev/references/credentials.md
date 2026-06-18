@@ -1,6 +1,6 @@
 # 应用凭证读取
 
-> 概念锚点：凭证=应用调 OpenAPI 的身份（appKey=clientId / appSecret=clientSecret）；见 SKILL.md 概念地图。
+> 凭证=应用调 OpenAPI 的身份（appKey=clientId / appSecret=clientSecret）；见 SKILL.md 概念地图。
 
 `dws dev app credentials get --unified-app-id <id>` 读取应用凭证。参数查 `dws schema dev.app.credentials.get`。
 
