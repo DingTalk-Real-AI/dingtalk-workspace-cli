@@ -6,6 +6,18 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.39] - 2026-06-18
+
+This release makes the AI-sent indicator opt-in. 1.0.38 unconditionally tagged every user-identity send/reply with the edition claw identity, so the IM server rendered a "Send from AI" badge under every message — and on the open edition a stale hardcoded value even leaked the Wukong-branded label (「悟空AI发送」) to external users. The badge is now off by default and shown only when the caller explicitly asks for it.
+
+### Added
+
+- **`--ai-tag` opt-in flag for `chat message send` / `chat message reply`** (#477; `internal/helpers/chat.go`) — by default no `clawType` tool argument is attached, so delivered messages carry no "Send from AI" badge. Passing `--ai-tag` attaches `edition.ClawType()` so the IM server renders the badge (open edition `openClaw` → 「通过AI发送」; the wukong overlay sets its own value → 「悟空AI发送」). Covers the text/Markdown, rich-media, and `--user`/`--open-dingtalk-id` direct send paths plus `reply`. Bot (`send-by-bot`) and webhook sends are intentionally untouched — they already render as bot messages. The badge is opt-in so dws does not brand every message a user sends.
+
+### Fixed
+
+- **`dws chat message reply` no longer leaks the Wukong AI label on the open edition** (#475, fixes #474; `internal/helpers/chat.go`, `pkg/edition/edition.go`) — the reply path hardcoded `clawType: "wukong"`, so open-source quoted replies were tagged 「悟空AI发送」 by the IM server, leaking Wukong branding to external users (reported by an external customer integrating via openclaw). The value now derives from the edition via the new `edition.ClawType()` accessor (open → `DefaultOSSClawType` = `openClaw`), and — together with #477 — is only attached when `--ai-tag` is passed. The earlier fix existed on a branch (PR #450) but was never merged to main; #475 cherry-picked it.
+
 ## [1.0.38] - 2026-06-16
 
 This release adds client-side agent attribution for usage stats, fixes two commands that silently misbehaved (`dws sheet export` hanging, `dws upgrade --dry-run` actually upgrading), hardens the document write path against server-rejected characters, and makes the long-broken `--no-browser` login flag actually work.
