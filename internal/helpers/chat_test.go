@@ -310,13 +310,13 @@ func TestChatMessageSendRejectsAtMentionsOutsideGroup(t *testing.T) {
 	}
 }
 
-// TestChatMessageSendCarriesClawType guards the "Send from AI" indicator:
-// every user-identity send path must attach the edition claw identity as the
-// clawType tool argument so the IM server renders the AI-sent label on the
-// delivered message. The open-source build pins it to edition.DefaultOSSClawType
-// ("openClaw"); dropping the parameter (or hardcoding another edition's value,
-// as the reply command once did with "wukong") mislabels or unlabels messages.
-func TestChatMessageSendCarriesClawType(t *testing.T) {
+// TestChatMessageAITagControlsClawType guards the opt-in "Send from AI" indicator:
+// by default NO user-identity send carries the clawType tool argument (so the IM
+// server renders no AI badge). Only when --ai-tag is passed does each path attach
+// the edition claw identity (open-source build pins it to edition.DefaultOSSClawType,
+// "openClaw"); the wukong overlay would attach its own value. The label is opt-in so
+// dws does not surprise users by branding every message they send.
+func TestChatMessageAITagControlsClawType(t *testing.T) {
 	cases := []struct {
 		name string
 		make func(runner executor.Runner) *cobra.Command
@@ -354,7 +354,8 @@ func TestChatMessageSendCarriesClawType(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+		// Default: no --ai-tag → must omit clawType entirely (no badge).
+		t.Run(tc.name+"/default-no-tag", func(t *testing.T) {
 			runner := &captureRunner{}
 			cmd := tc.make(runner)
 			var out bytes.Buffer
@@ -364,9 +365,24 @@ func TestChatMessageSendCarriesClawType(t *testing.T) {
 			if err := cmd.Execute(); err != nil {
 				t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 			}
+			if v, ok := runner.last.Params["clawType"]; ok {
+				t.Fatalf("default send must omit clawType, got %#v", v)
+			}
+		})
+		// Opt-in: --ai-tag → attach the edition claw identity.
+		t.Run(tc.name+"/with-ai-tag", func(t *testing.T) {
+			runner := &captureRunner{}
+			cmd := tc.make(runner)
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			cmd.SetArgs(append(append([]string{}, tc.args...), "--ai-tag"))
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
+			}
 			got, ok := runner.last.Params["clawType"]
 			if !ok {
-				t.Fatalf("Params missing clawType; got %#v", runner.last.Params)
+				t.Fatalf("--ai-tag send missing clawType; got %#v", runner.last.Params)
 			}
 			if got != edition.DefaultOSSClawType {
 				t.Fatalf("clawType = %#v, want %q", got, edition.DefaultOSSClawType)
