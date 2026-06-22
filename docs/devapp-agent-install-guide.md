@@ -17,7 +17,7 @@ curl -fsSL https://raw.githubusercontent.com/wxianfeng/dingtalk-workspace-cli/fe
 1. 拉取 `wxianfeng/dingtalk-workspace-cli` 的 `feat/dws-devapp` 分支。
 2. 使用本地源码构建 `dws`。
 3. 安装 `dws` 到默认目录 `~/.local/bin`。
-4. 安装 Agent Skill 到本机已检测到的 Agent 目录。
+4. 安装 Agent Skill 到本机已检测到的 Agent 目录，只安装通用 `dws` 和 DevApp 专用 `dws-devapp` 两个 skill。
 
 > 预览分支安装需要本机已有 `git`、`go` 和 `make`。Go 版本要求以仓库 `go.mod` 为准。
 
@@ -41,7 +41,8 @@ irm https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/ma
 | `DEVAPP_BRANCH` | 覆盖安装分支，默认 `feat/dws-devapp` |
 | `DEVAPP_SOURCE_DIR` | 使用已有源码目录安装，跳过 clone |
 | `DEVAPP_KEEP_SOURCE=1` | 保留临时源码目录，便于调试 |
-| `DEVAPP_SKIP_SKILL_SETUP=1` | 跳过自动执行 `dws skill setup --mode multi` |
+| `DEVAPP_SKIP_SKILL_SETUP=1` | 跳过自动安装 `dws` 与 `dws-devapp` skill |
+| `DEVAPP_SKILL_NAME` | 覆盖 DevApp skill 安装名称，默认 `dws-devapp` |
 | `DWS_INSTALL_DIR` | 传给底层 `scripts/install.sh`，覆盖 `dws` 安装目录 |
 | `DWS_SKILL_MODE` | 传给底层 `scripts/install.sh`，选择 `mono` 或 `multi` |
 

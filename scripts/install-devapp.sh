@@ -12,7 +12,8 @@
 #   DEVAPP_BRANCH            Branch to install. Default: feat/dws-devapp
 #   DEVAPP_SOURCE_DIR        Existing source checkout to install from.
 #   DEVAPP_KEEP_SOURCE       Set to 1 to keep the temporary source checkout.
-#   DEVAPP_SKIP_SKILL_SETUP  Set to 1 to skip automatic multi-skill setup.
+#   DEVAPP_SKIP_SKILL_SETUP  Set to 1 to skip automatic DevApp skill install.
+#   DEVAPP_SKILL_NAME        Installed DevApp skill directory/name. Default: dws-devapp
 #
 # Pass-through variables handled by scripts/install.sh:
 #   DWS_INSTALL_DIR          Binary install directory. Default: ~/.local/bin
@@ -28,6 +29,7 @@ BRANCH="${DEVAPP_BRANCH:-feat/dws-devapp}"
 SOURCE_DIR="${DEVAPP_SOURCE_DIR:-}"
 KEEP_SOURCE="${DEVAPP_KEEP_SOURCE:-0}"
 SKIP_SKILL_SETUP="${DEVAPP_SKIP_SKILL_SETUP:-0}"
+DEVAPP_SKILL_NAME="${DEVAPP_SKILL_NAME:-dws-devapp}"
 TMPDIR_WORK=""
 
 say() {
@@ -79,39 +81,95 @@ resolve_source_dir() {
   printf '%s\n' "$checkout"
 }
 
-installed_binary() {
-  install_dir="${DWS_INSTALL_DIR:-$HOME/.local/bin}"
-  install_name="${DWS_INSTALL_NAME:-dws}"
-  candidate="${install_dir}/${install_name}"
-  if [ -x "$candidate" ]; then
-    printf '%s\n' "$candidate"
-    return 0
-  fi
-  if command -v "$install_name" >/dev/null 2>&1; then
-    command -v "$install_name"
-    return 0
-  fi
-  return 1
+copy_skill() {
+  src="$1"
+  dest="$2"
+
+  rm -rf "$dest"
+  mkdir -p "$dest"
+  cp -R "$src/"* "$dest/" 2>/dev/null || cp -r "$src/"* "$dest/"
 }
 
-setup_multi_skills() {
-  mode="$(printf '%s' "${DWS_SKILL_MODE:-multi}" | tr '[:upper:]' '[:lower:]')"
-  if [ "$mode" != "multi" ] || [ "${DWS_NO_SKILLS:-0}" = "1" ] || [ "$SKIP_SKILL_SETUP" = "1" ]; then
+copy_devapp_skill() {
+  src="$1"
+  dest="$2"
+
+  copy_skill "$src" "$dest"
+  if [ -f "$dest/SKILL.md" ]; then
+    tmp_skill="${dest}/SKILL.md.tmp"
+    sed "s/^name: .*/name: ${DEVAPP_SKILL_NAME}/" "$dest/SKILL.md" > "$tmp_skill"
+    mv "$tmp_skill" "$dest/SKILL.md"
+  fi
+}
+
+install_skill_to_agent_homes() {
+  src="$1"
+  skill_name="$2"
+  kind="$3"
+  installed=0
+  idx=0
+
+  for agent_dir in \
+    ".agents/skills" \
+    ".claude/skills" \
+    ".cursor/skills" \
+    ".qoder/skills" \
+    ".qoderwork/skills" \
+    ".gemini/skills" \
+    ".codex/skills" \
+    ".github/skills" \
+    ".windsurf/skills" \
+    ".augment/skills" \
+    ".cline/skills" \
+    ".amp/skills" \
+    ".kiro/skills" \
+    ".trae/skills" \
+    ".openclaw/skills" \
+    ".hermes/skills"
+  do
+    base_dir="$HOME/$agent_dir"
+    parent_gate="$(dirname "$base_dir")"
+    if [ "$idx" -gt 0 ] && [ ! -e "$parent_gate" ]; then
+      idx=$((idx + 1))
+      continue
+    fi
+
+    dest="$base_dir/$skill_name"
+    if [ "$kind" = "devapp" ]; then
+      copy_devapp_skill "$src" "$dest"
+    else
+      copy_skill "$src" "$dest"
+    fi
+    say "✅ Skill installed: ~/${agent_dir}/${skill_name}"
+    installed=$((installed + 1))
+    idx=$((idx + 1))
+  done
+
+  if [ "$installed" -eq 0 ]; then
+    dest="$HOME/.agents/skills/$skill_name"
+    if [ "$kind" = "devapp" ]; then
+      copy_devapp_skill "$src" "$dest"
+    else
+      copy_skill "$src" "$dest"
+    fi
+    say "✅ Skill installed: ~/.agents/skills/${skill_name}"
+  fi
+}
+
+install_devapp_skills() {
+  if [ "${DWS_NO_SKILLS:-0}" = "1" ] || [ "$SKIP_SKILL_SETUP" = "1" ]; then
     return 0
   fi
 
-  bin_path="$(installed_binary || true)"
-  if [ -z "$bin_path" ]; then
-    say ""
-    say "Could not find installed dws binary; skip automatic skill setup."
-    say "Run later:"
-    say "  dws skill setup --mode multi --source ${source_root} --yes"
-    return 0
-  fi
+  dws_skill_src="$source_root/skills/mono"
+  devapp_skill_src="$source_root/skills/multi/dingtalk-dev"
+  [ -f "$dws_skill_src/SKILL.md" ] || err "dws skill source not found: ${dws_skill_src}"
+  [ -f "$devapp_skill_src/SKILL.md" ] || err "DevApp skill source not found: ${devapp_skill_src}"
 
   say ""
-  say "Installing DevApp agent skills from source..."
-  "$bin_path" skill setup --mode multi --source "$source_root" --yes
+  say "Installing agent skills: dws + ${DEVAPP_SKILL_NAME}"
+  install_skill_to_agent_homes "$dws_skill_src" "dws" "dws"
+  install_skill_to_agent_homes "$devapp_skill_src" "$DEVAPP_SKILL_NAME" "devapp"
 }
 
 main() {
@@ -124,11 +182,16 @@ main() {
 
   source_root="$(resolve_source_dir)"
 
-  say ""
-  say "Installing dws from DevApp preview source..."
-  DWS_VERSION=latest DWS_SKILL_MODE="${DWS_SKILL_MODE:-multi}" sh "$source_root/scripts/install.sh"
+  if [ "${DWS_SKILLS_ONLY:-0}" = "1" ]; then
+    say ""
+    say "Skipping binary install because DWS_SKILLS_ONLY=1."
+  else
+    say ""
+    say "Installing dws from DevApp preview source..."
+    DWS_VERSION=latest DWS_NO_SKILLS=1 sh "$source_root/scripts/install.sh"
+  fi
 
-  setup_multi_skills
+  install_devapp_skills
 
   say ""
   say "DevApp next steps:"
