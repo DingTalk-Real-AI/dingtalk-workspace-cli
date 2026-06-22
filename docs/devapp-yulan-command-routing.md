@@ -953,7 +953,7 @@ real model is "list subscribable events + subscribe/unsubscribe events by
 
 | CLI | MCP tool | Notes |
 | --- | --- | --- |
-| `dev app event list` | `list_dev_app_events` | Args `unifiedAppId/cursor/pageSize`; returns `pushType=STREAM` + `events[]` (`eventCode`/`eventName`/`subscribed`) + `hasMore/nextCursor/pageSize`. Read. |
+| `dev app event list` | `list_dev_app_events` | Args `unifiedAppId/keyword/cursor/pageSize`; `keyword` searches `eventCode` or `eventName`; returns `pushType=STREAM` + `events[]` (`eventCode`/`eventName`/`subscribed`) + `hasMore/nextCursor/pageSize`. Read. |
 | `dev app event subscribe` | `subscribe_dev_app_events` | Args `unifiedAppId` + required array `eventCodes`. Returns `success/operation/eventCodes/needsPublish/versionRequiredAction`; failures include `errorCode/errorMsg/reason/retryable/action` such as `STREAM_NOT_CONNECTED`. Write (`--dry-run`/`--yes`). |
 | `dev app event unsubscribe` | `unsubscribe_dev_app_events` | Args `unifiedAppId` + required array `eventCodes`. Returns `success/operation/eventCodes/needsPublish/versionRequiredAction`; failures include `errorCode/errorMsg/reason/retryable/action`. Write. |
 

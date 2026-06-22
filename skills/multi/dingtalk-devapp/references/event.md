@@ -8,9 +8,10 @@
 
 ```bash
 dws dev app event list --unified-app-id <unifiedAppId> --page-size 20 --format json
+dws dev app event list --unified-app-id <unifiedAppId> --keyword 通讯录 --page-size 20 --format json
 ```
 
-MCP tool: `list_dev_app_events`。返回 `pushType=STREAM`、`events[]`、`hasMore`、`nextCursor`、`pageSize`；`hasMore=true` 时下一页继续传 `--cursor <nextCursor>`。`events[]` 每项含：
+MCP tool: `list_dev_app_events`。可选 `--keyword` 按事件码或事件名称搜索。返回 `pushType=STREAM`、`events[]`、`hasMore`、`nextCursor`、`pageSize`；`hasMore=true` 时下一页继续传 `--cursor <nextCursor>`。`events[]` 每项含：
 
 | 字段 | 含义 |
 |------|------|
@@ -43,6 +44,7 @@ MCP tool: `unsubscribe_dev_app_events`（入参 `unifiedAppId` + 必填数组 `e
 | CLI | MCP | 必填 | 说明 |
 |-----|-----|------|------|
 | `--unified-app-id` | `unifiedAppId` | 是 | 统一应用 ID |
+| `--keyword` | `keyword` | list 可选 | 事件搜索关键词，匹配事件码或事件名称 |
 | `--cursor` | `cursor` | list 可选 | 服务端返回的下一页游标 |
 | `--page-size` | `pageSize` | list 可选 | 单页数量 |
 | `--event-codes` | `eventCodes` | subscribe/unsubscribe 必填 | 事件码列表，逗号分隔，取自 `event list` |

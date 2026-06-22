@@ -546,6 +546,24 @@ func TestDevAppDeleteConfirmName(t *testing.T) {
 // TestDevAppEventSubscribeUsesEventCodes locks the param contract: the server's
 // subscribe/unsubscribe tools (plural: subscribe_dev_app_events) read eventCodes
 // as an ARRAY — real-device confirmed against the updated MCP schema.
+func TestDevAppEventListForwardsKeyword(t *testing.T) {
+	runner := &captureRunner{}
+	root := newDevAppTestRoot(runner)
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"dev", "app", "event", "list", "--unified-app-id", "u-1", "--keyword", "通讯录"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
+	}
+	if runner.last.Tool != devAppEventListTool {
+		t.Fatalf("Tool = %q, want %q", runner.last.Tool, devAppEventListTool)
+	}
+	if got := runner.last.Params["keyword"]; got != "通讯录" {
+		t.Fatalf("keyword = %#v, want 通讯录", got)
+	}
+}
+
 func TestDevAppEventSubscribeUsesEventCodes(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
