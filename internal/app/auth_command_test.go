@@ -202,13 +202,16 @@ func TestAuthLoginPostLoginTUIModeRespectsRecommendAndFormat(t *testing.T) {
 		}
 	})
 
-	t.Run("without recommend shows tui for interactive default login", func(t *testing.T) {
+	t.Run("without recommend defaults to recommend auth without tui", func(t *testing.T) {
 		root := newRoot(t)
-		if !authLoginShouldShowPostLoginTUIForTerminal(root, "json", false, true) {
-			t.Fatal("default interactive login without --recommend should show post-login TUI")
+		if authLoginShouldShowPostLoginTUIForTerminal(root, "json", false, true) {
+			t.Fatal("default interactive login must not show post-login TUI")
+		}
+		if !authLoginShouldUseDefaultRecommendAuthorizationForTerminal(root, "json", false, true) {
+			t.Fatal("default interactive login should use recommend authorization")
 		}
 		if !authLoginShouldUseHumanAuthorizationModeForTerminal(root, "json", true, true) {
-			t.Fatal("default interactive post-login TUI flow should use human authorization flow")
+			t.Fatal("default interactive recommend authorization should use human authorization flow")
 		}
 	})
 
@@ -220,18 +223,24 @@ func TestAuthLoginPostLoginTUIModeRespectsRecommendAndFormat(t *testing.T) {
 		if authLoginShouldShowPostLoginTUIForTerminal(root, "json", false, true) {
 			t.Fatal("explicit --format json must not show post-login TUI")
 		}
+		if authLoginShouldUseDefaultRecommendAuthorizationForTerminal(root, "json", false, true) {
+			t.Fatal("explicit --format json must not default to recommend authorization")
+		}
 		if authLoginShouldUseHumanAuthorizationModeForTerminal(root, "json", true, true) {
 			t.Fatal("explicit --format json must keep machine-readable authorization flow")
 		}
 	})
 
-	t.Run("table without recommend shows tui", func(t *testing.T) {
+	t.Run("table without recommend defaults to recommend auth", func(t *testing.T) {
 		root := newRoot(t)
 		if err := root.PersistentFlags().Set("format", "table"); err != nil {
 			t.Fatalf("set format: %v", err)
 		}
-		if !authLoginShouldShowPostLoginTUIForTerminal(root, "table", false, true) {
-			t.Fatal("table format should show post-login TUI without --recommend")
+		if authLoginShouldShowPostLoginTUIForTerminal(root, "table", false, true) {
+			t.Fatal("table format must not show post-login TUI without --recommend")
+		}
+		if !authLoginShouldUseDefaultRecommendAuthorizationForTerminal(root, "table", false, true) {
+			t.Fatal("table format should default to recommend authorization")
 		}
 		if !authLoginShouldUseHumanAuthorizationModeForTerminal(root, "table", true, true) {
 			t.Fatal("table format should use human authorization flow in an interactive terminal")
@@ -242,6 +251,9 @@ func TestAuthLoginPostLoginTUIModeRespectsRecommendAndFormat(t *testing.T) {
 		root := newRoot(t)
 		if authLoginShouldShowPostLoginTUIForTerminal(root, "json", false, false) {
 			t.Fatal("non-interactive login should skip post-login TUI")
+		}
+		if authLoginShouldUseDefaultRecommendAuthorizationForTerminal(root, "json", false, false) {
+			t.Fatal("non-interactive login should not default to recommend authorization")
 		}
 		if authLoginShouldUseHumanAuthorizationModeForTerminal(root, "json", true, false) {
 			t.Fatal("non-interactive login should keep machine-readable authorization flow")
@@ -356,7 +368,7 @@ func TestAuthLoginRecommendSkipsPostLoginTUI(t *testing.T) {
 	}
 }
 
-func TestAuthLoginWithoutRecommendTUIRunsAfterLoginTokenSaved(t *testing.T) {
+func TestAuthLoginDefaultRecommendRunsAfterLoginTokenSaved(t *testing.T) {
 	t.Setenv(keychain.DisableKeychainEnv, "1")
 	t.Setenv(keychain.StorageDirEnv, t.TempDir())
 	configDir := t.TempDir()
@@ -376,41 +388,36 @@ func TestAuthLoginWithoutRecommendTUIRunsAfterLoginTokenSaved(t *testing.T) {
 	})
 	authLoginInteractiveTerminal = func() bool { return true }
 
-	var sawTokenBeforeTUI bool
+	var sawTokenBeforePlan bool
 	authLoginGuideActionSelector = func() (authLoginGuideAction, error) {
-		token, err := authpkg.LoadTokenData(configDir)
-		if err != nil {
-			t.Fatalf("LoadTokenData before TUI error = %v", err)
-		}
-		if token.AccessToken != "login-token" {
-			t.Fatalf("AccessToken before TUI = %q, want login-token", token.AccessToken)
-		}
-		sawTokenBeforeTUI = true
-		return authLoginGuideDirectCLI, nil
+		t.Fatal("default recommend must not call the post-login guide selector")
+		return "", nil
 	}
 	authLoginGuideActionApplier = func(*cobra.Command, string, authLoginGuideAction) error {
+		t.Fatal("default recommend must not apply a post-login guide action")
 		return nil
 	}
 	loginRecommendScopeModeSelector = func() (pat.LoginRecommendScopeMode, error) {
-		if !sawTokenBeforeTUI {
-			t.Fatal("scope selector ran before login token was observed")
-		}
-		return pat.LoginRecommendScopeAll, nil
+		t.Fatal("default recommend must not call the scope-mode TUI")
+		return "", nil
 	}
 	loginRecommendProductSelector = func(products []pat.LoginRecommendProduct) ([]string, error) {
-		if !sawTokenBeforeTUI {
-			t.Fatal("product selector ran before login token was observed")
-		}
-		if len(products) != 1 || products[0].ProductCode != "calendar" {
-			t.Fatalf("selector products = %+v, want calendar", products)
-		}
-		return []string{"calendar"}, nil
+		t.Fatal("default recommend must not call the product-domain TUI")
+		return nil, nil
 	}
 
 	fake := &authLoginRecommendSequenceCaller{responses: []string{
 		`{"success":true,"data":{"items":[{"scope":"calendar.event:read","productCode":"calendar","productName":"日历"}],"selectedScopes":["calendar.event:read"]}}`,
-		`{"success":true,"data":{"items":[{"scope":"calendar.event:read","productCode":"calendar","productName":"日历"}],"selectedScopes":["calendar.event:read"]}}`,
 		`{"success":true,"data":{"grantedScopes":["calendar.event:read"]}}`,
+	}, beforeCall: func(toolName string) {
+		token, err := authpkg.LoadTokenData(configDir)
+		if err != nil {
+			t.Fatalf("LoadTokenData before %s error = %v", toolName, err)
+		}
+		if token.AccessToken != "login-token" {
+			t.Fatalf("AccessToken before %s = %q, want login-token", toolName, token.AccessToken)
+		}
+		sawTokenBeforePlan = true
 	}}
 	cmd := newAuthLoginCommand(fake)
 	var out bytes.Buffer
@@ -421,23 +428,23 @@ func TestAuthLoginWithoutRecommendTUIRunsAfterLoginTokenSaved(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("auth login error = %v\noutput:\n%s", err, out.String())
 	}
-	if !sawTokenBeforeTUI {
-		t.Fatal("post-login TUI selector was not called")
+	if !sawTokenBeforePlan {
+		t.Fatal("recommend authorization plan was not called after token save")
 	}
-	if len(fake.tools) != 3 {
-		t.Fatalf("CallTool count = %d, want initial plan + selected plan + grant", len(fake.tools))
+	if len(fake.tools) != 2 {
+		t.Fatalf("CallTool count = %d, want plan + grant", len(fake.tools))
 	}
-	if fake.tools[0] != "pat.batch_plan" || fake.tools[1] != "pat.batch_plan" || fake.tools[2] != "pat.batch_grant" {
-		t.Fatalf("tool sequence = %v, want plan, plan, grant", fake.tools)
+	if fake.tools[0] != "pat.batch_plan" || fake.tools[1] != "pat.batch_grant" {
+		t.Fatalf("tool sequence = %v, want plan, grant", fake.tools)
 	}
 	if got := fake.args[0]["recommend"]; got != true {
-		t.Fatalf("initial product discovery plan recommend = %#v, want true", got)
+		t.Fatalf("default recommend plan recommend = %#v, want true", got)
 	}
-	if got := fake.args[1]["recommend"]; got != false {
-		t.Fatalf("selected all-scope plan recommend = %#v, want false", got)
-	}
-	if got := fake.args[1]["productCodes"]; !stringSliceArgEqual(got, []string{"calendar"}) {
-		t.Fatalf("selected all-scope plan productCodes = %#v, want calendar", got)
+	if got := fake.args[0]["productCodes"]; got != nil {
+		codes, ok := got.([]string)
+		if !ok || len(codes) != 0 {
+			t.Fatalf("default recommend plan productCodes = %#v, want no concrete product codes", got)
+		}
 	}
 }
 
@@ -448,12 +455,16 @@ func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 type authLoginRecommendSequenceCaller struct {
-	responses []string
-	tools     []string
-	args      []map[string]any
+	responses  []string
+	tools      []string
+	args       []map[string]any
+	beforeCall func(toolName string)
 }
 
 func (f *authLoginRecommendSequenceCaller) CallTool(_ context.Context, _ string, toolName string, args map[string]any) (*edition.ToolResult, error) {
+	if f.beforeCall != nil {
+		f.beforeCall(toolName)
+	}
 	f.tools = append(f.tools, toolName)
 	copiedArgs := make(map[string]any, len(args))
 	for key, value := range args {
