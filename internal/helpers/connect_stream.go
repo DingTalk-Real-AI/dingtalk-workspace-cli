@@ -539,7 +539,14 @@ var agentSpecs = map[string]agentSpec{
 	"gemini": {app: "Gemini CLI", bins: []string{"gemini"}, argvTail: []string{"-p"},
 		install: []string{"npm", "i", "-g", "@google/gemini-cli"}, hint: "npm i -g @google/gemini-cli",
 		modelFlag: "-m"},
-	"opencode": {app: "opencode", bins: []string{"opencode"}, argvTail: []string{"run"},
+	// --pure runs opencode without external plugins, mirroring claudecode's
+	// `--setting-sources project --strict-mcp-config` neutralisation above: the
+	// bot must answer in a clean environment, not inherit the operator's
+	// interactive opencode plugins. Without it, plugin suites that swap the
+	// global default agent at runtime (e.g. OhMyOpenCode's rotating codenames)
+	// break headless `opencode run` — it crashes resolving a default agent that
+	// no longer exists, and the crash trace gets sent back as the reply.
+	"opencode": {app: "opencode", bins: []string{"opencode"}, argvTail: []string{"run", "--pure"},
 		install: []string{"npm", "i", "-g", "opencode-ai"}, hint: "npm i -g opencode-ai",
 		modelFlag: "-m"},
 	// desktop-app-bundled CLIs — hint only (can't silently install a GUI app); the

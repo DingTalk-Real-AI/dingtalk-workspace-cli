@@ -47,10 +47,27 @@ detect_arch() {
 
 # GitHub's /releases/latest excludes prereleases, so read the releases list
 # (newest first) and take the top tag — the dev preview is published as a prerelease.
+# Prefer `gh` CLI (authenticated, 5 000 req/h) over raw curl (60 req/h, easily rate-limited).
 resolve_version() {
   [ -n "$DEVAPP_VERSION" ] && return 0
-  DEVAPP_VERSION="$(curl -fsSL "https://api.github.com/repos/${DEVAPP_REPO}/releases?per_page=1" 2>/dev/null \
-    | grep -m1 '"tag_name"' | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')"
+
+  # Try gh CLI first (authenticated, much higher rate limit)
+  if command -v gh >/dev/null 2>&1; then
+    DEVAPP_VERSION="$(gh api "repos/${DEVAPP_REPO}/releases?per_page=1" --jq '.[0].tag_name' 2>/dev/null || true)"
+    [ -n "$DEVAPP_VERSION" ] && return 0
+  fi
+
+  # Fallback: unauthenticated curl (may be rate-limited)
+  _tmpfile="$(mktemp)"
+  _http_code="$(curl -sSL -o "$_tmpfile" -w '%{http_code}' "https://api.github.com/repos/${DEVAPP_REPO}/releases?per_page=1" 2>/dev/null || echo "000")"
+
+  if [ "$_http_code" = "403" ] || [ "$_http_code" = "429" ]; then
+    rm -f "$_tmpfile"
+    err "GitHub API rate limit hit (HTTP ${_http_code}). Install the GitHub CLI (gh) or set DEVAPP_VERSION explicitly."
+  fi
+
+  DEVAPP_VERSION="$(grep -m1 '"tag_name"' "$_tmpfile" | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')"
+  rm -f "$_tmpfile"
   [ -n "$DEVAPP_VERSION" ] || err "No release found on ${DEVAPP_REPO}. Push a dev tag (e.g. v1.0.39-dev.1) to trigger CI, or set DEVAPP_VERSION."
 }
 
