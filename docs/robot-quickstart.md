@@ -13,7 +13,7 @@
 ```bash
 ARCH=$(uname -m | sed 's/x86_64/amd64/')
 mkdir -p ~/.local/bin
-curl -fsSL -o /tmp/dws.tar.gz "https://github.com/PeterGuy326/dingtalk-workspace-cli/releases/latest/download/dws-darwin-${ARCH}.tar.gz"
+curl -fsSL -o /tmp/dws.tar.gz "https://github.com/wxianfeng/dingtalk-workspace-cli/releases/latest/download/dws-darwin-${ARCH}.tar.gz"
 tar xzf /tmp/dws.tar.gz -C ~/.local/bin dws
 export PATH="$HOME/.local/bin:$PATH"
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
@@ -26,14 +26,14 @@ dws version
 
 ```powershell
 New-Item -ItemType Directory -Force "$env:USERPROFILE\dws" | Out-Null
-Invoke-WebRequest -Uri "https://github.com/PeterGuy326/dingtalk-workspace-cli/releases/latest/download/dws-windows-amd64.zip" -OutFile "$env:TEMP\dws.zip"
+Invoke-WebRequest -Uri "https://github.com/wxianfeng/dingtalk-workspace-cli/releases/latest/download/dws-windows-amd64.zip" -OutFile "$env:TEMP\dws.zip"
 Expand-Archive -Path "$env:TEMP\dws.zip" -DestinationPath "$env:USERPROFILE\dws" -Force
 [Environment]::SetEnvironmentVariable("Path", "$env:Path;$env:USERPROFILE\dws", "User")
 ```
 
 然后**重新打开一个 PowerShell 窗口**，执行 `dws version` 确认。
 
-> 两个平台装好后都应显示形如 `dws version v1.0.6x-dws-devapp` 的版本号（能打印版本即安装成功，具体数字以最新发布为准）。其他平台（Linux / Windows ARM）的安装包在 [最新 Release 页面](https://github.com/PeterGuy326/dingtalk-workspace-cli/releases/latest)下载。
+> 两个平台装好后都应显示形如 `dws version v1.0.6x-dws-devapp` 的版本号（能打印版本即安装成功，具体数字以最新发布为准）。其他平台（Linux / Windows ARM）的安装包在 [最新 Release 页面](https://github.com/wxianfeng/dingtalk-workspace-cli/releases/latest)下载。
 
 ### 登录钉钉
 
@@ -45,18 +45,22 @@ dws auth login
 
 ## 第二步：创建机器人
 
-一条命令建号（名字、描述可以改成你自己的）：
+建号是异步的，两步（名字、描述可以改成你自己的）：
 
 ```bash
-dws devapp robot create --app-name 我的智能体 --robot-name 小助手 --desc "群内答疑" --yes --format json
+# 1) 提交建号任务，记下返回的 taskId
+dws dev app robot submit --name 我的智能体 --robot-name 小助手 --desc "群内答疑" --yes --format json
+
+# 2) 用上一步的 taskId 查结果，直到 status 变成 SUCCESS（还是 WAITING 就过几秒再查一次）
+dws dev app robot result --task-id 上一步返回的taskId --format json
 ```
 
-返回结果里的 `clientId` 和 `clientSecret` **保存好**，下一步要用。
+`status` 变成 `SUCCESS` 后，返回结果里的 `clientId` 和 `clientSecret` **保存好**，下一步要用。
 
 ## 第三步：把机器人接上你本地的 AI
 
 ```bash
-dws devapp robot connect --channel auto --robot-client-id dingxxxxxxxxxxxxxxxx --robot-client-secret yyyyyyyyyyyyyyyyyyyy
+dws dev connect --channel auto --robot-client-id dingxxxxxxxxxxxxxxxx --robot-client-secret yyyyyyyyyyyyyyyyyyyy
 ```
 
 - 把 `dingxxxxxxxxxxxxxxxx` 和 `yyyyyyyyyyyyyyyyyyyy` 换成第二步返回的 `clientId` 和 `clientSecret` 的实际值
@@ -89,7 +93,7 @@ dws devapp robot connect --channel auto --robot-client-id dingxxxxxxxxxxxxxxxx -
 `--channel auto` 只认内置的几款工具（Claude Code / Codex / Qoder / Gemini 等）。如果你用的是自研的、或还没内置支持的 AI（比如网易有道龙虾 LobsterAI），用 `--agent-cmd` 把它接进来——只要它能在命令行「一次性」跑（给一段问题、把答案打到标准输出），就能接：
 
 ```bash
-dws devapp robot connect \
+dws dev connect \
   --agent-cmd "你的AI命令 一次性问答参数" \
   --robot-client-id dingxxxx --robot-client-secret yyyy
 ```
@@ -104,7 +108,7 @@ dws devapp robot connect \
 命令里残留了 `<...>` 尖括号占位符（旧版文档的写法），shell 会把尖括号当成重定向符。把占位符整体替换成实际值、不要保留尖括号，再执行。
 
 **群里 @机器人 没反应？**
-确认第三步的 `robot connect` 窗口还开着——关掉窗口机器人就下线了。
+确认第三步的 `dev connect` 窗口还开着——关掉窗口机器人就下线了。
 
 **第二步提示"当前用户没有开发者身份"？**
 创建应用需要开放平台开发者权限。请企业管理员在钉钉开放平台（open-dev.dingtalk.com）的「权限管理」中把你的账号添加为开发者，然后重试第二步。
@@ -129,4 +133,4 @@ macOS 重开一个终端窗口；Windows 重开一个 PowerShell 窗口（安装
 一句话：让机器人和终端"看到一样的东西、用一样的模型"，差距基本就抹平了。
 
 **第三步执行完，在蚂蚁钉/开放平台搜不到审批工单？**
-这是正常的，不是出错。第三步 `robot connect`（把机器人接到本地 AI）只是用现成机器人的凭证起一条连接、本地转发，**不产生任何审批工单**。会产生审批工单的是第二步「建机器人」（`robot create`），由平台/管理员审批。所以第三步之后搜不到工单是预期内的。
+这是正常的，不是出错。第三步 `dev connect`（把机器人接到本地 AI）只是用现成机器人的凭证起一条连接、本地转发，**不产生任何审批工单**。会产生审批工单的是第二步「建机器人」（`dev app robot submit`），由平台/管理员审批。所以第三步之后搜不到工单是预期内的。

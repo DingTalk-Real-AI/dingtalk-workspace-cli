@@ -52,14 +52,14 @@ func TestDirectRuntimeEndpoint_DevappEnvOverrideWithoutRegistry(t *testing.T) {
 	withCleanDynamicRegistry(t)
 	t.Setenv("DINGTALK_DEVAPP_MCP_URL", "https://example.test/server/devapp")
 
-	assertEndpoint(t, "devapp", "list_open_dev_apps_by_condition", "https://example.test/server/devapp")
+	assertEndpoint(t, "devapp", "list_dev_app", "https://example.test/server/devapp")
 }
 
 func TestDirectRuntimeEndpoint_DevappEnvOverridePreservesQuery(t *testing.T) {
 	withCleanDynamicRegistry(t)
 	t.Setenv("DINGTALK_DEVAPP_MCP_URL", "https://example.test/server/devapp?key=secret")
 
-	assertEndpoint(t, "devapp", "list_open_dev_apps_by_condition", "https://example.test/server/devapp?key=secret")
+	assertEndpoint(t, "devapp", "list_dev_app", "https://example.test/server/devapp?key=secret")
 }
 
 func TestDirectRuntimeEndpoint_DevappDynamicServerDoesNotOverrideHardcoded(t *testing.T) {
@@ -74,7 +74,7 @@ func TestDirectRuntimeEndpoint_DevappDynamicServerDoesNotOverrideHardcoded(t *te
 		},
 	})
 
-	assertEndpoint(t, "devapp", "list_open_dev_apps_by_condition", devappMCPEndpoint())
+	assertEndpoint(t, "devapp", "list_dev_app", devappMCPEndpoint())
 }
 
 func TestDirectRuntimeEndpoint_DevappEditionSupplementDoesNotOverrideHardcoded(t *testing.T) {
@@ -95,7 +95,7 @@ func TestDirectRuntimeEndpoint_DevappEditionSupplementDoesNotOverrideHardcoded(t
 	})
 	t.Cleanup(func() { edition.Override(prev) })
 
-	assertEndpoint(t, "devapp", "list_open_dev_apps_by_condition", devappMCPEndpoint())
+	assertEndpoint(t, "devapp", "list_dev_app", devappMCPEndpoint())
 }
 
 func TestDirectRuntimeEndpoint_DevappEditionStaticDoesNotOverrideHardcoded(t *testing.T) {
@@ -116,7 +116,7 @@ func TestDirectRuntimeEndpoint_DevappEditionStaticDoesNotOverrideHardcoded(t *te
 	})
 	t.Cleanup(func() { edition.Override(prev) })
 
-	assertEndpoint(t, "devapp", "list_open_dev_apps_by_condition", devappMCPEndpoint())
+	assertEndpoint(t, "devapp", "list_dev_app", devappMCPEndpoint())
 }
 
 func TestDirectRuntimeEndpoint_DevappEnvOverrideWinsOverEditionSupplement(t *testing.T) {
@@ -137,7 +137,7 @@ func TestDirectRuntimeEndpoint_DevappEnvOverrideWinsOverEditionSupplement(t *tes
 	})
 	t.Cleanup(func() { edition.Override(prev) })
 
-	assertEndpoint(t, "devapp", "list_open_dev_apps_by_condition", "https://example.test/server/devapp-env")
+	assertEndpoint(t, "devapp", "list_dev_app", "https://example.test/server/devapp-env")
 }
 
 func TestDirectRuntimeEndpoint_DefaultPATFallbackWhenRegistryMissing(t *testing.T) {

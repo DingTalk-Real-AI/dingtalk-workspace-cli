@@ -85,33 +85,32 @@ dws devapp
   permission search            Search permission candidates, alias over list semantics
   permission detail            Show one permission's full API coverage
   permission add               Apply permissions into current app version changes
-  permission remove            Remove one authorized permission
-  event list                   List event subscription config
-  event config                 Configure callback URL, token, aesKey, event types
+  permission remove            Remove authorized permissions
+  event list                   List subscribable events and current subscription state
+  event subscribe              Subscribe events by eventCodes
+  event unsubscribe            Unsubscribe events by eventCodes
   robot create                 Create a new agent app + robot synchronously
   robot submit                 Submit async robot-create task (supports retry by taskId)
   robot result                 Query async robot-create task result
   robot get                    Get robot config of an existing app
-  robot config                 Create robot config on an existing app
-  robot update                 Update robot config
+  robot config                 Create or update robot config on an existing app
   robot enable                 Enable / re-enable robot capability
-  robot offline                Offline robot capability
+  robot disable                Disable robot capability
   version create               Save app version
-  version list                 List app versions (paged)
+  version list                 List app versions (cursor paged)
   version get                  Get one version detail
   version check-approval       Precheck publish approval requirements (no publish)
   version publish              Submit publish, possibly creating approval
   version status               Poll publish and approval status
 ```
 
-Robot and version commands are hardcoded helper leaves over the `op-app` MCP
-server (same pinned endpoint as the rest of `devapp`, no service discovery).
-`event` is still spec-only and reports unsupported at runtime.
+Robot, version, and event commands are hardcoded helper leaves over the `op-app`
+MCP server (same pinned endpoint as the rest of `devapp`, no service discovery).
 
 Open-source examples should use `--format json` for agent consumption:
 
 ```bash
-dws devapp list --name DemoApp --page 1 --page-size 20 --format json
+dws devapp list --name DemoApp --page-size 20 --format json
 dws devapp get --unified-app-id UNIFIED_APP_ID --format json
 dws devapp permission list --unified-app-id UNIFIED_APP_ID --format json
 ```
@@ -129,24 +128,24 @@ Do not send confirmation fields such as `confirmCreate`, `confirmUpdate`, `confi
 
 | Area | CLI command | MCP tool | Backend HSF facade | Current backend status | Open-source DWS status |
 | --- | --- | --- | --- | --- | --- |
-| App query | `devapp list` | `list_open_dev_apps_by_condition` | `OpenInnerAppQueryFacade.listByCondition` | Implemented | Hardcoded helper |
-| App detail | `devapp get` | `get_open_dev_app_detail` | `OpenInnerAppQueryFacade.getDetail` | Implemented | Hardcoded helper |
-| App create | `devapp create` | `create_inner_app` | `OpenInnerAppManageFacade.create` | Implemented | Hardcoded helper |
-| App update | `devapp update` | `update_inner_app` | `OpenInnerAppManageFacade.update` | Implemented | Hardcoded helper |
-| App delete | `devapp delete` | `delete_inner_app` | `OpenInnerAppManageFacade.delete` | Implemented | Hardcoded helper |
-| Credentials | `devapp credentials get` | `get_open_dev_app_credentials` | `OpenInnerAppQueryFacade.getCredentials` | Implemented | Hardcoded helper |
-| Web app | `devapp webapp get/config` | `get_webapp_config`/`set_webapp_config` | Webapp facade | Implemented | Hardcoded helper; verified `config` then `get` returns `agentId/h5PageType/homepageLink/pcHomepageLink/ompLink`; before config, `get` may only return `agentId`. |
-| Permission list | `devapp permission list/search/detail` | `list_open_dev_app_permissions` | `OpenInnerAppPermissionFacade.list` | Implemented | Hardcoded helper |
-| Permission apply | `devapp permission add` | `apply_open_dev_app_permissions` | `OpenInnerAppPermissionFacade.apply` | Implemented | Hardcoded helper |
-| Permission remove | `devapp permission remove` | `remove_open_dev_app_permission` | `OpenInnerAppPermissionFacade.remove` | Implemented | Hardcoded helper |
-| Events | `devapp event list/config` | `list/config_open_dev_app_events` | Event facade pending | Pending | Spec only |
-| Robot create | `devapp robot create/submit/result` | `submit_robot_create_task`/`query_robot_create_result` (sync `create_dingtalk_robot` broken server-side, see issue #35) | Implemented | Hardcoded helper |
-| Robot config | `devapp robot get/config/update/enable/offline` | `get/create/update_open_dev_app_robot_config`, `enable/offline_open_dev_app_robot` | Implemented | Hardcoded helper |
-| Version | `devapp version create/list/get/check-approval/publish/status` | `create/list_open_dev_app_versions`, `get_open_dev_app_version_detail/status`, `publish_open_dev_app_version` | Implemented | Hardcoded helper |
+| App query | `devapp list` | `list_dev_app` | `OpenInnerAppQueryFacade.listByCondition` | Implemented | Hardcoded helper |
+| App detail | `devapp get` | `get_dev_app` | `OpenInnerAppQueryFacade.getDetail` | Implemented | Hardcoded helper |
+| App create | `devapp create` | `create_dev_app` | `OpenInnerAppManageFacade.create` | Implemented | Hardcoded helper |
+| App update | `devapp update` | `update_dev_app` | `OpenInnerAppManageFacade.update` | Implemented | Hardcoded helper |
+| App delete | `devapp delete` | `delete_dev_app` | `OpenInnerAppManageFacade.delete` | Implemented | Hardcoded helper |
+| Credentials | `devapp credentials get` | `get_dev_app_credentials` | `OpenInnerAppQueryFacade.getCredentials` | Implemented | Hardcoded helper |
+| Web app | `devapp webapp get/config` | `get_extension_webapp_config`/`set_extension_webapp_config` | Webapp facade | Implemented | Hardcoded helper; locator field is `unifiedAppId`; config fields are `h5PageType/homepageUrl/pcHomepageUrl/ompUrl`. |
+| Permission list | `devapp permission list/search/detail` | `list_dev_app_permissions` | `OpenInnerAppPermissionFacade.list` | Implemented | Hardcoded helper |
+| Permission apply | `devapp permission add` | `apply_dev_app_permissions` | `OpenInnerAppPermissionFacade.apply` | Implemented | Hardcoded helper |
+| Permission remove | `devapp permission remove` | `remove_dev_app_permissions` | `OpenInnerAppPermissionFacade.remove` | Implemented | Hardcoded helper |
+| Events | `devapp event list/subscribe/unsubscribe` | `list_dev_app_events`, `subscribe_dev_app_events`, `unsubscribe_dev_app_events` | Implemented | Hardcoded helper |
+| Robot create | `devapp robot create/submit/result` | `create_dingtalk_robot`/`submit_robot_create_task`/`query_robot_create_result` | Implemented | Hardcoded helper |
+| Robot config | `devapp robot get/config/enable/disable` | `get_extension_robot_config`, `set_extension_robot_config`, `enable_dev_app_robot`, `disable_dev_app_robot` | Implemented | Hardcoded helper |
+| Version | `devapp version create/list/get/check-approval/publish/status` | `create_dev_app_version`, `list_dev_app_versions`, `get_dev_app_version_detail`, `publish_dev_app_version`, `get_dev_app_version_status` | Implemented | Hardcoded helper |
 
-P0 for yulan is app CRUD, permissions, credentials, and web app config. Robot
-and version are now implemented as hardcoded helper leaves over the same
-`op-app` MCP server; events remain a pending backend slice.
+P0 for yulan is app CRUD, permissions, credentials, and web app config. Robot,
+version, and event subscription are now all implemented as hardcoded helper
+leaves over the same `op-app` MCP server.
 
 ### 3.1 P0 RPC Contract
 
@@ -180,36 +179,32 @@ MCP output configuration should keep the wrapper fields and configure success as
 `ServiceResult.success == true`. DWS/Agent normalization can add `ok`, `reason`,
 `summary`, and `nextAction`, but raw `errorCode/errorMsg` must remain visible.
 
+Naming convention:
+
+- Public CLI flags use user-facing names: `--name`, `--desc`, `--icon`, `--homepage-url`.
+- MCP app create/update use the current backend request field names: `name`, `desc`, `icon`.
+- MCP app list/detail use the simplified locator/search fields: `unifiedAppId`, `appKey`, `name`.
+- The CLI helper keeps public flags stable, for example `--name` -> `name` for create/update/list/detail.
+
 ### 3.2 P0 Tool Contracts
 
-#### list_open_dev_apps_by_condition
+#### list_dev_app
 
 | Item | Contract |
 | --- | --- |
 | CLI | `dws devapp list` |
 | HSF facade | `OpenInnerAppQueryFacade.listByCondition` |
 | Request shape | One object with system context and optional list filters. |
-| Required public fields | None; default `currentPage=1`, `pageSize=20`. |
+| Required public fields | None; default `pageSize=20`. |
 | Identity source | `corpId/userId` from MCP system context. |
 
 Input fields:
 
 | Field | Type | CLI flag | Required | Notes |
 | --- | --- | --- | --- | --- |
-| `currentPage` | number | `--page` | no | 1-based page number. |
 | `pageSize` | number | `--page-size` | no | Default 20; cap by backend. |
-| `appName` | string | `--name` | no | App name keyword. |
-| `agentId` | number | `--agent-id` | no | Exact DingTalk app agentId. |
-| `appId` | number | `--app-id` | no | Compatible app id. |
-| `appKey` | string | `--app-key` | no | DingTalk appKey/clientId. |
-| `customKey` | string | `--custom-key` | no | Custom key. |
-| `appGroupId` | number | `--app-group-id` | no | App group id. |
-| `creator` | string | `--creator` | no | Creator name keyword. |
-| `robotName` | string | `--robot-name` | no | Bot name keyword. |
-| `developType` | number/string | `--develop-type` | no | Use backend enum if schema exposes one. |
-| `filterCoolApp` | number/boolean | `--filter-cool-app` | no | Only expose when backend semantics are documented. |
-| `sortType` | string | `--sort` | no | Example: `gmt_modified`. |
-| `sortOrder` | string | `--order` | no | `asc` or `desc`. |
+| `cursor` | string | `--cursor` | no | Cursor from previous response; empty for first page. |
+| `name` | string | `--name` | no | App name keyword. |
 
 Normalized response:
 
@@ -217,47 +212,39 @@ Normalized response:
 {
   "ok": true,
   "operation": "app.list",
-  "page": {"currentPage": 1, "pageSize": 20, "total": 0},
+  "page": {"pageSize": 20, "nextCursor": ""},
   "apps": [
     {
       "unifiedAppId": "UNIFIED_APP_ID",
-      "appName": "DemoApp",
-      "agentId": 123456,
-      "appId": 123,
+      "name": "DemoApp",
       "appKey": "dingxxx",
-      "customKey": "custom-key",
       "creator": "Creator",
       "robotName": "BotName",
-      "gmtModified": "2026-06-05T00:00:00+08:00"
+      "modifiedAt": "2026-06-05 00:00:00"
     }
   ],
   "raw": {}
 }
 ```
 
-#### get_open_dev_app_detail
+#### get_dev_app
 
 | Item | Contract |
 | --- | --- |
 | CLI | `dws devapp get` |
 | HSF facade | `OpenInnerAppQueryFacade.getDetail` |
-| Request shape | One object with system context and one or more app locator fields. |
-| Required public fields | At least one locator. |
+| Request shape | One object with system context and `unifiedAppId`. |
+| Required public fields | `unifiedAppId`. |
 | Identity source | `corpId/userId` from MCP system context. |
 
-Locator fields:
+Locator field:
 
 | Field | Type | CLI flag | Notes |
 | --- | --- | --- | --- |
-| `unifiedAppId` | string | `--unified-app-id` | Preferred. |
-| `agentId` | number | `--agent-id` | Exact id. |
-| `appId` | number | `--app-id` | Compatible id. |
-| `appKey` | string | `--app-key` | appKey/clientId. |
-| `customKey` | string | `--custom-key` | Custom key. |
-| `appName` | string | `--name` | Fuzzy; must resolve uniquely before writes. |
+| `unifiedAppId` | string | `--unified-app-id` | Required app identity. |
 
-Detail response should include identifiers and configuration summary, but not
-full `clientSecret/appSecret`:
+Detail response may include identifiers, configuration summary, and credentials.
+Treat `clientSecret/appSecret` as sensitive values in all user-visible output:
 
 ```json
 {
@@ -265,11 +252,8 @@ full `clientSecret/appSecret`:
   "operation": "app.get",
   "app": {
     "unifiedAppId": "UNIFIED_APP_ID",
-    "appName": "DemoApp",
-    "agentId": 123456,
-    "appId": 123,
+    "name": "DemoApp",
     "appKey": "dingxxx",
-    "customKey": "custom-key",
     "developType": "internal",
     "creator": "Creator",
     "visibility": "partial_members",
@@ -280,23 +264,23 @@ full `clientSecret/appSecret`:
 }
 ```
 
-#### create_inner_app
+#### create_dev_app
 
 | Item | Contract |
 | --- | --- |
 | CLI | `dws devapp create` |
 | HSF facade | `OpenInnerAppManageFacade.create` |
 | Request shape | One object with system context and app base fields. |
-| Required public fields | `appName`; `--type` is a CLI-only guard and currently must be `internal`. |
+| Required public fields | `name`; `--type` is a CLI-only guard and currently must be `internal`. |
 | Write guard | CLI `--dry-run`, then `--yes`; no MCP confirm field. |
 
 Input fields:
 
 | Field | Type | CLI flag | Required | Notes |
 | --- | --- | --- | --- | --- |
-| `appName` | string | `--name` | yes | Enterprise internal app name. |
-| `appDesc` | string | `--desc` | no | App description. |
-| `appIcon` | string | `--icon` | no | Existing media/resource id if backend accepts it. |
+| `name` | string | `--name` | yes | Enterprise internal app name. |
+| `desc` | string | `--desc` | no | App description. |
+| `icon` | string | `--icon` | no | Existing media/resource id if backend accepts it. |
 
 Response:
 
@@ -306,8 +290,7 @@ Response:
   "operation": "app.create",
   "app": {
     "unifiedAppId": "UNIFIED_APP_ID",
-    "appName": "DemoApp",
-    "agentId": 123456,
+    "name": "DemoApp",
     "appKey": "dingxxx"
   },
   "nextAction": "run devapp get or configure permissions",
@@ -315,7 +298,7 @@ Response:
 }
 ```
 
-#### update_inner_app
+#### update_dev_app
 
 | Item | Contract |
 | --- | --- |
@@ -325,23 +308,23 @@ Response:
 | Required public fields | One app locator and at least one changed field. |
 | Write guard | CLI `--dry-run`, then `--yes`; no MCP confirm field. |
 
-Locator fields are the same as `get_open_dev_app_detail`, but the Agent should
+Locator fields are the same as `get_dev_app`, but the Agent should
 prefer `unifiedAppId` after resolving a unique app.
 
 Update fields:
 
 | Field | Type | CLI flag | Notes |
 | --- | --- | --- | --- |
-| `appName` | string | `--name` | New app name. |
-| `appDesc` | string | `--desc` | New app description. |
-| `appIcon` | string | `--icon` | New icon resource id if backend accepts it. |
+| `name` | string | `--name` | New app name. |
+| `desc` | string | `--desc` | New app description. |
+| `icon` | string | `--icon` | New icon resource id if backend accepts it. |
 | `international` | object/string | `--international` | Only expose when schema describes the shape. |
 | `supportHarmony` | boolean | `--support-harmony` | Harmony support switch if backend exposes it. |
 
 Response should return the updated app summary plus a `changedFields` array when
 available.
 
-#### delete_inner_app
+#### delete_dev_app
 
 | Item | Contract |
 | --- | --- |
@@ -355,28 +338,28 @@ The Agent must display the resolved app summary before executing delete with
 `--yes`. The response should include `deleted=true`, the app summary, and raw
 backend fields.
 
-#### list_open_dev_app_permissions
+#### list_dev_app_permissions
 
 | Item | Contract |
 | --- | --- |
 | CLI | `dws devapp permission list/search/detail` |
 | HSF facade | `OpenInnerAppPermissionFacade.list` |
 | Request shape | One object with system context, app locator, and optional filters. |
-| Required public fields | One app locator. |
+| Required public fields | `unifiedAppId`. |
 | Web semantics | Equivalent to grouped `scope/list` for APP and SNS scopes. |
 
 Input fields:
 
 | Field | Type | CLI flag | Required | Notes |
 | --- | --- | --- | --- | --- |
-| `unifiedAppId` | string | `--unified-app-id` | one locator | Preferred. |
-| `agentId` | number | `--agent-id` | one locator | Compatible. |
+| `unifiedAppId` | string | `--unified-app-id` | yes | Unified app id. |
 | `keyword` | string | `--keyword` | no | Maps to Web `key`. |
 | `apiStatus` | string | `--api-status` | no | Web `apiStatus` filter. |
 | `authStatus` | string | `--status` | no | `ALL/AUTHED/UNAUTHED`, post-filter. |
-| `firstLevelType` | string | `--scope-type` | no | `APP/SNS`; empty returns both. |
+| `scopeType` | string | `--scope-type` | no | `APP/SNS`; empty returns both. |
 | `scopeValue` | string | `--scope` | no | Detail mode and exact post-filter. |
-| `limit` | number | `--limit` | no | Agent display cap; no server pagination. |
+| `pageSize` | number | `--page-size` | no | Return count cap; default 20. |
+| `cursor` | string | `--cursor` | no | Cursor from previous response; empty for first page. |
 
 Normalized response should flatten `appScopes` and `snsScopes` into one
 `permissions[]` list while preserving group metadata:
@@ -390,7 +373,7 @@ Normalized response should flatten `appScopes` and `snsScopes` into one
     {
       "scopeValue": "qyapi_robot_sendmsg",
       "scopeName": "企业内机器人发消息权限",
-      "firstLevelType": "APP",
+      "scopeType": "APP",
       "categoryTitle": "机器人",
       "authed": true,
       "canEdit": true,
@@ -401,27 +384,26 @@ Normalized response should flatten `appScopes` and `snsScopes` into one
     }
   ],
   "summary": {"totalMatched": 1, "returnedCount": 1},
-  "truncated": false,
+  "nextCursor": "",
   "raw": {}
 }
 ```
 
-#### apply_open_dev_app_permissions
+#### apply_dev_app_permissions
 
 | Item | Contract |
 | --- | --- |
 | CLI | `dws devapp permission add` |
 | HSF facade | `OpenInnerAppPermissionFacade.apply` |
 | Request shape | One object with system context, app locator, and `scopeValues`. |
-| Required public fields | One app locator and non-empty `scopeValues`. |
+| Required public fields | `unifiedAppId` and non-empty `scopeValues`. |
 | Write guard | CLI `--dry-run`, then `--yes`; no MCP confirm field. |
 
 Input fields:
 
 | Field | Type | CLI flag | Required | Notes |
 | --- | --- | --- | --- | --- |
-| `unifiedAppId` | string | `--unified-app-id` | one locator | Preferred. |
-| `agentId` | number | `--agent-id` | one locator | Compatible. |
+| `unifiedAppId` | string | `--unified-app-id` | yes | Unified app id. |
 | `scopeValues` | string[] | `--permissions` | yes | Comma-separated in CLI; must come from list response. |
 
 Response must distinguish direct apply, version-staged apply, rejected scopes, and
@@ -444,23 +426,22 @@ skipped scopes:
 `requiredApproval=true` scopes must be accepted when editable and staged into the
 current app version. Approver selection is handled by the version flow.
 
-#### remove_open_dev_app_permission
+#### remove_dev_app_permissions
 
 | Item | Contract |
 | --- | --- |
 | CLI | `dws devapp permission remove` |
 | HSF facade | `OpenInnerAppPermissionFacade.remove` |
-| Request shape | One object with system context, app locator, and one `scopeValue`. |
-| Required public fields | One app locator and one `scopeValue`. |
+| Request shape | One object with system context, app locator, and `scopeValues`. |
+| Required public fields | `unifiedAppId` and non-empty `scopeValues`. |
 | Write guard | CLI `--dry-run`, then `--yes`; no MCP confirm field. |
 
 Input fields:
 
 | Field | Type | CLI flag | Required | Notes |
 | --- | --- | --- | --- | --- |
-| `unifiedAppId` | string | `--unified-app-id` | one locator | Preferred. |
-| `agentId` | number | `--agent-id` | one locator | Compatible. |
-| `scopeValue` | string | `--permission` | yes | Remove exactly one permission. |
+| `unifiedAppId` | string | `--unified-app-id` | yes | Unified app id. |
+| `scopeValues` | string[] | `--permissions` | yes | Remove one or more permissions. |
 
 Expected structured failures:
 
@@ -499,99 +480,73 @@ Tool override examples:
 ```json
 {
   "toolOverrides": {
-    "list_open_dev_apps_by_condition": {
+    "list_dev_app": {
       "cliName": "list",
       "description": "查询开放平台企业内部应用列表",
       "flags": {
-        "currentPage": {"alias": "page", "default": 1},
         "pageSize": {"alias": "page-size", "default": 20},
-        "appName": {"alias": "name"},
-        "agentId": {"alias": "agent-id"},
-        "appId": {"alias": "app-id"},
-        "appKey": {"alias": "app-key"},
-        "customKey": {"alias": "custom-key"},
-        "creator": {"alias": "creator"},
-        "robotName": {"alias": "robot-name"},
-        "sortType": {"alias": "sort"},
-        "sortOrder": {"alias": "order"}
+        "cursor": {"alias": "cursor"},
+        "name": {"alias": "name"}
       }
     },
-    "get_open_dev_app_detail": {
+    "get_dev_app": {
       "cliName": "get",
       "description": "查询开放平台企业内部应用详情",
       "flags": {
-        "unifiedAppId": {"alias": "unified-app-id"},
-        "agentId": {"alias": "agent-id"},
-        "appId": {"alias": "app-id"},
-        "appKey": {"alias": "app-key"},
-        "customKey": {"alias": "custom-key"},
-        "appName": {"alias": "name"}
+        "unifiedAppId": {"alias": "unified-app-id", "required": true}
       }
     },
-    "create_inner_app": {
+    "create_dev_app": {
       "cliName": "create",
       "description": "创建开放平台企业内部应用",
       "isSensitive": true,
       "flags": {
-        "appName": {"alias": "name", "required": true},
-        "appDesc": {"alias": "desc"},
-        "appIcon": {"alias": "icon"}
+        "name": {"alias": "name", "required": true},
+        "desc": {"alias": "desc"},
+        "icon": {"alias": "icon"}
       }
     },
-    "update_inner_app": {
+    "update_dev_app": {
       "cliName": "update",
       "description": "修改开放平台企业内部应用基础信息",
       "isSensitive": true,
       "flags": {
-        "unifiedAppId": {"alias": "unified-app-id"},
-        "agentId": {"alias": "agent-id"},
-        "appId": {"alias": "app-id"},
-        "appKey": {"alias": "app-key"},
-        "customKey": {"alias": "custom-key"},
-        "currentAppName": {"alias": "current-name"},
-        "appName": {"alias": "name"},
-        "appDesc": {"alias": "desc"},
-        "appIcon": {"alias": "icon"},
-        "international": {"alias": "international"},
-        "supportHarmony": {"alias": "support-harmony", "type": "bool"}
+        "unifiedAppId": {"alias": "unified-app-id", "required": true},
+        "name": {"alias": "name"},
+        "desc": {"alias": "desc"},
+        "icon": {"alias": "icon"}
       }
     },
-    "delete_inner_app": {
+    "delete_dev_app": {
       "cliName": "delete",
       "description": "删除开放平台企业内部应用",
       "isSensitive": true,
       "flags": {
-        "unifiedAppId": {"alias": "unified-app-id"},
-        "agentId": {"alias": "agent-id"},
-        "appId": {"alias": "app-id"},
-        "appName": {"alias": "name"},
-        "appKey": {"alias": "app-key"},
-        "customKey": {"alias": "custom-key"}
+        "unifiedAppId": {"alias": "unified-app-id", "required": true}
       }
     },
-    "list_open_dev_app_permissions": {
+    "list_dev_app_permissions": {
       "cliName": "list",
       "group": "permission",
       "description": "查询开放平台应用权限列表，默认同时返回 APP 应用权限和 SNS 个人权限",
       "flags": {
         "unifiedAppId": {"alias": "unified-app-id"},
-        "agentId": {"alias": "agent-id"},
         "keyword": {"alias": "keyword"},
         "apiStatus": {"alias": "api-status"},
         "authStatus": {"alias": "status", "default": "ALL"},
-        "firstLevelType": {"alias": "scope-type"},
+        "scopeType": {"alias": "scope-type"},
         "scopeValue": {"alias": "scope"},
-        "limit": {"alias": "limit", "default": "20"}
+        "pageSize": {"alias": "page-size", "default": "20"},
+        "cursor": {"alias": "cursor"}
       }
     },
-    "apply_open_dev_app_permissions": {
+    "apply_dev_app_permissions": {
       "cliName": "add",
       "group": "permission",
       "description": "申请开放平台应用权限点；需审核权限写入当前应用版本变更",
       "isSensitive": true,
       "flags": {
         "unifiedAppId": {"alias": "unified-app-id"},
-        "agentId": {"alias": "agent-id"},
         "scopeValues": {
           "alias": "permissions",
           "type": "stringSlice",
@@ -600,18 +555,18 @@ Tool override examples:
         }
       }
     },
-    "remove_open_dev_app_permission": {
+    "remove_dev_app_permissions": {
       "cliName": "remove",
       "group": "permission",
-      "description": "取消一个已开通的开放平台应用权限点",
+      "description": "取消一个或多个已开通的开放平台应用权限点",
       "isSensitive": true,
       "flags": {
         "unifiedAppId": {"alias": "unified-app-id"},
-        "agentId": {"alias": "agent-id"},
-        "scopeValue": {
-          "alias": "permission",
+        "scopeValues": {
+          "alias": "permissions",
+          "type": "stringSlice",
           "required": true,
-          "description": "待取消权限点 scopeValue"
+          "description": "待取消权限点 scopeValue，多个用逗号分隔"
         }
       }
     }
@@ -619,7 +574,7 @@ Tool override examples:
 }
 ```
 
-`permission search/detail` are UX aliases over `list_open_dev_app_permissions`. The helper exposes one canonical MCP call and keeps alias behavior at the CLI layer:
+`permission search/detail` are UX aliases over `list_dev_app_permissions`. The helper exposes one canonical MCP call and keeps alias behavior at the CLI layer:
 
 ```bash
 dws devapp permission list --keyword "机器人发送消息"
@@ -630,8 +585,8 @@ If a helper command is added, map aliases without creating new MCP tools:
 
 | Helper command | Underlying tool | Forced/derived args |
 | --- | --- | --- |
-| `devapp permission search` | `list_open_dev_app_permissions` | Requires `keyword` or `scopeValue`; returns candidate summaries. |
-| `devapp permission detail` | `list_open_dev_app_permissions` | Requires `scopeValue`; returns one scope with full `apiList`. |
+| `devapp permission search` | `list_dev_app_permissions` | Requires `keyword` or `scopeValue`; returns candidate summaries. |
+| `devapp permission detail` | `list_dev_app_permissions` | Requires `scopeValue`; returns one scope with full `apiList`. |
 
 ## 5. App Identity Resolution
 
@@ -640,16 +595,14 @@ Application identity must be resolved before detail and write commands.
 | Priority | Identifier | Rule |
 | --- | --- | --- |
 | 1 | `unifiedAppId` | Preferred unique id for write operations. |
-| 2 | `agentId/appId` | Compatible exact identifier. |
-| 3 | `appKey/clientId` | Call list/detail and require one result. |
-| 4 | `customKey` | Call list/detail and require one result. |
-| 5 | `appName/name` | Fuzzy search; write operations require one result. |
+| 2 | `appKey/clientId` | Call list/detail and require one result. |
+| 3 | `name` | Fuzzy search; write operations require one result. |
 
 Agent rule:
 
 1. Never choose the first row when multiple apps match.
-2. Show candidates with `appName`, `unifiedAppId`, `agentId`, `appKey/clientId`, `creator`, and modified time.
-3. Ask the user to pick `unifiedAppId` or `agentId` for write operations.
+2. Show candidates with `name`, `unifiedAppId`, `appKey/clientId`, `creator`, and modified time.
+3. Ask the user to pick `unifiedAppId` for write operations when multiple apps match.
 
 MCP calls must rely on system context for caller identity:
 
@@ -665,34 +618,26 @@ Open-source DWS and Agent must not pass `orgId` or `uid` as user input.
 ### 6.1 List
 
 ```bash
-dws devapp list --page 1 --page-size 20 --format json
+dws devapp list --page-size 20 --format json
 dws devapp list --name DemoApp --format json
-dws devapp list --agent-id AGENT_ID --format json
-dws devapp list --app-key dingxxx --format json
-dws devapp list --creator 张三 --format json
-dws devapp list --robot-name 小钉 --format json
+dws devapp list --page-size 20 --cursor NEXT_CURSOR --format json
 ```
 
 MCP payload:
 
 ```json
 {
-  "currentPage": 1,
   "pageSize": 20,
-  "appName": "DemoApp",
-  "sortType": "gmt_modified",
-  "sortOrder": "desc"
+  "name": "DemoApp"
 }
 ```
 
-Pagination is supported for app list through `currentPage/pageSize`, both 1-based. Search filters are optional. A baseline call should pass only pagination and sort fields.
+Pagination is cursor based. A baseline call should pass only `pageSize`; use the response `nextCursor` for the next page.
 
 ### 6.2 Get
 
 ```bash
 dws devapp get --unified-app-id UNIFIED_APP_ID --format json
-dws devapp get --agent-id AGENT_ID --format json
-dws devapp get --name DemoApp --format json
 ```
 
 MCP payload:
@@ -703,7 +648,7 @@ MCP payload:
 }
 ```
 
-`get` may show `clientId/appKey/agentId`, but it must not be used to read full `clientSecret/appSecret`. Secret read belongs to `credentials get`.
+`get` may show `clientId/appKey/clientSecret/appSecret`; callers must treat secret fields as sensitive. Active secret reads still prefer `credentials get`.
 
 ### 6.3 Create
 
@@ -726,8 +671,8 @@ MCP payload:
 
 ```json
 {
-  "appName": "DemoApp",
-  "appDesc": "internal app"
+  "name": "DemoApp",
+  "desc": "internal app"
 }
 ```
 
@@ -742,9 +687,9 @@ At least one update field is required. Supported P0 fields:
 
 | CLI flag | MCP field | Notes |
 | --- | --- | --- |
-| `--name` | `appName` | New app name. |
-| `--desc` | `appDesc` | New description. |
-| `--icon` | `appIcon` | Existing media id or backend-supported resource. |
+| `--name` | `name` | New app name. |
+| `--desc` | `desc` | New description. |
+| `--icon` | `icon` | Existing media id or backend-supported resource. |
 | `--international` | `international` | JSON string if exposed. |
 | `--support-harmony` | `supportHarmony` | Boolean if exposed. |
 
@@ -765,7 +710,7 @@ MCP payload:
 }
 ```
 
-Valid locator fields are `unifiedAppId`, `agentId`, `appId`, `appName`, `appKey`, and `customKey`. Name/key locators must uniquely resolve.
+Valid public locator field is `unifiedAppId`.
 
 ## 7. Credentials
 
@@ -773,13 +718,12 @@ Target command:
 
 ```bash
 dws devapp credentials get --unified-app-id UNIFIED_APP_ID --format json
-dws devapp credentials get --agent-id AGENT_ID --format json
 ```
 
 Current status:
 
 1. Backend facade is `OpenInnerAppQueryFacade.getCredentials`.
-2. MCP tool is `get_open_dev_app_credentials`.
+2. MCP tool is `get_dev_app_credentials`.
 3. CLI sends only application locator fields and does not add `showSecret`, `confirmSecret`, or masking fields.
 4. The MCP response follows the backend credential contract and may include `clientSecret/appSecret`; callers must treat command output as sensitive.
 
@@ -787,7 +731,7 @@ Target fields:
 
 | Field | Notes |
 | --- | --- |
-| `unifiedAppId/agentId/appName` | App summary. |
+| `unifiedAppId/name` | App summary. |
 | `clientId/appKey` | Non-secret identifiers. |
 | `clientSecret/appSecret` | Returned by the dedicated credentials tool; treat as sensitive output. |
 | `currentSecretStatus` | Current secret state. |
@@ -810,10 +754,10 @@ Returned groups:
   "success": true,
   "data": {
     "snsScopes": [
-      {"title": "个人权限", "firstLevelType": "SNS", "scopeList": []}
+      {"title": "个人权限", "scopeType": "SNS", "scopeList": []}
     ],
     "appScopes": [
-      {"title": "通讯录管理", "firstLevelType": "APP", "scopeList": []}
+      {"title": "通讯录管理", "scopeType": "APP", "scopeList": []}
     ]
   }
 }
@@ -836,7 +780,7 @@ MCP payload for normal list:
 {
   "unifiedAppId": "UNIFIED_APP_ID",
   "authStatus": "ALL",
-  "limit": 20
+  "pageSize": 20
 }
 ```
 
@@ -847,7 +791,7 @@ MCP payload for search:
   "unifiedAppId": "UNIFIED_APP_ID",
   "keyword": "机器人发送消息",
   "authStatus": "UNAUTHED",
-  "limit": 10
+  "pageSize": 10
 }
 ```
 
@@ -857,7 +801,7 @@ MCP payload for detail:
 {
   "unifiedAppId": "UNIFIED_APP_ID",
   "scopeValue": "qyapi_robot_sendmsg",
-  "limit": 1
+  "pageSize": 1
 }
 ```
 
@@ -865,16 +809,16 @@ Input fields:
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `unifiedAppId` | string | one of app id fields | Preferred app locator. |
-| `agentId` | number | one of app id fields | Compatible app locator. |
+| `unifiedAppId` | string | yes | Unified app id. |
 | `keyword` | string | no | Maps to Web `key`. |
 | `apiStatus` | string | no | Maps to Web `apiStatus`. |
 | `authStatus` | string | no | `ALL/AUTHED/UNAUTHED`, post-filter. |
-| `firstLevelType` | string | no | `APP/SNS`; empty returns both. |
+| `scopeType` | string | no | `APP/SNS`; empty returns both. |
 | `scopeValue` | string | no | Detail mode and exact post-filter. |
-| `limit` | number | no | Default 20, hard cap 50. |
+| `pageSize` | number | no | Default 20, hard cap 50. |
+| `cursor` | string | no | Cursor from previous response; empty for first page. |
 
-Permission list has no server pagination. Web also loads the full grouped list. Use `keyword` to reduce server-side results, then use `limit` to control Agent context.
+Permission list uses cursor pagination. Use `keyword` to reduce server-side results and `pageSize/cursor` to control Agent context.
 
 Default response must flatten APP and SNS scopes into one stable `permissions[]` array:
 
@@ -886,7 +830,7 @@ Default response must flatten APP and SNS scopes into one stable `permissions[]`
       "scopeValue": "qyapi_robot_sendmsg",
       "scopeName": "企业内机器人发消息权限",
       "scopeDesc": "企业内机器人发消息权限",
-      "firstLevelType": "APP",
+      "scopeType": "APP",
       "categoryTitle": "机器人",
       "authed": true,
       "canEdit": true,
@@ -919,7 +863,7 @@ Default response must flatten APP and SNS scopes into one stable `permissions[]`
 {
   "scopeValue": "Contact.User.mobile",
   "scopeName": "个人手机号信息",
-  "firstLevelType": "SNS",
+  "scopeType": "SNS",
   "authed": false,
   "canEdit": true,
   "requiredApproval": true,
@@ -934,7 +878,7 @@ Agent selection order:
 1. Exact `scopeValue`.
 2. Matched `apiList[].name`.
 3. Scope name or description.
-4. Category title and `firstLevelType`.
+4. Category title and `scopeType`.
 
 Agent must pass final `scopeValue` to add/remove. Do not pass API name, API uuid, or category title into write tools.
 
@@ -979,8 +923,8 @@ Expected response:
 ### 8.4 Remove
 
 ```bash
-dws devapp permission remove --unified-app-id UNIFIED_APP_ID --permission qyapi_robot_sendmsg --dry-run --format json
-dws devapp permission remove --unified-app-id UNIFIED_APP_ID --permission qyapi_robot_sendmsg --yes --format json
+dws devapp permission remove --unified-app-id UNIFIED_APP_ID --permissions qyapi_robot_sendmsg --dry-run --format json
+dws devapp permission remove --unified-app-id UNIFIED_APP_ID --permissions qyapi_robot_sendmsg --yes --format json
 ```
 
 MCP payload:
@@ -988,7 +932,7 @@ MCP payload:
 ```json
 {
   "unifiedAppId": "UNIFIED_APP_ID",
-  "scopeValue": "qyapi_robot_sendmsg"
+  "scopeValues": ["qyapi_robot_sendmsg"]
 }
 ```
 
@@ -1003,25 +947,33 @@ Rules:
 
 Event and version commands are needed for a full application lifecycle but should not be folded into permission add.
 
-Target event tools:
+Implemented event tools (verified against the `op-app` MCP `tools/list`). The
+real model is "list subscribable events + subscribe/unsubscribe events by
+`eventCodes`", not a single callbackUrl/token/aesKey config call:
 
 | CLI | MCP tool | Notes |
 | --- | --- | --- |
-| `devapp event list` | `list_open_dev_app_events` | Query current callback and subscribed event types. |
-| `devapp event config` | `configure_open_dev_app_event` | Configure callbackUrl, token, aesKey, eventTypes. |
+| `dev app event list` | `list_dev_app_events` | Args `unifiedAppId/keyword/cursor/pageSize`; `keyword` searches `eventCode` or `eventName`; returns `pushType=STREAM` + `events[]` (`eventCode`/`eventName`/`subscribed`) + `hasMore/nextCursor/pageSize`. Read. |
+| `dev app event subscribe` | `subscribe_dev_app_events` | Args `unifiedAppId` + required array `eventCodes`. Returns `success/operation/eventCodes/needsPublish/versionRequiredAction`; failures include `errorCode/errorMsg/reason/retryable/action` such as `STREAM_NOT_CONNECTED`. Write (`--dry-run`/`--yes`). |
+| `dev app event unsubscribe` | `unsubscribe_dev_app_events` | Args `unifiedAppId` + required array `eventCodes`. Returns `success/operation/eventCodes/needsPublish/versionRequiredAction`; failures include `errorCode/errorMsg/reason/retryable/action`. Write. |
+
+Note: for gray unified apps, subscribe/unsubscribe are staged into version
+metadata and only take effect after `version publish`. The event callback URL
+itself is not part of this model; it lives in robot config (`eventCallbackUrl`,
+exposed as `robot config --event-url`).
 
 Implemented version tools (verified against the `op-app` MCP `tools/list`):
 
 | CLI | MCP tool | Notes |
 | --- | --- | --- |
-| `devapp version create` | `create_open_dev_app_version` | Save a new version from current config (`version`, `description`). |
-| `devapp version list` | `list_open_dev_app_versions` | Paged list (`currentPage`, `pageSize`). |
-| `devapp version get` | `get_open_dev_app_version_detail` | One version detail by `versionId`. |
-| `devapp version check-approval` | `publish_open_dev_app_version` (`dryRun=true`) | Precheck approval requirement / approvers; does not publish. |
-| `devapp version publish` | `publish_open_dev_app_version` (`dryRun=false`) | Publish; `confirmedSensitive` for high-sensitivity scopes, optional `approverUserId`. |
-| `devapp version status` | `get_open_dev_app_version_status` | Poll publish and approval state. |
+| `devapp version create` | `create_dev_app_version` | Save a new version from current config. Omit `version` by default so the server auto-increments from the latest released version; only pass `version` when the user explicitly requests a higher version. |
+| `devapp version list` | `list_dev_app_versions` | Cursor-paged list (`cursor`, `pageSize`; response `items/nextCursor/hasMore`). |
+| `devapp version get` | `get_dev_app_version_detail` | One version detail by `versionId`. |
+| `devapp version check-approval` | `publish_dev_app_version` (`precheckOnly=true`) | Precheck approval requirement / approvers via `requiresApproval/publishable/approvalMode/approvalCandidates`; does not publish. |
+| `devapp version publish` | `publish_dev_app_version` (`precheckOnly=false`) | Publish or submit approval; inspect `published/approvalSubmitted/processId/versionStatus`. |
+| `devapp version status` | `get_dev_app_version_status` | Poll publish and approval state. |
 
-Note: the MCP `dryRun` field is the server-side approval precheck and maps to
+Note: the MCP `precheckOnly` field is the server-side approval precheck and maps to
 `version check-approval`. It is distinct from the CLI global `--dry-run` (preview
 without execution). `check-approval` is read-only (no write guard); `publish`
 uses the standard `--dry-run`/`--yes` write guard.
@@ -1030,16 +982,15 @@ Implemented robot tools:
 
 | CLI | MCP tool | Notes |
 | --- | --- | --- |
-| `devapp robot create` | `submit_robot_create_task` + `query_robot_create_result` | Create a new agent app + robot via the async submit/poll flow (the legacy sync `create_dingtalk_robot` action is broken server-side — see issue #35). |
+| `devapp robot create` | `create_dingtalk_robot` | Synchronously create a new agent app + robot. |
 | `devapp robot submit` | `submit_robot_create_task` | Async submit; supports retry via original `taskId`. |
 | `devapp robot result` | `query_robot_create_result` | Poll async task by `taskId`. |
-| `devapp robot get` | `get_open_dev_app_robot_config` | Read robot config of an existing app. |
-| `devapp robot config` | `create_open_dev_app_robot_config` | Create robot config on an existing app. |
-| `devapp robot update` | `update_open_dev_app_robot_config` | Update robot config. |
-| `devapp robot enable` | `enable_open_dev_app_robot` | Enable / re-enable robot capability. |
-| `devapp robot offline` | `offline_open_dev_app_robot` | Offline robot capability. |
+| `devapp robot get` | `get_extension_robot_config` | Read robot config of an existing app. |
+| `devapp robot config` | `set_extension_robot_config` | Create or update robot config on an existing app. |
+| `devapp robot enable` | `enable_dev_app_robot` | Enable / re-enable robot capability. |
+| `devapp robot disable` | `disable_dev_app_robot` | Disable robot capability. |
 
-Robot create/submit and config/update/enable/offline are write operations and
+Robot create/submit and config/enable/disable are write operations and
 use the `--dry-run`/`--yes` guard; `get` and `result` are reads.
 
 Stitching rule:
@@ -1068,9 +1019,9 @@ Positive `devapp` signals:
 | Signal | Route |
 | --- | --- |
 | `开放平台应用`, `开发者后台应用`, `企业内部应用`, `内部应用` | `devapp` |
-| `agentId`, `clientId`, `appKey`, `customKey`, `appSecret`, `clientSecret` | `devapp` |
+| `unifiedAppId`, `clientId`, `appKey`, `appSecret`, `clientSecret` | `devapp` |
 | `应用权限`, `权限点`, `API 权限`, `APP/SNS 权限`, `scopeValue` | `devapp permission ...` |
-| `事件订阅`, `callbackUrl`, `token`, `aesKey` in an app context | `devapp event ...` |
+| `事件订阅`, `订阅事件`, `退订事件`, `eventCode`, `可订阅事件` in an app context | `devapp event ...` |
 | `应用版本`, `版本发布`, `选审批人`, `发布审核` in developer backend context | `devapp version ...` |
 | yulan's current `开放平台应用 CLI 化 / dws app` workstream | `devapp` |
 
@@ -1114,18 +1065,18 @@ Intent table:
 
 | User intent | Command | Tool |
 | --- | --- | --- |
-| "查应用/搜索应用" | `devapp list` | `list_open_dev_apps_by_condition` |
-| "看应用详情/clientId/agentId" | `devapp get` | `get_open_dev_app_detail` |
-| "创建应用" | `devapp create` | `create_inner_app` |
-| "修改名称/描述/图标" | `devapp update` | `update_inner_app` |
-| "删除应用" | `devapp delete` | `delete_inner_app` |
-| "查权限/搜索 API 权限" | `permission list` | `list_open_dev_app_permissions` |
-| "这个权限覆盖哪些 API" | `permission list --scope` | `list_open_dev_app_permissions` |
-| "申请权限/开通权限" | `permission add` | `apply_open_dev_app_permissions` |
-| "取消权限/移除权限" | `permission remove` | `remove_open_dev_app_permission` |
-| "拿 appSecret/clientSecret" | `credentials get` | `get_open_dev_app_credentials` |
-| "配置事件订阅" | `event config` | Pending |
-| "发布/审核/选审批人" | `version ...` | Pending |
+| "查应用/搜索应用" | `devapp list` | `list_dev_app` |
+| "看应用详情/clientId/appKey" | `devapp get` | `get_dev_app` |
+| "创建应用" | `devapp create` | `create_dev_app` |
+| "修改名称/描述/图标" | `devapp update` | `update_dev_app` |
+| "删除应用" | `devapp delete` | `delete_dev_app` |
+| "查权限/搜索 API 权限" | `permission list` | `list_dev_app_permissions` |
+| "这个权限覆盖哪些 API" | `permission list --scope` | `list_dev_app_permissions` |
+| "申请权限/开通权限" | `permission add` | `apply_dev_app_permissions` |
+| "取消权限/移除权限" | `permission remove` | `remove_dev_app_permissions` |
+| "拿 appSecret/clientSecret" | `credentials get` | `get_dev_app_credentials` |
+| "查可订阅事件/订阅/退订事件" | `event list/subscribe/unsubscribe` | `list_open_dev_app_events`, `subscribe/unsubscribe_open_dev_app_event` |
+| "发布/审核/选审批人" | `version ...` | `publish_open_dev_app_version` etc. |
 
 Yulan invocation examples:
 
@@ -1135,7 +1086,7 @@ Yulan invocation examples:
 | "把应用图标换成 ICON_RESOURCE" | `dws devapp update --unified-app-id ... --icon ICON_RESOURCE --dry-run --format json` | Icon change is app base info update and must be guarded. |
 | "已确认删除这个开放平台应用" | `dws devapp delete --unified-app-id ... --yes --format json` | Destructive write only after unique app resolution and confirmation. |
 | "手机号权限要申请，虽然需要审核" | `dws devapp permission add --permissions Contact.User.mobile --dry-run/--yes` | `requiredApproval=true` is still appliable; approval moves to version publish. |
-| "配置事件订阅回调" | `dws devapp event config ... --dry-run --format json` | Event subscription is app configuration, not permission or docs search. |
+| "订阅通讯录用户增加事件" | `dws dev app event list ...` then `dws dev app event subscribe --event-codes user_add_org --dry-run --format json` | Pick eventCode from list, then subscribe; gray apps need a version publish to take effect. |
 | "保存版本并看审核状态" | `version create`, `check-approval`, `publish`, `status` | Version flow owns approver selection and publish audit state. |
 | "创建 MCP 服务并配置 HSF tool" | OpenDev MCP platform workflow, not `dws devapp create` | MCP connector/tool is a platform artifact, not an enterprise internal app. |
 
@@ -1211,7 +1162,7 @@ Do not add confirmation booleans to MCP payloads. These belong to the CLI layer:
 | User request | Agent recipe |
 | --- | --- |
 | "查 DemoApp 应用" | `devapp list --name DemoApp`; if one result, optionally `devapp get`; if multiple, show candidates. |
-| "这个 agentId 是哪个应用" | `devapp get --agent-id AGENT_ID`; if backend requires list semantics, use `devapp list --agent-id AGENT_ID`. |
+| "这个 appKey 是哪个应用" | 当前 CLI 不用 appKey 定位详情；先让用户提供 `unifiedAppId`，或用 `devapp list --name` 缩小候选后再 `devapp get --unified-app-id ...`。 |
 | "创建企业内部应用" | `devapp create --name ... --type internal --dry-run`; after confirmation, repeat with `--yes`. |
 | "修改应用描述/图标" | Resolve `unifiedAppId`; `devapp update --unified-app-id ... --desc/icon ... --dry-run`; after confirmation, `--yes`. |
 | "删除应用" | Resolve unique app; show app summary; `devapp delete ... --dry-run`; after confirmation, `--yes`. |
@@ -1231,9 +1182,9 @@ writing:
 2. If the user gives an API name, search with `keyword`, then match
    `apiList[].name` or `apiPreview.name`.
 3. If the user gives a human permission name, match `scopeName/scopeDesc`.
-4. If multiple scopes remain, show `scopeValue`, `scopeName`, `firstLevelType`,
+4. If multiple scopes remain, show `scopeValue`, `scopeName`, `scopeType`,
    `authed`, `requiredApproval`, and `apiPreview`, then ask for one.
-5. For list output, cap the displayed list with `limit`; for detail output, call
+5. For list output, cap the displayed list with `pageSize`; for detail output, call
    with `scopeValue` and return the full API coverage for one scope only.
 
 `requiredApproval=true` is not a blocker for permission add. It means the add
@@ -1258,7 +1209,7 @@ Agent should normalize behavior without hiding raw backend fields.
 | `PERMISSION_ALREADY_AUTHED` | Add receives an already authorized scope | Report skipped scope and continue only for remaining unauth scopes. |
 | `PERMISSION_NOT_AUTHED` | Remove receives an unauthorized scope | Report that there is nothing to remove. |
 | `PERMISSION_NOT_EDITABLE` | `canEdit=false` or backend no-edit error | Show the no-edit reason; do not retry as a write. |
-| `VERSION_APPROVAL_REQUIRED` | `check-approval` says approver is required | Ask for approver or use returned candidate when the user gave an explicit approver. |
+| `requiresApproval=true` | `check-approval` says approval is required | Use `approvalMode/approvalCandidates`; ask for approver only in `SELECT_APPROVER` mode. |
 Raw `errorCode/errorMsg` must remain in JSON output or the Agent response so the
 backend owner can diagnose actual HSF failures.
 
@@ -1273,8 +1224,7 @@ details:
   "operation": "permission.add",
   "app": {
     "unifiedAppId": "UNIFIED_APP_ID",
-    "agentId": 123456,
-    "appName": "DemoApp"
+    "name": "DemoApp"
   },
   "summary": {
     "appliedCount": 1,
@@ -1377,7 +1327,7 @@ For each P0 tool:
 6. Configure tool input JSON Schema with only Agent-facing fields.
 7. Map `corpId/userId` from system context to the business request object.
 8. Review every recommended mapping manually, especially fields named
-   `agentId`, `appId`, `appKey`, or `userId`.
+   `unifiedAppId`, `appKey`, `name`, or `userId`.
 9. Keep `ServiceResult` output wrapper and success rule
    `ServiceResult.success == true`.
 10. Remove blank error-text optimization rows; preserve raw
@@ -1390,14 +1340,14 @@ P0 debug inputs:
 
 | Tool | Baseline debug input |
 | --- | --- |
-| `list_open_dev_apps_by_condition` | `{"currentPage":1,"pageSize":10}` |
-| `get_open_dev_app_detail` | `{"unifiedAppId":"UNIFIED_APP_ID"}` |
-| `create_inner_app` | `{"appName":"DemoApp","appDesc":"internal app"}` |
-| `update_inner_app` | `{"unifiedAppId":"UNIFIED_APP_ID","appDesc":"new desc"}` |
-| `delete_inner_app` | `{"unifiedAppId":"UNIFIED_APP_ID"}` |
-| `list_open_dev_app_permissions` | `{"unifiedAppId":"UNIFIED_APP_ID","authStatus":"ALL","limit":20}` |
-| `apply_open_dev_app_permissions` | `{"unifiedAppId":"UNIFIED_APP_ID","scopeValues":["SCOPE_VALUE"]}` |
-| `remove_open_dev_app_permission` | `{"unifiedAppId":"UNIFIED_APP_ID","scopeValue":"SCOPE_VALUE"}` |
+| `list_dev_app` | `{"pageSize":10}` |
+| `get_dev_app` | `{"unifiedAppId":"UNIFIED_APP_ID"}` |
+| `create_dev_app` | `{"name":"DemoApp","desc":"internal app"}` |
+| `update_dev_app` | `{"unifiedAppId":"UNIFIED_APP_ID","desc":"new desc"}` |
+| `delete_dev_app` | `{"unifiedAppId":"UNIFIED_APP_ID"}` |
+| `list_dev_app_permissions` | `{"unifiedAppId":"UNIFIED_APP_ID","authStatus":"ALL","pageSize":20}` |
+| `apply_dev_app_permissions` | `{"unifiedAppId":"UNIFIED_APP_ID","scopeValues":["SCOPE_VALUE"]}` |
+| `remove_dev_app_permissions` | `{"unifiedAppId":"UNIFIED_APP_ID","scopeValues":["SCOPE_VALUE"]}` |
 
 For destructive debug cases, use a disposable application and permission scope.
 Do not use production data in long-lived examples.
@@ -1408,8 +1358,8 @@ After publish, verify the service through MCP before using DWS:
 
 1. Run MCP `initialize`.
 2. Run `tools/list` and confirm all expected P0 tool keys exist.
-3. Call `list_open_dev_apps_by_condition` with only pagination.
-4. Call one exact locator scenario, such as `get_open_dev_app_detail`.
+3. Call `list_dev_app` with only pagination.
+4. Call one exact locator scenario, such as `get_dev_app`.
 5. Call permission list with `authStatus=ALL` and confirm APP and SNS scopes are
    both represented.
 6. Confirm failures preserve `errorCode/errorMsg`.
@@ -1473,9 +1423,10 @@ the following are true:
 4. Permission list/add/remove smoke cases pass for APP and SNS scopes.
 5. `requiredApproval=true` permission add stages into version changes instead of
    being rejected by the Agent.
-6. Credential access is handled only by `credentials get`; missing event/version
-   tools are reported as unsupported/pending, not silently emulated by other
-   commands.
+6. Credential access is handled only by `credentials get`; event subscription
+   (`event list/subscribe/unsubscribe`) and version flow are implemented over
+   `op-app`, and any still-missing tool is reported as unsupported, not silently
+   emulated by other commands.
 7. No repository doc, skill, log, or fixture contains MCP gateway keys, cookies,
    access tokens, full app secrets, or production app data.
 8. Existing skill setup and generator tests pass.
@@ -1488,14 +1439,14 @@ the following are true:
 | `dws devapp get --name DemoApp --format json` with multiple matches | Stops and returns candidates. |
 | `dws devapp create --name T --type internal --dry-run --format json` | Prints payload only; no MCP call. |
 | `dws devapp create --name T --type internal --format json` | Refuses because write confirmation is missing. |
-| `dws devapp create --name T --type internal --yes --format json` | Calls `create_inner_app`. |
-| `dws devapp update --unified-app-id X --desc Y --yes --format json` | Calls `update_inner_app`. |
+| `dws devapp create --name T --type internal --yes --format json` | Calls `create_dev_app`. |
+| `dws devapp update --unified-app-id X --desc Y --yes --format json` | Calls `update_dev_app`. |
 | `dws devapp delete --unified-app-id X --format json` | Refuses because delete confirmation is missing. |
 | `dws devapp permission list --unified-app-id X --format json` | Returns flattened APP and SNS permissions. |
 | `dws devapp permission list --unified-app-id X --keyword "发送消息" --format json` | Returns candidate `permissions[]`; no automatic apply. |
 | `dws devapp permission add --unified-app-id X --permissions Contact.User.mobile --yes --format json` | Applies or stages permission; `requiredApproval=true` is allowed. |
-| `dws devapp permission remove --unified-app-id X --permission qyapi_robot_sendmsg --yes --format json` | Removes one authorized scope or returns a structured reason. |
-| `dws devapp credentials get --unified-app-id X --format json` | Calls `get_open_dev_app_credentials`; does not use `devapp get` as a secret fallback. |
+| `dws devapp permission remove --unified-app-id X --permissions qyapi_robot_sendmsg --yes --format json` | Removes authorized scopes or returns a structured reason. |
+| `dws devapp credentials get --unified-app-id X --format json` | Calls `get_dev_app_credentials`; does not use `devapp get` as a secret fallback. |
 | `查应用 appXYZ 的详情` without OpenDev context | Does not blindly route to `devapp`; uses context such as `workbench app get` or asks. |
 | `查询开放平台 API 错误码` | Routes to `devdoc`, not `devapp`. |
 | `创建 MCP 服务并配置 HSF tool` | Uses OpenDev MCP platform workflow, not `dws devapp create`. |

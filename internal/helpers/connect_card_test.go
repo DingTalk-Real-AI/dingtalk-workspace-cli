@@ -230,7 +230,7 @@ func TestRobotConnectReplyCardFlag(t *testing.T) {
 			var out strings.Builder
 			root.SetOut(&out)
 			root.SetErr(&out)
-			args := append([]string{"devapp", "robot", "connect",
+			args := append([]string{"dev", "connect",
 				"--channel", "claudecode",
 				"--robot-client-id", "a", "--robot-client-secret", "b", "--dry-run"}, tc.args...)
 			root.SetArgs(args)

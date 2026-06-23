@@ -321,10 +321,22 @@ func TestRuntimeRunnerInjectsAuthTokenFromFlag(t *testing.T) {
 func TestResolveIdentityHeadersForwardsAgentCode(t *testing.T) {
 	setupRuntimeCommandTest(t)
 	t.Setenv(authpkg.AgentCodeEnv, " cursor ")
+	t.Setenv(authpkg.AgentCodeEnvCompat, "")
 
 	headers := resolveIdentityHeaders()
 	if got := headers["x-dingtalk-dws-agent-code"]; got != "cursor" {
 		t.Fatalf("x-dingtalk-dws-agent-code = %q, want cursor", got)
+	}
+}
+
+func TestResolveIdentityHeadersForwardsCompatAgentCode(t *testing.T) {
+	setupRuntimeCommandTest(t)
+	t.Setenv(authpkg.AgentCodeEnv, "")
+	t.Setenv(authpkg.AgentCodeEnvCompat, " compat ")
+
+	headers := resolveIdentityHeaders()
+	if got := headers["x-dingtalk-dws-agent-code"]; got != "compat" {
+		t.Fatalf("x-dingtalk-dws-agent-code = %q, want compat", got)
 	}
 }
 
@@ -882,6 +894,20 @@ func jsonRPCToolName(req map[string]any) string {
 	}
 	name, _ := params["name"].(string)
 	return name
+}
+
+func TestDetectBusinessErrorNestedServiceResult(t *testing.T) {
+	content := map[string]any{
+		"success": false,
+		"result": map[string]any{
+			"success":   false,
+			"errorCode": "ROBOT_NOT_FOUND",
+			"errorMsg":  "robot info is not exist",
+		},
+	}
+	if got := detectBusinessError(content); got != "robot info is not exist" {
+		t.Fatalf("detectBusinessError() = %q, want nested errorMsg", got)
+	}
 }
 
 func writeJSONRPCToolResult(t *testing.T, w http.ResponseWriter, req map[string]any, content map[string]any, isError bool) {

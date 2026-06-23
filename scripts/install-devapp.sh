@@ -2,102 +2,139 @@
 # Copyright 2026 Alibaba Group
 # Licensed under the Apache License, Version 2.0
 #
-# One-command installer for the DevApp preview branch.
+# One-command installer for the dws Dev preview — pre-built binary, no build tools.
+# Downloads the dev binary + dingtalk-dev skill from the fork's GitHub Releases.
+# Requires only curl + tar (no go / make / git).
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/wxianfeng/dingtalk-workspace-cli/feat/dws-devapp/scripts/install-devapp.sh | sh
 #
-# Environment variables:
-#   DEVAPP_REPO_URL    Git repository URL. Default: https://github.com/wxianfeng/dingtalk-workspace-cli.git
-#   DEVAPP_BRANCH      Branch to install. Default: feat/dws-devapp
-#   DEVAPP_SOURCE_DIR  Existing source checkout to install from.
-#   DEVAPP_KEEP_SOURCE Set to 1 to keep the temporary source checkout.
-#
-# The script clones the requested branch and delegates to scripts/install.sh
-# from that checkout, which builds and installs dws from local source.
-
+# Env (all optional):
+#   DEVAPP_REPO      fork holding dev releases (default: wxianfeng/dingtalk-workspace-cli)
+#   DEVAPP_VERSION   pin a dev release tag (default: latest release on the fork)
+#   DWS_INSTALL_DIR  binary dir (default: ~/.local/bin)
+#   DWS_NO_SKILLS    set 1 to skip the dev skill
 set -eu
 
-REPO_URL="${DEVAPP_REPO_URL:-https://github.com/wxianfeng/dingtalk-workspace-cli.git}"
-BRANCH="${DEVAPP_BRANCH:-feat/dws-devapp}"
-SOURCE_DIR="${DEVAPP_SOURCE_DIR:-}"
-KEEP_SOURCE="${DEVAPP_KEEP_SOURCE:-0}"
-TMPDIR_WORK=""
+DEVAPP_REPO="${DEVAPP_REPO:-wxianfeng/dingtalk-workspace-cli}"
+DEVAPP_VERSION="${DEVAPP_VERSION:-}"
+INSTALL_DIR="${DWS_INSTALL_DIR:-$HOME/.local/bin}"
+NO_SKILLS="${DWS_NO_SKILLS:-0}"
+SKILL_NAME="dingtalk-dev"
 
-say() {
-  printf '  %s\n' "$@"
+say() { printf '  %s\n' "$@"; }
+err() { printf '  ❌ %s\n' "$@" >&2; exit 1; }
+need_cmd() { command -v "$1" >/dev/null 2>&1 || err "Missing required command: $1"; }
+
+need_cmd curl
+
+detect_os() {
+  case "$(uname -s)" in
+    Linux*)  echo linux ;;
+    Darwin*) echo darwin ;;
+    MINGW*|MSYS*|CYGWIN*) echo windows ;;  # Git Bash / MSYS2 / Cygwin on Windows
+    *) err "Unsupported OS: $(uname -s). On native Windows use install-devapp.ps1." ;;
+  esac
 }
 
-err() {
-  printf '  ERROR: %s\n' "$@" >&2
-  exit 1
+detect_arch() {
+  case "$(uname -m)" in
+    x86_64|amd64)  echo amd64 ;;
+    arm64|aarch64) echo arm64 ;;
+    *) err "Unsupported architecture: $(uname -m)" ;;
+  esac
 }
 
-need_cmd() {
-  command -v "$1" >/dev/null 2>&1 || err "Missing required command: $1"
+# GitHub's /releases/latest excludes prereleases, so read the releases list
+# (newest first) and take the top tag — the dev preview is published as a prerelease.
+resolve_version() {
+  [ -n "$DEVAPP_VERSION" ] && return 0
+  DEVAPP_VERSION="$(curl -fsSL "https://api.github.com/repos/${DEVAPP_REPO}/releases?per_page=1" 2>/dev/null \
+    | grep -m1 '"tag_name"' | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')"
+  [ -n "$DEVAPP_VERSION" ] || err "No release found on ${DEVAPP_REPO}. Push a dev tag (e.g. v1.0.39-dev.1) to trigger CI, or set DEVAPP_VERSION."
 }
 
-cleanup() {
-  if [ -n "$TMPDIR_WORK" ] && [ "$KEEP_SOURCE" != "1" ]; then
-    rm -rf "$TMPDIR_WORK"
-  fi
-}
+install_skill() {
+  bundle="$1"   # extracted skills bundle dir
+  src=""
+  for c in "$bundle/multi/$SKILL_NAME" "$bundle/skills/multi/$SKILL_NAME" "$bundle/$SKILL_NAME"; do
+    [ -f "$c/SKILL.md" ] && src="$c" && break
+  done
+  [ -n "$src" ] || { say "  (dingtalk-dev not found in skills bundle; skipped)"; return 0; }
 
-trap cleanup EXIT INT TERM
+  # cache so `dws skill setup --mode multi` can find a source later
+  cache="$HOME/.dws/skills/multi/$SKILL_NAME"
+  rm -rf "$cache"; mkdir -p "$cache"; cp -R "$src/." "$cache/"
 
-print_banner() {
-  printf '\n'
-  say "DevApp preview installer"
-  say "Repository: ${REPO_URL}"
-  say "Branch:     ${BRANCH}"
-  printf '\n'
-}
-
-resolve_source_dir() {
-  if [ -n "$SOURCE_DIR" ]; then
-    [ -d "$SOURCE_DIR" ] || err "DEVAPP_SOURCE_DIR does not exist: ${SOURCE_DIR}"
-    [ -f "$SOURCE_DIR/scripts/install.sh" ] || err "install.sh not found under DEVAPP_SOURCE_DIR: ${SOURCE_DIR}"
-    printf '%s\n' "$SOURCE_DIR"
-    return 0
-  fi
-
-  need_cmd git
-
-  TMPDIR_WORK="$(mktemp -d)"
-  checkout="${TMPDIR_WORK}/dingtalk-workspace-cli"
-
-  say "Cloning DevApp preview source..." >&2
-  git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$checkout"
-
-  [ -f "$checkout/scripts/install.sh" ] || err "install.sh not found after clone"
-  printf '%s\n' "$checkout"
+  installed=0; idx=0
+  for agent_dir in \
+    .agents/skills .claude/skills .cursor/skills .qoder/skills .qoderwork/skills \
+    .gemini/skills .codex/skills .github/skills .windsurf/skills .augment/skills \
+    .cline/skills .amp/skills .kiro/skills .trae/skills .openclaw/skills .hermes/skills \
+    .config/opencode/skills
+  do
+    base="$HOME/$agent_dir"
+    if [ "$idx" -gt 0 ] && [ ! -e "$(dirname "$base")" ]; then idx=$((idx + 1)); continue; fi
+    dest="$base/$SKILL_NAME"; rm -rf "$dest"; mkdir -p "$dest"; cp -R "$src/." "$dest/"
+    installed=$((installed + 1)); idx=$((idx + 1))
+  done
+  say "✅ Skill dingtalk-dev → ${installed} agent dir(s)"
 }
 
 main() {
-  print_banner
+  resolve_version
+  os="$(detect_os)"; arch="$(detect_arch)"
+  tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT INT TERM
 
-  if [ "${DWS_SKILLS_ONLY:-0}" != "1" ]; then
-    need_cmd go
-    need_cmd make
+  printf '\n'
+  say "dws Dev preview installer (pre-built binary)"
+  say "Repo:    ${DEVAPP_REPO}"
+  say "Version: ${DEVAPP_VERSION}"
+  say "Target:  ${os}/${arch}"
+  printf '\n'
+
+  # 1) binary (already ad-hoc signed by CI; copy does not break the signature)
+  if [ "$os" = "windows" ]; then
+    asset="dws-windows-${arch}.zip"; binname="dws.exe"
+  else
+    asset="dws-${os}-${arch}.tar.gz"; binname="dws"
+  fi
+  say "⬇  Downloading ${asset} ..."
+  curl -fsSL "https://github.com/${DEVAPP_REPO}/releases/download/${DEVAPP_VERSION}/${asset}" -o "$tmp/$asset" \
+    || err "Binary download failed — does release ${DEVAPP_VERSION} have ${asset}?"
+  if [ "$os" = "windows" ]; then
+    need_cmd unzip; unzip -q "$tmp/$asset" -d "$tmp"
+  else
+    need_cmd tar; tar -xzf "$tmp/$asset" -C "$tmp"
+  fi
+  [ -f "$tmp/$binname" ] || err "${binname} not found inside ${asset}"
+  mkdir -p "$INSTALL_DIR"
+  cp "$tmp/$binname" "$INSTALL_DIR/$binname"; chmod +x "$INSTALL_DIR/$binname" 2>/dev/null || true
+  say "✅ Binary → ${INSTALL_DIR}/${binname}"
+
+  # 2) dev skill from the release's skills bundle
+  if [ "$NO_SKILLS" != "1" ]; then
+    if curl -fsSL "https://github.com/${DEVAPP_REPO}/releases/download/${DEVAPP_VERSION}/dws-skills.zip" -o "$tmp/skills.zip" 2>/dev/null; then
+      mkdir -p "$tmp/sk"
+      if command -v unzip >/dev/null 2>&1; then unzip -q "$tmp/skills.zip" -d "$tmp/sk"; else tar -xf "$tmp/skills.zip" -C "$tmp/sk"; fi
+      say ""
+      install_skill "$tmp/sk"
+    else
+      say "  (no dws-skills.zip in release ${DEVAPP_VERSION}; skill skipped)"
+    fi
   fi
 
-  source_root="$(resolve_source_dir)"
-
-  say ""
-  say "Installing dws from DevApp preview source..."
-  DWS_VERSION=latest DWS_SKILL_MODE="${DWS_SKILL_MODE:-mono}" sh "$source_root/scripts/install.sh"
-
-  say ""
-  say "DevApp next steps:"
+  printf '\n'
+  say "🎉 Done. Next steps:"
   say "  dws version"
   say "  dws auth login"
-  say "  dws devapp --help --format json"
-  say "  dws devapp list --format json"
-
-  if [ "$KEEP_SOURCE" = "1" ]; then
-    say ""
-    say "Source checkout kept at: ${source_root}"
-  fi
+  say "  dws dev --help --format json"
+  say "  dws dev app list --format json"
+  printf '\n'
+  case ":$PATH:" in
+    *":$INSTALL_DIR:"*) ;;
+    *) say "Note: ${INSTALL_DIR} is not on \$PATH — add it so 'dws' is found." ;;
+  esac
 }
 
 main

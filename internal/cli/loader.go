@@ -279,7 +279,7 @@ func (l EnvironmentLoader) Load(ctx context.Context) (ir.Catalog, error) {
 	// accepted subset. See plan fix-wukong-discovery-missing-servers Phase 4.3.
 	logDiscoveryWarnings(response.Metadata.Warnings)
 
-	servers := market.NormalizeServers(response, "live_market")
+	servers := market.NormalizeServersForBaseURL(response, "live_market", baseURL)
 	_ = store.SaveRegistry(partition, cache.RegistrySnapshot{Servers: servers})
 
 	changedKeys := cache.ChangedServerKeysByUpdatedAt(cached.Registry.Servers, servers)

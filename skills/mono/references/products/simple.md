@@ -15,7 +15,25 @@ Example:
 Flags:
       --query string   搜索关键词 (必填)
       --page string    页码 (默认 1)
+      --cursor string  分页游标，翻页传上次返回的 nextCursor；传入后不再使用 --page
       --size string    每页数量 (默认 10)
+```
+
+### 排查开放平台调用错误
+```
+Usage:
+  dws devdoc error diagnose [flags]
+Example:
+  dws devdoc error diagnose --error-code "40014" --query "获取用户信息 access_token" --format json
+  dws devdoc error diagnose --request-id "<REQUEST_ID>" --query "接口调用失败" --format json
+Flags:
+      --query string           原始排查问题
+      --error-code string      错误码
+      --error-message string   错误描述
+      --api string             API 名称
+      --context string         额外排查上下文
+      --request-id string      开放平台 requestId
+      --cursor string          分页游标，翻页传上次返回的 nextCursor；传入后不再使用 --page
 ```
 
 ---
@@ -99,6 +117,7 @@ Example:
 ## 意图判断
 
 - 用户说"开发文档/API 文档/接口文档" → `devdoc article search`
+- 用户说"调用报错/错误码/requestId" → `devdoc error diagnose`；若返回 `PARAM_ERROR - 未找到指定工具`，降级 `devdoc article search` 并标记后端工具注册待闭环
 - 用户说"审批/请假/报销/出差" → `oa approval`
 - 用户说"同意审批/批准" → `oa approval approve`
 - 用户说"拒绝审批/驳回" → `oa approval reject`
@@ -110,7 +129,8 @@ Example:
 
 | 操作 | 从返回中提取 | 用于 |
 |------|-------------|------|
-| `devdoc article search` | 文档链接 | 直接展示给用户 |
+| `devdoc article search` | 文档链接、nextCursor | 直接展示给用户；hasMore=true 时用 --cursor 翻页 |
+| `devdoc error diagnose` | 诊断材料/文档链接、nextCursor | 排查错误码；hasMore=true 时用 --cursor 翻页；不可用时退回文档搜索 |
 | `oa approval list-forms` | processCode | detail / records 等 |
 | `oa approval tasks` | taskId, instanceId | approve / reject |
 | `oa approval list-pending` | instanceId | detail / approve / reject |

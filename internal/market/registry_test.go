@@ -101,6 +101,74 @@ func TestNormalizeServersDeduplicatesSameNameAcrossEndpoints(t *testing.T) {
 	}
 }
 
+func TestNormalizeServersConvertsPreMCPRemoteToGatewayEndpoint(t *testing.T) {
+	t.Parallel()
+
+	response := ListResponse{
+		Servers: []ServerEnvelope{
+			{
+				Server: RegistryServer{
+					Name: "钉钉开放平台文档搜索",
+					Remotes: []RegistryRemote{
+						{Type: "streamable-http", URL: "https://pre-mcp.dingtalk.com/server/devdoc?key=b&key=a#fragment"},
+					},
+				},
+				Meta: EnvelopeMeta{
+					Registry: RegistryMetadata{Status: "active", UpdatedAt: "2026-06-16T00:00:00Z"},
+					CLI:      CLIOverlay{ID: "devdoc", Command: "devdoc"},
+				},
+			},
+		},
+	}
+
+	servers := NormalizeServers(response, "live_market")
+	if len(servers) != 1 {
+		t.Fatalf("NormalizeServers() len = %d, want 1", len(servers))
+	}
+	want := "https://pre-mcp-gw.dingtalk.com/server/devdoc?key=a&key=b"
+	if servers[0].Endpoint != want {
+		t.Fatalf("NormalizeServers() endpoint = %q, want %q", servers[0].Endpoint, want)
+	}
+}
+
+func TestNormalizeServersForBaseURLForcesPreGatewayEndpoint(t *testing.T) {
+	t.Parallel()
+
+	response := ListResponse{
+		Servers: []ServerEnvelope{
+			{
+				Server: RegistryServer{
+					Name: "钉钉文档",
+					Remotes: []RegistryRemote{
+						{Type: "streamable-http", URL: "https://mcp-gw.dingtalk.com/server/doc?key=b&key=a#fragment"},
+					},
+				},
+				Meta: EnvelopeMeta{
+					Registry: RegistryMetadata{Status: "active", UpdatedAt: "2026-06-16T00:00:00Z"},
+					CLI:      CLIOverlay{ID: "doc", Command: "doc"},
+				},
+			},
+		},
+	}
+
+	prodServers := NormalizeServers(response, "live_market")
+	if len(prodServers) != 1 {
+		t.Fatalf("NormalizeServers() len = %d, want 1", len(prodServers))
+	}
+	if want := "https://mcp-gw.dingtalk.com/server/doc?key=a&key=b"; prodServers[0].Endpoint != want {
+		t.Fatalf("NormalizeServers() endpoint = %q, want %q", prodServers[0].Endpoint, want)
+	}
+
+	preServers := NormalizeServersForBaseURL(response, "live_market", "https://pre-mcp.dingtalk.com")
+	if len(preServers) != 1 {
+		t.Fatalf("NormalizeServersForBaseURL() len = %d, want 1", len(preServers))
+	}
+	want := "https://pre-mcp-gw.dingtalk.com/server/doc?key=a&key=b"
+	if preServers[0].Endpoint != want {
+		t.Fatalf("NormalizeServersForBaseURL() endpoint = %q, want %q", preServers[0].Endpoint, want)
+	}
+}
+
 // TestNormalizeServersPreservesDistinctCLIIDsOnSharedEndpoint guards the
 // bot-root / bot-message / bot-group split (issue: chat bot subtree vanished
 // from the CLI after NormalizeServers collapsed three envelopes that share a

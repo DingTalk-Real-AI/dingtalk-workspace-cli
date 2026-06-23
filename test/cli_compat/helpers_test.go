@@ -126,13 +126,9 @@ func execCmdWithArgs(t *testing.T, root *cobra.Command, path []string, flags map
 
 	cap := getCapture(t)
 
-	cliArgs := []string{"-f", "json"}
+	cliArgs := []string{"-f", "json", "--dry-run"}
 	cliArgs = append(cliArgs, path...)
 
-	// Add dry-run if capture says so
-	if cap != nil && cap.dryRun {
-		cliArgs = append(cliArgs, "--dry-run")
-	}
 	// Add --yes if auto-confirm
 	if cap != nil && cap.confirm {
 		cliArgs = append(cliArgs, "--yes")
@@ -165,11 +161,22 @@ func execCmdWithArgs(t *testing.T, root *cobra.Command, path []string, flags map
 		} `json:"invocation"`
 	}
 	if cap != nil {
+		recordDryRunPreview := !cap.dryRun
 		if jsonErr := json.Unmarshal(out.Bytes(), &inv); jsonErr == nil && inv.Invocation.Tool != "" {
-			if !inv.Invocation.DryRun {
+			if !inv.Invocation.DryRun || recordDryRunPreview {
 				cap.record(inv.Invocation.Tool, inv.Invocation.Params, "")
 			}
-			// For dry-run: don't record (matches old behavior: assertCallCount == 0)
+			return nil
+		}
+		var directInv struct {
+			Tool   string         `json:"tool"`
+			Params map[string]any `json:"params"`
+			DryRun bool           `json:"dry_run"`
+		}
+		if jsonErr := json.Unmarshal(out.Bytes(), &directInv); jsonErr == nil && directInv.Tool != "" {
+			if recordDryRunPreview {
+				cap.record(directInv.Tool, directInv.Params, "")
+			}
 		}
 	}
 	return nil

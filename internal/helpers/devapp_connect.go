@@ -28,8 +28,8 @@ import (
 )
 
 // devapp_connect wires the channel-aware "建联" (linking) capability into the
-// devapp command tree as `dws devapp robot connect`. Provisioning (建号) is NOT
-// duplicated here — it reuses devapp's existing `robot create/submit/result`.
+// dev command tree as `dws dev connect`. Provisioning (建号) is NOT
+// duplicated here — it reuses the existing `dev app robot create/submit/result`.
 // This file holds only the linking half: detect the current agent channel, then
 // start a Go-native in-process Stream that forwards @-bot messages to the local
 // agent CLI. The Stream forwarder internals live in connect_stream.go.
@@ -376,24 +376,35 @@ func officialChannelGuidance(channel string) string {
 	return ""
 }
 
-// newDevAppRobotConnectCommand implements `dws devapp robot connect`: the linking
+// connectPreviewEnvelope wraps a connect dry-run preview in an envelope that
+// mirrors the app-tree helper_invocation shape (kind + dry_run at a known top
+// level), so an agent can parse "is this a dry-run preview" the same way across
+// all dev commands. The connect-specific fields (channel/cli/connect/...) sit
+// inside, since connect is a linking pre-check, not an MCP tool call.
+func connectPreviewEnvelope(fields map[string]any) map[string]any {
+	fields["kind"] = "connect_preview"
+	fields["dry_run"] = true
+	return map[string]any{"invocation": fields}
+}
+
+// newDevAppRobotConnectCommand implements `dws dev connect`: the linking
 // half of provisioning. It takes an existing robot's credentials — either
 // directly via --client-id/--client-secret, or by --unified-app-id (reusing
-// devapp's `get_open_dev_app_credentials` to fetch them) — and starts the
+// devapp 的 `get_dev_app_credentials` to fetch them) — and starts the
 // channel-aware Stream connector in the foreground. It never provisions a robot;
-// for 建号 run `dws devapp robot create` (or submit/result) first.
+// for 建号 run `dws dev app robot create` (or submit/result) first.
 func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "connect",
 		Short: "建联：把现成机器人接到当前本地 agent（起 Stream，不建号）",
 		Long: "用已建好的机器人凭证把它接到当前本地 agent，不做建号。\n" +
-			"凭证两种来源：① 直接传 --robot-client-id/--robot-client-secret；② 传 --unified-app-id（复用 devapp credentials get 自动取凭证）。\n" +
+			"凭证两种来源：① 直接传 --robot-client-id/--robot-client-secret；② 传 --unified-app-id（复用 dev app credentials get 自动取凭证）。\n" +
 			"渠道由 --channel 显式指定，或运行时信号自动探测。\n" +
-			"缺凭证请先用 `dws devapp robot create` 建号拿 clientId/clientSecret。",
-		Example: "  dws devapp robot connect --channel workbuddy --robot-client-id <id> --robot-client-secret <secret>\n" +
-			"  dws devapp robot connect --unified-app-id <ID> --channel qoderwork\n" +
-			"  dws devapp robot connect --channel claudecode --robot-client-id <id> --robot-client-secret <secret>\n" +
-			"  dws devapp robot connect --agent-cmd \"lobster -p\" --robot-client-id <id> --robot-client-secret <secret>  # 自研/未支持的 AI 工具",
+			"缺凭证请先用 `dws dev app robot submit` 建号（随后 `robot result` 轮询）拿 clientId/clientSecret。",
+		Example: "  dws dev connect --channel workbuddy --robot-client-id <id> --robot-client-secret <secret>\n" +
+			"  dws dev connect --unified-app-id <ID> --channel qoderwork\n" +
+			"  dws dev connect --channel claudecode --robot-client-id <id> --robot-client-secret <secret>\n" +
+			"  dws dev connect --agent-cmd \"lobster -p\" --robot-client-id <id> --robot-client-secret <secret>  # 自研/未支持的 AI 工具",
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -430,25 +441,24 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 			unifiedAppID := devAppStringFlag(cmd, "unified-app-id")
 			opts := connectAgentOptionsFromCommand(cmd)
 
-			// Credential resolution: explicit pair wins; otherwise reuse devapp's
+			// Credential resolution: explicit pair wins; otherwise reuse dev app's
 			// credentials get against --unified-app-id.
 			resolvedBy := "flag:--robot-client-id/--robot-client-secret"
 			if clientID == "" || clientSecret == "" {
 				if unifiedAppID == "" {
-					return apperrors.NewValidation("需要 --robot-client-id/--robot-client-secret（用现成机器人凭证），或 --unified-app-id（复用 devapp credentials get 自动取凭证）")
+					return apperrors.NewValidation("需要 --robot-client-id/--robot-client-secret（用现成机器人凭证），或 --unified-app-id（复用 dev app credentials get 自动取凭证）")
 				}
 				if commandDryRun(cmd) {
 					// Dry-run must not call the credentials tool; just preview routing.
-					return writeCommandPayload(cmd, map[string]any{
+					return writeCommandPayload(cmd, connectPreviewEnvelope(map[string]any{
 						"channel":          channel,
 						"detectedBy":       detectedBy,
-						"dryRun":           true,
 						"credentialSource": "unified-app-id (credentials get, skipped in dry-run)",
 						"unifiedAppId":     unifiedAppID,
 						"agent":            connectAgentOptionsPayload(channel, opts),
 						"cli":              connectCliStatus(channel),
 						"connect":          buildConnectPlan(channel, "", ""),
-					})
+					}))
 				}
 				id, secret, err := devAppFetchCredentials(runner, cmd, unifiedAppID)
 				if err != nil {
@@ -462,16 +472,15 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 			}
 
 			if commandDryRun(cmd) {
-				return writeCommandPayload(cmd, map[string]any{
+				return writeCommandPayload(cmd, connectPreviewEnvelope(map[string]any{
 					"channel":          channel,
 					"detectedBy":       detectedBy,
-					"dryRun":           true,
 					"credentialSource": resolvedBy,
 					"clientId":         clientID,
 					"agent":            connectAgentOptionsPayload(channel, opts),
 					"cli":              connectCliStatus(channel),
 					"connect":          buildConnectPlan(channel, clientID, ""),
-				})
+				}))
 			}
 
 			// --daemon: detach into a background supervisor that keeps the
@@ -505,7 +514,7 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 	// 目标机器人凭证，与 OAuth 客户端是两码事，故独立命名避免撞名。
 	cmd.Flags().String("robot-client-id", "", "现成机器人 clientId（AppKey）")
 	cmd.Flags().String("robot-client-secret", "", "现成机器人 clientSecret（AppSecret）")
-	cmd.Flags().String("unified-app-id", "", "统一应用 ID：复用 devapp credentials get 自动取凭证（替代手填 robot-client-id/secret）")
+	cmd.Flags().String("unified-app-id", "", "统一应用 ID：复用 dev app credentials get 自动取凭证（替代手填 robot-client-id/secret）")
 	cmd.Flags().String("agent-model", "", "覆盖本地 agent 模型（如 claude 的 sonnet/opus；默认用渠道内置模型，求快）；env: DWS_AGENT_MODEL")
 	cmd.Flags().String("agent-workdir", "", "本地 agent 的运行目录（放知识文件可给机器人上下文；默认空白临时目录，求快）；env: DWS_AGENT_WORKDIR")
 	cmd.Flags().Bool("agent-memory", true, "按会话续聊：同一群/单聊共享 agent 会话上下文（claudecode/codebuddy/workbuddy 支持；--agent-memory=false 关闭）")
@@ -651,14 +660,14 @@ func connectAgentOptionsPayload(channel string, opts connectAgentOptions) map[st
 	return map[string]any{"model": model, "workdir": workDir, "memory": memory, "replyStyle": replyStyle}
 }
 
-// devAppFetchCredentials reuses devapp's get_open_dev_app_credentials tool to
+// devAppFetchCredentials reuses dev app 的 get_dev_app_credentials tool to
 // resolve a unified app's clientId/clientSecret, so `robot connect
 // --unified-app-id` need not have the caller paste raw credentials. Note the
 // open platform only returns clientSecret once (at provisioning); if the tool
 // omits it the caller is told to fall back to explicit flags.
 //
 // TODO(verify): the clientId/clientSecret (and appKey/appSecret fallback) field
-// names below are NOT yet confirmed against the real get_open_dev_app_credentials
+// names below are NOT yet confirmed against the real get_dev_app_credentials
 // response — no fixture exists in-repo. Verify against the pre-prod gateway and
 // pin the exact field names before relying on --unified-app-id auto-fetch. The
 // path degrades safely today: an unrecognised shape yields empty strings and the
@@ -667,7 +676,7 @@ func devAppFetchCredentials(runner executor.Runner, cmd *cobra.Command, unifiedA
 	invocation := executor.NewHelperInvocation(
 		cobracmd.LegacyCommandPath(cmd),
 		devAppProduct,
-		"get_open_dev_app_credentials",
+		devAppCredentialsGetTool,
 		map[string]any{"unifiedAppId": unifiedAppID},
 	)
 	res, err := runner.Run(cmd.Context(), invocation)

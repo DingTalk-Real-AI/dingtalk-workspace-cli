@@ -1,0 +1,103 @@
+name: Auto Dev Release
+
+# 推到 dev 分支 → 跑测试 → 通过才自动出一个 dev 预览 release。
+# install-devapp.sh / .ps1 取 fork 最新 release，所以发完安装链接即最新。
+#
+# 设计要点：
+# - 自包含：测试 + 算版本 + 打 tag + 发 release 全在一个 job，不依赖 tag 触发
+#   release.yml（GITHUB_TOKEN 推的 tag 本来也不会触发别的 workflow）。
+# - 质量门：测试这一步失败，后面发布步骤就不会跑。
+# - 不含 npm publish，所以自动发布天然是绿的。
+on:
+  push:
+    branches:
+      - feat/dws-devapp
+
+# 串行：两次 push 不会同时算版本号撞车
+concurrency:
+  group: auto-dev-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  test-and-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install archive tooling
+        run: sudo apt-get update && sudo apt-get install -y zip unzip
+
+      # ---- 质量门：测试不过就不发 ----
+      - name: Build
+        run: make build
+
+      - name: Test
+        run: go test -race -count=1 -timeout=5m ./cmd/... ./internal/...
+
+      # ---- 算下一个 dev 版本号并打 tag ----
+      - name: Compute next dev version
+        id: ver
+        run: |
+          set -eu
+          LATEST=$(git tag -l 'v*-dev.*' --sort=-v:refname | head -1 || true)
+          if [ -z "$LATEST" ]; then
+            BASE="v1.0.39"; N=0
+          else
+            BASE=$(printf '%s' "$LATEST" | sed -E 's/-dev\.[0-9]+$//')
+            N=$(printf '%s' "$LATEST" | sed -E 's/.*-dev\.([0-9]+)$/\1/')
+          fi
+          NEW="${BASE}-dev.$((N + 1))"
+          echo "version=$NEW" >> "$GITHUB_OUTPUT"
+          echo "next dev release: $NEW (prev: ${LATEST:-none})"
+
+      - name: Create and push tag
+        run: |
+          set -eu
+          V="${{ steps.ver.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "$V"
+          git push origin "$V"
+
+      # ---- 自己发 release（不靠 tag 触发 release.yml）----
+      - name: Install rcodesign (ad-hoc sign darwin binaries from Linux)
+        run: |
+          set -eu
+          RCS_VERSION="0.27.0"
+          curl -fsSL -o /tmp/rcodesign.tar.gz \
+            "https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F${RCS_VERSION}/apple-codesign-${RCS_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+          mkdir -p /tmp/rcodesign
+          tar -xzf /tmp/rcodesign.tar.gz -C /tmp/rcodesign --strip-components=1
+          sudo install -m 0755 /tmp/rcodesign/rcodesign /usr/local/bin/rcodesign
+          rcodesign --version
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post-release packaging
+        run: ./scripts/release/post-goreleaser.sh
+        env:
+          DWS_PACKAGE_VERSION: ${{ steps.ver.outputs.version }}
+
+      - name: Upload dws-skills.zip to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ steps.ver.outputs.version }}" dist/dws-skills.zip --clobber

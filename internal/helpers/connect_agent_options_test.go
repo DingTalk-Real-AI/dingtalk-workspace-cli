@@ -132,7 +132,7 @@ func TestRobotConnectAgentFlagsInDryRun(t *testing.T) {
 	var out bytes.Buffer
 	root.SetOut(&out)
 	root.SetErr(&out)
-	root.SetArgs([]string{"devapp", "robot", "connect",
+	root.SetArgs([]string{"dev", "connect",
 		"--channel", "claudecode",
 		"--robot-client-id", "id1", "--robot-client-secret", "sec1",
 		"--agent-model", "claude-sonnet-4-6", "--agent-workdir", "/tmp/kb",
@@ -151,7 +151,7 @@ func TestRobotConnectAgentFlagsInDryRun(t *testing.T) {
 	root = newDevAppTestRoot(&captureRunner{})
 	root.SetOut(&out)
 	root.SetErr(&out)
-	root.SetArgs([]string{"devapp", "robot", "connect",
+	root.SetArgs([]string{"dev", "connect",
 		"--channel", "claudecode",
 		"--robot-client-id", "id1", "--robot-client-secret", "sec1",
 		"--agent-memory=false", "--dry-run"})
@@ -179,7 +179,7 @@ func TestRobotConnectDryRunShowsCliStatus(t *testing.T) {
 		var out bytes.Buffer
 		root.SetOut(&out)
 		root.SetErr(&out)
-		root.SetArgs([]string{"devapp", "robot", "connect", "--channel", channel,
+		root.SetArgs([]string{"dev", "connect", "--channel", channel,
 			"--robot-client-id", "a", "--robot-client-secret", "b", "--dry-run"})
 		if err := root.Execute(); err != nil {
 			t.Fatalf("Execute(%s): %v\n%s", channel, err, out.String())

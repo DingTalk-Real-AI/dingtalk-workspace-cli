@@ -172,8 +172,8 @@ func inAntiRange(root, file string, ln int) bool {
 }
 
 func shouldSkip(cmd string) bool {
-	if strings.HasPrefix(cmd, "dws devapp ") || cmd == "dws devapp" {
-		// devapp is a target MCP-discovered command tree. Until the MCP product
+	if strings.HasPrefix(cmd, "dws dev ") || cmd == "dws dev" {
+		// dev (product id: devapp) is a target MCP-discovered command tree. Until the MCP product
 		// is published into the open-source registry, validate its Agent routing
 		// through test/skill_tests.md rather than mock cobra dispatch.
 		return true

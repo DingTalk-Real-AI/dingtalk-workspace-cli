@@ -74,7 +74,7 @@ type streamingForwarder interface {
 }
 
 // connectAgentOptions carries the user-facing agent tuning exposed on
-// `devapp robot connect` (and mirrored env vars). Zero value = defaults:
+// `dev connect` (and mirrored env vars). Zero value = defaults:
 // channel's built-in model, per-conversation memory on (where the CLI supports
 // it), empty scratch workdir.
 type connectAgentOptions struct {

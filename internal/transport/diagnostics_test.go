@@ -76,6 +76,26 @@ func TestExtractServerDiagnosticsFromMap(t *testing.T) {
 	}
 }
 
+func TestExtractServerDiagnosticsFromMapNestedBusinessCode(t *testing.T) {
+	t.Parallel()
+	content := map[string]any{
+		"trace_id": "trace-002",
+		"code":     "BUSINESS_ERROR",
+		"result": map[string]any{
+			"success":   false,
+			"errorCode": "ROBOT_NOT_FOUND",
+			"errorMsg":  "robot info is not exist",
+		},
+	}
+	diag := ExtractServerDiagnosticsFromMap(content)
+	if diag.TraceID != "trace-002" {
+		t.Fatalf("TraceID = %q, want trace-002", diag.TraceID)
+	}
+	if diag.ServerErrorCode != "ROBOT_NOT_FOUND" {
+		t.Fatalf("ServerErrorCode = %q, want ROBOT_NOT_FOUND", diag.ServerErrorCode)
+	}
+}
+
 func TestExtractServerDiagnosticsFromMap_Empty(t *testing.T) {
 	t.Parallel()
 	diag := ExtractServerDiagnosticsFromMap(nil)

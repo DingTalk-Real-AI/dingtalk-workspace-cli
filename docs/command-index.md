@@ -36,7 +36,7 @@ Every command inherits these flags (documented here once, not repeated per comma
 - [`dws calendar` — Calendar](#dws-calendar) · 14 commands
 - [`dws chat` — Group Chat / IM](#dws-chat) · 23 commands
 - [`dws contact` — Contact Directory](#dws-contact) · 6 commands
-- [`dws devdoc` — Open Platform Docs](#dws-devdoc) · 1 commands
+- [`dws devdoc` — Open Platform Docs](#dws-devdoc) · 2 commands
 - [`dws ding` — DING Messages](#dws-ding) · 2 commands
 - [`dws doc` — DingTalk Doc](#dws-doc) · 21 commands
 - [`dws drive` — DingTalk Drive](#dws-drive) · 6 commands
@@ -182,11 +182,12 @@ _Users, departments, and directory lookups._
 
 _Search the DingTalk Open Platform documentation._
 
-**1 commands**
+**2 commands**
 
 | Command | Description | When to use |
 |---|---|---|
 | `dws devdoc article search` | Search the DingTalk Open Platform documentation by keyword. | When the agent needs authoritative API reference or guides to answer a developer question. |
+| `dws devdoc error diagnose` | Diagnose DingTalk Open Platform API errors by error code, requestId, or context. | When the agent needs troubleshooting material for a failed OpenAPI call. |
 
 ## `dws ding` — DING Messages
 
@@ -320,4 +321,3 @@ _Personal todo task management._
 | `dws todo task get` | Retrieve the full details of a todo item by ID. | When the agent inspects a specific todo's content, due date, and executors. |
 | `dws todo task list` | List todos for the current user within the current organization. | When the agent surfaces the user's outstanding tasks or builds a daily focus list. |
 | `dws todo task update` | Update a todo's title, description, due time, or executors. | When the agent edits an existing todo after new information comes in. |
-

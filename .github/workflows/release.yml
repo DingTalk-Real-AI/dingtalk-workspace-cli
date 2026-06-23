@@ -69,14 +69,14 @@ jobs:
           gh release edit "${{ github.ref_name }}" --prerelease=false --latest
 
       - name: Setup Node.js
-        if: github.repository == 'DingTalk-Real-AI/dingtalk-workspace-cli'
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
 
       - name: Publish to npm
-        if: github.repository == 'DingTalk-Real-AI/dingtalk-workspace-cli'
+        # 只有官方仓库发 npm；fork（dev 预览）没有 NPM_TOKEN，跳过以免红叉
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' }}
         working-directory: dist/npm/dingtalk-workspace-cli
         run: npm publish --access public
         env:

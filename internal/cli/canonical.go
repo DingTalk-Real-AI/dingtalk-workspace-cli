@@ -103,7 +103,7 @@ func NewMCPCommand(ctx context.Context, loader CatalogLoader, runner executor.Ru
 	return cmd
 }
 
-func NewSchemaCommand(loader CatalogLoader) *cobra.Command {
+func NewSchemaCommand(loader CatalogLoader, helperTools HelperToolFetcher) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "schema [path]",
 		Short: "查看 MCP 工具 Schema (产品列表 / 工具参数)",
@@ -125,7 +125,13 @@ func NewSchemaCommand(loader CatalogLoader) *cobra.Command {
   dws schema --cli-path "ding message send" # 同上，显式 flag（脚本友好）
   dws schema calendar.create_event --jq '.tool.auth'
   dws schema -f pretty ding.send_ding_message  # ANSI 彩色分区展示
-  dws schema --jq '.tool.flag_overlay'      # 只看 CLI overlay`,
+  dws schema --jq '.tool.flag_overlay'      # 只看 CLI overlay
+
+helper-only 命令组（如 dev，不走服务发现）也支持查询，schema 从 op-app
+MCP 服务端实时拉取，输出对齐 gws 的扁平格式（parameters 内联 required，
+键为 CLI flag）：
+  dws schema "dev app robot config"         # 实时 MCP 参数 schema（gws-flat）
+  dws schema "dev app"                      # 列出该分组下的子命令`,
 		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -137,6 +143,29 @@ func NewSchemaCommand(loader CatalogLoader) *cobra.Command {
 				}
 				args = []string{cliPath}
 			}
+
+			// Helper-only subtrees (e.g. `dws dev ...`) aren't in the discovery
+			// catalog; their schema CONTENT is fetched LIVE from the helper's
+			// pinned MCP server (op-app) and rendered in the gws-flat shape, so
+			// `dws schema "dev app robot config"` answers without touching
+			// discovery. Only the `dev` root claims this path; everything else
+			// falls through to the catalog below.
+			if len(args) > 0 {
+				payload, ok, err := renderHelperSchema(cmd.Context(), cmd.Root(), args[0], helperTools)
+				if err != nil {
+					return err
+				}
+				if ok {
+					return output.WriteFiltered(
+						cmd.OutOrStdout(),
+						output.ResolveFormat(cmd, output.FormatJSON),
+						payload,
+						output.ResolveFields(cmd),
+						output.ResolveJQ(cmd),
+					)
+				}
+			}
+
 			catalog, err := loader.Load(cmd.Context())
 			if err != nil {
 				var degraded *CatalogDegraded
@@ -164,6 +193,17 @@ func NewSchemaCommand(loader CatalogLoader) *cobra.Command {
 			payload, err := schemaPayload(catalog, args)
 			if err != nil {
 				return err
+			}
+
+			// Append helper-only subtrees (e.g. `dev`) to the no-arg product
+			// listing so browsing all products also surfaces helper commands.
+			if len(args) == 0 {
+				if helpers := helperProductSummaries(cmd.Root()); len(helpers) > 0 {
+					if products, ok := payload["products"].([]map[string]any); ok {
+						payload["products"] = append(products, helpers...)
+						payload["count"] = len(payload["products"].([]map[string]any))
+					}
+				}
 			}
 
 			return output.WriteFiltered(

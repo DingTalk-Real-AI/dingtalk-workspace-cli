@@ -2,8 +2,8 @@
 
 ## Summary
 
-- **Total Test Cases**: 234
-- **Passed**: 234
+- **Total Test Cases**: 232
+- **Passed**: 232
 - **Failed**: 0
 - **Pass Rate**: 100.0%
 
@@ -16,8 +16,8 @@
 | calendar | 30 | 30 | 0 | 100.0% |
 | chat | 31 | 31 | 0 | 100.0% |
 | contact | 14 | 14 | 0 | 100.0% |
-| devapp | 25 | 25 | 0 | 100.0% |
-| devdoc | 7 | 7 | 0 | 100.0% |
+| devapp | 22 | 22 | 0 | 100.0% |
+| devdoc | 8 | 8 | 0 | 100.0% |
 | ding | 5 | 5 | 0 | 100.0% |
 | report | 26 | 26 | 0 | 100.0% |
 | routing | 3 | 3 | 0 | 100.0% |
@@ -1105,11 +1105,11 @@
 
 **devapp_devapp_list_002** ✅ PASS
 
-- Prompt: 分页查询开放平台应用，第 2 页，每页 10 条，按修改时间倒序
-- Expected: `dws devapp list --page 2 --page-size 10 --sort gmt_modified --order desc --format json`
+- Prompt: 分页查询开放平台应用，使用上一页返回的 cursor，每页 10 条
+- Expected: `dws devapp list --cursor NEXT_CURSOR --page-size 10 --format json`
 - Skill Reference: references/products/devapp.md
 - Command path: PASS (devapp list)
-- Flags: PASS (4 flags validated)
+- Flags: PASS (2 flags validated)
 
 **devapp_devapp_list_003** ✅ PASS
 
@@ -1123,22 +1123,6 @@
 
 - Prompt: 查看统一应用 UNIFIED_APP_ID 的应用详情
 - Expected: `dws devapp get --unified-app-id UNIFIED_APP_ID --format json`
-- Skill Reference: references/products/devapp.md
-- Command path: PASS (devapp get)
-- Flags: PASS (1 flags validated)
-
-**devapp_devapp_get_002** ✅ PASS
-
-- Prompt: agentId 为 123456 的开放平台应用是哪个
-- Expected: `dws devapp get --agent-id 123456 --format json`
-- Skill Reference: references/products/devapp.md
-- Command path: PASS (devapp get)
-- Flags: PASS (1 flags validated)
-
-**devapp_devapp_get_003** ✅ PASS
-
-- Prompt: 查开放平台应用 DemoApp 的 appKey、clientId 和 agentId
-- Expected: `dws devapp get --name DemoApp --format json`
 - Skill Reference: references/products/devapp.md
 - Command path: PASS (devapp get)
 - Flags: PASS (1 flags validated)
@@ -1183,18 +1167,10 @@
 - Command path: PASS (devapp credentials get)
 - Flags: PASS (1 flags validated)
 
-**devapp_devapp_credentials_get_002** ✅ PASS
-
-- Prompt: 查询 AgentId AGENT_ID 对应应用的开放平台凭证
-- Expected: `dws devapp credentials get --agent-id AGENT_ID --format json`
-- Skill Reference: references/products/devapp.md
-- Command path: PASS (devapp credentials get)
-- Flags: PASS (1 flags validated)
-
 **devapp_devapp_member_list_001** ✅ PASS
 
 - Prompt: 查看开放平台应用 UNIFIED_APP_ID 的成员
-- Expected: `dws devapp member list --app-id UNIFIED_APP_ID --format json`
+- Expected: `dws devapp member list --unified-app-id UNIFIED_APP_ID --format json`
 - Skill Reference: references/products/devapp.md
 - Command path: PASS (devapp member list)
 - Flags: PASS (1 flags validated)
@@ -1202,7 +1178,7 @@
 **devapp_devapp_member_add_001** ✅ PASS
 
 - Prompt: 给开放平台应用 UNIFIED_APP_ID 添加开发者成员 userId1,userId2，先预览
-- Expected: `dws devapp member add --app-id UNIFIED_APP_ID --users userId1,userId2 --member-type DEVELOPER --dry-run --format json`
+- Expected: `dws devapp member add --unified-app-id UNIFIED_APP_ID --users userId1,userId2 --member-type DEVELOPER --dry-run --format json`
 - Skill Reference: references/products/devapp.md
 - Command path: PASS (devapp member add)
 - Flags: PASS (3 flags validated)
@@ -1210,7 +1186,7 @@
 **devapp_devapp_member_remove_001** ✅ PASS
 
 - Prompt: 已确认，从开放平台应用 UNIFIED_APP_ID 移除开发者成员 userId1
-- Expected: `dws devapp member remove --app-id UNIFIED_APP_ID --users userId1 --member-type DEVELOPER --yes --format json`
+- Expected: `dws devapp member remove --unified-app-id UNIFIED_APP_ID --users userId1 --member-type DEVELOPER --yes --format json`
 - Skill Reference: references/products/devapp.md
 - Command path: PASS (devapp member remove)
 - Flags: PASS (4 flags validated)
@@ -1218,7 +1194,7 @@
 **devapp_devapp_security_config_001** ✅ PASS
 
 - Prompt: 给开放平台应用 UNIFIED_APP_ID 配置 IP 白名单 192.0.2.10，先预览
-- Expected: `dws devapp security config --app-id UNIFIED_APP_ID --ip-whitelist 192.0.2.10 --dry-run --format json`
+- Expected: `dws devapp security config --unified-app-id UNIFIED_APP_ID --ip-whitelist 192.0.2.10 --dry-run --format json`
 - Skill Reference: references/products/devapp.md
 - Command path: PASS (devapp security config)
 - Flags: PASS (2 flags validated)
@@ -1274,7 +1250,7 @@
 **devapp_devapp_permission_remove_001** ✅ PASS
 
 - Prompt: 从应用 UNIFIED_APP_ID 移除 qyapi_robot_sendmsg 权限，先预览
-- Expected: `dws devapp permission remove --unified-app-id UNIFIED_APP_ID --permission qyapi_robot_sendmsg --dry-run --format json`
+- Expected: `dws devapp permission remove --unified-app-id UNIFIED_APP_ID --permissions qyapi_robot_sendmsg --dry-run --format json`
 - Skill Reference: references/products/devapp.md
 - Command path: PASS (devapp permission remove)
 - Flags: PASS (2 flags validated)
@@ -1352,6 +1328,14 @@
 - Skill Reference: references/products/devdoc.md
 - Command path: PASS (devdoc article search)
 - Flags: PASS (1 flags validated)
+
+**devdoc_devdoc_article_search_008** ✅ PASS
+
+- Prompt: 继续搜索开放平台文档中关于消息卡片的下一页，游标 NEXT_CURSOR
+- Expected: `dws devdoc article search --keyword 消息卡片 --cursor NEXT_CURSOR --format json`
+- Skill Reference: references/products/devdoc.md
+- Command path: PASS (devdoc article search)
+- Flags: PASS (2 flags validated)
 
 ### ding
 

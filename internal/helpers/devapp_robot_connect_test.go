@@ -20,12 +20,12 @@ import (
 	"testing"
 )
 
-// TestDevAppRobotConnectRegistered confirms `devapp robot connect` is wired into
+// TestDevAppRobotConnectRegistered confirms `dev connect` is wired into
 // the robot subtree alongside the (reused) provisioning commands.
 func TestDevAppRobotConnectRegistered(t *testing.T) {
 	root := newDevAppCommand(&captureRunner{})
 	if _, _, err := root.Find([]string{"robot", "connect"}); err != nil {
-		t.Fatalf("devapp robot connect not registered: %v", err)
+		t.Fatalf("dev connect not registered: %v", err)
 	}
 	// Provisioning stays under robot (reused, not duplicated by connect).
 	for _, name := range []string{"create", "submit", "result"} {
@@ -72,7 +72,7 @@ func TestDevAppRobotConnectValidation(t *testing.T) {
 			var out bytes.Buffer
 			root.SetOut(&out)
 			root.SetErr(&out)
-			root.SetArgs(append([]string{"devapp", "robot", "connect"}, tc.args...))
+			root.SetArgs(append([]string{"dev", "connect"}, tc.args...))
 			err := root.Execute()
 
 			if tc.wantErr != "" {
@@ -94,7 +94,7 @@ func TestDevAppRobotConnectValidation(t *testing.T) {
 }
 
 // TestDevAppFetchCredentials checks that --unified-app-id credential resolution
-// reuses get_open_dev_app_credentials and extracts clientId/clientSecret from the
+// reuses get_dev_app_credentials and extracts clientId/clientSecret from the
 // MCP envelope.
 func TestDevAppFetchCredentials(t *testing.T) {
 	runner := &devAppResponseRunner{response: map[string]any{
@@ -106,7 +106,7 @@ func TestDevAppFetchCredentials(t *testing.T) {
 		},
 	}}
 	root := newDevAppTestRoot(runner)
-	connectCmd, _, err := root.Find([]string{"devapp", "robot", "connect"})
+	connectCmd, _, err := root.Find([]string{"dev", "connect"})
 	if err != nil {
 		t.Fatalf("find connect: %v", err)
 	}
@@ -119,8 +119,8 @@ func TestDevAppFetchCredentials(t *testing.T) {
 	if id != "ck-123" || secret != "cs-456" {
 		t.Fatalf("got id=%q secret=%q, want ck-123/cs-456", id, secret)
 	}
-	if runner.last.Tool != "get_open_dev_app_credentials" {
-		t.Fatalf("Tool = %q, want get_open_dev_app_credentials", runner.last.Tool)
+	if runner.last.Tool != "get_dev_app_credentials" {
+		t.Fatalf("Tool = %q, want get_dev_app_credentials", runner.last.Tool)
 	}
 	if runner.last.CanonicalProduct != devAppProduct {
 		t.Fatalf("CanonicalProduct = %q, want %q", runner.last.CanonicalProduct, devAppProduct)
