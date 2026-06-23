@@ -257,11 +257,13 @@ func newDevAppEventListCommand(runner executor.Runner) *cobra.Command {
 				return err
 			}
 			params := map[string]any{"unifiedAppId": appID}
+			devAppPutString(params, "keyword", devAppStringFlag(cmd, "keyword"))
 			devAppApplyCursorParams(cmd, params)
 			return runDevAppTool(runner, cmd, devAppEventListTool, params)
 		},
 	}
 	addDevAppUnifiedIDFlag(cmd)
+	cmd.Flags().String("keyword", "", "事件搜索关键词，支持按事件码或事件名称模糊匹配")
 	registerDevAppCursorFlags(cmd)
 	preferLegacyLeaf(cmd)
 	annotateDevAppTool(cmd, devAppEventListTool)
