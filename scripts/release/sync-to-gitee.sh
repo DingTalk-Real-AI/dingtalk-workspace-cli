@@ -47,7 +47,7 @@ echo "📦 Mirroring release ${VERSION} → Gitee ${GITEE_REPO}"
 # ── Resolve or create the Gitee release for this tag ──────────────────────────
 # Gitee mirror sync brings the git tag over, so the tag should already exist.
 rel_json="$(curl -fsSL "${base}/releases/tags/${VERSION}?access_token=${GITEE_TOKEN}" 2>/dev/null || true)"
-release_id="$(printf '%s' "$rel_json" | grep -o '"id":[ ]*[0-9]*' | head -1 | grep -o '[0-9]*')"
+release_id="$(printf '%s' "$rel_json" | grep -o '"id":[ ]*[0-9]*' | head -1 | grep -o '[0-9]*' || true)"
 
 if [ -z "$release_id" ]; then
   echo "   No Gitee release for ${VERSION} yet — creating it."
@@ -57,7 +57,7 @@ if [ -z "$release_id" ]; then
     -F "name=${VERSION}" \
     -F "body=Mirror of GitHub release ${VERSION} for China users." \
     -F "target_commitish=main" 2>/dev/null || true)"
-  release_id="$(printf '%s' "$rel_json" | grep -o '"id":[ ]*[0-9]*' | head -1 | grep -o '[0-9]*')"
+  release_id="$(printf '%s' "$rel_json" | grep -o '"id":[ ]*[0-9]*' | head -1 | grep -o '[0-9]*' || true)"
 fi
 [ -n "$release_id" ] || { echo "❌ Could not get/create Gitee release for ${VERSION}. Response: ${rel_json}" >&2; exit 1; }
 echo "   Gitee release id = ${release_id}"
