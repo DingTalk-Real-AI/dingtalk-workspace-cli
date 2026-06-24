@@ -58,6 +58,18 @@ jobs:
         run: |
           gh release upload "${{ github.ref_name }}" dist/dws-skills.zip --clobber
 
+      - name: Sync release to China OSS mirror
+        # 自动同步到国内镜像，供 install.sh 的 DWS_RELEASE_BASE 开关消费。
+        # 脚本自带门控：未配置 OSS_* secret 时优雅跳过，不影响海外发布。
+        run: ./scripts/release/sync-to-oss.sh
+        env:
+          VERSION: ${{ github.ref_name }}
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT }}
+          OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
+          OSS_PREFIX: ${{ secrets.OSS_PREFIX }}
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
