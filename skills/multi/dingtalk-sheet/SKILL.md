@@ -23,6 +23,13 @@ metadata:
 
 > 命令参考：[sheet.md](references/sheet.md)；URL 识别与类型探测：[url-patterns.md](references/url-patterns.md)。
 
+## 开放平台文档 RAG / 错误码排查
+
+- 任何产品执行中，只要用户问开放平台 API、接口参数、字段含义、权限点、回调、SDK、配额、错误码，或命令返回上游 OpenAPI/SDK 错误，必须先用 `dws devdoc article search --query "<关键词>" --format json` 做官方文档 RAG。
+- 查询词优先保留原始 API 名、能力名、权限点、完整错误码和 message；首轮形如 `errcode <code> <message>`，无结果再换 `<产品/场景> <错误码>`、`<接口名> 参数`。
+- 本地 CLI 错误（如 `unknown command` / `unknown flag` / 认证 / recovery）仍按 root `dws` / `dws-shared` 的错误处理执行；`devdoc` 用于开放平台业务错误码和接口语义排查。
+- `devdoc` 只查钉钉开放平台开发者文档，不查业务数据；排查结论必须基于命中条目的标题、摘要或链接，不能编造错误原因或不存在的命令。
+
 ## URL 预检（含 alidocs URL 时必读）
 
 输入含 `alidocs.dingtalk.com` URL 时，该域名下存在多种路径格式：`/i/p/...`（分享短链）、`/i/nodes/...`（节点链接，类型需探测）、`/spreadsheetv2/...`（电子表格直链，直接路由到 `sheet`）、`/document/edit|preview?dentryKey=...`（文档链接，路由到 `dingtalk-doc`）等。**必须先读 [url-patterns.md](references/url-patterns.md) 中的「alidocs URL 分流决策」**，按规则识别 URL 类型；仅当确认是在线电子表格（`/spreadsheetv2/...` 或 `i/nodes/` 且 probe 出 `contentType=ALIDOC` + `extension=axls`）时，才继续走本 skill 的命令。

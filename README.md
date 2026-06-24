@@ -299,7 +299,7 @@ dws aitable record query --base-id BASE_ID --table-id TABLE_ID --limit 10
 The repo ships a complete Agent Skill system under `skills/`, now organized into two layouts:
 
 - `skills/mono/` — single-skill layout (one `SKILL.md` + `references/products/`), recommended default.
-- `skills/multi/` — per-product skills (`dingtalk-aitable/`, `dingtalk-calendar/`, `dingtalk-chat/`, ... 18 products in total), each with its own `SKILL.md`. 🧪 **EXPERIMENTAL / preview — see banner in each multi `SKILL.md` for caveats.**
+- `skills/multi/` — per-product skills (`dingtalk-aitable/`, `dingtalk-calendar/`, `dingtalk-chat/`, ... 20 products in total), each with its own `SKILL.md`. 🧪 **EXPERIMENTAL / preview — see banner in each multi `SKILL.md` for caveats.**
 
 After installing, AI tools like Claude Code / Cursor can operate DingTalk directly through natural language:
 
@@ -514,7 +514,7 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 | Mail | `mail` | 18 | `mailbox` `message` `draft` `folder` `tag` `thread` `attachment` `user` | List mailboxes, KQL message search, read & send messages, drafts, folders, tags, threads, attachments, address-book user search |
 | Sheet | `sheet` | 23 | `range` `filter-view` (top-level: `create` `new` `list` `info` `read` `get` `update` `find` `replace` `append` `merge-cells` `unmerge-cells` `add-dimension` `insert-dimension` `delete-dimension` `move-dimension` `update-dimension` `write-image`) | Online spreadsheet (`contentType=ALIDOC`, `extension=axls`): worksheet CRUD, range read / write / append, dimension ops, cell merge / unmerge, find / replace, named filter views + sheet-level filters, image write |
 | Wiki | `wiki` | 21 | `space` `member` `node` `doc` `file` | Knowledge base management: spaces (`create` / `get` / `list` / `search`), members (`add` / `list` / `update`), node tree, docs & files |
-| DevDoc | `devdoc` | 2 | `article` `error` | Search Open Platform documentation and troubleshoot API errors |
+| DevDoc | `devdoc` | 2 | `article` `error` | Search the DingTalk Open Platform documentation and diagnose API errors |
 | AI Search | `aisearch` | 3 | `person` | Enterprise people search by name / department / position / duty / supervisor / subordinate / phone / job-number (single command, multi-dimension filter) |
 | Live | `live` | 1 | `stream` | DingTalk live streaming: list my lives |
 | Raw API | `api` | 1 | — | Call any DingTalk OpenAPI directly (api / oapi dual-form), with automatic app-level token management |
@@ -579,6 +579,7 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 - [Command Index](./docs/command-index.md) — every runtime command with description and when-to-use guidance
 - [Reference](./docs/reference.md) — environment variables, exit codes, output formats, shell completion
 - [Architecture](./docs/architecture.md) — discovery-driven pipeline, IR, transport layer
+- [Open Platform App Command Routing](./docs/dev-yulan-command-routing.md) — yulan dev app command design, MCP overlay, permission flow, and Agent routing
 - [Changelog](./CHANGELOG.md) — release history and migration notes
 
 ## Contributing

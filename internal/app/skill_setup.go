@@ -4,11 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	embeddedskills "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/skills"
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 )
@@ -21,6 +23,8 @@ var skillSetupAgentHomes = []string{
 	".agents/skills",
 	".claude/skills",
 	".cursor/skills",
+	".qoder/skills",
+	".qoderwork/skills",
 	".gemini/skills",
 	".codex/skills",
 	".github/skills",
@@ -56,7 +60,8 @@ multi 模式支持按产品挑选：
   -x/--exclude 从全装里剔除指定子 skill（可重复，与 --skill 互斥）
   未列出的已有 dingtalk-* skill 会保留（additive 叠加语义）
 
-不带 --mode 时进入交互式询问；不带 --target 时铺到所有检测到的 Agent 目录。`,
+不带 --mode 时进入交互式询问；不带 --target 时铺到所有检测到的 Agent 目录。
+skill 源默认取二进制内嵌的版本（升级二进制即升级 skill）；--source / DWS_SKILL_SOURCE 可显式覆盖。`,
 		Example: `  dws skill setup                                       # 交互式
   dws skill setup --mode mono --yes                     # 非交互装 mono
   dws skill setup --mode multi --target claude          # multi 全装到 ~/.claude/skills/
@@ -68,7 +73,7 @@ multi 模式支持按产品挑选：
 	}
 	cmd.Flags().String("mode", "", "skill 模式：mono | multi（不指定则交互询问）")
 	cmd.Flags().String("target", "all", "目标 Agent：all | "+supportedTargets())
-	cmd.Flags().String("source", "", "skill 源目录（默认自动查找二进制旁边或当前目录）")
+	cmd.Flags().String("source", "", "skill 源目录（默认使用二进制内嵌的 skill 源，与当前版本一致）")
 	cmd.Flags().Bool("yes", false, "跳过所有确认提示")
 	cmd.Flags().StringSliceP("skill", "s", nil, "multi 模式：仅安装指定子 skill（可重复，接受短名 aitable 或全名 dingtalk-aitable）")
 	cmd.Flags().StringSliceP("exclude", "x", nil, "multi 模式：从全装中剔除指定子 skill（可重复，与 --skill 互斥）")
@@ -313,7 +318,37 @@ func resolveSkillSetupMode(mode string, autoYes bool, out io.Writer) (string, er
 func resolveSkillSetupSource(explicit, mode string) (string, error) {
 	subdir := mode // "mono" or "multi"
 
-	candidates := skillSourceCandidates(explicit, subdir)
+	// An explicit override (--source flag or DWS_SKILL_SOURCE) wins, and an
+	// override that does not contain a skill root is an error — never a
+	// silent fallback to another source the user did not ask for.
+	var overrides []string
+	if explicit != "" {
+		overrides = append(overrides, explicit, filepath.Join(explicit, "skills", subdir))
+	}
+	if env := strings.TrimSpace(os.Getenv("DWS_SKILL_SOURCE")); env != "" {
+		overrides = append(overrides, env, filepath.Join(env, "skills", subdir))
+	}
+	if len(overrides) > 0 {
+		for _, c := range overrides {
+			if isSkillSourceRoot(c, mode) {
+				return c, nil
+			}
+		}
+		hint := strings.Join(overrides, "\n  - ")
+		return "", fmt.Errorf("未找到 %s 模式的 skill 源目录（--source / DWS_SKILL_SOURCE 显式指定时不回退到内嵌源），已尝试：\n  - %s", mode, hint)
+	}
+
+	// Default: the copy embedded in this binary, materialized into the
+	// user-level cache. Upgrading the binary therefore upgrades what setup
+	// installs — a stale checkout in cwd can no longer poison the install
+	// (issue PeterGuy326#8).
+	if src, err := materializeEmbeddedSkillSource(subdir); err == nil && isSkillSourceRoot(src, mode) {
+		return src, nil
+	}
+
+	// Legacy fallbacks (exe-adjacent, cwd, user cache) — only reachable when
+	// embed materialization fails (e.g. unwritable HOME and temp dir).
+	candidates := skillSourceCandidates("", subdir)
 	for _, c := range candidates {
 		if isSkillSourceRoot(c, mode) {
 			return c, nil
@@ -322,6 +357,38 @@ func resolveSkillSetupSource(explicit, mode string) (string, error) {
 
 	hint := strings.Join(candidates, "\n  - ")
 	return "", fmt.Errorf("未找到 %s 模式的 skill 源目录，已尝试：\n  - %s\n\n请用 --source 显式指定包含 skills/%s 的仓库根目录", mode, hint, mode)
+}
+
+// materializeEmbeddedSkillSource extracts the embedded skills/<mode> tree
+// into the user-level cache (~/.dws/skills/<mode>) and returns that path.
+// The cache is wiped and rewritten on every call so its content always
+// matches the running binary; a temp directory is used when HOME is not
+// resolvable.
+func materializeEmbeddedSkillSource(mode string) (string, error) {
+	sub, err := fs.Sub(embeddedskills.FS, mode)
+	if err != nil {
+		return "", err
+	}
+	var dest string
+	if home, herr := os.UserHomeDir(); herr == nil && home != "" {
+		dest = filepath.Join(home, ".dws", "skills", mode)
+	} else {
+		tmp, terr := os.MkdirTemp("", "dws-skill-src-")
+		if terr != nil {
+			return "", terr
+		}
+		dest = filepath.Join(tmp, mode)
+	}
+	if err := os.RemoveAll(dest); err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		return "", err
+	}
+	if err := os.CopyFS(dest, sub); err != nil {
+		return "", err
+	}
+	return dest, nil
 }
 
 // skillSourceCandidates returns the ordered list of paths to probe for a

@@ -259,13 +259,22 @@ func (r *runtimeRunner) handleCatalogMiss(ctx context.Context, invocation execut
 		invocation.DryRun = true
 		return r.fallback.Run(ctx, invocation)
 	}
+	hint := "产品 envelope 可能未下发到 discovery，或已经被 serverDeps fail-fast 丢弃；可执行 'dws cache refresh' 强制重新 discovery，仍失败请向 Portal 确认 envelope 状态。"
+	actions := []string{"dws cache refresh"}
+	if strings.TrimSpace(invocation.CanonicalProduct) == devappProductID {
+		hint = "dev app（product id: devapp）是 helper-only 产品，命令树不依赖 discovery；真实调用需要内部版通过 SupplementServers/StaticServers 注入 MCP endpoint，或本地调试临时设置 DINGTALK_DEVAPP_MCP_URL。"
+		actions = []string{
+			"检查内部版 SupplementServers/StaticServers 是否包含 devapp endpoint",
+			"本地调试可临时设置 DINGTALK_DEVAPP_MCP_URL 后重试",
+		}
+	}
 	return executor.Result{}, apperrors.NewAPI(
 		fmt.Sprintf("endpoint not resolved for product %q (tool %q): %s", invocation.CanonicalProduct, invocation.Tool, detail),
 		apperrors.WithOperation("discovery.resolve"),
 		apperrors.WithReason("endpoint_not_resolved"),
 		apperrors.WithServerKey(invocation.CanonicalProduct),
-		apperrors.WithHint("产品 envelope 可能未下发到 discovery，或已经被 serverDeps fail-fast 丢弃；可执行 'dws cache refresh' 强制重新 discovery，仍失败请向 Portal 确认 envelope 状态。"),
-		apperrors.WithActions("dws cache refresh"),
+		apperrors.WithHint(hint),
+		apperrors.WithActions(actions...),
 	)
 }
 
@@ -738,13 +747,23 @@ func resolveIdentityHeaders() map[string]string {
 // errors (success=false + errorCode/errorMsg) that are not flagged at the MCP
 // protocol level. Returns the error message, or "" if the response is OK.
 func detectBusinessError(content map[string]any) string {
+	return detectBusinessErrorAtDepth(content, 0)
+}
+
+func detectBusinessErrorAtDepth(content map[string]any, depth int) string {
+	if content == nil || depth > 8 {
+		return ""
+	}
 	success, ok := content["success"]
 	if !ok {
-		return ""
+		return detectNestedBusinessError(content, depth)
 	}
 	b, ok := success.(bool)
 	if !ok || b {
-		return ""
+		return detectNestedBusinessError(content, depth)
+	}
+	if nested := detectNestedBusinessError(content, depth); nested != "" {
+		return nested
 	}
 	if msg, ok := content["errorMsg"].(string); ok && strings.TrimSpace(msg) != "" {
 		return strings.TrimSpace(msg)
@@ -753,6 +772,28 @@ func detectBusinessError(content map[string]any) string {
 		return "business error: code " + strings.TrimSpace(code)
 	}
 	return "business error: success=false"
+}
+
+func detectNestedBusinessError(content map[string]any, depth int) string {
+	for _, key := range []string{"content", "result", "data"} {
+		switch child := content[key].(type) {
+		case map[string]any:
+			if msg := detectBusinessErrorAtDepth(child, depth+1); msg != "" {
+				return msg
+			}
+		case []any:
+			for _, item := range child {
+				childMap, ok := item.(map[string]any)
+				if !ok {
+					continue
+				}
+				if msg := detectBusinessErrorAtDepth(childMap, depth+1); msg != "" {
+					return msg
+				}
+			}
+		}
+	}
+	return ""
 }
 
 // extractMCPErrorMessage builds an error message from a ToolCallResult with

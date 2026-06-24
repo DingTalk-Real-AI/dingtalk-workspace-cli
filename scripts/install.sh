@@ -171,7 +171,7 @@ resolve_version() {
       VERSION="$(curl -fsSI "https://github.com/${REPO}/releases/latest" 2>/dev/null \
         | grep -i '^location:' | sed 's|.*/tag/||;s/[[:space:]]*$//')"
     elif need_cmd wget; then
-      VERSION="$(wget --spider --max-redirect=0 "https://github.com/${REPO}/releases/latest" 2>&1 \
+      VERSION="$(wget --spider --max-redirect=0 "$LATEST_URL" 2>&1 \
         | grep -i 'Location:' | sed 's|.*/tag/||;s/[[:space:]]*$//')"
     fi
     if [ -z "$VERSION" ]; then
@@ -353,6 +353,8 @@ install_skills_to_homes() {
     ".agents/skills" \
     ".claude/skills" \
     ".cursor/skills" \
+    ".qoder/skills" \
+    ".qoderwork/skills" \
     ".gemini/skills" \
     ".codex/skills" \
     ".github/skills" \

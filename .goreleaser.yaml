@@ -64,7 +64,8 @@ changelog:
 
 release:
   github:
-    owner: DingTalk-Real-AI
+    # 用当前运行 CI 的仓库 owner: fork CI 发到 fork, 官方 CI 发到官方, 两边都对
+    owner: "{{ .Env.GITHUB_REPOSITORY_OWNER }}"
     name: dingtalk-workspace-cli
   draft: false
   prerelease: auto

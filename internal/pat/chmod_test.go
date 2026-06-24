@@ -1708,6 +1708,7 @@ func TestChmod_agentCode_flag_wins_over_env(t *testing.T) {
 // apply its open-source default.
 func TestChmod_agentCode_legacy_env_not_recognized(t *testing.T) {
 	t.Setenv(agentCodeEnv, "")
+	t.Setenv(agentCodeEnvCompat, "")
 	t.Setenv("DWS_AGENTCODE", "legacyval")
 	t.Setenv("DWS_DINGTALK_AGENTCODE", "draftval")
 
@@ -1785,6 +1786,7 @@ func TestResolveAgentCodeFromEnv(t *testing.T) {
 	// Reverse-guard: legacy DWS_AGENTCODE MUST NOT be picked up when the
 	// canonical env is unset — it was hard-removed as a legacy alias.
 	t.Setenv(agentCodeEnv, "")
+	t.Setenv(agentCodeEnvCompat, "")
 	t.Setenv("DWS_AGENTCODE", "legacy")
 	if code, src := resolveAgentCodeFromEnv(); code != "" || src != "" {
 		t.Errorf("resolveAgentCodeFromEnv() = (%q, %q), want empty — legacy DWS_AGENTCODE must be ignored",

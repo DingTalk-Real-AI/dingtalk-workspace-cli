@@ -310,7 +310,7 @@ func loadDynamicCommands(ctx context.Context, runner executor.Runner) []*cobra.C
 				// no-op: fall through to FallbackServers check below
 			}
 		} else {
-			servers = market.NormalizeServers(resp, "market")
+			servers = market.NormalizeServersForBaseURL(resp, "market", registryDiscoveryBaseURL())
 			if discoveryTraceEnabled() {
 				slog.Info("loadDynamicCommands: sync discovery fetch ok",
 					"partition", partition,
@@ -568,6 +568,13 @@ func fetchRegistryServers(ctx context.Context, httpClient *http.Client) (market.
 	return client.FetchServers(ctx, config.DefaultFetchServersLimit)
 }
 
+func registryDiscoveryBaseURL() string {
+	if editionURL := strings.TrimSpace(edition.Get().DiscoveryURL); editionURL != "" {
+		return editionURL
+	}
+	return DiscoveryBaseURL()
+}
+
 // asyncRevalidateRegistry refreshes the registry cache in the background.
 // Uses a short timeout derived from the parent context and silently ignores
 // errors — the next CLI invocation will pick up the refreshed cache or retry.
@@ -580,7 +587,7 @@ func asyncRevalidateRegistry(parent context.Context, store *cache.Store, partiti
 		slog.Debug("asyncRevalidateRegistry: fetch failed", "error", err)
 		return
 	}
-	servers := market.NormalizeServers(resp, "market")
+	servers := market.NormalizeServersForBaseURL(resp, "market", registryDiscoveryBaseURL())
 	if saveErr := store.SaveRegistry(partition, cache.RegistrySnapshot{Servers: servers}); saveErr != nil {
 		slog.Debug("asyncRevalidateRegistry: save failed", "error", saveErr)
 	}

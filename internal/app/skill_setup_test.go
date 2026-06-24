@@ -318,19 +318,21 @@ func TestSkillSourceCandidatesIncludesUserCache(t *testing.T) {
 // TestResolveSkillSetupSourceFallsBackToUserCache verifies that when no
 // --source / DWS_SKILL_SOURCE / source checkout is available, the resolver
 // successfully discovers ~/.dws/skills/multi/ as the source.
-func TestResolveSkillSetupSourceFallsBackToUserCache(t *testing.T) {
+func TestResolveSkillSetupSourceDefaultsToEmbedded(t *testing.T) {
 	fakeHome := t.TempDir()
 	t.Setenv("HOME", fakeHome)
 	t.Setenv("DWS_SKILL_SOURCE", "")
 
+	// Pre-seed a stale user cache: the embedded default must overwrite it,
+	// not serve it (issue PeterGuy326#8 — stale installed sources poisoned
+	// every later setup run).
 	cacheRoot := filepath.Join(fakeHome, ".dws", "skills", "multi")
-	for _, n := range []string{"dingtalk-aitable", "dingtalk-doc"} {
-		if err := os.MkdirAll(filepath.Join(cacheRoot, n), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(cacheRoot, n, "SKILL.md"), []byte("# "+n), 0o644); err != nil {
-			t.Fatal(err)
-		}
+	staleMarker := filepath.Join(cacheRoot, "stale-marker", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(staleMarker), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(staleMarker, []byte("# stale"), 0o644); err != nil {
+		t.Fatal(err)
 	}
 
 	// Run resolver from a tempdir that has no skills/ on disk, simulating a
@@ -340,10 +342,36 @@ func TestResolveSkillSetupSourceFallsBackToUserCache(t *testing.T) {
 
 	got, err := resolveSkillSetupSource("", skillSetupModeMulti)
 	if err != nil {
-		t.Fatalf("expected user-cache fallback to succeed, got err=%v", err)
+		t.Fatalf("expected embedded default to succeed, got err=%v", err)
 	}
 	if got != cacheRoot {
-		t.Fatalf("expected %s, got %s", cacheRoot, got)
+		t.Fatalf("expected materialized cache %s, got %s", cacheRoot, got)
+	}
+	if _, err := os.Stat(staleMarker); !os.IsNotExist(err) {
+		t.Fatalf("stale cache content must be wiped by embedded materialization")
+	}
+	if !isSkillSourceRoot(got, skillSetupModeMulti) {
+		t.Fatalf("materialized source %s is not a valid multi root", got)
+	}
+}
+
+func TestMaterializeEmbeddedSkillSourceMono(t *testing.T) {
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+
+	got, err := materializeEmbeddedSkillSource(skillSetupModeMono)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != filepath.Join(fakeHome, ".dws", "skills", "mono") {
+		t.Fatalf("unexpected dest %s", got)
+	}
+	if !isSkillSourceRoot(got, skillSetupModeMono) {
+		t.Fatalf("materialized mono source missing SKILL.md")
+	}
+	// The underscore-shared references must survive embedding (all: pattern).
+	if _, err := os.Stat(filepath.Join(got, "references", "best_practices", "_common")); err != nil {
+		t.Fatalf("_common references missing from embedded mono tree: %v", err)
 	}
 }
 

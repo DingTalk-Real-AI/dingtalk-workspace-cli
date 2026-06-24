@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
 func TestDefaultPATServerDescriptorUsesBehaviorAuthorizationName(t *testing.T) {
@@ -36,6 +37,107 @@ func TestDirectRuntimeProductIDsIncludesDefaultPAT(t *testing.T) {
 	if !ids["pat"] {
 		t.Fatalf("DirectRuntimeProductIDs() missing default pat product: %#v", ids)
 	}
+}
+
+func TestDirectRuntimeProductIDsIncludesDevappHelper(t *testing.T) {
+	withCleanDynamicRegistry(t)
+
+	ids := DirectRuntimeProductIDs()
+	if !ids["devapp"] {
+		t.Fatalf("DirectRuntimeProductIDs() missing devapp helper product: %#v", ids)
+	}
+}
+
+func TestDirectRuntimeEndpoint_DevappEnvOverrideWithoutRegistry(t *testing.T) {
+	withCleanDynamicRegistry(t)
+	t.Setenv("DINGTALK_DEVAPP_MCP_URL", "https://example.test/server/devapp")
+
+	assertEndpoint(t, "devapp", "list_dev_app", "https://example.test/server/devapp")
+}
+
+func TestDirectRuntimeEndpoint_DevappEnvOverridePreservesQuery(t *testing.T) {
+	withCleanDynamicRegistry(t)
+	t.Setenv("DINGTALK_DEVAPP_MCP_URL", "https://example.test/server/devapp?key=secret")
+
+	assertEndpoint(t, "devapp", "list_dev_app", "https://example.test/server/devapp?key=secret")
+}
+
+func TestDirectRuntimeEndpoint_DevappDynamicServerDoesNotOverrideHardcoded(t *testing.T) {
+	withCleanDynamicRegistry(t)
+	SetDynamicServers([]market.ServerDescriptor{
+		{
+			Endpoint: "https://example.test/server/devapp-supplement",
+			CLI: market.CLIOverlay{
+				ID:      "devapp",
+				Command: "devapp",
+			},
+		},
+	})
+
+	assertEndpoint(t, "devapp", "list_dev_app", devappMCPEndpoint())
+}
+
+func TestDirectRuntimeEndpoint_DevappEditionSupplementDoesNotOverrideHardcoded(t *testing.T) {
+	withCleanDynamicRegistry(t)
+	prev := edition.Get()
+	edition.Override(&edition.Hooks{
+		Name: "wukong",
+		SupplementServers: func() []edition.ServerInfo {
+			return []edition.ServerInfo{
+				{
+					ID:       "devapp",
+					Name:     "开放平台应用管理",
+					Endpoint: "https://example.test/server/devapp-edition-supplement?key=secret",
+					Prefixes: []string{"devapp", "app"},
+				},
+			}
+		},
+	})
+	t.Cleanup(func() { edition.Override(prev) })
+
+	assertEndpoint(t, "devapp", "list_dev_app", devappMCPEndpoint())
+}
+
+func TestDirectRuntimeEndpoint_DevappEditionStaticDoesNotOverrideHardcoded(t *testing.T) {
+	withCleanDynamicRegistry(t)
+	prev := edition.Get()
+	edition.Override(&edition.Hooks{
+		Name: "wukong",
+		StaticServers: func() []edition.ServerInfo {
+			return []edition.ServerInfo{
+				{
+					ID:       "devapp",
+					Name:     "开放平台应用管理",
+					Endpoint: "https://example.test/server/devapp-edition-static",
+					Prefixes: []string{"devapp", "app"},
+				},
+			}
+		},
+	})
+	t.Cleanup(func() { edition.Override(prev) })
+
+	assertEndpoint(t, "devapp", "list_dev_app", devappMCPEndpoint())
+}
+
+func TestDirectRuntimeEndpoint_DevappEnvOverrideWinsOverEditionSupplement(t *testing.T) {
+	withCleanDynamicRegistry(t)
+	t.Setenv("DINGTALK_DEVAPP_MCP_URL", "https://example.test/server/devapp-env")
+	prev := edition.Get()
+	edition.Override(&edition.Hooks{
+		Name: "wukong",
+		SupplementServers: func() []edition.ServerInfo {
+			return []edition.ServerInfo{
+				{
+					ID:       "devapp",
+					Name:     "开放平台应用管理",
+					Endpoint: "https://example.test/server/devapp-edition-supplement",
+				},
+			}
+		},
+	})
+	t.Cleanup(func() { edition.Override(prev) })
+
+	assertEndpoint(t, "devapp", "list_dev_app", "https://example.test/server/devapp-env")
 }
 
 func TestDirectRuntimeEndpoint_DefaultPATFallbackWhenRegistryMissing(t *testing.T) {

@@ -24,6 +24,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
 var (
@@ -45,7 +46,16 @@ const (
 	defaultPATProductID   = "pat"
 	defaultPATDisplayName = "行为授权"
 	defaultPATServerID    = "abc3c880fb90f04b52d1426aaf093766e5fc9ec38411688cbb74df42a584d374"
+	devappProductID       = "devapp"
+	devappServerPath      = "/server/op-app"
 )
+
+// devappMCPEndpoint resolves the open-platform app-management MCP endpoint
+// from the configured gateway base URL, so it follows the active environment
+// (production by default, pre when ~/.dws/mcp_url points at the pre gateway).
+func devappMCPEndpoint() string {
+	return defaultPATGatewayBaseURL() + devappServerPath
+}
 
 func defaultPATServerDescriptor() market.ServerDescriptor {
 	return market.ServerDescriptor{
@@ -220,12 +230,9 @@ func directRuntimeToolEndpoint(toolName string) (string, bool) {
 		return "", false
 	}
 	dynamicMu.RLock()
-	te := dynamicToolEndpoints
-	dynamicMu.RUnlock()
-	if te == nil {
-		return "", false
-	}
-	endpoint, ok := te[toolName]
+	defer dynamicMu.RUnlock()
+
+	endpoint, ok := dynamicToolEndpoints[toolName]
 	return endpoint, ok && strings.TrimSpace(endpoint) != ""
 }
 
@@ -241,24 +248,27 @@ func directRuntimeEndpoint(productID, toolName string) (string, bool) {
 		}
 	}
 
-	dynamicMu.RLock()
-	de := dynamicEndpoints
-	te := dynamicToolEndpoints
-	dynamicMu.RUnlock()
+	// Hardcoded built-in: devapp is pinned to the open-platform app-management
+	// MCP server in source (NOT service discovery), per product decision.
+	for _, candidate := range []string{strings.TrimSpace(productID), normalized} {
+		if candidate == devappProductID {
+			return devappMCPEndpoint(), true
+		}
+	}
 
 	// Priority 1: product-level endpoint.
 	// When the caller already knows the productID (e.g. "drive"), the product
 	// endpoint is authoritative. This prevents cross-product tool name
 	// collisions (e.g. both "drive" and "doc" register "create_folder") from
 	// routing the request to the wrong MCP server. See issue #219.
+	dynamicMu.RLock()
 	for _, candidate := range []string{strings.TrimSpace(productID), normalized} {
 		if candidate == "" {
 			continue
 		}
-		if de != nil {
-			if endpoint, ok := de[candidate]; ok {
-				return endpoint, true
-			}
+		if endpoint, ok := dynamicEndpoints[candidate]; ok {
+			dynamicMu.RUnlock()
+			return endpoint, true
 		}
 	}
 
@@ -266,11 +276,13 @@ func directRuntimeEndpoint(productID, toolName string) (string, bool) {
 	// This path is used when the caller does not know the productID but has a
 	// tool name, e.g. in helper invocations or plugin routes where only the
 	// tool name is available.
-	if tool := strings.TrimSpace(toolName); tool != "" && te != nil {
-		if endpoint, ok := te[tool]; ok {
+	if tool := strings.TrimSpace(toolName); tool != "" {
+		if endpoint, ok := dynamicToolEndpoints[tool]; ok {
+			dynamicMu.RUnlock()
 			return endpoint, true
 		}
 	}
+	dynamicMu.RUnlock()
 
 	// Priority 3: built-in PAT fallback for cold-start paths that run before
 	// discovery/plugin registration has populated the dynamic registry.
@@ -279,18 +291,69 @@ func directRuntimeEndpoint(productID, toolName string) (string, bool) {
 			return defaultPATMCPEndpoint(), true
 		}
 	}
+
+	// Priority 4: edition-owned static/supplement endpoints. Helper-only
+	// products such as devapp intentionally do not depend on Market discovery,
+	// so the internal edition may provide only an endpoint and no tool list.
+	for _, candidate := range []string{strings.TrimSpace(productID), normalized} {
+		if endpoint, ok := editionServerEndpoint(candidate); ok {
+			return endpoint, true
+		}
+	}
 	return "", false
 }
 
-// DirectRuntimeProductIDs returns the set of product IDs that have direct
-// runtime endpoints configured, sourced from dynamic server discovery.
+func editionServerEndpoint(productID string) (string, bool) {
+	productID = strings.TrimSpace(productID)
+	if productID == "" {
+		return "", false
+	}
+	hooks := edition.Get()
+	if hooks == nil {
+		return "", false
+	}
+	if endpoint, ok := endpointFromEditionServers(productID, hooks.StaticServers); ok {
+		return endpoint, true
+	}
+	if endpoint, ok := endpointFromEditionServers(productID, hooks.SupplementServers); ok {
+		return endpoint, true
+	}
+	return "", false
+}
+
+func endpointFromEditionServers(productID string, fn func() []edition.ServerInfo) (string, bool) {
+	if fn == nil {
+		return "", false
+	}
+	for _, server := range fn() {
+		endpoint := strings.TrimSpace(server.Endpoint)
+		if endpoint == "" {
+			continue
+		}
+		if strings.TrimSpace(server.ID) == productID {
+			return endpoint, true
+		}
+		for _, prefix := range server.Prefixes {
+			if strings.TrimSpace(prefix) == productID {
+				return endpoint, true
+			}
+		}
+	}
+	return "", false
+}
+
+// DirectRuntimeProductIDs returns product IDs that should stay visible for
+// direct runtime execution. Dynamic products come from MCP discovery/plugin
+// registration; built-in helper products such as devapp resolve their endpoint
+// through DINGTALK_<PRODUCT>_MCP_URL instead of requiring discovery.
 func DirectRuntimeProductIDs() map[string]bool {
 	dynamicMu.RLock()
-	dp := dynamicProducts
-	dynamicMu.RUnlock()
-	ids := make(map[string]bool, len(dp)+1)
+	defer dynamicMu.RUnlock()
+
+	ids := make(map[string]bool, len(dynamicProducts)+2)
 	ids[defaultPATProductID] = true
-	for key := range dp {
+	ids[devappProductID] = true
+	for key := range dynamicProducts {
 		ids[key] = true
 	}
 	return ids
@@ -365,15 +428,14 @@ func AppendDynamicServer(server market.ServerDescriptor) {
 }
 
 func normalizeDirectRuntimeProductID(productID string) string {
-	dynamicMu.RLock()
-	da := dynamicAliases
-	dynamicMu.RUnlock()
 	trimmed := strings.TrimSpace(productID)
-	if da != nil {
-		if normalizedID, ok := da[trimmed]; ok && normalizedID != "" {
-			return normalizedID
-		}
+	dynamicMu.RLock()
+	if normalizedID, ok := dynamicAliases[trimmed]; ok && normalizedID != "" {
+		dynamicMu.RUnlock()
+		return normalizedID
 	}
+	dynamicMu.RUnlock()
+
 	if normalizedID, ok := legacyDirectRuntimeAliases[trimmed]; ok {
 		return normalizedID
 	}

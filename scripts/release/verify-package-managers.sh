@@ -27,6 +27,8 @@ TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/dws-package-verify-XXXXXX")"
 HOME_AGENT_PARENTS="
 .claude
 .cursor
+.qoder
+.qoderwork
 .gemini
 .codex
 .github
@@ -43,6 +45,8 @@ HOME_SKILL_TARGETS="
 .agents/skills/dws
 .claude/skills/dws
 .cursor/skills/dws
+.qoder/skills/dws
+.qoderwork/skills/dws
 .gemini/skills/dws
 .codex/skills/dws
 .github/skills/dws

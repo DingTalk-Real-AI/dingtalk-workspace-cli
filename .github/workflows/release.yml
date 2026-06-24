@@ -58,6 +58,18 @@ jobs:
         run: |
           gh release upload "${{ github.ref_name }}" dist/dws-skills.zip --clobber
 
+      - name: Sync release to China OSS mirror
+        # 自动同步到国内镜像，供 install.sh 的 DWS_RELEASE_BASE 开关消费。
+        # 脚本自带门控：未配置 OSS_* secret 时优雅跳过，不影响海外发布。
+        run: ./scripts/release/sync-to-oss.sh
+        env:
+          VERSION: ${{ github.ref_name }}
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT }}
+          OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
+          OSS_PREFIX: ${{ secrets.OSS_PREFIX }}
+
       - name: Mirror release to Gitee (China)
         # 把 release 附件（二进制/校验和/skills 包）镜像到 Gitee release，供 install.sh
         # 的 DWS_GITEE_REPO 开关消费（仓库代码由 Gitee 仓库镜像功能自动同步，附件不在其内）。
@@ -75,6 +87,8 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - name: Publish to npm
+        # 只有官方仓库发 npm；fork（dev 预览）没有 NPM_TOKEN，跳过以免红叉
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' }}
         working-directory: dist/npm/dingtalk-workspace-cli
         run: npm publish --access public
         env:

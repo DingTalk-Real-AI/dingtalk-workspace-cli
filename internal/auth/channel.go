@@ -23,6 +23,10 @@ const (
 	// injects to declare "this process is driven by a third-party Agent host,
 	// render authorization UI yourselves".
 	AgentCodeEnv = "DINGTALK_DWS_AGENTCODE"
+
+	// AgentCodeEnvCompat is a compatibility alias for hosts that shipped the
+	// reversed prefix before AgentCodeEnv became the public spelling.
+	AgentCodeEnvCompat = "DWS_DINGTALK_AGENTCODE"
 )
 
 // AgentCodeFromEnv returns the effective host agent code and the env name that

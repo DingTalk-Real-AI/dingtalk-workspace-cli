@@ -15,6 +15,7 @@ Example:
 Flags:
       --query string     搜索关键词 (必填)
       --page string      页码 (默认 1)
+      --cursor string    分页游标，翻页传上次返回的 nextCursor；传入后不再使用 --page
       --size string      每页数量 (默认 10)
 ```
 
@@ -34,6 +35,7 @@ Flags:
       --api string             API 名称，会合并进原始问题作为补充检索词
       --context string         额外排查上下文，会合并进原始问题
       --page int               分页页码 (默认 1)
+      --cursor string          分页游标，翻页传上次返回的 nextCursor；传入后不再使用 --page
       --size int               分页大小 (默认 10)
 ```
 
@@ -111,7 +113,7 @@ Args:
 ## 意图判断
 
 - 用户说"开发文档/API 文档/接口文档" → `devdoc article search`
-- 用户说"调用报错/requestId/traceId/错误码/错误描述" → `devdoc error diagnose`
+- 用户说"调用报错/requestId/traceId/错误码/错误描述" → `devdoc error diagnose`；若返回 `PARAM_ERROR - 未找到指定工具`，降级 `devdoc article search` 并标记后端工具注册待闭环
 - 用户说"直播/我的直播" → `live stream list`
 - 用户说"搜索技能/找技能/安装技能/技能市场" → `skill search` / `skill install`（按步骤衔接）
 
@@ -119,8 +121,8 @@ Args:
 
 | 操作 | 从返回中提取 | 用于 |
 |------|-------------|------|
-| `devdoc article search` | 文档链接 | 直接展示给用户 |
-| `devdoc error diagnose` | diagnosticInfo、references、materials | 排查开放平台调用错误 |
+| `devdoc article search` | 文档链接、nextCursor | 直接展示给用户；hasMore=true 时用 --cursor 翻页 |
+| `devdoc error diagnose` | diagnosticInfo、references、materials、nextCursor | 排查开放平台调用错误；hasMore=true 时用 --cursor 翻页；不可用时退回文档搜索 |
 | `skill search` | `skillId`、名称、描述 | 用户选型后传给 `skill install <skillId> <target>` |
 | `skill install` | 安装成功/失败信息 | 确认目标 Agent 目录已注册 |
 | `skill publish` | 发布结果（成功或错误信息） | 确认企业技能库已更新 |

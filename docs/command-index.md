@@ -187,7 +187,7 @@ _Search the DingTalk Open Platform documentation._
 | Command | Description | When to use |
 |---|---|---|
 | `dws devdoc article search` | Search the DingTalk Open Platform documentation by keyword. | When the agent needs authoritative API reference or guides to answer a developer question. |
-| `dws devdoc error diagnose` | Troubleshoot an Open Platform API failure by requestId, error code, error message, or context. | When the agent has a requestId, traceId, error code, or failure description and needs diagnostic facts plus references. |
+| `dws devdoc error diagnose` | Troubleshoot an Open Platform API failure by requestId, traceId, error code, error message, or context. | When the agent has a requestId, traceId, error code, or failure description and needs diagnostic facts plus references. |
 
 ## `dws ding` — DING Messages
 

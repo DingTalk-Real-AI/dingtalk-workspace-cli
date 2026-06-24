@@ -41,6 +41,8 @@ $AgentDirs = @(
     ".agents\skills",
     ".claude\skills",
     ".cursor\skills",
+    ".qoder\skills",
+    ".qoderwork\skills",
     ".gemini\skills",
     ".codex\skills",
     ".github\skills",
@@ -164,7 +166,7 @@ function Resolve-LatestVersion {
             return
         }
         try {
-            $response = Invoke-WebRequest -Uri "https://github.com/$Repo/releases/latest" `
+            $response = Invoke-WebRequest -Uri $LatestUrl `
                 -MaximumRedirection 0 -ErrorAction SilentlyContinue -UseBasicParsing 2>$null
         } catch {
             if ($_.Exception.Response.Headers.Location) {
@@ -176,7 +178,7 @@ function Resolve-LatestVersion {
 
         # Fallback: parse the redirect from the response
         try {
-            $response = Invoke-WebRequest -Uri "https://github.com/$Repo/releases/latest" `
+            $response = Invoke-WebRequest -Uri $LatestUrl `
                 -UseBasicParsing -ErrorAction Stop
             if ($response.BaseResponse.ResponseUri) {
                 $script:Version = ($response.BaseResponse.ResponseUri.ToString() -split "/tag/")[-1].Trim()

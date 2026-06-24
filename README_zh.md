@@ -71,9 +71,9 @@ irm https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/ma
 | 模式 | 安装内容 | 适合场景 |
 |------|----------|----------|
 | **mono**（稳定，默认） | 一个 `dws` skill，覆盖全部产品 | 跨产品组合操作；单一入口召唤 |
-| **multi** 🧪 **试验版 / Preview** | 18 个独立产品 skill（`dingtalk-aitable` / `dingtalk-calendar` / `dingtalk-chat` ...） | 单产品任务；每次召唤上下文更小 |
+| **multi** 🧪 **试验版 / Preview** | 20 个独立产品 skill（`dingtalk-aitable` / `dingtalk-calendar` / `dingtalk-chat` ...） | 单产品任务；每次召唤上下文更小 |
 
-> 🧪 **multi 模式当前为 EXPERIMENTAL（试验版 / Preview）**。18 个独立 skill 全部通过 dispatch verifier，但接口、命名、跨 skill 引用后续可能调整。生产 / 共享环境建议优先用 `mono`。问题请提 issue 反馈。
+> 🧪 **multi 模式当前为 EXPERIMENTAL（试验版 / Preview）**。20 个独立 skill 全部通过 dispatch verifier，但接口、命名、跨 skill 引用后续可能调整。生产 / 共享环境建议优先用 `mono`。问题请提 issue 反馈。
 
 怎么选：
 
@@ -510,7 +510,7 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 | 邮箱 | `mail` | 18 | `mailbox` `message` `draft` `folder` `tag` `thread` `attachment` `user` | 邮箱地址列表、KQL 邮件搜索、读取与发送邮件、草稿、文件夹、标签、会话、附件、通讯录用户搜索 |
 | 在线电子表格 | `sheet` | 23 | `range` `filter-view`（顶层：`create` `new` `list` `info` `read` `get` `update` `find` `replace` `append` `merge-cells` `unmerge-cells` `add-dimension` `insert-dimension` `delete-dimension` `move-dimension` `update-dimension` `write-image`） | 在线电子表格（`contentType=ALIDOC`、`extension=axls`）：工作表 CRUD、区域读写/追加、行列操作、合并/取消合并、查找替换、命名筛选视图 + 表级筛选、写入图片 |
 | 知识库 | `wiki` | 21 | `space` `member` `node` `doc` `file` | 知识库管理：空间（`create` / `get` / `list` / `search`）、成员（`add` / `list` / `update`）、节点树、文档与文件 |
-| 开发者文档 | `devdoc` | 2 | `article` `error` | 搜索钉钉开放平台文档、排查开放平台调用错误 |
+| 开发者文档 | `devdoc` | 2 | `article` `error` | 搜索钉钉开放平台文档并排查 API 调用错误 |
 | AI 搜问 | `aisearch` | 3 | `person` | 企业人员搜索：按姓名 / 部门 / 职位 / 职责 / 上级 / 下级 / 手机号 / 工号 多维度过滤（单命令） |
 | 直播 | `live` | 1 | `stream` | 钉钉直播：查看我的直播列表 |
 | Raw API | `api` | 1 | — | 直接调用任意钉钉 OpenAPI（api / oapi 双形态），自动管理应用级 Token |
@@ -577,6 +577,7 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 - [命令索引](./docs/command-index.md) — 全部运行时命令，带描述与使用场景
 - [参考手册](./docs/reference.md) — 环境变量、退出码、输出格式、Shell 补全
 - [架构设计](./docs/architecture.md) — 发现驱动管道、IR、Transport 层
+- [开放平台应用指令设计](./docs/dev-yulan-command-routing.md) — yulan dev app 应用侧命令、MCP overlay、权限流程与 Agent 路由
 - [更新日志](./CHANGELOG.md) — 版本历史与迁移说明
 
 ## 贡献指南

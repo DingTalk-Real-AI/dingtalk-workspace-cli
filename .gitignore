@@ -26,6 +26,7 @@ test/cli_compat/testdata/
 *.pem
 *.key
 credentials*
+!skills/**/credentials.md
 plans
 _docs
 dws.zip
@@ -34,3 +35,10 @@ dws.zip
 
 # envelope/discovery.pre.json synced via Portal, not git-tracked
 /envelope/discovery.pre.json
+
+# local/pre-release MCP service configs may contain personal gateway keys
+/docs/mcp/serviceconfig-pre*
+
+# 功能测试运行产物
+results.jsonl
+test/dev_functional/results.jsonl

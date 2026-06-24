@@ -6,6 +6,14 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Added
+
+- **`dws devapp robot connect` — generic `custom` channel for self-built / unsupported AI tools** (issue #37; `internal/helpers/devapp_connect.go`, `internal/helpers/connect_stream.go`) — a new `--agent-cmd "<command>"` flag (and `custom` channel) lets the bot forward to any headless AI CLI that takes a question as its trailing argument and prints the answer to stdout, so tools that aren't built-in (e.g. 网易有道龙虾 LobsterAI) or self-built agents can be onboarded without code changes. `--agent-cmd` forces the `custom` channel unless `--channel` is set explicitly; detection also falls back to `custom` when `DWS_AGENT_CMD` is present.
+
+### Changed
+
+- **`robot connect` now hints how to match terminal answer quality** (issue #39; `internal/helpers/devapp_connect.go`) — when neither a work dir nor a knowledge source is configured, the connector prints a one-time note that the bot runs in a clean temp dir without local project context, pointing at `--agent-workdir` / `--knowledge-dir` / `--knowledge-source` / `--agent-model`. The robot quickstart gains matching FAQ entries, plus a clarification that step 3 (`robot connect`) produces no approval ticket (issue #19).
+
 ## [1.0.39] - 2026-06-18
 
 This release makes the AI-sent indicator opt-in. 1.0.38 unconditionally tagged every user-identity send/reply with the edition claw identity, so the IM server rendered a "Send from AI" badge under every message — and on the open edition a stale hardcoded value even leaked the Wukong-branded label (「悟空AI发送」) to external users. The badge is now off by default and shown only when the caller explicitly asks for it.

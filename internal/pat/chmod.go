@@ -75,7 +75,8 @@ func resolveSessionIDFromEnv() string {
 // draft name DWS_DINGTALK_AGENTCODE and legacy names such as DWS_AGENTCODE /
 // DINGTALK_AGENTCODE / REWIND_AGENTCODE are explicitly NOT consumed.
 const (
-	agentCodeEnv = authpkg.AgentCodeEnv
+	agentCodeEnv       = authpkg.AgentCodeEnv
+	agentCodeEnvCompat = authpkg.AgentCodeEnvCompat
 )
 
 // agentCodePattern is the validation regex for any --agentCode value
