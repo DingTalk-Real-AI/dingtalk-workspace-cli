@@ -14,7 +14,7 @@
 #
 # Required environment (CI secrets):
 #   GITEE_TOKEN   Gitee private access token (scopes: projects)
-#   GITEE_REPO    "owner/repo" on Gitee, e.g. dingtalk-real-ai/dingtalk-workspace-cli
+#   GITEE_REPO    "owner/repo" on Gitee, e.g. DingTalk-Real-AI/dingtalk-workspace-cli
 # Optional:
 #   VERSION       release tag (default: git describe)
 #   DIST_DIR      artifacts dir (default: ./dist)

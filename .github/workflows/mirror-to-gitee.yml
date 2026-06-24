@@ -1,0 +1,37 @@
+# 此 workflow 把本仓库代码自动镜像到 Gitee，供国内用户访问。
+# 需要在仓库 Settings → Secrets and variables → Actions 配置两个 secret：
+#   GITEE_TOKEN        —— Gitee 私人令牌(在 Gitee 设置→私人令牌生成)，需勾选 projects + admin:repo_hook 权限。
+#   GITEE_PRIVATE_KEY  —— SSH 私钥(本地 ssh-keygen 生成的私钥)，对应公钥需添加到 Gitee 账号的 SSH 公钥中。
+# 未配置 secret 时(例如 fork 仓库)，mirror step 会被自动跳过，不会报错(不会出现红叉)。
+name: Mirror code to Gitee
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  schedule:
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    # GitHub Actions 不允许在 job-level if 直接引用 secrets，
+    # 因此先用 env 暴露 GITEE_TOKEN，再在 step 里用 env.GITEE_TOKEN 做守卫判断。
+    env:
+      GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+    steps:
+      - name: Mirror to Gitee
+        if: env.GITEE_TOKEN != ''
+        uses: Yikun/hub-mirror-action@master
+        with:
+          src: "github/DingTalk-Real-AI"
+          dst: "gitee/DingTalk-Real-AI"
+          dst_key: ${{ secrets.GITEE_PRIVATE_KEY }}
+          dst_token: ${{ secrets.GITEE_TOKEN }}
+          account_type: "org"
+          static_list: "dingtalk-workspace-cli"
+          clone_style: "https"
+          force_update: true

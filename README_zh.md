@@ -113,6 +113,34 @@ cp dws ~/.local/bin/         # 安装到 PATH
 
 </details>
 
+## 国内加速安装
+
+国内用户可使用以下通道，避免 GitHub 网络问题。默认（不设置这些环境变量）走 GitHub。
+
+**1. 安装脚本 + 预编译二进制（阿里云 OSS + CDN）：**
+
+```bash
+DWS_RELEASE_BASE=https://<OSS-CDN-域名>/dws/download DWS_VERSION=<tag> curl -fsSL https://<OSS-CDN-域名>/dws/install.sh | sh
+```
+
+> `<OSS-CDN-域名>` 待团队确定后替换，`<tag>` 替换为目标版本（如 `v1.0.7`）。产物目录结构需为 `<base>/<version>/<asset-file>`。不设置这些环境变量时，默认从 GitHub 安装。
+
+**2. 源码镜像（Gitee）：**
+
+仓库镜像地址：`https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli`
+
+```bash
+DWS_GITEE_REPO=DingTalk-Real-AI/dingtalk-workspace-cli curl -fsSL https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli/raw/main/scripts/install.sh | sh
+```
+
+**3. npm 包（npmmirror 镜像）：**
+
+```bash
+npm install -g dingtalk-workspace-cli --registry=https://registry.npmmirror.com
+```
+
+> npmmirror 会自动同步公网 npm 的公开包，国内可直接使用。
+
 ## 升级
 
 > 需要 **v1.0.7** 及以上版本。更早版本请重新执行[安装脚本](#安装)进行升级。
