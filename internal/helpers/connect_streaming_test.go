@@ -40,6 +40,10 @@ func TestParseStreamLineQoder(t *testing.T) {
 	if d != "" || f != "1、2、3" {
 		t.Fatalf("result: d=%q f=%q", d, f)
 	}
+	d, f = parseStreamLine("qoder", `{"type":"result","subtype":"success","result":"OK"}`)
+	if d != "" || f != "OK" {
+		t.Fatalf("result field: d=%q f=%q", d, f)
+	}
 	// garbage tolerated
 	if d, f := parseStreamLine("qoder", `{not json`); d != "" || f != "" {
 		t.Fatalf("garbage: d=%q f=%q", d, f)

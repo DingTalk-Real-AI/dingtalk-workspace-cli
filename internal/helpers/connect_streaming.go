@@ -156,6 +156,7 @@ func parseStreamLine(parser, line string) (delta, final string) {
 		var ev struct {
 			Type    string `json:"type"`
 			Subtype string `json:"subtype"`
+			Result  string `json:"result"`
 			Message struct {
 				Content []struct {
 					Type string `json:"type"`
@@ -177,7 +178,10 @@ func parseStreamLine(parser, line string) (delta, final string) {
 		}
 		switch {
 		case ev.Type == "result" && ev.Subtype == "success":
-			return "", text()
+			if t := text(); t != "" {
+				return "", t
+			}
+			return "", strings.TrimSpace(ev.Result)
 		case ev.Type == "assistant":
 			if t := text(); t != "" {
 				// Turn-level snapshot: append as a paragraph.

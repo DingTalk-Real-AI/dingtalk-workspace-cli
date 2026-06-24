@@ -169,6 +169,19 @@ func buildConnectPlan(channel, clientID, robotCode string) map[string]any {
 				},
 			}
 		}
+		if channel == "qoder" || channel == "qoderwork" {
+			return map[string]any{
+				"method":  "stream-bridge-qoder-stream",
+				"summary": fmt.Sprintf("Go 原生 Stream 建联，转发到本地 %s 的常驻 qodercli stream-json 子进程", spec.app),
+				"steps": []string{
+					"自动定位 qodercli（PATH 或 app 自带）",
+					"用 clientId/clientSecret 起 Stream，注册 TOPIC_ROBOT 回调",
+					"启动并复用 qodercli --print --output-format stream-json --input-format stream-json",
+					"收到消息 → 按 conversationId 传入 Qoder session_id → 读取 assistant/result JSON 作为回复",
+					"经 sessionWebhook/AI 卡片把回复发回钉钉，并记录发送成功/失败",
+				},
+			}
+		}
 		return map[string]any{
 			"method":  "stream-bridge",
 			"summary": fmt.Sprintf("Go 原生 Stream 建联，转发到本地 %s 的无头 CLI（每条消息起一个新实例，可 7×24 无人值守）", spec.app),
@@ -553,7 +566,7 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("unified-app-id", "", "统一应用 ID：复用 dev app credentials get 自动取凭证（替代手填 robot-client-id/secret）")
 	cmd.Flags().String("agent-model", "", "覆盖本地 agent 模型（如 claude 的 sonnet/opus；默认用渠道内置模型，求快）；env: DWS_AGENT_MODEL")
 	cmd.Flags().String("agent-workdir", "", "本地 agent 的运行目录（放知识文件可给机器人上下文；默认空白临时目录，求快）；env: DWS_AGENT_WORKDIR")
-	cmd.Flags().Bool("agent-memory", true, "按会话续聊：同一群/单聊共享 agent 会话上下文（codex/opencode/claudecode/codebuddy/workbuddy 支持；qoder/qoderwork 仅当前进程内续聊；--agent-memory=false 关闭）")
+	cmd.Flags().Bool("agent-memory", true, "按会话续聊：同一群/单聊共享 agent 会话上下文（codex/opencode/qoder/qoderwork/claudecode/codebuddy/workbuddy 支持；--agent-memory=false 关闭）")
 	cmd.Flags().Bool("reply-card", true, "用 AI 卡片回复（思考中→完成状态，同官方渠道体验）；卡片失败自动回退普通消息；--reply-card=false 关闭")
 	cmd.Flags().String("card-template", "", "AI 卡片模板 ID（开发者后台·本应用·AI 卡片设置里获取；模板按应用授权，强烈建议注册自己应用的模板）；env: DWS_CARD_TEMPLATE")
 	cmd.Flags().String("knowledge-dir", "", "答疑知识目录（.md/.txt）：每条消息本地检索 top-k 片段拼进 prompt，agent 仍在空目录跑、不拖慢回复；env: DWS_KNOWLEDGE_DIR")
@@ -660,7 +673,8 @@ func connectAgentOptionsFromCommand(cmd *cobra.Command) connectAgentOptions {
 // connectAgentOptionsPayload renders the effective agent tuning for the
 // dry-run preview, including whether session memory actually applies to the
 // chosen channel (Codex uses app-server threads, opencode uses opencode serve
-// sessions, qoder stays process-local, and gemini stays stateless today).
+// sessions, CLI session channels use --session-id/--resume, and gemini stays
+// stateless today).
 func connectAgentOptionsPayload(channel string, opts connectAgentOptions) map[string]any {
 	spec, ok := agentSpecs[channel]
 	memory := "unsupported"
@@ -676,13 +690,15 @@ func connectAgentOptionsPayload(channel string, opts connectAgentOptions) map[st
 		} else {
 			memory = "disabled"
 		}
+	} else if channel == "qoder" || channel == "qoderwork" {
+		if opts.Memory {
+			memory = "per-conversation-qoder-stream"
+		} else {
+			memory = "disabled"
+		}
 	} else if ok && spec.ccSessions {
 		if opts.Memory {
-			if isQoderChannel(channel) {
-				memory = "per-conversation-process"
-			} else {
-				memory = "per-conversation"
-			}
+			memory = "per-conversation"
 		} else {
 			memory = "disabled"
 		}
