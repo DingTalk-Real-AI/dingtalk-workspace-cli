@@ -245,3 +245,71 @@ func TestOpencodeSessionsPersist(t *testing.T) {
 		t.Errorf("after reset+restart conv-2 = %q, want ses_b (untouched)", got)
 	}
 }
+
+// TestNewOpencodeServerHasNoClientTimeout pins the fix: the shared HTTP client
+// must not carry an overall deadline, otherwise long agent turns get aborted
+// with "Client.Timeout exceeded while awaiting headers". The per-turn ctx is
+// the only thing allowed to bound a message round-trip.
+func TestNewOpencodeServerHasNoClientTimeout(t *testing.T) {
+	s := newOpencodeServer("opencode", nil, "")
+	if s.httpClient == nil {
+		t.Fatal("httpClient must be initialized")
+	}
+	if s.httpClient.Timeout != 0 {
+		t.Fatalf("opencode http client Timeout = %s, want 0 (per-turn ctx governs long agent replies)", s.httpClient.Timeout)
+	}
+}
+
+// TestOpencodeForwarderMessageGovernedByTurnCtx verifies a slow reply is not
+// cut by a fixed client timeout (the old 30s bug) and that the per-turn ctx is
+// the real governor instead.
+func TestOpencodeForwarderMessageGovernedByTurnCtx(t *testing.T) {
+	dir := t.TempDir()
+	const replyDelay = 200 * time.Millisecond
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/global/health":
+			_, _ = w.Write([]byte(`{"healthy":true}`))
+		case r.URL.Path == "/session":
+			_, _ = w.Write([]byte(`{"id":"ses_slow"}`))
+		case r.URL.Path == "/session/ses_slow/message":
+			select {
+			case <-time.After(replyDelay):
+			case <-r.Context().Done():
+				return
+			}
+			_, _ = w.Write([]byte(`{"parts":[{"type":"text","text":"slow ok"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	newForwarder := func(turn time.Duration) *opencodeForwarder {
+		return &opencodeForwarder{
+			bin:      "opencode",
+			timeout:  turn,
+			workDir:  dir,
+			sessions: newOpencodeSessions(filepath.Join(dir, "s.json")),
+			// &http.Client{} mirrors the fixed production default (no overall cap).
+			server: &opencodeServer{baseURL: ts.URL, httpClient: &http.Client{}},
+		}
+	}
+
+	// Generous turn budget: the slow reply must come back, not be cut by a cap.
+	reply, err := newForwarder(5*time.Second).forwardStream(context.Background(), "conv-ok", "hi", nil)
+	if err != nil {
+		t.Fatalf("slow reply within the turn budget should succeed, got: %v", err)
+	}
+	if !strings.Contains(reply, "slow ok") {
+		t.Fatalf("reply = %q, want it to contain slow ok", reply)
+	}
+
+	// Turn budget shorter than the reply delay: the per-turn ctx is what bounds
+	// the round-trip, so this must error out (proving ctx, not a client cap, wins).
+	if _, err := newForwarder(50*time.Millisecond).forwardStream(context.Background(), "conv-cut", "hi", nil); err == nil {
+		t.Fatal("a reply slower than the turn ctx should fail")
+	}
+}
