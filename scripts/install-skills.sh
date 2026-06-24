@@ -19,6 +19,8 @@ set -eu
 REPO="DingTalk-Real-AI/dingtalk-workspace-cli"
 # China mirror: Gitee repo "owner/repo". When set, version + asset URLs resolve via Gitee API.
 GITEE_REPO="${DWS_GITEE_REPO:-}"
+# Auto-fallback Gitee mirror used when GitHub is unreachable (see pick_source).
+GITEE_FALLBACK_REPO="${DWS_GITEE_FALLBACK_REPO:-DingTalk-Real-AI/dingtalk-workspace-cli}"
 VERSION="${DWS_VERSION:-latest}"
 SKILL_NAME="dws"
 ROOT="${DWS_SKILLS_ROOT:-$PWD}"
@@ -46,6 +48,14 @@ gitee_api() {
     sleep 2
   done
   return 1
+}
+
+pick_source() {
+  [ -n "$GITEE_REPO" ] && return 0
+  [ "${DWS_NO_FALLBACK:-0}" = "1" ] && return 0
+  curl -fsS --connect-timeout 5 --max-time 12 -o /dev/null "https://github.com/${REPO}/releases/latest" 2>/dev/null && return 0
+  GITEE_REPO="$GITEE_FALLBACK_REPO"
+  printf '  ⚠ GitHub 不可达，自动切换国内 Gitee 镜像: %s\n' "$GITEE_REPO"
 }
 
 resolve_version() {
@@ -197,6 +207,7 @@ install_skills_to_root() {
 
 main() {
   need_cmd curl
+  pick_source
   resolve_version
 
   printf '\n'

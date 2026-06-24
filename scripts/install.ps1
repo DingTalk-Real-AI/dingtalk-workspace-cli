@@ -29,6 +29,8 @@ $Repo = "DingTalk-Real-AI/dingtalk-workspace-cli"
 $BinName = "dws"
 # China mirror: Gitee repo "owner/repo". When set, version + asset URLs resolve via the Gitee API.
 $GiteeRepo = if ($env:DWS_GITEE_REPO) { $env:DWS_GITEE_REPO } else { "" }
+# Auto-fallback Gitee mirror used when GitHub is unreachable (see Resolve-Source).
+$GiteeFallbackRepo = if ($env:DWS_GITEE_FALLBACK_REPO) { $env:DWS_GITEE_FALLBACK_REPO } else { "DingTalk-Real-AI/dingtalk-workspace-cli" }
 $InstallDir = if ($env:DWS_INSTALL_DIR) { $env:DWS_INSTALL_DIR } else { Join-Path $HOME ".local\bin" }
 $Version = if ($env:DWS_VERSION) { $env:DWS_VERSION } else { "latest" }
 $NoSkills = $env:DWS_NO_SKILLS -eq "1"
@@ -144,6 +146,20 @@ function Get-GiteeAssetUrl {
         if ($a.name -eq $Name) { return $a.browser_download_url }
     }
     return ""
+}
+
+function Resolve-Source {
+    # Explicit DWS_GITEE_REPO wins; else probe GitHub and fall back to Gitee when unreachable.
+    if ($GiteeRepo -ne "") { return }
+    if ($env:DWS_NO_FALLBACK -eq "1") { return }
+    try {
+        Invoke-WebRequest -Uri "https://github.com/$Repo/releases/latest" -Method Head `
+            -TimeoutSec 12 -UseBasicParsing -ErrorAction Stop 2>$null | Out-Null
+        return
+    } catch {
+        $script:GiteeRepo = $GiteeFallbackRepo
+        Write-Say "⚠ GitHub 不可达，自动切换国内 Gitee 镜像: $script:GiteeRepo"
+    }
 }
 
 function Resolve-LatestVersion {
@@ -590,6 +606,10 @@ function Install-Skills {
 $SourceRoot = Resolve-SourceRoot
 
 Write-Banner
+
+# Pick GitHub vs Gitee mirror (auto-fallback when GitHub is unreachable).
+# Skipped when installing from a local source checkout (no download needed).
+if (-not $SourceRoot) { Resolve-Source }
 
 if (!$NoSkills) {
     Resolve-SkillMode
