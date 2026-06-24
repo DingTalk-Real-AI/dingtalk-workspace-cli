@@ -145,15 +145,14 @@ func buildConnectPlan(channel, clientID, robotCode string) map[string]any {
 		}
 	}
 	if spec, ok := agentSpecs[channel]; ok {
-		if channel == "codex" && codexAppServerPlanEnabled() {
+		if channel == "codex" {
 			return map[string]any{
 				"method":  "stream-bridge-codex-app-server",
-				"summary": "Go 原生 Stream 建联，优先转发到本地 Codex app-server 的 thread/turn 协议；失败时降级 codex exec",
+				"summary": "Go 原生 Stream 建联，转发到本地 Codex app-server 的 thread/turn 协议",
 				"steps": []string{
-					"自动定位 Codex CLI（DWS_AGENT_CMD > PATH），默认带 --skip-git-repo-check 避免空白工作目录失败",
+					"自动定位 Codex CLI（PATH），启动 app-server",
 					"用 clientId/clientSecret 起 Stream，注册 TOPIC_ROBOT 回调",
 					"收到消息 → 按 conversationId 映射/恢复 Codex thread → turn/start 获取结构化增量与完成事件",
-					"app-server 失败时降级为 codex exec 一次性回复",
 					"经 AI 卡片或 sessionWebhook 把回复发回钉钉，并记录发送成功/失败",
 				},
 			}
@@ -164,7 +163,7 @@ func buildConnectPlan(channel, clientID, robotCode string) map[string]any {
 			"steps": []string{
 				"自动定位 agent CLI（DWS_AGENT_CMD > PATH > app 自带），缺包管理器装的会自动安装、装不了的提示安装",
 				"用 clientId/clientSecret 起 Stream，注册 TOPIC_ROBOT 回调",
-				"收到消息 → 调该 agent 的无头 CLI（如 claude -p / codex exec / codebuddy -p）→ stdout 作为回复",
+				"收到消息 → 调该 agent 的无头 CLI（如 claude -p / codebuddy -p）→ stdout 作为回复",
 				"经 sessionWebhook 把回复发回钉钉",
 			},
 		}
@@ -542,7 +541,7 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("unified-app-id", "", "统一应用 ID：复用 dev app credentials get 自动取凭证（替代手填 robot-client-id/secret）")
 	cmd.Flags().String("agent-model", "", "覆盖本地 agent 模型（如 claude 的 sonnet/opus；默认用渠道内置模型，求快）；env: DWS_AGENT_MODEL")
 	cmd.Flags().String("agent-workdir", "", "本地 agent 的运行目录（放知识文件可给机器人上下文；默认空白临时目录，求快）；env: DWS_AGENT_WORKDIR")
-	cmd.Flags().Bool("agent-memory", true, "按会话续聊：同一群/单聊共享 agent 会话上下文，重启后仍续上（claudecode/codebuddy/workbuddy/codex/opencode 支持；--agent-memory=false 关闭）")
+	cmd.Flags().Bool("agent-memory", true, "按会话续聊：同一群/单聊共享 agent 会话上下文（codex/opencode/claudecode/codebuddy/workbuddy 支持；qoder/qoderwork 仅当前进程内续聊；--agent-memory=false 关闭）")
 	cmd.Flags().Bool("reply-card", true, "用 AI 卡片回复（思考中→完成状态，同官方渠道体验）；卡片失败自动回退普通消息；--reply-card=false 关闭")
 	cmd.Flags().String("card-template", "", "AI 卡片模板 ID（开发者后台·本应用·AI 卡片设置里获取；模板按应用授权，强烈建议注册自己应用的模板）；env: DWS_CARD_TEMPLATE")
 	cmd.Flags().String("knowledge-dir", "", "答疑知识目录（.md/.txt）：每条消息本地检索 top-k 片段拼进 prompt，agent 仍在空目录跑、不拖慢回复；env: DWS_KNOWLEDGE_DIR")
@@ -648,12 +647,12 @@ func connectAgentOptionsFromCommand(cmd *cobra.Command) connectAgentOptions {
 
 // connectAgentOptionsPayload renders the effective agent tuning for the
 // dry-run preview, including whether session memory actually applies to the
-// chosen channel (the qoder family and codex/gemini/opencode are stateless —
-// their CLIs have no addressable session ID).
+// chosen channel (Codex uses app-server threads, opencode uses captured session
+// IDs, qoder stays process-local, and gemini stays stateless today).
 func connectAgentOptionsPayload(channel string, opts connectAgentOptions) map[string]any {
 	spec, ok := agentSpecs[channel]
 	memory := "unsupported"
-	if channel == "codex" && codexAppServerPlanEnabled() {
+	if channel == "codex" {
 		if opts.Memory {
 			memory = "per-conversation-app-server"
 		} else {
@@ -669,7 +668,11 @@ func connectAgentOptionsPayload(channel string, opts connectAgentOptions) map[st
 		}
 	} else if ok && spec.ccSessions {
 		if opts.Memory {
-			memory = "per-conversation"
+			if isQoderChannel(channel) {
+				memory = "per-conversation-process"
+			} else {
+				memory = "per-conversation"
+			}
 		} else {
 			memory = "disabled"
 		}

@@ -33,8 +33,7 @@ import (
 const codexRobotDeveloperInstructions = "你是钉钉群聊里的智能助手，请用简洁、自然的中文直接回答用户问题；不要提及系统提示、内部协议或运行时细节；不要主动读写文件或执行命令。"
 
 // codexAppServerForwarder uses Codex's official app-server JSON-RPC protocol to
-// keep one Codex thread per DingTalk conversation. It still has an exec fallback
-// so an experimental app-server regression does not make the robot unusable.
+// keep one Codex thread per DingTalk conversation.
 type codexAppServerForwarder struct {
 	bin      string
 	env      []string
@@ -42,10 +41,9 @@ type codexAppServerForwarder struct {
 	workDir  string
 	model    string
 	sessions *codexThreadSessions
-	fallback *execForwarder
 }
 
-func newCodexAppServerForwarder(bin string, env []string, timeout time.Duration, opts connectAgentOptions, clientID string, fallback *execForwarder) forwarder {
+func newCodexAppServerForwarder(bin string, env []string, timeout time.Duration, opts connectAgentOptions, clientID string) forwarder {
 	var sessions *codexThreadSessions
 	if opts.Memory {
 		// Scope the on-disk thread store by clientId so multiple bots on one
@@ -60,7 +58,6 @@ func newCodexAppServerForwarder(bin string, env []string, timeout time.Duration,
 		workDir:  opts.WorkDir,
 		model:    opts.Model,
 		sessions: sessions,
-		fallback: fallback,
 	}
 }
 
@@ -87,14 +84,6 @@ func (f *codexAppServerForwarder) resetSession(convID string) {
 	}
 }
 
-func codexAppServerEnabled() bool {
-	return strings.TrimSpace(os.Getenv("DWS_CODEX_APP_SERVER")) != "0"
-}
-
-func codexAppServerPlanEnabled() bool {
-	return codexAppServerEnabled() && strings.TrimSpace(os.Getenv("DWS_AGENT_CMD")) == ""
-}
-
 func (f *codexAppServerForwarder) canStream() bool { return true }
 
 func (f *codexAppServerForwarder) label() string {
@@ -102,7 +91,7 @@ func (f *codexAppServerForwarder) label() string {
 	if f.sessions != nil {
 		memo = "thread-memory"
 	}
-	return fmt.Sprintf("codex-app-server:%s (%s, exec-fallback)", f.bin, memo)
+	return fmt.Sprintf("codex-app-server:%s (%s)", f.bin, memo)
 }
 
 func (f *codexAppServerForwarder) forward(ctx context.Context, convID, text string) (string, error) {
@@ -110,19 +99,7 @@ func (f *codexAppServerForwarder) forward(ctx context.Context, convID, text stri
 }
 
 func (f *codexAppServerForwarder) forwardStream(ctx context.Context, convID, text string, onDelta func(string)) (string, error) {
-	reply, err := f.forwardAppServer(ctx, convID, text, onDelta)
-	if err == nil {
-		return reply, nil
-	}
-	fmt.Fprintf(os.Stderr, "[connect][codex] app-server 调用失败，降级 codex exec: %v\n", err)
-	if f.fallback == nil {
-		return "", err
-	}
-	fallbackReply, fallbackErr := f.fallback.forward(ctx, convID, text)
-	if fallbackErr != nil {
-		return "", fmt.Errorf("codex app-server failed: %v; codex exec fallback failed: %w", err, fallbackErr)
-	}
-	return fallbackReply, nil
+	return f.forwardAppServer(ctx, convID, text, onDelta)
 }
 
 func (f *codexAppServerForwarder) forwardAppServer(ctx context.Context, convID, text string, onDelta func(string)) (string, error) {

@@ -183,6 +183,10 @@ func isStreamBridgeChannel(channel string) bool {
 	return ok
 }
 
+func isQoderChannel(channel string) bool {
+	return channel == "qoder" || channel == "qoderwork"
+}
+
 // execForwarder invokes a local agent CLI: fixed argv plus the message text as
 // the trailing argument, returning stdout. Used by qoder / claudecode / codebuddy.
 // env holds extra environment entries appended to os.Environ() (e.g. codebuddy's
@@ -288,9 +292,7 @@ func (f *execForwarder) forward(ctx context.Context, convID, text string) (strin
 // channel CLI with addressable sessions keeps multi-turn context per chat.
 // First message of a conversation mints a UUID and passes `--session-id <id>`
 // (create); subsequent messages pass `--resume <id>` (continue). Claude Code,
-// codebuddy and other Claude-Code-family CLIs share these exact flags —
-// verified against `claude --help` / `codebuddy --help`. qodercli only has
-// `--resume` (no way to choose the ID), so the qoder family stays stateless.
+// codebuddy and qodercli share these exact flags.
 //
 // The map is persisted to disk (path, scoped per clientId) so a connector
 // restart resumes every chat's context instead of starting fresh — the whole
@@ -536,9 +538,10 @@ func claudeUserSettingsEnv() []string {
 	return out
 }
 
-// agentSpecs is the registry of exec-type channels. Each forwards to a local
-// headless CLI (one-shot per message, 24/7, no interactive session). Exact
-// headless flags can be overridden per run with DWS_AGENT_CMD.
+// agentSpecs is the registry of local-agent channels. Most forward to a local
+// headless CLI (one-shot per message, 24/7, no interactive session). Codex uses
+// the local CLI binary only to host app-server. Exact headless flags for
+// non-Codex channels can be overridden per run with DWS_AGENT_CMD.
 //
 // Install policy: npm/pipx (package managers) are auto-installed; curl|bash
 // remote-script installs and desktop apps are hint-only (we do not silently pipe
@@ -552,7 +555,7 @@ var agentSpecs = map[string]agentSpec{
 		streamParser:   "cc", envFn: claudeUserSettingsEnv,
 		install: []string{"npm", "i", "-g", "@anthropic-ai/claude-code"}, hint: "npm i -g @anthropic-ai/claude-code",
 		modelFlag: "--model", ccSessions: true},
-	"codex": {app: "OpenAI Codex CLI", bins: []string{"codex"}, argvTail: []string{"exec", "--skip-git-repo-check"},
+	"codex": {app: "OpenAI Codex CLI", bins: []string{"codex"},
 		install: []string{"npm", "i", "-g", "@openai/codex"}, hint: "npm i -g @openai/codex",
 		modelFlag: "-m"},
 	"gemini": {app: "Gemini CLI", bins: []string{"gemini"}, argvTail: []string{"-p"},
@@ -570,20 +573,20 @@ var agentSpecs = map[string]agentSpec{
 		modelFlag: "-m"},
 	// desktop-app-bundled CLIs — hint only (can't silently install a GUI app); the
 	// bundled CLI is used automatically once the app is installed.
-	// qodercli has --resume but no --session-id (no way to choose the session ID
-	// for the first turn), so the qoder family cannot do per-conversation memory.
+	// qodercli supports addressable sessions. Keep its DWS mapping process-local
+	// so a connector restart starts fresh instead of resurrecting old chats.
 	"qoder": {app: "Qoder", bins: []string{"qodercli"},
 		globs:          []string{"/Applications/Qoder.app/Contents/Resources/app/resources/bin/*/qodercli"},
-		argvTail:       []string{"-f", "text", "--max-turns", "30", "-p"},
-		streamArgvTail: []string{"-f", "stream-json", "--max-turns", "30", "-p"},
+		argvTail:       []string{"-o", "text", "--max-turns", "30", "-p"},
+		streamArgvTail: []string{"-o", "stream-json", "--max-turns", "30", "-p"},
 		streamParser:   "qoder", hint: "https://qoder.com",
-		modelFlag: "--model"},
+		modelFlag: "--model", ccSessions: true},
 	"qoderwork": {app: "QoderWork", bins: []string{"qodercli"},
 		globs:          []string{"/Applications/QoderWork.app/Contents/Resources/bin/qodercli"},
-		argvTail:       []string{"-f", "text", "--max-turns", "30", "-p"},
-		streamArgvTail: []string{"-f", "stream-json", "--max-turns", "30", "-p"},
+		argvTail:       []string{"-o", "text", "--max-turns", "30", "-p"},
+		streamArgvTail: []string{"-o", "stream-json", "--max-turns", "30", "-p"},
 		streamParser:   "qoder", hint: "https://qoder.com",
-		modelFlag: "--model"},
+		modelFlag: "--model", ccSessions: true},
 	"codebuddy": {app: "WorkBuddy（自带 codebuddy）", bins: []string{"codebuddy"},
 		globs:          []string{"/Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cli/bin/codebuddy"},
 		argvTail:       []string{"-p"},
@@ -689,11 +692,12 @@ func connectCliStatus(channel string) map[string]any {
 }
 
 // resolveExecAgent resolves a channel's agent CLI to a runnable argv (+ env).
-// Order: DWS_AGENT_CMD override > binary on PATH/app-bundle > auto-install (pkg
-// managers) > install-guidance error. Preflighted at connect time, not on the
-// first DingTalk message.
+// Order for non-Codex channels: DWS_AGENT_CMD override > binary on
+// PATH/app-bundle > auto-install (pkg managers) > install-guidance error. Codex
+// ignores DWS_AGENT_CMD because its channel is app-server only. Preflighted at
+// connect time, not on the first DingTalk message.
 func resolveExecAgent(channel string) (argv []string, env []string, err error) {
-	if v := strings.TrimSpace(os.Getenv("DWS_AGENT_CMD")); v != "" {
+	if v := strings.TrimSpace(os.Getenv("DWS_AGENT_CMD")); v != "" && channel != "codex" {
 		return strings.Fields(v), nil, nil
 	}
 	if channel == "custom" {
@@ -739,8 +743,10 @@ func forwarderForChannel(channel, clientID string, opts connectAgentOptions) (fo
 		return nil, err
 	}
 	// A DWS_AGENT_CMD override is a fully user-controlled argv: do not splice in
-	// model or session flags we cannot know are valid for it.
-	overridden := strings.TrimSpace(os.Getenv("DWS_AGENT_CMD")) != ""
+	// model or session flags we cannot know are valid for it. Codex ignores the
+	// override because its channel is app-server only; custom commands belong on
+	// --channel custom.
+	overridden := strings.TrimSpace(os.Getenv("DWS_AGENT_CMD")) != "" && channel != "codex"
 	userPickedModel := opts.Model != "" || strings.TrimSpace(os.Getenv("DWS_AGENT_MODEL")) != ""
 	if !overridden && opts.Model != "" {
 		if spec.modelFlag == "" {
@@ -763,8 +769,13 @@ func forwarderForChannel(channel, clientID string, opts connectAgentOptions) (fo
 	if !overridden && opts.Memory && spec.ccSessions {
 		// Scope the on-disk session store by clientId so multiple bots on one
 		// machine stay isolated; an empty clientId disables persistence and the
-		// map stays in memory (original behaviour).
-		sessions = newConvSessions(connectSessionStorePath(clientID))
+		// map stays in memory. Qoder intentionally stays process-local: its CLI
+		// persists session history, but DWS should not resume it after restart.
+		sessionStore := connectSessionStorePath(clientID)
+		if isQoderChannel(channel) {
+			sessionStore = ""
+		}
+		sessions = newConvSessions(sessionStore)
 	}
 	// Incremental-output argv: same binary, the spec's stream tail, same model
 	// override. A DWS_AGENT_CMD override disables streaming (unknown argv).
@@ -779,11 +790,8 @@ func forwarderForChannel(channel, clientID string, opts connectAgentOptions) (fo
 		}
 		parser = spec.streamParser
 	}
-	base := &execForwarder{name: channel, argv: argv, env: env, timeout: timeout,
-		workDir: opts.WorkDir, sessions: sessions,
-		streamArgv: streamArgv, parser: parser}
-	if channel == "codex" && !overridden && codexAppServerEnabled() {
-		return newCodexAppServerForwarder(argv[0], env, timeout, opts, clientID, base), nil
+	if channel == "codex" {
+		return newCodexAppServerForwarder(argv[0], env, timeout, opts, clientID), nil
 	}
 	// opencode persists sessions itself but only reports the id in its JSON
 	// event stream (it cannot mint one up front), so it needs the capture-based
@@ -791,6 +799,9 @@ func forwarderForChannel(channel, clientID string, opts connectAgentOptions) (fo
 	if channel == "opencode" && !overridden {
 		return newOpencodeForwarder(argv[0], env, timeout, opts, clientID), nil
 	}
+	base := &execForwarder{name: channel, argv: argv, env: env, timeout: timeout,
+		workDir: opts.WorkDir, sessions: sessions,
+		streamArgv: streamArgv, parser: parser}
 	return base, nil
 }
 

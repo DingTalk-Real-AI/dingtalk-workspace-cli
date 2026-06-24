@@ -106,13 +106,36 @@ func TestForwarderSessionAndModelWiring(t *testing.T) {
 		t.Fatalf("built-in haiku pin should be replaced: %v", ef.argv)
 	}
 
-	// qoder family: no addressable sessions -> memory silently unavailable.
+	// qoder family supports addressable CLI sessions, but DWS keeps the mapping
+	// process-local so a connector restart starts fresh.
 	qf, err := forwarderForChannel("qoder", "", connectAgentOptions{Memory: true})
 	if err != nil {
 		t.Fatalf("qoder forwarder: %v", err)
 	}
-	if qf.(*execForwarder).sessions != nil {
-		t.Fatal("qoder has no --session-id; sessions must stay nil")
+	qef := qf.(*execForwarder)
+	if qef.sessions == nil {
+		t.Fatal("qoder with Memory=true should have process-local sessions")
+	}
+	if qef.sessions.path != "" {
+		t.Fatalf("qoder sessions should not persist to disk, path = %q", qef.sessions.path)
+	}
+	if got := strings.Join(qef.argv, " "); !strings.Contains(got, "-o text") || strings.Contains(got, "-f text") {
+		t.Fatalf("qoder output flag mismatch: argv = %v", qef.argv)
+	}
+	if got := strings.Join(qef.streamArgv, " "); !strings.Contains(got, "-o stream-json") || strings.Contains(got, "-f stream-json") {
+		t.Fatalf("qoder stream output flag mismatch: streamArgv = %v", qef.streamArgv)
+	}
+
+	qwf, err := forwarderForChannel("qoderwork", "robot-client", connectAgentOptions{Memory: true})
+	if err != nil {
+		t.Fatalf("qoderwork forwarder: %v", err)
+	}
+	qwef := qwf.(*execForwarder)
+	if qwef.sessions == nil {
+		t.Fatal("qoderwork with Memory=true should have process-local sessions")
+	}
+	if qwef.sessions.path != "" {
+		t.Fatalf("qoderwork sessions should not persist to disk, path = %q", qwef.sessions.path)
 	}
 
 	// Memory off on a supporting channel.
@@ -160,6 +183,21 @@ func TestRobotConnectAgentFlagsInDryRun(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), `"memory": "disabled"`) {
 		t.Fatalf("dry-run output missing disabled memory:\n%s", out.String())
+	}
+}
+
+func TestQoderAgentMemoryPayloadIsProcessLocal(t *testing.T) {
+	payload := connectAgentOptionsPayload("qoder", connectAgentOptions{Memory: true})
+	if got := payload["memory"]; got != "per-conversation-process" {
+		t.Fatalf("qoder memory = %v, want per-conversation-process", got)
+	}
+	payload = connectAgentOptionsPayload("qoderwork", connectAgentOptions{Memory: true})
+	if got := payload["memory"]; got != "per-conversation-process" {
+		t.Fatalf("qoderwork memory = %v, want per-conversation-process", got)
+	}
+	payload = connectAgentOptionsPayload("qoder", connectAgentOptions{Memory: false})
+	if got := payload["memory"]; got != "disabled" {
+		t.Fatalf("qoder memory disabled = %v, want disabled", got)
 	}
 }
 

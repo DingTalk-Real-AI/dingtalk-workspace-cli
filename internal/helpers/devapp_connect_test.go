@@ -172,14 +172,23 @@ func TestConnectExternalCommand(t *testing.T) {
 
 func TestForwarderForChannel(t *testing.T) {
 	clearChannelEnv(t)
-	// Every stream-bridge channel now yields an execForwarder (local CLI product,
-	// no bridge/session). Use DWS_AGENT_CMD so the test does not depend on the
-	// agent binaries being installed on the test machine.
+	stub := t.TempDir()
+	writeShellExecutable(t, stub, "codex", "exit 0\n")
+	t.Setenv("PATH", stub)
+	// DWS_AGENT_CMD covers ordinary stream-bridge channels so the test does not
+	// depend on those binaries being installed. Codex ignores it and stays on
+	// app-server.
 	t.Setenv("DWS_AGENT_CMD", "fake-cli --flag")
 	for ch := range agentSpecs {
 		fwd, err := forwarderForChannel(ch, "", connectAgentOptions{})
 		if err != nil {
 			t.Fatalf("forwarderForChannel(%q) err = %v", ch, err)
+		}
+		if ch == "codex" {
+			if _, ok := fwd.(*codexAppServerForwarder); !ok {
+				t.Errorf("codex should ignore DWS_AGENT_CMD and yield app-server, got %T", fwd)
+			}
+			continue
 		}
 		ef, ok := fwd.(*execForwarder)
 		if !ok {
