@@ -33,6 +33,10 @@ BIN_NAME="dws"
 RELEASE_BASE="${DWS_RELEASE_BASE:-https://github.com/${REPO}/releases/download}"
 # Latest-version resolution endpoint (the /releases/latest redirect trick is GitHub-specific).
 LATEST_URL="${DWS_LATEST_URL:-https://github.com/${REPO}/releases/latest}"
+# China mirror: Gitee repo "owner/repo". When set, version + asset URLs resolve via
+# the Gitee API (https://gitee.com/api/v5) instead of GitHub. Gitee attachment URLs
+# carry an unstable numeric id, so every asset is resolved by name at install time.
+GITEE_REPO="${DWS_GITEE_REPO:-}"
 INSTALL_DIR="${DWS_INSTALL_DIR:-$HOME/.local/bin}"
 INSTALL_NAME="${DWS_INSTALL_NAME:-$BIN_NAME}"
 VERSION="${DWS_VERSION:-latest}"
@@ -88,6 +92,25 @@ download() {
   fi
 }
 
+# Resolve the download URL of a release asset by file name.
+#   GitHub: deterministic template <base>/<version>/<file>.
+#   Gitee : query the release API and pick the asset whose name matches
+#           (Gitee attachment URLs carry an unstable numeric id, so we never
+#            template them — we read browser_download_url straight from the API).
+asset_url() {
+  _name="$1"
+  if [ -z "$GITEE_REPO" ]; then
+    printf '%s' "${RELEASE_BASE}/${VERSION}/${_name}"
+    return 0
+  fi
+  curl -fsSL "https://gitee.com/api/v5/repos/${GITEE_REPO}/releases/tags/${VERSION}" 2>/dev/null \
+    | tr '}' '\n' \
+    | grep "\"name\":[ ]*\"${_name}\"" \
+    | grep -o '"browser_download_url":[ ]*"[^"]*"' \
+    | head -1 \
+    | sed 's/.*"browser_download_url":[ ]*"//;s/"$//'
+}
+
 extract_zip() {
   archive="$1"
   dest="$2"
@@ -125,8 +148,13 @@ detect_arch() {
 # Resolve the latest version tag from GitHub
 resolve_version() {
   if [ "$VERSION" = "latest" ]; then
-    # Follow the redirect from /releases/latest to get the tag
-    if need_cmd curl; then
+    if [ -n "$GITEE_REPO" ]; then
+      # Gitee API returns the latest release with its tag_name.
+      VERSION="$(curl -fsSL "https://gitee.com/api/v5/repos/${GITEE_REPO}/releases/latest" 2>/dev/null \
+        | grep -o '"tag_name":[ ]*"[^"]*"' | head -1 \
+        | sed 's/.*"tag_name":[ ]*"//;s/"$//')"
+    elif need_cmd curl; then
+      # Follow the redirect from /releases/latest to get the tag
       VERSION="$(curl -fsSI "$LATEST_URL" 2>/dev/null \
         | grep -i '^location:' | sed 's|.*/tag/||;s/[[:space:]]*$//')"
     elif need_cmd wget; then
@@ -412,7 +440,8 @@ install_binary() {
   resolve_version
 
   archive_name="${BIN_NAME}-${os}-${arch}.tar.gz"
-  download_url="${RELEASE_BASE}/${VERSION}/${archive_name}"
+  download_url="$(asset_url "$archive_name")"
+  [ -n "$download_url" ] || err "Could not resolve download URL for ${archive_name} (version ${VERSION})."
 
   say "⬇  Downloading ${BIN_NAME} ${VERSION} (${os}/${arch})..."
 
@@ -422,7 +451,7 @@ install_binary() {
   download "$download_url" "$tmpdir/$archive_name"
 
   # Download and verify SHA256 checksum
-  checksum_url="${RELEASE_BASE}/${VERSION}/checksums.txt"
+  checksum_url="$(asset_url checksums.txt)"
   if download "$checksum_url" "$tmpdir/checksums.txt" 2>/dev/null; then
     expected="$(awk -v file="$archive_name" '$2 == file {print $1; exit}' "$tmpdir/checksums.txt")"
     if [ -n "$expected" ]; then
@@ -493,7 +522,8 @@ install_skills() {
 
   resolve_version
   skills_archive="dws-skills.zip"
-  download_url="${RELEASE_BASE}/${VERSION}/${skills_archive}"
+  download_url="$(asset_url "$skills_archive")"
+  [ -n "$download_url" ] || err "Could not resolve download URL for ${skills_archive} (version ${VERSION})."
 
   tmpdir_skills="$(mktemp -d)"
   trap 'rm -rf "$tmpdir_skills"' EXIT INT TERM

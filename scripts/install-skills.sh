@@ -19,6 +19,8 @@ REPO="DingTalk-Real-AI/dingtalk-workspace-cli"
 #   DWS_RELEASE_BASE=https://dl.dingtalk.com/dws/download  (layout: <base>/<version>/<file>)
 RELEASE_BASE="${DWS_RELEASE_BASE:-https://github.com/${REPO}/releases/download}"
 LATEST_URL="${DWS_LATEST_URL:-https://github.com/${REPO}/releases/latest}"
+# China mirror: Gitee repo "owner/repo". When set, version + asset URLs resolve via Gitee API.
+GITEE_REPO="${DWS_GITEE_REPO:-}"
 VERSION="${DWS_VERSION:-latest}"
 SKILL_NAME="dws"
 ROOT="${DWS_SKILLS_ROOT:-$PWD}"
@@ -35,13 +37,32 @@ need_cmd() {
 
 resolve_version() {
   if [ "$VERSION" = "latest" ]; then
-    VERSION="$(curl -fsSI "$LATEST_URL" 2>/dev/null \
-      | grep -i '^location:' | sed 's|.*/tag/||;s/[[:space:]]*$//')"
+    if [ -n "$GITEE_REPO" ]; then
+      VERSION="$(curl -fsSL "https://gitee.com/api/v5/repos/${GITEE_REPO}/releases/latest" 2>/dev/null \
+        | grep -o '"tag_name":[ ]*"[^"]*"' | head -1 | sed 's/.*"tag_name":[ ]*"//;s/"$//')"
+    else
+      VERSION="$(curl -fsSI "$LATEST_URL" 2>/dev/null \
+        | grep -i '^location:' | sed 's|.*/tag/||;s/[[:space:]]*$//')"
+    fi
     if [ -z "$VERSION" ]; then
       printf '❌ Could not determine the latest version. Set DWS_VERSION explicitly.\n' >&2
       exit 1
     fi
   fi
+}
+
+# Resolve a release asset's download URL by name (GitHub template vs Gitee API).
+asset_url() {
+  _name="$1"
+  if [ -z "$GITEE_REPO" ]; then
+    printf '%s' "${RELEASE_BASE}/${VERSION}/${_name}"
+    return 0
+  fi
+  curl -fsSL "https://gitee.com/api/v5/repos/${GITEE_REPO}/releases/tags/${VERSION}" 2>/dev/null \
+    | tr '}' '\n' \
+    | grep "\"name\":[ ]*\"${_name}\"" \
+    | grep -o '"browser_download_url":[ ]*"[^"]*"' \
+    | head -1 | sed 's/.*"browser_download_url":[ ]*"//;s/"$//'
 }
 
 extract_zip() {
@@ -170,7 +191,8 @@ main() {
   TMPDIR_WORK="$(mktemp -d)"
   trap 'rm -rf "$TMPDIR_WORK"' EXIT INT TERM
 
-  ASSET_URL="${RELEASE_BASE}/${VERSION}/dws-skills.zip"
+  ASSET_URL="$(asset_url dws-skills.zip)"
+  [ -n "$ASSET_URL" ] || { printf '❌ Could not resolve download URL for dws-skills.zip (version %s).\n' "$VERSION" >&2; exit 1; }
   printf '  ⬇  Downloading skills from GitHub Releases: %s (%s)\n' "$REPO" "$VERSION"
   curl -fsSL "$ASSET_URL" -o "$TMPDIR_WORK/dws-skills.zip"
   extract_zip "$TMPDIR_WORK/dws-skills.zip" "$TMPDIR_WORK/extracted"

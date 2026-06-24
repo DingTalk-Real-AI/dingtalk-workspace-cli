@@ -30,6 +30,8 @@ $BinName = "dws"
 $ReleaseBase = if ($env:DWS_RELEASE_BASE) { $env:DWS_RELEASE_BASE } else { "https://github.com/$Repo/releases/download" }
 # Latest-version resolution endpoint (the /releases/latest redirect trick is GitHub-specific).
 $LatestUrl = if ($env:DWS_LATEST_URL) { $env:DWS_LATEST_URL } else { "https://github.com/$Repo/releases/latest" }
+# China mirror: Gitee repo "owner/repo". When set, version + asset URLs resolve via the Gitee API.
+$GiteeRepo = if ($env:DWS_GITEE_REPO) { $env:DWS_GITEE_REPO } else { "" }
 $InstallDir = if ($env:DWS_INSTALL_DIR) { $env:DWS_INSTALL_DIR } else { Join-Path $HOME ".local\bin" }
 $Version = if ($env:DWS_VERSION) { $env:DWS_VERSION } else { "latest" }
 $NoSkills = $env:DWS_NO_SKILLS -eq "1"
@@ -123,8 +125,27 @@ function Get-Arch {
     Write-Err "Unsupported architecture: Could not detect system architecture. Please set DWS_ARCH environment variable to 'amd64' or 'arm64'."
 }
 
+function Get-GiteeAssetUrl {
+    param([string]$Name)
+    # Resolve a release asset's download URL by name via the Gitee API
+    # (Gitee attachment URLs carry an unstable numeric id, so never template them).
+    $rel = Invoke-RestMethod -Uri "https://gitee.com/api/v5/repos/$GiteeRepo/releases/tags/$Version" -UseBasicParsing
+    foreach ($a in $rel.assets) {
+        if ($a.name -eq $Name) { return $a.browser_download_url }
+    }
+    return ""
+}
+
 function Resolve-LatestVersion {
     if ($Version -eq "latest") {
+        if ($GiteeRepo -ne "") {
+            try {
+                $rel = Invoke-RestMethod -Uri "https://gitee.com/api/v5/repos/$GiteeRepo/releases/latest" -UseBasicParsing
+                if ($rel.tag_name) { $script:Version = $rel.tag_name.Trim(); return }
+            } catch {}
+            Write-Err "Could not determine the latest Gitee version. Set `$env:DWS_VERSION explicitly."
+            return
+        }
         try {
             $response = Invoke-WebRequest -Uri $LatestUrl `
                 -MaximumRedirection 0 -ErrorAction SilentlyContinue -UseBasicParsing 2>$null
@@ -294,7 +315,8 @@ function Install-Binary {
     Resolve-LatestVersion
 
     $archiveName = "${BinName}-windows-${arch}.zip"
-    $downloadUrl = "$ReleaseBase/$Version/$archiveName"
+    if ($GiteeRepo -ne "") { $downloadUrl = Get-GiteeAssetUrl $archiveName } else { $downloadUrl = "$ReleaseBase/$Version/$archiveName" }
+    if (-not $downloadUrl) { Write-Err "Could not resolve download URL for $archiveName (version $Version)." }
 
     Write-Say "⬇  Downloading $BinName $Version (windows/$arch)..."
 
@@ -306,7 +328,7 @@ function Install-Binary {
         Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath -UseBasicParsing
 
         # Download and verify SHA256 checksum
-        $checksumUrl = "$ReleaseBase/$Version/checksums.txt"
+        if ($GiteeRepo -ne "") { $checksumUrl = Get-GiteeAssetUrl "checksums.txt" } else { $checksumUrl = "$ReleaseBase/$Version/checksums.txt" }
         try {
             $checksumPath = Join-Path $tmpDir "checksums.txt"
             Invoke-WebRequest -Uri $checksumUrl -OutFile $checksumPath -UseBasicParsing
@@ -488,7 +510,8 @@ function Install-Skills {
     Write-Say "📦 Installing agent skills from GitHub Releases..."
     Resolve-LatestVersion
 
-    $zipUrl = "$ReleaseBase/$Version/dws-skills.zip"
+    if ($GiteeRepo -ne "") { $zipUrl = Get-GiteeAssetUrl "dws-skills.zip" } else { $zipUrl = "$ReleaseBase/$Version/dws-skills.zip" }
+    if (-not $zipUrl) { Write-Err "Could not resolve download URL for dws-skills.zip (version $Version)." }
 
     $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) "dws-skills-$PID"
     New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
