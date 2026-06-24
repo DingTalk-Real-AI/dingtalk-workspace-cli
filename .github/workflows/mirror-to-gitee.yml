@@ -1,8 +1,9 @@
-# 此 workflow 把本仓库代码自动镜像到 Gitee，供国内用户访问。
-# 需要在仓库 Settings → Secrets and variables → Actions 配置两个 secret：
-#   GITEE_TOKEN        —— Gitee 私人令牌(在 Gitee 设置→私人令牌生成)，需勾选 projects + admin:repo_hook 权限。
-#   GITEE_PRIVATE_KEY  —— SSH 私钥(本地 ssh-keygen 生成的私钥)，对应公钥需添加到 Gitee 账号的 SSH 公钥中。
-# 未配置 secret 时(例如 fork 仓库)，mirror step 会被自动跳过，不会报错(不会出现红叉)。
+# 把本仓库代码自动镜像到 Gitee，供国内用户访问（raw 脚本入口 + tags）。
+# 用 HTTPS + 令牌直接 git push（无需 SSH key），复用已配置的 secret：
+#   GITEE_TOKEN  —— Gitee 私人令牌（勾 projects）
+#   GITEE_USER   —— 令牌所属 Gitee 用户名（用于 https 推送鉴权）
+#   GITEE_REPO   —— "owner/repo"，如 DingTalk-Real-AI/dingtalk-workspace-cli
+# 未配置 GITEE_TOKEN 时（如 fork）自动跳过，不报红叉。
 name: Mirror code to Gitee
 
 on:
@@ -18,22 +19,26 @@ on:
 jobs:
   mirror:
     runs-on: ubuntu-latest
-    # GitHub Actions 不允许在 job-level if 直接引用 secrets，因此先用 env 暴露 secret，
-    # 再在 step 里做守卫判断。hub-mirror 必须有 SSH 私钥(GITEE_PRIVATE_KEY)才能推送，
-    # 故以它为守卫：未配置时整步跳过(代码镜像可改由 Gitee 侧 pull-mirror 承担)，不报红叉。
+    # GitHub Actions 不允许在 job-level if 直接引用 secrets，故先用 env 暴露再在 step 守卫。
     env:
       GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-      GITEE_PRIVATE_KEY: ${{ secrets.GITEE_PRIVATE_KEY }}
+      GITEE_USER: ${{ secrets.GITEE_USER }}
+      GITEE_REPO: ${{ secrets.GITEE_REPO }}
     steps:
-      - name: Mirror to Gitee
-        if: env.GITEE_PRIVATE_KEY != ''
-        uses: Yikun/hub-mirror-action@master
+      - name: Checkout (full history + tags)
+        if: env.GITEE_TOKEN != ''
+        uses: actions/checkout@v4
         with:
-          src: "github/DingTalk-Real-AI"
-          dst: "gitee/DingTalk-Real-AI"
-          dst_key: ${{ secrets.GITEE_PRIVATE_KEY }}
-          dst_token: ${{ secrets.GITEE_TOKEN }}
-          account_type: "org"
-          static_list: "dingtalk-workspace-cli"
-          clone_style: "https"
-          force_update: true
+          fetch-depth: 0
+
+      - name: Push main + tags to Gitee
+        if: env.GITEE_TOKEN != ''
+        run: |
+          set -eu
+          REMOTE="https://${GITEE_USER}:${GITEE_TOKEN}@gitee.com/${GITEE_REPO}.git"
+          # 取到 main 与所有 tag（落到 origin/* 与本地 tags，避免推当前分支引用冲突）
+          git fetch --force --tags origin 'refs/heads/main:refs/remotes/origin/main'
+          # 镜像对齐（force：Gitee 始终跟随 GitHub）
+          git push --force "$REMOTE" 'refs/remotes/origin/main:refs/heads/main'
+          git push --force --tags "$REMOTE"
+          echo "✅ 已镜像 main + tags 到 Gitee ${GITEE_REPO}"
