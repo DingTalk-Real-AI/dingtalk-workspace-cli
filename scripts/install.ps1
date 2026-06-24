@@ -122,11 +122,24 @@ function Get-Arch {
     Write-Err "Unsupported architecture: Could not detect system architecture. Please set DWS_ARCH environment variable to 'amd64' or 'arm64'."
 }
 
+function Invoke-GiteeApi {
+    param([string]$Uri)
+    # Gitee's gateway returns sporadic 502/503, so retry a few times before failing.
+    for ($i = 1; $i -le 4; $i++) {
+        try {
+            return Invoke-RestMethod -Uri $Uri -UseBasicParsing
+        } catch {
+            if ($i -eq 4) { throw }
+            Start-Sleep -Seconds 2
+        }
+    }
+}
+
 function Get-GiteeAssetUrl {
     param([string]$Name)
     # Resolve a release asset's download URL by name via the Gitee API
     # (Gitee attachment URLs carry an unstable numeric id, so never template them).
-    $rel = Invoke-RestMethod -Uri "https://gitee.com/api/v5/repos/$GiteeRepo/releases/tags/$Version" -UseBasicParsing
+    $rel = Invoke-GiteeApi "https://gitee.com/api/v5/repos/$GiteeRepo/releases/tags/$Version"
     foreach ($a in $rel.assets) {
         if ($a.name -eq $Name) { return $a.browser_download_url }
     }
@@ -137,8 +150,15 @@ function Resolve-LatestVersion {
     if ($Version -eq "latest") {
         if ($GiteeRepo -ne "") {
             try {
-                $rel = Invoke-RestMethod -Uri "https://gitee.com/api/v5/repos/$GiteeRepo/releases/latest" -UseBasicParsing
-                if ($rel.tag_name) { $script:Version = $rel.tag_name.Trim(); return }
+                # Gitee's /releases/latest and /releases endpoints are unreliable
+                # (404 / empty even when releases exist), so resolve the newest
+                # vN.N.N tag from the git tags endpoint instead.
+                $tags = Invoke-GiteeApi "https://gitee.com/api/v5/repos/$GiteeRepo/tags"
+                $latest = $tags.name |
+                    Where-Object { $_ -match '^v\d+\.\d+\.\d+$' } |
+                    ForEach-Object { [version]($_.TrimStart('v')) } |
+                    Sort-Object | Select-Object -Last 1
+                if ($latest) { $script:Version = "v$latest"; return }
             } catch {}
             Write-Err "Could not determine the latest Gitee version. Set `$env:DWS_VERSION explicitly."
             return

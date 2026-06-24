@@ -33,11 +33,31 @@ need_cmd() {
   fi
 }
 
+# Fetch a Gitee API endpoint, retrying transient 502/503 from Gitee's gateway.
+gitee_api() {
+  _url="$1"
+  _try=1
+  while [ "$_try" -le 4 ]; do
+    if _resp="$(curl -fsSL "$_url" 2>/dev/null)" && [ -n "$_resp" ]; then
+      printf '%s' "$_resp"
+      return 0
+    fi
+    _try=$((_try + 1))
+    sleep 2
+  done
+  return 1
+}
+
 resolve_version() {
   if [ "$VERSION" = "latest" ]; then
     if [ -n "$GITEE_REPO" ]; then
-      VERSION="$(curl -fsSL "https://gitee.com/api/v5/repos/${GITEE_REPO}/releases/latest" 2>/dev/null \
-        | grep -o '"tag_name":[ ]*"[^"]*"' | head -1 | sed 's/.*"tag_name":[ ]*"//;s/"$//')"
+      # Gitee's /releases/latest and /releases endpoints are unreliable, so
+      # resolve the newest vN.N.N tag from the git tags endpoint instead.
+      VERSION="$(gitee_api "https://gitee.com/api/v5/repos/${GITEE_REPO}/tags" \
+        | grep -o '"name":[ ]*"v[0-9][0-9.]*"' \
+        | sed 's/.*"name":[ ]*"//;s/"$//' \
+        | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+        | sort -V | tail -1)"
     else
       VERSION="$(curl -fsSI "https://github.com/${REPO}/releases/latest" 2>/dev/null \
         | grep -i '^location:' | sed 's|.*/tag/||;s/[[:space:]]*$//')"
@@ -56,7 +76,7 @@ asset_url() {
     printf '%s' "https://github.com/${REPO}/releases/download/${VERSION}/${_name}"
     return 0
   fi
-  curl -fsSL "https://gitee.com/api/v5/repos/${GITEE_REPO}/releases/tags/${VERSION}" 2>/dev/null \
+  gitee_api "https://gitee.com/api/v5/repos/${GITEE_REPO}/releases/tags/${VERSION}" \
     | tr '}' '\n' \
     | grep "\"name\":[ ]*\"${_name}\"" \
     | grep -o '"browser_download_url":[ ]*"[^"]*"' \

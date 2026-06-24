@@ -83,6 +83,23 @@ download() {
   fi
 }
 
+# Fetch a Gitee API endpoint, retrying transient failures. Gitee's gateway
+# returns sporadic 502/503, so a single curl is unreliable; retry a few times
+# before giving up. Prints the response body on success.
+gitee_api() {
+  _url="$1"
+  _try=1
+  while [ "$_try" -le 4 ]; do
+    if _resp="$(curl -fsSL "$_url" 2>/dev/null)" && [ -n "$_resp" ]; then
+      printf '%s' "$_resp"
+      return 0
+    fi
+    _try=$((_try + 1))
+    sleep 2
+  done
+  return 1
+}
+
 # Resolve the download URL of a release asset by file name.
 #   GitHub: deterministic template <repo>/releases/download/<version>/<file>.
 #   Gitee : query the release API and pick the asset whose name matches
@@ -94,7 +111,7 @@ asset_url() {
     printf '%s' "https://github.com/${REPO}/releases/download/${VERSION}/${_name}"
     return 0
   fi
-  curl -fsSL "https://gitee.com/api/v5/repos/${GITEE_REPO}/releases/tags/${VERSION}" 2>/dev/null \
+  gitee_api "https://gitee.com/api/v5/repos/${GITEE_REPO}/releases/tags/${VERSION}" \
     | tr '}' '\n' \
     | grep "\"name\":[ ]*\"${_name}\"" \
     | grep -o '"browser_download_url":[ ]*"[^"]*"' \
@@ -140,10 +157,15 @@ detect_arch() {
 resolve_version() {
   if [ "$VERSION" = "latest" ]; then
     if [ -n "$GITEE_REPO" ]; then
-      # Gitee API returns the latest release with its tag_name.
-      VERSION="$(curl -fsSL "https://gitee.com/api/v5/repos/${GITEE_REPO}/releases/latest" 2>/dev/null \
-        | grep -o '"tag_name":[ ]*"[^"]*"' | head -1 \
-        | sed 's/.*"tag_name":[ ]*"//;s/"$//')"
+      # Gitee's /releases/latest and /releases endpoints are unreliable — they
+      # return 404 / an empty list even when releases exist — so resolve the
+      # newest version from the git tags endpoint instead: keep only vN.N.N
+      # tags and pick the highest by version order.
+      VERSION="$(gitee_api "https://gitee.com/api/v5/repos/${GITEE_REPO}/tags" \
+        | grep -o '"name":[ ]*"v[0-9][0-9.]*"' \
+        | sed 's/.*"name":[ ]*"//;s/"$//' \
+        | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+        | sort -V | tail -1)"
     elif need_cmd curl; then
       # Follow the redirect from /releases/latest to get the tag
       VERSION="$(curl -fsSI "https://github.com/${REPO}/releases/latest" 2>/dev/null \
