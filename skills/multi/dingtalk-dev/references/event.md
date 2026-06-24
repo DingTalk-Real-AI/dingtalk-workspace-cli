@@ -7,7 +7,7 @@
 规则：
 - 写操作先 `--dry-run` 预览，确认后 `--yes`。
 - 一次可订阅多个事件码，共用同一回调。
-- 事件码取值以开放平台文档为准；不确定走 `dws dev doc search`。
+- 可订阅的事件码通过 `event list` 查询：返回 `events[]` 列出 `eventCode/eventName/subscribed`，不用查文档。
 - 退订前先 `event list` 确认当前订阅，避免退不存在的。
 - `event list` 支持 `--keyword/--cursor/--page-size`；`--keyword` 按事件码或事件名称搜索；返回 `events/hasMore/nextCursor/pageSize`；翻页继续传 `nextCursor`。
 - 返回看 `events[].subscribed` 和 `pushType=STREAM`（事件走 Stream 长连推送；connect 与事件订阅的关系见下方「Stream 长连」）。
