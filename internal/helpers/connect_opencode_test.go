@@ -15,70 +15,207 @@ package helpers
 
 import (
 	"context"
-	"os"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
 
-// TestOpencodeForwarderCapturesAndResumesSession verifies the capture-based
-// session flow: the first turn passes no --session and captures the id from the
-// JSON stream (persisting it), and the second turn replays it with --session.
-func TestOpencodeForwarderCapturesAndResumesSession(t *testing.T) {
+func TestOpencodeForwarderUsesServerSessionAPI(t *testing.T) {
 	dir := t.TempDir()
-	logPath := filepath.Join(dir, "args.log")
 	storePath := filepath.Join(dir, "opencode-sessions.json")
-	opencode := writeShellExecutable(t, dir, "opencode", `
-echo "$@" >> "$OPENCODE_STUB_LOG"
-sid=ses_stub
-printf '%s\n' '{"type":"step_start","sessionID":"'"$sid"'","part":{}}'
-printf '%s\n' '{"type":"text","sessionID":"'"$sid"'","part":{"text":"hello"}}'
-printf '%s\n' '{"type":"step_finish","sessionID":"'"$sid"'","part":{}}'
-`)
+	var calls []string
+	var prompts []string
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/global/health":
+			_, _ = w.Write([]byte(`{"healthy":true,"version":"test"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/session":
+			_, _ = w.Write([]byte(`{"id":"ses_server"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/session/ses_server/message":
+			var req struct {
+				Parts []struct {
+					Type string `json:"type"`
+					Text string `json:"text"`
+				} `json:"parts"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Fatalf("decode message request: %v", err)
+			}
+			if len(req.Parts) != 1 || req.Parts[0].Type != "text" {
+				t.Fatalf("message parts = %#v, want one text part", req.Parts)
+			}
+			prompts = append(prompts, req.Parts[0].Text)
+			_, _ = w.Write([]byte(`{"info":{"id":"msg_1"},"parts":[{"type":"text","text":"reply ` + req.Parts[0].Text + `"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
 	f := &opencodeForwarder{
-		bin:      opencode,
-		env:      []string{"OPENCODE_STUB_LOG=" + logPath},
+		bin:      "opencode",
 		timeout:  5 * time.Second,
 		workDir:  dir,
 		sessions: newOpencodeSessions(storePath),
+		server:   &opencodeServer{baseURL: ts.URL, httpClient: ts.Client()},
 	}
 
-	// First turn: captures and persists ses_stub; reply is the accumulated text.
-	reply, err := f.forwardStream(context.Background(), "conv-1", "hi", nil)
+	reply, err := f.forwardStream(context.Background(), "conv-1", "hi", func(string) {
+		t.Fatal("opencode server mode must not stream deltas")
+	})
 	if err != nil {
 		t.Fatalf("first forward: %v", err)
 	}
-	if reply != "hello" {
-		t.Fatalf("first reply = %q, want hello", reply)
+	if reply != "reply hi" {
+		t.Fatalf("first reply = %q, want reply hi", reply)
 	}
-	if got := f.sessions.id("conv-1"); got != "ses_stub" {
-		t.Fatalf("captured session = %q, want ses_stub", got)
+	if got := f.sessions.id("conv-1"); got != "ses_server" {
+		t.Fatalf("captured session = %q, want ses_server", got)
 	}
 
-	// Second turn: must replay the captured session via --session.
-	if _, err := f.forwardStream(context.Background(), "conv-1", "again", nil); err != nil {
+	reply, err = f.forwardStream(context.Background(), "conv-1", "again", nil)
+	if err != nil {
 		t.Fatalf("second forward: %v", err)
 	}
-	logBytes, err := os.ReadFile(logPath)
+	if reply != "reply again" {
+		t.Fatalf("second reply = %q, want reply again", reply)
+	}
+	if got := strings.Join(calls, "\n"); strings.Count(got, "POST /session\n") != 1 && strings.Count(got, "POST /session") != 1 {
+		t.Fatalf("POST /session should be called once, calls:\n%s", got)
+	}
+	if got := strings.Join(prompts, ","); got != "hi,again" {
+		t.Fatalf("prompts = %q, want hi,again", got)
+	}
+	if f.canStream() {
+		t.Fatal("opencode server mode should be one-shot for group chat replies")
+	}
+}
+
+func TestOpencodeForwarderRecreatesMissingServerSession(t *testing.T) {
+	dir := t.TempDir()
+	storePath := filepath.Join(dir, "opencode-sessions.json")
+	var created int
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/global/health":
+			_, _ = w.Write([]byte(`{"healthy":true,"version":"test"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/session":
+			created++
+			_, _ = w.Write([]byte(`{"id":"ses_new"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/session/ses_stale/message":
+			http.Error(w, `{"error":"missing"}`, http.StatusNotFound)
+		case r.Method == http.MethodPost && r.URL.Path == "/session/ses_new/message":
+			_, _ = w.Write([]byte(`{"parts":[{"type":"text","text":"fresh"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	f := &opencodeForwarder{
+		bin:      "opencode",
+		timeout:  5 * time.Second,
+		workDir:  dir,
+		sessions: newOpencodeSessions(storePath),
+		server:   &opencodeServer{baseURL: ts.URL, httpClient: ts.Client()},
+	}
+	f.sessions.set("conv-1", "ses_stale")
+
+	reply, err := f.forwardStream(context.Background(), "conv-1", "again", nil)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("forward after missing session: %v", err)
 	}
-	lines := strings.Split(strings.TrimSpace(string(logBytes)), "\n")
-	if len(lines) != 2 {
-		t.Fatalf("expected 2 invocations, got %d:\n%s", len(lines), string(logBytes))
+	if reply != "fresh" {
+		t.Fatalf("reply = %q, want fresh", reply)
 	}
-	if strings.Contains(lines[0], "--session") {
-		t.Errorf("first invocation should not pass --session, got: %s", lines[0])
+	if got := f.sessions.id("conv-1"); got != "ses_new" {
+		t.Fatalf("session after retry = %q, want ses_new", got)
 	}
-	if !strings.Contains(lines[1], "--session ses_stub") {
-		t.Errorf("second invocation should resume --session ses_stub, got: %s", lines[1])
+	if created != 1 {
+		t.Fatalf("created sessions = %d, want 1", created)
+	}
+}
+
+func TestOpencodeForwarderKeepsSessionWhenServerReturnsNoText(t *testing.T) {
+	dir := t.TempDir()
+	storePath := filepath.Join(dir, "opencode-sessions.json")
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/global/health":
+			_, _ = w.Write([]byte(`{"healthy":true,"version":"test"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/session/ses_keep/message":
+			_, _ = w.Write([]byte(`{"parts":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	f := &opencodeForwarder{
+		bin:      "opencode",
+		timeout:  5 * time.Second,
+		workDir:  dir,
+		sessions: newOpencodeSessions(storePath),
+		server:   &opencodeServer{baseURL: ts.URL, httpClient: ts.Client()},
+	}
+	f.sessions.set("conv-1", "ses_keep")
+
+	reply, err := f.forwardStream(context.Background(), "conv-1", "question", nil)
+	if err != nil {
+		t.Fatalf("forward with empty response: %v", err)
+	}
+	if reply != "（本地 agent 无文本输出）" {
+		t.Fatalf("reply = %q, want no-text hint", reply)
+	}
+	if got := f.sessions.id("conv-1"); got != "ses_keep" {
+		t.Fatalf("session after no-text response = %q, want ses_keep", got)
+	}
+}
+
+func TestOpencodeForwarderOnlyReturnsTextParts(t *testing.T) {
+	dir := t.TempDir()
+	storePath := filepath.Join(dir, "opencode-sessions.json")
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/global/health":
+			_, _ = w.Write([]byte(`{"healthy":true,"version":"test"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/session":
+			_, _ = w.Write([]byte(`{"id":"ses_parts"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/session/ses_parts/message":
+			_, _ = w.Write([]byte(`{"parts":[{"type":"reasoning","text":"hidden reasoning"},{"type":"text","text":"visible"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	f := &opencodeForwarder{
+		bin:      "opencode",
+		timeout:  5 * time.Second,
+		workDir:  dir,
+		sessions: newOpencodeSessions(storePath),
+		server:   &opencodeServer{baseURL: ts.URL, httpClient: ts.Client()},
 	}
 
-	// reset drops the mapping: the next turn starts fresh (no --session).
-	f.resetSession("conv-1")
-	if got := f.sessions.id("conv-1"); got != "" {
-		t.Errorf("after reset session = %q, want empty", got)
+	reply, err := f.forwardStream(context.Background(), "conv-1", "question", nil)
+	if err != nil {
+		t.Fatalf("forward: %v", err)
+	}
+	if reply != "visible" {
+		t.Fatalf("reply = %q, want visible", reply)
 	}
 }
 

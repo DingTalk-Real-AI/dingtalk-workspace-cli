@@ -82,6 +82,10 @@ type sessionResetter interface {
 	resetSession(convID string)
 }
 
+type forwarderCloser interface {
+	close() error
+}
+
 // connectAgentOptions carries the user-facing agent tuning exposed on
 // `dev connect` (and mirrored env vars). Zero value = defaults:
 // channel's built-in model, per-conversation memory on (where the CLI supports
@@ -561,14 +565,10 @@ var agentSpecs = map[string]agentSpec{
 	"gemini": {app: "Gemini CLI", bins: []string{"gemini"}, argvTail: []string{"-p"},
 		install: []string{"npm", "i", "-g", "@google/gemini-cli"}, hint: "npm i -g @google/gemini-cli",
 		modelFlag: "-m"},
-	// --pure runs opencode without external plugins, mirroring claudecode's
-	// `--setting-sources project --strict-mcp-config` neutralisation above: the
-	// bot must answer in a clean environment, not inherit the operator's
-	// interactive opencode plugins. Without it, plugin suites that swap the
-	// global default agent at runtime (e.g. OhMyOpenCode's rotating codenames)
-	// break headless `opencode run` — it crashes resolving a default agent that
-	// no longer exists, and the crash trace gets sent back as the reply.
-	"opencode": {app: "opencode", bins: []string{"opencode"}, argvTail: []string{"run", "--pure"},
+	// opencode is resolved here only to find the local binary. The forwarder
+	// uses `opencode serve --pure` plus HTTP session/message APIs instead of
+	// parsing `opencode run` stdout.
+	"opencode": {app: "opencode", bins: []string{"opencode"},
 		install: []string{"npm", "i", "-g", "opencode-ai"}, hint: "npm i -g opencode-ai",
 		modelFlag: "-m"},
 	// desktop-app-bundled CLIs — hint only (can't silently install a GUI app); the
@@ -793,9 +793,8 @@ func forwarderForChannel(channel, clientID string, opts connectAgentOptions) (fo
 	if channel == "codex" {
 		return newCodexAppServerForwarder(argv[0], env, timeout, opts, clientID), nil
 	}
-	// opencode persists sessions itself but only reports the id in its JSON
-	// event stream (it cannot mint one up front), so it needs the capture-based
-	// forwarder rather than the Claude-family --session-id/--resume exec path.
+	// opencode uses its official local HTTP server; DWS keeps the
+	// conversation→session mapping and sends one-shot group replies.
 	if channel == "opencode" && !overridden {
 		return newOpencodeForwarder(argv[0], env, timeout, opts, clientID), nil
 	}
@@ -876,6 +875,13 @@ type connectExtras struct {
 func runStreamConnector(ctx context.Context, channel, clientID, clientSecret string, fwd forwarder, cardCli *aiCardClient, extras *connectExtras) error {
 	if extras == nil {
 		extras = &connectExtras{}
+	}
+	if closer, ok := fwd.(forwarderCloser); ok {
+		defer func() {
+			if err := closer.close(); err != nil {
+				fmt.Fprintf(os.Stderr, "[connect] 关闭本地 agent 失败（忽略）: %v\n", err)
+			}
+		}()
 	}
 	// One connector per robot per machine — duplicate Stream connections on
 	// one clientId get messages load-balanced between them (bot answers

@@ -24,7 +24,7 @@ dws dev connect --robot-client-id <clientId> --robot-client-secret <clientSecret
 | `--channel` | `auto`(默认,运行时信号自动识别) / openclaw / qoder / qoderwork / hermes / workbuddy / claudecode / codebuddy / codex / gemini / opencode |
 | `--robot-client-id` / `--robot-client-secret` | 现成机器人凭证（clientId=AppKey, clientSecret=AppSecret）。命名带 `robot-` 前缀以避开全局 OAuth `--client-id` flag |
 | `--unified-app-id` | 统一应用 ID，内部复用 `credentials get` 自动取凭证，替代手填 robot-client-id/secret。注意 clientSecret 仅建号时返回一次、未必可取，取不到时回退手填 |
-| `--agent-memory` | 按会话续聊（默认开）：同一群/单聊共享 agent 会话，追问保留上下文。codex 走 app-server thread；opencode 捕获 CLI session；qoder/qoderwork/claudecode/codebuddy/workbuddy 走 CLI `--session-id`/`--resume`。qoder 系映射只保存在当前 DWS 进程内，重启后重新开始；gemini 保持无状态。`--agent-memory=false` 关闭 |
+| `--agent-memory` | 按会话续聊（默认开）：同一群/单聊共享 agent 会话，追问保留上下文。codex 走 app-server thread；opencode 走 `opencode serve` 的 HTTP session/message API；qoder/qoderwork/claudecode/codebuddy/workbuddy 走 CLI `--session-id`/`--resume`。qoder 系映射只保存在当前 DWS 进程内，重启后重新开始；gemini 保持无状态。`--agent-memory=false` 关闭 |
 | `--agent-model` | 覆盖本地 agent 模型（如 claudecode 默认锁 haiku 求快，可改 `claude-sonnet-4-6` 换聪明）。env: `DWS_AGENT_MODEL` |
 | `--agent-workdir` | agent 运行目录：放知识文件（如 CLAUDE.md）可给机器人企业上下文。默认空白临时目录（冷启动快 ~4s vs 大目录 ~29s，慢了会错过钉钉响应窗口）。env: `DWS_AGENT_WORKDIR` |
 | `--reply-card` | 富回复（默认开）：🤔Thinking/🥳Done 表态永远生效；**卡片需配 `--card-template` 才启用**（同 hermes：没配模板=纯文字回复），失败自动回退文字；env `DWS_REPLY_CARD=0` 全关 |
@@ -80,7 +80,7 @@ dws dev connect --unified-app-id <unifiedAppId> --channel codex --format json
 ## 机制与环境覆盖
 
 - **stream-bridge 渠道**：Go 原生进程内 Stream 转发器，订阅 `TOPIC_ROBOT`，每条 @机器人消息起一个无头 CLI 实例 → stdout 回钉钉，可 7×24 无人值守。
-- **会话记忆**：Codex 记录 `conversationId -> threadId`；opencode 捕获 CLI 返回的 session id；Qoder/Claude/CodeBuddy/WorkBuddy 使用 `--session-id`/`--resume`。qoder/qoderwork 只做当前 DWS 进程内短期映射，不跨重启恢复；`/new`、`/start`、`/reset`、`/clear` 会清空当前会话映射。
+- **会话记忆**：Codex 记录 `conversationId -> threadId`；opencode 记录 `conversationId -> sessionId` 并通过本地 `opencode serve` 的 HTTP API 续聊；Qoder/Claude/CodeBuddy/WorkBuddy 使用 `--session-id`/`--resume`。qoder/qoderwork 只做当前 DWS 进程内短期映射，不跨重启恢复；`/new`、`/start`、`/reset`、`/clear` 会清空当前会话映射。
 - **官方渠道**（openclaw/hermes）：dws 不代建机器人，输出官方 onboarding 指引。
 - 环境覆盖：`DWS_AGENT_CMD`(整条命令覆盖,覆盖时不再注入模型/会话参数) / `DWS_AGENT_MODEL` / `DWS_AGENT_WORKDIR` / `DWS_CONNECT_CMD` / `DWS_CONNECT_NO_INSTALL=1` / `DWS_AGENT_TIMEOUT_MS`。
 

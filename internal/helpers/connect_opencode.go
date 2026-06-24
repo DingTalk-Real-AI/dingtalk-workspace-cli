@@ -14,10 +14,16 @@
 package helpers
 
 import (
-	"bufio"
+	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,24 +34,28 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
-// opencode keeps per-conversation context, but unlike the Claude family it does
-// not let the caller mint the session id up front: `opencode run` creates a
-// session on the first turn and reports its id in the `--format json` event
-// stream, and a later turn continues it with `--session <id>`. So the connector
-// CAPTURES the id from the output (like codex's thread id) instead of minting a
-// UUID, persists the convID→sessionID map, and replays it on the next message.
-// This is what lets opencode behave as an always-on digital employee whose
-// context survives both follow-up messages and a connector restart.
+const (
+	opencodeServerUsername     = "opencode"
+	opencodeServerHealthPath   = "/global/health"
+	opencodeNoTextReply        = "（本地 agent 无文本输出）"
+	opencodeServerStartupWait  = 20 * time.Second
+	opencodeServerPollInterval = 150 * time.Millisecond
+)
 
-// opencodeForwarder forwards one DingTalk message to a local `opencode run`,
-// parsing the JSON event stream for the reply text and the assigned session id.
+var errOpencodeSessionMissing = errors.New("opencode session missing")
+
+// opencodeForwarder forwards DingTalk messages to a local `opencode serve`
+// instance. DWS owns the local server process and keeps a per-conversation
+// mapping to opencode's native session id; opencode owns the actual message
+// history in its own storage.
 type opencodeForwarder struct {
 	bin      string
 	env      []string
 	timeout  time.Duration
 	workDir  string
 	model    string
-	sessions *opencodeSessions // convID→sessionID, persisted; nil = stateless
+	sessions *opencodeSessions // convID→opencode sessionID, persisted; nil = stateless
+	server   *opencodeServer
 }
 
 func newOpencodeForwarder(bin string, env []string, timeout time.Duration, opts connectAgentOptions, clientID string) forwarder {
@@ -53,7 +63,7 @@ func newOpencodeForwarder(bin string, env []string, timeout time.Duration, opts 
 	if opts.Memory {
 		sessions = newOpencodeSessions(opencodeSessionStorePath(clientID))
 	}
-	return &opencodeForwarder{
+	f := &opencodeForwarder{
 		bin:      bin,
 		env:      env,
 		timeout:  timeout,
@@ -61,115 +71,88 @@ func newOpencodeForwarder(bin string, env []string, timeout time.Duration, opts 
 		model:    opts.Model,
 		sessions: sessions,
 	}
+	f.server = newOpencodeServer(bin, env, f.cwd())
+	return f
 }
 
-func (f *opencodeForwarder) canStream() bool { return true }
+// Group-chat bots answer once per message. opencode server still supports
+// events, but DWS deliberately uses the synchronous message API here.
+func (f *opencodeForwarder) canStream() bool { return false }
 
 func (f *opencodeForwarder) label() string {
 	memo := "stateless"
 	if f.sessions != nil {
-		memo = "session-memory"
+		memo = "server-session-memory"
 	}
-	return fmt.Sprintf("opencode:%s (%s)", f.bin, memo)
+	return fmt.Sprintf("opencode-server:%s (%s)", f.bin, memo)
 }
 
 func (f *opencodeForwarder) forward(ctx context.Context, convID, text string) (string, error) {
 	return f.forwardStream(ctx, convID, text, nil)
 }
 
-// forwardStream runs `opencode run --format json`, accumulating the visible text
-// from `text` events (calling onDelta with the text-so-far when non-nil) and
-// capturing the session id the stream reports. On the first turn of a
-// conversation no `--session` is passed; the captured id is then persisted so
-// the next message — and a restart — continues the same session.
-func (f *opencodeForwarder) forwardStream(ctx context.Context, convID, text string, onDelta func(string)) (string, error) {
+func (f *opencodeForwarder) forwardStream(ctx context.Context, convID, text string, _ func(string)) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, f.timeout)
 	defer cancel()
 
-	priorSession := ""
-	if f.sessions != nil {
-		priorSession = f.sessions.id(convID)
-	}
-
-	args := []string{"run", "--pure", "--format", "json"}
-	if f.model != "" {
-		args = append(args, "--model", f.model)
-	}
-	if priorSession != "" {
-		args = append(args, "--session", priorSession)
-	}
-	args = append(args, text)
-
-	cmd := exec.CommandContext(ctx, f.bin, args...)
-	if f.workDir != "" {
-		cmd.Dir = f.workDir
-	} else {
-		cmd.Dir = connectWorkDir()
-	}
-	if len(f.env) > 0 {
-		cmd.Env = append(os.Environ(), f.env...)
-	}
-	stdout, err := cmd.StdoutPipe()
+	client, err := f.server.ensure(ctx)
 	if err != nil {
 		return "", err
 	}
-	var stderrBuf strings.Builder
-	cmd.Stderr = &stderrBuf
-	if err := cmd.Start(); err != nil {
+	reply, err := f.forwardWithClient(ctx, client, convID, text)
+	if errors.Is(err, errOpencodeSessionMissing) && f.sessions != nil {
+		f.sessions.reset(convID)
+		reply, err = f.forwardWithClient(ctx, client, convID, text)
+	}
+	return reply, err
+}
+
+func (f *opencodeForwarder) forwardWithClient(ctx context.Context, client *opencodeHTTPClient, convID, text string) (string, error) {
+	sessionID := ""
+	if f.sessions != nil {
+		sessionID = f.sessions.id(convID)
+	}
+	if sessionID == "" {
+		created, err := client.createSession(ctx)
+		if err != nil {
+			return "", err
+		}
+		sessionID = created
+		if f.sessions != nil {
+			f.sessions.set(convID, sessionID)
+		}
+	}
+	reply, err := client.sendMessage(ctx, sessionID, text, f.model)
+	if err != nil {
 		return "", err
 	}
-
-	var acc strings.Builder
-	capturedSession := ""
-	scanner := bufio.NewScanner(stdout)
-	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || !strings.HasPrefix(line, "{") {
-			continue
-		}
-		sid, delta := parseOpencodeLine(line)
-		if sid != "" {
-			capturedSession = sid
-		}
-		if delta != "" {
-			acc.WriteString(delta)
-			if onDelta != nil {
-				onDelta(brandReply(f.name(), acc.String()))
-			}
-		}
+	if agentReplyIsError(reply) {
+		return agentBackendErrorReply(reply), nil
 	}
-	waitErr := cmd.Wait()
-
-	// Persist the captured session as soon as we have one for a conversation
-	// that did not have it yet (first turn), so the next message continues it.
-	if f.sessions != nil && capturedSession != "" && capturedSession != priorSession {
-		f.sessions.set(convID, capturedSession)
+	if strings.TrimSpace(reply) == "" {
+		return opencodeNoTextReply, nil
 	}
-
-	finalText := strings.TrimSpace(acc.String())
-	// A bare backend error must not be forwarded as the answer; drop the session
-	// so the next message starts clean, and return an actionable hint.
-	if agentReplyIsError(finalText) {
-		if f.sessions != nil {
-			f.sessions.reset(convID)
-		}
-		return agentBackendErrorReply(finalText), nil
-	}
-	if finalText != "" {
-		return brandReply(f.name(), finalText), nil
-	}
-	if waitErr != nil {
-		msg := waitErr.Error()
-		if s := strings.TrimSpace(stderrBuf.String()); s != "" {
-			msg = s
-		}
-		return "", fmt.Errorf("本地 opencode agent 调用失败：%s", truncateRunes(msg, 300))
-	}
-	return "（本地 agent 无文本输出）", nil
+	return brandReply(f.name(), reply), nil
 }
 
 func (f *opencodeForwarder) name() string { return "opencode" }
+
+func (f *opencodeForwarder) cwd() string {
+	if f.workDir == "" {
+		return connectWorkDir()
+	}
+	if abs, err := filepath.Abs(f.workDir); err == nil {
+		return abs
+	}
+	return f.workDir
+}
+
+func (f *opencodeForwarder) close() error {
+	if f.server != nil {
+		return f.server.close()
+	}
+	return nil
+}
 
 // resetSession drops the conversation's opencode session so the next message
 // starts a fresh one. Implements sessionResetter for the /new and /clear
@@ -180,34 +163,306 @@ func (f *opencodeForwarder) resetSession(convID string) {
 	}
 }
 
-// parseOpencodeLine extracts (sessionID, visible-text delta) from one
-// `opencode run --format json` event line. Every event carries the top-level
-// sessionID; only `text` events carry reply text in part.text. Either return
-// value may be empty.
-func parseOpencodeLine(line string) (sessionID, delta string) {
-	var ev struct {
-		Type      string `json:"type"`
-		SessionID string `json:"sessionID"`
-		Part      struct {
-			Text string `json:"text"`
-		} `json:"part"`
+type opencodeServer struct {
+	bin        string
+	env        []string
+	workDir    string
+	mu         sync.Mutex
+	baseURL    string
+	password   string
+	cmd        *exec.Cmd
+	done       chan error
+	httpClient *http.Client
+}
+
+func newOpencodeServer(bin string, env []string, workDir string) *opencodeServer {
+	return &opencodeServer{
+		bin:        bin,
+		env:        env,
+		workDir:    workDir,
+		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
-	if json.Unmarshal([]byte(line), &ev) != nil {
-		return "", ""
+}
+
+func (s *opencodeServer) ensure(ctx context.Context) (*opencodeHTTPClient, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.httpClient == nil {
+		s.httpClient = &http.Client{Timeout: 30 * time.Second}
 	}
-	if ev.Type == "text" {
-		return ev.SessionID, ev.Part.Text
+	client := &opencodeHTTPClient{baseURL: s.baseURL, username: opencodeServerUsername, password: s.password, httpClient: s.httpClient}
+	if s.baseURL != "" && client.health(ctx) == nil {
+		return client, nil
 	}
-	return ev.SessionID, ""
+	if s.cmd != nil {
+		_ = s.closeLocked()
+	}
+
+	port, err := freeLocalPort()
+	if err != nil {
+		return nil, err
+	}
+	password := randomHex(24)
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+	cmd := exec.Command(s.bin, "serve", "--pure", "--hostname", "127.0.0.1", "--port", fmt.Sprint(port))
+	if s.workDir != "" {
+		cmd.Dir = s.workDir
+	}
+	cmd.Env = append(os.Environ(), s.env...)
+	cmd.Env = append(cmd.Env,
+		"OPENCODE_SERVER_USERNAME="+opencodeServerUsername,
+		"OPENCODE_SERVER_PASSWORD="+password,
+	)
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("启动 opencode serve 失败：%w", err)
+	}
+
+	s.baseURL = baseURL
+	s.password = password
+	s.cmd = cmd
+	s.done = make(chan error, 1)
+	go func() {
+		s.done <- cmd.Wait()
+	}()
+	client = &opencodeHTTPClient{baseURL: s.baseURL, username: opencodeServerUsername, password: s.password, httpClient: s.httpClient}
+	if err := s.waitHealthy(ctx, client); err != nil {
+		_ = s.closeLocked()
+		return nil, err
+	}
+	return client, nil
+}
+
+func (s *opencodeServer) waitHealthy(ctx context.Context, client *opencodeHTTPClient) error {
+	deadline := time.Now().Add(opencodeServerStartupWait)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if s.done != nil {
+			select {
+			case err := <-s.done:
+				s.done = nil
+				if err != nil {
+					return fmt.Errorf("opencode serve 已退出：%w", err)
+				}
+				return fmt.Errorf("opencode serve 已退出")
+			default:
+			}
+		}
+		if err := client.health(ctx); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+		time.Sleep(opencodeServerPollInterval)
+	}
+	if lastErr != nil {
+		return fmt.Errorf("等待 opencode serve 就绪超时：%w", lastErr)
+	}
+	return fmt.Errorf("等待 opencode serve 就绪超时")
+}
+
+func (s *opencodeServer) close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closeLocked()
+}
+
+func (s *opencodeServer) closeLocked() error {
+	if s.cmd == nil || s.cmd.Process == nil {
+		s.cmd = nil
+		s.done = nil
+		return nil
+	}
+	err := s.cmd.Process.Kill()
+	if s.done != nil {
+		<-s.done
+	}
+	s.cmd = nil
+	s.done = nil
+	s.baseURL = ""
+	s.password = ""
+	return err
+}
+
+type opencodeHTTPClient struct {
+	baseURL    string
+	username   string
+	password   string
+	httpClient *http.Client
+}
+
+func (c *opencodeHTTPClient) health(ctx context.Context) error {
+	var out struct {
+		Healthy bool `json:"healthy"`
+	}
+	if err := c.doJSON(ctx, http.MethodGet, opencodeServerHealthPath, nil, &out); err != nil {
+		return err
+	}
+	if !out.Healthy {
+		return fmt.Errorf("opencode serve health=false")
+	}
+	return nil
+}
+
+func (c *opencodeHTTPClient) createSession(ctx context.Context) (string, error) {
+	var out struct {
+		ID string `json:"id"`
+	}
+	if err := c.doJSON(ctx, http.MethodPost, "/session", map[string]any{}, &out); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(out.ID) == "" {
+		return "", fmt.Errorf("opencode server response missing session id")
+	}
+	return out.ID, nil
+}
+
+func (c *opencodeHTTPClient) sendMessage(ctx context.Context, sessionID, text, model string) (string, error) {
+	body := map[string]any{
+		"parts": []map[string]any{{"type": "text", "text": text}},
+	}
+	if m := opencodeModelRef(model); m != nil {
+		body["model"] = m
+	}
+	var out struct {
+		Parts []opencodePart `json:"parts"`
+	}
+	if err := c.doJSON(ctx, http.MethodPost, "/session/"+sessionID+"/message", body, &out); err != nil {
+		if errors.Is(err, errOpencodeSessionMissing) {
+			return "", err
+		}
+		return "", err
+	}
+	return strings.TrimSpace(opencodePartsText(out.Parts)), nil
+}
+
+func (c *opencodeHTTPClient) doJSON(ctx context.Context, method, path string, in any, out any) error {
+	if strings.TrimSpace(c.baseURL) == "" {
+		return fmt.Errorf("opencode server URL is empty")
+	}
+	var body io.Reader
+	if in != nil {
+		data, err := json.Marshal(in)
+		if err != nil {
+			return err
+		}
+		body = bytes.NewReader(data)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(c.baseURL, "/")+path, body)
+	if err != nil {
+		return err
+	}
+	if in != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Header.Set("Accept", "application/json")
+	if c.password != "" {
+		req.SetBasicAuth(c.username, c.password)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound && strings.HasPrefix(path, "/session/") {
+		return errOpencodeSessionMissing
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		msg := strings.TrimSpace(string(raw))
+		if msg == "" {
+			msg = resp.Status
+		}
+		return fmt.Errorf("opencode server %s %s 失败：%s", method, path, truncateRunes(msg, 300))
+	}
+	if out == nil {
+		return nil
+	}
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+type opencodePart struct {
+	Type  string          `json:"type"`
+	Text  string          `json:"text"`
+	Delta string          `json:"delta"`
+	Parts []opencodePart  `json:"parts"`
+	Data  json.RawMessage `json:"data"`
+}
+
+func opencodePartsText(parts []opencodePart) string {
+	var b strings.Builder
+	var walk func([]opencodePart)
+	walk = func(items []opencodePart) {
+		for _, p := range items {
+			if p.Type == "text" {
+				if p.Text != "" {
+					b.WriteString(p.Text)
+				}
+				if p.Delta != "" {
+					b.WriteString(p.Delta)
+				}
+				if len(p.Data) > 0 {
+					var nested struct {
+						Text string `json:"text"`
+					}
+					if json.Unmarshal(p.Data, &nested) == nil && nested.Text != "" {
+						b.WriteString(nested.Text)
+					}
+				}
+			}
+			if len(p.Parts) > 0 {
+				walk(p.Parts)
+			}
+		}
+	}
+	walk(parts)
+	return b.String()
+}
+
+func opencodeModelRef(model string) map[string]string {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return nil
+	}
+	provider, modelID, ok := strings.Cut(model, "/")
+	if !ok || strings.TrimSpace(provider) == "" || strings.TrimSpace(modelID) == "" {
+		return map[string]string{"modelID": model}
+	}
+	return map[string]string{"providerID": provider, "modelID": modelID}
+}
+
+func freeLocalPort() (int, error) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, err
+	}
+	defer ln.Close()
+	return ln.Addr().(*net.TCPAddr).Port, nil
+}
+
+func randomHex(bytesLen int) string {
+	buf := make([]byte, bytesLen)
+	if _, err := rand.Read(buf); err != nil {
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(buf)
 }
 
 // opencodeSessionStorePath returns the on-disk location for a robot's opencode
 // conversation→session map, scoped by clientId so multiple bots on one machine
-// stay isolated: <config dir>/connect/<clientId>/opencode-sessions.json. It
-// mirrors the Claude-family connectSessionStorePath layout with a distinct
-// filename so the stores never collide. An empty clientId means "do not persist"
-// (in-memory only). The clientId is sanitized like the connect lock file so it
-// is always filesystem-safe.
+// stay isolated: <config dir>/connect/<clientId>/opencode-sessions.json. An
+// empty clientId means "do not persist" (in-memory only).
 func opencodeSessionStorePath(clientID string) string {
 	if clientID == "" {
 		return ""
@@ -216,9 +471,9 @@ func opencodeSessionStorePath(clientID string) string {
 }
 
 // opencodeSessions maps a DingTalk conversation to the opencode session id
-// captured from the agent's output. The map is the authoritative store (guarded
-// by mu) and is persisted to disk so context survives a connector restart. An
-// empty path keeps it in memory only (persistence disabled).
+// returned by the server API. The map is the authoritative store (guarded by mu)
+// and is persisted to disk so context can survive a connector restart when
+// --agent-memory is enabled.
 type opencodeSessions struct {
 	mu   sync.Mutex
 	m    map[string]string

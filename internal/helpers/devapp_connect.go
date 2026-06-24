@@ -157,6 +157,18 @@ func buildConnectPlan(channel, clientID, robotCode string) map[string]any {
 				},
 			}
 		}
+		if channel == "opencode" {
+			return map[string]any{
+				"method":  "stream-bridge-opencode-server",
+				"summary": "Go 原生 Stream 建联，转发到本地 opencode serve 的 HTTP session/message 协议",
+				"steps": []string{
+					"自动定位 opencode CLI（PATH），启动 opencode serve --pure",
+					"用 clientId/clientSecret 起 Stream，注册 TOPIC_ROBOT 回调",
+					"收到消息 → 按 conversationId 映射/恢复 opencode session → /session/{id}/message 获取一次性回复",
+					"经 AI 卡片或 sessionWebhook 把回复发回钉钉，并记录发送成功/失败",
+				},
+			}
+		}
 		return map[string]any{
 			"method":  "stream-bridge",
 			"summary": fmt.Sprintf("Go 原生 Stream 建联，转发到本地 %s 的无头 CLI（每条消息起一个新实例，可 7×24 无人值守）", spec.app),
@@ -647,8 +659,8 @@ func connectAgentOptionsFromCommand(cmd *cobra.Command) connectAgentOptions {
 
 // connectAgentOptionsPayload renders the effective agent tuning for the
 // dry-run preview, including whether session memory actually applies to the
-// chosen channel (Codex uses app-server threads, opencode uses captured session
-// IDs, qoder stays process-local, and gemini stays stateless today).
+// chosen channel (Codex uses app-server threads, opencode uses opencode serve
+// sessions, qoder stays process-local, and gemini stays stateless today).
 func connectAgentOptionsPayload(channel string, opts connectAgentOptions) map[string]any {
 	spec, ok := agentSpecs[channel]
 	memory := "unsupported"
@@ -659,10 +671,8 @@ func connectAgentOptionsPayload(channel string, opts connectAgentOptions) map[st
 			memory = "disabled"
 		}
 	} else if channel == "opencode" {
-		// opencode persists its own sessions; the connector captures the id from
-		// the JSON stream and replays it with --session (see connect_opencode.go).
 		if opts.Memory {
-			memory = "per-conversation-captured"
+			memory = "per-conversation-opencode-server"
 		} else {
 			memory = "disabled"
 		}
