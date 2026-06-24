@@ -40,6 +40,10 @@ const (
 	opencodeNoTextReply        = "（本地 agent 无文本输出）"
 	opencodeServerStartupWait  = 20 * time.Second
 	opencodeServerPollInterval = 150 * time.Millisecond
+	// opencodeHealthProbeTimeout bounds a single /global/health probe so startup
+	// detection stays snappy even though the shared http.Client has no overall
+	// deadline (message turns rely on the per-turn ctx instead).
+	opencodeHealthProbeTimeout = 10 * time.Second
 )
 
 var errOpencodeSessionMissing = errors.New("opencode session missing")
@@ -177,10 +181,14 @@ type opencodeServer struct {
 
 func newOpencodeServer(bin string, env []string, workDir string) *opencodeServer {
 	return &opencodeServer{
-		bin:        bin,
-		env:        env,
-		workDir:    workDir,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		bin:     bin,
+		env:     env,
+		workDir: workDir,
+		// No client-level Timeout: a turn can legitimately run for minutes, so the
+		// per-request ctx (forwardStream's f.timeout, default 300s) governs instead.
+		// A hardcoded 30s here used to abort long agent replies mid-flight with
+		// "Client.Timeout exceeded while awaiting headers".
+		httpClient: &http.Client{},
 	}
 }
 
@@ -189,7 +197,7 @@ func (s *opencodeServer) ensure(ctx context.Context) (*opencodeHTTPClient, error
 	defer s.mu.Unlock()
 
 	if s.httpClient == nil {
-		s.httpClient = &http.Client{Timeout: 30 * time.Second}
+		s.httpClient = &http.Client{}
 	}
 	client := &opencodeHTTPClient{baseURL: s.baseURL, username: opencodeServerUsername, password: s.password, httpClient: s.httpClient}
 	if s.baseURL != "" && client.health(ctx) == nil {
@@ -297,6 +305,8 @@ type opencodeHTTPClient struct {
 }
 
 func (c *opencodeHTTPClient) health(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, opencodeHealthProbeTimeout)
+	defer cancel()
 	var out struct {
 		Healthy bool `json:"healthy"`
 	}
