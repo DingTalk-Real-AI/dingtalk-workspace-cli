@@ -456,30 +456,43 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 			// credentials get against --unified-app-id.
 			resolvedBy := "flag:--robot-client-id/--robot-client-secret"
 			if clientID == "" || clientSecret == "" {
-				if unifiedAppID == "" {
-					return apperrors.NewValidation("需要 --robot-client-id/--robot-client-secret（用现成机器人凭证），或 --unified-app-id（复用 dev app credentials get 自动取凭证）")
+				switch {
+				case unifiedAppID != "":
+					if commandDryRun(cmd) {
+						// Dry-run must not call the credentials tool; just preview routing.
+						return writeCommandPayload(cmd, connectPreviewEnvelope(map[string]any{
+							"channel":          channel,
+							"detectedBy":       detectedBy,
+							"credentialSource": "unified-app-id (credentials get, skipped in dry-run)",
+							"unifiedAppId":     unifiedAppID,
+							"agent":            connectAgentOptionsPayload(channel, opts),
+							"cli":              connectCliStatus(channel),
+							"connect":          buildConnectPlan(channel, "", ""),
+						}))
+					}
+					id, secret, err := devAppFetchCredentials(runner, cmd, unifiedAppID)
+					if err != nil {
+						return err
+					}
+					if id == "" || secret == "" {
+						return apperrors.NewInternal("credentials get 未返回 clientId/clientSecret；clientSecret 可能仅建号时返回一次，请改用 --robot-client-id/--robot-client-secret 直接传入")
+					}
+					clientID, clientSecret = id, secret
+					resolvedBy = "unified-app-id:credentials get"
+				case !commandDryRun(cmd) && connectStdinInteractive():
+					// No credentials and a real terminal: guide the user through
+					// provisioning a new robot app or picking an existing one,
+					// instead of failing. Scripts/daemons/pipes and dry-run fall
+					// through to the explicit-flag requirement below.
+					creds, oerr := runConnectOnboarding(runner, cmd, cmd.InOrStdin(), cmd.OutOrStdout())
+					if oerr != nil {
+						return oerr
+					}
+					clientID, clientSecret = creds.clientID, creds.clientSecret
+					resolvedBy = creds.source
+				default:
+					return apperrors.NewValidation("需要 --robot-client-id/--robot-client-secret（用现成机器人凭证），或 --unified-app-id（复用 dev app credentials get 自动取凭证）；或在交互终端直接运行 connect 进入建联引导")
 				}
-				if commandDryRun(cmd) {
-					// Dry-run must not call the credentials tool; just preview routing.
-					return writeCommandPayload(cmd, connectPreviewEnvelope(map[string]any{
-						"channel":          channel,
-						"detectedBy":       detectedBy,
-						"credentialSource": "unified-app-id (credentials get, skipped in dry-run)",
-						"unifiedAppId":     unifiedAppID,
-						"agent":            connectAgentOptionsPayload(channel, opts),
-						"cli":              connectCliStatus(channel),
-						"connect":          buildConnectPlan(channel, "", ""),
-					}))
-				}
-				id, secret, err := devAppFetchCredentials(runner, cmd, unifiedAppID)
-				if err != nil {
-					return err
-				}
-				if id == "" || secret == "" {
-					return apperrors.NewInternal("credentials get 未返回 clientId/clientSecret；clientSecret 可能仅建号时返回一次，请改用 --robot-client-id/--robot-client-secret 直接传入")
-				}
-				clientID, clientSecret = id, secret
-				resolvedBy = "unified-app-id:credentials get"
 			}
 
 			if commandDryRun(cmd) {
