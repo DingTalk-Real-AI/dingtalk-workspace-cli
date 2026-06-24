@@ -187,12 +187,9 @@ func isStreamBridgeChannel(channel string) bool {
 	return ok
 }
 
-func isQoderChannel(channel string) bool {
-	return channel == "qoder" || channel == "qoderwork"
-}
-
 // execForwarder invokes a local agent CLI: fixed argv plus the message text as
-// the trailing argument, returning stdout. Used by qoder / claudecode / codebuddy.
+// the trailing argument, returning stdout. Used by claudecode / codebuddy and
+// generic/custom one-shot channels.
 // env holds extra environment entries appended to os.Environ() (e.g. codebuddy's
 // CODEBUDDY_CONFIG_DIR so it reuses the WorkBuddy login).
 type execForwarder struct {
@@ -216,7 +213,7 @@ type execForwarder struct {
 // resetSession drops the conversation's agent session so the next message
 // starts a fresh one. Implements sessionResetter for the built-in /new and
 // /clear commands. A no-op when this channel has no addressable sessions
-// (sessions == nil, e.g. the qoder family).
+// (sessions == nil).
 func (f *execForwarder) resetSession(convID string) {
 	if f.sessions != nil && strings.TrimSpace(convID) != "" {
 		f.sessions.reset(convID)
@@ -296,7 +293,8 @@ func (f *execForwarder) forward(ctx context.Context, convID, text string) (strin
 // channel CLI with addressable sessions keeps multi-turn context per chat.
 // First message of a conversation mints a UUID and passes `--session-id <id>`
 // (create); subsequent messages pass `--resume <id>` (continue). Claude Code,
-// codebuddy and qodercli share these exact flags.
+// codebuddy and qodercli share these exact flags in one-shot CLI mode. Qoder's
+// persistent stream-json mode reuses the same UUID values as JSON session_id.
 //
 // The map is persisted to disk (path, scoped per clientId) so a connector
 // restart resumes every chat's context instead of starting fresh — the whole
@@ -325,17 +323,42 @@ func (s *convSessions) persistLocked() {
 	saveConvSessionMap(s.path, s.m)
 }
 
+func convSessionKey(convID string) string {
+	key := strings.TrimSpace(convID)
+	if key == "" {
+		key = "_default"
+	}
+	return key
+}
+
+// id returns the stable agent session ID for one conversation, minting and
+// persisting one on first sight. It is used by transports that carry the session
+// id in a JSON field rather than argv flags.
+func (s *convSessions) id(convID string) string {
+	key := convSessionKey(convID)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if id, ok := s.m[key]; ok {
+		return id
+	}
+	id := uuid.NewString()
+	s.m[key] = id
+	s.persistLocked()
+	return id
+}
+
 // args returns the session argv fragment for one conversation, minting a new
 // session on first sight. A newly minted mapping is persisted so a restart can
 // resume it.
 func (s *convSessions) args(convID string) []string {
+	key := convSessionKey(convID)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if id, ok := s.m[convID]; ok {
+	if id, ok := s.m[key]; ok {
 		return []string{"--resume", id}
 	}
 	id := uuid.NewString()
-	s.m[convID] = id
+	s.m[key] = id
 	s.persistLocked()
 	return []string{"--session-id", id}
 }
@@ -345,9 +368,10 @@ func (s *convSessions) args(convID string) []string {
 // fresh ID is safe either way). The removal is persisted so a restart does not
 // resurrect the dropped session.
 func (s *convSessions) reset(convID string) {
+	key := convSessionKey(convID)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.m, convID)
+	delete(s.m, key)
 	s.persistLocked()
 }
 
@@ -573,8 +597,8 @@ var agentSpecs = map[string]agentSpec{
 		modelFlag: "-m"},
 	// desktop-app-bundled CLIs — hint only (can't silently install a GUI app); the
 	// bundled CLI is used automatically once the app is installed.
-	// qodercli supports addressable sessions. Keep its DWS mapping process-local
-	// so a connector restart starts fresh instead of resurrecting old chats.
+	// qodercli supports addressable sessions; DWS persists the conversation
+	// mapping like other --session-id/--resume CLIs so restarts can resume.
 	"qoder": {app: "Qoder", bins: []string{"qodercli"},
 		globs:          []string{"/Applications/Qoder.app/Contents/Resources/app/resources/bin/*/qodercli"},
 		argvTail:       []string{"-o", "text", "--max-turns", "30", "-p"},
@@ -769,12 +793,8 @@ func forwarderForChannel(channel, clientID string, opts connectAgentOptions) (fo
 	if !overridden && opts.Memory && spec.ccSessions {
 		// Scope the on-disk session store by clientId so multiple bots on one
 		// machine stay isolated; an empty clientId disables persistence and the
-		// map stays in memory. Qoder intentionally stays process-local: its CLI
-		// persists session history, but DWS should not resume it after restart.
+		// map stays in memory.
 		sessionStore := connectSessionStorePath(clientID)
-		if isQoderChannel(channel) {
-			sessionStore = ""
-		}
 		sessions = newConvSessions(sessionStore)
 	}
 	// Incremental-output argv: same binary, the spec's stream tail, same model
@@ -797,6 +817,9 @@ func forwarderForChannel(channel, clientID string, opts connectAgentOptions) (fo
 	// conversation→session mapping and sends one-shot group replies.
 	if channel == "opencode" && !overridden {
 		return newOpencodeForwarder(argv[0], env, timeout, opts, clientID), nil
+	}
+	if (channel == "qoder" || channel == "qoderwork") && !overridden {
+		return newQoderStreamForwarder(channel, argv[0], env, timeout, opts, sessions), nil
 	}
 	base := &execForwarder{name: channel, argv: argv, env: env, timeout: timeout,
 		workDir: opts.WorkDir, sessions: sessions,

@@ -106,36 +106,35 @@ func TestForwarderSessionAndModelWiring(t *testing.T) {
 		t.Fatalf("built-in haiku pin should be replaced: %v", ef.argv)
 	}
 
-	// qoder family supports addressable CLI sessions, but DWS keeps the mapping
-	// process-local so a connector restart starts fresh.
-	qf, err := forwarderForChannel("qoder", "", connectAgentOptions{Memory: true})
+	// qoder family runs a persistent stream-json subprocess and carries the
+	// addressable Qoder session id inside each JSON user message. DWS persists
+	// the mapping so a connector restart can resume the same conversation.
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	qf, err := forwarderForChannel("qoder", "qoder-client", connectAgentOptions{Memory: true})
 	if err != nil {
 		t.Fatalf("qoder forwarder: %v", err)
 	}
-	qef := qf.(*execForwarder)
-	if qef.sessions == nil {
-		t.Fatal("qoder with Memory=true should have process-local sessions")
+	qsf := qf.(*qoderStreamForwarder)
+	if qsf.sessions == nil {
+		t.Fatal("qoder with Memory=true should have sessions")
 	}
-	if qef.sessions.path != "" {
-		t.Fatalf("qoder sessions should not persist to disk, path = %q", qef.sessions.path)
+	if qsf.sessions.path == "" {
+		t.Fatal("qoder sessions should persist to disk")
 	}
-	if got := strings.Join(qef.argv, " "); !strings.Contains(got, "-o text") || strings.Contains(got, "-f text") {
-		t.Fatalf("qoder output flag mismatch: argv = %v", qef.argv)
-	}
-	if got := strings.Join(qef.streamArgv, " "); !strings.Contains(got, "-o stream-json") || strings.Contains(got, "-f stream-json") {
-		t.Fatalf("qoder stream output flag mismatch: streamArgv = %v", qef.streamArgv)
+	if got := strings.Join(qsf.commandArgs(), " "); !strings.Contains(got, "--input-format stream-json") || !strings.Contains(got, "--output-format stream-json") {
+		t.Fatalf("qoder stream-json args mismatch: argv = %v", qsf.commandArgs())
 	}
 
 	qwf, err := forwarderForChannel("qoderwork", "robot-client", connectAgentOptions{Memory: true})
 	if err != nil {
 		t.Fatalf("qoderwork forwarder: %v", err)
 	}
-	qwef := qwf.(*execForwarder)
-	if qwef.sessions == nil {
-		t.Fatal("qoderwork with Memory=true should have process-local sessions")
+	qwsf := qwf.(*qoderStreamForwarder)
+	if qwsf.sessions == nil {
+		t.Fatal("qoderwork with Memory=true should have sessions")
 	}
-	if qwef.sessions.path != "" {
-		t.Fatalf("qoderwork sessions should not persist to disk, path = %q", qwef.sessions.path)
+	if qwsf.sessions.path == "" {
+		t.Fatal("qoderwork sessions should persist to disk")
 	}
 
 	// Memory off on a supporting channel.
@@ -186,14 +185,14 @@ func TestRobotConnectAgentFlagsInDryRun(t *testing.T) {
 	}
 }
 
-func TestQoderAgentMemoryPayloadIsProcessLocal(t *testing.T) {
+func TestQoderAgentMemoryPayloadIsPerConversation(t *testing.T) {
 	payload := connectAgentOptionsPayload("qoder", connectAgentOptions{Memory: true})
-	if got := payload["memory"]; got != "per-conversation-process" {
-		t.Fatalf("qoder memory = %v, want per-conversation-process", got)
+	if got := payload["memory"]; got != "per-conversation-qoder-stream" {
+		t.Fatalf("qoder memory = %v, want per-conversation-qoder-stream", got)
 	}
 	payload = connectAgentOptionsPayload("qoderwork", connectAgentOptions{Memory: true})
-	if got := payload["memory"]; got != "per-conversation-process" {
-		t.Fatalf("qoderwork memory = %v, want per-conversation-process", got)
+	if got := payload["memory"]; got != "per-conversation-qoder-stream" {
+		t.Fatalf("qoderwork memory = %v, want per-conversation-qoder-stream", got)
 	}
 	payload = connectAgentOptionsPayload("qoder", connectAgentOptions{Memory: false})
 	if got := payload["memory"]; got != "disabled" {

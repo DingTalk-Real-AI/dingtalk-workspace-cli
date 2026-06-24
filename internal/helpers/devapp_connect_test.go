@@ -114,8 +114,8 @@ func TestCustomChannel(t *testing.T) {
 func TestBuildConnectPlanMethod(t *testing.T) {
 	want := map[string]string{
 		"openclaw":   "openclaw-connector",
-		"qoder":      "stream-bridge",
-		"qoderwork":  "stream-bridge",
+		"qoder":      "stream-bridge-qoder-stream",
+		"qoderwork":  "stream-bridge-qoder-stream",
 		"hermes":     "official-channel",
 		"workbuddy":  "stream-bridge",
 		"claudecode": "stream-bridge",
