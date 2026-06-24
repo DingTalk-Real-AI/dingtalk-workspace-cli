@@ -6,6 +6,14 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.40] - 2026-06-24
+
+This release adds China-accessible install mirrors so the CLI installs reliably from mainland China, where GitHub raw + Releases are slow or fail.
+
+### Added
+
+- **China mirror via Gitee + npmmirror** (#486; `scripts/install.sh`, `scripts/install.ps1`, `scripts/install-skills.sh`, `scripts/release/sync-to-gitee.sh`, `.github/workflows/release.yml`, `.github/workflows/mirror-to-gitee.yml`) — an opt-in `DWS_GITEE_REPO` env var makes all three installers resolve the latest version and every release asset (binary, `checksums.txt`, `dws-skills.zip`) from the Gitee OpenAPI v5 instead of GitHub; with it unset, installation defaults to GitHub (fully backward compatible). The release pipeline mirrors release attachments to the matching Gitee release after each tag (gated on `GITEE_TOKEN`/`GITEE_REPO`), and a hub-mirror workflow keeps the repo code in sync (gated on `GITEE_PRIVATE_KEY`). README documents three China install channels: Gitee raw script, Gitee release binaries, and the npm package via `registry.npmmirror.com`.
+
 ## [1.0.39] - 2026-06-18
 
 This release makes the AI-sent indicator opt-in. 1.0.38 unconditionally tagged every user-identity send/reply with the edition claw identity, so the IM server rendered a "Send from AI" badge under every message — and on the open edition a stale hardcoded value even leaked the Wukong-branded label (「悟空AI发送」) to external users. The badge is now off by default and shown only when the caller explicitly asks for it.
