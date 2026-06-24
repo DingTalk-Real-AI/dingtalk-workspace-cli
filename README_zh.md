@@ -117,15 +117,7 @@ cp dws ~/.local/bin/         # 安装到 PATH
 
 国内用户可使用以下通道，避免 GitHub 网络问题。默认（不设置这些环境变量）走 GitHub。
 
-**1. 安装脚本 + 预编译二进制（阿里云 OSS + CDN）：**
-
-```bash
-DWS_RELEASE_BASE=https://<OSS-CDN-域名>/dws/download DWS_VERSION=<tag> curl -fsSL https://<OSS-CDN-域名>/dws/install.sh | sh
-```
-
-> `<OSS-CDN-域名>` 待团队确定后替换，`<tag>` 替换为目标版本（如 `v1.0.7`）。产物目录结构需为 `<base>/<version>/<asset-file>`。不设置这些环境变量时，默认从 GitHub 安装。
-
-**2. 源码镜像（Gitee）：**
+**1. 安装脚本 + 预编译二进制（Gitee 镜像）：**
 
 仓库镜像地址：`https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli`
 
@@ -133,7 +125,9 @@ DWS_RELEASE_BASE=https://<OSS-CDN-域名>/dws/download DWS_VERSION=<tag> curl -f
 DWS_GITEE_REPO=DingTalk-Real-AI/dingtalk-workspace-cli curl -fsSL https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli/raw/main/scripts/install.sh | sh
 ```
 
-**3. npm 包（npmmirror 镜像）：**
+> 设置 `DWS_GITEE_REPO` 后，安装脚本会改从 Gitee API 解析最新版本和各个 release 产物（二进制、校验和、skills 包），而不是走 GitHub。不设置时默认从 GitHub 安装。
+
+**2. npm 包（npmmirror 镜像）：**
 
 ```bash
 npm install -g dingtalk-workspace-cli --registry=https://registry.npmmirror.com

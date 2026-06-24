@@ -117,15 +117,7 @@ cp dws ~/.local/bin/         # install to PATH
 
 For users in mainland China, the following channels avoid GitHub network issues. By default (without setting these environment variables) the installer pulls from GitHub.
 
-**1. Install script + pre-built binary (Alibaba Cloud OSS + CDN):**
-
-```bash
-DWS_RELEASE_BASE=https://<OSS-CDN-domain>/dws/download DWS_VERSION=<tag> curl -fsSL https://<OSS-CDN-domain>/dws/install.sh | sh
-```
-
-> Replace `<OSS-CDN-domain>` once the team finalizes it, and set `<tag>` to the target version (e.g. `v1.0.7`). The asset layout must be `<base>/<version>/<asset-file>`. If these variables are unset, installation defaults to GitHub.
-
-**2. Source mirror (Gitee):**
+**1. Install script + pre-built binary (Gitee mirror):**
 
 Repository mirror: `https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli`
 
@@ -133,7 +125,9 @@ Repository mirror: `https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli`
 DWS_GITEE_REPO=DingTalk-Real-AI/dingtalk-workspace-cli curl -fsSL https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli/raw/main/scripts/install.sh | sh
 ```
 
-**3. npm package (npmmirror mirror):**
+> With `DWS_GITEE_REPO` set, the installer resolves the latest version and every release asset (binary, checksums, skills) from the Gitee API instead of GitHub. If it is unset, installation defaults to GitHub.
+
+**2. npm package (npmmirror mirror):**
 
 ```bash
 npm install -g dingtalk-workspace-cli --registry=https://registry.npmmirror.com

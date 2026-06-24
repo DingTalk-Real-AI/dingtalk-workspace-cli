@@ -15,13 +15,8 @@
 #   DWS_NO_SKILLS     — set to 1 to skip skills install
 #   DWS_SKILLS_ONLY   — set to 1 to install only skills (skip binary)
 #   DWS_SKILL_MODE    — mono | multi (default: prompt if TTY, else mono)
-#   DWS_RELEASE_BASE  — base URL for release assets       (default: GitHub Releases)
-#                       China users can point this at a domestic mirror (OSS+CDN), e.g.:
-#                         DWS_RELEASE_BASE=https://dl.dingtalk.com/dws/download
-#                       Layout must be: <base>/<version>/<asset-file>
-#   DWS_LATEST_URL    — endpoint to resolve the latest tag (default: GitHub redirect)
-#                       Mirror users should set DWS_VERSION explicitly, or expose a
-#                       redirect/latest endpoint compatible with the resolver below.
+#   DWS_GITEE_REPO    — "owner/repo" on Gitee; when set, version + assets resolve
+#                       via the Gitee API instead of GitHub (China mirror)
 #
 # Agent skills paths follow build/npm/install.js AGENT_DIRS (order and entries must match).
 
@@ -29,10 +24,6 @@ set -eu
 
 REPO="DingTalk-Real-AI/dingtalk-workspace-cli"
 BIN_NAME="dws"
-# Asset distribution base. Default = GitHub Releases (overseas); override for China mirror.
-RELEASE_BASE="${DWS_RELEASE_BASE:-https://github.com/${REPO}/releases/download}"
-# Latest-version resolution endpoint (the /releases/latest redirect trick is GitHub-specific).
-LATEST_URL="${DWS_LATEST_URL:-https://github.com/${REPO}/releases/latest}"
 # China mirror: Gitee repo "owner/repo". When set, version + asset URLs resolve via
 # the Gitee API (https://gitee.com/api/v5) instead of GitHub. Gitee attachment URLs
 # carry an unstable numeric id, so every asset is resolved by name at install time.
@@ -93,14 +84,14 @@ download() {
 }
 
 # Resolve the download URL of a release asset by file name.
-#   GitHub: deterministic template <base>/<version>/<file>.
+#   GitHub: deterministic template <repo>/releases/download/<version>/<file>.
 #   Gitee : query the release API and pick the asset whose name matches
 #           (Gitee attachment URLs carry an unstable numeric id, so we never
 #            template them — we read browser_download_url straight from the API).
 asset_url() {
   _name="$1"
   if [ -z "$GITEE_REPO" ]; then
-    printf '%s' "${RELEASE_BASE}/${VERSION}/${_name}"
+    printf '%s' "https://github.com/${REPO}/releases/download/${VERSION}/${_name}"
     return 0
   fi
   curl -fsSL "https://gitee.com/api/v5/repos/${GITEE_REPO}/releases/tags/${VERSION}" 2>/dev/null \
@@ -155,10 +146,10 @@ resolve_version() {
         | sed 's/.*"tag_name":[ ]*"//;s/"$//')"
     elif need_cmd curl; then
       # Follow the redirect from /releases/latest to get the tag
-      VERSION="$(curl -fsSI "$LATEST_URL" 2>/dev/null \
+      VERSION="$(curl -fsSI "https://github.com/${REPO}/releases/latest" 2>/dev/null \
         | grep -i '^location:' | sed 's|.*/tag/||;s/[[:space:]]*$//')"
     elif need_cmd wget; then
-      VERSION="$(wget --spider --max-redirect=0 "$LATEST_URL" 2>&1 \
+      VERSION="$(wget --spider --max-redirect=0 "https://github.com/${REPO}/releases/latest" 2>&1 \
         | grep -i 'Location:' | sed 's|.*/tag/||;s/[[:space:]]*$//')"
     fi
     if [ -z "$VERSION" ]; then

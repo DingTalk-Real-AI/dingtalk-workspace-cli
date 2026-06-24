@@ -18,6 +18,8 @@
 #   DWS_NO_SKILLS     — set to 1 to skip skills install
 #   DWS_SKILLS_ONLY   — set to 1 to install only skills
 #   DWS_SKILL_MODE    — mono | multi (default: prompt if TTY, else mono)
+#   DWS_GITEE_REPO    — "owner/repo" on Gitee; resolve version + assets via the
+#                       Gitee API instead of GitHub (China mirror)
 #
 # Agent skills paths follow build/npm/install.js AGENT_DIRS (order and entries must match).
 
@@ -25,11 +27,6 @@ $ErrorActionPreference = "Stop"
 
 $Repo = "DingTalk-Real-AI/dingtalk-workspace-cli"
 $BinName = "dws"
-# Asset distribution base. Default = GitHub Releases (overseas); override for China mirror, e.g.:
-#   $env:DWS_RELEASE_BASE = "https://dl.dingtalk.com/dws/download"   (layout: <base>/<version>/<file>)
-$ReleaseBase = if ($env:DWS_RELEASE_BASE) { $env:DWS_RELEASE_BASE } else { "https://github.com/$Repo/releases/download" }
-# Latest-version resolution endpoint (the /releases/latest redirect trick is GitHub-specific).
-$LatestUrl = if ($env:DWS_LATEST_URL) { $env:DWS_LATEST_URL } else { "https://github.com/$Repo/releases/latest" }
 # China mirror: Gitee repo "owner/repo". When set, version + asset URLs resolve via the Gitee API.
 $GiteeRepo = if ($env:DWS_GITEE_REPO) { $env:DWS_GITEE_REPO } else { "" }
 $InstallDir = if ($env:DWS_INSTALL_DIR) { $env:DWS_INSTALL_DIR } else { Join-Path $HOME ".local\bin" }
@@ -147,7 +144,7 @@ function Resolve-LatestVersion {
             return
         }
         try {
-            $response = Invoke-WebRequest -Uri $LatestUrl `
+            $response = Invoke-WebRequest -Uri "https://github.com/$Repo/releases/latest" `
                 -MaximumRedirection 0 -ErrorAction SilentlyContinue -UseBasicParsing 2>$null
         } catch {
             if ($_.Exception.Response.Headers.Location) {
@@ -159,7 +156,7 @@ function Resolve-LatestVersion {
 
         # Fallback: parse the redirect from the response
         try {
-            $response = Invoke-WebRequest -Uri $LatestUrl `
+            $response = Invoke-WebRequest -Uri "https://github.com/$Repo/releases/latest" `
                 -UseBasicParsing -ErrorAction Stop
             if ($response.BaseResponse.ResponseUri) {
                 $script:Version = ($response.BaseResponse.ResponseUri.ToString() -split "/tag/")[-1].Trim()
@@ -315,7 +312,7 @@ function Install-Binary {
     Resolve-LatestVersion
 
     $archiveName = "${BinName}-windows-${arch}.zip"
-    if ($GiteeRepo -ne "") { $downloadUrl = Get-GiteeAssetUrl $archiveName } else { $downloadUrl = "$ReleaseBase/$Version/$archiveName" }
+    if ($GiteeRepo -ne "") { $downloadUrl = Get-GiteeAssetUrl $archiveName } else { $downloadUrl = "https://github.com/$Repo/releases/download/$Version/$archiveName" }
     if (-not $downloadUrl) { Write-Err "Could not resolve download URL for $archiveName (version $Version)." }
 
     Write-Say "⬇  Downloading $BinName $Version (windows/$arch)..."
@@ -328,7 +325,7 @@ function Install-Binary {
         Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath -UseBasicParsing
 
         # Download and verify SHA256 checksum
-        if ($GiteeRepo -ne "") { $checksumUrl = Get-GiteeAssetUrl "checksums.txt" } else { $checksumUrl = "$ReleaseBase/$Version/checksums.txt" }
+        if ($GiteeRepo -ne "") { $checksumUrl = Get-GiteeAssetUrl "checksums.txt" } else { $checksumUrl = "https://github.com/$Repo/releases/download/$Version/checksums.txt" }
         try {
             $checksumPath = Join-Path $tmpDir "checksums.txt"
             Invoke-WebRequest -Uri $checksumUrl -OutFile $checksumPath -UseBasicParsing
@@ -510,7 +507,7 @@ function Install-Skills {
     Write-Say "📦 Installing agent skills from GitHub Releases..."
     Resolve-LatestVersion
 
-    if ($GiteeRepo -ne "") { $zipUrl = Get-GiteeAssetUrl "dws-skills.zip" } else { $zipUrl = "$ReleaseBase/$Version/dws-skills.zip" }
+    if ($GiteeRepo -ne "") { $zipUrl = Get-GiteeAssetUrl "dws-skills.zip" } else { $zipUrl = "https://github.com/$Repo/releases/download/$Version/dws-skills.zip" }
     if (-not $zipUrl) { Write-Err "Could not resolve download URL for dws-skills.zip (version $Version)." }
 
     $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) "dws-skills-$PID"

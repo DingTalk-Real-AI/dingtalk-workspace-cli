@@ -13,12 +13,10 @@ set -eu
 # Environment variables (optional):
 #   DWS_VERSION        — release tag (default: latest)
 #   DWS_SKILLS_ROOT    — base path for agent dirs (default: $PWD)
+#   DWS_GITEE_REPO     — "owner/repo" on Gitee; resolve version + assets via the
+#                        Gitee API instead of GitHub (China mirror)
 
 REPO="DingTalk-Real-AI/dingtalk-workspace-cli"
-# Asset distribution base. Default = GitHub Releases (overseas); override for China mirror:
-#   DWS_RELEASE_BASE=https://dl.dingtalk.com/dws/download  (layout: <base>/<version>/<file>)
-RELEASE_BASE="${DWS_RELEASE_BASE:-https://github.com/${REPO}/releases/download}"
-LATEST_URL="${DWS_LATEST_URL:-https://github.com/${REPO}/releases/latest}"
 # China mirror: Gitee repo "owner/repo". When set, version + asset URLs resolve via Gitee API.
 GITEE_REPO="${DWS_GITEE_REPO:-}"
 VERSION="${DWS_VERSION:-latest}"
@@ -41,7 +39,7 @@ resolve_version() {
       VERSION="$(curl -fsSL "https://gitee.com/api/v5/repos/${GITEE_REPO}/releases/latest" 2>/dev/null \
         | grep -o '"tag_name":[ ]*"[^"]*"' | head -1 | sed 's/.*"tag_name":[ ]*"//;s/"$//')"
     else
-      VERSION="$(curl -fsSI "$LATEST_URL" 2>/dev/null \
+      VERSION="$(curl -fsSI "https://github.com/${REPO}/releases/latest" 2>/dev/null \
         | grep -i '^location:' | sed 's|.*/tag/||;s/[[:space:]]*$//')"
     fi
     if [ -z "$VERSION" ]; then
@@ -55,7 +53,7 @@ resolve_version() {
 asset_url() {
   _name="$1"
   if [ -z "$GITEE_REPO" ]; then
-    printf '%s' "${RELEASE_BASE}/${VERSION}/${_name}"
+    printf '%s' "https://github.com/${REPO}/releases/download/${VERSION}/${_name}"
     return 0
   fi
   curl -fsSL "https://gitee.com/api/v5/repos/${GITEE_REPO}/releases/tags/${VERSION}" 2>/dev/null \
