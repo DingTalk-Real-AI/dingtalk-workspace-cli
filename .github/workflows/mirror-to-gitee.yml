@@ -18,13 +18,15 @@ on:
 jobs:
   mirror:
     runs-on: ubuntu-latest
-    # GitHub Actions 不允许在 job-level if 直接引用 secrets，
-    # 因此先用 env 暴露 GITEE_TOKEN，再在 step 里用 env.GITEE_TOKEN 做守卫判断。
+    # GitHub Actions 不允许在 job-level if 直接引用 secrets，因此先用 env 暴露 secret，
+    # 再在 step 里做守卫判断。hub-mirror 必须有 SSH 私钥(GITEE_PRIVATE_KEY)才能推送，
+    # 故以它为守卫：未配置时整步跳过(代码镜像可改由 Gitee 侧 pull-mirror 承担)，不报红叉。
     env:
       GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+      GITEE_PRIVATE_KEY: ${{ secrets.GITEE_PRIVATE_KEY }}
     steps:
       - name: Mirror to Gitee
-        if: env.GITEE_TOKEN != ''
+        if: env.GITEE_PRIVATE_KEY != ''
         uses: Yikun/hub-mirror-action@master
         with:
           src: "github/DingTalk-Real-AI"

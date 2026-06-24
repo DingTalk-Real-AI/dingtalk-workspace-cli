@@ -4,13 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
-	embeddedskills "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/skills"
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 )
@@ -100,10 +98,11 @@ func runSkillSetup(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("--skill / --exclude 仅在 --mode multi 下有效（mono 只有一个 skill，无需挑选）")
 	}
 
-	skillSrc, err := resolveSkillSetupSource(source, mode)
+	skillSrc, srcCleanup, err := resolveSkillSetupSourceOrEmbedded(source, mode)
 	if err != nil {
 		return err
 	}
+	defer srcCleanup()
 
 	dests, err := resolveSkillSetupTargets(target, mode)
 	if err != nil {
@@ -338,16 +337,10 @@ func resolveSkillSetupSource(explicit, mode string) (string, error) {
 		return "", fmt.Errorf("未找到 %s 模式的 skill 源目录（--source / DWS_SKILL_SOURCE 显式指定时不回退到内嵌源），已尝试：\n  - %s", mode, hint)
 	}
 
-	// Default: the copy embedded in this binary, materialized into the
-	// user-level cache. Upgrading the binary therefore upgrades what setup
-	// installs — a stale checkout in cwd can no longer poison the install
-	// (issue PeterGuy326#8).
-	if src, err := materializeEmbeddedSkillSource(subdir); err == nil && isSkillSourceRoot(src, mode) {
-		return src, nil
-	}
-
-	// Legacy fallbacks (exe-adjacent, cwd, user cache) — only reachable when
-	// embed materialization fails (e.g. unwritable HOME and temp dir).
+	// No explicit override: legacy fallback only — embedded materialization
+	// is handled by resolveSkillSetupSourceOrEmbedded (skill_setup_embed.go),
+	// the wrapper that callers use. This branch is reachable only when the
+	// wrapper passes through with an empty explicit/env (legacy direct call).
 	candidates := skillSourceCandidates("", subdir)
 	for _, c := range candidates {
 		if isSkillSourceRoot(c, mode) {
@@ -357,38 +350,6 @@ func resolveSkillSetupSource(explicit, mode string) (string, error) {
 
 	hint := strings.Join(candidates, "\n  - ")
 	return "", fmt.Errorf("未找到 %s 模式的 skill 源目录，已尝试：\n  - %s\n\n请用 --source 显式指定包含 skills/%s 的仓库根目录", mode, hint, mode)
-}
-
-// materializeEmbeddedSkillSource extracts the embedded skills/<mode> tree
-// into the user-level cache (~/.dws/skills/<mode>) and returns that path.
-// The cache is wiped and rewritten on every call so its content always
-// matches the running binary; a temp directory is used when HOME is not
-// resolvable.
-func materializeEmbeddedSkillSource(mode string) (string, error) {
-	sub, err := fs.Sub(embeddedskills.FS, mode)
-	if err != nil {
-		return "", err
-	}
-	var dest string
-	if home, herr := os.UserHomeDir(); herr == nil && home != "" {
-		dest = filepath.Join(home, ".dws", "skills", mode)
-	} else {
-		tmp, terr := os.MkdirTemp("", "dws-skill-src-")
-		if terr != nil {
-			return "", terr
-		}
-		dest = filepath.Join(tmp, mode)
-	}
-	if err := os.RemoveAll(dest); err != nil {
-		return "", err
-	}
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-		return "", err
-	}
-	if err := os.CopyFS(dest, sub); err != nil {
-		return "", err
-	}
-	return dest, nil
 }
 
 // skillSourceCandidates returns the ordered list of paths to probe for a
