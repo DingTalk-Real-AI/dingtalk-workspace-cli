@@ -28,6 +28,11 @@ BIN_NAME="dws"
 # the Gitee API (https://gitee.com/api/v5) instead of GitHub. Gitee attachment URLs
 # carry an unstable numeric id, so every asset is resolved by name at install time.
 GITEE_REPO="${DWS_GITEE_REPO:-}"
+# Auto-fallback: when DWS_GITEE_REPO is not set, the installer probes GitHub and,
+# if it is unreachable (typical in mainland China), automatically switches to this
+# Gitee mirror — so a plain `curl … | sh` works everywhere with no env var.
+# Set DWS_NO_FALLBACK=1 to disable the probe and force GitHub.
+GITEE_FALLBACK_REPO="${DWS_GITEE_FALLBACK_REPO:-DingTalk-Real-AI/dingtalk-workspace-cli}"
 INSTALL_DIR="${DWS_INSTALL_DIR:-$HOME/.local/bin}"
 INSTALL_NAME="${DWS_INSTALL_NAME:-$BIN_NAME}"
 VERSION="${DWS_VERSION:-latest}"
@@ -151,6 +156,21 @@ detect_arch() {
     arm64|aarch64) echo "arm64" ;;
     *) err "Unsupported architecture: $arch" ;;
   esac
+}
+
+# Decide the download source. An explicit DWS_GITEE_REPO always wins. Otherwise
+# probe GitHub Releases; if it is unreachable (typical in mainland China), switch
+# GITEE_REPO to the mirror so every subsequent resolve/download uses Gitee.
+pick_source() {
+  [ -n "$GITEE_REPO" ] && return 0
+  [ "${DWS_NO_FALLBACK:-0}" = "1" ] && return 0
+  if need_cmd curl; then
+    curl -fsS --connect-timeout 5 --max-time 12 -o /dev/null "https://github.com/${REPO}/releases/latest" 2>/dev/null && return 0
+  elif need_cmd wget; then
+    wget -q --timeout=12 --tries=1 -O /dev/null "https://github.com/${REPO}/releases/latest" 2>/dev/null && return 0
+  fi
+  GITEE_REPO="$GITEE_FALLBACK_REPO"
+  say "⚠ GitHub 不可达，自动切换国内 Gitee 镜像: ${GITEE_REPO}"
 }
 
 # Resolve the latest version tag from GitHub
@@ -612,6 +632,10 @@ main() {
   fi
 
   print_banner
+
+  # Pick GitHub vs Gitee mirror (auto-fallback when GitHub is unreachable).
+  # Skipped when installing from a local source checkout (no download needed).
+  [ -z "$source_root" ] && pick_source
 
   # Resolve skill mode only when we are actually going to touch skills.
   if [ "$NO_SKILLS" != "1" ]; then
