@@ -529,7 +529,7 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("unified-app-id", "", "统一应用 ID：复用 dev app credentials get 自动取凭证（替代手填 robot-client-id/secret）")
 	cmd.Flags().String("agent-model", "", "覆盖本地 agent 模型（如 claude 的 sonnet/opus；默认用渠道内置模型，求快）；env: DWS_AGENT_MODEL")
 	cmd.Flags().String("agent-workdir", "", "本地 agent 的运行目录（放知识文件可给机器人上下文；默认空白临时目录，求快）；env: DWS_AGENT_WORKDIR")
-	cmd.Flags().Bool("agent-memory", true, "按会话续聊：同一群/单聊共享 agent 会话上下文（claudecode/codebuddy/workbuddy 支持；--agent-memory=false 关闭）")
+	cmd.Flags().Bool("agent-memory", true, "按会话续聊：同一群/单聊共享 agent 会话上下文，重启后仍续上（claudecode/codebuddy/workbuddy/codex/opencode 支持；--agent-memory=false 关闭）")
 	cmd.Flags().Bool("reply-card", true, "用 AI 卡片回复（思考中→完成状态，同官方渠道体验）；卡片失败自动回退普通消息；--reply-card=false 关闭")
 	cmd.Flags().String("card-template", "", "AI 卡片模板 ID（开发者后台·本应用·AI 卡片设置里获取；模板按应用授权，强烈建议注册自己应用的模板）；env: DWS_CARD_TEMPLATE")
 	cmd.Flags().String("knowledge-dir", "", "答疑知识目录（.md/.txt）：每条消息本地检索 top-k 片段拼进 prompt，agent 仍在空目录跑、不拖慢回复；env: DWS_KNOWLEDGE_DIR")
@@ -643,6 +643,14 @@ func connectAgentOptionsPayload(channel string, opts connectAgentOptions) map[st
 	if channel == "codex" && codexAppServerPlanEnabled() {
 		if opts.Memory {
 			memory = "per-conversation-app-server"
+		} else {
+			memory = "disabled"
+		}
+	} else if channel == "opencode" {
+		// opencode persists its own sessions; the connector captures the id from
+		// the JSON stream and replays it with --session (see connect_opencode.go).
+		if opts.Memory {
+			memory = "per-conversation-captured"
 		} else {
 			memory = "disabled"
 		}

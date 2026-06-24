@@ -785,6 +785,12 @@ func forwarderForChannel(channel, clientID string, opts connectAgentOptions) (fo
 	if channel == "codex" && !overridden && codexAppServerEnabled() {
 		return newCodexAppServerForwarder(argv[0], env, timeout, opts, clientID, base), nil
 	}
+	// opencode persists sessions itself but only reports the id in its JSON
+	// event stream (it cannot mint one up front), so it needs the capture-based
+	// forwarder rather than the Claude-family --session-id/--resume exec path.
+	if channel == "opencode" && !overridden {
+		return newOpencodeForwarder(argv[0], env, timeout, opts, clientID), nil
+	}
 	return base, nil
 }
 
