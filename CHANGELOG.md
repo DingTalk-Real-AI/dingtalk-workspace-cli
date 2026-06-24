@@ -6,6 +6,18 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.41] - 2026-06-24
+
+This release makes the installers work from mainland China out of the box (no env var) and keeps the Gitee mirror in sync automatically.
+
+### Added
+
+- **Auto-fallback to the Gitee mirror when GitHub is unreachable** (#492; `scripts/install.sh`, `scripts/install.ps1`, `scripts/install-skills.sh`) — the installers probe GitHub Releases on startup and, when it is unreachable (typical in mainland China), automatically resolve the version and download every asset (binary, `checksums.txt`, `dws-skills.zip`) from the Gitee mirror instead. A plain `curl … | sh` now works in China with no `DWS_GITEE_REPO` needed. Explicit `DWS_GITEE_REPO` still wins, `DWS_NO_FALLBACK=1` forces GitHub, and local source-checkout installs skip the probe.
+
+### Changed
+
+- **CI mirrors repo code to Gitee automatically** (#493; `.github/workflows/mirror-to-gitee.yml`) — the mirror workflow now pushes `main` + tags to the Gitee mirror over HTTPS using `GITEE_TOKEN` (no SSH key), on every push to `main` and every tag, keeping the Gitee `raw/main` install scripts and tags in sync without any manual `git push`. Gated on `GITEE_TOKEN`; skips cleanly when unset.
+
 ## [1.0.40] - 2026-06-24
 
 This release adds China-accessible install mirrors so the CLI installs reliably from mainland China, where GitHub raw + Releases are slow or fail.
@@ -13,6 +25,7 @@ This release adds China-accessible install mirrors so the CLI installs reliably 
 ### Added
 
 - **China mirror via Gitee + npmmirror** (#486; `scripts/install.sh`, `scripts/install.ps1`, `scripts/install-skills.sh`, `scripts/release/sync-to-gitee.sh`, `.github/workflows/release.yml`, `.github/workflows/mirror-to-gitee.yml`) — an opt-in `DWS_GITEE_REPO` env var makes all three installers resolve the latest version and every release asset (binary, `checksums.txt`, `dws-skills.zip`) from the Gitee OpenAPI v5 instead of GitHub; with it unset, installation defaults to GitHub (fully backward compatible). The release pipeline mirrors release attachments to the matching Gitee release after each tag (gated on `GITEE_TOKEN`/`GITEE_REPO`), and a hub-mirror workflow keeps the repo code in sync (gated on `GITEE_PRIVATE_KEY`). README documents three China install channels: Gitee raw script, Gitee release binaries, and the npm package via `registry.npmmirror.com`.
+- **Skills embedded in the binary** (#488; `skills_embed.go`, `internal/app/skill_setup.go`, `internal/app/skill_setup_embed.go`) — the `skills/` tree (mono + multi) is embedded into the `dws` binary via `go:embed` and `dws skill setup` defaults to the embedded copy, refreshing the installed skill instead of silently reusing a stale copy probed from the current working directory — so skills install offline with no separate download.
 
 ## [1.0.39] - 2026-06-18
 
