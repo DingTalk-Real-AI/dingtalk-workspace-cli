@@ -172,10 +172,12 @@ dws dev connect stop
 
 ## dev app event — 事件订阅
 
+事件码定位优先用 `event list --keyword` 搜索；只有用户明确要「全部事件」时才翻全量（逐页）。
+
 ```bash
-dws dev app event list       --unified-app-id <unifiedAppId> --format json
-dws dev app event subscribe  --unified-app-id <unifiedAppId> --event-type <type> --format json
-dws dev app event unsubscribe --unified-app-id <unifiedAppId> --event-type <type> --yes --format json
+dws dev app event list        --unified-app-id <unifiedAppId> --keyword <关键词> --format json
+dws dev app event subscribe   --unified-app-id <unifiedAppId> --event-codes <code1>,<code2> --dry-run --format json
+dws dev app event unsubscribe --unified-app-id <unifiedAppId> --event-codes <code1>,<code2> --yes --format json
 ```
 
 ---

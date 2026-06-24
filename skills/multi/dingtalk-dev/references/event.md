@@ -7,9 +7,11 @@
 规则：
 - 写操作先 `--dry-run` 预览，确认后 `--yes`。
 - 一次可订阅多个事件码，共用同一回调。
+- **事件码定位优先用 `event list --keyword <关键词>` 搜索**（按事件码或事件名称模糊匹配）；只有用户明确要「全部事件」时才不带 `--keyword` 翻全量。
 - 可订阅的事件码通过 `event list` 查询：返回 `events[]` 列出 `eventCode/eventName/subscribed`，不用查文档。
 - 退订前先 `event list` 确认当前订阅，避免退不存在的。
-- `event list` 支持 `--keyword/--cursor/--page-size`；`--keyword` 按事件码或事件名称搜索；返回 `events/hasMore/nextCursor/pageSize`；翻页继续传 `nextCursor`。
+- 翻全量时用 `--cursor/--page-size` 逐页处理；返回 `events/hasMore/nextCursor/pageSize`，翻页继续传 `nextCursor`。
+- 批量或全量订阅前，先把候选 `eventCode` 列给用户确认，再 `--dry-run` → `--yes`。
 - 返回看 `events[].subscribed` 和 `pushType=STREAM`（事件走 Stream 长连推送；connect 与事件订阅的关系见下方「Stream 长连」）。
 - `subscribe/unsubscribe` 的 `--event-codes` 必填，返回 `success/operation/unifiedAppId/eventCodes/needsPublish/versionRequiredAction`；失败时补 `errorCode/errorMsg/reason/retryable/action`。
 - 如果服务端返回 `errorCode=STREAM_NOT_CONNECTED`、`reason=STREAM_NOT_CONNECTED`、`retryable=false`、`action=run connect`，先执行 `dev connect` 建联，再重试订阅。

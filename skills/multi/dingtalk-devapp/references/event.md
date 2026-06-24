@@ -6,12 +6,16 @@
 
 ## 可订阅事件列表
 
+**搜索优先**：定位事件码时优先用 `--keyword` 搜索；只有用户明确要「全部事件」时才不带 `--keyword` 翻全量。
+
 ```bash
-dws dev app event list --unified-app-id <unifiedAppId> --page-size 20 --format json
+# 首选：按关键词搜索定位事件码
 dws dev app event list --unified-app-id <unifiedAppId> --keyword 通讯录 --page-size 20 --format json
+# 兜底：用户明确要全部事件时才翻全量
+dws dev app event list --unified-app-id <unifiedAppId> --page-size 20 --format json
 ```
 
-MCP tool: `list_dev_app_events`。可选 `--keyword` 按事件码或事件名称搜索。返回 `pushType=STREAM`、`events[]`、`hasMore`、`nextCursor`、`pageSize`；`hasMore=true` 时下一页继续传 `--cursor <nextCursor>`。`events[]` 每项含：
+MCP tool: `list_dev_app_events`。`--keyword` 按事件码或事件名称模糊匹配。返回 `pushType=STREAM`、`events[]`、`hasMore`、`nextCursor`、`pageSize`；`hasMore=true` 时下一页继续传 `--cursor <nextCursor>`，逐页处理。`events[]` 每项含：
 
 | 字段 | 含义 |
 |------|------|
@@ -66,16 +70,17 @@ event subscribe/unsubscribe   订阅变更写入版本元数据
 ## 单步流程
 
 ```text
-1. 查看可订阅事件及当前状态
-   dws dev app event list --unified-app-id <ID> --format json
+1. 定位事件码（搜索优先）
+   dws dev app event list --unified-app-id <ID> --keyword <关键词> --format json
    → 从返回里挑 eventCode
+   → 用户明确要全部事件时，才不带 --keyword 翻全量（逐页）
 
-2. 订阅
+2. 订阅（批量/全量前先列候选 eventCode 给用户确认）
    dws dev app event subscribe --unified-app-id <ID> --event-codes <CODE1>,<CODE2> --dry-run --format json
    → 确认后加 --yes
 
 3. 验证
-   dws dev app event list --unified-app-id <ID> --format json
+   dws dev app event list --unified-app-id <ID> --keyword <关键词> --format json
    → 确认对应事件 subscribed=true（灰度应用需先发布版本）
 ```
 

@@ -114,7 +114,7 @@ metadata:
 | 机器人 | [robot.md](references/robot.md) | robot submit / result / get / config / enable / disable |
 | 本地建联 | [connect.md](references/connect.md) | dev connect（渠道预检 / agent 模型工作目录 / 会话记忆 / AI 卡片） |
 | 版本发布 | [version.md](references/version.md) | version create / list / get / check-approval / publish / status |
-| 事件订阅 | [event.md](references/event.md) | event list / subscribe / unsubscribe |
+| 事件订阅 | [event.md](references/event.md) | event list / subscribe / unsubscribe（事件定位走搜索优先） |
 
 ## Gotchas
 - 新应用 `version list` 返回空不等于无可发布内容：先 `version create`，用返回的 `versionId` 继续 check-approval/publish。
