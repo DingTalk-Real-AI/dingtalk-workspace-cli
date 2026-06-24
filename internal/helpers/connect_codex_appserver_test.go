@@ -51,21 +51,18 @@ func TestForwarderForChannelCodexPrefersAppServer(t *testing.T) {
 	if cf.sessions == nil {
 		t.Fatal("codex app-server should keep per-conversation thread memory by default")
 	}
-	if cf.fallback == nil || !strings.Contains(strings.Join(cf.fallback.argv, " "), "exec --skip-git-repo-check") {
-		t.Fatalf("codex fallback should be codex exec with skip git repo check, got %#v", cf.fallback)
-	}
 
 	t.Setenv("DWS_CODEX_APP_SERVER", "0")
 	fwd, err = forwarderForChannel("codex", "", connectAgentOptions{Memory: true})
 	if err != nil {
-		t.Fatalf("codex disabled app-server forwarder: %v", err)
+		t.Fatalf("codex forwarder with deprecated app-server env: %v", err)
 	}
-	if _, ok := fwd.(*execForwarder); !ok {
-		t.Fatalf("DWS_CODEX_APP_SERVER=0 should keep exec forwarder, got %T", fwd)
+	if _, ok := fwd.(*codexAppServerForwarder); !ok {
+		t.Fatalf("DWS_CODEX_APP_SERVER=0 should be ignored and keep app-server, got %T", fwd)
 	}
 }
 
-func TestCodexConnectPlanFollowsAppServerEnv(t *testing.T) {
+func TestCodexConnectPlanIgnoresAppServerEnv(t *testing.T) {
 	clearChannelEnv(t)
 	plan := buildConnectPlan("codex", "cid", "")
 	if got := plan["method"]; got != "stream-bridge-codex-app-server" {
@@ -78,25 +75,25 @@ func TestCodexConnectPlanFollowsAppServerEnv(t *testing.T) {
 
 	t.Setenv("DWS_CODEX_APP_SERVER", "0")
 	plan = buildConnectPlan("codex", "cid", "")
-	if got := plan["method"]; got != "stream-bridge" {
-		t.Fatalf("disabled app-server plan method = %v", got)
+	if got := plan["method"]; got != "stream-bridge-codex-app-server" {
+		t.Fatalf("deprecated app-server env should be ignored, method = %v", got)
 	}
 	payload = connectAgentOptionsPayload("codex", connectAgentOptions{Memory: true})
-	if got := payload["memory"]; got != "unsupported" {
-		t.Fatalf("disabled app-server memory = %v", got)
+	if got := payload["memory"]; got != "per-conversation-app-server" {
+		t.Fatalf("deprecated app-server env should keep codex memory, got %v", got)
 	}
 }
 
-func TestCodexConnectPlanFollowsAgentCmdOverride(t *testing.T) {
+func TestCodexConnectPlanIgnoresAgentCmdOverride(t *testing.T) {
 	clearChannelEnv(t)
 	t.Setenv("DWS_AGENT_CMD", "my-codex exec")
 	plan := buildConnectPlan("codex", "cid", "")
-	if got := plan["method"]; got != "stream-bridge" {
-		t.Fatalf("DWS_AGENT_CMD override plan method = %v", got)
+	if got := plan["method"]; got != "stream-bridge-codex-app-server" {
+		t.Fatalf("codex should ignore DWS_AGENT_CMD and keep app-server plan, method = %v", got)
 	}
 	payload := connectAgentOptionsPayload("codex", connectAgentOptions{Memory: true})
-	if got := payload["memory"]; got != "unsupported" {
-		t.Fatalf("DWS_AGENT_CMD override memory = %v", got)
+	if got := payload["memory"]; got != "per-conversation-app-server" {
+		t.Fatalf("codex should ignore DWS_AGENT_CMD and keep app-server memory, got %v", got)
 	}
 }
 
@@ -157,7 +154,7 @@ done
 	}
 }
 
-func TestCodexAppServerForwarderFallsBackToExec(t *testing.T) {
+func TestCodexAppServerForwarderReturnsAppServerError(t *testing.T) {
 	dir := t.TempDir()
 	codex := writeShellExecutable(t, dir, "codex", `
 while IFS= read -r line; do
@@ -169,25 +166,21 @@ while IFS= read -r line; do
   esac
 done
 `)
-	fallback := writeShellExecutable(t, dir, "fallback", "echo fallback-ok\n")
 	fwd := &codexAppServerForwarder{
 		bin:     codex,
-		timeout: 2 * time.Second,
+		timeout: 10 * time.Second,
 		workDir: dir,
-		fallback: &execForwarder{
-			name:    "codex",
-			argv:    []string{fallback},
-			timeout: 2 * time.Second,
-			workDir: dir,
-		},
 	}
 
 	reply, err := fwd.forward(context.Background(), "conv-1", "hello")
-	if err != nil {
-		t.Fatalf("forward fallback: %v", err)
+	if err == nil {
+		t.Fatal("forward should return the app-server error instead of falling back to exec")
 	}
-	if reply != "fallback-ok" {
-		t.Fatalf("reply = %q, want fallback-ok", reply)
+	if reply != "" {
+		t.Fatalf("reply = %q, want empty reply on app-server error", reply)
+	}
+	if !strings.Contains(err.Error(), "app-server-broken") {
+		t.Fatalf("error = %v, want app-server-broken", err)
 	}
 }
 
