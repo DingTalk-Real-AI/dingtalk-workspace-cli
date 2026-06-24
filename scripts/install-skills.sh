@@ -15,6 +15,10 @@ set -eu
 #   DWS_SKILLS_ROOT    — base path for agent dirs (default: $PWD)
 
 REPO="DingTalk-Real-AI/dingtalk-workspace-cli"
+# Asset distribution base. Default = GitHub Releases (overseas); override for China mirror:
+#   DWS_RELEASE_BASE=https://dl.dingtalk.com/dws/download  (layout: <base>/<version>/<file>)
+RELEASE_BASE="${DWS_RELEASE_BASE:-https://github.com/${REPO}/releases/download}"
+LATEST_URL="${DWS_LATEST_URL:-https://github.com/${REPO}/releases/latest}"
 VERSION="${DWS_VERSION:-latest}"
 SKILL_NAME="dws"
 ROOT="${DWS_SKILLS_ROOT:-$PWD}"
@@ -31,7 +35,7 @@ need_cmd() {
 
 resolve_version() {
   if [ "$VERSION" = "latest" ]; then
-    VERSION="$(curl -fsSI "https://github.com/${REPO}/releases/latest" 2>/dev/null \
+    VERSION="$(curl -fsSI "$LATEST_URL" 2>/dev/null \
       | grep -i '^location:' | sed 's|.*/tag/||;s/[[:space:]]*$//')"
     if [ -z "$VERSION" ]; then
       printf '❌ Could not determine the latest version. Set DWS_VERSION explicitly.\n' >&2
@@ -168,7 +172,7 @@ main() {
   TMPDIR_WORK="$(mktemp -d)"
   trap 'rm -rf "$TMPDIR_WORK"' EXIT INT TERM
 
-  ASSET_URL="https://github.com/${REPO}/releases/download/${VERSION}/dws-skills.zip"
+  ASSET_URL="${RELEASE_BASE}/${VERSION}/dws-skills.zip"
   printf '  ⬇  Downloading skills from GitHub Releases: %s (%s)\n' "$REPO" "$VERSION"
   curl -fsSL "$ASSET_URL" -o "$TMPDIR_WORK/dws-skills.zip"
   extract_zip "$TMPDIR_WORK/dws-skills.zip" "$TMPDIR_WORK/extracted"

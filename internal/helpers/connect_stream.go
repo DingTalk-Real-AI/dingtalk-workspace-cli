@@ -73,6 +73,15 @@ type streamingForwarder interface {
 	forwardStream(ctx context.Context, convID, text string, onDelta func(string)) (string, error)
 }
 
+// sessionResetter is an optional capability: a forwarder that can forget a
+// conversation's agent session, so a built-in /new or /clear command starts a
+// fresh context. Forwarders with per-conversation memory (Claude-family exec,
+// codex app-server) implement it; a stateless channel does not, and the main
+// loop tells the user the command is unsupported there.
+type sessionResetter interface {
+	resetSession(convID string)
+}
+
 // connectAgentOptions carries the user-facing agent tuning exposed on
 // `dev connect` (and mirrored env vars). Zero value = defaults:
 // channel's built-in model, per-conversation memory on (where the CLI supports
@@ -194,6 +203,16 @@ type execForwarder struct {
 	// with parser naming its stdout protocol (see connect_streaming.go).
 	streamArgv []string
 	parser     string
+}
+
+// resetSession drops the conversation's agent session so the next message
+// starts a fresh one. Implements sessionResetter for the built-in /new and
+// /clear commands. A no-op when this channel has no addressable sessions
+// (sessions == nil, e.g. the qoder family).
+func (f *execForwarder) resetSession(convID string) {
+	if f.sessions != nil && strings.TrimSpace(convID) != "" {
+		f.sessions.reset(convID)
+	}
 }
 
 func (f *execForwarder) label() string {
@@ -764,7 +783,13 @@ func forwarderForChannel(channel, clientID string, opts connectAgentOptions) (fo
 		workDir: opts.WorkDir, sessions: sessions,
 		streamArgv: streamArgv, parser: parser}
 	if channel == "codex" && !overridden && codexAppServerEnabled() {
-		return newCodexAppServerForwarder(argv[0], env, timeout, opts, base), nil
+		return newCodexAppServerForwarder(argv[0], env, timeout, opts, clientID, base), nil
+	}
+	// opencode persists sessions itself but only reports the id in its JSON
+	// event stream (it cannot mint one up front), so it needs the capture-based
+	// forwarder rather than the Claude-family --session-id/--resume exec path.
+	if channel == "opencode" && !overridden {
+		return newOpencodeForwarder(argv[0], env, timeout, opts, clientID), nil
 	}
 	return base, nil
 }
@@ -930,6 +955,24 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 			// the agent. Returns true only when it consumed the message.
 			if extras.approval.handleOwnerDecision(context.Background(),
 				strings.TrimSpace(callbackData.SenderStaffId), text) {
+				return
+			}
+			// Built-in slash commands (/new, /clear): reset this conversation's
+			// session and ack, instead of forwarding to the agent. Matches only
+			// when the whole message is the command (parseConnectControlCommand),
+			// so a normal question is unaffected. Costs no agent turn / tokens.
+			if action, isCmd := parseConnectControlCommand(text); isCmd {
+				ackText := action.ack
+				if action.resetsSession() {
+					if r, canReset := fwd.(sessionResetter); canReset {
+						r.resetSession(convID)
+					} else {
+						ackText = "当前渠道暂不支持会话指令（/new、/clear）。"
+					}
+				}
+				if serr := replier.SimpleReplyText(context.Background(), webhook, []byte(ackText)); serr != nil {
+					fmt.Fprintf(os.Stderr, "[connect] 指令回复发送失败 (%s, msgId=%s): %v\n", channel, msgID, serr)
+				}
 				return
 			}
 			started := time.Now()

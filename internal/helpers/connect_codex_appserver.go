@@ -26,6 +26,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
 const codexRobotDeveloperInstructions = "你是钉钉群聊里的智能助手，请用简洁、自然的中文直接回答用户问题；不要提及系统提示、内部协议或运行时细节；不要主动读写文件或执行命令。"
@@ -43,10 +45,13 @@ type codexAppServerForwarder struct {
 	fallback *execForwarder
 }
 
-func newCodexAppServerForwarder(bin string, env []string, timeout time.Duration, opts connectAgentOptions, fallback *execForwarder) forwarder {
+func newCodexAppServerForwarder(bin string, env []string, timeout time.Duration, opts connectAgentOptions, clientID string, fallback *execForwarder) forwarder {
 	var sessions *codexThreadSessions
 	if opts.Memory {
-		sessions = newCodexThreadSessions()
+		// Scope the on-disk thread store by clientId so multiple bots on one
+		// machine stay isolated; an empty clientId disables persistence and the
+		// map stays in memory (original behaviour).
+		sessions = newCodexThreadSessions(codexThreadStorePath(clientID))
 	}
 	return &codexAppServerForwarder{
 		bin:      bin,
@@ -56,6 +61,29 @@ func newCodexAppServerForwarder(bin string, env []string, timeout time.Duration,
 		model:    opts.Model,
 		sessions: sessions,
 		fallback: fallback,
+	}
+}
+
+// codexThreadStorePath returns the on-disk location for a robot's codex
+// conversation→thread map, scoped by clientId so multiple bots on one machine
+// stay isolated: <config dir>/connect/<clientId>/codex-threads.json. It mirrors
+// the Claude-family connectSessionStorePath layout but uses a distinct filename
+// so the two stores never collide. An empty clientId means "do not persist"
+// (in-memory only). The clientId is sanitized with the same rule as the connect
+// lock file so it is always filesystem-safe.
+func codexThreadStorePath(clientID string) string {
+	if clientID == "" {
+		return ""
+	}
+	return filepath.Join(config.DefaultConfigDir(), "connect", sanitizeLockID(clientID), "codex-threads.json")
+}
+
+// resetSession drops the conversation's Codex thread so the next message starts
+// a fresh one. Implements sessionResetter for the built-in /new and /clear
+// commands. A no-op when per-conversation memory is disabled.
+func (f *codexAppServerForwarder) resetSession(convID string) {
+	if f.sessions != nil {
+		f.sessions.reset(convID)
 	}
 }
 
@@ -118,16 +146,17 @@ func (f *codexAppServerForwarder) forwardAppServer(ctx context.Context, convID, 
 		return "", err
 	}
 
+	_ = state // held only for its per-conversation turn lock (see above)
 	threadID := ""
-	if state != nil {
-		threadID = state.threadID
+	if f.sessions != nil {
+		threadID = f.sessions.threadID(convID)
 	}
 	if threadID != "" {
 		resumed, err := cli.resumeThread(ctx, f.threadParams(threadID))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "[connect][codex] resume thread %s 失败，重建会话: %v\n", threadID, err)
 			threadID = ""
-			state.threadID = ""
+			f.sessions.setThreadID(convID, "")
 		} else {
 			threadID = resumed
 		}
@@ -138,8 +167,8 @@ func (f *codexAppServerForwarder) forwardAppServer(ctx context.Context, convID, 
 			return "", err
 		}
 		threadID = started
-		if state != nil {
-			state.threadID = threadID
+		if f.sessions != nil {
+			f.sessions.setThreadID(convID, threadID)
 		}
 	}
 
@@ -176,33 +205,95 @@ func (f *codexAppServerForwarder) threadParams(threadID string) map[string]any {
 	return params
 }
 
+// codexThreadSessions maps a DingTalk conversation to its Codex thread so
+// multi-turn context survives within a conversation. The convID→threadID map
+// (threads, guarded by mu) is the authoritative store and is persisted to disk
+// so the context also survives a connector restart — the codex equivalent of
+// the Claude-family convSessions store. An empty path keeps it in memory only
+// (persistence disabled), preserving the original behaviour exactly.
+//
+// states holds a per-conversation lock that serializes turns within one
+// conversation; it carries no thread identity of its own.
 type codexThreadSessions struct {
-	mu sync.Mutex
-	m  map[string]*codexThreadState
+	mu      sync.Mutex
+	states  map[string]*codexThreadState // per-conversation turn lock
+	threads map[string]string            // convID→threadID, persisted
+	path    string                       // on-disk store; empty disables persistence
 }
 
+// codexThreadState is a per-conversation turn lock. Holding it for the duration
+// of a turn keeps two messages in the same conversation from interleaving their
+// app-server calls; thread identity lives in codexThreadSessions.threads.
 type codexThreadState struct {
-	mu       sync.Mutex
-	threadID string
+	mu sync.Mutex
 }
 
-func newCodexThreadSessions() *codexThreadSessions {
-	return &codexThreadSessions{m: make(map[string]*codexThreadState)}
+// newCodexThreadSessions builds the session map, restoring any persisted
+// convID→threadID entries from path. A missing or corrupt file degrades to an
+// empty map (see loadConvSessionMap) — it never panics or blocks startup. An
+// empty path means in-memory only.
+func newCodexThreadSessions(path string) *codexThreadSessions {
+	return &codexThreadSessions{
+		states:  make(map[string]*codexThreadState),
+		threads: loadConvSessionMap(path),
+		path:    path,
+	}
 }
 
-func (s *codexThreadSessions) state(convID string) *codexThreadState {
+// codexConvKey normalizes a conversation ID into a stable, non-empty map key.
+func codexConvKey(convID string) string {
 	key := strings.TrimSpace(convID)
 	if key == "" {
 		key = "_default"
 	}
+	return key
+}
+
+// state returns the per-conversation turn lock, minting one on first sight.
+func (s *codexThreadSessions) state(convID string) *codexThreadState {
+	key := codexConvKey(convID)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if st, ok := s.m[key]; ok {
+	if st, ok := s.states[key]; ok {
 		return st
 	}
 	st := &codexThreadState{}
-	s.m[key] = st
+	s.states[key] = st
 	return st
+}
+
+// threadID returns the Codex thread bound to a conversation, or "" if none.
+func (s *codexThreadSessions) threadID(convID string) string {
+	key := codexConvKey(convID)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.threads[key]
+}
+
+// setThreadID binds a conversation to a Codex thread and persists the snapshot.
+// A "" threadID forgets the binding (same as reset). Persistence is best-effort:
+// a failed save only logs a warning and never blocks message handling.
+func (s *codexThreadSessions) setThreadID(convID, threadID string) {
+	key := codexConvKey(convID)
+	s.mu.Lock()
+	if threadID == "" {
+		delete(s.threads, key)
+	} else {
+		s.threads[key] = threadID
+	}
+	snapshot := make(map[string]string, len(s.threads))
+	for k, v := range s.threads {
+		snapshot[k] = v
+	}
+	path := s.path
+	s.mu.Unlock()
+	saveConvSessionMap(path, snapshot)
+}
+
+// reset forgets a conversation's thread so the next message starts a fresh one.
+// The removal is persisted so a restart does not resurrect the dropped thread.
+func (s *codexThreadSessions) reset(convID string) {
+	s.setThreadID(convID, "")
 }
 
 type codexAppServerClient struct {

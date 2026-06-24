@@ -124,7 +124,7 @@ done
 		env:      []string{"CODEX_STUB_LOG=" + logPath},
 		timeout:  5 * time.Second,
 		workDir:  dir,
-		sessions: newCodexThreadSessions(),
+		sessions: newCodexThreadSessions(""),
 	}
 
 	var deltas []string

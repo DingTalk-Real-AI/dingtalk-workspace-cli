@@ -25,6 +25,11 @@ $ErrorActionPreference = "Stop"
 
 $Repo = "DingTalk-Real-AI/dingtalk-workspace-cli"
 $BinName = "dws"
+# Asset distribution base. Default = GitHub Releases (overseas); override for China mirror, e.g.:
+#   $env:DWS_RELEASE_BASE = "https://dl.dingtalk.com/dws/download"   (layout: <base>/<version>/<file>)
+$ReleaseBase = if ($env:DWS_RELEASE_BASE) { $env:DWS_RELEASE_BASE } else { "https://github.com/$Repo/releases/download" }
+# Latest-version resolution endpoint (the /releases/latest redirect trick is GitHub-specific).
+$LatestUrl = if ($env:DWS_LATEST_URL) { $env:DWS_LATEST_URL } else { "https://github.com/$Repo/releases/latest" }
 $InstallDir = if ($env:DWS_INSTALL_DIR) { $env:DWS_INSTALL_DIR } else { Join-Path $HOME ".local\bin" }
 $Version = if ($env:DWS_VERSION) { $env:DWS_VERSION } else { "latest" }
 $NoSkills = $env:DWS_NO_SKILLS -eq "1"
@@ -123,7 +128,7 @@ function Get-Arch {
 function Resolve-LatestVersion {
     if ($Version -eq "latest") {
         try {
-            $response = Invoke-WebRequest -Uri "https://github.com/$Repo/releases/latest" `
+            $response = Invoke-WebRequest -Uri $LatestUrl `
                 -MaximumRedirection 0 -ErrorAction SilentlyContinue -UseBasicParsing 2>$null
         } catch {
             if ($_.Exception.Response.Headers.Location) {
@@ -135,7 +140,7 @@ function Resolve-LatestVersion {
 
         # Fallback: parse the redirect from the response
         try {
-            $response = Invoke-WebRequest -Uri "https://github.com/$Repo/releases/latest" `
+            $response = Invoke-WebRequest -Uri $LatestUrl `
                 -UseBasicParsing -ErrorAction Stop
             if ($response.BaseResponse.ResponseUri) {
                 $script:Version = ($response.BaseResponse.ResponseUri.ToString() -split "/tag/")[-1].Trim()
@@ -291,7 +296,7 @@ function Install-Binary {
     Resolve-LatestVersion
 
     $archiveName = "${BinName}-windows-${arch}.zip"
-    $downloadUrl = "https://github.com/$Repo/releases/download/$Version/$archiveName"
+    $downloadUrl = "$ReleaseBase/$Version/$archiveName"
 
     Write-Say "⬇  Downloading $BinName $Version (windows/$arch)..."
 
@@ -303,7 +308,7 @@ function Install-Binary {
         Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath -UseBasicParsing
 
         # Download and verify SHA256 checksum
-        $checksumUrl = "https://github.com/$Repo/releases/download/$Version/checksums.txt"
+        $checksumUrl = "$ReleaseBase/$Version/checksums.txt"
         try {
             $checksumPath = Join-Path $tmpDir "checksums.txt"
             Invoke-WebRequest -Uri $checksumUrl -OutFile $checksumPath -UseBasicParsing
@@ -485,7 +490,7 @@ function Install-Skills {
     Write-Say "📦 Installing agent skills from GitHub Releases..."
     Resolve-LatestVersion
 
-    $zipUrl = "https://github.com/$Repo/releases/download/$Version/dws-skills.zip"
+    $zipUrl = "$ReleaseBase/$Version/dws-skills.zip"
 
     $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) "dws-skills-$PID"
     New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
