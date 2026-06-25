@@ -495,6 +495,23 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 
 </details>
 
+## DingTalk bot — connect a robot to your local AI
+
+`dws dev connect` bridges a DingTalk robot to a local AI CLI (Claude Code / Codex / opencode / Qoder / Gemini, or any tool via `--agent-cmd`): @-mention the bot in a chat and it answers using your local agent, keeping per-conversation multi-turn memory.
+
+```bash
+dws dev connect --channel auto --robot-client-id <id> --robot-client-secret <secret>
+```
+
+In-chat **session commands** (send the bare command as the whole message — no agent turn, no tokens):
+
+| Command | Effect |
+|---------|--------|
+| `/new` (aliases `/start`, `/reset`) | Start a fresh session; the previous one is left intact (resumable where the agent supports it) |
+| `/clear` | Wipe the current session — disposed through the agent's real session op (opencode issues `DELETE /session/:id`); channels whose agent exposes no delete primitive fall back to a reset |
+
+See [`docs/robot-quickstart.md`](./docs/robot-quickstart.md) for the full 4-step walkthrough (install → create robot → connect → add to a group).
+
 ## Key Services
 
 | Service | Command | Commands | Subcommands | Description |

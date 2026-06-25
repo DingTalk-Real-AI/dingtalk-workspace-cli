@@ -491,6 +491,23 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 
 </details>
 
+## 钉钉机器人 —— 把机器人接到你本地的 AI
+
+`dws dev connect` 把一个钉钉机器人接到本地 AI CLI（Claude Code / Codex / opencode / Qoder / Gemini，或用 `--agent-cmd` 接任意工具）：群里 @ 机器人提问，它用你本地的 agent 回答，按会话保留多轮上下文。
+
+```bash
+dws dev connect --channel auto --robot-client-id <id> --robot-client-secret <secret>
+```
+
+聊天里的**会话指令**（整条消息就是指令时生效，不消耗一次 AI 调用）：
+
+| 指令 | 作用 |
+|------|------|
+| `/new`（别名 `/start`、`/reset`） | 开启新会话；旧会话保留（agent 支持的话仍可回溯） |
+| `/clear` | 清空当前会话 —— 调 agent 真实会话原语真删（opencode 走 `DELETE /session/:id`）；驱动接口没有删除原语的渠道退化为重置 |
+
+完整四步教程见 [`docs/robot-quickstart.md`](./docs/robot-quickstart.md)（装工具 → 建机器人 → 接上 AI → 拉进群）。
+
 ## 核心服务
 
 | 服务 | 命令 | 命令数 | 子命令 | 描述 |
