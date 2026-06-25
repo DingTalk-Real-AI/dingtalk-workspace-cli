@@ -186,7 +186,7 @@ func validateAttendanceSelfSettingSave(cmd *cobra.Command) error {
 func validateAttendanceApproveTemplates(cmd *cobra.Command) error {
 	typ := strings.TrimSpace(attFlagString(cmd, "type"))
 	if typ != "" && !attendanceApproveTypes[typ] {
-		return apperrors.NewValidation("--type 审批模板类型不合法：应为 overtime / leave / patch / trip(travel) / business_trip 之一")
+		return apperrors.NewValidation("无效的审批类型：--type 应为 overtime / leave / patch / trip(travel) / business_trip 之一")
 	}
 	return nil
 }
