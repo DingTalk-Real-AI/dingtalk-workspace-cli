@@ -19,6 +19,7 @@ import (
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // attendanceScheduleInnerRequired are the fields every scheduleVOS item must
@@ -27,6 +28,12 @@ import (
 var attendanceScheduleInnerRequired = []string{"userId", "workDate", "classId", "isRest"}
 
 var attendanceGroupTypes = map[string]bool{"FIXED": true, "TURN": true, "NONE": true}
+
+var attendanceApproveTypes = map[string]bool{
+	"overtime": true, "trip": true, "travel": true, "business_trip": true,
+	"business-trip": true, "out": true, "leave": true, "patch": true,
+	"repair_check": true, "repair-check": true,
+}
 
 // installAttendanceHook wires attendance-specific PreRunE validators that
 // mirror wukong's client-side checks (inner-JSON required fields, group type,
@@ -46,6 +53,12 @@ func installAttendanceHook(cmd *cobra.Command, canonicalProduct, toolName string
 		validate = validateAttendanceGroupCreate
 	case "update_group_setting":
 		validate = validateAttendanceGroupUpdate
+	case "update_group_member":
+		validate = validateAttendanceUpdateMembers
+	case "save_self_setting":
+		validate = validateAttendanceSelfSettingSave
+	case "query_at_approve_template":
+		validate = validateAttendanceApproveTemplates
 	default:
 		return
 	}
@@ -80,6 +93,9 @@ func validateAttendanceScheduleImport(cmd *cobra.Command) error {
 	var items []map[string]any
 	if err := json.Unmarshal([]byte(raw), &items); err != nil {
 		return nil // malformed JSON is owned by a separate check
+	}
+	if len(items) == 0 {
+		return apperrors.NewValidation("--scheduleVOS requires at least one schedule entry (empty array not allowed)")
 	}
 	for _, item := range items {
 		for _, f := range attendanceScheduleInnerRequired {
@@ -130,10 +146,47 @@ func validateAttendanceGroupCreate(cmd *cobra.Command) error {
 }
 
 func validateAttendanceGroupUpdate(cmd *cobra.Command) error {
+	if v := strings.TrimSpace(attFlagString(cmd, "enable-outside-check")); v != "" && v != "true" && v != "false" {
+		return apperrors.NewValidation("--enable-outside-check must be true or false")
+	}
 	for _, f := range []string{"name", "type", "owner", "enable-outside-check", "classIds", "group-vo"} {
 		if fl := cmd.Flags().Lookup(f); fl != nil && cmd.Flags().Changed(f) {
 			return nil
 		}
 	}
 	return apperrors.NewValidation("至少需要指定一个修改项（--name / --type / --owner / --enable-outside-check / --classIds / --group-vo）")
+}
+
+func validateAttendanceUpdateMembers(cmd *cobra.Command) error {
+	for _, f := range []string{"add-users", "remove-users", "add-extra-users", "remove-extra-users", "add-depts", "remove-depts"} {
+		if fl := cmd.Flags().Lookup(f); fl != nil && cmd.Flags().Changed(f) {
+			return nil
+		}
+	}
+	return apperrors.NewValidation("至少需要指定一个变更项（--add-users / --remove-users / --add-extra-users / --remove-extra-users / --add-depts / --remove-depts）")
+}
+
+func validateAttendanceSelfSettingSave(cmd *cobra.Command) error {
+	hasField := false
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		switch f.Name {
+		case "setting-scene", "user", "yes", "format", "debug", "verbose", "dry-run",
+			"client-id", "client-secret", "fields", "jq", "mock", "timeout":
+			// control / identity flags, not setting fields
+		default:
+			hasField = true
+		}
+	})
+	if !hasField {
+		return apperrors.NewValidation("至少需要指定一个设置项（--setting-scene / --user 之外的任一字段）")
+	}
+	return nil
+}
+
+func validateAttendanceApproveTemplates(cmd *cobra.Command) error {
+	typ := strings.TrimSpace(attFlagString(cmd, "type"))
+	if typ != "" && !attendanceApproveTypes[typ] {
+		return apperrors.NewValidation("--type 审批模板类型不合法：应为 overtime / leave / patch / trip(travel) / business_trip 之一")
+	}
+	return nil
 }
