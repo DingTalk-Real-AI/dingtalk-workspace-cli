@@ -871,7 +871,7 @@ func CollectBindings(cmd *cobra.Command, bindings []FlagBinding, existing map[st
 			if _, ok := existing[binding.Property]; ok {
 				continue
 			}
-			return nil, apperrors.NewValidation(fmt.Sprintf("--%s is required", primaryName))
+			return nil, apperrors.NewValidation(fmt.Sprintf("missing required flag: --%s is required", primaryName))
 		}
 		if !anyChanged {
 			continue
