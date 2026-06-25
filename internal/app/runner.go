@@ -340,7 +340,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		// wukong's "Arguments: {...}" dry-run line; stderr keeps it out of the
 		// machine-readable channel.
 		if argsJSON, err := json.Marshal(invocation.Params); err == nil {
-			fmt.Fprintf(os.Stderr, "Arguments: %s\n", argsJSON)
+			fmt.Fprintf(os.Stderr, "DRY-RUN Arguments: %s\n", argsJSON)
 		}
 		return executor.Result{
 			Invocation: invocation,
