@@ -28,10 +28,18 @@ metadata:
 | 用户说 | 命令 |
 |--------|------|
 | "查 OAuth2 接入文档" | `dws devdoc article search --query "OAuth2 接入"` |
+| "RAG 查一下群消息回调字段" | `dws devdoc article search --query "群消息回调 字段"` |
 | "API 调用报错怎么办" | `dws devdoc error diagnose --query "<报错关键词>"` |
 | "requestId 15r6h45w0muec 为什么失败" | `dws devdoc error diagnose --request-id 15r6h45w0muec` |
 | "错误码 33012" | `dws devdoc error diagnose --error-code 33012` |
 | "开放接口文档" | `dws devdoc article search --query "<接口名或场景>"` |
+
+## 调用规则
+
+- 文档问答走 `article search`，底层是 `search_open_platform_docs_rag`；保留 API 名、字段名、scope、errcode 等精确关键词
+- 开放平台调用失败走 `error diagnose`，底层是 `search_open_error_code_rag`；优先传 `--request-id` / `--trace-id`，其次传 `--error-code` 和报错上下文
+- `--api`、`--error-message`、`--context` 会合并进 `query`；`--api` 不能单独发起排查
+- `error troubleshoot` 是 `error diagnose` 的别名
 
 ## 跨产品协作
 

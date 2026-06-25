@@ -514,7 +514,7 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 | Mail | `mail` | 18 | `mailbox` `message` `draft` `folder` `tag` `thread` `attachment` `user` | List mailboxes, KQL message search, read & send messages, drafts, folders, tags, threads, attachments, address-book user search |
 | Sheet | `sheet` | 23 | `range` `filter-view` (top-level: `create` `new` `list` `info` `read` `get` `update` `find` `replace` `append` `merge-cells` `unmerge-cells` `add-dimension` `insert-dimension` `delete-dimension` `move-dimension` `update-dimension` `write-image`) | Online spreadsheet (`contentType=ALIDOC`, `extension=axls`): worksheet CRUD, range read / write / append, dimension ops, cell merge / unmerge, find / replace, named filter views + sheet-level filters, image write |
 | Wiki | `wiki` | 21 | `space` `member` `node` `doc` `file` | Knowledge base management: spaces (`create` / `get` / `list` / `search`), members (`add` / `list` / `update`), node tree, docs & files |
-| DevDoc | `devdoc` | 2 | `article` `error` | Search Open Platform documentation and troubleshoot API errors |
+| DevDoc | `devdoc` | 2 | `article` `error` | Search Open Platform docs with RAG and troubleshoot API errors |
 | AI Search | `aisearch` | 3 | `person` | Enterprise people search by name / department / position / duty / supervisor / subordinate / phone / job-number (single command, multi-dimension filter) |
 | Live | `live` | 1 | `stream` | DingTalk live streaming: list my lives |
 | Raw API | `api` | 1 | — | Call any DingTalk OpenAPI directly (api / oapi dual-form), with automatic app-level token management |
