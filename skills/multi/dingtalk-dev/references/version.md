@@ -83,3 +83,17 @@ permission add（requiredApproval=true 写入版本变更）
 | `check-approval` 提示需审批 | 按返回选审批人，再 `publish --approver-user-id` |
 | 发布报高敏权限未确认 | 加 `--confirmed-sensitive` 重新发布 |
 | `ServiceResult.success=false` | 透传 `errorCode/errorMsg` |
+
+## 发现命令
+
+调用任何方法前先查清楚再敲：
+
+```
+# 浏览命令组下的子命令与 flag
+dws dev app version --help
+
+# 查某方法的必填参数、类型、默认值
+dws schema dev.app.version.<method>
+```
+
+按 `dws schema` 输出构造 `--flag`（flag 名 = schema 参数名）。

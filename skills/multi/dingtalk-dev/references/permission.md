@@ -40,3 +40,17 @@ scopeValue 选择顺序：
 ## 取消权限
 
 `--scope-values` 多个逗号分隔。返回：`removed`（布尔，整体成败）、`removedScopeValues`（成功取消的）、`rejectedScopeValues`（被拒的）、`message`。逐条看 `removedScopeValues`/`rejectedScopeValues` 判断每个权限点的结果。
+
+## 发现命令
+
+调用任何方法前先查清楚再敲：
+
+```
+# 浏览命令组下的子命令与 flag
+dws dev app permission --help
+
+# 查某方法的必填参数、类型、默认值
+dws schema dev.app.permission.<method>
+```
+
+按 `dws schema` 输出构造 `--flag`（flag 名 = schema 参数名）。
