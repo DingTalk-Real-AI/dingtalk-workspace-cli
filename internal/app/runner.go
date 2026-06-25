@@ -586,28 +586,40 @@ func resolveRuntimeAuthToken(ctx context.Context, explicitToken string) string {
 
 // Cached token state for process lifetime
 var (
-	cachedRuntimeToken     string
-	cachedRuntimeTokenOnce sync.Once
+	cachedRuntimeTokenMu sync.Mutex
+	cachedRuntimeTokens  = map[string]string{}
 )
 
 // getCachedRuntimeToken returns a cached access token, loading it only once per process.
 // This avoids repeated Keychain access which takes ~70ms each time.
 func getCachedRuntimeToken(ctx context.Context) string {
-	cachedRuntimeTokenOnce.Do(func() {
-		loadStart := time.Now()
-		defer func() { RecordTiming(ctx, "auth_keychain", time.Since(loadStart)) }()
+	cacheKey := strings.TrimSpace(authpkg.RuntimeProfile())
+	if cacheKey == "" {
+		cacheKey = "__default__"
+	}
+	cachedRuntimeTokenMu.Lock()
+	if token := cachedRuntimeTokens[cacheKey]; token != "" {
+		cachedRuntimeTokenMu.Unlock()
+		return token
+	}
+	cachedRuntimeTokenMu.Unlock()
 
-		configDir := defaultConfigDir()
-		token, tokenErr := resolveAccessTokenFromDir(ctx, configDir)
-		if tokenErr != nil && errors.Is(tokenErr, authpkg.ErrTokenDecryption) {
-			slog.Error(tokenErr.Error())
-			return
-		}
-		if token != "" {
-			cachedRuntimeToken = token
-		}
-	})
-	return cachedRuntimeToken
+	loadStart := time.Now()
+	defer func() { RecordTiming(ctx, "auth_keychain", time.Since(loadStart)) }()
+
+	configDir := defaultConfigDir()
+	token, tokenErr := resolveAccessTokenFromDir(ctx, configDir)
+	if tokenErr != nil && errors.Is(tokenErr, authpkg.ErrTokenDecryption) {
+		slog.Error(tokenErr.Error())
+		return ""
+	}
+	if token == "" {
+		return ""
+	}
+	cachedRuntimeTokenMu.Lock()
+	cachedRuntimeTokens[cacheKey] = token
+	cachedRuntimeTokenMu.Unlock()
+	return token
 }
 
 // generateExecutionID returns a random 16-char hex string used to correlate
@@ -622,8 +634,9 @@ func generateExecutionID() string {
 // ResetRuntimeTokenCache clears the cached token, forcing a reload on next access.
 // This should be called after login/logout operations.
 func ResetRuntimeTokenCache() {
-	cachedRuntimeTokenOnce = sync.Once{}
-	cachedRuntimeToken = ""
+	cachedRuntimeTokenMu.Lock()
+	defer cachedRuntimeTokenMu.Unlock()
+	cachedRuntimeTokens = map[string]string{}
 }
 
 func newRuntimeContentScanner() safety.Scanner {

@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -91,7 +92,10 @@ func WriteTokenMarker(configDir string) error {
 
 // DeleteTokenMarker removes the token.json marker file.
 func DeleteTokenMarker(configDir string) error {
-	return os.Remove(filepath.Join(configDir, tokenJSONFile))
+	if err := os.Remove(filepath.Join(configDir, tokenJSONFile)); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 // SaveTokenData persists TokenData. When an edition hook (SaveToken) is
@@ -105,14 +109,43 @@ func SaveTokenData(configDir string, data *TokenData) error {
 		}
 		return h.SaveToken(configDir, jsonData)
 	}
-	return SaveTokenDataKeychain(data)
+	if data != nil && strings.TrimSpace(data.CorpID) != "" {
+		if err := SaveTokenDataKeychainForCorpID(data.CorpID, data); err != nil {
+			return err
+		}
+		makeCurrent := strings.TrimSpace(RuntimeProfile()) == ""
+		if err := UpsertProfileFromTokenWithCurrent(configDir, data, makeCurrent); err != nil {
+			return err
+		}
+		if makeCurrent {
+			if err := SaveTokenDataKeychain(data); err != nil {
+				return err
+			}
+		} else if err := SyncLegacyTokenMirror(configDir); err != nil {
+			return err
+		}
+		return WriteTokenMarker(configDir)
+	}
+	if err := SaveTokenDataKeychain(data); err != nil {
+		return err
+	}
+	return WriteTokenMarker(configDir)
 }
 
 // LoadTokenData reads TokenData. When an edition hook (LoadToken) is
 // registered, it delegates entirely to the hook; otherwise it falls back
 // to keychain with legacy .data migration.
 func LoadTokenData(configDir string) (*TokenData, error) {
+	return LoadTokenDataForProfile(configDir, RuntimeProfile())
+}
+
+// LoadTokenDataForProfile reads TokenData for a profile selector without mutating
+// currentProfile. Empty selector follows the default resolution chain.
+func LoadTokenDataForProfile(configDir, profile string) (*TokenData, error) {
 	if h := edition.Get(); h.LoadToken != nil {
+		if strings.TrimSpace(profile) != "" {
+			return nil, fmt.Errorf("profile selection is not supported by the current auth backend")
+		}
 		jsonData, err := h.LoadToken(configDir)
 		if err != nil {
 			return nil, err
@@ -125,6 +158,19 @@ func LoadTokenData(configDir string) (*TokenData, error) {
 	}
 
 	// Default: keychain with legacy .data migration
+	selected, err := resolveProfileForLoad(configDir, profile)
+	if err != nil {
+		return nil, err
+	}
+	if selected != nil {
+		data, err := LoadTokenDataKeychainForCorpID(selected.CorpID)
+		if err == nil {
+			return data, nil
+		}
+		if strings.TrimSpace(profile) != "" {
+			return nil, err
+		}
+	}
 	if TokenDataExistsKeychain() {
 		return LoadTokenDataKeychain()
 	}
@@ -132,7 +178,7 @@ func LoadTokenData(configDir string) (*TokenData, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := SaveTokenDataKeychain(data); err == nil {
+	if err := SaveTokenData(configDir, data); err == nil {
 		_ = DeleteSecureData(configDir)
 	}
 	return data, nil
@@ -142,15 +188,79 @@ func LoadTokenData(configDir string) (*TokenData, error) {
 // registered, it delegates entirely to the hook; otherwise it falls back
 // to keychain + legacy cleanup.
 func DeleteTokenData(configDir string) error {
+	return DeleteTokenDataForProfile(configDir, RuntimeProfile())
+}
+
+// DeleteTokenDataForProfile removes one profile's token data. Empty selector
+// removes the current/default profile, falling back to legacy single-slot auth.
+func DeleteTokenDataForProfile(configDir, profile string) error {
 	if h := edition.Get(); h.DeleteToken != nil {
+		if strings.TrimSpace(profile) != "" {
+			return fmt.Errorf("profile selection is not supported by the current auth backend")
+		}
 		return h.DeleteToken(configDir)
 	}
+	selected, err := resolveProfileForLoad(configDir, profile)
+	if err != nil {
+		return err
+	}
+	if selected != nil {
+		keychainErr := DeleteTokenDataKeychainForCorpID(selected.CorpID)
+		_, removeErr := RemoveProfile(configDir, selected.CorpID)
+		legacyErr := SyncLegacyTokenMirror(configDir)
+		secureErr := DeleteSecureData(configDir)
+		if keychainErr != nil {
+			return keychainErr
+		}
+		if removeErr != nil {
+			return removeErr
+		}
+		if legacyErr != nil {
+			return legacyErr
+		}
+		return secureErr
+	}
+
 	keychainErr := DeleteTokenDataKeychain()
 	legacyErr := DeleteSecureData(configDir)
+	markerErr := DeleteTokenMarker(configDir)
 	if keychainErr != nil {
 		return keychainErr
 	}
-	return legacyErr
+	if legacyErr != nil {
+		return legacyErr
+	}
+	return markerErr
+}
+
+// DeleteAllTokenData removes all profile-scoped and legacy token data.
+func DeleteAllTokenData(configDir string) error {
+	if h := edition.Get(); h.DeleteToken != nil {
+		return h.DeleteToken(configDir)
+	}
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		return err
+	}
+	var firstErr error
+	for _, profile := range cfg.Profiles {
+		if err := DeleteTokenDataKeychainForCorpID(profile.CorpID); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if err := os.Remove(ProfilesPath(configDir)); err != nil && !os.IsNotExist(err) && firstErr == nil {
+		firstErr = err
+	}
+	if err := DeleteTokenDataKeychain(); err != nil && firstErr == nil {
+		firstErr = err
+	}
+	if err := DeleteSecureData(configDir); err != nil && firstErr == nil {
+		firstErr = err
+	}
+	if err := DeleteTokenMarker(configDir); err != nil && firstErr == nil {
+		firstErr = err
+	}
+	return firstErr
 }
 
 // RevokeTokenRemote calls the appropriate logout/revoke endpoint to invalidate the access token.

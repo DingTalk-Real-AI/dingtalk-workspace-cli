@@ -29,6 +29,7 @@ type GlobalFlags struct {
 	JQ           string
 	Mock         bool
 	Output       string
+	Profile      string
 	Timeout      int
 	Token        string
 	Verbose      bool
@@ -46,6 +47,7 @@ func bindPersistentFlags(cmd *cobra.Command, flags *GlobalFlags) {
 	cmd.PersistentFlags().BoolVar(&flags.Mock, "mock", false, "使用 Mock 数据 (开发调试用)")
 	cmd.PersistentFlags().StringVarP(&flags.Output, "output", "o", "", "Write command output to a file")
 	_ = cmd.PersistentFlags().MarkHidden("output")
+	cmd.PersistentFlags().StringVar(&flags.Profile, "profile", "", "一次性指定本次命令使用的组织 profile 名或 corpId")
 	cmd.PersistentFlags().IntVar(&flags.Timeout, "timeout", 30, "HTTP 请求超时时间 (秒)")
 	cmd.PersistentFlags().StringVar(&flags.Token, "token", "", "Override the configured API token")
 	_ = cmd.PersistentFlags().MarkHidden("token")

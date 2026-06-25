@@ -267,6 +267,7 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 		rootCtx = context.Background()
 	}
 	flags := &GlobalFlags{}
+	authpkg.SetRuntimeProfile(preparseProfileFlag(os.Args[1:]))
 	loader := cli.EnvironmentLoader{
 		LookupEnv:              os.LookupEnv,
 		CatalogBaseURLOverride: DiscoveryBaseURL(),
@@ -290,6 +291,7 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 			return cmd.Help()
 		},
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			authpkg.SetRuntimeProfile(flags.Profile)
 			// Apply OAuth credential overrides from CLI flags (highest priority).
 			if flags.ClientID != "" {
 				authpkg.SetClientID(flags.ClientID)
@@ -327,6 +329,7 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 
 	utilityCommands := []*cobra.Command{
 		newAuthCommand(patCaller),
+		newProfileCommand(),
 		newAPICommand(flags),
 		newSkillCommand(),
 		newCacheCommand(),
@@ -370,6 +373,19 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 	root.SetContext(rootCtx)
 
 	return root
+}
+
+func preparseProfileFlag(args []string) string {
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		switch {
+		case arg == "--profile" && i+1 < len(args):
+			return strings.TrimSpace(args[i+1])
+		case strings.HasPrefix(arg, "--profile="):
+			return strings.TrimSpace(strings.TrimPrefix(arg, "--profile="))
+		}
+	}
+	return ""
 }
 
 func newAuthCommand(patCaller edition.ToolCaller) *cobra.Command {
@@ -770,6 +786,7 @@ func hideNonDirectRuntimeCommands(root *cobra.Command) {
 		"completion": true,
 		"skill":      true,
 		"plugin":     true,
+		"profile":    true,
 		"version":    true,
 		"help":       true,
 		"recovery":   true,
@@ -796,7 +813,7 @@ func hideNonDirectRuntimeCommands(root *cobra.Command) {
 // by a malicious or misconfigured plugin.
 var reservedCommands = map[string]bool{
 	"auth": true, "api": true, "login": true, "logout": true,
-	"plugin": true, "skill": true, "cache": true,
+	"plugin": true, "profile": true, "skill": true, "cache": true,
 	"config": true, "doctor": true, "completion": true,
 	"recovery": true, "upgrade": true, "version": true,
 	"schema": true, "mcp": true, "help": true,

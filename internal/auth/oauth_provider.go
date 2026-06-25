@@ -547,9 +547,12 @@ func (p *OAuthProvider) GetAccessToken(ctx context.Context) (string, error) {
 		if rErr == nil {
 			return refreshed.AccessToken, nil
 		}
+		_ = MarkProfileStatus(p.configDir, data.CorpID, ProfileStatusExpired)
 		if p.logger != nil {
 			p.logger.Warn(i18n.T("refresh_token 刷新失败"), "error", rErr)
 		}
+	} else {
+		_ = MarkProfileStatus(p.configDir, data.CorpID, ProfileStatusExpired)
 	}
 
 	return "", errors.New(i18n.T("所有凭证已失效，请运行 dws auth login 重新登录"))

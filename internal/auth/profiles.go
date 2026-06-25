@@ -1,0 +1,558 @@
+// Copyright 2026 Alibaba Group
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package auth
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
+)
+
+const profilesJSONFile = "profiles.json"
+
+const (
+	ProfileStatusActive  = "active"
+	ProfileStatusExpired = "expired"
+	ProfileStatusRevoked = "revoked"
+)
+
+// ProfilesConfig stores non-sensitive profile metadata. Token material stays in keychain.
+type ProfilesConfig struct {
+	Version         int       `json:"version"`
+	PrimaryProfile  string    `json:"primaryProfile,omitempty"`
+	CurrentProfile  string    `json:"currentProfile,omitempty"`
+	PreviousProfile string    `json:"previousProfile,omitempty"`
+	Profiles        []Profile `json:"profiles,omitempty"`
+}
+
+// Profile is a logged-in DingTalk organization identity.
+type Profile struct {
+	Name              string   `json:"name"`
+	CorpID            string   `json:"corpId"`
+	CorpName          string   `json:"corpName,omitempty"`
+	UserID            string   `json:"userId,omitempty"`
+	UserName          string   `json:"userName,omitempty"`
+	ClientID          string   `json:"clientId,omitempty"`
+	Status            string   `json:"status,omitempty"`
+	AuthorizedDomains []string `json:"authorizedDomains,omitempty"`
+	ExpiresAt         string   `json:"expiresAt,omitempty"`
+	RefreshExpAt      string   `json:"refreshExpAt,omitempty"`
+	LastLoginAt       string   `json:"lastLoginAt,omitempty"`
+	LastUsedAt        string   `json:"lastUsedAt,omitempty"`
+	UpdatedAt         string   `json:"updatedAt,omitempty"`
+}
+
+var (
+	runtimeProfileMu sync.RWMutex
+	runtimeProfile   string
+)
+
+// SetRuntimeProfile sets a process-local one-shot profile override.
+func SetRuntimeProfile(profile string) {
+	runtimeProfileMu.Lock()
+	defer runtimeProfileMu.Unlock()
+	runtimeProfile = strings.TrimSpace(profile)
+}
+
+// RuntimeProfile returns the process-local one-shot profile override.
+func RuntimeProfile() string {
+	runtimeProfileMu.RLock()
+	defer runtimeProfileMu.RUnlock()
+	return runtimeProfile
+}
+
+// ProfilesPath returns the profile metadata path for a config dir.
+func ProfilesPath(configDir string) string {
+	return filepath.Join(configDir, profilesJSONFile)
+}
+
+// LoadProfiles reads profiles.json. A missing file returns an empty config.
+func LoadProfiles(configDir string) (*ProfilesConfig, error) {
+	path := ProfilesPath(configDir)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &ProfilesConfig{Version: 1}, nil
+		}
+		return nil, fmt.Errorf("read profiles: %w", err)
+	}
+	var cfg ProfilesConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parse profiles: %w", err)
+	}
+	normalizeProfilesConfig(&cfg)
+	return &cfg, nil
+}
+
+// SaveProfiles writes profiles.json atomically.
+func SaveProfiles(configDir string, cfg *ProfilesConfig) error {
+	if cfg == nil {
+		cfg = &ProfilesConfig{}
+	}
+	normalizeProfilesConfig(cfg)
+	if err := os.MkdirAll(configDir, config.DirPerm); err != nil {
+		return fmt.Errorf("create config dir: %w", err)
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal profiles: %w", err)
+	}
+	data = append(data, '\n')
+	path := ProfilesPath(configDir)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, config.FilePerm); err != nil {
+		return fmt.Errorf("write profiles tmp: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("rename profiles: %w", err)
+	}
+	return nil
+}
+
+// EnsureProfilesMigration initializes profiles.json from the legacy auth-token slot when needed.
+func EnsureProfilesMigration(configDir string) error {
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		return err
+	}
+	if len(cfg.Profiles) > 0 {
+		return nil
+	}
+	if !TokenDataExistsKeychain() {
+		return nil
+	}
+	data, err := LoadTokenDataKeychain()
+	if err != nil || data == nil || strings.TrimSpace(data.CorpID) == "" {
+		return nil
+	}
+	if err := SaveTokenDataKeychainForCorpID(data.CorpID, data); err != nil {
+		return err
+	}
+	return upsertProfileFromToken(configDir, cfg, data, false)
+}
+
+// UpsertProfileFromToken updates profiles.json after a successful login or refresh.
+func UpsertProfileFromToken(configDir string, data *TokenData) error {
+	return UpsertProfileFromTokenWithCurrent(configDir, data, true)
+}
+
+// UpsertProfileFromTokenWithCurrent updates profiles.json and optionally makes
+// the token's corp the persistent current profile.
+func UpsertProfileFromTokenWithCurrent(configDir string, data *TokenData, makeCurrent bool) error {
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		return err
+	}
+	return upsertProfileFromToken(configDir, cfg, data, makeCurrent)
+}
+
+func upsertProfileFromToken(configDir string, cfg *ProfilesConfig, data *TokenData, makeCurrent bool) error {
+	if data == nil {
+		return nil
+	}
+	corpID := strings.TrimSpace(data.CorpID)
+	if corpID == "" {
+		return nil
+	}
+	normalizeProfilesConfig(cfg)
+	now := time.Now().Format(time.RFC3339)
+	idx := profileIndexByCorpID(cfg, corpID)
+	if idx < 0 {
+		profile := Profile{
+			Name:         chooseProfileName(cfg, data),
+			CorpID:       corpID,
+			CorpName:     strings.TrimSpace(data.CorpName),
+			UserID:       strings.TrimSpace(data.UserID),
+			UserName:     strings.TrimSpace(data.UserName),
+			ClientID:     strings.TrimSpace(data.ClientID),
+			Status:       ProfileStatusActive,
+			ExpiresAt:    timeOrRFC3339(data.ExpiresAt),
+			RefreshExpAt: timeOrRFC3339(data.RefreshExpAt),
+			LastLoginAt:  now,
+			LastUsedAt:   now,
+			UpdatedAt:    now,
+		}
+		cfg.Profiles = append(cfg.Profiles, profile)
+	} else {
+		p := &cfg.Profiles[idx]
+		if strings.TrimSpace(p.Name) == "" {
+			p.Name = chooseProfileName(cfg, data)
+		}
+		if v := strings.TrimSpace(data.CorpName); v != "" {
+			p.CorpName = v
+		}
+		if v := strings.TrimSpace(data.UserID); v != "" {
+			p.UserID = v
+		}
+		if v := strings.TrimSpace(data.UserName); v != "" {
+			p.UserName = v
+		}
+		if v := strings.TrimSpace(data.ClientID); v != "" {
+			p.ClientID = v
+		}
+		p.Status = ProfileStatusActive
+		p.ExpiresAt = timeOrRFC3339(data.ExpiresAt)
+		p.RefreshExpAt = timeOrRFC3339(data.RefreshExpAt)
+		p.LastLoginAt = now
+		p.LastUsedAt = now
+		p.UpdatedAt = now
+	}
+	if cfg.PrimaryProfile == "" {
+		cfg.PrimaryProfile = corpID
+	}
+	if makeCurrent && cfg.CurrentProfile != corpID {
+		if cfg.CurrentProfile != "" {
+			cfg.PreviousProfile = cfg.CurrentProfile
+		}
+		cfg.CurrentProfile = corpID
+	}
+	if cfg.CurrentProfile == "" {
+		cfg.CurrentProfile = corpID
+	}
+	return SaveProfiles(configDir, cfg)
+}
+
+// ResolveProfile returns a profile selected by name/corpId or by current/primary fallback.
+func ResolveProfile(configDir, selector string) (*Profile, error) {
+	if err := EnsureProfilesMigration(configDir); err != nil {
+		return nil, err
+	}
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		return nil, err
+	}
+	selector = strings.TrimSpace(selector)
+	if selector != "" {
+		p := findProfile(cfg, selector)
+		if p == nil {
+			return nil, fmt.Errorf("profile %q not found", selector)
+		}
+		return p, nil
+	}
+	if p := findProfile(cfg, cfg.CurrentProfile); p != nil {
+		return p, nil
+	}
+	if p := findProfile(cfg, cfg.PrimaryProfile); p != nil {
+		return p, nil
+	}
+	return nil, nil
+}
+
+func resolveProfileForLoad(configDir, selector string) (*Profile, error) {
+	if err := EnsureProfilesMigration(configDir); err != nil {
+		return nil, err
+	}
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		return nil, err
+	}
+	selector = strings.TrimSpace(selector)
+	if selector != "" {
+		p := findProfile(cfg, selector)
+		if p == nil {
+			return nil, fmt.Errorf("profile %q not found", selector)
+		}
+		return p, nil
+	}
+	for _, candidate := range []string{cfg.CurrentProfile, cfg.PrimaryProfile} {
+		if p := findProfile(cfg, candidate); p != nil && TokenDataExistsKeychainForCorpID(p.CorpID) {
+			return p, nil
+		}
+	}
+	if p := findProfile(cfg, cfg.CurrentProfile); p != nil {
+		return p, nil
+	}
+	if p := findProfile(cfg, cfg.PrimaryProfile); p != nil {
+		return p, nil
+	}
+	return nil, nil
+}
+
+// SetCurrentProfile persists the selected current profile.
+func SetCurrentProfile(configDir, selector string) (*Profile, error) {
+	if err := EnsureProfilesMigration(configDir); err != nil {
+		return nil, err
+	}
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		return nil, err
+	}
+	p := findProfile(cfg, selector)
+	if p == nil {
+		return nil, fmt.Errorf("profile %q not found", strings.TrimSpace(selector))
+	}
+	if cfg.CurrentProfile != p.CorpID {
+		if cfg.CurrentProfile != "" {
+			cfg.PreviousProfile = cfg.CurrentProfile
+		}
+		cfg.CurrentProfile = p.CorpID
+	}
+	touchProfile(cfg, p.CorpID)
+	if err := SaveProfiles(configDir, cfg); err != nil {
+		return nil, err
+	}
+	if err := SyncLegacyTokenMirror(configDir); err != nil {
+		return nil, err
+	}
+	return findProfile(cfg, p.CorpID), nil
+}
+
+// UsePreviousProfile toggles currentProfile and previousProfile.
+func UsePreviousProfile(configDir string) (*Profile, error) {
+	if err := EnsureProfilesMigration(configDir); err != nil {
+		return nil, err
+	}
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		return nil, err
+	}
+	prev := strings.TrimSpace(cfg.PreviousProfile)
+	if prev == "" {
+		return nil, fmt.Errorf("previous profile is empty")
+	}
+	p := findProfile(cfg, prev)
+	if p == nil {
+		return nil, fmt.Errorf("previous profile %q not found", prev)
+	}
+	cfg.PreviousProfile, cfg.CurrentProfile = cfg.CurrentProfile, p.CorpID
+	touchProfile(cfg, p.CorpID)
+	if err := SaveProfiles(configDir, cfg); err != nil {
+		return nil, err
+	}
+	if err := SyncLegacyTokenMirror(configDir); err != nil {
+		return nil, err
+	}
+	return findProfile(cfg, p.CorpID), nil
+}
+
+// RemoveProfile removes a profile from metadata and returns the removed profile.
+func RemoveProfile(configDir, selector string) (*Profile, error) {
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		return nil, err
+	}
+	p := findProfile(cfg, selector)
+	if p == nil {
+		return nil, fmt.Errorf("profile %q not found", strings.TrimSpace(selector))
+	}
+	removed := *p
+	kept := cfg.Profiles[:0]
+	for _, profile := range cfg.Profiles {
+		if profile.CorpID != removed.CorpID {
+			kept = append(kept, profile)
+		}
+	}
+	cfg.Profiles = kept
+	if cfg.PrimaryProfile == removed.CorpID {
+		cfg.PrimaryProfile = firstProfileCorpID(cfg)
+	}
+	if cfg.CurrentProfile == removed.CorpID {
+		cfg.CurrentProfile = cfg.PrimaryProfile
+		if cfg.CurrentProfile == "" {
+			cfg.CurrentProfile = firstProfileCorpID(cfg)
+		}
+	}
+	if cfg.PreviousProfile == removed.CorpID {
+		cfg.PreviousProfile = ""
+	}
+	if len(cfg.Profiles) == 0 {
+		cfg.PrimaryProfile = ""
+		cfg.CurrentProfile = ""
+		cfg.PreviousProfile = ""
+	}
+	if err := SaveProfiles(configDir, cfg); err != nil {
+		return nil, err
+	}
+	return &removed, nil
+}
+
+// MarkProfileStatus updates a profile status if it exists.
+func MarkProfileStatus(configDir, corpID, status string) error {
+	if strings.TrimSpace(corpID) == "" {
+		return nil
+	}
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		return err
+	}
+	p := findProfile(cfg, corpID)
+	if p == nil {
+		return nil
+	}
+	p.Status = strings.TrimSpace(status)
+	p.UpdatedAt = time.Now().Format(time.RFC3339)
+	return SaveProfiles(configDir, cfg)
+}
+
+// SyncLegacyTokenMirror mirrors the current profile token into legacy auth-token.
+func SyncLegacyTokenMirror(configDir string) error {
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		return err
+	}
+	for _, candidate := range []string{cfg.CurrentProfile, cfg.PrimaryProfile} {
+		if p := findProfile(cfg, candidate); p != nil {
+			data, loadErr := LoadTokenDataKeychainForCorpID(p.CorpID)
+			if loadErr == nil && data != nil {
+				if err := SaveTokenDataKeychain(data); err != nil {
+					return err
+				}
+				return WriteTokenMarker(configDir)
+			}
+		}
+	}
+	_ = DeleteTokenDataKeychain()
+	_ = DeleteTokenMarker(configDir)
+	return nil
+}
+
+func normalizeProfilesConfig(cfg *ProfilesConfig) {
+	if cfg == nil {
+		return
+	}
+	cfg.Version = 1
+	seen := make(map[string]bool, len(cfg.Profiles))
+	profiles := cfg.Profiles[:0]
+	for _, p := range cfg.Profiles {
+		p.CorpID = strings.TrimSpace(p.CorpID)
+		if p.CorpID == "" || seen[p.CorpID] {
+			continue
+		}
+		seen[p.CorpID] = true
+		p.Name = strings.TrimSpace(p.Name)
+		if p.Name == "" {
+			p.Name = p.CorpID
+		}
+		if p.Status == "" {
+			p.Status = ProfileStatusActive
+		}
+		profiles = append(profiles, p)
+	}
+	cfg.Profiles = profiles
+	if cfg.PrimaryProfile != "" && findProfile(cfg, cfg.PrimaryProfile) == nil {
+		cfg.PrimaryProfile = ""
+	}
+	if cfg.CurrentProfile != "" && findProfile(cfg, cfg.CurrentProfile) == nil {
+		cfg.CurrentProfile = ""
+	}
+	if cfg.PreviousProfile != "" && findProfile(cfg, cfg.PreviousProfile) == nil {
+		cfg.PreviousProfile = ""
+	}
+	if cfg.PrimaryProfile == "" {
+		cfg.PrimaryProfile = firstProfileCorpID(cfg)
+	}
+	if cfg.CurrentProfile == "" {
+		cfg.CurrentProfile = cfg.PrimaryProfile
+	}
+}
+
+func chooseProfileName(cfg *ProfilesConfig, data *TokenData) string {
+	base := strings.TrimSpace(data.CorpName)
+	if base == "" {
+		base = strings.TrimSpace(data.CorpID)
+	}
+	if base == "" {
+		base = "profile"
+	}
+	if !profileNameTakenByOtherCorp(cfg, base, data.CorpID) {
+		return base
+	}
+	suffix := shortCorpID(data.CorpID)
+	name := base + "-" + suffix
+	if !profileNameTakenByOtherCorp(cfg, name, data.CorpID) {
+		return name
+	}
+	for i := 2; ; i++ {
+		candidate := fmt.Sprintf("%s-%s-%d", base, suffix, i)
+		if !profileNameTakenByOtherCorp(cfg, candidate, data.CorpID) {
+			return candidate
+		}
+	}
+}
+
+func profileNameTakenByOtherCorp(cfg *ProfilesConfig, name, corpID string) bool {
+	name = strings.TrimSpace(name)
+	corpID = strings.TrimSpace(corpID)
+	for _, p := range cfg.Profiles {
+		if p.CorpID != corpID && p.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func findProfile(cfg *ProfilesConfig, selector string) *Profile {
+	if cfg == nil {
+		return nil
+	}
+	selector = strings.TrimSpace(selector)
+	if selector == "" {
+		return nil
+	}
+	for i := range cfg.Profiles {
+		if cfg.Profiles[i].CorpID == selector || cfg.Profiles[i].Name == selector {
+			return &cfg.Profiles[i]
+		}
+	}
+	return nil
+}
+
+func profileIndexByCorpID(cfg *ProfilesConfig, corpID string) int {
+	if cfg == nil {
+		return -1
+	}
+	for i := range cfg.Profiles {
+		if cfg.Profiles[i].CorpID == corpID {
+			return i
+		}
+	}
+	return -1
+}
+
+func firstProfileCorpID(cfg *ProfilesConfig) string {
+	if cfg == nil || len(cfg.Profiles) == 0 {
+		return ""
+	}
+	return cfg.Profiles[0].CorpID
+}
+
+func touchProfile(cfg *ProfilesConfig, corpID string) {
+	if p := findProfile(cfg, corpID); p != nil {
+		now := time.Now().Format(time.RFC3339)
+		p.LastUsedAt = now
+		p.UpdatedAt = now
+	}
+}
+
+func timeOrRFC3339(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format(time.RFC3339)
+}
+
+func shortCorpID(corpID string) string {
+	corpID = strings.TrimSpace(corpID)
+	if len(corpID) <= 8 {
+		return corpID
+	}
+	return corpID[len(corpID)-8:]
+}

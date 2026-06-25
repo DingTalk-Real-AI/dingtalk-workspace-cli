@@ -25,8 +25,10 @@ import (
 // written by these tests, and removes test data on completion.
 func cleanupKeychain(t *testing.T) {
 	t.Helper()
+	SetRuntimeProfile("")
 	t.Setenv(keychain.StorageDirEnv, t.TempDir())
 	t.Cleanup(func() {
+		SetRuntimeProfile("")
 		_ = keychain.Remove(keychain.Service, keychain.AccountToken)
 	})
 }
@@ -127,6 +129,166 @@ func TestTokenOverwrite(t *testing.T) {
 	}
 }
 
+func TestMultiProfileSaveLoadAndSwitch(t *testing.T) {
+	cleanupKeychain(t)
+	configDir := t.TempDir()
+
+	dataA := testToken("at_a", "corp_a", "A Org")
+	dataB := testToken("at_b", "corp_b", "B Org")
+	if err := SaveTokenData(configDir, dataA); err != nil {
+		t.Fatalf("SaveTokenData(A) error = %v", err)
+	}
+	if err := SaveTokenData(configDir, dataB); err != nil {
+		t.Fatalf("SaveTokenData(B) error = %v", err)
+	}
+
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	if cfg.PrimaryProfile != "corp_a" || cfg.CurrentProfile != "corp_b" || cfg.PreviousProfile != "corp_a" {
+		t.Fatalf("profile pointers = primary %q current %q previous %q", cfg.PrimaryProfile, cfg.CurrentProfile, cfg.PreviousProfile)
+	}
+
+	loadedB, err := LoadTokenData(configDir)
+	if err != nil {
+		t.Fatalf("LoadTokenData() error = %v", err)
+	}
+	if loadedB.AccessToken != "at_b" {
+		t.Fatalf("default token = %q, want at_b", loadedB.AccessToken)
+	}
+	loadedA, err := LoadTokenDataForProfile(configDir, "A Org")
+	if err != nil {
+		t.Fatalf("LoadTokenDataForProfile(A Org) error = %v", err)
+	}
+	if loadedA.AccessToken != "at_a" {
+		t.Fatalf("profile A token = %q, want at_a", loadedA.AccessToken)
+	}
+
+	if _, err := SetCurrentProfile(configDir, "corp_a"); err != nil {
+		t.Fatalf("SetCurrentProfile(A) error = %v", err)
+	}
+	loadedA, err = LoadTokenData(configDir)
+	if err != nil {
+		t.Fatalf("LoadTokenData() after switch error = %v", err)
+	}
+	if loadedA.AccessToken != "at_a" {
+		t.Fatalf("default token after switch = %q, want at_a", loadedA.AccessToken)
+	}
+	if _, err := UsePreviousProfile(configDir); err != nil {
+		t.Fatalf("UsePreviousProfile() error = %v", err)
+	}
+	loadedB, err = LoadTokenData(configDir)
+	if err != nil {
+		t.Fatalf("LoadTokenData() after previous error = %v", err)
+	}
+	if loadedB.AccessToken != "at_b" {
+		t.Fatalf("default token after previous = %q, want at_b", loadedB.AccessToken)
+	}
+}
+
+func TestRuntimeProfileOverrideDoesNotMutateCurrent(t *testing.T) {
+	cleanupKeychain(t)
+	configDir := t.TempDir()
+
+	if err := SaveTokenData(configDir, testToken("at_a", "corp_a", "A Org")); err != nil {
+		t.Fatalf("SaveTokenData(A) error = %v", err)
+	}
+	if err := SaveTokenData(configDir, testToken("at_b", "corp_b", "B Org")); err != nil {
+		t.Fatalf("SaveTokenData(B) error = %v", err)
+	}
+	if _, err := SetCurrentProfile(configDir, "corp_a"); err != nil {
+		t.Fatalf("SetCurrentProfile(A) error = %v", err)
+	}
+
+	SetRuntimeProfile("corp_b")
+	if err := SaveTokenData(configDir, testToken("at_b_refreshed", "corp_b", "B Org")); err != nil {
+		t.Fatalf("SaveTokenData(B refresh) error = %v", err)
+	}
+	SetRuntimeProfile("")
+
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	if cfg.CurrentProfile != "corp_a" {
+		t.Fatalf("current profile = %q, want corp_a", cfg.CurrentProfile)
+	}
+	loadedB, err := LoadTokenDataForProfile(configDir, "corp_b")
+	if err != nil {
+		t.Fatalf("LoadTokenDataForProfile(B) error = %v", err)
+	}
+	if loadedB.AccessToken != "at_b_refreshed" {
+		t.Fatalf("profile B token = %q, want at_b_refreshed", loadedB.AccessToken)
+	}
+	loadedDefault, err := LoadTokenData(configDir)
+	if err != nil {
+		t.Fatalf("LoadTokenData() error = %v", err)
+	}
+	if loadedDefault.AccessToken != "at_a" {
+		t.Fatalf("default token = %q, want at_a", loadedDefault.AccessToken)
+	}
+}
+
+func TestDeleteProfilePreservesOtherProfiles(t *testing.T) {
+	cleanupKeychain(t)
+	configDir := t.TempDir()
+
+	if err := SaveTokenData(configDir, testToken("at_a", "corp_a", "A Org")); err != nil {
+		t.Fatalf("SaveTokenData(A) error = %v", err)
+	}
+	if err := SaveTokenData(configDir, testToken("at_b", "corp_b", "B Org")); err != nil {
+		t.Fatalf("SaveTokenData(B) error = %v", err)
+	}
+	if err := DeleteTokenDataForProfile(configDir, "corp_b"); err != nil {
+		t.Fatalf("DeleteTokenDataForProfile(B) error = %v", err)
+	}
+	if _, err := LoadTokenDataForProfile(configDir, "corp_b"); err == nil {
+		t.Fatal("LoadTokenDataForProfile(B) error = nil after delete, want failure")
+	}
+	loadedA, err := LoadTokenDataForProfile(configDir, "corp_a")
+	if err != nil {
+		t.Fatalf("LoadTokenDataForProfile(A) error = %v", err)
+	}
+	if loadedA.AccessToken != "at_a" {
+		t.Fatalf("profile A token = %q, want at_a", loadedA.AccessToken)
+	}
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	if len(cfg.Profiles) != 1 || cfg.CurrentProfile != "corp_a" {
+		t.Fatalf("profiles after delete = %#v", cfg)
+	}
+}
+
+func TestLegacyKeychainMigrationInitializesProfile(t *testing.T) {
+	cleanupKeychain(t)
+	configDir := t.TempDir()
+
+	legacy := testToken("at_legacy", "corp_legacy", "Legacy Org")
+	if err := SaveTokenDataKeychain(legacy); err != nil {
+		t.Fatalf("SaveTokenDataKeychain() error = %v", err)
+	}
+	loaded, err := LoadTokenData(configDir)
+	if err != nil {
+		t.Fatalf("LoadTokenData() error = %v", err)
+	}
+	if loaded.AccessToken != "at_legacy" {
+		t.Fatalf("loaded token = %q, want at_legacy", loaded.AccessToken)
+	}
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	if cfg.PrimaryProfile != "corp_legacy" || cfg.CurrentProfile != "corp_legacy" {
+		t.Fatalf("profile pointers after migration = %#v", cfg)
+	}
+	if !TokenDataExistsKeychainForCorpID("corp_legacy") {
+		t.Fatal("corp-scoped token should exist after migration")
+	}
+}
+
 func TestTokenDataExistsKeychain(t *testing.T) {
 	cleanupKeychain(t)
 
@@ -149,6 +311,21 @@ func TestTokenDataExistsKeychain(t *testing.T) {
 	// Should be true after save
 	if !TokenDataExistsKeychain() {
 		t.Fatal("TokenDataExistsKeychain() should be true after save")
+	}
+}
+
+func testToken(accessToken, corpID, corpName string) *TokenData {
+	now := time.Now().UTC()
+	return &TokenData{
+		AccessToken:  accessToken,
+		RefreshToken: "rt_" + accessToken,
+		ExpiresAt:    now.Add(2 * time.Hour),
+		RefreshExpAt: now.Add(30 * 24 * time.Hour),
+		CorpID:       corpID,
+		CorpName:     corpName,
+		UserID:       "user_" + corpID,
+		UserName:     "User " + corpID,
+		ClientID:     "client_" + corpID,
 	}
 }
 

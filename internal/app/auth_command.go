@@ -373,58 +373,65 @@ func selectLoginRecommendScopeMode() (pat.LoginRecommendScopeMode, error) {
 }
 
 func newAuthLogoutCommand() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:               "logout",
 		Short:             "清除认证信息",
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			configDir := defaultConfigDir()
+			profileSelector, err := cmd.Flags().GetString("profile")
+			if err != nil {
+				return apperrors.NewInternal("failed to read --profile")
+			}
+			all, err := cmd.Flags().GetBool("all")
+			if err != nil {
+				return apperrors.NewInternal("failed to read --all")
+			}
+			if all && strings.TrimSpace(profileSelector) != "" {
+				return apperrors.NewValidation("--profile and --all cannot be used together")
+			}
 			revokeCtx, cancel := context.WithTimeout(cmd.Context(), 15*time.Second)
 			defer cancel()
-			_ = authpkg.RevokeTokenRemote(revokeCtx)
-
-			// Load token data to get associated clientId before deletion
-			var storedClientID string
-			if tokenData, err := authpkg.LoadTokenData(configDir); err == nil && tokenData != nil {
-				storedClientID = tokenData.ClientID
+			if all {
+				if err := logoutNonPrimaryProfiles(cmd, revokeCtx, configDir); err != nil {
+					return err
+				}
+			} else if err := logoutOneProfile(cmd, revokeCtx, configDir, profileSelector); err != nil {
+				return err
 			}
-
-			if err := authpkg.DeleteTokenData(configDir); err != nil {
-				return apperrors.NewInternal(fmt.Sprintf("failed to clear token data: %v", err))
-			}
-			// Clean up associated client secret and app token from keychain
-			if storedClientID != "" {
-				_ = authpkg.DeleteClientSecret(storedClientID)
-				_ = authpkg.DeleteAppTokenData(storedClientID)
-			}
-			// Also try cleaning app token using appKey from app config
-			if appKey, _ := authpkg.ResolveAppCredentials(configDir); appKey != "" && appKey != storedClientID {
-				_ = authpkg.DeleteAppTokenData(appKey)
-			}
-			// Clean up app credentials (app.json + keychain secret)
-			_ = authpkg.DeleteAppConfig(configDir)
-			_ = os.Remove(filepath.Join(configDir, "mcp_url"))
-			_ = os.Remove(filepath.Join(configDir, "token"))
-			_ = os.Remove(filepath.Join(configDir, "token.json"))
+			cleanupAuthConfigIfNoProfiles(configDir)
 			ResetRuntimeTokenCache()
 			clearCompatCache()
 			w := cmd.OutOrStdout()
-			fmt.Fprintln(w, "[OK] 已清除所有认证信息")
+			if all {
+				fmt.Fprintln(w, "[OK] 已清除所有非主 profile 认证信息")
+			} else {
+				fmt.Fprintln(w, "[OK] 已清除认证信息")
+			}
 			if !edition.Get().IsEmbedded {
 				fmt.Fprintln(w, "请运行 dws auth login --recommend 重新登录")
 			}
 			return nil
 		},
 	}
+	cmd.Flags().String("profile", "", "指定要退出的 profile 名或 corpId")
+	cmd.Flags().Bool("all", false, "退出所有非主 profile")
+	return cmd
 }
 
 func newAuthStatusCommand() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:               "status",
 		Short:             "查看认证状态",
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			configDir := defaultConfigDir()
+			profileSelector, err := cmd.Flags().GetString("profile")
+			if err != nil {
+				return apperrors.NewInternal("failed to read --profile")
+			}
+			restoreProfile := pushRuntimeProfile(profileSelector)
+			defer restoreProfile()
 
 			authenticated := false
 			refreshed := false
@@ -444,6 +451,8 @@ func newAuthStatusCommand() *cobra.Command {
 						}
 					} else if edition.Get().AutoPurgeToken {
 						_ = authpkg.DeleteTokenData(configDir)
+					} else if tokenData != nil {
+						_ = authpkg.MarkProfileStatus(configDir, tokenData.CorpID, authpkg.ProfileStatusExpired)
 					}
 				}
 				if authStatusAuthenticated(tokenData) {
@@ -485,6 +494,83 @@ func newAuthStatusCommand() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().String("profile", "", "指定要查看的 profile 名或 corpId")
+	return cmd
+}
+
+func logoutOneProfile(_ *cobra.Command, ctx context.Context, configDir, selector string) error {
+	selected, err := authpkg.ResolveProfile(configDir, selector)
+	if err != nil {
+		return apperrors.NewValidation(err.Error())
+	}
+	if selected != nil {
+		cfg, loadErr := authpkg.LoadProfiles(configDir)
+		if loadErr != nil {
+			return apperrors.NewInternal(fmt.Sprintf("failed to load profiles: %v", loadErr))
+		}
+		if len(cfg.Profiles) > 1 && selected.CorpID == cfg.PrimaryProfile {
+			return apperrors.NewValidation("primary profile cannot be logged out while other profiles exist; switch to another profile or use auth reset")
+		}
+	}
+	restoreProfile := pushRuntimeProfile(selector)
+	defer restoreProfile()
+	_ = authpkg.RevokeTokenRemote(ctx)
+	if err := authpkg.DeleteTokenDataForProfile(configDir, selector); err != nil {
+		return apperrors.NewInternal(fmt.Sprintf("failed to clear token data: %v", err))
+	}
+	return nil
+}
+
+func logoutNonPrimaryProfiles(_ *cobra.Command, ctx context.Context, configDir string) error {
+	if err := authpkg.EnsureProfilesMigration(configDir); err != nil {
+		return apperrors.NewInternal(fmt.Sprintf("failed to migrate profiles: %v", err))
+	}
+	cfg, err := authpkg.LoadProfiles(configDir)
+	if err != nil {
+		return apperrors.NewInternal(fmt.Sprintf("failed to load profiles: %v", err))
+	}
+	for _, profile := range cfg.Profiles {
+		if profile.CorpID == cfg.PrimaryProfile {
+			continue
+		}
+		restoreProfile := pushRuntimeProfile(profile.CorpID)
+		_ = authpkg.RevokeTokenRemote(ctx)
+		restoreProfile()
+		if err := authpkg.DeleteTokenDataForProfile(configDir, profile.CorpID); err != nil {
+			return apperrors.NewInternal(fmt.Sprintf("failed to clear profile %s: %v", profile.Name, err))
+		}
+	}
+	return nil
+}
+
+func pushRuntimeProfile(selector string) func() {
+	selector = strings.TrimSpace(selector)
+	if selector == "" {
+		return func() {}
+	}
+	previous := authpkg.RuntimeProfile()
+	authpkg.SetRuntimeProfile(selector)
+	return func() {
+		authpkg.SetRuntimeProfile(previous)
+	}
+}
+
+func cleanupAuthConfigIfNoProfiles(configDir string) {
+	cfg, err := authpkg.LoadProfiles(configDir)
+	if err == nil && len(cfg.Profiles) > 0 {
+		return
+	}
+	if authpkg.TokenDataExistsKeychain() {
+		return
+	}
+	appKey, _ := authpkg.ResolveAppCredentials(configDir)
+	if appKey != "" {
+		_ = authpkg.DeleteAppTokenData(appKey)
+	}
+	_ = authpkg.DeleteAppConfig(configDir)
+	_ = os.Remove(filepath.Join(configDir, "mcp_url"))
+	_ = os.Remove(filepath.Join(configDir, "token"))
+	_ = authpkg.DeleteTokenMarker(configDir)
 }
 
 func newAuthExportCommand() *cobra.Command {
@@ -683,11 +769,12 @@ func newAuthResetCommand() *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			configDir := defaultConfigDir()
-			if err := authpkg.DeleteTokenData(configDir); err != nil {
+			if err := authpkg.DeleteAllTokenData(configDir); err != nil {
 				return apperrors.NewInternal(fmt.Sprintf("failed to reset token data: %v", err))
 			}
 			_ = os.Remove(filepath.Join(configDir, "mcp_url"))
 			_ = os.Remove(filepath.Join(configDir, "token"))
+			_ = authpkg.DeleteAppConfig(configDir)
 			ResetRuntimeTokenCache()
 			clearCompatCache()
 			w := cmd.OutOrStdout()
