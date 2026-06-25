@@ -63,22 +63,33 @@ fi
 echo "   Gitee release id = ${release_id}"
 
 # ── Mirror each artifact, verifying content so re-runs self-heal ─────────────
-# Pull the current asset list (name + attach id + download url) so we can, per
-# file:
-#   • skip it when it is already on Gitee AND byte-identical,
+# Pull the current attachment list (name + attach id + download url) so we can,
+# per file:
+#   • skip it when it is already on Gitee, unique, AND byte-identical,
 #   • REPLACE it when present but stale (different bytes) — e.g. the darwin
 #     binaries are re-signed and so differ between GitHub and a prior mirror
 #     run, which breaks install.sh's checksums.txt verification on macOS,
+#   • DEDUP it when the same name has >1 attachment — a prior run that failed to
+#     delete (see below) left the old copy *and* an extra upload; Gitee then
+#     serves the OLDER one by name, so the stale binary wins. We delete every
+#     copy and upload one fresh.
 #   • upload it when missing.
 # This brings the Gitee release into byte-for-byte agreement with $DIST_DIR,
 # which the caller fills from the GitHub release whose checksums.txt is what
 # install.sh verifies against.
-assets_map="$(curl -fsSL "${base}/releases/${release_id}?access_token=${GITEE_TOKEN}" 2>/dev/null \
+#
+# We list attachments via the dedicated /attach_files endpoint, NOT the release
+# detail (/releases/{id}) endpoint: the latter's "assets" array omits the attach
+# id, so DELETE /attach_files/{id} was previously called with an empty id and
+# silently no-op'd — leaving stale + duplicate darwin binaries on Gitee.
+assets_map="$(curl -fsSL "${base}/releases/${release_id}/attach_files?access_token=${GITEE_TOKEN}" 2>/dev/null \
   | python3 -c 'import json,sys
 try:
-    for a in json.load(sys.stdin).get("assets",[]):
+    data=json.load(sys.stdin)
+    rows=data if isinstance(data,list) else data.get("attach_files",[])
+    for a in rows:
         n=a.get("name",""); i=a.get("id",""); u=a.get("browser_download_url","")
-        if n:
+        if n and i!="":
             print("%s\t%s\t%s" % (n, i, u))
 except Exception:
     pass' 2>/dev/null || true)"
@@ -94,6 +105,11 @@ gitee_attach() {  # upload file $1; success when the response carries a download
     | grep -q '"browser_download_url"'
 }
 
+gitee_delete() {  # delete attachment by id $1
+  curl -fsSL -X DELETE "${base}/releases/${release_id}/attach_files/${1}?access_token=${GITEE_TOKEN}" \
+    >/dev/null 2>&1 || true
+}
+
 uploaded=0
 replaced=0
 skipped=0
@@ -101,10 +117,18 @@ for f in "$DIST_DIR"/dws-*.tar.gz "$DIST_DIR"/dws-*.zip "$DIST_DIR"/checksums.tx
   [ -f "$f" ] || continue
   fn="$(basename "$f")"
   local_sha="$(sha256_of "$f")"
-  row="$(printf '%s\n' "$assets_map" | awk -F'\t' -v n="$fn" '$1==n {print; exit}')"
-  if [ -n "$row" ]; then
-    aid="$(printf '%s' "$row" | cut -f2)"
-    aurl="$(printf '%s' "$row" | cut -f3)"
+  # Every attach id currently carrying this name (may be >1 from a botched run).
+  ids="$(printf '%s\n' "$assets_map" | awk -F'\t' -v n="$fn" '$1==n {print $2}')"
+  aurl="$(printf '%s\n' "$assets_map" | awk -F'\t' -v n="$fn" '$1==n {print $3; exit}')"
+  count="$(printf '%s' "$ids" | grep -c . || true)"
+
+  if [ "$count" -eq 0 ]; then
+    echo "   ⬆ ${fn} (new)"
+    if gitee_attach "$f"; then uploaded=$((uploaded + 1)); else echo "   ⚠ upload may have failed for ${fn}" >&2; fi
+    continue
+  fi
+
+  if [ "$count" -eq 1 ]; then
     gitee_sha="$(curl -fsSL "$aurl" 2>/dev/null | sha256_of || true)"
     if [ "$gitee_sha" = "$local_sha" ]; then
       echo "   ✓ ${fn} already correct on Gitee — skip"
@@ -112,12 +136,15 @@ for f in "$DIST_DIR"/dws-*.tar.gz "$DIST_DIR"/dws-*.zip "$DIST_DIR"/checksums.tx
       continue
     fi
     echo "   ↻ ${fn} differs on Gitee (stale) — deleting + re-uploading"
-    curl -fsSL -X DELETE "${base}/releases/${release_id}/attach_files/${aid}?access_token=${GITEE_TOKEN}" >/dev/null 2>&1 || true
-    if gitee_attach "$f"; then replaced=$((replaced + 1)); else echo "   ⚠ re-upload may have failed for ${fn}" >&2; fi
-    continue
+  else
+    echo "   ↻ ${fn} has ${count} copies on Gitee (dup) — deleting all + re-uploading one"
   fi
-  echo "   ⬆ ${fn} (new)"
-  if gitee_attach "$f"; then uploaded=$((uploaded + 1)); else echo "   ⚠ upload may have failed for ${fn}" >&2; fi
+
+  # Delete every copy, then upload exactly one fresh, correct file.
+  printf '%s\n' "$ids" | while read -r aid; do
+    [ -n "$aid" ] && gitee_delete "$aid"
+  done
+  if gitee_attach "$f"; then replaced=$((replaced + 1)); else echo "   ⚠ re-upload may have failed for ${fn}" >&2; fi
 done
 
 if [ "$uploaded" -eq 0 ] && [ "$replaced" -eq 0 ] && [ "$skipped" -eq 0 ]; then
