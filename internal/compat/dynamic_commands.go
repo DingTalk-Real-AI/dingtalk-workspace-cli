@@ -239,6 +239,10 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 			// todo_hooks.go for the full rationale). No-op for non-todo.
 			installTodoHook(cmd, canonicalProduct, toolName)
 
+			// §calendar-hook: reject partial recurrence on event create/update
+			// (see calendar_hooks.go). No-op for non-calendar.
+			installCalendarHook(cmd, canonicalProduct, toolName)
+
 			// §1.4: Add to the right parent group
 			attachToGroup(rootCmd, override.Group, groupCmds, cmd)
 		}
