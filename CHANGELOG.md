@@ -14,6 +14,12 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 - **`robot connect` now hints how to match terminal answer quality** (issue #39; `internal/helpers/devapp_connect.go`) — when neither a work dir nor a knowledge source is configured, the connector prints a one-time note that the bot runs in a clean temp dir without local project context, pointing at `--agent-workdir` / `--knowledge-dir` / `--knowledge-source` / `--agent-model`. The robot quickstart gains matching FAQ entries, plus a clarification that step 3 (`robot connect`) produces no approval ticket (issue #19).
 
+- **`robot connect` session commands `/new` vs `/clear` now use each channel's real session op** (PR #20; `internal/helpers/connect_opencode.go`, `internal/helpers/connect_stream.go`) — `/new` (and `/start`, `/reset`) opens a fresh session and leaves the previous one intact (resumable where the agent supports it); `/clear` actively disposes the current session through the agent's real delete primitive — opencode issues `DELETE /session/:id`. Channels whose agent exposes no delete in the mode DWS drives it (Codex app-server, Qoder stream, Claude-family exec) fall back to a reset, so `/clear` behaves like `/new` there. Previously both commands only dropped the local `conversationId → sessionId` mapping, so the two were indistinguishable and opencode sessions were never disposed (they leaked).
+
+### Fixed
+
+- **`robot connect` no longer aborts long opencode turns at 30 seconds** (PR #19; `internal/helpers/connect_opencode.go`) — the shared opencode HTTP client hard-coded a 30s `Timeout` that covered every request, including `POST /session/{id}/message`, so a long agent turn (e.g. a multi-minute research report) was killed mid-flight with `context deadline exceeded (Client.Timeout exceeded while awaiting headers)` even though the per-turn budget (`DWS_AGENT_TIMEOUT_MS`, default 300s) was far larger. The client-level deadline is removed so the per-request ctx governs the round-trip; only the `/global/health` probe keeps a short 10s timeout so startup detection stays snappy.
+
 ## [1.0.41] - 2026-06-24
 
 This release makes the installers work from mainland China out of the box (no env var) and keeps the Gitee mirror in sync automatically.
