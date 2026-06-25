@@ -193,7 +193,7 @@ func upsertProfileFromToken(configDir string, cfg *ProfilesConfig, data *TokenDa
 		cfg.Profiles = append(cfg.Profiles, profile)
 	} else {
 		p := &cfg.Profiles[idx]
-		if strings.TrimSpace(p.Name) == "" {
+		if shouldRefreshProfileName(p, data) {
 			p.Name = chooseProfileName(cfg, data)
 		}
 		if v := strings.TrimSpace(data.CorpName); v != "" {
@@ -441,6 +441,9 @@ func normalizeProfilesConfig(cfg *ProfilesConfig) {
 		if p.Name == "" {
 			p.Name = p.CorpID
 		}
+		if corpName := strings.TrimSpace(p.CorpName); p.Name == p.CorpID && corpName != "" && !profileNameTakenByOtherCorp(cfg, corpName, p.CorpID) {
+			p.Name = corpName
+		}
 		if p.Status == "" {
 			p.Status = ProfileStatusActive
 		}
@@ -488,6 +491,17 @@ func chooseProfileName(cfg *ProfilesConfig, data *TokenData) string {
 	}
 }
 
+func shouldRefreshProfileName(p *Profile, data *TokenData) bool {
+	if p == nil || data == nil {
+		return false
+	}
+	name := strings.TrimSpace(p.Name)
+	if name == "" {
+		return true
+	}
+	return strings.TrimSpace(data.CorpName) != "" && name == strings.TrimSpace(p.CorpID)
+}
+
 func profileNameTakenByOtherCorp(cfg *ProfilesConfig, name, corpID string) bool {
 	name = strings.TrimSpace(name)
 	corpID = strings.TrimSpace(corpID)
@@ -507,12 +521,19 @@ func findProfile(cfg *ProfilesConfig, selector string) *Profile {
 	if selector == "" {
 		return nil
 	}
+	var corpNameMatch *Profile
 	for i := range cfg.Profiles {
 		if cfg.Profiles[i].CorpID == selector || cfg.Profiles[i].Name == selector {
 			return &cfg.Profiles[i]
 		}
+		if strings.TrimSpace(cfg.Profiles[i].CorpName) == selector {
+			if corpNameMatch != nil {
+				return nil
+			}
+			corpNameMatch = &cfg.Profiles[i]
+		}
 	}
-	return nil
+	return corpNameMatch
 }
 
 func profileIndexByCorpID(cfg *ProfilesConfig, corpID string) int {

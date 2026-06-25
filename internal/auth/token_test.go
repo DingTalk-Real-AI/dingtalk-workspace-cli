@@ -14,6 +14,7 @@
 package auth
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -259,6 +260,111 @@ func TestDeleteProfilePreservesOtherProfiles(t *testing.T) {
 	}
 	if len(cfg.Profiles) != 1 || cfg.CurrentProfile != "corp_a" {
 		t.Fatalf("profiles after delete = %#v", cfg)
+	}
+}
+
+func TestUpsertProfileFromTokenOverwritesSameCorp(t *testing.T) {
+	cleanupKeychain(t)
+	configDir := t.TempDir()
+
+	first := testToken("at_first", "corp_same", "旧组织名")
+	if err := SaveTokenData(configDir, first); err != nil {
+		t.Fatalf("SaveTokenData(first) error = %v", err)
+	}
+	second := testToken("at_second", "corp_same", "新组织名")
+	second.UserID = "user_updated"
+	second.UserName = "Updated User"
+	second.ClientID = "client_updated"
+	if err := SaveTokenData(configDir, second); err != nil {
+		t.Fatalf("SaveTokenData(second) error = %v", err)
+	}
+
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	if len(cfg.Profiles) != 1 {
+		t.Fatalf("profiles len = %d, want 1: %#v", len(cfg.Profiles), cfg.Profiles)
+	}
+	profile := cfg.Profiles[0]
+	if profile.CorpName != "新组织名" {
+		t.Fatalf("corpName = %q, want 新组织名", profile.CorpName)
+	}
+	if profile.UserID != "user_updated" || profile.UserName != "Updated User" || profile.ClientID != "client_updated" {
+		t.Fatalf("profile metadata was not overwritten: %#v", profile)
+	}
+	loaded, err := LoadTokenDataForProfile(configDir, "corp_same")
+	if err != nil {
+		t.Fatalf("LoadTokenDataForProfile() error = %v", err)
+	}
+	if loaded.AccessToken != "at_second" {
+		t.Fatalf("access token = %q, want at_second", loaded.AccessToken)
+	}
+}
+
+func TestUpsertProfileFromTokenPromotesCorpIDNameToCorpName(t *testing.T) {
+	cleanupKeychain(t)
+	configDir := t.TempDir()
+
+	first := testToken("at_first", "corp_same", "")
+	if err := SaveTokenData(configDir, first); err != nil {
+		t.Fatalf("SaveTokenData(first) error = %v", err)
+	}
+	second := testToken("at_second", "corp_same", "新组织名")
+	if err := SaveTokenData(configDir, second); err != nil {
+		t.Fatalf("SaveTokenData(second) error = %v", err)
+	}
+
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	if len(cfg.Profiles) != 1 {
+		t.Fatalf("profiles len = %d, want 1: %#v", len(cfg.Profiles), cfg.Profiles)
+	}
+	if cfg.Profiles[0].Name != "新组织名" {
+		t.Fatalf("profile name = %q, want 新组织名", cfg.Profiles[0].Name)
+	}
+
+	resolved, err := ResolveProfile(configDir, "新组织名")
+	if err != nil {
+		t.Fatalf("ResolveProfile(corpName) error = %v", err)
+	}
+	if resolved.CorpID != "corp_same" {
+		t.Fatalf("resolved corpId = %q, want corp_same", resolved.CorpID)
+	}
+}
+
+func TestLoadProfilesPromotesLegacyCorpIDNameToCorpName(t *testing.T) {
+	configDir := t.TempDir()
+	raw := `{
+  "version": 1,
+  "primaryProfile": "corp_same",
+  "currentProfile": "corp_same",
+  "profiles": [
+    {
+      "name": "corp_same",
+      "corpId": "corp_same",
+      "corpName": "新组织名"
+    }
+  ]
+}`
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(ProfilesPath(configDir), []byte(raw), 0o600); err != nil {
+		t.Fatalf("WriteFile(profiles.json) error = %v", err)
+	}
+
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	if len(cfg.Profiles) != 1 {
+		t.Fatalf("profiles len = %d, want 1", len(cfg.Profiles))
+	}
+	if cfg.Profiles[0].Name != "新组织名" {
+		t.Fatalf("profile name = %q, want 新组织名", cfg.Profiles[0].Name)
 	}
 }
 

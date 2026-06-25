@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
@@ -143,7 +144,9 @@ func (p *OAuthProvider) refreshWithRefreshToken(ctx context.Context, data *Token
 	updated.CorpID = data.CorpID
 	updated.UserID = data.UserID
 	updated.UserName = data.UserName
-	updated.CorpName = data.CorpName
+	if updated.CorpName == "" {
+		updated.CorpName = data.CorpName
+	}
 
 	if err := SaveTokenData(p.configDir, updated); err != nil {
 		return nil, fmt.Errorf("保存刷新后的 token 失败（旧 refresh_token 已失效，请重新登录）: %w", err)
@@ -185,7 +188,9 @@ func (p *OAuthProvider) refreshViaMCP(ctx context.Context, data *TokenData) (*To
 	updated.CorpID = data.CorpID
 	updated.UserID = data.UserID
 	updated.UserName = data.UserName
-	updated.CorpName = data.CorpName
+	if updated.CorpName == "" {
+		updated.CorpName = data.CorpName
+	}
 
 	if err := SaveTokenData(p.configDir, updated); err != nil {
 		return nil, fmt.Errorf("保存刷新后的 token 失败（旧 refresh_token 已失效，请重新登录）: %w", err)
@@ -259,7 +264,7 @@ func (p *OAuthProvider) parseTokenResponse(body []byte) (*TokenData, error) {
 }
 
 // parseMCPTokenResponse parses token response from MCP proxy.
-// MCP OAuth response format: {"accessToken": "...", "refreshToken": "...", "expiresIn": 7200, "corpId": "..."}
+// MCP OAuth response format: {"accessToken": "...", "refreshToken": "...", "expiresIn": 7200, "corpId": "...", "corpName": "..."}
 func (p *OAuthProvider) parseMCPTokenResponse(body []byte) (*TokenData, error) {
 	var resp struct {
 		AccessToken    string `json:"accessToken"`
@@ -267,6 +272,9 @@ func (p *OAuthProvider) parseMCPTokenResponse(body []byte) (*TokenData, error) {
 		PersistentCode string `json:"persistentCode"`
 		ExpiresIn      int64  `json:"expiresIn"`
 		CorpID         string `json:"corpId"`
+		CorpName       string `json:"corpName"`
+		CorpNameSnake  string `json:"corp_name"`
+		OrgName        string `json:"orgName"`
 		// Error fields (when request fails)
 		ErrorCode string `json:"errorCode,omitempty"`
 		ErrorMsg  string `json:"errorMsg,omitempty"`
@@ -293,6 +301,7 @@ func (p *OAuthProvider) parseMCPTokenResponse(body []byte) (*TokenData, error) {
 		ExpiresAt:    now.Add(time.Duration(expiresIn) * time.Second),
 		RefreshExpAt: now.Add(config.DefaultRefreshTokenLifetime),
 		CorpID:       resp.CorpID,
+		CorpName:     firstNonEmpty(resp.CorpName, resp.CorpNameSnake, resp.OrgName),
 	}
 	if resp.PersistentCode != "" {
 		data.PersistentCode = resp.PersistentCode
@@ -300,13 +309,25 @@ func (p *OAuthProvider) parseMCPTokenResponse(body []byte) (*TokenData, error) {
 	return data, nil
 }
 
-func buildAuthURL(clientID, redirectURI string) string {
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if trimmed := strings.TrimSpace(v); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func buildAuthURL(clientID, redirectURI, targetCorpID string) string {
 	params := url.Values{
 		"client_id":     {clientID},
 		"redirect_uri":  {redirectURI},
 		"response_type": {"code"},
 		"scope":         {DefaultScopes},
 		"prompt":        {"consent"},
+	}
+	if targetCorpID = strings.TrimSpace(targetCorpID); targetCorpID != "" {
+		params.Set("corpId", targetCorpID)
 	}
 	return AuthorizeURL + "?" + params.Encode()
 }

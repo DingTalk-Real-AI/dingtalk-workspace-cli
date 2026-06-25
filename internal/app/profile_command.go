@@ -89,7 +89,11 @@ func newProfileUseCommand() *cobra.Command {
 			clearCompatCache()
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if strings.EqualFold(strings.TrimSpace(format), "json") {
-				return writeProfileUseJSON(cmd.OutOrStdout(), profile)
+				cfg, loadErr := authpkg.LoadProfiles(configDir)
+				if loadErr != nil {
+					return apperrors.NewInternal(fmt.Sprintf("failed to load profiles: %v", loadErr))
+				}
+				return writeProfileUseJSON(cmd.OutOrStdout(), profile, cfg)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "[OK] 当前 profile: %s (%s)\n", profile.Name, profile.CorpID)
 			return nil
@@ -140,10 +144,16 @@ func writeProfileListJSON(w io.Writer, cfg *authpkg.ProfilesConfig) error {
 	return enc.Encode(resp)
 }
 
-func writeProfileUseJSON(w io.Writer, profile *authpkg.Profile) error {
+func writeProfileUseJSON(w io.Writer, profile *authpkg.Profile, cfg *authpkg.ProfilesConfig) error {
 	resp := profileUseResponse{Success: true}
 	if profile != nil {
-		resp.Profile = profileViewFromProfile(*profile, profile.CorpID, profile.CorpID)
+		primaryProfile := ""
+		currentProfile := ""
+		if cfg != nil {
+			primaryProfile = cfg.PrimaryProfile
+			currentProfile = cfg.CurrentProfile
+		}
+		resp.Profile = profileViewFromProfile(*profile, primaryProfile, currentProfile)
 	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")

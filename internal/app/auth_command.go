@@ -39,11 +39,12 @@ import (
 )
 
 type authLoginConfig struct {
-	Token     string
-	Force     bool
-	Device    bool
-	Recommend bool
-	Yes       bool
+	Token        string
+	Force        bool
+	Device       bool
+	Recommend    bool
+	Yes          bool
+	TargetCorpID string
 }
 
 type authLoginGuideAction string
@@ -154,6 +155,7 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 				provider := authpkg.NewOAuthProvider(configDir, nil)
 				provider.Output = cmd.ErrOrStderr()
 				provider.NoBrowser, _ = cmd.Flags().GetBool("no-browser")
+				provider.TargetCorpID = cfg.TargetCorpID
 				configureOAuthProviderCompatibility(provider, configDir)
 				tokenData, err = provider.Login(loginCtx, cfg.Force)
 				if err != nil {
@@ -163,6 +165,11 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 
 			ResetRuntimeTokenCache()
 			clearCompatCache()
+			if tokenData != nil && strings.TrimSpace(tokenData.CorpID) != "" {
+				_ = enrichAuthLoginProfileFromContact(cmd.Context(), configDir, patCaller, tokenData)
+				ResetRuntimeTokenCache()
+				clearCompatCache()
+			}
 
 			w := cmd.OutOrStdout()
 			runPostLoginAuthorization := func() error {
@@ -1045,16 +1052,147 @@ func resolveAuthLoginConfig(cmd *cobra.Command) (authLoginConfig, error) {
 		return authLoginConfig{}, apperrors.NewInternal("failed to read --recommend")
 	}
 	yes := false
+	profileSelector := ""
 	if cmd.Root() != nil {
 		yes, _ = cmd.Root().PersistentFlags().GetBool("yes")
+		profileSelector, _ = cmd.Root().PersistentFlags().GetString("profile")
+	}
+	targetCorpID, err := resolveAuthLoginTargetCorpID(defaultConfigDir(), profileSelector)
+	if err != nil {
+		return authLoginConfig{}, err
 	}
 	return authLoginConfig{
-		Token:     strings.TrimSpace(token),
-		Force:     force,
-		Device:    device,
-		Recommend: recommend,
-		Yes:       yes,
+		Token:        strings.TrimSpace(token),
+		Force:        force,
+		Device:       device,
+		Recommend:    recommend,
+		Yes:          yes,
+		TargetCorpID: targetCorpID,
 	}, nil
+}
+
+func resolveAuthLoginTargetCorpID(configDir, selector string) (string, error) {
+	selector = strings.TrimSpace(selector)
+	if selector == "" {
+		return "", nil
+	}
+	if profile, err := authpkg.ResolveProfile(configDir, selector); err == nil && profile != nil {
+		return strings.TrimSpace(profile.CorpID), nil
+	}
+	if strings.HasPrefix(selector, "ding") {
+		return selector, nil
+	}
+	return "", apperrors.NewValidation(fmt.Sprintf("profile %q not found", selector))
+}
+
+type contactProfileIdentity struct {
+	CorpID   string
+	CorpName string
+	UserID   string
+	UserName string
+}
+
+func enrichAuthLoginProfileFromContact(ctx context.Context, configDir string, caller edition.ToolCaller, data *authpkg.TokenData) error {
+	if caller == nil || data == nil {
+		return nil
+	}
+	corpID := strings.TrimSpace(data.CorpID)
+	if corpID == "" {
+		return nil
+	}
+	if strings.TrimSpace(data.CorpName) != "" && strings.TrimSpace(data.UserID) != "" && strings.TrimSpace(data.UserName) != "" {
+		return nil
+	}
+
+	restoreProfile := pushRuntimeProfile(corpID)
+	defer restoreProfile()
+	ResetRuntimeTokenCache()
+
+	result, err := caller.CallTool(ctx, "contact", "get_current_user_profile", map[string]any{
+		"profile": corpID,
+	})
+	if err != nil {
+		return err
+	}
+	identity, ok := contactProfileIdentityFromToolResult(result)
+	if !ok {
+		return nil
+	}
+	if identity.CorpID != "" && identity.CorpID != corpID {
+		return fmt.Errorf("contact profile corpId %q does not match login corpId %q", identity.CorpID, corpID)
+	}
+
+	updated := *data
+	if identity.CorpName != "" {
+		updated.CorpName = identity.CorpName
+	}
+	if identity.UserID != "" {
+		updated.UserID = identity.UserID
+	}
+	if identity.UserName != "" {
+		updated.UserName = identity.UserName
+	}
+	if updated.CorpName == data.CorpName && updated.UserID == data.UserID && updated.UserName == data.UserName {
+		return nil
+	}
+	if err := authpkg.SaveTokenData(configDir, &updated); err != nil {
+		return err
+	}
+	*data = updated
+	return nil
+}
+
+func contactProfileIdentityFromToolResult(result *edition.ToolResult) (contactProfileIdentity, bool) {
+	if result == nil {
+		return contactProfileIdentity{}, false
+	}
+	for _, block := range result.Content {
+		if strings.TrimSpace(block.Text) == "" {
+			continue
+		}
+		if identity, ok := contactProfileIdentityFromJSON([]byte(block.Text)); ok {
+			return identity, true
+		}
+	}
+	return contactProfileIdentity{}, false
+}
+
+func contactProfileIdentityFromJSON(data []byte) (contactProfileIdentity, bool) {
+	var payload struct {
+		Result []struct {
+			OrgEmployeeModel struct {
+				CorpID      string `json:"corpId"`
+				OrgName     string `json:"orgName"`
+				UserID      string `json:"userId"`
+				UserIDLower string `json:"userid"`
+				OrgUserName string `json:"orgUserName"`
+				Name        string `json:"name"`
+			} `json:"orgEmployeeModel"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return contactProfileIdentity{}, false
+	}
+	if len(payload.Result) == 0 {
+		return contactProfileIdentity{}, false
+	}
+	org := payload.Result[0].OrgEmployeeModel
+	identity := contactProfileIdentity{
+		CorpID:   strings.TrimSpace(org.CorpID),
+		CorpName: strings.TrimSpace(org.OrgName),
+		UserID:   firstNonEmptyString(org.UserID, org.UserIDLower),
+		UserName: firstNonEmptyString(org.OrgUserName, org.Name),
+	}
+	return identity, identity.CorpID != "" || identity.CorpName != "" || identity.UserID != "" || identity.UserName != ""
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func authStatusAuthenticated(data *authpkg.TokenData) bool {

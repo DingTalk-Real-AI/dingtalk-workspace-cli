@@ -37,12 +37,13 @@ var oauthHTTPClient = &http.Client{
 
 // OAuthProvider handles the DingTalk OAuth 2.0 authorization code flow.
 type OAuthProvider struct {
-	configDir  string
-	clientID   string
-	logger     *slog.Logger
-	Output     io.Writer
-	httpClient *http.Client
-	NoBrowser  bool
+	configDir    string
+	clientID     string
+	logger       *slog.Logger
+	Output       io.Writer
+	httpClient   *http.Client
+	NoBrowser    bool
+	TargetCorpID string
 }
 
 // NewOAuthProvider creates a new OAuth provider.
@@ -397,7 +398,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		_ = server.Shutdown(shutCtx)
 	}()
 
-	authURL := buildAuthURL(p.clientID, redirectURI)
+	authURL := buildAuthURL(p.clientID, redirectURI, p.TargetCorpID)
 	if p.logger != nil {
 		p.logger.Debug("authorization URL", "url", authURL)
 	}

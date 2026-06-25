@@ -330,6 +330,63 @@ func TestBuildTokenData_DefaultExpiry(t *testing.T) {
 	}
 }
 
+func TestParseMCPTokenResponseIncludesCorpName(t *testing.T) {
+	provider := &OAuthProvider{}
+	data, err := provider.parseMCPTokenResponse([]byte(`{
+		"accessToken": "access-123",
+		"refreshToken": "refresh-456",
+		"expiresIn": 7200,
+		"corpId": "ding123",
+		"corpName": "钉钉（中国）信息技术有限公司"
+	}`))
+	if err != nil {
+		t.Fatalf("parseMCPTokenResponse() error = %v", err)
+	}
+	if data.CorpID != "ding123" {
+		t.Fatalf("corp id = %q, want ding123", data.CorpID)
+	}
+	if data.CorpName != "钉钉（中国）信息技术有限公司" {
+		t.Fatalf("corp name = %q, want 钉钉（中国）信息技术有限公司", data.CorpName)
+	}
+}
+
+func TestParseMCPTokenResponseCorpNameFallbacks(t *testing.T) {
+	provider := &OAuthProvider{}
+	for _, tc := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "snake",
+			body: `{"accessToken":"access","refreshToken":"refresh","expiresIn":7200,"corpId":"ding123","corp_name":"Snake Corp"}`,
+			want: "Snake Corp",
+		},
+		{
+			name: "orgName",
+			body: `{"accessToken":"access","refreshToken":"refresh","expiresIn":7200,"corpId":"ding123","orgName":"Org Corp"}`,
+			want: "Org Corp",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			data, err := provider.parseMCPTokenResponse([]byte(tc.body))
+			if err != nil {
+				t.Fatalf("parseMCPTokenResponse() error = %v", err)
+			}
+			if data.CorpName != tc.want {
+				t.Fatalf("corp name = %q, want %q", data.CorpName, tc.want)
+			}
+		})
+	}
+}
+
+func TestBuildAuthURLIncludesTargetCorpID(t *testing.T) {
+	authURL := buildAuthURL("client-id", "http://127.0.0.1:1234/callback", "ding-target")
+	if !strings.Contains(authURL, "corpId=ding-target") {
+		t.Fatalf("auth URL missing target corpId: %s", authURL)
+	}
+}
+
 func buildTokenDataFromResponse(resp tokenResponse) *TokenData {
 	if resp.AccessToken == "" {
 		return nil

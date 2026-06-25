@@ -578,6 +578,53 @@ func TestAuthLoginDefaultTUIRunsAfterLoginTokenSaved(t *testing.T) {
 	}
 }
 
+func TestEnrichAuthLoginProfileFromContactPersistsCorpName(t *testing.T) {
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	t.Setenv(keychain.StorageDirEnv, t.TempDir())
+	configDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+
+	token := &authpkg.TokenData{
+		AccessToken:  "access-token",
+		RefreshToken: "refresh-token",
+		ExpiresAt:    time.Now().Add(time.Hour),
+		RefreshExpAt: time.Now().Add(24 * time.Hour),
+		CorpID:       "ding32fff839a3e0105d",
+		ClientID:     "client-id",
+		Source:       "mcp",
+	}
+	if err := authpkg.SaveTokenData(configDir, token); err != nil {
+		t.Fatalf("SaveTokenData() error = %v", err)
+	}
+
+	fake := &authLoginRecommendSequenceCaller{responses: []string{
+		`{"success":true,"result":[{"orgEmployeeModel":{"corpId":"ding32fff839a3e0105d","orgName":"钉钉（中国）信息技术有限公司","userId":"011352590165863362195","orgUserName":"玄玦(主用钉)"}}]}`,
+	}}
+	if err := enrichAuthLoginProfileFromContact(context.Background(), configDir, fake, token); err != nil {
+		t.Fatalf("enrichAuthLoginProfileFromContact() error = %v", err)
+	}
+	if token.CorpName != "钉钉（中国）信息技术有限公司" {
+		t.Fatalf("token corpName = %q, want 钉钉（中国）信息技术有限公司", token.CorpName)
+	}
+	if token.UserID != "011352590165863362195" || token.UserName != "玄玦(主用钉)" {
+		t.Fatalf("token user identity = (%q, %q), want contact result", token.UserID, token.UserName)
+	}
+
+	loaded, err := authpkg.LoadTokenDataForProfile(configDir, "ding32fff839a3e0105d")
+	if err != nil {
+		t.Fatalf("LoadTokenDataForProfile() error = %v", err)
+	}
+	if loaded.CorpName != "钉钉（中国）信息技术有限公司" {
+		t.Fatalf("persisted corpName = %q, want 钉钉（中国）信息技术有限公司", loaded.CorpName)
+	}
+	if len(fake.tools) != 1 || fake.tools[0] != "get_current_user_profile" {
+		t.Fatalf("tool calls = %v, want get_current_user_profile", fake.tools)
+	}
+	if got := fake.args[0]["profile"]; got != "ding32fff839a3e0105d" {
+		t.Fatalf("contact profile arg = %#v, want ding32fff839a3e0105d", got)
+	}
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
