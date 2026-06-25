@@ -79,6 +79,9 @@ type Hooks struct {
 	// --- HTTP headers ---
 	MergeHeaders func(base map[string]string) map[string]string
 
+	// --- EnterpriseCredential HTTP headers ---
+	EnterpriseCredentialHeaders func(base map[string]string) map[string]string
+
 	// --- auth ---
 	AuthClientID      string // OAuth client ID for device-flow authorisation
 	AuthClientFromMCP bool   // true → fetch client ID from MCP at runtime
