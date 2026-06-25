@@ -162,6 +162,40 @@ func TestSheetCondFormatCreateExpandsCondition(t *testing.T) {
 	}
 }
 
+func TestSheetCSVCommandsAcceptFileIDAlias(t *testing.T) {
+	t.Parallel()
+
+	runner := &sheetCommandRunner{}
+	executeSheetCommand(t, runner,
+		"csv-get",
+		"--file-id", "NODE_001",
+		"--sheet-id", "SHEET_001",
+		"--range", "A1:B2",
+	)
+
+	if runner.last.Tool != "get_range_as_csv" {
+		t.Fatalf("tool = %q, want get_range_as_csv", runner.last.Tool)
+	}
+	if got := runner.last.Params["nodeId"]; got != "NODE_001" {
+		t.Fatalf("csv-get nodeId = %#v", got)
+	}
+
+	executeSheetCommand(t, runner,
+		"csv-put",
+		"--file-id", "NODE_002",
+		"--sheet-id", "SHEET_002",
+		"--csv", "a,b\n1,2",
+		"--start-cell", "A1",
+	)
+
+	if runner.last.Tool != "set_range_from_csv" {
+		t.Fatalf("tool = %q, want set_range_from_csv", runner.last.Tool)
+	}
+	if got := runner.last.Params["nodeId"]; got != "NODE_002" {
+		t.Fatalf("csv-put nodeId = %#v", got)
+	}
+}
+
 func TestSheetReplaceAllowsEmptyReplacement(t *testing.T) {
 	t.Parallel()
 

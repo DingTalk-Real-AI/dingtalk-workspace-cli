@@ -1474,8 +1474,20 @@ func sheetNameFlag(cmd *cobra.Command) string {
 }
 
 func sheetStringFlag(cmd *cobra.Command, name string) string {
-	v, _ := cmd.Flags().GetString(name)
-	return v
+	if v, _ := cmd.Flags().GetString(name); v != "" {
+		return v
+	}
+	if name == "node" {
+		for _, alias := range []string{"url", "id", "node-id", "doc-id", "file-id"} {
+			if flag := cmd.Flags().Lookup(alias); flag == nil {
+				continue
+			}
+			if v, _ := cmd.Flags().GetString(alias); v != "" {
+				return v
+			}
+		}
+	}
+	return ""
 }
 
 func sheetFlagOrFallback(cmd *cobra.Command, primary string, aliases ...string) string {
