@@ -243,6 +243,11 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 			// (see calendar_hooks.go). No-op for non-calendar.
 			installCalendarHook(cmd, canonicalProduct, toolName)
 
+			// §attendance-hook: inner-JSON required fields, group type and
+			// FIXED conditional checks (see attendance_hooks.go). No-op for
+			// non-attendance.
+			installAttendanceHook(cmd, canonicalProduct, toolName)
+
 			// §1.4: Add to the right parent group
 			attachToGroup(rootCmd, override.Group, groupCmds, cmd)
 		}
