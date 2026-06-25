@@ -2,9 +2,9 @@
 
 > **前置条件（MUST READ）：** 执行本命令前，必须先用 Read 工具读取以下文件：
 > 1. [`../doc.md`](../doc.md) — 命令路由 + 场景索引 + 意图判断 + 工作流
-> 2. [`../url-patterns.md`](../url-patterns.md) — 仅当用户原始 `alidocs` URL 需要 probe 时
+> 2. [`../../url-patterns.md`](../../url-patterns.md) — 仅当用户原始 `alidocs` URL 需要 probe 时
 >
-> **同任务常配合**：[`doc-search.md`](./doc-search.md) / [`doc-list.md`](./doc-list.md)（先拿到 nodeId）/ [`doc-read.md`](./doc-read.md)（确认是 ALIDOC 后读正文）
+> **同任务常配合**：`dws drive search` / `dws wiki node search`（先定位 nodeId）/ [`doc-read.md`](./doc-read.md)（确认是 ALIDOC 后读正文）
 
 ## 命令格式
 
@@ -37,7 +37,7 @@ Flags:
 
 当用户输入包含钉钉文档 URL 时，**必须先识别并提取 DOC_ID**，再判断意图。
 
-补充：如果这是用户直接提供的原始 `alidocs` URL，必须先按 [链接规范](../url-patterns.md#alidocs-url-类型探测流程) probe 一次确认真实类型，再判断是否继续走 `doc`。
+补充：如果这是用户直接提供的原始 `alidocs` URL，必须先按 [链接规范](../../url-patterns.md#alidocs-url-类型探测流程) probe 一次确认真实类型，再判断是否继续走 `doc`。
 
 ### 支持的 URL 格式
 
@@ -51,7 +51,7 @@ Flags:
 1. 匹配 URL 中 `alidocs.dingtalk.com` 域名
 2. 取 URL path 的最后一段作为 DOC_ID（去掉 query string 和 fragment）
 3. 提取出的 DOC_ID 可直接用于所有 `--node` 参数，也可将完整 URL 传给 `--node`（CLI 会自动解析）
-4. 对用户直接提供的原始 `alidocs` URL，先按 [链接规范](../url-patterns.md#alidocs-url-类型探测流程) 执行 probe；只有 probe 确认是 `adoc` / `file` / `folder` 时，才继续走 `doc`
+4. 对用户直接提供的原始 `alidocs` URL，先按 [链接规范](../../url-patterns.md#alidocs-url-类型探测流程) 执行 probe；只有 probe 确认是 `adoc` / `file` / `folder` 时，才继续走 `doc`
 
 ## ID 边界与参数映射
 
@@ -59,7 +59,7 @@ Flags:
 - `dentryUuid` 是 `alidocs` URL `/i/nodes/{dentryUuid}` 的最后一段，在 `doc` 场景中等价于可传入 CLI 的 `nodeId`；不要把它改写成数字 ID。
 - `dentryId` 通常是纯数字，**不是** `doc` 的 `nodeId`，也不是 `doc --folder` 的目标文件夹 ID；不要把数字 `dentryId` 当作 `--node`、`--folder` 或 `--parent-id` 使用。
 - `parentId` / `--parent-id` 不是 `doc` 命令参数；`doc` 里目标父文件夹统一使用 `--folder <folderNodeId或folderUrl>`，目标知识库使用 `--workspace <workspaceId或workspaceUrl>`。
-- 如果上下文只有数字 `dentryId`，但用户要读、改、移动、复制、重命名文档，先通过 `doc search` / `doc list` / 用户提供的 `alidocs` URL 获取 `nodeId` / `dentryUuid`，不要用数字 `dentryId` 重试为父目录参数。
+- 如果上下文只有数字 `dentryId`，但用户要读、改、移动、复制、重命名文档，先通过 `dws drive search` / `dws drive list` / 用户提供的 `alidocs` URL 获取 `nodeId` / `dentryUuid`，不要用数字 `dentryId` 重试为父目录参数。
 
 ## 处理流程
 
@@ -78,8 +78,8 @@ Flags:
 | 方式 | 触发条件 | 操作 |
 |------|----------|------|
 | **A** | 用户**直接提供文档 URL 或 nodeId** | **直接传给 `--node`**，无需额外查询；优先使用此方式 |
-| **B** | 用户给出关键字 / 文档名 | `dws doc search --query "<关键字>" --format json` 从返回的 `nodes[].nodeId` 提取 |
-| **C** | 用户指向某个文件夹下的文档 | `dws doc list --folder <DOC_FOLDER_NODE_ID> --format json` 从返回中提取 |
+| **B** | 用户给出关键字 / 文档名 | `dws drive search --query "<关键字>" --format json` 或 `dws wiki node search --workspace <WS_ID> --keyword "<关键字>"` 从返回中提取 nodeId |
+| **C** | 用户指向某个文件夹下的文档 | `dws drive list --workspace <WS_ID> --format json` 或 `dws wiki node list --workspace <WS_ID>` 从返回中提取 |
 
 > **关键节省**：方式 A 命中时，禁止再调 search/list "确认一下" —— 用户提供的 URL/nodeId 本身就是权威输入。同理，`--folder` 也支持 alidocs 文件夹 URL 直传，不要先 search 把 URL 解析成纯数字 ID 再传。
 
@@ -104,13 +104,13 @@ dws doc read --node "https://alidocs.dingtalk.com/document/preview?cid=749936706
 
 `--folder` 参数同样支持 alidocs 文件夹 URL 或文档文件夹 nodeId。
 
-不要把纯数字 `dentryId` 当成这里的 ID。需要父文件夹时，使用文件夹的 `nodeId` / `dentryUuid` / URL 传给 `--folder`；不能改用 `--parent-id`。如果上一步只拿到了 drive/chat 链路里的纯数字 `dentryId`、`spaceId` 或 `parent-id`，说明还没有拿到 doc 文件夹，应该省略 `--folder` 使用默认文档根目录，或先通过 `dws doc list/search` 找到文档文件夹 nodeId。
+不要把纯数字 `dentryId` 当成这里的 ID。需要父文件夹时，使用文件夹的 `nodeId` / `dentryUuid` / URL 传给 `--folder`；不能改用 `--parent-id`。如果上一步只拿到了 drive/chat 链路里的纯数字 `dentryId`、`spaceId` 或 `parent-id`，说明还没有拿到 doc 文件夹，应该省略 `--folder` 使用默认文档根目录，或先通过 `dws drive search` / `dws drive list` 找到文档文件夹 nodeId。
 
 ## 上下文传递
 
 | 从返回中提取 | 用于 |
 |-------------|------|
-| `contentType` + `extension` | 选择 [`./doc-read.md`](./doc-read.md) / `dws sheet ...` / `dws aitable ...` / [`./doc-file-ops.md`](./doc-file-ops.md) 的下载/导出路径 |
+| `contentType` + `extension` | 选择 [`./doc-read.md`](./doc-read.md) / `dws sheet ...` / `dws aitable ...` / `dws drive download`（非 ALIDOC 走存储层下载） |
 | `nodeId` / `docUrl` | 后续所有 `--node` 入参 |
 
 ## 常用模板
@@ -145,6 +145,6 @@ dws doc info --node <WS_ID>   # 错误
 ## 参考
 
 - [`../doc.md` §意图判断](../doc.md#意图判断)（如何路由到本命令）
-- [`./doc-search.md`](./doc-search.md) / [`./doc-list.md`](./doc-list.md)（前置：拿 nodeId 的入口）
+- `dws drive search` / `dws wiki node search`（前置：定位 nodeId 的搜索入口，详见 [`../drive.md`](../drive.md) / [`../wiki.md`](../wiki.md)）
 - [`./doc-read.md`](./doc-read.md)（contentType=ALIDOC + extension=adoc 的后续命令）
-- [`../url-patterns.md`](../url-patterns.md)（用户原始 alidocs URL 的 probe 流程）
+- [`../../url-patterns.md`](../../url-patterns.md)（用户原始 alidocs URL 的 probe 流程）

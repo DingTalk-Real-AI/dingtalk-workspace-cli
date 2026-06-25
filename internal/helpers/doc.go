@@ -85,6 +85,7 @@ func (docHandler) Command(runner executor.Runner) *cobra.Command {
 		newDocPermissionAddCommand(runner),
 		newDocPermissionUpdateCommand(runner),
 		newDocPermissionListCommand(runner),
+		newDocPermissionRemoveCommand(runner),
 	)
 
 	export := &cobra.Command{
@@ -174,6 +175,7 @@ func newDocSearchCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			docDeprecatedNotice(cmd, "drive search or dws wiki node search")
 			params := map[string]any{}
 			if keyword := docFlagOrFallback(cmd, "query", "keyword"); keyword != "" {
 				params["keyword"] = keyword
@@ -222,6 +224,7 @@ func newDocListCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			docDeprecatedNotice(cmd, "drive list or dws wiki node list")
 			params := map[string]any{}
 			if folder := docFlagOrFallback(cmd, "folder", "parent-id", "node", "file-id", "nodee"); folder != "" {
 				params["folderId"] = normalizeDocNodeID(folder)
@@ -814,6 +817,7 @@ func newDocFileCreateCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			docDeprecatedNotice(cmd, "wiki node create")
 			name, err := docRequiredFlagOrFallback(cmd, "name", "title")
 			if err != nil {
 				return err
@@ -850,6 +854,7 @@ func newDocFolderCreateCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			docDeprecatedNotice(cmd, "wiki node create --type folder")
 			name, err := docRequiredFlagOrFallback(cmd, "name", "title")
 			if err != nil {
 				return err
@@ -889,6 +894,7 @@ func newDocTransferCommand(runner executor.Runner, use, tool string) *cobra.Comm
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			docDeprecatedNotice(cmd, "drive "+use)
 			nodeID, err := docRequiredNode(cmd)
 			if err != nil {
 				return err
@@ -919,6 +925,7 @@ func newDocRenameCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			docDeprecatedNotice(cmd, "drive rename")
 			nodeID, err := docRequiredNode(cmd)
 			if err != nil {
 				return err
@@ -2082,6 +2089,7 @@ func newDocPermissionAddCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			docDeprecatedNotice(cmd, "drive permission add")
 			return runDocPermissionMutation(cmd, runner, "add_permission")
 		},
 	}
@@ -2108,6 +2116,7 @@ func newDocPermissionUpdateCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			docDeprecatedNotice(cmd, "drive permission update")
 			return runDocPermissionMutation(cmd, runner, "update_permission")
 		},
 	}
@@ -2135,6 +2144,7 @@ func newDocPermissionListCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			docDeprecatedNotice(cmd, "drive permission list")
 			nodeID, err := docRequiredNode(cmd)
 			if err != nil {
 				return err
@@ -2186,6 +2196,57 @@ func newDocPermissionListCommand(runner executor.Runner) *cobra.Command {
 	return cmd
 }
 
+func newDocPermissionRemoveCommand(runner executor.Runner) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:               "remove",
+		Aliases:           []string{"rm"},
+		Short:             i18n.T("移除文档协作者权限"),
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			docDeprecatedNotice(cmd, "drive permission remove")
+			nodeID, err := docRequiredNode(cmd)
+			if err != nil {
+				return err
+			}
+			rawUsers := docFlagOrFallback(cmd, "users", "user", "uid")
+			if strings.TrimSpace(rawUsers) == "" {
+				return apperrors.NewValidation("--users is required")
+			}
+			userIDs, err := parseDocPermissionUsers(rawUsers)
+			if err != nil {
+				return err
+			}
+			params := map[string]any{
+				"nodeId":  nodeID,
+				"userIds": userIDs,
+			}
+			if v, _ := cmd.Flags().GetString("workspace"); v != "" {
+				params["workspaceId"] = v
+			}
+			if commandDryRun(cmd) {
+				return writeCommandPayload(cmd, executor.NewHelperInvocation(
+					cobracmd.LegacyCommandPath(cmd), "doc", "remove_permission", params,
+				))
+			}
+			result, err := runner.Run(cmd.Context(), executor.NewHelperInvocation(
+				cobracmd.LegacyCommandPath(cmd), "doc", "remove_permission", params,
+			))
+			if err != nil {
+				return err
+			}
+			return writeCommandPayload(cmd, result)
+		},
+	}
+	preferLegacyLeaf(cmd)
+	addDocNodeFlags(cmd)
+	cmd.Flags().String("users", "", i18n.T("被移除用户 userId 列表，逗号分隔，单次最多 30 (必填)"))
+	addDocHiddenStringFlag(cmd, "user", "--users alias")
+	addDocHiddenStringFlag(cmd, "uid", "--users alias")
+	cmd.Flags().String("workspace", "", i18n.T("目标知识库 ID 或 URL（选填）"))
+	return cmd
+}
+
 // runDocPermissionMutation 是 add / update 两个命令共用的执行体：
 // 校验 → 规范化 → 调对应 MCP tool。
 func runDocPermissionMutation(cmd *cobra.Command, runner executor.Runner, mcpTool string) error {
@@ -2232,6 +2293,10 @@ func runDocPermissionMutation(cmd *cobra.Command, runner executor.Runner, mcpToo
 		return err
 	}
 	return writeCommandPayload(cmd, result)
+}
+
+func docDeprecatedNotice(cmd *cobra.Command, replacement string) {
+	fmt.Fprintf(cmd.ErrOrStderr(), "warning: deprecated: use dws %s instead.\n", replacement)
 }
 
 // TRANSITIONAL: 等 mse 把 delete_document 加入 doc toolOverrides（含

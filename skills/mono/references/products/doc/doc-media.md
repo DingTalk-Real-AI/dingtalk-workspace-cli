@@ -4,7 +4,7 @@
 > 1. [`../doc.md`](../doc.md) — 命令路由 + 场景索引 + 意图判断 + 工作流
 
 > ⚠️ **图片插入硬规则**：
-> - 图片来源如果是钉盘/文档空间中的文件，**必须先下载到本地**（`dws doc download --node <图片nodeId> --output /tmp/xxx.png`），再执行 `media insert`
+> - 图片来源如果是钉盘/文档空间中的文件，**必须先下载到本地**（`dws drive download --node <图片nodeId> --output /tmp/xxx.png`），再执行 `media insert`
 > - **禁止**把钉盘/文档节点 URL（如 `alidocs.dingtalk.com/i/nodes/...`）写进 Markdown `![](...)` 图片语法——这些是页面链接，不是可渲染的图片资源
 > - 创建文档时需要图文并茂：先用 `doc create` 写入纯文本骨架，再对每张图片执行 `media insert`，最后用 `doc block list` 验证附件块存在
 
@@ -36,7 +36,7 @@ Flags:
 ### 关键说明
 
 - `--mime-type` 可选，不指定时根据扩展名自动推断；支持常见文件类型（PDF、Office、图片、视频、压缩包等）。
-- 与 [`./doc-file-ops.md`](./doc-file-ops.md) `doc upload` 的区别：`upload` 将文件上传到文档空间/知识库作为**独立文件**；`media insert` 将文件作为**附件块插入到文档正文中**。
+- 与 `dws drive upload` 的区别：`drive upload` 将文件上传到文档空间/知识库作为**独立文件**；`media insert` 将文件作为**附件块插入到文档正文中**。
 
 ---
 
@@ -94,5 +94,5 @@ dws doc media download --node <DOC_ID> --resource-id <RESOURCE_ID>
 
 - [`../doc.md` §意图判断](../doc.md#意图判断)（如何路由到本命令族）
 - [`./doc-block.md`](./doc-block.md)（block list 取 attachment 的 resourceId）
-- [`./doc-file-ops.md`](./doc-file-ops.md)（独立文件上传：`doc upload`）
+- [`../drive.md`](../drive.md)（独立文件上传：`dws drive upload`）
 - [`./style/doc-style-guideline.md` §4.9 附件与图片](./style/doc-style-guideline.md)（图示与附件使用规范）

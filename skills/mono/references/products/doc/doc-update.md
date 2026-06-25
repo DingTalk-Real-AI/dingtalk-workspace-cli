@@ -27,8 +27,7 @@ Flags:
       --mode string           更新模式: overwrite=覆盖, append=追加 (必填)
       --content-format string         内容格式: 默认为 markdown，可选 jsonml
       --revision int          文档版本号（仅 --content-format jsonml 时生效，可选）；传入后服务端做并发检查，版本不一致时返回 VersionConflict。不传则直接覆盖，不做并发检查
-      --fix-jsonml              启用全部 JSONML 修复（含 JSON 语法修复 + 结构修复），推荐 agent 调用时使用
-      --no-fix-jsonml           关闭全部 JSONML 修复（跳过 JSON 语法修复和结构修复），用于排查原始错误
+      --fix-jsonml              启用 JSON 语法修复（括号/逗号补全），推荐 agent 调用时使用
       --index int             插入位置（从 0 开始），仅在 mode=append 时生效。指定将内容插入到文档第几个 block 之前。不传时追加到末尾。block 的 index 可通过 doc block list 获取。插入成功后，该位置及之后所有 block 的 index 会依次 +1
 ```
 
@@ -52,7 +51,7 @@ Flags:
 ]}
 ```
 
-> 默认模式下，CLI 会自动给缺 uuid 的 block 注入 uuid、把 `["p", {}, "hello"]` 之类的裸字符串自动包裹成上述 span/leaf 形式（每条修复都会以 `[FIX]` 行输出）。如需严格按原样发送，加 `--no-fix-jsonml`，结构错误会被 validator 直接拦下。如果输入来自 LLM 生成且可能有 JSON 语法错误（缺括号/逗号），加 `--fix-jsonml` 启用全部修复。
+> CLI 不做结构修复——裸字符串、缺 uuid 等错误会被 validator 直接抦下。body 必须以 `["root", ...]` 为根节点，缺少会报错。如果输入来自 LLM 生成且可能有 JSON 语法错误（缺括号/逗号），加 `--fix-jsonml` 启用 JSON 语法修复。
 
 **典型流程**（无损读改写）：
 

@@ -130,6 +130,11 @@ func (aitableHandler) Command(runner executor.Runner) *cobra.Command {
 		newAitableRecordUpdateCommand(runner),
 		newAitableRecordBatchUpdateCommand(runner),
 		newAitableRecordDeleteCommand(runner),
+		newAitableRecordHistoryListCommand(runner),
+		newAitableRecordShareURLCommand(runner),
+		newAitableRecordUpsertCommand(runner),
+		newAitableRecordPrimaryDocGetCommand(runner),
+		newAitableRecordPrimaryDocCreateCommand(runner),
 		newAitableRecordListAlias(runner),
 	)
 
@@ -264,15 +269,36 @@ func (aitableHandler) Command(runner executor.Runner) *cobra.Command {
 			return cmd.Help()
 		},
 	}
+	viewGet := newAitableViewGetCommand(runner)
+	viewGet.AddCommand(
+		newAitableViewGetLockCommand(runner),
+		newAitableViewGetFrozenColsCommand(runner),
+		newAitableViewGetRowHeightCommand(runner),
+		newAitableViewGetFillColorRuleCommand(runner),
+	)
+	viewUpdate := newAitableViewUpdateCommand(runner)
+	viewUpdate.AddCommand(
+		newAitableViewUpdateFrozenColsCommand(runner),
+		newAitableViewUpdateRowHeightCommand(runner),
+		newAitableViewUpdateFillColorRuleCommand(runner),
+	)
 	view.AddCommand(
-		newAitableViewGetCommand(runner),
+		viewGet,
 		newAitableViewListCommand(runner),
 		newAitableViewCreateCommand(runner),
-		newAitableViewUpdateCommand(runner),
+		viewUpdate,
 		newAitableViewDeleteCommand(runner),
+		newAitableViewLockCommand(runner),
+		newAitableViewDuplicateCommand(runner),
 	)
 
-	root.AddCommand(base, table, field, record, newAitableFormCommand(runner), template, attachment, export, importCmd, dashboard, chart, view)
+	root.AddCommand(
+		base, table, field, record, newAitableFormCommand(runner),
+		newAitableWorkflowCommand(runner),
+		template, attachment, export, importCmd, dashboard, chart, view,
+		newAitableAdvpermCommand(runner),
+		newAitableSectionCommand(runner),
+	)
 
 	// 顶层别名：dws aitable search/list/create/info → base search/list/create/get
 	// 每个 alias 复用现有 constructor，独立 cobra.Command 实例（避免与 base.* 共享 flag 指针）
