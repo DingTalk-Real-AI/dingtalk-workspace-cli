@@ -361,7 +361,7 @@ func newDocsMCPGateway(t *testing.T, expectations []docsServerExpectation) *http
 	mux := http.NewServeMux()
 	server := httptest.NewServer(mux)
 
-	mux.HandleFunc("/cli/discovery/apis", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/cli/discovery/apis/bamboo", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return

@@ -590,6 +590,35 @@ func makePATErrorJSONWithURI(flowID, clientID, uri string) string {
 	return string(data)
 }
 
+func TestEnrichPATErrorWithOpenBrowserKeepsAuthorizationURLAmpersandReadable(t *testing.T) {
+	rawURI := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3Dflow-copy%26userCode%3DQZYH-D64W#/personalAuthorization?flowId=flow-copy&userCode=QZYH-D64W"
+	raw := makePATErrorJSONWithURI("flow-copy", "test-client-id", rawURI)
+
+	out := enrichPATErrorWithOpenBrowser(raw, true)
+
+	if strings.Contains(out, `\u0026`) {
+		t.Fatalf("enriched PAT JSON should keep URL ampersands readable for mobile copy/linkify, got: %s", out)
+	}
+	if !strings.Contains(out, "&userCode=QZYH-D64W") {
+		t.Fatalf("enriched PAT JSON missing readable authorization URL separator, got: %s", out)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(enriched PAT payload) error = %v\nraw=%s", err, out)
+	}
+	data, _ := payload["data"].(map[string]any)
+	if got, _ := data["uri"].(string); got != rawURI {
+		t.Fatalf("data.uri = %q, want %q", got, rawURI)
+	}
+	if _, ok := data["authUrl"]; ok {
+		t.Fatalf("data.authUrl should be omitted from enriched PAT payload")
+	}
+	if _, ok := data["authorizationUrl"]; ok {
+		t.Fatalf("data.authorizationUrl should be omitted from enriched PAT payload")
+	}
+}
+
 func TestHandlePatAuthCheck_Approved(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
 	server, configDir := setupHandlePATServer(t, "APPROVED", "test-auth-code")
@@ -1280,6 +1309,21 @@ func TestEnrichPATErrorForHostControl_SingleLineOutput(t *testing.T) {
 	}
 	if _, ok := data["callbacks"]; ok {
 		t.Fatalf("expected callbacks to be stripped in host-owned contract, got: %v", data["callbacks"])
+	}
+}
+
+func TestEnrichPATErrorForHostControlKeepsAuthorizationURLAmpersandReadable(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "agt-sales")
+	t.Setenv("DINGTALK_AGENT", "sales-copilot")
+
+	raw := `{"success":false,"code":"PAT_HIGH_RISK_NO_PERMISSION","data":{"flowId":"flow-host","desc":"授权","uri":"https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3Dflow-host%26userCode%3DQZYH-D64W#/personalAuthorization?flowId=flow-host&userCode=QZYH-D64W"}}`
+	out := enrichPATErrorForHostControl(raw)
+
+	if strings.Contains(out, `\u0026`) {
+		t.Fatalf("host PAT JSON should keep URL ampersands readable for mobile copy/linkify, got: %s", out)
+	}
+	if !strings.Contains(out, "&userCode=QZYH-D64W") {
+		t.Fatalf("host PAT JSON missing readable authorization URL separator, got: %s", out)
 	}
 }
 

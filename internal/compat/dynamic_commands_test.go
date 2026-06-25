@@ -381,7 +381,7 @@ func TestBuildDynamicCommands_PositionalWithFlagAliases(t *testing.T) {
 						"article": {Description: "文档文章"},
 					},
 					ToolOverrides: map[string]market.CLIToolOverride{
-						"search_open_platform_docs": {
+						"search_open_platform_docs_rag": {
 							CLIName: "search",
 							Group:   "article",
 							Flags: map[string]market.CLIFlagOverride{

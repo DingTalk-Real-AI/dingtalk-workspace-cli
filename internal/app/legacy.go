@@ -16,6 +16,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -49,7 +50,75 @@ func newLegacyPublicCommands(ctx context.Context, runner executor.Runner) []*cob
 		return mergeTopLevelCommands(commands)
 	}
 
-	dynamicCmds := loadDynamicCommands(ctx, runner)
+	return buildEnvelopeCommandsSafe(ctx, runner)
+}
+
+// loadDynamicCommandsFn is a test seam for buildEnvelopeCommandsSafe so a
+// panic in the cache-driven build can be simulated without crafting a
+// poisoned on-disk cache.
+var loadDynamicCommandsFn = loadDynamicCommands
+
+// buildEnvelopeCommandsSafe builds the public command set from the discovery
+// envelope, self-healing a poisoned cache when the dynamic build panics and
+// degrading to the hardcoded helper commands only if that also fails.
+//
+// Why this guard exists: the dynamic command tree is constructed from cached
+// discovery data BEFORE Cobra dispatches any command, so a panic here (e.g.
+// a duplicate pflag registration fed by a poisoned cache, as seen before
+// 1.0.32: "chat_permission_grant flag redefined: params") used to abort
+// every invocation — including `dws cache refresh`, the very command that
+// repairs the cache.
+//
+// Recovery is two-staged. First the partition's discovery cache is moved
+// aside (kept on disk for inspection) and the build retried against a fresh
+// fetch — so any path that delivers a fixed binary (`dws upgrade`, reinstall)
+// escapes the lock-out with zero manual cache surgery. Only when the rebuild
+// panics again (e.g. the remote envelope itself is still poisoned, or the
+// machine is offline with no usable cache) does the CLI degrade to utility
+// and helper commands with a `dws cache refresh` hint.
+func buildEnvelopeCommandsSafe(ctx context.Context, runner executor.Runner) []*cobra.Command {
+	cmds, panicked := tryBuildEnvelopeCommands(ctx, runner)
+	if panicked == nil {
+		return cmds
+	}
+	slog.Error("buildEnvelopeCommandsSafe: dynamic command build panicked", "panic", panicked)
+
+	quarantined, qErr := cacheStoreFromEnv().QuarantinePartition(editionPartition())
+	if qErr != nil {
+		slog.Error("buildEnvelopeCommandsSafe: failed to quarantine discovery cache", "error", qErr)
+	}
+	if quarantined != "" {
+		fmt.Fprintf(os.Stderr,
+			"Warning: building product commands from the local discovery cache failed: %v\n"+
+				"The cached discovery data was moved to %s; rebuilding from a fresh fetch...\n",
+			panicked, quarantined)
+		cmds, panicked = tryBuildEnvelopeCommands(ctx, runner)
+		if panicked == nil {
+			fmt.Fprintln(os.Stderr, "Product commands rebuilt successfully.")
+			return cmds
+		}
+		slog.Error("buildEnvelopeCommandsSafe: rebuild after cache quarantine panicked again, degrading to built-in commands", "panic", panicked)
+	}
+
+	fmt.Fprintf(os.Stderr,
+		"Warning: building product commands from the local discovery cache failed: %v\n"+
+			"Product commands are temporarily unavailable; utility commands still work.\n"+
+			"Run 'dws cache refresh' to rebuild the cache.\n", panicked)
+	return mergeTopLevelCommands(helpers.NewPublicCommands(runner))
+}
+
+// tryBuildEnvelopeCommands runs one attempt of the envelope-driven build,
+// converting a panic into a return value so the caller can decide between
+// self-heal and degradation.
+func tryBuildEnvelopeCommands(ctx context.Context, runner executor.Runner) (cmds []*cobra.Command, panicked any) {
+	defer func() {
+		if r := recover(); r != nil {
+			cmds = nil
+			panicked = r
+		}
+	}()
+
+	dynamicCmds := loadDynamicCommandsFn(ctx, runner)
 	helperCmds := helpers.NewPublicCommands(runner)
 	merged := mergeTopLevelCommands(pickCommands(dynamicCmds, helperCmds))
 	// Post-merge product hooks: tasks the envelope cannot express on its
@@ -58,7 +127,7 @@ func newLegacyPublicCommands(ctx context.Context, runner executor.Runner) []*cob
 	// command surface remains predictable from the envelope alone.
 	helpers.AttachReportLegacyInboxAlias(merged, runner)
 	helpers.AttachReportListReadableEnrichment(merged, runner)
-	return merged
+	return merged, nil
 }
 
 // pickCommands returns the union of dynamic and helpers commands. For

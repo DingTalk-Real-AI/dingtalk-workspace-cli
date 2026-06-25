@@ -108,17 +108,16 @@ func resolveSessionIDFromEnv() string {
 // a long-lived shell / sub-process. Exposing DINGTALK_DWS_AGENTCODE lets
 // the host export the code once and let the CLI resolve it on every pat
 // subcommand. The flag always wins when both are set so scripted one-offs
-// remain deterministic. When neither flag nor env is set, `pat chmod` fails
-// locally instead of letting the server reject the request later. Batch PAT
-// tools receive the resolved agentCode in arguments, while the CLI also keeps
-// exporting it through env for older gateway paths.
+// remain deterministic. When neither flag nor env is set, `pat chmod` omits
+// agentCode and lets the PAT server apply its open-source default. Batch PAT
+// tools receive the resolved agentCode in arguments when present, while the CLI
+// also keeps exporting it through env for older gateway paths.
 //
-// Namespace note: DWS_DINGTALK_AGENTCODE is kept as a compatibility alias for
-// hosts that shipped the reversed prefix early. DWS_AGENTCODE /
+// Namespace note: keep this as a single-spelled public contract. The reversed
+// draft name DWS_DINGTALK_AGENTCODE and legacy names such as DWS_AGENTCODE /
 // DINGTALK_AGENTCODE / REWIND_AGENTCODE are explicitly NOT consumed.
 const (
-	agentCodeEnv       = authpkg.AgentCodeEnv
-	agentCodeEnvCompat = authpkg.AgentCodeEnvCompat
+	agentCodeEnv = authpkg.AgentCodeEnv
 )
 
 // agentCodePattern is the validation regex for any --agentCode value
@@ -130,9 +129,9 @@ const (
 var agentCodePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
 // resolveAgentCodeFromEnv returns the fallback agent code from the canonical
-// DINGTALK_DWS_AGENTCODE env var, then the DWS_DINGTALK_AGENTCODE compatibility
-// alias. The second return value reports the env name that was consumed (for
-// error attribution); it is "" when both env vars are unset or blank.
+// DINGTALK_DWS_AGENTCODE env var. The second return value reports the env name
+// that was consumed (for error attribution); it is "" when the env var is unset
+// or blank.
 func resolveAgentCodeFromEnv() (string, string) {
 	return authpkg.AgentCodeFromEnv()
 }
@@ -152,35 +151,21 @@ func validateAgentCode(code string) error {
 	return nil
 }
 
-// resolveAgentCode implements the canonical two-tier lookup for
-// --agentCode:
+// resolveAgentCode implements the canonical optional lookup for --agentCode:
 //
 //  1. explicit --agentCode flag value (highest priority; wins over env)
 //  2. DINGTALK_DWS_AGENTCODE env var (per-shell primary fallback)
-//  3. DWS_DINGTALK_AGENTCODE env var (compatibility fallback)
-//  4. empty ("") when required=false; typed error when required=true.
+//  3. empty ("") so PAT-core can apply its open-source default.
 //
 // Any non-empty resolved value is validated via validateAgentCode, so
 // callers never have to re-validate.
-func resolveAgentCode(flagVal string, required bool) (string, error) {
+func resolveAgentCode(flagVal string) (string, error) {
 	code := strings.TrimSpace(flagVal)
 	envSource := ""
 	if code == "" {
 		code, envSource = resolveAgentCodeFromEnv()
 	}
 	if code == "" {
-		if required {
-			return "", apperrors.NewValidation(
-				fmt.Sprintf("flag --agentCode is required (or set env %s or %s)", agentCodeEnv, agentCodeEnvCompat),
-				apperrors.WithReason("missing_agent_code"),
-				apperrors.WithHint(fmt.Sprintf("dws pat chmod <scope>... --agentCode <id>\n  or: export %s=<id>", agentCodeEnv)),
-				apperrors.WithActions(
-					"dws pat chmod <scope>... --agentCode <id>",
-					fmt.Sprintf("export %s=<id>", agentCodeEnv),
-					fmt.Sprintf("export %s=<id>", agentCodeEnvCompat),
-				),
-			)
-		}
 		return "", nil
 	}
 	if err := validateAgentCode(code); err != nil {
@@ -267,11 +252,19 @@ grantType 规则:
   permanent  永久有效
 
 批量授权:
-  产品线批量授权推荐使用 --recommend --product <productCode[,productCode]>。
-  --products / --domain / --domains 保持兼容；裸 --recommend 保持可用，
-  但会按推荐集合规划，可能跨产品。
-  批量授权未传 --yes 时会打开授权确认页；传 --yes 时才直接写入服务端选中的权限。
-  批量授权未显式指定 --grant-type 且没有 session-id 时，会以 permanent 作为本次页面确认后的授权时长。`,
+  dws pat chmod 支持一次传多个 scope 直接批量授予。
+  也支持 --products / --product 按产品编码批量展开 scope 模板，
+  --domains / --domain 按产品域批量展开 scope 模板，
+  --recommend 使用服务端推荐 scope 集合。
+  使用产品 / 域 / 推荐集合时，CLI 会先生成 batch plan，确认
+  selected / skipped / pending，再对 selected scopes 执行 batch grant。
+  --dry-run 只返回授权计划，不写入授权。未加 --yes 时会打开授权确认页；
+  传 --yes 时才直接写入服务端选中的权限。批量授权未显式指定
+  --grant-type 且没有 session-id 时，会以 permanent 作为本次页面确认后的授权时长。
+
+agentCode 配置:
+  可通过 --agentCode 或 DINGTALK_DWS_AGENTCODE
+  指定；未传 agentCode 时，CLI 会省略该字段并由服务端默认兜底。`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			productCodes := collectChmodProductCodes(productFlags, productsFlag, domainFlags, domainsFlag)
 			if len(args) > 0 || recommend || len(productCodes) > 0 {
@@ -287,7 +280,7 @@ grantType 规则:
   dws pat chmod --recommend --grant-type session --session-id session-xxx`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			flagVal, _ := cmd.Flags().GetString("agentCode")
-			agentCode, err := resolveAgentCode(flagVal, true)
+			agentCode, err := resolveAgentCode(flagVal)
 			if err != nil {
 				return err
 			}
@@ -430,7 +423,7 @@ grantType 规则:
 	}
 
 	chmodCmd.Flags().String("agentCode", "",
-		"Agent 唯一标识（必填；也可通过 env DINGTALK_DWS_AGENTCODE/DWS_DINGTALK_AGENTCODE 注入，flag 优先；会进入 batch 参数并同步注入兼容 env）")
+		"Agent 唯一标识（可选；也可通过 env DINGTALK_DWS_AGENTCODE 注入，flag 优先；未传则由服务端默认兜底）")
 	chmodCmd.Flags().String("grant-type", "session", "授权策略: once|session|permanent")
 	chmodCmd.Flags().String("session-id", "", "会话标识（session 模式下必填）")
 	chmodCmd.Flags().StringArrayVar(&productFlags, "product", nil, "产品编码，可重复；与 --products 等价")
@@ -639,6 +632,12 @@ func RunLoginRecommendAuthorizationWithOptions(ctx context.Context, c edition.To
 		if err != nil {
 			return err
 		}
+	}
+	if recommendPlan && (allGranted || len(scopes) == 0) {
+		if output != nil {
+			_, _ = fmt.Fprintln(output, "推荐权限已全部授权或没有可授权项")
+		}
+		return nil
 	}
 	if opts.ProductSelector != nil {
 		products, err := extractLoginRecommendProducts(planResult)

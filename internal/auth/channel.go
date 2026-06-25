@@ -30,13 +30,15 @@ const (
 )
 
 // AgentCodeFromEnv returns the effective host agent code and the env name that
-// supplied it. The primary public spelling wins over the compatibility alias.
+// supplied it.
+//
+// Keep the public env surface intentionally single-spelled. The reversed
+// DWS_DINGTALK_AGENTCODE draft name is not consumed, so host-owned PAT mode,
+// gateway identity headers, and `pat chmod --agentCode` fallback all agree on
+// the same stable signal: DINGTALK_DWS_AGENTCODE.
 func AgentCodeFromEnv() (string, string) {
 	if value := strings.TrimSpace(os.Getenv(AgentCodeEnv)); value != "" {
 		return value, AgentCodeEnv
-	}
-	if value := strings.TrimSpace(os.Getenv(AgentCodeEnvCompat)); value != "" {
-		return value, AgentCodeEnvCompat
 	}
 	return "", ""
 }
@@ -48,11 +50,11 @@ func AgentCodeEnvPresent() bool {
 
 // HostOwnsPATFlow reports whether the current process is running under a
 // third-party Agent host that will render the PAT authorization card
-// itself. The trigger is the effective agent-code env (DINGTALK_DWS_AGENTCODE
-// or DWS_DINGTALK_AGENTCODE) being non-empty. The CLI deliberately does not
-// consult any other signal (DINGTALK_AGENT / DWS_CHANNEL / the wire claw-type
-// header) for this decision so that server-side routing tags and the host-owned
-// UI contract remain independent concerns.
+// itself. The trigger is DINGTALK_DWS_AGENTCODE being non-empty. The CLI
+// deliberately does not consult any other signal (DINGTALK_AGENT /
+// DWS_CHANNEL / the wire claw-type header) for this decision so that
+// server-side routing tags and the host-owned UI contract remain independent
+// concerns.
 func HostOwnsPATFlow() bool {
 	return AgentCodeEnvPresent()
 }

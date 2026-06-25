@@ -14,6 +14,7 @@
 package pat
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -29,8 +30,8 @@ import (
 )
 
 // fakeToolCaller captures the toolArgs passed to CallTool so tests can
-// assert how the two-tier --agentCode / DINGTALK_DWS_AGENTCODE / error
-// resolver feeds into the outgoing MCP argv.
+// assert how the optional --agentCode / DINGTALK_DWS_AGENTCODE resolver feeds
+// into the outgoing batch request.
 type fakeToolCaller struct {
 	mu                sync.Mutex
 	dryRun            bool
@@ -267,12 +268,40 @@ func buildChmod(t *testing.T, fake *fakeToolCaller) *cobra.Command {
 	return newChmodCommand(fake)
 }
 
+func attachRootYesFlag(t *testing.T, cmd *cobra.Command, yes bool) {
+	t.Helper()
+	root := &cobra.Command{Use: "dws"}
+	root.PersistentFlags().Bool("yes", false, "skip confirmation")
+	root.AddCommand(cmd)
+	if yes {
+		if err := root.PersistentFlags().Set("yes", "true"); err != nil {
+			t.Fatalf("set root --yes: %v", err)
+		}
+	}
+}
+
+func attachRootPATFlags(t *testing.T, cmd *cobra.Command, yes bool, formatChanged bool) {
+	t.Helper()
+	root := &cobra.Command{Use: "dws"}
+	root.PersistentFlags().Bool("yes", false, "skip confirmation")
+	root.PersistentFlags().String("format", "json", "")
+	root.PersistentFlags().Bool("verbose", false, "")
+	root.AddCommand(cmd)
+	if yes {
+		if err := root.PersistentFlags().Set("yes", "true"); err != nil {
+			t.Fatalf("set root --yes: %v", err)
+		}
+	}
+	if formatChanged {
+		if err := root.PersistentFlags().Set("format", "json"); err != nil {
+			t.Fatalf("set root --format: %v", err)
+		}
+	}
+}
+
 func setBatchYesForTest(t *testing.T, cmd *cobra.Command) {
 	t.Helper()
-	cmd.Flags().BoolP("yes", "y", false, "test-only root confirmation flag")
-	if err := cmd.Flags().Set("yes", "true"); err != nil {
-		t.Fatalf("set --yes: %v", err)
-	}
+	attachRootYesFlag(t, cmd, true)
 }
 
 func TestRegisterCommands_OnlyExposesChmodForAuthorization(t *testing.T) {
@@ -293,6 +322,63 @@ func TestRegisterCommands_OnlyExposesChmodForAuthorization(t *testing.T) {
 	for _, unexpected := range []string{"grant-batch", "grant-recommend", "scopes", "check"} {
 		if children[unexpected] {
 			t.Fatalf("unexpected pat subcommand %q registered; authorization must stay on chmod", unexpected)
+		}
+	}
+}
+
+func TestPATHelpDocumentsBatchAuthorization(t *testing.T) {
+	root := &cobra.Command{Use: "dws"}
+	RegisterCommands(root, &fakeToolCaller{})
+
+	patCmd, _, err := root.Find([]string{"pat"})
+	if err != nil {
+		t.Fatalf("pat command not found: %v", err)
+	}
+	var out strings.Builder
+	patCmd.SetOut(&out)
+	patCmd.SetErr(&out)
+	if err := patCmd.Help(); err != nil {
+		t.Fatalf("pat help error = %v", err)
+	}
+	patHelp := out.String()
+	for _, want := range []string{
+		"支持批量授权",
+		"--products / --product",
+		"--domains / --domain",
+		"--recommend",
+		"DINGTALK_DWS_AGENTCODE",
+		"未传 agentCode 时由服务端默认兜底",
+	} {
+		if !strings.Contains(patHelp, want) {
+			t.Fatalf("pat help missing %q\nhelp:\n%s", want, patHelp)
+		}
+	}
+
+	chmodCmd, _, err := root.Find([]string{"pat", "chmod"})
+	if err != nil {
+		t.Fatalf("pat chmod command not found: %v", err)
+	}
+	out.Reset()
+	chmodCmd.SetOut(&out)
+	chmodCmd.SetErr(&out)
+	if err := chmodCmd.Help(); err != nil {
+		t.Fatalf("pat chmod help error = %v", err)
+	}
+	chmodHelp := out.String()
+	for _, want := range []string{
+		"批量授权:",
+		"一次传多个 scope",
+		"batch plan",
+		"--dry-run 只返回授权计划",
+		"未加 --yes 时会打开授权确认页",
+		"传 --yes 时才直接写入",
+		"由服务端默认兜底",
+		"aitable.record:read aitable.record:write --grant-type permanent",
+		"dws pat chmod --products calendar,aitable",
+		"dws pat chmod --recommend --grant-type session",
+	} {
+		if !strings.Contains(chmodHelp, want) {
+			t.Fatalf("pat chmod help missing %q\nhelp:\n%s", want, chmodHelp)
 		}
 	}
 }
@@ -470,6 +556,328 @@ func TestChmod_productsSessionModePassesIdentityArgsAndCompatEnv(t *testing.T) {
 	}
 }
 
+func TestChmod_singleScopeReturnsServerAgentCodeInSummary(t *testing.T) {
+	t.Setenv(agentCodeEnv, "")
+	fake := &sequenceToolCaller{responses: []string{
+		`{"success":true,"code":"OK","data":{"agentCode":"dingmbw5n9ktkkbbjv3g","grantType":"once","grantedScopes":["contact.user:get-self"]}}`,
+	}}
+	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("grant-type", "once")
+	attachRootPATFlags(t, cmd, false, false)
+
+	output, err := captureStdout(t, func() error {
+		return cmd.RunE(cmd, []string{"contact.user:get-self"})
+	})
+	if err != nil {
+		t.Fatalf("chmod RunE error = %v", err)
+	}
+	if len(fake.calls) != 1 {
+		t.Fatalf("CallTool count = %d, want 1", len(fake.calls))
+	}
+	if fake.calls[0].tool != patBatchGrantToolName {
+		t.Fatalf("tool = %q, want %q", fake.calls[0].tool, patBatchGrantToolName)
+	}
+	if _, ok := fake.calls[0].args["agentCode"]; ok {
+		t.Fatalf("agentCode arg must be omitted so PAT-core can default it: %#v", fake.calls[0].args)
+	}
+	if !strings.Contains(output, "agentCode: dingmbw5n9ktkkbbjv3g") {
+		t.Fatalf("summary output missing server default agentCode:\n%s", output)
+	}
+}
+
+func TestChmod_flagAgentCodeWinsAndReturnedAgentCodeMatches(t *testing.T) {
+	t.Setenv(agentCodeEnv, "envshouldlose")
+	fake := &sequenceToolCaller{responses: []string{
+		`{"success":true,"code":"OK","data":{"agentCode":"qoderwork","grantType":"once","grantedScopes":["chat.bot:search"]}}`,
+	}}
+	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("grant-type", "once")
+	_ = cmd.Flags().Set("agentCode", "qoderwork")
+	attachRootPATFlags(t, cmd, false, false)
+
+	output, err := captureStdout(t, func() error {
+		return cmd.RunE(cmd, []string{"chat.bot:search"})
+	})
+	if err != nil {
+		t.Fatalf("chmod RunE error = %v", err)
+	}
+	if len(fake.calls) != 1 {
+		t.Fatalf("CallTool count = %d, want 1", len(fake.calls))
+	}
+	if got := fake.calls[0].args["agentCode"]; got != "qoderwork" {
+		t.Fatalf("agentCode arg = %#v, want qoderwork", got)
+	}
+	if got := fake.calls[0].agentEnv; got != "qoderwork" {
+		t.Fatalf("%s during CallTool = %q, want qoderwork", agentCodeEnv, got)
+	}
+	if !strings.Contains(output, "agentCode: qoderwork") {
+		t.Fatalf("summary output missing qoderwork agentCode:\n%s", output)
+	}
+}
+
+func TestChmod_batchEntryPointMatrixRequiresYesAndReturnsAgentCode(t *testing.T) {
+	cases := []struct {
+		name             string
+		args             []string
+		setFlags         func(*cobra.Command)
+		wantPlanProducts []string
+		wantRecommend    bool
+		wantCallCount    int
+	}{
+		{
+			name: "direct multi scope",
+			args: []string{"calendar.event:list", "calendar.event:create"},
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("grant-type", "once")
+			},
+			wantCallCount: 2,
+		},
+		{
+			name: "product repeated",
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("grant-type", "once")
+				_ = cmd.Flags().Set("product", "calendar")
+				_ = cmd.Flags().Set("product", "aitable")
+			},
+			wantPlanProducts: []string{"calendar", "aitable"},
+			wantCallCount:    2,
+		},
+		{
+			name: "products comma list",
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("grant-type", "once")
+				_ = cmd.Flags().Set("products", "calendar,aitable")
+			},
+			wantPlanProducts: []string{"calendar", "aitable"},
+			wantCallCount:    2,
+		},
+		{
+			name: "domain repeated",
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("grant-type", "once")
+				_ = cmd.Flags().Set("domain", "calendar")
+				_ = cmd.Flags().Set("domain", "chat")
+			},
+			wantPlanProducts: []string{"calendar", "chat"},
+			wantCallCount:    2,
+		},
+		{
+			name: "domains comma list",
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("grant-type", "once")
+				_ = cmd.Flags().Set("domains", "calendar,chat")
+			},
+			wantPlanProducts: []string{"calendar", "chat"},
+			wantCallCount:    2,
+		},
+		{
+			name: "recommend",
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("grant-type", "once")
+				_ = cmd.Flags().Set("recommend", "true")
+			},
+			wantRecommend: true,
+			wantCallCount: 2,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(agentCodeEnv, "qoderwork")
+			responses := []string{
+				`{"success":true,"code":"OK","data":{"agentCode":"qoderwork","grantType":"once","grantedScopes":["calendar.event:list","calendar.event:create"]}}`,
+			}
+			if tc.wantCallCount == 2 {
+				responses = []string{
+					`{"success":true,"code":"OK","data":{"agentCode":"qoderwork","selectedScopes":["calendar.event:list","calendar.event:create"],"skippedScopes":[],"pendingScopes":[]}}`,
+					`{"success":true,"code":"OK","data":{"agentCode":"qoderwork","grantType":"once","grantedScopes":["calendar.event:list","calendar.event:create"]}}`,
+				}
+			}
+			fake := &sequenceToolCaller{responses: responses}
+			cmd := newChmodCommand(fake)
+			tc.setFlags(cmd)
+			attachRootPATFlags(t, cmd, true, false)
+
+			output, err := captureStdout(t, func() error {
+				return cmd.RunE(cmd, tc.args)
+			})
+			if err != nil {
+				t.Fatalf("chmod RunE error = %v", err)
+			}
+			if len(fake.calls) != tc.wantCallCount {
+				t.Fatalf("CallTool count = %d, want %d", len(fake.calls), tc.wantCallCount)
+			}
+			if tc.wantCallCount == 1 {
+				if fake.calls[0].tool != patBatchGrantToolName {
+					t.Fatalf("tool = %q, want %q", fake.calls[0].tool, patBatchGrantToolName)
+				}
+				if got := fake.calls[0].args["scopes"]; !stringSliceArgEqual(got, tc.args) {
+					t.Fatalf("grant scopes = %#v, want %#v", got, tc.args)
+				}
+			} else {
+				if fake.calls[0].tool != patBatchPlanToolName {
+					t.Fatalf("first tool = %q, want %q", fake.calls[0].tool, patBatchPlanToolName)
+				}
+				if got := fake.calls[0].args["productCodes"]; !stringSliceArgEqual(got, tc.wantPlanProducts) {
+					t.Fatalf("plan productCodes = %#v, want %#v", got, tc.wantPlanProducts)
+				}
+				if got := fake.calls[0].args["recommend"]; got != tc.wantRecommend {
+					t.Fatalf("plan recommend = %#v, want %v", got, tc.wantRecommend)
+				}
+				if fake.calls[1].tool != patBatchGrantToolName {
+					t.Fatalf("second tool = %q, want %q", fake.calls[1].tool, patBatchGrantToolName)
+				}
+				if got := fake.calls[1].args["scopes"]; !stringSliceArgEqual(got, []string{"calendar.event:list", "calendar.event:create"}) {
+					t.Fatalf("grant scopes = %#v, want selected scopes", got)
+				}
+			}
+			last := fake.calls[len(fake.calls)-1]
+			if got := last.args["agentCode"]; got != "qoderwork" {
+				t.Fatalf("grant agentCode = %#v, want qoderwork", got)
+			}
+			if !strings.Contains(output, "agentCode: qoderwork") {
+				t.Fatalf("summary output missing qoderwork agentCode:\n%s", output)
+			}
+		})
+	}
+}
+
+func TestChmod_batchPlanEntryPointsDryRunOnlyReturnPlanAgentCode(t *testing.T) {
+	cases := []struct {
+		name             string
+		setFlags         func(*cobra.Command)
+		wantPlanProducts []string
+		wantRecommend    bool
+	}{
+		{
+			name: "product",
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("products", "calendar,aitable")
+			},
+			wantPlanProducts: []string{"calendar", "aitable"},
+		},
+		{
+			name: "domain",
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("domains", "calendar,chat")
+			},
+			wantPlanProducts: []string{"calendar", "chat"},
+		},
+		{
+			name: "recommend",
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("recommend", "true")
+			},
+			wantRecommend: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(agentCodeEnv, "qoderwork")
+			fake := &sequenceToolCaller{
+				dryRun: true,
+				responses: []string{
+					`{"success":true,"code":"OK","data":{"agentCode":"qoderwork","allGranted":false,"selectedScopes":["calendar.event:list"],"skippedScopes":[],"pendingScopes":[]}}`,
+				},
+			}
+			cmd := newChmodCommand(fake)
+			_ = cmd.Flags().Set("grant-type", "once")
+			tc.setFlags(cmd)
+			attachRootPATFlags(t, cmd, false, false)
+
+			output, err := captureStdout(t, func() error {
+				return cmd.RunE(cmd, nil)
+			})
+			if err != nil {
+				t.Fatalf("chmod RunE error = %v", err)
+			}
+			if len(fake.calls) != 1 {
+				t.Fatalf("CallTool count = %d, want dry-run plan only", len(fake.calls))
+			}
+			if fake.calls[0].tool != patBatchPlanToolName {
+				t.Fatalf("tool = %q, want %q", fake.calls[0].tool, patBatchPlanToolName)
+			}
+			if got := fake.calls[0].args["productCodes"]; !stringSliceArgEqual(got, tc.wantPlanProducts) {
+				t.Fatalf("plan productCodes = %#v, want %#v", got, tc.wantPlanProducts)
+			}
+			if got := fake.calls[0].args["recommend"]; got != tc.wantRecommend {
+				t.Fatalf("plan recommend = %#v, want %v", got, tc.wantRecommend)
+			}
+			if !strings.Contains(output, "agentCode: qoderwork") || !strings.Contains(output, "selected: 1") {
+				t.Fatalf("dry-run summary missing plan agentCode/selection:\n%s", output)
+			}
+		})
+	}
+}
+
+func TestChmod_grantTypeAndSessionParameterMatrix(t *testing.T) {
+	cases := []struct {
+		name          string
+		grantType     string
+		sessionFlag   string
+		sessionEnv    string
+		wantSessionID string
+		wantErr       string
+	}{
+		{name: "once no session", grantType: "once"},
+		{name: "permanent no session", grantType: "permanent"},
+		{name: "session from flag", grantType: "session", sessionFlag: "flag-session", wantSessionID: "flag-session"},
+		{name: "session from env", grantType: "session", sessionEnv: "env-session", wantSessionID: "env-session"},
+		{name: "session missing rejected", grantType: "session", wantErr: "--session-id is required"},
+		{name: "invalid grant type rejected", grantType: "invalid", wantErr: "invalid --grant-type"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(agentCodeEnv, "qoderwork")
+			if tc.sessionEnv != "" {
+				t.Setenv(sessionIDEnvDWS, tc.sessionEnv)
+			}
+			fake := &sequenceToolCaller{responses: []string{
+				`{"success":true,"code":"OK","data":{"agentCode":"qoderwork","grantedScopes":["aitable.record:read"]}}`,
+			}}
+			cmd := newChmodCommand(fake)
+			_ = cmd.Flags().Set("grant-type", tc.grantType)
+			if tc.sessionFlag != "" {
+				_ = cmd.Flags().Set("session-id", tc.sessionFlag)
+			}
+
+			err := cmd.RunE(cmd, []string{"aitable.record:read"})
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("chmod RunE error = %v, want containing %q", err, tc.wantErr)
+				}
+				if len(fake.calls) != 0 {
+					t.Fatalf("CallTool count = %d, want validator to block before MCP", len(fake.calls))
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("chmod RunE error = %v", err)
+			}
+			if len(fake.calls) != 1 {
+				t.Fatalf("CallTool count = %d, want 1", len(fake.calls))
+			}
+			if got := fake.calls[0].args["grantType"]; got != tc.grantType {
+				t.Fatalf("grantType arg = %#v, want %s", got, tc.grantType)
+			}
+			if tc.wantSessionID == "" {
+				if _, ok := fake.calls[0].args["sessionId"]; ok {
+					t.Fatalf("unexpected sessionId arg: %#v", fake.calls[0].args)
+				}
+				return
+			}
+			if got := fake.calls[0].args["sessionId"]; got != tc.wantSessionID {
+				t.Fatalf("sessionId arg = %#v, want %s", got, tc.wantSessionID)
+			}
+			if got := fake.calls[0].dingSessionEnv; got != tc.wantSessionID {
+				t.Fatalf("%s during CallTool = %q, want %s", sessionIDEnvDingtalk, got, tc.wantSessionID)
+			}
+		})
+	}
+}
+
 func TestChmod_productsDryRunUsesSessionIDFromEnv(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 	t.Setenv(sessionIDEnvDWS, "env-session-123")
@@ -507,8 +915,7 @@ func TestChmod_productsDryRunUsesSessionIDFromEnv(t *testing.T) {
 }
 
 func TestChmod_batchPlanRetriesWithoutIdentityArgsForCompat(t *testing.T) {
-	t.Setenv(agentCodeEnv, "")
-	t.Setenv(agentCodeEnvCompat, "qoderwork")
+	t.Setenv(agentCodeEnv, "qoderwork")
 	fake := &sequenceToolCaller{
 		errs: []error{
 			apperrors.NewAPI("PAT batch identity field 'agentCode' must be derived by gateway.",
@@ -550,8 +957,7 @@ func TestChmod_batchPlanRetriesWithoutIdentityArgsForCompat(t *testing.T) {
 }
 
 func TestChmod_batchGrantRetriesWithoutIdentityArgsForCompat(t *testing.T) {
-	t.Setenv(agentCodeEnv, "")
-	t.Setenv(agentCodeEnvCompat, "qoderwork")
+	t.Setenv(agentCodeEnv, "qoderwork")
 	fake := &sequenceToolCaller{
 		errs: []error{
 			apperrors.NewAPI("PAT batch identity field 'agentCode' must be derived by gateway.",
@@ -841,6 +1247,35 @@ func TestLoginRecommendAuthorizationWithoutSelectorKeepsSinglePlan(t *testing.T)
 	}
 }
 
+func TestLoginRecommendAuthorizationRecommendedAlreadyGrantedSkipsSelectorAndGrant(t *testing.T) {
+	fake := &sequenceToolCaller{responses: []string{
+		`{"success":true,"data":{"allGranted":false,"items":[{"scope":"calendar.event:read","productCode":"calendar","productName":"日历"}],"selectedScopes":[]}}`,
+	}}
+	var out bytes.Buffer
+	err := RunLoginRecommendAuthorizationWithOptions(context.Background(), fake, &out, LoginRecommendOptions{
+		ScopeMode: LoginRecommendScopeRecommended,
+		ProductSelector: func([]LoginRecommendProduct) ([]string, error) {
+			t.Fatal("already-granted recommended plan must not ask for product selection")
+			return nil, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("RunLoginRecommendAuthorizationWithOptions error = %v", err)
+	}
+	if len(fake.calls) != 1 {
+		t.Fatalf("CallTool count = %d, want only initial recommend plan", len(fake.calls))
+	}
+	if fake.calls[0].tool != patBatchPlanToolName {
+		t.Fatalf("tool sequence = %q, want only %q", fake.calls[0].tool, patBatchPlanToolName)
+	}
+	if strings.Contains(out.String(), "flowId") {
+		t.Fatalf("output = %q, must not include authorization flow", out.String())
+	}
+	if !strings.Contains(out.String(), "推荐权限已全部授权或没有可授权项") {
+		t.Fatalf("output = %q, want already-granted message", out.String())
+	}
+}
+
 func TestLoginRecommendAuthorizationAllScopeModePlansAllProductScopes(t *testing.T) {
 	fake := &sequenceToolCaller{responses: []string{
 		`{"success":true,"data":{"items":[{"scope":"calendar.event:read","productCode":"calendar","productName":"日历"},{"scope":"calendar.event:write","productCode":"calendar","productName":"日历"}],"selectedScopes":["calendar.event:read","calendar.event:write"]}}`,
@@ -997,9 +1432,9 @@ func TestChmod_agentCode_env_fallback(t *testing.T) {
 	}
 }
 
-func TestChmod_agentCode_compatEnvFallback(t *testing.T) {
+func TestChmod_agentCode_reversedEnvIgnored(t *testing.T) {
 	t.Setenv(agentCodeEnv, "")
-	t.Setenv(agentCodeEnvCompat, "compatwork")
+	t.Setenv("DWS_DINGTALK_AGENTCODE", "compatwork")
 
 	fake := &fakeToolCaller{resultOK: true}
 	cmd := buildChmod(t, fake)
@@ -1011,11 +1446,35 @@ func TestChmod_agentCode_compatEnvFallback(t *testing.T) {
 	if fake.gotTool != patBatchGrantToolName {
 		t.Fatalf("gotTool = %q, want %q", fake.gotTool, patBatchGrantToolName)
 	}
-	if got := fake.gotArgs["agentCode"]; got != "compatwork" {
-		t.Fatalf("batch agentCode = %#v, want compatwork", got)
+	if _, ok := fake.gotArgs["agentCode"]; ok {
+		t.Fatalf("agentCode arg must be omitted; reversed env name must not be consumed: %#v", fake.gotArgs)
 	}
-	if got := fake.gotAgentEnv; got != "compatwork" {
-		t.Fatalf("%s during CallTool = %q, want compatwork", agentCodeEnv, got)
+	if got := fake.gotAgentEnv; got != "" {
+		t.Fatalf("%s during CallTool = %q, want empty because reversed env is ignored", agentCodeEnv, got)
+	}
+}
+
+func TestChmod_withoutAgentCodeLetsServerDefault(t *testing.T) {
+	t.Setenv(agentCodeEnv, "")
+
+	fake := &fakeToolCaller{resultOK: true}
+	cmd := buildChmod(t, fake)
+	_ = cmd.Flags().Set("grant-type", "once")
+
+	if err := cmd.RunE(cmd, []string{"aitable.record:read"}); err != nil {
+		t.Fatalf("chmod RunE error = %v, want server-side default agentCode path", err)
+	}
+	if fake.callN != 1 {
+		t.Fatalf("CallTool was invoked %d times; missing agentCode must still reach the batch caller", fake.callN)
+	}
+	if fake.gotTool != patBatchGrantToolName {
+		t.Fatalf("gotTool = %q, want %q", fake.gotTool, patBatchGrantToolName)
+	}
+	if _, ok := fake.gotArgs["agentCode"]; ok {
+		t.Fatalf("agentCode arg must be omitted for server default path: %#v", fake.gotArgs)
+	}
+	if got := fake.gotAgentEnv; got != "" {
+		t.Fatalf("%s during CallTool = %q, want empty for server default path", agentCodeEnv, got)
 	}
 }
 
@@ -1044,26 +1503,6 @@ func TestChmod_agentCode_envServerMismatchFails(t *testing.T) {
 	}
 	if got := fake.calls[0].agentEnv; got != "dinglqdkz3mmw2xwvend" {
 		t.Fatalf("%s during CallTool = %q, want DINGTALK_DWS_AGENTCODE", agentCodeEnv, got)
-	}
-}
-
-func TestChmod_withoutAgentCodeFailsBeforeMCP(t *testing.T) {
-	t.Setenv(agentCodeEnv, "")
-	t.Setenv(agentCodeEnvCompat, "")
-
-	fake := &fakeToolCaller{resultOK: true}
-	cmd := buildChmod(t, fake)
-	_ = cmd.Flags().Set("grant-type", "once")
-
-	err := cmd.RunE(cmd, []string{"aitable.record:read"})
-	if err == nil {
-		t.Fatal("chmod RunE error = nil, want missing agentCode error")
-	}
-	if !strings.Contains(err.Error(), "flag --agentCode is required") {
-		t.Fatalf("error = %q, want missing agentCode hint", err.Error())
-	}
-	if fake.callN != 0 {
-		t.Fatalf("CallTool was invoked %d times; missing agentCode must fail before MCP", fake.callN)
 	}
 }
 
@@ -1525,27 +1964,27 @@ func TestChmod_agentCode_flag_wins_over_env(t *testing.T) {
 	}
 }
 
-// TestChmod_agentCode_legacy_env_not_recognized is a reverse-guard: after
-// the SSOT hard-removal of the DWS_AGENTCODE alias, exporting only the
-// legacy env MUST NOT satisfy the required agentCode contract.
+// TestChmod_agentCode_legacy_env_not_recognized is a reverse-guard: only
+// DINGTALK_DWS_AGENTCODE is consumed as the env fallback. Legacy / draft names
+// MUST NOT be consumed as agentCode. The request is still sent so PAT-core can
+// apply its open-source default.
 func TestChmod_agentCode_legacy_env_not_recognized(t *testing.T) {
 	t.Setenv(agentCodeEnv, "")
-	t.Setenv(agentCodeEnvCompat, "")
 	t.Setenv("DWS_AGENTCODE", "legacyval")
+	t.Setenv("DWS_DINGTALK_AGENTCODE", "draftval")
 
 	fake := &fakeToolCaller{resultOK: true}
 	cmd := buildChmod(t, fake)
 	_ = cmd.Flags().Set("grant-type", "once")
 
-	err := cmd.RunE(cmd, []string{"aitable.record:read"})
-	if err == nil {
-		t.Fatal("chmod RunE error = nil, want missing agentCode error")
+	if err := cmd.RunE(cmd, []string{"aitable.record:read"}); err != nil {
+		t.Fatalf("chmod RunE error = %v, want server-side default agentCode path", err)
 	}
-	if !strings.Contains(err.Error(), "flag --agentCode is required") {
-		t.Fatalf("error = %q, want missing agentCode hint", err.Error())
+	if fake.callN != 1 {
+		t.Fatalf("CallTool was invoked %d times; legacy env should be ignored but request should continue", fake.callN)
 	}
-	if fake.callN != 0 {
-		t.Fatalf("CallTool was invoked %d times; legacy env must not satisfy agentCode", fake.callN)
+	if _, ok := fake.gotArgs["agentCode"]; ok {
+		t.Fatalf("agentCode arg must be omitted; legacy DWS_AGENTCODE must not be consumed: %#v", fake.gotArgs)
 	}
 	if got := fake.gotAgentEnv; got != "" {
 		t.Fatalf("agent env = %q, want empty; legacy DWS_AGENTCODE must not be consumed", got)
@@ -1590,21 +2029,17 @@ func TestResolveAgentCodeFromEnv(t *testing.T) {
 			code, src, "qoderwork", agentCodeEnv)
 	}
 
-	t.Setenv(agentCodeEnvCompat, "compatwork")
-	if code, src := resolveAgentCodeFromEnv(); code != "qoderwork" || src != agentCodeEnv {
-		t.Errorf("resolveAgentCodeFromEnv() = (%q, %q), want primary (%q, %q)",
-			code, src, "qoderwork", agentCodeEnv)
+	// Reverse-guard: the draft reversed spelling is intentionally ignored.
+	t.Setenv(agentCodeEnv, "")
+	t.Setenv("DWS_DINGTALK_AGENTCODE", "compatwork")
+	if code, src := resolveAgentCodeFromEnv(); code != "" || src != "" {
+		t.Errorf("resolveAgentCodeFromEnv() = (%q, %q), want empty — DWS_DINGTALK_AGENTCODE must be ignored",
+			code, src)
 	}
 
+	// Empty primary → ("", "").
 	t.Setenv(agentCodeEnv, "")
-	if code, src := resolveAgentCodeFromEnv(); code != "compatwork" || src != agentCodeEnvCompat {
-		t.Errorf("resolveAgentCodeFromEnv() = (%q, %q), want compat (%q, %q)",
-			code, src, "compatwork", agentCodeEnvCompat)
-	}
-
-	// Empty primary + empty compat → ("", "").
-	t.Setenv(agentCodeEnv, "")
-	t.Setenv(agentCodeEnvCompat, "")
+	t.Setenv("DWS_DINGTALK_AGENTCODE", "")
 	if code, src := resolveAgentCodeFromEnv(); code != "" || src != "" {
 		t.Errorf("resolveAgentCodeFromEnv() = (%q, %q), want empty", code, src)
 	}
@@ -1612,7 +2047,6 @@ func TestResolveAgentCodeFromEnv(t *testing.T) {
 	// Reverse-guard: legacy DWS_AGENTCODE MUST NOT be picked up when the
 	// canonical env is unset — it was hard-removed as a legacy alias.
 	t.Setenv(agentCodeEnv, "")
-	t.Setenv(agentCodeEnvCompat, "")
 	t.Setenv("DWS_AGENTCODE", "legacy")
 	if code, src := resolveAgentCodeFromEnv(); code != "" || src != "" {
 		t.Errorf("resolveAgentCodeFromEnv() = (%q, %q), want empty — legacy DWS_AGENTCODE must be ignored",

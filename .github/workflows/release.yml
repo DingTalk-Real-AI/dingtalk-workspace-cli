@@ -58,6 +58,16 @@ jobs:
         run: |
           gh release upload "${{ github.ref_name }}" dist/dws-skills.zip --clobber
 
+      - name: Mirror release to Gitee (China)
+        # 把 release 附件（二进制/校验和/skills 包）镜像到 Gitee release，供 install.sh
+        # 的 DWS_GITEE_REPO 开关消费（仓库代码由 Gitee 仓库镜像功能自动同步，附件不在其内）。
+        # 脚本自带门控：未配置 GITEE_TOKEN / GITEE_REPO 时优雅跳过，不影响海外发布。
+        run: ./scripts/release/sync-to-gitee.sh
+        env:
+          VERSION: ${{ github.ref_name }}
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_REPO: ${{ secrets.GITEE_REPO }}
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:

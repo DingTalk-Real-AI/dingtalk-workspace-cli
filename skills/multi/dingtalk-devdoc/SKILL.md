@@ -28,7 +28,9 @@ metadata:
 | 用户说 | 命令 |
 |--------|------|
 | "查 OAuth2 接入文档" | `dws devdoc article search --query "OAuth2 接入"` |
-| "API 调用报错怎么办" | `dws devdoc article search --query "<报错关键词>"` |
+| "API 调用报错怎么办" | `dws devdoc error diagnose --query "<报错关键词>"` |
+| "requestId 15r6h45w0muec 为什么失败" | `dws devdoc error diagnose --request-id 15r6h45w0muec` |
+| "错误码 33012" | `dws devdoc error diagnose --error-code 33012` |
 | "开放接口文档" | `dws devdoc article search --query "<接口名或场景>"` |
 
 ## 跨产品协作

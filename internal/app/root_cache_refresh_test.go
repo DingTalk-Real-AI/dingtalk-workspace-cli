@@ -24,7 +24,7 @@ func TestCacheRefreshClearsExistingCachesAndSkipsCLISkippedServers(t *testing.T)
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/cli/discovery/apis":
+		case "/cli/discovery/apis/bamboo":
 			_ = json.NewEncoder(w).Encode(market.ListResponse{
 				Metadata: market.ListMetadata{Count: 2},
 				Servers: []market.ServerEnvelope{
@@ -146,7 +146,7 @@ func TestCacheRefreshHonorsEditionDiscoveryURL(t *testing.T) {
 					},
 				},
 			})
-		case "/cli/discovery/apis":
+		case "/cli/discovery/apis/bamboo":
 			marketHits.Add(1)
 			http.Error(w, "market endpoint must not be called when edition DiscoveryURL is set", http.StatusNotFound)
 		default:

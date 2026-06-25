@@ -237,7 +237,7 @@ func newRuntimeMarketServer(t *testing.T, fixture mockmcp.Fixture) *httptest.Ser
 	mux := http.NewServeMux()
 	srv := httptest.NewServer(mux)
 
-	mux.HandleFunc("/cli/discovery/apis", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/cli/discovery/apis/bamboo", func(w http.ResponseWriter, r *http.Request) {
 		response := market.ListResponse{}
 		for _, server := range fixture.Servers {
 			response.Servers = append(response.Servers, market.ServerEnvelope{

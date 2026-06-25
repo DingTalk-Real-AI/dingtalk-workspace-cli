@@ -34,18 +34,26 @@ import (
 
 const regRootPath = `Software\DwsCli\keychain`
 
-// StorageDir returns the storage directory for file-based keychain artifacts on Windows.
+// StorageDir returns the storage directory for a given service name on Windows.
+// The Windows keychain backend keeps secrets in DPAPI-protected HKCU registry
+// values rather than on disk, so this path is used only by the portable
+// auth-bundle export/import (internal/auth) to colocate config. When the
+// DWS_KEYCHAIN_DIR environment variable is set (used by tests for isolation),
+// the storage root is taken from that env var instead; otherwise it defaults
+// to %LocalAppData%\<service>.
 func StorageDir(service string) string {
 	if override := os.Getenv(StorageDirEnv); override != "" {
 		return filepath.Join(override, service)
 	}
-	if appData := os.Getenv("APPDATA"); appData != "" {
-		return filepath.Join(appData, "DwsCli", "keychain", service)
+	if local := os.Getenv("LocalAppData"); local != "" {
+		return filepath.Join(local, service)
 	}
-	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		return filepath.Join(home, "AppData", "Roaming", "DwsCli", "keychain", service)
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		fmt.Fprintf(os.Stderr, "warning: unable to determine home directory: %v\n", err)
+		return filepath.Join(".dws", "keychain", service)
 	}
-	return filepath.Join(".dws", "keychain", service)
+	return filepath.Join(home, "AppData", "Local", service)
 }
 
 func registryPathForService(service string) string {

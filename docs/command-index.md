@@ -4,7 +4,7 @@ Every runtime command the `dws` CLI exposes when loaded with the **pre** environ
 
 - **Source**: `dws-wukong/envelope/channel/open/pre/config.json`
 - **Products**: 13
-- **Total commands**: 159
+- **Total commands**: 160
 - **Generated from**: `internal/compat.BuildDynamicCommands` rendering of the pre config — the same code path the CLI uses at runtime.
 
 > Auto-generated. Edit `pre/config.json`, not this file.
@@ -36,7 +36,7 @@ Every command inherits these flags (documented here once, not repeated per comma
 - [`dws calendar` — Calendar](#dws-calendar) · 14 commands
 - [`dws chat` — Group Chat / IM](#dws-chat) · 23 commands
 - [`dws contact` — Contact Directory](#dws-contact) · 6 commands
-- [`dws devdoc` — Open Platform Docs](#dws-devdoc) · 1 commands
+- [`dws devdoc` — Open Platform Docs](#dws-devdoc) · 2 commands
 - [`dws ding` — DING Messages](#dws-ding) · 2 commands
 - [`dws doc` — DingTalk Doc](#dws-doc) · 21 commands
 - [`dws drive` — DingTalk Drive](#dws-drive) · 6 commands
@@ -182,11 +182,12 @@ _Users, departments, and directory lookups._
 
 _Search the DingTalk Open Platform documentation._
 
-**1 commands**
+**2 commands**
 
 | Command | Description | When to use |
 |---|---|---|
 | `dws devdoc article search` | Search the DingTalk Open Platform documentation by keyword. | When the agent needs authoritative API reference or guides to answer a developer question. |
+| `dws devdoc error diagnose` | Troubleshoot an Open Platform API failure by requestId, error code, error message, or context. | When the agent has a requestId, traceId, error code, or failure description and needs diagnostic facts plus references. |
 
 ## `dws ding` — DING Messages
 
@@ -320,4 +321,3 @@ _Personal todo task management._
 | `dws todo task get` | Retrieve the full details of a todo item by ID. | When the agent inspects a specific todo's content, due date, and executors. |
 | `dws todo task list` | List todos for the current user within the current organization. | When the agent surfaces the user's outstanding tasks or builds a daily focus list. |
 | `dws todo task update` | Update a todo's title, description, due time, or executors. | When the agent edits an existing todo after new information comes in. |
-

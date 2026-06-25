@@ -23,7 +23,7 @@ func TestResourceName(t *testing.T) {
 		input   string
 		wantErr bool
 	}{
-		{name: "valid", input: "search_open_platform_docs"},
+		{name: "valid", input: "search_open_platform_docs_rag"},
 		{name: "valid-cjk", input: "审批查询"},
 		{name: "leading-digit", input: "1tool", wantErr: true},
 		{name: "shell-char", input: "tool;rm", wantErr: true},

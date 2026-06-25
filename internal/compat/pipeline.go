@@ -185,7 +185,7 @@ func executePipelineCall(
 			return nil, err
 		}
 		actual := getDotPath(resp, step.PollUntilField)
-		if actual != nil && fmt.Sprint(actual) == step.PollUntilValue {
+		if actual != nil && strings.EqualFold(fmt.Sprint(actual), step.PollUntilValue) {
 			return resp, nil
 		}
 		if time.Now().After(deadline) {

@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
+	"github.com/spf13/cobra"
 )
 
 type captureRunner struct {
@@ -222,6 +224,55 @@ func TestChatMessageSendForwardsAtMentions(t *testing.T) {
 	}
 }
 
+// TestChatMessageSendContentNotHTMLEscaped guards the @-mention rendering fix:
+// the send_personal_message content must keep literal <@openDingTalkId> / <@all>
+// tokens. If json.Marshal's default HTML escaping is reintroduced, the tokens
+// become <@...> and the DingTalk client renders them as plain text
+// instead of a real @-mention.
+func TestChatMessageSendContentNotHTMLEscaped(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want string // literal token that must survive in content
+	}{
+		{
+			name: "group-at-all",
+			args: []string{"--group", "cid-xyz", "--title", "t", "--text", "<@all> hi", "--at-all"},
+			want: "<@all>",
+		},
+		{
+			name: "group-at-open-dingtalk-id",
+			args: []string{"--group", "cid-xyz", "--title", "t", "--text", "<@op-1> hi", "--at-open-dingtalk-ids", "op-1"},
+			want: "<@op-1>",
+		},
+		{
+			name: "direct-open-dingtalk-id",
+			args: []string{"--open-dingtalk-id", "OP123", "--title", "t", "--text", "<@OP123> hi"},
+			want: "<@OP123>",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &captureRunner{}
+			cmd := newChatMessageSendCommand(runner)
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			cmd.SetArgs(tc.args)
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
+			}
+			content, _ := runner.last.Params["content"].(string)
+			if !strings.Contains(content, tc.want) {
+				t.Fatalf("content %q missing literal %q (HTML-escaped?)", content, tc.want)
+			}
+			if strings.Contains(content, "\\u003c") || strings.Contains(content, "\\u003e") {
+				t.Fatalf("content %q is HTML-escaped; @-mention will not render", content)
+			}
+		})
+	}
+}
+
 // TestChatMessageSendRejectsAtMentionsOutsideGroup ensures we do not silently
 // drop user intent when --at-* is combined with --user / --open-dingtalk-id
 // (single-chat tools have no @-mention semantics, so the flag would never
@@ -256,6 +307,104 @@ func TestChatMessageSendRejectsAtMentionsOutsideGroup(t *testing.T) {
 				t.Fatalf("error = %q, want '...only apply when --group is set'", err.Error())
 			}
 		})
+	}
+}
+
+// TestChatMessageAITagControlsClawType guards the opt-in "Send from AI" indicator:
+// by default NO user-identity send carries the clawType tool argument (so the IM
+// server renders no AI badge). Only when --ai-tag is passed does each path attach
+// the edition claw identity (open-source build pins it to edition.DefaultOSSClawType,
+// "openClaw"); the wukong overlay would attach its own value. The label is opt-in so
+// dws does not surprise users by branding every message they send.
+func TestChatMessageAITagControlsClawType(t *testing.T) {
+	cases := []struct {
+		name string
+		make func(runner executor.Runner) *cobra.Command
+		args []string
+	}{
+		{
+			name: "group-markdown",
+			make: newChatMessageSendCommand,
+			args: []string{"--group", "cid-xyz", "--title", "t", "--text", "hello"},
+		},
+		{
+			name: "user-direct",
+			make: newChatMessageSendCommand,
+			args: []string{"--user", "034766", "--title", "t", "--text", "hi"},
+		},
+		{
+			name: "open-dingtalk-id-direct",
+			make: newChatMessageSendCommand,
+			args: []string{"--open-dingtalk-id", "OP123", "--title", "t", "--text", "hi"},
+		},
+		{
+			name: "group-rich-media-image",
+			make: newChatMessageSendCommand,
+			args: []string{"--group", "cid-xyz", "--msg-type", "image", "--media-id", "media-1"},
+		},
+		{
+			name: "reply",
+			make: newChatMessageReplyCommand,
+			args: []string{
+				"--conversation-id", "cid-xyz",
+				"--ref-msg-id", "msg-1",
+				"--ref-sender", "op-1",
+				"--text", "got it",
+			},
+		},
+	}
+	for _, tc := range cases {
+		// Default: no --ai-tag → must omit clawType entirely (no badge).
+		t.Run(tc.name+"/default-no-tag", func(t *testing.T) {
+			runner := &captureRunner{}
+			cmd := tc.make(runner)
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			cmd.SetArgs(tc.args)
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
+			}
+			if v, ok := runner.last.Params["clawType"]; ok {
+				t.Fatalf("default send must omit clawType, got %#v", v)
+			}
+		})
+		// Opt-in: --ai-tag → attach the edition claw identity.
+		t.Run(tc.name+"/with-ai-tag", func(t *testing.T) {
+			runner := &captureRunner{}
+			cmd := tc.make(runner)
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			cmd.SetArgs(append(append([]string{}, tc.args...), "--ai-tag"))
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
+			}
+			got, ok := runner.last.Params["clawType"]
+			if !ok {
+				t.Fatalf("--ai-tag send missing clawType; got %#v", runner.last.Params)
+			}
+			if got != edition.DefaultOSSClawType {
+				t.Fatalf("clawType = %#v, want %q", got, edition.DefaultOSSClawType)
+			}
+		})
+	}
+}
+
+// Robot sends are rendered as bot messages already; they must NOT carry the
+// user-identity clawType argument.
+func TestChatMessageSendByBotOmitsClawType(t *testing.T) {
+	runner := &captureRunner{}
+	cmd := newChatMessageSendByBotCommand(runner)
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--group", "cid-xyz", "--robot-code", "robot-001", "--title", "t", "--text", "x"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
+	}
+	if _, ok := runner.last.Params["clawType"]; ok {
+		t.Fatalf("bot send must not carry clawType; got %#v", runner.last.Params)
 	}
 }
 

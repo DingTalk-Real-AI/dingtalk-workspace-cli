@@ -414,6 +414,68 @@ func TestAuthLoginDefaultTUIModeSkipsSelectorWhenAllGranted(t *testing.T) {
 	}
 }
 
+func TestAuthLoginDefaultTUIModeRecommendedAlreadyGrantedSkipsAuthorizationPage(t *testing.T) {
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	t.Setenv(keychain.StorageDirEnv, t.TempDir())
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+
+	oldGuideSelector := authLoginGuideActionSelector
+	oldGuideApplier := authLoginGuideActionApplier
+	oldScopeSelector := loginRecommendScopeModeSelector
+	oldProductSelector := loginRecommendProductSelector
+	oldInteractiveTerminal := authLoginInteractiveTerminal
+	t.Cleanup(func() {
+		authLoginGuideActionSelector = oldGuideSelector
+		authLoginGuideActionApplier = oldGuideApplier
+		loginRecommendScopeModeSelector = oldScopeSelector
+		loginRecommendProductSelector = oldProductSelector
+		authLoginInteractiveTerminal = oldInteractiveTerminal
+	})
+	authLoginInteractiveTerminal = func() bool { return true }
+	authLoginGuideActionSelector = func() (authLoginGuideAction, error) {
+		t.Fatal("default auth login must not call the operation guide selector")
+		return "", nil
+	}
+	authLoginGuideActionApplier = func(*cobra.Command, string, authLoginGuideAction) error {
+		t.Fatal("default auth login must not apply a post-login guide action")
+		return nil
+	}
+	var scopeSelectorCalled bool
+	loginRecommendScopeModeSelector = func() (pat.LoginRecommendScopeMode, error) {
+		scopeSelectorCalled = true
+		return pat.LoginRecommendScopeRecommended, nil
+	}
+	loginRecommendProductSelector = func([]pat.LoginRecommendProduct) ([]string, error) {
+		t.Fatal("already-granted recommended auth must not call product-domain TUI")
+		return nil, nil
+	}
+
+	fake := &authLoginRecommendSequenceCaller{responses: []string{
+		`{"success":true,"data":{"allGranted":false,"items":[{"scope":"calendar.event:read","productCode":"calendar","productName":"日历"}],"selectedScopes":[]}}`,
+	}}
+	cmd := newAuthLoginCommand(fake)
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--token", "login-token"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("auth login error = %v\noutput:\n%s", err, out.String())
+	}
+	if !scopeSelectorCalled {
+		t.Fatal("scope-mode TUI was not called")
+	}
+	if len(fake.tools) != 1 {
+		t.Fatalf("CallTool count = %d, want only preflight recommend plan", len(fake.tools))
+	}
+	if fake.tools[0] != "pat.batch_plan" {
+		t.Fatalf("tool sequence = %v, want only plan", fake.tools)
+	}
+	if !strings.Contains(out.String(), "推荐权限已全部授权或没有可授权项") {
+		t.Fatalf("output = %q, want already-granted message", out.String())
+	}
+}
+
 func TestAuthLoginDefaultTUIRunsAfterLoginTokenSaved(t *testing.T) {
 	t.Setenv(keychain.DisableKeychainEnv, "1")
 	t.Setenv(keychain.StorageDirEnv, t.TempDir())

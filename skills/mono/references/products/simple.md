@@ -18,6 +18,25 @@ Flags:
       --size string    每页数量 (默认 10)
 ```
 
+### 错误排查
+```
+Usage:
+  dws devdoc error diagnose [flags]
+Example:
+  dws devdoc error diagnose --request-id 15r6h45w0muec --format json
+  dws devdoc error diagnose --error-code 33012 --error-message "missing scope" --format json
+Flags:
+      --query string           原始排查问题
+      --request-id string      开放平台 requestId
+      --trace-id string        requestId 的兼容别名
+      --error-code string      错误码
+      --error-message string   错误描述，会合并进原始问题
+      --api string             API 名称，会合并进原始问题作为补充检索词
+      --context string         额外排查上下文，会合并进原始问题
+      --page int               分页页码 (默认 1)
+      --size int               分页大小 (默认 10)
+```
+
 ---
 
 ## oa — 审批
@@ -99,6 +118,7 @@ Example:
 ## 意图判断
 
 - 用户说"开发文档/API 文档/接口文档" → `devdoc article search`
+- 用户说"调用报错/requestId/traceId/错误码/错误描述" → `devdoc error diagnose`
 - 用户说"审批/请假/报销/出差" → `oa approval`
 - 用户说"同意审批/批准" → `oa approval approve`
 - 用户说"拒绝审批/驳回" → `oa approval reject`
@@ -111,6 +131,7 @@ Example:
 | 操作 | 从返回中提取 | 用于 |
 |------|-------------|------|
 | `devdoc article search` | 文档链接 | 直接展示给用户 |
+| `devdoc error diagnose` | diagnosticInfo、references、materials | 排查开放平台调用错误 |
 | `oa approval list-forms` | processCode | detail / records 等 |
 | `oa approval tasks` | taskId, instanceId | approve / reject |
 | `oa approval list-pending` | instanceId | detail / approve / reject |

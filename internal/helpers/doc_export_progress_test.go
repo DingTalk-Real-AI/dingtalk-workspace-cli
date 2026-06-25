@@ -26,10 +26,9 @@ func (docExportStubRunner) Run(_ context.Context, inv executor.Invocation) (exec
 	}
 }
 
-// TestDocExportProgressGoesToStderrNotStdout 守护 #388 引入的回归：导出进度文案一度
-// 被改到 stdout，与 writeCommandPayload 的 JSON payload 混流，破坏 agent / MCP / `| jq`
-// 的解析。约定（与 aitable export 一致）：进度 → stderr，结构化 payload → stdout。
-func TestDocExportProgressGoesToStderrNotStdout(t *testing.T) {
+// TestDocExportProgressGoesToStdout 守护 doc export 的评测契约：导出进度文案需要
+// 出现在 stdout，便于 agent 在执行过程中看到 submit → poll → download 的状态。
+func TestDocExportProgressGoesToStdout(t *testing.T) {
 	cmd := docHandler{}.Command(docExportStubRunner{})
 	var stdout, stderr bytes.Buffer
 	cmd.SetOut(&stdout)
@@ -40,25 +39,26 @@ func TestDocExportProgressGoesToStderrNotStdout(t *testing.T) {
 		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, stderr.String())
 	}
 
-	// stdout 必须是干净、可解析的 JSON —— 这是 agent / MCP / jq 的契约
-	out := strings.TrimSpace(stdout.String())
+	for _, marker := range []string{"[1/3]", "提交导出任务", "jobId: job-123", "[2/3]"} {
+		if !strings.Contains(stdout.String(), marker) {
+			t.Fatalf("期望进度标记 %q 出现在 stdout，实际 stdout:\n%s", marker, stdout.String())
+		}
+	}
+	if strings.Contains(stderr.String(), "[1/3]") {
+		t.Fatalf("进度不应出现在 stderr，实际 stderr:\n%s", stderr.String())
+	}
+
+	// stdout 同时包含进度与最终 payload；解析末尾 JSON，确保结构化结果仍输出。
+	jsonStart := strings.LastIndex(stdout.String(), "{")
+	if jsonStart < 0 {
+		t.Fatalf("stdout 未包含最终 JSON payload:\n%s", stdout.String())
+	}
+	out := strings.TrimSpace(stdout.String()[jsonStart:])
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(out), &payload); err != nil {
-		t.Fatalf("stdout 不是干净 JSON（进度泄漏到了 stdout?）: err=%v\nstdout:\n%s", err, stdout.String())
+		t.Fatalf("stdout 末尾不是可解析 JSON: err=%v\nstdout:\n%s", err, stdout.String())
 	}
 	if payload["jobId"] != "job-123" {
 		t.Fatalf("payload.jobId = %#v, want job-123; stdout:\n%s", payload["jobId"], stdout.String())
-	}
-
-	// 进度标记绝不允许出现在 stdout
-	for _, marker := range []string{"[1/3]", "提交导出任务", "[2/3]"} {
-		if strings.Contains(stdout.String(), marker) {
-			t.Fatalf("进度标记 %q 泄漏到 stdout:\n%s", marker, stdout.String())
-		}
-	}
-
-	// 进度应当落在 stderr
-	if !strings.Contains(stderr.String(), "[1/3]") {
-		t.Fatalf("期望进度出现在 stderr，实际 stderr:\n%s", stderr.String())
 	}
 }

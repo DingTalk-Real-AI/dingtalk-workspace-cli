@@ -156,7 +156,7 @@ func TestRecoveryClosedLoopDoesNotRecursivelyCaptureExecuteFailures(t *testing.T
 		t.Fatalf("list_bases calls = %d, want 1", got)
 	}
 	if got := calls.docSearch.Load(); got < 1 {
-		t.Fatalf("search_open_platform_docs calls = %d, want at least 1", got)
+		t.Fatalf("search_open_platform_docs_rag calls = %d, want at least 1", got)
 	}
 }
 
@@ -251,7 +251,7 @@ func newRecoveryRuntimeServer(t *testing.T) (*httptest.Server, *recoveryRuntimeC
 			writeJSONRPCResult(t, w, req["id"], map[string]any{
 				"tools": []map[string]any{
 					{
-						"name":        "search_open_platform_docs",
+						"name":        "search_open_platform_docs_rag",
 						"title":       "Search Docs",
 						"description": "Search docs",
 						"inputSchema": map[string]any{"type": "object"},
@@ -261,7 +261,7 @@ func newRecoveryRuntimeServer(t *testing.T) (*httptest.Server, *recoveryRuntimeC
 		case "tools/call":
 			params, _ := req["params"].(map[string]any)
 			name, _ := params["name"].(string)
-			if name != "search_open_platform_docs" {
+			if name != "search_open_platform_docs_rag" {
 				t.Fatalf("unexpected devdoc tool %q", name)
 			}
 			calls.docSearch.Add(1)
@@ -313,8 +313,8 @@ func writeRecoveryCatalogFixture(t *testing.T, baseURL string) string {
 				"endpoint":     baseURL + "/server/devdoc",
 				"tools": []any{
 					map[string]any{
-						"rpc_name":       "search_open_platform_docs",
-						"canonical_path": "devdoc.search_open_platform_docs",
+						"rpc_name":       "search_open_platform_docs_rag",
+						"canonical_path": "devdoc.search_open_platform_docs_rag",
 					},
 				},
 			},

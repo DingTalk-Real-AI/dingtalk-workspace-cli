@@ -293,7 +293,7 @@ func (r *recoveryRuntime) Search(ctx context.Context, query string, rc recovery.
 			Status:   "empty",
 			Request: &recovery.ToolCallRecord{
 				ServerID:  "devdoc",
-				ToolName:  "search_open_platform_docs",
+				ToolName:  "search_open_platform_docs_rag",
 				Arguments: cloneRecoveryArgs(requestArgs),
 			},
 		},
@@ -302,7 +302,7 @@ func (r *recoveryRuntime) Search(ctx context.Context, query string, rc recovery.
 		retrieval.DocSearch.Status = "skipped"
 		return retrieval, nil
 	}
-	result, err := r.CallToolDirect(ctx, "devdoc", "search_open_platform_docs", requestArgs)
+	result, err := r.CallToolDirect(ctx, "devdoc", "search_open_platform_docs_rag", requestArgs)
 	if result != nil {
 		retrieval.DocSearch.Response = toRecoveryToolResponse(result)
 	}

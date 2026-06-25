@@ -95,10 +95,11 @@ func runSkillSetup(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("--skill / --exclude 仅在 --mode multi 下有效（mono 只有一个 skill，无需挑选）")
 	}
 
-	skillSrc, err := resolveSkillSetupSource(source, mode)
+	skillSrc, srcCleanup, err := resolveSkillSetupSourceOrEmbedded(source, mode)
 	if err != nil {
 		return err
 	}
+	defer srcCleanup()
 
 	dests, err := resolveSkillSetupTargets(target, mode)
 	if err != nil {

@@ -534,6 +534,34 @@ func newToolCommand(product ir.CanonicalProduct, tool ir.ToolDescriptor, runner 
 	return cmd
 }
 
+// canRegisterToolFlag reports whether a long flag named name can be
+// registered on cmd without panicking pflag ("flag redefined"). The reserved
+// payload names are excluded too: newToolCommand unconditionally registers
+// --json/--params before the spec loop. Tool schemas are remote data — a
+// property named after a reserved or already-registered flag must degrade to
+// "flag unavailable" (the value stays reachable through --json/--params),
+// never abort the process. Mirrors internal/compat's canRegisterFlag.
+func canRegisterToolFlag(cmd *cobra.Command, name string) bool {
+	if name == "" || name == "json" || name == "params" {
+		return false
+	}
+	return cmd.Flags().Lookup(name) == nil
+}
+
+// safeToolShorthand returns short when it is a single-character shorthand not
+// yet bound on cmd; otherwise "" (drop the shorthand, keep the long flag).
+// pflag panics on both multi-character and duplicate shorthands.
+func safeToolShorthand(cmd *cobra.Command, short string) string {
+	short = strings.TrimSpace(short)
+	if len(short) != 1 {
+		return ""
+	}
+	if cmd.Flags().ShorthandLookup(short) != nil {
+		return ""
+	}
+	return short
+}
+
 func applyFlagSpecs(cmd *cobra.Command, specs []FlagSpec) {
 	for _, spec := range specs {
 		usage := spec.Description
@@ -541,41 +569,42 @@ func applyFlagSpecs(cmd *cobra.Command, specs []FlagSpec) {
 			usage = fmt.Sprintf("Override %s", spec.PropertyName)
 		}
 		primary := strings.TrimSpace(spec.FlagName)
-		if primary == "" {
+		if !canRegisterToolFlag(cmd, primary) {
 			continue
 		}
+		shorthand := safeToolShorthand(cmd, spec.Shorthand)
 		alias := strings.TrimSpace(spec.Alias)
-		if alias == primary {
+		if alias == primary || !canRegisterToolFlag(cmd, alias) {
 			alias = ""
 		}
 
 		switch spec.Kind {
 		case flagString, flagJSON:
-			cmd.Flags().StringP(primary, spec.Shorthand, "", usage)
+			cmd.Flags().StringP(primary, shorthand, "", usage)
 			if alias != "" {
 				cmd.Flags().String(alias, "", usage+" (alias)")
 				_ = cmd.Flags().MarkHidden(alias)
 			}
 		case flagInteger:
-			cmd.Flags().IntP(primary, spec.Shorthand, 0, usage)
+			cmd.Flags().IntP(primary, shorthand, 0, usage)
 			if alias != "" {
 				cmd.Flags().Int(alias, 0, usage+" (alias)")
 				_ = cmd.Flags().MarkHidden(alias)
 			}
 		case flagNumber:
-			cmd.Flags().Float64P(primary, spec.Shorthand, 0, usage)
+			cmd.Flags().Float64P(primary, shorthand, 0, usage)
 			if alias != "" {
 				cmd.Flags().Float64(alias, 0, usage+" (alias)")
 				_ = cmd.Flags().MarkHidden(alias)
 			}
 		case flagBoolean:
-			cmd.Flags().BoolP(primary, spec.Shorthand, false, usage)
+			cmd.Flags().BoolP(primary, shorthand, false, usage)
 			if alias != "" {
 				cmd.Flags().Bool(alias, false, usage+" (alias)")
 				_ = cmd.Flags().MarkHidden(alias)
 			}
 		case flagStringArray, flagIntegerList, flagNumberList, flagBooleanList:
-			cmd.Flags().StringSliceP(primary, spec.Shorthand, nil, usage)
+			cmd.Flags().StringSliceP(primary, shorthand, nil, usage)
 			if alias != "" {
 				cmd.Flags().StringSlice(alias, nil, usage+" (alias)")
 				_ = cmd.Flags().MarkHidden(alias)

@@ -43,10 +43,12 @@
 ### 2. devdoc — 开发文档搜索
 
 **用 `devdoc` 的场景**：
-- "API 调用报错 403 怎么解决" — 开发调试问题
+- "API 调用报错 403 怎么解决" — 走 `devdoc error diagnose`
+- "requestId 15r6h45w0muec 为什么失败" — 走 `devdoc error diagnose --request-id ...`
 - "搜一下 OAuth2 接入文档" — 开放平台技术文档
 - "CLI 命令出错了怎么办" — CLI 使用错误
-- 用户提到"开发"、"API"、"调用错误"
+- 用户提到"开发"、"API"、"接口文档" → `devdoc article search`
+- 用户提到"调用错误"、"错误码"、"requestId"、"traceId" → `devdoc error diagnose`
 
 ---
 

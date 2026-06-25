@@ -77,7 +77,6 @@ type RecipeEntry struct {
 }
 
 var knownRegistryProducts = map[string]struct{}{
-	"aiapp":      {},
 	"aidesign":   {},
 	"aitable":    {},
 	"attendance": {},

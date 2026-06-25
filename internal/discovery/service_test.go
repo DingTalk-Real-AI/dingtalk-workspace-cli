@@ -13,13 +13,13 @@ import (
 )
 
 // newTestMCPServer returns an httptest.Server that handles both market registry
-// and MCP JSON-RPC endpoints. marketOK controls whether /cli/discovery/apis
+// and MCP JSON-RPC endpoints. marketOK controls whether /cli/discovery/apis/bamboo
 // succeeds, and mcpOK controls whether initialize+tools/list succeed.
 func newTestMCPServer(t *testing.T, marketOK, mcpOK bool) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/cli/discovery/apis", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/cli/discovery/apis/bamboo", func(w http.ResponseWriter, r *http.Request) {
 		if !marketOK {
 			http.Error(w, "market unavailable", http.StatusInternalServerError)
 			return

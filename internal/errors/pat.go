@@ -14,6 +14,7 @@
 package errors
 
 import (
+	"bytes"
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
@@ -476,11 +477,25 @@ func cleanPATJSON(body map[string]any, code string) string {
 	// stderr JSON MUST be a single-line, directly json.Unmarshal-able
 	// payload — pretty-printing would break naïve host parsers that read
 	// stderr line-by-line and fail on leading whitespace.
-	b, err := jsonutil.Marshal(out)
+	b, err := marshalSingleLineJSONNoHTMLEscape(out)
 	if err != nil {
 		return fmt.Sprintf(`{"success":false,"code":"%s"}`, code)
 	}
 	return string(b)
+}
+
+func marshalSingleLineJSONNoHTMLEscape(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	out := buf.Bytes()
+	if len(out) > 0 && out[len(out)-1] == '\n' {
+		out = out[:len(out)-1]
+	}
+	return out, nil
 }
 
 // ---- Runner adapter functions ------------------------------------------------

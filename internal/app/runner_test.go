@@ -329,14 +329,62 @@ func TestResolveIdentityHeadersForwardsAgentCode(t *testing.T) {
 	}
 }
 
-func TestResolveIdentityHeadersForwardsCompatAgentCode(t *testing.T) {
+func TestResolveIdentityHeadersAgentIdentityFields(t *testing.T) {
 	setupRuntimeCommandTest(t)
-	t.Setenv(authpkg.AgentCodeEnv, "")
-	t.Setenv(authpkg.AgentCodeEnvCompat, " compat ")
+	t.Setenv(authpkg.AgentCodeEnv, "qoder")
 
 	headers := resolveIdentityHeaders()
-	if got := headers["x-dingtalk-dws-agent-code"]; got != "compat" {
-		t.Fatalf("x-dingtalk-dws-agent-code = %q, want compat", got)
+
+	// x-dws-agent-id stays machine-level (v1 install UUID): non-empty and NOT
+	// the dwsa_ instance form — this is the cross-version continuity anchor.
+	machineID := headers["x-dws-agent-id"]
+	if machineID == "" {
+		t.Fatal("x-dws-agent-id must stay populated (machine-level)")
+	}
+	if strings.HasPrefix(machineID, "dwsa_") {
+		t.Fatalf("x-dws-agent-id must remain machine-level, got instance form %q", machineID)
+	}
+
+	// x-dws-agent-instance-id is the NEW per-(machine × agent_code) id.
+	instID := headers["x-dws-agent-instance-id"]
+	if !strings.HasPrefix(instID, "dwsa_") {
+		t.Fatalf("x-dws-agent-instance-id must be a derived instance id, got %q", instID)
+	}
+	if instID == machineID {
+		t.Fatal("instance id must differ from machine id")
+	}
+
+	// CLI version must now be on the wire so the gateway can segment old/new.
+	if headers[transport.HeaderVersion] == "" {
+		t.Fatalf("%s must be emitted", transport.HeaderVersion)
+	}
+}
+
+func TestResolveIdentityHeadersIgnoresReversedAgentCodeEnv(t *testing.T) {
+	setupRuntimeCommandTest(t)
+	t.Setenv(authpkg.AgentCodeEnv, "")
+	t.Setenv("DWS_DINGTALK_AGENTCODE", " compat ")
+	// Isolate from ambient agent-host detection signals so this test asserts
+	// only the reversed-env-name behavior (the suite itself may run under
+	// Claude Code / Qoder / VS Code, whose signals would otherwise be detected).
+	for _, k := range []string{
+		"CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT",
+		"OPENCLAW_BUNDLE_ROOT", "OPENCLAW_RUNTIME_ROLE", "HERMES_HOME",
+		"CODEX_SANDBOX", "VSCODE_BRAND", "__CFBundleIdentifier",
+	} {
+		t.Setenv(k, "")
+	}
+
+	headers := resolveIdentityHeaders()
+	// The reversed env name must never be consumed. With no canonical
+	// declaration and no host signature, agent_code resolves to the honest
+	// "custom" fallback — and crucially is NOT the reversed value.
+	got := headers["x-dingtalk-dws-agent-code"]
+	if got == "compat" {
+		t.Fatalf("x-dingtalk-dws-agent-code = %q, reversed env must be ignored", got)
+	}
+	if got != authpkg.AgentCodeCustom {
+		t.Fatalf("x-dingtalk-dws-agent-code = %q, want %q (fallback)", got, authpkg.AgentCodeCustom)
 	}
 }
 

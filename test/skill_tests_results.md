@@ -2,8 +2,8 @@
 
 ## Summary
 
-- **Total Test Cases**: 202
-- **Passed**: 202
+- **Total Test Cases**: 204
+- **Passed**: 204
 - **Failed**: 0
 - **Pass Rate**: 100.0%
 
@@ -16,7 +16,7 @@
 | calendar | 30 | 30 | 0 | 100.0% |
 | chat | 31 | 31 | 0 | 100.0% |
 | contact | 14 | 14 | 0 | 100.0% |
-| devdoc | 5 | 5 | 0 | 100.0% |
+| devdoc | 7 | 7 | 0 | 100.0% |
 | ding | 5 | 5 | 0 | 100.0% |
 | report | 26 | 26 | 0 | 100.0% |
 | todo | 30 | 30 | 0 | 100.0% |
@@ -1132,6 +1132,22 @@
 - Skill Reference: references/products/devdoc.md
 - Command path: PASS (devdoc article search)
 - Flags: PASS (1 flags validated)
+
+**devdoc_devdoc_error_diagnose_001** ✅ PASS
+
+- Prompt: 排查开放平台 requestId 15r6h45w0muec 的调用失败
+- Expected: `dws devdoc error diagnose --request-id 15r6h45w0muec --format json`
+- Skill Reference: references/products/devdoc.md
+- Command path: PASS (devdoc error diagnose)
+- Flags: PASS (1 flags validated)
+
+**devdoc_devdoc_error_diagnose_002** ✅ PASS
+
+- Prompt: 排查开放平台错误码 33012，错误描述 missing scope
+- Expected: `dws devdoc error diagnose --error-code 33012 --error-message "missing scope" --format json`
+- Skill Reference: references/products/devdoc.md
+- Command path: PASS (devdoc error diagnose)
+- Flags: PASS (2 flags validated)
 
 ### ding
 

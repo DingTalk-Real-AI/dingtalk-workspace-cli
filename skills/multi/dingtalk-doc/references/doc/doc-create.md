@@ -41,7 +41,7 @@ Flags:
 
 ## 关键说明
 
-- **`--name` 是 H1**：正文从 `##` 开始；正文内不要再写 `#` 一级标题（除非确需且已说明动机）。
+- **`--name` 是 H1**：正文从 `##` 开始；正文内不要再写 `#` 一级标题（除非确需且已说明动机）。若正文首行仍是与 `--name` 相同的一级标题，CLI 会自动移除并在 stderr 提示（仅精确匹配会被移除，其他一级标题不受影响）。
 - 不传 `--folder` 和 `--workspace` 时，默认创建在「我的文档」根目录。
 - `--folder` 仅接受文档文件夹 `nodeId` / `dentryUuid` / alidocs 文件夹 URL；**禁止**传入 drive `dentryId`、`parentId`、`spaceId` 这类纯数字 ID。
 - 输入方式选择见 [`./doc-update.md` §内容写入管道](./doc-update.md#内容写入管道createupdate-共用)（与 update 共用）。短文本字面量可 `--content`，多行/表格/特殊字符必须 `--content-file` 或 `--content -`。

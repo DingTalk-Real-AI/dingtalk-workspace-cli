@@ -18,6 +18,25 @@ Flags:
       --size string      每页数量 (默认 10)
 ```
 
+### 错误排查
+```
+Usage:
+  dws devdoc error diagnose [flags]
+Example:
+  dws devdoc error diagnose --request-id 15r6h45w0muec --format json
+  dws devdoc error diagnose --error-code 33012 --error-message "missing scope" --format json
+Flags:
+      --query string           原始排查问题
+      --request-id string      开放平台 requestId
+      --trace-id string        requestId 的兼容别名
+      --error-code string      错误码
+      --error-message string   错误描述，会合并进原始问题
+      --api string             API 名称，会合并进原始问题作为补充检索词
+      --context string         额外排查上下文，会合并进原始问题
+      --page int               分页页码 (默认 1)
+      --size int               分页大小 (默认 10)
+```
+
 ## live — 直播
 
 ### 查看我的直播列表
@@ -91,7 +110,8 @@ Args:
 
 ## 意图判断
 
-- 用户说"开发文档/API 文档/接口文档/调用报错" → `devdoc article search`
+- 用户说"开发文档/API 文档/接口文档" → `devdoc article search`
+- 用户说"调用报错/requestId/traceId/错误码/错误描述" → `devdoc error diagnose`
 - 用户说"直播/我的直播" → `live stream list`
 - 用户说"搜索技能/找技能/安装技能/技能市场" → `skill search` / `skill install`（按步骤衔接）
 
@@ -100,6 +120,7 @@ Args:
 | 操作 | 从返回中提取 | 用于 |
 |------|-------------|------|
 | `devdoc article search` | 文档链接 | 直接展示给用户 |
+| `devdoc error diagnose` | diagnosticInfo、references、materials | 排查开放平台调用错误 |
 | `skill search` | `skillId`、名称、描述 | 用户选型后传给 `skill install <skillId> <target>` |
 | `skill install` | 安装成功/失败信息 | 确认目标 Agent 目录已注册 |
 | `skill publish` | 发布结果（成功或错误信息） | 确认企业技能库已更新 |

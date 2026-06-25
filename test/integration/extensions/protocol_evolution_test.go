@@ -134,7 +134,7 @@ func newEvolvingRuntimeMarketServer(t *testing.T, fixture mockmcp.Fixture) *evol
 	s.SetFixture(t, fixture)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/cli/discovery/apis", s.serveMarketServers)
+	mux.HandleFunc("/cli/discovery/apis/bamboo", s.serveMarketServers)
 	mux.HandleFunc("/mcp/market/detail", s.serveMarketDetail)
 	mux.HandleFunc("/", s.serveMCP)
 	s.server = httptest.NewServer(mux)

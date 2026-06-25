@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -56,6 +57,7 @@ func newUpgradeCommand() *cobra.Command {
   dws upgrade --list --all       # 列出所有版本
   dws upgrade --version v1.0.5   # 升级到指定版本
   dws upgrade --rollback         # 回滚到上一版本
+  dws upgrade --dry-run          # 仅预览升级步骤，不实际执行
   dws upgrade -y                 # 跳过确认直接升级`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -68,6 +70,7 @@ func newUpgradeCommand() *cobra.Command {
 			}
 
 			yes, _ := cmd.Flags().GetBool("yes")
+			dryRun, _ := cmd.Flags().GetBool("dry-run")
 			format := resolveUpgradeFormat(cmd)
 
 			if flagList {
@@ -88,6 +91,7 @@ func newUpgradeCommand() *cobra.Command {
 				force:         flagForce,
 				skipSkills:    flagSkipSkills,
 				yes:           yes,
+				dryRun:        dryRun,
 			})
 		},
 	}
@@ -108,6 +112,7 @@ type upgradeOptions struct {
 	force         bool
 	skipSkills    bool
 	yes           bool
+	dryRun        bool
 }
 
 // --- dws upgrade --check ---
@@ -298,6 +303,29 @@ func runUpgradeRollback(yes bool) error {
 //   Phase 2 (Apply):   replace binary + install skills — only runs if Phase 1 fully succeeds.
 // If anything fails in Phase 1, no files on disk are modified.
 
+// writeDryRunPlan renders the steps that `dws upgrade` would perform, without
+// touching the filesystem. Kept side-effect-free and writer-injectable so the
+// --dry-run contract can be asserted in tests.
+func writeDryRunPlan(w io.Writer, currentVer, binaryAssetName string, hasSkills bool) {
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "  %s 预览模式，不会下载或修改任何文件\n", ugBold("[dry-run]"))
+	fmt.Fprintf(w, "  将执行以下操作:\n")
+	fmt.Fprintf(w, "    [1/5] 备份当前版本 %s\n", ugDim(ensureV(currentVer)))
+	fmt.Fprintf(w, "    [2/5] 下载 %s\n", ugCyan(binaryAssetName))
+	if hasSkills {
+		fmt.Fprintf(w, "          下载 %s\n", ugCyan("dws-skills.zip"))
+	}
+	fmt.Fprintf(w, "    [3/5] 校验 SHA256\n")
+	fmt.Fprintf(w, "    [4/5] 解压并验证\n")
+	replaceStep := "替换二进制"
+	if hasSkills {
+		replaceStep += " 并安装技能包"
+	}
+	fmt.Fprintf(w, "    [5/5] %s\n", replaceStep)
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "  %s\n", ugDim("移除 --dry-run 以实际执行升级"))
+}
+
 func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 	fmt.Printf("  %s\n", ugDim("检查更新..."))
 
@@ -337,6 +365,20 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 	}
 	if release.Prerelease {
 		fmt.Printf("  %s  %s\n", ugBold("通道:      "), ugYellow("pre-release"))
+	}
+
+	// --dry-run: preview only. Resolve the platform asset so a missing build is
+	// still reported, then describe the steps that *would* run and return before
+	// any side effect (no backup, no download, no replace). Matches the global
+	// flag's contract: "预览操作内容，不实际执行".
+	if opts.dryRun {
+		binaryAsset, err := upgrade.FindBinaryAsset(release.Assets)
+		if err != nil {
+			return err
+		}
+		hasSkills := upgrade.FindSkillsAsset(release.Assets) != nil && !opts.skipSkills
+		writeDryRunPlan(os.Stdout, currentVer, binaryAsset.Name, hasSkills)
+		return nil
 	}
 
 	if !opts.yes {
@@ -516,6 +558,16 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 		}
 	} else {
 		fmt.Printf(" %s\n", ugGreen("✓"))
+	}
+
+	// Clear discovery-derived caches so the upgraded binary rebuilds its
+	// command tree from a fresh fetch instead of inheriting snapshots written
+	// by the old version — a poisoned snapshot used to lock out every
+	// invocation before the build guards landed (#447 / #449).
+	if purged, purgeErr := cacheStoreFromEnv().PurgeDiscoveryData(); purgeErr != nil {
+		fmt.Printf("       %s %s\n", ugYellow("⚠"), ugDim(fmt.Sprintf("清理发现缓存失败 (可手动运行 dws cache refresh): %v", purgeErr)))
+	} else if len(purged) > 0 {
+		fmt.Printf("       %s %s\n", ugGreen("✓"), ugDim("发现缓存已清空, 新版本首次运行时自动重建"))
 	}
 
 	// Cleanup old backups

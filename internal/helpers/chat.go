@@ -14,6 +14,7 @@
 package helpers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"strings"
@@ -22,6 +23,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
 
@@ -332,7 +334,17 @@ func newChatMessageSendCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("file-type", "", "文件类型/扩展名 (msg-type=file)")
 	cmd.Flags().String("file-path", "", "文件展示路径 (msg-type=file)")
 	cmd.Flags().Int64("file-size", 0, "文件大小，单位字节 (msg-type=file)")
+	cmd.Flags().Bool("ai-tag", false, "标记为「通过AI发送」(默认不带；仅传 --ai-tag 时才在消息下方显示 AI 发送角标)")
 	return cmd
+}
+
+// attachAITag 仅在用户显式传入 --ai-tag 时，给发送参数加上 clawType，
+// 由 IM 服务端据此渲染「通过AI发送」角标 (悟空版渲染「悟空AI发送」)。
+// 默认不带：是否标记 AI 发送交由用户自行选择，不强加。
+func attachAITag(cmd *cobra.Command, params map[string]any) {
+	if on, _ := cmd.Flags().GetBool("ai-tag"); on {
+		params["clawType"] = edition.ClawType()
+	}
 }
 
 // deriveTitleFromText 在未显式指定 --title 时，从正文截取一个标题
@@ -441,6 +453,7 @@ func buildChatMessageSendInvocation(cmd *cobra.Command, args []string) (map[stri
 			return nil, "", apperrors.NewValidation("unsupported --msg-type: " + msgType + " (supported: image, file)")
 		}
 		params := map[string]any{"msgType": msgType, "content": contentJSON}
+		attachAITag(cmd, params)
 		if strings.TrimSpace(uuid) != "" {
 			params["uuid"] = uuid
 		}
@@ -475,12 +488,12 @@ func buildChatMessageSendInvocation(cmd *cobra.Command, args []string) (map[stri
 		if atAll && !strings.Contains(text, "<@all>") {
 			text = "<@all> " + text
 		}
-		b, _ := json.Marshal(map[string]string{"title": title, "text": text})
 		params := map[string]any{
 			"openConversationId": group,
 			"msgType":            "markdown",
-			"content":            string(b),
+			"content":            marshalMessageContent(title, text),
 		}
+		attachAITag(cmd, params)
 		if atAll {
 			params["atAll"] = true
 		}
@@ -493,14 +506,15 @@ func buildChatMessageSendInvocation(cmd *cobra.Command, args []string) (map[stri
 		return params, "send_personal_message", nil
 	case hasUser:
 		params := map[string]any{"title": title, "text": text, "receiverUserId": user}
+		attachAITag(cmd, params)
 		return params, "send_direct_message_as_user", nil
 	default:
-		b, _ := json.Marshal(map[string]string{"title": title, "text": text})
 		params := map[string]any{
 			"receiverOpenDingTalkId": openID,
 			"msgType":                "markdown",
-			"content":                string(b),
+			"content":                marshalMessageContent(title, text),
 		}
+		attachAITag(cmd, params)
 		if strings.TrimSpace(uuid) != "" {
 			params["uuid"] = uuid
 		}
@@ -976,8 +990,10 @@ func newChatMessageReplyCommand(runner executor.Runner) *cobra.Command {
 				"openConversationId": convID,
 				"msgType":            "reply",
 				"content":            contentJSON,
-				"clawType":           "wukong",
 			}
+			// clawType 仅在 --ai-tag 时携带；默认不带，回复不强加 AI 角标。
+			// edition 决定取值 (开源 openClaw / 悟空 wukong)。
+			attachAITag(cmd, params)
 			if uuid, _ := cmd.Flags().GetString("uuid"); strings.TrimSpace(uuid) != "" {
 				params["uuid"] = uuid
 			}
@@ -1001,6 +1017,7 @@ func newChatMessageReplyCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("ref-sender", "", "被引用消息发送者 openDingTalkId (必填)")
 	cmd.Flags().String("text", "", "回复正文 (必填)")
 	cmd.Flags().String("uuid", "", "可选 uuid（幂等标识）")
+	cmd.Flags().Bool("ai-tag", false, "标记为「通过AI发送」(默认不带；仅传 --ai-tag 时才显示 AI 发送角标)")
 	return cmd
 }
 
@@ -1010,4 +1027,20 @@ func jsonMarshal(v any) (string, error) {
 		return "", err
 	}
 	return string(b), nil
+}
+
+// marshalMessageContent builds the send_personal_message content payload
+// ({"title","text"}) WITHOUT HTML-escaping < > &. DingTalk's client renders
+// @-mentions by matching literal <@openDingTalkId> / <@all> tokens in the
+// message text; the default json.Marshal escaping turns them into
+// <@...>, which the client shows as plain text instead of a rendered
+// mention. encoding/json offers no escape toggle on Marshal, so use an Encoder.
+func marshalMessageContent(title, text string) string {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	// Encoder errors are impossible for a map[string]string; ignore safely.
+	_ = enc.Encode(map[string]string{"title": title, "text": text})
+	// Encoder.Encode appends a trailing newline; strip it.
+	return strings.TrimRight(buf.String(), "\n")
 }

@@ -18,6 +18,8 @@
 #   DWS_NO_SKILLS     — set to 1 to skip skills install
 #   DWS_SKILLS_ONLY   — set to 1 to install only skills
 #   DWS_SKILL_MODE    — mono | multi (default: prompt if TTY, else mono)
+#   DWS_GITEE_REPO    — "owner/repo" on Gitee; resolve version + assets via the
+#                       Gitee API instead of GitHub (China mirror)
 #
 # Agent skills paths follow build/npm/install.js AGENT_DIRS (order and entries must match).
 
@@ -25,6 +27,10 @@ $ErrorActionPreference = "Stop"
 
 $Repo = "DingTalk-Real-AI/dingtalk-workspace-cli"
 $BinName = "dws"
+# China mirror: Gitee repo "owner/repo". When set, version + asset URLs resolve via the Gitee API.
+$GiteeRepo = if ($env:DWS_GITEE_REPO) { $env:DWS_GITEE_REPO } else { "" }
+# Auto-fallback Gitee mirror used when GitHub is unreachable (see Resolve-Source).
+$GiteeFallbackRepo = if ($env:DWS_GITEE_FALLBACK_REPO) { $env:DWS_GITEE_FALLBACK_REPO } else { "DingTalk-Real-AI/dingtalk-workspace-cli" }
 $InstallDir = if ($env:DWS_INSTALL_DIR) { $env:DWS_INSTALL_DIR } else { Join-Path $HOME ".local\bin" }
 $Version = if ($env:DWS_VERSION) { $env:DWS_VERSION } else { "latest" }
 $NoSkills = $env:DWS_NO_SKILLS -eq "1"
@@ -118,8 +124,61 @@ function Get-Arch {
     Write-Err "Unsupported architecture: Could not detect system architecture. Please set DWS_ARCH environment variable to 'amd64' or 'arm64'."
 }
 
+function Invoke-GiteeApi {
+    param([string]$Uri)
+    # Gitee's gateway returns sporadic 502/503, so retry a few times before failing.
+    for ($i = 1; $i -le 4; $i++) {
+        try {
+            return Invoke-RestMethod -Uri $Uri -UseBasicParsing
+        } catch {
+            if ($i -eq 4) { throw }
+            Start-Sleep -Seconds 2
+        }
+    }
+}
+
+function Get-GiteeAssetUrl {
+    param([string]$Name)
+    # Resolve a release asset's download URL by name via the Gitee API
+    # (Gitee attachment URLs carry an unstable numeric id, so never template them).
+    $rel = Invoke-GiteeApi "https://gitee.com/api/v5/repos/$GiteeRepo/releases/tags/$Version"
+    foreach ($a in $rel.assets) {
+        if ($a.name -eq $Name) { return $a.browser_download_url }
+    }
+    return ""
+}
+
+function Resolve-Source {
+    # Explicit DWS_GITEE_REPO wins; else probe GitHub and fall back to Gitee when unreachable.
+    if ($GiteeRepo -ne "") { return }
+    if ($env:DWS_NO_FALLBACK -eq "1") { return }
+    try {
+        Invoke-WebRequest -Uri "https://github.com/$Repo/releases/latest" -Method Head `
+            -TimeoutSec 12 -UseBasicParsing -ErrorAction Stop 2>$null | Out-Null
+        return
+    } catch {
+        $script:GiteeRepo = $GiteeFallbackRepo
+        Write-Say "⚠ GitHub 不可达，自动切换国内 Gitee 镜像: $script:GiteeRepo"
+    }
+}
+
 function Resolve-LatestVersion {
     if ($Version -eq "latest") {
+        if ($GiteeRepo -ne "") {
+            try {
+                # Gitee's /releases/latest and /releases endpoints are unreliable
+                # (404 / empty even when releases exist), so resolve the newest
+                # vN.N.N tag from the git tags endpoint instead.
+                $tags = Invoke-GiteeApi "https://gitee.com/api/v5/repos/$GiteeRepo/tags"
+                $latest = $tags.name |
+                    Where-Object { $_ -match '^v\d+\.\d+\.\d+$' } |
+                    ForEach-Object { [version]($_.TrimStart('v')) } |
+                    Sort-Object | Select-Object -Last 1
+                if ($latest) { $script:Version = "v$latest"; return }
+            } catch {}
+            Write-Err "Could not determine the latest Gitee version. Set `$env:DWS_VERSION explicitly."
+            return
+        }
         try {
             $response = Invoke-WebRequest -Uri "https://github.com/$Repo/releases/latest" `
                 -MaximumRedirection 0 -ErrorAction SilentlyContinue -UseBasicParsing 2>$null
@@ -289,7 +348,8 @@ function Install-Binary {
     Resolve-LatestVersion
 
     $archiveName = "${BinName}-windows-${arch}.zip"
-    $downloadUrl = "https://github.com/$Repo/releases/download/$Version/$archiveName"
+    if ($GiteeRepo -ne "") { $downloadUrl = Get-GiteeAssetUrl $archiveName } else { $downloadUrl = "https://github.com/$Repo/releases/download/$Version/$archiveName" }
+    if (-not $downloadUrl) { Write-Err "Could not resolve download URL for $archiveName (version $Version)." }
 
     Write-Say "⬇  Downloading $BinName $Version (windows/$arch)..."
 
@@ -301,7 +361,7 @@ function Install-Binary {
         Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath -UseBasicParsing
 
         # Download and verify SHA256 checksum
-        $checksumUrl = "https://github.com/$Repo/releases/download/$Version/checksums.txt"
+        if ($GiteeRepo -ne "") { $checksumUrl = Get-GiteeAssetUrl "checksums.txt" } else { $checksumUrl = "https://github.com/$Repo/releases/download/$Version/checksums.txt" }
         try {
             $checksumPath = Join-Path $tmpDir "checksums.txt"
             Invoke-WebRequest -Uri $checksumUrl -OutFile $checksumPath -UseBasicParsing
@@ -483,7 +543,8 @@ function Install-Skills {
     Write-Say "📦 Installing agent skills from GitHub Releases..."
     Resolve-LatestVersion
 
-    $zipUrl = "https://github.com/$Repo/releases/download/$Version/dws-skills.zip"
+    if ($GiteeRepo -ne "") { $zipUrl = Get-GiteeAssetUrl "dws-skills.zip" } else { $zipUrl = "https://github.com/$Repo/releases/download/$Version/dws-skills.zip" }
+    if (-not $zipUrl) { Write-Err "Could not resolve download URL for dws-skills.zip (version $Version)." }
 
     $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) "dws-skills-$PID"
     New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
@@ -545,6 +606,10 @@ function Install-Skills {
 $SourceRoot = Resolve-SourceRoot
 
 Write-Banner
+
+# Pick GitHub vs Gitee mirror (auto-fallback when GitHub is unreachable).
+# Skipped when installing from a local source checkout (no download needed).
+if (-not $SourceRoot) { Resolve-Source }
 
 if (!$NoSkills) {
     Resolve-SkillMode

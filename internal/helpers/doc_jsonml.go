@@ -26,6 +26,7 @@ import (
 var docDangerousUnicode = [...]rune{
 	0x200B,
 	0x200C,
+	0x200D,
 	0x200E,
 	0x200F,
 	0x202A,
@@ -33,6 +34,8 @@ var docDangerousUnicode = [...]rune{
 	0x202C,
 	0x202D,
 	0x202E,
+	0x2028,
+	0x2029,
 	0x2066,
 	0x2067,
 	0x2068,
@@ -49,8 +52,20 @@ var docDangerousSet = func() map[rune]bool {
 	return m
 }()
 
-func stripDocDangerousUnicode(s string) string {
+// stripDocInputUnsafe removes characters that the server-side RejectControlChars
+// validator (mirrored by apiclient.rejectDangerousChars) would reject:
+//
+//  1. C0 control characters (except tab and newline) and DEL (0x7F)
+//  2. Dangerous Unicode (zero-width, Bidi controls, line/paragraph separators, BOM)
+//
+// It is applied at the write boundary so document content passes server
+// validation instead of being rejected. Tab and newline are preserved because
+// they are legitimate in document text.
+func stripDocInputUnsafe(s string) string {
 	return strings.Map(func(r rune) rune {
+		if r != '\t' && r != '\n' && (r < 0x20 || r == 0x7F) {
+			return -1
+		}
 		if docDangerousSet[r] {
 			return -1
 		}
@@ -194,7 +209,7 @@ func prepareDocJSONMLBody(cmd *cobra.Command, raw string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("marshal normalized jsonml: %w", err)
 	}
-	return stripDocDangerousUnicode(string(out)), nil
+	return stripDocInputUnsafe(string(out)), nil
 }
 
 func prepareDocJSONMLNode(cmd *cobra.Command, rawElement string) (string, error) {
@@ -247,7 +262,7 @@ func prepareDocJSONMLNode(cmd *cobra.Command, rawElement string) (string, error)
 	if err != nil {
 		return "", fmt.Errorf("marshal normalized jsonml: %w", err)
 	}
-	return string(out), nil
+	return stripDocInputUnsafe(string(out)), nil
 }
 
 func docEmitJSONMLFixNotes(cmd *cobra.Command, notes []string) {
