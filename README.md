@@ -135,6 +135,14 @@ npm install -g dingtalk-workspace-cli --registry=https://registry.npmmirror.com
 
 > npmmirror automatically syncs public packages from the public npm registry, so this works directly in China.
 
+**3. Skills only (Gitee mirror):**
+
+```bash
+DWS_GITEE_REPO=DingTalk-Real-AI/dingtalk-workspace-cli curl -fsSL https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli/raw/main/scripts/install-skills.sh | sh
+```
+
+> With `DWS_GITEE_REPO` set, `install-skills.sh` resolves the version and skills package from Gitee; it also auto-falls back to the Gitee mirror when GitHub is unreachable.
+
 ## Upgrade
 
 > Requires **v1.0.7** or later. For earlier versions, please re-run the [install script](#installation) to upgrade.
@@ -309,6 +317,8 @@ curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace
 ```
 
 > `install.sh` installs to `$HOME/.agents/skills/dws` (global); `install-skills.sh` installs to `./.agents/skills/dws` (current project).
+>
+> China users: prefix `DWS_GITEE_REPO` to use the Gitee mirror — see [China mirror](#china-mirror).
 
 **Switching or re-installing with `dws skill setup`:**
 
