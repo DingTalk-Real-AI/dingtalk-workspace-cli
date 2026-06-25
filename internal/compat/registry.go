@@ -336,7 +336,16 @@ func NewDirectCommand(route Route, runner executor.Runner) *cobra.Command {
 					Response: resp,
 				}
 				if route.OutputTransform != nil && result.Response != nil {
-					result.Response = route.OutputTransform(result.Response)
+					// Shape the MCP content payload (the actual data), not the
+					// {endpoint, content} runtime envelope, so rename/drop/table
+					// paths resolve against response fields (e.g. result.items)
+					// rather than the wrapper. Falls back to the whole Response
+					// when no content map is present (degraded/echo paths).
+					if content, ok := result.Response["content"].(map[string]any); ok {
+						result.Response["content"] = route.OutputTransform(content)
+					} else {
+						result.Response = route.OutputTransform(result.Response)
+					}
 				}
 				return output.WriteCommandPayload(cmd, result, output.FormatJSON)
 			}
