@@ -6,6 +6,10 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.42] - 2026-06-25
+
+This release rounds out `dws dev connect` — bridge a DingTalk robot to your local AI (Claude Code / Codex / opencode / Qoder / …): a generic `custom` channel for any headless CLI tool, in-chat `/new` / `/clear` session commands aligned to each agent's real session op, and a fix for long opencode turns being cut at 30 seconds.
+
 ### Added
 
 - **`dws devapp robot connect` — generic `custom` channel for self-built / unsupported AI tools** (issue #37; `internal/helpers/devapp_connect.go`, `internal/helpers/connect_stream.go`) — a new `--agent-cmd "<command>"` flag (and `custom` channel) lets the bot forward to any headless AI CLI that takes a question as its trailing argument and prints the answer to stdout, so tools that aren't built-in (e.g. 网易有道龙虾 LobsterAI) or self-built agents can be onboarded without code changes. `--agent-cmd` forces the `custom` channel unless `--channel` is set explicitly; detection also falls back to `custom` when `DWS_AGENT_CMD` is present.
