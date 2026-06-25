@@ -277,6 +277,9 @@ func newDocReadCommand(runner executor.Runner) *cobra.Command {
 			if output := docStringFlag(cmd, "output"); output != "" {
 				params["__output__"] = output
 			}
+			if format == "jsonml" {
+				return runDocReadJSONML(cmd, runner, params)
+			}
 			return runDocTool(cmd, runner, "doc", "get_document_content", params)
 		},
 	}
@@ -1474,6 +1477,56 @@ func docInvocationResult(cmd *cobra.Command, runner executor.Runner, product, to
 	return runner.Run(cmd.Context(), invocation)
 }
 
+func runDocReadJSONML(cmd *cobra.Command, runner executor.Runner, params map[string]any) error {
+	outputPath, _ := params["__output__"].(string)
+	result, err := docInvocationResult(cmd, runner, "doc", "get_document_content", params)
+	if err != nil {
+		return err
+	}
+	if !result.Invocation.Implemented {
+		return writeCommandPayload(cmd, result)
+	}
+	payload := normalizeDocReadJSONMLResult(result)
+	if outputPath != "" {
+		data, err := json.MarshalIndent(payload, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal JSONML output: %w", err)
+		}
+		if err := os.WriteFile(outputPath, data, 0644); err != nil {
+			return fmt.Errorf("failed to write output file %s: %w", outputPath, err)
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "[INFO] JSONML 已写入 %s\n", outputPath)
+		return nil
+	}
+	return writeCommandPayload(cmd, payload)
+}
+
+func normalizeDocReadJSONMLResult(result executor.Result) map[string]any {
+	content := result.Response
+	if nested, ok := result.Response["content"].(map[string]any); ok {
+		content = nested
+	}
+	out := map[string]any{}
+	for k, v := range content {
+		if k == "content" {
+			continue
+		}
+		out[k] = v
+	}
+	if raw, ok := out["jsonml"].(string); ok {
+		var decoded any
+		if err := json.Unmarshal([]byte(raw), &decoded); err == nil {
+			out["jsonml"] = decoded
+		}
+	}
+	if revision, ok := out["version"]; ok {
+		if _, exists := out["revision"]; !exists {
+			out["revision"] = revision
+		}
+	}
+	return out
+}
+
 func addDocNodeFlags(cmd *cobra.Command) {
 	cmd.Flags().String("node", "", i18n.T("文档 nodeId / URL"))
 	addDocHiddenStringFlag(cmd, "url", "--node alias")
@@ -2099,6 +2152,7 @@ func newDocPermissionAddCommand(runner executor.Runner) *cobra.Command {
 	addDocHiddenStringFlag(cmd, "users", "--user alias")
 	cmd.Flags().String("role", "", i18n.T("权限角色: MANAGER / EDITOR / DOWNLOADER / READER (必填，大小写不敏感)"))
 	cmd.Flags().String("workspace", "", i18n.T("目标知识库 ID 或 URL（选填，辅助构造返回的 docUrl）"))
+	addDocHiddenStringFlag(cmd, "workspace-id", "--workspace alias")
 	return cmd
 }
 
@@ -2127,6 +2181,7 @@ func newDocPermissionUpdateCommand(runner executor.Runner) *cobra.Command {
 	addDocHiddenStringFlag(cmd, "uid", "--user alias")
 	cmd.Flags().String("role", "", i18n.T("新权限角色: MANAGER / EDITOR / DOWNLOADER / READER (必填)"))
 	cmd.Flags().String("workspace", "", i18n.T("目标知识库 ID 或 URL（选填）"))
+	addDocHiddenStringFlag(cmd, "workspace-id", "--workspace alias")
 	return cmd
 }
 
@@ -2167,7 +2222,7 @@ func newDocPermissionListCommand(runner executor.Runner) *cobra.Command {
 				}
 				params["filterRoleIds"] = roles
 			}
-			if v, _ := cmd.Flags().GetString("workspace"); v != "" {
+			if v := docFlagOrFallback(cmd, "workspace", "workspace-id"); v != "" {
 				params["workspaceId"] = v
 			}
 			if commandDryRun(cmd) {
@@ -2193,6 +2248,7 @@ func newDocPermissionListCommand(runner executor.Runner) *cobra.Command {
 	_ = cmd.Flags().MarkHidden("page-size")
 	cmd.Flags().String("filter-role", "", i18n.T("按角色过滤（逗号分隔）: OWNER / MANAGER / EDITOR / DOWNLOADER / READER"))
 	cmd.Flags().String("workspace", "", i18n.T("目标知识库 ID 或 URL（选填）"))
+	addDocHiddenStringFlag(cmd, "workspace-id", "--workspace alias")
 	return cmd
 }
 
@@ -2221,7 +2277,7 @@ func newDocPermissionRemoveCommand(runner executor.Runner) *cobra.Command {
 				"nodeId":  nodeID,
 				"userIds": userIDs,
 			}
-			if v, _ := cmd.Flags().GetString("workspace"); v != "" {
+			if v := docFlagOrFallback(cmd, "workspace", "workspace-id"); v != "" {
 				params["workspaceId"] = v
 			}
 			if commandDryRun(cmd) {
@@ -2244,6 +2300,7 @@ func newDocPermissionRemoveCommand(runner executor.Runner) *cobra.Command {
 	addDocHiddenStringFlag(cmd, "user", "--users alias")
 	addDocHiddenStringFlag(cmd, "uid", "--users alias")
 	cmd.Flags().String("workspace", "", i18n.T("目标知识库 ID 或 URL（选填）"))
+	addDocHiddenStringFlag(cmd, "workspace-id", "--workspace alias")
 	return cmd
 }
 
@@ -2278,7 +2335,7 @@ func runDocPermissionMutation(cmd *cobra.Command, runner executor.Runner, mcpToo
 		"roleId":  role,
 		"userIds": userIDs,
 	}
-	if v, _ := cmd.Flags().GetString("workspace"); v != "" {
+	if v := docFlagOrFallback(cmd, "workspace", "workspace-id"); v != "" {
 		params["workspaceId"] = v
 	}
 	if commandDryRun(cmd) {

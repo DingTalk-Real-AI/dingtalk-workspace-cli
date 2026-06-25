@@ -236,7 +236,7 @@ func newWikiSpaceDeleteCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			workspaceID, err := wikiRequiredFlagOrFallback(cmd, "workspace", "workspace-id", "workspaceId", "id")
+			workspaceID, err := wikiRequiredFlagOrFallback(cmd, "workspace", "workspace-id", "workspaceId")
 			if err != nil {
 				return err
 			}
@@ -249,7 +249,9 @@ func newWikiSpaceDeleteCommand(runner executor.Runner) *cobra.Command {
 		},
 	}
 	preferLegacyLeaf(cmd)
-	addWikiWorkspaceFlag(cmd)
+	cmd.Flags().String("workspace", "", "知识库 ID 或 URL (必填)")
+	addWikiHiddenStringFlag(cmd, "workspace-id", "--workspace 的兼容别名")
+	addWikiHiddenStringFlag(cmd, "workspaceId", "--workspace 的兼容别名")
 	return cmd
 }
 
