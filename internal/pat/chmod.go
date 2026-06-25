@@ -18,9 +18,11 @@ import (
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -29,6 +31,46 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
+
+type LoginRecommendOptions struct {
+	// ProductCodes limits the recommend plan to service-owned product domains.
+	ProductCodes []string
+	// Confirmed grants the server-selected recommend scopes directly. When
+	// false, recommend authorization starts the batch confirmation page.
+	Confirmed bool
+	// ScopeMode controls whether the plan uses the safe recommended set or
+	// all scopes under the selected product domains. Empty means recommended.
+	ScopeMode LoginRecommendScopeMode
+	// ProductSelector lets interactive callers present the service-owned domain
+	// list before the final plan. It receives products extracted from the
+	// initial recommend plan and must return the product codes to grant.
+	ProductSelector func([]LoginRecommendProduct) ([]string, error)
+	// InitialPlan lets callers preflight the default recommend plan before any
+	// interactive selector and then reuse the same dry-run result.
+	InitialPlan *LoginRecommendPlan
+}
+
+type LoginRecommendScopeMode string
+
+const (
+	LoginRecommendScopeRecommended LoginRecommendScopeMode = "recommend"
+	LoginRecommendScopeAll         LoginRecommendScopeMode = "all"
+)
+
+type LoginRecommendProduct struct {
+	ProductCode        string
+	ProductName        string
+	Summary            string
+	ScopeCount         int
+	SelectedScopeCount int
+}
+
+type LoginRecommendPlan struct {
+	Result     *edition.ToolResult
+	Scopes     []string
+	Products   []LoginRecommendProduct
+	AllGranted bool
+}
 
 const (
 	sessionIDEnvDingtalk = "DINGTALK_SESSION_ID"
@@ -159,6 +201,8 @@ const (
 	patBatchUnsupportedCodeLower = "pat_batch_auth_unsupported"
 	patForgedIdentityCode        = "PAT_FORGED_IDENTITY_FIELD"
 	patForgedIdentityCodeLower   = "pat_forged_identity_field"
+	grantTypePermanent           = "permanent"
+	patCallerAuthLoginRecommend  = "auth_login_recommend"
 )
 
 var patBatchMetadataContractCodes = map[string]bool{
@@ -263,6 +307,9 @@ agentCode 配置:
 					if err != nil {
 						return fmt.Errorf("pat chmod plan failed: %w", err)
 					}
+					if err := ensurePATResultAgentCode(result, agentCode); err != nil {
+						return err
+					}
 					return handleToolResult(cmd, c, result)
 				}
 				bold := color.New(color.FgYellow, color.Bold)
@@ -288,6 +335,9 @@ agentCode 配置:
 				planResult, err := callPATBatchPlan(cmd.Context(), c, agentCode, sessionID, planArgs)
 				if err != nil {
 					return fmt.Errorf("pat chmod plan failed: %w", err)
+				}
+				if err := ensurePATResultAgentCode(planResult, agentCode); err != nil {
+					return err
 				}
 				scopes, err = extractSelectedScopes(planResult)
 				if err != nil {
@@ -342,6 +392,9 @@ agentCode 配置:
 			)
 			if err != nil {
 				return fmt.Errorf("pat chmod failed: %w", err)
+			}
+			if err := ensurePATResultAgentCode(result, agentCode); err != nil {
+				return err
 			}
 
 			return handleToolResult(cmd, c, result)
@@ -476,9 +529,16 @@ func callPATBatchToolWithIdentityFallback(ctx context.Context, c edition.ToolCal
 		return result, err
 	}
 	compatArgs := cloneWithoutPATIdentityArgs(args)
-	return withPATContextEnv(agentCode, sessionID, func() (*edition.ToolResult, error) {
+	result, err = withPATContextEnv(agentCode, sessionID, func() (*edition.ToolResult, error) {
 		return c.CallTool(ctx, "pat", toolName, compatArgs)
 	})
+	if err != nil {
+		return result, err
+	}
+	if err := ensurePATIdentityFallbackAgentCode(result, agentCode); err != nil {
+		return result, err
+	}
+	return result, nil
 }
 
 func buildBatchPlanArgs(scopes []string, productCodes []string, recommend bool, grantType string, agentCode string, sessionID string, dryRun bool) map[string]any {
@@ -496,6 +556,306 @@ func buildBatchPlanArgs(scopes []string, productCodes []string, recommend bool, 
 		args["sessionId"] = sessionID
 	}
 	return args
+}
+
+// RunLoginRecommendAuthorization plans the server-owned recommended scope set
+// after a successful dws auth login, then starts a batch Device Code Flow for
+// the server-selected grantable scopes. The actual browser open, polling, and
+// retry are handled by the shared PAT runner once PAT_BATCH_AUTH_PENDING is
+// classified as a PAT auth check.
+func RunLoginRecommendAuthorization(ctx context.Context, c edition.ToolCaller, output io.Writer) error {
+	return RunLoginRecommendAuthorizationWithOptions(ctx, c, output, LoginRecommendOptions{})
+}
+
+func PlanLoginRecommendAuthorization(ctx context.Context, c edition.ToolCaller) (*LoginRecommendPlan, error) {
+	if c == nil {
+		return nil, fmt.Errorf("internal error: tool runtime not initialized")
+	}
+	planResult, scopes, allGranted, err := planLoginRecommend(ctx, c, nil, true)
+	if err != nil {
+		return nil, err
+	}
+	products, err := extractLoginRecommendProducts(planResult)
+	if err != nil {
+		return nil, err
+	}
+	return &LoginRecommendPlan{
+		Result:     planResult,
+		Scopes:     scopes,
+		Products:   products,
+		AllGranted: allGranted,
+	}, nil
+}
+
+func RunLoginRecommendAuthorizationWithOptions(ctx context.Context, c edition.ToolCaller, output io.Writer, opts LoginRecommendOptions) error {
+	if c == nil {
+		return fmt.Errorf("internal error: tool runtime not initialized")
+	}
+	recommendPlan := opts.ScopeMode != LoginRecommendScopeAll
+	productCodes := normalizeProductCodes(opts.ProductCodes)
+	initialRecommendPlan := recommendPlan
+	if opts.ProductSelector != nil && len(productCodes) == 0 {
+		// The first plan only discovers the service-owned product-domain list
+		// for the TUI. The server contract rejects an empty all-scope request
+		// (recommend=false without productCodes), so all-scope mode is applied
+		// only after the user selects concrete productCodes.
+		initialRecommendPlan = true
+	}
+	var planResult *edition.ToolResult
+	var scopes []string
+	var allGranted bool
+	if opts.InitialPlan != nil && initialRecommendPlan && len(productCodes) == 0 {
+		planResult = opts.InitialPlan.Result
+		scopes = append([]string(nil), opts.InitialPlan.Scopes...)
+		allGranted = opts.InitialPlan.AllGranted
+	} else {
+		var err error
+		planResult, scopes, allGranted, err = planLoginRecommend(ctx, c, productCodes, initialRecommendPlan)
+		if err != nil {
+			return err
+		}
+	}
+	if recommendPlan && (allGranted || len(scopes) == 0) {
+		if output != nil {
+			_, _ = fmt.Fprintln(output, "推荐权限已全部授权或没有可授权项")
+		}
+		return nil
+	}
+	if opts.ProductSelector != nil {
+		products, err := extractLoginRecommendProducts(planResult)
+		if err != nil {
+			return err
+		}
+		if len(products) > 0 {
+			selectedProducts, err := opts.ProductSelector(products)
+			if err != nil {
+				return err
+			}
+			productCodes = normalizeProductCodes(selectedProducts)
+			if len(productCodes) == 0 {
+				return fmt.Errorf("至少选择一个授权业务域")
+			}
+			_, scopes, allGranted, err = planLoginRecommend(ctx, c, productCodes, recommendPlan)
+			if err != nil {
+				return err
+			}
+		}
+		if len(products) == 0 && !recommendPlan {
+			return fmt.Errorf("全部授权需要服务端返回可选授权业务域")
+		}
+	}
+	if allGranted || len(scopes) == 0 {
+		if output != nil {
+			_, _ = fmt.Fprintln(output, "推荐权限已全部授权或没有可授权项")
+		}
+		return nil
+	}
+	grantArgs := map[string]any{
+		"scopes":          scopes,
+		"grantType":       grantTypePermanent,
+		"caller":          patCallerAuthLoginRecommend,
+		"clientRequestId": newBatchClientRequestID("auth-login-recommend"),
+	}
+	if !opts.Confirmed {
+		grantArgs["startFlow"] = true
+		grantArgs["noWait"] = true
+	}
+	result, err := callPATBatchToolWithIdentityFallback(ctx, c, "", "", patBatchGrantToolName, grantArgs)
+	if err != nil {
+		return fmt.Errorf("pat login recommend grant failed: %w", err)
+	}
+	return handleToolResultForWriter(output, result, c)
+}
+
+func planLoginRecommend(ctx context.Context, c edition.ToolCaller, productCodes []string, recommend bool) (*edition.ToolResult, []string, bool, error) {
+	productCodes = normalizeProductCodes(productCodes)
+	if !recommend && len(productCodes) == 0 {
+		return nil, nil, false, fmt.Errorf("全部授权需要至少一个授权业务域")
+	}
+	planArgs := buildBatchPlanArgs(nil, productCodes, recommend, grantTypePermanent, "", "", true)
+	planArgs["caller"] = patCallerAuthLoginRecommend
+	planResult, err := callPATBatchPlan(ctx, c, "", "", planArgs)
+	if err != nil {
+		return nil, nil, false, fmt.Errorf("pat login recommend plan failed: %w", err)
+	}
+	if err := classifyToolResultText(planResult); err != nil {
+		return planResult, nil, false, err
+	}
+	scopes, err := extractSelectedScopesAllowEmpty(planResult)
+	if err != nil {
+		return planResult, nil, false, err
+	}
+	allGranted, err := extractBatchPlanAllGranted(planResult)
+	if err != nil {
+		return planResult, nil, false, err
+	}
+	return planResult, scopes, allGranted, nil
+}
+
+func newBatchClientRequestID(prefix string) string {
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		prefix = "batch"
+	}
+	return fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano())
+}
+
+func extractLoginRecommendProducts(result *edition.ToolResult) ([]LoginRecommendProduct, error) {
+	text := firstToolResultText(result)
+	if text == "" {
+		return nil, fmt.Errorf("empty PAT batch plan result")
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(text), &body); err != nil {
+		return nil, fmt.Errorf("parsing PAT batch plan result: %w", err)
+	}
+	data, _ := body["data"].(map[string]any)
+	if data == nil {
+		return nil, fmt.Errorf("PAT batch plan result missing data.items")
+	}
+	selectedSet := map[string]bool{}
+	if rawSelected, _ := data["selectedScopes"].([]any); len(rawSelected) > 0 {
+		for _, raw := range rawSelected {
+			if scope, ok := raw.(string); ok && strings.TrimSpace(scope) != "" {
+				selectedSet[strings.TrimSpace(scope)] = true
+			}
+		}
+	}
+
+	rawItems, _ := data["items"].([]any)
+	type productGroup struct {
+		item         LoginRecommendProduct
+		summarySeen  map[string]bool
+		summaryParts []string
+	}
+	groups := map[string]*productGroup{}
+	order := make([]string, 0)
+	for _, raw := range rawItems {
+		item, _ := raw.(map[string]any)
+		if item == nil {
+			continue
+		}
+		scope := stringField(item, "scope")
+		code := stringField(item, "productCode")
+		if code == "" {
+			code = productCodeFromScope(scope)
+		}
+		if code == "" {
+			continue
+		}
+		group := groups[code]
+		if group == nil {
+			group = &productGroup{
+				item: LoginRecommendProduct{
+					ProductCode: code,
+					ProductName: stringField(item, "productName"),
+				},
+				summarySeen: map[string]bool{},
+			}
+			if group.item.ProductName == "" {
+				group.item.ProductName = code
+			}
+			groups[code] = group
+			order = append(order, code)
+		}
+		group.item.ScopeCount++
+		if selectedSet[scope] {
+			group.item.SelectedScopeCount++
+		}
+		summary := stringField(item, "operationSummary")
+		if summary == "" {
+			summary = stringField(item, "displayName")
+		}
+		if summary != "" && !group.summarySeen[summary] && len(group.summaryParts) < 3 {
+			group.summarySeen[summary] = true
+			group.summaryParts = append(group.summaryParts, summary)
+		}
+	}
+
+	if len(order) == 0 {
+		scopes, err := extractSelectedScopesAllowEmpty(result)
+		if err != nil {
+			return nil, err
+		}
+		for _, scope := range scopes {
+			code := productCodeFromScope(scope)
+			if code == "" {
+				continue
+			}
+			if groups[code] == nil {
+				groups[code] = &productGroup{
+					item: LoginRecommendProduct{
+						ProductCode:        code,
+						ProductName:        code,
+						ScopeCount:         0,
+						SelectedScopeCount: 0,
+					},
+				}
+				order = append(order, code)
+			}
+			groups[code].item.ScopeCount++
+			groups[code].item.SelectedScopeCount++
+		}
+	}
+
+	products := make([]LoginRecommendProduct, 0, len(order))
+	for _, code := range order {
+		group := groups[code]
+		if group == nil {
+			continue
+		}
+		group.item.Summary = strings.Join(group.summaryParts, "、")
+		products = append(products, group.item)
+	}
+	return products, nil
+}
+
+func normalizeProductCodes(codes []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(codes))
+	for _, raw := range codes {
+		for _, part := range strings.Split(raw, ",") {
+			code := strings.TrimSpace(part)
+			if code == "" || seen[code] {
+				continue
+			}
+			seen[code] = true
+			out = append(out, code)
+		}
+	}
+	return out
+}
+
+func productCodeFromScope(scope string) string {
+	scope = strings.TrimSpace(scope)
+	if scope == "" {
+		return ""
+	}
+	end := len(scope)
+	if idx := strings.Index(scope, "."); idx >= 0 && idx < end {
+		end = idx
+	}
+	if idx := strings.Index(scope, ":"); idx >= 0 && idx < end {
+		end = idx
+	}
+	return strings.TrimSpace(scope[:end])
+}
+
+func extractBatchPlanAllGranted(result *edition.ToolResult) (bool, error) {
+	text := firstToolResultText(result)
+	if text == "" {
+		return false, fmt.Errorf("empty PAT batch plan result")
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(text), &body); err != nil {
+		return false, fmt.Errorf("parsing PAT batch plan result: %w", err)
+	}
+	data, _ := body["data"].(map[string]any)
+	if data == nil {
+		return false, fmt.Errorf("PAT batch plan result missing data")
+	}
+	allGranted, _ := data["allGranted"].(bool)
+	return allGranted, nil
 }
 
 func extractSelectedScopes(result *edition.ToolResult) ([]string, error) {
@@ -534,6 +894,30 @@ func extractSelectedScopes(result *edition.ToolResult) ([]string, error) {
 	return scopes, nil
 }
 
+func extractSelectedScopesAllowEmpty(result *edition.ToolResult) ([]string, error) {
+	text := firstToolResultText(result)
+	if text == "" {
+		return nil, fmt.Errorf("empty PAT batch plan result")
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(text), &body); err != nil {
+		return nil, fmt.Errorf("parsing PAT batch plan result: %w", err)
+	}
+	data, _ := body["data"].(map[string]any)
+	if data == nil {
+		return nil, fmt.Errorf("PAT batch plan result missing data.selectedScopes")
+	}
+	rawScopes, _ := data["selectedScopes"].([]any)
+	scopes := make([]string, 0, len(rawScopes))
+	for _, raw := range rawScopes {
+		scope, ok := raw.(string)
+		if ok && strings.TrimSpace(scope) != "" {
+			scopes = append(scopes, scope)
+		}
+	}
+	return scopes, nil
+}
+
 func firstToolResultText(result *edition.ToolResult) string {
 	if result == nil {
 		return ""
@@ -541,6 +925,77 @@ func firstToolResultText(result *edition.ToolResult) string {
 	for _, c := range result.Content {
 		if c.Type == "text" && strings.TrimSpace(c.Text) != "" {
 			return strings.TrimSpace(c.Text)
+		}
+	}
+	return ""
+}
+
+func ensurePATResultAgentCode(result *edition.ToolResult, expectedAgentCode string) error {
+	expectedAgentCode = strings.TrimSpace(expectedAgentCode)
+	if expectedAgentCode == "" {
+		return nil
+	}
+	actualAgentCode := patResultAgentCode(result)
+	if actualAgentCode == "" || actualAgentCode == expectedAgentCode {
+		return nil
+	}
+	return fmt.Errorf(
+		"pat chmod returned agentCode %q, want %q from --agentCode/%s; authorization was not applied to the requested agent",
+		actualAgentCode,
+		expectedAgentCode,
+		agentCodeEnv,
+	)
+}
+
+func ensurePATIdentityFallbackAgentCode(result *edition.ToolResult, expectedAgentCode string) error {
+	expectedAgentCode = strings.TrimSpace(expectedAgentCode)
+	if expectedAgentCode == "" {
+		return nil
+	}
+	actualAgentCode := patResultAgentCode(result)
+	if actualAgentCode == expectedAgentCode {
+		return nil
+	}
+	if actualAgentCode == "" {
+		return fmt.Errorf(
+			"pat chmod identity fallback did not return agentCode %q; authorization target cannot be verified",
+			expectedAgentCode,
+		)
+	}
+	return fmt.Errorf(
+		"pat chmod identity fallback returned agentCode %q, want %q from --agentCode/%s; authorization was not applied to the requested agent",
+		actualAgentCode,
+		expectedAgentCode,
+		agentCodeEnv,
+	)
+}
+
+func patResultAgentCode(result *edition.ToolResult) string {
+	text := firstToolResultText(result)
+	if text == "" {
+		return ""
+	}
+	var body map[string]any
+	if json.Unmarshal([]byte(text), &body) != nil {
+		return ""
+	}
+	if code := stringField(body, "agentCode"); code != "" {
+		return code
+	}
+	data, _ := body["data"].(map[string]any)
+	if data != nil {
+		if code := stringField(data, "agentCode"); code != "" {
+			return code
+		}
+	}
+	resultBody, _ := body["result"].(map[string]any)
+	if resultBody != nil {
+		if code := stringField(resultBody, "agentCode"); code != "" {
+			return code
+		}
+		resultData, _ := resultBody["data"].(map[string]any)
+		if resultData != nil {
+			return stringField(resultData, "agentCode")
 		}
 	}
 	return ""
@@ -810,6 +1265,44 @@ func handleToolResult(cmd *cobra.Command, caller edition.ToolCaller, result *edi
 	}
 	data, _ := json.Marshal(result)
 	return fmt.Errorf("empty PAT authorization result: %s", string(data))
+}
+
+func handleToolResultForWriter(w io.Writer, result *edition.ToolResult, caller edition.ToolCaller) error {
+	if result == nil {
+		return fmt.Errorf("empty tool result")
+	}
+	for _, c := range result.Content {
+		if c.Type != "text" || c.Text == "" {
+			continue
+		}
+		if respErr := apperrors.ClassifyMCPResponseText(c.Text); respErr != nil {
+			return respErr
+		}
+		if w == nil {
+			return nil
+		}
+		if summary := formatPATAuthorizationSummary(c.Text, caller); summary != "" {
+			_, _ = fmt.Fprint(w, summary)
+			return nil
+		}
+		_, _ = fmt.Fprintln(w, c.Text)
+		return nil
+	}
+	data, _ := json.Marshal(result)
+	return fmt.Errorf("empty PAT authorization result: %s", string(data))
+}
+
+func classifyToolResultText(result *edition.ToolResult) error {
+	if result == nil {
+		return fmt.Errorf("empty tool result")
+	}
+	for _, c := range result.Content {
+		if c.Type != "text" || c.Text == "" {
+			continue
+		}
+		return apperrors.ClassifyMCPResponseText(c.Text)
+	}
+	return nil
 }
 
 func shouldEmitRawPATResult(cmd *cobra.Command) bool {

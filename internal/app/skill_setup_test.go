@@ -47,6 +47,22 @@ func TestResolveSkillSetupModeNonInteractiveDefaultsMono(t *testing.T) {
 	}
 }
 
+func TestIsCharDeviceRejectsNilAndRegularFiles(t *testing.T) {
+	if isCharDevice(nil) {
+		t.Fatal("nil file must not be treated as interactive")
+	}
+
+	file, err := os.CreateTemp(t.TempDir(), "stdout")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+
+	if isCharDevice(file) {
+		t.Fatal("regular files must not be treated as interactive terminals")
+	}
+}
+
 func TestResolveSkillSetupSourceFindsMonoRoot(t *testing.T) {
 	tmp := t.TempDir()
 	monoDir := filepath.Join(tmp, "skills", "mono")

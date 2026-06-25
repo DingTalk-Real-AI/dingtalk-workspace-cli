@@ -15,20 +15,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
 
 var (
-	ugBold    = color.New(color.Bold).SprintFunc()
-	ugGreen   = color.New(color.FgGreen).SprintFunc()
-	ugYellow  = color.New(color.FgYellow).SprintFunc()
-	ugRed     = color.New(color.FgRed).SprintFunc()
-	ugCyan    = color.New(color.FgCyan).SprintFunc()
-	ugDim     = color.New(color.Faint).SprintFunc()
-	ugBoldGrn = color.New(color.Bold, color.FgGreen).SprintFunc()
+	ugBold    = tui.Bold
+	ugGreen   = tui.Success
+	ugYellow  = tui.Warning
+	ugRed     = tui.Danger
+	ugCyan    = tui.Cyan
+	ugDim     = tui.Dim
+	ugBoldGrn = tui.Success
 )
 
 const defaultListLimit = 10

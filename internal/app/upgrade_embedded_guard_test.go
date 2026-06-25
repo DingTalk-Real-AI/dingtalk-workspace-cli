@@ -11,7 +11,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
-func TestUpgradeCommand_BlockedInEmbeddedMode(t *testing.T) {
+func TestUpgradeCommand_BlockedWhenEmbedded(t *testing.T) {
 	prev := edition.Get()
 	edition.Override(&edition.Hooks{IsEmbedded: true, Name: "embedded"})
 	t.Cleanup(func() { edition.Override(prev) })

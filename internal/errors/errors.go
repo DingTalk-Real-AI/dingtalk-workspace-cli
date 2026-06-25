@@ -21,6 +21,8 @@ import (
 	"io"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
@@ -309,7 +311,7 @@ func PrintJSON(w io.Writer, err error) error {
 	}
 	payload := map[string]any{"error": errorPayload}
 
-	data, marshalErr := json.MarshalIndent(payload, "", "  ")
+	data, marshalErr := jsonutil.MarshalIndent(payload, "", "  ")
 	if marshalErr != nil {
 		_, writeErr := fmt.Fprintf(w, "{\"error\":{\"code\":5,\"category\":\"internal\",\"message\":\"failed to encode error output\"}}\n")
 		return writeErr
@@ -344,25 +346,25 @@ func PrintHumanAt(w io.Writer, err error, v Verbosity) error {
 
 	var typed *Error
 	if !stderrors.As(err, &typed) {
-		_, writeErr := fmt.Fprintf(w, "Error: %s\n", err.Error())
+		_, writeErr := fmt.Fprintf(w, "%s %s\n", tui.StateMark("error"), tui.Danger("Error: "+err.Error()))
 		return writeErr
 	}
 
 	// Line 1: Error summary
 	lines := []string{
-		fmt.Sprintf("Error: [%s] %s", strings.ToUpper(string(typed.Category)), typed.Message),
+		fmt.Sprintf("%s %s", tui.StateMark("error"), tui.Danger(fmt.Sprintf("Error: [%s] %s", strings.ToUpper(string(typed.Category)), typed.Message))),
 	}
 
 	// Always shown: hint, actions, retryable
 	if typed.Hint != "" {
-		lines = append(lines, fmt.Sprintf("Hint: %s", typed.Hint))
+		lines = append(lines, tui.Cyan(fmt.Sprintf("Hint: %s", typed.Hint)))
 	}
 
 	// Add user-friendly hint for specific server error codes
 	switch typed.ServerDiag.ServerErrorCode {
 	case "TOKEN_VERIFIED_FAILED", "CLI_ORG_NOT_AUTHORIZED":
-		lines = append(lines, "Hint: 该组织尚未开启 CLI 数据访问权限，请联系组织主管理员开启。")
-		lines = append(lines, "Action: 开启地址: "+config.GetDeveloperSettingsURL())
+		lines = append(lines, tui.Cyan("Hint: 该组织尚未开启 CLI 数据访问权限，请联系组织主管理员开启。"))
+		lines = append(lines, tui.White("Action: 开启地址: "+config.GetDeveloperSettingsURL()))
 	}
 
 	if len(typed.Actions) > 0 {
@@ -370,53 +372,53 @@ func PrintHumanAt(w io.Writer, err error, v Verbosity) error {
 			if strings.TrimSpace(action) == "" {
 				continue
 			}
-			lines = append(lines, fmt.Sprintf("Action: %s", action))
+			lines = append(lines, tui.White(fmt.Sprintf("Action: %s", action)))
 		}
 	}
 	if line := formatAvailableFlagsHumanLine(typed.AvailableFlags); line != "" {
-		lines = append(lines, line)
+		lines = append(lines, tui.Dim(line))
 	}
 	if typed.Retryable {
-		lines = append(lines, "Retryable: true")
+		lines = append(lines, tui.Warning("Retryable: true"))
 	}
 
 	// Always shown when present: Trace ID, Server Code
 	if typed.ServerDiag.TraceID != "" {
-		lines = append(lines, fmt.Sprintf("Trace ID: %s", typed.ServerDiag.TraceID))
+		lines = append(lines, tui.Dim(fmt.Sprintf("Trace ID: %s", typed.ServerDiag.TraceID)))
 	}
 	if typed.ServerDiag.ServerErrorCode != "" {
-		lines = append(lines, fmt.Sprintf("Server Code: %s", typed.ServerDiag.ServerErrorCode))
+		lines = append(lines, tui.Dim(fmt.Sprintf("Server Code: %s", typed.ServerDiag.ServerErrorCode)))
 	}
 
 	// Verbose+: technical detail, snapshot, reason, server key
 	if v >= VerbosityVerbose {
 		if typed.ServerDiag.TechnicalDetail != "" {
-			lines = append(lines, fmt.Sprintf("Detail: %s", typed.ServerDiag.TechnicalDetail))
+			lines = append(lines, tui.Dim(fmt.Sprintf("Detail: %s", typed.ServerDiag.TechnicalDetail)))
 		}
 		if typed.Reason != "" {
-			lines = append(lines, fmt.Sprintf("Reason: %s", typed.Reason))
+			lines = append(lines, tui.Dim(fmt.Sprintf("Reason: %s", typed.Reason)))
 		}
 		if typed.ServerKey != "" {
-			lines = append(lines, fmt.Sprintf("Server: %s", typed.ServerKey))
+			lines = append(lines, tui.Dim(fmt.Sprintf("Server: %s", typed.ServerKey)))
 		}
 		if typed.Snapshot != "" {
-			lines = append(lines, fmt.Sprintf("Snapshot: %s", typed.Snapshot))
+			lines = append(lines, tui.Dim(fmt.Sprintf("Snapshot: %s", typed.Snapshot)))
 		}
 		if typed.Cause != nil {
-			lines = append(lines, fmt.Sprintf("Cause: %s", typed.Cause.Error()))
+			lines = append(lines, tui.Dim(fmt.Sprintf("Cause: %s", typed.Cause.Error())))
 		}
 	}
 
 	// Debug: all internal diagnostics
 	if v >= VerbosityDebug {
 		if typed.Operation != "" {
-			lines = append(lines, fmt.Sprintf("Operation: %s", typed.Operation))
+			lines = append(lines, tui.Dim(fmt.Sprintf("Operation: %s", typed.Operation)))
 		}
 		if typed.RPCCode != 0 {
-			lines = append(lines, fmt.Sprintf("RPC Code: %d", typed.RPCCode))
+			lines = append(lines, tui.Dim(fmt.Sprintf("RPC Code: %d", typed.RPCCode)))
 		}
 		if len(typed.RPCData) > 0 {
-			lines = append(lines, fmt.Sprintf("RPC Data: %s", string(typed.RPCData)))
+			lines = append(lines, tui.Dim(fmt.Sprintf("RPC Data: %s", string(typed.RPCData))))
 		}
 	}
 

@@ -49,6 +49,11 @@ func TestWriteNDJSON(t *testing.T) {
 			payload:   map[string]any{"ok": true},
 			wantLines: []string{`{"ok":true}`},
 		},
+		{
+			name:      "url keeps ampersand",
+			payload:   map[string]any{"url": "https://example.test/auth?a=1&b=2"},
+			wantLines: []string{`{"url":"https://example.test/auth?a=1&b=2"}`},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -321,6 +321,7 @@ func TestRuntimeRunnerInjectsAuthTokenFromFlag(t *testing.T) {
 func TestResolveIdentityHeadersForwardsAgentCode(t *testing.T) {
 	setupRuntimeCommandTest(t)
 	t.Setenv(authpkg.AgentCodeEnv, " cursor ")
+	t.Setenv(authpkg.AgentCodeEnvCompat, "")
 
 	headers := resolveIdentityHeaders()
 	if got := headers["x-dingtalk-dws-agent-code"]; got != "cursor" {

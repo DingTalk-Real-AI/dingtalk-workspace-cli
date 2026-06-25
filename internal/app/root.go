@@ -323,9 +323,10 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 	genSkillsCmd.Hidden = true
 	mcpCmd := newMCPCommand(rootCtx, loader, runner, engine)
 	mcpCmd.Hidden = true
+	patCaller := newToolCallerAdapter(runner, flags)
 
 	utilityCommands := []*cobra.Command{
-		newAuthCommand(),
+		newAuthCommand(patCaller),
 		newAPICommand(flags),
 		newSkillCommand(),
 		newCacheCommand(),
@@ -354,7 +355,6 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 	}
 
 	// PAT authorization commands (open-source core)
-	patCaller := newToolCallerAdapter(runner, flags)
 	pat.RegisterCommands(root, patCaller)
 
 	if fn := edition.Get().RegisterExtraCommands; fn != nil {
@@ -372,8 +372,8 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 	return root
 }
 
-func newAuthCommand() *cobra.Command {
-	return buildAuthCommand()
+func newAuthCommand(patCaller edition.ToolCaller) *cobra.Command {
+	return buildAuthCommand(patCaller)
 }
 
 func newSkillCommand() *cobra.Command {

@@ -640,7 +640,14 @@ func copyFileContent(src, dst string, mode os.FileMode) error {
 }
 
 func isInteractiveTerminal() bool {
-	fi, err := os.Stdin.Stat()
+	return isCharDevice(os.Stdin) && isCharDevice(os.Stdout) && isCharDevice(os.Stderr)
+}
+
+func isCharDevice(file *os.File) bool {
+	if file == nil {
+		return false
+	}
+	fi, err := file.Stat()
 	if err != nil {
 		return false
 	}

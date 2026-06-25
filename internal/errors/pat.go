@@ -21,6 +21,8 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
 )
 
 // hostControlProvider returns the host-owned clawType for the current
@@ -105,12 +107,10 @@ const ExitCodePermission = 4
 // json.Unmarshal-able payload of the form
 // {"success":false,"code":<frozen enum>,"data":{...}}.
 //
-// When the payload includes data.uri, that URL is the authoritative
-// server-provided authorization link. Hosts must treat it as opaque and open
-// it verbatim instead of parsing and reconstructing it locally, because
-// required parameters may live in query, encoded hash, or fragment sections.
-// New hosts may prefer data.authorizationUrl when present; it preserves data.uri
-// while adding a copy/open-safe URL for legacy DingTalk hash-route variants.
+// When the payload includes data.uri/authUrl/authorizationUrl, that value is
+// the authoritative server-provided authorization link. The CLI accepts all
+// legacy aliases, normalizes the known DingTalk hash-route variant, and emits a
+// single data.uri field so terminals and hosts do not need to deduplicate links.
 type PATError struct {
 	RawJSON string
 }
@@ -147,6 +147,7 @@ var patNoPermissionCodes = map[string]bool{
 //     `dws auth login --scope <data.missingScope>`.
 var patAuthRequiredCodes = map[string]bool{
 	"AGENT_CODE_NOT_EXISTS":   true,
+	"PAT_BATCH_AUTH_PENDING":  true,
 	"PAT_SCOPE_AUTH_REQUIRED": true,
 }
 
@@ -241,7 +242,7 @@ func isBusinessError(body map[string]any) bool {
 // Check order: DWS gateway auth > PAT permission.
 func ClassifyToolResultContent(content map[string]any) error {
 	if _, ok := getDWSGatewayErrorCode(content); ok {
-		raw, _ := json.Marshal(content)
+		raw, _ := jsonutil.Marshal(content)
 		return NewAuth(string(raw),
 			WithReason("gateway_auth_expired"),
 			WithHint(authExpiredHint()),
@@ -353,14 +354,27 @@ func ApplyHostMutations(out map[string]any) {
 		data = map[string]any{}
 		out["data"] = data
 	}
-	if rawURI, ok := data["uri"].(string); ok && strings.TrimSpace(rawURI) != "" {
-		data["authorizationUrl"] = PATAuthorizationURL(rawURI)
+	if rawURI := patAuthorizationURIFromData(data); rawURI != "" {
+		authURL := PATAuthorizationURL(rawURI)
+		data["uri"] = authURL
+		delete(data, "authUrl")
+		delete(data, "authorizationUrl")
 	}
 	if block := HostControlBlock(); block != nil {
 		delete(data, "callbacks")
 		data["hostControl"] = block
 	}
 	data["openBrowser"] = PATOpenBrowserValue()
+}
+
+func patAuthorizationURIFromData(data map[string]any) string {
+	for _, key := range []string{"uri", "authUrl", "authorizationUrl"} {
+		value, _ := data[key].(string)
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 // PATAuthorizationURL returns the best URL for hosts to open or show to users.
@@ -443,9 +457,9 @@ func cleanPATJSON(body map[string]any, code string) string {
 		"code":    code,
 	}
 	if data, ok := body["data"]; ok {
-		// Keep data.uri exactly as returned by the service. Host consumers open
-		// that link directly, so local normalization would risk dropping
-		// parameters embedded in query/hash/fragment sections.
+		// ApplyHostMutations canonicalizes PAT URL aliases into one data.uri
+		// before JSON encoding, while stripClassFields keeps the rest of the
+		// service payload intact.
 		out["data"] = stripClassFields(data)
 	} else {
 		fallback := map[string]any{}

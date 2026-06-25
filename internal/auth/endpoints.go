@@ -290,6 +290,11 @@ func getRuntimeCredentials() (clientID, clientSecret string) {
 	return runtimeClientID, runtimeClientSecret
 }
 
+func getCompleteRuntimeCredentials() (clientID, clientSecret string, ok bool) {
+	clientID, clientSecret = getRuntimeCredentials()
+	return clientID, clientSecret, strings.TrimSpace(clientID) != "" && strings.TrimSpace(clientSecret) != ""
+}
+
 // getDefaultConfigDir returns the default configuration directory.
 // Priority: DWS_CONFIG_DIR env var > ~/.dws
 func getDefaultConfigDir() string {

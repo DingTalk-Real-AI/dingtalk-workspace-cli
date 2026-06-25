@@ -14,6 +14,7 @@
 package pat
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -298,6 +299,11 @@ func attachRootPATFlags(t *testing.T, cmd *cobra.Command, yes bool, formatChange
 	}
 }
 
+func setBatchYesForTest(t *testing.T, cmd *cobra.Command) {
+	t.Helper()
+	attachRootYesFlag(t, cmd, true)
+}
+
 func TestRegisterCommands_OnlyExposesChmodForAuthorization(t *testing.T) {
 	root := &cobra.Command{Use: "dws"}
 	RegisterCommands(root, &fakeToolCaller{})
@@ -367,8 +373,8 @@ func TestPATHelpDocumentsBatchAuthorization(t *testing.T) {
 		"执行批量授权必须显式",
 		"由服务端默认兜底",
 		"aitable.record:read aitable.record:write --grant-type permanent --yes",
-		"dws pat chmod --product calendar --product aitable",
-		"dws pat chmod --domain calendar --domain chat",
+		"dws pat chmod --products calendar,aitable",
+		"dws pat chmod --recommend --grant-type session",
 	} {
 		if !strings.Contains(chmodHelp, want) {
 			t.Fatalf("pat chmod help missing %q\nhelp:\n%s", want, chmodHelp)
@@ -385,7 +391,7 @@ func TestChmod_productsFlagPlansThenGrantsSelectedScopes(t *testing.T) {
 	cmd := newChmodCommand(fake)
 	_ = cmd.Flags().Set("grant-type", "once")
 	_ = cmd.Flags().Set("products", "calendar,aitable")
-	attachRootYesFlag(t, cmd, true)
+	setBatchYesForTest(t, cmd)
 
 	if err := cmd.RunE(cmd, nil); err != nil {
 		t.Fatalf("chmod RunE error = %v", err)
@@ -423,14 +429,14 @@ func TestChmod_productsFlagPlansThenGrantsSelectedScopes(t *testing.T) {
 	}
 }
 
-func TestChmod_productsFlagBlocksGrantWithoutYes(t *testing.T) {
+func TestChmod_productsFlagWithoutYesBlocksAfterPlan(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 	fake := &sequenceToolCaller{responses: []string{
-		`{"success":true,"data":{"selectedScopes":["calendar.event:read","aitable.record:read"]}}`,
+		`{"success":true,"data":{"selectedScopes":["calendar.event:read"]}}`,
 	}}
 	cmd := newChmodCommand(fake)
 	_ = cmd.Flags().Set("grant-type", "once")
-	_ = cmd.Flags().Set("products", "calendar,aitable")
+	_ = cmd.Flags().Set("products", "calendar")
 
 	err := cmd.RunE(cmd, nil)
 	if err == nil {
@@ -443,24 +449,25 @@ func TestChmod_productsFlagBlocksGrantWithoutYes(t *testing.T) {
 		t.Fatalf("CallTool count = %d, want plan only", len(fake.calls))
 	}
 	if fake.calls[0].tool != patBatchPlanToolName {
-		t.Fatalf("first tool = %q, want %q", fake.calls[0].tool, patBatchPlanToolName)
+		t.Fatalf("tool = %q, want %q", fake.calls[0].tool, patBatchPlanToolName)
 	}
 }
 
-func TestChmod_multipleExplicitScopesBlockWithoutYes(t *testing.T) {
-	fake := &fakeToolCaller{resultOK: true}
+func TestChmod_multipleScopesWithoutYesBlocksBeforeMCP(t *testing.T) {
+	t.Setenv(agentCodeEnv, "qoderwork")
+	fake := &sequenceToolCaller{}
 	cmd := newChmodCommand(fake)
-	_ = cmd.Flags().Set("grant-type", "once")
+	_ = cmd.Flags().Set("grant-type", "permanent")
 
-	err := cmd.RunE(cmd, []string{"aitable.record:read", "aitable.record:write"})
+	err := cmd.RunE(cmd, []string{"calendar.event:read", "aitable.record:write"})
 	if err == nil {
 		t.Fatal("chmod RunE error = nil, want batch --yes blocker")
 	}
 	if !strings.Contains(err.Error(), "--yes") || !strings.Contains(err.Error(), "batch PAT authorization blocked") {
 		t.Fatalf("error = %q, want explicit batch --yes blocker", err.Error())
 	}
-	if fake.callN != 0 {
-		t.Fatalf("CallTool was invoked %d times; batch without --yes must not grant", fake.callN)
+	if len(fake.calls) != 0 {
+		t.Fatalf("CallTool count = %d, want blocker before MCP", len(fake.calls))
 	}
 }
 
@@ -473,7 +480,7 @@ func TestChmod_productsSessionModePassesIdentityArgsAndCompatEnv(t *testing.T) {
 	cmd := newChmodCommand(fake)
 	_ = cmd.Flags().Set("products", "calendar")
 	_ = cmd.Flags().Set("session-id", "session-123")
-	attachRootYesFlag(t, cmd, true)
+	setBatchYesForTest(t, cmd)
 
 	if err := cmd.RunE(cmd, nil); err != nil {
 		t.Fatalf("chmod RunE error = %v", err)
@@ -769,75 +776,6 @@ func TestChmod_batchPlanEntryPointsDryRunOnlyReturnPlanAgentCode(t *testing.T) {
 	}
 }
 
-func TestChmod_batchEntryPointsWithoutYesAreBlocked(t *testing.T) {
-	cases := []struct {
-		name     string
-		args     []string
-		setFlags func(*cobra.Command)
-		wantPlan bool
-	}{
-		{
-			name: "direct multi scope",
-			args: []string{"calendar.event:list", "calendar.event:create"},
-			setFlags: func(cmd *cobra.Command) {
-				_ = cmd.Flags().Set("grant-type", "once")
-			},
-		},
-		{
-			name: "product",
-			setFlags: func(cmd *cobra.Command) {
-				_ = cmd.Flags().Set("grant-type", "once")
-				_ = cmd.Flags().Set("products", "calendar")
-			},
-			wantPlan: true,
-		},
-		{
-			name: "domain",
-			setFlags: func(cmd *cobra.Command) {
-				_ = cmd.Flags().Set("grant-type", "once")
-				_ = cmd.Flags().Set("domains", "calendar")
-			},
-			wantPlan: true,
-		},
-		{
-			name: "recommend",
-			setFlags: func(cmd *cobra.Command) {
-				_ = cmd.Flags().Set("grant-type", "once")
-				_ = cmd.Flags().Set("recommend", "true")
-			},
-			wantPlan: true,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv(agentCodeEnv, "qoderwork")
-			fake := &sequenceToolCaller{responses: []string{
-				`{"success":true,"data":{"selectedScopes":["calendar.event:list","calendar.event:create"]}}`,
-			}}
-			cmd := newChmodCommand(fake)
-			tc.setFlags(cmd)
-
-			err := cmd.RunE(cmd, tc.args)
-			if err == nil {
-				t.Fatal("chmod RunE error = nil, want batch --yes blocker")
-			}
-			if !strings.Contains(err.Error(), "--yes") || !strings.Contains(err.Error(), "batch PAT authorization blocked") {
-				t.Fatalf("error = %q, want explicit batch --yes blocker", err.Error())
-			}
-			if tc.wantPlan {
-				if len(fake.calls) != 1 || fake.calls[0].tool != patBatchPlanToolName {
-					t.Fatalf("calls = %#v, want one plan call before blocker", fake.calls)
-				}
-				return
-			}
-			if len(fake.calls) != 0 {
-				t.Fatalf("CallTool count = %d, want no MCP calls for direct multi-scope blocker", len(fake.calls))
-			}
-		})
-	}
-}
-
 func TestChmod_grantTypeAndSessionParameterMatrix(t *testing.T) {
 	cases := []struct {
 		name          string
@@ -955,12 +893,13 @@ func TestChmod_batchPlanRetriesWithoutIdentityArgsForCompat(t *testing.T) {
 		},
 		responses: []string{
 			"",
-			`{"success":true,"data":{"allGranted":true,"selectedScopes":[]}}`,
+			`{"success":true,"data":{"agentCode":"qoderwork","allGranted":true,"selectedScopes":[]}}`,
 		},
 	}
 	cmd := newChmodCommand(fake)
 	_ = cmd.Flags().Set("grant-type", "once")
 	_ = cmd.Flags().Set("products", "calendar")
+	setBatchYesForTest(t, cmd)
 
 	if err := cmd.RunE(cmd, nil); err != nil {
 		t.Fatalf("chmod RunE error = %v", err)
@@ -996,7 +935,7 @@ func TestChmod_batchGrantRetriesWithoutIdentityArgsForCompat(t *testing.T) {
 		},
 		responses: []string{
 			"",
-			`{"success":true,"data":{"grantedScopes":["calendar.event:read"]}}`,
+			`{"success":true,"data":{"agentCode":"qoderwork","grantedScopes":["calendar.event:read"]}}`,
 		},
 	}
 	cmd := newChmodCommand(fake)
@@ -1019,6 +958,75 @@ func TestChmod_batchGrantRetriesWithoutIdentityArgsForCompat(t *testing.T) {
 	}
 	if got := fake.calls[1].agentEnv; got != "qoderwork" {
 		t.Fatalf("compat retry %s = %q, want qoderwork", agentCodeEnv, got)
+	}
+}
+
+func TestChmod_batchGrantIdentityFallbackRejectsMismatchedAgentCode(t *testing.T) {
+	t.Setenv(agentCodeEnv, "dinglqdkz3mmw2xwvend")
+	fake := &sequenceToolCaller{
+		errs: []error{
+			apperrors.NewAPI("PAT batch identity field 'agentCode' must be derived by gateway.",
+				apperrors.WithReason("business_error"),
+				apperrors.WithServerDiag(apperrors.ServerDiagnostics{
+					ServerErrorCode: patForgedIdentityCode,
+				}),
+			),
+			nil,
+		},
+		responses: []string{
+			"",
+			`{"success":true,"result":{"agentCode":"dingmbw5n9ktkkbbjv3g","grantedScopes":[],"alreadyGrantedScopes":["chat.message:send"]}}`,
+		},
+	}
+	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("grant-type", "permanent")
+
+	err := cmd.RunE(cmd, []string{"chat.message:send"})
+	if err == nil {
+		t.Fatal("chmod RunE error = nil, want identity fallback agentCode mismatch")
+	}
+	if !strings.Contains(err.Error(), "identity fallback returned agentCode") ||
+		!strings.Contains(err.Error(), "dingmbw5n9ktkkbbjv3g") ||
+		!strings.Contains(err.Error(), "dinglqdkz3mmw2xwvend") {
+		t.Fatalf("error = %q, want fallback mismatch details", err.Error())
+	}
+	if len(fake.calls) != 2 {
+		t.Fatalf("CallTool count = %d, want 2", len(fake.calls))
+	}
+	if _, ok := fake.calls[1].args["agentCode"]; ok {
+		t.Fatalf("compat retry should still omit agentCode arg, got %#v", fake.calls[1].args)
+	}
+	if got := fake.calls[1].agentEnv; got != "dinglqdkz3mmw2xwvend" {
+		t.Fatalf("compat retry %s = %q, want requested agentCode", agentCodeEnv, got)
+	}
+}
+
+func TestChmod_batchGrantIdentityFallbackRejectsMissingAgentCode(t *testing.T) {
+	t.Setenv(agentCodeEnv, "dinglqdkz3mmw2xwvend")
+	fake := &sequenceToolCaller{
+		errs: []error{
+			apperrors.NewAPI("PAT batch identity field 'agentCode' must be derived by gateway.",
+				apperrors.WithReason("business_error"),
+				apperrors.WithServerDiag(apperrors.ServerDiagnostics{
+					ServerErrorCode: patForgedIdentityCode,
+				}),
+			),
+			nil,
+		},
+		responses: []string{
+			"",
+			`{"success":true,"data":{"grantedScopes":["chat.message:send"]}}`,
+		},
+	}
+	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("grant-type", "permanent")
+
+	err := cmd.RunE(cmd, []string{"chat.message:send"})
+	if err == nil {
+		t.Fatal("chmod RunE error = nil, want unverifiable fallback error")
+	}
+	if !strings.Contains(err.Error(), "authorization target cannot be verified") {
+		t.Fatalf("error = %q, want unverifiable fallback details", err.Error())
 	}
 }
 
@@ -1102,7 +1110,7 @@ func TestChmod_recommendFlagPlansThenGrantsWithoutPositionalScopes(t *testing.T)
 	cmd := newChmodCommand(fake)
 	_ = cmd.Flags().Set("grant-type", "once")
 	_ = cmd.Flags().Set("recommend", "true")
-	attachRootYesFlag(t, cmd, true)
+	setBatchYesForTest(t, cmd)
 
 	if err := cmd.RunE(cmd, nil); err != nil {
 		t.Fatalf("chmod RunE error = %v", err)
@@ -1122,6 +1130,196 @@ func TestChmod_recommendFlagPlansThenGrantsWithoutPositionalScopes(t *testing.T)
 	}
 }
 
+func TestLoginRecommendAuthorizationSelectorReplansBySelectedProducts(t *testing.T) {
+	fake := &sequenceToolCaller{responses: []string{
+		`{"success":true,"data":{"items":[{"scope":"calendar.event:read","productCode":"calendar","productName":"日历","displayName":"日程查看","operationSummary":"日历管理、日程创建"},{"scope":"doc.document:read","productCode":"doc","productName":"文档","displayName":"文档读取"}],"selectedScopes":["calendar.event:read","doc.document:read"]}}`,
+		`{"success":true,"data":{"items":[{"scope":"calendar.event:read","productCode":"calendar","productName":"日历","displayName":"日程查看"}],"selectedScopes":["calendar.event:read"]}}`,
+		`{"success":true,"data":{"flowId":"flow-1","userCode":"ABCD-EFGH","uri":"https://example.com/auth"}}`,
+	}}
+	var selectorProducts []LoginRecommendProduct
+	err := RunLoginRecommendAuthorizationWithOptions(context.Background(), fake, io.Discard, LoginRecommendOptions{
+		ProductSelector: func(products []LoginRecommendProduct) ([]string, error) {
+			selectorProducts = products
+			return []string{"calendar"}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("RunLoginRecommendAuthorizationWithOptions error = %v", err)
+	}
+	if len(selectorProducts) != 2 {
+		t.Fatalf("selector products = %d, want 2", len(selectorProducts))
+	}
+	if selectorProducts[0].ProductCode != "calendar" || selectorProducts[0].ProductName != "日历" {
+		t.Fatalf("first selector product = %+v, want calendar/日历", selectorProducts[0])
+	}
+	if selectorProducts[0].Summary != "日历管理、日程创建" {
+		t.Fatalf("first selector summary = %q", selectorProducts[0].Summary)
+	}
+	if len(fake.calls) != 3 {
+		t.Fatalf("CallTool count = %d, want initial plan + selected plan + grant", len(fake.calls))
+	}
+	if fake.calls[0].tool != patBatchPlanToolName {
+		t.Fatalf("first tool = %q, want %q", fake.calls[0].tool, patBatchPlanToolName)
+	}
+	if got := fake.calls[0].args["productCodes"]; !stringSliceArgEqual(got, nil) {
+		t.Fatalf("initial plan productCodes = %#v, want empty", got)
+	}
+	if got := fake.calls[0].args["recommend"]; got != true {
+		t.Fatalf("initial plan recommend = %#v, want true", got)
+	}
+	if got := fake.calls[1].args["productCodes"]; !stringSliceArgEqual(got, []string{"calendar"}) {
+		t.Fatalf("selected plan productCodes = %#v, want calendar", got)
+	}
+	if got := fake.calls[1].args["recommend"]; got != true {
+		t.Fatalf("selected plan recommend = %#v, want true", got)
+	}
+	if got := fake.calls[1].args["caller"]; got != patCallerAuthLoginRecommend {
+		t.Fatalf("selected plan caller = %#v, want %q", got, patCallerAuthLoginRecommend)
+	}
+	if fake.calls[2].tool != patBatchGrantToolName {
+		t.Fatalf("third tool = %q, want %q", fake.calls[2].tool, patBatchGrantToolName)
+	}
+	if got := fake.calls[2].args["scopes"]; !stringSliceArgEqual(got, []string{"calendar.event:read"}) {
+		t.Fatalf("grant scopes = %#v, want selected calendar scope", got)
+	}
+}
+
+func TestLoginRecommendAuthorizationWithoutSelectorKeepsSinglePlan(t *testing.T) {
+	fake := &sequenceToolCaller{responses: []string{
+		`{"success":true,"data":{"items":[{"scope":"calendar.event:read","productCode":"calendar","productName":"日历"}],"selectedScopes":["calendar.event:read"]}}`,
+		`{"success":true,"data":{"flowId":"flow-1","userCode":"ABCD-EFGH","uri":"https://example.com/auth"}}`,
+	}}
+	if err := RunLoginRecommendAuthorizationWithOptions(context.Background(), fake, io.Discard, LoginRecommendOptions{}); err != nil {
+		t.Fatalf("RunLoginRecommendAuthorizationWithOptions error = %v", err)
+	}
+	if len(fake.calls) != 2 {
+		t.Fatalf("CallTool count = %d, want one plan + grant", len(fake.calls))
+	}
+	if fake.calls[0].tool != patBatchPlanToolName {
+		t.Fatalf("first tool = %q, want %q", fake.calls[0].tool, patBatchPlanToolName)
+	}
+	if got := fake.calls[0].args["productCodes"]; !stringSliceArgEqual(got, nil) {
+		t.Fatalf("plan productCodes = %#v, want empty", got)
+	}
+	if fake.calls[1].tool != patBatchGrantToolName {
+		t.Fatalf("second tool = %q, want %q", fake.calls[1].tool, patBatchGrantToolName)
+	}
+	if got := fake.calls[1].args["startFlow"]; got != true {
+		t.Fatalf("startFlow = %#v, want true for unconfirmed recommend login", got)
+	}
+	if got := fake.calls[1].args["noWait"]; got != true {
+		t.Fatalf("noWait = %#v, want true for unconfirmed recommend login", got)
+	}
+}
+
+func TestLoginRecommendAuthorizationRecommendedAlreadyGrantedSkipsSelectorAndGrant(t *testing.T) {
+	fake := &sequenceToolCaller{responses: []string{
+		`{"success":true,"data":{"allGranted":false,"items":[{"scope":"calendar.event:read","productCode":"calendar","productName":"日历"}],"selectedScopes":[]}}`,
+	}}
+	var out bytes.Buffer
+	err := RunLoginRecommendAuthorizationWithOptions(context.Background(), fake, &out, LoginRecommendOptions{
+		ScopeMode: LoginRecommendScopeRecommended,
+		ProductSelector: func([]LoginRecommendProduct) ([]string, error) {
+			t.Fatal("already-granted recommended plan must not ask for product selection")
+			return nil, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("RunLoginRecommendAuthorizationWithOptions error = %v", err)
+	}
+	if len(fake.calls) != 1 {
+		t.Fatalf("CallTool count = %d, want only initial recommend plan", len(fake.calls))
+	}
+	if fake.calls[0].tool != patBatchPlanToolName {
+		t.Fatalf("tool sequence = %q, want only %q", fake.calls[0].tool, patBatchPlanToolName)
+	}
+	if strings.Contains(out.String(), "flowId") {
+		t.Fatalf("output = %q, must not include authorization flow", out.String())
+	}
+	if !strings.Contains(out.String(), "推荐权限已全部授权或没有可授权项") {
+		t.Fatalf("output = %q, want already-granted message", out.String())
+	}
+}
+
+func TestLoginRecommendAuthorizationAllScopeModePlansAllProductScopes(t *testing.T) {
+	fake := &sequenceToolCaller{responses: []string{
+		`{"success":true,"data":{"items":[{"scope":"calendar.event:read","productCode":"calendar","productName":"日历"},{"scope":"calendar.event:write","productCode":"calendar","productName":"日历"}],"selectedScopes":["calendar.event:read","calendar.event:write"]}}`,
+		`{"success":true,"data":{"items":[{"scope":"calendar.event:read","productCode":"calendar","productName":"日历"},{"scope":"calendar.event:write","productCode":"calendar","productName":"日历"}],"selectedScopes":["calendar.event:read","calendar.event:write"]}}`,
+		`{"success":true,"data":{"flowId":"flow-1","userCode":"ABCD-EFGH","uri":"https://example.com/auth"}}`,
+	}}
+	err := RunLoginRecommendAuthorizationWithOptions(context.Background(), fake, io.Discard, LoginRecommendOptions{
+		ScopeMode: LoginRecommendScopeAll,
+		ProductSelector: func(products []LoginRecommendProduct) ([]string, error) {
+			return []string{"calendar"}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("RunLoginRecommendAuthorizationWithOptions error = %v", err)
+	}
+	if len(fake.calls) != 3 {
+		t.Fatalf("CallTool count = %d, want initial plan + selected plan + grant", len(fake.calls))
+	}
+	if got := fake.calls[0].args["recommend"]; got != true {
+		t.Fatalf("initial discovery plan recommend = %#v, want true before product selection", got)
+	}
+	if got := fake.calls[0].args["productCodes"]; !stringSliceArgEqual(got, nil) {
+		t.Fatalf("initial discovery plan productCodes = %#v, want empty", got)
+	}
+	if got := fake.calls[1].args["recommend"]; got != false {
+		t.Fatalf("selected plan recommend = %#v, want false for all scope mode", got)
+	}
+	if got := fake.calls[1].args["productCodes"]; !stringSliceArgEqual(got, []string{"calendar"}) {
+		t.Fatalf("selected plan productCodes = %#v, want calendar", got)
+	}
+	if got := fake.calls[2].args["scopes"]; !stringSliceArgEqual(got, []string{"calendar.event:read", "calendar.event:write"}) {
+		t.Fatalf("grant scopes = %#v, want all selected calendar scopes", got)
+	}
+}
+
+func TestLoginRecommendAuthorizationAllScopeWithoutProductsFailsBeforePlan(t *testing.T) {
+	fake := &sequenceToolCaller{}
+	err := RunLoginRecommendAuthorizationWithOptions(context.Background(), fake, io.Discard, LoginRecommendOptions{
+		ScopeMode: LoginRecommendScopeAll,
+	})
+	if err == nil {
+		t.Fatal("RunLoginRecommendAuthorizationWithOptions error = nil, want product-domain validation error")
+	}
+	if !strings.Contains(err.Error(), "至少一个授权业务域") {
+		t.Fatalf("error = %v, want product-domain validation error", err)
+	}
+	if len(fake.calls) != 0 {
+		t.Fatalf("CallTool count = %d, want no empty all-scope plan call", len(fake.calls))
+	}
+}
+
+func TestLoginRecommendAuthorizationConfirmedGrantsDirectly(t *testing.T) {
+	fake := &sequenceToolCaller{responses: []string{
+		`{"success":true,"data":{"items":[{"scope":"calendar.event:read","productCode":"calendar","productName":"日历"}],"selectedScopes":["calendar.event:read"]}}`,
+		`{"success":true,"data":{"grantedScopes":["calendar.event:read"]}}`,
+	}}
+	if err := RunLoginRecommendAuthorizationWithOptions(context.Background(), fake, io.Discard, LoginRecommendOptions{Confirmed: true}); err != nil {
+		t.Fatalf("RunLoginRecommendAuthorizationWithOptions error = %v", err)
+	}
+	if len(fake.calls) != 2 {
+		t.Fatalf("CallTool count = %d, want one plan + grant", len(fake.calls))
+	}
+	if fake.calls[1].tool != patBatchGrantToolName {
+		t.Fatalf("second tool = %q, want %q", fake.calls[1].tool, patBatchGrantToolName)
+	}
+	if got := fake.calls[0].args["recommend"]; got != true {
+		t.Fatalf("plan recommend = %#v, want true for confirmed recommend login", got)
+	}
+	if _, ok := fake.calls[1].args["startFlow"]; ok {
+		t.Fatalf("startFlow should be omitted for confirmed recommend login")
+	}
+	if _, ok := fake.calls[1].args["noWait"]; ok {
+		t.Fatalf("noWait should be omitted for confirmed recommend login")
+	}
+	if got := fake.calls[1].args["caller"]; got != patCallerAuthLoginRecommend {
+		t.Fatalf("caller = %#v, want %q", got, patCallerAuthLoginRecommend)
+	}
+}
+
 func TestChmod_productsAllGrantedStopsAfterPlan(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 	fake := &sequenceToolCaller{responses: []string{
@@ -1130,6 +1328,7 @@ func TestChmod_productsAllGrantedStopsAfterPlan(t *testing.T) {
 	cmd := newChmodCommand(fake)
 	_ = cmd.Flags().Set("grant-type", "once")
 	_ = cmd.Flags().Set("products", "calendar")
+	setBatchYesForTest(t, cmd)
 
 	if err := cmd.RunE(cmd, nil); err != nil {
 		t.Fatalf("chmod RunE error = %v", err)
@@ -1241,6 +1440,34 @@ func TestChmod_withoutAgentCodeLetsServerDefault(t *testing.T) {
 	}
 	if got := fake.gotAgentEnv; got != "" {
 		t.Fatalf("%s during CallTool = %q, want empty for server default path", agentCodeEnv, got)
+	}
+}
+
+func TestChmod_agentCode_envServerMismatchFails(t *testing.T) {
+	t.Setenv(agentCodeEnv, "dinglqdkz3mmw2xwvend")
+
+	fake := &sequenceToolCaller{responses: []string{
+		`{"success":true,"code":"OK","data":{"agentCode":"dingmbw5n9ktkkkbjv3g","grantType":"permanent","grantedScopes":[],"alreadyGrantedScopes":["chat.message:send"]}}`,
+	}}
+	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("grant-type", "permanent")
+
+	err := cmd.RunE(cmd, []string{"chat.message:send"})
+	if err == nil {
+		t.Fatal("chmod RunE error = nil, want agentCode mismatch error")
+	}
+	if !strings.Contains(err.Error(), "dingmbw5n9ktkkkbjv3g") ||
+		!strings.Contains(err.Error(), "dinglqdkz3mmw2xwvend") {
+		t.Fatalf("error = %q, want both returned and expected agentCode", err.Error())
+	}
+	if len(fake.calls) != 1 {
+		t.Fatalf("CallTool count = %d, want 1", len(fake.calls))
+	}
+	if got := fake.calls[0].args["agentCode"]; got != "dinglqdkz3mmw2xwvend" {
+		t.Fatalf("batch grant agentCode = %#v, want DINGTALK_DWS_AGENTCODE", got)
+	}
+	if got := fake.calls[0].agentEnv; got != "dinglqdkz3mmw2xwvend" {
+		t.Fatalf("%s during CallTool = %q, want DINGTALK_DWS_AGENTCODE", agentCodeEnv, got)
 	}
 }
 

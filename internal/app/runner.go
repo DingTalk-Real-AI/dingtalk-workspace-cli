@@ -708,7 +708,6 @@ func resolveIdentityHeaders() map[string]string {
 	if version != "" {
 		headers[transport.HeaderVersion] = version
 	}
-
 	envHeaders := map[string]string{
 		"x-dingtalk-agent":          os.Getenv(envDingtalkAgent),
 		"x-dingtalk-dws-agent-code": agentCode,

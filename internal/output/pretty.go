@@ -20,7 +20,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/fatih/color"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui"
 )
 
 // writePretty renders the payload as ANSI-colored, human-readable text.
@@ -45,26 +45,19 @@ func writePretty(w io.Writer, payload any) error {
 // the single-tool shape (has `tool`). Colours are on by default via fatih/color,
 // auto-disabled when stdout is not a TTY or when NO_COLOR is set.
 func writeSchemaPretty(w io.Writer, payload map[string]any) error {
-	bold := color.New(color.Bold).SprintFunc()
-	cyan := color.New(color.FgCyan).SprintFunc()
-	green := color.New(color.FgGreen).SprintFunc()
-	yellow := color.New(color.FgYellow).SprintFunc()
-	red := color.New(color.FgRed, color.Bold).SprintFunc()
-	dim := color.New(color.Faint).SprintFunc()
-
 	if tool, ok := payload["tool"].(map[string]any); ok {
-		return writeSchemaToolPretty(w, payload, tool, bold, cyan, green, yellow, red, dim)
+		return writeSchemaToolPretty(w, payload, tool)
 	}
 	if products, ok := payload["products"].([]any); ok {
-		return writeSchemaListPretty(w, payload, products, bold, cyan, dim)
+		return writeSchemaListPretty(w, payload, products)
 	}
 
 	if degraded, _ := payload["degraded"].(bool); degraded {
 		reason, _ := payload["reason"].(string)
 		hint, _ := payload["hint"].(string)
-		fmt.Fprintf(w, "%s discovery degraded: %s\n", red("!"), yellow(reason))
+		fmt.Fprintf(w, "%s discovery degraded: %s\n", tui.StateMark("warning"), tui.Warning(reason))
 		if hint != "" {
-			fmt.Fprintf(w, "  %s %s\n", dim("hint:"), hint)
+			fmt.Fprintf(w, "  %s %s\n", tui.Key("hint"), hint)
 		}
 		return nil
 	}
@@ -75,13 +68,13 @@ func writeSchemaListPretty(
 	w io.Writer,
 	payload map[string]any,
 	products []any,
-	bold, cyan, dim func(...any) string,
 ) error {
 	count, _ := payload["count"].(float64)
 	if count == 0 {
 		count = float64(len(products))
 	}
-	fmt.Fprintf(w, "%s  %s products discovered\n", bold("Catalog"), cyan(fmt.Sprintf("%d", int(count))))
+	fmt.Fprintf(w, "%s\n", tui.Header("Catalog", fmt.Sprintf("%d products discovered", int(count))))
+	fmt.Fprintf(w, "%s\n", tui.Rule(64))
 
 	for _, raw := range products {
 		p, ok := raw.(map[string]any)
@@ -92,11 +85,11 @@ func writeSchemaListPretty(
 		name, _ := p["name"].(string)
 		desc, _ := p["description"].(string)
 		tools, _ := p["tools"].([]any)
-		fmt.Fprintf(w, "\n%s %s  %s\n", bold("▸"), bold(id), dim(name))
+		fmt.Fprintf(w, "\n%s %s  %s\n", tui.StateMark("ok"), tui.Bold(id), tui.Dim(name))
 		if desc != "" && desc != name {
-			fmt.Fprintf(w, "  %s\n", dim(desc))
+			fmt.Fprintf(w, "  %s\n", tui.Dim(desc))
 		}
-		fmt.Fprintf(w, "  %s %s\n", dim("tools:"), cyan(fmt.Sprintf("%d", len(tools))))
+		fmt.Fprintf(w, "  %s %s\n", tui.Key("tools"), tui.Cyan(fmt.Sprintf("%d", len(tools))))
 		shown := 0
 		for _, t := range tools {
 			tm, ok := t.(map[string]any)
@@ -106,13 +99,13 @@ func writeSchemaListPretty(
 			rpc, _ := tm["name"].(string)
 			cli, _ := tm["cli_name"].(string)
 			if cli == "" || cli == rpc {
-				fmt.Fprintf(w, "    - %s\n", rpc)
+				fmt.Fprintf(w, "    %s %s\n", tui.Bullet(), rpc)
 			} else {
-				fmt.Fprintf(w, "    - %s %s\n", rpc, dim("→ "+cli))
+				fmt.Fprintf(w, "    %s %s %s %s\n", tui.Bullet(), rpc, tui.Arrow(), tui.Dim(cli))
 			}
 			shown++
 			if shown >= 6 && len(tools) > 8 {
-				fmt.Fprintf(w, "    %s\n", dim(fmt.Sprintf("… %d more", len(tools)-shown)))
+				fmt.Fprintf(w, "    %s\n", tui.Dim(fmt.Sprintf("… %d more", len(tools)-shown)))
 				break
 			}
 		}
@@ -124,7 +117,6 @@ func writeSchemaToolPretty(
 	w io.Writer,
 	payload map[string]any,
 	tool map[string]any,
-	bold, cyan, green, yellow, red, dim func(...any) string,
 ) error {
 	rpc, _ := tool["name"].(string)
 	cli, _ := tool["cli_name"].(string)
@@ -135,19 +127,20 @@ func writeSchemaToolPretty(
 
 	header := rpc
 	if title != "" && title != rpc {
-		header = fmt.Sprintf("%s  %s", rpc, dim(title))
+		header = fmt.Sprintf("%s  %s", rpc, tui.Dim(title))
 	}
-	fmt.Fprintf(w, "%s %s\n", bold("Tool"), header)
+	fmt.Fprintf(w, "%s\n", tui.Header("Tool "+header, "schema"))
+	fmt.Fprintf(w, "%s\n", tui.Rule(72))
 
 	var productID string
 	if product, ok := payload["product"].(map[string]any); ok {
 		pid, _ := product["id"].(string)
 		pname, _ := product["name"].(string)
 		productID = pid
-		fmt.Fprintf(w, "  %s %s  %s\n", dim("product:"), pid, dim(pname))
+		fmt.Fprintf(w, "  %s %s  %s\n", tui.Key("product"), tui.Cyan(pid), tui.Dim(pname))
 	}
 	if canonical != "" {
-		fmt.Fprintf(w, "  %s %s\n", dim("canonical:"), canonical)
+		fmt.Fprintf(w, "  %s %s\n", tui.Key("canonical"), canonical)
 	}
 	if cli != "" {
 		parts := []string{}
@@ -158,26 +151,26 @@ func writeSchemaToolPretty(
 			parts = append(parts, strings.Split(group, ".")...)
 		}
 		parts = append(parts, cli)
-		fmt.Fprintf(w, "  %s %s\n", dim("cli path:"), cyan(strings.Join(parts, " ")))
+		fmt.Fprintf(w, "  %s %s\n", tui.Key("cli path"), tui.Cyan(strings.Join(parts, " ")))
 	}
 
 	// Sensitivity + annotations in one line.
 	sensitive, _ := tool["sensitive"].(bool)
 	if sensitive {
-		fmt.Fprintf(w, "  %s %s\n", dim("sensitive:"), red("yes (needs --yes)"))
+		fmt.Fprintf(w, "  %s %s\n", tui.Key("sensitive"), tui.Danger("yes (needs --yes)"))
 	}
 	if ann, ok := tool["annotations"].(map[string]any); ok && len(ann) > 0 {
 		var parts []string
 		for _, key := range sortedMapKeys(ann) {
 			parts = append(parts, fmt.Sprintf("%s=%v", key, ann[key]))
 		}
-		fmt.Fprintf(w, "  %s %s\n", dim("annotations:"), yellow(strings.Join(parts, " ")))
+		fmt.Fprintf(w, "  %s %s\n", tui.Key("annotations"), tui.Warning(strings.Join(parts, " ")))
 	}
 
 	if desc != "" && desc != title {
 		fmt.Fprintln(w)
 		for _, line := range strings.Split(strings.TrimSpace(desc), "\n") {
-			fmt.Fprintf(w, "  %s\n", dim(line))
+			fmt.Fprintf(w, "  %s\n", tui.Dim(line))
 		}
 	}
 
@@ -200,18 +193,17 @@ func writeSchemaToolPretty(
 			}
 		}
 		fmt.Fprintln(w)
-		fmt.Fprintf(w, "%s\n", bold("Parameters"))
+		fmt.Fprintf(w, "%s\n", tui.Section("Parameters"))
 		for _, name := range sortedMapKeys(params) {
 			prop, _ := params[name].(map[string]any)
-			writeParamPretty(w, name, prop, required[name], overlay[name],
-				bold, cyan, green, yellow, red, dim)
+			writeParamPretty(w, name, prop, required[name], overlay[name])
 		}
 	}
 
 	// Output schema, if any.
 	if out, ok := tool["output_schema"].(map[string]any); ok && len(out) > 0 {
 		fmt.Fprintln(w)
-		fmt.Fprintf(w, "%s\n", bold("Output schema"))
+		fmt.Fprintf(w, "%s\n", tui.Section("Output schema"))
 		b, _ := json.MarshalIndent(out, "  ", "  ")
 		fmt.Fprintf(w, "  %s\n", string(b))
 	}
@@ -225,25 +217,24 @@ func writeParamPretty(
 	prop map[string]any,
 	required bool,
 	overlay map[string]any,
-	bold, cyan, green, yellow, red, dim func(...any) string,
 ) {
 	typeStr := describeType(prop)
 	marker := " "
 	if required {
-		marker = red("*")
+		marker = tui.Danger("*")
 	}
 
 	alias, _ := overlay["alias"].(string)
-	line := fmt.Sprintf(" %s %s", marker, bold(name))
+	line := fmt.Sprintf(" %s %s", marker, tui.Bold(name))
 	if alias != "" && alias != name {
-		line += fmt.Sprintf(" %s", cyan("--"+alias))
+		line += fmt.Sprintf(" %s", tui.Cyan("--"+alias))
 	}
-	line += fmt.Sprintf("  %s", dim(typeStr))
+	line += fmt.Sprintf("  %s", tui.Dim(typeStr))
 	fmt.Fprintln(w, line)
 
 	if d, _ := prop["description"].(string); d != "" {
 		for _, ln := range strings.Split(strings.TrimSpace(d), "\n") {
-			fmt.Fprintf(w, "     %s\n", dim(ln))
+			fmt.Fprintf(w, "     %s\n", tui.Dim(ln))
 		}
 	}
 
@@ -253,7 +244,7 @@ func writeParamPretty(
 		for _, v := range enum {
 			vals = append(vals, fmt.Sprintf("%v", v))
 		}
-		fmt.Fprintf(w, "     %s %s\n", dim("enum:"), green(strings.Join(vals, ", ")))
+		fmt.Fprintf(w, "     %s %s\n", tui.Key("enum"), tui.Success(strings.Join(vals, ", ")))
 	}
 
 	// overlay — transform / env default / default.
@@ -266,13 +257,13 @@ func writeParamPretty(
 			}
 			extras += "(" + strings.Join(kvs, ", ") + ")"
 		}
-		fmt.Fprintf(w, "     %s %s\n", dim("transform:"), yellow(extras))
+		fmt.Fprintf(w, "     %s %s\n", tui.Key("transform"), tui.Warning(extras))
 	}
 	if env, _ := overlay["env_default"].(string); env != "" {
-		fmt.Fprintf(w, "     %s %s\n", dim("env default:"), green("$"+env))
+		fmt.Fprintf(w, "     %s %s\n", tui.Key("env default"), tui.Success("$"+env))
 	}
 	if def, _ := overlay["default"].(string); def != "" {
-		fmt.Fprintf(w, "     %s %s\n", dim("default:"), green(def))
+		fmt.Fprintf(w, "     %s %s\n", tui.Key("default"), tui.Success(def))
 	}
 }
 
