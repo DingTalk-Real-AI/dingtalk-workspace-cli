@@ -12,7 +12,10 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 60 (not 30): mirroring every release asset to Gitee is slow; 30 min cut the
+    # Gitee step off mid-upload on the v1.0.42 release. The Gitee step is now also
+    # idempotent (re-runs only upload missing assets).
+    timeout-minutes: 60
 
     steps:
       - name: Check out repository
