@@ -6,6 +6,10 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Added
+
+- **`dingtalk-dev` skill: image-upload → `mediaId` recipe + per-resource command discovery** (`skills/multi/dingtalk-dev/references/`) — documents how to obtain a `mediaId` for app / robot icons via the DingTalk OpenAPI (`credentials get` → `gettoken` → `/media/upload?type=image` → `--icon-media-id` → read back), since the dev command set has no upload command; and adds a "discovering commands" block to all 10 product refs pointing at each group's `--help` and `dws schema dev.app.<group>.<method>` (`dws schema dev.connect` for connect), so agents inspect commands instead of relying on memory.
+
 ## [1.0.42] - 2026-06-25
 
 This release rounds out `dws dev connect` — bridge a DingTalk robot to your local AI (Claude Code / Codex / opencode / Qoder / …): a generic `custom` channel for any headless CLI tool, in-chat `/new` / `/clear` session commands aligned to each agent's real session op, and a fix for long opencode turns being cut at 30 seconds.
