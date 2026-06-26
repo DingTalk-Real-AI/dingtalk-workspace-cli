@@ -54,7 +54,7 @@ Flags:
 | `formula` | 公式文本（如 =SUM(A1:A10)），无公式时回退原始值 | 查看/复制公式 |
 
 **大表分批读取**：当 `hasMore=true` 或数据量很大时，按行窗口分批：
-- 先通过 `info` 获取 `lastNonEmptyRow` / `columnCount` 确定边界
+- 先通过 `info` 获取 `nonEmptyRange.range`，或用 `nonEmptyRange.lastRow` / `nonEmptyRange.lastColumn` 确定 A1 边界
 - 分批读取：`--range "A1:J500"`、`--range "A501:J1000"` ……
 - 单次建议 ≤5000 单元格
 
@@ -165,7 +165,7 @@ Flags:
 | `formula` | 公式文本（如 =SUM(A1:A10)），无公式时回退原始值 | 查看/复制公式 |
 
 **超时处理建议**：读取大范围数据时若出现超时或响应过慢，请主动缩小 `--range` 查询范围，**建议单次读取的单元格数量控制在 5000 个以内**（例如 50 行 × 100 列、100 行 × 50 列）。对于大表可采用分页读取策略：
-- 先通过 `info` 获取 `rowCount` / `lastNonEmptyRow` / `columnCount` 确定数据边界
+- 先通过 `info` 获取 `nonEmptyRange.range`，或用 `nonEmptyRange.lastRow` / `nonEmptyRange.lastColumn` 确定 A1 边界
 - 按行分批读取，如 `A1:J500`、`A501:J1000`、`A1001:J1500` ……
 - 避免不传 `--range` 直接读取整个大工作表
 
@@ -192,7 +192,7 @@ dws sheet range read --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:D10" --f
 | 操作 | 从返回中提取 | 用于 |
 |------|-------------|------|
 | `list` | 工作表的 `sheetId` | info / range read 的 --sheet-id |
-| `info` | `rowCount` / `lastNonEmptyRow` / `columnCount` / `mergedRanges` | 确定数据范围、分页读取边界、识别合并单元格结构 |
+| `info` | `rowCount` / `nonEmptyRange.range` / `nonEmptyRange.lastRow` / `nonEmptyRange.lastColumn` / `mergedRanges` | 确定数据范围、分页读取边界、识别合并单元格结构 |
 
 ## 注意事项
 

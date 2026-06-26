@@ -14,6 +14,7 @@
 package helpers
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -238,6 +239,127 @@ func sheetStripCellsMeta(cellsRaw any) {
 			}
 		}
 	}
+}
+
+// sheet info 坐标投影：只向 agent 暴露 A1/UI 语义的 nonEmptyRange
+// （range / lastCell / lastRow / lastColumn），并清掉服务端的 legacy 0-based
+// 字段。与 wukong normalizeSheetInfoCoordinatesForAgent 一致。
+func sheetNormalizeInfoCoordinates(v any) {
+	switch t := v.(type) {
+	case map[string]any:
+		_, hasNonEmpty := t["nonEmptyRange"]
+		_, hasLegacyRow := t["lastNonEmptyRow"]
+		if hasNonEmpty || hasLegacyRow {
+			sheetApplyNonEmptyRange(t)
+		}
+		for _, child := range t {
+			sheetNormalizeInfoCoordinates(child)
+		}
+	case []any:
+		for _, child := range t {
+			sheetNormalizeInfoCoordinates(child)
+		}
+	}
+}
+
+func sheetApplyNonEmptyRange(sheet map[string]any) {
+	if ner := sheetNormalizeNonEmptyRangeObject(sheet["nonEmptyRange"]); ner != nil {
+		sheet["nonEmptyRange"] = ner
+	} else if ner := sheetBuildNonEmptyRangeFromLegacy(sheet); ner != nil {
+		sheet["nonEmptyRange"] = ner
+	} else {
+		sheet["nonEmptyRange"] = nil
+	}
+	delete(sheet, "lastNonEmptyRow")
+	delete(sheet, "lastNonEmptyColumn")
+	delete(sheet, "lastNonEmptyIndexBase")
+	delete(sheet, "lastNonEmptyRowNumber")
+	delete(sheet, "lastNonEmptyColumnLetter")
+	delete(sheet, "nonEmptyRangeA1")
+}
+
+func sheetNormalizeNonEmptyRangeObject(v any) map[string]any {
+	ner, ok := v.(map[string]any)
+	if !ok {
+		return nil
+	}
+	rangeValue, hasRange := ner["range"].(string)
+	lastCell, hasLastCell := ner["lastCell"].(string)
+	lastRow, hasLastRow := sheetNonNegativeJSONInt(ner["lastRow"])
+	lastColumn, hasLastColumn := ner["lastColumn"].(string)
+	if hasRange && hasLastCell && hasLastRow && hasLastColumn {
+		return map[string]any{
+			"range":      rangeValue,
+			"lastCell":   lastCell,
+			"lastRow":    lastRow,
+			"lastColumn": lastColumn,
+		}
+	}
+	return nil
+}
+
+func sheetBuildNonEmptyRangeFromLegacy(sheet map[string]any) map[string]any {
+	row, hasRow := sheetNonNegativeJSONInt(sheet["lastNonEmptyRow"])
+	col, hasCol := sheetNonNegativeJSONInt(sheet["lastNonEmptyColumn"])
+	if !hasRow || !hasCol {
+		return nil
+	}
+	lastColumnLetter := sheetColumnLetterFromZeroBased(col)
+	lastRowNumber := row + 1
+	lastCellA1 := fmt.Sprintf("%s%d", lastColumnLetter, lastRowNumber)
+	return map[string]any{
+		"range":      "A1:" + lastCellA1,
+		"lastCell":   lastCellA1,
+		"lastRow":    lastRowNumber,
+		"lastColumn": lastColumnLetter,
+	}
+}
+
+func sheetNonNegativeJSONInt(v any) (int, bool) {
+	switch n := v.(type) {
+	case int:
+		return n, n >= 0
+	case int64:
+		if n < 0 {
+			return 0, false
+		}
+		return int(n), true
+	case float64:
+		if n < 0 {
+			return 0, false
+		}
+		i := int(n)
+		if float64(i) != n {
+			return 0, false
+		}
+		return i, true
+	case json.Number:
+		i, err := n.Int64()
+		if err != nil || i < 0 {
+			return 0, false
+		}
+		return int(i), true
+	default:
+		return 0, false
+	}
+}
+
+func sheetColumnLetterFromZeroBased(index int) string {
+	if index < 0 {
+		return ""
+	}
+	index++
+	var b strings.Builder
+	for index > 0 {
+		index--
+		b.WriteByte(byte('A' + index%26))
+		index /= 26
+	}
+	letters := []byte(b.String())
+	for i, j := 0, len(letters)-1; i < j; i, j = i+1, j-1 {
+		letters[i], letters[j] = letters[j], letters[i]
+	}
+	return string(letters)
 }
 
 // sheetIsEmptyMetaShell 判断 metadata 块是否为全 null 空壳（MCP 框架按 schema 填充的）。

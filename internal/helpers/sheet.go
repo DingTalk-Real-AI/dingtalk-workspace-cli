@@ -168,7 +168,15 @@ func newSheetInfoCommand(runner executor.Runner) *cobra.Command {
 		}
 		params := map[string]any{"nodeId": node}
 		sheetAddStringParam(cmd, params, "sheetId", "sheet-id")
-		return runSheetTool(cmd, runner, "get_sheet", params)
+		result, err := sheetInvocationResult(cmd, runner, "sheet", "get_sheet", params)
+		if err != nil {
+			return err
+		}
+		// 只向 agent 暴露 A1/UI 语义的 nonEmptyRange，清掉 legacy 0-based 字段（与 wukong 对齐）。
+		if !commandDryRun(cmd) {
+			sheetNormalizeInfoCoordinates(result.Response)
+		}
+		return writeCommandPayload(cmd, result)
 	})
 	addSheetNodeFlags(cmd)
 	cmd.Flags().String("sheet-id", "", "工作表 ID 或名称")
@@ -228,8 +236,14 @@ func newSheetUpdateCommand(runner executor.Runner) *cobra.Command {
 			params["frozenColumnCount"] = v
 			changed = true
 		}
+		// tab-color：Hex 颜色（如 #FF0000），传空字符串清除颜色（与 wukong 对齐）。
+		if cmd.Flags().Changed("tab-color") {
+			v, _ := cmd.Flags().GetString("tab-color")
+			params["tabColor"] = v
+			changed = true
+		}
 		if !changed {
-			return apperrors.NewValidation("at least one of --name, --index, --hidden, --frozen-row-count or --frozen-column-count is required")
+			return apperrors.NewValidation("at least one of --name, --index, --hidden, --frozen-row-count, --frozen-column-count or --tab-color is required")
 		}
 		return runSheetTool(cmd, runner, "update_sheet", params)
 	})
@@ -241,6 +255,7 @@ func newSheetUpdateCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().Bool("hidden", false, "是否隐藏工作表")
 	cmd.Flags().Int("frozen-row-count", 0, "冻结行数")
 	cmd.Flags().Int("frozen-column-count", 0, "冻结列数")
+	cmd.Flags().String("tab-color", "", "工作表标签颜色，Hex 格式如 #FF0000；传空字符串清除颜色")
 	return cmd
 }
 

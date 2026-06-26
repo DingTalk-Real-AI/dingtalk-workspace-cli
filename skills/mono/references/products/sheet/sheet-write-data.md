@@ -389,7 +389,7 @@ dws sheet append --node <NODE_ID> --sheet-id <SHEET_ID> \
 | `create` | `nodeId` | list / info / new / range update / append / csv-put 的 --node |
 | `list` | 工作表的 `sheetId` | range update / append / csv-put 的 --sheet-id |
 | `new` | 新工作表的 `sheetId` | range update / append / csv-put 的 --sheet-id |
-| `info` | `rowCount` / `lastNonEmptyRow` / `mergedRanges` | 确定数据范围、追加写入起始行、识别合并单元格结构 |
+| `info` | `rowCount` / `nonEmptyRange.range` / `nonEmptyRange.lastRow` / `nonEmptyRange.lastColumn` / `mergedRanges` | 确定数据范围、追加写入起始行、识别合并单元格结构 |
 | `append` | `a1Notation` 追加数据所在范围 | 确认追加位置 |
 | `csv-put` | `a1Notation` 实际写入的单元格范围 | 确认写入位置和范围 |
 
