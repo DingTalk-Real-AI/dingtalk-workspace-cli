@@ -42,11 +42,11 @@ import (
 // wired into the existing todo handler's task group (see todo.go).
 func newTodoAddAttachmentCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:     "add-attachment",
-		Short:   i18n.T("上传待办附件"),
-		Long:    i18n.T("上传本地文件作为待办附件（init → 上传 → commit → add 四步）。会真实上传文件，请确认待办存在。"),
-		Example: "  dws todo task add-attachment --task-id <taskId> --file-path <filePath>",
-		Args:    cobra.NoArgs,
+		Use:               "add-attachment",
+		Short:             i18n.T("上传待办附件"),
+		Long:              i18n.T("上传本地文件作为待办附件（init → 上传 → commit → add 四步）。会真实上传文件，请确认待办存在。"),
+		Example:           "  dws todo task add-attachment --task-id <taskId> --file-path <filePath>",
+		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			taskID := strings.TrimSpace(firstNonEmptyFlag(cmd, "task-id", "id"))
