@@ -248,6 +248,11 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 			// non-attendance.
 			installAttendanceHook(cmd, canonicalProduct, toolName)
 
+			// §report-hook: native --contents-file / --contents - (stdin)
+			// resolution + one-of(contents, contents-file) relaxation (see
+			// report_hooks.go). No-op for non-report.
+			installReportHook(cmd, canonicalProduct, toolName)
+
 			// §1.4: Add to the right parent group
 			attachToGroup(rootCmd, override.Group, groupCmds, cmd)
 		}
