@@ -30,7 +30,8 @@ import (
 
 // ApplyTransform applies a named transform rule to a value.
 // Supported transforms: iso8601_to_millis, csv_to_array, json_parse,
-// json_parse_strict, enum_map, file_read, invert_bool, parse_bool, string_to_int64.
+// json_parse_strict, enum_map, file_read, file_read_json, invert_bool,
+// parse_bool, string_to_int64.
 func ApplyTransform(value any, transform string, args map[string]any) (any, error) {
 	switch strings.TrimSpace(transform) {
 	case "":
@@ -47,6 +48,8 @@ func ApplyTransform(value any, transform string, args map[string]any) (any, erro
 		return transformEnumMap(value, args)
 	case "file_read":
 		return transformFileRead(value)
+	case "file_read_json":
+		return transformFileReadJSON(value)
 	case "invert_bool":
 		return transformInvertBool(value)
 	case "parse_bool":
@@ -259,6 +262,21 @@ func transformJSONParse(value any) (any, error) {
 			"quote the whole value and use `[{key: value, ...}]` for ad-hoc input, " +
 			"or pass `@path/to/file.json` to read from a file",
 	)
+}
+
+// transformFileReadJSON reads a file path (or "-" for stdin) and parses its
+// contents as JSON, returning the decoded array/object. It composes file_read
+// + json_parse so a *-file CLI flag can feed a JSON-array MCP parameter in one
+// step (single transforms cannot be chained in the envelope). Used by flags
+// such as report `--contents-file`, where the literal `--contents` sibling
+// keeps json_parse for inline JSON and the file flag handles long/multiline
+// content from a path or stdin.
+func transformFileReadJSON(value any) (any, error) {
+	s, err := transformFileRead(value)
+	if err != nil {
+		return nil, err
+	}
+	return transformJSONParse(s)
 }
 
 // transformJSONParseStrict is the strict variant of json_parse: only accepts

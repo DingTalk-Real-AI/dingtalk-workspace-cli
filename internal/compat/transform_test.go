@@ -366,3 +366,31 @@ func TestStringToInt64_EmptyPassthrough(t *testing.T) {
 		t.Errorf("expected empty string pass-through, got %v", got)
 	}
 }
+
+func TestFileReadJSON_FileAndStdin(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "contents.json")
+	payload := `[{"key":"今日完成工作","sort":"0","content":"done","contentType":"markdown","type":"1"}]`
+	if err := os.WriteFile(path, []byte(payload), 0o600); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	got, err := ApplyTransform(path, "file_read_json", nil)
+	if err != nil {
+		t.Fatalf("file_read_json(%q): %v", path, err)
+	}
+	arr, ok := got.([]any)
+	if !ok || len(arr) != 1 {
+		t.Fatalf("file_read_json should decode a 1-element array, got %T %v", got, got)
+	}
+	item, ok := arr[0].(map[string]any)
+	if !ok || item["key"] != "今日完成工作" || item["content"] != "done" {
+		t.Fatalf("decoded item mismatch: %v", arr[0])
+	}
+}
+
+func TestFileReadJSON_MissingFile(t *testing.T) {
+	if _, err := ApplyTransform(filepath.Join(t.TempDir(), "nope.json"), "file_read_json", nil); err == nil {
+		t.Fatal("file_read_json on a missing path should error")
+	}
+}
