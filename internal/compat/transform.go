@@ -51,6 +51,8 @@ func ApplyTransform(value any, transform string, args map[string]any) (any, erro
 		return transformInvertBool(value)
 	case "parse_bool":
 		return transformParseBool(value)
+	case "attendance_class_check_time":
+		return transformAttendanceClassCheckTime(value)
 	case "string_to_int64":
 		return transformStringToInt64(value)
 	default:
@@ -102,6 +104,54 @@ func transformParseBool(value any) (any, error) {
 	default:
 		return value, nil
 	}
+}
+
+// transformAttendanceClassCheckTime parses a class-VO JSON string and converts
+// every "HH:mm" checkTime under sections[*].times[*] and
+// setting.topRestTimeList[*] into a Unix-millis number (1970-01-01 HH:mm in
+// UTC+8), mirroring wukong's convertClassCheckTime. The MCP backend expects the
+// numeric form; the envelope cannot express this nested walk, so it lives here.
+func transformAttendanceClassCheckTime(value any) (any, error) {
+	parsed, err := transformJSONParseStrict(value)
+	if err != nil {
+		return nil, err
+	}
+	classVO, ok := parsed.(map[string]any)
+	if !ok {
+		return parsed, nil
+	}
+	cst := time.FixedZone("CST", 8*3600)
+	convertOne := func(obj map[string]any) {
+		if ct, ok := obj["checkTime"].(string); ok {
+			ct = strings.TrimSpace(ct)
+			if t, err := time.ParseInLocation("2006-01-02 15:04", "1970-01-01 "+ct, cst); err == nil {
+				obj["checkTime"] = float64(t.UnixMilli())
+			}
+		}
+	}
+	if sections, ok := classVO["sections"].([]any); ok {
+		for _, sec := range sections {
+			if secMap, ok := sec.(map[string]any); ok {
+				if times, ok := secMap["times"].([]any); ok {
+					for _, t := range times {
+						if tMap, ok := t.(map[string]any); ok {
+							convertOne(tMap)
+						}
+					}
+				}
+			}
+		}
+	}
+	if setting, ok := classVO["setting"].(map[string]any); ok {
+		if restList, ok := setting["topRestTimeList"].([]any); ok {
+			for _, item := range restList {
+				if itemMap, ok := item.(map[string]any); ok {
+					convertOne(itemMap)
+				}
+			}
+		}
+	}
+	return classVO, nil
 }
 
 func transformISO8601ToMillis(value any) (any, error) {
