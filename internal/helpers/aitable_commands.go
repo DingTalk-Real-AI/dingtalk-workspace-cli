@@ -130,7 +130,33 @@ func newAitableBaseCreateCommand(runner executor.Runner) *cobra.Command {
 			if folderID := aitableStringFlag(cmd, "folder-id"); folderID != "" {
 				params["folderId"] = folderID
 			}
-			return runAitableTool(cmd, runner, "create_base", params)
+			// dry-run 或带模板：保持单步 create_base 语义。
+			if commandDryRun(cmd) {
+				return runAitableTool(cmd, runner, "create_base", params)
+			}
+			result, err := runAitableProductToolResult(cmd, runner, "aitable", "create_base", params)
+			if err != nil {
+				return err
+			}
+			// 默认表由服务端按 scenario 决定：wukong 场景建、openClaw 不建。
+			// 为与 wukong 行为对齐，无模板时在 CLI 侧兜底补建一张默认表，
+			// 使新 base 立即可用（含 tableId）。输出仍保持原 create_base 结果，
+			// 不把内部补建步骤暴露给调用方。
+			if _, hasTemplate := params["templateId"]; !hasTemplate {
+				if baseID := findStringDeep(result.Response, "baseId", "baseID"); baseID != "" {
+					if _, terr := runAitableProductToolResult(cmd, runner, "aitable", "create_table", map[string]any{
+						"baseId":    baseID,
+						"tableName": "表格1",
+						"fields": []any{map[string]any{
+							"fieldName": "标题",
+							"type":      "text",
+						}},
+					}); terr != nil {
+						fmt.Fprintf(cmd.ErrOrStderr(), "warning: created base %s but default table creation failed: %v\n", baseID, terr)
+					}
+				}
+			}
+			return writeCommandPayload(cmd, result)
 		},
 	}
 	preferLegacyLeaf(cmd)
