@@ -1032,9 +1032,8 @@ func newSheetFilterViewReadCommand(runner executor.Runner, use, short, mode stri
 			return err
 		}
 		filterViews := sheetResultFilterViews(result.Response)
-		if len(filterViews) == 0 {
-			return writeCommandPayload(cmd, result)
-		}
+		// 不再对空列表提前返回成功：请求了具体 filter-view-id 却找不到（含一个都没有）
+		// 应报"未找到"错误，而非静默成功（与 wukong 对齐）。
 		view, err := sheetFindFilterView(filterViews, sheetStringFlag(cmd, "filter-view-id"))
 		if err != nil {
 			return err
@@ -1272,10 +1271,6 @@ func newSheetExportCommand(runner executor.Runner) *cobra.Command {
 		if err != nil {
 			return err
 		}
-		out := map[string]any{"jobId": jobID, "status": status}
-		if downloadURL != "" {
-			out["downloadUrl"] = downloadURL
-		}
 		if outputPath != "" && downloadURL != "" {
 			if fi, statErr := os.Stat(outputPath); statErr == nil && fi.IsDir() {
 				outputPath = filepath.Join(outputPath, sheetExportFilename(downloadURL, jobID))
@@ -1283,9 +1278,18 @@ func newSheetExportCommand(runner executor.Runner) *cobra.Command {
 			if err := sheetHTTPGet(cmd, downloadURL, outputPath); err != nil {
 				return err
 			}
-			out["output"] = outputPath
+			out := map[string]any{"jobId": jobID, "status": status, "output": outputPath}
+			if downloadURL != "" {
+				out["downloadUrl"] = downloadURL
+			}
+			return writeCommandPayload(cmd, out)
 		}
-		return writeCommandPayload(cmd, out)
+		// 无 --output：按 wukong 输出 KV 纯文本（jobId / downloadUrl），便于下游正则解析。
+		fmt.Fprintf(cmd.OutOrStdout(), "jobId: %s\n", jobID)
+		if downloadURL != "" {
+			fmt.Fprintf(cmd.OutOrStdout(), "downloadUrl: %s\n", downloadURL)
+		}
+		return nil
 	})
 	addSheetNodeFlags(cmd)
 	cmd.Flags().String("output", "", "本地保存路径")
@@ -1975,47 +1979,57 @@ func newSheetRangeBatchSetStyleCommand(runner executor.Runner) *cobra.Command {
 		if err := json.Unmarshal(data, &items); err != nil {
 			return err
 		}
+		if len(items) == 0 {
+			return apperrors.NewValidation("--batch 配置为空")
+		}
 		continueOnErr, _ := cmd.Flags().GetBool("continue-on-error")
+		total := len(items)
 		var outputs []executor.Result
 		var firstErr error
+		failed := 0
+		// 失败语义：默认遇错即停；--continue-on-error 跳过坏条目继续，
+		// 跑完后仍统一返回首个错误（与 wukong 对齐，避免静默吞错）。
+		recordErr := func(err error) bool {
+			failed++
+			if firstErr == nil {
+				firstErr = err
+			}
+			return continueOnErr
+		}
 		for _, item := range items {
 			if item.SheetID == "" || item.Range == "" {
-				firstErr = apperrors.NewValidation("batch item requires sheetId and range")
-				if !continueOnErr {
+				if !recordErr(apperrors.NewValidation("batch item requires sheetId and range")) {
 					return firstErr
 				}
 				continue
 			}
 			rows, cols, err := sheetParseA1Range(item.Range)
 			if err != nil {
-				firstErr = err
-				if !continueOnErr {
+				if !recordErr(err) {
 					return err
 				}
 				continue
 			}
 			params := map[string]any{"nodeId": sheetStringFlag(cmd, "node"), "sheetId": item.SheetID, "rangeAddress": item.Range}
 			if err := sheetApplyStyleSpec(&item.sheetStyleSpec, rows, cols, params); err != nil {
-				firstErr = err
-				if !continueOnErr {
+				if !recordErr(err) {
 					return err
 				}
 				continue
 			}
 			result, err := sheetInvocationResult(cmd, runner, "sheet", "update_range", params)
 			if err != nil {
-				firstErr = err
-				if !continueOnErr {
+				if !recordErr(err) {
 					return err
 				}
 				continue
 			}
 			outputs = append(outputs, result)
 		}
-		if firstErr != nil && !continueOnErr {
-			return firstErr
+		if firstErr != nil {
+			return apperrors.NewValidation(fmt.Sprintf("batch-set-style 共 %d 条失败（首个错误：%v）", failed, firstErr))
 		}
-		return writeCommandPayload(cmd, map[string]any{"count": len(outputs), "results": outputs})
+		return writeCommandPayload(cmd, map[string]any{"count": len(outputs), "total": total, "results": outputs})
 	})
 	addSheetNodeFlags(cmd)
 	cmd.Flags().String("batch", "", "批次配置 JSON 文件路径 (必填)")
@@ -2141,7 +2155,7 @@ func sheetApply2DString(scalar, jsonStr string, rows, cols int, flagName, key st
 		return err
 	}
 	if !sheetMatrixStringShape(m, rows, cols) {
-		return apperrors.NewValidation("--" + flagName + "-json shape does not match range")
+		return apperrors.NewValidation(fmt.Sprintf("--%s-json 行列维度与 --range 不一致 (dimension does not match range)", flagName))
 	}
 	if enum != nil {
 		for _, row := range m {
