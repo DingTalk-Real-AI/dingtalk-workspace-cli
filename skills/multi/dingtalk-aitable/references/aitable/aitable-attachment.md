@@ -1,6 +1,8 @@
 # attachment — 附件上传
 
 > **STOP — 不要使用钉盘 (drive) 上传！** 钉盘 fileId 无法写入 attachment 字段。必须使用以下流程。
+>
+> **STOP — 严禁在 record create/update 的 cells 里直接传图片 URL！** 直传 `{"url":"https://..."}` 会导致服务端同步下载图片，批量写入时触发 TIMEOUT_ERROR。正确做法：先 `attachment upload` 获取 `fileToken`，再用 `{"fileToken":"ft_xxx"}` 写入。
 
 ## 准备附件上传
 
@@ -38,8 +40,8 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 dws aitable attachment upload --base-id <BASE_ID> --file-name report.pdf --size 204800 --format json
 # → 返回 uploadUrl、fileToken
 
-# 2. PUT 上传（Content-Type 留空）
-curl -X PUT "<uploadUrl>" -H "Content-Type:" --data-binary @report.pdf
+# 2. PUT 上传（Content-Type 必须是文件的具体 MIME type）
+curl -X PUT "<uploadUrl>" -H "Content-Type: application/pdf" --data-binary @report.pdf
 
 # 3. 写入记录
 dws aitable record update --base-id <BASE_ID> --table-id <TABLE_ID> \

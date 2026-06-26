@@ -10,6 +10,33 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 - **`dingtalk-dev` skill: image-upload → `mediaId` recipe + per-resource command discovery** (`skills/multi/dingtalk-dev/references/`) — documents how to obtain a `mediaId` for app / robot icons via the DingTalk OpenAPI (`credentials get` → `gettoken` → `/media/upload?type=image` → `--icon-media-id` → read back), since the dev command set has no upload command; and adds a "discovering commands" block to all 10 product refs pointing at each group's `--help` and `dws schema dev.app.<group>.<method>` (`dws schema dev.connect` for connect), so agents inspect commands instead of relying on memory.
 
+## [1.0.43] - 2026-06-26
+
+This release aligns the open edition's CLI surface with **dws-wukong** across the communication domain (chat / mail / minutes / todo / calendar / contact / aisearch / live / report / ding) and the structured-office domain (aitable / sheet / drive / wiki / doc), and switches the discovery version code from `bamboo` to `cedar` so the aligned command tree is served from its own discovery config.
+
+### Added
+
+- **`calendar book get|search` and `calendar acl list`** (cedar discovery overrides) — query a specific calendar (primary via `--id primary`), fuzzy-search calendars by name, and list a calendar's access-control entries. Maps to the calendar MCP `get_calendar` / `search_calendar` / `list_acls` tools.
+- **`calendar attendee list|add|delete`** (`internal/helpers/calendar_commands.go`) — manage event participants under the wukong-aligned `attendee` naming (equivalent to the legacy `participant` group; calls `get/add/remove_calendar_participant`).
+- **`minutes tag list` and `minutes tag query --tag-id`** — list a user's AI-minutes tags and query minutes by tag (`query_user_tag_list` / `query_minutes_by_tag_id`).
+- **`minutes list mine|shared|all`** (`internal/helpers/minutes_commands.go`) — list own / shared / all minutes with renamed output fields.
+- **`mail folder create|update|delete`, `mail template create|list|get|update|delete`, `mail contact create|list|update|batch-delete`, and `mail message list`** — full mail folder / message-template / contact CRUD plus folder-scoped message listing.
+- **`chat file upload`** (`internal/helpers/chat_file.go`) — upload a local file (init/PUT/commit) or a remote URL to a conversation's file space.
+- **`todo task add-attachment`** (`internal/helpers/todo_commands.go`) — attach a local file to a todo (multi-step upload).
+- **aitable extensions** (`internal/helpers/aitable_extra.go`) — advanced permission / roles, view sub-commands (lock / duplicate / frozen-cols / row-height / fill-color-rule / card / timebar), section node management, workflow enable/disable, record `upsert` / `share-url` / `history-list` / primary-doc, and field search-options. Helper tools route to the hardcoded `aitable-helper` supplement endpoint.
+- **sheet, drive, wiki, doc helper coverage** synced from dws-wukong (`internal/helpers/sheet.go`, `drive.go`, `wiki.go`, `doc.go`).
+
+### Changed
+
+- **Discovery version code `bamboo` → `cedar`** (`internal/market/registry.go`; `discoveryAPIPath = "/cli/discovery/apis/cedar"`) — version codes step by first letter (bamboo → cedar → …); `cedar` carries the dws-wukong alignment. Older binaries keep reading `bamboo`, so the change is isolated to this release line. All test/mock/generator fixtures updated to the cedar path.
+- **CLI output envelope aligned with wukong for cross-edition parity** (`internal/app/runner.go`, `internal/compat/registry.go`) — dry-run prints a `DRY-RUN Arguments:` line, successful results carry `success: true`, missing-required-flag wording is unified to `missing required flag(s): --x`, and OutputTransform applies to the response content layer.
+- **New flag transforms** (`internal/compat/transform.go`) — `parse_bool` (explicit boolean strings so `--flag false` is honoured) and `attendance_class_check_time` (`HH:mm` → UTC+8 milliseconds for shift check-times).
+- **`--calendar-id` accepted on calendar event / participant / room / attachment commands** so calendars other than the primary can be targeted.
+
+### Fixed
+
+- **Client-side validation** for calendar recurrence completeness and attendance schedule / class / group inputs, surfacing input errors before they reach the server.
+
 ## [1.0.42] - 2026-06-25
 
 This release rounds out `dws dev connect` — bridge a DingTalk robot to your local AI (Claude Code / Codex / opencode / Qoder / …): a generic `custom` channel for any headless CLI tool, in-chat `/new` / `/clear` session commands aligned to each agent's real session op, and a fix for long opencode turns being cut at 30 seconds.

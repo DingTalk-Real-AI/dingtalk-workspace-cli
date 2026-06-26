@@ -21,19 +21,24 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 )
 
 type driveCommandRunner struct {
+	calls  int
+	all    []executor.Invocation
 	last   executor.Invocation
 	result executor.Result
 	err    error
 }
 
 func (r *driveCommandRunner) Run(_ context.Context, invocation executor.Invocation) (executor.Result, error) {
+	r.calls++
 	r.last = invocation
+	r.all = append(r.all, invocation)
 	if r.err != nil {
 		return executor.Result{}, r.err
 	}
@@ -62,6 +67,109 @@ func TestDriveListPageSizeAliasMapsMaxResults(t *testing.T) {
 	}
 	if got := runner.last.Params["maxResults"]; got != float64(20) {
 		t.Fatalf("maxResults = %#v, want 20", got)
+	}
+}
+
+func TestDriveListWorkspaceRoutesToDocListNodes(t *testing.T) {
+	t.Parallel()
+
+	runner := &driveCommandRunner{}
+	cmd := newDriveListCommand(runner)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"--workspace-id", "WS_001", "--folder", "FOLDER_001", "--limit", "10"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut.String())
+	}
+	if runner.last.CanonicalProduct != "doc" {
+		t.Fatalf("product = %q, want doc", runner.last.CanonicalProduct)
+	}
+	if runner.last.Tool != "list_nodes" {
+		t.Fatalf("tool = %q, want list_nodes", runner.last.Tool)
+	}
+	if got := runner.last.Params["workspaceId"]; got != "WS_001" {
+		t.Fatalf("workspaceId = %#v, want WS_001", got)
+	}
+	if got := runner.last.Params["folderId"]; got != "FOLDER_001" {
+		t.Fatalf("folderId = %#v, want FOLDER_001", got)
+	}
+	if got := runner.last.Params["pageSize"]; got != 10 {
+		t.Fatalf("pageSize = %#v, want 10", got)
+	}
+}
+
+func TestDriveCopyAliasesRouteToDoc(t *testing.T) {
+	t.Parallel()
+
+	runner := &driveCommandRunner{}
+	cmd := newDriveCopyCommand(runner)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"--file-id", "NODE_001", "--parent-id", "FOLDER_001", "--workspace-id", "WS_001"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut.String())
+	}
+	if runner.last.CanonicalProduct != "doc" || runner.last.Tool != "copy_document" {
+		t.Fatalf("invocation = %#v, want doc copy_document", runner.last)
+	}
+	if got := runner.last.Params["nodeId"]; got != "NODE_001" {
+		t.Fatalf("nodeId = %#v, want NODE_001", got)
+	}
+	if got := runner.last.Params["targetFolderId"]; got != "FOLDER_001" {
+		t.Fatalf("targetFolderId = %#v, want FOLDER_001", got)
+	}
+	if got := runner.last.Params["workspaceId"]; got != "WS_001" {
+		t.Fatalf("workspaceId = %#v, want WS_001", got)
+	}
+}
+
+func TestDrivePermissionRemoveRoutesToDoc(t *testing.T) {
+	t.Parallel()
+
+	runner := &driveCommandRunner{}
+	cmd := newDrivePermissionCommand(runner)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"remove", "--node", "NODE_001", "--users", "uid1,uid2"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut.String())
+	}
+	if runner.last.CanonicalProduct != "doc" || runner.last.Tool != "remove_permission" {
+		t.Fatalf("invocation = %#v, want doc remove_permission", runner.last)
+	}
+	users, ok := runner.last.Params["userIds"].([]string)
+	if !ok || strings.Join(users, ",") != "uid1,uid2" {
+		t.Fatalf("userIds = %#v, want uid1,uid2", runner.last.Params["userIds"])
+	}
+}
+
+func TestDriveSearchAggregatesDriveAndDoc(t *testing.T) {
+	t.Parallel()
+
+	runner := &driveCommandRunner{}
+	cmd := newDriveSearchCommand(runner)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"--query", "报告", "--extensions", "pdf,docx", "--limit", "5"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut.String())
+	}
+	if len(runner.all) != 2 {
+		t.Fatalf("calls = %d, want 2", len(runner.all))
+	}
+	if runner.all[0].CanonicalProduct != "drive" || runner.all[0].Tool != "search_files" {
+		t.Fatalf("first invocation = %#v, want drive search_files", runner.all[0])
+	}
+	if runner.all[1].CanonicalProduct != "doc" || runner.all[1].Tool != "search_documents" {
+		t.Fatalf("second invocation = %#v, want doc search_documents", runner.all[1])
 	}
 }
 

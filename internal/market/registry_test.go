@@ -262,7 +262,7 @@ func TestFetchServers(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/cli/discovery/apis/bamboo" {
+		if r.URL.Path != "/cli/discovery/apis/cedar" {
 			t.Fatalf("unexpected path %q", r.URL.Path)
 		}
 		payload := ListResponse{
@@ -299,7 +299,7 @@ func TestFetchServersFollowsNextCursor(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/cli/discovery/apis/bamboo" {
+		if r.URL.Path != "/cli/discovery/apis/cedar" {
 			t.Fatalf("unexpected path %q", r.URL.Path)
 		}
 

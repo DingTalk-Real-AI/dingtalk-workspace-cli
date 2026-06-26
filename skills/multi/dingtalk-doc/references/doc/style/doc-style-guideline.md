@@ -56,7 +56,7 @@
 
 1. **读者**：谁打开这篇文档？读完要做什么动作（操作 / 选择 / 查参数 / 看推理）？
 2. **唯一记忆点**：读者关掉文档后，最想让他记住的一句话是什么？这句话决定开头摘要 / callout 该写什么。
-3. **形态**：按 §2.0 推荐格式列 + [doc-create-workflow.md §JSONML 起稿判定](./doc-create-workflow.md#jsonml-起稿判定) 决定路径。命中判定条件（决策型 / 含对比的知识沉淀型 / 用户意图关键词）→ **直接 JSONML 起稿**；未命中 → markdown 起稿 + 创建后精修。
+3. **形态**：按 §2.0 推荐格式列 + [doc-create-workflow.md §JSONML 起稿判定](./doc-create-workflow.md#jsonml-起稿判定) 决定路径。命中判定条件（决策型 / 含对比的知识沉淀型 / 用户意图关键词）→ **直接 JSONML 起稿**（但必须先完成 [doc-create-workflow.md §设计规划](./doc-create-workflow.md#设计规划jsonml-起稿前必做) 的 4 步规划）；未命中 → markdown 起稿 + 创建后精修。
 
 写完自检时回看这三个答案：开头有没有兑现「记忆点」、形态有没有兑现「推荐格式」。两条任一不兑现，按 §8 自检表对应行动。
 

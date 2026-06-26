@@ -69,6 +69,7 @@ func (todoHandler) Command(runner executor.Runner) *cobra.Command {
 		newTodoTaskDoneCommand(runner),
 		newTodoTaskGetCommand(runner),
 		newTodoTaskDeleteCommand(runner),
+		newTodoAddAttachmentCommand(runner),
 	)
 	root.AddCommand(task)
 	return root

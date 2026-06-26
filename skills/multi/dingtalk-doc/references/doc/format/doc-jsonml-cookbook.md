@@ -52,7 +52,7 @@
 - 表格用 `table → tr → tc`（无 th/td），表头底色用 `tc` 的 `"fill"` 属性
 - 关键数据着色用 leaf 的 `"color"`（绿=好 / 红=风险）
 - 状态标记用 leaf 的 `"highlight"`（黄=待确认、绿=完成、红=阻塞）
-- uuid 可全部省略——CLI normalize 自动补充
+- uuid 必须显式提供——CLI 不再自动补充
 
 ## ⚠️ JSONML 结构严格约束（生成时必须遵守）
 
@@ -96,16 +96,16 @@
 ## 核心规则
 
 1. **每个 block 节点应有 uuid**：`["tag", {"uuid": "唯一ID"}, ...children]`
-   - insert 时可以自行生成任意唯一字符串，后端会自动分配正式 uuid
+   - insert 时必须提供 uuid（可自行生成任意唯一字符串，后端会自动分配正式 uuid）
    - update 时 uuid **必须**与 `--block-id` 一致
-   - normalize **仅在 attrs 槽完全缺失**（如 `["p", "text"]`）时才补 uuid；如果你写了 `["p", {}, ...]`，normalize 会尊重这个空 attrs 不再补 uuid（这一行为保证 `doc read → doc update` 不污染原文档）
+   - uuid 必须显式提供，不再自动补充
 2. **文本必须用 span + leaf 三层结构**，不要直接写裸字符串
    - ✅ `["p", {"uuid": "x"}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "hello"]]]`
-   - ❌ `["p", {"uuid": "x"}, "hello"]` — validator 会报错；默认模式下 CLI 会自动包成 ✅ 的形式并打印 `[FIX]` 行
+   - ❌ `["p", {"uuid": "x"}, "hello"]` — validator 会报错，请手动包成 ✅ 的形式
    - ⚠️ `["p", {"uuid": "x"}, ["text", {}, "hello"]]` — `text` 是历史 inline tag，validator 不会报错，但建议改写为 ✅ 形式以与 `dws doc read --content-format jsonml` 的输出保持一致
 3. **attrs 对象必须存在**（即使为空）：`["p", {}, ...]` 不能省略 `{}`
 
-> **自动修复 vs 严格模式**：CLI 默认 normalize 会把 ❌ 的裸字符串自动包成 ✅；如要 1:1 透传原始 JSONML（例如复现服务端报错），用 `--no-fix-jsonml`，此时 validator 会以 `JSONPath + Suggestion` 形式逐条报错。如果输入来自 LLM 且可能有 JSON 语法错误（缺括号/逗号），用 `--fix-jsonml` 启用全部修复。
+> **严格模式（缺省）**：CLI 不做结构修复，裸字符串等错误会被 validator 以 `JSONPath + Suggestion` 形式逐条报错。如果输入来自 LLM 且可能有 JSON 语法错误（缺括号/逗号），用 `--fix-jsonml` 启用 JSON 语法修复。
 
 ## 段落 (p)
 
@@ -118,6 +118,11 @@ dws doc block insert --node <DOC_ID> --content-format jsonml \
 dws doc block insert --node <DOC_ID> --content-format jsonml \
   --element '["p", {"uuid": "new2"}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf", "bold": true}, "加粗"], ["span", {"data-type": "leaf"}, "普通"], ["span", {"data-type": "leaf", "italic": true}, "斜体"]]]'
 
+# 多行文本（每行一个 p，同一 p 内的多个 span 不会换行）
+dws doc block insert --node <DOC_ID> --content-format jsonml \
+  --element '["p", {"uuid": "line1"}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf", "bold": true}, "第一行标题"]]]' \
+  --element '["p", {"uuid": "line2"}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "第二行正文内容"]]]'
+
 # 带链接（link 是与 text 并列的子节点）
 dws doc block insert --node <DOC_ID> --content-format jsonml \
   --element '["p", {"uuid": "new3"}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "请访问"]], ["a", {"href": "https://example.com"}, "链接文字"]]'
@@ -126,11 +131,73 @@ dws doc block insert --node <DOC_ID> --content-format jsonml \
 **leaf 支持的格式属性**：
 - `bold: true` — 加粗
 - `italic: true` — 斜体
-- `underline: true` — 下划线
+- `underline: {"value": "single"}` — 下划线（value: `single`/`dash`/`wave`/`double`/`none`，可选 `color`）
 - `strike: true` — 删除线
-- `color: "#ff0000"` — 文字颜色
+- `dstrike: true` — 双删除线
+- `color: "#ff0000"` — 文字颜色（`#rrggbb` 格式）
 - `highlight: "#ffff00"` — 高亮背景色
-- `sz: 14` / `szUnit: "pt"` — 字号
+- `sz: 14` / `szUnit: "pt"` — 字号（szUnit 默认 `"px"`，推荐显式写 `"pt"`）
+ `fonts: {"ascii": "Arial", "eastAsia": "SimHei"}` — 字体（四分区：ascii/hAnsi/cs/eastAsia，值必须使用 font-family 名称，见下方字体表）
+- `vertAlign: "superscript"` — 上标（`"subscript"` 下标，`"baseline"` 基线）
+- `spacing: 2` — 字间距（单位 pt）
+
+**字体名称映射**（`fonts` 字段必须使用 font-family 值，不能写中文名）：
+
+| 用户说法 | font-family 值 | 用户说法 | font-family 值 |
+|---------|---------------|---------|---------------|
+| 宋体 | `SimSun` | 黑体 | `SimHei` |
+| 微软雅黑 | `Microsoft YaHei` | 微软雅黑UI | `Microsoft YaHei UI` |
+| 仿宋 | `FangSong` | 仿宋_GB2312 | `FangSong_GB2312` |
+| 楷体 | `KaiTi` | 楷体_GB2312 | `KaiTi_GB2312` |
+| 等线 | `DengXian` | 新宋体 | `NSimSun` |
+| 宋体-简 | `SimSun SC` | 宋体-繁 | `SimSun TC` |
+| 黑体-简 | `Heiti SC` | 黑体-繁 | `Heiti TC` |
+| 华文宋体 | `STSong` | 华文黑体 | `STHeiti` |
+| 华文楷体 | `STKaiti` | 华文仿宋 | `STFangsong` |
+| 华文中宋 | `STZhongsong` | 华文行楷 | `STXingkai` |
+| 华文隶书 | `STLiti` | 华文新魏 | `STXinwei` |
+| 华文细黑 | `STXihei` | 华文琥珀 | `STHupo` |
+| 苹方-简 | `PingFang SC` | 苹方-繁 | `PingFang TC` |
+| 苹方-港 | `PingFang HK` | 冬青黑-简 | `Hiragino Sans GB` |
+| 兰亭黑-简 | `Lantinghei SC` | 兰亭黑-繁 | `Lantinghei TC` |
+| 凌慧体-简 | `LingWai SC` | 幼圆 | `YouYuan` |
+| 思源黑体 | `Source Han Sans CN` | 思源宋体 | `Source Han Serif CN` |
+| 思源等宽 | `Source Han Mono SC` | 思源黑体Regular | `Source Han Sans CN Regular` |
+| 阿里普惠体2.0 | `"Alibaba PuHuiTi 2.0"` | 阿里普惠体3.0 | `"Alibaba PuHuiTi 3.0"` |
+| 钉钉进步体 | `DingTalk JinBuTi` | Adobe仿宋 | `Adobe 仿宋 Std` |
+| 方正小标宋_GBK | `FZXiaoBiaoSong-B05` | 方正小标宋简体 | `FZXiaoBiaoSong-B05S` |
+| 方正黑体 | `FZHei-B01S` | 方正楷体 | `FZKai-Z03S` |
+| 方正仿宋 | `FZFangSong-Z02S` | 方正仿宋_GBK | `FZFangSong-Z02` |
+| PMingLiU | `PMingLiU` | — | — |
+
+**英文字体**（font-family 值即为字体名）：
+`Arial` ・ `Calibri` ・ `Cambria` ・ `Centaur` ・ `Comfortaa` ・ `Comic Sans MS` ・ `Courier New` ・ `Franklin Gothic` ・ `Garamond` ・ `Georgia` ・ `Helvetica` ・ `Impact` ・ `Lora` ・ `Lucida Sans` ・ `Merriweather` ・ `Montserrat` ・ `Nunito` ・ `Oswald` ・ `Playfair Display` ・ `Roboto` ・ `Spectral` ・ `Times New Roman` ・ `Trebuchet MS` ・ `Verdana`
+
+> **规则**：优先从上表匹配；用户指定的字体不在列表时，使用该字体在操作系统中的真实 font-family 名称（如"更纱黑体" → `Sarasa Gothic SC`）。
+
+**leaf 组合示例**：
+
+```json
+["span", {"data-type": "leaf", "bold": true, "color": "#C62828", "sz": 16, "szUnit": "pt"}, "红色加粗大字"]
+["span", {"data-type": "leaf", "strike": true, "color": "#9E9E9E"}, "已废弃内容"]
+["span", {"data-type": "leaf", "vertAlign": "superscript"}, "[1]"]
+["span", {"data-type": "leaf", "fonts": {"ascii": "Courier New", "eastAsia": "DengXian"}}, "等宽字体"]
+```
+
+**段落级排版属性**（写在 p/h1-h6 的 attrs 上）：
+- `jc: "center"` — 对齐（`left`/`center`/`right`/`both`/`justify`）
+- `spacing: {"line": 1.5, "lineRule": "auto"}` — 行距（lineRule=auto 时 line 为倍数：1=单倍、1.5=1.5倍、2=双倍）
+- `spacing: {"before": 12, "after": 8}` — 段前/段后间距（单位 pt）
+- `ind: {"firstLine": 32}` — 首行缩进（≈ 2 中文字符）
+- `ind: {"left": 96}` — 左缩进
+
+**段落排版示例**：
+
+```json
+["p", {"uuid": "p1", "jc": "center"}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "居中段落"]]]
+["p", {"uuid": "p2", "spacing": {"line": 1.5, "lineRule": "auto"}}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "1.5倍行距"]]]
+["p", {"uuid": "p3", "spacing": {"line": 2, "lineRule": "auto", "before": 12, "after": 8}}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "双倍行距+段前后间距"]]]
+```
 
 ## 标题 (h1-h6)
 
@@ -155,9 +222,11 @@ dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --content-format json
 dws doc block insert --node <DOC_ID> --content-format jsonml \
   --element '["p", {"uuid": "li1", "list": {"listId": "mylist1", "level": 0, "isOrdered": false}}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "无序列表第一项"]]]'
 
-# 有序列表项
+# 有序列表项（仅第一项设 start，后续项不设，系统自动递增）
 dws doc block insert --node <DOC_ID> --content-format jsonml \
   --element '["p", {"uuid": "li2", "list": {"listId": "mylist2", "level": 0, "isOrdered": true, "start": 1}}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "有序列表第一项"]]]'
+dws doc block insert --node <DOC_ID> --content-format jsonml \
+  --element '["p", {"uuid": "li2b", "list": {"listId": "mylist2", "level": 0, "isOrdered": true}}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "有序列表第二项"]]]'
 
 # 缩进子项（level: 1）
 dws doc block insert --node <DOC_ID> --content-format jsonml \
@@ -220,8 +289,10 @@ dws doc block insert --node <DOC_ID> --content-format jsonml \
 
 ## 表格 (table)
 
+> colsWidth 单位为 **pt**（页宽约 650pt）。如配合 `tblW: {"type": "pct"}` 则为百分比权重。
+
 ```bash
-# 2行2列表格
+# 2行2列表格（各列 200pt）
 dws doc block insert --node <DOC_ID> --content-format jsonml \
   --element '["table", {"uuid": "tb1", "colsWidth": [200, 200]}, ["tr", {"uuid": "tr1"}, ["tc", {"uuid": "tc1", "colSpan": 1, "rowSpan": 1}, ["p", {"uuid": "tcp1"}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "标题A"]]]], ["tc", {"uuid": "tc2", "colSpan": 1, "rowSpan": 1}, ["p", {"uuid": "tcp2"}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "标题B"]]]]], ["tr", {"uuid": "tr2"}, ["tc", {"uuid": "tc3", "colSpan": 1, "rowSpan": 1}, ["p", {"uuid": "tcp3"}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "数据1"]]]], ["tc", {"uuid": "tc4", "colSpan": 1, "rowSpan": 1}, ["p", {"uuid": "tcp4"}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "数据2"]]]]]]]'
 ```
@@ -239,13 +310,18 @@ dws doc block insert --node <DOC_ID> --content-format jsonml \
 
 ## 分栏布局 (columns)
 
-分栏复用 table tag，通过 `sr: true` 区分。
+分栏复用 table tag，通过 `sr: true` 区分。分栏的 `tc` 可设置 `fill`（背景色）和 `border`（边框）属性提升视觉效果。
 
 ```bash
-# 两栏布局
+# 两栏布局（带背景色）
 dws doc block insert --node <DOC_ID> --content-format jsonml \
-  --element '["table", {"uuid": "col1", "sr": true, "colsWidth": [300, 300]}, ["tr", {"uuid": "coltr"}, ["tc", {"uuid": "coltc1"}, ["p", {"uuid": "colp1"}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "左栏内容"]]]], ["tc", {"uuid": "coltc2"}, ["p", {"uuid": "colp2"}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "右栏内容"]]]]]]'
+  --element '["table", {"uuid": "col1", "sr": true, "colsWidth": [300, 300]}, ["tr", {"uuid": "coltr"}, ["tc", {"uuid": "coltc1", "fill": "#EEF6FF", "vAlign": "top"}, ["p", {"uuid": "colp1"}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "左栏内容"]]]], ["tc", {"uuid": "coltc2", "fill": "#FFF3E0", "vAlign": "top"}, ["p", {"uuid": "colp2"}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "右栏内容"]]]]]]'
 ```
+
+**分栏视觉属性**：
+- `fill` — 单元格背景色（推荐淡色，如 `#EEF6FF` / `#FFF8E1` / `#F3E5F5`）
+- `border` — 边框配置（可选）
+- 分栏建议始终设置 `fill` 背景色，纯白底分栏视觉上与普通段落无异，读者无法感知分栏结构
 
 ## 嵌入块 (embed)
 
@@ -374,7 +450,7 @@ dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --content-format json
 
 | 错误写法 | 问题 | 正确写法 |
 |---------|------|---------|
-| `["p", {}, "文字"]` | 裸字符串。validator 会报 `段落子节点不能是裸字符串`；默认 normalize 会自动包成右侧形式（打印 `[FIX]` 行） | `["p", {}, ["span", {"data-type":"text"}, ["span", {"data-type":"leaf"}, "文字"]]]` |
+| `["p", {}, "文字"]` | 裸字符串。validator 会报 `段落子节点不能是裸字符串`，请手动包成右侧形式 | `["p", {}, ["span", {"data-type":"text"}, ["span", {"data-type":"leaf"}, "文字"]]]` |
 | `["p", {}, ["text", {}, "文字"]]` | `text` 是历史 inline tag，validator 不报错但服务端实际渲染的 canonical 形式是 span/leaf；为与 `doc read` 输出一致，建议改写 | 同上，用 span + data-type |
 | `["callout", {}, ...]` | 不存在 callout tag | `["container", {"subType": "colorBlocks", ...}, ...]` |
 | `["list", {}, ...]` | 不存在 list tag | `["p", {"list": {...}}, ...]` |

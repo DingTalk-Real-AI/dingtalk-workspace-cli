@@ -38,15 +38,19 @@ func addWikiProxyCommands(root *cobra.Command, runner executor.Runner) {
 		newWikiProxyLeaf(runner, "search", wikiProxyTargetSpace, []string{"space", "search"}, wikiProxyOptions{}),
 		newWikiProxyLeaf(runner, "create", wikiProxyTargetSpace, []string{"space", "create"}, wikiProxyOptions{}),
 		newWikiProxyLeaf(runner, "get", wikiProxyTargetSpace, []string{"space", "get"}, wikiProxyOptions{}),
+		newWikiProxyLeaf(runner, "delete", wikiProxyTargetSpace, []string{"space", "delete"}, wikiProxyOptions{}),
 	)
 
 	node := newWikiProxyGroup("node", "知识库节点兼容入口")
 	node.AddCommand(
-		newWikiProxyLeaf(runner, "list", wikiProxyTargetDoc, []string{"list"}, wikiProxyOptions{}),
+		newWikiNodeListCommand(runner),
 		newWikiProxyLeaf(runner, "read", wikiProxyTargetDoc, []string{"read"}, wikiProxyOptions{}),
 		newWikiProxyLeaf(runner, "info", wikiProxyTargetDoc, []string{"info"}, wikiProxyOptions{}),
-		newWikiProxyLeaf(runner, "create", wikiProxyTargetDoc, []string{"create"}, wikiProxyOptions{}),
-		newWikiProxyLeaf(runner, "search", wikiProxyTargetDoc, []string{"search"}, wikiProxyOptions{workspaceToWorkspaceIDs: true}),
+		newWikiNodeCreateCommand(runner),
+		newWikiNodeCopyCommand(runner),
+		newWikiNodeMoveCommand(runner),
+		newWikiNodeDeleteCommand(runner),
+		newWikiNodeSearchCommand(runner),
 	)
 
 	file := newWikiProxyGroup("file", "知识库文件兼容入口")
@@ -164,6 +168,7 @@ func newWikiProxySpaceTargetRoot(runner executor.Runner) *cobra.Command {
 		newWikiSpaceGetCommand(runner),
 		newWikiSpaceListCommand(runner),
 		newWikiSpaceSearchCommand(runner),
+		newWikiSpaceDeleteCommand(runner),
 	)
 	root.AddCommand(space)
 	return root
