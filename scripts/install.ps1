@@ -27,6 +27,8 @@ $ErrorActionPreference = "Stop"
 
 $Repo = "DingTalk-Real-AI/dingtalk-workspace-cli"
 $BinName = "dws"
+# GitHub "latest release" URL; Resolve-LatestVersion follows its redirect to get the tag.
+$LatestUrl = "https://github.com/$Repo/releases/latest"
 # China mirror: Gitee repo "owner/repo". When set, version + asset URLs resolve via the Gitee API.
 $GiteeRepo = if ($env:DWS_GITEE_REPO) { $env:DWS_GITEE_REPO } else { "" }
 # Auto-fallback Gitee mirror used when GitHub is unreachable (see Resolve-Source).

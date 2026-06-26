@@ -92,3 +92,17 @@ dws dev connect --unified-app-id <unifiedAppId> --channel codex --format json
 | 缺凭证 | 优先用明确 `unifiedAppId` 走 `credentials get`；若只有 `robot submit/result` 的一次性 clientId/clientSecret，按敏感信息使用，缺 `unifiedAppId` 时不能续写版本发布 |
 | Codex app-server 调用失败 | 检查本机 `codex` 是否可执行、是否已登录，以及 `--agent-workdir` 指向的目录是否可用；Codex 渠道不会降级到 `codex exec` |
 | 桌面 App 渠道 `installed:false, autoInstall:false` | 引导用户先装对应 App（installHint 是下载地址），不要直接起连接 |
+
+## 发现命令
+
+起连接前先查清楚再敲：
+
+```
+# 浏览 connect 的子命令与 flag
+dws dev connect --help
+
+# 查 connect 的必填参数、类型、默认值
+dws schema dev.connect
+```
+
+按 `dws schema` 输出构造 `--flag`（flag 名 = schema 参数名）。

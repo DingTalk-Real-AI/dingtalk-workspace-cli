@@ -6,6 +6,10 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Added
+
+- **`dingtalk-dev` skill: image-upload → `mediaId` recipe + per-resource command discovery** (`skills/multi/dingtalk-dev/references/`) — documents how to obtain a `mediaId` for app / robot icons via the DingTalk OpenAPI (`credentials get` → `gettoken` → `/media/upload?type=image` → `--icon-media-id` → read back), since the dev command set has no upload command; and adds a "discovering commands" block to all 10 product refs pointing at each group's `--help` and `dws schema dev.app.<group>.<method>` (`dws schema dev.connect` for connect), so agents inspect commands instead of relying on memory.
+
 ## [1.0.43] - 2026-06-26
 
 This release aligns the open edition's CLI surface with **dws-wukong** across the communication domain (chat / mail / minutes / todo / calendar / contact / aisearch / live / report / ding) and the structured-office domain (aitable / sheet / drive / wiki / doc), and switches the discovery version code from `bamboo` to `cedar` so the aligned command tree is served from its own discovery config.
