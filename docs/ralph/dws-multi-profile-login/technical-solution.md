@@ -42,13 +42,11 @@ JSON 输出包含 `primaryProfile`、`currentProfile`、`previousProfile` 和 `p
 ### 切换 profile
 
 ```bash
-dws profile use [name-or-corpId] --format json
-dws auth switch [name-or-corpId] --format json
-dws profile use - --format json
-dws auth switch - --format json
+dws profile switch [name-or-corpId] --format json
+dws profile switch - --format json
 ```
 
-`profile use <name-or-corpId>` 持久切换默认 current；`auth switch <name-or-corpId>` 是产品兼容入口，语义等价。`profile use -` 和 `auth switch -` 在 current 和 previous 间 toggle。无参数执行 `dws auth switch` 或 `dws profile use` 时，在交互终端展示组织选择 TUI；非交互环境要求显式传入 profile 名或 corpId。切换成功后同步 legacy `auth-token` 镜像，并清理进程内 token/runtime cache。
+`profile switch <name-or-corpId>` 持久切换默认 current；目标可以是 primaryProfile 对应的主组织。`profile switch -` 在 current 和 previous 间 toggle。无参数执行 `dws profile switch` 时，在交互终端展示组织选择 TUI，列表包含主组织、当前组织和所有已登录附属组织；非交互环境要求显式传入 profile 名或 corpId。切换成功后同步 legacy `auth-token` 镜像，并清理进程内 token/runtime cache。`profile use` 作为兼容别名保留，正式用户引导使用 `profile switch`。
 
 ### 单次命令覆盖
 
@@ -66,7 +64,7 @@ dws --profile <name-or-corpId> <product> <command> --format json
 
 - `primaryProfile`：首次成功登录的组织，用于默认 fallback 和标记；`auth logout` 默认全登出时会一并清除。
 - `currentProfile`：默认命令上下文。
-- `previousProfile`：上一个 current，用于 `profile use -` 或 `auth switch -`。
+- `previousProfile`：上一个 current，用于 `profile switch -`。
 - `profiles[]`：按 `corpId` 维护 profile 元数据。
 
 不得在 `profiles.json` 中保存 access token、refresh token、persistent code 或 client secret。
@@ -104,7 +102,7 @@ profile 解析优先级：
 以下产品稿能力不进入 P0 技术实现：
 
 - `dws auth list`：替换为 `dws profile list`。
-- `dws auth switch`：保留为 `dws profile use` 的兼容入口；无参数时必须展示 TUI。
+- `dws auth switch`：不提供；组织上下文切换统一使用 `dws profile switch`。
 - `dws auth login --associated`：替换为重复执行 `dws auth login`。
 - `--组织corp ID`：替换为全局 `--profile <name|corpId>`。
 - 自动发现所有所属组织：P1；P0 只展示主动登录过的 profile。
@@ -116,7 +114,7 @@ profile 解析优先级：
 - 第二/第三组织登录不会覆盖已有组织 token。
 - 同组织重复登录只刷新，不重复新增。
 - `dws profile list` 顶层可见，JSON 和表格都展示组织名。
-- `dws profile use` 与 `dws auth switch` 可按 name/corpId 切换，可用 `-` 切回 previous，无参数时展示 TUI。
+- `dws profile switch` 可按 name/corpId 切换，可用 `-` 切回 previous，无参数时展示 TUI，且可选回主组织。
 - `--profile` 可一次性指定组织，且不改变 current。
 - `auth logout` 默认清理所有组织登录态；`auth logout --profile <name|corpId>` 只清指定组织；`auth reset` 额外清 app config 等本机认证配置。
 - legacy 单槽可迁移，current token 可镜像到 legacy 槽。
@@ -124,7 +122,7 @@ profile 解析优先级：
 ## 验证命令
 
 ```bash
-go test ./internal/auth ./internal/app -run 'Test(MultiProfile|RuntimeProfile|DeleteProfile|UpsertProfile|LoadProfiles|LegacyKeychain|WriteProfile|ProfileList|ProfileUse|ProfileSwitch|AuthSwitch|AuthStatus|AuthLogout|AuthLogin|ResolveAuthLogin|EnrichAuthLogin|RootHelp|RootShortHelp|RootCommand)'
+go test ./internal/auth ./internal/app -run 'Test(MultiProfile|RuntimeProfile|DeleteProfile|UpsertProfile|LoadProfiles|LegacyKeychain|WriteProfile|ProfileList|ProfileUse|ProfileSwitch|AuthCommandDoesNotExposeSwitch|AuthStatus|AuthLogout|AuthLogin|ResolveAuthLogin|EnrichAuthLogin|RootHelp|RootShortHelp|RootCommand)'
 dws version
 dws profile list --format json
 ```

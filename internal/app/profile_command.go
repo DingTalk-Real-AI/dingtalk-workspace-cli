@@ -36,7 +36,7 @@ func newProfileCommand() *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	cmd.AddCommand(newProfileListCommand(), newProfileUseCommand())
+	cmd.AddCommand(newProfileListCommand(), newProfileSwitchCommand(), newProfileUseCommand())
 	return cmd
 }
 
@@ -69,6 +69,18 @@ func newProfileListCommand() *cobra.Command {
 func newProfileUseCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:               "use [name|corpId|-]",
+		Short:             "切换当前组织 profile（兼容 profile switch）",
+		Args:              cobra.MaximumNArgs(1),
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runProfileSwitchCommand(cmd, args)
+		},
+	}
+}
+
+func newProfileSwitchCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:               "switch [name|corpId|-]",
 		Short:             "切换当前组织 profile",
 		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
@@ -130,7 +142,7 @@ func switchProfileAndWrite(cmd *cobra.Command, configDir, selector string, usedT
 
 func selectProfileSwitchProfile(cmd *cobra.Command, configDir string) (string, error) {
 	if !profileSwitchInteractiveTerminal() {
-		return "", apperrors.NewValidation("profile selector required in non-interactive mode; use dws auth switch <name|corpId> or dws profile use <name|corpId>")
+		return "", apperrors.NewValidation("profile selector required in non-interactive mode; use dws profile switch <name|corpId>")
 	}
 	if err := authpkg.EnsureProfilesMigration(configDir); err != nil {
 		return "", apperrors.NewInternal(fmt.Sprintf("failed to migrate profiles: %v", err))

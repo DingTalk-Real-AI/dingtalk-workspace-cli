@@ -16,6 +16,7 @@ package app
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
@@ -142,7 +143,7 @@ func TestProfileUseRootCommandSwitchesOrganizationAndLegacyMirror(t *testing.T) 
 	}
 }
 
-func TestAuthSwitchRootCommandSwitchesOrganization(t *testing.T) {
+func TestProfileSwitchRootCommandSwitchesPrimaryOrganizationAndLegacyMirror(t *testing.T) {
 	configDir := setupAuthLogoutProfiles(t,
 		authLogoutTestToken("corp_primary"),
 		authLogoutTestToken("corp_secondary"),
@@ -152,12 +153,12 @@ func TestAuthSwitchRootCommandSwitchesOrganization(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"--format", "table", "auth", "switch", "corp_primary"})
+	cmd.SetArgs([]string{"--format", "table", "profile", "switch", "corp_primary"})
 	if err := cmd.Execute(); err != nil {
-		t.Fatalf("auth switch corp_primary error = %v\noutput:\n%s", err, out.String())
+		t.Fatalf("profile switch corp_primary error = %v\noutput:\n%s", err, out.String())
 	}
 	if !bytes.Contains(out.Bytes(), []byte("组织: corp_primary org")) {
-		t.Fatalf("auth switch output should include organization name:\n%s", out.String())
+		t.Fatalf("profile switch output should include organization name:\n%s", out.String())
 	}
 	cfg, err := authpkg.LoadProfiles(configDir)
 	if err != nil {
@@ -166,9 +167,16 @@ func TestAuthSwitchRootCommandSwitchesOrganization(t *testing.T) {
 	if cfg.CurrentProfile != "corp_primary" || cfg.PreviousProfile != "corp_secondary" {
 		t.Fatalf("profile pointers = current %q previous %q, want corp_primary/corp_secondary", cfg.CurrentProfile, cfg.PreviousProfile)
 	}
+	legacyToken, err := authpkg.LoadTokenData(configDir)
+	if err != nil {
+		t.Fatalf("LoadTokenData() error = %v", err)
+	}
+	if legacyToken.CorpID != "corp_primary" {
+		t.Fatalf("legacy token corp = %q, want corp_primary", legacyToken.CorpID)
+	}
 }
 
-func TestAuthSwitchNoArgsUsesTUISelector(t *testing.T) {
+func TestProfileSwitchNoArgsUsesTUISelector(t *testing.T) {
 	configDir := setupAuthLogoutProfiles(t,
 		authLogoutTestToken("corp_primary"),
 		authLogoutTestToken("corp_secondary"),
@@ -190,15 +198,15 @@ func TestAuthSwitchNoArgsUsesTUISelector(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"auth", "switch"})
+	cmd.SetArgs([]string{"profile", "switch"})
 	if err := cmd.Execute(); err != nil {
-		t.Fatalf("auth switch error = %v\noutput:\n%s", err, out.String())
+		t.Fatalf("profile switch error = %v\noutput:\n%s", err, out.String())
 	}
 	if !called {
-		t.Fatal("auth switch without args did not invoke TUI selector")
+		t.Fatal("profile switch without args did not invoke TUI selector")
 	}
 	if !bytes.Contains(out.Bytes(), []byte("组织: corp_primary org")) {
-		t.Fatalf("auth switch TUI path should use human output by default:\n%s", out.String())
+		t.Fatalf("profile switch TUI path should use human output by default:\n%s", out.String())
 	}
 	cfg, err := authpkg.LoadProfiles(configDir)
 	if err != nil {
@@ -206,6 +214,21 @@ func TestAuthSwitchNoArgsUsesTUISelector(t *testing.T) {
 	}
 	if cfg.CurrentProfile != "corp_primary" {
 		t.Fatalf("currentProfile = %q, want corp_primary", cfg.CurrentProfile)
+	}
+}
+
+func TestAuthCommandDoesNotExposeSwitch(t *testing.T) {
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"auth", "switch"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatalf("auth switch succeeded, want unknown command error\noutput:\n%s", out.String())
+	}
+	if !strings.Contains(err.Error(), `unknown command "switch" for "dws auth"`) {
+		t.Fatalf("error = %v, want auth switch unknown command", err)
 	}
 }
 

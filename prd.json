@@ -51,7 +51,7 @@
   "technicalDecisions": [
     {
       "topic": "command_naming",
-      "decision": "采用技术方案命名：auth 管凭证，profile 管组织身份选择；主命令使用 dws profile list/use 和全局 --profile，同时保留 dws auth switch 作为产品兼容入口并在无参数时展示组织选择 TUI。",
+      "decision": "采用技术方案命名：auth 管凭证，profile 管组织身份选择；主命令使用 dws profile list/switch 和全局 --profile；不在 auth 命令组下提供 dws auth switch。",
       "reason": "与飞书 CLI 的 auth/profile 分层一致，避免把凭证动作和上下文选择混在同一命令组。"
     },
     {
@@ -101,14 +101,15 @@
       "id": "F3",
       "priority": "P0",
       "name": "切换当前组织",
-      "description": "dws 顶层提供 dws profile use [name|corpId|-]，并提供 dws auth switch [name|corpId|-] 兼容入口，用于持久切换默认组织上下文或切回上一个组织。",
+      "description": "dws 顶层提供 dws profile switch [name|corpId|-]，用于持久切换默认组织上下文或切回上一个组织；无参数时展示组织选择 TUI。",
       "acceptance": [
-        "dws profile use <name|corpId> 将 currentProfile 更新为目标 corpId。",
-        "dws auth switch <name|corpId> 等价于 dws profile use <name|corpId>，用于兼容产品方案和用户心智。",
-        "dws auth switch 或 dws profile use 在交互终端且无参数时展示组织选择 TUI，用户可用方向键选择并回车确认。",
+        "dws profile switch <name|corpId> 将 currentProfile 更新为目标 corpId，目标可以是 primaryProfile 对应的主组织。",
+        "dws profile switch 在交互终端且无参数时展示组织选择 TUI，列表包含主组织、当前组织和所有已登录附属组织，用户可用方向键选择并回车确认。",
+        "dws profile use <name|corpId|-> 作为兼容命令继续复用 profile switch 语义，但正式文档和用户引导使用 dws profile switch。",
+        "dws auth switch 不在 auth 命令下暴露，避免把凭证动作和组织上下文切换混在一起。",
         "非交互环境无参数执行时返回 validation error，并提示显式传入 profile 名或 corpId。",
         "切换时 previousProfile 记录切换前的 currentProfile。",
-        "dws profile use - 使用 previousProfile 切回，并在 current/previous 间 toggle。",
+        "dws profile switch - 使用 previousProfile 切回，并在 current/previous 间 toggle。",
         "切换成功后重置进程内 token/runtime 缓存，后续无 --profile 命令默认使用新的 currentProfile。",
         "切换后 legacy auth-token 镜像同步为当前 profile token。",
         "切换成功的人类可读输出必须包含当前组织名和 corpId，便于终端 agent 确认已切到正确组织。",
@@ -214,8 +215,8 @@
   ],
   "reviewChecklist": [
     "切换组织能力必须在 dws 顶层出现，不接受只在内部函数可用。",
-    "profile list/use 与 auth status 的人类可读输出必须显式包含组织名，不接受只展示 profile name 或 corpId。",
-    "产品草案中的 auth list/--associated/--组织corp ID 若与技术方案冲突，以技术方案命名为准；auth switch 保留为 profile use 的兼容入口，且无参数时必须展示 TUI。",
+    "profile list/switch 与 auth status 的人类可读输出必须显式包含组织名，不接受只展示 profile name 或 corpId。",
+    "产品草案中的 auth list/--associated/--组织corp ID/auth switch 若与技术方案冲突，以技术方案命名为准；切换组织不得放在 auth 命令组下。",
     "profiles.json 不得包含 access_token、refresh_token、persistent_code 或 client_secret。",
     "全局 --profile 不得持久改 currentProfile。",
     "auth logout 默认必须清除所有已登录组织；--profile 只能清除指定组织；不得继续暴露 --all。",
