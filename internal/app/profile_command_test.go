@@ -16,10 +16,13 @@ package app
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
@@ -41,6 +44,12 @@ func TestWriteProfileUseJSONKeepsPrimaryAndCurrentDistinct(t *testing.T) {
 	var resp profileUseResponse
 	if err := json.Unmarshal(buf.Bytes(), &resp); err != nil {
 		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if bytes.Contains(buf.Bytes(), []byte(`"name"`)) {
+		t.Fatalf("profile use JSON should not contain name when corpName is present:\n%s", buf.String())
+	}
+	if resp.Profile.CorpName != "B Org" {
+		t.Fatalf("corpName = %q, want B Org", resp.Profile.CorpName)
 	}
 	if !resp.Profile.IsCurrent {
 		t.Fatalf("isCurrent = false, want true")
@@ -76,6 +85,9 @@ func TestProfileListRootCommandJSONIncludesCorpName(t *testing.T) {
 	}
 	if len(resp.Profiles) != 2 {
 		t.Fatalf("profiles len = %d, want 2", len(resp.Profiles))
+	}
+	if bytes.Contains(out.Bytes(), []byte(`"name"`)) {
+		t.Fatalf("profile list JSON should not contain name when corpName is present:\n%s", out.String())
 	}
 	for _, p := range resp.Profiles {
 		if p.CorpName == "" {
@@ -176,6 +188,65 @@ func TestProfileSwitchRootCommandSwitchesPrimaryOrganizationAndLegacyMirror(t *t
 	}
 }
 
+func TestProfileSwitchRootCommandSupportsCorpIDFlag(t *testing.T) {
+	configDir := setupAuthLogoutProfiles(t,
+		authLogoutTestToken("corp_primary"),
+		authLogoutTestToken("corp_secondary"),
+	)
+
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--format", "table", "profile", "switch", "--corpId", "corp_primary"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("profile switch --corpId error = %v\noutput:\n%s", err, out.String())
+	}
+	cfg, err := authpkg.LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	if cfg.CurrentProfile != "corp_primary" {
+		t.Fatalf("currentProfile = %q, want corp_primary", cfg.CurrentProfile)
+	}
+
+	cmd = NewRootCommand()
+	out.Reset()
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--format", "table", "profile", "use", "--corp", "corp_secondary"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("profile use --corp error = %v\noutput:\n%s", err, out.String())
+	}
+	cfg, err = authpkg.LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	if cfg.CurrentProfile != "corp_secondary" {
+		t.Fatalf("currentProfile = %q, want corp_secondary", cfg.CurrentProfile)
+	}
+}
+
+func TestProfileSwitchRootCommandRejectsConflictingSelectors(t *testing.T) {
+	setupAuthLogoutProfiles(t,
+		authLogoutTestToken("corp_primary"),
+		authLogoutTestToken("corp_secondary"),
+	)
+
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"profile", "switch", "corp_primary", "--corpId", "corp_secondary"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatalf("profile switch with conflicting selectors succeeded\noutput:\n%s", out.String())
+	}
+	if !strings.Contains(err.Error(), "只能指定一个组织选择器") {
+		t.Fatalf("error = %v, want conflicting selector validation", err)
+	}
+}
+
 func TestProfileSwitchNoArgsUsesTUISelector(t *testing.T) {
 	configDir := setupAuthLogoutProfiles(t,
 		authLogoutTestToken("corp_primary"),
@@ -217,14 +288,14 @@ func TestProfileSwitchNoArgsUsesTUISelector(t *testing.T) {
 	}
 }
 
-func TestProfileSwitchOptionsIncludeAllLoggedProfiles(t *testing.T) {
+func TestProfileSwitchOptionLabelUsesOnlyOrganizationAndCurrentState(t *testing.T) {
 	cfg := &authpkg.ProfilesConfig{
 		PrimaryProfile: "corp_primary",
 		CurrentProfile: "corp_secondary",
 		Profiles: []authpkg.Profile{
 			{
 				CorpID:   "corp_primary",
-				CorpName: "主组织",
+				CorpName: "第一组织",
 				UserName: "alice",
 				Status:   authpkg.ProfileStatusActive,
 			},
@@ -236,25 +307,154 @@ func TestProfileSwitchOptionsIncludeAllLoggedProfiles(t *testing.T) {
 			},
 		},
 	}
-	options := profileSwitchOptions(cfg)
-	if len(options) != len(cfg.Profiles) {
-		t.Fatalf("options len = %d, want %d", len(options), len(cfg.Profiles))
-	}
-	wantValues := []string{"corp_primary", "corp_secondary"}
-	for i, want := range wantValues {
-		if options[i].Value != want {
-			t.Fatalf("option[%d].Value = %q, want %q", i, options[i].Value, want)
-		}
-		if strings.Contains(options[i].Key, "\n") {
-			t.Fatalf("option[%d].Key contains newline: %q", i, options[i].Key)
+	primary := profileSwitchOptionLabel(cfg.Profiles[0], cfg)
+	current := profileSwitchOptionLabel(cfg.Profiles[1], cfg)
+	for _, label := range []string{primary, current} {
+		if strings.Contains(label, "\n") {
+			t.Fatalf("profile switch label contains newline: %q", label)
 		}
 	}
-	if !strings.Contains(options[0].Key, "default") {
-		t.Fatalf("primary option missing default marker: %q", options[0].Key)
+	if !strings.Contains(primary, "第一组织") {
+		t.Fatalf("primary option missing organization name: %q", primary)
 	}
-	if !strings.Contains(options[1].Key, "current") {
-		t.Fatalf("current option missing current marker: %q", options[1].Key)
+	if !strings.Contains(current, "当前组织") {
+		t.Fatalf("current option missing current marker: %q", current)
 	}
+	for _, unwanted := range []string{"alice", "bob", "已登录", "主组织", "corp_primary", "corp_secondary"} {
+		if strings.Contains(primary, unwanted) || strings.Contains(current, unwanted) {
+			t.Fatalf("profile switch option should not contain %q: %q / %q", unwanted, primary, current)
+		}
+	}
+}
+
+func TestProfileSwitchTUIViewUsesFixedOuterTable(t *testing.T) {
+	cfg := profileSwitchTestConfig(2)
+	model := newProfileSwitchTUIModel(cfg, "corp_00")
+	view := model.tableView()
+	if lines := strings.Split(view, "\n"); len(lines) != profileSwitchVisibleOptions+4 {
+		t.Fatalf("table line count = %d, want %d:\n%s", len(lines), profileSwitchVisibleOptions+4, view)
+	}
+	for _, want := range []string{"┌", "┬", "┐", "├", "┼", "┤", "└", "┴", "┘", "组织名", "本地状态"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("profile switch table missing %q in:\n%s", want, view)
+		}
+	}
+	for _, unwanted := range []string{"CORP_ID", "ORGANIZATION", "STATUS"} {
+		if strings.Contains(view, unwanted) {
+			t.Fatalf("profile switch table should not contain %q:\n%s", unwanted, view)
+		}
+	}
+	if got := strings.Count(view, "│"); got != (profileSwitchVisibleOptions+1)*3 {
+		t.Fatalf("table vertical separators = %d, want %d\n%s", got, (profileSwitchVisibleOptions+1)*3, view)
+	}
+	for _, profile := range cfg.Profiles {
+		if got := strings.Count(view, profile.CorpID); got != 0 {
+			t.Fatalf("profile corpId %s appears %d times, want hidden:\n%s", profile.CorpID, got, view)
+		}
+	}
+}
+
+func TestProfileSwitchTUISortsLatestLoggedInProfilesFirst(t *testing.T) {
+	cfg := &authpkg.ProfilesConfig{
+		PrimaryProfile: "old",
+		CurrentProfile: "old",
+		Profiles: []authpkg.Profile{
+			{CorpID: "old", CorpName: "旧组织", LastLoginAt: "2026-06-26T10:00:00+08:00"},
+			{CorpID: "new", CorpName: "新组织", LastLoginAt: "2026-06-26T12:00:00+08:00"},
+			{CorpID: "fallback", CorpName: "兜底组织", UpdatedAt: "2026-06-26T11:00:00+08:00"},
+		},
+	}
+	model := newProfileSwitchTUIModel(cfg, "old")
+	gotOrder := []string{model.profiles[0].CorpID, model.profiles[1].CorpID, model.profiles[2].CorpID}
+	wantOrder := []string{"new", "fallback", "old"}
+	if strings.Join(gotOrder, ",") != strings.Join(wantOrder, ",") {
+		t.Fatalf("profile order = %v, want %v", gotOrder, wantOrder)
+	}
+	if got := model.selectedCorpID(); got != "old" {
+		t.Fatalf("selectedCorpID = %q, want old", got)
+	}
+}
+
+func TestProfileSwitchTUIArrowKeysMoveSelectionWithoutDuplicatingRows(t *testing.T) {
+	cfg := profileSwitchTestConfig(7)
+	model := newProfileSwitchTUIModel(cfg, "corp_00")
+	for step := 0; step < 6; step++ {
+		view := model.tableView()
+		if got := strings.Count(view, "›"); got != 1 {
+			t.Fatalf("step %d selected cursor count = %d, want 1:\n%s", step, got, view)
+		}
+		for _, profile := range cfg.Profiles {
+			name := profileOrgName(profile)
+			if got := strings.Count(view, name); got > 1 {
+				t.Fatalf("step %d profile %s appears %d times, want at most once:\n%s", step, name, got, view)
+			}
+		}
+		next, _ := model.Update(tea.KeyMsg{Type: tea.KeyDown})
+		model = next.(profileSwitchTUIModel)
+	}
+	if model.selected != 6 || model.offset != 2 {
+		t.Fatalf("selection after down keys = selected %d offset %d, want 6/2", model.selected, model.offset)
+	}
+}
+
+func TestProfileSwitchTableRowsKeepFixedDisplayWidth(t *testing.T) {
+	rows := []string{
+		profileSwitchTableLine("组织名", "本地状态"),
+		profileSwitchTableLine("› 钉钉（中国）信息技术有限公司", "当前组织"),
+		profileSwitchTableLine("  ACME", ""),
+		profileSwitchTableLine("", ""),
+		profileSwitchStyledTableLine("组织名", "本地状态", profileSwitchHeaderStyle()),
+		profileSwitchStyledTableLine("› 钉钉（中国）信息技术有限公司", "当前组织", profileSwitchSelectedRowStyle()),
+		profileSwitchStyledTableLine("  ACME", "", profileSwitchNormalRowStyle()),
+		profileSwitchStyledTableLine("", "", profileSwitchNormalRowStyle()),
+	}
+	wantWidth := lipgloss.Width(rows[0])
+	for i, row := range rows {
+		if got := lipgloss.Width(row); got != wantWidth {
+			t.Fatalf("row[%d] width = %d, want %d: %q", i, got, wantWidth, row)
+		}
+		if got := strings.Count(row, "│"); got != 3 {
+			t.Fatalf("row[%d] separator count = %d, want 3: %q", i, got, row)
+		}
+	}
+}
+
+func TestProfileSwitchOptionLabelHidesCorpID(t *testing.T) {
+	const corpID = "ding8196cd9a2b2405da24f2f5cc6abecb85"
+	cfg := &authpkg.ProfilesConfig{
+		PrimaryProfile: corpID,
+		CurrentProfile: corpID,
+	}
+	label := profileSwitchOptionLabel(authpkg.Profile{
+		CorpID:   corpID,
+		CorpName: "钉钉",
+	}, cfg)
+	for _, want := range []string{"钉钉", "当前组织"} {
+		if !strings.Contains(label, want) {
+			t.Fatalf("profile switch label missing %q in %q", want, label)
+		}
+	}
+	for _, unwanted := range []string{"ding8196", "cb85", "主组织"} {
+		if strings.Contains(label, unwanted) {
+			t.Fatalf("profile switch label should not contain %q in %q", unwanted, label)
+		}
+	}
+}
+
+func profileSwitchTestConfig(count int) *authpkg.ProfilesConfig {
+	cfg := &authpkg.ProfilesConfig{
+		PrimaryProfile: "corp_00",
+		CurrentProfile: "corp_00",
+	}
+	for i := 0; i < count; i++ {
+		corpID := fmt.Sprintf("corp_%02d", i)
+		cfg.Profiles = append(cfg.Profiles, authpkg.Profile{
+			CorpID:   corpID,
+			CorpName: fmt.Sprintf("组织%02d", i),
+			Status:   authpkg.ProfileStatusActive,
+		})
+	}
+	return cfg
 }
 
 func TestAuthCommandDoesNotExposeSwitch(t *testing.T) {
@@ -358,6 +558,11 @@ func TestWriteProfileListTableIncludesCorpName(t *testing.T) {
 			t.Fatalf("profile list table missing %q in output:\n%s", want, out)
 		}
 	}
+	for _, unwanted := range []string{"PROFILE", "DingTalk China"} {
+		if bytes.Contains(buf.Bytes(), []byte(unwanted)) {
+			t.Fatalf("profile list table should not contain %q in output:\n%s", unwanted, out)
+		}
+	}
 }
 
 func TestProfileUseMessageIncludesCorpName(t *testing.T) {
@@ -366,9 +571,12 @@ func TestProfileUseMessageIncludesCorpName(t *testing.T) {
 		CorpID:   "ding8196",
 		CorpName: "钉钉（中国）信息技术有限公司",
 	})
-	for _, want := range []string{"DingTalk China", "组织: 钉钉（中国）信息技术有限公司", "ding8196"} {
+	for _, want := range []string{"当前组织: 钉钉（中国）信息技术有限公司", "ding8196"} {
 		if !bytes.Contains([]byte(got), []byte(want)) {
 			t.Fatalf("profileUseMessage() missing %q in %q", want, got)
 		}
+	}
+	if bytes.Contains([]byte(got), []byte("DingTalk China")) {
+		t.Fatalf("profileUseMessage() should not include profile name when corpName is present: %q", got)
 	}
 }

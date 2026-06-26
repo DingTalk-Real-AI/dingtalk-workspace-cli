@@ -111,6 +111,7 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 
 示例:
   dws auth login              # 本机登录并新增/刷新一个组织 profile
+  dws auth login --profile <corpId>  # 指定本次授权目标组织，不持久切换当前组织
   dws auth login --recommend  # 无交互批量授权服务端推荐权限
   dws auth login --device     # SSH 远程 / 无头环境登录 (设备流)
   dws auth login --force      # 兼容保留；login 默认已忽略缓存并进入授权流程
@@ -381,8 +382,14 @@ func selectLoginRecommendScopeMode() (pat.LoginRecommendScopeMode, error) {
 
 func newAuthLogoutCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:               "logout",
-		Short:             "清除认证信息（默认退出所有组织）",
+		Use:   "logout",
+		Short: "清除认证信息（默认退出所有组织）",
+		Long: `清除本机钉钉登录态。
+
+默认退出所有已登录组织 profile；指定 --profile 时只退出该组织，不影响其他组织。`,
+		Example: `  dws auth logout
+  dws auth logout --profile <corpId>
+  dws auth logout --profile "钉钉"`,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			configDir := defaultConfigDir()
@@ -417,8 +424,15 @@ func newAuthLogoutCommand() *cobra.Command {
 
 func newAuthStatusCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:               "status",
-		Short:             "查看认证状态",
+		Use:   "status",
+		Short: "查看认证状态",
+		Long: `查看当前或指定组织 profile 的认证状态。
+
+指定 --profile 时只读取并刷新被选中的 token slot，不会修改 currentProfile。`,
+		Example: `  dws auth status
+  dws auth status --profile <corpId>
+  dws auth status --profile "钉钉"
+  dws auth status --profile <corpId> --format json`,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			configDir := defaultConfigDir()

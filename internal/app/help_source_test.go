@@ -220,11 +220,81 @@ func TestRootHelpCustomizationDoesNotAffectSubcommandHelp(t *testing.T) {
 	}
 }
 
+func TestProfileHelpDocumentsMultiProfileUsage(t *testing.T) {
+	got := executeHelpForTest(t, "profile", "switch", "--help")
+	for _, want := range []string{
+		"切换默认组织 profile",
+		"需要只影响单次业务命令时，请使用全局 --profile",
+		"dws profile switch --corpId <corpId>",
+		"dws --profile <corpId> contact user get-self",
+		"--corpId string",
+		"--name string",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("profile switch help missing %q:\n%s", want, got)
+		}
+	}
+
+	got = executeHelpForTest(t, "profile", "list", "--help")
+	for _, want := range []string{
+		"列出本机已登录的所有组织 profile",
+		"dws profile list --format json",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("profile list help missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestAuthHelpDocumentsProfileUsage(t *testing.T) {
+	got := executeHelpForTest(t, "auth", "login", "--help")
+	if !strings.Contains(got, "dws auth login --profile <corpId>") {
+		t.Fatalf("auth login help missing --profile example:\n%s", got)
+	}
+
+	got = executeHelpForTest(t, "auth", "status", "--help")
+	for _, want := range []string{
+		"查看当前或指定组织 profile 的认证状态",
+		"只读取并刷新被选中的 token slot",
+		"dws auth status --profile <corpId>",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("auth status help missing %q:\n%s", want, got)
+		}
+	}
+
+	got = executeHelpForTest(t, "auth", "logout", "--help")
+	for _, want := range []string{
+		"默认退出所有已登录组织 profile",
+		"dws auth logout --profile <corpId>",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("auth logout help missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestRootCommandRegistersUpgradeCommand(t *testing.T) {
 	root := NewRootCommand()
 	if cmd := lookupCommand(root, "upgrade"); cmd == nil {
 		t.Fatal("upgrade command should be registered on root, but was not found")
 	}
+}
+
+func executeHelpForTest(t *testing.T, args ...string) string {
+	t.Helper()
+	t.Setenv(cli.CatalogFixtureEnv, "")
+	t.Setenv(cli.CacheDirEnv, t.TempDir())
+
+	root := NewRootCommand()
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs(args)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute(%v) error = %v\noutput:\n%s", args, err, out.String())
+	}
+	return out.String()
 }
 
 func discoveryServerEntry(command, description string, groups, toolOverrides map[string]any) map[string]any {
