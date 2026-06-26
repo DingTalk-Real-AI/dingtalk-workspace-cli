@@ -110,6 +110,7 @@ func (aitableHandler) Command(runner executor.Runner) *cobra.Command {
 		newAitableFieldCreateCommand(runner),
 		newAitableFieldUpdateCommand(runner),
 		newAitableFieldDeleteCommand(runner),
+		newAitableFieldSearchOptionsCommand(runner),
 		newAitableFieldListAlias(runner),
 	)
 
@@ -271,6 +272,14 @@ func (aitableHandler) Command(runner executor.Runner) *cobra.Command {
 	}
 	viewGet := newAitableViewGetCommand(runner)
 	viewGet.AddCommand(
+		newAitableViewGetCardCommand(runner),
+		newAitableViewGetTimebarCommand(runner),
+		newAitableViewGetAggregateCommand(runner),
+		newAitableViewGetFilterCommand(runner),
+		newAitableViewGetSortCommand(runner),
+		newAitableViewGetGroupCommand(runner),
+		newAitableViewGetVisibleFieldsCommand(runner),
+		newAitableViewGetFieldWidthsCommand(runner),
 		newAitableViewGetLockCommand(runner),
 		newAitableViewGetFrozenColsCommand(runner),
 		newAitableViewGetRowHeightCommand(runner),
@@ -278,6 +287,15 @@ func (aitableHandler) Command(runner executor.Runner) *cobra.Command {
 	)
 	viewUpdate := newAitableViewUpdateCommand(runner)
 	viewUpdate.AddCommand(
+		newAitableViewUpdateCardCommand(runner),
+		newAitableViewUpdateTimebarCommand(runner),
+		newAitableViewUpdateAggregateCommand(runner),
+		newAitableViewUpdateFieldWidthsCommand(runner),
+		newAitableViewUpdateVisibleFieldsCommand(runner),
+		newAitableViewUpdateFilterCommand(runner),
+		newAitableViewUpdateSortCommand(runner),
+		newAitableViewUpdateGroupCommand(runner),
+		newAitableViewUpdateNameCommand(runner),
 		newAitableViewUpdateFrozenColsCommand(runner),
 		newAitableViewUpdateRowHeightCommand(runner),
 		newAitableViewUpdateFillColorRuleCommand(runner),

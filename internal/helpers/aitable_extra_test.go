@@ -2,8 +2,12 @@ package helpers
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/spf13/cobra"
 )
 
@@ -16,6 +20,159 @@ func executeAitableExtraCommand(t *testing.T, cmd *cobra.Command, args ...string
 	cmd.SetArgs(args)
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut.String())
+	}
+}
+
+type aitableSequencedRunner struct {
+	calls     []executor.Invocation
+	responses []map[string]any
+}
+
+func (r *aitableSequencedRunner) Run(_ context.Context, invocation executor.Invocation) (executor.Result, error) {
+	r.calls = append(r.calls, invocation)
+	var response map[string]any
+	if idx := len(r.calls) - 1; idx >= 0 && idx < len(r.responses) {
+		response = r.responses[idx]
+	}
+	return executor.Result{Invocation: invocation, Response: response}, nil
+}
+
+func TestAitableFieldSearchOptionsRoutesToAitable(t *testing.T) {
+	t.Parallel()
+
+	runner := &aitableCommandRunner{}
+	cmd := newAitableFieldSearchOptionsCommand(runner)
+	executeAitableExtraCommand(t, cmd,
+		"--base-id", "BASE_001",
+		"--table-id", "TABLE_001",
+		"--field-id", "FIELD_001",
+		"--keyword", "已",
+		"--limit", "10",
+	)
+
+	if got := runner.last.CanonicalProduct; got != "aitable" {
+		t.Fatalf("CanonicalProduct = %q, want aitable", got)
+	}
+	if got := runner.last.Tool; got != "search_field_options" {
+		t.Fatalf("Tool = %q, want search_field_options", got)
+	}
+	if got := runner.last.Params["keyword"]; got != "已" {
+		t.Fatalf("keyword = %#v, want 已", got)
+	}
+	if got := runner.last.Params["limit"]; got != 10 {
+		t.Fatalf("limit = %#v, want 10", got)
+	}
+}
+
+func TestAitableViewGetFieldWidthsProjectsCustomWidthMap(t *testing.T) {
+	t.Parallel()
+
+	runner := &aitableSequencedRunner{responses: []map[string]any{{
+		"content": map[string]any{
+			"status": "success",
+			"data": map[string]any{"views": []any{map[string]any{
+				"viewId":   "VIEW_001",
+				"viewType": "Grid",
+				"custom": map[string]any{
+					"widthMap": map[string]any{"FIELD_001": 240},
+				},
+			}}},
+		},
+	}}}
+	cmd := newAitableViewGetFieldWidthsCommand(runner)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{
+		"--base-id", "BASE_001",
+		"--table-id", "TABLE_001",
+		"--view-id", "VIEW_001",
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("output JSON parse error = %v\nstdout:\n%s", err, out.String())
+	}
+	data, ok := payload["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("data = %#v, want object", payload["data"])
+	}
+	if got := data["FIELD_001"]; got != float64(240) {
+		t.Fatalf("FIELD_001 width = %#v, want 240", got)
+	}
+}
+
+func TestAitableViewUpdateCardDispatchesGalleryConfig(t *testing.T) {
+	t.Parallel()
+
+	runner := &aitableSequencedRunner{responses: []map[string]any{
+		{"content": map[string]any{
+			"status": "success",
+			"data": map[string]any{"views": []any{map[string]any{
+				"viewId":   "VIEW_001",
+				"viewType": "Gallery",
+			}}},
+		}},
+		{"content": map[string]any{"status": "success"}},
+	}}
+	cmd := newAitableViewUpdateCardCommand(runner)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{
+		"--base-id", "BASE_001",
+		"--table-id", "TABLE_001",
+		"--view-id", "VIEW_001",
+		"--cover-mode", "custom",
+		"--cover-field-id", "FIELD_001",
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut.String())
+	}
+	if len(runner.calls) != 2 {
+		t.Fatalf("calls = %d, want 2", len(runner.calls))
+	}
+	update := runner.calls[1]
+	if update.Tool != "update_view" {
+		t.Fatalf("second tool = %q, want update_view", update.Tool)
+	}
+	config, ok := update.Params["config"].(map[string]any)
+	if !ok {
+		t.Fatalf("config = %#v, want object", update.Params["config"])
+	}
+	card, ok := config["galleryCard"].(map[string]any)
+	if !ok {
+		t.Fatalf("galleryCard = %#v, want object", config["galleryCard"])
+	}
+	if got := card["coverMode"]; got != "custom" {
+		t.Fatalf("coverMode = %#v, want custom", got)
+	}
+}
+
+func TestAitableViewUpdateConfigRoutedKeyHintsSubcommand(t *testing.T) {
+	t.Parallel()
+
+	runner := &aitableCommandRunner{}
+	cmd := newAitableViewUpdateCommand(runner)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{
+		"--base-id", "BASE_001",
+		"--table-id", "TABLE_001",
+		"--view-id", "VIEW_001",
+		"--config", `{"frozenColCount":2}`,
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "frozen-cols") {
+		t.Fatalf("stderr missing frozen-cols hint:\n%s", errOut.String())
 	}
 }
 
