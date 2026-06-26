@@ -19,16 +19,16 @@ dws auth login --format json
 继续登录第二个或第三个组织：
 
 ```bash
-dws auth login --force --format json
+dws auth login --format json
 ```
 
 设备码模式：
 
 ```bash
-dws auth login --device --force --format json
+dws auth login --device --format json
 ```
 
-说明：不新增 `--associated`。OAuth 授权结果中的 `corpId` 是 profile 的唯一组织键。
+说明：不新增 `--associated`。OAuth 授权结果中的 `corpId` 是 profile 的唯一组织键。`dws auth login` 的 OAuth loopback 路径默认进入授权流程，不能因为 current token 有效而直接返回；`--force` 仅兼容保留，不再是新增附属组织的必要参数。
 
 ### 查看 profile
 
@@ -93,6 +93,7 @@ profile 解析优先级：
 
 第二个组织和第三个组织都是“重复登录同一个自然人但选择不同组织”的场景。CLI 不需要知道这是第几个组织，只看 OAuth 返回的 `corpId`：
 
+- 每次 `dws auth login` 都进入授权流程，给用户选择/授权一个组织的机会。
 - 新 `corpId`：新增 profile，写入 `auth-token:<corpId>`，设为 current。
 - 已存在 `corpId`：刷新该 profile token 和元数据，不新增重复项。
 - 首个 profile：同时成为 primary 和 current。
@@ -104,7 +105,7 @@ profile 解析优先级：
 
 - `dws auth list`：替换为 `dws profile list`。
 - `dws auth switch`：保留为 `dws profile use` 的兼容入口；无参数时必须展示 TUI。
-- `dws auth login --associated`：替换为重复执行 `dws auth login --force`。
+- `dws auth login --associated`：替换为重复执行 `dws auth login`。
 - `--组织corp ID`：替换为全局 `--profile <name|corpId>`。
 - 自动发现所有所属组织：P1；P0 只展示主动登录过的 profile。
 - 内置跨组织聚合 `--all-orgs`：不做；由 agent 编排多次 `--profile` 调用。

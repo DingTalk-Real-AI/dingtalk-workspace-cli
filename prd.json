@@ -78,6 +78,7 @@
       "description": "用户重复执行 dws auth login 时，按登录结果中的 corpId 新增或刷新组织 profile；新组织成为 currentProfile，首次组织成为 primaryProfile。",
       "acceptance": [
         "首次 auth login 创建 profiles.json，primaryProfile=currentProfile=登录 corpId。",
+        "每次执行 dws auth login 的 OAuth loopback 路径都进入授权流程，不因当前 token 有效而直接返回。",
         "第二个组织 auth login 新增 profile，不覆盖第一个组织 token。",
         "同组织重复 auth login 只刷新该 profile 的 token 和元数据，不新增重复 profile。",
         "登录成功后 token 写入 auth-token:<corpId>，并同步 legacy auth-token 镜像。"

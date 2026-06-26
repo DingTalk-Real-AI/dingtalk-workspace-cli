@@ -10,7 +10,7 @@
 
 - PRD 已落地：`prd.json` 与 `docs/ralph/dws-multi-profile-login/prd.json`
 - 顶层命令已落地：`dws profile list/use`
-- 第二/第三组织登录路径已落地：重复 `dws auth login --force`
+- 第二/第三组织登录路径已落地：重复 `dws auth login`，默认进入授权流程以新增/刷新组织 profile
 - 单次组织指定已落地：全局 `--profile`
 - 组织名展示已落地：profile JSON 包含 `corpName`，表格包含 `ORG_NAME`
 - 技术方案拒绝项已裁决：不实现 `auth list/--associated/--组织corp ID`；`auth switch` 保留为 `profile use` 的兼容入口，无参数展示 TUI
@@ -55,7 +55,7 @@ go test ./internal/auth ./internal/app -run 'Test(MultiProfile|RuntimeProfile|De
 可以验收。对产品经理侧，当前可交付用户路径是：
 
 1. 首次 `dws auth login` 登录主组织。
-2. 继续 `dws auth login --force` 登录第二/第三组织。
+2. 继续 `dws auth login` 登录第二/第三组织。
 3. 用 `dws profile list` 看组织列表。
 4. 用 `dws auth switch` 或 `dws profile use` 切默认组织；无参数时弹 TUI。
 5. 用 `dws --profile <corpId>` 做单次跨组织调度。

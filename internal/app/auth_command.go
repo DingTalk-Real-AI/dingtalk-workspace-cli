@@ -123,10 +123,10 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
       否则 OAuth 回调会跳到本机不可达的 127.0.0.1 链接，授权完成后无法回写 token。
 
 示例:
-  dws auth login              # 本机登录后选择推荐/全部权限与授权业务域
+  dws auth login              # 本机登录并新增/刷新一个组织 profile
   dws auth login --recommend  # 无交互批量授权服务端推荐权限
   dws auth login --device     # SSH 远程 / 无头环境登录 (设备流)
-  dws auth login --force      # 强制重新登录 (忽略缓存 token)
+  dws auth login --force      # 兼容保留；login 默认已忽略缓存并进入授权流程
   dws auth login --token xxx  # 使用指定 token`,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -170,7 +170,7 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 				provider.NoBrowser, _ = cmd.Flags().GetBool("no-browser")
 				provider.TargetCorpID = cfg.TargetCorpID
 				configureOAuthProviderCompatibility(provider, configDir)
-				tokenData, err = provider.Login(loginCtx, cfg.Force)
+				tokenData, err = provider.Login(loginCtx, authLoginForcesAuthorization(cfg))
 				if err != nil {
 					return apperrors.NewAuth(fmt.Sprintf("dingtalk login failed: %v", err))
 				}
@@ -237,7 +237,7 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 				if err := runPostLoginAuthorization(); err != nil {
 					return err
 				}
-				return writeAuthLoginJSON(w, tokenData, cfg.Force)
+				return writeAuthLoginJSON(w, tokenData, authLoginForcesAuthorization(cfg))
 			}
 
 			// Default table output
@@ -245,7 +245,7 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 				return err
 			}
 			fmt.Fprintln(w)
-			if !cfg.Device && tokenData != nil && tokenData.IsAccessTokenValid() && !cfg.Force {
+			if !cfg.Device && tokenData != nil && tokenData.IsAccessTokenValid() && !authLoginForcesAuthorization(cfg) {
 				fmt.Fprintln(w, authLoginStatusLine("Token 有效，无需重新登录"))
 			} else {
 				fmt.Fprintln(w, authLoginStatusLine("登录成功！"))
@@ -270,7 +270,7 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 	}
 	cmd.Flags().String("token", "", "Access token")
 	cmd.Flags().Bool("device", false, "Use device authorization flow")
-	cmd.Flags().Bool("force", false, "Force interactive login (ignore cached token)")
+	cmd.Flags().Bool("force", false, "兼容保留；login 默认已忽略缓存并进入授权流程")
 	cmd.Flags().Bool("recommend", false, "登录成功后无交互批量授权服务端推荐权限")
 	// Hidden compatibility flags
 	cmd.Flags().String("redirect-url", "", "Loopback redirect URL")
@@ -1068,6 +1068,10 @@ func resolveAuthLoginConfig(cmd *cobra.Command) (authLoginConfig, error) {
 		Yes:          yes,
 		TargetCorpID: targetCorpID,
 	}, nil
+}
+
+func authLoginForcesAuthorization(_ authLoginConfig) bool {
+	return true
 }
 
 func resolveAuthLoginTargetCorpID(configDir, selector string) (string, error) {

@@ -19,7 +19,7 @@
 
 本轮以技术方案为主线。产品稿中提到的 `auth list`、`auth login --associated`、`--组织corp ID` 属于被技术方案替换的命名或交互，不作为当前实现验收口径。`auth switch` 保留为 `profile use` 的产品兼容入口，并在无参数时展示组织选择 TUI。当前 P0 采用：
 
-- `dws auth login --force`：继续登录第二个、第三个组织。
+- `dws auth login`：继续登录第二个、第三个组织；每次执行都进入授权流程以新增/刷新附属组织。
 - `dws profile list`：查看已登录组织。
 - `dws profile use [name|corpId|-]`：持久切换当前组织；无参数时展示 TUI。
 - `dws auth switch [name|corpId|-]`：兼容切换入口；无参数时展示 TUI。
@@ -34,15 +34,15 @@
 已有第一个组织后，继续执行：
 
 ```bash
-dws auth login --force --format json
+dws auth login --format json
 ```
 
-浏览器授权页里选择第二个目标组织并授权。登录成功后，CLI 根据返回 token 中的 `corpId` 写入独立 keychain 槽 `auth-token:<corpId>`，并在 `profiles.json` 中新增 profile。新登录的组织会成为 `currentProfile`，原来的 current 会进入 `previousProfile`。
+浏览器授权页里选择第二个目标组织并授权。登录成功后，CLI 根据返回 token 中的 `corpId` 写入独立 keychain 槽 `auth-token:<corpId>`，并在 `profiles.json` 中新增 profile。新登录的组织会成为 `currentProfile`，原来的 current 会进入 `previousProfile`。这里不能因为当前 token 有效而直接返回，必须让用户有机会新增附属组织。
 
 如果是 SSH/headless 环境，使用设备码模式：
 
 ```bash
-dws auth login --device --force --format json
+dws auth login --device --format json
 ```
 
 登录后检查：
@@ -58,7 +58,7 @@ dws profile list --format json
 第三个组织不需要新命令，重复第二组织流程：
 
 ```bash
-dws auth login --force --format json
+dws auth login --format json
 dws profile list --format json
 ```
 

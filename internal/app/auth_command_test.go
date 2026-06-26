@@ -452,6 +452,15 @@ func TestResolveAuthLoginConfigReadsInheritedYes(t *testing.T) {
 	}
 }
 
+func TestAuthLoginForcesAuthorizationByDefault(t *testing.T) {
+	if !authLoginForcesAuthorization(authLoginConfig{}) {
+		t.Fatal("auth login should force authorization by default so each login can add an organization profile")
+	}
+	if !authLoginForcesAuthorization(authLoginConfig{Force: false}) {
+		t.Fatal("Force=false should still force authorization")
+	}
+}
+
 func TestAuthLoginRecommendSkipsPostLoginTUI(t *testing.T) {
 	t.Setenv(keychain.DisableKeychainEnv, "1")
 	t.Setenv(keychain.StorageDirEnv, t.TempDir())
