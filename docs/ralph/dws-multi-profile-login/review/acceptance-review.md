@@ -30,6 +30,7 @@
 
 ```bash
 go test ./internal/auth ./internal/app -run 'Test(MultiProfile|RuntimeProfile|DeleteProfile|UpsertProfile|LoadProfiles|LegacyKeychain|WriteProfile|ProfileList|ProfileUse|ProfileSwitch|AuthCommandDoesNotExposeSwitch|AuthStatus|AuthLogout|AuthLogin|ResolveAuthLogin|EnrichAuthLogin|RootHelp|RootShortHelp|RootCommand)'
+go test ./internal/auth ./internal/app
 ```
 
 结果：
@@ -44,7 +45,6 @@ go test ./internal/auth ./internal/app -run 'Test(MultiProfile|RuntimeProfile|De
 
 ## 未阻塞但需记录的风险
 
-- 全量 `go test ./internal/auth ./internal/app` 被 `internal/app` 中 upgrade 相关用例 `TestValidateNewBinary_RecoversFromUnsignedDarwin` 阻塞，错误为测试二进制执行被 macOS kill。该路径与多组织登录无直接耦合，应单独排查本机签名/隔离属性/测试环境。
 - real/embedded hook 后端仍不支持显式 `--profile`，这是技术方案明确的 P0 非目标。
 - P0 不自动发现所有所属组织；第三组织必须由用户再次完成 OAuth 授权后才会出现在 `profile list`。
 - `auth logout` 与飞书 CLI 的登出心智对齐为“清当前认证上下文下的用户登录态”；在 dws 多组织模型里，不带 `--profile` 表示清所有已登录组织。

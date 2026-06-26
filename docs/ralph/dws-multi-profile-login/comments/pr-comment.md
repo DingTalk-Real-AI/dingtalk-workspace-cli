@@ -17,12 +17,9 @@
 
 ```bash
 go test ./internal/auth ./internal/app -run 'Test(MultiProfile|RuntimeProfile|DeleteProfile|UpsertProfile|LoadProfiles|LegacyKeychain|WriteProfile|ProfileList|ProfileUse|ProfileSwitch|AuthCommandDoesNotExposeSwitch|AuthStatus|AuthLogout|AuthLogin|ResolveAuthLogin|EnrichAuthLogin|RootHelp|RootShortHelp|RootCommand)'
+go test ./internal/auth ./internal/app
 ```
 
-结果：`internal/auth` 与多组织相关 `internal/app` 用例通过。
+结果：`internal/auth` 与 `internal/app` 均通过。
 
 另已验证本地打包安装，本机 `dws` 已指向本 PR 最新构建。
-
-### 残余说明
-
-全量 `go test ./internal/auth ./internal/app` 中 `internal/app` 被 upgrade 模块用例 `TestValidateNewBinary_RecoversFromUnsignedDarwin` 阻塞，错误是测试二进制执行被 macOS kill。该失败不在本次多组织登录改动面内，建议作为独立本机签名/隔离环境问题跟进。
