@@ -35,17 +35,17 @@ metadata:
 | 用户说 | 命令 |
 |--------|------|
 | "今天收到的日志" | `python scripts/report_received_today.py` |
-| "看日志模版" | `dws report template list` → `dws report template detail --name "<模版名>"` |
-| "提交日报 / 周报（按模版）" | `dws report create --template-id <id> --contents '[...]' |
-| "我已发送的日志" | `dws report sent --start <ISO> --end <ISO>` |
-| "日志已读统计" | `dws report stats --report-id <id>` |
+| "看日志模版" | `dws report template list` → `dws report template get --name "<模版名>"` |
+| "提交日报 / 周报（按模版）" | `dws report entry submit --template-id <id> --contents-file <tmp>.json` |
+| "我已发送的日志" | `dws report outbox list --start <ISO> --end <ISO>` |
+| "日志已读统计" | `dws report entry stats --report-id <id>` |
 | "生成日报 / 周报 / 月报 / 主题报告" | 见 [05-reporting.md](references/05-reporting.md) recipe |
 
 ## 日志查询硬约束
 
-- 查“收到的日志”必须用 `dws report list --start "<ISO>" --end "<ISO>" --cursor 0 --size 20 --format json`，并把“今天 / 最近 30 天”等时间词先展开成完整 ISO 起止时间。
-- 列表返回后，后续 `detail` / `stats` 必须复用同一个 `reportId`；不要重新挑选、猜测或改用标题。
-- 用户要正文时用 `dws report detail --report-id <reportId>`；用户要已读/统计时用 `dws report stats --report-id <reportId>`。
+- 查“收到的日志”必须用 `dws report inbox list --start "<ISO>" --end "<ISO>" --cursor 0 --size 20 --format json`，并把“今天 / 最近 30 天”等时间词先展开成完整 ISO 起止时间。
+- 列表返回后，后续 `entry get` / `entry stats` 必须复用同一个 `reportId`；不要重新挑选、猜测或改用标题。
+- 用户要正文时用 `dws report entry get --report-id <reportId>`；用户要已读/统计时用 `dws report entry stats --report-id <reportId>`。
 
 ## 跨产品协作
 
