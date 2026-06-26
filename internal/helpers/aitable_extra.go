@@ -28,6 +28,81 @@ func runAitableHelperTool(cmd *cobra.Command, runner executor.Runner, tool strin
 	return runAitableProductTool(cmd, runner, "aitable-helper", tool, params)
 }
 
+// newAitableRecordQueryEmptyCommand：dws aitable record query-empty
+// 扫描一页记录，过滤出"完全没填用户字段"的空行。路由到 aitable-helper 的
+// query_empty_records——该工具未必下发到 discovery，硬编码兜底保证 discovery
+// 降级时命令仍可用（与 view lock/duplicate 等 helper 命令同一层）。
+func newAitableRecordQueryEmptyCommand(runner executor.Runner) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "query-empty",
+		Short: i18n.T("查询完全没填用户字段的空行"),
+		Long: i18n.T(`按表内顺序扫描一页，过滤出"完全没填用户字段"的空行。
+- 空行定义：除系统字段（recordId / 创建人 / 创建时间 / 修改人 / 修改时间）外，所有 cell 都是 null、空字符串、空集合或空 Map。
+- --limit 是扫描预算（不是返回数）：可能扫了 100 条但全部非空，本页返回空数组。
+- 翻页：返回 nextCursor 非空时把它传回继续扫；nextCursor 为空才表示扫完全表。`),
+		Example:           "  dws aitable record query-empty --base-id BASE_ID --table-id TABLE_ID\n  dws aitable record query-empty --base-id BASE_ID --table-id TABLE_ID --limit 50\n  dws aitable record query-empty --base-id BASE_ID --table-id TABLE_ID --cursor <上次的nextCursor>",
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			baseID, tableID, err := requiredAitableBaseTable(cmd)
+			if err != nil {
+				return err
+			}
+			params := map[string]any{
+				"baseId":  baseID,
+				"tableId": tableID,
+			}
+			if cmd.Flags().Changed("limit") {
+				limit, _ := cmd.Flags().GetInt("limit")
+				if limit < 1 || limit > 100 {
+					return apperrors.NewValidation(fmt.Sprintf("--limit must be in [1, 100], got %d", limit))
+				}
+				params["limit"] = limit
+			}
+			if cursor := aitableStringFlag(cmd, "cursor"); cursor != "" {
+				params["cursor"] = cursor
+			}
+			return runAitableHelperTool(cmd, runner, "query_empty_records", params)
+		},
+	}
+	preferLegacyLeaf(cmd)
+	addAitableBaseTableFlags(cmd)
+	cmd.Flags().Int("limit", 0, i18n.T("单页扫描预算 [1, 100]，不传使用服务端默认值"))
+	cmd.Flags().String("cursor", "", i18n.T("翻页游标：传入上次返回的 nextCursor 继续扫描"))
+	return cmd
+}
+
+// newAitableDashboardArrangeCommand：dws aitable dashboard arrange
+// 服务端智能重排仪表盘内图表布局。路由到 aitable-helper 的 align_dashboard。
+func newAitableDashboardArrangeCommand(runner executor.Runner) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "arrange",
+		Short: i18n.T("自动重排仪表盘图表布局"),
+		Long: i18n.T(`对指定仪表盘做服务端智能布局：把图表按行铺满网格，避免某行只占半幅、留下大片空白。
+返回 data 含 totalColumns、alignedChartCount 以及每个图表的新位置 layout。`),
+		Example:           "  dws aitable dashboard arrange --base-id BASE_ID --dashboard-id DASHBOARD_ID",
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			baseID, err := aitableRequiredFlagOrFallback(cmd, "base-id", "base")
+			if err != nil {
+				return err
+			}
+			dashboardID, err := aitableRequiredFlag(cmd, "dashboard-id")
+			if err != nil {
+				return err
+			}
+			return runAitableHelperTool(cmd, runner, "align_dashboard", map[string]any{
+				"baseId":      baseID,
+				"dashboardId": dashboardID,
+			})
+		},
+	}
+	preferLegacyLeaf(cmd)
+	addAitableDashboardIDFlags(cmd)
+	return cmd
+}
+
 func newAitableFieldSearchOptionsCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "search-options",

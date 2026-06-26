@@ -303,6 +303,73 @@ func TestAitableWorkflowListRoutesToHelper(t *testing.T) {
 	}
 }
 
+func TestAitableRecordQueryEmptyRoutesToHelper(t *testing.T) {
+	t.Parallel()
+
+	runner := &aitableCommandRunner{}
+	cmd := newAitableRecordQueryEmptyCommand(runner)
+	executeAitableExtraCommand(t, cmd,
+		"--base-id", "BASE_001",
+		"--table-id", "TABLE_001",
+		"--limit", "50",
+		"--cursor", "CUR_001",
+	)
+
+	if got := runner.last.CanonicalProduct; got != "aitable-helper" {
+		t.Fatalf("CanonicalProduct = %q, want aitable-helper", got)
+	}
+	if got := runner.last.Tool; got != "query_empty_records" {
+		t.Fatalf("Tool = %q, want query_empty_records", got)
+	}
+	if got := runner.last.Params["limit"]; got != 50 {
+		t.Fatalf("limit = %#v, want 50", got)
+	}
+	if got := runner.last.Params["cursor"]; got != "CUR_001" {
+		t.Fatalf("cursor = %#v, want CUR_001", got)
+	}
+}
+
+func TestAitableRecordQueryEmptyRejectsOutOfRangeLimit(t *testing.T) {
+	t.Parallel()
+
+	runner := &aitableCommandRunner{}
+	cmd := newAitableRecordQueryEmptyCommand(runner)
+	cmd.SetArgs([]string{
+		"--base-id", "BASE_001",
+		"--table-id", "TABLE_001",
+		"--limit", "200",
+	})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("expected error for --limit 200, got nil")
+	}
+	if runner.last.Tool != "" {
+		t.Fatalf("runner should not be called on invalid limit, got tool %q", runner.last.Tool)
+	}
+}
+
+func TestAitableDashboardArrangeRoutesToHelper(t *testing.T) {
+	t.Parallel()
+
+	runner := &aitableCommandRunner{}
+	cmd := newAitableDashboardArrangeCommand(runner)
+	executeAitableExtraCommand(t, cmd,
+		"--base-id", "BASE_001",
+		"--dashboard-id", "DASH_001",
+	)
+
+	if got := runner.last.CanonicalProduct; got != "aitable-helper" {
+		t.Fatalf("CanonicalProduct = %q, want aitable-helper", got)
+	}
+	if got := runner.last.Tool; got != "align_dashboard" {
+		t.Fatalf("Tool = %q, want align_dashboard", got)
+	}
+	if got := runner.last.Params["dashboardId"]; got != "DASH_001" {
+		t.Fatalf("dashboardId = %#v, want DASH_001", got)
+	}
+}
+
 func TestAitableAdvpermRoleCreateParsesSubRoles(t *testing.T) {
 	t.Parallel()
 

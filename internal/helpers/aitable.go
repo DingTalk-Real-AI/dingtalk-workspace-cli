@@ -130,6 +130,7 @@ func (aitableHandler) Command(runner executor.Runner) *cobra.Command {
 		newAitableRecordCreateCommand(runner),
 		newAitableRecordUpdateCommand(runner),
 		newAitableRecordBatchUpdateCommand(runner),
+		newAitableRecordQueryEmptyCommand(runner),
 		newAitableRecordDeleteCommand(runner),
 		newAitableRecordHistoryListCommand(runner),
 		newAitableRecordShareURLCommand(runner),
@@ -257,6 +258,7 @@ func (aitableHandler) Command(runner executor.Runner) *cobra.Command {
 		newAitableDashboardUpdateCommand(runner),
 		newAitableDashboardDeleteCommand(runner),
 		newAitableDashboardConfigExampleCommand(runner),
+		newAitableDashboardArrangeCommand(runner),
 		dashboardShare,
 	)
 
