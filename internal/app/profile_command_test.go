@@ -217,6 +217,46 @@ func TestProfileSwitchNoArgsUsesTUISelector(t *testing.T) {
 	}
 }
 
+func TestProfileSwitchOptionsIncludeAllLoggedProfiles(t *testing.T) {
+	cfg := &authpkg.ProfilesConfig{
+		PrimaryProfile: "corp_primary",
+		CurrentProfile: "corp_secondary",
+		Profiles: []authpkg.Profile{
+			{
+				CorpID:   "corp_primary",
+				CorpName: "主组织",
+				UserName: "alice",
+				Status:   authpkg.ProfileStatusActive,
+			},
+			{
+				CorpID:   "corp_secondary",
+				CorpName: "第二组织",
+				UserName: "bob",
+				Status:   authpkg.ProfileStatusActive,
+			},
+		},
+	}
+	options := profileSwitchOptions(cfg)
+	if len(options) != len(cfg.Profiles) {
+		t.Fatalf("options len = %d, want %d", len(options), len(cfg.Profiles))
+	}
+	wantValues := []string{"corp_primary", "corp_secondary"}
+	for i, want := range wantValues {
+		if options[i].Value != want {
+			t.Fatalf("option[%d].Value = %q, want %q", i, options[i].Value, want)
+		}
+		if strings.Contains(options[i].Key, "\n") {
+			t.Fatalf("option[%d].Key contains newline: %q", i, options[i].Key)
+		}
+	}
+	if !strings.Contains(options[0].Key, "default") {
+		t.Fatalf("primary option missing default marker: %q", options[0].Key)
+	}
+	if !strings.Contains(options[1].Key, "current") {
+		t.Fatalf("current option missing current marker: %q", options[1].Key)
+	}
+}
+
 func TestAuthCommandDoesNotExposeSwitch(t *testing.T) {
 	cmd := NewRootCommand()
 	var out bytes.Buffer

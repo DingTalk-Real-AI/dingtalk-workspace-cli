@@ -161,10 +161,7 @@ func selectProfileSwitchProfile(cmd *cobra.Command, configDir string) (string, e
 	if choice == "" {
 		choice = cfg.Profiles[0].CorpID
 	}
-	options := make([]huh.Option[string], 0, len(cfg.Profiles))
-	for _, p := range cfg.Profiles {
-		options = append(options, huh.NewOption(profileSwitchOptionLabel(p, cfg), p.CorpID))
-	}
+	options := profileSwitchOptions(cfg)
 	height := len(options)
 	if height > 12 {
 		height = 12
@@ -173,7 +170,7 @@ func selectProfileSwitchProfile(cmd *cobra.Command, configDir string) (string, e
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("选择要切换的组织").
-				Description("↑↓ 选择，Enter 确认\n\nORGANIZATION                 STATUS   USER               CORP_ID").
+				Description("全部已登录 profile，↑↓ 选择，Enter 确认，/ 搜索").
 				Options(options...).
 				Height(height).
 				Value(&choice),
@@ -183,6 +180,17 @@ func selectProfileSwitchProfile(cmd *cobra.Command, configDir string) (string, e
 		return "", apperrors.NewValidation(fmt.Sprintf("组织选择中止: %v", err))
 	}
 	return strings.TrimSpace(choice), nil
+}
+
+func profileSwitchOptions(cfg *authpkg.ProfilesConfig) []huh.Option[string] {
+	if cfg == nil {
+		return nil
+	}
+	options := make([]huh.Option[string], 0, len(cfg.Profiles))
+	for _, p := range cfg.Profiles {
+		options = append(options, huh.NewOption(profileSwitchOptionLabel(p, cfg), p.CorpID))
+	}
+	return options
 }
 
 func profileSwitchOptionLabel(p authpkg.Profile, cfg *authpkg.ProfilesConfig) string {
@@ -210,12 +218,21 @@ func profileSwitchOptionLabel(p authpkg.Profile, cfg *authpkg.ProfilesConfig) st
 	}
 	marker := ""
 	if cfg != nil && p.CorpID == cfg.CurrentProfile {
-		marker = "  ← 当前"
+		marker = "current"
 	} else if cfg != nil && p.CorpID == cfg.PrimaryProfile {
-		marker = "  default"
+		marker = "default"
 	}
 	org := profileOrgName(p)
-	return fmt.Sprintf("%-28s %-8s %-18s %s%s", clipProfileCell(org, 28), statusLabel, clipProfileCell(user, 18), p.CorpID, marker)
+	parts := []string{
+		clipProfileCell(org, 22),
+		statusLabel,
+		clipProfileCell(user, 12),
+		shortProfileCorpID(p.CorpID),
+	}
+	if marker != "" {
+		parts = append(parts, marker)
+	}
+	return strings.Join(parts, " | ")
 }
 
 type profileListResponse struct {
@@ -382,4 +399,13 @@ func clipProfileCell(value string, limit int) string {
 		return string(runes[:limit])
 	}
 	return string(runes[:limit-3]) + "..."
+}
+
+func shortProfileCorpID(corpID string) string {
+	corpID = strings.TrimSpace(corpID)
+	runes := []rune(corpID)
+	if len(runes) <= 18 {
+		return corpID
+	}
+	return string(runes[:10]) + "..." + string(runes[len(runes)-4:])
 }
