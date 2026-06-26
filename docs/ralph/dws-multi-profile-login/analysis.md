@@ -17,11 +17,12 @@
 
 ## 决策结论
 
-本轮以技术方案为主线。产品稿中提到的 `auth list`、`auth switch`、`auth login --associated`、`--组织corp ID` 属于被技术方案替换的命名或交互，不作为当前实现验收口径。当前 P0 采用：
+本轮以技术方案为主线。产品稿中提到的 `auth list`、`auth login --associated`、`--组织corp ID` 属于被技术方案替换的命名或交互，不作为当前实现验收口径。`auth switch` 保留为 `profile use` 的产品兼容入口，并在无参数时展示组织选择 TUI。当前 P0 采用：
 
 - `dws auth login --force`：继续登录第二个、第三个组织。
 - `dws profile list`：查看已登录组织。
-- `dws profile use <name|corpId|->`：持久切换当前组织。
+- `dws profile use [name|corpId|-]`：持久切换当前组织；无参数时展示 TUI。
+- `dws auth switch [name|corpId|-]`：兼容切换入口；无参数时展示 TUI。
 - `dws --profile <name|corpId> <product> <command>`：单次命令临时指定组织。
 
 这个拆分符合“auth 管凭证、profile 管组织上下文”的边界，也让终端调度 dws 时能在顶层直接命中 profile 管理能力。
@@ -69,12 +70,21 @@ dws profile list --format json
 
 ```bash
 dws profile use <name-or-corpId> --format json
+dws auth switch <name-or-corpId> --format json
+```
+
+交互选择组织：
+
+```bash
+dws auth switch
+dws profile use
 ```
 
 切回上一个组织：
 
 ```bash
 dws profile use - --format json
+dws auth switch - --format json
 ```
 
 单次命令指定组织，不改变默认 current：
@@ -89,7 +99,7 @@ dws --profile <name-or-corpId> <product> <command> --format json
 
 - 多槽 profile 元数据与 current/primary/previous 指针：`internal/auth/profiles.go`
 - token 按组织独立存储，legacy `auth-token` 镜像兼容旧逻辑：`internal/auth/token.go`
-- 顶层 `dws profile list/use`：`internal/app/profile_command.go`
+- 顶层 `dws profile list/use` 与 `dws auth switch` 兼容入口：`internal/app/profile_command.go`、`internal/app/auth_command.go`
 - 全局 `--profile` 预解析与运行时注入：`internal/app/root.go`
 - PRD 与验收口径：`prd.json`
 
@@ -105,7 +115,7 @@ dws --profile <name-or-corpId> <product> <command> --format json
 聚焦多组织能力的单元测试已通过：
 
 ```bash
-go test ./internal/auth ./internal/app -run 'Test(MultiProfile|RuntimeProfile|DeleteProfile|UpsertProfile|LoadProfiles|LegacyKeychain|WriteProfile|ProfileList|ProfileUse|AuthStatus|AuthLogout|AuthLogin|ResolveAuthLogin|EnrichAuthLogin|RootHelp|RootShortHelp|RootCommand)'
+go test ./internal/auth ./internal/app -run 'Test(MultiProfile|RuntimeProfile|DeleteProfile|UpsertProfile|LoadProfiles|LegacyKeychain|WriteProfile|ProfileList|ProfileUse|ProfileSwitch|AuthSwitch|AuthStatus|AuthLogout|AuthLogin|ResolveAuthLogin|EnrichAuthLogin|RootHelp|RootShortHelp|RootCommand)'
 ```
 
 全量 `go test ./internal/auth ./internal/app` 中 `internal/auth` 通过，但 `internal/app` 被升级模块用例 `TestValidateNewBinary_RecoversFromUnsignedDarwin` 阻塞，错误是测试二进制执行时被 macOS kill。该失败发生在 upgrade 验签/回滚路径，不在多组织登录代码改动面内，需作为独立 CI/本机签名环境问题跟进。

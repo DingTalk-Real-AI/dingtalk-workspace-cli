@@ -82,12 +82,25 @@ func buildAuthCommand(patCaller edition.ToolCaller) *cobra.Command {
 	cmd.AddCommand(
 		newAuthLogoutCommand(),
 		newAuthStatusCommand(),
+		newAuthSwitchCommand(),
 		newAuthExportCommand(),
 		newAuthImportCommand(),
 		newAuthExchangeCommand(),
 		newAuthResetCommand(),
 	)
 	return cmd
+}
+
+func newAuthSwitchCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:               "switch [name|corpId|-]",
+		Short:             "切换当前组织 profile",
+		Args:              cobra.MaximumNArgs(1),
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runProfileSwitchCommand(cmd, args)
+		},
+	}
 }
 
 func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {

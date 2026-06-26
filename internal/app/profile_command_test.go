@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/spf13/cobra"
 )
 
 func TestWriteProfileUseJSONKeepsPrimaryAndCurrentDistinct(t *testing.T) {
@@ -138,6 +139,125 @@ func TestProfileUseRootCommandSwitchesOrganizationAndLegacyMirror(t *testing.T) 
 	}
 	if legacyToken.CorpID != "corp_secondary" {
 		t.Fatalf("legacy token corp = %q, want corp_secondary", legacyToken.CorpID)
+	}
+}
+
+func TestAuthSwitchRootCommandSwitchesOrganization(t *testing.T) {
+	configDir := setupAuthLogoutProfiles(t,
+		authLogoutTestToken("corp_primary"),
+		authLogoutTestToken("corp_secondary"),
+	)
+
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--format", "table", "auth", "switch", "corp_primary"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("auth switch corp_primary error = %v\noutput:\n%s", err, out.String())
+	}
+	if !bytes.Contains(out.Bytes(), []byte("组织: corp_primary org")) {
+		t.Fatalf("auth switch output should include organization name:\n%s", out.String())
+	}
+	cfg, err := authpkg.LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	if cfg.CurrentProfile != "corp_primary" || cfg.PreviousProfile != "corp_secondary" {
+		t.Fatalf("profile pointers = current %q previous %q, want corp_primary/corp_secondary", cfg.CurrentProfile, cfg.PreviousProfile)
+	}
+}
+
+func TestAuthSwitchNoArgsUsesTUISelector(t *testing.T) {
+	configDir := setupAuthLogoutProfiles(t,
+		authLogoutTestToken("corp_primary"),
+		authLogoutTestToken("corp_secondary"),
+	)
+	oldSelector := profileSwitchSelector
+	t.Cleanup(func() {
+		profileSwitchSelector = oldSelector
+	})
+	called := false
+	profileSwitchSelector = func(cmd *cobra.Command, gotConfigDir string) (string, error) {
+		called = true
+		if gotConfigDir != configDir {
+			t.Fatalf("configDir = %q, want %q", gotConfigDir, configDir)
+		}
+		return "corp_primary", nil
+	}
+
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"auth", "switch"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("auth switch error = %v\noutput:\n%s", err, out.String())
+	}
+	if !called {
+		t.Fatal("auth switch without args did not invoke TUI selector")
+	}
+	if !bytes.Contains(out.Bytes(), []byte("组织: corp_primary org")) {
+		t.Fatalf("auth switch TUI path should use human output by default:\n%s", out.String())
+	}
+	cfg, err := authpkg.LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	if cfg.CurrentProfile != "corp_primary" {
+		t.Fatalf("currentProfile = %q, want corp_primary", cfg.CurrentProfile)
+	}
+}
+
+func TestProfileUseNoArgsUsesTUISelector(t *testing.T) {
+	configDir := setupAuthLogoutProfiles(t,
+		authLogoutTestToken("corp_primary"),
+		authLogoutTestToken("corp_secondary"),
+	)
+	oldSelector := profileSwitchSelector
+	t.Cleanup(func() {
+		profileSwitchSelector = oldSelector
+	})
+	profileSwitchSelector = func(cmd *cobra.Command, gotConfigDir string) (string, error) {
+		if gotConfigDir != configDir {
+			t.Fatalf("configDir = %q, want %q", gotConfigDir, configDir)
+		}
+		return "corp_primary", nil
+	}
+
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"profile", "use"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("profile use error = %v\noutput:\n%s", err, out.String())
+	}
+	if !bytes.Contains(out.Bytes(), []byte("组织: corp_primary org")) {
+		t.Fatalf("profile use TUI path should use human output by default:\n%s", out.String())
+	}
+	cfg, err := authpkg.LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	if cfg.CurrentProfile != "corp_primary" {
+		t.Fatalf("currentProfile = %q, want corp_primary", cfg.CurrentProfile)
+	}
+}
+
+func TestProfileSwitchSelectorRequiresInteractiveTerminal(t *testing.T) {
+	oldInteractive := profileSwitchInteractiveTerminal
+	t.Cleanup(func() {
+		profileSwitchInteractiveTerminal = oldInteractive
+	})
+	profileSwitchInteractiveTerminal = func() bool { return false }
+
+	_, err := selectProfileSwitchProfile(nil, t.TempDir())
+	if err == nil {
+		t.Fatal("selectProfileSwitchProfile() succeeded, want validation error")
+	}
+	if !bytes.Contains([]byte(err.Error()), []byte("profile selector required")) {
+		t.Fatalf("error = %v, want profile selector hint", err)
 	}
 }
 
