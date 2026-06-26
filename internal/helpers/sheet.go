@@ -137,7 +137,7 @@ func newSheetCreateCommand(runner executor.Runner) *cobra.Command {
 			return err
 		}
 		params := map[string]any{"name": name}
-		sheetAddStringParam(cmd, params, "folderId", "folder")
+		sheetAddStringParam(cmd, params, "folderId", "folder", "parent-id")
 		sheetAddStringParam(cmd, params, "workspaceId", "workspace", "workspace-id")
 		return runSheetTool(cmd, runner, "create_workspace_sheet", params)
 	})
@@ -145,6 +145,7 @@ func newSheetCreateCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("folder", "", "目标文件夹 ID 或 URL")
 	cmd.Flags().String("workspace", "", "目标知识库 ID")
 	addSheetHiddenStringFlag(cmd, "workspace-id", "--workspace alias")
+	addSheetHiddenStringFlag(cmd, "parent-id", "--folder 的跨产品别名")
 	return cmd
 }
 
@@ -462,7 +463,7 @@ func newSheetRangeMoveCommand(runner executor.Runner) *cobra.Command {
 
 func newSheetFindCommand(runner executor.Runner) *cobra.Command {
 	cmd := newSheetLeaf("find", "在工作表中搜索单元格内容", func(cmd *cobra.Command, _ []string) error {
-		query, err := sheetRequiredFlagOrFallback(cmd, "query", "find")
+		query, err := sheetRequiredFlagOrFallback(cmd, "query", "find", "keyword")
 		if err != nil {
 			return err
 		}
@@ -488,6 +489,7 @@ func newSheetFindCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("query", "", "搜索文本 (必填)")
 	cmd.Flags().String("find", "", "--query alias")
 	_ = cmd.Flags().MarkHidden("find")
+	addSheetHiddenStringFlag(cmd, "keyword", "--query 的跨产品别名")
 	cmd.Flags().String("range", "", "搜索范围，A1 表示法")
 	cmd.Flags().Bool("match-case", true, "区分大小写")
 	cmd.Flags().Bool("match-entire-cell", false, "完整单元格匹配")
