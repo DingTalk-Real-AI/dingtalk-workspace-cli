@@ -30,7 +30,7 @@ import (
 
 // ApplyTransform applies a named transform rule to a value.
 // Supported transforms: iso8601_to_millis, csv_to_array, json_parse,
-// json_parse_strict, enum_map, file_read, invert_bool, string_to_int64.
+// json_parse_strict, enum_map, file_read, invert_bool, parse_bool, string_to_int64.
 func ApplyTransform(value any, transform string, args map[string]any) (any, error) {
 	switch strings.TrimSpace(transform) {
 	case "":
@@ -49,6 +49,8 @@ func ApplyTransform(value any, transform string, args map[string]any) (any, erro
 		return transformFileRead(value)
 	case "invert_bool":
 		return transformInvertBool(value)
+	case "parse_bool":
+		return transformParseBool(value)
 	case "string_to_int64":
 		return transformStringToInt64(value)
 	default:
@@ -72,6 +74,29 @@ func transformInvertBool(value any) (any, error) {
 			return false, nil
 		case "false", "0", "no", "off", "":
 			return true, nil
+		}
+		return value, nil
+	default:
+		return value, nil
+	}
+}
+
+// transformParseBool coerces a CLI string flag into a real JSON boolean so the
+// MCP body carries `false`/`true` (not the string "false"/"true" or a swallowed
+// zero value). Used by envelope flags that are semantically boolean but must be
+// declared as string flags to accept an explicit `false` on the command line
+// (cobra bool flags drop the space-form value). Unknown tokens pass through
+// unchanged so upstream validators own the error wording.
+func transformParseBool(value any) (any, error) {
+	switch v := value.(type) {
+	case bool:
+		return v, nil
+	case string:
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "true", "1", "yes", "on":
+			return true, nil
+		case "false", "0", "no", "off":
+			return false, nil
 		}
 		return value, nil
 	default:
