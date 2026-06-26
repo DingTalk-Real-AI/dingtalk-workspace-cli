@@ -135,6 +135,14 @@ npm install -g dingtalk-workspace-cli --registry=https://registry.npmmirror.com
 
 > npmmirror 会自动同步公网 npm 的公开包，国内可直接使用。
 
+**3. 单独安装 Skills（Gitee 镜像）：**
+
+```bash
+DWS_GITEE_REPO=DingTalk-Real-AI/dingtalk-workspace-cli curl -fsSL https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli/raw/main/scripts/install-skills.sh | sh
+```
+
+> 同样设置 `DWS_GITEE_REPO`，`install-skills.sh` 会从 Gitee 解析版本和 skills 包；GitHub 不可达时也会自动回退到 Gitee 镜像。
+
 ## 升级
 
 > 需要 **v1.0.7** 及以上版本。更早版本请重新执行[安装脚本](#安装)进行升级。
@@ -306,6 +314,8 @@ curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace
 ```
 
 > `install.sh` 安装到 `$HOME/.agents/skills/dws`（全局）；`install-skills.sh` 安装到 `./.agents/skills/dws`（当前项目）。
+>
+> 国内用户加 `DWS_GITEE_REPO` 走 Gitee 镜像，见 [国内加速安装](#国内加速安装)。
 
 **用 `dws skill setup` 切换或重装：**
 

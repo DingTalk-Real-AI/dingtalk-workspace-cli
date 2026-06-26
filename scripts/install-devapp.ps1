@@ -1,22 +1,22 @@
 # Copyright 2026 Alibaba Group
 # Licensed under the Apache License, Version 2.0
 #
-# One-command installer for the dws Dev preview on native Windows (PowerShell).
-# Downloads the dev binary (dws.exe) + dingtalk-dev skill from the fork's GitHub Releases.
+# One-command installer for dws dev on native Windows (PowerShell).
+# Downloads the dev binary (dws.exe) + dingtalk-dev skill from the DingTalk-Real-AI GitHub Releases.
 #
 # Usage:
-#   irm https://raw.githubusercontent.com/wxianfeng/dingtalk-workspace-cli/feat/dws-devapp/scripts/install-devapp.ps1 | iex
+#   irm https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install-devapp.ps1 | iex
 #
 # Env (all optional):
-#   DEVAPP_REPO      fork holding dev releases (default: wxianfeng/dingtalk-workspace-cli)
-#   DEVAPP_VERSION   pin a dev release tag (default: latest release on the fork)
+#   DEVAPP_REPO      repo holding dev releases (default: DingTalk-Real-AI/dingtalk-workspace-cli)
+#   DEVAPP_VERSION   pin a release tag (default: latest release)
 #   DWS_ARCH         architecture override (amd64 or arm64)
 #   DWS_INSTALL_DIR  binary dir (default: ~/.local/bin)
 #   DWS_NO_SKILLS    set 1 to skip the dev skill
 
 $ErrorActionPreference = "Stop"
 
-$Repo       = if ($env:DEVAPP_REPO) { $env:DEVAPP_REPO } else { "wxianfeng/dingtalk-workspace-cli" }
+$Repo       = if ($env:DEVAPP_REPO) { $env:DEVAPP_REPO } else { "DingTalk-Real-AI/dingtalk-workspace-cli" }
 $Version    = $env:DEVAPP_VERSION
 $InstallDir = if ($env:DWS_INSTALL_DIR) { $env:DWS_INSTALL_DIR } else { Join-Path $HOME ".local\bin" }
 $NoSkills   = $env:DWS_NO_SKILLS -eq "1"
@@ -40,15 +40,15 @@ function Get-Arch {
     }
 }
 
-# GitHub's /releases/latest excludes prereleases; read the releases list (newest
-# first) and take the top tag — the dev preview is published as a prerelease.
+# Read the releases list (newest first) and take the top tag, so this also works
+# if a release is ever published as a prerelease (which /releases/latest skips).
 if (-not $Version) {
     try {
         $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases?per_page=1" `
             -Headers @{ "User-Agent" = "dws-devapp-installer" } -UseBasicParsing
         $Version = $rel[0].tag_name
     } catch {}
-    if (-not $Version) { Die "No release found on $Repo. Push a dev tag (e.g. v1.0.39-dev.1) to trigger CI, or set DEVAPP_VERSION." }
+    if (-not $Version) { Die "No release found on $Repo. Set DEVAPP_VERSION to a published release tag." }
 }
 
 $arch = Get-Arch
@@ -56,7 +56,7 @@ $tmp  = Join-Path $env:TEMP ("dws-dev-" + [System.Guid]::NewGuid().ToString())
 New-Item -ItemType Directory -Path $tmp -Force | Out-Null
 
 Write-Host ""
-Say "dws Dev preview installer (Windows, pre-built binary)"
+Say "dws dev installer (Windows, pre-built binary)"
 Say "Repo:    $Repo"
 Say "Version: $Version"
 Say "Target:  windows/$arch"
