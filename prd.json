@@ -1,0 +1,219 @@
+{
+  "version": 1,
+  "title": "dws multi-profile organization login",
+  "generatedAt": "2026-06-26",
+  "method": "ralph-core-architect",
+  "sourceDocuments": [
+    {
+      "title": "dws 多组织 CLI 技术方案",
+      "nodeId": "mweZ92PV6O36dZbnsMLBrOLGJxEKBD6p",
+      "url": "https://alidocs.dingtalk.com/i/nodes/mweZ92PV6O36dZbnsMLBrOLGJxEKBD6p?utm_scene=person_space",
+      "role": "primary_technical_design",
+      "receipt": "dws doc read logId 2127d89817824391288753543e0756"
+    },
+    {
+      "title": "方案补充",
+      "nodeId": "MyQA2dXW7oOA63YacZgBYPbmWzlwrZgb",
+      "url": "https://alidocs.dingtalk.com/i/nodes/MyQA2dXW7oOA63YacZgBYPbmWzlwrZgb?utm_scene=person_space",
+      "role": "technical_scope_supplement",
+      "receipt": "dws doc read logId 0bab027317824391287061282e092c"
+    },
+    {
+      "title": "dws支持多组织",
+      "nodeId": "MyQA2dXW7oOA63YacZ4vrQ1RWzlwrZgb",
+      "url": "https://alidocs.dingtalk.com/i/nodes/MyQA2dXW7oOA63YacZ4vrQ1RWzlwrZgb?utm_scene=person_space",
+      "role": "product_logic_reference",
+      "receipt": "dws doc read logId 0b5deb3217824391290727610e08f9"
+    }
+  ],
+  "problem": {
+    "summary": "同一个自然人可能属于多个钉钉组织，现有 dws 单槽 token 会让 CLI 默认只能稳定代理一个组织，和用户对个人 Agent 跨组织整理个人数据的心智不一致。",
+    "whyNow": "当前 TokenData 已包含 CorpID/CorpName/UserID/UserName 等组织绑定字段，缺口集中在单槽 keychain 到多槽 profile 的演进，以及运行时 profile 选择指针。",
+    "evidence": [
+      "TokenData 是组织绑定，一份 token 对应一个 corp profile。",
+      "旧 keychain account 固定为 auth-token，是单组织覆盖的主要卡点。",
+      "client-secret:<clientID> 已有键控多槽先例，可复用同类设计。"
+    ]
+  },
+  "goals": [
+    "同一用户可在本机 dws 登录多个钉钉组织 profile。",
+    "每个组织 token 独立存储、刷新、删除，互不覆盖。",
+    "dws 顶层直接暴露 profile 管理能力，终端调度可通过 dws profile 命中。",
+    "命令执行前能解析当前 profile，并把 UserID/CorpID 注入运行时。",
+    "保留旧单槽 auth-token 镜像，兼容旧版二进制和宿主探测。"
+  ],
+  "nonGoals": [
+    "本期不做 real/嵌入宿主多组织 hook 协议扩展。",
+    "本期不内置 --all-orgs 跨组织业务聚合；聚合由 agent 编排多次 --profile 调用完成。",
+    "本期不自动发现用户所属的所有组织，只展示用户主动登录过的 profile。",
+    "本期不把权限授权链路、额外业务命令扩展作为多组织登录交付条件。"
+  ],
+  "technicalDecisions": [
+    {
+      "topic": "command_naming",
+      "decision": "采用技术方案命名：auth 管凭证，profile 管组织身份选择；用 dws profile list/use 和全局 --profile，替代产品草案中的 auth list/auth switch/--组织corp ID。",
+      "reason": "与飞书 CLI 的 auth/profile 分层一致，避免把凭证动作和上下文选择混在同一命令组。"
+    },
+    {
+      "topic": "storage",
+      "decision": "Token 写入 auth-token:<corpId> keychain 槽；profiles.json 只保存非敏感 profile 元数据和 current/primary/previous 指针。",
+      "reason": "保持 secret/config 分离，profile list 不需要解密所有 token。"
+    },
+    {
+      "topic": "compatibility",
+      "decision": "当前可用 profile 镜像写入 legacy auth-token，并保留 token.json marker。",
+      "reason": "确保旧 binary、旧宿主或只检查 marker 的逻辑不立即失效。"
+    },
+    {
+      "topic": "runtime_resolution",
+      "decision": "profile 解析优先级为 --profile > currentProfile > primaryProfile > legacy auth-token。",
+      "reason": "满足一次性组织覆盖、持久切换和旧单槽回退。"
+    }
+  ],
+  "features": [
+    {
+      "id": "F1",
+      "priority": "P0",
+      "name": "多组织登录写入 profile",
+      "description": "用户重复执行 dws auth login 时，按登录结果中的 corpId 新增或刷新组织 profile；新组织成为 currentProfile，首次组织成为 primaryProfile。",
+      "acceptance": [
+        "首次 auth login 创建 profiles.json，primaryProfile=currentProfile=登录 corpId。",
+        "第二个组织 auth login 新增 profile，不覆盖第一个组织 token。",
+        "同组织重复 auth login 只刷新该 profile 的 token 和元数据，不新增重复 profile。",
+        "登录成功后 token 写入 auth-token:<corpId>，并同步 legacy auth-token 镜像。"
+      ]
+    },
+    {
+      "id": "F2",
+      "priority": "P0",
+      "name": "profile 元数据列表",
+      "description": "dws 顶层提供 dws profile list/ls，展示已登录组织 profile、current/primary 标记、状态、用户和有效期等非敏感信息。",
+      "acceptance": [
+        "dws profile --help 在顶层 Utility Commands 中可见。",
+        "dws profile list --format json 返回 success、primaryProfile、currentProfile、previousProfile 和 profiles 数组。",
+        "profile list 的 JSON profiles 项必须包含 corpName；表格输出必须显式展示组织名，避免只有 corpId。",
+        "profile list 只读取 profiles.json 渲染列表，不要求解密所有 token。",
+        "profile 名可由 corpName 生成；重复名称回退为带 corpId 后缀的稳定名称。"
+      ]
+    },
+    {
+      "id": "F3",
+      "priority": "P0",
+      "name": "切换当前组织",
+      "description": "dws 顶层提供 dws profile use <name|corpId|->，用于持久切换默认组织上下文或切回上一个组织。",
+      "acceptance": [
+        "dws profile use <name|corpId> 将 currentProfile 更新为目标 corpId。",
+        "切换时 previousProfile 记录切换前的 currentProfile。",
+        "dws profile use - 使用 previousProfile 切回，并在 current/previous 间 toggle。",
+        "切换成功后重置进程内 token/runtime 缓存，后续无 --profile 命令默认使用新的 currentProfile。",
+        "切换后 legacy auth-token 镜像同步为当前 profile token。",
+        "切换成功的人类可读输出必须包含当前组织名和 corpId，便于终端 agent 确认已切到正确组织。",
+        "不存在或歧义 profile 返回 validation error，不静默回退。"
+      ]
+    },
+    {
+      "id": "F4",
+      "priority": "P0",
+      "name": "单次命令临时指定组织",
+      "description": "全局 --profile <name|corpId> 作为一次性 profile override，适用于任意 dws 取数命令，不持久修改 currentProfile。",
+      "acceptance": [
+        "dws --help 展示全局 --profile 标志。",
+        "带 --profile 的命令只影响本次运行，命令结束后 currentProfile 不变化。",
+        "runtime token cache 按 profile selector 分桶，A/B profile 连续命令不串 token。",
+        "插件 UserContext 注入前已完成 profile resolution，UserID/CorpID 对应被选 profile。"
+      ]
+    },
+    {
+      "id": "F5",
+      "priority": "P0",
+      "name": "按 profile 查看认证状态",
+      "description": "dws auth status 支持查看当前或指定 profile 的认证状态，必要时只刷新被选中的 token slot。",
+      "acceptance": [
+        "dws auth status 默认查看 currentProfile。",
+        "dws auth status --profile <name|corpId> 查看指定 profile，不改变 currentProfile。",
+        "auth status 的 JSON 与人类可读输出必须包含对应组织名和 corpId。",
+        "access token 过期但 refresh token 有效时，只刷新被选 profile 的 auth-token:<corpId>。",
+        "refresh 失败时标记该 profile 为 expired，并保留其他 profile 可用。"
+      ]
+    },
+    {
+      "id": "F6",
+      "priority": "P0",
+      "name": "退出与重置",
+      "description": "dws auth logout 支持按 profile 清理，dws auth logout --all 仅清非主 profile，dws auth reset 清理所有 profile 与 legacy 状态。",
+      "acceptance": [
+        "dws auth logout --profile <name|corpId> 删除目标 auth-token:<corpId> 和 profile 元数据，不影响其他 profile。",
+        "dws auth logout --all 删除所有非 primaryProfile，保留主 profile。",
+        "primaryProfile 不应通过 logout 被误删；需要全量清理时使用 auth reset。",
+        "auth reset 删除 profiles.json、所有 auth-token:<corpId>、legacy auth-token、token.json marker 和 app config。"
+      ]
+    },
+    {
+      "id": "F7",
+      "priority": "P1",
+      "name": "兼容旧单槽迁移",
+      "description": "新 CLI 在 profiles.json 缺失但 legacy auth-token 存在时，自动把旧 token 迁移为 primary/current profile。",
+      "acceptance": [
+        "旧 auth-token 中包含 corpId 时，首次 LoadTokenData 初始化 profiles.json。",
+        "迁移后 auth-token:<corpId> 存在，primaryProfile=currentProfile=corpId。",
+        "profiles.json 对旧版 CLI 为增量文件，旧版忽略不破坏旧逻辑。"
+      ]
+    },
+    {
+      "id": "F8",
+      "priority": "P1",
+      "name": "agent 编排跨组织聚合原语",
+      "description": "CLI 只提供 profile list 和单次 --profile 取数原语，跨组织聚合由 agent 调度多次命令完成。",
+      "acceptance": [
+        "不提供 --all-orgs 内置聚合 flag。",
+        "agent 可通过 dws profile list 获取已登录且授权的 profile 列表。",
+        "agent 对每个 profile 带 --profile 调一次业务命令，结果自行合并并标注来源组织。",
+        "部分 profile 失败时，agent 能保留成功结果并标注失败组织。"
+      ]
+    }
+  ],
+  "implementationSlices": [
+    {
+      "id": "S1",
+      "owner": "BE/auth",
+      "writeSet": [
+        "internal/auth/profiles.go",
+        "internal/auth/token.go",
+        "internal/auth/keychain_store.go",
+        "internal/auth/oauth_provider.go"
+      ],
+      "doneWhen": "profile 元数据、多槽 token、legacy mirror、profile resolution、单 profile 刷新全部有单元测试。"
+    },
+    {
+      "id": "S2",
+      "owner": "CLI/app",
+      "writeSet": [
+        "internal/app/profile_command.go",
+        "internal/app/auth_command.go",
+        "internal/app/flags.go",
+        "internal/app/root.go",
+        "internal/app/runner.go"
+      ],
+      "doneWhen": "dws profile 顶层命令、全局 --profile、auth status/logout/reset 与 runtime cache 均通过 CLI 级测试。"
+    },
+    {
+      "id": "S3",
+      "owner": "QA",
+      "writeSet": [
+        "internal/auth/*_test.go",
+        "internal/app/*_test.go",
+        "test/cli/*_test.go"
+      ],
+      "doneWhen": "覆盖 F1-F7 验收用例，至少运行 go test ./internal/auth ./internal/app ./test/cli。"
+    }
+  ],
+  "reviewChecklist": [
+    "切换组织能力必须在 dws 顶层出现，不接受只在内部函数可用。",
+    "profile list/use 与 auth status 的人类可读输出必须显式包含组织名，不接受只展示 profile name 或 corpId。",
+    "产品草案中的 auth switch/auth list/--associated/--组织corp ID 若与技术方案冲突，以技术方案命名为准，并在 PRD 中记录裁决。",
+    "profiles.json 不得包含 access_token、refresh_token、persistent_code 或 client_secret。",
+    "全局 --profile 不得持久改 currentProfile。",
+    "primaryProfile 不得被 logout 误删；全量删除只允许 auth reset。",
+    "real/embedded hook 签名不得为本期多组织改造破坏。"
+  ]
+}

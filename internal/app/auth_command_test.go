@@ -184,6 +184,178 @@ func TestAuthStatusRefreshFailureLeavesStoredTokenIntact(t *testing.T) {
 	}
 }
 
+func TestAuthStatusTableIncludesCorpName(t *testing.T) {
+	setupAuthLogoutProfiles(t, authLogoutTestToken("corp_primary"))
+
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--format", "table", "auth", "status"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("auth status --format table error = %v\noutput:\n%s", err, out.String())
+	}
+	for _, want := range []string{"企业:", "corp_primary org", "企业 ID:", "corp_primary"} {
+		if !bytes.Contains(out.Bytes(), []byte(want)) {
+			t.Fatalf("auth status table missing %q in output:\n%s", want, out.String())
+		}
+	}
+}
+
+func TestAuthStatusProfileOverrideDoesNotSwitchCurrentProfile(t *testing.T) {
+	configDir := setupAuthLogoutProfiles(t,
+		authLogoutTestToken("corp_primary"),
+		authLogoutTestToken("corp_secondary"),
+	)
+
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--format", "table", "auth", "status", "--profile", "corp_primary"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("auth status --profile error = %v\noutput:\n%s", err, out.String())
+	}
+	for _, want := range []string{"corp_primary org", "corp_primary"} {
+		if !bytes.Contains(out.Bytes(), []byte(want)) {
+			t.Fatalf("auth status --profile output missing %q:\n%s", want, out.String())
+		}
+	}
+	if bytes.Contains(out.Bytes(), []byte("corp_secondary org")) {
+		t.Fatalf("auth status --profile should render selected profile, got:\n%s", out.String())
+	}
+	cfg, err := authpkg.LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	if cfg.CurrentProfile != "corp_secondary" {
+		t.Fatalf("currentProfile = %q, want unchanged corp_secondary", cfg.CurrentProfile)
+	}
+}
+
+func TestAuthLogoutPrimarySingleProfileReturnsValidationAndKeepsToken(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{name: "default current primary", args: []string{"auth", "logout"}},
+		{name: "explicit primary profile", args: []string{"auth", "logout", "--profile", "corp_primary"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			configDir := setupAuthLogoutProfiles(t, authLogoutTestToken("corp_primary"))
+
+			revokeCalls := 0
+			originalTransport := http.DefaultTransport
+			t.Cleanup(func() {
+				http.DefaultTransport = originalTransport
+			})
+			http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				revokeCalls++
+				return nil, errors.New("unexpected remote revoke for protected primary profile")
+			})
+
+			cmd := NewRootCommand()
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			cmd.SetArgs(tc.args)
+
+			err := cmd.Execute()
+			if err == nil {
+				t.Fatalf("Execute(%v) succeeded, want validation error", tc.args)
+			}
+			var appErr *apperrors.Error
+			if !errors.As(err, &appErr) || appErr.Category != apperrors.CategoryValidation {
+				t.Fatalf("expected validation error, got %T: %v", err, err)
+			}
+			if !strings.Contains(err.Error(), "auth reset") {
+				t.Fatalf("error = %v, want auth reset hint", err)
+			}
+			if revokeCalls != 0 {
+				t.Fatalf("remote revoke calls = %d, want 0 for protected primary profile", revokeCalls)
+			}
+
+			cfg, err := authpkg.LoadProfiles(configDir)
+			if err != nil {
+				t.Fatalf("LoadProfiles() error = %v", err)
+			}
+			if cfg.PrimaryProfile != "corp_primary" || cfg.CurrentProfile != "corp_primary" {
+				t.Fatalf("profiles pointers = primary %q current %q, want corp_primary/corp_primary", cfg.PrimaryProfile, cfg.CurrentProfile)
+			}
+			if len(cfg.Profiles) != 1 || cfg.Profiles[0].CorpID != "corp_primary" {
+				t.Fatalf("profiles = %#v, want only corp_primary retained", cfg.Profiles)
+			}
+			if !authpkg.TokenDataExistsKeychainForCorpID("corp_primary") {
+				t.Fatal("primary profile token should be retained")
+			}
+			loaded, err := authpkg.LoadTokenDataForProfile(configDir, "corp_primary")
+			if err != nil {
+				t.Fatalf("LoadTokenDataForProfile(primary) error = %v", err)
+			}
+			if loaded.AccessToken != "access-corp_primary" {
+				t.Fatalf("primary access token = %q, want retained token", loaded.AccessToken)
+			}
+			if !authpkg.TokenDataExistsKeychain() {
+				t.Fatal("legacy auth-token mirror should remain after rejected primary logout")
+			}
+		})
+	}
+}
+
+func TestAuthLogoutAllKeepsPrimaryAndDeletesNonPrimary(t *testing.T) {
+	configDir := setupAuthLogoutProfiles(t,
+		authLogoutTestToken("corp_primary"),
+		authLogoutTestToken("corp_secondary"),
+	)
+
+	originalTransport := http.DefaultTransport
+	t.Cleanup(func() {
+		http.DefaultTransport = originalTransport
+	})
+	http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return nil, errors.New("remote revoke disabled in unit test")
+	})
+
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"auth", "logout", "--all"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("auth logout --all error = %v\noutput:\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "主 profile 已保留") {
+		t.Fatalf("auth logout --all output should mention retained primary profile:\n%s", out.String())
+	}
+	if strings.Contains(out.String(), "重新登录") {
+		t.Fatalf("auth logout --all output should not ask for re-login while primary remains:\n%s", out.String())
+	}
+
+	cfg, err := authpkg.LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	if cfg.PrimaryProfile != "corp_primary" || cfg.CurrentProfile != "corp_primary" {
+		t.Fatalf("profiles pointers = primary %q current %q, want corp_primary/corp_primary", cfg.PrimaryProfile, cfg.CurrentProfile)
+	}
+	if len(cfg.Profiles) != 1 || cfg.Profiles[0].CorpID != "corp_primary" {
+		t.Fatalf("profiles = %#v, want only corp_primary retained", cfg.Profiles)
+	}
+	if !authpkg.TokenDataExistsKeychainForCorpID("corp_primary") {
+		t.Fatal("primary profile token should be retained")
+	}
+	if authpkg.TokenDataExistsKeychainForCorpID("corp_secondary") {
+		t.Fatal("non-primary profile token should be deleted")
+	}
+	loaded, err := authpkg.LoadTokenData(configDir)
+	if err != nil {
+		t.Fatalf("LoadTokenData() error = %v", err)
+	}
+	if loaded.CorpID != "corp_primary" || loaded.AccessToken != "access-corp_primary" {
+		t.Fatalf("default token = (%q, %q), want retained primary token", loaded.CorpID, loaded.AccessToken)
+	}
+}
+
 func TestAuthLoginPostLoginTUIModeRespectsRecommendAndFormat(t *testing.T) {
 	newRoot := func(t *testing.T) *cobra.Command {
 		t.Helper()
@@ -687,5 +859,43 @@ func stringSliceArgEqual(got any, want []string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func setupAuthLogoutProfiles(t *testing.T, tokens ...*authpkg.TokenData) string {
+	t.Helper()
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	t.Setenv(keychain.StorageDirEnv, filepath.Join(root, "keychain"))
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+	authpkg.SetRuntimeProfile("")
+	ResetRuntimeTokenCache()
+	clearCompatCache()
+	t.Cleanup(func() {
+		authpkg.SetRuntimeProfile("")
+		ResetRuntimeTokenCache()
+		clearCompatCache()
+	})
+
+	for _, token := range tokens {
+		if err := authpkg.SaveTokenData(configDir, token); err != nil {
+			t.Fatalf("SaveTokenData(%s) error = %v", token.CorpID, err)
+		}
+	}
+	return configDir
+}
+
+func authLogoutTestToken(corpID string) *authpkg.TokenData {
+	return &authpkg.TokenData{
+		AccessToken:  "access-" + corpID,
+		RefreshToken: "refresh-" + corpID,
+		ExpiresAt:    time.Now().Add(time.Hour),
+		RefreshExpAt: time.Now().Add(24 * time.Hour),
+		CorpID:       corpID,
+		CorpName:     corpID + " org",
+		UserID:       "user-" + corpID,
+		UserName:     "User " + corpID,
+		ClientID:     "client-" + corpID,
 	}
 }

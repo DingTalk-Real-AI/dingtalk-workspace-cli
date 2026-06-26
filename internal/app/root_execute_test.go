@@ -263,7 +263,7 @@ func TestRootHelpDoesNotRequirePINOrLogin(t *testing.T) {
 	if !strings.Contains(out.String(), "Discovered MCP Services:") {
 		t.Fatalf("root help output missing MCP summary:\n%s", out.String())
 	}
-	for _, want := range []string{"Utility Commands:", "skill", "auth", "version"} {
+	for _, want := range []string{"Utility Commands:", "skill", "auth", "profile", "version", "Global Flags:", "--profile"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("root help output missing %q:\n%s", want, out.String())
 		}

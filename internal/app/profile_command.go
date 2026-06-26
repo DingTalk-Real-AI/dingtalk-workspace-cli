@@ -95,7 +95,7 @@ func newProfileUseCommand() *cobra.Command {
 				}
 				return writeProfileUseJSON(cmd.OutOrStdout(), profile, cfg)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "[OK] 当前 profile: %s (%s)\n", profile.Name, profile.CorpID)
+			fmt.Fprintln(cmd.OutOrStdout(), profileUseMessage(profile))
 			return nil
 		},
 	}
@@ -165,7 +165,7 @@ func writeProfileListTable(w io.Writer, cfg *authpkg.ProfilesConfig) {
 		fmt.Fprintln(w, "未找到已登录 profile")
 		return
 	}
-	fmt.Fprintf(w, "%-3s %-3s %-28s %-34s %-10s %s\n", "CUR", "PRI", "NAME", "CORP_ID", "STATUS", "USER")
+	fmt.Fprintf(w, "%-3s %-3s %-24s %-28s %-34s %-10s %s\n", "CUR", "PRI", "PROFILE", "ORG_NAME", "CORP_ID", "STATUS", "USER")
 	for _, p := range cfg.Profiles {
 		current := ""
 		if p.CorpID == cfg.CurrentProfile {
@@ -183,8 +183,44 @@ func writeProfileListTable(w io.Writer, cfg *authpkg.ProfilesConfig) {
 		if status == "" {
 			status = authpkg.ProfileStatusActive
 		}
-		fmt.Fprintf(w, "%-3s %-3s %-28s %-34s %-10s %s\n", current, primary, clipProfileCell(p.Name, 28), clipProfileCell(p.CorpID, 34), status, user)
+		fmt.Fprintf(
+			w,
+			"%-3s %-3s %-24s %-28s %-34s %-10s %s\n",
+			current,
+			primary,
+			clipProfileCell(p.Name, 24),
+			clipProfileCell(profileOrgName(p), 28),
+			clipProfileCell(p.CorpID, 34),
+			status,
+			user,
+		)
 	}
+}
+
+func profileUseMessage(profile *authpkg.Profile) string {
+	if profile == nil {
+		return "[OK] 当前 profile 已切换"
+	}
+	name := strings.TrimSpace(profile.Name)
+	corpID := strings.TrimSpace(profile.CorpID)
+	if name == "" {
+		name = corpID
+	}
+	orgName := strings.TrimSpace(profile.CorpName)
+	if orgName == "" {
+		orgName = name
+	}
+	return fmt.Sprintf("[OK] 当前 profile: %s | 组织: %s (%s)", name, orgName, corpID)
+}
+
+func profileOrgName(p authpkg.Profile) string {
+	if v := strings.TrimSpace(p.CorpName); v != "" {
+		return v
+	}
+	if v := strings.TrimSpace(p.Name); v != "" {
+		return v
+	}
+	return strings.TrimSpace(p.CorpID)
 }
 
 func profileViews(cfg *authpkg.ProfilesConfig) []profileView {

@@ -412,9 +412,10 @@ func newAuthLogoutCommand() *cobra.Command {
 			w := cmd.OutOrStdout()
 			if all {
 				fmt.Fprintln(w, "[OK] 已清除所有非主 profile 认证信息")
-			} else {
-				fmt.Fprintln(w, "[OK] 已清除认证信息")
+				fmt.Fprintln(w, "主 profile 已保留；如需清除全部认证信息，请运行 dws auth reset")
+				return nil
 			}
+			fmt.Fprintln(w, "[OK] 已清除认证信息")
 			if !edition.Get().IsEmbedded {
 				fmt.Fprintln(w, "请运行 dws auth login --recommend 重新登录")
 			}
@@ -483,6 +484,12 @@ func newAuthStatusCommand() *cobra.Command {
 					fmt.Fprintf(w, "%-16s%s\n", "状态:", "已登录 ✅")
 				}
 				if tokenData != nil {
+					if tokenData.CorpName != "" {
+						fmt.Fprintf(w, "%-16s%s\n", "企业:", tokenData.CorpName)
+					}
+					if tokenData.CorpID != "" {
+						fmt.Fprintf(w, "%-16s%s\n", "企业 ID:", tokenData.CorpID)
+					}
 					if tokenData.IsRefreshTokenValid() {
 						fmt.Fprintf(w, "%-16s%s\n", "Refresh Token:", "有效 ✅")
 					} else {
@@ -515,8 +522,8 @@ func logoutOneProfile(_ *cobra.Command, ctx context.Context, configDir, selector
 		if loadErr != nil {
 			return apperrors.NewInternal(fmt.Sprintf("failed to load profiles: %v", loadErr))
 		}
-		if len(cfg.Profiles) > 1 && selected.CorpID == cfg.PrimaryProfile {
-			return apperrors.NewValidation("primary profile cannot be logged out while other profiles exist; switch to another profile or use auth reset")
+		if selected.CorpID == cfg.PrimaryProfile {
+			return apperrors.NewValidation("primary profile cannot be logged out; use auth reset to clear all profiles")
 		}
 	}
 	restoreProfile := pushRuntimeProfile(selector)

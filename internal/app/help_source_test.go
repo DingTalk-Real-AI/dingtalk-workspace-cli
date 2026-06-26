@@ -161,9 +161,14 @@ func TestRootHelpUsesMCPOnlySummary(t *testing.T) {
 			t.Fatalf("root help missing %q:\n%s", want, got)
 		}
 	}
-	for _, unwanted := range []string{"快速开始:", "更多信息:", "auth            认证管理", "Flags:"} {
+	for _, unwanted := range []string{"快速开始:", "更多信息:", "auth            认证管理"} {
 		if strings.Contains(got, unwanted) {
 			t.Fatalf("root help unexpectedly contains %q:\n%s", unwanted, got)
+		}
+	}
+	for _, want := range []string{"Global Flags:", "--profile"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("root help missing %q:\n%s", want, got)
 		}
 	}
 }

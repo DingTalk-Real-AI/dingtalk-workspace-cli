@@ -9,6 +9,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 func configureRootHelp(root *cobra.Command) {
@@ -86,6 +87,7 @@ func renderRootHelp(root *cobra.Command) {
 		_ = tw.Flush()
 		_, _ = fmt.Fprintln(w)
 	}
+	renderRootGlobalFlags(root)
 	_, _ = fmt.Fprintf(w, "%s %s\n", tui.Key("Next"), `Use "dws <service> --help" for more information about a discovered MCP service or "dws <command> --help" for utility commands.`)
 
 	// Render root.Long after the command list so agents see the upgrade
@@ -97,6 +99,53 @@ func renderRootHelp(root *cobra.Command) {
 		_, _ = fmt.Fprintln(w)
 		_, _ = fmt.Fprintln(w, tui.Dim(long))
 	}
+}
+
+func renderRootGlobalFlags(root *cobra.Command) {
+	if root == nil {
+		return
+	}
+	flags := visiblePersistentFlags(root)
+	if len(flags) == 0 {
+		return
+	}
+	w := root.OutOrStdout()
+	_, _ = fmt.Fprintln(w, tui.Section("Global Flags:"))
+	_, _ = fmt.Fprintln(w)
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	for _, flag := range flags {
+		_, _ = fmt.Fprintf(tw, "  %s\t%s\n", formatRootFlag(flag), tui.Dim(strings.TrimSpace(flag.Usage)))
+	}
+	_ = tw.Flush()
+	_, _ = fmt.Fprintln(w)
+}
+
+func visiblePersistentFlags(root *cobra.Command) []*pflag.Flag {
+	if root == nil {
+		return nil
+	}
+	flags := make([]*pflag.Flag, 0)
+	root.PersistentFlags().VisitAll(func(flag *pflag.Flag) {
+		if flag == nil || flag.Hidden {
+			return
+		}
+		flags = append(flags, flag)
+	})
+	return flags
+}
+
+func formatRootFlag(flag *pflag.Flag) string {
+	if flag == nil {
+		return ""
+	}
+	name := "--" + flag.Name
+	if flag.Value != nil && flag.Value.Type() != "bool" {
+		name += " " + flag.Value.Type()
+	}
+	if flag.Shorthand == "" {
+		return "    " + name
+	}
+	return "-" + flag.Shorthand + ", " + name
 }
 
 func commandShort(cmd *cobra.Command) string {
