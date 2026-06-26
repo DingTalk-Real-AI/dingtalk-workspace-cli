@@ -292,7 +292,16 @@ func newSheetRangeReadCommand(runner executor.Runner) *cobra.Command {
 		sheetAddStringParam(cmd, params, "sheetId", "sheet-id")
 		sheetAddStringParam(cmd, params, "range", "range")
 		sheetAddStringParam(cmd, params, "valueRenderOption", "value-render-option")
-		return runSheetTool(cmd, runner, "get_cell_infos", params)
+		result, err := sheetInvocationResult(cmd, runner, "sheet", "get_cell_infos", params)
+		if err != nil {
+			return err
+		}
+		// 剥掉 MCP 框架填充的全 null dataValidation / hyperlink 空壳，
+		// 使"清除后回读不再含该 key"成立（与 wukong 对齐）。dry-run 不投影。
+		if !commandDryRun(cmd) {
+			sheetCleanCellInfos(result.Response)
+		}
+		return writeCommandPayload(cmd, result)
 	})
 	cmd.Aliases = []string{"get"}
 	addSheetNodeFlags(cmd)
@@ -313,11 +322,20 @@ func newSheetRangeUpdateCommand(runner executor.Runner) *cobra.Command {
 		}
 		for i, row := range cells {
 			for j, cell := range row {
+				path := fmt.Sprintf("--values[%d][%d]", i, j)
 				if cell == nil {
-					return apperrors.NewValidation(fmt.Sprintf("--values[%d][%d] must be an object, not null", i, j))
+					return apperrors.NewValidation(fmt.Sprintf("%s: 不支持 null，每个单元格必须是 {type:text,...}、{type:richText,...}、{hyperlink:...} 对象，或 {} 表示保留原值", path))
 				}
-				if _, ok := cell.(map[string]any); !ok {
-					return apperrors.NewValidation(fmt.Sprintf("--values[%d][%d] must be an object", i, j))
+				cellMap, ok := cell.(map[string]any)
+				if !ok {
+					return apperrors.NewValidation(fmt.Sprintf("%s: 必须为 object（如 {\"type\":\"text\",\"text\":\"...\"}）", path))
+				}
+				// {} 空对象 = 跳过该单元格，保留原值不变
+				if len(cellMap) == 0 {
+					continue
+				}
+				if err := sheetValidateComplexValueCell(cellMap, path); err != nil {
+					return err
 				}
 			}
 		}
