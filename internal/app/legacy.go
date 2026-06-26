@@ -351,13 +351,57 @@ func loadDynamicCommands(ctx context.Context, runner executor.Runner) []*cobra.C
 
 	detailStart := time.Now()
 	detailsByID := loadCachedDetailsFast(store, servers)
+	existingTools := loadCachedToolNames(store, servers)
 	RecordTiming(ctx, "tool_metadata", time.Since(detailStart))
 
 	buildStart := time.Now()
-	cmds := compat.BuildDynamicCommands(servers, runner, detailsByID)
+	cmds := compat.BuildDynamicCommands(servers, runner, detailsByID, existingTools)
 	RecordTiming(ctx, "build_commands", time.Since(buildStart))
 
 	return cmds
+}
+
+// loadCachedToolNames reads the live tools/list snapshot from disk cache for
+// each server and returns a map from CLI server ID (slug) → set of tool names
+// the server actually exposes. This is the existence oracle BuildDynamicCommands
+// uses to hide phantom override leaves (commands whose backing MCP tool is not
+// deployed) from `--help`.
+//
+// Source note: this reads the `tools/` partition (populated by `dws cache
+// refresh` / discovery, keyed by server.Key), NOT the `detail/` partition used
+// by loadCachedDetailsFast — the latter is frequently empty even after a
+// refresh, so it is unusable as an existence signal.
+//
+// Keyed by cli.ID so serverOverride routing (e.g. contact → hrmregister)
+// resolves against the target server's tool set. A server with no cached tools
+// is simply absent from the map; the build guard treats "absent / empty" as
+// "unknown" and keeps the command, so a cold cache never blanks the tree.
+func loadCachedToolNames(store *cache.Store, servers []market.ServerDescriptor) map[string]map[string]struct{} {
+	result := make(map[string]map[string]struct{})
+	if store == nil {
+		return result
+	}
+	partition := editionPartition()
+	for _, server := range servers {
+		slug := strings.TrimSpace(server.CLI.ID)
+		if slug == "" || strings.TrimSpace(server.Key) == "" {
+			continue
+		}
+		snap, _, err := store.LoadTools(partition, server.Key)
+		if err != nil || len(snap.Tools) == 0 {
+			continue
+		}
+		names := make(map[string]struct{}, len(snap.Tools))
+		for _, t := range snap.Tools {
+			if n := strings.TrimSpace(t.Name); n != "" {
+				names[n] = struct{}{}
+			}
+		}
+		if len(names) > 0 {
+			result[slug] = names
+		}
+	}
+	return result
 }
 
 // loadCachedDetailsFast reads Detail API tool metadata from disk cache only —

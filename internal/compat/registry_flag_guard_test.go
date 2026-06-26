@@ -83,7 +83,7 @@ func TestBuildDynamicCommandsSurvivesMalformedFlagEnvelope(t *testing.T) {
 			}
 
 			// Must not panic; the command must build and stay executable.
-			cmds := BuildDynamicCommands(servers, &captureRunner{}, nil)
+			cmds := BuildDynamicCommands(servers, &captureRunner{}, nil, nil)
 			if len(cmds) != 1 {
 				t.Fatalf("BuildDynamicCommands() = %d commands, want 1", len(cmds))
 			}
@@ -120,7 +120,7 @@ func TestBuildDynamicCommandsKeepsFirstShorthand(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, &captureRunner{}, nil)
+	cmds := BuildDynamicCommands(servers, &captureRunner{}, nil, nil)
 	boom, _, err := cmds[0].Find([]string{"boom"})
 	if err != nil {
 		t.Fatalf("find boom: %v", err)

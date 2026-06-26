@@ -1503,8 +1503,10 @@ func buildHTTPCommandsFromTools(srv market.ServerDescriptor, tools []transport.T
 		}
 	}
 
+	// nil existingTools: single-server overlay built from a live tool list, so
+	// no phantom-leaf guard is needed (see BuildDynamicCommands doc).
 	return compat.BuildDynamicCommands(
-		[]market.ServerDescriptor{srv}, runner, detailsByID)
+		[]market.ServerDescriptor{srv}, runner, detailsByID, nil)
 }
 
 // deriveToolCLIName converts an MCP tool name (e.g. "web_search" or
@@ -1691,8 +1693,9 @@ func buildStdioCommands(p *plugin.Plugin, sc plugin.StdioServerClient, tools []t
 	RegisterStdioClient(p.Manifest.Name+"/"+sc.Key, sc.Client)
 
 	detailsByID := toolsToDetails(tools, overlay.ID)
+	// nil existingTools: overlay built from this plugin's live tool list.
 	cmds := compat.BuildDynamicCommands(
-		[]market.ServerDescriptor{descriptor}, runner, detailsByID)
+		[]market.ServerDescriptor{descriptor}, runner, detailsByID, nil)
 
 	slog.Debug("plugin: stdio server registered",
 		"plugin", p.Manifest.Name, "server", sc.Key,
