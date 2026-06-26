@@ -22,7 +22,7 @@
 - `internal/app/profile_command.go`：实现 `profile list`、`profile use [name|corpId|-]`，无参数展示 TUI，输出组织名和 corpId。
 - `internal/app/auth_command.go`：实现 `auth switch [name|corpId|-]` 兼容入口，复用 profile 切换逻辑。
 - `internal/app/root.go`：注册顶层 `profile` 命令，并在运行时预解析/注入全局 `--profile`。
-- `internal/app/auth_command.go`：auth status/logout/reset 对 profile 语义做了补齐。
+- `internal/app/auth_command.go`：auth status/logout/reset 对 profile 语义做了补齐；`auth logout` 默认清理所有组织，`--profile` 只清指定组织。
 
 ## 测试证据
 
@@ -47,6 +47,7 @@ go test ./internal/auth ./internal/app -run 'Test(MultiProfile|RuntimeProfile|De
 - 全量 `go test ./internal/auth ./internal/app` 被 `internal/app` 中 upgrade 相关用例 `TestValidateNewBinary_RecoversFromUnsignedDarwin` 阻塞，错误为测试二进制执行被 macOS kill。该路径与多组织登录无直接耦合，应单独排查本机签名/隔离属性/测试环境。
 - real/embedded hook 后端仍不支持显式 `--profile`，这是技术方案明确的 P0 非目标。
 - P0 不自动发现所有所属组织；第三组织必须由用户再次完成 OAuth 授权后才会出现在 `profile list`。
+- `auth logout` 与飞书 CLI 的登出心智对齐为“清当前认证上下文下的用户登录态”；在 dws 多组织模型里，不带 `--profile` 表示清所有已登录组织。
 - 跨组织聚合由 agent 编排，不由 CLI 内置 `--all-orgs`。
 
 ## 验收判断

@@ -395,7 +395,7 @@ func selectLoginRecommendScopeMode() (pat.LoginRecommendScopeMode, error) {
 func newAuthLogoutCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "logout",
-		Short:             "清除认证信息",
+		Short:             "清除认证信息（默认退出所有组织）",
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			configDir := defaultConfigDir()
@@ -403,31 +403,20 @@ func newAuthLogoutCommand() *cobra.Command {
 			if err != nil {
 				return apperrors.NewInternal("failed to read --profile")
 			}
-			all, err := cmd.Flags().GetBool("all")
-			if err != nil {
-				return apperrors.NewInternal("failed to read --all")
-			}
-			if all && strings.TrimSpace(profileSelector) != "" {
-				return apperrors.NewValidation("--profile and --all cannot be used together")
-			}
 			revokeCtx, cancel := context.WithTimeout(cmd.Context(), 15*time.Second)
 			defer cancel()
-			if all {
-				if err := logoutNonPrimaryProfiles(cmd, revokeCtx, configDir); err != nil {
+			if strings.TrimSpace(profileSelector) != "" {
+				if err := logoutOneProfile(cmd, revokeCtx, configDir, profileSelector); err != nil {
 					return err
 				}
-			} else if err := logoutOneProfile(cmd, revokeCtx, configDir, profileSelector); err != nil {
-				return err
+			} else {
+				if err := logoutAllProfiles(cmd, revokeCtx, configDir); err != nil {
+					return err
+				}
 			}
-			cleanupAuthConfigIfNoProfiles(configDir)
 			ResetRuntimeTokenCache()
 			clearCompatCache()
 			w := cmd.OutOrStdout()
-			if all {
-				fmt.Fprintln(w, "[OK] 已清除所有非主 profile 认证信息")
-				fmt.Fprintln(w, "主 profile 已保留；如需清除全部认证信息，请运行 dws auth reset")
-				return nil
-			}
 			fmt.Fprintln(w, "[OK] 已清除认证信息")
 			if !edition.Get().IsEmbedded {
 				fmt.Fprintln(w, "请运行 dws auth login --recommend 重新登录")
@@ -436,7 +425,6 @@ func newAuthLogoutCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().String("profile", "", "指定要退出的 profile 名或 corpId")
-	cmd.Flags().Bool("all", false, "退出所有非主 profile")
 	return cmd
 }
 
@@ -526,18 +514,8 @@ func newAuthStatusCommand() *cobra.Command {
 }
 
 func logoutOneProfile(_ *cobra.Command, ctx context.Context, configDir, selector string) error {
-	selected, err := authpkg.ResolveProfile(configDir, selector)
-	if err != nil {
+	if _, err := authpkg.ResolveProfile(configDir, selector); err != nil {
 		return apperrors.NewValidation(err.Error())
-	}
-	if selected != nil {
-		cfg, loadErr := authpkg.LoadProfiles(configDir)
-		if loadErr != nil {
-			return apperrors.NewInternal(fmt.Sprintf("failed to load profiles: %v", loadErr))
-		}
-		if selected.CorpID == cfg.PrimaryProfile {
-			return apperrors.NewValidation("primary profile cannot be logged out; use auth reset to clear all profiles")
-		}
 	}
 	restoreProfile := pushRuntimeProfile(selector)
 	defer restoreProfile()
@@ -548,7 +526,7 @@ func logoutOneProfile(_ *cobra.Command, ctx context.Context, configDir, selector
 	return nil
 }
 
-func logoutNonPrimaryProfiles(_ *cobra.Command, ctx context.Context, configDir string) error {
+func logoutAllProfiles(_ *cobra.Command, ctx context.Context, configDir string) error {
 	if err := authpkg.EnsureProfilesMigration(configDir); err != nil {
 		return apperrors.NewInternal(fmt.Sprintf("failed to migrate profiles: %v", err))
 	}
@@ -556,16 +534,17 @@ func logoutNonPrimaryProfiles(_ *cobra.Command, ctx context.Context, configDir s
 	if err != nil {
 		return apperrors.NewInternal(fmt.Sprintf("failed to load profiles: %v", err))
 	}
-	for _, profile := range cfg.Profiles {
-		if profile.CorpID == cfg.PrimaryProfile {
-			continue
-		}
-		restoreProfile := pushRuntimeProfile(profile.CorpID)
+	if cfg == nil || len(cfg.Profiles) == 0 {
 		_ = authpkg.RevokeTokenRemote(ctx)
-		restoreProfile()
-		if err := authpkg.DeleteTokenDataForProfile(configDir, profile.CorpID); err != nil {
-			return apperrors.NewInternal(fmt.Sprintf("failed to clear profile %s: %v", profile.Name, err))
+	} else {
+		for _, profile := range cfg.Profiles {
+			restoreProfile := pushRuntimeProfile(profile.CorpID)
+			_ = authpkg.RevokeTokenRemote(ctx)
+			restoreProfile()
 		}
+	}
+	if err := authpkg.DeleteAllTokenData(configDir); err != nil {
+		return apperrors.NewInternal(fmt.Sprintf("failed to clear token data: %v", err))
 	}
 	return nil
 }

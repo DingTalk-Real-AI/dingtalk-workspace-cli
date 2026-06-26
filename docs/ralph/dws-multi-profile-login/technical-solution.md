@@ -64,7 +64,7 @@ dws --profile <name-or-corpId> <product> <command> --format json
 
 `profiles.json` 只保存非敏感元数据：
 
-- `primaryProfile`：首次成功登录的组织，普通 logout 不删除。
+- `primaryProfile`：首次成功登录的组织，用于默认 fallback 和标记；`auth logout` 默认全登出时会一并清除。
 - `currentProfile`：默认命令上下文。
 - `previousProfile`：上一个 current，用于 `profile use -` 或 `auth switch -`。
 - `profiles[]`：按 `corpId` 维护 profile 元数据。
@@ -117,7 +117,7 @@ profile 解析优先级：
 - `dws profile list` 顶层可见，JSON 和表格都展示组织名。
 - `dws profile use` 与 `dws auth switch` 可按 name/corpId 切换，可用 `-` 切回 previous，无参数时展示 TUI。
 - `--profile` 可一次性指定组织，且不改变 current。
-- `auth status/logout/reset` 按 profile 语义执行，primary 不被普通 logout 误删。
+- `auth logout` 默认清理所有组织登录态；`auth logout --profile <name|corpId>` 只清指定组织；`auth reset` 额外清 app config 等本机认证配置。
 - legacy 单槽可迁移，current token 可镜像到 legacy 槽。
 
 ## 验证命令

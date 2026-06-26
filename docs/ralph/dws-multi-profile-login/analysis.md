@@ -107,8 +107,19 @@ dws --profile <name-or-corpId> <product> <command> --format json
 
 - P0 不自动发现用户属于的所有组织，只列出用户主动登录过的 profile。
 - P0 不扩展 real/embedded hook 协议；hook 后端显式 profile 选择仍会返回“不支持”。
-- 主 profile 不通过普通 logout 误删；需要全量清理时走 `dws auth reset`。
+- `dws auth logout` 默认清理所有已登录组织；`--profile <name|corpId>` 才是单组织登出；`auth reset` 用于额外清理 app config 等本机认证配置。
 - profile 元数据不保存 access token、refresh token、persistent code 或 client secret。
+
+## 飞书 CLI 登出语义对齐
+
+飞书 CLI 的 `auth logout` 文档语义是“Sign out and remove stored credentials”，源码实现会遍历当前 app config 下的 `Users`，逐个 revoke/remove token，然后把 `app.Users` 置空并保存配置。也就是说，飞书的 logout 清的是当前 app/profile 认证上下文下的所有已登录用户 token，而不是只清一个“当前用户”。
+
+dws 的多组织模型不是飞书的多用户列表，而是同一自然人下多个组织 profile。为了让用户输入 `dws auth logout` 时得到“我已经彻底退出 dws 用户授权”的结果，dws 应采用：
+
+- `dws auth logout`：默认清理所有组织 profile 的用户登录态。
+- `dws auth logout --profile <name|corpId>`：只清理指定组织。
+- 不再暴露 `--all`，避免用户需要额外记忆“全登出”的特殊 flag。
+- `dws auth reset`：比 logout 更重，额外清理 app config、mcp_url 等本机认证配置。
 
 ## 验收状态
 

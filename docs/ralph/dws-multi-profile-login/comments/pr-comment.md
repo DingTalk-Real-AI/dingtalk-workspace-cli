@@ -10,6 +10,7 @@
 - 持久切换：`dws profile use <name|corpId|-> --format json` 或 `dws auth switch <name|corpId|-> --format json`。
 - 交互切换：`dws auth switch` 或 `dws profile use` 无参数时展示组织选择 TUI。
 - 单次命令指定组织：`dws --profile <name|corpId> <product> <command> --format json`。
+- 登出：`dws auth logout` 默认清理所有组织登录态；`dws auth logout --profile <name|corpId>` 只清指定组织；`--all` 已移除。
 - 产品稿里的 `auth list/--associated/--组织corp ID` 不进入 P0，分别由 `profile list`、重复 `auth login --force` 和全局 `--profile` 替代；`auth switch` 作为 `profile use` 的兼容入口保留。
 
 ### 验证

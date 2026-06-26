@@ -143,11 +143,12 @@
       "id": "F6",
       "priority": "P0",
       "name": "退出与重置",
-      "description": "dws auth logout 支持按 profile 清理，dws auth logout --all 仅清非主 profile，dws auth reset 清理所有 profile 与 legacy 状态。",
+      "description": "dws auth logout 默认清理所有组织 profile 的用户登录态；dws auth logout --profile <name|corpId> 只清理指定组织；dws auth reset 在 logout 基础上进一步清理本机应用认证配置。",
       "acceptance": [
-        "dws auth logout --profile <name|corpId> 删除目标 auth-token:<corpId> 和 profile 元数据，不影响其他 profile。",
-        "dws auth logout --all 删除所有非 primaryProfile，保留主 profile。",
-        "primaryProfile 不应通过 logout 被误删；需要全量清理时使用 auth reset。",
+        "dws auth logout 不带参数时删除所有 auth-token:<corpId>、profiles.json、legacy auth-token 和 token.json marker。",
+        "dws auth logout 不再提供 --all flag。",
+        "dws auth logout --profile <name|corpId> 删除目标 auth-token:<corpId> 和 profile 元数据，不影响其他 profile；目标可以是 primaryProfile。",
+        "dws auth logout 清理用户登录态但保留 app config / mcp_url 等本机应用配置。",
         "auth reset 删除 profiles.json、所有 auth-token:<corpId>、legacy auth-token、token.json marker 和 app config。"
       ]
     },
@@ -216,7 +217,7 @@
     "产品草案中的 auth list/--associated/--组织corp ID 若与技术方案冲突，以技术方案命名为准；auth switch 保留为 profile use 的兼容入口，且无参数时必须展示 TUI。",
     "profiles.json 不得包含 access_token、refresh_token、persistent_code 或 client_secret。",
     "全局 --profile 不得持久改 currentProfile。",
-    "primaryProfile 不得被 logout 误删；全量删除只允许 auth reset。",
+    "auth logout 默认必须清除所有已登录组织；--profile 只能清除指定组织；不得继续暴露 --all。",
     "real/embedded hook 签名不得为本期多组织改造破坏。"
   ]
 }
