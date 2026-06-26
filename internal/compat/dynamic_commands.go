@@ -342,15 +342,22 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 		commands = append(commands, topLevel[name])
 	}
 
-	// §guard.emptygroups: the tool-existence guard hides individual phantom
-	// leaves, but a group whose every leaf got hidden would still show in help
-	// as an empty heading (e.g. attendance `vacation`/`overtime` with no
-	// deployed tools). Collapse those. Only runs when the guard is active
-	// (existingTools != nil); with a nil/cold oracle no leaf was hidden, so this
-	// is a no-op and overlay/plugin paths are unaffected.
-	if existingTools != nil {
-		for _, c := range commands {
-			hideEmptyGroups(c)
+	// §guard.emptygroups: a group whose every leaf is hidden would still show in
+	// help as an empty heading (e.g. attendance `vacation`/`overtime` once their
+	// tools are gone). Collapse those. This runs unconditionally because leaves
+	// get hidden by TWO independent mechanisms — the runtime tool-existence
+	// guard above AND envelope `hidden:true` overrides — and an envelope-emptied
+	// group must collapse even when the guard is inert (cold tools cache). It is
+	// safe regardless of cache state: hideEmptyGroups only ever hides a group all
+	// of whose children are already hidden; it never hides a leaf, so it cannot
+	// blank a tree on its own.
+	for _, c := range commands {
+		// Collapse empty sub-groups within each product, but never the product
+		// root itself: a root can legitimately be empty at this point and gain
+		// visible leaves later from helper/overlay merges, so hiding it here
+		// could wrongly drop a whole product from `dws --help`.
+		for _, sub := range c.Commands() {
+			hideEmptyGroups(sub)
 		}
 	}
 	return commands
@@ -365,6 +372,16 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 func hideEmptyGroups(cmd *cobra.Command) bool {
 	subs := cmd.Commands()
 	if len(subs) == 0 {
+		// No children. A real leaf stands on its own Hidden flag. A group
+		// container with no children is empty — this happens when every
+		// override in a group is `hidden:true` (those leaves are never built,
+		// leaving the group childless) — so hide it. Group containers and leaves
+		// both have a RunE, so cobra's Runnable() can't tell them apart; the
+		// group annotation can.
+		if cmdutil.IsGroup(cmd) {
+			cmd.Hidden = true
+			return true
+		}
 		return cmd.Hidden
 	}
 	allHidden := true

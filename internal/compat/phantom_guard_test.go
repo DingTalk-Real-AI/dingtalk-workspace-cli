@@ -167,6 +167,58 @@ func TestPhantomGuard_ServerOverrideRoutesToTargetSet(t *testing.T) {
 	}
 }
 
+// TestPhantomGuard_EmptyGroupCollapses: a group all of whose overrides are
+// hidden:true (so none of its leaves are built) must itself be hidden from
+// help, while a group keeping at least one visible leaf stays. This runs
+// regardless of the tools-cache oracle (envelope hidden:true is cache-
+// independent), so existingTools is nil here.
+func TestPhantomGuard_EmptyGroupCollapses(t *testing.T) {
+	t.Parallel()
+
+	servers := []market.ServerDescriptor{
+		{
+			Endpoint: "https://endpoint-attendance",
+			CLI: market.CLIOverlay{
+				ID:      "attendance",
+				Command: "attendance",
+				Groups: map[string]market.CLIGroupDef{
+					"vacation": {Description: "假期管理"}, // all leaves hidden -> collapse
+					"record":   {Description: "考勤记录"}, // keeps a visible leaf
+				},
+				ToolOverrides: map[string]market.CLIToolOverride{
+					"get_leave_types":            {CLIName: "types", Group: "vacation", Hidden: true},
+					"get_leave_balance_quota":    {CLIName: "balance", Group: "vacation", Hidden: true},
+					"get_user_attendance_record": {CLIName: "get", Group: "record"},
+				},
+			},
+		},
+	}
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil, nil)
+
+	vacation := findGroup(cmds[0], "vacation")
+	record := findGroup(cmds[0], "record")
+	if vacation == nil || record == nil {
+		t.Fatalf("both groups should exist as commands; vacation=%v record=%v", vacation, record)
+	}
+	if !vacation.Hidden {
+		t.Error("group 'vacation' with only hidden leaves must collapse (be hidden)")
+	}
+	if record.Hidden {
+		t.Error("group 'record' with a visible leaf must stay visible")
+	}
+}
+
+// findGroup returns a direct child of root with the given name (groups attach
+// directly under the product root).
+func findGroup(root *cobra.Command, name string) *cobra.Command {
+	for _, c := range root.Commands() {
+		if c.Name() == name {
+			return c
+		}
+	}
+	return nil
+}
+
 // TestPhantomGuard_PipelineLeafNeverHidden: pipeline leaves orchestrate multiple
 // tools and have no single backing toolName, so the guard must skip them even
 // when the override key is not a deployed tool.
