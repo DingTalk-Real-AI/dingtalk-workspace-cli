@@ -18,9 +18,9 @@ Flags:
 #### 查看群成员列表 — 分页查询指定群聊的成员
 ```
 Usage:
-  dws chat group members [flags]
+  dws chat group members list [flags]
 Example:
-  dws chat group members --id <openconversation_id>
+  dws chat group members list --id <openconversation_id>
 Flags:
       --cursor string   分页游标，首次从 0 开始
       --id string       群 ID / openconversation_id (必填)
@@ -100,13 +100,11 @@ Usage:
   dws chat group transfer-owner [flags]
 Example:
   dws chat group transfer-owner --group <openConversationId> --new-owner <openDingTalkId>
-  dws chat group transfer-owner --group <openConversationId> --user <userId>
   # 查询群 ID: dws chat search --query "群名"
   # 查询人员: dws aisearch person --keyword "姓名" --dimension name
 Flags:
       --group string       群聊 openConversationId (必填)
-      --new-owner string   新群主 openDingTalkId
-      --user string        新群主 userId
+      --new-owner string   新群主 openDingTalkId (必填)
 ```
 
 #### 获取群邀请链接 — 获取指定群聊的邀请加入链接
@@ -511,28 +509,17 @@ Usage:
 Example:
   dws chat message send-by-bot --robot-code <robot-code> --group <openconversation_id> --title "日报" --text "## 今日完成..."
   dws chat message send-by-bot --robot-code <robot-code> --users userId1,userId2 --title "提醒" --text "请提交周报"
-  dws chat message send-by-bot --robot-code <robot-code> --open-dingtalk-ids openDingtalkId1,openDingtalkId2 --title "提醒" --text "请提交周报"
-  dws chat message send-by-bot --robot-code <robot-code> --group <openconversation_id> --at-user-ids userId1,userId2 --title "提醒" --text "@userId1 @userId2 请查收本周报告"
-  dws chat message send-by-bot --robot-code <robot-code> --group <openconversation_id> --at-open-dingtalk-ids openDingtalkId1,openDingtalkId2 --title "提醒" --text "@openDingtalkId1 @openDingtalkId2 请查收本周报告"
-  dws chat message send-by-bot --robot-code <robot-code> --group <openconversation_id> --at-all --title "通知" --text "请所有人注意"
 Flags:
       --group string                 群聊 openConversationId（群聊时必填）
       --robot-code string            机器人 Code (必填)
       --text string                  消息内容 Markdown (必填)
       --title string                 消息标题 (必填)
-      --users string                 用户 userId 列表，逗号分隔，最多20个（单聊时必填）
-      --open-dingtalk-ids string     用户 openDingtalkId 列表，逗号分隔（单聊时可替代 --users，可选）
-      --at-user-ids string           @指定成员的 userId 列表，逗号分隔（仅群聊时生效，可选）
-      --at-open-dingtalk-ids string  @指定成员的 openDingtalkId 列表，逗号分隔（仅群聊时生效，可选）
-      --at-all                        @所有人（可选），服务端接收字符串 true/false
+      --users string                 接收者 userId 列表，逗号分隔，最多20个（单聊时必填）
 
 注意:
   - 用户明确要求机器人发送时，必须使用 `chat message send-by-bot`；严禁使用 `chat message send` 以用户身份代发
-  - --group 与 --users/--open-dingtalk-ids 互斥，必须且只能指定其一
-  - --group 的别名: --id, --chat, --conversation-id (均可替代 --group)
-  - --at-user-ids 仅在 --group 群聊时生效，单聊时无效；设置时 --text 中需包含 @userId 对应文本
-  - --at-open-dingtalk-ids 仅在 --group 群聊时生效，单聊时无效；设置时 --text 中需包含 @openDingtalkId 对应文本
-  - --at-all @所有人，仅群聊时生效；只需带上 --at-all flag 即可，服务端会自动处理
+  - --group（群聊）与 --users（单聊）互斥，必须且只能指定其一
+  - send-by-bot 不支持 @成员/@所有人 参数（无 --at-user-ids/--at-open-dingtalk-ids/--at-all）；如需在群里 @人，用 `chat message send --group` 走用户身份发送
   - userId 获取方式：`dws contact user search --query "姓名"` 搜人获取 userId
   - **换行符**：--text 按 Markdown 渲染，换行规则同 `chat message send`：
     1. 必须使用**真实换行符**（`U+000A`），而非字面量 `\n`，否则全部内容会渲染在同一行
@@ -1179,7 +1166,7 @@ Flags:
 用户说"建群/创建群聊" → `chat group create`
 用户说"搜索群/找群" → `chat search`
 用户说"我创建的群/我管理的群/我是群主的群/我当管理员的群" → `chat group list-my-groups`
-用户说"群成员/看群里有谁" → `chat group members`
+用户说"群成员/看群里有谁" → `chat group members list`
 用户说"拉人进群/加群成员" → `chat group members add`
 用户说"踢人/移除群成员" → `chat group members remove`
 用户说"加机器人到群" → `chat group members add-bot`
@@ -1351,7 +1338,7 @@ dws chat message send-by-bot --robot-code <robot-code> --group <openconversation
   --title "通知" --text "内容" --format json
 
 # Step 3: 邀请机器人进群
-dws chat group members add-bot --group <openconversation_id> --robot-code <robot-code>
+dws chat group members add-bot --id <openconversation_id> --robot-code <robot-code>
 
 # Step 4: 重新发送
 dws chat message send-by-bot --robot-code <robot-code> --group <openconversation_id> \
@@ -1370,27 +1357,22 @@ dws chat bot find --query "玉澜" --format json
 dws chat message send --open-dingtalk-id <openDingTalkId> --text "你好" --format json
 ```
 
-### 机器人 @指定人发群消息
+### @指定人发群消息（用户身份）
 
-通过 `--at-user-ids` 传入 userId 列表或 `--at-open-dingtalk-ids` 传入 openDingtalkId 列表来 @指定成员，多个用逗号分隔。`--text` 中需包含 `@userId` 或 `@openDingtalkId` 文本（不要用尖括号，不要用姓名）。通过 `--at-all` @所有人。
+`send-by-bot` 不支持 @ 参数。群里 @人/@所有人请用 `chat message send --group`（当前用户身份）：通过 `--at-open-dingtalk-ids` 传入 openDingTalkId 列表 @指定成员（多个逗号分隔），`--text` 中需包含对应 `@openDingTalkId` 文本；`--at-all` @所有人。
 
 ```bash
-# Step 1: 搜人获取 userId
+# Step 1: 搜人获取 openDingTalkId
 dws contact user search --query "张三" --format json
 
-# Step 2: 用 userId 发送并 @（注意 text 中 @userId）
-dws chat message send-by-bot --robot-code <robot-code> --group <openconversation_id> \
-  --at-user-ids userId1,userId2 \
-  --title "提醒" --text "@userId1 @userId2 请查收本周报告" --format json
-
-# 或者用 openDingtalkId 发送并 @
-dws chat message send-by-bot --robot-code <robot-code> --group <openconversation_id> \
+# Step 2: @指定成员发群消息（注意 text 中带 @openDingTalkId）
+dws chat message send --group <openconversation_id> \
   --at-open-dingtalk-ids openDingtalkId1,openDingtalkId2 \
-  --title "提醒" --text "@openDingtalkId1 @openDingtalkId2 请查收本周报告" --format json
+  --text "@openDingtalkId1 @openDingtalkId2 请查收本周报告" --format json
 
 # @所有人
-dws chat message send-by-bot --robot-code <robot-code> --group <openconversation_id> \
-  --at-all --title "通知" --text "请所有人注意" --format json
+dws chat message send --group <openconversation_id> \
+  --at-all --text "请所有人注意" --format json
 ```
 
 
@@ -1467,8 +1449,8 @@ Flags:
 | `chat search` | `openConversationId` | message send/list、group members 等的 --group |
 | `chat group create` | `openConversationId` | 同上 |
 | `chat message list-all` | `nextCursor` | 下次 list-all 的 --cursor |
-| `aisearch person` | `userId` | message send 的 --user、list-direct 的 --user、send-by-bot 的 --users、send-by-bot 的 --at-user-ids、list-by-sender 的 --sender-user-id |
-| `aisearch person` → `contact user get` | `openDingTalkId` | message send 的 --at-open-dingtalk-ids、--open-dingtalk-id、list-direct 的 --open-dingtalk-id、send-by-bot 的 --open-dingtalk-ids、send-by-bot 的 --at-open-dingtalk-ids、list-by-sender 的 --sender-open-dingtalk-id |
+| `aisearch person` | `userId` | message send 的 --user、list-direct 的 --user、send-by-bot 的 --users、list-by-sender 的 --sender-user-id |
+| `aisearch person` → `contact user get` | `openDingTalkId` | message send 的 --at-open-dingtalk-ids、--open-dingtalk-id、list-direct 的 --open-dingtalk-id、list-by-sender 的 --sender-open-dingtalk-id |
 | `chat bot search` | `robotCode` | send-by-bot / recall-by-bot 的 --robot-code（仅我创建的机器人，无 openDingTalkId） |
 | `chat bot find` | `openDingTalkId` | 给机器人发单聊消息（全部可用机器人，额外返回 openDingTalkId） |
 | `chat message send-by-bot` | `processQueryKey` | recall-by-bot 的 --keys |
@@ -1514,12 +1496,12 @@ Flags:
 - `--user` 和 `--open-dingtalk-id` 本质上都是发起单聊操作，只是用户标识格式不同：userId 为企业内部应用常用标识，openDingTalkId 为三方应用或跨组织场景下的用户标识，服务端对两种 ID 的解析逻辑不同
 - `--time` 格式: `yyyy-MM-dd HH:mm:ss`，为拉取消息的起始时间点；`--forward` 控制方向（默认 true，拉给定时间之后的消息），`--limit` 控制数量
 - `chat search` 挂在 `chat` 下（非 `chat group` 下），路径为 `dws chat search`
-- `send-by-bot` 群聊传 `--group`，单聊传 `--users` 或 `--open-dingtalk-ids`，与 `--group` 互斥且必选其一；群聊时可选 `--at-user-ids` @指定成员（传 userId 列表）或 `--at-open-dingtalk-ids` @指定成员（传 openDingtalkId 列表），content 中需包含对应 @标识；`--at-all` @所有人；群聊场景如果返回"机器人不存在"错误，需先通过 `chat group members add-bot --group <openConversationId> --robot-code <robot-code>` 将机器人邀请进群后再发送
+- `send-by-bot` 群聊传 `--group`，单聊传 `--users`，二者互斥且必选其一；**不支持 @成员/@所有人**（无 `--at-user-ids`/`--at-open-dingtalk-ids`/`--at-all`），群里 @人请用 `chat message send --group` 走用户身份；群聊场景如果返回"机器人不存在"错误，需先通过 `chat group members add-bot --id <openConversationId> --robot-code <robot-code>` 将机器人邀请进群后再发送
 - `recall-by-bot` 群聊传 `--group` + `--keys`，单聊仅传 `--keys`（不传 `--group` 即为单聊撤回）
 - `send-by-webhook` 支持 `--at-all`、`--at-mobiles`、`--at-users` 进行 @ 操作，但需在 `--text` 中包含 `@userId` 或 `@手机号` 才能生效；`--at-all` @所有人时需在 `--text` 中包含 `@10`
 - `chat group-role` 系列命令用于管理群的自定义身份标签：`list` 查列表，`add` 创建，`update` 改名，`remove` 删除；`set-user` 覆盖某人全部身份（传空 --role-ids 则清除），`remove-user` 仅移除指定身份，`query-user` 查询某人当前身份；用户用 `--user <userId>`
 - 消息**换行符**（`send` / `send-by-bot` / `send-by-webhook` 的 `--text`）有两层要求：(1) 必须是**真实换行符** `U+000A`，不是字面量 `\n`；(2) Markdown 规范下单换行不生效，需用空行 `\n\n`（段落分隔）或行尾两空格 + 换行 / `<br>`（硬换行）
-- `chat group transfer-owner` 转让群主，需传 --group（openConversationId）；新群主 userId 用 `--user`，openDingTalkId 用 `--new-owner`
+- `chat group transfer-owner` 转让群主，需传 --group（openConversationId）；新群主用 `--new-owner`（传 openDingTalkId）
 - `chat group invite-url` 获取群邀请链接，需传 --group（openConversationId），可选 --expires-seconds 指定有效期（秒，0=永久）
 - `chat group quit` 退出群聊，需传 --group（openConversationId）
 - `chat group update-icon` 更新群头像，需传 --group（openConversationId）和 --icon-media-id（mediaId）
@@ -1553,5 +1535,5 @@ Flags:
 
 ## 相关产品
 
-- [contact](./contact.md) — 搜索同事/好友，获取 userId 用于 --user、send-by-bot --users、send-by-bot --at-user-ids、list-by-sender --sender-user-id；获取 openDingTalkId 用于 message send 的 --at-open-dingtalk-ids、--open-dingtalk-id、send-by-bot --open-dingtalk-ids、send-by-bot --at-open-dingtalk-ids、list-by-sender 的 --sender-open-dingtalk-id
+- [contact](./contact.md) — 搜索同事/好友，获取 userId 用于 --user、send-by-bot --users、list-by-sender --sender-user-id；获取 openDingTalkId 用于 message send 的 --at-open-dingtalk-ids、--open-dingtalk-id、list-by-sender 的 --sender-open-dingtalk-id
 - [drive](./drive.md) — 上传文件获取下载链接，用于 Markdown 图片/文件消息

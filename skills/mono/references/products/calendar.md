@@ -101,8 +101,6 @@ Flags:
 **默认行为**：不传 `--start` / `--end` 时，默认返回今天的日程（00:00:00 ~ 23:59:59）。
 **权限**：查询共享日历下的日程时，至少要有reader权限。
 
-补充：当前用户的个人日程也可用 `dws calendar event list-mine` 查询，参数与 `event list` 一致。
-
 ### 获取日程详情
 ```
 Usage:
@@ -219,12 +217,13 @@ Flags:
 Usage:
   dws calendar attendee add [flags]
 Example:
-  dws calendar attendee add --event <EVENT_ID> --attendees <USER_ID_1>,<USER_ID_2>
-  dws calendar attendee add --event <EVENT_ID> --attendees <USER_ID> --optional
+  dws calendar attendee add --event <EVENT_ID> --users <USER_ID_1>,<USER_ID_2>
+  dws calendar attendee add --event <EVENT_ID> --users <USER_ID> --optional true
 Flags:
-      --event string       日程 ID (必填)
-      --attendees string   参会人 userId 列表，逗号分隔 (必填，最多500人)
-      --optional           参会人可选 (默认必选参会人)
+      --event string         日程 eventId (必填)
+      --users string         参会人 userId 列表，逗号分隔 (必填)
+      --optional string      是否可选参会人 (可选)
+      --calendar-id string   日历 ID (可选)
 ```
 
 ### 移除参会人
@@ -235,10 +234,11 @@ Flags:
 Usage:
   dws calendar attendee delete [flags]
 Example:
-  dws calendar attendee delete --event <EVENT_ID> --attendees <USER_ID> --yes
+  dws calendar attendee delete --event <EVENT_ID> --users <USER_ID> --yes
 Flags:
-      --event string       日程 ID (必填)
-      --attendees string   参会人 userId 列表，逗号分隔 (必填)
+      --event string         日程 eventId (必填)
+      --users string         参会人 userId 列表，逗号分隔 (必填)
+      --calendar-id string   日历 ID (可选)
 ```
 
 ### 搜索会议室
@@ -317,10 +317,10 @@ Usage:
   dws calendar room list-groups [flags]
 Example:
   dws calendar room list-groups
-  dws calendar room list-groups --limit 20 --page 0
+  dws calendar room list-groups --page-size 20 --page-index 0
 Flags:
-      --limit string       页大小 (可选，不填默认 100，超过 100 按 100 处理)
-      --page string        分页起始位置 (可选，不填默认 0)
+      --page-size string    页大小 (可选，默认 100，上限 100)
+      --page-index string   分页起始位置 (可选，默认 0)
 ```
 
 ### 添加日程附件
@@ -419,8 +419,8 @@ Flags:
 
 用户说"参会人/与会者":
 - 查看 → `attendee list`
-- 邀请/添加 → `attendee add --attendees <USER_ID>`（可选参会人加 `--optional`）
-- 移除 → `attendee delete --attendees <USER_ID>`
+- 邀请/添加 → `attendee add --users <USER_ID>`（可选参会人加 `--optional true`）
+- 移除 → `attendee delete --users <USER_ID>`
 
 用户说"会议室/订会议室":
 - 哪个空闲 → `room search`
@@ -479,7 +479,7 @@ dws calendar event create --title "Q1 复盘会" \
   --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15:00:00+08:00" --format json
 
 # Step 2: 添加参会人（必须用 Step 1 返回的 eventId）
-dws calendar attendee add --event <EVENT_ID> --attendees userId1,userId2 --format json
+dws calendar attendee add --event <EVENT_ID> --users userId1,userId2 --format json
 
 # Step 3: 搜索空闲会议室
 dws calendar room search --start ... --end ... --format json
@@ -519,19 +519,19 @@ dws calendar event list --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15
 
 - 时间格式: `event create/update`、`event list`、`busy search` 和 `event suggest` 用 ISO-8601
 - 时区: `event create/update` 和 `event suggest` 支持 `--timezone` 指定 IANA 时区（如 `Asia/Shanghai`、`America/New_York`），不传默认 `Asia/Shanghai`
-- 创建日程时可通过 `--attendees` 直接指定参会人（最多500人），也可创建后用 `attendee add --attendees ...` 单独添加
-- `--attendees` 和 `--open-dingtalk-ids` 至少传一个（如果需要指定参会人）
-- 添加参会人时可通过 `--optional` 设为可选参会人（默认必选）
+- 创建日程时可通过 `--attendees` 直接指定参会人（最多500人），也可创建后用 `attendee add --users ...` 单独添加
+- `event create` 的 `--attendees` 和 `--open-dingtalk-ids` 至少传一个（如果需要指定参会人）
+- `attendee add` 可通过 `--optional true` 设为可选参会人（默认必选）
 - `event suggest` 根据参会人闲忙自动推荐合适时间，适合会议时间未确定时使用
 - 创建日程**支持**通过 `--rooms` 一步预定会议室（`event create --rooms roomId1,roomId2`）；若创建后再加，仍可用 `room add`
 - `room search` 不带 `--group-id` 时查根目录；企业会议室超过 100 条会报错，此时需先 `room list-groups` 获取分组，再按分组逐一查询
-- `room list-groups` 支持 `--limit` / `--page` 分页（schema 类型为字符串）
+- `room list-groups` 支持 `--page-size` / `--page-index` 分页（schema 类型为字符串）
 - **`event create --rooms` / `room add --rooms` 的唯一合法来源**：最近一次（同一会话、同一时段窗口）`room search` 返回体中的 `roomId`；禁止把用户自然语言会议室名当 `roomId` 传入（否则会 `roomId invalid` 等错误）
 - **搜房无结果**：在符合早停/用户限定范围内，`room search`（含按分组逐组查）全部返回空或无空闲 → 应**直接向用户报错/说明失败**并结束订房；**禁止**假设 roomId、禁止无合法 `roomId` 时调用 `room add` / `event create --rooms` 试探、禁止用 `event get` 等绕路推断 roomId
 - **评测 / 自动化断言**：凡涉及 `room add` / `event create --rooms` 的流程，`--rooms` 只能填上游 `room search`（或等价接口）返回 JSON 中的 **`rooms[].roomId`**；不得以会议室展示名、楼层文案或用户口语当作 `roomId`
 - **附件**：`attachment add` 仅负责挂载，**不上传**文件；fileId 必须先通过钉盘流程取得；`--files` 多附件用 `<fileId>:<name>` 元素逗号分隔
 - **日历本**：`book list` 返回的 `id` 才是合法 `calendarId`；如无明确说明，`event list` / `event get` 都不要带 `--calendar-id`，让接口默认走 primary 主日历
-- **已弃用入参**：`--max-results`（event list / list-mine）在新 MCP schema 中被移除；CLI 仍接受但**不会**透传到 MCP；模型生成命令时**禁止**继续使用
+- **已弃用入参**：`--max-results`（event list）在新 MCP schema 中被移除；CLI 仍接受但**不会**透传到 MCP；模型生成命令时**禁止**继续使用
 
 ## 自动化脚本
 
@@ -544,4 +544,4 @@ dws calendar event list --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15
 ## 相关产品
 
 - [conference](./simple.md) — 仅视频会议预约（返回入会链接），不含参会人/会议室管理
-- [contact](./contact.md) — 搜索同事 userId，用于 attendee add --attendees
+- [contact](./contact.md) — 搜索同事 userId，用于 attendee add --users
