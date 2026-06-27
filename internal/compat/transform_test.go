@@ -127,6 +127,65 @@ func TestJSONParse_InvalidInput(t *testing.T) {
 	}
 }
 
+func TestJSONParse_AtFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "payload.json")
+	if err := os.WriteFile(path, []byte(`[{"k":"长内容\n多行","n":1}]`), 0o600); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+	got, err := ApplyTransform("@"+path, "json_parse", nil)
+	if err != nil {
+		t.Fatalf("json_parse @file: %v", err)
+	}
+	arr, ok := got.([]any)
+	if !ok || len(arr) != 1 {
+		t.Fatalf("expected 1-element array from @file, got %T %v", got, got)
+	}
+	item := arr[0].(map[string]any)
+	if item["k"] != "长内容\n多行" {
+		t.Fatalf("@file content mismatch: %v", item)
+	}
+}
+
+func TestJSONParse_AtFileMissing(t *testing.T) {
+	if _, err := ApplyTransform("@"+filepath.Join(t.TempDir(), "nope.json"), "json_parse", nil); err == nil {
+		t.Fatal("json_parse @missing-file should error")
+	}
+}
+
+func TestJSONParse_BareAtErrors(t *testing.T) {
+	_, err := ApplyTransform("@", "json_parse", nil)
+	if err == nil {
+		t.Fatal("bare @ should error (needs a path or -)")
+	}
+}
+
+func TestJSONParseStrict_AtFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "p.json")
+	if err := os.WriteFile(path, []byte(`{"a":[1,2,3]}`), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	got, err := ApplyTransform("@"+path, "json_parse_strict", nil)
+	if err != nil {
+		t.Fatalf("json_parse_strict @file: %v", err)
+	}
+	if _, ok := got.(map[string]any); !ok {
+		t.Fatalf("expected object, got %T", got)
+	}
+}
+
+func TestJSONParse_AtPassthroughNonAt(t *testing.T) {
+	// A value not starting with "@" must be parsed inline, untouched.
+	got, err := ApplyTransform(`[{"x":1}]`, "json_parse", nil)
+	if err != nil {
+		t.Fatalf("inline json_parse: %v", err)
+	}
+	if arr, ok := got.([]any); !ok || len(arr) != 1 {
+		t.Fatalf("inline parse regressed: %T %v", got, got)
+	}
+}
+
 // TestFileRead_BasicFile exercises the happy path: a UTF-8 file on disk is
 // read in full and surfaced as a string value. This is the contract the
 // `--content-file ./a.md` flag relies on so the upstream MCP tool sees the

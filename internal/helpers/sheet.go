@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
@@ -840,10 +841,10 @@ func newSheetFilterCreateCommand(runner executor.Runner) *cobra.Command {
 			"sheetId": sheetStringFlag(cmd, "sheet-id"),
 			"range":   sheetStringFlag(cmd, "range"),
 		}
-		if v := sheetStringFlag(cmd, "criteria"); v != "" {
+		if sheetStringFlag(cmd, "criteria") != "" {
 			var criteria []any
-			if err := json.Unmarshal([]byte(v), &criteria); err != nil {
-				return fmt.Errorf("--criteria JSON parse failed: %w", err)
+			if err := sheetParseJSONFlag(cmd, "criteria", &criteria); err != nil {
+				return err
 			}
 			params["criteria"] = criteria
 		}
@@ -912,10 +913,10 @@ func newSheetFilterViewCreateCommand(runner executor.Runner) *cobra.Command {
 			"name":    sheetStringFlag(cmd, "name"),
 			"range":   sheetStringFlag(cmd, "range"),
 		}
-		if v := sheetStringFlag(cmd, "criteria"); v != "" {
+		if sheetStringFlag(cmd, "criteria") != "" {
 			var criteria []any
-			if err := json.Unmarshal([]byte(v), &criteria); err != nil {
-				return fmt.Errorf("--criteria JSON parse failed: %w", err)
+			if err := sheetParseJSONFlag(cmd, "criteria", &criteria); err != nil {
+				return err
 			}
 			params["criteria"] = criteria
 		}
@@ -1578,7 +1579,13 @@ func sheetAddChangedIntParam(cmd *cobra.Command, params map[string]any, key, fla
 }
 
 func sheetParseJSONFlag(cmd *cobra.Command, flag string, out any) error {
-	raw := sheetStringFlag(cmd, flag)
+	// Resolve @file / @- so large 2D ranges, criteria and sort-keys can come
+	// from a file or stdin instead of inline shell-quoted JSON. ResolveInputSource
+	// passes values not starting with "@" through unchanged.
+	raw, err := cli.ResolveInputSource(sheetStringFlag(cmd, flag), flag, cli.NewStdinGuard())
+	if err != nil {
+		return err
+	}
 	if err := json.Unmarshal([]byte(raw), out); err != nil {
 		return fmt.Errorf("--%s JSON parse failed: %w", flag, err)
 	}
