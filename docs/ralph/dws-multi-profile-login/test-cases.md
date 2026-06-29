@@ -47,7 +47,44 @@ bash scripts/dev/test-multi-profile-e2e.sh --keep-workdir
 - 通过生产 auth 存储 API seed 登录后的 token 结果，不依赖真实扫码。
 - 使用真实 CLI 命令验证 profile/auth 命令面和状态变化。
 
-## 2.1 多 profile 参数设计规范
+## 2.1 CI/CD 质量门
+
+新增 GitHub Actions workflow：`Multi Profile E2E`。
+
+触发策略：
+
+- `pull_request`：所有 PR 自动触发。
+- `push`：所有分支 push 自动触发，不限制 `main`、`codex/**` 或 `feat/**`。
+- `workflow_dispatch`：支持在 GitHub Actions 页面手动触发。
+
+执行环境：
+
+- Runner：`ubuntu-latest`。
+- Go 版本：通过 `actions/setup-go@v5` 读取 `go.mod`。
+- Job timeout：15 分钟。
+- 权限：`contents: read`。
+- 并发：同一 ref 使用 `multi-profile-e2e-${{ github.ref }}` 分组，新 push 会取消同分支旧 run。
+
+执行命令：
+
+```bash
+bash scripts/dev/test-multi-profile-e2e.sh --keep-workdir
+```
+
+CI 覆盖内容：
+
+- 运行 focused Go regressions：`internal/auth`、`internal/app`、`test/cli` 中与 multi-profile、profile flag、auth/profile 命令面相关的用例。
+- 构建临时 `dws` 二进制。
+- 在隔离目录内 seed 多组织 token，不依赖真实扫码和真实 Keychain。
+- 执行 profile list/switch/use、auth status/reset、legacy migration、`--profile corpA, corpB` 多组织读取等黑盒链路。
+- 失败时上传 `.tmp-bin/multi-profile-e2e.*/out` 和 `.tmp-bin/multi-profile-e2e.*/config` 作为排查 artifact。
+
+当前落地验证：
+
+- 本地执行 `bash scripts/dev/test-multi-profile-e2e.sh` 已通过。
+- GitHub Actions 已通过 `Multi Profile E2E`：`https://github.com/shangguanxuan633-lab/dingtalk-workspace-cli/actions/runs/28345765214`。
+
+## 2.2 多 profile 参数设计规范
 
 核心规范参照 `lark-cli`：profile 仍是一个全局 string flag，多值由同一个 flag 值承载 CSV 列表。
 
