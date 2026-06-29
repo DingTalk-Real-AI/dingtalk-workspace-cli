@@ -742,7 +742,7 @@ func collectSchemaFlags(cmd *cobra.Command, bindings []FlagBinding, params map[s
 		"json": true, "params": true, "help": true,
 		"format": true, "fields": true, "jq": true,
 		"debug": true, "verbose": true, "dry-run": true,
-		"yes": true, "mock": true, "timeout": true,
+		"yes": true, "mock": true, "profile": true, "timeout": true,
 		"client-id": true, "client-secret": true,
 	}
 

@@ -288,6 +288,7 @@ func TestCollectSchemaFlagsSkipsGlobalFlags(t *testing.T) {
 	cmd.Flags().Bool("verbose", false, "Verbose")
 	cmd.Flags().Bool("dry-run", false, "Dry run")
 	cmd.Flags().String("format", "json", "Format")
+	cmd.Flags().String("profile", "", "Profile")
 	cmd.Flags().String("json", "", "")
 	cmd.Flags().String("params", "", "")
 
@@ -296,6 +297,7 @@ func TestCollectSchemaFlagsSkipsGlobalFlags(t *testing.T) {
 	_ = cmd.Flags().Set("verbose", "true")
 	_ = cmd.Flags().Set("dry-run", "true")
 	_ = cmd.Flags().Set("format", "table")
+	_ = cmd.Flags().Set("profile", "corp_profile")
 
 	params := make(map[string]any)
 	collectSchemaFlags(cmd, nil, params)
@@ -304,7 +306,7 @@ func TestCollectSchemaFlagsSkipsGlobalFlags(t *testing.T) {
 		t.Errorf("name = %v, want Bob", params["name"])
 	}
 	// Global flags should be skipped
-	for _, skip := range []string{"debug", "verbose", "dry_run", "format"} {
+	for _, skip := range []string{"debug", "verbose", "dry_run", "format", "profile"} {
 		if _, exists := params[skip]; exists {
 			t.Errorf("%s should be skipped (global flag)", skip)
 		}

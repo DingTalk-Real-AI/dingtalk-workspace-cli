@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app"
+	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/spf13/cobra"
 )
 
@@ -92,6 +93,10 @@ func getCapture(t *testing.T) *mcpCallCapture {
 
 func setupTestDeps(t *testing.T, _ string) *mcpCallCapture {
 	t.Helper()
+	authpkg.SetRuntimeProfile("")
+	t.Cleanup(func() {
+		authpkg.SetRuntimeProfile("")
+	})
 	cap := &mcpCallCapture{}
 	linkCapture(t, cap)
 	return cap
