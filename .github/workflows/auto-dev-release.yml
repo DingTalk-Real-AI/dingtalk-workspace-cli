@@ -47,6 +47,9 @@ jobs:
       - name: Test
         run: go test -race -count=1 -timeout=5m ./cmd/... ./internal/...
 
+      - name: Multi Profile E2E
+        run: bash scripts/dev/test-multi-profile-e2e.sh
+
       # ---- 算下一个 dev 版本号并打 tag ----
       - name: Compute next dev version
         id: ver

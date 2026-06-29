@@ -478,8 +478,8 @@ GOEOF
 cd "$ROOT"
 
 if [[ "$RUN_GO_TESTS" -eq 1 ]]; then
-  log "running focused Go regressions"
-  go test -timeout 180s -count=1 ./internal/auth ./internal/app ./test/cli -run 'Test(MultiProfile|RuntimeProfile|ProfileFlagArgs|PreparseProfileFlag|NormalizeProcessProfileArgs|CommaSeparated|CommaNamed|DeleteProfile|UpsertProfile|LoadProfiles|LegacyKeychain|WriteProfile|ProfileList|ProfileUse|ProfileSwitch|AuthCommandDoesNotExposeSwitch|AuthStatus|AuthLogout|AuthLogin|ResolveAuthLogin|EnrichAuthLogin|RootHelp|RootShortHelp|RootCommand|ProductCommandsAcceptGlobalProfileFlag)'
+  log "running multi-profile Go regressions"
+  go test -timeout 180s -count=1 ./internal/auth ./internal/app ./test/cli
 fi
 
 log "building dws"

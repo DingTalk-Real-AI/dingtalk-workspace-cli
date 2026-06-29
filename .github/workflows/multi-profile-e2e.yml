@@ -17,6 +17,8 @@ jobs:
     name: Multi Profile E2E
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      MULTI_PROFILE_E2E_LOG: .tmp-bin/multi-profile-e2e.log
 
     steps:
       - name: Check out repository
@@ -28,7 +30,17 @@ jobs:
           go-version-file: go.mod
 
       - name: Run isolated multi-profile chain
-        run: bash scripts/dev/test-multi-profile-e2e.sh --keep-workdir
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p .tmp-bin
+          bash scripts/dev/test-multi-profile-e2e.sh --keep-workdir | tee "$MULTI_PROFILE_E2E_LOG"
+          {
+            echo "### Multi Profile E2E"
+            echo "- Command: \`bash scripts/dev/test-multi-profile-e2e.sh --keep-workdir\`"
+            echo "- Scope: isolated auth/profile storage, profile switch/use, one-shot profile override, CSV multi-profile aggregation, legacy migration"
+            echo "- Result: passed"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload debug artifacts
         if: failure()
@@ -37,5 +49,6 @@ jobs:
           name: multi-profile-e2e-debug
           path: |
             .tmp-bin/multi-profile-e2e.*/out
-            .tmp-bin/multi-profile-e2e.*/config
+            .tmp-bin/multi-profile-e2e.log
           if-no-files-found: ignore
+          retention-days: 3
