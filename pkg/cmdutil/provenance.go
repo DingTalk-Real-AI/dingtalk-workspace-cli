@@ -52,3 +52,30 @@ func IsEnvelopeSourced(cmd *cobra.Command) bool {
 	}
 	return cmd.Annotations[SourceAnnotation] == SourceEnvelope
 }
+
+// KindAnnotation records the structural role of a command. It distinguishes a
+// pure group container (a heading whose RunE only prints help) from a runnable
+// leaf. Both have a RunE set, so cobra's Runnable() cannot tell them apart —
+// this annotation can. Kept here next to SourceAnnotation so the literals stay
+// in one place.
+const KindAnnotation = "dws.kind"
+
+// KindGroup marks a command created as a group container (see NewGroupCommand).
+const KindGroup = "group"
+
+// MarkGroup stamps cmd as a group container. Safe on a command without an
+// existing Annotations map.
+func MarkGroup(cmd *cobra.Command) {
+	if cmd == nil {
+		return
+	}
+	if cmd.Annotations == nil {
+		cmd.Annotations = map[string]string{}
+	}
+	cmd.Annotations[KindAnnotation] = KindGroup
+}
+
+// IsGroup reports whether cmd was created as a group container.
+func IsGroup(cmd *cobra.Command) bool {
+	return cmd != nil && cmd.Annotations[KindAnnotation] == KindGroup
+}

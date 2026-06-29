@@ -148,8 +148,11 @@ func registerStdioServerFromOverlay(
 		}
 	}
 
+	// nil existingTools: this overlay is built from the plugin's own live tool
+	// list (detailsByID is derived from it), so there are no phantom leaves to
+	// guard against here.
 	cmds := compat.BuildDynamicCommands(
-		[]market.ServerDescriptor{descriptor}, runner, detailsByID)
+		[]market.ServerDescriptor{descriptor}, runner, detailsByID, nil)
 
 	slog.Debug("plugin: stdio server registered from overlay",
 		"plugin", p.Manifest.Name, "server", sc.Key,

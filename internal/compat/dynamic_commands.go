@@ -51,8 +51,16 @@ var runtimeDefaultWhitelist = map[string]bool{
 // detailsByID maps CLI server ID → []DetailTool from the MCP Detail API.
 // When provided, tool Short/Long descriptions and typed flags are enriched from Detail API data.
 //
+// existingTools maps CLI server ID (slug) → set of tool names that server
+// actually exposes (from the live tools/list cache). When a server's set is
+// present and non-empty, override leaves whose backing MCP tool is missing from
+// it are hidden from `--help` (phantom-command guard). When the set is absent or
+// empty (cold cache, or a server we have no tools snapshot for) the guard does
+// nothing for that server, so an unpopulated cache never blanks the command
+// tree. Pass nil to disable the guard entirely.
+//
 // Conversion rules reference: docs/mcp-to-cli-conversion.md
-func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Runner, detailsByID map[string][]market.DetailTool) []*cobra.Command {
+func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Runner, detailsByID map[string][]market.DetailTool, existingTools map[string]map[string]struct{}) []*cobra.Command {
 	type builtCmd struct {
 		cmd    *cobra.Command
 		parent string // cli.Parent: attach as sub-command of this top-level command
@@ -222,6 +230,25 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 
 			cmd := NewDirectCommand(route, runner)
 
+			// §guard.toolexists: keep `--help` honest under envelope/deployment
+			// drift. When we know the resolved server's live tool set and it does
+			// NOT contain this leaf's backing tool, the command is a phantom
+			// (renders in help but fails at invocation with "tool not found"), so
+			// hide it. Safety rails:
+			//   - only acts when the set is KNOWN and non-empty (absent/empty =
+			//     unknown = keep; a cold tools cache must never blank the tree);
+			//   - skips pipeline leaves, which orchestrate multiple tools and have
+			//     no single backing toolName to check;
+			//   - Hidden (not removed) so the command stays invocable for anyone
+			//     who calls it directly — it just leaves the help surface.
+			if len(override.Pipeline) == 0 && existingTools != nil {
+				if known, ok := existingTools[canonicalProduct]; ok && len(known) > 0 {
+					if _, exists := known[toolName]; !exists {
+						cmd.Hidden = true
+					}
+				}
+			}
+
 			// Enrich flags with typed parameters from Detail API toolRequest JSON Schema.
 			if dt, ok := detailIndex[toolName]; ok && dt.ToolRequest != "" {
 				buildFlagsFromDetailSchema(cmd, dt.ToolRequest, override.Flags)
@@ -247,6 +274,11 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 			// FIXED conditional checks (see attendance_hooks.go). No-op for
 			// non-attendance.
 			installAttendanceHook(cmd, canonicalProduct, toolName)
+
+			// §report-hook: native --contents-file / --contents - (stdin)
+			// resolution + one-of(contents, contents-file) relaxation (see
+			// report_hooks.go). No-op for non-report.
+			installReportHook(cmd, canonicalProduct, toolName)
 
 			// §1.4: Add to the right parent group
 			attachToGroup(rootCmd, override.Group, groupCmds, cmd)
@@ -314,7 +346,59 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 	for _, name := range topOrder {
 		commands = append(commands, topLevel[name])
 	}
+
+	// §guard.emptygroups: a group whose every leaf is hidden would still show in
+	// help as an empty heading (e.g. attendance `vacation`/`overtime` once their
+	// tools are gone). Collapse those. This runs unconditionally because leaves
+	// get hidden by TWO independent mechanisms — the runtime tool-existence
+	// guard above AND envelope `hidden:true` overrides — and an envelope-emptied
+	// group must collapse even when the guard is inert (cold tools cache). It is
+	// safe regardless of cache state: hideEmptyGroups only ever hides a group all
+	// of whose children are already hidden; it never hides a leaf, so it cannot
+	// blank a tree on its own.
+	for _, c := range commands {
+		// Collapse empty sub-groups within each product, but never the product
+		// root itself: a root can legitimately be empty at this point and gain
+		// visible leaves later from helper/overlay merges, so hiding it here
+		// could wrongly drop a whole product from `dws --help`.
+		for _, sub := range c.Commands() {
+			hideEmptyGroups(sub)
+		}
+	}
 	return commands
+}
+
+// hideEmptyGroups recursively hides group commands whose every subcommand is
+// hidden — the collateral of the tool-existence guard emptying a group of all
+// its leaves. Returns true if cmd is (now) hidden. A command with no
+// subcommands is a leaf: its own Hidden flag is returned unchanged. A group is
+// only newly hidden when it HAS subcommands and they are ALL hidden, so a group
+// retaining at least one visible leaf always stays visible.
+func hideEmptyGroups(cmd *cobra.Command) bool {
+	subs := cmd.Commands()
+	if len(subs) == 0 {
+		// No children. A real leaf stands on its own Hidden flag. A group
+		// container with no children is empty — this happens when every
+		// override in a group is `hidden:true` (those leaves are never built,
+		// leaving the group childless) — so hide it. Group containers and leaves
+		// both have a RunE, so cobra's Runnable() can't tell them apart; the
+		// group annotation can.
+		if cmdutil.IsGroup(cmd) {
+			cmd.Hidden = true
+			return true
+		}
+		return cmd.Hidden
+	}
+	allHidden := true
+	for _, sub := range subs {
+		if !hideEmptyGroups(sub) {
+			allHidden = false
+		}
+	}
+	if allHidden {
+		cmd.Hidden = true
+	}
+	return cmd.Hidden
 }
 
 // buildDetailIndex creates a map from toolName → DetailTool for fast lookup.

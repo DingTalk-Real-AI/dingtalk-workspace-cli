@@ -77,7 +77,7 @@ func TestBuildDynamicCommands_ParentNesting(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil)
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil, nil)
 
 	// Should produce only one top-level command: "chat"
 	if len(cmds) != 1 {
@@ -130,7 +130,7 @@ func TestBuildDynamicCommands_ParentNotFound(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil)
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil, nil)
 
 	// Parent not found, should fall back to top-level
 	if len(cmds) != 1 {
@@ -169,7 +169,7 @@ func TestBuildDynamicCommands_ShorthandFlag(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil)
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil, nil)
 	if len(cmds) != 1 {
 		t.Fatalf("expected 1 cmd, got %d", len(cmds))
 	}
@@ -212,7 +212,7 @@ func TestBuildDynamicCommands_RequiredFlag(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil)
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil, nil)
 	send := findChild(cmds[0], "send")
 	if send == nil {
 		t.Fatal("send leaf not found")
@@ -253,7 +253,7 @@ func TestBuildDynamicCommands_RequiredIgnoredWhenPositional(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil)
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil, nil)
 	send := findChild(cmds[0], "send")
 	if send == nil {
 		t.Fatal("send leaf not found")
@@ -292,7 +292,7 @@ func TestBuildDynamicCommands_PositionalArg(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil)
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil, nil)
 	send := findChild(cmds[0], "send")
 	if send == nil {
 		t.Fatal("send leaf not found")
@@ -347,7 +347,7 @@ func TestBuildDynamicCommands_PositionalArgInjection(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, captured, nil)
+	cmds := BuildDynamicCommands(servers, captured, nil, nil)
 	send := findChild(cmds[0], "send")
 	if send == nil {
 		t.Fatal("send leaf not found")
@@ -399,7 +399,7 @@ func TestBuildDynamicCommands_PositionalWithFlagAliases(t *testing.T) {
 				},
 			},
 		}
-		cmds := BuildDynamicCommands(servers, captured, nil)
+		cmds := BuildDynamicCommands(servers, captured, nil, nil)
 		article := findChild(cmds[0], "article")
 		if article == nil {
 			t.Fatal("article group not found")
@@ -552,7 +552,7 @@ func TestBuildDynamicCommands_PositionalArityMixed(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil)
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil, nil)
 	leaf := findChild(cmds[0], "do")
 	if leaf == nil {
 		t.Fatal("do leaf not found")
@@ -606,7 +606,7 @@ func TestBuildDynamicCommands_ServerOverride(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, captured, nil)
+	cmds := BuildDynamicCommands(servers, captured, nil, nil)
 	leaf := findChild(cmds[0], "bot-list")
 	if leaf == nil {
 		t.Fatal("bot-list leaf not found")
@@ -641,7 +641,7 @@ func TestBuildDynamicCommands_ServerOverrideFallback(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, captured, nil)
+	cmds := BuildDynamicCommands(servers, captured, nil, nil)
 	leaf := findChild(cmds[0], "list")
 	if leaf == nil {
 		t.Fatal("list leaf not found")
@@ -680,7 +680,7 @@ func TestBuildDynamicCommands_DescriptionOverridesUsage(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil)
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil, nil)
 	send := findChild(cmds[0], "send")
 	if send == nil {
 		t.Fatal("send leaf not found")
@@ -732,7 +732,7 @@ func TestBuildDynamicCommands_OverlayFlagWinsOverDetailSchema(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, details)
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, details, nil)
 	send := findChild(cmds[0], "send")
 	if send == nil {
 		t.Fatal("send leaf not found")
@@ -775,7 +775,7 @@ func TestBuildDynamicCommands_BodyWrapper(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, runner, nil)
+	cmds := BuildDynamicCommands(servers, runner, nil, nil)
 	create := findChild(cmds[0], "create")
 	if create == nil {
 		t.Fatal("create leaf not found")
@@ -858,7 +858,7 @@ func TestBuildDynamicCommands_MutuallyExclusive(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil)
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil, nil)
 	cmds[0].SetArgs([]string{"list", "--group", "g1", "--user", "u1"})
 	cmds[0].SilenceErrors = true
 	cmds[0].SilenceUsage = true
@@ -901,7 +901,7 @@ func TestBuildDynamicCommands_RequireOneOf(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil)
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil, nil)
 	cmds[0].SetArgs([]string{"list"})
 	cmds[0].SilenceErrors = true
 	cmds[0].SilenceUsage = true
@@ -940,7 +940,7 @@ func TestBuildDynamicCommands_RequireOneOfSatisfied(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, runner, nil)
+	cmds := BuildDynamicCommands(servers, runner, nil, nil)
 	cmds[0].SetArgs([]string{"list", "--group", "g1"})
 	cmds[0].SilenceErrors = true
 	cmds[0].SilenceUsage = true
@@ -974,7 +974,7 @@ func TestBuildDynamicCommands_RedirectTo(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, runner, nil)
+	cmds := BuildDynamicCommands(servers, runner, nil, nil)
 	history := findChild(cmds[0], "history")
 	if history == nil {
 		t.Fatal("history stub not found")
@@ -1029,7 +1029,7 @@ func TestBuildDynamicCommands_Hints(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil)
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil, nil)
 	root := cmds[0]
 
 	// history hint attached directly under root.
@@ -1094,7 +1094,7 @@ func TestBuildDynamicCommands_UnknownFlagConstraintSkipped(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil)
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil, nil)
 	list := findChild(cmds[0], "list")
 	if list == nil {
 		t.Fatal("list leaf not found (constraint validation must not abort build)")
@@ -1135,7 +1135,7 @@ func TestBuildDynamicCommands_MultipleAliases_PrimarySet(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, runner, nil)
+	cmds := BuildDynamicCommands(servers, runner, nil, nil)
 	cmds[0].SetArgs([]string{"search", "--query", "hello"})
 	cmds[0].SilenceErrors = true
 	cmds[0].SilenceUsage = true
@@ -1193,7 +1193,7 @@ func TestBuildDynamicCommands_MultipleAliases_OnlyAliasSet(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, runner, nil)
+	cmds := BuildDynamicCommands(servers, runner, nil, nil)
 	cmds[0].SetArgs([]string{"search", "--keyword", "hi"})
 	cmds[0].SilenceErrors = true
 	cmds[0].SilenceUsage = true
@@ -1234,7 +1234,7 @@ func TestBuildDynamicCommands_MultipleAliases_RequiredErrorWhenNoneSet(t *testin
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, runner, nil)
+	cmds := BuildDynamicCommands(servers, runner, nil, nil)
 	cmds[0].SetArgs([]string{"search"})
 	cmds[0].SilenceErrors = true
 	cmds[0].SilenceUsage = true
@@ -1275,7 +1275,7 @@ func TestBuildDynamicCommands_MultipleAliases_PrimaryWinsWhenBothSet(t *testing.
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, runner, nil)
+	cmds := BuildDynamicCommands(servers, runner, nil, nil)
 	cmds[0].SetArgs([]string{"search", "--query", "primary", "--keyword", "fallback"})
 	cmds[0].SilenceErrors = true
 	cmds[0].SilenceUsage = true
@@ -1316,7 +1316,7 @@ func TestBuildDynamicCommands_MultipleAliases_MultiAliasChain(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, runner, nil)
+	cmds := BuildDynamicCommands(servers, runner, nil, nil)
 	cmds[0].SetArgs([]string{"get", "--user-ids", "u1,u2"})
 	cmds[0].SilenceErrors = true
 	cmds[0].SilenceUsage = true
@@ -1383,7 +1383,7 @@ func TestBuildDynamicCommands_MultipleAliases_Dedup(t *testing.T) {
 
 	// If ApplyBindings panics (duplicate pflag) we fail. Otherwise the cmd
 	// should build and execute fine.
-	cmds := BuildDynamicCommands(servers, runner, nil)
+	cmds := BuildDynamicCommands(servers, runner, nil, nil)
 	cmds[0].SetArgs([]string{"search", "--keyword", "ok"})
 	cmds[0].SilenceErrors = true
 	cmds[0].SilenceUsage = true
@@ -1421,7 +1421,7 @@ func TestBuildDynamicCommands_NoParent(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil)
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil, nil)
 
 	if len(cmds) != 2 {
 		t.Fatalf("expected 2 top-level commands, got %d", len(cmds))
@@ -1457,7 +1457,7 @@ func TestBuildDynamicCommands_ExampleField(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil)
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil, nil)
 	approval := findChild(cmds[0], "approval")
 	if approval == nil {
 		t.Fatal("approval group not found")
@@ -1503,7 +1503,7 @@ func TestApplyBindings_VisibleFlagDefault_String(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil)
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil, nil)
 	leaf := findChild(cmds[0], "list-forms")
 	if leaf == nil {
 		t.Fatal("list-forms leaf not found")
@@ -1548,7 +1548,7 @@ func TestApplyBindings_VisibleFlagDefault_Int(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil)
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil, nil)
 	leaf := findChild(cmds[0], "list-forms")
 	if leaf == nil {
 		t.Fatal("list-forms leaf not found")
@@ -1786,7 +1786,7 @@ func TestBuildDynamicCommands_ParentMergeSameName(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil)
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil, nil)
 	if len(cmds) != 1 || cmds[0].Name() != "chat" {
 		t.Fatalf("expected single top-level 'chat', got %d cmds", len(cmds))
 	}
@@ -1860,7 +1860,7 @@ func TestBuildDynamicCommands_ParentMergeRecursive(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil)
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil, nil)
 	if len(cmds) != 1 || cmds[0].Name() != "chat" {
 		t.Fatalf("expected single top-level 'chat', got %d", len(cmds))
 	}
@@ -1934,7 +1934,7 @@ func TestBuildDynamicCommands_ParentMergeLeafCollision(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil)
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, nil, nil)
 	if len(cmds) != 1 {
 		t.Fatalf("expected 1 top-level, got %d", len(cmds))
 	}
@@ -1987,7 +1987,7 @@ func TestBuildFlagsFromDetailSchema_FormatEnumAnnotations(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, details)
+	cmds := BuildDynamicCommands(servers, executor.EchoRunner{}, details, nil)
 	list := findChild(cmds[0], "list")
 	if list == nil {
 		t.Fatal("list leaf not found")
@@ -2052,7 +2052,7 @@ func TestBuildDynamicCommands_MapsTo_WithoutTransform(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, runner, nil)
+	cmds := BuildDynamicCommands(servers, runner, nil, nil)
 	cmds[0].SetArgs([]string{"update", "--node", "n1", "--content", "# 标题"})
 	cmds[0].SilenceErrors = true
 	cmds[0].SilenceUsage = true
@@ -2107,7 +2107,7 @@ func TestBuildDynamicCommands_MapsTo_WithFileReadTransform(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, runner, nil)
+	cmds := BuildDynamicCommands(servers, runner, nil, nil)
 	cmds[0].SetArgs([]string{"update", "--node", "n1", "--content-file", path})
 	cmds[0].SilenceErrors = true
 	cmds[0].SilenceUsage = true
@@ -2157,7 +2157,7 @@ func TestBuildDynamicCommands_MapsTo_SiblingFlagsExclusiveSetOne(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, runner, nil)
+	cmds := BuildDynamicCommands(servers, runner, nil, nil)
 	cmds[0].SetArgs([]string{"update", "--node", "n1", "--content", "literal body"})
 	cmds[0].SilenceErrors = true
 	cmds[0].SilenceUsage = true
@@ -2207,7 +2207,7 @@ func TestBuildDynamicCommands_MapsTo_BothSetIsRejectedByCobra(t *testing.T) {
 		},
 	}
 
-	cmds := BuildDynamicCommands(servers, runner, nil)
+	cmds := BuildDynamicCommands(servers, runner, nil, nil)
 	cmds[0].SetArgs([]string{"update", "--node", "n1", "--content", "x", "--content-file", "/tmp/y"})
 	cmds[0].SilenceErrors = true
 	cmds[0].SilenceUsage = true
