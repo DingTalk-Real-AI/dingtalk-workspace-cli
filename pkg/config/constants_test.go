@@ -1,6 +1,9 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -189,6 +192,30 @@ func TestDefaultFetchServersLimit(t *testing.T) {
 	t.Parallel()
 	if DefaultFetchServersLimit != 200 {
 		t.Fatalf("DefaultFetchServersLimit = %d, want 200", DefaultFetchServersLimit)
+	}
+}
+
+func TestGetMCPBaseURLDefaultsToProduction(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", dir)
+
+	got := GetMCPBaseURL()
+	if got != "https://mcp.dingtalk.com" {
+		t.Fatalf("GetMCPBaseURL() = %q, want production MCP URL", got)
+	}
+	if strings.Contains(got, "pre-mcp") {
+		t.Fatalf("GetMCPBaseURL() = %q, must not default to prepub MCP URL", got)
+	}
+}
+
+func TestGetMCPBaseURLUsesConfigFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", dir)
+	if err := os.WriteFile(filepath.Join(dir, "mcp_url"), []byte("https://custom-mcp.example.com\n"), FilePerm); err != nil {
+		t.Fatalf("WriteFile(mcp_url) error = %v", err)
+	}
+	if got := GetMCPBaseURL(); got != "https://custom-mcp.example.com" {
+		t.Fatalf("GetMCPBaseURL() = %q, want configured URL", got)
 	}
 }
 

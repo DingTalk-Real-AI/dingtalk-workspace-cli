@@ -2,6 +2,9 @@ package transport
 
 import (
 	"bytes"
+	"context"
+	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -80,6 +83,41 @@ func TestRedactURL(t *testing.T) {
 		} else if got != tt.want {
 			t.Fatalf("RedactURL(%s) = %s, want %s", tt.input, got, tt.want)
 		}
+	}
+}
+
+func TestDoWithRetryRedactsGatewayQueryInHeaderDebugLog(t *testing.T) {
+	t.Parallel()
+
+	var logBuf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	var requestedURL string
+	client := NewClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		requestedURL = req.URL.String()
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"jsonrpc":"2.0","id":1,"result":{}}`)),
+			Request:    req,
+		}, nil
+	})})
+	client.FileLogger = logger
+
+	resp, err := client.doWithRetry(context.Background(), "https://mcp-gw.dingtalk.com/server/demo?key=secret#frag", []byte(`{}`))
+	if err != nil {
+		t.Fatalf("doWithRetry() error = %v", err)
+	}
+	defer resp.Body.Close()
+
+	if !strings.Contains(requestedURL, "key=secret") {
+		t.Fatalf("gateway request URL = %q, want preserved key query", requestedURL)
+	}
+	out := logBuf.String()
+	if strings.Contains(out, "key=secret") || strings.Contains(out, "secret") {
+		t.Fatalf("debug log leaked gateway key: %s", out)
+	}
+	if !strings.Contains(out, "key=REDACTED") {
+		t.Fatalf("debug log did not include redacted endpoint, got: %s", out)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -50,38 +51,42 @@ func renderRootHelp(root *cobra.Command) {
 	utilities := visibleUtilityRootCommands(root)
 	w := root.OutOrStdout()
 
+	_, _ = fmt.Fprintln(w, tui.Header("Workspace CLI", "DingTalk blue-white technical console"))
+	_, _ = fmt.Fprintln(w, tui.Rule(76))
+	_, _ = fmt.Fprintln(w)
+
 	if len(services) == 0 {
-		_, _ = fmt.Fprintln(w, "No MCP services discovered.")
+		_, _ = fmt.Fprintf(w, "%s %s\n", tui.StateMark("warning"), tui.Warning("No MCP services discovered."))
 		_, _ = fmt.Fprintln(w)
 	} else {
-		_, _ = fmt.Fprintln(w, "Discovered MCP Services:")
+		_, _ = fmt.Fprintln(w, tui.Section("Discovered MCP Services:"))
 		_, _ = fmt.Fprintln(w)
 
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 		for _, service := range services {
-			_, _ = fmt.Fprintf(tw, "  %s\t%s\n", service.Name(), strings.TrimSpace(service.Short))
+			_, _ = fmt.Fprintf(tw, "  %s %s\t%s\n", tui.StateMark("ok"), tui.Bold(service.Name()), tui.Dim(strings.TrimSpace(service.Short)))
 		}
 		_ = tw.Flush()
 		_, _ = fmt.Fprintln(w)
 	}
 
-	_, _ = fmt.Fprintln(w, "Usage:")
-	_, _ = fmt.Fprintln(w, "  dws <service> [command] [flags]")
+	_, _ = fmt.Fprintln(w, tui.Section("Usage:"))
+	_, _ = fmt.Fprintf(w, "  %s %s\n", tui.Bullet(), tui.White("dws <service> [command] [flags]"))
 	if len(utilities) > 0 {
-		_, _ = fmt.Fprintln(w, "  dws <command> [flags]")
+		_, _ = fmt.Fprintf(w, "  %s %s\n", tui.Bullet(), tui.White("dws <command> [flags]"))
 	}
 	_, _ = fmt.Fprintln(w)
 	if len(utilities) > 0 {
-		_, _ = fmt.Fprintln(w, "Utility Commands:")
+		_, _ = fmt.Fprintln(w, tui.Section("Utility Commands:"))
 		_, _ = fmt.Fprintln(w)
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 		for _, utility := range utilities {
-			_, _ = fmt.Fprintf(tw, "  %s\t%s\n", utility.Name(), strings.TrimSpace(utility.Short))
+			_, _ = fmt.Fprintf(tw, "  %s %s\t%s\n", tui.Bullet(), tui.Bold(utility.Name()), tui.Dim(commandShort(utility)))
 		}
 		_ = tw.Flush()
 		_, _ = fmt.Fprintln(w)
 	}
-	_, _ = fmt.Fprintln(w, `Use "dws <service> --help" for more information about a discovered MCP service or "dws <command> --help" for utility commands.`)
+	_, _ = fmt.Fprintf(w, "%s %s\n", tui.Key("Next"), `Use "dws <service> --help" for more information about a discovered MCP service or "dws <command> --help" for utility commands.`)
 
 	// Render root.Long after the command list so agents see the upgrade
 	// hint (or any other root-level guidance) after browsing all available
@@ -90,8 +95,19 @@ func renderRootHelp(root *cobra.Command) {
 	// it and dropped this, so we restore it explicitly here.
 	if long := strings.TrimSpace(root.Long); long != "" {
 		_, _ = fmt.Fprintln(w)
-		_, _ = fmt.Fprintln(w, long)
+		_, _ = fmt.Fprintln(w, tui.Dim(long))
 	}
+}
+
+func commandShort(cmd *cobra.Command) string {
+	if cmd == nil {
+		return ""
+	}
+	short := strings.TrimSpace(cmd.Short)
+	if cmd.Name() == "help" && short == "Help about any command" {
+		return i18n.T("查看任意命令的帮助信息")
+	}
+	return short
 }
 
 // resolveVisibleProducts returns the set of top-level product IDs that should

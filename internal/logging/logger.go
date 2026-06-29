@@ -85,6 +85,19 @@ func (fl *FileLogger) Close() error {
 	return fl.writer.close()
 }
 
+// NewRotatingFile opens path as a size-rotating log file (same rotation policy
+// as the diagnostic logger: maxLogSize per file, maxBackups kept) and returns an
+// io.WriteCloser. The caller owns the returned writer and must Close it. Used by
+// the connect daemon to archive a long-running connector's stdout/stderr without
+// reimplementing rotation. Returns an error if the file cannot be opened.
+func NewRotatingFile(path string) (io.WriteCloser, error) {
+	w := newRotatingWriter(path, maxLogSize, maxBackups)
+	if err := w.open(); err != nil {
+		return nil, err
+	}
+	return w, nil
+}
+
 func newNopFileLogger() *FileLogger {
 	return &FileLogger{
 		Logger: slog.New(slog.NewJSONHandler(io.Discard, nil)),
@@ -175,6 +188,10 @@ func (w *rotatingWriter) reopenLocked() error {
 	w.written = info.Size()
 	return nil
 }
+
+// Close implements io.Closer so rotatingWriter can be returned as an
+// io.WriteCloser (see NewRotatingFile).
+func (w *rotatingWriter) Close() error { return w.close() }
 
 func (w *rotatingWriter) close() error {
 	w.mu.Lock()

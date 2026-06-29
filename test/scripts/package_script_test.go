@@ -13,6 +13,8 @@ var expectedPackagedSkillTargets = []string{
 	".agents/skills/dws",
 	".claude/skills/dws",
 	".cursor/skills/dws",
+	".qoder/skills/dws",
+	".qoderwork/skills/dws",
 	".gemini/skills/dws",
 	".codex/skills/dws",
 	".github/skills/dws",

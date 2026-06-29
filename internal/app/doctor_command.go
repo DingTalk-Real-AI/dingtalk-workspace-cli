@@ -22,9 +22,9 @@ import (
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cache"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -113,7 +113,8 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 		return output.WriteJSON(w, result)
 	}
 
-	fmt.Fprintf(w, "\n诊断完成: %d 项通过, %d 项警告, %d 项失败\n", pass, warn, fail)
+	fmt.Fprintf(w, "\n%s\n", tui.Header("Doctor", fmt.Sprintf("%d pass · %d warn · %d fail", pass, warn, fail)))
+	fmt.Fprintf(w, "%s 诊断完成: %d 项通过, %d 项警告, %d 项失败\n", tui.StateMark("ok"), pass, warn, fail)
 	if fail > 0 {
 		return fmt.Errorf("诊断发现 %d 项失败", fail)
 	}
@@ -124,7 +125,7 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 
 func doctorCheckAuth(ctx context.Context, w io.Writer, jsonOut bool) checkResult {
 	if !jsonOut {
-		fmt.Fprint(w, "检查登录状态...       ")
+		fmt.Fprint(w, tui.Dim("检查登录状态...       "))
 	}
 
 	configDir := defaultConfigDir()
@@ -187,10 +188,10 @@ func doctorCheckAuth(ctx context.Context, w io.Writer, jsonOut bool) checkResult
 
 func doctorCheckNetwork(ctx context.Context, w io.Writer, jsonOut bool, timeout time.Duration) checkResult {
 	if !jsonOut {
-		fmt.Fprint(w, "检查网络连通性...     ")
+		fmt.Fprint(w, tui.Dim("检查网络连通性...     "))
 	}
 
-	baseURL := cli.DefaultMarketBaseURL
+	baseURL := config.GetMCPBaseURL()
 	httpClient := &http.Client{Timeout: timeout}
 	client := market.NewClient(baseURL, httpClient)
 
@@ -205,7 +206,7 @@ func doctorCheckNetwork(ctx context.Context, w io.Writer, jsonOut bool, timeout 
 		r := checkResult{
 			Name:    "network",
 			Status:  statusFail,
-			Message: fmt.Sprintf("mcp.dingtalk.com 不可达: %v", err),
+			Message: fmt.Sprintf("%s 不可达: %v", baseURL, err),
 			Hint:    "请检查网络连接或代理设置",
 		}
 		if !jsonOut {
@@ -217,7 +218,7 @@ func doctorCheckNetwork(ctx context.Context, w io.Writer, jsonOut bool, timeout 
 	r := checkResult{
 		Name:    "network",
 		Status:  statusPass,
-		Message: fmt.Sprintf("mcp.dingtalk.com 可达 (延迟 %dms)", latency.Milliseconds()),
+		Message: fmt.Sprintf("%s 可达 (延迟 %dms)", baseURL, latency.Milliseconds()),
 	}
 	if !jsonOut {
 		printCheckResult(w, r)
@@ -229,7 +230,7 @@ func doctorCheckNetwork(ctx context.Context, w io.Writer, jsonOut bool, timeout 
 
 func doctorCheckCache(w io.Writer, jsonOut bool) checkResult {
 	if !jsonOut {
-		fmt.Fprint(w, "检查缓存状态...       ")
+		fmt.Fprint(w, tui.Dim("检查缓存状态...       "))
 	}
 
 	store := cacheStoreFromEnv()
@@ -301,7 +302,7 @@ func doctorCheckCache(w io.Writer, jsonOut bool) checkResult {
 
 func doctorCheckVersion(w io.Writer, jsonOut bool, timeout time.Duration) checkResult {
 	if !jsonOut {
-		fmt.Fprint(w, "检查版本更新...       ")
+		fmt.Fprint(w, tui.Dim("检查版本更新...       "))
 	}
 
 	currentVer := version
@@ -349,9 +350,18 @@ func doctorCheckVersion(w io.Writer, jsonOut bool, timeout time.Duration) checkR
 
 func printCheckResult(w io.Writer, r checkResult) {
 	icon := statusIcon(r.Status)
-	fmt.Fprintf(w, "%s %s\n", icon, r.Message)
+	message := r.Message
+	switch r.Status {
+	case statusPass:
+		message = tui.Success(message)
+	case statusWarn:
+		message = tui.Warning(message)
+	case statusFail:
+		message = tui.Danger(message)
+	}
+	fmt.Fprintf(w, "%s %s\n", icon, message)
 	if r.Hint != "" {
-		fmt.Fprintf(w, "                      %s\n", r.Hint)
+		fmt.Fprintf(w, "                      %s\n", tui.Dim(r.Hint))
 	}
 }
 
@@ -386,7 +396,7 @@ func countResults(checks []checkResult) (pass, warn, fail int) {
 
 func doctorCheckPerf(w io.Writer, jsonOut bool) checkResult {
 	if !jsonOut {
-		fmt.Fprint(w, "检查性能报告...       ")
+		fmt.Fprint(w, tui.Dim("检查性能报告...       "))
 	}
 
 	report, err := LoadLatestReport()

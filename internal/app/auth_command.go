@@ -14,29 +14,55 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
+	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
 type authLoginConfig struct {
-	Token  string
-	Force  bool
-	Device bool
+	Token     string
+	Force     bool
+	Device    bool
+	Recommend bool
+	Yes       bool
 }
 
-func buildAuthCommand() *cobra.Command {
+type authLoginGuideAction string
+
+const (
+	authLoginGuideDirectCLI         authLoginGuideAction = "direct_cli"
+	authLoginGuideConfigureAgentApp authLoginGuideAction = "configure_agent_app"
+	authLoginGuideManualCredentials authLoginGuideAction = "manual_credentials"
+)
+
+var (
+	authLoginBrandBlue = lipgloss.AdaptiveColor{Light: "#1677FF", Dark: "#69B1FF"}
+	authLoginInk       = lipgloss.AdaptiveColor{Light: "#1F2937", Dark: "#EAF2FF"}
+	authLoginMuted     = lipgloss.AdaptiveColor{Light: "#667085", Dark: "#8A96A8"}
+	authLoginLine      = lipgloss.AdaptiveColor{Light: "#D6E4FF", Dark: "#2F3B52"}
+	authLoginDanger    = lipgloss.AdaptiveColor{Light: "#D92D20", Dark: "#FF6B6B"}
+)
+
+func buildAuthCommand(patCaller edition.ToolCaller) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "auth",
 		Short:             "认证管理",
@@ -50,18 +76,20 @@ func buildAuthCommand() *cobra.Command {
 	}
 
 	if !edition.Get().HideAuthLogin {
-		cmd.AddCommand(newAuthLoginCommand())
+		cmd.AddCommand(newAuthLoginCommand(patCaller))
 	}
 	cmd.AddCommand(
 		newAuthLogoutCommand(),
 		newAuthStatusCommand(),
+		newAuthExportCommand(),
+		newAuthImportCommand(),
 		newAuthExchangeCommand(),
 		newAuthResetCommand(),
 	)
 	return cmd
 }
 
-func newAuthLoginCommand() *cobra.Command {
+func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "login",
 		Short: "登录钉钉（自动刷新 token，必要时扫码）",
@@ -81,7 +109,8 @@ func newAuthLoginCommand() *cobra.Command {
       否则 OAuth 回调会跳到本机不可达的 127.0.0.1 链接，授权完成后无法回写 token。
 
 示例:
-  dws auth login              # 本机扫码登录 (loopback 流)
+  dws auth login              # 本机登录后选择推荐/全部权限与授权业务域
+  dws auth login --recommend  # 无交互批量授权服务端推荐权限
   dws auth login --device     # SSH 远程 / 无头环境登录 (设备流)
   dws auth login --force      # 强制重新登录 (忽略缓存 token)
   dws auth login --token xxx  # 使用指定 token`,
@@ -93,6 +122,10 @@ func newAuthLoginCommand() *cobra.Command {
 			}
 			configDir := defaultConfigDir()
 			var tokenData *authpkg.TokenData
+			format, _ := cmd.Root().PersistentFlags().GetString("format")
+			postLoginTUIMode := !cfg.Yes && authLoginShouldUsePostLoginTUIMode(cmd, format, cfg.Recommend)
+			recommendAuthMode := cfg.Recommend || postLoginTUIMode
+			humanAuthMode := !cfg.Yes && authLoginShouldUseHumanAuthorizationMode(cmd, format, recommendAuthMode)
 
 			switch {
 			case strings.TrimSpace(cfg.Token) != "":
@@ -109,6 +142,7 @@ func newAuthLoginCommand() *cobra.Command {
 
 				provider := authpkg.NewDeviceFlowProvider(configDir, nil)
 				provider.Output = cmd.ErrOrStderr()
+				provider.NoBrowser, _ = cmd.Flags().GetBool("no-browser")
 				tokenData, err = provider.Login(loginCtx)
 				if err != nil {
 					return apperrors.NewAuth(fmt.Sprintf("device authorization failed: %v", err))
@@ -119,6 +153,7 @@ func newAuthLoginCommand() *cobra.Command {
 
 				provider := authpkg.NewOAuthProvider(configDir, nil)
 				provider.Output = cmd.ErrOrStderr()
+				provider.NoBrowser, _ = cmd.Flags().GetBool("no-browser")
 				configureOAuthProviderCompatibility(provider, configDir)
 				tokenData, err = provider.Login(loginCtx, cfg.Force)
 				if err != nil {
@@ -130,41 +165,93 @@ func newAuthLoginCommand() *cobra.Command {
 			clearCompatCache()
 
 			w := cmd.OutOrStdout()
+			runPostLoginAuthorization := func() error {
+				if !recommendAuthMode {
+					return nil
+				}
+				recommendScopeMode := pat.LoginRecommendScopeRecommended
+				var initialPlan *pat.LoginRecommendPlan
+				if postLoginTUIMode {
+					var planErr error
+					initialPlan, planErr = pat.PlanLoginRecommendAuthorization(cmd.Context(), patCaller)
+					if planErr != nil {
+						return planErr
+					}
+					if authLoginRecommendPlanSkipsInteractiveAuthorization(initialPlan) {
+						fmt.Fprintln(cmd.ErrOrStderr(), "推荐权限已全部授权或没有可授权项")
+						return nil
+					}
+					var err error
+					recommendScopeMode, err = loginRecommendScopeModeSelector()
+					if err != nil {
+						return err
+					}
+				}
+				opts := pat.LoginRecommendOptions{Confirmed: cfg.Yes, ScopeMode: recommendScopeMode, InitialPlan: initialPlan}
+				if postLoginTUIMode {
+					opts.ProductSelector = func(products []pat.LoginRecommendProduct) ([]string, error) {
+						return loginRecommendProductSelector(products)
+					}
+				}
+				retryFormat := format
+				if humanAuthMode {
+					retryFormat = "table"
+				}
+				run := func(ctx context.Context) error {
+					return pat.RunLoginRecommendAuthorizationWithOptions(ctx, patCaller, cmd.ErrOrStderr(), opts)
+				}
+				err := run(cmd.Context())
+				if patErr := apperrors.AsPatAuthCheckError(err); patErr != nil {
+					return runDirectPATAuthCheckWaitOnly(
+						cmd.Context(),
+						&GlobalFlags{Format: retryFormat},
+						patErr,
+						cmd.ErrOrStderr(),
+					)
+				}
+				return err
+			}
 
 			// Check if JSON output is requested
-			format, _ := cmd.Root().PersistentFlags().GetString("format")
-			if strings.EqualFold(strings.TrimSpace(format), "json") {
+			if strings.EqualFold(strings.TrimSpace(format), "json") && !humanAuthMode {
+				if err := runPostLoginAuthorization(); err != nil {
+					return err
+				}
 				return writeAuthLoginJSON(w, tokenData, cfg.Force)
 			}
 
 			// Default table output
+			if err := runPostLoginAuthorization(); err != nil {
+				return err
+			}
 			fmt.Fprintln(w)
 			if !cfg.Device && tokenData != nil && tokenData.IsAccessTokenValid() && !cfg.Force {
-				fmt.Fprintf(w, "[OK] Token 有效，无需重新登录\n")
+				fmt.Fprintln(w, authLoginStatusLine("Token 有效，无需重新登录"))
 			} else {
-				fmt.Fprintf(w, "[OK] 登录成功！\n")
+				fmt.Fprintln(w, authLoginStatusLine("登录成功！"))
 			}
 			if tokenData != nil {
 				if tokenData.CorpName != "" {
-					fmt.Fprintf(w, "%-16s%s\n", "企业:", tokenData.CorpName)
+					fmt.Fprintln(w, authLoginInfoLine("企业", tokenData.CorpName))
 				}
 				if tokenData.CorpID != "" {
-					fmt.Fprintf(w, "%-16s%s\n", "企业 ID:", tokenData.CorpID)
+					fmt.Fprintln(w, authLoginInfoLine("企业 ID", tokenData.CorpID))
 				}
 				if tokenData.UserName != "" {
-					fmt.Fprintf(w, "%-16s%s\n", "用户:", tokenData.UserName)
+					fmt.Fprintln(w, authLoginInfoLine("用户", tokenData.UserName))
 				}
 				if expiry := authLoginDisplayExpiry(tokenData); expiry != "" {
-					fmt.Fprintf(w, "%-16s%s\n", "有效期:", expiry)
+					fmt.Fprintln(w, authLoginInfoLine("有效期", expiry))
 				}
 			}
-			fmt.Fprintf(w, "Token 将自动刷新，无需重复登录\n")
+			fmt.Fprintln(w, authLoginMutedStyle().Render("Token 将自动刷新，无需重复登录"))
 			return nil
 		},
 	}
 	cmd.Flags().String("token", "", "Access token")
 	cmd.Flags().Bool("device", false, "Use device authorization flow")
 	cmd.Flags().Bool("force", false, "Force interactive login (ignore cached token)")
+	cmd.Flags().Bool("recommend", false, "登录成功后无交互批量授权服务端推荐权限")
 	// Hidden compatibility flags
 	cmd.Flags().String("redirect-url", "", "Loopback redirect URL")
 	cmd.Flags().String("scopes", "", "Space-separated DingTalk OAuth scopes")
@@ -179,8 +266,110 @@ func newAuthLoginCommand() *cobra.Command {
 	_ = cmd.Flags().MarkHidden("token-url")
 	_ = cmd.Flags().MarkHidden("refresh-url")
 	_ = cmd.Flags().MarkHidden("login-timeout")
-	_ = cmd.Flags().MarkHidden("no-browser")
 	return cmd
+}
+
+var (
+	authLoginGuideActionSelector    = selectAuthLoginGuideAction
+	authLoginGuideActionApplier     = applyAuthLoginGuideAction
+	loginRecommendScopeModeSelector = selectLoginRecommendScopeMode
+	loginRecommendProductSelector   = selectLoginRecommendProducts
+	authLoginInteractiveTerminal    = isInteractiveTerminal
+)
+
+func selectAuthLoginGuideAction() (authLoginGuideAction, error) {
+	choice := authLoginGuideDirectCLI
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[authLoginGuideAction]().
+				Title("选择操作").
+				Options(
+					huh.NewOption("直接使用CLI", authLoginGuideDirectCLI),
+					huh.NewOption("一键配置智能体应用", authLoginGuideConfigureAgentApp),
+					huh.NewOption("手动输入应用凭证", authLoginGuideManualCredentials),
+				).
+				Value(&choice),
+		),
+	).WithTheme(authLoginHuhTheme())
+	if err := form.Run(); err != nil {
+		return "", fmt.Errorf("使用引导选择中止: %w", err)
+	}
+	return choice, nil
+}
+
+func applyAuthLoginGuideAction(cmd *cobra.Command, configDir string, action authLoginGuideAction) error {
+	switch action {
+	case authLoginGuideDirectCLI:
+		return nil
+	case authLoginGuideConfigureAgentApp:
+		fmt.Fprintln(cmd.ErrOrStderr(), "一键配置智能体应用暂未开放，已继续使用 CLI 登录")
+		return nil
+	case authLoginGuideManualCredentials:
+		clientID, clientSecret, err := promptAuthLoginManualCredentials()
+		if err != nil {
+			return err
+		}
+		authpkg.SetClientID(clientID)
+		authpkg.SetClientSecret(clientSecret)
+		if err := authpkg.SaveAppConfig(configDir, &authpkg.AppConfig{
+			ClientID:     clientID,
+			ClientSecret: authpkg.PlainSecret(clientSecret),
+		}); err != nil {
+			return apperrors.NewInternal(fmt.Sprintf("failed to persist app credentials: %v", err))
+		}
+		return nil
+	default:
+		return fmt.Errorf("未知操作: %s", action)
+	}
+}
+
+func promptAuthLoginManualCredentials() (string, string, error) {
+	var clientID, clientSecret string
+	nonEmpty := func(label string) func(string) error {
+		return func(value string) error {
+			if strings.TrimSpace(value) == "" {
+				return fmt.Errorf("%s 不能为空", label)
+			}
+			return nil
+		}
+	}
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("输入 AppKey").
+				Value(&clientID).
+				Validate(nonEmpty("AppKey")),
+			huh.NewInput().
+				Title("输入 AppSecret").
+				EchoMode(huh.EchoModePassword).
+				Value(&clientSecret).
+				Validate(nonEmpty("AppSecret")),
+		),
+	).WithTheme(authLoginHuhTheme())
+	if err := form.Run(); err != nil {
+		return "", "", fmt.Errorf("应用凭证输入中止: %w", err)
+	}
+	return strings.TrimSpace(clientID), strings.TrimSpace(clientSecret), nil
+}
+
+func selectLoginRecommendScopeMode() (pat.LoginRecommendScopeMode, error) {
+	choice := pat.LoginRecommendScopeRecommended
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[pat.LoginRecommendScopeMode]().
+				Title("选择授权范围").
+				Description("空格选择 回车确认").
+				Options(
+					huh.NewOption("推荐授权", pat.LoginRecommendScopeRecommended),
+					huh.NewOption("全部授权", pat.LoginRecommendScopeAll),
+				).
+				Value(&choice),
+		),
+	).WithTheme(authLoginHuhTheme())
+	if err := form.Run(); err != nil {
+		return "", fmt.Errorf("授权范围选择中止: %w", err)
+	}
+	return choice, nil
 }
 
 func newAuthLogoutCommand() *cobra.Command {
@@ -222,7 +411,7 @@ func newAuthLogoutCommand() *cobra.Command {
 			w := cmd.OutOrStdout()
 			fmt.Fprintln(w, "[OK] 已清除所有认证信息")
 			if !edition.Get().IsEmbedded {
-				fmt.Fprintln(w, "请运行 dws auth login 重新登录")
+				fmt.Fprintln(w, "请运行 dws auth login --recommend 重新登录")
 			}
 			return nil
 		},
@@ -277,18 +466,157 @@ func newAuthStatusCommand() *cobra.Command {
 				} else {
 					fmt.Fprintf(w, "%-16s%s\n", "状态:", "已登录 ✅")
 				}
+				if tokenData != nil {
+					if tokenData.IsRefreshTokenValid() {
+						fmt.Fprintf(w, "%-16s%s\n", "Refresh Token:", "有效 ✅")
+					} else {
+						fmt.Fprintf(w, "%-16s%s\n", "Refresh Token:", "缺失或已过期 ⚠️")
+					}
+				}
 				if updatedAt := authStatusUpdatedAt(tokenData); updatedAt != "" {
 					fmt.Fprintf(w, "%-16s%s\n", "有效期:", updatedAt)
 				}
 			} else {
 				fmt.Fprintf(w, "%-16s%s\n", "状态:", "未登录")
 				if !edition.Get().IsEmbedded {
-					fmt.Fprintln(w, "运行 dws auth login 进行登录")
+					fmt.Fprintln(w, "运行 dws auth login --recommend 进行登录")
 				}
 			}
 			return nil
 		},
 	}
+}
+
+func newAuthExportCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "export",
+		Short: "导出可迁移认证包",
+		Long: `导出包含 refresh token 与解密材料的认证包，便于在另一台 Linux 沙箱中导入。
+
+包内包含 ~/.local/share/dws-cli 加密 keychain 与 ~/.dws 必要配置，不含 token 明文。
+
+示例:
+  dws auth export -o dws-auth.tar.gz
+  dws auth export --base64 > dws-auth.b64`,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			output, err := cmd.Flags().GetString("output")
+			if err != nil {
+				return apperrors.NewInternal("failed to read --output")
+			}
+			asBase64, err := cmd.Flags().GetBool("base64")
+			if err != nil {
+				return apperrors.NewInternal("failed to read --base64")
+			}
+			output = strings.TrimSpace(output)
+			if !asBase64 && output == "" {
+				return apperrors.NewValidation("--output is required unless --base64 is used")
+			}
+			if !authpkg.PortableExportSupported() {
+				return apperrors.NewValidation(fmt.Sprintf(
+					"macOS 默认将 DEK 存在系统 Keychain，导出的包无法在其它机器解密；请设置 %s=1 后重新登录再导出",
+					keychain.DisableKeychainEnv,
+				))
+			}
+			if !authpkg.PortableAuthSourceReady() {
+				return apperrors.NewValidation("尚未登录，请先运行 dws auth login --recommend")
+			}
+
+			var bundle bytes.Buffer
+			if err := authpkg.ExportPortableAuthBundle(defaultConfigDir(), &bundle); err != nil {
+				return apperrors.NewInternal(fmt.Sprintf("failed to export auth bundle: %v", err))
+			}
+
+			if asBase64 {
+				payload := []byte(base64.StdEncoding.EncodeToString(bundle.Bytes()) + "\n")
+				if output == "" {
+					_, err := cmd.OutOrStdout().Write(payload)
+					return err
+				}
+				if err := helpers.AtomicWrite(output, payload, config.FilePerm); err != nil {
+					return apperrors.NewInternal(fmt.Sprintf("failed to write auth bundle: %v", err))
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "[OK] 已导出认证包: %s\n", output)
+				fmt.Fprintf(cmd.ErrOrStderr(), "认证包含敏感凭据，用完请删除: rm -P %s\n", output)
+				return nil
+			}
+
+			if err := helpers.AtomicWrite(output, bundle.Bytes(), config.FilePerm); err != nil {
+				return apperrors.NewInternal(fmt.Sprintf("failed to write auth bundle: %v", err))
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "[OK] 已导出认证包: %s\n", output)
+			fmt.Fprintf(cmd.ErrOrStderr(), "认证包含敏感凭据，用完请删除: rm -P %s\n", output)
+			return nil
+		},
+	}
+	cmd.Flags().StringP("output", "o", "", "认证包输出路径")
+	cmd.Flags().Bool("base64", false, "将认证包编码为 base64，便于复制粘贴")
+	return cmd
+}
+
+func newAuthImportCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "import",
+		Short: "导入可迁移认证包",
+		Long: `从 dws auth export 生成的 tar.gz 或 base64 文件恢复认证。
+
+导入后请运行 dws auth status 确认 refresh token 仍有效。
+
+示例:
+  dws auth import -i dws-auth.tar.gz
+  dws auth import -i dws-auth.b64 --base64`,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			input, err := cmd.Flags().GetString("input")
+			if err != nil {
+				return apperrors.NewInternal("failed to read --input")
+			}
+			input = strings.TrimSpace(input)
+			if input == "" {
+				return apperrors.NewValidation("--input is required")
+			}
+			asBase64, err := cmd.Flags().GetBool("base64")
+			if err != nil {
+				return apperrors.NewInternal("failed to read --base64")
+			}
+			force, err := cmd.Flags().GetBool("force")
+			if err != nil {
+				return apperrors.NewInternal("failed to read --force")
+			}
+
+			configDir := defaultConfigDir()
+			if !force && authpkg.PortableAuthTargetPopulated(configDir) {
+				return apperrors.NewValidation("检测到已有登录态，请使用 --force 确认覆盖")
+			}
+
+			payload, err := os.ReadFile(input)
+			if err != nil {
+				return apperrors.NewInternal(fmt.Sprintf("failed to read auth bundle: %v", err))
+			}
+			if asBase64 {
+				payload, err = base64.StdEncoding.DecodeString(strings.TrimSpace(string(payload)))
+				if err != nil {
+					return apperrors.NewValidation(fmt.Sprintf("invalid base64 auth bundle: %v", err))
+				}
+			}
+			report, err := authpkg.ImportPortableAuthBundle(configDir, bytes.NewReader(payload))
+			if err != nil {
+				return apperrors.NewInternal(fmt.Sprintf("failed to import auth bundle: %v", err))
+			}
+			if report.OSMismatch {
+				fmt.Fprintf(cmd.ErrOrStderr(), "警告: 认证包来自 %s，当前系统为 %s，请确认解密材料兼容\n", report.BundleOS, runtime.GOOS)
+			}
+			ResetRuntimeTokenCache()
+			clearCompatCache()
+			fmt.Fprintln(cmd.OutOrStdout(), "[OK] 已导入认证包")
+			fmt.Fprintln(cmd.OutOrStdout(), "请运行 dws auth status 验证登录状态")
+			return nil
+		},
+	}
+	cmd.Flags().StringP("input", "i", "", "认证包输入路径")
+	cmd.Flags().Bool("base64", false, "输入为 base64 编码的认证包")
+	cmd.Flags().Bool("force", false, "覆盖已有登录态")
+	return cmd
 }
 
 func newAuthExchangeCommand() *cobra.Command {
@@ -365,7 +693,7 @@ func newAuthResetCommand() *cobra.Command {
 			w := cmd.OutOrStdout()
 			fmt.Fprintln(w, "[OK] 认证信息已重置")
 			if !edition.Get().IsEmbedded {
-				fmt.Fprintln(w, "请运行 dws auth login 重新登录")
+				fmt.Fprintln(w, "请运行 dws auth login --recommend 重新登录")
 			}
 			return nil
 		},
@@ -406,6 +734,205 @@ func authLoginDisplayExpiry(data *authpkg.TokenData) string {
 	return ""
 }
 
+func selectLoginRecommendProducts(products []pat.LoginRecommendProduct) ([]string, error) {
+	if len(products) == 0 {
+		return nil, nil
+	}
+	selected := make([]string, 0, len(products))
+	options := make([]huh.Option[string], 0, len(products))
+	for _, product := range products {
+		code := strings.TrimSpace(product.ProductCode)
+		if code == "" {
+			continue
+		}
+		selected = append(selected, code)
+		options = append(options, huh.NewOption(loginRecommendProductLabel(product), code).Selected(true))
+	}
+	if len(options) == 0 {
+		return nil, nil
+	}
+	height := len(options)
+	if height > 15 {
+		height = 15
+	}
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewMultiSelect[string]().
+				Title("选择要授权的业务域").
+				Description("空格选择 回车确认").
+				Options(options...).
+				Height(height).
+				Value(&selected).
+				Validate(func(values []string) error {
+					if len(values) == 0 {
+						return fmt.Errorf("至少选择一个授权业务域")
+					}
+					return nil
+				}),
+		),
+	).WithTheme(authLoginHuhTheme())
+	if err := form.Run(); err != nil {
+		return nil, fmt.Errorf("授权业务域选择中止: %w", err)
+	}
+	return selected, nil
+}
+
+func authLoginHuhTheme() *huh.Theme {
+	t := huh.ThemeBase()
+
+	t.Form.Base = lipgloss.NewStyle().Foreground(authLoginInk)
+	t.FieldSeparator = lipgloss.NewStyle().SetString("\n")
+
+	t.Focused.Base = t.Focused.Base.BorderForeground(authLoginBrandBlue)
+	t.Focused.Card = t.Focused.Base
+	t.Focused.Title = lipgloss.NewStyle().Foreground(authLoginBrandBlue).Bold(true)
+	t.Focused.NoteTitle = t.Focused.Title.MarginBottom(1)
+	t.Focused.Description = authLoginMutedStyle()
+	t.Focused.ErrorIndicator = lipgloss.NewStyle().SetString(" *").Foreground(authLoginDanger)
+	t.Focused.ErrorMessage = lipgloss.NewStyle().SetString(" *").Foreground(authLoginDanger)
+	t.Focused.SelectSelector = lipgloss.NewStyle().SetString("› ").Foreground(authLoginBrandBlue).Bold(true)
+	t.Focused.MultiSelectSelector = t.Focused.SelectSelector
+	t.Focused.Option = lipgloss.NewStyle().Foreground(authLoginInk)
+	t.Focused.SelectedOption = lipgloss.NewStyle().Foreground(authLoginBrandBlue).Bold(true)
+	t.Focused.SelectedPrefix = lipgloss.NewStyle().SetString("● ").Foreground(authLoginBrandBlue)
+	t.Focused.UnselectedOption = lipgloss.NewStyle().Foreground(authLoginInk)
+	t.Focused.UnselectedPrefix = lipgloss.NewStyle().SetString("○ ").Foreground(authLoginMuted)
+	t.Focused.NextIndicator = lipgloss.NewStyle().SetString("→").Foreground(authLoginBrandBlue)
+	t.Focused.PrevIndicator = lipgloss.NewStyle().SetString("←").Foreground(authLoginMuted)
+	t.Focused.FocusedButton = lipgloss.NewStyle().
+		Foreground(lipgloss.AdaptiveColor{Light: "#FFFFFF", Dark: "#0B1220"}).
+		Background(authLoginBrandBlue).
+		Padding(0, 2).
+		Bold(true)
+	t.Focused.BlurredButton = lipgloss.NewStyle().
+		Foreground(authLoginInk).
+		Background(authLoginLine).
+		Padding(0, 2)
+	t.Focused.Next = t.Focused.FocusedButton
+	t.Focused.TextInput.Cursor = lipgloss.NewStyle().Foreground(authLoginBrandBlue)
+	t.Focused.TextInput.CursorText = lipgloss.NewStyle().Foreground(authLoginInk)
+	t.Focused.TextInput.Placeholder = authLoginMutedStyle()
+	t.Focused.TextInput.Prompt = lipgloss.NewStyle().Foreground(authLoginBrandBlue)
+	t.Focused.TextInput.Text = lipgloss.NewStyle().Foreground(authLoginInk)
+
+	t.Blurred = t.Focused
+	t.Blurred.Base = t.Focused.Base.BorderStyle(lipgloss.HiddenBorder()).BorderForeground(authLoginLine)
+	t.Blurred.Card = t.Blurred.Base
+	t.Blurred.Title = lipgloss.NewStyle().Foreground(authLoginInk)
+	t.Blurred.NoteTitle = t.Blurred.Title.MarginBottom(1)
+	t.Blurred.Description = authLoginMutedStyle()
+	t.Blurred.SelectSelector = lipgloss.NewStyle().SetString("  ")
+	t.Blurred.MultiSelectSelector = t.Blurred.SelectSelector
+	t.Blurred.SelectedOption = lipgloss.NewStyle().Foreground(authLoginInk)
+	t.Blurred.SelectedPrefix = lipgloss.NewStyle().SetString("● ").Foreground(authLoginBrandBlue)
+	t.Blurred.UnselectedOption = lipgloss.NewStyle().Foreground(authLoginMuted)
+	t.Blurred.UnselectedPrefix = lipgloss.NewStyle().SetString("○ ").Foreground(authLoginMuted)
+	t.Blurred.NextIndicator = lipgloss.NewStyle()
+	t.Blurred.PrevIndicator = lipgloss.NewStyle()
+	t.Blurred.TextInput.Prompt = lipgloss.NewStyle().Foreground(authLoginMuted)
+	t.Blurred.TextInput.Text = lipgloss.NewStyle().Foreground(authLoginInk)
+
+	t.Group.Title = t.Focused.Title
+	t.Group.Description = t.Focused.Description
+
+	t.Help.ShortKey = authLoginMutedStyle()
+	t.Help.ShortDesc = authLoginMutedStyle()
+	t.Help.ShortSeparator = authLoginMutedStyle()
+	t.Help.FullKey = authLoginMutedStyle()
+	t.Help.FullDesc = authLoginMutedStyle()
+	t.Help.FullSeparator = authLoginMutedStyle()
+	t.Help.Ellipsis = authLoginMutedStyle()
+
+	return t
+}
+
+func authLoginStatusLine(message string) string {
+	return fmt.Sprintf("%s %s",
+		lipgloss.NewStyle().Foreground(authLoginBrandBlue).Bold(true).Render("[OK]"),
+		lipgloss.NewStyle().Foreground(authLoginInk).Bold(true).Render(message),
+	)
+}
+
+func authLoginInfoLine(key, value string) string {
+	label := authLoginMutedStyle().Width(14).Render(key + ":")
+	return fmt.Sprintf("%s %s", label, value)
+}
+
+func authLoginMutedStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(authLoginMuted)
+}
+
+func authLoginShouldShowPostLoginTUI(cmd *cobra.Command, format string, recommend bool) bool {
+	return authLoginShouldUsePostLoginTUIModeForTerminal(cmd, format, recommend, authLoginInteractiveTerminal())
+}
+
+func authLoginShouldShowPostLoginTUIForTerminal(cmd *cobra.Command, format string, recommend bool, interactive bool) bool {
+	return authLoginShouldUsePostLoginTUIModeForTerminal(cmd, format, recommend, interactive)
+}
+
+func authLoginShouldUsePostLoginTUIMode(cmd *cobra.Command, format string, recommend bool) bool {
+	return authLoginShouldUsePostLoginTUIModeForTerminal(cmd, format, recommend, authLoginInteractiveTerminal())
+}
+
+func authLoginShouldUsePostLoginTUIModeForTerminal(cmd *cobra.Command, format string, recommend bool, interactive bool) bool {
+	if recommend || !interactive {
+		return false
+	}
+	return authLoginAllowsInteractiveDefault(cmd, format)
+}
+
+func authLoginShouldUseHumanAuthorizationMode(cmd *cobra.Command, format string, hasAuthorizationFlow bool) bool {
+	return authLoginShouldUseHumanAuthorizationModeForTerminal(cmd, format, hasAuthorizationFlow, authLoginInteractiveTerminal())
+}
+
+func authLoginShouldUseHumanAuthorizationModeForTerminal(cmd *cobra.Command, format string, hasAuthorizationFlow bool, interactive bool) bool {
+	if !hasAuthorizationFlow || !interactive {
+		return false
+	}
+	return authLoginAllowsInteractiveDefault(cmd, format)
+}
+
+func authLoginRecommendPlanSkipsInteractiveAuthorization(plan *pat.LoginRecommendPlan) bool {
+	if plan == nil {
+		return false
+	}
+	return plan.AllGranted || len(plan.Scopes) == 0
+}
+
+func authLoginAllowsInteractiveDefault(cmd *cobra.Command, format string) bool {
+	if cmd == nil || cmd.Root() == nil {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(format), "json") {
+		return true
+	}
+	flags := cmd.Root().PersistentFlags()
+	return !flags.Changed("format")
+}
+
+func loginRecommendProductLabel(product pat.LoginRecommendProduct) string {
+	name := strings.TrimSpace(product.ProductName)
+	if name == "" || name == product.ProductCode {
+		name = product.ProductCode
+	}
+	summary := strings.TrimSpace(product.Summary)
+	if summary != "" {
+		summary = " - " + clipRunes(summary, 42)
+	}
+	return fmt.Sprintf("%-10s %s%s", product.ProductCode, name, summary)
+}
+
+func clipRunes(value string, limit int) string {
+	if limit <= 0 {
+		return ""
+	}
+	runes := []rune(value)
+	if len(runes) <= limit {
+		return value
+	}
+	return string(runes[:limit]) + "..."
+}
+
 func clearCompatCache() {
 	store := cacheStoreFromEnv()
 	if store != nil {
@@ -426,10 +953,20 @@ func resolveAuthLoginConfig(cmd *cobra.Command) (authLoginConfig, error) {
 	if err != nil {
 		return authLoginConfig{}, apperrors.NewInternal("failed to read --force")
 	}
+	recommend, err := cmd.Flags().GetBool("recommend")
+	if err != nil {
+		return authLoginConfig{}, apperrors.NewInternal("failed to read --recommend")
+	}
+	yes := false
+	if cmd.Root() != nil {
+		yes, _ = cmd.Root().PersistentFlags().GetBool("yes")
+	}
 	return authLoginConfig{
-		Token:  strings.TrimSpace(token),
-		Force:  force,
-		Device: device,
+		Token:     strings.TrimSpace(token),
+		Force:     force,
+		Device:    device,
+		Recommend: recommend,
+		Yes:       yes,
 	}, nil
 }
 

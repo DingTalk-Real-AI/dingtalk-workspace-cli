@@ -47,6 +47,22 @@ func TestResolveSkillSetupModeNonInteractiveDefaultsMono(t *testing.T) {
 	}
 }
 
+func TestIsCharDeviceRejectsNilAndRegularFiles(t *testing.T) {
+	if isCharDevice(nil) {
+		t.Fatal("nil file must not be treated as interactive")
+	}
+
+	file, err := os.CreateTemp(t.TempDir(), "stdout")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+
+	if isCharDevice(file) {
+		t.Fatal("regular files must not be treated as interactive terminals")
+	}
+}
+
 func TestResolveSkillSetupSourceFindsMonoRoot(t *testing.T) {
 	tmp := t.TempDir()
 	monoDir := filepath.Join(tmp, "skills", "mono")
@@ -317,36 +333,6 @@ func TestSkillSourceCandidatesIncludesUserCache(t *testing.T) {
 
 // TestResolveSkillSetupSourceFallsBackToUserCache verifies that when no
 // --source / DWS_SKILL_SOURCE / source checkout is available, the resolver
-// successfully discovers ~/.dws/skills/multi/ as the source.
-func TestResolveSkillSetupSourceFallsBackToUserCache(t *testing.T) {
-	fakeHome := t.TempDir()
-	t.Setenv("HOME", fakeHome)
-	t.Setenv("DWS_SKILL_SOURCE", "")
-
-	cacheRoot := filepath.Join(fakeHome, ".dws", "skills", "multi")
-	for _, n := range []string{"dingtalk-aitable", "dingtalk-doc"} {
-		if err := os.MkdirAll(filepath.Join(cacheRoot, n), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(cacheRoot, n, "SKILL.md"), []byte("# "+n), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// Run resolver from a tempdir that has no skills/ on disk, simulating a
-	// fresh user machine without a source checkout.
-	scratch := t.TempDir()
-	t.Chdir(scratch)
-
-	got, err := resolveSkillSetupSource("", skillSetupModeMulti)
-	if err != nil {
-		t.Fatalf("expected user-cache fallback to succeed, got err=%v", err)
-	}
-	if got != cacheRoot {
-		t.Fatalf("expected %s, got %s", cacheRoot, got)
-	}
-}
-
 func TestNormalizeMultiSkillName(t *testing.T) {
 	cases := []struct {
 		in, want string

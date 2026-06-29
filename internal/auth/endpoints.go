@@ -96,7 +96,7 @@ const (
 	LogoutContinueURL = "https://login.dingtalk.com"
 
 	// MCP API endpoints for CLI authorization management.
-	DefaultMCPBaseURL    = "https://mcp.dingtalk.com"
+	DefaultMCPBaseURL    = config.DefaultMCPBaseURL
 	CLIAuthEnabledPath   = "/cli/cliAuthEnabled"
 	SuperAdminPath       = "/cli/superAdmin"
 	SendCliAuthApplyPath = "/cli/sendCliAuthApply"
@@ -131,13 +131,7 @@ func GetDeveloperSettingsURL() string {
 // 1. ~/.dws/mcp_url file content (for pre-release environment)
 // 2. Default value (https://mcp.dingtalk.com)
 func GetMCPBaseURL() string {
-	mcpURLPath := filepath.Join(getDefaultConfigDir(), "mcp_url")
-	if data, err := os.ReadFile(mcpURLPath); err == nil {
-		if url := strings.TrimSpace(string(data)); url != "" {
-			return url
-		}
-	}
-	return DefaultMCPBaseURL
+	return config.GetMCPBaseURL()
 }
 
 // Runtime overrides set via CLI flags (--client-id, --client-secret).
@@ -294,6 +288,11 @@ func getRuntimeCredentials() (clientID, clientSecret string) {
 	clientMu.RLock()
 	defer clientMu.RUnlock()
 	return runtimeClientID, runtimeClientSecret
+}
+
+func getCompleteRuntimeCredentials() (clientID, clientSecret string, ok bool) {
+	clientID, clientSecret = getRuntimeCredentials()
+	return clientID, clientSecret, strings.TrimSpace(clientID) != "" && strings.TrimSpace(clientSecret) != ""
 }
 
 // getDefaultConfigDir returns the default configuration directory.

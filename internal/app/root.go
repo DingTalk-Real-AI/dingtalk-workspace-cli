@@ -96,6 +96,7 @@ func Execute() (exitCode int) {
 		if executed == nil {
 			executed = root
 		}
+		err = rewordRequiredFlagError(err)
 		if isUnknownCommandError(err) {
 			executed.SetOut(os.Stderr)
 			_ = executed.Help()
@@ -114,9 +115,49 @@ func isUnknownCommandError(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "unknown command")
 }
 
+// rewordRequiredFlagError rewrites cobra's default missing-required-flag message
+// (`required flag(s) "email" not set`) into the wukong-aligned form
+// (`missing required flag(s): --email`). cobra's ValidateRequiredFlags returns
+// this error directly (it does not pass through FlagErrorFunc), so it is
+// normalised here. The substring "required flag" is preserved for compatibility
+// with existing assertions; flag names gain the "--" prefix and quotes are
+// dropped so error output matches hardcoded cmdutil.ValidateRequiredFlags.
+func rewordRequiredFlagError(err error) error {
+	if err == nil {
+		return err
+	}
+	const pfx = "required flag(s) "
+	const sfx = " not set"
+	msg := err.Error()
+	if !strings.HasPrefix(msg, pfx) || !strings.HasSuffix(msg, sfx) {
+		return err
+	}
+	mid := strings.TrimSuffix(strings.TrimPrefix(msg, pfx), sfx)
+	var flags []string
+	for _, part := range strings.Split(mid, ", ") {
+		if name := strings.Trim(strings.TrimSpace(part), "\""); name != "" {
+			flags = append(flags, "--"+name)
+		}
+	}
+	if len(flags) == 0 {
+		return err
+	}
+	return apperrors.NewValidation(fmt.Sprintf("missing required flag(s): %s", strings.Join(flags, ", ")))
+}
+
 // flagErrorWithSuggestions provides helpful suggestions for common flag mistakes.
+//
+// 所有 flag 解析错误都会在 message 末尾追加 "See '<CommandPath> --help' for usage."，
+// 与 docker / kubectl / gh / wukong CLI 的 UX 一致，方便用户/agent 复制完整命令查 help。
+// 装在 root 的 FlagErrorFunc 通过 cobra 的 parent fallback 机制覆盖全命令树
+// （cobra.Command.FlagErrorFunc 沿 c.parent 递归向上查找）。
 func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 	errMsg := err.Error()
+	// 尾部 hint：换行 + See '...' for usage.
+	// JSON 输出时 \n 会被序列化为字面 \n，文本输出时换行；
+	// 无论哪种格式，子串 "--help' for usage." 都可被检索到。
+	tail := fmt.Sprintf("\nSee '%s --help' for usage.", cmd.CommandPath())
+	msgWithTail := errMsg + tail
 
 	// Common flag aliases and suggestions
 	suggestions := map[string]string{
@@ -135,7 +176,7 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 	for flag, suggestion := range suggestions {
 		if strings.Contains(errMsg, "unknown flag: "+flag) {
 			return apperrors.NewValidation(
-				errMsg,
+				msgWithTail,
 				apperrors.WithHint(suggestion),
 				apperrors.WithReason("unknown_flag"),
 				apperrors.WithCause(err),
@@ -149,7 +190,7 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 		fix := cmdutil.SuggestFlagFix(cmd, err)
 		if fix.Suggestion != "" {
 			return apperrors.NewValidation(
-				errMsg,
+				msgWithTail,
 				apperrors.WithHint(fix.Suggestion),
 				apperrors.WithReason("unknown_flag"),
 				apperrors.WithCause(err),
@@ -159,7 +200,10 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 		}
 	}
 
-	return err
+	// Fallback：未命中已知别名 / SuggestFlagFix 未给建议的 flag 解析错误
+	// （missing required / ambiguous / unknown shorthand 等），仍包尾部 hint，
+	// 行为对齐 wukong / docker / kubectl。
+	return fmt.Errorf("%s%s", errMsg, tail)
 }
 
 func printExecutionError(root *cobra.Command, stdout, stderr io.Writer, err error) error {
@@ -310,12 +354,14 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 	genSkillsCmd.Hidden = true
 	mcpCmd := newMCPCommand(rootCtx, loader, runner, engine)
 	mcpCmd.Hidden = true
+	patCaller := newToolCallerAdapter(runner, flags)
 
 	utilityCommands := []*cobra.Command{
-		newAuthCommand(),
+		newAuthCommand(patCaller),
 		newAPICommand(flags),
 		newSkillCommand(),
 		newCacheCommand(),
+		newCatalogCommand(loader),
 		newConfigCommand(),
 		newDoctorCommand(),
 		newEventCommand(),
@@ -342,7 +388,6 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 	}
 
 	// PAT authorization commands (open-source core)
-	patCaller := newToolCallerAdapter(runner, flags)
 	pat.RegisterCommands(root, patCaller)
 
 	if fn := edition.Get().RegisterExtraCommands; fn != nil {
@@ -360,8 +405,8 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 	return root
 }
 
-func newAuthCommand() *cobra.Command {
-	return buildAuthCommand()
+func newAuthCommand(patCaller edition.ToolCaller) *cobra.Command {
+	return buildAuthCommand(patCaller)
 }
 
 func newSkillCommand() *cobra.Command {
@@ -462,7 +507,7 @@ func newCacheCommand() *cobra.Command {
 			if err != nil {
 				return apperrors.NewDiscovery(fmt.Sprintf("cache refresh: fetch server list failed: %v", err))
 			}
-			servers := market.NormalizeServers(resp, "live_market")
+			servers := market.NormalizeServersForBaseURL(resp, "live_market", registryDiscoveryBaseURL())
 			_ = store.SaveRegistry(service.CachePartition(), cache.RegistrySnapshot{Servers: servers})
 
 			selected := selectServersForProduct(servers, product)
@@ -584,7 +629,7 @@ func newVersionCommand() *cobra.Command {
 }
 
 func newSchemaCommand(loader cli.CatalogLoader) *cobra.Command {
-	return cli.NewSchemaCommand(loader)
+	return cli.NewSchemaCommand(loader, newHelperToolFetcher())
 }
 
 func newGenerateSkillsCommand() *cobra.Command {
@@ -670,8 +715,76 @@ func newGenerateSkillsCommand() *cobra.Command {
 	return cmd
 }
 
+// buildMCPCommandFn is a test seam for newMCPCommand so a panic in the
+// catalog-driven canonical build can be simulated without crafting a
+// poisoned on-disk cache.
+var buildMCPCommandFn = cli.NewMCPCommand
+
+// newMCPCommand builds the canonical `dws mcp` tree, self-healing a poisoned
+// cache when the build panics and degrading to an inert stub if that also
+// fails.
+//
+// Why this guard exists: the canonical tree is assembled from cached catalog
+// data BEFORE the legacy command build and before Cobra dispatches anything,
+// so a panic here (e.g. a tool schema property named after the reserved
+// --params flag, as cached during the 1.0.32 incident) used to abort every
+// invocation — including `dws cache refresh` and `dws upgrade` — and was NOT
+// covered by the legacy-path guards (#447/#452). Same two-staged recovery as
+// buildEnvelopeCommandsSafe: quarantine the partition, retry once against a
+// fresh fetch, then degrade with a `dws cache refresh` hint.
 func newMCPCommand(ctx context.Context, loader cli.CatalogLoader, runner executor.Runner, engine *pipeline.Engine) *cobra.Command {
-	return cli.NewMCPCommand(ctx, loader, runner, engine)
+	cmd, panicked := tryBuildMCPCommand(ctx, loader, runner, engine)
+	if panicked == nil {
+		return cmd
+	}
+	slog.Error("newMCPCommand: canonical command build panicked", "panic", panicked)
+
+	quarantined, qErr := cacheStoreFromEnv().QuarantinePartition(editionPartition())
+	if qErr != nil {
+		slog.Error("newMCPCommand: failed to quarantine discovery cache", "error", qErr)
+	}
+	if quarantined != "" {
+		fmt.Fprintf(os.Stderr,
+			"Warning: building canonical commands from the local discovery cache failed: %v\n"+
+				"The cached discovery data was moved to %s; rebuilding from a fresh fetch...\n",
+			panicked, quarantined)
+		cmd, panicked = tryBuildMCPCommand(ctx, loader, runner, engine)
+		if panicked == nil {
+			fmt.Fprintln(os.Stderr, "Canonical commands rebuilt successfully.")
+			return cmd
+		}
+		slog.Error("newMCPCommand: rebuild after cache quarantine panicked again, degrading to a stub", "panic", panicked)
+	}
+
+	fmt.Fprintf(os.Stderr,
+		"Warning: building canonical commands from the local discovery cache failed: %v\n"+
+			"The 'dws mcp' surface is temporarily unavailable; other commands still work.\n"+
+			"Run 'dws cache refresh' to rebuild the cache.\n", panicked)
+	buildErr := apperrors.NewInternal(fmt.Sprintf("canonical command build failed: %v; run 'dws cache refresh'", panicked))
+	stub := &cobra.Command{
+		Use:               "mcp",
+		Short:             "Canonical MCP-derived CLI surface (unavailable)",
+		Hidden:            true,
+		Args:              cobra.ArbitraryArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return buildErr
+		},
+	}
+	return stub
+}
+
+// tryBuildMCPCommand runs one attempt of the canonical build, converting a
+// panic into a return value so the caller can decide between self-heal and
+// degradation.
+func tryBuildMCPCommand(ctx context.Context, loader cli.CatalogLoader, runner executor.Runner, engine *pipeline.Engine) (cmd *cobra.Command, panicked any) {
+	defer func() {
+		if r := recover(); r != nil {
+			cmd = nil
+			panicked = r
+		}
+	}()
+	return buildMCPCommandFn(ctx, loader, runner, engine), nil
 }
 
 // hideNonDirectRuntimeCommands marks top-level product commands as hidden
@@ -1496,22 +1609,38 @@ func registerStdioServer(p *plugin.Plugin, sc plugin.StdioServerClient, runner e
 }
 
 // discoverStdioTools performs the blocking Initialize + ListTools handshake
-// on a stdio MCP subprocess. Returns nil on any error (logged at Warn level).
+// on a stdio MCP subprocess. Returns nil on any error (logged at Debug level).
 // The default 2s budget comfortably accommodates Python/Node runtimes whose
 // interpreter + dependency load dominates the first response. Operators with
 // heavier startup chains can relax further via DWS_PLUGIN_COLD_TIMEOUT.
+//
+// A handshake failure here is an EXPECTED, benign outcome for an optional local
+// plugin: e.g. the conference plugin reports "本地服务未就绪" whenever the
+// DingTalk desktop client isn't running, which is the common case for anyone
+// not actively recording a meeting. Discovery simply yields no tools and the
+// run proceeds — commands that ship toolOverrides still register up-front via
+// registerStdioServerFromOverlay (Phase A), so availability is unaffected.
+//
+// These run during command-tree construction (NewRootCommandWithEngine), which
+// happens BEFORE PersistentPreRunE applies --debug/--verbose via
+// configureLogLevel. So a Warn here printed to stderr on EVERY invocation
+// regardless of flags, polluting output and misleading callers into treating it
+// as the cause of an unrelated command error (e.g. an auth or PARAM_ERROR from a
+// completely different server). Logging at Debug keeps the discovery miss out of
+// normal output; surfacing it would require configuring the log level before the
+// tree is built, which we deliberately avoid this close to release.
 func discoverStdioTools(p *plugin.Plugin, sc plugin.StdioServerClient, timeouts pluginColdTimeouts) []transport.ToolDescriptor {
 	ctx, cancel := context.WithTimeout(context.Background(), timeouts.stdio)
 	defer cancel()
 
 	if _, err := sc.Client.Initialize(ctx); err != nil {
-		slog.Warn("plugin: stdio initialize failed",
+		slog.Debug("plugin: stdio initialize failed",
 			"plugin", p.Manifest.Name, "server", sc.Key, "error", err)
 		return nil
 	}
 	toolsResult, err := sc.Client.ListTools(ctx)
 	if err != nil {
-		slog.Warn("plugin: stdio ListTools failed",
+		slog.Debug("plugin: stdio ListTools failed",
 			"plugin", p.Manifest.Name, "server", sc.Key, "error", err)
 		return nil
 	}

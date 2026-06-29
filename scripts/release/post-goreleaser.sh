@@ -245,14 +245,22 @@ sign_darwin_archives() {
     fi
     sign_one_darwin_binary "$bin"
 
-    # Repack deterministically: sorted file order, zeroed owner/mtime so
-    # rerunning the script produces byte-identical archives (and sha256s).
-    (
-      cd "$stage" \
-        && tar --sort=name --owner=0 --group=0 --numeric-owner \
-              --mtime='2020-01-01 00:00Z' \
-              -czf "$archive.new" .
-    )
+    # Repack deterministically when GNU tar is available. macOS ships BSD tar,
+    # which lacks --sort/--mtime/--owner; fall back to a portable archive there
+    # so local package builds still complete.
+    if command -v gtar >/dev/null 2>&1; then
+      (
+        cd "$stage" \
+          && gtar --sort=name --owner=0 --group=0 --numeric-owner \
+                --mtime='2020-01-01 00:00Z' \
+                -czf "$archive.new" .
+      )
+    else
+      (
+        cd "$stage" \
+          && COPYFILE_DISABLE=1 tar -czf "$archive.new" .
+      )
+    fi
     mv "$archive.new" "$archive"
 
     update_checksum_entry "$name" "$(sha256_file "$archive")"

@@ -90,7 +90,7 @@ func degradedHint(reason CatalogDegradedReason, serverCount int) string {
 		if embedded {
 			return "无法连接 MCP 市场，请检查网络"
 		}
-		return "无法连接 MCP 市场 (mcp.dingtalk.com)，请检查网络"
+		return "无法连接 MCP 市场，请检查网络"
 	case DegradedRuntimeAllFailed:
 		if embedded {
 			return fmt.Sprintf("已发现 %d 个服务但连接全部失败，请稍后重试", serverCount)
@@ -113,7 +113,7 @@ const (
 	CatalogFixtureEnv    = "DWS_CATALOG_FIXTURE"
 	CacheDirEnv          = "DWS_CACHE_DIR"
 	PluginColdTimeoutEnv = "DWS_PLUGIN_COLD_TIMEOUT"
-	DefaultMarketBaseURL = "https://mcp.dingtalk.com"
+	DefaultMarketBaseURL = config.DefaultMCPBaseURL
 
 	// defaultDiscoveryTimeout bounds the time spent on live registry discovery.
 	// Tightened to 4s so a slow/unreachable discovery endpoint cannot block
@@ -203,7 +203,7 @@ func (l EnvironmentLoader) Load(ctx context.Context) (ir.Catalog, error) {
 	// eliminating the historical split where the command tree came from
 	// Wukong Portal while runtime endpoint resolution silently read the
 	// open-source Market cache (see fix-wukong-endpoint-partition plan).
-	baseURL := DefaultMarketBaseURL
+	baseURL := config.GetMCPBaseURL()
 	if editionURL := strings.TrimSpace(edition.Get().DiscoveryURL); editionURL != "" {
 		baseURL = editionURL
 	}
@@ -279,7 +279,7 @@ func (l EnvironmentLoader) Load(ctx context.Context) (ir.Catalog, error) {
 	// accepted subset. See plan fix-wukong-discovery-missing-servers Phase 4.3.
 	logDiscoveryWarnings(response.Metadata.Warnings)
 
-	servers := market.NormalizeServers(response, "live_market")
+	servers := market.NormalizeServersForBaseURL(response, "live_market", baseURL)
 	_ = store.SaveRegistry(partition, cache.RegistrySnapshot{Servers: servers})
 
 	changedKeys := cache.ChangedServerKeysByUpdatedAt(cached.Registry.Servers, servers)

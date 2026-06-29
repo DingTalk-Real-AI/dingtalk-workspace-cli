@@ -16,6 +16,7 @@ package helpers
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -81,6 +82,7 @@ func (reportHandler) Command(runner executor.Runner) *cobra.Command {
 		newReportListCommand(runner),
 		newReportStatsCommand(runner),
 		newReportSentCommand(runner),
+		newReportCreatedCommand(runner),
 	)
 	return root
 }
@@ -316,49 +318,7 @@ func newReportListCommand(runner executor.Runner) *cobra.Command {
   dws report list --start "2026-03-10 00:00:00" --end "2026-03-10 23:59:59" --cursor 0 --size 20`,
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			startStr, _ := cmd.Flags().GetString("start")
-			endStr, _ := cmd.Flags().GetString("end")
-
-			startMs, err := parseFlexTimeToMillis("start", startStr)
-			if err != nil {
-				return err
-			}
-			endMs, err := parseFlexTimeToMillis("end", endStr)
-			if err != nil {
-				return err
-			}
-			if err := validateTimeRange(startMs, endMs); err != nil {
-				return err
-			}
-
-			// cursor defaults to 0, size defaults to 20
-			cursor, _ := cmd.Flags().GetInt("cursor")
-			size, _ := cmd.Flags().GetInt("size")
-			if v, _ := cmd.Flags().GetInt("limit"); v > 0 && !cmd.Flags().Changed("size") {
-				size = v
-			}
-
-			params := map[string]any{
-				"startTime": float64(startMs),
-				"endTime":   float64(endMs),
-				"cursor":    float64(cursor),
-				"size":      float64(size),
-			}
-
-			if commandDryRun(cmd) {
-				return writeCommandPayload(cmd, executor.NewHelperInvocation(
-					cobracmd.LegacyCommandPath(cmd), "report", "get_received_report_list", params,
-				))
-			}
-			result, err := runner.Run(cmd.Context(), executor.NewHelperInvocation(
-				cobracmd.LegacyCommandPath(cmd), "report", "get_received_report_list", params,
-			))
-			if err != nil {
-				return err
-			}
-			return writeCommandPayload(cmd, result)
-		},
+		RunE:              withReportDeprecationWarning("list", "inbox list", reportListRunE(runner)),
 	}
 	cmd.Flags().String("start", "", "开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00) (必填)")
 	cmd.Flags().String("end", "", "结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00) (必填)")
@@ -419,83 +379,7 @@ func newReportSentCommand(runner executor.Runner) *cobra.Command {
   dws report sent --template-name "日报"`,
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// cursor defaults to 0, size defaults to 20
-			cursor, _ := cmd.Flags().GetInt("cursor")
-			size, _ := cmd.Flags().GetInt("size")
-			if v, _ := cmd.Flags().GetInt("limit"); v > 0 && !cmd.Flags().Changed("size") {
-				size = v
-			}
-
-			params := map[string]any{
-				"cursor": float64(cursor),
-				"size":   float64(size),
-			}
-
-			// Default time range: last 30 days
-			now := time.Now()
-			startDefault := now.AddDate(0, 0, -30).Truncate(24 * time.Hour).Format(time.RFC3339)
-			endDefault := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 0, now.Location()).Format(time.RFC3339)
-
-			startStr, _ := cmd.Flags().GetString("start")
-			if startStr == "" {
-				startStr = startDefault
-			}
-			endStr, _ := cmd.Flags().GetString("end")
-			if endStr == "" {
-				endStr = endDefault
-			}
-
-			startMs, err := parseFlexTimeToMillis("start", startStr)
-			if err != nil {
-				return err
-			}
-			params["startTime"] = float64(startMs)
-
-			endMs, err := parseFlexTimeToMillis("end", endStr)
-			if err != nil {
-				return err
-			}
-			params["endTime"] = float64(endMs)
-
-			if err := validateTimeRange(startMs, endMs); err != nil {
-				return err
-			}
-
-			// Optional modified time filters
-			if v, _ := cmd.Flags().GetString("modified-start"); v != "" {
-				ms, err := parseFlexTimeToMillis("modified-start", v)
-				if err != nil {
-					return err
-				}
-				params["modifiedStartTime"] = float64(ms)
-			}
-			if v, _ := cmd.Flags().GetString("modified-end"); v != "" {
-				ms, err := parseFlexTimeToMillis("modified-end", v)
-				if err != nil {
-					return err
-				}
-				params["modifiedEndTime"] = float64(ms)
-			}
-
-			// Optional template name filter
-			if v, _ := cmd.Flags().GetString("template-name"); v != "" {
-				params["report_template_name"] = v
-			}
-
-			if commandDryRun(cmd) {
-				return writeCommandPayload(cmd, executor.NewHelperInvocation(
-					cobracmd.LegacyCommandPath(cmd), "report", "get_send_report_list", params,
-				))
-			}
-			result, err := runner.Run(cmd.Context(), executor.NewHelperInvocation(
-				cobracmd.LegacyCommandPath(cmd), "report", "get_send_report_list", params,
-			))
-			if err != nil {
-				return err
-			}
-			return writeCommandPayload(cmd, result)
-		},
+		RunE:              withReportDeprecationWarning("sent", "outbox list", reportSentRunE(runner)),
 	}
 	cmd.Flags().Int("cursor", 0, "分页游标，首次传 0 (默认 0)")
 	cmd.Flags().Int("size", 20, "每页条数，最大 20 (默认 20)")
@@ -508,6 +392,241 @@ func newReportSentCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("template-name", "", "日志模板名称 (可选，不传查全部)")
 	preferLegacyLeaf(cmd)
 	return cmd
+}
+
+// ── deprecation wrapper ────────────────────────────────────
+// withReportDeprecationWarning prints a stderr warning that the legacy command
+// is deprecated and then invokes the underlying RunE unchanged. The CLI exit
+// code, stdout payload, and side effects remain identical to the canonical
+// new-path command — only stderr gains the `[deprecated]` notice.
+//
+// Pair with the deprecated leaves wired in `(reportHandler).Command` and the
+// post-merge `AttachReportLegacyInboxAlias` hook so every legacy invocation
+// path carries the same notice.
+func withReportDeprecationWarning(oldPath, newPath string, run func(*cobra.Command, []string) error) func(*cobra.Command, []string) error {
+	return func(cmd *cobra.Command, args []string) error {
+		w := cmd.ErrOrStderr()
+		if w == nil {
+			w = os.Stderr
+		}
+		fmt.Fprintf(w, "[deprecated] `dws report %s` 已废弃，将在后续版本中移除。请改用 `dws report %s`。\n", oldPath, newPath)
+		return run(cmd, args)
+	}
+}
+
+// reportSentRunE implements the canonical "list reports I have sent" handler.
+// Extracted so that the legacy `sent` and `created` aliases can share one body
+// and each wrap it independently with the deprecation notice.
+func reportSentRunE(runner executor.Runner) func(*cobra.Command, []string) error {
+	return func(cmd *cobra.Command, args []string) error {
+		// cursor defaults to 0, size defaults to 20
+		cursor, _ := cmd.Flags().GetInt("cursor")
+		size, _ := cmd.Flags().GetInt("size")
+		if v, _ := cmd.Flags().GetInt("limit"); v > 0 && !cmd.Flags().Changed("size") {
+			size = v
+		}
+
+		params := map[string]any{
+			"cursor": float64(cursor),
+			"size":   float64(size),
+		}
+
+		// Default time range: last 30 days
+		now := time.Now()
+		startDefault := now.AddDate(0, 0, -30).Truncate(24 * time.Hour).Format(time.RFC3339)
+		endDefault := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 0, now.Location()).Format(time.RFC3339)
+
+		startStr, _ := cmd.Flags().GetString("start")
+		if startStr == "" {
+			startStr = startDefault
+		}
+		endStr, _ := cmd.Flags().GetString("end")
+		if endStr == "" {
+			endStr = endDefault
+		}
+
+		startMs, err := parseFlexTimeToMillis("start", startStr)
+		if err != nil {
+			return err
+		}
+		params["startTime"] = float64(startMs)
+
+		endMs, err := parseFlexTimeToMillis("end", endStr)
+		if err != nil {
+			return err
+		}
+		params["endTime"] = float64(endMs)
+
+		if err := validateTimeRange(startMs, endMs); err != nil {
+			return err
+		}
+
+		// Optional modified time filters
+		if v, _ := cmd.Flags().GetString("modified-start"); v != "" {
+			ms, err := parseFlexTimeToMillis("modified-start", v)
+			if err != nil {
+				return err
+			}
+			params["modifiedStartTime"] = float64(ms)
+		}
+		if v, _ := cmd.Flags().GetString("modified-end"); v != "" {
+			ms, err := parseFlexTimeToMillis("modified-end", v)
+			if err != nil {
+				return err
+			}
+			params["modifiedEndTime"] = float64(ms)
+		}
+
+		// Optional template name filter
+		if v, _ := cmd.Flags().GetString("template-name"); v != "" {
+			params["report_template_name"] = v
+		}
+
+		if commandDryRun(cmd) {
+			return writeCommandPayload(cmd, executor.NewHelperInvocation(
+				cobracmd.LegacyCommandPath(cmd), "report", "get_send_report_list", params,
+			))
+		}
+		result, err := runner.Run(cmd.Context(), executor.NewHelperInvocation(
+			cobracmd.LegacyCommandPath(cmd), "report", "get_send_report_list", params,
+		))
+		if err != nil {
+			return err
+		}
+		return writeCommandPayload(cmd, result)
+	}
+}
+
+// reportListRunE implements the canonical "list reports I have received" handler.
+// Extracted so the legacy `list` and `inbox` aliases can share one body and
+// each wrap it independently with the deprecation notice. The post-merge
+// inbox-group hook (AttachReportLegacyInboxAlias) also reuses this body.
+func reportListRunE(runner executor.Runner) func(*cobra.Command, []string) error {
+	return func(cmd *cobra.Command, args []string) error {
+		startStr, _ := cmd.Flags().GetString("start")
+		endStr, _ := cmd.Flags().GetString("end")
+
+		startMs, err := parseFlexTimeToMillis("start", startStr)
+		if err != nil {
+			return err
+		}
+		endMs, err := parseFlexTimeToMillis("end", endStr)
+		if err != nil {
+			return err
+		}
+		if err := validateTimeRange(startMs, endMs); err != nil {
+			return err
+		}
+
+		// cursor defaults to 0, size defaults to 20
+		cursor, _ := cmd.Flags().GetInt("cursor")
+		size, _ := cmd.Flags().GetInt("size")
+		if v, _ := cmd.Flags().GetInt("limit"); v > 0 && !cmd.Flags().Changed("size") {
+			size = v
+		}
+
+		params := map[string]any{
+			"startTime": float64(startMs),
+			"endTime":   float64(endMs),
+			"cursor":    float64(cursor),
+			"size":      float64(size),
+		}
+
+		if commandDryRun(cmd) {
+			return writeCommandPayload(cmd, executor.NewHelperInvocation(
+				cobracmd.LegacyCommandPath(cmd), "report", "get_received_report_list", params,
+			))
+		}
+		result, err := runner.Run(cmd.Context(), executor.NewHelperInvocation(
+			cobracmd.LegacyCommandPath(cmd), "report", "get_received_report_list", params,
+		))
+		if err != nil {
+			return err
+		}
+		return writeCommandPayload(cmd, result)
+	}
+}
+
+// ── created (deprecated alias for outbox list) ─────────────
+// newReportCreatedCommand registers `dws report created` as a deprecated
+// alias of `dws report outbox list`. Behaves byte-for-byte like `report sent`
+// on stdout — the only difference is the deprecation notice on stderr names
+// the user's invocation path so logs make it obvious which alias was used.
+func newReportCreatedCommand(runner executor.Runner) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:               "created",
+		Short:             "[deprecated] 已废弃，请改用 `dws report outbox list`",
+		Example:           "  dws report created --cursor 0 --size 20\n  dws report created --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\"",
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE:              withReportDeprecationWarning("created", "outbox list", reportSentRunE(runner)),
+	}
+	cmd.Flags().Int("cursor", 0, "分页游标，首次传 0 (默认 0)")
+	cmd.Flags().Int("size", 20, "每页条数，最大 20 (默认 20)")
+	cmd.Flags().Int("limit", 0, "--size 的别名")
+	_ = cmd.Flags().MarkHidden("limit")
+	cmd.Flags().String("start", "", "创建开始时间 ISO-8601 (默认最近 30 天)")
+	cmd.Flags().String("end", "", "创建结束时间 ISO-8601 (默认最近 30 天)")
+	cmd.Flags().String("modified-start", "", "修改开始时间 ISO-8601 (可选)")
+	cmd.Flags().String("modified-end", "", "修改结束时间 ISO-8601 (可选)")
+	cmd.Flags().String("template-name", "", "日志模板名称 (可选，不传查全部)")
+	preferLegacyLeaf(cmd)
+	return cmd
+}
+
+// AttachReportLegacyInboxAlias finds the dynamic-built `report inbox` group
+// in the merged command tree and turns it into a dual-role command: when
+// invoked with flags (and no subcommand), it executes the canonical inbox
+// list handler with a deprecation notice on stderr. Sub-command invocation
+// (e.g. `report inbox list ...`) keeps working unchanged.
+//
+// Why a post-merge hook: the envelope publishes `inbox` as a group whose
+// only child is `list`. Hardcoded helpers cannot graft a same-named leaf in
+// (MergeHardcodedLeaves rejects helper-leaf vs envelope-group as a shape
+// mismatch), so we instead enrich the existing group's flags and RunE in
+// place. The `runner` is the same executor that the helper leaves use,
+// keeping behaviour identical to `report list` / `report inbox list`.
+func AttachReportLegacyInboxAlias(commands []*cobra.Command, runner executor.Runner) {
+	for _, top := range commands {
+		if top == nil || top.Name() != "report" {
+			continue
+		}
+		var inbox *cobra.Command
+		for _, child := range top.Commands() {
+			if child != nil && child.Name() == "inbox" {
+				inbox = child
+				break
+			}
+		}
+		if inbox == nil {
+			return
+		}
+		// Inject the same flag surface used by `report list` so the
+		// legacy invocation `report inbox --start ... --end ...` parses.
+		// Skip flags that already exist (envelope may have registered
+		// some on the group) to avoid duplicate-flag panics.
+		registerIfAbsent := func(name string, register func()) {
+			if inbox.Flags().Lookup(name) == nil {
+				register()
+			}
+		}
+		registerIfAbsent("start", func() { inbox.Flags().String("start", "", "开始时间 ISO-8601 (必填)") })
+		registerIfAbsent("end", func() { inbox.Flags().String("end", "", "结束时间 ISO-8601 (必填)") })
+		registerIfAbsent("cursor", func() { inbox.Flags().Int("cursor", 0, "分页游标，首次传 0 (默认 0)") })
+		registerIfAbsent("size", func() { inbox.Flags().Int("size", 20, "每页条数 (默认 20)") })
+		registerIfAbsent("limit", func() {
+			inbox.Flags().Int("limit", 0, "--size 的别名")
+			_ = inbox.Flags().MarkHidden("limit")
+		})
+		registerIfAbsent("sender-user-ids", func() {
+			inbox.Flags().StringSlice("sender-user-ids", nil, "发送人 staffId 列表，逗号分隔 (可选)")
+		})
+		inbox.RunE = withReportDeprecationWarning("inbox", "inbox list", reportListRunE(runner))
+		// Group default Args was cobra.NoArgs which rejects positional args; we
+		// keep that constraint — the legacy path is `report inbox --start ...`
+		// with flags only, no positional arguments.
+		return
+	}
 }
 
 // ── helpers ────────────────────────────────────────────────

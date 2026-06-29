@@ -103,15 +103,15 @@ func NewMCPCommand(ctx context.Context, loader CatalogLoader, runner executor.Ru
 	return cmd
 }
 
-func NewSchemaCommand(loader CatalogLoader) *cobra.Command {
+func NewSchemaCommand(loader CatalogLoader, helperTools HelperToolFetcher) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "schema [path]",
 		Short: "查看 MCP 工具 Schema (产品列表 / 工具参数)",
 		Long: `查看已发现的 MCP 产品和工具的 Schema 元数据。
 
 不带参数时列出所有产品及其工具数量；带路径时输出该工具的完整
-输入 Schema（JSON Schema 格式）、输出 Schema、MCP 注解和 CLI
-层的 flag overlay（alias/transform/env_default）。
+输入 Schema（JSON Schema 格式）、输出 Schema、授权元数据、MCP
+注解和 CLI 层的 flag overlay（alias/transform/env_default）。
 
 路径支持三种写法：
   product.rpc_name           规范路径 (e.g. ding.send_ding_message)
@@ -123,8 +123,15 @@ func NewSchemaCommand(loader CatalogLoader) *cobra.Command {
   dws schema ding.send_ding_message         # 规范路径
   dws schema "ding message send"            # CLI 路径（空格）
   dws schema --cli-path "ding message send" # 同上，显式 flag（脚本友好）
+  dws schema calendar.create_event --jq '.tool.auth'
   dws schema -f pretty ding.send_ding_message  # ANSI 彩色分区展示
-  dws schema --jq '.tool.flag_overlay'      # 只看 CLI overlay`,
+  dws schema --jq '.tool.flag_overlay'      # 只看 CLI overlay
+
+helper-only 命令组（如 dev，不走服务发现）也支持查询，schema 从 op-app
+MCP 服务端实时拉取，输出对齐 gws 的扁平格式（parameters 内联 required，
+键为 CLI flag）：
+  dws schema "dev app robot config"         # 实时 MCP 参数 schema（gws-flat）
+  dws schema "dev app"                      # 列出该分组下的子命令`,
 		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -136,6 +143,29 @@ func NewSchemaCommand(loader CatalogLoader) *cobra.Command {
 				}
 				args = []string{cliPath}
 			}
+
+			// Helper-only subtrees (e.g. `dws dev ...`) aren't in the discovery
+			// catalog; their schema CONTENT is fetched LIVE from the helper's
+			// pinned MCP server (op-app) and rendered in the gws-flat shape, so
+			// `dws schema "dev app robot config"` answers without touching
+			// discovery. Only the `dev` root claims this path; everything else
+			// falls through to the catalog below.
+			if len(args) > 0 {
+				payload, ok, err := renderHelperSchema(cmd.Context(), cmd.Root(), args[0], helperTools)
+				if err != nil {
+					return err
+				}
+				if ok {
+					return output.WriteFiltered(
+						cmd.OutOrStdout(),
+						output.ResolveFormat(cmd, output.FormatJSON),
+						payload,
+						output.ResolveFields(cmd),
+						output.ResolveJQ(cmd),
+					)
+				}
+			}
+
 			catalog, err := loader.Load(cmd.Context())
 			if err != nil {
 				var degraded *CatalogDegraded
@@ -163,6 +193,17 @@ func NewSchemaCommand(loader CatalogLoader) *cobra.Command {
 			payload, err := schemaPayload(catalog, args)
 			if err != nil {
 				return err
+			}
+
+			// Append helper-only subtrees (e.g. `dev`) to the no-arg product
+			// listing so browsing all products also surfaces helper commands.
+			if len(args) == 0 {
+				if helpers := helperProductSummaries(cmd.Root()); len(helpers) > 0 {
+					if products, ok := payload["products"].([]map[string]any); ok {
+						payload["products"] = append(products, helpers...)
+						payload["count"] = len(payload["products"].([]map[string]any))
+					}
+				}
 			}
 
 			return output.WriteFiltered(
@@ -222,9 +263,27 @@ func newProductCommand(product ir.CanonicalProduct, runner executor.Runner, engi
 	if shortDescription == "" {
 		shortDescription = product.ID
 	}
-	aliases := make([]string, 0, 1)
-	if preferred := preferredProductRouteToken(product); preferred != "" && preferred != product.ID {
-		aliases = append(aliases, preferred)
+	aliases := make([]string, 0, 2)
+	seenAlias := map[string]bool{product.ID: true}
+	addAlias := func(s string) {
+		s = strings.TrimSpace(s)
+		if s == "" || seenAlias[s] {
+			return
+		}
+		seenAlias[s] = true
+		aliases = append(aliases, s)
+	}
+	if preferred := preferredProductRouteToken(product); preferred != "" {
+		addAlias(preferred)
+	}
+	// Consume only cli.Aliases (canonical alternate-name field).
+	// cli.Prefixes is the tool-name-prefix pool consumed by deriveCommandName;
+	// treating prefixes[1:] as aliases over-registers names the wukong edition
+	// does not expose, breaking cross-edition parity.
+	if product.CLI != nil {
+		for _, a := range product.CLI.Aliases {
+			addAlias(a)
+		}
 	}
 
 	cmd := &cobra.Command{
@@ -515,6 +574,34 @@ func newToolCommand(product ir.CanonicalProduct, tool ir.ToolDescriptor, runner 
 	return cmd
 }
 
+// canRegisterToolFlag reports whether a long flag named name can be
+// registered on cmd without panicking pflag ("flag redefined"). The reserved
+// payload names are excluded too: newToolCommand unconditionally registers
+// --json/--params before the spec loop. Tool schemas are remote data — a
+// property named after a reserved or already-registered flag must degrade to
+// "flag unavailable" (the value stays reachable through --json/--params),
+// never abort the process. Mirrors internal/compat's canRegisterFlag.
+func canRegisterToolFlag(cmd *cobra.Command, name string) bool {
+	if name == "" || name == "json" || name == "params" {
+		return false
+	}
+	return cmd.Flags().Lookup(name) == nil
+}
+
+// safeToolShorthand returns short when it is a single-character shorthand not
+// yet bound on cmd; otherwise "" (drop the shorthand, keep the long flag).
+// pflag panics on both multi-character and duplicate shorthands.
+func safeToolShorthand(cmd *cobra.Command, short string) string {
+	short = strings.TrimSpace(short)
+	if len(short) != 1 {
+		return ""
+	}
+	if cmd.Flags().ShorthandLookup(short) != nil {
+		return ""
+	}
+	return short
+}
+
 func applyFlagSpecs(cmd *cobra.Command, specs []FlagSpec) {
 	for _, spec := range specs {
 		usage := spec.Description
@@ -522,41 +609,42 @@ func applyFlagSpecs(cmd *cobra.Command, specs []FlagSpec) {
 			usage = fmt.Sprintf("Override %s", spec.PropertyName)
 		}
 		primary := strings.TrimSpace(spec.FlagName)
-		if primary == "" {
+		if !canRegisterToolFlag(cmd, primary) {
 			continue
 		}
+		shorthand := safeToolShorthand(cmd, spec.Shorthand)
 		alias := strings.TrimSpace(spec.Alias)
-		if alias == primary {
+		if alias == primary || !canRegisterToolFlag(cmd, alias) {
 			alias = ""
 		}
 
 		switch spec.Kind {
 		case flagString, flagJSON:
-			cmd.Flags().StringP(primary, spec.Shorthand, "", usage)
+			cmd.Flags().StringP(primary, shorthand, "", usage)
 			if alias != "" {
 				cmd.Flags().String(alias, "", usage+" (alias)")
 				_ = cmd.Flags().MarkHidden(alias)
 			}
 		case flagInteger:
-			cmd.Flags().IntP(primary, spec.Shorthand, 0, usage)
+			cmd.Flags().IntP(primary, shorthand, 0, usage)
 			if alias != "" {
 				cmd.Flags().Int(alias, 0, usage+" (alias)")
 				_ = cmd.Flags().MarkHidden(alias)
 			}
 		case flagNumber:
-			cmd.Flags().Float64P(primary, spec.Shorthand, 0, usage)
+			cmd.Flags().Float64P(primary, shorthand, 0, usage)
 			if alias != "" {
 				cmd.Flags().Float64(alias, 0, usage+" (alias)")
 				_ = cmd.Flags().MarkHidden(alias)
 			}
 		case flagBoolean:
-			cmd.Flags().BoolP(primary, spec.Shorthand, false, usage)
+			cmd.Flags().BoolP(primary, shorthand, false, usage)
 			if alias != "" {
 				cmd.Flags().Bool(alias, false, usage+" (alias)")
 				_ = cmd.Flags().MarkHidden(alias)
 			}
 		case flagStringArray, flagIntegerList, flagNumberList, flagBooleanList:
-			cmd.Flags().StringSliceP(primary, spec.Shorthand, nil, usage)
+			cmd.Flags().StringSliceP(primary, shorthand, nil, usage)
 			if alias != "" {
 				cmd.Flags().StringSlice(alias, nil, usage+" (alias)")
 				_ = cmd.Flags().MarkHidden(alias)
@@ -784,6 +872,9 @@ func compactTool(t ir.ToolDescriptor) map[string]any {
 	}
 	if t.Annotations != nil {
 		tool["annotations"] = t.Annotations
+	}
+	if t.Auth != nil {
+		tool["auth"] = t.Auth
 	}
 	if len(t.FlagOverlay) > 0 {
 		tool["flag_overlay"] = t.FlagOverlay

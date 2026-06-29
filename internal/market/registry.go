@@ -31,8 +31,16 @@ import (
 )
 
 const (
-	defaultBaseURL      = "https://mcp.dingtalk.com"
+	defaultBaseURL      = config.DefaultMCPBaseURL
 	registryMetadataKey = "com.dingtalk.mcp.registry/metadata"
+
+	// discoveryAPIPath is the path appended to BaseURL when fetching the
+	// MCP server list. Kept as a single constant so the version-coded
+	// segment (".../cedar") lives in one place and future version bumps
+	// only touch here. Version codes step by first letter (bamboo -> cedar
+	// -> ...); cedar carries the dws-wukong alignment. See registry_test.go
+	// for the matching fixture path.
+	discoveryAPIPath = "/cli/discovery/apis/cedar"
 )
 
 type Client struct {
@@ -215,6 +223,19 @@ type CLIToolOverride struct {
 	// inner slice becomes one cobra.MarkFlagsOneRequired call. Typically
 	// paired with MutuallyExclusive to enforce "exactly one of".
 	RequireOneOf [][]string `json:"requireOneOf,omitempty"`
+	// RequireTogether groups flag aliases that must all be set together (or
+	// all left unset). Each inner slice becomes one PreRunE cross-field check
+	// reporting "--a and --b must be set together (or both omitted)". Used
+	// for envelope-driven leaves where cobra has no first-class operator
+	// (the only built-in pair APIs are mutually-exclusive / one-required).
+	// Example: [["start","end"]] on `contact user dismission search`.
+	RequireTogether [][]string `json:"requireTogether,omitempty"`
+	// RejectPositional, when true, attaches cobra.NoArgs to the generated
+	// leaf so any unexpected positional argument is rejected at parse time
+	// (non-zero exit). Only honored on leaves with no positional bindings;
+	// leaves declaring `flags.*.positional: true` ignore this field because
+	// their arity is governed by the positional binding count.
+	RejectPositional bool `json:"rejectPositional,omitempty"`
 	// RedirectTo, when non-empty, turns this entry into a stub command that
 	// prints the redirect target instead of invoking a tool. All other
 	// fields (Flags / BodyWrapper / IsSensitive / ServerOverride) are
@@ -337,6 +358,46 @@ type CLIFlagOverride struct {
 	// Only meaningful when the enclosing CLIToolOverride.Pipeline is set.
 	// Use for flags like `--output` that describe local destination paths.
 	PipelineLocal bool `json:"pipelineLocal,omitempty"`
+}
+
+// UnmarshalJSON tolerates discovery overlays that encode a flag's "default" as
+// a bool or number (e.g. the sheet server publishes `"default": false`) rather
+// than a string. Default is typed as string, and Go's strict decode would fail
+// the ENTIRE discovery list on a single mistyped default in ANY product's
+// overlay — silently breaking `dws cache refresh` for every product, not just
+// the offending one. Coerce scalar defaults to their literal string form so one
+// bad envelope can no longer take down discovery.
+func (o *CLIFlagOverride) UnmarshalJSON(data []byte) error {
+	type alias CLIFlagOverride
+	aux := &struct {
+		Default json.RawMessage `json:"default,omitempty"`
+		*alias
+	}{alias: (*alias)(o)}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	o.Default = coerceScalarToString(aux.Default)
+	return nil
+}
+
+// coerceScalarToString renders a JSON scalar (string / bool / number) as a
+// plain string; objects, arrays and null collapse to "".
+func coerceScalarToString(raw json.RawMessage) string {
+	s := strings.TrimSpace(string(raw))
+	if s == "" || s == "null" {
+		return ""
+	}
+	if strings.HasPrefix(s, `"`) {
+		var str string
+		if json.Unmarshal(raw, &str) == nil {
+			return str
+		}
+		return ""
+	}
+	if strings.HasPrefix(s, "{") || strings.HasPrefix(s, "[") {
+		return ""
+	}
+	return s
 }
 
 type CLITool struct {
@@ -491,7 +552,7 @@ func (c *Client) FetchServersFromURL(ctx context.Context, fullURL string) (ListR
 }
 
 func (c *Client) fetchServersPage(ctx context.Context, limit int, cursor string) (ListResponse, error) {
-	reqURL, err := url.Parse(c.BaseURL + "/cli/discovery/apis")
+	reqURL, err := url.Parse(c.BaseURL + discoveryAPIPath)
 	if err != nil {
 		return ListResponse{}, apperrors.NewDiscovery("failed to build market servers URL")
 	}
@@ -609,7 +670,12 @@ func isPrivateHost(host string) bool {
 }
 
 func NormalizeServers(response ListResponse, source string) []ServerDescriptor {
+	return NormalizeServersForBaseURL(response, source, "")
+}
+
+func NormalizeServersForBaseURL(response ListResponse, source string, discoveryBaseURL string) []ServerDescriptor {
 	bestByEndpoint := make(map[string]ServerDescriptor)
+	forcePreGateway := isPreMCPBaseURL(discoveryBaseURL)
 
 	for _, envelope := range response.Servers {
 		meta := envelope.Meta.Registry
@@ -622,7 +688,7 @@ func NormalizeServers(response ListResponse, source string) []ServerDescriptor {
 			continue
 		}
 
-		endpoint := NormalizeEndpoint(remoteURL)
+		endpoint := normalizeEndpoint(remoteURL, forcePreGateway)
 		descriptor := ServerDescriptor{
 			Key:         ServerKey(endpoint),
 			DisplayName: strings.TrimSpace(envelope.Server.Name),
@@ -763,10 +829,15 @@ func hasDeprecatedMarker(displayName string) bool {
 }
 
 func NormalizeEndpoint(raw string) string {
+	return normalizeEndpoint(raw, false)
+}
+
+func normalizeEndpoint(raw string, forcePreGateway bool) string {
 	parsed, err := url.Parse(raw)
 	if err != nil {
 		return strings.TrimSpace(raw)
 	}
+	normalizeGatewayHost(parsed, forcePreGateway)
 	parsed.Fragment = ""
 	parsed.Path = strings.TrimRight(parsed.Path, "/")
 	values := parsed.Query()
@@ -785,6 +856,68 @@ func NormalizeEndpoint(raw string) string {
 	}
 	parsed.RawQuery = normalized.Encode()
 	return parsed.String()
+}
+
+func normalizeGatewayHost(parsed *url.URL, forcePreGateway bool) {
+	if parsed == nil {
+		return
+	}
+	host := parsed.Hostname()
+	nextHost, ok := normalizedGatewayHost(host, forcePreGateway)
+	if !ok {
+		return
+	}
+	if port := parsed.Port(); port != "" {
+		parsed.Host = net.JoinHostPort(nextHost, port)
+	} else {
+		parsed.Host = nextHost
+	}
+}
+
+func normalizedGatewayHost(host string, forcePreGateway bool) (string, bool) {
+	host = strings.TrimSpace(strings.ToLower(host))
+	if host == "" {
+		return "", false
+	}
+	if forcePreGateway {
+		switch {
+		case host == "mcp.dingtalk.com" || host == "mcp-gw.dingtalk.com" ||
+			host == "pre-mcp.dingtalk.com" || host == "pre-mcp-gw.dingtalk.com":
+			return "pre-mcp-gw.dingtalk.com", true
+		case strings.HasPrefix(host, "pre-mcp-gw."):
+			return host, true
+		case strings.HasPrefix(host, "pre-mcp."):
+			return strings.Replace(host, "pre-mcp.", "pre-mcp-gw.", 1), true
+		case strings.HasPrefix(host, "mcp-gw."):
+			return strings.Replace(host, "mcp-gw.", "pre-mcp-gw.", 1), true
+		case strings.HasPrefix(host, "mcp."):
+			return strings.Replace(host, "mcp.", "pre-mcp-gw.", 1), true
+		default:
+			return "", false
+		}
+	}
+	switch {
+	case host == "mcp.dingtalk.com":
+		return "mcp-gw.dingtalk.com", true
+	case strings.HasPrefix(host, "pre-mcp."):
+		return strings.Replace(host, "pre-mcp.", "pre-mcp-gw.", 1), true
+	case strings.HasPrefix(host, "mcp."):
+		return strings.Replace(host, "mcp.", "mcp-gw.", 1), true
+	default:
+		return "", false
+	}
+}
+
+func isPreMCPBaseURL(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	return host == "pre-mcp.dingtalk.com" ||
+		host == "pre-mcp-gw.dingtalk.com" ||
+		strings.HasPrefix(host, "pre-mcp.") ||
+		strings.HasPrefix(host, "pre-mcp-gw.")
 }
 
 func ServerKey(endpoint string) string {

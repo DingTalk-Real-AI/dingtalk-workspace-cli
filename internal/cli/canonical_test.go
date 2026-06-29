@@ -147,6 +147,12 @@ func TestCompactToolEmitsExtendedFields(t *testing.T) {
 			},
 		},
 		Annotations: &ir.ToolAnnotations{DestructiveHint: &destructive},
+		Auth: &ir.ToolAuthMetadata{
+			ProductCode:         "calendar",
+			RequiredPermissions: []string{"Calendar.Event.Write"},
+			GrantProductCodes:   []string{"calendar"},
+			AuthMetaHash:        "sha256:test",
+		},
 		FlagOverlay: map[string]ir.FlagOverlay{
 			"receiverUserIdList": {Alias: "users", Transform: "csv_to_array"},
 		},
@@ -170,6 +176,13 @@ func TestCompactToolEmitsExtendedFields(t *testing.T) {
 	}
 	if _, ok := out["annotations"]; !ok {
 		t.Errorf("annotations missing, keys = %v", keysOf(out))
+	}
+	auth, ok := out["auth"].(*ir.ToolAuthMetadata)
+	if !ok {
+		t.Fatalf("auth type = %T", out["auth"])
+	}
+	if auth.RequiredPermissions[0] != "Calendar.Event.Write" {
+		t.Errorf("auth required permissions = %#v", auth.RequiredPermissions)
 	}
 	overlay, ok := out["flag_overlay"].(map[string]ir.FlagOverlay)
 	if !ok {
@@ -275,7 +288,7 @@ func TestSchemaCommandCLIPathFlag(t *testing.T) {
 	}}
 
 	t.Run("resolves via --cli-path", func(t *testing.T) {
-		cmd := NewSchemaCommand(loader)
+		cmd := NewSchemaCommand(loader, nil)
 		var out bytes.Buffer
 		cmd.SetOut(&out)
 		cmd.SetErr(&bytes.Buffer{})
@@ -297,7 +310,7 @@ func TestSchemaCommandCLIPathFlag(t *testing.T) {
 	})
 
 	t.Run("rejects positional + flag collision", func(t *testing.T) {
-		cmd := NewSchemaCommand(loader)
+		cmd := NewSchemaCommand(loader, nil)
 		var out bytes.Buffer
 		cmd.SetOut(&out)
 		cmd.SetErr(&bytes.Buffer{})
@@ -1239,7 +1252,7 @@ func TestSchemaCommandOutputsDegradedOnUnauthenticated(t *testing.T) {
 		Reason: DegradedUnauthenticated,
 		Hint:   "未登录，无法发现 MCP 服务。请先执行: dws auth login",
 	}
-	cmd := NewSchemaCommand(errorLoader{err: degradedErr})
+	cmd := NewSchemaCommand(errorLoader{err: degradedErr}, nil)
 
 	var out, errOut bytes.Buffer
 	cmd.SetOut(&out)
@@ -1272,9 +1285,9 @@ func TestSchemaCommandOutputsDegradedOnMarketUnreachable(t *testing.T) {
 
 	degradedErr := &CatalogDegraded{
 		Reason: DegradedMarketUnreachable,
-		Hint:   "无法连接 MCP 市场 (mcp.dingtalk.com)，请检查网络",
+		Hint:   "无法连接 MCP 市场，请检查网络",
 	}
-	cmd := NewSchemaCommand(errorLoader{err: degradedErr})
+	cmd := NewSchemaCommand(errorLoader{err: degradedErr}, nil)
 
 	var out, errOut bytes.Buffer
 	cmd.SetOut(&out)
@@ -1297,7 +1310,7 @@ func TestSchemaCommandPropagatesNonDegradedError(t *testing.T) {
 	t.Parallel()
 
 	wantErr := errors.New("unexpected failure")
-	cmd := NewSchemaCommand(errorLoader{err: wantErr})
+	cmd := NewSchemaCommand(errorLoader{err: wantErr}, nil)
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)

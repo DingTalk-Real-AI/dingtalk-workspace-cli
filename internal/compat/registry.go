@@ -105,6 +105,18 @@ type Route struct {
 	// (rename / drop / columns) before the formatter emits it. Wired up from
 	// CLIToolOverride.OutputFormat. See discovery-schema-v3 §2.5.
 	OutputTransform func(map[string]any) map[string]any
+	// RejectPositional forces cobra.NoArgs on the generated leaf when no
+	// positional bindings exist, so stray positional tokens (e.g.
+	// `dws contact label list unexpected`) exit non-zero. Sourced from
+	// CLIToolOverride.RejectPositional. Ignored when the leaf already
+	// declares positional bindings — their arity validator wins.
+	RejectPositional bool
+	// RequireTogether groups flag aliases that must all be set together (or
+	// all left unset). Each inner slice produces one PreRunE cross-field
+	// check. Sourced from CLIToolOverride.RequireTogether. Unknown flag
+	// names are logged and skipped at command-build time (consistent with
+	// applyFlagConstraints semantics).
+	RequireTogether [][]string
 }
 
 type CommandFactory func(runner executor.Runner) *cobra.Command
@@ -172,7 +184,16 @@ func NewDirectCommand(route Route, runner executor.Runner) *cobra.Command {
 	var argsValidator cobra.PositionalArgs = cobra.ArbitraryArgs
 	switch {
 	case totalMax == 0:
-		argsValidator = cobra.ArbitraryArgs
+		// No positional bindings: default to ArbitraryArgs unless the
+		// envelope explicitly asked for strict no-positional. We only
+		// honor RejectPositional in this branch because leaves with
+		// positional bindings already get a stricter validator below;
+		// flipping them to NoArgs would silently break valid invocations.
+		if route.RejectPositional {
+			argsValidator = cobra.NoArgs
+		} else {
+			argsValidator = cobra.ArbitraryArgs
+		}
 	case strictMin > 0 && strictMin == totalMax:
 		argsValidator = cobra.MinimumNArgs(strictMin)
 	case strictMin > 0:
@@ -221,6 +242,12 @@ func NewDirectCommand(route Route, runner executor.Runner) *cobra.Command {
 		Hidden:            route.Hidden,
 		Args:              argsValidator,
 		DisableAutoGenTag: true,
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			// Envelope-declared cross-field "must be set together" checks.
+			// Returns the first failing group so users see one actionable
+			// error per invocation (mirrors cobra's MarkFlagsOneRequired UX).
+			return validateRequireTogether(cmd, route.RequireTogether)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonPayload, err := cmd.Flags().GetString("json")
 			if err != nil {
@@ -309,7 +336,16 @@ func NewDirectCommand(route Route, runner executor.Runner) *cobra.Command {
 					Response: resp,
 				}
 				if route.OutputTransform != nil && result.Response != nil {
-					result.Response = route.OutputTransform(result.Response)
+					// Shape the MCP content payload (the actual data), not the
+					// {endpoint, content} runtime envelope, so rename/drop/table
+					// paths resolve against response fields (e.g. result.items)
+					// rather than the wrapper. Falls back to the whole Response
+					// when no content map is present (degraded/echo paths).
+					if content, ok := result.Response["content"].(map[string]any); ok {
+						result.Response["content"] = route.OutputTransform(content)
+					} else {
+						result.Response = route.OutputTransform(result.Response)
+					}
 				}
 				return output.WriteCommandPayload(cmd, result, output.FormatJSON)
 			}
@@ -388,6 +424,33 @@ func parseFlagDefault(kind ValueKind, raw string) (defStr string, defInt int, de
 	return
 }
 
+// canRegisterFlag reports whether a long flag named name can be registered
+// on cmd without panicking pflag ("flag redefined"). The reserved payload
+// names are excluded too: ApplyBindings unconditionally registers hidden
+// --json/--params after the bindings loop. The envelope is remote data —
+// a duplicate or reserved name there must degrade to "flag unavailable",
+// never abort the process.
+func canRegisterFlag(cmd *cobra.Command, name string) bool {
+	if name == "" || name == "json" || name == "params" {
+		return false
+	}
+	return cmd.Flags().Lookup(name) == nil
+}
+
+// safeShorthand returns short when it is a single-character shorthand not
+// yet bound on cmd; otherwise "" (drop the shorthand, keep the long flag).
+// pflag panics on both multi-character and duplicate shorthands.
+func safeShorthand(cmd *cobra.Command, short string) string {
+	short = strings.TrimSpace(short)
+	if len(short) != 1 {
+		return ""
+	}
+	if cmd.Flags().ShorthandLookup(short) != nil {
+		return ""
+	}
+	return short
+}
+
 func ApplyBindings(cmd *cobra.Command, bindings []FlagBinding) {
 	for _, binding := range bindings {
 		// Positional bindings are collected from cobra args rather than flags.
@@ -437,7 +500,7 @@ func ApplyBindings(cmd *cobra.Command, bindings []FlagBinding) {
 		defStr, defInt, defFloat, defBool, defSlice := parseFlagDefault(binding.Kind, binding.Default)
 
 		registerHidden := func(name string, suffix string) {
-			if name == "" {
+			if !canRegisterFlag(cmd, name) {
 				return
 			}
 			switch binding.Kind {
@@ -457,19 +520,27 @@ func ApplyBindings(cmd *cobra.Command, bindings []FlagBinding) {
 			_ = cmd.Flags().MarkHidden(name)
 		}
 
+		if !canRegisterFlag(cmd, primary) {
+			// Duplicate or reserved primary name in the envelope. Skip the
+			// whole binding: CollectBindings tolerates the missing flag
+			// (Lookup → nil → continue) and the value can still be supplied
+			// via the --params payload.
+			continue
+		}
+		short := safeShorthand(cmd, binding.Short)
 		switch binding.Kind {
 		case ValueString:
-			cmd.Flags().StringP(primary, binding.Short, defStr, binding.Usage)
+			cmd.Flags().StringP(primary, short, defStr, binding.Usage)
 		case ValueInt:
-			cmd.Flags().IntP(primary, binding.Short, defInt, binding.Usage)
+			cmd.Flags().IntP(primary, short, defInt, binding.Usage)
 		case ValueFloat:
-			cmd.Flags().Float64P(primary, binding.Short, defFloat, binding.Usage)
+			cmd.Flags().Float64P(primary, short, defFloat, binding.Usage)
 		case ValueBool:
-			cmd.Flags().BoolP(primary, binding.Short, defBool, binding.Usage)
+			cmd.Flags().BoolP(primary, short, defBool, binding.Usage)
 		case ValueStringSlice, ValueIntSlice, ValueFloatSlice, ValueBoolSlice:
-			cmd.Flags().StringSliceP(primary, binding.Short, defSlice, binding.Usage)
+			cmd.Flags().StringSliceP(primary, short, defSlice, binding.Usage)
 		case ValueJSON:
-			cmd.Flags().StringP(primary, binding.Short, defStr, binding.Usage+" (JSON)")
+			cmd.Flags().StringP(primary, short, defStr, binding.Usage+" (JSON)")
 		}
 		registerHidden(alias, " (alias)")
 		for _, extra := range extras {
@@ -486,8 +557,12 @@ func ApplyBindings(cmd *cobra.Command, bindings []FlagBinding) {
 			}
 		}
 	}
-	cmd.Flags().String("json", "", "Base JSON object payload for this command")
-	cmd.Flags().String("params", "", "Additional JSON object payload merged after --json")
+	if cmd.Flags().Lookup("json") == nil {
+		cmd.Flags().String("json", "", "Base JSON object payload for this command")
+	}
+	if cmd.Flags().Lookup("params") == nil {
+		cmd.Flags().String("params", "", "Additional JSON object payload merged after --json")
+	}
 	_ = cmd.Flags().MarkHidden("json")
 	_ = cmd.Flags().MarkHidden("params")
 }
@@ -526,12 +601,12 @@ func registerPositionalAliasFlags(cmd *cobra.Command, binding FlagBinding) {
 	defStr, defInt, defFloat, defBool, defSlice := parseFlagDefault(binding.Kind, binding.Default)
 
 	register := func(name string, withShort bool, hidden bool, usageSuffix string) {
-		if name == "" {
+		if !canRegisterFlag(cmd, name) {
 			return
 		}
 		short := ""
 		if withShort {
-			short = binding.Short
+			short = safeShorthand(cmd, binding.Short)
 		}
 		usage := binding.Usage + usageSuffix
 		switch binding.Kind {
@@ -796,7 +871,7 @@ func CollectBindings(cmd *cobra.Command, bindings []FlagBinding, existing map[st
 			if _, ok := existing[binding.Property]; ok {
 				continue
 			}
-			return nil, apperrors.NewValidation(fmt.Sprintf("--%s is required", primaryName))
+			return nil, apperrors.NewValidation(fmt.Sprintf("missing required flag: --%s is required", primaryName))
 		}
 		if !anyChanged {
 			continue
@@ -1031,4 +1106,43 @@ func compatFlagName(raw string) string {
 		}
 	}
 	return strings.Trim(builder.String(), "-")
+}
+
+// validateRequireTogether enforces "either all set, or all unset" semantics
+// for each group of flag aliases. Returns a validation error pointing at the
+// first failing group; nil if every group satisfies the check or no groups
+// were declared. Unknown flag names in a group are skipped silently — the
+// envelope load path already warned about them when applyFlagConstraints
+// validated the same shape for MutuallyExclusive / RequireOneOf.
+func validateRequireTogether(cmd *cobra.Command, groups [][]string) error {
+	for _, group := range groups {
+		set := make([]string, 0, len(group))
+		unset := make([]string, 0, len(group))
+		for _, raw := range group {
+			name := strings.TrimSpace(raw)
+			if name == "" {
+				continue
+			}
+			if cmd.Flags().Lookup(name) == nil {
+				continue
+			}
+			if cobracmd.FlagChanged(cmd, name) {
+				set = append(set, name)
+			} else {
+				unset = append(unset, name)
+			}
+		}
+		if len(set) == 0 || len(unset) == 0 {
+			continue
+		}
+		// Render a stable, human-readable list of the group's flag names so
+		// the error matches what the user typed. Example output:
+		//   --start 和 --end 必须同时设置或同时不设置
+		return apperrors.NewValidation(fmt.Sprintf(
+			"--%s 和 --%s 必须同时设置或同时不设置",
+			strings.Join(set, " --"),
+			strings.Join(unset, " --"),
+		))
+	}
+	return nil
 }

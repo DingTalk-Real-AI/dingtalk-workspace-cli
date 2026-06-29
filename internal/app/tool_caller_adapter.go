@@ -15,10 +15,10 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -77,7 +77,7 @@ func convertResult(r executor.Result) *edition.ToolResult {
 	contentRaw, ok := resp["content"]
 	if !ok {
 		// Dry-run or echo mode: serialize the whole response as text.
-		data, _ := json.Marshal(resp)
+		data, _ := jsonutil.Marshal(resp)
 		return &edition.ToolResult{
 			Content: []edition.ContentBlock{{Type: "text", Text: string(data)}},
 		}
@@ -98,12 +98,12 @@ func convertResult(r executor.Result) *edition.ToolResult {
 		}
 		return &edition.ToolResult{Content: blocks}
 	case map[string]any:
-		data, _ := json.Marshal(v)
+		data, _ := jsonutil.Marshal(v)
 		return &edition.ToolResult{
 			Content: []edition.ContentBlock{{Type: "text", Text: string(data)}},
 		}
 	default:
-		data, _ := json.Marshal(contentRaw)
+		data, _ := jsonutil.Marshal(contentRaw)
 		return &edition.ToolResult{
 			Content: []edition.ContentBlock{{Type: "text", Text: string(data)}},
 		}

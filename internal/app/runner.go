@@ -17,6 +17,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -88,6 +89,8 @@ const (
 	envDingtalkTraceID   = "DINGTALK_TRACE_ID"
 	envDingtalkSessionID = "DINGTALK_SESSION_ID"
 	envDingtalkMessageID = "DINGTALK_MESSAGE_ID"
+	envDWSSessionID      = "DWS_SESSION_ID"
+	envRewindSessionID   = "REWIND_SESSION_ID"
 
 	// Environment variables for third-party channel integration
 	envDWSChannel = "DWS_CHANNEL"
@@ -109,7 +112,7 @@ func logHostOwnedPATDecisionOnce() {
 	hostOwnedPATDecisionOnce.Do(func() {
 		slog.Debug("runtime.host_owned_pat",
 			"hostOwned", authpkg.HostOwnsPATFlow(),
-			"agentCodeEnvPresent", os.Getenv(authpkg.AgentCodeEnv) != "",
+			"agentCodeEnvPresent", authpkg.AgentCodeEnvPresent(),
 		)
 	})
 }
@@ -162,6 +165,7 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 	if r.loader == nil || r.transport == nil {
 		return r.fallback.Run(ctx, invocation)
 	}
+	r.transport.ExtraHeaders = resolveIdentityHeaders()
 
 	// Mock mode: skip catalog validation, use a placeholder endpoint.
 	if r.globalFlags != nil && r.globalFlags.Mock {
@@ -256,13 +260,22 @@ func (r *runtimeRunner) handleCatalogMiss(ctx context.Context, invocation execut
 		invocation.DryRun = true
 		return r.fallback.Run(ctx, invocation)
 	}
+	hint := "产品 envelope 可能未下发到 discovery，或已经被 serverDeps fail-fast 丢弃；可执行 'dws cache refresh' 强制重新 discovery，仍失败请向 Portal 确认 envelope 状态。"
+	actions := []string{"dws cache refresh"}
+	if strings.TrimSpace(invocation.CanonicalProduct) == devappProductID {
+		hint = "dev app（product id: devapp）是 helper-only 产品，命令树不依赖 discovery；真实调用需要内部版通过 SupplementServers/StaticServers 注入 MCP endpoint，或本地调试临时设置 DINGTALK_DEVAPP_MCP_URL。"
+		actions = []string{
+			"检查内部版 SupplementServers/StaticServers 是否包含 devapp endpoint",
+			"本地调试可临时设置 DINGTALK_DEVAPP_MCP_URL 后重试",
+		}
+	}
 	return executor.Result{}, apperrors.NewAPI(
 		fmt.Sprintf("endpoint not resolved for product %q (tool %q): %s", invocation.CanonicalProduct, invocation.Tool, detail),
 		apperrors.WithOperation("discovery.resolve"),
 		apperrors.WithReason("endpoint_not_resolved"),
 		apperrors.WithServerKey(invocation.CanonicalProduct),
-		apperrors.WithHint("产品 envelope 可能未下发到 discovery，或已经被 serverDeps fail-fast 丢弃；可执行 'dws cache refresh' 强制重新 discovery，仍失败请向 Portal 确认 envelope 状态。"),
-		apperrors.WithActions("dws cache refresh"),
+		apperrors.WithHint(hint),
+		apperrors.WithActions(actions...),
 	)
 }
 
@@ -321,6 +334,14 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		invocation.CanonicalProduct, invocation.Tool, endpoint, version, authToken != "", timeoutSec)
 
 	if invocation.DryRun {
+		// Emit a wukong-aligned human-readable preview on stderr so the dry-run
+		// surface advertises the resolved MCP arguments without polluting the
+		// stdout payload (which stays valid JSON in --format json mode). Mirrors
+		// wukong's "Arguments: {...}" dry-run line; stderr keeps it out of the
+		// machine-readable channel.
+		if argsJSON, err := json.Marshal(invocation.Params); err == nil {
+			fmt.Fprintf(os.Stderr, "DRY-RUN Arguments: %s\n", argsJSON)
+		}
 		return executor.Result{
 			Invocation: invocation,
 			Response: map[string]any{
@@ -480,6 +501,15 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	}
 
 	invocation.Implemented = true
+	// Align with wukong's response envelope: stamp a top-level success=true on
+	// map payloads that don't already carry a success flag. Business errors
+	// (success=false) are intercepted above, so reaching here means the call
+	// succeeded. Additive only — existing keys are never overwritten.
+	if callResult.Content != nil {
+		if _, has := callResult.Content["success"]; !has {
+			callResult.Content["success"] = true
+		}
+	}
 	response := map[string]any{
 		"endpoint": transport.RedactURL(endpoint),
 		"content":  callResult.Content,
@@ -677,11 +707,39 @@ func resolveIdentityHeaders() map[string]string {
 	// open-source edition pins to edition.DefaultOSSClawType via the
 	// MergeHeaders hook below) and it does NOT influence the host-owned
 	// PAT decision (driven solely by DINGTALK_DWS_AGENTCODE).
+	sessionID := os.Getenv(envDingtalkSessionID)
+	if sessionID == "" {
+		sessionID = os.Getenv(envDWSSessionID)
+	}
+	if sessionID == "" {
+		sessionID = os.Getenv(envRewindSessionID)
+	}
+	// Resolve the agent_code (accuracy-first; unknown hosts -> custom) and the
+	// per-(machine × agent_code) instance id. This is what makes agent_code
+	// actually report a value: previously it was sent only when the host
+	// injected DINGTALK_DWS_AGENTCODE (empty ~99.98% of the time), so the
+	// gateway logged no agent_code at all. DetectAgentCode always yields a code.
+	//
+	// Backward-compat by design (additive, not breaking):
+	//   - x-dws-agent-id keeps its v1 meaning = machine-level install UUID
+	//     (set by id.Headers() above), so old/new clients stay comparable.
+	//   - x-dws-agent-instance-id is NEW: the per-(machine × agent_code) id.
+	//     Old clients don't send it, which is itself a clean old/new signal.
+	// Note: x-dws-channel (DWS_CHANNEL) is a separate axis, untouched.
+	agentCode, agentCodeSig := authpkg.DetectAgentCode()
+	headers["x-dws-agent-instance-id"] = id.ResolveAgentID(defaultConfigDir(), agentCode, agentCodeSig)
+
+	// Emit the CLI version on the wire so the gateway can segment old vs new
+	// clients (and scope agent_code coverage / adoption). The header constant
+	// existed but was never set; wire it here.
+	if version != "" {
+		headers[transport.HeaderVersion] = version
+	}
 	envHeaders := map[string]string{
 		"x-dingtalk-agent":          os.Getenv(envDingtalkAgent),
-		"x-dingtalk-dws-agent-code": strings.TrimSpace(os.Getenv(authpkg.AgentCodeEnv)),
+		"x-dingtalk-dws-agent-code": agentCode,
 		"x-dingtalk-trace-id":       os.Getenv(envDingtalkTraceID),
-		"x-dingtalk-session-id":     os.Getenv(envDingtalkSessionID),
+		"x-dingtalk-session-id":     sessionID,
 		"x-dingtalk-message-id":     os.Getenv(envDingtalkMessageID),
 	}
 	for k, v := range envHeaders {
@@ -706,13 +764,23 @@ func resolveIdentityHeaders() map[string]string {
 // errors (success=false + errorCode/errorMsg) that are not flagged at the MCP
 // protocol level. Returns the error message, or "" if the response is OK.
 func detectBusinessError(content map[string]any) string {
+	return detectBusinessErrorAtDepth(content, 0)
+}
+
+func detectBusinessErrorAtDepth(content map[string]any, depth int) string {
+	if content == nil || depth > 8 {
+		return ""
+	}
 	success, ok := content["success"]
 	if !ok {
-		return ""
+		return detectNestedBusinessError(content, depth)
 	}
 	b, ok := success.(bool)
 	if !ok || b {
-		return ""
+		return detectNestedBusinessError(content, depth)
+	}
+	if nested := detectNestedBusinessError(content, depth); nested != "" {
+		return nested
 	}
 	if msg, ok := content["errorMsg"].(string); ok && strings.TrimSpace(msg) != "" {
 		return strings.TrimSpace(msg)
@@ -721,6 +789,28 @@ func detectBusinessError(content map[string]any) string {
 		return "business error: code " + strings.TrimSpace(code)
 	}
 	return "business error: success=false"
+}
+
+func detectNestedBusinessError(content map[string]any, depth int) string {
+	for _, key := range []string{"content", "result", "data"} {
+		switch child := content[key].(type) {
+		case map[string]any:
+			if msg := detectBusinessErrorAtDepth(child, depth+1); msg != "" {
+				return msg
+			}
+		case []any:
+			for _, item := range child {
+				childMap, ok := item.(map[string]any)
+				if !ok {
+					continue
+				}
+				if msg := detectBusinessErrorAtDepth(childMap, depth+1); msg != "" {
+					return msg
+				}
+			}
+		}
+	}
+	return ""
 }
 
 // extractMCPErrorMessage builds an error message from a ToolCallResult with

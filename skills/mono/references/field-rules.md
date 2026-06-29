@@ -14,7 +14,7 @@
 | "删掉这条数据" | `record delete` | 不是 `table delete` |
 | "删掉这个列" | `field delete` | 不是 `record delete` |
 | "改字段类型" | 先 `field delete` 再 `field create` | `field update` **不能改类型** |
-| "移动字段/调整字段顺序" | **不支持**，需在钉钉界面手动拖拽 | 没有 `reorder`/`move` 命令 |
+| "移动字段/调整字段顺序" | `view update --config '{"visibleFieldIds":[...]}'`（视图层重排，首列主字段必须保留在第一位） | 没有 `field reorder`/`field move` 命令；不能改字段在元数据里的"原始定义顺序" |
 
 ## field 子命令总览
 
@@ -24,28 +24,36 @@
 |-------|------|
 | `field get` | 获取字段详情（含完整 config/options）。**不是 `field list`** |
 | `field create` | **创建字段（支持通过 config.options 设置选项）** |
-| `field update` | 更新字段名称或配置（**不能改类型**） |
+| `field update` | 更新字段名称或配置（**不能改类型**，**不能改顺序**） |
 | `field delete` | 删除字段（不可逆） |
+
+> **想"调整字段顺序"？请使用 `view update`**（视图层操作，不属于 `field` 子命令）：
+> - 通过 `--config '{"visibleFieldIds":["fld1","fld2",...]}'` 传入 fieldId 数组，数组顺序即视图中的字段显示顺序
+> - 仅影响**该视图**的列排列，同一 table 的其他视图与字段元数据原始顺序不变
+> - **首列字段（主字段）必须保留在数组第一位**，不能移动到非首位
+> - **漏传的字段不会被隐藏**，而是会被 API 自动追加到列表末尾
+> - **读写命名不一致**：写入键名 `visibleFieldIds`，但读出（`view get`）时该字段在 view 里叫 `columns`——校验顺序时请看 `views[].columns`
 
 ## 字段创建时设置 config（重要）
 
-创建 singleSelect/multipleSelect 字段时，**必须在 `--fields` 的 `config.options` 中设置选项**：
+创建 singleSelect/multipleSelect 字段时，**必须设置选项 (options)**：
 
 ```bash
-# 创建带选项的单选字段
+# 创建带选项的单选字段 (推荐新语法: --name/--type/--config)
 dws aitable field create --base-id <BASE_ID> --table-id <TABLE_ID> \
-  --fields '[{"fieldName":"优先级","type":"singleSelect","config":{"options":[{"name":"高"},{"name":"中"},{"name":"低"}]}}]' \
+  --name "优先级" --type "singleSelect" \
+  --config '{"options":[{"name":"高"},{"name":"中"},{"name":"低"}]}' \
   --format json
 
-# 建表时也可以直接带选项字段
+# 建表时也可以直接通过 --fields 批量带选项字段
 dws aitable table create --base-id <BASE_ID> --name "任务表" \
   --fields '[{"fieldName":"任务","type":"text"},{"fieldName":"状态","type":"singleSelect","config":{"options":[{"name":"待办"},{"name":"进行中"},{"name":"已完成"}]}}]' \
   --format json
 ```
 
 > ⚠️ **不要混淆**：
-> - **字段创建**（field create / table create 的 --fields）：通过 `config.options` 设置选项，创建时就指定
-> - **记录写入**（record create / record update 的 --records）：只能写入已存在的选项名称
+> - **字段创建**（`field create` 的 `--config` 或 `table create` 的 `--fields`）：创建时就指定 `options`
+> - **记录写入**（`record create` / `record update` 的 `--records`）：只能写入已存在的选项名称
 
 ## 主字段约束（table create 必读）
 
@@ -75,17 +83,9 @@ dws aitable table create --base-id <BASE_ID> --name "产品图片" \
 
 ## 记录写入格式（record create / record update）
 
-> 以下是 **记录写入** 时 cells 的格式，不是字段创建的格式。
-
-| 类型 | 写入格式 | 读取返回格式 |
-|------|----------|-------------|
-| text | `"fldXXX":"文本值"` | `"fldXXX":"文本值"` |
-| number | `"fldXXX":123` | `"fldXXX":123` |
-| singleSelect | `"fldXXX":"选项名"` (必须是已存在的选项) | `"fldXXX":{"id":"x","name":"选项名"}` |
-| multipleSelect | `"fldXXX":["选项1","选项2"]` (必须是已存在的选项) | `"fldXXX":[{"id":"x","name":"选项1"}]` |
-| date | `"fldXXX":"2026-03-04"` 或 Unix ms | `"fldXXX":1709510400000` (ms) |
-| user | `"fldXXX":[{"userId":"123"}]` | `"fldXXX":{"uid":"123"}` |
-| attachment | `[{"fileToken":"<token>"}]` — 需先通过 `attachment upload` 获取，见下方 ⬇️ | `[{"url":"...","filename":"...","size":N}]` |
+> 各字段类型的完整写入/读取格式规范请参考：[aitable-cell-value.md](./products/aitable/aitable-cell-value.md)
+>
+> 该文件是 cellValue 格式的 **source of truth**，包含所有字段类型的详细示例和注意事项。
 
 ## ⚠️ 附件上传完整流程（必读！）
 
@@ -102,4 +102,3 @@ python3 scripts/upload_attachment.py <BASE_ID> /path/to/photo.png
 dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
   --records '[{"cells":{"fldAttachId":[{"fileToken":"ft_xxx"}]}}]' --format json
 ```
-

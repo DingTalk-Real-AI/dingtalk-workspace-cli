@@ -238,6 +238,74 @@ func (s *Store) DeleteDetail(partition, serverKey string) error {
 	return nil
 }
 
+// QuarantinePartition moves the entire on-disk cache for a partition aside,
+// renaming it to "<partition>.quarantined", so the next load starts from an
+// empty cache while the poisoned snapshot stays on disk for inspection.
+// Returns the quarantine path, or "" when the partition has no cache on disk.
+// A previous quarantine for the same partition is replaced, so repeated
+// quarantines never accumulate.
+func (s *Store) QuarantinePartition(partition string) (string, error) {
+	dir := filepath.Join(s.Root, sanitize(partition))
+	if _, err := os.Stat(dir); err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	quarantine := dir + ".quarantined"
+	if err := os.RemoveAll(quarantine); err != nil {
+		return "", err
+	}
+	if err := os.Rename(dir, quarantine); err != nil {
+		return "", err
+	}
+	return quarantine, nil
+}
+
+// discoverySubdirs are the per-partition directories holding discovery-derived
+// data: the market registry envelope plus tools / detail snapshots.
+var discoverySubdirs = []string{"market", "tools", "detail"}
+
+// PurgeDiscoveryData deletes the discovery-derived cache for every partition
+// under the cache root, leaving unrelated data that shares the root (e.g. the
+// upgrade download cache in "downloads/") untouched. Returns the names of the
+// partition directories that had data removed. Removal errors are collected
+// into the returned error but do not stop the sweep.
+func (s *Store) PurgeDiscoveryData() ([]string, error) {
+	entries, err := os.ReadDir(s.Root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var purged []string
+	var firstErr error
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		removedAny := false
+		for _, sub := range discoverySubdirs {
+			dir := filepath.Join(s.Root, entry.Name(), sub)
+			if _, statErr := os.Stat(dir); statErr != nil {
+				continue
+			}
+			if rmErr := os.RemoveAll(dir); rmErr != nil {
+				if firstErr == nil {
+					firstErr = rmErr
+				}
+				continue
+			}
+			removedAny = true
+		}
+		if removedAny {
+			purged = append(purged, entry.Name())
+		}
+	}
+	return purged, firstErr
+}
+
 func (s *Store) registryPath(partition string) string {
 	return filepath.Join(s.Root, sanitize(partition), "market", "servers.json")
 }

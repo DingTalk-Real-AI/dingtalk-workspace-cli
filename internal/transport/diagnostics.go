@@ -16,6 +16,7 @@ package transport
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
@@ -38,16 +39,11 @@ func ExtractServerDiagnostics(data json.RawMessage) apperrors.ServerDiagnostics 
 	if len(data) == 0 {
 		return apperrors.ServerDiagnostics{}
 	}
-	var fields serverDiagFields
-	if json.Unmarshal(data, &fields) != nil {
+	var content map[string]any
+	if json.Unmarshal(data, &content) != nil {
 		return apperrors.ServerDiagnostics{}
 	}
-	return apperrors.ServerDiagnostics{
-		TraceID:         coalesceStr(fields.TraceID, fields.TraceIDCamel),
-		ServerErrorCode: coalesceStr(fields.Code, fields.ErrorCode),
-		TechnicalDetail: fields.TechnicalDetail,
-		ServerRetryable: fields.Retryable,
-	}
+	return ExtractServerDiagnosticsFromMap(content)
 }
 
 // ExtractServerDiagnosticsFromMap parses server diagnostic fields from a
@@ -58,7 +54,7 @@ func ExtractServerDiagnosticsFromMap(content map[string]any) apperrors.ServerDia
 	}
 	diag := apperrors.ServerDiagnostics{
 		TraceID:         stringFromMap(content, "trace_id", "traceId"),
-		ServerErrorCode: stringFromMap(content, "code", "errorCode"),
+		ServerErrorCode: serverErrorCodeFromMap(content, 0),
 		TechnicalDetail: stringFromMap(content, "technical_detail"),
 	}
 	if v, ok := content["retryable"].(bool); ok {
@@ -101,4 +97,51 @@ func stringFromMap(m map[string]any, keys ...string) string {
 		}
 	}
 	return ""
+}
+
+func serverErrorCodeFromMap(content map[string]any, depth int) string {
+	if content == nil || depth > 8 {
+		return ""
+	}
+	direct := stringFromMap(content, "errorCode", "code", "server_error_code")
+	if isWrapperServerCode(direct) {
+		if nested := nestedServerErrorCode(content, depth); nested != "" {
+			return nested
+		}
+	}
+	if direct != "" {
+		return direct
+	}
+	return nestedServerErrorCode(content, depth)
+}
+
+func nestedServerErrorCode(content map[string]any, depth int) string {
+	for _, key := range []string{"content", "result", "data"} {
+		switch child := content[key].(type) {
+		case map[string]any:
+			if code := serverErrorCodeFromMap(child, depth+1); code != "" {
+				return code
+			}
+		case []any:
+			for _, item := range child {
+				childMap, ok := item.(map[string]any)
+				if !ok {
+					continue
+				}
+				if code := serverErrorCodeFromMap(childMap, depth+1); code != "" {
+					return code
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func isWrapperServerCode(code string) bool {
+	switch strings.ToUpper(strings.TrimSpace(code)) {
+	case "ERROR", "BUSINESS_ERROR", "-1":
+		return true
+	default:
+		return false
+	}
 }

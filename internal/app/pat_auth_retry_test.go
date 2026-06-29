@@ -590,6 +590,35 @@ func makePATErrorJSONWithURI(flowID, clientID, uri string) string {
 	return string(data)
 }
 
+func TestEnrichPATErrorWithOpenBrowserKeepsAuthorizationURLAmpersandReadable(t *testing.T) {
+	rawURI := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3Dflow-copy%26userCode%3DQZYH-D64W#/personalAuthorization?flowId=flow-copy&userCode=QZYH-D64W"
+	raw := makePATErrorJSONWithURI("flow-copy", "test-client-id", rawURI)
+
+	out := enrichPATErrorWithOpenBrowser(raw, true)
+
+	if strings.Contains(out, `\u0026`) {
+		t.Fatalf("enriched PAT JSON should keep URL ampersands readable for mobile copy/linkify, got: %s", out)
+	}
+	if !strings.Contains(out, "&userCode=QZYH-D64W") {
+		t.Fatalf("enriched PAT JSON missing readable authorization URL separator, got: %s", out)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(enriched PAT payload) error = %v\nraw=%s", err, out)
+	}
+	data, _ := payload["data"].(map[string]any)
+	if got, _ := data["uri"].(string); got != rawURI {
+		t.Fatalf("data.uri = %q, want %q", got, rawURI)
+	}
+	if _, ok := data["authUrl"]; ok {
+		t.Fatalf("data.authUrl should be omitted from enriched PAT payload")
+	}
+	if _, ok := data["authorizationUrl"]; ok {
+		t.Fatalf("data.authorizationUrl should be omitted from enriched PAT payload")
+	}
+}
+
 func TestHandlePatAuthCheck_Approved(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
 	server, configDir := setupHandlePATServer(t, "APPROVED", "test-auth-code")
@@ -630,6 +659,192 @@ func TestHandlePatAuthCheck_Approved(t *testing.T) {
 	// Verify SetClientIDFromMCP was called with the PAT response clientId.
 	if cid := authpkg.ClientID(); cid != "test-client-id" {
 		t.Errorf("expected ClientID 'test-client-id', got %q", cid)
+	}
+}
+
+func TestRunDirectPATAuthCheck_ApprovedRetriesCallback(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "")
+	server, _ := setupHandlePATServer(t, "APPROVED", "")
+	defer server.Close()
+
+	patErr := &apperrors.PATError{RawJSON: makePATErrorJSONWithURI("flow-direct", "test-client-id", "https://example.com/pat")}
+	var retried atomic.Bool
+	var retryHadKey atomic.Bool
+	err := runDirectPATAuthCheck(context.Background(), &GlobalFlags{}, patErr, func(ctx context.Context) error {
+		retried.Store(true)
+		retryHadKey.Store(IsPatRetrying(ctx))
+		return nil
+	}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("runDirectPATAuthCheck error = %v", err)
+	}
+	if !retried.Load() {
+		t.Fatal("expected direct PAT auth retry callback to run")
+	}
+	if !retryHadKey.Load() {
+		t.Fatal("expected direct PAT auth retry context to be marked as PAT retrying")
+	}
+}
+
+func TestRunDirectPATAuthCheckWaitOnly_ApprovedDoesNotRetry(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "")
+	server, _ := setupHandlePATServer(t, "APPROVED", "")
+	defer server.Close()
+
+	patErr := &apperrors.PATError{RawJSON: makePATErrorJSONWithURI("flow-direct", "test-client-id", "https://example.com/pat")}
+	var out bytes.Buffer
+	err := runDirectPATAuthCheckWaitOnly(context.Background(), &GlobalFlags{}, patErr, &out)
+	if err != nil {
+		t.Fatalf("runDirectPATAuthCheckWaitOnly error = %v", err)
+	}
+	if strings.Contains(out.String(), "授权完成，正在重试") {
+		t.Fatalf("wait-only auth must not print retry prompt, output:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "授权成功") {
+		t.Fatalf("wait-only auth should still report success, output:\n%s", out.String())
+	}
+}
+
+func TestRunDirectPATAuthCheckWaitOnly_SuppressesBrowserOpen(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "")
+	server, configDir := setupHandlePATServer(t, "APPROVED", "")
+	defer server.Close()
+	if _, err := pat.SetBrowserPolicy(configDir, "", true); err != nil {
+		t.Fatalf("SetBrowserPolicy(default) error = %v", err)
+	}
+
+	var opened bool
+	origOpenBrowser := openBrowserFunc
+	openBrowserFunc = func(rawURL string) error {
+		opened = true
+		return nil
+	}
+	t.Cleanup(func() { openBrowserFunc = origOpenBrowser })
+
+	patErr := &apperrors.PATError{RawJSON: makePATErrorJSONWithURI("flow-direct", "test-client-id", "https://example.com/pat")}
+	var out bytes.Buffer
+	err := runDirectPATAuthCheckWaitOnly(context.Background(), &GlobalFlags{}, patErr, &out)
+	if err != nil {
+		t.Fatalf("runDirectPATAuthCheckWaitOnly error = %v", err)
+	}
+	if opened {
+		t.Fatal("wait-only auth must not open a second browser tab")
+	}
+	if !strings.Contains(out.String(), "授权链接:") {
+		t.Fatalf("wait-only auth should still print the authorization URL, output:\n%s", out.String())
+	}
+}
+
+func TestResolvePATPollInterval(t *testing.T) {
+	tests := []struct {
+		name    string
+		seconds int
+		want    time.Duration
+	}{
+		{name: "default", seconds: 0, want: patPollInterval},
+		{name: "server value", seconds: 3, want: 3 * time.Second},
+		{name: "cap excessive value", seconds: 90, want: patMaxPollInterval},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := resolvePATPollInterval(tt.seconds); got != tt.want {
+				t.Fatalf("resolvePATPollInterval(%d) = %s, want %s", tt.seconds, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRunDirectPATAuthCheck_JSONModeReturnsStructuredPending(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "")
+	configDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+	if _, err := pat.SetBrowserPolicy(configDir, "", false); err != nil {
+		t.Fatalf("SetBrowserPolicy(default) error = %v", err)
+	}
+
+	rawURI := "https://example.com/personalAuthorization?flowId=flow-json&userCode=ABCD-EFGH"
+	raw := `{"success":false,"code":"PAT_BATCH_AUTH_PENDING","data":{"flowId":"flow-json","uri":"` + rawURI + `","authUrl":"` + rawURI + `","clientId":"test-client-id"}}`
+	err := runDirectPATAuthCheck(context.Background(), &GlobalFlags{Format: "json"},
+		&apperrors.PATError{RawJSON: raw},
+		func(ctx context.Context) error {
+			t.Fatal("retry callback should not run in structured PAT output mode")
+			return nil
+		},
+		&bytes.Buffer{},
+	)
+	if err == nil {
+		t.Fatal("expected structured PATError")
+	}
+	patOut, ok := err.(*apperrors.PATError)
+	if !ok {
+		t.Fatalf("expected *PATError, got %T: %v", err, err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(patOut.RawJSON), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(PAT payload) error = %v\nraw=%s", err, patOut.RawJSON)
+	}
+	if got, _ := payload["code"].(string); got != "PAT_BATCH_AUTH_PENDING" {
+		t.Fatalf("code = %q, want PAT_BATCH_AUTH_PENDING", got)
+	}
+	data, _ := payload["data"].(map[string]any)
+	if got, _ := data["uri"].(string); got != rawURI {
+		t.Fatalf("data.uri = %q, want %q", got, rawURI)
+	}
+	if _, ok := data["authUrl"]; ok {
+		t.Fatalf("data.authUrl should be omitted from structured PAT output")
+	}
+	if _, ok := data["authorizationUrl"]; ok {
+		t.Fatalf("data.authorizationUrl should be omitted from structured PAT output")
+	}
+	if got, ok := data["openBrowser"].(bool); !ok || got {
+		t.Fatalf("data.openBrowser = %#v, want false", data["openBrowser"])
+	}
+}
+
+func TestRunDirectPATAuthCheck_JSONModeBackfillsSingleURIFromAuthURL(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "")
+	configDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+	if _, err := pat.SetBrowserPolicy(configDir, "", false); err != nil {
+		t.Fatalf("SetBrowserPolicy(default) error = %v", err)
+	}
+
+	rawURL := "https://open-dev.dingtalk.com/fe/old#%2FpersonalAuthorization%3FflowId%3Dflow-json%26userCode%3DABCD-EFGH"
+	wantURL := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3Dflow-json%26userCode%3DABCD-EFGH#/personalAuthorization?flowId=flow-json&userCode=ABCD-EFGH"
+	raw := `{"success":false,"code":"PAT_BATCH_AUTH_PENDING","data":{"flowId":"flow-json","authUrl":"` + rawURL + `","clientId":"test-client-id"}}`
+	err := runDirectPATAuthCheck(context.Background(), &GlobalFlags{Format: "json"},
+		&apperrors.PATError{RawJSON: raw},
+		func(ctx context.Context) error {
+			t.Fatal("retry callback should not run in structured PAT output mode")
+			return nil
+		},
+		&bytes.Buffer{},
+	)
+	if err == nil {
+		t.Fatal("expected structured PATError")
+	}
+	patOut, ok := err.(*apperrors.PATError)
+	if !ok {
+		t.Fatalf("expected *PATError, got %T: %v", err, err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(patOut.RawJSON), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(PAT payload) error = %v\nraw=%s", err, patOut.RawJSON)
+	}
+	if strings.Contains(patOut.RawJSON, `\u0026`) {
+		t.Fatalf("PAT output escaped URL separators: %s", patOut.RawJSON)
+	}
+	data, _ := payload["data"].(map[string]any)
+	if got, _ := data["uri"].(string); got != wantURL {
+		t.Fatalf("data.uri = %q, want %q", got, wantURL)
+	}
+	if _, ok := data["authUrl"]; ok {
+		t.Fatalf("data.authUrl should be omitted after backfilling data.uri")
+	}
+	if _, ok := data["authorizationUrl"]; ok {
+		t.Fatalf("data.authorizationUrl should be omitted after backfilling data.uri")
 	}
 }
 
@@ -928,6 +1143,12 @@ func TestHandlePatAuthCheck_JSONModeCanOpenBrowserWithoutTextOutput(t *testing.T
 	if !ok {
 		t.Fatalf("expected *PATError, got %T: %v", err, err)
 	}
+	if strings.Contains(patOut.RawJSON, `\u0026`) {
+		t.Fatalf("PATError RawJSON escaped ampersands in authorization URL: %s", patOut.RawJSON)
+	}
+	if !strings.Contains(patOut.RawJSON, "&userCode=98JV-JSBL") {
+		t.Fatalf("PATError RawJSON missing literal ampersand route separator: %s", patOut.RawJSON)
+	}
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(patOut.RawJSON), &payload); err != nil {
 		t.Fatalf("json.Unmarshal(json PAT payload) error = %v\nraw=%s", err, patOut.RawJSON)
@@ -936,8 +1157,11 @@ func TestHandlePatAuthCheck_JSONModeCanOpenBrowserWithoutTextOutput(t *testing.T
 	if got, _ := data["uri"].(string); got != rawURI {
 		t.Fatalf("data.uri = %q, want verbatim %q", got, rawURI)
 	}
-	if got, _ := data["authorizationUrl"].(string); got != rawURI {
-		t.Fatalf("data.authorizationUrl = %q, want %q", got, rawURI)
+	if _, ok := data["authUrl"]; ok {
+		t.Fatalf("data.authUrl should be omitted from json PAT output")
+	}
+	if _, ok := data["authorizationUrl"]; ok {
+		t.Fatalf("data.authorizationUrl should be omitted from json PAT output")
 	}
 	if got, ok := data["openBrowser"].(bool); !ok || !got {
 		t.Fatalf("data.openBrowser = %#v, want true", data["openBrowser"])
@@ -972,7 +1196,7 @@ func TestHandlePatAuthCheck_NonJSONModeRespectsBrowserPolicy(t *testing.T) {
 		fallback:    mock,
 		globalFlags: &GlobalFlags{Format: "table"},
 	}
-	raw := `{"code":"AGENT_CODE_NOT_EXISTS","data":{"desc":"test auth","flowId":"flow-approved","uri":"https://example.com/pat","clientId":"test-client-id"}}`
+	raw := `{"code":"AGENT_CODE_NOT_EXISTS","data":{"desc":"test auth","flowId":"flow-approved","authorizationUrl":"https://example.com/pat","clientId":"test-client-id"}}`
 
 	var buf bytes.Buffer
 	_, err := handlePatAuthCheck(context.Background(), runner, executor.Invocation{
@@ -991,6 +1215,12 @@ func TestHandlePatAuthCheck_NonJSONModeRespectsBrowserPolicy(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "需要 PAT 授权") {
 		t.Fatalf("expected human-readable PAT output, got %q", buf.String())
+	}
+	if !strings.Contains(buf.String(), "授权链接: https://example.com/pat") {
+		t.Fatalf("expected authorization URL in human-readable PAT output, got %q", buf.String())
+	}
+	if strings.Contains(buf.String(), "PAT_AUTHORIZATION_URL=") {
+		t.Fatalf("human-readable PAT output should not emit a second machine-readable URL line, got %q", buf.String())
 	}
 }
 
@@ -1079,6 +1309,21 @@ func TestEnrichPATErrorForHostControl_SingleLineOutput(t *testing.T) {
 	}
 	if _, ok := data["callbacks"]; ok {
 		t.Fatalf("expected callbacks to be stripped in host-owned contract, got: %v", data["callbacks"])
+	}
+}
+
+func TestEnrichPATErrorForHostControlKeepsAuthorizationURLAmpersandReadable(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "agt-sales")
+	t.Setenv("DINGTALK_AGENT", "sales-copilot")
+
+	raw := `{"success":false,"code":"PAT_HIGH_RISK_NO_PERMISSION","data":{"flowId":"flow-host","desc":"授权","uri":"https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3Dflow-host%26userCode%3DQZYH-D64W#/personalAuthorization?flowId=flow-host&userCode=QZYH-D64W"}}`
+	out := enrichPATErrorForHostControl(raw)
+
+	if strings.Contains(out, `\u0026`) {
+		t.Fatalf("host PAT JSON should keep URL ampersands readable for mobile copy/linkify, got: %s", out)
+	}
+	if !strings.Contains(out, "&userCode=QZYH-D64W") {
+		t.Fatalf("host PAT JSON missing readable authorization URL separator, got: %s", out)
 	}
 }
 
@@ -1208,8 +1453,8 @@ func TestHandlePatAuthCheck_OpensOpaqueURIWithoutRebuild(t *testing.T) {
 	if opened != rawURI {
 		t.Fatalf("opened url = %q, want verbatim %q", opened, rawURI)
 	}
-	if got := buf.String(); !strings.Contains(got, "PAT_AUTHORIZATION_URL="+rawURI) {
-		t.Fatalf("output missing copy-safe PAT_AUTHORIZATION_URL line:\n%s", got)
+	if got := buf.String(); strings.Contains(got, "PAT_AUTHORIZATION_URL=") {
+		t.Fatalf("human-readable PAT output should not emit PAT_AUTHORIZATION_URL line:\n%s", got)
 	}
 }
 
@@ -1254,8 +1499,8 @@ func TestHandlePatAuthCheck_NormalizesLegacyHashRouteForBrowserAndOutput(t *test
 	if opened != wantURL {
 		t.Fatalf("opened url = %q, want normalized %q", opened, wantURL)
 	}
-	if got := buf.String(); !strings.Contains(got, "PAT_AUTHORIZATION_URL="+wantURL) {
-		t.Fatalf("output missing normalized PAT_AUTHORIZATION_URL line:\n%s", got)
+	if got := buf.String(); strings.Contains(got, "PAT_AUTHORIZATION_URL=") {
+		t.Fatalf("human-readable PAT output should not emit PAT_AUTHORIZATION_URL line:\n%s", got)
 	}
 }
 

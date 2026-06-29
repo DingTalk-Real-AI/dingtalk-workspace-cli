@@ -494,8 +494,7 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 }
 
 func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte) (*http.Response, error) {
-	// Strip any query/fragment from the endpoint to prevent parameter injection.
-	endpoint = validate.StripQueryFragment(endpoint)
+	endpoint = sanitizeJSONRPCEndpoint(endpoint)
 	var lastErr error
 	for attempt := 0; attempt <= c.MaxRetries; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
@@ -533,7 +532,7 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte) 
 		// Diagnostic: log identity-related headers on first attempt.
 		if attempt == 0 && c.FileLogger != nil {
 			c.FileLogger.LogAttrs(context.Background(), slog.LevelDebug, "http_request_headers",
-				slog.String("endpoint", endpoint),
+				slog.String("endpoint", RedactURL(endpoint)),
 				slog.String("x-user-access-token-present", fmt.Sprintf("%t", req.Header.Get("x-user-access-token") != "")),
 				slog.Int("extra_headers_count", len(c.ExtraHeaders)),
 			)
@@ -591,6 +590,31 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte) 
 			Cause: lastErr,
 		}),
 	)
+}
+
+func sanitizeJSONRPCEndpoint(endpoint string) string {
+	parsed, err := url.Parse(strings.TrimSpace(endpoint))
+	if err != nil || parsed.Host == "" {
+		return validate.StripQueryFragment(endpoint)
+	}
+	parsed.Fragment = ""
+	if shouldPreserveEndpointQuery(parsed) {
+		return parsed.String()
+	}
+	parsed.RawQuery = ""
+	return parsed.String()
+}
+
+func shouldPreserveEndpointQuery(parsed *url.URL) bool {
+	if parsed == nil || !strings.EqualFold(parsed.Scheme, "https") {
+		return false
+	}
+	switch strings.ToLower(parsed.Hostname()) {
+	case "mcp-gw.dingtalk.com", "pre-mcp-gw.dingtalk.com":
+		return true
+	default:
+		return false
+	}
 }
 
 func retryable(statusCode int) bool {

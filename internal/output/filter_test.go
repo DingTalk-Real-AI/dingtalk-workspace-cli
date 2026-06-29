@@ -219,6 +219,20 @@ func TestApplyJQIdentity(t *testing.T) {
 	}
 }
 
+func TestApplyJQDoesNotEscapeAmpersands(t *testing.T) {
+	payload := map[string]any{"url": "https://example.test/auth?a=1&b=2"}
+	var buf bytes.Buffer
+	if err := ApplyJQ(&buf, payload, ".url"); err != nil {
+		t.Fatalf("ApplyJQ error: %v", err)
+	}
+	if strings.Contains(buf.String(), `\u0026`) {
+		t.Fatalf("ApplyJQ escaped ampersand: %s", buf.String())
+	}
+	if !strings.Contains(buf.String(), "a=1&b=2") {
+		t.Fatalf("ApplyJQ output missing literal ampersand: %s", buf.String())
+	}
+}
+
 func TestApplyJQFieldAccess(t *testing.T) {
 	payload := map[string]any{"name": "Alice", "age": float64(30)}
 	var buf bytes.Buffer

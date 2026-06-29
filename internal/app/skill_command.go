@@ -95,12 +95,13 @@ var agentSkillPaths = map[string]string{
 	// `agents` is the generic-agent sentinel: install scripts and `setup`
 	// special-case ~/.agents/skills as a no-checks-required fallback so a
 	// fresh machine without any IDE/agent registry still gets skills.
-	"agents":   ".agents/skills",
-	"qoder":    ".qoder/skills",
-	"claude":   ".claude/skills",
-	"cursor":   ".cursor/skills",
-	"codex":    ".codex/skills",
-	"opencode": filepath.Join(".config", "opencode", "skills"),
+	"agents":    ".agents/skills",
+	"qoder":     ".qoder/skills",
+	"qoderwork": ".qoderwork/skills",
+	"claude":    ".claude/skills",
+	"cursor":    ".cursor/skills",
+	"codex":     ".codex/skills",
+	"opencode":  filepath.Join(".config", "opencode", "skills"),
 	// IDE / agent registries also probed by `dws skill setup --target all`.
 	"gemini":   ".gemini/skills",
 	"github":   ".github/skills",

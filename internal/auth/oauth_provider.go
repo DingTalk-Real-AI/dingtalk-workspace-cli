@@ -42,6 +42,7 @@ type OAuthProvider struct {
 	logger     *slog.Logger
 	Output     io.Writer
 	httpClient *http.Client
+	NoBrowser  bool
 }
 
 // NewOAuthProvider creates a new OAuth provider.
@@ -56,8 +57,8 @@ func NewOAuthProvider(configDir string, logger *slog.Logger) *OAuthProvider {
 }
 
 // resetCredentialState clears any stale credential state inherited from
-// previous login methods so that OAuth flow always starts fresh by
-// fetching clientID from MCP.
+// previous login methods before the OAuth flow falls back to MCP-managed
+// credentials. Complete runtime AppKey/AppSecret overrides skip this reset.
 func (p *OAuthProvider) resetCredentialState() {
 	p.clientID = ""
 	clientMu.Lock()
@@ -109,22 +110,29 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 	}
 
 	// Fall through: full browser OAuth flow.
-	// Defensive reset: clear any stale credential state from previous login
-	// methods so we always re-fetch clientID from MCP. This ensures
-	// --force login works regardless of what app.json contains.
-	p.resetCredentialState()
+	if runtimeClientID, _, ok := getCompleteRuntimeCredentials(); ok {
+		p.clientID = runtimeClientID
+		clientMu.Lock()
+		clientIDFromMCP = false
+		clientMu.Unlock()
+	} else {
+		// Defensive reset: clear any stale credential state from previous login
+		// methods so we can re-fetch clientID from MCP. This ensures --force
+		// login works regardless of what app.json contains.
+		p.resetCredentialState()
 
-	if p.logger != nil {
-		p.logger.Debug("fetching client ID from MCP server (OAuth flow always re-fetches)")
-	}
-	mcpClientID, mcpErr := FetchClientIDFromMCP(ctx)
-	if mcpErr != nil {
-		return nil, fmt.Errorf("%s: %w", i18n.T("获取 Client ID 失败"), mcpErr)
-	}
-	p.clientID = mcpClientID
-	SetClientIDFromMCP(mcpClientID)
-	if p.logger != nil {
-		p.logger.Debug("fetched client ID from MCP server", "clientID", mcpClientID)
+		if p.logger != nil {
+			p.logger.Debug("fetching client ID from MCP server (OAuth flow always re-fetches)")
+		}
+		mcpClientID, mcpErr := FetchClientIDFromMCP(ctx)
+		if mcpErr != nil {
+			return nil, fmt.Errorf("%s: %w", i18n.T("获取 Client ID 失败"), mcpErr)
+		}
+		p.clientID = mcpClientID
+		SetClientIDFromMCP(mcpClientID)
+		if p.logger != nil {
+			p.logger.Debug("fetched client ID from MCP server", "clientID", mcpClientID)
+		}
 	}
 
 	// Find a free port for the callback server.
@@ -393,8 +401,10 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 	if p.logger != nil {
 		p.logger.Debug("authorization URL", "url", authURL)
 	}
-	if err := openBrowser(authURL); err != nil && p.logger != nil {
-		p.logger.Warn(i18n.T("无法自动打开浏览器"), "error", err)
+	if !p.NoBrowser {
+		if err := openBrowser(authURL); err != nil && p.logger != nil {
+			p.logger.Warn(i18n.T("无法自动打开浏览器"), "error", err)
+		}
 	}
 
 	_, _ = fmt.Fprintln(p.output(), "")

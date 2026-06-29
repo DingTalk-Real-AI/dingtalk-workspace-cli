@@ -30,7 +30,7 @@ import (
 
 // ApplyTransform applies a named transform rule to a value.
 // Supported transforms: iso8601_to_millis, csv_to_array, json_parse,
-// json_parse_strict, enum_map, file_read, invert_bool.
+// json_parse_strict, enum_map, file_read, invert_bool, parse_bool, string_to_int64.
 func ApplyTransform(value any, transform string, args map[string]any) (any, error) {
 	switch strings.TrimSpace(transform) {
 	case "":
@@ -49,6 +49,12 @@ func ApplyTransform(value any, transform string, args map[string]any) (any, erro
 		return transformFileRead(value)
 	case "invert_bool":
 		return transformInvertBool(value)
+	case "parse_bool":
+		return transformParseBool(value)
+	case "attendance_class_check_time":
+		return transformAttendanceClassCheckTime(value)
+	case "string_to_int64":
+		return transformStringToInt64(value)
 	default:
 		return value, nil
 	}
@@ -75,6 +81,77 @@ func transformInvertBool(value any) (any, error) {
 	default:
 		return value, nil
 	}
+}
+
+// transformParseBool coerces a CLI string flag into a real JSON boolean so the
+// MCP body carries `false`/`true` (not the string "false"/"true" or a swallowed
+// zero value). Used by envelope flags that are semantically boolean but must be
+// declared as string flags to accept an explicit `false` on the command line
+// (cobra bool flags drop the space-form value). Unknown tokens pass through
+// unchanged so upstream validators own the error wording.
+func transformParseBool(value any) (any, error) {
+	switch v := value.(type) {
+	case bool:
+		return v, nil
+	case string:
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "true", "1", "yes", "on":
+			return true, nil
+		case "false", "0", "no", "off":
+			return false, nil
+		}
+		return value, nil
+	default:
+		return value, nil
+	}
+}
+
+// transformAttendanceClassCheckTime parses a class-VO JSON string and converts
+// every "HH:mm" checkTime under sections[*].times[*] and
+// setting.topRestTimeList[*] into a Unix-millis number (1970-01-01 HH:mm in
+// UTC+8), mirroring wukong's convertClassCheckTime. The MCP backend expects the
+// numeric form; the envelope cannot express this nested walk, so it lives here.
+func transformAttendanceClassCheckTime(value any) (any, error) {
+	parsed, err := transformJSONParseStrict(value)
+	if err != nil {
+		return nil, err
+	}
+	classVO, ok := parsed.(map[string]any)
+	if !ok {
+		return parsed, nil
+	}
+	cst := time.FixedZone("CST", 8*3600)
+	convertOne := func(obj map[string]any) {
+		if ct, ok := obj["checkTime"].(string); ok {
+			ct = strings.TrimSpace(ct)
+			if t, err := time.ParseInLocation("2006-01-02 15:04", "1970-01-01 "+ct, cst); err == nil {
+				obj["checkTime"] = float64(t.UnixMilli())
+			}
+		}
+	}
+	if sections, ok := classVO["sections"].([]any); ok {
+		for _, sec := range sections {
+			if secMap, ok := sec.(map[string]any); ok {
+				if times, ok := secMap["times"].([]any); ok {
+					for _, t := range times {
+						if tMap, ok := t.(map[string]any); ok {
+							convertOne(tMap)
+						}
+					}
+				}
+			}
+		}
+	}
+	if setting, ok := classVO["setting"].(map[string]any); ok {
+		if restList, ok := setting["topRestTimeList"].([]any); ok {
+			for _, item := range restList {
+				if itemMap, ok := item.(map[string]any); ok {
+					convertOne(itemMap)
+				}
+			}
+		}
+	}
+	return classVO, nil
 }
 
 func transformISO8601ToMillis(value any) (any, error) {
@@ -260,6 +337,69 @@ func transformFileRead(value any) (any, error) {
 		return nil, apperrors.NewValidation(fmt.Sprintf("file_read: %q is not valid UTF-8", s))
 	}
 	return string(buf), nil
+}
+
+// transformStringToInt64 parses a string-form integer (e.g. "12345") into an
+// int64 so the MCP body carries a numeric value rather than a quoted string.
+// Used for envelope flags whose upstream schema requires int64 (e.g. deptId).
+//
+// Two ergonomic guards are layered on top of the raw parse:
+//
+//  1. Placeholder rejection — common LLM/AI-agent placeholders for "myself" /
+//     "root department" (self / me / 我 / root / 0) are NOT valid deptIds. The
+//     dingtalk root department's deptId is the literal integer 1; if we let
+//     "self" fall through to the MCP, the server returns an empty result with
+//     success=true, masking the mistake. Instead, return a validation error
+//     pointing the caller at the correct usage. Mirrors wukong's cmdutil error
+//     wording ("根部门 deptId=1，请使用 --id 1") so CLI and wukong agree.
+//
+//  2. Non-numeric rejection — anything else that fails strconv.ParseInt is
+//     reported as a validation error rather than silently sent as a string,
+//     which the upstream server would also reject (or worse: coerce to 0).
+//
+// Numeric int / int64 inputs pass through unchanged; the transform is a no-op
+// when the schema-typed flag already produced an integer.
+func transformStringToInt64(value any) (any, error) {
+	switch v := value.(type) {
+	case nil:
+		return value, nil
+	case int:
+		return int64(v), nil
+	case int32:
+		return int64(v), nil
+	case int64:
+		return v, nil
+	case float64:
+		// JSON numbers decode as float64; accept only when integer-valued.
+		if v == float64(int64(v)) {
+			return int64(v), nil
+		}
+		return nil, apperrors.NewValidation(fmt.Sprintf("string_to_int64: %v is not an integer", v))
+	}
+	s, ok := toString(value)
+	if !ok {
+		return value, nil
+	}
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return value, nil
+	}
+	// Placeholder guard: LLMs often invent symbolic values like "self" / "me" /
+	// "root" / "我" for "the current user's root department". Catch them with a
+	// clear error pointing at the canonical deptId=1, instead of forwarding the
+	// bogus value and letting the upstream return success=true with empty data.
+	lowered := strings.ToLower(s)
+	switch lowered {
+	case "self", "me", "我", "root", "0":
+		return nil, apperrors.NewValidation(
+			"flag --id 必须是整数；钉钉根部门 deptId=1，请使用 --id 1",
+		)
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return nil, apperrors.NewValidation(fmt.Sprintf("flag --id 必须是整数，got %q", s))
+	}
+	return n, nil
 }
 
 func toString(v any) (string, bool) {

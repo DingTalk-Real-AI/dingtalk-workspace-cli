@@ -16,6 +16,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -49,9 +50,84 @@ func newLegacyPublicCommands(ctx context.Context, runner executor.Runner) []*cob
 		return mergeTopLevelCommands(commands)
 	}
 
-	dynamicCmds := loadDynamicCommands(ctx, runner)
+	return buildEnvelopeCommandsSafe(ctx, runner)
+}
+
+// loadDynamicCommandsFn is a test seam for buildEnvelopeCommandsSafe so a
+// panic in the cache-driven build can be simulated without crafting a
+// poisoned on-disk cache.
+var loadDynamicCommandsFn = loadDynamicCommands
+
+// buildEnvelopeCommandsSafe builds the public command set from the discovery
+// envelope, self-healing a poisoned cache when the dynamic build panics and
+// degrading to the hardcoded helper commands only if that also fails.
+//
+// Why this guard exists: the dynamic command tree is constructed from cached
+// discovery data BEFORE Cobra dispatches any command, so a panic here (e.g.
+// a duplicate pflag registration fed by a poisoned cache, as seen before
+// 1.0.32: "chat_permission_grant flag redefined: params") used to abort
+// every invocation — including `dws cache refresh`, the very command that
+// repairs the cache.
+//
+// Recovery is two-staged. First the partition's discovery cache is moved
+// aside (kept on disk for inspection) and the build retried against a fresh
+// fetch — so any path that delivers a fixed binary (`dws upgrade`, reinstall)
+// escapes the lock-out with zero manual cache surgery. Only when the rebuild
+// panics again (e.g. the remote envelope itself is still poisoned, or the
+// machine is offline with no usable cache) does the CLI degrade to utility
+// and helper commands with a `dws cache refresh` hint.
+func buildEnvelopeCommandsSafe(ctx context.Context, runner executor.Runner) []*cobra.Command {
+	cmds, panicked := tryBuildEnvelopeCommands(ctx, runner)
+	if panicked == nil {
+		return cmds
+	}
+	slog.Error("buildEnvelopeCommandsSafe: dynamic command build panicked", "panic", panicked)
+
+	quarantined, qErr := cacheStoreFromEnv().QuarantinePartition(editionPartition())
+	if qErr != nil {
+		slog.Error("buildEnvelopeCommandsSafe: failed to quarantine discovery cache", "error", qErr)
+	}
+	if quarantined != "" {
+		fmt.Fprintf(os.Stderr,
+			"Warning: building product commands from the local discovery cache failed: %v\n"+
+				"The cached discovery data was moved to %s; rebuilding from a fresh fetch...\n",
+			panicked, quarantined)
+		cmds, panicked = tryBuildEnvelopeCommands(ctx, runner)
+		if panicked == nil {
+			fmt.Fprintln(os.Stderr, "Product commands rebuilt successfully.")
+			return cmds
+		}
+		slog.Error("buildEnvelopeCommandsSafe: rebuild after cache quarantine panicked again, degrading to built-in commands", "panic", panicked)
+	}
+
+	fmt.Fprintf(os.Stderr,
+		"Warning: building product commands from the local discovery cache failed: %v\n"+
+			"Product commands are temporarily unavailable; utility commands still work.\n"+
+			"Run 'dws cache refresh' to rebuild the cache.\n", panicked)
+	return mergeTopLevelCommands(helpers.NewPublicCommands(runner))
+}
+
+// tryBuildEnvelopeCommands runs one attempt of the envelope-driven build,
+// converting a panic into a return value so the caller can decide between
+// self-heal and degradation.
+func tryBuildEnvelopeCommands(ctx context.Context, runner executor.Runner) (cmds []*cobra.Command, panicked any) {
+	defer func() {
+		if r := recover(); r != nil {
+			cmds = nil
+			panicked = r
+		}
+	}()
+
+	dynamicCmds := loadDynamicCommandsFn(ctx, runner)
 	helperCmds := helpers.NewPublicCommands(runner)
-	return mergeTopLevelCommands(pickCommands(dynamicCmds, helperCmds))
+	merged := mergeTopLevelCommands(pickCommands(dynamicCmds, helperCmds))
+	// Post-merge product hooks: tasks the envelope cannot express on its
+	// own (e.g. dual-role group+leaf semantics for deprecated aliases).
+	// Keep each hook narrowly scoped to one product so the open-source
+	// command surface remains predictable from the envelope alone.
+	helpers.AttachReportLegacyInboxAlias(merged, runner)
+	helpers.AttachReportListReadableEnrichment(merged, runner)
+	return merged, nil
 }
 
 // pickCommands returns the union of dynamic and helpers commands. For
@@ -211,11 +287,7 @@ func loadDynamicCommands(ctx context.Context, runner executor.Runner) []*cobra.C
 			if edURL := strings.TrimSpace(edition.Get().DiscoveryURL); edURL != "" {
 				slog.Info("loadDynamicCommands: sync discovery fetch", "partition", partition, "url", edURL)
 			} else {
-				baseURL := cli.DefaultMarketBaseURL
-				if discoveryBaseURLOverride != "" {
-					baseURL = discoveryBaseURLOverride
-				}
-				slog.Info("loadDynamicCommands: sync market catalog fetch", "partition", partition, "base_url", baseURL)
+				slog.Info("loadDynamicCommands: sync market catalog fetch", "partition", partition, "base_url", DiscoveryBaseURL())
 			}
 		}
 		fetchStart := time.Now()
@@ -238,7 +310,7 @@ func loadDynamicCommands(ctx context.Context, runner executor.Runner) []*cobra.C
 				// no-op: fall through to FallbackServers check below
 			}
 		} else {
-			servers = market.NormalizeServers(resp, "market")
+			servers = market.NormalizeServersForBaseURL(resp, "market", registryDiscoveryBaseURL())
 			if discoveryTraceEnabled() {
 				slog.Info("loadDynamicCommands: sync discovery fetch ok",
 					"partition", partition,
@@ -453,7 +525,7 @@ func DiscoveryBaseURL() string {
 	if discoveryBaseURLOverride != "" {
 		return discoveryBaseURLOverride
 	}
-	return cli.DefaultMarketBaseURL
+	return config.GetMCPBaseURL()
 }
 
 // ipv4HTTPClient returns an HTTP client that forces IPv4 connections with
@@ -496,6 +568,13 @@ func fetchRegistryServers(ctx context.Context, httpClient *http.Client) (market.
 	return client.FetchServers(ctx, config.DefaultFetchServersLimit)
 }
 
+func registryDiscoveryBaseURL() string {
+	if editionURL := strings.TrimSpace(edition.Get().DiscoveryURL); editionURL != "" {
+		return editionURL
+	}
+	return DiscoveryBaseURL()
+}
+
 // asyncRevalidateRegistry refreshes the registry cache in the background.
 // Uses a short timeout derived from the parent context and silently ignores
 // errors — the next CLI invocation will pick up the refreshed cache or retry.
@@ -508,7 +587,7 @@ func asyncRevalidateRegistry(parent context.Context, store *cache.Store, partiti
 		slog.Debug("asyncRevalidateRegistry: fetch failed", "error", err)
 		return
 	}
-	servers := market.NormalizeServers(resp, "market")
+	servers := market.NormalizeServersForBaseURL(resp, "market", registryDiscoveryBaseURL())
 	if saveErr := store.SaveRegistry(partition, cache.RegistrySnapshot{Servers: servers}); saveErr != nil {
 		slog.Debug("asyncRevalidateRegistry: save failed", "error", saveErr)
 	}

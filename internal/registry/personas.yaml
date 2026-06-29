@@ -39,7 +39,7 @@ personas:
   - name: ops-analyst
     title: 运营分析师
     description: "围绕数据与运营流程执行：表格、听记、邮件与应用协同。"
-    services: [aitable, minutes, mail, aiapp, drive, doc]
+    services: [aitable, minutes, mail, drive, doc]
     workflows: [minutes-to-todo, drive-upload-and-announce]
     instructions:
       - "先获取原始数据，再做结构化汇总与分发。"
