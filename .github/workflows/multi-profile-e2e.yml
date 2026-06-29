@@ -3,10 +3,6 @@ name: Multi Profile E2E
 on:
   pull_request:
   push:
-    branches:
-      - main
-      - codex/**
-      - feat/**
   workflow_dispatch:
 
 permissions:

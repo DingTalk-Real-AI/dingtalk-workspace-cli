@@ -29,7 +29,7 @@ GitHub Actions 入口：
 触发方式：
 
 - PR 自动触发。
-- `main`、`codex/**`、`feat/**` 分支 push 自动触发。
+- 任意分支 push 自动触发。
 - Actions 页面手动执行 `workflow_dispatch`。
 
 调试模式：
