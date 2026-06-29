@@ -161,6 +161,18 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 	// invocations within the same process free.
 	logHostOwnedPATDecisionOnce()
 
+	selections, multi, err := resolveMultiProfileSelections(defaultConfigDir(), authpkg.RuntimeProfile())
+	if err != nil {
+		return executor.Result{}, apperrors.NewValidation(err.Error())
+	}
+	if multi {
+		return r.runMultiProfile(ctx, invocation, selections)
+	}
+
+	return r.runSingle(ctx, invocation, true)
+}
+
+func (r *runtimeRunner) runSingle(ctx context.Context, invocation executor.Invocation, prefetchToken bool) (executor.Result, error) {
 	if r.loader == nil || r.transport == nil {
 		return r.fallback.Run(ctx, invocation)
 	}
@@ -178,7 +190,9 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 	// Prefetch the Keychain token in the background. Keychain access costs
 	// ~70ms on macOS; starting it here lets the load overlap with endpoint
 	// resolution and catalog loading below.
-	go getCachedRuntimeToken(ctx)
+	if prefetchToken {
+		go getCachedRuntimeToken(ctx)
+	}
 
 	if shouldUseDirectRuntime(invocation) {
 		if endpoint, ok := directRuntimeEndpoint(invocation.CanonicalProduct, invocation.Tool); ok {
@@ -236,6 +250,144 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 		endpoint = toolEndpoint
 	}
 	return r.executeInvocation(ctx, endpoint, invocation)
+}
+
+type multiProfileSelection struct {
+	Selector string
+	Profile  authpkg.Profile
+}
+
+func resolveMultiProfileSelections(configDir, rawSelector string) ([]multiProfileSelection, bool, error) {
+	rawSelector = strings.TrimSpace(rawSelector)
+	if rawSelector == "" || !strings.Contains(rawSelector, ",") {
+		return nil, false, nil
+	}
+	if p, err := authpkg.ResolveProfile(configDir, rawSelector); err == nil && p != nil {
+		return nil, false, nil
+	}
+
+	parts := strings.Split(rawSelector, ",")
+	selections := make([]multiProfileSelection, 0, len(parts))
+	seen := make(map[string]bool, len(parts))
+	for _, part := range parts {
+		selector := strings.TrimSpace(part)
+		if selector == "" {
+			return nil, false, fmt.Errorf("--profile contains an empty profile selector: %q", rawSelector)
+		}
+		profile, err := authpkg.ResolveProfile(configDir, selector)
+		if err != nil {
+			return nil, false, err
+		}
+		if profile == nil {
+			return nil, false, fmt.Errorf("profile %q not found", selector)
+		}
+		if seen[profile.CorpID] {
+			continue
+		}
+		seen[profile.CorpID] = true
+		selections = append(selections, multiProfileSelection{
+			Selector: selector,
+			Profile:  *profile,
+		})
+	}
+	if len(selections) == 0 {
+		return nil, false, nil
+	}
+	return selections, true, nil
+}
+
+func (r *runtimeRunner) runMultiProfile(ctx context.Context, invocation executor.Invocation, selections []multiProfileSelection) (executor.Result, error) {
+	previousProfile := authpkg.RuntimeProfile()
+	defer authpkg.SetRuntimeProfile(previousProfile)
+
+	entries := make([]any, 0, len(selections))
+	succeeded := 0
+	failed := 0
+
+	for _, selection := range selections {
+		authpkg.SetRuntimeProfile(selection.Profile.CorpID)
+		result, err := r.runSingle(ctx, cloneInvocation(invocation), false)
+
+		entry := map[string]any{
+			"selector": selection.Selector,
+			"corpId":   selection.Profile.CorpID,
+			"corpName": selection.Profile.CorpName,
+			"ok":       err == nil,
+		}
+		if err != nil {
+			failed++
+			entry["error"] = multiProfileErrorPayload(err)
+		} else {
+			succeeded++
+			if payload := multiProfileResultPayload(result); payload != nil {
+				entry["result"] = payload
+			}
+			if result.Response != nil {
+				if endpoint, ok := result.Response["endpoint"]; ok {
+					entry["endpoint"] = endpoint
+				}
+			}
+		}
+		entries = append(entries, entry)
+	}
+
+	invocation.Implemented = true
+	return executor.Result{
+		Invocation: invocation,
+		Response: map[string]any{
+			"content": map[string]any{
+				"success":      failed == 0,
+				"multiProfile": true,
+				"summary": map[string]any{
+					"total":     len(selections),
+					"succeeded": succeeded,
+					"failed":    failed,
+				},
+				"profiles": entries,
+			},
+		},
+	}, nil
+}
+
+func cloneInvocation(invocation executor.Invocation) executor.Invocation {
+	cloned := invocation
+	if invocation.Params != nil {
+		cloned.Params = make(map[string]any, len(invocation.Params))
+		for key, value := range invocation.Params {
+			cloned.Params[key] = value
+		}
+	}
+	return cloned
+}
+
+func multiProfileResultPayload(result executor.Result) any {
+	if result.Response == nil {
+		return nil
+	}
+	if content, ok := result.Response["content"]; ok {
+		return content
+	}
+	return result.Response
+}
+
+func multiProfileErrorPayload(err error) map[string]any {
+	payload := map[string]any{
+		"message": err.Error(),
+	}
+	var typed *apperrors.Error
+	if errors.As(err, &typed) {
+		payload["category"] = string(typed.Category)
+		if typed.Reason != "" {
+			payload["reason"] = typed.Reason
+		}
+		if typed.Operation != "" {
+			payload["operation"] = typed.Operation
+		}
+		if code := typed.ExitCode(); code != 0 {
+			payload["exitCode"] = code
+		}
+	}
+	return payload
 }
 
 // handleCatalogMiss decides what to do when discovery catalog does not cover the

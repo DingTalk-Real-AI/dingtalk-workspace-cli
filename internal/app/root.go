@@ -67,6 +67,9 @@ func Execute() (exitCode int) {
 		}
 	}()
 
+	restoreArgs := normalizeProcessProfileArgs()
+	defer restoreArgs()
+
 	timing := NewTimingCollector()
 	defer func() {
 		StopAllStdioClients() // Ensure child processes are terminated on exit
@@ -376,6 +379,7 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 }
 
 func preparseProfileFlag(args []string) string {
+	args, _ = normalizeProfileFlagArgs(args)
 	for i := 0; i < len(args); i++ {
 		arg := strings.TrimSpace(args[i])
 		switch {
@@ -386,6 +390,71 @@ func preparseProfileFlag(args []string) string {
 		}
 	}
 	return ""
+}
+
+func normalizeProcessProfileArgs() func() {
+	original := append([]string(nil), os.Args...)
+	if len(os.Args) > 1 {
+		if normalized, changed := normalizeProfileFlagArgs(os.Args[1:]); changed {
+			os.Args = append([]string{os.Args[0]}, normalized...)
+		}
+	}
+	return func() {
+		os.Args = original
+	}
+}
+
+func normalizeProfileFlagArgs(args []string) ([]string, bool) {
+	if len(args) == 0 {
+		return args, false
+	}
+	out := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		trimmed := strings.TrimSpace(arg)
+		switch {
+		case trimmed == "--profile":
+			out = append(out, arg)
+			if i+1 >= len(args) {
+				continue
+			}
+			value, next := collectProfileFlagValue(args[i+1], args, i+2)
+			out = append(out, value)
+			i = next - 1
+		case strings.HasPrefix(trimmed, "--profile="):
+			value, next := collectProfileFlagValue(strings.TrimPrefix(trimmed, "--profile="), args, i+1)
+			out = append(out, "--profile="+value)
+			i = next - 1
+		default:
+			out = append(out, arg)
+		}
+	}
+	return out, argsChanged(args, out)
+}
+
+func collectProfileFlagValue(first string, args []string, next int) (string, int) {
+	parts := []string{strings.TrimSpace(first)}
+	for len(parts) > 0 && strings.HasSuffix(strings.TrimSpace(parts[len(parts)-1]), ",") && next < len(args) {
+		candidate := strings.TrimSpace(args[next])
+		if candidate == "" || strings.HasPrefix(candidate, "-") {
+			break
+		}
+		parts = append(parts, candidate)
+		next++
+	}
+	return strings.Join(parts, ""), next
+}
+
+func argsChanged(before, after []string) bool {
+	if len(before) != len(after) {
+		return true
+	}
+	for i := range before {
+		if before[i] != after[i] {
+			return true
+		}
+	}
+	return false
 }
 
 func newAuthCommand(patCaller edition.ToolCaller) *cobra.Command {
