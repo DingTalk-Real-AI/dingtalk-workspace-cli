@@ -31,8 +31,8 @@ Flags:
       --editor-uids strings       按编辑者用户 ID 过滤，逗号分隔
       --mentioned-uids strings    按 @提及的用户 ID 过滤，逗号分隔
       --workspace-ids strings     按知识库 ID 过滤，支持知识库 URL，逗号分隔
-      --limit int             每页数量 (默认 10，最大 30)
-      --cursor string         分页游标 (从上次结果的 nextPageToken 获取)
+      --page-size int             每页数量
+      --page-token string         分页 token (从上次结果的 nextPageToken 获取)
 ```
 
 ## 关键说明
@@ -70,7 +70,7 @@ dws doc search --creator-uids uid1,uid2
 dws doc search --workspace-ids wsId1,wsId2
 
 # 翻页
-dws doc search --query "周报" --limit 30 --cursor <nextPageToken>
+dws doc search --query "周报" --page-size 30 --page-token <nextPageToken>
 ```
 
 ## 参考

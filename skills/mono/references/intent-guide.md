@@ -82,10 +82,10 @@
 
 **用 `report` 的场景**：
 - "帮我看看收到的日报" — 日志收件箱
-- "帮我写/提交今天的日报（钉钉日志模版）" — 先 `report template list` / `template detail`，再 `report create`
+- "帮我写/提交今天的日报（钉钉日志模版）" — 先 `report template list` / `template get`，再 `report entry submit --contents-file <tmp>.json`
 - "有什么日志模版" — 查看模版
 - "看看这个日志的已读统计" — 阅读状态
-- "我发过的日志有哪些" — 已发送列表 (`report sent`)
+- "我发过的日志有哪些" — 已发送列表 (`report outbox list`)
 - 用户提到"日报"、"周报"、"日志"
 
 **用 `todo` 的场景**：
