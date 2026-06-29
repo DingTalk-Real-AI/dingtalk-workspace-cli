@@ -8,7 +8,7 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [1.0.45] - 2026-06-29
 
-This release adds **multi-organization (profile) support** (#500): `dws` can stay logged in to several DingTalk organizations at once and switch between them, while staying fully backward/forward compatible with the previous single-org token. A profile is one logged-in organization (corp); the current profile decides which org a command runs against. The release also hardens the new credential store for concurrency and corruption recovery, and documents the capability in both the mono and multi skill sets.
+This release adds **multi-organization (profile) support** (#500): `dws` can stay logged in to several DingTalk organizations at once and switch between them, while staying fully backward/forward compatible with the previous single-org token. A profile is one logged-in organization (corp); the current profile decides which org a command runs against. The release also hardens the new credential store for concurrency and corruption recovery, documents the capability in both the mono and multi skill sets, and flips `--ai-tag` on by default so messages sent through `dws` carry the DingTalk 「通过AI发送」 badge (#524).
 
 ### Added
 
@@ -19,6 +19,7 @@ This release adds **multi-organization (profile) support** (#500): `dws` can sta
 
 ### Changed
 
+- **`--ai-tag` now defaults on — DingTalk 「通过AI发送」 badge for dws-sent messages** (`internal/helpers/chat.go`, #524) — `chat message send` / `reply` flip the `--ai-tag` default from false to true, attaching the AI `clawType` by default so messages sent through `dws` (and by AI agents) transparently carry the 「通过AI发送」 badge; pass `--ai-tag=false` to send as the user with no badge.
 - **Concurrency-safe, self-healing `profiles.json`** (`internal/auth/profiles.go`, `internal/auth/token.go`) — every read-modify-write on `profiles.json` and the legacy mirror is serialized under the existing dual-layer (process + cross-process) lock, split into public (locking) entry points and lock-free `*Locked` variants so the non-reentrant lock is never re-acquired (the refresh path and the load-path migration use the lock-free savers). `profiles.json` and the token marker are written via per-write random temp names + atomic rename so concurrent writers can no longer corrupt a fixed `.tmp`. An unparseable `profiles.json` is quarantined (`*.corrupt-*`) and rebuilt empty so the CLI self-heals; `auth reset` / `logout` proceed even when it cannot be read and sweep the quarantined files.
 
 ### Fixed
