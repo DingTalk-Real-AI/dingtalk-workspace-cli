@@ -23,6 +23,8 @@ metadata:
 
 > 命令参考：[contact.md](references/contact.md)；剧本：[08-directory.md](references/08-directory.md)。
 
+> 跨组织：当前组织查不到人时，别判定「查无此人」——先 `dws profile list` 看有哪些已登录组织，再对每个组织带 `--profile <corpId>` 各查一遍，全无才追问用户。详见 `dingtalk-profile` skill。
+
 ## 开放平台文档 RAG / 错误码排查
 
 - 任何产品执行中，只要用户问开放平台 API、接口参数、字段含义、权限点、回调、SDK、配额、错误码，或命令返回上游 OpenAPI/SDK 错误，必须先用 `dws devdoc article search --query "<关键词>" --format json` 做官方文档 RAG。

@@ -27,6 +27,7 @@ cli_version: ">=1.0.15"
 - **脚本优先**：[scripts/](./scripts/) 下的 `python scripts/<name>.py` 已封装翻页/轮询/批量逻辑，遇到对应场景（如 AI 表格批量导入导出、AI 应用创建轮询、文档创建后写内容、钉盘目录树等）**优先调用脚本**而非手写多步命令。脚本均支持 `--dry-run` 预览、`--format json` 输出，失败时回退到手动步骤
 - **业务域最佳实践优先**：文档类多步任务先读 [04-document.md](./references/best_practices/04-document.md)；AI 表格读取/统计/写入/导入导出先读 [06-data-analytics.md](./references/best_practices/06-data-analytics.md)。本仓库只迁入这些业务域 best practices，不引入其它产品行动指南。
 - 知识库容器只用 `dws wiki space/member`；知识库内文件/文档的浏览、搜索、读取、创建、移动、复制统一切到 `dws doc`。`workspaceId` 只能传给 `wiki --workspace`、`doc --workspace` 或 `doc search --workspace-ids`，禁止传给 `doc list --folder`，也不要使用不存在的 `--space-id`。
+- 找群 / 找人 / 找数据在当前组织没命中、且 `dws profile list` 显示 ≥2 个组织时，对每个组织带一次性 `--profile <corpId>` 各搜一遍；命中即用，全部组织都没有才追问用户。禁止在当前组织搜不到就判定「不存在」或直接甩给用户选。
 
 ## 开放平台文档 RAG / 错误码排查
 
@@ -72,6 +73,30 @@ cli_version: ">=1.0.15"
 4. **Fallback 单产品路由**：仅当行动指南未命中，且用户意图明确是单一产品单步操作时，才按「产品总览」和「意图判断决策树」选择产品，并读取对应 `references/products/*.md`。
 5. **追问**：以上步骤都无法判断时，主动追问用户澄清，严禁猜测命令、flag、URL、ID 或字段名。
 
+## 多组织处理
+dws 可同时登录多个钉钉组织，一个 profile = 一个已登录组织（corp）。当前 profile 决定本次命令用哪个组织的身份（corpId / userId 按当前 profile 自动注入，不是只支持单组织）。
+
+**触发条件（命中任一即进入本节）**：
+- 显式：用户提到 切换 / 换 / 跨组织、另一个钉钉、别的公司、看登录了哪些组织、当前是哪个组织、某人 / 某群 / 某数据在别的组织
+- 隐式（最常见、易漏）：在当前组织读 / 搜没找到目标（群 / 人 / 数据），且 `dws profile list` 显示已登录 ≥2 个组织 —— 别急着判「不存在」，按下方跨组织铁律去其他组织找
+- 需要跨多个组织汇总 / 对比数据
+- 用户问认证状态 / 登录了哪些组织 / 主组织是哪个
+
+**不触发**：只登录 1 个组织时，按当前组织正常处理，不带 `--profile`，不进本节。
+
+命令：
+- `dws profile list` — 列出已登录组织（主 / 当前标记、状态、有效期），只读元数据
+- `dws profile switch <名称|corpId|->` — 持久切换当前组织；`-` 切回上一个；无参数在交互终端弹选择器（非交互须显式传参）。`dws profile use` 是其别名
+- 全局 `--profile <名称|corpId>` — 单次指定本命令用哪个组织，一次性、不改当前组织
+- `dws auth login` — 再登一个组织即新增 profile（自动从授权账号取 corpId / corpName）；同组织重复 login = 刷新
+- `dws auth status [--profile <名称>]` — 查看认证状态
+
+多组织数据聚合步骤：`dws profile list` 拿到所有已登录组织，对每个组织带 `--profile <corpId>` 各取一次数，合并并标注来源组织；某组织失败则标「该组织暂不可用」并继续返回其余。
+安全护栏：
+- 只有 `dws profile list` 显示 ≥2 个组织才启用上面的跨组织逻辑；单组织直接按当前组织走，不带 `--profile`。
+- 自动跨组织只对「读 / 搜」。写 / 发 / 删 / 撤回等操作默认只在当前组织做；确需带 `--profile` 跨组织写时，必须先与用户确认目标组织。
+- 持久切换 `dws profile switch`（改默认组织）按写操作对待：未经用户明确要求不得执行。跨组织找数一律用一次性 `--profile`，不改当前组织。
+
 ## 行动指南（优先匹配）
 
 > 将用户意图与下表做**语义比对**，不要求字面包含关键词。命中后必须读取该行动指南文件，并按其中固定路线执行；多个场景同时命中时，按下方「消歧规则」选择。
@@ -112,6 +137,7 @@ cli_version: ">=1.0.15"
 用户提到"在线电子表格/钉钉表格/axls/工作表/单元格读写/合并单元格/筛选视图/导出 xlsx" → `sheet`
 用户提到"待办/TODO/任务提醒/循环待办" → `todo`
 用户提到"创建知识库/知识库列表/搜索知识库空间/wiki/团队空间/知识库成员管理/我的文档个人空间" → `wiki`
+用户提到"切换组织/换组织/跨组织/另一个钉钉/别的公司/多组织/看所有组织/profile/登录了哪些组织" → `profile`（见「多组织 / profile」节）
 
 关键区分: **dev(创建/配置/建联机器人)** vs **chat(查询/发消息已有机器人)**。`dws chat bot search/find` 只查询机器人；**建号**（创建钉钉智能体机器人）走 `dws dev app robot submit`；**建联**（把机器人接到本地 agent 的 Stream）走 `dws dev connect`。凡是"创建机器人""建机器人""接入 agent""建联"一律路由到 `dev`，禁止走 `chat`。
 关键区分: aitable(数据表格) vs todo(待办任务)
@@ -149,6 +175,7 @@ cli_version: ">=1.0.15"
 | `oa` | `approval reject` | 拒绝待审批（需加明确理由） |
 | `todo` | `task delete` | 删除待办 |
 | `minutes` | `replace-text` | 全文批量替换转写与摘要 |
+| `auth` | `logout` | **默认退出所有已登录组织**；只退一个加 `--profile <名称\|corpId>`。注意：退主组织不会被拦，会静默把「主」改选为剩下第一个组织，退主前必须向用户确认 |
 
 ### 确认流程
 ```

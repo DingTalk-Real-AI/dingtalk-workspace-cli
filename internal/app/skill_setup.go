@@ -123,7 +123,9 @@ func runSkillSetup(cmd *cobra.Command, _ []string) error {
 		if filterErr != nil {
 			return filterErr
 		}
-		multiSkillNames = filtered
+		// dws-shared carries the global rules every product skill declares as a
+		// PREREQUISITE; it must ship even when --skill / --exclude narrows the set.
+		multiSkillNames = ensureMandatorySharedSkill(filtered, allMultiSkillNames)
 	}
 
 	if !autoYes {
@@ -159,6 +161,33 @@ func runSkillSetup(cmd *cobra.Command, _ []string) error {
 // multiSkillPrefix is the canonical prefix for every per-product skill
 // bundle in skills/multi/ (e.g. dingtalk-aitable, dingtalk-calendar).
 const multiSkillPrefix = "dingtalk-"
+
+// multiSharedSkill is the shared, non-product skill that every per-product
+// skill declares as a PREREQUISITE. It must always be installed in multi mode
+// regardless of --skill / --exclude, otherwise the product skills reference a
+// dws-shared that was never installed.
+const multiSharedSkill = "dws-shared"
+
+// ensureMandatorySharedSkill guarantees the shared dependency skill is included
+// whenever it exists in the source, even if --skill / --exclude narrowed it out.
+func ensureMandatorySharedSkill(selected, all []string) []string {
+	hasShared := false
+	for _, n := range all {
+		if n == multiSharedSkill {
+			hasShared = true
+			break
+		}
+	}
+	if !hasShared {
+		return selected
+	}
+	for _, n := range selected {
+		if n == multiSharedSkill {
+			return selected
+		}
+	}
+	return append([]string{multiSharedSkill}, selected...)
+}
 
 // normalizeMultiSkillName accepts either the short form (aitable) or the
 // full form (dingtalk-aitable) and returns the canonical full form.
