@@ -10,10 +10,6 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 - **`dingtalk-dev` skill: image-upload → `mediaId` recipe + per-resource command discovery** (`skills/multi/dingtalk-dev/references/`) — documents how to obtain a `mediaId` for app / robot icons via the DingTalk OpenAPI (`credentials get` → `gettoken` → `/media/upload?type=image` → `--icon-media-id` → read back), since the dev command set has no upload command; and adds a "discovering commands" block to all 10 product refs pointing at each group's `--help` and `dws schema dev.app.<group>.<method>` (`dws schema dev.connect` for connect), so agents inspect commands instead of relying on memory.
 
-### Changed
-
-- **Agent attribution no longer invents the `custom` fallback** (`internal/auth/agent_code_detect.go`, `internal/auth/identity.go`, `internal/app/runner.go`, `docs/agent-code.md`) — when no explicit declaration or verified host signal resolves an `agent_code`, dws now leaves `x-dingtalk-dws-agent-code` and `x-dws-agent-instance-id` unset instead of sending `custom` and a derived custom instance id. Explicitly declared custom-like agent codes still pass through normally.
-
 ## [1.0.43] - 2026-06-26
 
 This release aligns the open edition's CLI surface with **dws-wukong** across the communication domain (chat / mail / minutes / todo / calendar / contact / aisearch / live / report / ding) and the structured-office domain (aitable / sheet / drive / wiki / doc), and switches the discovery version code from `bamboo` to `cedar` so the aligned command tree is served from its own discovery config.

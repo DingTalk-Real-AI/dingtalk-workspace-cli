@@ -119,27 +119,25 @@ func TestDetectAgentCode_BundleID_T3(t *testing.T) {
 	}
 }
 
-// An unknown bundle id (e.g. a plain terminal) must NOT be labeled.
-func TestDetectAgentCode_UnknownBundleIsEmpty(t *testing.T) {
+// An unknown bundle id (e.g. a plain terminal) must NOT be labeled — falls to
+// custom.
+func TestDetectAgentCode_UnknownBundleIsCustom(t *testing.T) {
 	clearAgentCodeEnv(t)
 	t.Setenv("__CFBundleIdentifier", "com.googlecode.iterm2")
-	code, sig := DetectAgentCode()
-	if code != "" {
-		t.Fatalf("unknown bundle must stay empty, got %q", code)
-	}
-	if sig != "" {
-		t.Fatalf("unknown bundle signal must stay empty, got %q", sig)
+	code, _ := DetectAgentCode()
+	if code != AgentCodeCustom {
+		t.Fatalf("unknown bundle must be custom, got %q", code)
 	}
 }
 
-func TestDetectAgentCode_FallbackEmpty(t *testing.T) {
+func TestDetectAgentCode_Fallback_Custom(t *testing.T) {
 	clearAgentCodeEnv(t)
 	code, sig := DetectAgentCode()
-	if code != "" {
-		t.Fatalf("want empty, got %q", code)
+	if code != AgentCodeCustom {
+		t.Fatalf("want custom, got %q", code)
 	}
-	if sig != "" {
-		t.Fatalf("want empty signal, got %q", sig)
+	if sig != "fallback" {
+		t.Fatalf("want fallback, got %q", sig)
 	}
 }
 
@@ -149,8 +147,8 @@ func TestDetectAgentCode_IgnoresNoise(t *testing.T) {
 	t.Setenv("TERM_PROGRAM", "iTerm.app")
 	t.Setenv("DWS_CHANNEL", "Qoderwork")
 	code, _ := DetectAgentCode()
-	if code != "" {
-		t.Fatalf("noise must not decide agent_code; want empty, got %q", code)
+	if code != AgentCodeCustom {
+		t.Fatalf("noise must not decide agent_code; want custom, got %q", code)
 	}
 }
 
@@ -178,8 +176,7 @@ func TestNormalizeAgentCode(t *testing.T) {
 		"WorkBuddy":          "workbuddy",
 		"Visual Studio Code": "vscode",
 		"Cursor":             "cursor",
-		"":                   "",
-		"custom":             AgentCodeCustom,
+		"":                   AgentCodeCustom,
 		"some-new-ide":       "some-new-ide",
 	}
 	for in, want := range cases {
