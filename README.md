@@ -234,6 +234,22 @@ Credentials are securely persisted after first login (Keychain). Subsequent runs
 </details>
 
 <details>
+<summary><strong>Multiple organizations (profiles)</strong></summary>
+
+`dws` can stay logged in to several DingTalk organizations at once. Each organization is one **profile**; the current profile decides which org a command runs against (credentials are stored per organization).
+
+```bash
+dws auth login                              # log in to another org → adds a profile (first login becomes the primary)
+dws profile list                            # list logged-in orgs (primary / current marker, status)
+dws profile switch <name|corpId>            # switch the default org (use - to toggle back to the previous one)
+dws --profile <name|corpId> contact user search --query "..."   # run one command against a specific org, without changing the default
+```
+
+Cross-org reads are orchestrated by the agent rather than a built-in `--all-orgs`: list the profiles, run the query per org with `--profile`, then merge. Writes default to the current org only — confirm the target org before writing across orgs.
+
+</details>
+
+<details>
 <summary><strong>Migrate auth between Linux sandboxes</strong></summary>
 
 Copying only `~/.dws/app.json` does not carry the refresh token; access tokens expire after ~2 hours. Use the official export/import flow:
@@ -524,29 +540,29 @@ See [`docs/robot-quickstart.md`](./docs/robot-quickstart.md) for the full 4-step
 
 ## Key Services
 
-| Service | Command | Commands | Subcommands | Description |
-|---------|---------|:--------:|-------------|-------------|
-| Contact | `contact` | 15 | `user` `dept` `label` `relation` | Search users by name / mobile / job-number, batch query, departments, labels & roles, person relations, roster profile & dismissions, current user |
-| Chat / IM | `chat` (alias `im`) | 65 | `message` `group` `bot` `conversation-info` `search` `search-common` `list-top-conversations` `group-mute` `group-mute-member` `mute` `set-top` `list-categories` `list-conversations` | Messages (send / reply / list / list-all / by-sender / mentions / focused / unread / topic replies / search / advanced search / forward / cards / emoji & text-emotion reactions / recall / read & send status queries), group CRUD + member management (members add / remove / list / `add-bot`, member-role CRUD, invite URL, icon, settings, transfer-owner, set-admin, quit), bot-identity messaging (`send-by-bot` / `recall-by-bot` / `send-by-webhook`), conversation info, common-groups lookup, group/member/conversation mute, conversation set-top, conversation categories |
-| Calendar | `calendar` | 23 | `event` `book` `acl` `attendee` `participant` `room` `busy` `attachment` | Events CRUD + suggested times + attachments, calendar books (get / search / primary via `--id primary`), access-control list, attendee management (wukong-aligned naming, `--calendar-id` aware), meeting room booking, free-busy query |
-| Todo | `todo` | 16 | `task` `comment` | Create / list / update / done / get / delete tasks, plus task comments |
-| Approval | `oa` | 15 | `approval` | Approve / reject / revoke / redirect tasks, pending / initiated / submitted / executed / cc instances, process forms, comments, operation records |
-| Attendance | `attendance` | 4 | `record` `shift` `summary` `rules` | Clock-in records, shift schedules, attendance summary, group rules |
-| Ding | `ding` | 2 | `message` | Send / recall DING messages |
-| Report | `report` | 20 | `create` `submit` `list` `detail` `template` `stats` `inbox` `outbox` `entry` | Create / submit reports, sent & received (inbox / outbox) lists, templates (get / list), statistics, single-entry get |
-| AI Tables | `aitable` | 102 | `base` `table` `record` `field` `view` `section` `advperm` `workflow` `dashboard` `chart` `import` `export` `attachment` `template` `form` | Full CRUD for Bases / datasheets / records / fields / views; node (section) management, advanced permission & roles, automation workflows; record upsert / share-url / history / primary-doc; view lock / duplicate / frozen-cols / row-height / fill-color-rule / card / timebar; charts & dashboards; import/export; attachments; forms; templates |
-| Doc | `doc` | 29 | `search` `list` `info` `read` `create` `update` `upload` `download` `copy` `move` `rename` `file` `folder` `block` `comment` `permission` `media` | Search / read / write docs, file & folder create, block-level editing, comments (list / create / reply / create-inline), permission management, media, upload / download |
-| Drive | `drive` | 17 | `list` `list-spaces` `info` `download` `mkdir` `upload` `upload-info` `commit` `delete` `copy` `move` `rename` `search` `permission` | DingTalk drive file ops: list / search / info / download, create folders, upload (one-shot or two-phase), copy / move / rename, permission management (list / mutation / remove), doc-transfer, delete |
-| Minutes | `minutes` | 31 | `list` `get` `tag` `update` `mind-graph` `speaker` `permission` `hot-word` `record` `upload` `replace-text` | List AI meeting notes (mine / shared / all), tags (list / query by tag), details (info / summary / keywords / transcription / todos / batch), title/summary updates, mind map, speaker, member permission, hot-word, recording control, upload session |
-| Mail | `mail` | 33 | `mailbox` `message` `send` `draft` `folder` `template` `contact` `tag` `thread` `attachment` `user` | List mailboxes, KQL search + folder-scoped message list, read & send messages, drafts, folder CRUD, message templates (CRUD), mail contacts (CRUD), tags, threads, attachments, address-book user search |
-| Sheet | `sheet` | 60 | `range` `filter` `filter-view` `cond-format` (+ dimension, float-image, dropdown, csv, merge, find/replace, write-image, …) | Online spreadsheet (`contentType=ALIDOC`, `extension=axls`): worksheet CRUD, range read / write / copy / fill / sort / style, dimension ops, filters & filter views, conditional formatting, float images, dropdowns, CSV get/put, cell merge / unmerge, find / replace, image write |
-| Wiki | `wiki` | 27 | `space` `member` `node` `doc` `file` | Knowledge base management: spaces (create / get / list / search / delete), members (add / list / update / remove), node tree (create / delete / list / search / move / copy / transfer), docs & files |
-| DevDoc | `devdoc` | 2 | `article` `error` | Search the DingTalk Open Platform documentation and diagnose API errors |
-| AI Search | `aisearch` | 3 | `person` | Enterprise people search by name / department / position / duty / supervisor / subordinate / phone / job-number (single command, multi-dimension filter) |
-| Live | `live` | 1 | `stream` | DingTalk live streaming: list my lives |
-| Raw API | `api` | 1 | — | Call any DingTalk OpenAPI directly (api / oapi dual-form), with automatic app-level token management |
+| Service | Command | Capabilities |
+|---------|---------|--------------|
+| Contact | `contact` | Look up users by name / mobile / job-number, departments, labels & roles, roster profiles & dismissals |
+| Chat / IM | `chat` (`im`) | Send / reply / search messages, group & member management, bot & webhook messaging, reactions, recall |
+| Calendar | `calendar` | Events CRUD, attendees, meeting rooms, free/busy & time suggestions |
+| Todo | `todo` | Create / list / update / complete tasks and comments |
+| Approval | `oa` | Approve / reject / revoke / transfer; query pending / initiated / CC instances and forms |
+| Attendance | `attendance` | Clock-in records, shifts, summaries, group rules (read-only) |
+| Ding | `ding` | Send / recall DING messages |
+| Report | `report` | Create / submit logs, inbox & outbox, templates, statistics |
+| AI Tables | `aitable` | Bases / tables / records / fields / views, permissions & roles, automation, charts & dashboards, import / export |
+| Doc | `doc` | Search / read / write docs, block-level editing, comments, permissions, media, up / download |
+| Drive | `drive` | List / search / download, folders, upload, copy / move / rename, permissions |
+| Minutes | `minutes` | AI meeting notes: list, summary / keywords / transcription / todos, mind map, speakers, tags |
+| Mail | `mail` | Mailboxes, KQL search, read / send, drafts, folders, templates, contacts |
+| Sheet | `sheet` | Online spreadsheets: worksheet & range read / write, filters, conditional format, images, CSV |
+| Wiki | `wiki` | Knowledge bases: spaces, members, node tree, docs & files |
+| DevDoc | `devdoc` | Search the Open Platform docs and diagnose API errors |
+| AI Search | `aisearch` | Enterprise people search by name / dept / role / duty / supervisor / phone / job-number |
+| Live | `live` | List my live streams |
+| Raw API | `api` | Call any DingTalk OpenAPI directly, with managed app-level token |
 
-> **466 commands across 18 products** (after the dws-wukong alignment in 1.0.43). Full listing with descriptions and usage scenarios: [`docs/command-index.md`](./docs/command-index.md). Run `dws --help` for the top-level tree, or `dws <service> --help` for subcommands.
+> Full command listing with usage scenarios: [`docs/command-index.md`](./docs/command-index.md). Run `dws --help` for the top-level tree, or `dws <service> --help` for any service's subcommands.
 
 > **Note on `chat bot`**: bot capabilities (`send-by-bot` / `recall-by-bot` / `add-bot` / `send-by-webhook` / bot search) are merged into the relevant `chat` subtrees (e.g. `dws chat message send-by-bot`, `dws chat group members add-bot`) so the agent-facing command surface stays flat and discoverable. There is no longer a separate top-level `bot` product.
 

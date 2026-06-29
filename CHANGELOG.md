@@ -6,6 +6,26 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.45] - 2026-06-29
+
+This release adds **multi-organization (profile) support** (#500): `dws` can stay logged in to several DingTalk organizations at once and switch between them, while staying fully backward/forward compatible with the previous single-org token. A profile is one logged-in organization (corp); the current profile decides which org a command runs against. The release also hardens the new credential store for concurrency and corruption recovery, and documents the capability in both the mono and multi skill sets.
+
+### Added
+
+- **Multi-organization login & `profile` management** (`internal/auth/profiles.go`, `internal/app/profile_command.go`) — `dws auth login` against a new organization adds a profile (the first login becomes the primary); `dws profile list` shows logged-in orgs with primary / current markers, status and validity; `dws profile switch <name|corpId|->` persistently switches the default org (`-` toggles back to the previous one, no-arg opens a TUI selector on a terminal); `dws profile use` is an alias of `switch`. `dws auth status [--profile <name>]` reports a specific profile. Credentials are stored per organization in keychain slots keyed by corpId (`auth-token:<corpId>`), with a plaintext `profiles.json` registry holding only metadata and the primary/current/previous pointers (no tokens).
+- **Global `--profile <name|corpId>` flag** — run a single command against a specific organization without changing the default (one-shot; does not move currentProfile). Cross-org reads are orchestrated by the agent (list profiles → query each with `--profile` → merge); there is intentionally no built-in `--all-orgs`.
+- **Backward / forward compatibility with the legacy single token slot** — a pre-existing single-slot token is migrated into `auth-token:<corpId>` and marked primary on first multi-profile use; the current (or primary) profile's token is mirrored back into the legacy slot so older binaries and the embedded host keep working. `profiles.json` is additive and ignored by older versions.
+- **`dingtalk-profile` and `dws-shared` skills + multi-org documentation** (`skills/`) — a standalone `dingtalk-profile` skill plus a new `dws-shared` skill that carries auth, global flags and the multi-org rule, so every multi-mode product skill's PREREQUISITE resolves and all read/search skills inherit cross-org behavior. The mono skill gains a "multi-org / profile" section, trigger conditions, a decision-tree entry and a corrected logout danger note. Multi-mode install now always ships `dws-shared` even when `--skill` / `--exclude` narrows the set.
+
+### Changed
+
+- **Concurrency-safe, self-healing `profiles.json`** (`internal/auth/profiles.go`, `internal/auth/token.go`) — every read-modify-write on `profiles.json` and the legacy mirror is serialized under the existing dual-layer (process + cross-process) lock, split into public (locking) entry points and lock-free `*Locked` variants so the non-reentrant lock is never re-acquired (the refresh path and the load-path migration use the lock-free savers). `profiles.json` and the token marker are written via per-write random temp names + atomic rename so concurrent writers can no longer corrupt a fixed `.tmp`. An unparseable `profiles.json` is quarantined (`*.corrupt-*`) and rebuilt empty so the CLI self-heals; `auth reset` / `logout` proceed even when it cannot be read and sweep the quarantined files.
+
+### Fixed
+
+- **No silent fallback to a different org's token** (`internal/auth/token.go`) — when the resolved current/primary profile's keychain slot fails to read and no `--profile` was given, the loader now only falls back to the legacy single slot if it belongs to the same organization; otherwise it surfaces the error instead of acting as a different org.
+- **Legacy mirror no longer wiped on a transient keychain read error** (`internal/auth/profiles.go`) — `SyncLegacyTokenMirror` distinguishes "token genuinely absent" from "keychain momentarily unreadable" and keeps the existing mirror in the latter case, so a host app's login state is not dropped by a transient failure.
+
 ## [1.0.44] - 2026-06-28
 
 This release hardens the dynamic-command surface and finishes the dws-wukong parity pass for structured input. Phantom override commands whose backing MCP tool isn't deployed are hidden from `--help`; `report entry submit` reads `--contents-file` / stdin natively; structured JSON flags accept `@file` / `@-`; and `sheet range update` / `range read` now accept the same plain shapes wukong does (scalar cells, flat `values`, null-clears-cell, a `--hyperlinks` flag). On the wukong01 sandbox this lifts the full open-edition cli_to_mcp pass rate from 77.6% to 95.5% (sheet 28.5% → 99.8%, report → 100%); the remaining failures are account / org / out-of-scope, not CLI defects.
