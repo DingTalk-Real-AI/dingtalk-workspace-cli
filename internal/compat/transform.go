@@ -243,6 +243,18 @@ func transformJSONParse(value any) (any, error) {
 	if s == "" {
 		return value, nil
 	}
+	// @file / @- expansion — read the JSON/YAML payload from a file or stdin
+	// before parsing. A leading "@" is an unambiguous file sentinel because a
+	// JSON/YAML value never starts with "@"; this is what the error hint below
+	// promises and lets long/complex payloads (many records, big cell ranges)
+	// avoid shell-quoting hell.
+	s, err := resolveJSONSource(s)
+	if err != nil {
+		return nil, err
+	}
+	if s == "" {
+		return value, nil
+	}
 	// Strict JSON first — fast path and unambiguous type promotion (numbers
 	// stay numbers, etc.).
 	var parsed any
@@ -257,8 +269,30 @@ func transformJSONParse(value any) (any, error) {
 	return nil, apperrors.NewValidation(
 		"json_parse: input is not valid JSON or YAML; " +
 			"quote the whole value and use `[{key: value, ...}]` for ad-hoc input, " +
-			"or pass `@path/to/file.json` to read from a file",
+			"or pass `@path/to/file.json` (or `@-` for stdin) to read from a file",
 	)
+}
+
+// resolveJSONSource expands an @file / @- reference used by the json_parse
+// transforms. A leading "@" is the file sentinel: "@-" reads stdin, "@<path>"
+// reads the file (UTF-8, via transformFileRead). Any value not starting with
+// "@" is returned unchanged. JSON/YAML payloads never start with "@", so this
+// is unambiguous for structured flags.
+func resolveJSONSource(s string) (string, error) {
+	if !strings.HasPrefix(s, "@") {
+		return s, nil
+	}
+	ref := strings.TrimSpace(s[1:])
+	if ref == "" {
+		return "", apperrors.NewValidation(
+			"json_parse: `@` must be followed by a file path, or `@-` to read from stdin")
+	}
+	out, err := transformFileRead(ref)
+	if err != nil {
+		return "", err
+	}
+	loaded, _ := out.(string)
+	return strings.TrimSpace(loaded), nil
 }
 
 // transformJSONParseStrict is the strict variant of json_parse: only accepts
@@ -274,12 +308,21 @@ func transformJSONParseStrict(value any) (any, error) {
 	if s == "" {
 		return value, nil
 	}
+	// @file / @- expansion — same sentinel as json_parse (see resolveJSONSource).
+	s, err := resolveJSONSource(s)
+	if err != nil {
+		return nil, err
+	}
+	if s == "" {
+		return value, nil
+	}
 	var parsed any
 	if err := json.Unmarshal([]byte(s), &parsed); err != nil {
 		return nil, apperrors.NewValidation(
 			"json_parse_strict: input is not valid JSON; " +
 				"this transform rejects YAML-style ad-hoc input — quote the whole value " +
-				"as strict JSON (e.g. '[{\"key\":\"value\"}]') or use `json_parse` for YAML-tolerant parsing",
+				"as strict JSON (e.g. '[{\"key\":\"value\"}]'), pass `@path/to/file.json` " +
+				"(or `@-` for stdin), or use `json_parse` for YAML-tolerant parsing",
 		)
 	}
 	return parsed, nil
