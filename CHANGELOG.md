@@ -6,6 +6,10 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Changed
+
+- **Agent attribution no longer invents the `custom` fallback** (`internal/auth/agent_code_detect.go`, `internal/auth/identity.go`, `internal/app/runner.go`, `docs/agent-code.md`) — when no explicit declaration or verified host signal resolves an `agent_code`, dws now leaves `x-dingtalk-dws-agent-code` and `x-dws-agent-instance-id` unset instead of sending `custom` and a derived custom instance id. Explicitly declared custom-like agent codes still pass through normally.
+
 ## [1.0.42] - 2026-06-25
 
 This release rounds out `dws dev connect` — bridge a DingTalk robot to your local AI (Claude Code / Codex / opencode / Qoder / …): a generic `custom` channel for any headless CLI tool, in-chat `/new` / `/clear` session commands aligned to each agent's real session op, and a fix for long opencode turns being cut at 30 seconds.

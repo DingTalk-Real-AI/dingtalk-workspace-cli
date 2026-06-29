@@ -1,15 +1,16 @@
 # Agent identification (agent_code & agentId)
 
-dws tags every MCP request with **which agent host is driving it** and a
-**per-instance id**, so usage can be sliced by channel/instance in the data
-warehouse. This page is the integration contract.
+dws tags MCP requests with **which agent host is driving it** and a
+**per-instance id** when the agent host can be resolved, so usage can be sliced
+by channel/instance in the data warehouse. This page is the integration
+contract.
 
 ## What dws sends on the wire
 
 | Header | Meaning | Granularity |
 |--------|---------|-------------|
-| `x-dingtalk-dws-agent-code` | which agent host (claudecode / codex / qoder / cursor / custom …) | channel |
-| `x-dws-agent-instance-id` | `dwsa_<base62>` derived from `machineId + agent_code` | machine × channel |
+| `x-dingtalk-dws-agent-code` | which agent host (claudecode / codex / qoder / cursor / explicit custom codes …) | channel |
+| `x-dws-agent-instance-id` | `dwsa_<base62>` derived from `machineId + agent_code`; omitted when agent_code is empty | machine × channel |
 | `x-dws-agent-id` | stable per-install machine id (v1-compatible) | machine |
 | `X-Cli-Version` | dws CLI version (segments old vs new clients) | — |
 
@@ -26,7 +27,7 @@ clients send no `agent_code` / instance id — treat their absence as
 3. **T2 — `VSCODE_BRAND`:** every VS Code fork declares its brand — one rule
    covers Cursor / Windsurf / Trae / Qoder / Kiro / … incl. future forks.
 4. **T3 — macOS `__CFBundleIdentifier`:** known agent app bundles.
-5. **T4 — `custom`:** unknown host. Never guessed.
+5. **T4 — empty:** unknown host. No `custom` fallback is invented.
 
 ## Declaring your agent (recommended — the only fully-general path)
 

@@ -74,13 +74,15 @@ func TestResolveAgentID_IdempotentAndPersisted(t *testing.T) {
 	}
 }
 
-func TestResolveAgentID_EmptyAgentCodeGoesCustom(t *testing.T) {
+func TestResolveAgentID_EmptyAgentCodeReturnsEmpty(t *testing.T) {
 	dir := t.TempDir()
 	id := EnsureExists(dir)
-	got := id.ResolveAgentID(dir, "", "fallback")
-	want := id.ResolveAgentID(dir, AgentCodeCustom, "fallback")
-	if got != want {
-		t.Fatalf("empty agent_code must map to custom bucket: %q != %q", got, want)
+	got := id.ResolveAgentID(dir, "", "")
+	if got != "" {
+		t.Fatalf("empty agent_code must not derive an instance id, got %q", got)
+	}
+	if len(id.Agents) != 0 {
+		t.Fatalf("empty agent_code must not be persisted: %+v", id.Agents)
 	}
 }
 
