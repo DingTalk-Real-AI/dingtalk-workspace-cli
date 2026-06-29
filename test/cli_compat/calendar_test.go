@@ -14,6 +14,60 @@ func TestCalEventList_should_call_list_calendar_events_with_no_args(t *testing.T
 		t.Fatalf("unexpected error: %v", err)
 	}
 	assertToolName(t, cap, "list_calendar_events")
+	last := cap.last()
+	if last == nil {
+		t.Fatal("no MCP call captured")
+	}
+	if last.Args["startTime"] == nil {
+		t.Error("expected startTime to be set (default today 00:00), but it was nil")
+	}
+	if last.Args["endTime"] == nil {
+		t.Error("expected endTime to be set (default today 23:59), but it was nil")
+	}
+}
+
+func TestCalEventList_should_default_end_when_only_start_provided(t *testing.T) {
+	cap := setupTestDeps(t, "calendar")
+	root := buildRoot()
+	err := execCmd(t, root, []string{"calendar", "event", "list"}, map[string]string{
+		"start": "2026-03-10",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertToolName(t, cap, "list_calendar_events")
+	last := cap.last()
+	if last == nil {
+		t.Fatal("no MCP call captured")
+	}
+	if last.Args["startTime"] == nil {
+		t.Error("expected startTime to be set, but it was nil")
+	}
+	if last.Args["endTime"] == nil {
+		t.Error("expected endTime to be defaulted when only --start provided, but it was nil")
+	}
+}
+
+func TestCalEventList_should_default_start_when_only_end_provided(t *testing.T) {
+	cap := setupTestDeps(t, "calendar")
+	root := buildRoot()
+	err := execCmd(t, root, []string{"calendar", "event", "list"}, map[string]string{
+		"end": "2026-03-10T18:00:00+08:00",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertToolName(t, cap, "list_calendar_events")
+	last := cap.last()
+	if last == nil {
+		t.Fatal("no MCP call captured")
+	}
+	if last.Args["startTime"] == nil {
+		t.Error("expected startTime to be defaulted when only --end provided, but it was nil")
+	}
+	if last.Args["endTime"] == nil {
+		t.Error("expected endTime to be set, but it was nil")
+	}
 }
 
 func TestCalEventList_should_parse_start_time_to_millis(t *testing.T) {

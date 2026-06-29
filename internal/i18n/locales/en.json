@@ -190,5 +190,11 @@
   "覆盖 OAuth 客户端 ID (钉钉 AppKey)": "Override OAuth client ID (DingTalk AppKey)",
   "覆盖 OAuth 客户端密钥 (钉钉 AppSecret)": "Override OAuth client secret (DingTalk AppSecret)",
   "查看任意命令的帮助信息": "Help about any command",
+  "日程管理": "Event management",
+  "列出日程": "List calendar events",
+  "开始时间 (可选, 默认今天 00:00)": "Start time (optional, defaults to today 00:00)",
+  "结束时间 (可选, 默认今天 23:59)": "End time (optional, defaults to today 23:59)",
+  "--start 的别名": "Alias for --start",
+  "--end 的别名": "Alias for --end",
   "显示任意命令的帮助文案。\n用法：dws help [命令路径] 查看完整说明。": "Help provides help for any command in the application.\nSimply type dws help [path to command] for full details."
 }
