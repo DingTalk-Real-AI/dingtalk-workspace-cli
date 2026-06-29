@@ -216,6 +216,55 @@ func sheetCleanCellInfos(v any) {
 	}
 }
 
+// sheetProjectFlatValues walks an MCP get_cell_infos response and, next to any
+// rich `cells` array, adds a flat `values` 2D array of each cell's scalar
+// `value`. This gives consumers the simple wukong get_range shape
+// (values: [["姓名","部门"]]) without dropping the rich `cells` payload.
+// Idempotent: skips when `values` already exists or there are no cells.
+func sheetProjectFlatValues(v any) {
+	switch t := v.(type) {
+	case map[string]any:
+		if cellsRaw, ok := t["cells"]; ok {
+			if _, exists := t["values"]; !exists {
+				if flat := sheetFlatValuesFromCells(cellsRaw); flat != nil {
+					t["values"] = flat
+				}
+			}
+		}
+		for _, child := range t {
+			sheetProjectFlatValues(child)
+		}
+	case []any:
+		for _, child := range t {
+			sheetProjectFlatValues(child)
+		}
+	}
+}
+
+func sheetFlatValuesFromCells(cellsRaw any) []any {
+	rows, ok := cellsRaw.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]any, 0, len(rows))
+	for _, row := range rows {
+		rowSlice, ok := row.([]any)
+		if !ok {
+			return nil
+		}
+		flatRow := make([]any, 0, len(rowSlice))
+		for _, cell := range rowSlice {
+			if cellMap, ok := cell.(map[string]any); ok {
+				flatRow = append(flatRow, cellMap["value"])
+			} else {
+				flatRow = append(flatRow, cell)
+			}
+		}
+		out = append(out, flatRow)
+	}
+	return out
+}
+
 func sheetStripCellsMeta(cellsRaw any) {
 	rows, ok := cellsRaw.([]any)
 	if !ok {

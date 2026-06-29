@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
@@ -316,6 +317,10 @@ func newSheetRangeReadCommand(runner executor.Runner) *cobra.Command {
 		// 使"清除后回读不再含该 key"成立（与 wukong 对齐）。dry-run 不投影。
 		if !commandDryRun(cmd) {
 			sheetCleanCellInfos(result.Response)
+			// Project a flat `values` 2D array alongside the rich `cells` so
+			// consumers expecting wukong's get_range shape (values: [["a"]])
+			// work while `cells` (styles/richText) stays available.
+			sheetProjectFlatValues(result.Response)
 		}
 		return writeCommandPayload(cmd, result)
 	})
@@ -329,22 +334,55 @@ func newSheetRangeReadCommand(runner executor.Runner) *cobra.Command {
 
 func newSheetRangeUpdateCommand(runner executor.Runner) *cobra.Command {
 	cmd := newSheetLeaf("update", "更新工作表指定区域内容", func(cmd *cobra.Command, _ []string) error {
-		if err := sheetValidateRequired(cmd, "node", "sheet-id", "range", "values"); err != nil {
+		if err := sheetValidateRequired(cmd, "node", "sheet-id", "range"); err != nil {
 			return err
 		}
+		hasValues := sheetStringFlag(cmd, "values") != ""
+		hasHyperlinks := sheetStringFlag(cmd, "hyperlinks") != ""
+		if !hasValues && !hasHyperlinks {
+			return apperrors.NewValidation("--values 或 --hyperlinks 至少传入一项")
+		}
 		var cells [][]any
-		if err := sheetParseJSONFlag(cmd, "values", &cells); err != nil {
-			return err
+		if hasValues {
+			if err := sheetParseJSONFlag(cmd, "values", &cells); err != nil {
+				return err
+			}
+		}
+		// --hyperlinks overlays cell-level links onto the same grid (matches
+		// wukong update_range: hyperlinks coexist with values, hyperlinks win).
+		// Each item is wukong's {type:path,link,text}, which is exactly open's
+		// cell `hyperlink` field shape.
+		if hasHyperlinks {
+			var hyperlinks [][]any
+			if err := sheetParseJSONFlag(cmd, "hyperlinks", &hyperlinks); err != nil {
+				return err
+			}
+			merged, err := sheetMergeHyperlinks(cells, hyperlinks)
+			if err != nil {
+				return err
+			}
+			cells = merged
 		}
 		for i, row := range cells {
 			for j, cell := range row {
 				path := fmt.Sprintf("--values[%d][%d]", i, j)
 				if cell == nil {
-					return apperrors.NewValidation(fmt.Sprintf("%s: 不支持 null，每个单元格必须是 {type:text,...}、{type:richText,...}、{hyperlink:...} 对象，或 {} 表示保留原值", path))
+					// null clears the cell content (matches wukong's update_range
+					// pass-through). Use {} (keep-original) for "leave unchanged".
+					cells[i][j] = map[string]any{"type": "text", "text": ""}
+					continue
+				}
+				// Auto-wrap a scalar cell (string / number / bool) into a text
+				// cell so the simple form --values '[["姓名","部门"]]' works, the
+				// same shape `append` and wukong's update_range accept. Explicit
+				// object cells fall through to the rich validation below.
+				if wrapped, ok := sheetWrapScalarCell(cell); ok {
+					cells[i][j] = wrapped
+					continue
 				}
 				cellMap, ok := cell.(map[string]any)
 				if !ok {
-					return apperrors.NewValidation(fmt.Sprintf("%s: 必须为 object（如 {\"type\":\"text\",\"text\":\"...\"}）", path))
+					return apperrors.NewValidation(fmt.Sprintf("%s: 必须为 object（如 {\"type\":\"text\",\"text\":\"...\"}）、纯字符串/数字，或 {} 表示保留原值", path))
 				}
 				// {} 空对象 = 跳过该单元格，保留原值不变
 				if len(cellMap) == 0 {
@@ -364,8 +402,57 @@ func newSheetRangeUpdateCommand(runner executor.Runner) *cobra.Command {
 	})
 	addSheetBaseFlags(cmd)
 	cmd.Flags().String("range", "", "目标单元格区域地址 (必填)")
-	cmd.Flags().String("values", "", "单元格内容二维 JSON 数组 (必填)")
+	cmd.Flags().String("values", "", "单元格内容二维 JSON 数组 (--values 或 --hyperlinks 至少一项)")
+	cmd.Flags().String("hyperlinks", "", "超链接二维 JSON 数组，每项 {type:path,link,text}；与 --values 共存时按位叠加")
 	return cmd
+}
+
+// sheetMergeHyperlinks overlays a hyperlinks grid onto a values cell grid so
+// `sheet range update` accepts the separate --hyperlinks flag (wukong shape).
+// Each non-null hyperlink item is wukong's {type:path,link,text}, attached as
+// the cell's `hyperlink` field; a scalar value cell is first wrapped to a text
+// cell so the link has a host cell. Returns a grid sized to the larger of the
+// two inputs.
+func sheetMergeHyperlinks(cells [][]any, hyperlinks [][]any) ([][]any, error) {
+	rows := len(cells)
+	if len(hyperlinks) > rows {
+		rows = len(hyperlinks)
+	}
+	out := make([][]any, rows)
+	for i := 0; i < rows; i++ {
+		var valRow, linkRow []any
+		if i < len(cells) {
+			valRow = cells[i]
+		}
+		if i < len(hyperlinks) {
+			linkRow = hyperlinks[i]
+		}
+		cols := len(valRow)
+		if len(linkRow) > cols {
+			cols = len(linkRow)
+		}
+		row := make([]any, cols)
+		for j := 0; j < cols; j++ {
+			if j < len(valRow) {
+				row[j] = valRow[j]
+			}
+			if j < len(linkRow) && linkRow[j] != nil {
+				cell, ok := row[j].(map[string]any)
+				if !ok {
+					// No (or scalar) value cell here — host the link on a cell.
+					if wrapped, wok := sheetWrapScalarCell(row[j]); wok {
+						cell = wrapped
+					} else {
+						cell = map[string]any{}
+					}
+				}
+				cell["hyperlink"] = linkRow[j]
+				row[j] = cell
+			}
+		}
+		out[i] = row
+	}
+	return out, nil
 }
 
 func newSheetRangeClearCommand(runner executor.Runner) *cobra.Command {
@@ -840,10 +927,10 @@ func newSheetFilterCreateCommand(runner executor.Runner) *cobra.Command {
 			"sheetId": sheetStringFlag(cmd, "sheet-id"),
 			"range":   sheetStringFlag(cmd, "range"),
 		}
-		if v := sheetStringFlag(cmd, "criteria"); v != "" {
+		if sheetStringFlag(cmd, "criteria") != "" {
 			var criteria []any
-			if err := json.Unmarshal([]byte(v), &criteria); err != nil {
-				return fmt.Errorf("--criteria JSON parse failed: %w", err)
+			if err := sheetParseJSONFlag(cmd, "criteria", &criteria); err != nil {
+				return err
 			}
 			params["criteria"] = criteria
 		}
@@ -912,10 +999,10 @@ func newSheetFilterViewCreateCommand(runner executor.Runner) *cobra.Command {
 			"name":    sheetStringFlag(cmd, "name"),
 			"range":   sheetStringFlag(cmd, "range"),
 		}
-		if v := sheetStringFlag(cmd, "criteria"); v != "" {
+		if sheetStringFlag(cmd, "criteria") != "" {
 			var criteria []any
-			if err := json.Unmarshal([]byte(v), &criteria); err != nil {
-				return fmt.Errorf("--criteria JSON parse failed: %w", err)
+			if err := sheetParseJSONFlag(cmd, "criteria", &criteria); err != nil {
+				return err
 			}
 			params["criteria"] = criteria
 		}
@@ -1577,8 +1664,33 @@ func sheetAddChangedIntParam(cmd *cobra.Command, params map[string]any, key, fla
 	}
 }
 
+// sheetWrapScalarCell converts a bare scalar cell value (string / number /
+// bool) into a {type:text,text:"..."} cell object accepted by set_cell_range.
+// Returns ok=false for non-scalar values (maps, slices) so the caller can apply
+// its richer object validation. This lets `sheet range update` accept the same
+// plain `[["a","b"]]` shape as `sheet append` and the wukong update_range tool.
+func sheetWrapScalarCell(cell any) (map[string]any, bool) {
+	switch v := cell.(type) {
+	case string:
+		return map[string]any{"type": "text", "text": v}, true
+	case float64:
+		return map[string]any{"type": "text", "text": strconv.FormatFloat(v, 'f', -1, 64)}, true
+	case json.Number:
+		return map[string]any{"type": "text", "text": v.String()}, true
+	case bool:
+		return map[string]any{"type": "text", "text": strconv.FormatBool(v)}, true
+	}
+	return nil, false
+}
+
 func sheetParseJSONFlag(cmd *cobra.Command, flag string, out any) error {
-	raw := sheetStringFlag(cmd, flag)
+	// Resolve @file / @- so large 2D ranges, criteria and sort-keys can come
+	// from a file or stdin instead of inline shell-quoted JSON. ResolveInputSource
+	// passes values not starting with "@" through unchanged.
+	raw, err := cli.ResolveInputSource(sheetStringFlag(cmd, flag), flag, cli.NewStdinGuard())
+	if err != nil {
+		return err
+	}
 	if err := json.Unmarshal([]byte(raw), out); err != nil {
 		return fmt.Errorf("--%s JSON parse failed: %w", flag, err)
 	}
