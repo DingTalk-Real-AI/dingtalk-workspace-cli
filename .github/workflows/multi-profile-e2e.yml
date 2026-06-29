@@ -1,0 +1,45 @@
+name: Multi Profile E2E
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - codex/**
+      - feat/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: multi-profile-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  multi-profile-e2e:
+    name: Multi Profile E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run isolated multi-profile chain
+        run: bash scripts/dev/test-multi-profile-e2e.sh --keep-workdir
+
+      - name: Upload debug artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: multi-profile-e2e-debug
+          path: |
+            .tmp-bin/multi-profile-e2e.*/out
+            .tmp-bin/multi-profile-e2e.*/config
+          if-no-files-found: ignore
