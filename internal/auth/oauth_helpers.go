@@ -148,7 +148,9 @@ func (p *OAuthProvider) refreshWithRefreshToken(ctx context.Context, data *Token
 		updated.CorpName = data.CorpName
 	}
 
-	if err := SaveTokenData(p.configDir, updated); err != nil {
+	// Refresh runs under lockedRefresh's dual-layer lock; use the lock-free
+	// saver to avoid re-acquiring the non-reentrant lock (deadlock).
+	if err := saveTokenDataLocked(p.configDir, updated); err != nil {
 		return nil, fmt.Errorf("保存刷新后的 token 失败（旧 refresh_token 已失效，请重新登录）: %w", err)
 	}
 	return updated, nil
@@ -192,7 +194,9 @@ func (p *OAuthProvider) refreshViaMCP(ctx context.Context, data *TokenData) (*To
 		updated.CorpName = data.CorpName
 	}
 
-	if err := SaveTokenData(p.configDir, updated); err != nil {
+	// Refresh runs under lockedRefresh's dual-layer lock; use the lock-free
+	// saver to avoid re-acquiring the non-reentrant lock (deadlock).
+	if err := saveTokenDataLocked(p.configDir, updated); err != nil {
 		return nil, fmt.Errorf("保存刷新后的 token 失败（旧 refresh_token 已失效，请重新登录）: %w", err)
 	}
 	return updated, nil
