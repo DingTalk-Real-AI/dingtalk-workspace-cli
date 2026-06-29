@@ -190,6 +190,15 @@ func LoadTokenDataForProfile(configDir, profile string) (*TokenData, error) {
 		if strings.TrimSpace(profile) != "" {
 			return nil, err
 		}
+		// No explicit --profile: `selected` is the resolved current/primary
+		// profile. Only fall back to the legacy single slot when it belongs to
+		// the SAME org; otherwise surface the error instead of silently acting
+		// as a different organization (the legacy mirror may have drifted).
+		if legacy, lerr := LoadTokenDataKeychain(); lerr == nil && legacy != nil &&
+			strings.TrimSpace(legacy.CorpID) == strings.TrimSpace(selected.CorpID) {
+			return legacy, nil
+		}
+		return nil, err
 	}
 	if TokenDataExistsKeychain() {
 		return LoadTokenDataKeychain()
