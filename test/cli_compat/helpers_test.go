@@ -135,6 +135,12 @@ func execCmdWithArgs(t *testing.T, root *cobra.Command, path []string, flags map
 	cap := getCapture(t)
 
 	cliArgs := []string{"-f", "json"}
+	if cap != nil {
+		cliArgs = append(cliArgs, "--mock")
+		if !cap.dryRun && !cap.preview {
+			cliArgs = append(cliArgs, "--dry-run")
+		}
+	}
 	cliArgs = append(cliArgs, path...)
 
 	// Add dry-run if capture says so
@@ -179,10 +185,10 @@ func execCmdWithArgs(t *testing.T, root *cobra.Command, path []string, flags map
 	}
 	if cap != nil {
 		if jsonErr := json.Unmarshal(out.Bytes(), &inv); jsonErr == nil && inv.Invocation.Tool != "" {
-			if !inv.Invocation.DryRun || cap.preview {
+			if !inv.Invocation.DryRun || cap.preview || !cap.dryRun {
 				cap.record(inv.Invocation.Tool, inv.Invocation.Params, "")
 			}
-			// For dry-run: don't record (matches old behavior: assertCallCount == 0)
+			// Explicit dry-run captures still do not record, matching old assertCallCount == 0 behavior.
 		} else if jsonErr := json.Unmarshal(out.Bytes(), &flatInv); jsonErr == nil && flatInv.Tool != "" {
 			dryRunPreview := flatInv.DryRun || cap.dryRun || cap.preview
 			if !dryRunPreview || cap.preview {

@@ -17,6 +17,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -333,6 +334,14 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		invocation.CanonicalProduct, invocation.Tool, endpoint, version, authToken != "", timeoutSec)
 
 	if invocation.DryRun {
+		// Emit a wukong-aligned human-readable preview on stderr so the dry-run
+		// surface advertises the resolved MCP arguments without polluting the
+		// stdout payload (which stays valid JSON in --format json mode). Mirrors
+		// wukong's "Arguments: {...}" dry-run line; stderr keeps it out of the
+		// machine-readable channel.
+		if argsJSON, err := json.Marshal(invocation.Params); err == nil {
+			fmt.Fprintf(os.Stderr, "DRY-RUN Arguments: %s\n", argsJSON)
+		}
 		return executor.Result{
 			Invocation: invocation,
 			Response: map[string]any{
@@ -492,6 +501,15 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	}
 
 	invocation.Implemented = true
+	// Align with wukong's response envelope: stamp a top-level success=true on
+	// map payloads that don't already carry a success flag. Business errors
+	// (success=false) are intercepted above, so reaching here means the call
+	// succeeded. Additive only — existing keys are never overwritten.
+	if callResult.Content != nil {
+		if _, has := callResult.Content["success"]; !has {
+			callResult.Content["success"] = true
+		}
+	}
 	response := map[string]any{
 		"endpoint": transport.RedactURL(endpoint),
 		"content":  callResult.Content,

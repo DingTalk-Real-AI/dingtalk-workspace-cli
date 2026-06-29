@@ -5,9 +5,9 @@
 
 > **路由前置判断**：用户说「下载/导出」时**必须**先用 [`./doc-info.md`](./doc-info.md) `info --node <ID> --format json` 查 `contentType`：
 > - `contentType` 为 `ALIDOC`（在线文档）→ **必须用 `export`**，禁止用 `download`
-> - `contentType` 为 `DOCUMENT`/`IMAGE`/`VIDEO` 等（已有文件）→ 用 [`./doc-file-ops.md`](./doc-file-ops.md) `download`
+> - `contentType` 为 `DOCUMENT`/`IMAGE`/`VIDEO` 等（已有文件）→ 用 `dws drive download`（详见 [`../drive.md`](../drive.md)）
 >
-> `download` 只能下载**已有文件**（原样下载），`export` 是将**在线文档格式转换**后导出为 docx，两者完全不同。
+> `drive download` 只能下载**已有文件**（原样下载），`export` 是将**在线文档格式转换**后导出为 docx，两者完全不同。
 
 ---
 
@@ -77,4 +77,4 @@ dws doc export get --job-id <JOB_ID> --format json
 
 - [`../doc.md` §意图判断](../doc.md#意图判断)（如何路由到本命令）
 - [`./doc-info.md`](./doc-info.md)（前置：判断 contentType=ALIDOC 才走 export）
-- [`./doc-file-ops.md`](./doc-file-ops.md)（非 ALIDOC 文件用 download）
+- [`../drive.md`](../drive.md)（非 ALIDOC 文件用 `dws drive download`）

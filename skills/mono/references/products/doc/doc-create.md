@@ -35,13 +35,12 @@ Flags:
       --content string        文档初始内容（短文本字面量）；传 - 表示从 stdin 读取
       --content-file string   从文件读取文档内容（UTF-8）。推荐长/多行/表格内容使用
       --content-format string         内容格式: 默认为 markdown，可选 jsonml
-      --fix-jsonml              启用全部 JSONML 修复（含 JSON 语法修复 + 结构修复），推荐 agent 调用时使用
-      --no-fix-jsonml           关闭全部 JSONML 修复（跳过 JSON 语法修复和结构修复），用于排查原始错误
+      --fix-jsonml              启用 JSON 语法修复（括号/逗号补全），推荐 agent 调用时使用
 ```
 
 ## 关键说明
 
-- **`--name` 是 H1**：正文从 `##` 开始；正文内不要再写 `#` 一级标题（除非确需且已说明动机）。若正文首行仍是与 `--name` 相同的一级标题，CLI 会自动移除并在 stderr 提示（仅精确匹配会被移除，其他一级标题不受影响）。
+- **`--name` 是 H1**：正文从 `##` 开始；正文内不要再写 `#` 一级标题（除非确需且已说明动机）。
 - 不传 `--folder` 和 `--workspace` 时，默认创建在「我的文档」根目录。
 - `--folder` 仅接受文档文件夹 `nodeId` / `dentryUuid` / alidocs 文件夹 URL；**禁止**传入 drive `dentryId`、`parentId`、`spaceId` 这类纯数字 ID。
 - 输入方式选择见 [`./doc-update.md` §内容写入管道](./doc-update.md#内容写入管道createupdate-共用)（与 update 共用）。短文本字面量可 `--content`，多行/表格/特殊字符必须 `--content-file` 或 `--content -`。

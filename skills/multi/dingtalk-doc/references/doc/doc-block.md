@@ -2,13 +2,13 @@
 
 > **前置条件（MUST READ）：** 执行本命令前，必须先用 Read 工具读取以下文件：
 > 1. [`../doc.md`](../doc.md) — 命令路由 + 场景索引 + 意图判断 + 工作流
-> 2. [`./style/doc-update-workflow.md`](./style/doc-update-workflow.md) — 改写流程（编辑形态优先级、JSONML normalize/validator 行为）
+> 2. [`./style/doc-update-workflow.md`](./style/doc-update-workflow.md) — 改写流程（编辑形态优先级、JSONML validator 行为）
 > 3. [`./format/doc-jsonml-cookbook.md`](./format/doc-jsonml-cookbook.md) — JSONML 范例（含 callout / 分栏 / 表格 / 标题等节点的完整命令）
 > 4. [`./format/doc-jsonml-schema.md`](./format/doc-jsonml-schema.md) — JSONML 节点结构字段定义
 >
 > **同任务常配合**：[`doc-update.md`](./doc-update.md)（整篇 overwrite / 末尾追加纯文本）/ [`./format/doc-jsonml-cookbook.md`](./format/doc-jsonml-cookbook.md)（JSONML 复制范例）
 
-> **改写已有文档优先 JSONML**：保真度最高、callout / 分栏 / 表格 / @人 / 附件 / 颜色 / 嵌套都能 1:1 round-trip；写入端默认 normalize + validate。详见 [`./style/doc-update-workflow.md` §1.3 编辑形态优先级](./style/doc-update-workflow.md)。
+> **改写已有文档优先 JSONML**：保真度最高、callout / 分栏 / 表格 / @人 / 附件 / 颜色 / 嵌套都能 1:1 round-trip；写入端有 validator 兜底。详见 [`./style/doc-update-workflow.md` §1.3 编辑形态优先级](./style/doc-update-workflow.md)。
 
 ---
 
@@ -88,8 +88,7 @@ Flags:
       --level int          标题级别 1-6 (配合 --heading，默认 1)
       --element string     块元素 JSON (高级)；content-format=jsonml 时为 JSONML 数组字符串
       --content-format string      输入格式: 默认为 element，可选 jsonml
-      --fix-jsonml              启用全部 JSONML 修复（含 JSON 语法修复 + 结构修复），推荐 agent 调用时使用
-      --no-fix-jsonml           关闭全部 JSONML 修复（跳过 JSON 语法修复和结构修复），用于排查原始错误
+      --fix-jsonml              启用 JSON 语法修复（括号/逗号补全），推荐 agent 调用时使用
       --index int          参照位置索引 (从 0 开始)
       --where string       插入方向: before / after (默认 after)
       --ref-block string   参照块 ID (优先级高于 --index)
@@ -116,8 +115,7 @@ Flags:
       --level int          标题级别 1-6 (配合 --heading，默认 1)
       --element string     块元素 JSON (高级)；content-format=jsonml 时为 JSONML 数组字符串
       --content-format string      输入格式: 默认为 element，可选 jsonml
-      --fix-jsonml              启用全部 JSONML 修复（含 JSON 语法修复 + 结构修复），推荐 agent 调用时使用
-      --no-fix-jsonml           关闭全部 JSONML 修复（跳过 JSON 语法修复和结构修复），用于排查原始错误
+      --fix-jsonml              启用 JSON 语法修复（括号/逗号补全），推荐 agent 调用时使用
 ```
 
 > 使用 `--content-format jsonml` 时，`element` 中的 `uuid` **必须**等于 `--block-id`，否则报错。
@@ -169,17 +167,16 @@ dws doc block update --node DOC_ID --block-id UUID --content-format jsonml \
 dws doc block delete --node DOC_ID --block-id UUID
 ```
 
-> 关于自动修复 / 严格校验：默认会自动注入 uuid、把裸字符串包成 span/leaf；如要禁用，用 `--no-fix-jsonml`。如需同时启用 JSON 语法修复（修复 LLM 遗漏的括号/逗号），用 `--fix-jsonml`。文本结构定义见 [`./format/doc-jsonml-cookbook.md`](./format/doc-jsonml-cookbook.md)。
+> 关于校验：CLI 不做结构修复，裸字符串、缺 uuid 等错误会被 validator 直接抦下。如需同时启用 JSON 语法修复（修复 LLM 遗漏的括号/逗号），用 `--fix-jsonml`。文本结构定义见 [`./format/doc-jsonml-cookbook.md`](./format/doc-jsonml-cookbook.md)。
 
 ## 关键说明
 
 - **块类型**：paragraph、heading、blockquote、callout、columns、orderedList、unorderedList、table、sheet、attachment、slot。
 - **快捷 vs --element**：`block insert` 优先使用 `--text` 或 `--heading` 快捷方式；复杂块类型（table、callout、columns 等）使用 `--element` JSON 或 `--content-format jsonml`。
 - **简单内容追加**：建议用 [`./doc-update.md`](./doc-update.md) `--mode append`，不必走 block insert。
-- **JSONML normalize + validator**（写入端默认行为）：
-  - 缺 `uuid` 的 block 会自动注入；裸字符串自动包成 `["span",{"data-type":"text"},["span",{"data-type":"leaf"},"..."]]`；每条修复以 `[FIX]` 行输出。
-  - 结构错误会被 validator 拦下并返回带 path 的错误（如 `$[2][2]: paragraph child must be span wrapper, got raw string.`）。
-  - `--no-fix-jsonml` 关闭全部修复（normalize + JSON repair）；`--fix-jsonml` 开启全部修复（含 JSON 语法修复），推荐 agent 调用。
+- **JSONML validator**（写入端默认行为）：
+  - 裸字符串、缺 uuid 等结构错误会被 validator 抦下并返回带 path 的错误（如 `$[2][2]: paragraph child must be span wrapper, got raw string.`）。
+  - `--fix-jsonml` 开启 JSON 语法修复，推荐 agent 调用。
 - **图片插入**：插入图片走 [`./doc-media.md`](./doc-media.md) `media insert`（作为附件块），不走 block insert。
 - **分割线**：用 [`./doc-update.md`](./doc-update.md) `--content "---" --mode append`，不走 block insert。
 
@@ -265,7 +262,7 @@ dws doc block insert --node <DOC_ID> --content-format jsonml --parent-block <UUI
 
 - [`../doc.md` §意图判断](../doc.md#意图判断)（如何路由到本命令族）
 - [`./doc-update.md`](./doc-update.md)（整篇改写 / 纯文本追加）
-- [`./style/doc-update-workflow.md`](./style/doc-update-workflow.md)（编辑形态优先级、normalize/validator 行为）
+- [`./style/doc-update-workflow.md`](./style/doc-update-workflow.md)（编辑形态优先级、validator 行为）
 - [`./format/doc-jsonml-cookbook.md`](./format/doc-jsonml-cookbook.md)（所有节点的可复制 JSONML 范例）
 - [`./format/doc-jsonml-schema.md`](./format/doc-jsonml-schema.md)（JSONML 节点结构字段定义）
 - [`./style/doc-style-guideline.md`](./style/doc-style-guideline.md)（callout 颜色 / 元素边界规范）

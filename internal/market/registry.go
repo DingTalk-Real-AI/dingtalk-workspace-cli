@@ -36,9 +36,11 @@ const (
 
 	// discoveryAPIPath is the path appended to BaseURL when fetching the
 	// MCP server list. Kept as a single constant so the version-coded
-	// segment (".../bamboo") lives in one place and future version bumps
-	// only touch here. See registry_test.go for the matching fixture path.
-	discoveryAPIPath = "/cli/discovery/apis/bamboo"
+	// segment (".../cedar") lives in one place and future version bumps
+	// only touch here. Version codes step by first letter (bamboo -> cedar
+	// -> ...); cedar carries the dws-wukong alignment. See registry_test.go
+	// for the matching fixture path.
+	discoveryAPIPath = "/cli/discovery/apis/cedar"
 )
 
 type Client struct {

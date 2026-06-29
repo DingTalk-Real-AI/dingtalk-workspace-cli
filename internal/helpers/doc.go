@@ -85,6 +85,7 @@ func (docHandler) Command(runner executor.Runner) *cobra.Command {
 		newDocPermissionAddCommand(runner),
 		newDocPermissionUpdateCommand(runner),
 		newDocPermissionListCommand(runner),
+		newDocPermissionRemoveCommand(runner),
 	)
 
 	export := &cobra.Command{
@@ -174,6 +175,7 @@ func newDocSearchCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			docDeprecatedNotice(cmd, "drive search or dws wiki node search")
 			params := map[string]any{}
 			if keyword := docFlagOrFallback(cmd, "query", "keyword"); keyword != "" {
 				params["keyword"] = keyword
@@ -222,6 +224,7 @@ func newDocListCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			docDeprecatedNotice(cmd, "drive list or dws wiki node list")
 			params := map[string]any{}
 			if folder := docFlagOrFallback(cmd, "folder", "parent-id", "node", "file-id", "nodee"); folder != "" {
 				params["folderId"] = normalizeDocNodeID(folder)
@@ -273,6 +276,9 @@ func newDocReadCommand(runner executor.Runner) *cobra.Command {
 			}
 			if output := docStringFlag(cmd, "output"); output != "" {
 				params["__output__"] = output
+			}
+			if format == "jsonml" {
+				return runDocReadJSONML(cmd, runner, params)
 			}
 			return runDocTool(cmd, runner, "doc", "get_document_content", params)
 		},
@@ -814,6 +820,7 @@ func newDocFileCreateCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			docDeprecatedNotice(cmd, "wiki node create")
 			name, err := docRequiredFlagOrFallback(cmd, "name", "title")
 			if err != nil {
 				return err
@@ -850,6 +857,7 @@ func newDocFolderCreateCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			docDeprecatedNotice(cmd, "wiki node create --type folder")
 			name, err := docRequiredFlagOrFallback(cmd, "name", "title")
 			if err != nil {
 				return err
@@ -889,6 +897,7 @@ func newDocTransferCommand(runner executor.Runner, use, tool string) *cobra.Comm
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			docDeprecatedNotice(cmd, "drive "+use)
 			nodeID, err := docRequiredNode(cmd)
 			if err != nil {
 				return err
@@ -919,6 +928,7 @@ func newDocRenameCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			docDeprecatedNotice(cmd, "drive rename")
 			nodeID, err := docRequiredNode(cmd)
 			if err != nil {
 				return err
@@ -1465,6 +1475,56 @@ func docInvocationResult(cmd *cobra.Command, runner executor.Runner, product, to
 	invocation := executor.NewHelperInvocation(cobracmd.LegacyCommandPath(cmd), product, tool, params)
 	invocation.DryRun = commandDryRun(cmd)
 	return runner.Run(cmd.Context(), invocation)
+}
+
+func runDocReadJSONML(cmd *cobra.Command, runner executor.Runner, params map[string]any) error {
+	outputPath, _ := params["__output__"].(string)
+	result, err := docInvocationResult(cmd, runner, "doc", "get_document_content", params)
+	if err != nil {
+		return err
+	}
+	if !result.Invocation.Implemented {
+		return writeCommandPayload(cmd, result)
+	}
+	payload := normalizeDocReadJSONMLResult(result)
+	if outputPath != "" {
+		data, err := json.MarshalIndent(payload, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal JSONML output: %w", err)
+		}
+		if err := os.WriteFile(outputPath, data, 0644); err != nil {
+			return fmt.Errorf("failed to write output file %s: %w", outputPath, err)
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "[INFO] JSONML 已写入 %s\n", outputPath)
+		return nil
+	}
+	return writeCommandPayload(cmd, payload)
+}
+
+func normalizeDocReadJSONMLResult(result executor.Result) map[string]any {
+	content := result.Response
+	if nested, ok := result.Response["content"].(map[string]any); ok {
+		content = nested
+	}
+	out := map[string]any{}
+	for k, v := range content {
+		if k == "content" {
+			continue
+		}
+		out[k] = v
+	}
+	if raw, ok := out["jsonml"].(string); ok {
+		var decoded any
+		if err := json.Unmarshal([]byte(raw), &decoded); err == nil {
+			out["jsonml"] = decoded
+		}
+	}
+	if revision, ok := out["version"]; ok {
+		if _, exists := out["revision"]; !exists {
+			out["revision"] = revision
+		}
+	}
+	return out
 }
 
 func addDocNodeFlags(cmd *cobra.Command) {
@@ -2082,6 +2142,7 @@ func newDocPermissionAddCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			docDeprecatedNotice(cmd, "drive permission add")
 			return runDocPermissionMutation(cmd, runner, "add_permission")
 		},
 	}
@@ -2091,6 +2152,7 @@ func newDocPermissionAddCommand(runner executor.Runner) *cobra.Command {
 	addDocHiddenStringFlag(cmd, "users", "--user alias")
 	cmd.Flags().String("role", "", i18n.T("权限角色: MANAGER / EDITOR / DOWNLOADER / READER (必填，大小写不敏感)"))
 	cmd.Flags().String("workspace", "", i18n.T("目标知识库 ID 或 URL（选填，辅助构造返回的 docUrl）"))
+	addDocHiddenStringFlag(cmd, "workspace-id", "--workspace alias")
 	return cmd
 }
 
@@ -2108,6 +2170,7 @@ func newDocPermissionUpdateCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			docDeprecatedNotice(cmd, "drive permission update")
 			return runDocPermissionMutation(cmd, runner, "update_permission")
 		},
 	}
@@ -2118,6 +2181,7 @@ func newDocPermissionUpdateCommand(runner executor.Runner) *cobra.Command {
 	addDocHiddenStringFlag(cmd, "uid", "--user alias")
 	cmd.Flags().String("role", "", i18n.T("新权限角色: MANAGER / EDITOR / DOWNLOADER / READER (必填)"))
 	cmd.Flags().String("workspace", "", i18n.T("目标知识库 ID 或 URL（选填）"))
+	addDocHiddenStringFlag(cmd, "workspace-id", "--workspace alias")
 	return cmd
 }
 
@@ -2135,6 +2199,7 @@ func newDocPermissionListCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			docDeprecatedNotice(cmd, "drive permission list")
 			nodeID, err := docRequiredNode(cmd)
 			if err != nil {
 				return err
@@ -2157,7 +2222,7 @@ func newDocPermissionListCommand(runner executor.Runner) *cobra.Command {
 				}
 				params["filterRoleIds"] = roles
 			}
-			if v, _ := cmd.Flags().GetString("workspace"); v != "" {
+			if v := docFlagOrFallback(cmd, "workspace", "workspace-id"); v != "" {
 				params["workspaceId"] = v
 			}
 			if commandDryRun(cmd) {
@@ -2183,6 +2248,59 @@ func newDocPermissionListCommand(runner executor.Runner) *cobra.Command {
 	_ = cmd.Flags().MarkHidden("page-size")
 	cmd.Flags().String("filter-role", "", i18n.T("按角色过滤（逗号分隔）: OWNER / MANAGER / EDITOR / DOWNLOADER / READER"))
 	cmd.Flags().String("workspace", "", i18n.T("目标知识库 ID 或 URL（选填）"))
+	addDocHiddenStringFlag(cmd, "workspace-id", "--workspace alias")
+	return cmd
+}
+
+func newDocPermissionRemoveCommand(runner executor.Runner) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:               "remove",
+		Aliases:           []string{"rm"},
+		Short:             i18n.T("移除文档协作者权限"),
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			docDeprecatedNotice(cmd, "drive permission remove")
+			nodeID, err := docRequiredNode(cmd)
+			if err != nil {
+				return err
+			}
+			rawUsers := docFlagOrFallback(cmd, "users", "user", "uid")
+			if strings.TrimSpace(rawUsers) == "" {
+				return apperrors.NewValidation("--users is required")
+			}
+			userIDs, err := parseDocPermissionUsers(rawUsers)
+			if err != nil {
+				return err
+			}
+			params := map[string]any{
+				"nodeId":  nodeID,
+				"userIds": userIDs,
+			}
+			if v := docFlagOrFallback(cmd, "workspace", "workspace-id"); v != "" {
+				params["workspaceId"] = v
+			}
+			if commandDryRun(cmd) {
+				return writeCommandPayload(cmd, executor.NewHelperInvocation(
+					cobracmd.LegacyCommandPath(cmd), "doc", "remove_permission", params,
+				))
+			}
+			result, err := runner.Run(cmd.Context(), executor.NewHelperInvocation(
+				cobracmd.LegacyCommandPath(cmd), "doc", "remove_permission", params,
+			))
+			if err != nil {
+				return err
+			}
+			return writeCommandPayload(cmd, result)
+		},
+	}
+	preferLegacyLeaf(cmd)
+	addDocNodeFlags(cmd)
+	cmd.Flags().String("users", "", i18n.T("被移除用户 userId 列表，逗号分隔，单次最多 30 (必填)"))
+	addDocHiddenStringFlag(cmd, "user", "--users alias")
+	addDocHiddenStringFlag(cmd, "uid", "--users alias")
+	cmd.Flags().String("workspace", "", i18n.T("目标知识库 ID 或 URL（选填）"))
+	addDocHiddenStringFlag(cmd, "workspace-id", "--workspace alias")
 	return cmd
 }
 
@@ -2217,7 +2335,7 @@ func runDocPermissionMutation(cmd *cobra.Command, runner executor.Runner, mcpToo
 		"roleId":  role,
 		"userIds": userIDs,
 	}
-	if v, _ := cmd.Flags().GetString("workspace"); v != "" {
+	if v := docFlagOrFallback(cmd, "workspace", "workspace-id"); v != "" {
 		params["workspaceId"] = v
 	}
 	if commandDryRun(cmd) {
@@ -2232,6 +2350,10 @@ func runDocPermissionMutation(cmd *cobra.Command, runner executor.Runner, mcpToo
 		return err
 	}
 	return writeCommandPayload(cmd, result)
+}
+
+func docDeprecatedNotice(cmd *cobra.Command, replacement string) {
+	fmt.Fprintf(cmd.ErrOrStderr(), "warning: deprecated: use dws %s instead.\n", replacement)
 }
 
 // TRANSITIONAL: 等 mse 把 delete_document 加入 doc toolOverrides（含

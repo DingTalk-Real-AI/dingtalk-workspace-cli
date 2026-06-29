@@ -16,6 +16,7 @@ package helpers
 import (
 	"bytes"
 	"context"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -256,6 +257,94 @@ func TestWikiMemberAddUsesWorkspaceIDAlias(t *testing.T) {
 	}
 	if strings.Join(users, ",") != "uid1,uid2" {
 		t.Fatalf("userIds = %#v, want uid1,uid2", users)
+	}
+}
+
+func TestWikiSpaceListDriveTypesRouteToDrive(t *testing.T) {
+	t.Parallel()
+
+	runner := &wikiCommandRunner{}
+	cmd := wikiHandler{}.Command(runner)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"space", "list", "--type", "orgSpace", "--limit", "10"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut.String())
+	}
+	if runner.last.CanonicalProduct != "drive" {
+		t.Fatalf("product = %q, want drive", runner.last.CanonicalProduct)
+	}
+	if runner.last.Tool != "list_spaces" {
+		t.Fatalf("tool = %q, want list_spaces", runner.last.Tool)
+	}
+	if got := runner.last.Params["spaceType"]; got != "orgSpace" {
+		t.Fatalf("spaceType = %#v, want orgSpace", got)
+	}
+	if got := runner.last.Params["maxResults"]; got != 10 {
+		t.Fatalf("maxResults = %#v, want 10", got)
+	}
+}
+
+func TestWikiNodeSearchRoutesToDoc(t *testing.T) {
+	t.Parallel()
+
+	runner := &wikiCommandRunner{}
+	cmd := wikiHandler{}.Command(runner)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{
+		"node", "search",
+		"--workspace-id", "WS_001",
+		"--keyword", "方案",
+		"--extensions", "adoc,asheet",
+		"--limit", "5",
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut.String())
+	}
+	if runner.last.CanonicalProduct != "doc" || runner.last.Tool != "search_documents" {
+		t.Fatalf("invocation = %#v, want doc search_documents", runner.last)
+	}
+	if got := runner.last.Params["keyword"]; got != "方案" {
+		t.Fatalf("keyword = %#v, want 方案", got)
+	}
+	if got := runner.last.Params["workspaceIds"]; !reflect.DeepEqual(got, []string{"WS_001"}) {
+		t.Fatalf("workspaceIds = %#v, want []string{WS_001}", got)
+	}
+	if got := runner.last.Params["extensions"]; !reflect.DeepEqual(got, []string{"adoc", "asheet"}) {
+		t.Fatalf("extensions = %#v, want adoc/asheet", got)
+	}
+	if got := runner.last.Params["pageSize"]; got != 5 {
+		t.Fatalf("pageSize = %#v, want 5", got)
+	}
+}
+
+func TestWikiMemberRemoveRoutesToWiki(t *testing.T) {
+	t.Parallel()
+
+	runner := &wikiCommandRunner{}
+	cmd := wikiHandler{}.Command(runner)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"member", "remove", "--workspace-id", "WS_001", "--user", "uid1,uid2"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut.String())
+	}
+	if runner.last.CanonicalProduct != "wiki" || runner.last.Tool != "remove_member" {
+		t.Fatalf("invocation = %#v, want wiki remove_member", runner.last)
+	}
+	if got := runner.last.Params["workspaceId"]; got != "WS_001" {
+		t.Fatalf("workspaceId = %#v, want WS_001", got)
+	}
+	users, ok := runner.last.Params["userIds"].([]string)
+	if !ok || strings.Join(users, ",") != "uid1,uid2" {
+		t.Fatalf("userIds = %#v, want uid1,uid2", runner.last.Params["userIds"])
 	}
 }
 

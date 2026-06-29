@@ -30,3 +30,17 @@
 `dev connect` 内部用 dingtalk-stream-sdk-go，凭 `clientId/clientSecret` 建一条 WebSocket 长连并保活——底层网关握手、ticket、加解密都由 SDK 封装，agent 跑 `dev connect` 即可，不用碰这些。
 
 dws 当前只消费机器人消息、不消费事件。要自己写事件消费程序补这个 gap 时，SDK 用法以官方文档为准（走 `dev doc search`，或看 github.com/open-dingtalk/dingtalk-stream-sdk-go）——注意事件用 `RegisterAllEventHandler`、connect 用的机器人是 `RegisterChatBotCallbackRouter`，两套别混；版本/接口会变，不在这里固化。
+
+## 发现命令
+
+调用任何方法前先查清楚再敲：
+
+```
+# 浏览命令组下的子命令与 flag
+dws dev app event --help
+
+# 查某方法的必填参数、类型、默认值
+dws schema dev.app.event.<method>
+```
+
+按 `dws schema` 输出构造 `--flag`（flag 名 = schema 参数名）。

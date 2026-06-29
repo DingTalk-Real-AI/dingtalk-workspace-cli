@@ -26,3 +26,17 @@
 |------|------|
 | 多应用命中 | 展示候选，停止写操作 |
 | `ServiceResult.success=false` | 透传 `errorCode/errorMsg` |
+
+## 发现命令
+
+调用任何方法前先查清楚再敲：
+
+```
+# 浏览命令组下的子命令与 flag
+dws dev app --help
+
+# 查某方法的必填参数、类型、默认值
+dws schema dev.app.<method>
+```
+
+按 `dws schema` 输出构造 `--flag`（flag 名 = schema 参数名）。

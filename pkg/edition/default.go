@@ -20,6 +20,8 @@ package edition
 // their environment.
 const DefaultOSSClawType = "openClaw"
 
+const openAitableHelperEndpoint = "https://mcp-gw.dingtalk.com/server/bb2984ee6b10c1560b4fe943ca620f646bed31f215c551a53abf040b52591a95"
+
 // defaultHooks returns the open-source edition defaults.
 //
 // MergeHeaders is the only hook that ships with behaviour: it pins the
@@ -44,9 +46,15 @@ func defaultHooks() *Hooks {
 func openSupplementServers() []ServerInfo {
 	return []ServerInfo{
 		{
+			ID:       "aitable-helper",
+			Name:     "AI 多维表(辅助)",
+			Endpoint: openAitableHelperEndpoint,
+			Prefixes: []string{"form", "share_form"},
+		},
+		{
 			ID:       "aitable-form",
 			Name:     "AI 多维表(表单)",
-			Endpoint: "https://mcp-gw.dingtalk.com/server/bb2984ee6b10c1560b4fe943ca620f646bed31f215c551a53abf040b52591a95",
+			Endpoint: openAitableHelperEndpoint,
 			Prefixes: []string{"form", "share_form"},
 		},
 	}

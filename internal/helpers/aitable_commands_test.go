@@ -1393,3 +1393,55 @@ func singleAitableRecord(t *testing.T, value any) map[string]any {
 	}
 	return record
 }
+
+// base create 无模板时，CLI 兜底补建一张默认表（与 wukong 场景行为对齐：
+// 服务端对 openClaw 不建默认表，CLI 侧补齐使新 base 立即含 tableId）。
+func TestAitableBaseCreateAddsDefaultTableWithoutTemplate(t *testing.T) {
+	t.Parallel()
+	runner := &aitableSequencedRunner{responses: []map[string]any{
+		{"data": map[string]any{"baseId": "BASE_001"}},
+		{"data": map[string]any{"tableId": "TABLE_001"}},
+	}}
+	cmd := newAitableBaseCreateCommand(runner)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"--name", "项目跟踪"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut.String())
+	}
+	if len(runner.calls) != 2 {
+		t.Fatalf("calls = %d, want create_base + create_table", len(runner.calls))
+	}
+	if got := runner.calls[0].Tool; got != "create_base" {
+		t.Fatalf("first tool = %q, want create_base", got)
+	}
+	if got := runner.calls[1].Tool; got != "create_table" {
+		t.Fatalf("second tool = %q, want create_table", got)
+	}
+	if got := runner.calls[1].Params["baseId"]; got != "BASE_001" {
+		t.Fatalf("create_table baseId = %#v, want BASE_001", got)
+	}
+}
+
+// base create 带 --template-id 时不补建默认表（模板自带结构）。
+func TestAitableBaseCreateWithTemplateSkipsDefaultTable(t *testing.T) {
+	t.Parallel()
+	runner := &aitableSequencedRunner{responses: []map[string]any{
+		{"data": map[string]any{"baseId": "BASE_001"}},
+	}}
+	cmd := newAitableBaseCreateCommand(runner)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"--name", "项目跟踪", "--template-id", "TPL_001"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut.String())
+	}
+	if len(runner.calls) != 1 {
+		t.Fatalf("calls = %d, want only create_base", len(runner.calls))
+	}
+	if got := runner.calls[0].Tool; got != "create_base" {
+		t.Fatalf("tool = %q, want create_base", got)
+	}
+}

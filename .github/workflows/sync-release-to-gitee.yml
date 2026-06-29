@@ -1,0 +1,49 @@
+name: Sync release to Gitee
+
+# Manually mirror a published GitHub release's assets to the matching Gitee
+# release. Use this to repair a release whose Gitee mirror is incomplete (e.g.
+# the Release job timed out mid-upload). It runs ONLY the idempotent Gitee sync
+# step — it does not run GoReleaser and does not touch the GitHub release, so
+# there is no release outage. The sync script skips assets already on Gitee, so
+# this only uploads what is missing.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag to mirror to Gitee (e.g. v1.0.42)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  sync-gitee:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download GitHub release assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          mkdir -p dist
+          gh release download "${{ inputs.version }}" \
+            --repo "${{ github.repository }}" \
+            --dir dist \
+            --pattern 'dws-*' \
+            --pattern 'checksums.txt' \
+            --clobber
+          ls -la dist
+
+      - name: Mirror release to Gitee (China)
+        # Idempotent: uploads only assets not already present on the Gitee release.
+        run: ./scripts/release/sync-to-gitee.sh
+        env:
+          VERSION: ${{ inputs.version }}
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_REPO: ${{ secrets.GITEE_REPO }}
