@@ -302,7 +302,7 @@ Flags:
 - 用户说"复制知识库里的文档" → `node copy`（需 `--workspace` + `--node`）
 - 用户说"移动知识库里的文档" → `node move`（需 `--workspace` + `--node`）
 - 用户说"删除知识库里的文档/节点" → `node delete`（需 `--workspace` + `--node`）
-- 用户说"把知识库分享给某人/给某人加入知识库/邀请进知识库" → `member add`（需 `--workspace` + `--user` + `--role`）
+- 用户说"把知识库分享给某人/给某人加入知识库/邀请进知识库" → `member add`（需 `--workspace` + `--users` + `--role`）
 - 用户说"修改某人在知识库的权限/调整成员角色" → `member update`
 - 用户说"移除知识库成员/把某人从知识库移除/删除知识库成员" → `member remove`（需 `--workspace` + `--users`）
 - 用户说"知识库有哪些成员/查看知识库成员" → `member list`

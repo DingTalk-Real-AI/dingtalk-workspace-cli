@@ -13,19 +13,19 @@ Usage:
 Example:
   dws doc list
   dws doc list --folder <DOC_FOLDER_NODE_ID>
-  dws doc list --workspace <WS_ID> --limit 20
+  dws doc list --workspace <WS_ID> --page-size 20
 Flags:
       --folder string       文档文件夹 nodeId 或 alidocs 文件夹 URL；不要传 drive dentryId/parent-id 这类纯数字 ID
       --workspace string    知识库 ID
-      --limit int       每页数量 (默认 50，最大 50)
-      --cursor string   分页游标 (从上次结果的 nextPageToken 获取)
+      --page-size int       每页数量
+      --page-token string   分页 token (从上次结果的 nextPageToken 获取)
 ```
 
 ## 关键说明
 
 - 不传任何 flag 时遍历"我的文档"根目录。
 - `--folder` 仅接受文档文件夹 `nodeId` / `dentryUuid` / alidocs 文件夹 URL；**禁止**传入 drive `dentryId`、`parentId`、`spaceId` 这类纯数字 ID。
-- 单页最多 50 条，需翻页时使用 `nextPageToken` → `--cursor`。
+- 需翻页时使用 `nextPageToken` → `--page-token`。
 
 ## 上下文传递
 
@@ -45,10 +45,10 @@ dws doc list --folder <DOC_FOLDER_NODE_ID> --format json
 dws doc list --folder "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>" --format json
 
 # 浏览指定知识库根目录（取出 workspaceId 后）
-dws doc list --workspace <WS_ID> --limit 20 --format json
+dws doc list --workspace <WS_ID> --page-size 20 --format json
 
 # 翻页
-dws doc list --folder <DOC_FOLDER_NODE_ID> --cursor <nextPageToken> --format json
+dws doc list --folder <DOC_FOLDER_NODE_ID> --page-token <nextPageToken> --format json
 ```
 
 ## 参考
