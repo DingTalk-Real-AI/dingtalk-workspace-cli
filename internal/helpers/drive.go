@@ -79,6 +79,12 @@ func (driveHandler) Command(runner executor.Runner) *cobra.Command {
 		newDriveCommitCommand(runner),
 		newDriveUploadCommand(runner),
 		newDriveDeleteCommand(runner),
+		newDriveSearchCommand(runner),
+		newDriveCopyCommand(runner),
+		newDriveMoveCommand(runner),
+		newDriveRenameCommand(runner),
+		newDrivePermissionCommand(runner),
+		newDriveFolderCommand(runner),
 	)
 	return root
 }
@@ -97,6 +103,17 @@ func newDriveListCommand(runner executor.Runner) *cobra.Command {
 			maxResults := driveIntFlagOrFallback(cmd, "limit", "max", "page-size")
 			if maxResults <= 0 {
 				maxResults = 20
+			}
+			if workspaceID := driveFlagOrFallback(cmd, "workspace", "workspace-id"); workspaceID != "" {
+				params := map[string]any{"workspaceId": workspaceID}
+				if folderID := driveFlagOrFallback(cmd, "folder", "parent-id"); folderID != "" {
+					params["folderId"] = normalizeDocNodeID(folderID)
+				}
+				if maxResults > 0 {
+					params["pageSize"] = maxResults
+				}
+				addDriveStringParam(cmd, params, "pageToken", "cursor", "next-token")
+				return runDriveInvocation(cmd, runner, "doc", "list_nodes", params)
 			}
 			params := map[string]any{"maxResults": float64(maxResults)}
 			addDriveStringParam(cmd, params, "spaceId", "space-id")
@@ -124,6 +141,8 @@ func newDriveListCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("space-id", "", "空间 ID，不传则使用「我的文件」对应 spaceId (可选)")
 	cmd.Flags().String("folder", "", "父节点 ID (dentryUuid)，不传则列出空间根目录 (可选)")
 	addDriveHiddenStringFlag(cmd, "parent-id", "--folder 的兼容别名")
+	cmd.Flags().String("workspace", "", "文档空间/知识库 ID，传入则路由到文档空间")
+	addDriveHiddenStringFlag(cmd, "workspace-id", "--workspace 的兼容别名")
 	cmd.Flags().String("cursor", "", "分页游标，首次不传 (可选)")
 	addDriveHiddenStringFlag(cmd, "next-token", "--cursor 的兼容别名")
 	cmd.Flags().String("order-by", "", "排序字段: createTime|modifyTime|name (可选)")
@@ -147,6 +166,7 @@ spaceType 筛选规则:
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Fprintln(cmd.ErrOrStderr(), "warning: deprecated: use dws wiki space list instead.")
 			params := map[string]any{}
 			maxResults, _ := cmd.Flags().GetInt("limit")
 			if !cmd.Flags().Changed("limit") {
@@ -380,6 +400,9 @@ func newDriveUploadCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("mime-type", "", "文件 MIME 类型，不传则自动推断 (可选)")
 	cmd.Flags().String("folder", "", "父节点 ID (dentryUuid)，不传则上传到空间根目录 (可选)")
 	addDriveHiddenStringFlag(cmd, "parent-id", "--folder 的兼容别名")
+	cmd.Flags().String("workspace", "", "目标知识库 ID，传入时路由到文档空间上传")
+	addDriveHiddenStringFlag(cmd, "workspace-id", "--workspace 的兼容别名")
+	cmd.Flags().Bool("convert", false, "是否转换为钉钉在线文档（文档空间上传时生效）")
 	return cmd
 }
 
@@ -387,6 +410,9 @@ func runDriveUpload(cmd *cobra.Command, runner executor.Runner) error {
 	filePath, _ := cmd.Flags().GetString("file")
 	if strings.TrimSpace(filePath) == "" {
 		return apperrors.NewValidation("--file is required")
+	}
+	if workspaceID := driveFlagOrFallback(cmd, "workspace", "workspace-id"); workspaceID != "" {
+		return runDriveUploadToDoc(cmd, runner, workspaceID)
 	}
 
 	absPath, err := filepath.Abs(filePath)
@@ -493,6 +519,93 @@ func runDriveUpload(cmd *cobra.Command, runner executor.Runner) error {
 	return writeCommandPayload(cmd, result)
 }
 
+func runDriveUploadToDoc(cmd *cobra.Command, runner executor.Runner, workspaceID string) error {
+	filePath, _ := cmd.Flags().GetString("file")
+	absPath, err := filepath.Abs(filePath)
+	if err != nil {
+		return apperrors.NewValidation("无法解析文件路径: " + err.Error())
+	}
+	fi, err := os.Stat(absPath)
+	if err != nil {
+		return apperrors.NewValidation("文件不存在或无法读取: " + absPath)
+	}
+	if fi.IsDir() {
+		return apperrors.NewValidation("--file 不能是目录: " + absPath)
+	}
+	fileSize := fi.Size()
+	if fileSize <= 0 {
+		return apperrors.NewValidation("文件为空")
+	}
+
+	fileName := driveFlagOrFallback(cmd, "file-name", "name")
+	if fileName == "" {
+		fileName = filepath.Base(absPath)
+	}
+	folderID := driveFlagOrFallback(cmd, "folder", "parent-id")
+	if folderID != "" {
+		folderID = normalizeDocNodeID(folderID)
+	}
+
+	step1Params := map[string]any{"workspaceId": workspaceID}
+	if folderID != "" {
+		step1Params["folderId"] = folderID
+	}
+	commitParams := map[string]any{
+		"name":        fileName,
+		"fileSize":    float64(fileSize),
+		"workspaceId": workspaceID,
+	}
+	if folderID != "" {
+		commitParams["folderId"] = folderID
+	}
+	if convert, _ := cmd.Flags().GetBool("convert"); convert {
+		commitParams["convertToOnlineDoc"] = true
+	}
+
+	if commandDryRun(cmd) {
+		return writeCommandPayload(cmd, map[string]any{
+			"dry_run": true,
+			"step_1_get_file_upload_info": executor.NewHelperInvocation(
+				cobracmd.LegacyCommandPath(cmd), "doc", "get_file_upload_info", step1Params,
+			),
+			"step_2_http_put_oss": "PUT file bytes to resourceUrl with returned headers",
+			"step_3_commit_uploaded_file": executor.NewHelperInvocation(
+				cobracmd.LegacyCommandPath(cmd), "doc", "commit_uploaded_file", commitParams,
+			),
+			"file": absPath,
+			"name": fileName,
+			"size": fileSize,
+		})
+	}
+
+	fmt.Fprintf(cmd.ErrOrStderr(), "[1/3] 获取文档空间上传凭证 %s (%d 字节)...\n", fileName, fileSize)
+	step1Result, err := runner.Run(cmd.Context(), executor.NewHelperInvocation(
+		cobracmd.LegacyCommandPath(cmd), "doc", "get_file_upload_info", step1Params,
+	))
+	if err != nil {
+		return fmt.Errorf("获取上传凭证失败: %w", err)
+	}
+	resourceURL, uploadKey, headers, err := extractDocFileUploadInfo(step1Result.Response)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintln(cmd.ErrOrStderr(), "[2/3] 上传文件到 OSS...")
+	if err := httpPutDriveFile(cmd.Context(), resourceURL, headers, absPath, fileSize); err != nil {
+		return err
+	}
+
+	fmt.Fprintln(cmd.ErrOrStderr(), "[3/3] 提交文件入库...")
+	commitParams["uploadKey"] = uploadKey
+	result, err := runner.Run(cmd.Context(), executor.NewHelperInvocation(
+		cobracmd.LegacyCommandPath(cmd), "doc", "commit_uploaded_file", commitParams,
+	))
+	if err != nil {
+		return fmt.Errorf("提交文件入库失败: %w", err)
+	}
+	return writeCommandPayload(cmd, result)
+}
+
 // ── delete (drive surface routed to doc MCP server) ────────
 
 func newDriveDeleteCommand(runner executor.Runner) *cobra.Command {
@@ -526,6 +639,303 @@ func newDriveDeleteCommand(runner executor.Runner) *cobra.Command {
 	addDriveHiddenStringFlag(cmd, "file-id", "--node 的兼容别名")
 	cmd.Flags().BoolP("yes", "y", false, "跳过确认直接删除")
 	return cmd
+}
+
+func newDriveSearchCommand(runner executor.Runner) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:               "search",
+		Short:             "搜索文件（聚合钉盘和文档空间）",
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			keyword := driveFlagOrFallback(cmd, "query", "keyword")
+			if keyword == "" {
+				return apperrors.NewValidation("--query is required")
+			}
+			target := driveStringFlag(cmd, "target")
+			driveParams := map[string]any{"keyword": keyword}
+			if target != "" && target != "all" {
+				driveParams["searchTarget"] = target
+			}
+			addDriveStringSliceParam(cmd, driveParams, "fileTypes", "file-types")
+			addDriveStringSliceParam(cmd, driveParams, "extensions", "extensions")
+			addDriveStringSliceParam(cmd, driveParams, "creatorUserIds", "creator-uids")
+			addDriveInt64Param(cmd, driveParams, "createdTimeFrom", "created-from")
+			addDriveInt64Param(cmd, driveParams, "createdTimeTo", "created-to")
+			addDriveInt64Param(cmd, driveParams, "modifiedTimeFrom", "modified-from")
+			addDriveInt64Param(cmd, driveParams, "modifiedTimeTo", "modified-to")
+			if pageSize := driveIntFlagOrFallback(cmd, "limit", "page-size"); pageSize > 0 {
+				driveParams["pageSize"] = float64(pageSize)
+			}
+			addDriveStringParam(cmd, driveParams, "pageToken", "cursor", "page-token")
+
+			if target == "file" || target == "space" {
+				return runDriveInvocation(cmd, runner, "drive", "search_files", driveParams)
+			}
+
+			driveResult, driveErr := driveInvocationResult(cmd, runner, "drive", "search_files", driveParams)
+			docParams := map[string]any{"keyword": keyword}
+			if pageSize := driveIntFlagOrFallback(cmd, "limit", "page-size"); pageSize > 0 {
+				docParams["pageSize"] = pageSize
+			}
+			if extensions, ok := driveParams["extensions"]; ok {
+				docParams["extensions"] = extensions
+			}
+			docResult, docErr := driveInvocationResult(cmd, runner, "doc", "search_documents", docParams)
+			if driveErr != nil && docErr != nil {
+				return fmt.Errorf("aggregated search failed: drive: %v; doc: %v", driveErr, docErr)
+			}
+			result := map[string]any{}
+			if driveErr == nil {
+				result["drive_results"] = driveResult.Response
+			}
+			if docErr == nil {
+				result["doc_results"] = docResult.Response
+			}
+			return writeCommandPayload(cmd, map[string]any{"success": true, "result": result})
+		},
+	}
+	preferLegacyLeaf(cmd)
+	cmd.Flags().String("query", "", "搜索关键词 (必填)")
+	addDriveHiddenStringFlag(cmd, "keyword", "--query 的兼容别名")
+	cmd.Flags().String("target", "", "搜索范围: all(默认) / file / space")
+	cmd.Flags().StringSlice("file-types", nil, "按文件内容类型过滤")
+	cmd.Flags().StringSlice("extensions", nil, "按文件扩展名过滤")
+	cmd.Flags().StringSlice("creator-uids", nil, "按创建者 userId 过滤")
+	cmd.Flags().Int64("created-from", 0, "创建时间起始毫秒时间戳")
+	cmd.Flags().Int64("created-to", 0, "创建时间截止毫秒时间戳")
+	cmd.Flags().Int64("modified-from", 0, "修改时间起始毫秒时间戳")
+	cmd.Flags().Int64("modified-to", 0, "修改时间截止毫秒时间戳")
+	cmd.Flags().Int("limit", 0, "每页返回数量")
+	cmd.Flags().Int("page-size", 0, "--limit 的兼容别名")
+	_ = cmd.Flags().MarkHidden("page-size")
+	cmd.Flags().String("cursor", "", "分页游标")
+	addDriveHiddenStringFlag(cmd, "page-token", "--cursor 的兼容别名")
+	return cmd
+}
+
+func newDriveCopyCommand(runner executor.Runner) *cobra.Command {
+	return newDriveDocTransferCommand(runner, "copy", "copy_document")
+}
+
+func newDriveMoveCommand(runner executor.Runner) *cobra.Command {
+	return newDriveDocTransferCommand(runner, "move", "move_document")
+}
+
+func newDriveDocTransferCommand(runner executor.Runner, use, tool string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:               use,
+		Short:             use + " 文档空间节点",
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			nodeID, err := driveRequiredFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
+			if err != nil {
+				return err
+			}
+			params := map[string]any{"nodeId": normalizeDocNodeID(nodeID)}
+			if folder := driveFlagOrFallback(cmd, "folder", "parent-id", "parent-node-id", "parent-folder-id"); folder != "" {
+				params["targetFolderId"] = normalizeDocNodeID(folder)
+			}
+			addDriveStringParam(cmd, params, "workspaceId", "workspace", "workspace-id")
+			return runDriveInvocation(cmd, runner, "doc", tool, params)
+		},
+	}
+	preferLegacyLeaf(cmd)
+	addDriveDocNodeFlags(cmd)
+	cmd.Flags().String("folder", "", "目标文件夹 nodeId")
+	addDriveHiddenStringFlag(cmd, "parent-id", "--folder 的兼容别名")
+	addDriveHiddenStringFlag(cmd, "parent-node-id", "--folder 的兼容别名")
+	addDriveHiddenStringFlag(cmd, "parent-folder-id", "--folder 的兼容别名")
+	cmd.Flags().String("workspace", "", "目标知识库 ID")
+	addDriveHiddenStringFlag(cmd, "workspace-id", "--workspace 的兼容别名")
+	return cmd
+}
+
+func newDriveRenameCommand(runner executor.Runner) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:               "rename",
+		Short:             "重命名文档空间节点",
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			nodeID, err := driveRequiredFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
+			if err != nil {
+				return err
+			}
+			name, err := driveRequiredFlagOrFallback(cmd, "name", "title")
+			if err != nil {
+				return err
+			}
+			return runDriveInvocation(cmd, runner, "doc", "rename_document", map[string]any{
+				"nodeId":  normalizeDocNodeID(nodeID),
+				"newName": name,
+			})
+		},
+	}
+	preferLegacyLeaf(cmd)
+	addDriveDocNodeFlags(cmd)
+	cmd.Flags().String("name", "", "新名称 (必填)")
+	addDriveHiddenStringFlag(cmd, "title", "--name 的兼容别名")
+	return cmd
+}
+
+func newDrivePermissionCommand(runner executor.Runner) *cobra.Command {
+	root := &cobra.Command{
+		Use:               "permission",
+		Aliases:           []string{"perm"},
+		Short:             "文档空间节点权限管理",
+		Args:              cobra.NoArgs,
+		TraverseChildren:  true,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+	root.AddCommand(
+		newDrivePermissionMutationCommand(runner, "add", "add_permission", true),
+		newDrivePermissionMutationCommand(runner, "update", "update_permission", true),
+		newDrivePermissionListCommand(runner),
+		newDrivePermissionRemoveCommand(runner),
+	)
+	preferLegacyLeaf(root)
+	return root
+}
+
+func newDrivePermissionMutationCommand(runner executor.Runner, use, tool string, requireRole bool) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:               use,
+		Short:             use + " 文档空间节点权限",
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			nodeID, err := driveRequiredFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
+			if err != nil {
+				return err
+			}
+			rawUsers := driveFlagOrFallback(cmd, "users", "user", "uid")
+			if rawUsers == "" {
+				return apperrors.NewValidation("--users is required")
+			}
+			userIDs, err := parseDocPermissionUsers(rawUsers)
+			if err != nil {
+				return err
+			}
+			params := map[string]any{
+				"nodeId":  normalizeDocNodeID(nodeID),
+				"userIds": userIDs,
+			}
+			if requireRole {
+				rawRole, err := driveRequiredFlag(cmd, "role")
+				if err != nil {
+					return err
+				}
+				role, ok := normalizeDocPermissionRole(rawRole)
+				if !ok {
+					return apperrors.NewValidation(fmt.Sprintf("invalid --role: %s", rawRole))
+				}
+				params["roleId"] = role
+			}
+			addDriveStringParam(cmd, params, "workspaceId", "workspace", "workspace-id")
+			return runDriveInvocation(cmd, runner, "doc", tool, params)
+		},
+	}
+	preferLegacyLeaf(cmd)
+	addDriveDocNodeFlags(cmd)
+	cmd.Flags().String("users", "", "用户 userId 列表，逗号分隔 (必填)")
+	addDriveHiddenStringFlag(cmd, "user", "--users 的兼容别名")
+	addDriveHiddenStringFlag(cmd, "uid", "--users 的兼容别名")
+	if requireRole {
+		cmd.Flags().String("role", "", "权限角色: MANAGER / EDITOR / DOWNLOADER / READER (必填)")
+	}
+	cmd.Flags().String("workspace", "", "知识库 ID (选填)")
+	addDriveHiddenStringFlag(cmd, "workspace-id", "--workspace 的兼容别名")
+	return cmd
+}
+
+func newDrivePermissionListCommand(runner executor.Runner) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:               "list",
+		Aliases:           []string{"ls"},
+		Short:             "查询文档空间节点协作者",
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			nodeID, err := driveRequiredFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
+			if err != nil {
+				return err
+			}
+			params := map[string]any{"nodeId": normalizeDocNodeID(nodeID)}
+			if limit := driveIntFlagOrFallback(cmd, "limit", "max-results", "page-size"); limit > 0 {
+				params["maxResults"] = limit
+			}
+			if filterRole := driveStringFlag(cmd, "filter-role"); filterRole != "" {
+				params["filterRoleIds"] = parseDriveRoleList(filterRole)
+			}
+			addDriveStringParam(cmd, params, "workspaceId", "workspace", "workspace-id")
+			return runDriveInvocation(cmd, runner, "doc", "list_permission", params)
+		},
+	}
+	preferLegacyLeaf(cmd)
+	addDriveDocNodeFlags(cmd)
+	cmd.Flags().Int("limit", 30, "返回成员数上限")
+	cmd.Flags().Int("max-results", 0, "--limit 的兼容别名")
+	_ = cmd.Flags().MarkHidden("max-results")
+	cmd.Flags().Int("page-size", 0, "--limit 的兼容别名")
+	_ = cmd.Flags().MarkHidden("page-size")
+	cmd.Flags().String("filter-role", "", "按角色过滤，逗号分隔")
+	cmd.Flags().String("workspace", "", "知识库 ID (选填)")
+	addDriveHiddenStringFlag(cmd, "workspace-id", "--workspace 的兼容别名")
+	return cmd
+}
+
+func newDrivePermissionRemoveCommand(runner executor.Runner) *cobra.Command {
+	cmd := newDrivePermissionMutationCommand(runner, "remove", "remove_permission", false)
+	cmd.Aliases = []string{"rm"}
+	return cmd
+}
+
+func newDriveFolderCommand(runner executor.Runner) *cobra.Command {
+	root := &cobra.Command{
+		Use:               "folder",
+		Short:             "文档空间文件夹兼容入口（deprecated）",
+		Args:              cobra.NoArgs,
+		TraverseChildren:  true,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+	create := &cobra.Command{
+		Use:               "create",
+		Short:             "创建文档空间文件夹（deprecated）",
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Fprintln(cmd.ErrOrStderr(), "warning: deprecated: use dws wiki node create --type folder instead.")
+			name, err := driveRequiredFlagOrFallback(cmd, "name", "title")
+			if err != nil {
+				return err
+			}
+			params := map[string]any{"name": name}
+			if folder := driveFlagOrFallback(cmd, "folder", "parent-id"); folder != "" {
+				params["folderId"] = normalizeDocNodeID(folder)
+			}
+			addDriveStringParam(cmd, params, "workspaceId", "workspace", "workspace-id")
+			return runDriveInvocation(cmd, runner, "doc", "create_folder", params)
+		},
+	}
+	preferLegacyLeaf(root)
+	preferLegacyLeaf(create)
+	create.Flags().String("name", "", "文件夹名称 (必填)")
+	addDriveHiddenStringFlag(create, "title", "--name 的兼容别名")
+	create.Flags().String("folder", "", "父文件夹 nodeId 或 URL")
+	addDriveHiddenStringFlag(create, "parent-id", "--folder 的兼容别名")
+	create.Flags().String("workspace", "", "目标知识库 ID")
+	addDriveHiddenStringFlag(create, "workspace-id", "--workspace 的兼容别名")
+	root.AddCommand(create)
+	root.Hidden = true
+	return root
 }
 
 func runDriveInfo(cmd *cobra.Command, runner executor.Runner, params map[string]any) error {
@@ -812,6 +1222,64 @@ func addDriveStringParam(cmd *cobra.Command, params map[string]any, paramName st
 	if value := driveFlagOrFallback(cmd, flags[0], flags[1:]...); value != "" {
 		params[paramName] = value
 	}
+}
+
+func addDriveStringSliceParam(cmd *cobra.Command, params map[string]any, paramName, flag string) {
+	if !cmd.Flags().Changed(flag) {
+		return
+	}
+	values, err := cmd.Flags().GetStringSlice(flag)
+	if err != nil || len(values) == 0 {
+		return
+	}
+	cleaned := make([]string, 0, len(values))
+	for _, value := range values {
+		for _, part := range strings.Split(value, ",") {
+			if item := strings.TrimSpace(part); item != "" {
+				cleaned = append(cleaned, item)
+			}
+		}
+	}
+	if len(cleaned) > 0 {
+		params[paramName] = cleaned
+	}
+}
+
+func addDriveInt64Param(cmd *cobra.Command, params map[string]any, paramName, flag string) {
+	if !cmd.Flags().Changed(flag) {
+		return
+	}
+	value, err := cmd.Flags().GetInt64(flag)
+	if err == nil && value > 0 {
+		params[paramName] = value
+	}
+}
+
+func addDriveDocNodeFlags(cmd *cobra.Command) {
+	cmd.Flags().String("node", "", "节点 ID 或 URL (必填)")
+	addDriveHiddenStringFlag(cmd, "url", "--node 的兼容别名")
+	addDriveHiddenStringFlag(cmd, "id", "--node 的兼容别名")
+	addDriveHiddenStringFlag(cmd, "node-id", "--node 的兼容别名")
+	addDriveHiddenStringFlag(cmd, "doc-id", "--node 的兼容别名")
+	addDriveHiddenStringFlag(cmd, "file-id", "--node 的兼容别名")
+}
+
+func parseDriveRoleList(raw string) []string {
+	roles := make([]string, 0)
+	for _, part := range strings.Split(raw, ",") {
+		role := strings.ToUpper(strings.TrimSpace(part))
+		if role == "" {
+			continue
+		}
+		if normalized, ok := normalizeDocPermissionRole(role); ok {
+			roles = append(roles, normalized)
+			continue
+		}
+		if role == "OWNER" {
+			roles = append(roles, role)
+		}
+	}
+	return roles
 }
 
 func addDriveHiddenStringFlag(cmd *cobra.Command, name, usage string) {

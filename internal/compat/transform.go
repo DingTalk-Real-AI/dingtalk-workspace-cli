@@ -30,7 +30,7 @@ import (
 
 // ApplyTransform applies a named transform rule to a value.
 // Supported transforms: iso8601_to_millis, csv_to_array, json_parse,
-// json_parse_strict, enum_map, file_read, invert_bool, string_to_int64.
+// json_parse_strict, enum_map, file_read, invert_bool, parse_bool, string_to_int64.
 func ApplyTransform(value any, transform string, args map[string]any) (any, error) {
 	switch strings.TrimSpace(transform) {
 	case "":
@@ -49,6 +49,10 @@ func ApplyTransform(value any, transform string, args map[string]any) (any, erro
 		return transformFileRead(value)
 	case "invert_bool":
 		return transformInvertBool(value)
+	case "parse_bool":
+		return transformParseBool(value)
+	case "attendance_class_check_time":
+		return transformAttendanceClassCheckTime(value)
 	case "string_to_int64":
 		return transformStringToInt64(value)
 	default:
@@ -77,6 +81,77 @@ func transformInvertBool(value any) (any, error) {
 	default:
 		return value, nil
 	}
+}
+
+// transformParseBool coerces a CLI string flag into a real JSON boolean so the
+// MCP body carries `false`/`true` (not the string "false"/"true" or a swallowed
+// zero value). Used by envelope flags that are semantically boolean but must be
+// declared as string flags to accept an explicit `false` on the command line
+// (cobra bool flags drop the space-form value). Unknown tokens pass through
+// unchanged so upstream validators own the error wording.
+func transformParseBool(value any) (any, error) {
+	switch v := value.(type) {
+	case bool:
+		return v, nil
+	case string:
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "true", "1", "yes", "on":
+			return true, nil
+		case "false", "0", "no", "off":
+			return false, nil
+		}
+		return value, nil
+	default:
+		return value, nil
+	}
+}
+
+// transformAttendanceClassCheckTime parses a class-VO JSON string and converts
+// every "HH:mm" checkTime under sections[*].times[*] and
+// setting.topRestTimeList[*] into a Unix-millis number (1970-01-01 HH:mm in
+// UTC+8), mirroring wukong's convertClassCheckTime. The MCP backend expects the
+// numeric form; the envelope cannot express this nested walk, so it lives here.
+func transformAttendanceClassCheckTime(value any) (any, error) {
+	parsed, err := transformJSONParseStrict(value)
+	if err != nil {
+		return nil, err
+	}
+	classVO, ok := parsed.(map[string]any)
+	if !ok {
+		return parsed, nil
+	}
+	cst := time.FixedZone("CST", 8*3600)
+	convertOne := func(obj map[string]any) {
+		if ct, ok := obj["checkTime"].(string); ok {
+			ct = strings.TrimSpace(ct)
+			if t, err := time.ParseInLocation("2006-01-02 15:04", "1970-01-01 "+ct, cst); err == nil {
+				obj["checkTime"] = float64(t.UnixMilli())
+			}
+		}
+	}
+	if sections, ok := classVO["sections"].([]any); ok {
+		for _, sec := range sections {
+			if secMap, ok := sec.(map[string]any); ok {
+				if times, ok := secMap["times"].([]any); ok {
+					for _, t := range times {
+						if tMap, ok := t.(map[string]any); ok {
+							convertOne(tMap)
+						}
+					}
+				}
+			}
+		}
+	}
+	if setting, ok := classVO["setting"].(map[string]any); ok {
+		if restList, ok := setting["topRestTimeList"].([]any); ok {
+			for _, item := range restList {
+				if itemMap, ok := item.(map[string]any); ok {
+					convertOne(itemMap)
+				}
+			}
+		}
+	}
+	return classVO, nil
 }
 
 func transformISO8601ToMillis(value any) (any, error) {
@@ -168,6 +243,18 @@ func transformJSONParse(value any) (any, error) {
 	if s == "" {
 		return value, nil
 	}
+	// @file / @- expansion — read the JSON/YAML payload from a file or stdin
+	// before parsing. A leading "@" is an unambiguous file sentinel because a
+	// JSON/YAML value never starts with "@"; this is what the error hint below
+	// promises and lets long/complex payloads (many records, big cell ranges)
+	// avoid shell-quoting hell.
+	s, err := resolveJSONSource(s)
+	if err != nil {
+		return nil, err
+	}
+	if s == "" {
+		return value, nil
+	}
 	// Strict JSON first — fast path and unambiguous type promotion (numbers
 	// stay numbers, etc.).
 	var parsed any
@@ -182,8 +269,30 @@ func transformJSONParse(value any) (any, error) {
 	return nil, apperrors.NewValidation(
 		"json_parse: input is not valid JSON or YAML; " +
 			"quote the whole value and use `[{key: value, ...}]` for ad-hoc input, " +
-			"or pass `@path/to/file.json` to read from a file",
+			"or pass `@path/to/file.json` (or `@-` for stdin) to read from a file",
 	)
+}
+
+// resolveJSONSource expands an @file / @- reference used by the json_parse
+// transforms. A leading "@" is the file sentinel: "@-" reads stdin, "@<path>"
+// reads the file (UTF-8, via transformFileRead). Any value not starting with
+// "@" is returned unchanged. JSON/YAML payloads never start with "@", so this
+// is unambiguous for structured flags.
+func resolveJSONSource(s string) (string, error) {
+	if !strings.HasPrefix(s, "@") {
+		return s, nil
+	}
+	ref := strings.TrimSpace(s[1:])
+	if ref == "" {
+		return "", apperrors.NewValidation(
+			"json_parse: `@` must be followed by a file path, or `@-` to read from stdin")
+	}
+	out, err := transformFileRead(ref)
+	if err != nil {
+		return "", err
+	}
+	loaded, _ := out.(string)
+	return strings.TrimSpace(loaded), nil
 }
 
 // transformJSONParseStrict is the strict variant of json_parse: only accepts
@@ -199,12 +308,21 @@ func transformJSONParseStrict(value any) (any, error) {
 	if s == "" {
 		return value, nil
 	}
+	// @file / @- expansion — same sentinel as json_parse (see resolveJSONSource).
+	s, err := resolveJSONSource(s)
+	if err != nil {
+		return nil, err
+	}
+	if s == "" {
+		return value, nil
+	}
 	var parsed any
 	if err := json.Unmarshal([]byte(s), &parsed); err != nil {
 		return nil, apperrors.NewValidation(
 			"json_parse_strict: input is not valid JSON; " +
 				"this transform rejects YAML-style ad-hoc input — quote the whole value " +
-				"as strict JSON (e.g. '[{\"key\":\"value\"}]') or use `json_parse` for YAML-tolerant parsing",
+				"as strict JSON (e.g. '[{\"key\":\"value\"}]'), pass `@path/to/file.json` " +
+				"(or `@-` for stdin), or use `json_parse` for YAML-tolerant parsing",
 		)
 	}
 	return parsed, nil

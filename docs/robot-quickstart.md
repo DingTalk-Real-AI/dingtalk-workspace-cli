@@ -13,8 +13,13 @@
 打开终端，整段复制执行：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wxianfeng/dingtalk-workspace-cli/feat/dws-devapp/scripts/install-devapp.sh | sh
+curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install-devapp.sh | sh
 ```
+
+> 国内用户：`dws dev` 已在正式版里，直接用标准安装脚本的 Gitee 镜像即可（二进制和 skill 都从 Gitee 拉，避免 GitHub 网络问题）：
+> ```bash
+> DWS_GITEE_REPO=DingTalk-Real-AI/dingtalk-workspace-cli curl -fsSL https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli/raw/main/scripts/install.sh | sh
+> ```
 
 装完按提示把 `~/.local/bin` 加进 `PATH`（脚本会在末尾提示），然后执行 `dws version` 确认。
 
@@ -23,12 +28,12 @@ curl -fsSL https://raw.githubusercontent.com/wxianfeng/dingtalk-workspace-cli/fe
 打开 PowerShell，整段复制执行：
 
 ```powershell
-irm https://raw.githubusercontent.com/wxianfeng/dingtalk-workspace-cli/feat/dws-devapp/scripts/install-devapp.ps1 | iex
+irm https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install-devapp.ps1 | iex
 ```
 
 然后**重新打开一个 PowerShell 窗口**，执行 `dws version` 确认。
 
-> 能打印出版本号即安装成功（脚本默认装当前最新的预览版）。脚本走 GitHub API 取最新预览版，无需手动填版本号；想钉某个版本可设环境变量 `DEVAPP_VERSION`。
+> 能打印出版本号即安装成功（脚本默认装最新正式版）。脚本走 GitHub API 取最新 release，无需手动填版本号；想钉某个版本可设环境变量 `DEVAPP_VERSION`。
 
 ### 登录钉钉
 

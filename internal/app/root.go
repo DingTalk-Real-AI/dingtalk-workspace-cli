@@ -99,6 +99,7 @@ func Execute() (exitCode int) {
 		if executed == nil {
 			executed = root
 		}
+		err = rewordRequiredFlagError(err)
 		if isUnknownCommandError(err) {
 			executed.SetOut(os.Stderr)
 			_ = executed.Help()
@@ -115,6 +116,36 @@ func Execute() (exitCode int) {
 
 func isUnknownCommandError(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "unknown command")
+}
+
+// rewordRequiredFlagError rewrites cobra's default missing-required-flag message
+// (`required flag(s) "email" not set`) into the wukong-aligned form
+// (`missing required flag(s): --email`). cobra's ValidateRequiredFlags returns
+// this error directly (it does not pass through FlagErrorFunc), so it is
+// normalised here. The substring "required flag" is preserved for compatibility
+// with existing assertions; flag names gain the "--" prefix and quotes are
+// dropped so error output matches hardcoded cmdutil.ValidateRequiredFlags.
+func rewordRequiredFlagError(err error) error {
+	if err == nil {
+		return err
+	}
+	const pfx = "required flag(s) "
+	const sfx = " not set"
+	msg := err.Error()
+	if !strings.HasPrefix(msg, pfx) || !strings.HasSuffix(msg, sfx) {
+		return err
+	}
+	mid := strings.TrimSuffix(strings.TrimPrefix(msg, pfx), sfx)
+	var flags []string
+	for _, part := range strings.Split(mid, ", ") {
+		if name := strings.Trim(strings.TrimSpace(part), "\""); name != "" {
+			flags = append(flags, "--"+name)
+		}
+	}
+	if len(flags) == 0 {
+		return err
+	}
+	return apperrors.NewValidation(fmt.Sprintf("missing required flag(s): %s", strings.Join(flags, ", ")))
 }
 
 // flagErrorWithSuggestions provides helpful suggestions for common flag mistakes.
@@ -336,6 +367,7 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 		newAPICommand(flags),
 		newSkillCommand(),
 		newCacheCommand(),
+		newCatalogCommand(loader),
 		newConfigCommand(),
 		newDoctorCommand(),
 		newCompletionCommand(root),
@@ -1557,8 +1589,10 @@ func buildHTTPCommandsFromTools(srv market.ServerDescriptor, tools []transport.T
 		}
 	}
 
+	// nil existingTools: single-server overlay built from a live tool list, so
+	// no phantom-leaf guard is needed (see BuildDynamicCommands doc).
 	return compat.BuildDynamicCommands(
-		[]market.ServerDescriptor{srv}, runner, detailsByID)
+		[]market.ServerDescriptor{srv}, runner, detailsByID, nil)
 }
 
 // deriveToolCLIName converts an MCP tool name (e.g. "web_search" or
@@ -1745,8 +1779,9 @@ func buildStdioCommands(p *plugin.Plugin, sc plugin.StdioServerClient, tools []t
 	RegisterStdioClient(p.Manifest.Name+"/"+sc.Key, sc.Client)
 
 	detailsByID := toolsToDetails(tools, overlay.ID)
+	// nil existingTools: overlay built from this plugin's live tool list.
 	cmds := compat.BuildDynamicCommands(
-		[]market.ServerDescriptor{descriptor}, runner, detailsByID)
+		[]market.ServerDescriptor{descriptor}, runner, detailsByID, nil)
 
 	slog.Debug("plugin: stdio server registered",
 		"plugin", p.Manifest.Name, "server", sc.Key,

@@ -4,10 +4,10 @@
 
 `export data` 为异步任务：首次调用可能只返回 `taskId`，需要继续轮询。
 
-> ⚠️ **`export data` 的 `--format` 是导出格式**：需要导出 xlsx/附件时写 `--format excel` / `excel_and_attachment`。不要在这个命令上追加全局 `--format json`。
+> ⚠️ **`--format` 冲突警告**：`export data` 的 `--format` 是**导出格式**（excel/attachment 等），不是全局输出格式。**此命令禁止追加全局 `--format json`**，否则会覆盖导出格式导致 `INVALID_EXPORT_FORMAT` 错误。输出默认就是 JSON，无需额外指定。
 
 ```bash
-# 第一步：创建任务（按 scope 传必要参数）
+# 第一步：创建任务（按 scope 传必要参数）——注意：不要加 --format json！
 dws aitable export data --base-id <BASE_ID> --scope table --table-id <TABLE_ID> --format excel --timeout-ms 1000
 
 # 第二步：拿 taskId 继续轮询，直到返回 downloadUrl

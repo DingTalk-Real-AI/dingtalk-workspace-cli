@@ -86,10 +86,15 @@
 {"fldDateId": "2026-03-15T09:00+08:00"}
 ```
 
-**读取**：RFC3339 字符串
+**读取**：RFC3339 字符串（带时区）
 ```json
 {"fldDateId": "2026-03-15T09:00:00+08:00"}
 ```
+
+**过滤**（`record query --filters`）：日期字段**只能用日期专用操作符** `date_eq` / `before` / `after` / `not_before` / `not_after` / `exist` / `un_exist`，比较值用日期字符串（如 `"2026-03-15"`）。
+- ❌ 通用 `eq` / `ne` / `gt` / `gte` / `lt` / `lte` / `contain` 对日期字段无效，会静默返回 0 条；
+- ❌ 不支持区间 `date_between` 与相对 `from_now`（CLI 会直接拒绝），范围查询用 `not_before` + `not_after` 组合。
+- 详见 [aitable-filter-sort.md](./aitable-filter-sort.md) §日期字段过滤。
 
 ---
 
@@ -236,15 +241,14 @@
 
 ### attachment（附件）
 
-**写入**：对象数组，支持 `fileToken` 或 `url` 形式
+**写入**：对象数组，**必须使用 `fileToken`**
 
 ```json
 {"fldAttachId": [{"fileToken": "ft_xxx"}]}
-{"fldAttachId": [{"url": "https://example.com/file.pdf"}]}
 ```
 
-> ⚠️ **必须先通过 [attachment upload 流程](./aitable-attachment.md) 获取 `fileToken`**。
-> URL 形式是 best-effort 异步转存，不保证立即可用。
+> ⚠️ **必须先通过 [attachment upload 流程](./aitable-attachment.md) 上传文件获取 `fileToken`，再将 `fileToken` 写入 cells。**
+> ❌ **严禁直接传 `{"url": "https://..."}` 形式写入附件/图片字段** — 服务端会同步下载图片，10 条记录即触发 TIMEOUT_ERROR 超时。
 > 写入会**整体覆盖**原附件列表，不是追加。
 
 **读取**：对象数组（含下载链接、文件名、大小）
@@ -335,7 +339,7 @@
 |------|----------|
 | cells key 用字段名称 `"课程名称"` | 用 fieldId `"fldXXX"` |
 | progress 写入 `75` | 写入 `0.75`（范围 0~1） |
-| attachment 直接传文件路径 | 必须先 upload 获取 fileToken |
+| attachment 直接传文件路径或图片 URL | 必须先 `attachment upload` 获取 fileToken，再用 fileToken 写入（直传 URL 会超时） |
 | user 字段传用户名字符串 | 传对象数组 `[{"userId":"...", "corpId":"..."}]` |
 | group 字段用 `openConversationId` | 用 `cid` |
 | singleSelect 传 option id 字符串 | 传 name 字符串或 `{"id":"...", "name":"..."}` 对象 |

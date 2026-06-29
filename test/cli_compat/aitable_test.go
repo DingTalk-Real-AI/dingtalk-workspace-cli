@@ -442,6 +442,7 @@ func TestAitableExportData_should_call_export_data_with_wukong_payload(t *testin
 		"--table-id", "T1",
 		"--format", "excel",
 		"--timeout-ms", "1000",
+		"--dry-run",
 	})
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -454,11 +455,18 @@ func TestAitableExportData_should_call_export_data_with_wukong_payload(t *testin
 			DryRun bool           `json:"dry_run"`
 		} `json:"invocation"`
 	}
+	var flatInv struct {
+		Tool   string         `json:"tool"`
+		Params map[string]any `json:"params"`
+		DryRun bool           `json:"dry_run"`
+	}
 	if err := json.Unmarshal(out.Bytes(), &inv); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v\noutput:\n%s", err, out.String())
 	}
-	if inv.Invocation.Tool != "" && !inv.Invocation.DryRun {
+	if inv.Invocation.Tool != "" {
 		cap.record(inv.Invocation.Tool, inv.Invocation.Params, "")
+	} else if err := json.Unmarshal(out.Bytes(), &flatInv); err == nil && flatInv.Tool != "" {
+		cap.record(flatInv.Tool, flatInv.Params, "")
 	}
 
 	assertToolName(t, cap, "export_data")
@@ -507,6 +515,109 @@ func TestAitableViewUpdate_should_pass_description(t *testing.T) {
 	}
 	assertToolName(t, cap, "update_view")
 	assertToolArg(t, cap, "viewDescription", map[string]any{"content": []any{}})
+}
+
+func TestAitableRecordHistoryList_should_call_query_record_history(t *testing.T) {
+	cap := setupTestDeps(t, "aitable")
+	root := buildRoot()
+	if err := execCmd(t, root, []string{"aitable", "record", "history-list"}, map[string]string{
+		"base-id":   "B1",
+		"table-id":  "T1",
+		"record-id": "R1",
+		"limit":     "30",
+		"offset":    "10",
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertToolName(t, cap, "query_record_history")
+	assertToolArg(t, cap, "baseId", "B1")
+	assertToolArg(t, cap, "tableId", "T1")
+	assertToolArg(t, cap, "recordId", "R1")
+	assertToolArg(t, cap, "limit", 30)
+	assertToolArg(t, cap, "offset", 10)
+}
+
+func TestAitableRecordUpsert_should_call_record_upsert(t *testing.T) {
+	cap := setupTestDeps(t, "aitable")
+	root := buildRoot()
+	if err := execCmd(t, root, []string{"aitable", "record", "upsert"}, map[string]string{
+		"base-id":  "B1",
+		"table-id": "T1",
+		"records":  `[{"recordId":"R1","cells":{"fld":"updated"}},{"cells":{"fld":"new"}}]`,
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertToolName(t, cap, "record_upsert")
+	assertToolArg(t, cap, "baseId", "B1")
+	assertToolArg(t, cap, "tableId", "T1")
+}
+
+func TestAitableViewLock_should_call_lock_or_unlock_view(t *testing.T) {
+	cap := setupTestDeps(t, "aitable")
+	root := buildRoot()
+	if err := execCmdWithArgs(t, root, []string{"aitable", "view", "lock"}, map[string]string{
+		"base-id":  "B1",
+		"table-id": "T1",
+		"view-id":  "V1",
+	}, []string{"--off"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertToolName(t, cap, "lock_or_unlock_view")
+	assertToolArg(t, cap, "action", "unlock")
+}
+
+func TestAitableWorkflowList_should_call_list_workflows(t *testing.T) {
+	cap := setupTestDeps(t, "aitable")
+	root := buildRoot()
+	if err := execCmd(t, root, []string{"aitable", "workflow", "list"}, map[string]string{
+		"base-id": "B1",
+		"limit":   "50",
+		"offset":  "100",
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertToolName(t, cap, "list_workflows")
+	assertToolArg(t, cap, "baseId", "B1")
+	assertToolArg(t, cap, "limit", 50)
+	assertToolArg(t, cap, "offset", 100)
+}
+
+func TestAitableAdvpermRoleCreate_should_call_create_role(t *testing.T) {
+	cap := setupTestDeps(t, "aitable")
+	root := buildRoot()
+	if err := execCmd(t, root, []string{"aitable", "advperm", "role-create"}, map[string]string{
+		"base-id":   "B1",
+		"name":      "市场可读",
+		"sub-roles": `[{"targetId":"T1","targetType":"sheet","authLevel":"read"}]`,
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertToolName(t, cap, "create_role")
+	assertToolArg(t, cap, "baseId", "B1")
+	assertToolArg(t, cap, "name", "市场可读")
+	assertToolArg(t, cap, "subRoles", []any{map[string]any{
+		"targetId":   "T1",
+		"targetType": "sheet",
+		"authLevel":  "read",
+	}})
+}
+
+func TestAitableSectionMoveNode_should_call_move_nsheet_node(t *testing.T) {
+	cap := setupTestDeps(t, "aitable")
+	root := buildRoot()
+	if err := execCmd(t, root, []string{"aitable", "section", "move-node"}, map[string]string{
+		"base-id":               "B1",
+		"node-id":               "NODE_001",
+		"new-parent-section-id": "SEC_001",
+		"target-index":          "0",
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertToolName(t, cap, "move_nsheet_node")
+	assertToolArg(t, cap, "baseId", "B1")
+	assertToolArg(t, cap, "nodeId", "NODE_001")
+	assertToolArg(t, cap, "newParentSectionId", "SEC_001")
+	assertToolArg(t, cap, "targetIndex", 0)
 }
 
 func TestAitableSurface_should_not_expose_open_source_only_commands(t *testing.T) {

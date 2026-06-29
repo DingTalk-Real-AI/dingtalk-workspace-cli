@@ -58,3 +58,17 @@
 | 创建任务 `EXPIRED` | 任务过期，重新 `submit`（可带原 taskId） |
 
 > 把机器人接到本地 agent 调试/值守见 [connect.md](connect.md)。
+
+## 发现命令
+
+调用任何方法前先查清楚再敲：
+
+```
+# 浏览命令组下的子命令与 flag
+dws dev app robot --help
+
+# 查某方法的必填参数、类型、默认值
+dws schema dev.app.robot.<method>
+```
+
+按 `dws schema` 输出构造 `--flag`（flag 名 = schema 参数名）。

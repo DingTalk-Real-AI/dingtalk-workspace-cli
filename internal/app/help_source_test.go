@@ -55,9 +55,11 @@ func TestRootCommandDoesNotInjectPatchedHelpCommands(t *testing.T) {
 	t.Cleanup(func() { SetDiscoveryBaseURL("") })
 
 	root := NewRootCommand()
+	// `minutes list all` is intentionally provided as a hardcoded helper
+	// (see internal/helpers/minutes_commands.go) to align with the wukong
+	// baseline, so it is expected to resolve and is no longer asserted here.
 	for _, path := range []string{
 		"chat message list-topic-replies",
-		"minutes list all",
 	} {
 		if cmd := lookupCommand(root, path); cmd != nil {
 			t.Fatalf("findCommand(%q) = %q, want nil", path, cmd.CommandPath())

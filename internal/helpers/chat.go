@@ -121,7 +121,7 @@ func (chatHandler) Command(runner executor.Runner) *cobra.Command {
 		newChatBotSearchCommand(runner),
 	)
 
-	root.AddCommand(message, group, bot)
+	root.AddCommand(message, group, bot, newChatFileGroup(runner))
 	return root
 }
 

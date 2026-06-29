@@ -40,7 +40,7 @@ func TestProductCommandsAcceptGlobalProfileFlag(t *testing.T) {
 	oldLoadDynamicCommands := loadDynamicCommandsFn
 	loadDynamicCommandsFn = func(_ context.Context, _ executor.Runner) []*cobra.Command {
 		SetDynamicServers(descriptors)
-		return compat.BuildDynamicCommands(descriptors, capture, nil)
+		return compat.BuildDynamicCommands(descriptors, capture, nil, nil)
 	}
 	authpkg.SetRuntimeProfile("")
 	ResetRuntimeTokenCache()

@@ -96,6 +96,35 @@ func TestDocPermissionListLimitAliases(t *testing.T) {
 	}
 }
 
+func TestDocPermissionRemoveRoutesToRemovePermission(t *testing.T) {
+	t.Parallel()
+
+	runner := &docCommandRunner{}
+	cmd := newDocTestRoot(runner)
+	_, errOut, err := executeDocCommand(t, cmd,
+		"permission", "rm",
+		"--node", "NODE_001",
+		"--users", "uid1,uid2",
+		"--workspace", "WS_001",
+	)
+	if err != nil {
+		t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut)
+	}
+	if runner.last.Tool != "remove_permission" {
+		t.Fatalf("tool = %q, want remove_permission", runner.last.Tool)
+	}
+	if got := runner.last.Params["nodeId"]; got != "NODE_001" {
+		t.Fatalf("nodeId = %#v, want NODE_001", got)
+	}
+	users, ok := runner.last.Params["userIds"].([]string)
+	if !ok || strings.Join(users, ",") != "uid1,uid2" {
+		t.Fatalf("userIds = %#v, want uid1,uid2", runner.last.Params["userIds"])
+	}
+	if got := runner.last.Params["workspaceId"]; got != "WS_001" {
+		t.Fatalf("workspaceId = %#v, want WS_001", got)
+	}
+}
+
 func TestDocPermissionListMaxresultsRejected(t *testing.T) {
 	t.Parallel()
 

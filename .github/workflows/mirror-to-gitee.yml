@@ -31,14 +31,45 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Push main + tags to Gitee
+      - name: Push main + tags to Gitee (with README localization)
         if: env.GITEE_TOKEN != ''
         run: |
           set -eu
           REMOTE="https://${GITEE_USER}:${GITEE_TOKEN}@gitee.com/${GITEE_REPO}.git"
           # 取到 main 与所有 tag（落到 origin/* 与本地 tags，避免推当前分支引用冲突）
           git fetch --force --tags origin 'refs/heads/main:refs/remotes/origin/main'
-          # 镜像对齐（force：Gitee 始终跟随 GitHub）
-          git push --force "$REMOTE" 'refs/remotes/origin/main:refs/heads/main'
+
+          # Gitee 专属分支：在 origin/main 之上叠加一个 README 本地化 commit。
+          # GitHub 那份 README 不变；只有推往 Gitee 的副本被改写。
+          git checkout -B gitee-main origin/main
+          git config user.email "actions@github.com"
+          git config user.name "github-actions[bot]"
+
+          # 1) 安装命令本地化：raw.githubusercontent → gitee raw（国内可达）。
+          for f in README.md README_zh.md; do
+            [ -f "$f" ] || continue
+            sed -i "s#raw.githubusercontent.com/${GITEE_REPO}/main#gitee.com/${GITEE_REPO}/raw/main#g" "$f"
+          done
+
+          # 2) coverage 徽章：仓库内相对路径 svg 在 Gitee 渲染不出来（gitee raw 对 svg
+          #    返回需签名、会过期的 URL，且 content-type 为 text/plain）。改成 shields.io
+          #    静态徽章——数值取自仓库 coverage.svg，颜色按覆盖率阈值。
+          SVG=".github/badges/coverage.svg"
+          if [ -f "$SVG" ]; then
+            PCT="$(grep -oE '[0-9]+(\.[0-9]+)?%' "$SVG" | head -1)"
+            NUM="${PCT%\%}"; INT="${NUM%.*}"
+            if [ "${INT:-0}" -ge 80 ]; then C=brightgreen; elif [ "${INT:-0}" -ge 60 ]; then C=yellow; else C=red; fi
+            BADGE="https://img.shields.io/badge/coverage-${NUM}%25-${C}"
+            for f in README.md README_zh.md; do
+              [ -f "$f" ] || continue
+              sed -i "s#\.github/badges/coverage\.svg#${BADGE}#g" "$f"
+            done
+          fi
+
+          git add README.md README_zh.md 2>/dev/null || true
+          git commit -m "docs(gitee): localize install commands + coverage badge for Gitee mirror" || true
+
+          # 镜像对齐（force：Gitee 始终跟随 GitHub + Gitee 专属 README 本地化）
+          git push --force "$REMOTE" 'gitee-main:refs/heads/main'
           git push --force --tags "$REMOTE"
-          echo "✅ 已镜像 main + tags 到 Gitee ${GITEE_REPO}"
+          echo "✅ 已镜像 main(+Gitee README 本地化) + tags 到 Gitee ${GITEE_REPO}"

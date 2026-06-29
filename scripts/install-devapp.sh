@@ -2,21 +2,21 @@
 # Copyright 2026 Alibaba Group
 # Licensed under the Apache License, Version 2.0
 #
-# One-command installer for the dws Dev preview — pre-built binary, no build tools.
-# Downloads the dev binary + dingtalk-dev skill from the fork's GitHub Releases.
+# One-command installer for dws dev — pre-built binary, no build tools.
+# Downloads the dev binary + dingtalk-dev skill from the DingTalk-Real-AI GitHub Releases.
 # Requires only curl + tar (no go / make / git).
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/wxianfeng/dingtalk-workspace-cli/feat/dws-devapp/scripts/install-devapp.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install-devapp.sh | sh
 #
 # Env (all optional):
-#   DEVAPP_REPO      fork holding dev releases (default: wxianfeng/dingtalk-workspace-cli)
-#   DEVAPP_VERSION   pin a dev release tag (default: latest release on the fork)
+#   DEVAPP_REPO      repo holding dev releases (default: DingTalk-Real-AI/dingtalk-workspace-cli)
+#   DEVAPP_VERSION   pin a release tag (default: latest release)
 #   DWS_INSTALL_DIR  binary dir (default: ~/.local/bin)
 #   DWS_NO_SKILLS    set 1 to skip the dev skill
 set -eu
 
-DEVAPP_REPO="${DEVAPP_REPO:-wxianfeng/dingtalk-workspace-cli}"
+DEVAPP_REPO="${DEVAPP_REPO:-DingTalk-Real-AI/dingtalk-workspace-cli}"
 DEVAPP_VERSION="${DEVAPP_VERSION:-}"
 INSTALL_DIR="${DWS_INSTALL_DIR:-$HOME/.local/bin}"
 NO_SKILLS="${DWS_NO_SKILLS:-0}"
@@ -45,8 +45,8 @@ detect_arch() {
   esac
 }
 
-# GitHub's /releases/latest excludes prereleases, so read the releases list
-# (newest first) and take the top tag — the dev preview is published as a prerelease.
+# Read the releases list (newest first) and take the top tag, so this also works
+# if a release is ever published as a prerelease (which /releases/latest skips).
 # Prefer `gh` CLI (authenticated, 5 000 req/h) over raw curl (60 req/h, easily rate-limited).
 resolve_version() {
   [ -n "$DEVAPP_VERSION" ] && return 0
@@ -68,7 +68,7 @@ resolve_version() {
 
   DEVAPP_VERSION="$(grep -m1 '"tag_name"' "$_tmpfile" | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')"
   rm -f "$_tmpfile"
-  [ -n "$DEVAPP_VERSION" ] || err "No release found on ${DEVAPP_REPO}. Push a dev tag (e.g. v1.0.39-dev.1) to trigger CI, or set DEVAPP_VERSION."
+  [ -n "$DEVAPP_VERSION" ] || err "No release found on ${DEVAPP_REPO}. Set DEVAPP_VERSION to a published release tag."
 }
 
 install_skill() {
@@ -104,7 +104,7 @@ main() {
   tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT INT TERM
 
   printf '\n'
-  say "dws Dev preview installer (pre-built binary)"
+  say "dws dev installer (pre-built binary)"
   say "Repo:    ${DEVAPP_REPO}"
   say "Version: ${DEVAPP_VERSION}"
   say "Target:  ${os}/${arch}"

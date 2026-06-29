@@ -130,7 +130,33 @@ func newAitableBaseCreateCommand(runner executor.Runner) *cobra.Command {
 			if folderID := aitableStringFlag(cmd, "folder-id"); folderID != "" {
 				params["folderId"] = folderID
 			}
-			return runAitableTool(cmd, runner, "create_base", params)
+			// dry-run 或带模板：保持单步 create_base 语义。
+			if commandDryRun(cmd) {
+				return runAitableTool(cmd, runner, "create_base", params)
+			}
+			result, err := runAitableProductToolResult(cmd, runner, "aitable", "create_base", params)
+			if err != nil {
+				return err
+			}
+			// 默认表由服务端按 scenario 决定：wukong 场景建、openClaw 不建。
+			// 为与 wukong 行为对齐，无模板时在 CLI 侧兜底补建一张默认表，
+			// 使新 base 立即可用（含 tableId）。输出仍保持原 create_base 结果，
+			// 不把内部补建步骤暴露给调用方。
+			if _, hasTemplate := params["templateId"]; !hasTemplate {
+				if baseID := findStringDeep(result.Response, "baseId", "baseID"); baseID != "" {
+					if _, terr := runAitableProductToolResult(cmd, runner, "aitable", "create_table", map[string]any{
+						"baseId":    baseID,
+						"tableName": "表格1",
+						"fields": []any{map[string]any{
+							"fieldName": "标题",
+							"type":      "text",
+						}},
+					}); terr != nil {
+						fmt.Fprintf(cmd.ErrOrStderr(), "warning: created base %s but default table creation failed: %v\n", baseID, terr)
+					}
+				}
+			}
+			return writeCommandPayload(cmd, result)
 		},
 	}
 	preferLegacyLeaf(cmd)
@@ -1440,6 +1466,9 @@ func newAitableViewUpdateCommand(runner executor.Runner) *cobra.Command {
 				if err != nil {
 					return err
 				}
+				if err := normalizeAitableViewConfigBlock(cmd, config); err != nil {
+					return err
+				}
 				params["config"] = config
 			}
 			if _, hasName := params["newViewName"]; !hasName {
@@ -1499,6 +1528,14 @@ func runAitableFormTool(cmd *cobra.Command, runner executor.Runner, tool string,
 }
 
 func runAitableProductTool(cmd *cobra.Command, runner executor.Runner, product, tool string, params map[string]any) error {
+	result, err := runAitableProductToolResult(cmd, runner, product, tool, params)
+	if err != nil {
+		return err
+	}
+	return writeCommandPayload(cmd, result)
+}
+
+func runAitableProductToolResult(cmd *cobra.Command, runner executor.Runner, product, tool string, params map[string]any) (executor.Result, error) {
 	invocation := executor.NewHelperInvocation(
 		cobracmd.LegacyCommandPath(cmd),
 		product,
@@ -1509,9 +1546,9 @@ func runAitableProductTool(cmd *cobra.Command, runner executor.Runner, product, 
 	if invocation.DryRun {
 		result, err := runner.Run(cmd.Context(), invocation)
 		if err != nil {
-			return err
+			return executor.Result{}, err
 		}
-		return writeCommandPayload(cmd, result)
+		return result, nil
 	}
 
 	var lastErr error
@@ -1523,7 +1560,7 @@ func runAitableProductTool(cmd *cobra.Command, runner executor.Runner, product, 
 			select {
 			case <-cmd.Context().Done():
 				timer.Stop()
-				return cmd.Context().Err()
+				return executor.Result{}, cmd.Context().Err()
 			case <-timer.C:
 			}
 		}
@@ -1531,16 +1568,16 @@ func runAitableProductTool(cmd *cobra.Command, runner executor.Runner, product, 
 		result, err := runner.Run(cmd.Context(), invocation)
 		lastErr = err
 		if err == nil {
-			return writeCommandPayload(cmd, result)
+			return result, nil
 		}
 		if !aitableErrorRetryable(err) {
-			return err
+			return executor.Result{}, err
 		}
 	}
 	if lastErr != nil {
-		return lastErr
+		return executor.Result{}, lastErr
 	}
-	return nil
+	return executor.Result{}, nil
 }
 
 const aitableHelperMaxRetries = 3
@@ -1906,11 +1943,15 @@ func normalizeAitableSort(items []any) []any {
 }
 
 func parseAitableJSONArray(raw, flagName string) ([]any, error) {
-	var value []any
+	var value any
 	if err := json.Unmarshal([]byte(raw), &value); err != nil {
 		return nil, apperrors.NewValidation(fmt.Sprintf("--%s JSON parse failed: %v", flagName, err))
 	}
-	return value, nil
+	arr, ok := value.([]any)
+	if !ok {
+		return nil, apperrors.NewValidation(fmt.Sprintf("--%s must be a JSON array / 数组, got %T", flagName, value))
+	}
+	return arr, nil
 }
 
 func parseAitableJSONObject(raw, flagName string) (map[string]any, error) {

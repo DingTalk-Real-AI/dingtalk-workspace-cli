@@ -30,28 +30,23 @@ JSONML 是文档内容树的序列化格式：
 - 第二个元素为文档级属性对象（如 `sectPr` 页面设置），可选
 - 后续元素为块级节点（每个 block 节点应带 `uuid`）
 
-全量覆写（overwrite）时，CLI 接受三种 body 形态：
+全量覆写（overwrite）时，CLI 要求 body 必须以 `["root", ...]` 为根节点：
 
 1. `["root", {sectPr}, ...blocks]` — 服务端 canonical 形式，`doc read` 输出
-2. `[blocks, ...]` — 纯块数组（缺少 root，validator 会 warn 但不阻断）
-3. 单个 `[tag, ...]` — 当作单 block，validator warn
+2. `["root", {}, ...blocks]` — 无页面设置时用空 attrs
 
-## CLI 行为概览（validator + normalize）
+## CLI 行为概览（validator）
 
-写入端（`doc create/update`、`block insert/update`）默认会走 **normalize → validate** 两步：
+写入端（`doc create/update`、`block insert/update`）走 **validate** 一步，不做结构修复：
 
-| 行为 | 缺省 | `--fix-jsonml` | `--no-fix-jsonml` |
-|------|------|----------------|-------------------|
-| JSON 语法修复（括号/逗号补全） | ✗ | ✓（打印 `[FIX]`） | ✗ |
-| 解包单 block 为 body | ✓ | ✓ | ✗ |
-| **attrs 槽完全缺失**时补 `attrs` + `uuid` | ✓ | ✓ | ✗ |
-| 裸字符串 → `span/text + span/leaf` 自动包裹 | ✓（打印 `[FIX]`） | ✓（打印 `[FIX]`） | ✗ |
-| validator 阻断（HasErrors → 拒绝发送） | ✓ | ✓ | ✓ |
-| validator 警告（warnings → 仅 stderr） | ✓ | ✓ | ✓ |
+| 行为 | 缺省 | `--fix-jsonml` |
+|------|------|----------------|
+| JSON 语法修复（括号/逗号补全） | ✗ | ✓（打印 `[FIX]`） |
+| validator 阻断（HasErrors → 拒绝发送） | ✓ | ✓ |
+| validator 警告（warnings → 仅 stderr） | ✓ | ✓ |
+| root 校验（仅 doc create/update） | ✓ | ✓ |
 
-> **uuid 注入的边界**：仅当 attrs 槽**完全缺失**（如 `["p", "text"]`）才补 `attrs` + `uuid`。当生产者已显式给出 `attrs`（哪怕是 `{}` 或不含 uuid），normalize 一律不再补 uuid —— 视为生产者明确意图。这避免 `doc read → doc update` 回灌时污染原文档中未修改的节点（真实文档中常见 `["h1", {}, ...]` 形态）。
-
-三态设计：缺省 = 结构修复 ON + JSON 语法修复 OFF；`--fix-jsonml` 全开（含 JSON repair，推荐 agent 调用）；`--no-fix-jsonml` 全关（用于排查原始错误）。校验始终执行，不可跳过。
+> `doc create/update` 要求 body 必须以 `["root", {attrs?}, ...blocks]` 为根节点。缺少 root 会报错而非自动包装。`doc block insert/update` 不要求 root。
 
 报错格式（面向 agent）：
 
@@ -89,12 +84,12 @@ Suggestion: ["span",{"data-type":"text"},["span",{"data-type":"leaf"},"<your tex
 | `strike` | `boolean` | `true` / `false` | 单删除线 |
 | `dstrike` | `boolean` | `true` / `false` | 双删除线（独立于 strike） |
 | `underline` | `object` | `{value, color?}` | 下划线。value: `"single"` \| `"dash"` \| `"wave"` \| `"double"` \| `"none"` |
-| `color` | `string` | CSS 颜色 | 文字颜色，如 `"#ff0000"` |
+| `color` | `string` | `"#rrggbb"` | 文字颜色 |
 | `highlight` | `string` | CSS 颜色 | 文字高亮背景色 |
 | `shd` | `object` | `{val?, color?, fill?}` | OOXML 底纹（Word 导入保留） |
 | `sz` | `number` | 数值 | 字号，配合 `szUnit` |
 | `szUnit` | `string` | `"px"` \| `"pt"` | 字号单位，默认 `"px"` |
-| `fonts` | `object` | `{ascii, hAnsi, cs, eastAsia}` | OOXML 四分区字体 |
+| `fonts` | `object` | `{ascii, hAnsi, cs, eastAsia}` | OOXML 四分区字体，值为 font-family 名称（如 `SimHei`），不能写中文名 |
 | `vertAlign` | `string` | `"superscript"` \| `"subscript"` \| `"baseline"` | 上标/下标/基线 |
 | `spacing` | `number` | 数值（pt） | 字间距 |
 
@@ -107,6 +102,17 @@ Suggestion: ["span",{"data-type":"text"},["span",{"data-type":"leaf"},"<your tex
 ["span", {"data-type": "text"},
   ["span", {"data-type": "leaf", "underline": {"value": "single", "color": "#ff0000"}, "sz": 14, "szUnit": "px"}, "红色下划线"]
 ]
+["span", {"data-type": "text"},
+  ["span", {"data-type": "leaf", "strike": true, "color": "#9E9E9E"}, "删除线灰字"]
+]
+["span", {"data-type": "text"},
+  ["span", {"data-type": "leaf", "fonts": {"ascii": "Arial", "eastAsia": "SimSun"}, "sz": 12, "szUnit": "pt"}, "指定字体"]
+]
+["span", {"data-type": "text"},
+  ["span", {"data-type": "leaf"}, "H"],
+  ["span", {"data-type": "leaf", "vertAlign": "subscript"}, "2"],
+  ["span", {"data-type": "leaf"}, "O"]
+]
 ```
 
 ### 历史/兼容形式
@@ -115,7 +121,7 @@ Suggestion: ["span",{"data-type":"text"},["span",{"data-type":"leaf"},"<your tex
 |------|-----------|--------|------|
 | `["span", {"data-type":"text"}, ["span", {"data-type":"leaf"}, "x"]]` | ✓ canonical | ✓ | ✅ 新内容首选 |
 | `["text", {marks}, "x"]` | ✓（`text` 在 inline 白名单中） | ✓（兼容） | ⚠️ 历史 inline tag。`doc read` 不会输出这种形式；如需复制粘贴回写、保持与现有内容一致，建议改写为 canonical |
-| `"raw string"` 作为 block 子节点 | ✗ 报错 `段落子节点不能是裸字符串` | — | 不要直接写。默认 normalize 会自动包成 canonical（打印 `[FIX]`） |
+| `"raw string"` 作为 block 子节点 | ✗ 报错 `段落子节点不能是裸字符串` | — | 不要直接写。validator 会报错，请手动包成 canonical 形式 |
 
 > Marks 表的属性集对 canonical 的 leaf 和 legacy 的 text 都适用；差别仅在承载位置（leaf 的 attrs vs text 的 attrs）。
 
@@ -133,9 +139,9 @@ Suggestion: ["span",{"data-type":"text"},["span",{"data-type":"leaf"},"<your tex
 - **tag**: `"p"`
 - **attrs**（全部 optional）:
   - `jc?: "left" | "center" | "right" | "both" | "distribute" | "justify"` — 对齐
-  - `ind?` — 缩进（单位 **twips**，1 twip = 1/1440 英寸）
+  - `ind?` — 缩进
     - `left?: number`, `right?: number`, `firstLine?: number`, `firstLineChars?: number`, `hanging?: number`
-  - `spacing?` — 行间距（单位 **twips**；`line` 字段：`lineRule=auto` 时 1/240 行，否则 twips）
+  - `spacing?` — 行间距（`lineRule=auto` 时 `line` 为倍数：1=单倍、1.5=1.5倍、2=双倍；`before`/`after` 单位 pt）
     - `line?: number`, `before?: number`, `after?: number`
     - `lineRule?: "atLeast" | "auto" | "exact"`
   - `shd?: {val?, fill?, color?}` — 底纹
@@ -148,7 +154,8 @@ Suggestion: ["span",{"data-type":"text"},["span",{"data-type":"leaf"},"<your tex
 ```json
 ["p", {"uuid": "p1"}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "普通段落"]]]
 ["p", {"uuid": "p2", "jc": "center"}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "居中段落"]]]
-["p", {"uuid": "p3", "ind": {"firstLine": 420}}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "首行缩进段落"]]]
+["p", {"uuid": "p3", "ind": {"firstLine": 32}}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "首行缩进段落"]]]
+["p", {"uuid": "p4", "spacing": {"line": 1.5, "lineRule": "auto"}}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "1.5倍行距"]]]
 ```
 
 ### heading（标题）
@@ -184,7 +191,7 @@ Suggestion: ["span",{"data-type":"text"},["span",{"data-type":"leaf"},"<your tex
   - `isTaskList?: boolean` — 是否任务列表，默认 `false`
   - `isChecked?: boolean` — 任务是否完成（仅 isTaskList=true 时有意义）
   - `isCanceled?: boolean` — 任务是否取消
-  - `start?: number` — 有序列表起始序号（≥1）。validator 报错：`必须 ≥1`
+  - `start?: number` — 有序列表起始序号（≥1）。**仅在列表第一项设置**，后续项不设置此字段（系统自动递增）。validator 报错：`必须 ≥1`
   - `listStyleType?: string` — 样式类型（31 种预设）
   - `hideSymbol?: boolean` — 隐藏列表符号
 - **示例**:
@@ -193,7 +200,9 @@ Suggestion: ["span",{"data-type":"text"},["span",{"data-type":"leaf"},"<your tex
 ["p", {"uuid": "li1", "list": {"listId": "abc", "level": 0, "isOrdered": false}},
   ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "无序列表项"]]]
 ["p", {"uuid": "li2", "list": {"listId": "def", "level": 0, "isOrdered": true, "start": 1}},
-  ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "有序列表项"]]]
+  ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "有序第一项"]]]
+["p", {"uuid": "li2b", "list": {"listId": "def", "level": 0, "isOrdered": true}},
+  ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "有序第二项（不设 start，自动编号 2）"]]]
 ["p", {"uuid": "li3", "list": {"listId": "ghi", "level": 1, "isOrdered": false}},
   ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "二级缩进"]]]
 ["p", {"uuid": "li4", "list": {"listId": "jkl", "level": 0, "isTaskList": true, "isChecked": false}},
@@ -221,7 +230,10 @@ Suggestion: ["span",{"data-type":"text"},["span",{"data-type":"leaf"},"<your tex
 
 - **tag**: `"table"`
 - **attrs**:
-  - `colsWidth: number[]` — 列宽（语义必传），单位 **px**。缺失时 validator 警告 `table 应提供 colsWidth`
+  - `colsWidth: number[]` — 列宽（语义必传）。缺失时 validator 警告 `table 应提供 colsWidth`
+    - 默认模式：值为各列绝对宽度，单位 **pt**（如 `[325, 325]` 总和≈页宽 650pt）
+    - 比例模式（配合 `tblW: {"type": "pct"}`）：值为百分比权重（如 `[33.3, 33.3, 33.4]` 总和=100）
+  - `tblW?: {w?: number, type?: string}` — 表格宽度模式。`type: "pct"` 时 colsWidth 按比例解析
   - `sr?: boolean` — `true` 表示这是分栏布局（columns），不是普通表格
   - `jc?: string` — 对齐（源码注释"目前无消费"）
 - **children**: `["tr", ...]` 行节点
@@ -293,7 +305,7 @@ Suggestion: ["span",{"data-type":"text"},["span",{"data-type":"leaf"},"<your tex
 - **tag**: `"table"`（复用 table tag，通过 `sr: true` 区分）
 - **attrs**:
   - `sr: true` — 固定标识
-  - `colsWidth?: number[]` — 各列宽度
+  - `colsWidth?: number[]` — 各列宽度（pt），前端按比例换算为页面宽度
   - `spacing?: number` — 栏间距
 - **children**: 单个 `["tr", ...]`，内含多个 `["tc", ...]`
 - **示例**:
@@ -660,7 +672,7 @@ block tag 也可出现在 inline 上下文（如 `img` 既是 block 又是 inlin
     ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "列表示例"]]],
   ["p", {"uuid": "li1", "list": {"listId": "l1", "level": 0, "isOrdered": true, "start": 1}},
     ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "第一项"]]],
-  ["p", {"uuid": "li2", "list": {"listId": "l1", "level": 0, "isOrdered": true, "start": 2}},
+  ["p", {"uuid": "li2", "list": {"listId": "l1", "level": 0, "isOrdered": true}},
     ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "第二项"]]],
   ["p", {"uuid": "li3", "list": {"listId": "l1", "level": 1, "isOrdered": false}},
     ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "子项"]]],
@@ -687,11 +699,11 @@ block tag 也可出现在 inline 上下文（如 `img` 既是 block 又是 inlin
 ## 设计要点
 
 1. **Canonical 文本是 span/leaf**：每段文字 = `["span", {"data-type":"text"}, ["span", {"data-type":"leaf", ...marks}, "..."]]`。legacy `["text", {marks}, "..."]` 仍被接受但不建议新写。
-2. **裸字符串作 block 子节点违法**：validator 报错；默认 normalize 自动包成 canonical 并打印 `[FIX]`；可用 `--no-fix-jsonml` 关闭。
-3. **每个 block 必带 `uuid`**：手写 JSONML 时建议每个 block 自带 `uuid`（base32 alphanumeric，dws CLI 用 `dws` 前缀）。写入端 normalize **仅在 `attrs` 槽完全缺失（如 `["p", "text"]`）** 时自动补一个；只要 `attrs` 槽存在（即使是 `{}`），normalize 不再补 uuid —— 这保证 `doc read → doc update` 回灌不会污染原文档节点。
+2. **裸字符串作 block 子节点违法**：validator 报错，请手动包成 canonical 形式。
+3. **每个 block 必带 `uuid`**：手写 JSONML 时建议每个 block 自带 `uuid`（base32 alphanumeric，dws CLI 用 `dws` 前缀）。
 4. **扁平列表**: 列表不嵌套，通过 `listId` + `level` 表达层级。
 5. **属性装饰**: blockquote / list / footnote 不是独立 tag，是 paragraph 的属性。
 6. **Void 节点**: hr / code / img / card / toc / embed / onlineVideo 在构造时不需要传子节点；服务端返回的真实文档中这些节点**可能包含内部配置数据子节点**，解析时应兼容。
 7. **columns = table + sr:true**: 分栏复用表格结构。
 8. **card 轻引用**: body 中只存 cardType + metadata.id，重数据在 parts 层。
-9. **root 节点**: 服务端返回的完整 body 以 `["root", {sectPr...}, ...blocks]` 包裹，写入时可直接使用此格式或纯块列表格式。
+9. **root 节点**: 服务端返回的完整 body 以 `["root", {sectPr...}, ...blocks]` 包裹。`doc create/update` 写入时必须以 root 为根节点，缺少会报错。`doc block insert/update` 不要求 root。
