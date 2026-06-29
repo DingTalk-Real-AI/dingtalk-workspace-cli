@@ -334,13 +334,14 @@ func newChatMessageSendCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("file-type", "", "文件类型/扩展名 (msg-type=file)")
 	cmd.Flags().String("file-path", "", "文件展示路径 (msg-type=file)")
 	cmd.Flags().Int64("file-size", 0, "文件大小，单位字节 (msg-type=file)")
-	cmd.Flags().Bool("ai-tag", false, "标记为「通过AI发送」(默认不带；仅传 --ai-tag 时才在消息下方显示 AI 发送角标)")
+	cmd.Flags().Bool("ai-tag", true, "标记为「通过AI发送」角标，默认带上（透明标识 AI/CLI 代发）；仅当 --ai-tag=false 时不带角标（按本人发送）")
 	return cmd
 }
 
-// attachAITag 仅在用户显式传入 --ai-tag 时，给发送参数加上 clawType，
-// 由 IM 服务端据此渲染「通过AI发送」角标 (悟空版渲染「悟空AI发送」)。
-// 默认不带：是否标记 AI 发送交由用户自行选择，不强加。
+// attachAITag 在 --ai-tag 为真时给发送参数加上 clawType，由 IM 服务端据此
+// 渲染「通过AI发送」角标 (悟空版渲染「悟空AI发送」)。--ai-tag 默认 true：
+// 经 dws/agent 代发的消息默认带角标以透明标识 AI/CLI 代发，仅当用户显式
+// 传 --ai-tag=false 时才不带 (按本人发送)。
 func attachAITag(cmd *cobra.Command, params map[string]any) {
 	if on, _ := cmd.Flags().GetBool("ai-tag"); on {
 		params["clawType"] = edition.ClawType()
@@ -1017,7 +1018,7 @@ func newChatMessageReplyCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("ref-sender", "", "被引用消息发送者 openDingTalkId (必填)")
 	cmd.Flags().String("text", "", "回复正文 (必填)")
 	cmd.Flags().String("uuid", "", "可选 uuid（幂等标识）")
-	cmd.Flags().Bool("ai-tag", false, "标记为「通过AI发送」(默认不带；仅传 --ai-tag 时才显示 AI 发送角标)")
+	cmd.Flags().Bool("ai-tag", true, "标记为「通过AI发送」角标，默认带上（透明标识 AI/CLI 代发）；仅当 --ai-tag=false 时不带角标（按本人发送）")
 	return cmd
 }
 
