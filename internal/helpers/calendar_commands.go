@@ -15,11 +15,13 @@ package helpers
 
 import (
 	"strings"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/spf13/cobra"
 )
 
@@ -46,6 +48,16 @@ func (calendarHandler) Command(runner executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE:              func(cmd *cobra.Command, args []string) error { return cmd.Help() },
 	}
+	event := &cobra.Command{
+		Use:               "event",
+		Short:             i18n.T("日程管理"),
+		Args:              cobra.NoArgs,
+		TraverseChildren:  true,
+		DisableAutoGenTag: true,
+		RunE:              func(cmd *cobra.Command, args []string) error { return cmd.Help() },
+	}
+	event.AddCommand(newCalendarEventListCommand(runner))
+
 	attendee := &cobra.Command{
 		Use:               "attendee",
 		Short:             i18n.T("参会人管理（与 participant 等价，对齐 wukong 命名）"),
@@ -59,8 +71,77 @@ func (calendarHandler) Command(runner executor.Runner) *cobra.Command {
 		newCalendarAttendeeAddCommand(runner),
 		newCalendarAttendeeDeleteCommand(runner),
 	)
-	root.AddCommand(attendee)
+	root.AddCommand(event, attendee)
 	return root
+}
+
+func newCalendarEventListCommand(runner executor.Runner) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "list",
+		Short:   i18n.T("列出日程"),
+		Example: "  dws calendar event list\n  dws calendar event list --start 2026-06-29 --end 2026-06-30",
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			now := time.Now()
+			todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+			todayEnd := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 0, now.Location())
+
+			startStr := strings.TrimSpace(firstNonEmptyFlag(cmd, "start", "startTime"))
+			endStr := strings.TrimSpace(firstNonEmptyFlag(cmd, "end", "endTime"))
+
+			var startMs, endMs int64
+			if startStr != "" {
+				ms, err := cmdutil.ParseISOTimeToMillis("start", startStr)
+				if err != nil {
+					return err
+				}
+				startMs = ms
+			}
+			if endStr != "" {
+				ms, err := cmdutil.ParseISOTimeToMillis("end", endStr)
+				if err != nil {
+					return err
+				}
+				endMs = ms
+			}
+
+			// Default missing side to today; if only one side is given, use its
+			// date so the range is always valid (e.g. --end 2026-03-10 → start=2026-03-10 00:00).
+			if startStr == "" && endStr == "" {
+				startMs = todayStart.UnixMilli()
+				endMs = todayEnd.UnixMilli()
+			} else if startStr == "" {
+				endTime := time.UnixMilli(endMs)
+				startMs = time.Date(endTime.Year(), endTime.Month(), endTime.Day(), 0, 0, 0, 0, endTime.Location()).UnixMilli()
+			} else if endStr == "" {
+				startTime := time.UnixMilli(startMs)
+				endMs = time.Date(startTime.Year(), startTime.Month(), startTime.Day(), 23, 59, 59, 0, startTime.Location()).UnixMilli()
+			}
+
+			if err := cmdutil.ValidateTimeRange(startMs, endMs); err != nil {
+				return err
+			}
+
+			params := map[string]any{
+				"startTime": startMs,
+				"endTime":   endMs,
+			}
+			if v := strings.TrimSpace(firstNonEmptyFlag(cmd, "calendar-id", "calendarId")); v != "" {
+				params["calendarId"] = v
+			}
+			return runCalendarTool(cmd, runner, "list_calendar_events", params)
+		},
+	}
+	preferLegacyLeaf(cmd)
+	cmd.Flags().String("start", "", i18n.T("开始时间 (可选, 默认今天 00:00)"))
+	cmd.Flags().String("end", "", i18n.T("结束时间 (可选, 默认今天 23:59)"))
+	cmd.Flags().String("startTime", "", i18n.T("--start 的别名"))
+	cmd.Flags().String("endTime", "", i18n.T("--end 的别名"))
+	cmd.Flags().String("calendar-id", "", i18n.T("日历 ID (可选, 默认主日历)"))
+	_ = cmd.Flags().MarkHidden("startTime")
+	_ = cmd.Flags().MarkHidden("endTime")
+	return cmd
 }
 
 func newCalendarAttendeeListCommand(runner executor.Runner) *cobra.Command {
