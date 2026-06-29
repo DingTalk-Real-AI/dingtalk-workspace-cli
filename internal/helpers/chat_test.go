@@ -354,8 +354,8 @@ func TestChatMessageAITagControlsClawType(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
-		// Default: no --ai-tag → must omit clawType entirely (no badge).
-		t.Run(tc.name+"/default-no-tag", func(t *testing.T) {
+		// Default: no --ai-tag → ai-tag defaults to true → must attach clawType.
+		t.Run(tc.name+"/default-has-tag", func(t *testing.T) {
 			runner := &captureRunner{}
 			cmd := tc.make(runner)
 			var out bytes.Buffer
@@ -365,11 +365,30 @@ func TestChatMessageAITagControlsClawType(t *testing.T) {
 			if err := cmd.Execute(); err != nil {
 				t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 			}
-			if v, ok := runner.last.Params["clawType"]; ok {
-				t.Fatalf("default send must omit clawType, got %#v", v)
+			got, ok := runner.last.Params["clawType"]
+			if !ok {
+				t.Fatalf("default send must attach clawType (ai-tag defaults true); got %#v", runner.last.Params)
+			}
+			if got != edition.DefaultOSSClawType {
+				t.Fatalf("clawType = %#v, want %q", got, edition.DefaultOSSClawType)
 			}
 		})
-		// Opt-in: --ai-tag → attach the edition claw identity.
+		// Opt-out: --ai-tag=false → omit clawType entirely (no badge).
+		t.Run(tc.name+"/ai-tag-false", func(t *testing.T) {
+			runner := &captureRunner{}
+			cmd := tc.make(runner)
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			cmd.SetArgs(append(append([]string{}, tc.args...), "--ai-tag=false"))
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
+			}
+			if v, ok := runner.last.Params["clawType"]; ok {
+				t.Fatalf("--ai-tag=false must omit clawType, got %#v", v)
+			}
+		})
+		// Opt-in (explicit): --ai-tag → attach the edition claw identity.
 		t.Run(tc.name+"/with-ai-tag", func(t *testing.T) {
 			runner := &captureRunner{}
 			cmd := tc.make(runner)

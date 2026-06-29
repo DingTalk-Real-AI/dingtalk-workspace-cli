@@ -388,6 +388,8 @@ Flags:
 
 **重要：该接口会真实发送消息到目标会话，不可用于测试或试探性调用。调用前必须确认消息内容和接收对象无误。**
 
+**`--ai-tag` 默认开（默认 true）**：dws 发送的消息默认带「通过AI发送」角标，正常发无需特意加；仅当用户要求按本人发、不带角标时传 `--ai-tag=false`。仅 send / reply 支持。
+
 --group 指定群聊 openConversationId 发群消息；--user 指定用户 userId 发单聊；--open-dingtalk-id 指定用户 openDingTalkId 发单聊。三者只能选其一，不能同时指定。纯文本/Markdown 单聊传 --user 时直接走 userId 发送能力，不需要先手动查询 openDingTalkId。推荐使用 --text flag 传递消息内容（也支持位置参数）。可选 --title 作为消息标题。
 若用户只提供了数字群号而非 openConversationId，需先调用 `chat group get-by-group-id` 将群号转为 openConversationId，再传入 --group。
 --群聊时可选 --at-all @所有人，或 --at-open-dingtalk-ids 指定成员（仅群聊时生效）。
@@ -411,6 +413,10 @@ Example:
   dws chat message send --group <openconversation_id> --text "hello" --uuid "unique-id-123"
   dws chat message send --group <openconversation_id> --at-all "@all 请大家注意"
   dws chat message send --group <openconversation_id> --at-open-dingtalk-ids openDingTalkId1,openDingTalkId2 "<@openDingTalkId1> <@openDingTalkId2> 请查收"
+  # 默认即带「通过AI发送」角标，无需特意加 --ai-tag
+  dws chat message send --user <userId> --text "已处理好了"
+  # 仅当用户要求按本人发送、不带角标时
+  dws chat message send --user <userId> --text "已处理好了" --ai-tag=false
   # 发送图片
   dws chat message send --group <openconversation_id> --msg-type image --media-id <mediaId>
   # 发送文件（音频/视频/文档等非图片文件统一走钉盘上传）
@@ -426,6 +432,7 @@ Flags:
       --title string             消息标题（可选，默认「消息」）
       --at-all                   @所有人（仅群聊时生效，可选，默认 false）
       --at-open-dingtalk-ids string  @指定成员的 openDingTalkId 列表，逗号分隔（仅群聊时生效，可选）
+      --ai-tag                   标记为「通过AI发送」角标，默认 true（默认带上）；传 --ai-tag=false 关闭（按本人发送）
       --media-id string          图片 mediaId（dt_media_upload 上传后用 `python scripts/extract_media_id.py <URL>` 提取，仅 msgType=image）
       --msg-type string          消息类型: image/file（image 用 mediaId，file 用钉盘上传）
       --dentry-id int64          钉盘文件 dentryId（msgType=file 时必填，通过 drive info 获取）
@@ -1517,7 +1524,7 @@ Flags:
 - `chat message reply` 引用回复消息（**单聊/群聊均可**），需传 --conversation-id（openConversationId，单聊与群聊使用同一字段）、--ref-msg-id（被引用消息 openMessageId）、--ref-sender（被引用消息发送者 openDingTalkId）、--text（回复内容）；目前回复类型仅支持 text
 - `chat message forward` 转发单条消息（**源/目标会话均支持单聊/群聊**，常见组合：群→群、群→单、单→群、单→单），需传 --src-conversation-id（源会话 openConversationId）、--msg-id（源消息 openMessageId）、--dest-conversation-id（目标会话 openConversationId）
 - `chat set-top` 设置/取消会话置顶（**单聊/群聊均可**），需传 --conversation-id（openConversationId，单聊与群聊使用同一字段），默认置顶，传 --off 取消
-- `chat message reply` 以当前用户身份引用回复，与 `chat message send` 的用户身份发送语义一致
+- `chat message reply` 以当前用户身份引用回复，与 `chat message send` 的用户身份发送语义一致；**同样支持 `--ai-tag`（默认 true，默认带「通过AI发送」角标，传 `--ai-tag=false` 关闭）**（详见上文 send 段的「AI 代发标记」规则）
 - **如何获取 openConversationId**（如果上层已有则直接使用，不必再查）：
   - 群聊：`dws chat search --query "群名"`
   - 单聊：`dws chat conversation-info --user <userId>` 或 `dws chat conversation-info --open-dingtalk-id <openDingTalkId>`（人员信息可通过 `dws aisearch person --keyword "姓名" --dimension name` 获取）
