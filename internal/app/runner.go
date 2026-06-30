@@ -922,6 +922,9 @@ func resolveIdentityHeaders() map[string]string {
 	if fn := edition.Get().MergeHeaders; fn != nil {
 		headers = fn(headers)
 	}
+	if fn := edition.Get().EnterpriseCredentialHeaders; fn != nil {
+		headers = fn(headers)
+	}
 	return headers
 }
 
