@@ -124,11 +124,17 @@ func readStdinBounded() (string, error) {
 }
 
 // looksLikeFilePath returns true when value should be interpreted as the
-// `@<path>` file-injection syntax. Heuristic: value must start with '@', and
-// the character right after '@' must be ASCII (letter, digit, or one of the
-// common path-prefix characters: . / ~ _ -). This rules out mistaken matches
-// for natural-language messages that happen to start with '@' followed by
-// non-ASCII text — e.g. "@所有人" should be a chat mention, not a file path.
+// `@<path>` file-injection syntax. A real @file reference is a single shell
+// token: it starts with '@', its first character is an ASCII path char
+// (letter, digit, or one of . / ~ _ -), and the whole candidate path contains
+// no whitespace and no multi-byte (e.g. CJK) runes.
+//
+// The whole-token rule is what keeps natural-language chat messages out of the
+// file branch even when they start with an ASCII '@'-mention. "@所有人 早上好"
+// is ruled out by the non-ASCII bytes; "@qoderwake数据员 在的…" — an at-mention
+// of an English-named member — is ruled out by both the space and the CJK
+// runes, so it reaches the message payload as literal text instead of being
+// mis-read as a missing filename.
 func looksLikeFilePath(value string) bool {
 	if !strings.HasPrefix(value, "@") || len(value) < 2 {
 		return false
@@ -137,11 +143,14 @@ func looksLikeFilePath(value string) bool {
 	if rest == "-" {
 		return true // @- = stdin
 	}
-	first := rune(rest[0])
-	if first > unicode.MaxASCII {
-		// First byte is part of a multi-byte rune (e.g. Chinese) — not a path.
-		return false
+	// A path token has no whitespace and no multi-byte runes. Anything else
+	// is natural-language text that merely happens to begin with '@'.
+	for _, r := range rest {
+		if r > unicode.MaxASCII || unicode.IsSpace(r) {
+			return false
+		}
 	}
+	first := rune(rest[0])
 	switch {
 	case first >= 'A' && first <= 'Z',
 		first >= 'a' && first <= 'z',
