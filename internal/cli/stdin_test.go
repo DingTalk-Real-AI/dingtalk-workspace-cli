@@ -48,8 +48,10 @@ func TestReadFileArgPlainValue(t *testing.T) {
 }
 
 // TestReadFileArgChineseAtMention guards the @所有人-style mentions that the
-// chat bot Webhook tests rely on: an '@' followed by non-ASCII text must be
-// treated as a literal message, not as the @file injection syntax.
+// chat bot Webhook tests rely on: an '@' followed by chat text must be treated
+// as a literal message, not as the @file injection syntax. A value is only a
+// file path when it is a single token (no whitespace, no multi-byte runes), so
+// an ASCII-led mention like "@A 但接下来都是中文" stays plain text too.
 func TestReadFileArgChineseAtMention(t *testing.T) {
 	t.Parallel()
 	cases := []string{
@@ -59,13 +61,34 @@ func TestReadFileArgChineseAtMention(t *testing.T) {
 	}
 	for _, in := range cases {
 		val, isFile, err := ReadFileArg(in)
-		if in == "@A 但接下来都是中文@测试" {
-			// '@A' starts with ASCII, treated as path → expect file error
-			if err == nil {
-				t.Errorf("@A... should attempt file lookup; got val=%q isFile=%v", val, isFile)
-			}
+		if err != nil {
+			t.Errorf("%q: unexpected error %v", in, err)
 			continue
 		}
+		if isFile {
+			t.Errorf("%q: should be plain text, got isFile=true", in)
+		}
+		if val != in {
+			t.Errorf("%q: got %q", in, val)
+		}
+	}
+}
+
+// TestReadFileArgAsciiLedMention is the regression guard for the reported bug:
+// `--text "@qoderwake数据员 在的，有什么可以帮你？"` was mis-read as the @file
+// syntax because the byte after '@' is ASCII ('q'), so the whole string was
+// passed to os.Open and failed with "no such file or directory". An at-mention
+// of an English-named member must reach the payload as literal text.
+func TestReadFileArgAsciiLedMention(t *testing.T) {
+	t.Parallel()
+	cases := []string{
+		"@qoderwake数据员 在的，有什么可以帮你？",
+		"@qoderwake数据员",                  // CJK with no space
+		"@bot hello there",              // pure ASCII with a space
+		"@team\n下一行",                    // newline counts as whitespace
+	}
+	for _, in := range cases {
+		val, isFile, err := ReadFileArg(in)
 		if err != nil {
 			t.Errorf("%q: unexpected error %v", in, err)
 			continue
