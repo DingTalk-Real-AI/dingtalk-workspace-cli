@@ -1,6 +1,6 @@
 ---
 name: dingtalk-ding
-description: DING 紧急消息（应用内 / 短信 / 电话）。Use when 用户说 DING一下/紧急通知/电话DING/短信DING/必达消息/电话叫人。Distinct from dingtalk-chat(普通群聊消息)、dingtalk-outbound-call(企业外呼)。命令前缀：dws ding。
+description: DING 紧急消息（应用内 / 短信 / 电话）。Use when 用户说 DING一下/紧急通知/电话DING/短信DING/必达消息/电话叫人。Distinct from dingtalk-chat(普通群聊消息)。命令前缀：dws ding。
 cli_version: ">=0.2.14"
 metadata:
   category: product

@@ -12,7 +12,7 @@ Example:
   dws live stream list
   dws live stream list --format json
 ```
-无业务 flag，仅全局 flag。`dws live list` 是 `dws live stream list` 的别名。
+无业务 flag，仅全局 flag。唯一命令是 `dws live stream list`；`dws live list` 不是可用别名（会返回 validation error: use dws live stream list），不要使用。
 
 ## 意图判断
 
@@ -28,4 +28,4 @@ dws live stream list --format json
 ## 注意事项
 
 - 该产品当前只提供直播列表查询，不支持创建/开播/会中控制。
-- `dws live list` 等价于 `dws live stream list`。
+- 唯一命令是 `dws live stream list`；`dws live list` 不可用（返回 validation error）。
