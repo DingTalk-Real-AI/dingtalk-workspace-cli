@@ -1,6 +1,6 @@
 ---
 name: dingtalk-sheet
-description: 钉钉电子表格。Use when 用户说 电子表格/工作表/单元格读写/单元格追加/查找/公式/超链接/插入图片/浮动图片/sheet。Distinct from dingtalk-aitable(AI表格/多维表/字段类型)、dingtalk-doc(普通文档)。命令前缀：dws sheet。
+description: 钉钉电子表格。Use when 用户说 电子表格/工作表/单元格读写/单元格追加/查找/公式/超链接/插入图片/浮动图片/条件格式/筛选/筛选视图/CSV 读取或写入/导出 xlsx/sheet。Distinct from dingtalk-aitable(AI表格/多维表/字段类型)、dingtalk-doc(普通文档)。命令前缀：dws sheet。
 cli_version: ">=0.2.14"
 metadata:
   category: product

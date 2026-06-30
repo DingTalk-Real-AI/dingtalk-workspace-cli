@@ -1,6 +1,6 @@
 ---
 name: dingtalk-doc
-description: 钉钉文档（云文档）。Use when 用户说 写文档/读文档/创建文档/编辑文档/搜文档/文档块/分块编辑/Markdown 写入/上传文件到文档。Distinct from dingtalk-drive(钉盘文件存储)、dingtalk-aitable(数据表格)、dingtalk-wiki(知识库空间)。命令前缀：dws doc。
+description: 钉钉文档（云文档）。Use when 用户说 写文档/读文档/创建文档/编辑文档/搜文档/文档块/分块编辑/Markdown 写入/上传文件到文档/文档权限协作或共享/文档导出。Distinct from dingtalk-drive(钉盘文件存储)、dingtalk-aitable(数据表格)、dingtalk-wiki(知识库空间)。命令前缀：dws doc。
 cli_version: ">=0.2.14"
 metadata:
   category: product

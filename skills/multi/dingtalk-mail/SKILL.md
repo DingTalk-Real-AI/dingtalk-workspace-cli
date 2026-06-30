@@ -1,6 +1,6 @@
 ---
 name: dingtalk-mail
-description: 钉钉邮箱。Use when 用户说 发邮件/查邮件/回邮件/转发邮件/未读邮件/邮件搜索。Distinct from dingtalk-chat(钉钉消息)、dingtalk-ding(紧急通知)。命令前缀：dws mail。
+description: 钉钉邮箱。Use when 用户说 发邮件/查邮件/回邮件/转发邮件/未读邮件/邮件搜索/草稿/附件/标签/会话/文件夹/查邮箱用户。子命令：message(send/search/get/reply/reply-all/forward/list/batch-move/batch-delete)、draft、folder、mailbox、attachment、tag、thread、user。Distinct from dingtalk-chat(钉钉消息)、dingtalk-ding(紧急通知)。命令前缀：dws mail。
 cli_version: ">=0.2.14"
 metadata:
   category: product
@@ -34,9 +34,9 @@ metadata:
 
 | 用户说 | 命令 |
 |--------|------|
-| "发邮件给 a@b.com" | `dws mail message send --from <自己邮箱> --to a@b.com --subject "<标题>" --body "<正文>"` |
+| "发邮件给 a@b.com" | `dws mail message send --from <自己邮箱> --to a@b.com --subject "<标题>" --content "<正文>"` |
 | "今天未读邮件" | `python scripts/mail_unread_summary.py` |
-| "带抄送发送" | `python scripts/mail_send_with_cc.py --to a@b.com --cc c@d.com --subject "<标题>" --body "<正文>"` |
+| "带抄送发送" | `python scripts/mail_send_with_cc.py --to a@b.com --cc c@d.com --subject "<标题>" --content "<正文>"` |
 
 ## 评测高频硬约束
 

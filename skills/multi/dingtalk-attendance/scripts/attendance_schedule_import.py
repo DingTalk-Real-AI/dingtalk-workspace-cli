@@ -2,6 +2,11 @@
 """
 考勤排班导入脚本
 
+[开源版不可用] 本脚本底层调用 `dws attendance schedule import`，
+   该命令为写操作，开源 dws CLI 未暴露，执行会返回 `unknown command`。
+   开源环境请告知用户"开源版仅支持只读考勤查询，暂不支持导入排班"。
+   以下逻辑仅在闭源/完整版 CLI 环境下可用。
+
 [AI Agent 强制门禁] 本脚本执行前必须先阅读：
    dingtalk-workspace/references/products/attendance-schedule.md
 

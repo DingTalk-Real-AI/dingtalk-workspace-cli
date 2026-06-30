@@ -1,6 +1,6 @@
 ---
 name: dingtalk-chat
-description: 钉钉群聊与消息。Use when 用户提到 发消息/单聊/群聊/建群/拉人进群/改群名/搜索群/群成员管理/@消息/撤回消息/机器人群发/Webhook通知/发图片或文件到群。Distinct from dingtalk-ding(紧急DING消息/短信/电话)、dingtalk-mail(邮件)、dingtalk-edu-group(班级群)。命令前缀：dws chat。
+description: 钉钉群聊与消息。Use when 用户提到 发消息/单聊/群聊/建群/拉人进群/改群名/搜索群/搜共同群/群成员管理/@消息/撤回消息/机器人群发/Webhook通知/发图片或文件到群/群禁言/全员禁言/单个成员禁言/设置群自定义角色/会话置顶/会话免打扰/会话分组归类。Distinct from dingtalk-ding(紧急DING消息/短信/电话)、dingtalk-mail(邮件)。命令前缀：dws chat。
 cli_version: ">=0.2.14"
 metadata:
   category: product
@@ -44,6 +44,13 @@ metadata:
 | "用机器人发消息" | `dws chat message send-by-bot --robot-code <code> --group <id> --title "<标题>" --text "<内容>"` |
 | "Webhook 推一条" | `dws chat message send-by-webhook --token <token> --title "<标题>" --text "<内容>"` |
 | "撤回机器人消息" | `dws chat message recall-by-bot --robot-code <code> --group <openConversationId> --keys <processQueryKey>`（只能撤回机器人发的；撤回普通用户消息开源 dws v1.0.30 暂不支持）|
+| "搜共同群 / 我俩都在哪些群" | `dws chat search-common`（按昵称列表查共同所在群聊）|
+| "全员禁言 / 解除全员禁言" | `dws chat group-mute` |
+| "禁言某成员 / 单独禁言" | `dws chat group-mute-member` |
+| "会话免打扰" | `dws chat mute` |
+| "群自定义角色" | `dws chat group-role` |
+| "置顶会话 / 取消置顶" | `dws chat set-top`（查置顶用 `dws chat list-top-conversations`）|
+| "会话分组归类" | `dws chat category` |
 
 > **注**：v1.0.30 起 `chat message send / send-by-bot / send-by-webhook` 全部强制 `--title` 必填（单聊群聊都要）。
 

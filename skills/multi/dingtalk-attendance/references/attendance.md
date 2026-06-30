@@ -1,6 +1,6 @@
 # 考勤 (attendance) 命令参考
 
-> **【开源版命令可用性提示】** 当前开源 dws 已落地 P0 5 条命令：`attendance check result`、`attendance check record`、`attendance group search`、`attendance vacation balance`、`attendance vacation types`。文档中其余 P1 阶段命令（`class` / `overtime` / `adjustment` / `group settings` / `report` / `schedule` / `boss-check` 等共 28 条）暂未通过服务发现推全，调用会返回 `unknown command`，将在后续批次落地。
+> **【开源版命令可用性提示 — 必读】** 当前**开源 dws CLI 只暴露 4 条只读查询命令**：`attendance record`、`attendance rules`、`attendance shift`、`attendance summary`。本文档中描述的所有**写场景命令**（`schedule import`、`group create`、`group update`、`group update-members`、`class create`、`class update`、`selfsetting save`、`globalsetting save`、`vacation update-type`、`vacation save-balance` 等）以及部分扩展查询命令（`approve`、`adjustment`、`overtime`、`globalsetting`、`report`、`boss-check`、`checkin` 等）**在开源版均不可用**，调用会返回 `unknown command`。遇到这些命令时**不要伪装成功**，直接告知用户"开源版仅支持只读查询，该写/扩展操作暂不可用"。各写命令小节已用 🚫 标注。
 
 > **【必读】日期范围严格计算规则 — 所有含 --start/--end 或 --from/--to 的命令均适用**
 >
@@ -92,6 +92,9 @@ Flags:
 - 回复用户时不要直接裸露任何 `submitUrl`，所有返回的表单模板都必须使用 Markdown 可点击链接格式展示：`[formName](submitUrl)`，例如 `[员工请假](https://...)`。如存在更匹配的模板，可以放在列表前面，但不要只返回推荐模板，必须同时返回其它可用模板供用户选择，且每个模板都应是用户可直接点击的 Markdown 链接。
 
 ### 导入排班记录（排班 = 为员工安排工作日期和班次, 写场景接口，必须走二次确认流程）
+
+> 🚫 **开源版不可用**：`schedule import` 为写命令，开源 dws CLI 未暴露，调用返回 `unknown command`。下方用法仅供闭源/完整版参考，开源环境请告知用户"暂不支持导入排班"。
+
 ```
 Usage:
   dws attendance schedule import [flags]
@@ -175,6 +178,8 @@ Flags:
 根据班次 ID 查询该班次的完整详细信息。班次 ID 可从 `class search` 返回结果中提取，也有可能来源于用户手动输入。
 
 ### 创建班次 (写场景接口，必须走二次确认流程)
+
+> 🚫 **开源版不可用**：`class create` 为写命令，开源 dws CLI 未暴露，调用返回 `unknown command`。下方仅供完整版参考。
 **强制执行流程**：此命令为写操作，Agent 调用时必须遵守以下流程：
 1. 先向用户展示待执行操作的完整参数摘要，包括班次名称、上下班时间、休息时段等
 2. 使用 `ask_human` 或返回待确认状态，等待用户明确确认
@@ -204,6 +209,8 @@ Flags:
 - `setting`(object, 可选): `seriousLateMinutes`(严重迟到分钟) `absenteeismLateMinutes`(旷工迟到分钟) `attendDays`(出勤天数) `topRestTimeList`([]object, 仅单段上下班时可用，最多3段: checkType/checkTime("HH:mm")/across)
 
 ### 更新班次 (写场景接口，必须走二次确认流程)
+
+> 🚫 **开源版不可用**：`class update` 为写命令，开源 dws CLI 未暴露，调用返回 `unknown command`。下方仅供完整版参考。
 **强制执行流程**：此命令为写操作，Agent 调用时必须遵守以下流程：
 1. 先向用户展示待执行操作的完整参数摘要，包括班次 ID、要修改的字段含义及新值
 2. 使用 `ask_human` 或返回待确认状态，等待用户明确确认
@@ -335,6 +342,8 @@ Flags:
 返回结果中如含成员 userId 列表，必须调用 `dws contact user get --ids <userId1>,<userId2>,...`（支持逗号分隔传多个 ID），将 userId 转换为员工姓名后再输出；不得直接输出裸 userId
 
 ### 更新考勤组成员 (写场景接口，必须走二次确认流程)
+
+> 🚫 **开源版不可用**：`group update-members` 为写命令，开源 dws CLI 未暴露，调用返回 `unknown command`。下方仅供完整版参考，开源环境请告知用户"暂不支持修改考勤组成员"。
 **强制执行流程**：此命令为写操作，Agent 调用时必须遵守以下流程：
 1. 先向用户展示待执行操作的完整参数摘要，包括考勤组 ID、要添加/移除的成员列表
 2. 使用 `ask_human` 或返回待确认状态，等待用户明确确认
@@ -362,6 +371,8 @@ Flags:
 对指定考勤组的成员进行增删操作。--group-id 必填，其余参数均为可选，但至少需要传入一个变更项，否则命令拒绝执行。每次调用各参数最多传 20 个 ID。"无需考勤"人员指考勤组内豁免打卡的成员（如高管）。
 
 ### 更新考勤组配置 (写场景接口，必须走二次确认流程)
+
+> 🚫 **开源版不可用**：`group update` 为写命令，开源 dws CLI 未暴露，调用返回 `unknown command`。下方仅供完整版参考。
 **强制执行流程**：此命令为写操作，Agent 调用时必须遵守以下流程：
 1. 先向用户展示待执行操作的完整参数摘要，包括考勤组 ID、要修改的字段含义及新值
 2. 使用 `ask_human` 或返回待确认状态，等待用户明确确认
@@ -402,6 +413,8 @@ Flags:
 - 自由工时设置（NONE）：`workDays`([1-7]，1=周一7=周日) `freeCheckDayStartMinOffset`(number，距0点分钟数) `freeCheckCoreTime`(最短工作时长，分钟) `freeCheckDemandWorkMinutes`(要求打卡时长，分钟) `freeCheckSettingVO`(对象: freeCheckType(CYCLE上下班交替/MAX_TIME_UPDATE最大时间打卡)/freeWorkDayLackSwitch/freeOnDutyLackMinOffset/freeOffDutyLackMinOffset/delimitOffsetMinutesBetweenDays/freeCheckGapVO{onOffCheckGapMinutes/offOnCheckGapMinutes}) `freeGroupSpecialDayVO`(对象: specialOnDutyDays[]/specialOffDutyDays[])
 
 ### 创建考勤组 (写场景接口，必须走二次确认流程)
+
+> 🚫 **开源版不可用**：`group create` 为写命令，开源 dws CLI 未暴露，调用返回 `unknown command`。下方仅供完整版参考，开源环境请告知用户"暂不支持创建考勤组"。
 **强制执行流程**：此命令为写操作，Agent 调用时必须遵守以下流程：
 1. 先向用户展示待执行操作的完整参数摘要，包括考勤组名称、类型、班次列表等
 2. 使用 `ask_human` 或返回待确认状态，等待用户明确确认
@@ -586,6 +599,8 @@ Flags:
 其中周报/月报通知渠道枚举值：0 表示全关闭，1 表示工作通知，2 表示钉邮，3 表示工作通知和钉邮。
 
 ### 更新保存个人规则设置 (写场景接口，必须走二次确认流程)
+
+> 🚫 **开源版不可用**：`selfsetting save` 为写命令，开源 dws CLI 未暴露，调用返回 `unknown command`。下方仅供完整版参考。
 **强制执行流程**：此命令为写操作，Agent 调用时必须遵守以下流程：
 1. 先向用户展示待执行操作的完整参数摘要，包括目标用户、设置场景、当前值、新值和最终命令参数
 2. 使用 `ask_human` 或返回待确认状态，等待用户明确确认
@@ -700,6 +715,8 @@ Flags:
 - `bossMonthlyReportType`: 团队考勤统计通知月报发送渠道类型，0 全关闭，1 工作通知，2 钉邮，3 工作通知和钉邮
 
 ### 更新保存全局规则设置（写场景接口，仅管理员，必须走二次确认流程）
+
+> 🚫 **开源版不可用**：`globalsetting save`（及 `globalsetting get`）在开源 dws CLI 未暴露，调用返回 `unknown command`。下方仅供完整版参考。
 **强制执行流程**：此命令为写操作，Agent 调用时必须先向用户展示待执行操作的完整参数摘要，等待用户明确确认后，才能追加 `--yes` 执行。
 
 ```
@@ -825,6 +842,8 @@ Flags:
 
 ### 更新假期规则（写场景接口，必须走二次确认流程）
 
+> 🚫 **开源版不可用**：`vacation update-type` 为写命令，开源 dws CLI 未暴露，调用返回 `unknown command`。下方仅供完整版参考。
+
 **强制执行流程**：此命令为写操作，Agent 调用时必须遵守以下流程：
 1. 先向用户展示待执行操作的完整参数摘要
 2. 使用 `ask_human` 或返回待确认状态，等待用户明确确认
@@ -925,6 +944,8 @@ Flags:
 如用户明确要求跳过确认，可传 `--user-say-yes=true`；否则默认必须等待确认。
 
 ### 设置员工假期余额
+
+> 🚫 **开源版不可用**：`vacation save-balance` 为写命令，开源 dws CLI 未暴露，调用返回 `unknown command`。下方仅供完整版参考。
 ```
 Usage:
   dws attendance vacation save-balance [flags]
@@ -968,6 +989,8 @@ Flags:
 调用 MCP 工具 get_checkin_record 查询指定员工在一段时间内的签到记录。权限说明：Boss/超级管理员可查看全公司员工，子管理员可查看管理范围内员工，部门主管可查看所管理部门员工，普通员工只能查询自己。接口单次最多返回100条签到记录。
 
 ## 意图判断
+
+> 🚫 **开源版范围提醒**：下表把意图路由到了完整版的全部命令，但**开源 dws CLI 只能执行 `record` / `rules` / `shift` / `summary` 四类只读查询**。凡路由到写命令（`schedule import`、`class create|update`、`group create|update|update-members`、`selfsetting save`、`globalsetting save`、`vacation update-type|save-balance` 等）或开源未推全的扩展查询（`approve`、`adjustment`、`overtime`、`report`、`checkin`、`boss-check` 等）的意图，在开源环境会返回 `unknown command`——此时应直接告知用户"开源版仅支持只读查询，该操作暂不可用"，不要伪装成功。
 
 用户说"打卡记录/出勤/考勤" → `check record`
 用户说"指定用户打卡结果/考勤结果/迟到早退/缺卡异常" → `check result`
@@ -1019,8 +1042,10 @@ Flags:
 
 ## 核心工作流
 
+> 🚫 **开源版范围提醒**：下面示例中**只有 `record` / `rules` / `shift` / `summary` 四类只读命令在开源 dws CLI 可用**。`schedule import`、`class create|update`、`group create|update|update-members`、`selfsetting save`、`globalsetting *`、`report *`、`vacation update-type|save-balance` 等**写/扩展命令在开源版会返回 `unknown command`**，下方仅作完整版参考，请勿在开源环境直接执行。
+
 ```bash
-# 导入排班记录
+# 导入排班记录（🚫 开源版不可用：schedule import 返回 unknown command）
 dws attendance schedule import --group-id 123456 \
   --schedules '[{"userId":"user001","classId":123,"workDate":"2026-04-22","checkBeginTime":"09:00","checkEndTime":"18:00"}]' \
   --yes --format json
@@ -1223,6 +1248,8 @@ dws attendance checkin records --operator-staff-id op001 --staff-ids user001,use
 
 ### 改签打卡记录
 
+> 🚫 **开源版不可用**：`boss-check` 为管理员写命令，开源 dws CLI 未暴露，调用返回 `unknown command`。下方仅供完整版参考。
+
 **命令**: `dws attendance boss-check`
 
 **功能**: 改签打卡记录，管理员可修改员工的打卡时间、打卡结果等信息。
@@ -1283,7 +1310,7 @@ dws attendance boss-check --plan-id 948964045503 --time "2026-05-13 18:00" --res
 | attendance_report_detail.py | 考勤报表 — **明细粒度** |  **禁止直接调用**，必须先读 [attendance-report.md](./attendance-report.md) 按工作流执行 |
 | attendance_report_monthly.py | 考勤报表 — **月度汇总** |  **禁止直接调用**，必须先读 [attendance-report.md](./attendance-report.md) 按工作流执行 |
 | attendance_report_daily.py | 考勤报表 — **每日统计** |  **禁止直接调用**，必须先读 [attendance-report.md](./attendance-report.md) 按工作流执行 |
-| attendance_schedule_import.py | 排班导入（含校验、回显、执行） | **禁止直接调用**，必须先读 [attendance-schedule.md](./attendance-schedule.md) 按工作流执行 |
+| attendance_schedule_import.py | 排班导入（含校验、回显、执行） | 🚫 **开源版不可用**：底层 `dws attendance schedule import` 为写命令，开源 CLI 返回 `unknown command`。**禁止直接调用**；如可用，必须先读 [attendance-schedule.md](./attendance-schedule.md) 按工作流执行 |
 | attendance_schedule_export.py | 排班查询导出（分批查询、排班表 Excel） | **禁止直接调用**，必须先读 [attendance-schedule.md](./attendance-schedule.md) 按工作流执行 |
 
 > 说明：

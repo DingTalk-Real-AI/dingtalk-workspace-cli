@@ -1,6 +1,6 @@
 ---
 name: dingtalk-minutes
-description: 钉钉 AI 听记。Use when 用户说 听记/会议录音/会议纪要/AI摘要/转写/关键字/听记标题/会后待办提取/分享听记。Distinct from dingtalk-calendar(日程)、dingtalk-report(日报)、dingtalk-doc(普通文档)。命令前缀：dws minutes。URL `shanji.dingtalk.com` 一定路由到此 skill。
+description: 钉钉 AI 听记。Use when 用户说 听记/会议录音/会议纪要/AI摘要/转写/关键字/听记标题/会后待办提取/分享听记/思维导图/听记成员权限/替换文本或纠错/更新听记信息。Distinct from dingtalk-calendar(日程)、dingtalk-report(日报)、dingtalk-doc(普通文档)。命令前缀：dws minutes。URL `shanji.dingtalk.com` 一定路由到此 skill。
 cli_version: ">=0.2.14"
 metadata:
   category: product

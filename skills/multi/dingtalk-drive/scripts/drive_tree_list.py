@@ -5,7 +5,7 @@
 用法:
     python drive_tree_list.py                   # 列出根目录
     python drive_tree_list.py --depth 2         # 递归 2 层
-    python drive_tree_list.py --parent-id <id>  # 指定目录
+    python drive_tree_list.py --folder <dentryUuid>  # 指定目录
     python drive_tree_list.py --dry-run
 """
 
@@ -41,10 +41,10 @@ def list_dir(
     parent_id: str = '', dry_run: bool = False,
 ) -> list:
     cmd_args = [
-        'drive', 'list', '--max', '50', '--format', 'json',
+        'drive', 'list', '--limit', '50', '--format', 'json',
     ]
     if parent_id:
-        cmd_args.extend(['--parent-id', parent_id])
+        cmd_args.extend(['--folder', parent_id])
     data = run_dws(cmd_args, dry_run=dry_run)
     if not data:
         return []
@@ -102,7 +102,8 @@ def main():
         description='递归列出钉盘目录树'
     )
     parser.add_argument(
-        '--parent-id', default='', help='起始目录 ID'
+        '--folder', default='', dest='parent_id',
+        help='起始目录 ID (dentryUuid)',
     )
     parser.add_argument(
         '--depth', type=int, default=1,

@@ -29,7 +29,7 @@
 | `nodeId` | `doc search` | `doc read/update/copy/move/rename --node` |
 | `nodeId` | `doc list` 中的 folder 类型节点 / `doc folder create` | `doc list --folder`、`doc create --folder`、`doc upload --folder`、`doc copy/move --folder` |
 | `baseId` / `tableId` | `aitable base search` | `aitable record query --base-id --table-id` |
-| `dentryUuid` | `drive list` / `drive mkdir` | `drive info/download --file-id`、`drive list/mkdir/upload --parent-id` |
+| `dentryUuid` | `drive list` / `drive mkdir` | `drive info/download --node`、`drive list/mkdir/upload --folder` |
 | `workspaceId` | `wiki space search/list/create` | `doc list/search/create --workspace`、`wiki member * --workspace` |
 
-**ID 边界硬约束**：遇到 `drive --parent-id`、`doc --folder`、`doc --node` 时，只能使用 `dentryUuid` / `nodeId` / 文档 URL。若当前上下文只有数字型 `dentryId`，必须先重新 `drive list` / `doc list` / `doc search` 获取正确 ID，不能把该数字直接代入后续命令。
+**ID 边界硬约束**：遇到 `drive --folder`、`doc --folder`、`doc --node` 时，只能使用 `dentryUuid` / `nodeId` / 文档 URL。若当前上下文只有数字型 `dentryId`，必须先重新 `drive list` / `doc list` / `doc search` 获取正确 ID，不能把该数字直接代入后续命令。

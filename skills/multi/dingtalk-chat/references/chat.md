@@ -418,7 +418,7 @@ Example:
   # 发送文件（音频/视频/文档等非图片文件统一走钉盘上传）
   # 先 dws chat conversation-info --group <id> 获取 spaceId（取 newCSpaceIdIM）
   # 再 dws drive upload --file <文件> --space-id <spaceId> 上传
-  # 再 dws drive info --file-id <fileId> --space-id <spaceId> 获取 dentryId
+  # 再 dws drive info --node <fileId> --space-id <spaceId> 获取 dentryId
   dws chat message send --group <openconversation_id> --msg-type file --dentry-id <dentryId> --space-id 24557356340 --file-name "report.pdf" --file-type "pdf" --file-path "/report.pdf" --file-size 234724
 Flags:
       --text string              消息内容（推荐使用，也可用位置参数）
@@ -1416,7 +1416,7 @@ dws chat message send --group <openconversation_id> \
 dws drive upload --file "报告.pdf" --format json
 
 # Step 2: 获取下载链接
-dws drive download --file-id <dentryUuid> --format json
+dws drive download --node <dentryUuid> --format json
 
 # Step 3: 用 Markdown 语法发送
 dws chat message send --group <openconversation_id> \

@@ -7,10 +7,10 @@
         --to colleague@company.com \
         --cc boss@company.com,team@company.com \
         --subject "周报" \
-        --body "本周完成任务A和任务B"
+        --content "本周完成任务A和任务B"
 
     python mail_send_with_cc.py --dry-run \
-        --to a@b.com --subject "test" --body "hello"
+        --to a@b.com --subject "test" --content "hello"
 """
 
 import sys
@@ -79,7 +79,7 @@ def main():
     parser.add_argument('--to', required=True, help='收件人')
     parser.add_argument('--cc', default='', help='抄送人')
     parser.add_argument('--subject', required=True, help='标题')
-    parser.add_argument('--body', required=True, help='正文')
+    parser.add_argument('--content', required=True, help='正文')
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
 
@@ -99,7 +99,7 @@ def main():
         '--from', from_email or '<MY_EMAIL>',
         '--to', args.to,
         '--subject', args.subject,
-        '--body', args.body,
+        '--content', args.content,
         '--format', 'json',
     ]
     if args.cc:

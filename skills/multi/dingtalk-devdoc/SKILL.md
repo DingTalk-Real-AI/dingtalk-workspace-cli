@@ -1,6 +1,6 @@
 ---
 name: dingtalk-devdoc
-description: 钉钉开放平台开发文档搜索。Use when 用户说 开放平台文档/API 文档/接口文档/调用报错/开放接口怎么调。Distinct from dingtalk-doc(钉钉云文档)。命令前缀：dws devdoc。
+description: 钉钉开放平台开发文档搜索与错误排查。Use when 用户说 开放平台文档/API 文档/接口文档/调用报错/开放接口怎么调，或 按 requestId/errorCode 排查开放平台调用错误。Distinct from dingtalk-doc(钉钉云文档)。命令前缀：dws devdoc（文档检索 article，错误诊断 error diagnose）。
 cli_version: ">=0.2.14"
 metadata:
   category: product

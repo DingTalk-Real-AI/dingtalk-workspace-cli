@@ -31,5 +31,5 @@
 
 | Recipe | 行动指南（固定路线） |
 |--------|---------------------|
-| send-to-person-by-name | 1. `mail mailbox list` → 从 `emailAccounts` 取发件邮箱<br>2. 走「查找他人邮箱地址」两路并发查询获取收件人邮箱（见 [mail.md](./mail.md)）<br>3. `mail message send --from <发件邮箱> --to <收件邮箱> --subject "<标题>" --body "<内容>"` |
-| search-then-read | 1. `mail mailbox list` → 取邮箱<br>2. `mail message search --email <邮箱> --query "<KQL>" --size 20` → 取 `messageId`<br>3. 对感兴趣的一封执行 `mail message get --email <邮箱> --id <messageId>` 读取正文 |
+| send-to-person-by-name | 1. `mail mailbox list` → 从 `emailAccounts` 取发件邮箱<br>2. 走「查找他人邮箱地址」两路并发查询获取收件人邮箱（见 [mail.md](./mail.md)）<br>3. `mail message send --from <发件邮箱> --to <收件邮箱> --subject "<标题>" --content "<内容>"` |
+| search-then-read | 1. `mail mailbox list` → 取邮箱<br>2. `mail message search --email <邮箱> --query "<KQL>" --limit 20` → 取 `messageId`<br>3. 对感兴趣的一封执行 `mail message get --email <邮箱> --id <messageId>` 读取正文 |

@@ -1,6 +1,6 @@
 ---
 name: dingtalk-drive
-description: 钉盘文件存储。Use when 用户说 钉盘/上传文件/下载文件/文件夹/查文件/创建文件夹。Distinct from dingtalk-doc(钉钉文档内容编辑)、dingtalk-wiki(知识库空间)。命令前缀：dws drive。
+description: 钉盘文件存储。Use when 用户说 钉盘/上传文件/下载文件/文件夹/查文件/搜文件/创建文件夹/复制/移动/重命名/文件权限/钉盘空间。子命令：list、list-spaces、search、info、download、upload、upload-info、commit、mkdir、delete、copy、move、rename、permission(add/list/remove/update)。Distinct from dingtalk-doc(钉钉文档内容编辑)、dingtalk-wiki(知识库空间)。命令前缀：dws drive。
 cli_version: ">=0.2.14"
 metadata:
   category: product
@@ -35,20 +35,24 @@ metadata:
 | 用户说 | 命令 |
 |--------|------|
 | "看钉盘空间 / 团队文件 / 有哪些 space" | `dws drive list-spaces` |
-| "看钉盘文件 / 文件夹列表" | `dws drive list --space-id <spaceId> [--parent-id <fileId>]` |
+| "看钉盘文件 / 文件夹列表" | `dws drive list --space-id <spaceId> [--folder <dentryUuid>]` |
+| "搜文件 / 找某个钉盘文件" | `dws drive search --query "<关键词>" [--target file|space]` |
 | "钉盘目录树" | `python scripts/drive_tree_list.py --depth 2` |
-| "查文件元数据" | `dws drive info --space-id <spaceId> --file-id <fileId>` |
-| "下载文件" | `dws drive download --space-id <spaceId> --file-id <fileId> --output <path>` |
-| "上传本地文件（首选一键）" | `dws drive upload --file ./report.pdf [--folder <fileId>]` |
-| "上传文件（手动三步）" | `dws drive upload-info --space-id <spaceId> --file-name <名> --file-size <bytes> [--parent-id <fileId>]` → 客户端 HTTP PUT → `dws drive commit --space-id <spaceId> --upload-id <uploadId> --file-name <名> --file-size <bytes> [--parent-id <fileId>]` |
-| "建文件夹" | `dws drive mkdir --space-id <spaceId> --name "<名称>" [--parent-id <fileId>]` |
-| "删除文件 / 移到回收站（需确认）" | `dws drive delete --file-id <dentryUuid> --yes` |
+| "查文件元数据" | `dws drive info --node <dentryUuid> [--space-id <spaceId>]` |
+| "下载文件" | `dws drive download --node <dentryUuid> --output <path> [--space-id <spaceId>]` |
+| "上传本地文件（首选一键）" | `dws drive upload --file ./report.pdf [--folder <dentryUuid>]` |
+| "上传文件（手动三步）" | `dws drive upload-info --file-name <名> --file-size <bytes> [--space-id <spaceId>] [--folder <dentryUuid>]` → 客户端 HTTP PUT → `dws drive commit --upload-id <uploadId> --file-name <名> --file-size <bytes> [--space-id <spaceId>] [--folder <dentryUuid>]` |
+| "建文件夹" | `dws drive mkdir --name "<名称>" [--space-id <spaceId>] [--folder <dentryUuid>]` |
+| "复制 / 移动 / 重命名节点" | `dws drive copy/move --node <dentryUuid> --folder <目标文件夹>`；`dws drive rename --node <dentryUuid> --name "<新名>"` |
+| "查 / 改文件权限" | `dws drive permission list/add/remove/update --node <dentryUuid>` |
+| "删除文件 / 移到回收站（需确认）" | `dws drive delete --node <dentryUuid> --yes` |
 
 ## 评测高频硬约束
 
-- 查找文件不要只看根目录后放弃；根目录没命中时，进入最相关的评测/目标文件夹继续 `drive list --space-id <spaceId> --parent-id <fileId>`，必要时用目录树脚本递归到合理深度。
-- `drive list` 默认 `--max 20`，评测里保守使用 `--max 50` 以内并处理 `nextToken` 翻页；不要因为参数边界报错反复重试。
-- `dws drive` 当前没有 search 子命令，按目录递归 `drive list`；命中后必须 `drive info --space-id <spaceId> --file-id <fileId> --format json` 回读元数据。
+- 只记得名称/关键词、不知道具体位置时，优先用 `dws drive search --query "<关键词>"` 聚合搜索（钉盘 + 文档空间）；命中后用结果里的 `fileId` 作为 `drive info/download` 的 `--node`。
+- 查找文件不要只看根目录后放弃；根目录没命中时，进入最相关的评测/目标文件夹继续 `drive list --space-id <spaceId> --folder <dentryUuid>`，必要时用目录树脚本递归到合理深度。
+- `drive list` 默认 `--limit 20`（最大 100），评测里保守使用 `--limit 50` 以内并用返回的 `nextCursor` 传 `--cursor` 翻页；不要因为参数边界报错反复重试。
+- 命中后必须 `drive info --node <dentryUuid> --format json` 回读元数据（`--space-id` 可选）。
 - `drive download` 需要 `--output` 指定本地保存路径或目录；不要省略必填输出位置。
 - 删除、覆盖、移动等破坏性操作必须确认；上传（upload-info + commit 两步）、创建文件夹、下载后要读回或列目录验证。
 - 所有 `dws drive` 命令加 `--format json`。
