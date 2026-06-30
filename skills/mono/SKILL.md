@@ -54,7 +54,9 @@ cli_version: ">=1.0.15"
 | `doc`             | 钉钉文档：搜索/浏览/读写/块级编辑/评论/文件创建/复制/移动/重命名/**删除/导出 docx/权限管理/媒体上传下载**；创建/编辑先按渐进式 doc 子文档与 JSONML 工作流决策       | [doc.md](./references/products/doc.md)                         |
 | `drive`           | 钉钉云盘：文件列表/元数据/文件夹/上传(两步)/下载                        | [drive.md](./references/products/drive.md)                     |
 | `minutes`         | AI听记：听记列表/摘要/关键词/转写/待办/思维导图/发言人/发言人段落总结/热词/录音控制/成员权限/上传 | [minutes.md](./references/products/minutes.md)                 |
+| `live`            | 直播：查询我的直播列表/信息（仅查询）                              | [live.md](./references/products/live.md)                       |
 | `oa`              | OA审批：待处理/详情/同意/拒绝/撤销/记录/已发起/任务/转交/评论/抄送              | [oa.md](./references/products/oa.md)                           |
+| `pat`             | 行为授权：按 scope 授权(chmod，支持产品/域/推荐批量)/浏览器策略(browser-policy)；agent 撞墙缺权限时用 | [pat.md](./references/products/pat.md)                         |
 | `report`          | 日志：按模版创建/收件箱/已发送/模版查看/详情/已读统计                         | [report.md](./references/products/report.md)                   |
 | `mail`            | 邮箱：邮箱地址查询/邮件搜索(KQL)/邮件详情/发送邮件                        | [mail.md](./references/products/mail.md)                       |
 | `sheet`           | 在线电子表格(axls)：工作表 CRUD/区域读写/CSV 批量写入/行列增删/合并/查找替换/筛选视图/全局筛选/排序/下拉列表/浮动图片/导出(两步) | [sheet.md](./references/products/sheet.md)                     |
@@ -108,6 +110,8 @@ cli_version: ">=1.0.15"
 用户提到"听记/AI听记/会议纪要/转写/摘要/思维导图/发言人/热词" → `minutes`
 用户提到"邮箱/邮件/发邮件/收邮件/搜邮件/查邮件/邮件草稿/转发邮件/回复邮件/邮件附件/抄送" → `mail`
 用户提到"审批/请假/报销/出差/加班/同意/拒绝/撤销审批" → `oa`
+用户提到"授权/给权限/开权限/scope/缺权限/撞墙/行为授权/PAT/是否弹浏览器授权" → `pat`
+用户提到"直播/我的直播/直播列表" → `live`
 用户提到"日志/日报/周报/日志统计/写日报/提交周报/发日志/填日志" → `report`
 用户提到"在线电子表格/钉钉表格/axls/工作表/单元格读写/合并单元格/筛选视图/导出 xlsx" → `sheet`
 用户提到"待办/TODO/任务提醒/循环待办" → `todo`

@@ -1,6 +1,6 @@
 ---
 name: dingtalk-todo
-description: 钉钉待办 / TODO。Use when 用户说 创建待办/TODO/任务提醒/指派任务/标记完成/查待办/紧急待办/循环待办/批量建待办/逾期待办。Distinct from dingtalk-report(日报周报)、dingtalk-oa(审批)、dingtalk-calendar(日程)。命令前缀：dws todo。
+description: 钉钉待办 / TODO。Use when 用户说 创建待办/TODO/任务提醒/指派任务/标记完成/查待办/紧急待办/循环待办/批量建待办/逾期待办/给待办加评论或查看评论。Distinct from dingtalk-report(日报周报)、dingtalk-oa(审批)、dingtalk-calendar(日程)。命令前缀：dws todo。
 cli_version: ">=0.2.14"
 metadata:
   category: product

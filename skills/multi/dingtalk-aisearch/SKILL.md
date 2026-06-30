@@ -1,6 +1,6 @@
 ---
 name: dingtalk-aisearch
-description: AI 搜问 - 搜人首选入口（按姓名/部门/职位/职责/上下级/手机号/工号维度）。Use when 用户说 找同事/找人/谁负责XX/XX的负责人是谁/查上级/查下级/团队成员/XX工号是谁/XX手机号。Distinct from dingtalk-contact(精确按 userId 查详情)。命令前缀：dws aisearch。
+description: AI 搜问 - 三合一智能搜索：搜人(person 按姓名/部门/职位/职责/上下级/手机号/工号)、搜行为(behavior 发送/创建/分享/编辑/接收等行为记录)、搜内容(enterprise 企业知识/消息，含文档/IM/日历/待办/纪要/日志/邮件)。Use when 用户说 找同事/找人/谁负责XX/XX的负责人是谁/查上级/查下级/团队成员/XX工号是谁/XX手机号，或 我发过/谁分享过/谁创建了XX、搜某段时间的行为，或 找文档/找纪要/找企业内某主题的内容。Distinct from dingtalk-contact(精确按 userId 查详情)。命令前缀：dws aisearch。
 cli_version: ">=0.2.14"
 metadata:
   category: product
@@ -10,7 +10,9 @@ metadata:
       - dws
 ---
 
-# 钉钉 AI 搜问（搜人）Skill
+# 钉钉 AI 搜问（搜人 / 搜行为 / 搜内容）Skill
+
+> **三合一**：`person`（搜企业人员）、`behavior`（搜发送/创建/分享/编辑/接收等行为记录）、`enterprise`（搜企业内部知识内容和相关消息，覆盖文档/IM/日历/待办/纪要/日志/邮件等）。
 
 > 🧪 **EXPERIMENTAL · 试验版 / Preview** — multi 模式当前未达 stable 标准。20 个 dingtalk-* skill 全部通过 dispatch verifier，但接口、命名、跨 skill 引用后续可能调整；生产 / 共享环境请优先使用 mono 模式（`dws skill setup --mode mono`）。问题请提 issue 反馈。
 
@@ -39,6 +41,8 @@ metadata:
 | "张三的上级 / 下级" | `dws aisearch person --keyword "张三" --dimension supervisor`（或 `subordinate`） |
 | "X 部门有哪些人" | `dws aisearch person --keyword "<部门>" --dimension department` |
 | "工号 12345 是谁 / 138xxxx 手机号是谁" | `dws aisearch person --keyword "<工号>" --dimension jobNumber` / `dws aisearch person --keyword "<手机号>" --dimension phone` |
+| "我发过/谁分享过/谁创建了 XX" / "上周关于评审的行为" | `dws aisearch behavior --queries "<关键词>" --behavior-type send/create/share/edit/receive`（可加 `--direction`、`--time-range`） |
+| "找关于 XX 的文档/纪要/内容" / "搜某主题的企业内容" | `dws aisearch enterprise --queries "<关键词>"`（可加 `--types document,minute,...`、`--time-range`） |
 
 ## 评测高频硬约束
 

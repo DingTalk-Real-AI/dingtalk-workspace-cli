@@ -1,6 +1,6 @@
 ---
 name: dingtalk-aitable
-description: 钉钉 AI 表格（多维表）。Use when 用户说 AI表格/多维表/数据表/base/table/建表/查记录/写数据/字段/记录增删改查/筛选/排序/公式/模板搜索/批量导入CSV或JSON/导出/仪表盘/图表/上传附件到表格/按字段类型建表。Distinct from 主 dws skill 的 dws sheet(电子表格/单元格读写/公式)、dws doc(文档编辑)。命令前缀：dws aitable。
+description: 钉钉 AI 表格（多维表）。Use when 用户说 AI表格/多维表/数据表/base/table/建表/查记录/写数据/字段/记录增删改查/筛选/排序/公式/模板搜索/批量导入CSV或JSON/导出/仪表盘/图表/上传附件到表格/按字段类型建表/高级权限/字段或记录权限/自动化工作流/文件夹或节点归类。Distinct from 主 dws skill 的 dws sheet(电子表格/单元格读写/公式)、dws doc(文档编辑)。命令前缀：dws aitable。
 cli_version: ">=0.2.14"
 metadata:
   category: product

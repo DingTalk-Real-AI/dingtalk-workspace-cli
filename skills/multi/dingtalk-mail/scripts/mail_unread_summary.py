@@ -4,7 +4,7 @@
 
 用法:
     python mail_unread_summary.py
-    python mail_unread_summary.py --size 30
+    python mail_unread_summary.py --limit 30
     python mail_unread_summary.py --dry-run
 """
 
@@ -61,7 +61,7 @@ def main():
         description='查询今天未读邮件'
     )
     parser.add_argument(
-        '--size', type=int, default=20, help='返回数量'
+        '--limit', type=int, default=20, help='返回数量'
     )
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
@@ -80,7 +80,7 @@ def main():
         'mail', 'message', 'search',
         '--email', email or '<MY_EMAIL>',
         '--query', kql,
-        '--size', str(args.size),
+        '--limit', str(args.limit),
         '--format', 'json',
     ], dry_run=args.dry_run)
 
