@@ -400,6 +400,46 @@ func coerceScalarToString(raw json.RawMessage) string {
 	return s
 }
 
+// UnmarshalJSON tolerates discovery overlays that encode `groups` as a JSON
+// array instead of the schema-correct object (map[string]CLIGroupDef). Third
+// party MCP applications registered through the open platform have been
+// observed publishing `"groups": ["record","import",...]` — a list of group
+// names rather than a name->definition map. Go's strict decode would otherwise
+// fail the ENTIRE server list on a single such envelope, silently breaking
+// `dws cache refresh` for every product (not just the offending one): exactly
+// the failure mode the CLIFlagOverride scalar-default tolerance above guards
+// against. Coerce a non-object `groups` value to an empty map so one malformed
+// third-party envelope can no longer take down discovery.
+func (o *CLIOverlay) UnmarshalJSON(data []byte) error {
+	type alias CLIOverlay
+	aux := &struct {
+		Groups json.RawMessage `json:"groups,omitempty"`
+		*alias
+	}{alias: (*alias)(o)}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	o.Groups = coerceGroupsMap(aux.Groups)
+	return nil
+}
+
+// coerceGroupsMap decodes a JSON object into map[string]CLIGroupDef. Any other
+// shape (array, scalar, null) collapses to nil — the lenient path that keeps a
+// malformed third-party `groups` from failing the whole discovery decode.
+func coerceGroupsMap(raw json.RawMessage) map[string]CLIGroupDef {
+	s := strings.TrimSpace(string(raw))
+	if s == "" || s == "null" {
+		return nil
+	}
+	if strings.HasPrefix(s, "{") {
+		var m map[string]CLIGroupDef
+		if err := json.Unmarshal(raw, &m); err == nil {
+			return m
+		}
+	}
+	return nil
+}
+
 type CLITool struct {
 	Name        string                 `json:"name"`
 	CLIName     string                 `json:"cliName"`
