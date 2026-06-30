@@ -320,12 +320,12 @@ func TestRuntimeRunnerInjectsAuthTokenFromFlag(t *testing.T) {
 
 func TestResolveIdentityHeadersForwardsAgentCode(t *testing.T) {
 	setupRuntimeCommandTest(t)
-	t.Setenv(authpkg.AgentCodeEnv, " cursor ")
+	t.Setenv(authpkg.AgentCodeEnv, " QoderWork ")
 	t.Setenv(authpkg.AgentCodeEnvCompat, "")
 
 	headers := resolveIdentityHeaders()
-	if got := headers["x-dingtalk-dws-agent-code"]; got != "cursor" {
-		t.Fatalf("x-dingtalk-dws-agent-code = %q, want cursor", got)
+	if got := headers["x-dingtalk-dws-agent-code"]; got != "QoderWork" {
+		t.Fatalf("x-dingtalk-dws-agent-code = %q, want QoderWork", got)
 	}
 }
 
@@ -377,14 +377,13 @@ func TestResolveIdentityHeadersIgnoresReversedAgentCodeEnv(t *testing.T) {
 
 	headers := resolveIdentityHeaders()
 	// The reversed env name must never be consumed. With no canonical
-	// declaration and no host signature, agent_code resolves to the honest
-	// "custom" fallback — and crucially is NOT the reversed value.
-	got := headers["x-dingtalk-dws-agent-code"]
-	if got == "compat" {
-		t.Fatalf("x-dingtalk-dws-agent-code = %q, reversed env must be ignored", got)
+	// declaration and no host signature, agent_code stays empty rather than
+	// falling back to a synthetic key.
+	if got, ok := headers["x-dingtalk-dws-agent-code"]; ok {
+		t.Fatalf("x-dingtalk-dws-agent-code = %q, want header omitted", got)
 	}
-	if got != authpkg.AgentCodeCustom {
-		t.Fatalf("x-dingtalk-dws-agent-code = %q, want %q (fallback)", got, authpkg.AgentCodeCustom)
+	if got, ok := headers["x-dws-agent-instance-id"]; ok {
+		t.Fatalf("x-dws-agent-instance-id = %q, want header omitted when agent_code is empty", got)
 	}
 }
 

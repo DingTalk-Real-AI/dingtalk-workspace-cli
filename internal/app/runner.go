@@ -879,20 +879,21 @@ func resolveIdentityHeaders() map[string]string {
 	if sessionID == "" {
 		sessionID = os.Getenv(envRewindSessionID)
 	}
-	// Resolve the agent_code (accuracy-first; unknown hosts -> custom) and the
-	// per-(machine × agent_code) instance id. This is what makes agent_code
-	// actually report a value: previously it was sent only when the host
-	// injected DINGTALK_DWS_AGENTCODE (empty ~99.98% of the time), so the
-	// gateway logged no agent_code at all. DetectAgentCode always yields a code.
+	// Resolve the agent_code (accuracy-first; unknown hosts stay empty) and the
+	// per-(machine × agent_code) instance id when a code is known. Synthetic
+	// fallbacks must not be sent because PAT authorization checks use the same
+	// header as their grant key.
 	//
 	// Backward-compat by design (additive, not breaking):
 	//   - x-dws-agent-id keeps its v1 meaning = machine-level install UUID
 	//     (set by id.Headers() above), so old/new clients stay comparable.
-	//   - x-dws-agent-instance-id is NEW: the per-(machine × agent_code) id.
-	//     Old clients don't send it, which is itself a clean old/new signal.
+	//   - x-dws-agent-instance-id is NEW: the per-(machine × agent_code) id,
+	//     sent only when x-dingtalk-dws-agent-code is non-empty.
 	// Note: x-dws-channel (DWS_CHANNEL) is a separate axis, untouched.
 	agentCode, agentCodeSig := authpkg.DetectAgentCode()
-	headers["x-dws-agent-instance-id"] = id.ResolveAgentID(defaultConfigDir(), agentCode, agentCodeSig)
+	if agentInstanceID := id.ResolveAgentID(defaultConfigDir(), agentCode, agentCodeSig); agentInstanceID != "" {
+		headers["x-dws-agent-instance-id"] = agentInstanceID
+	}
 
 	// Emit the CLI version on the wire so the gateway can segment old vs new
 	// clients (and scope agent_code coverage / adoption). The header constant

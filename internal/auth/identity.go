@@ -134,11 +134,11 @@ func (id *Identity) machineSeed() string {
 // ResolveAgentID returns the per-(machine × agentCode) agentId, deriving and
 // persisting it on first sight of an agentCode. Idempotent: the same machine
 // and agentCode always yields the same id, which is what makes cumulative
-// per-agent_code statistics possible. An empty agentCode is treated as the
-// custom bucket.
+// per-agent_code statistics possible. An empty agentCode has no per-agent
+// identity and returns empty.
 func (id *Identity) ResolveAgentID(configDir, agentCode, signal string) string {
 	if agentCode == "" {
-		agentCode = AgentCodeCustom
+		return ""
 	}
 	if id.Agents == nil {
 		id.Agents = make(map[string]*AgentEntry)

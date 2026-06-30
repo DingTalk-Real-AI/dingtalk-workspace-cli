@@ -23,7 +23,7 @@
 //     family (VSCODE_BRAND covers every VS Code fork, present and future).
 //   - Every per-host signature below is OBSERVED on a real host (live process
 //     env via `ps eww`, or the app bundle Info.plist), not guessed.
-//   - Anything unidentified falls back to AgentCodeCustom — never guess.
+//   - Anything unidentified stays empty — never guess or synthesize a PAT key.
 //   - Deliberately NOT used: TERM_PROGRAM (reports the terminal, e.g. iTerm,
 //     not the agent host) and fuzzy parent-process name matching.
 package auth
@@ -33,7 +33,8 @@ import (
 	"strings"
 )
 
-// AgentCodeCustom is the honest fallback for any host we cannot identify.
+// AgentCodeCustom is the literal code a host may explicitly declare for a
+// custom integration. It is not used as an implicit fallback.
 const AgentCodeCustom = "custom"
 
 // hostSignature is a verified env fingerprint for a known agent host. EnvKeys
@@ -66,7 +67,7 @@ var knownSignatures = []hostSignature{
 // crush, goose, kimi, amazon-q, continue, ...) expose NO reliable
 // self-identifying env marker — only user-set API-key/config vars, which we
 // must not key off (a user setting GEMINI_API_KEY is not "running under
-// gemini"). They therefore resolve to custom unless they declare themselves.
+// gemini"). They therefore resolve to empty unless they declare themselves.
 //
 // The authoritative, fully-general path to 100% coverage is the T0 declaration
 // contract: a host sets DINGTALK_DWS_AGENTCODE=<code> when it launches dws.
@@ -78,7 +79,7 @@ var knownSignatures = []hostSignature{
 // id is exposed via __CFBundleIdentifier and inherited by child processes the
 // IDE spawns (including dws), so it identifies the host even from an integrated
 // terminal. Verified from each app's Info.plist (2026-06-16). Only known agent
-// bundles map; everything else (iTerm, Terminal, ...) falls through to custom.
+// bundles map; everything else (iTerm, Terminal, ...) falls through to empty.
 //
 // macOS-only signal: __CFBundleIdentifier does not exist on Linux/Windows, so
 // this map is simply a no-op there (os.Getenv returns "").
@@ -96,11 +97,11 @@ var bundleIDToCode = map[string]string{
 //	T1  verified per-agent env signature (CLI/daemon agents)
 //	T2  VSCODE_BRAND value           (every VS Code fork declares its brand)
 //	T3  macOS app bundle id          (known agent bundles only)
-//	T4  fallback -> custom           (never guess)
+//	T4  unresolved -> empty          (never guess)
 func DetectAgentCode() (code string, signal string) {
 	// T0: host explicitly declares its agent_code — highest confidence.
 	if v, name := AgentCodeFromEnv(); v != "" {
-		return normalizeAgentCode(v), "env:" + name
+		return v, "env:" + name
 	}
 
 	// T1: verified per-agent env signature (most specific — wins over the IDE
@@ -127,8 +128,8 @@ func DetectAgentCode() (code string, signal string) {
 		}
 	}
 
-	// T4: unknown host — honest fallback, no guessing.
-	return AgentCodeCustom, "fallback"
+	// T4: unknown host — leave agent_code empty, no guessing.
+	return "", ""
 }
 
 // normalizeAgentCode maps host-declared names/brands to canonical agent_code
@@ -140,11 +141,13 @@ func normalizeAgentCode(raw string) string {
 	s = strings.ReplaceAll(s, " ", "")
 	switch s {
 	case "":
-		return AgentCodeCustom
+		return ""
 	case "claude", "claude-code", "claude_code", "claudecode":
 		return "claudecode"
-	case "qoder", "qoderwork":
+	case "qoder":
 		return "qoder"
+	case "qoderwork":
+		return "QoderWork"
 	case "workbuddy", "work-buddy":
 		return "workbuddy"
 	case "visualstudiocode", "code", "code-oss", "vscode":

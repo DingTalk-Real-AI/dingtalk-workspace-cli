@@ -8,7 +8,7 @@ warehouse. This page is the integration contract.
 
 | Header | Meaning | Granularity |
 |--------|---------|-------------|
-| `x-dingtalk-dws-agent-code` | which agent host (claudecode / codex / qoder / cursor / custom …) | channel |
+| `x-dingtalk-dws-agent-code` | which agent host (claudecode / codex / qoder / cursor / custom if explicitly declared …) | channel |
 | `x-dws-agent-instance-id` | `dwsa_<base62>` derived from `machineId + agent_code` | machine × channel |
 | `x-dws-agent-id` | stable per-install machine id (v1-compatible) | machine |
 | `X-Cli-Version` | dws CLI version (segments old vs new clients) | — |
@@ -26,7 +26,7 @@ clients send no `agent_code` / instance id — treat their absence as
 3. **T2 — `VSCODE_BRAND`:** every VS Code fork declares its brand — one rule
    covers Cursor / Windsurf / Trae / Qoder / Kiro / … incl. future forks.
 4. **T3 — macOS `__CFBundleIdentifier`:** known agent app bundles.
-5. **T4 — `custom`:** unknown host. Never guessed.
+5. **T4 — unresolved:** unknown host sends no agent_code. Never guessed.
 
 ## Declaring your agent (recommended — the only fully-general path)
 
@@ -55,8 +55,8 @@ MCP server config example (JSON-style hosts):
 `claudecode`, `codex`, `cursor`, `vscode`, `qoder`, `windsurf`, `trae`,
 `workbuddy`, `openclaw`, `hermes`, `codebuddy`, `comate`, `lingma`, `gemini`,
 `aider`, `opencode`, `goose`, `crush`, `kimi`, `amazonq`, `continue`, …
-Use a stable lowercase slug; unknown values are kept as-is (lowercased,
-spaces stripped), so a new agent name flows through cleanly.
+Use a stable slug. Values declared via `DINGTALK_DWS_AGENTCODE` are forwarded
+verbatim so PAT grants and follow-up command checks use the same key.
 
 ## Trust & limitations — READ THIS
 

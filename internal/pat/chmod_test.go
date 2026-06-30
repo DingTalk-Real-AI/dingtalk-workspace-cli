@@ -1907,13 +1907,13 @@ func TestChmod_agentCode_env_invalid(t *testing.T) {
 // wins and env is silently ignored (no warning needed because the flag is
 // the explicit, scripted intent).
 func TestChmod_agentCode_flag_wins_over_env(t *testing.T) {
-	t.Setenv(agentCodeEnv, "envval")
+	t.Setenv(agentCodeEnv, "qoder")
 
 	fake := &fakeToolCaller{resultOK: true}
 	cmd := buildChmod(t, fake)
 
 	_ = cmd.Flags().Set("grant-type", "once")
-	_ = cmd.Flags().Set("agentCode", "flagval")
+	_ = cmd.Flags().Set("agentCode", "QoderWork")
 
 	if err := cmd.RunE(cmd, []string{"aitable.record:read"}); err != nil {
 		t.Fatalf("chmod RunE error = %v", err)
@@ -1921,11 +1921,11 @@ func TestChmod_agentCode_flag_wins_over_env(t *testing.T) {
 	if fake.gotTool != patBatchGrantToolName {
 		t.Fatalf("gotTool = %q, want %q", fake.gotTool, patBatchGrantToolName)
 	}
-	if got := fake.gotAgentEnv; got != "flagval" {
-		t.Fatalf("agent env = %q, want %q (flag must win over env)", got, "flagval")
+	if got := fake.gotAgentEnv; got != "QoderWork" {
+		t.Fatalf("agent env = %q, want %q (flag must win over env)", got, "QoderWork")
 	}
-	if got := fake.gotArgs["agentCode"]; got != "flagval" {
-		t.Fatalf("batch agentCode = %#v, want flagval", got)
+	if got := fake.gotArgs["agentCode"]; got != "QoderWork" {
+		t.Fatalf("batch agentCode = %#v, want QoderWork", got)
 	}
 }
 

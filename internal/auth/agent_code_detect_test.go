@@ -38,10 +38,10 @@ func clearAgentCodeEnv(t *testing.T) {
 
 func TestDetectAgentCode_HostDeclaration_T0(t *testing.T) {
 	clearAgentCodeEnv(t)
-	t.Setenv(AgentCodeEnv, "Qoder")
+	t.Setenv(AgentCodeEnv, "QoderWork")
 	code, sig := DetectAgentCode()
-	if code != "qoder" {
-		t.Fatalf("want qoder, got %q", code)
+	if code != "QoderWork" {
+		t.Fatalf("want verbatim QoderWork, got %q", code)
 	}
 	if !strings.HasPrefix(sig, "env:"+AgentCodeEnv) {
 		t.Fatalf("want env signal, got %q", sig)
@@ -119,25 +119,24 @@ func TestDetectAgentCode_BundleID_T3(t *testing.T) {
 	}
 }
 
-// An unknown bundle id (e.g. a plain terminal) must NOT be labeled — falls to
-// custom.
-func TestDetectAgentCode_UnknownBundleIsCustom(t *testing.T) {
+// An unknown bundle id (e.g. a plain terminal) must NOT be labeled.
+func TestDetectAgentCode_UnknownBundleIsEmpty(t *testing.T) {
 	clearAgentCodeEnv(t)
 	t.Setenv("__CFBundleIdentifier", "com.googlecode.iterm2")
 	code, _ := DetectAgentCode()
-	if code != AgentCodeCustom {
-		t.Fatalf("unknown bundle must be custom, got %q", code)
+	if code != "" {
+		t.Fatalf("unknown bundle must be empty, got %q", code)
 	}
 }
 
-func TestDetectAgentCode_Fallback_Custom(t *testing.T) {
+func TestDetectAgentCode_FallbackEmpty(t *testing.T) {
 	clearAgentCodeEnv(t)
 	code, sig := DetectAgentCode()
-	if code != AgentCodeCustom {
-		t.Fatalf("want custom, got %q", code)
+	if code != "" {
+		t.Fatalf("want empty code, got %q", code)
 	}
-	if sig != "fallback" {
-		t.Fatalf("want fallback, got %q", sig)
+	if sig != "" {
+		t.Fatalf("want empty signal, got %q", sig)
 	}
 }
 
@@ -147,8 +146,8 @@ func TestDetectAgentCode_IgnoresNoise(t *testing.T) {
 	t.Setenv("TERM_PROGRAM", "iTerm.app")
 	t.Setenv("DWS_CHANNEL", "Qoderwork")
 	code, _ := DetectAgentCode()
-	if code != AgentCodeCustom {
-		t.Fatalf("noise must not decide agent_code; want custom, got %q", code)
+	if code != "" {
+		t.Fatalf("noise must not decide agent_code; want empty, got %q", code)
 	}
 }
 
@@ -172,11 +171,11 @@ func TestNormalizeAgentCode(t *testing.T) {
 		"claude":             "claudecode",
 		"Claude-Code":        "claudecode",
 		"CLAUDECODE":         "claudecode",
-		"Qoderwork":          "qoder",
+		"Qoderwork":          "QoderWork",
 		"WorkBuddy":          "workbuddy",
 		"Visual Studio Code": "vscode",
 		"Cursor":             "cursor",
-		"":                   AgentCodeCustom,
+		"":                   "",
 		"some-new-ide":       "some-new-ide",
 	}
 	for in, want := range cases {

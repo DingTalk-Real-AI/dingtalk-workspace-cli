@@ -6,6 +6,10 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Fixed
+
+- **PAT agentCode grants no longer split from follow-up command checks** (`internal/auth/agent_code_detect.go`, `internal/app/runner.go`, `internal/pat/chmod_test.go`) — explicit `DINGTALK_DWS_AGENTCODE` declarations are now forwarded verbatim as the common cross-host contract, and unknown hosts no longer synthesize `custom` into `x-dingtalk-dws-agent-code` / `x-dws-agent-instance-id`. `pat chmod --agentCode` remains the highest-priority grant target and still wins over the env fallback.
+
 ## [1.0.45] - 2026-06-29
 
 This release adds **multi-organization (profile) support** (#500): `dws` can stay logged in to several DingTalk organizations at once and switch between them, while staying fully backward/forward compatible with the previous single-org token. A profile is one logged-in organization (corp); the current profile decides which org a command runs against. The release also hardens the new credential store for concurrency and corruption recovery, documents the capability in both the mono and multi skill sets, and flips `--ai-tag` on by default so messages sent through `dws` carry the DingTalk 「通过AI发送」 badge (#524).
