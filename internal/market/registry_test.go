@@ -445,6 +445,96 @@ func TestNormalizeServersPreservesCLIMetadataAndLifecycle(t *testing.T) {
 	}
 }
 
+// TestCLIOverlayToleratesGroupsAsArray pins the lenient decode that keeps a
+// single third-party overlay publishing `"groups": [...]` (an array instead of
+// the schema-correct object) from failing the entire server-list decode and
+// breaking `dws cache refresh` for every product. See registry.go
+// CLIOverlay.UnmarshalJSON.
+func TestCLIOverlayToleratesGroupsAsArray(t *testing.T) {
+	t.Parallel()
+
+	// groups encoded as an array of group names (the real malformed shape
+	// observed from pre-env business apps, e.g. 智能合同 / 宜搭).
+	raw := []byte(`{
+		"id": "contract",
+		"command": "contract",
+		"prefixes": ["contract"],
+		"groups": ["record", "import", "review"],
+		"toolOverrides": {"query_contract": {"cliName": "query"}}
+	}`)
+
+	var overlay CLIOverlay
+	if err := json.Unmarshal(raw, &overlay); err != nil {
+		t.Fatalf("Unmarshal() with array groups error = %v, want nil", err)
+	}
+	if overlay.Groups != nil {
+		t.Fatalf("Groups = %#v, want nil (array coerced away)", overlay.Groups)
+	}
+	// Every other field must survive the lenient path untouched.
+	if overlay.ID != "contract" || overlay.Command != "contract" {
+		t.Fatalf("overlay id/command = %q/%q, want contract/contract", overlay.ID, overlay.Command)
+	}
+	if len(overlay.Prefixes) != 1 || overlay.Prefixes[0] != "contract" {
+		t.Fatalf("overlay prefixes = %#v, want [contract]", overlay.Prefixes)
+	}
+	if ov, ok := overlay.ToolOverrides["query_contract"]; !ok || ov.CLIName != "query" {
+		t.Fatalf("overlay toolOverrides = %#v, want query_contract->query", overlay.ToolOverrides)
+	}
+}
+
+// TestCLIOverlayPreservesGroupsAsObject confirms the well-formed object shape
+// still decodes normally — the tolerance must not regress the happy path.
+func TestCLIOverlayPreservesGroupsAsObject(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`{
+		"id": "report",
+		"groups": {"template": {"description": "日志模版"}, "entry": {"description": "单份日报"}}
+	}`)
+
+	var overlay CLIOverlay
+	if err := json.Unmarshal(raw, &overlay); err != nil {
+		t.Fatalf("Unmarshal() with object groups error = %v, want nil", err)
+	}
+	if len(overlay.Groups) != 2 {
+		t.Fatalf("Groups len = %d, want 2", len(overlay.Groups))
+	}
+	if overlay.Groups["template"].Description != "日志模版" {
+		t.Fatalf("Groups[template] = %#v, want description 日志模版", overlay.Groups["template"])
+	}
+}
+
+// TestFetchServersDecodesWhenOneEnvelopeHasArrayGroups proves the headline
+// failure is fixed end to end: one bad-groups envelope alongside a good one
+// no longer fails the whole list decode — both servers come through.
+func TestFetchServersDecodesWhenOneEnvelopeHasArrayGroups(t *testing.T) {
+	t.Parallel()
+
+	body := `{"metadata":{"count":2},"servers":[
+		{"server":{"name":"智能合同","remotes":[{"type":"streamable-http","url":"https://example.com/server/contract"}]},
+		 "_meta":{"com.dingtalk.mcp.registry/metadata":{"status":"active"},
+		          "com.dingtalk.mcp.registry/cli":{"id":"contract","groups":["record","import"]}}},
+		{"server":{"name":"钉钉日志","remotes":[{"type":"streamable-http","url":"https://example.com/server/report"}]},
+		 "_meta":{"com.dingtalk.mcp.registry/metadata":{"status":"active"},
+		          "com.dingtalk.mcp.registry/cli":{"id":"report","groups":{"template":{"description":"日志模版"}}}}}
+	]}`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, server.Client())
+	resp, err := client.FetchServers(context.Background(), 200)
+	if err != nil {
+		t.Fatalf("FetchServers() error = %v, want nil (array groups must not fail decode)", err)
+	}
+	if len(resp.Servers) != 2 {
+		t.Fatalf("FetchServers() decoded %d servers, want 2", len(resp.Servers))
+	}
+}
+
 func mustParseRFC3339(t *testing.T, value string) (parsed time.Time) {
 	t.Helper()
 
