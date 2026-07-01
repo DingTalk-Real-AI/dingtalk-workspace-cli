@@ -16,6 +16,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -198,6 +199,50 @@ func TestAuthStatusTableIncludesCorpName(t *testing.T) {
 	for _, want := range []string{"企业:", "corp_primary org", "企业 ID:", "corp_primary"} {
 		if !bytes.Contains(out.Bytes(), []byte(want)) {
 			t.Fatalf("auth status table missing %q in output:\n%s", want, out.String())
+		}
+	}
+}
+
+func TestWriteAuthLoginJSONIncludesProfileID(t *testing.T) {
+	token := &authpkg.TokenData{
+		AccessToken: "access",
+		CorpID:      "corp_same",
+		CorpName:    "Same Org",
+		UserID:      "user_1",
+		UserName:    "张三",
+		ExpiresAt:   time.Now().Add(time.Hour),
+	}
+	var out bytes.Buffer
+	if err := writeAuthLoginJSON(&out, token, true); err != nil {
+		t.Fatalf("writeAuthLoginJSON() error = %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v\noutput:\n%s", err, out.String())
+	}
+	if payload["profileId"] != "corp_same:user_1" {
+		t.Fatalf("profileId = %#v, want corp_same:user_1", payload["profileId"])
+	}
+	if payload["corp_id"] != "corp_same" || payload["user_id"] != "user_1" || payload["user_name"] != "张三" {
+		t.Fatalf("login JSON identity fields = %#v", payload)
+	}
+}
+
+func TestWriteAuthLoginInfoLinesIncludesProfileID(t *testing.T) {
+	token := &authpkg.TokenData{
+		CorpID:    "corp_same",
+		CorpName:  "Same Org",
+		UserID:    "user_1",
+		UserName:  "张三",
+		ExpiresAt: time.Now().Add(time.Hour),
+	}
+	var out bytes.Buffer
+	writeAuthLoginInfoLines(&out, token)
+
+	for _, want := range []string{"企业:", "Same Org", "企业 ID:", "corp_same", "用户:", "张三", "profileId:", "corp_same:user_1", "有效期:"} {
+		if !bytes.Contains(out.Bytes(), []byte(want)) {
+			t.Fatalf("login info output missing %q:\n%s", want, out.String())
 		}
 	}
 }

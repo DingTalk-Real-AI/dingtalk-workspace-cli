@@ -152,6 +152,9 @@ func saveTokenDataLocked(configDir string, data *TokenData) error {
 }
 
 func saveTokenViaHook(h *edition.Hooks, configDir string, data *TokenData) error {
+	if data != nil {
+		data.ProfileID = ProfileIDFromToken(data)
+	}
 	jsonData, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshaling token data for hook: %w", err)

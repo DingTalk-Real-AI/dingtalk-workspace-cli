@@ -35,6 +35,35 @@ dws auth login --recommend
 
 `--recommend` 是正确拼写；不要写成 `--recommand`。
 
+登录成功后，普通输出会展示本次登录账号的 `profileId`：
+
+```text
+[OK] 登录成功！
+企业:          邦道科技有限公司
+企业 ID:       ding7779cf9da65ca5ea
+用户:          张三
+profileId:     ding7779cf9da65ca5ea:user123
+有效期:        30 天后
+```
+
+如果使用 JSON 输出，`auth login` 也会返回本次登录账号的 `profileId`：
+
+```bash
+dws auth login --format json
+```
+
+```json
+{
+  "success": true,
+  "profileId": "ding7779cf9da65ca5ea:user123",
+  "corp_id": "ding7779cf9da65ca5ea",
+  "user_id": "user123",
+  "user_name": "张三"
+}
+```
+
+edition overlay 的 `SaveToken` hook 收到的 token JSON 也会包含 `profile_id`。当已拿到 `corp_id` 和 `user_id` 时，值为 `corpId:userId`；如果保存时还没有 `user_id`，会按兼容逻辑退化为 `corpId`。
+
 ### 查看已登录账号
 
 ```bash

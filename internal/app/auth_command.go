@@ -238,20 +238,7 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 			} else {
 				fmt.Fprintln(w, authLoginStatusLine("登录成功！"))
 			}
-			if tokenData != nil {
-				if tokenData.CorpName != "" {
-					fmt.Fprintln(w, authLoginInfoLine("企业", tokenData.CorpName))
-				}
-				if tokenData.CorpID != "" {
-					fmt.Fprintln(w, authLoginInfoLine("企业 ID", tokenData.CorpID))
-				}
-				if tokenData.UserName != "" {
-					fmt.Fprintln(w, authLoginInfoLine("用户", tokenData.UserName))
-				}
-				if expiry := authLoginDisplayExpiry(tokenData); expiry != "" {
-					fmt.Fprintln(w, authLoginInfoLine("有效期", expiry))
-				}
-			}
+			writeAuthLoginInfoLines(w, tokenData)
 			fmt.Fprintln(w, authLoginMutedStyle().Render("Token 将自动刷新，无需重复登录"))
 			return nil
 		},
@@ -947,6 +934,27 @@ func authLoginStatusLine(message string) string {
 	)
 }
 
+func writeAuthLoginInfoLines(w io.Writer, tokenData *authpkg.TokenData) {
+	if tokenData == nil {
+		return
+	}
+	if tokenData.CorpName != "" {
+		fmt.Fprintln(w, authLoginInfoLine("企业", tokenData.CorpName))
+	}
+	if tokenData.CorpID != "" {
+		fmt.Fprintln(w, authLoginInfoLine("企业 ID", tokenData.CorpID))
+	}
+	if tokenData.UserName != "" {
+		fmt.Fprintln(w, authLoginInfoLine("用户", tokenData.UserName))
+	}
+	if profileID := authpkg.ProfileIDFromToken(tokenData); profileID != "" {
+		fmt.Fprintln(w, authLoginInfoLine("profileId", profileID))
+	}
+	if expiry := authLoginDisplayExpiry(tokenData); expiry != "" {
+		fmt.Fprintln(w, authLoginInfoLine("有效期", expiry))
+	}
+}
+
 func authLoginInfoLine(key, value string) string {
 	label := authLoginMutedStyle().Width(14).Render(key + ":")
 	return fmt.Sprintf("%s %s", label, value)
@@ -1268,6 +1276,7 @@ func writeAuthStatusJSON(w io.Writer, authenticated, refreshed bool, data *authp
 type authLoginResponse struct {
 	Success           bool   `json:"success"`
 	Message           string `json:"message"`
+	ProfileID         string `json:"profileId,omitempty"`
 	TokenValid        bool   `json:"token_valid,omitempty"`
 	RefreshTokenValid bool   `json:"refresh_token_valid,omitempty"`
 	ExpiresAt         string `json:"expires_at,omitempty"`
@@ -1300,6 +1309,7 @@ func writeAuthLoginJSON(w io.Writer, data *authpkg.TokenData, forced bool) error
 		resp.CorpName = data.CorpName
 		resp.UserID = data.UserID
 		resp.UserName = data.UserName
+		resp.ProfileID = authpkg.ProfileIDFromToken(data)
 	}
 
 	enc := json.NewEncoder(w)

@@ -14,11 +14,13 @@
 package auth
 
 import (
+	"encoding/json"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
 // cleanupKeychain isolates keychain state to a per-test temporary directory
@@ -317,6 +319,48 @@ func TestProfileIDFromTokenRecomputesLegacyCorpOnlyIDWhenUserAppears(t *testing.
 
 	if got := ProfileIDFromToken(data); got != "corp_same:user_later" {
 		t.Fatalf("ProfileIDFromToken() = %q, want corp_same:user_later", got)
+	}
+}
+
+func TestSaveTokenHookReceivesProfileID(t *testing.T) {
+	var payload TokenData
+	edition.Override(&edition.Hooks{
+		SaveToken: func(configDir string, data []byte) error {
+			return json.Unmarshal(data, &payload)
+		},
+	})
+	t.Cleanup(func() { edition.Override(&edition.Hooks{}) })
+
+	if err := SaveTokenData(t.TempDir(), &TokenData{
+		AccessToken: "at",
+		CorpID:      "corp_same",
+		UserID:      "user_1",
+		UserName:    "张三",
+	}); err != nil {
+		t.Fatalf("SaveTokenData() error = %v", err)
+	}
+	if payload.ProfileID != "corp_same:user_1" {
+		t.Fatalf("hook profile_id = %q, want corp_same:user_1", payload.ProfileID)
+	}
+}
+
+func TestSaveTokenHookProfileIDFallsBackToCorpID(t *testing.T) {
+	var payload TokenData
+	edition.Override(&edition.Hooks{
+		SaveToken: func(configDir string, data []byte) error {
+			return json.Unmarshal(data, &payload)
+		},
+	})
+	t.Cleanup(func() { edition.Override(&edition.Hooks{}) })
+
+	if err := SaveTokenData(t.TempDir(), &TokenData{
+		AccessToken: "at",
+		CorpID:      "corp_only",
+	}); err != nil {
+		t.Fatalf("SaveTokenData() error = %v", err)
+	}
+	if payload.ProfileID != "corp_only" {
+		t.Fatalf("hook profile_id = %q, want corp_only", payload.ProfileID)
 	}
 }
 
