@@ -280,6 +280,10 @@ func BuildDynamicCommands(servers []market.ServerDescriptor, runner executor.Run
 			// report_hooks.go). No-op for non-report.
 			installReportHook(cmd, canonicalProduct, toolName)
 
+			// §chat-hook: post-processing for chat message list forward=true
+			// boundary dedup. No-op for non-chat. See chat_hooks.go (#430).
+			installChatHook(cmd, canonicalProduct, toolName)
+
 			// §1.4: Add to the right parent group
 			attachToGroup(rootCmd, override.Group, groupCmds, cmd)
 		}
