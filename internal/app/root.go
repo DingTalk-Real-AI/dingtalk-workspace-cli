@@ -586,13 +586,17 @@ func newCacheCommand() *cobra.Command {
 				transportClient,
 				store,
 			)
+			if profileID := runtimeCacheProfileID(); profileID != "" {
+				service.Tenant = editionPartition() + "/profile"
+				service.AuthIdentity = profileID
+			}
 
 			resp, err := fetchRegistryServers(cmd.Context(), ipv4HTTPClient(config.HTTPTimeout))
 			if err != nil {
 				return apperrors.NewDiscovery(fmt.Sprintf("cache refresh: fetch server list failed: %v", err))
 			}
 			servers := market.NormalizeServersForBaseURL(resp, "live_market", registryDiscoveryBaseURL())
-			_ = store.SaveRegistry(service.CachePartition(), cache.RegistrySnapshot{Servers: servers})
+			_ = store.SaveRegistry(editionPartition(), cache.RegistrySnapshot{Servers: servers})
 
 			selected := selectServersForProduct(servers, product)
 			if strings.TrimSpace(product) != "" && len(selected) == 0 {

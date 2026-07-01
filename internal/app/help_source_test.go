@@ -227,8 +227,9 @@ func TestProfileHelpDocumentsMultiProfileUsage(t *testing.T) {
 	for _, want := range []string{
 		"切换默认组织 profile",
 		"需要只影响单次业务命令时，请使用全局 --profile",
+		"dws profile switch <profileId|name|corpId>",
 		"dws profile switch --corpId <corpId>",
-		"dws --profile <corpId> contact user get-self",
+		"dws --profile <profileId|name|corpId> contact user get-self",
 		"--corpId string",
 		"--name string",
 	} {
@@ -250,7 +251,7 @@ func TestProfileHelpDocumentsMultiProfileUsage(t *testing.T) {
 
 func TestAuthHelpDocumentsProfileUsage(t *testing.T) {
 	got := executeHelpForTest(t, "auth", "login", "--help")
-	if !strings.Contains(got, "dws auth login --profile <corpId>") {
+	if !strings.Contains(got, "dws auth login --profile <profileId|name|corpId>") {
 		t.Fatalf("auth login help missing --profile example:\n%s", got)
 	}
 
@@ -258,7 +259,7 @@ func TestAuthHelpDocumentsProfileUsage(t *testing.T) {
 	for _, want := range []string{
 		"查看当前或指定组织 profile 的认证状态",
 		"只读取并刷新被选中的 token slot",
-		"dws auth status --profile <corpId>",
+		"dws auth status --profile <profileId|name|corpId>",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("auth status help missing %q:\n%s", want, got)
@@ -268,7 +269,7 @@ func TestAuthHelpDocumentsProfileUsage(t *testing.T) {
 	got = executeHelpForTest(t, "auth", "logout", "--help")
 	for _, want := range []string{
 		"默认退出所有已登录组织 profile",
-		"dws auth logout --profile <corpId>",
+		"dws auth logout --profile <profileId|name|corpId>",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("auth logout help missing %q:\n%s", want, got)

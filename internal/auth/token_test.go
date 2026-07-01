@@ -147,7 +147,7 @@ func TestMultiProfileSaveLoadAndSwitch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProfiles() error = %v", err)
 	}
-	if cfg.PrimaryProfile != "corp_a" || cfg.CurrentProfile != "corp_b" || cfg.PreviousProfile != "corp_a" {
+	if cfg.PrimaryProfile != "corp_a:user_corp_a" || cfg.CurrentProfile != "corp_b:user_corp_b" || cfg.PreviousProfile != "corp_a:user_corp_a" {
 		t.Fatalf("profile pointers = primary %q current %q previous %q", cfg.PrimaryProfile, cfg.CurrentProfile, cfg.PreviousProfile)
 	}
 
@@ -212,7 +212,7 @@ func TestRuntimeProfileOverrideDoesNotMutateCurrent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProfiles() error = %v", err)
 	}
-	if cfg.CurrentProfile != "corp_a" {
+	if cfg.CurrentProfile != "corp_a:user_corp_a" {
 		t.Fatalf("current profile = %q, want corp_a", cfg.CurrentProfile)
 	}
 	loadedB, err := LoadTokenDataForProfile(configDir, "corp_b")
@@ -258,22 +258,24 @@ func TestDeleteProfilePreservesOtherProfiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProfiles() error = %v", err)
 	}
-	if len(cfg.Profiles) != 1 || cfg.CurrentProfile != "corp_a" {
+	if len(cfg.Profiles) != 1 || cfg.CurrentProfile != "corp_a:user_corp_a" {
 		t.Fatalf("profiles after delete = %#v", cfg)
 	}
 }
 
-func TestUpsertProfileFromTokenOverwritesSameCorp(t *testing.T) {
+func TestSameCorpDifferentUsersCreateDistinctProfiles(t *testing.T) {
 	cleanupKeychain(t)
 	configDir := t.TempDir()
 
 	first := testToken("at_first", "corp_same", "旧组织名")
+	first.UserID = "user_first"
+	first.UserName = "First User"
 	if err := SaveTokenData(configDir, first); err != nil {
 		t.Fatalf("SaveTokenData(first) error = %v", err)
 	}
 	second := testToken("at_second", "corp_same", "新组织名")
-	second.UserID = "user_updated"
-	second.UserName = "Updated User"
+	second.UserID = "user_second"
+	second.UserName = "Second User"
 	second.ClientID = "client_updated"
 	if err := SaveTokenData(configDir, second); err != nil {
 		t.Fatalf("SaveTokenData(second) error = %v", err)
@@ -283,22 +285,38 @@ func TestUpsertProfileFromTokenOverwritesSameCorp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProfiles() error = %v", err)
 	}
-	if len(cfg.Profiles) != 1 {
-		t.Fatalf("profiles len = %d, want 1: %#v", len(cfg.Profiles), cfg.Profiles)
+	if len(cfg.Profiles) != 2 {
+		t.Fatalf("profiles len = %d, want 2: %#v", len(cfg.Profiles), cfg.Profiles)
 	}
-	profile := cfg.Profiles[0]
-	if profile.CorpName != "新组织名" {
-		t.Fatalf("corpName = %q, want 新组织名", profile.CorpName)
+	if cfg.PrimaryProfile != "corp_same:user_first" || cfg.CurrentProfile != "corp_same:user_second" {
+		t.Fatalf("profile pointers = primary %q current %q, want first/current second", cfg.PrimaryProfile, cfg.CurrentProfile)
 	}
-	if profile.UserID != "user_updated" || profile.UserName != "Updated User" || profile.ClientID != "client_updated" {
-		t.Fatalf("profile metadata was not overwritten: %#v", profile)
+	if _, err := LoadTokenDataForProfile(configDir, "corp_same"); err == nil {
+		t.Fatal("LoadTokenDataForProfile(corp_same) error = nil, want ambiguous selector")
 	}
-	loaded, err := LoadTokenDataForProfile(configDir, "corp_same")
+	loaded, err := LoadTokenDataForProfile(configDir, "corp_same:user_first")
 	if err != nil {
-		t.Fatalf("LoadTokenDataForProfile() error = %v", err)
+		t.Fatalf("LoadTokenDataForProfile(first profileId) error = %v", err)
+	}
+	if loaded.AccessToken != "at_first" {
+		t.Fatalf("first access token = %q, want at_first", loaded.AccessToken)
+	}
+	loaded, err = LoadTokenDataForProfile(configDir, "corp_same:user_second")
+	if err != nil {
+		t.Fatalf("LoadTokenDataForProfile(second profileId) error = %v", err)
 	}
 	if loaded.AccessToken != "at_second" {
-		t.Fatalf("access token = %q, want at_second", loaded.AccessToken)
+		t.Fatalf("second access token = %q, want at_second", loaded.AccessToken)
+	}
+}
+
+func TestProfileIDFromTokenRecomputesLegacyCorpOnlyIDWhenUserAppears(t *testing.T) {
+	data := testToken("at", "corp_same", "Same Org")
+	data.ProfileID = data.CorpID
+	data.UserID = "user_later"
+
+	if got := ProfileIDFromToken(data); got != "corp_same:user_later" {
+		t.Fatalf("ProfileIDFromToken() = %q, want corp_same:user_later", got)
 	}
 }
 
@@ -332,6 +350,43 @@ func TestUpsertProfileFromTokenPromotesCorpIDNameToCorpName(t *testing.T) {
 	}
 	if resolved.CorpID != "corp_same" {
 		t.Fatalf("resolved corpId = %q, want corp_same", resolved.CorpID)
+	}
+}
+
+func TestLoadProfilesMigratesLegacyPointersToProfileID(t *testing.T) {
+	configDir := t.TempDir()
+	raw := `{
+  "version": 1,
+  "primaryProfile": "corp_same",
+  "currentProfile": "corp_same",
+  "profiles": [
+    {
+      "name": "Legacy Org",
+      "corpId": "corp_same",
+      "corpName": "Legacy Org",
+      "userId": "user_legacy"
+    }
+  ]
+}`
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(ProfilesPath(configDir), []byte(raw), 0o600); err != nil {
+		t.Fatalf("WriteFile(profiles.json) error = %v", err)
+	}
+
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		t.Fatalf("LoadProfiles() error = %v", err)
+	}
+	if cfg.Version != 2 {
+		t.Fatalf("version = %d, want 2", cfg.Version)
+	}
+	if cfg.PrimaryProfile != "corp_same:user_legacy" || cfg.CurrentProfile != "corp_same:user_legacy" {
+		t.Fatalf("profile pointers = primary %q current %q, want migrated profileId", cfg.PrimaryProfile, cfg.CurrentProfile)
+	}
+	if cfg.Profiles[0].ProfileID != "corp_same:user_legacy" {
+		t.Fatalf("profileId = %q, want corp_same:user_legacy", cfg.Profiles[0].ProfileID)
 	}
 }
 
@@ -387,11 +442,11 @@ func TestLegacyKeychainMigrationInitializesProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProfiles() error = %v", err)
 	}
-	if cfg.PrimaryProfile != "corp_legacy" || cfg.CurrentProfile != "corp_legacy" {
+	if cfg.PrimaryProfile != "corp_legacy:user_corp_legacy" || cfg.CurrentProfile != "corp_legacy:user_corp_legacy" {
 		t.Fatalf("profile pointers after migration = %#v", cfg)
 	}
-	if !TokenDataExistsKeychainForCorpID("corp_legacy") {
-		t.Fatal("corp-scoped token should exist after migration")
+	if !TokenDataExistsKeychainForProfileID("corp_legacy:user_corp_legacy") {
+		t.Fatal("profile-scoped token should exist after migration")
 	}
 }
 

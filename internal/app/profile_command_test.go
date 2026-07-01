@@ -80,7 +80,7 @@ func TestProfileListRootCommandJSONIncludesCorpName(t *testing.T) {
 	if !resp.Success {
 		t.Fatal("success = false, want true")
 	}
-	if resp.PrimaryProfile != "corp_primary" || resp.CurrentProfile != "corp_secondary" || resp.PreviousProfile != "corp_primary" {
+	if resp.PrimaryProfile != "corp_primary:user-corp_primary" || resp.CurrentProfile != "corp_secondary:user-corp_secondary" || resp.PreviousProfile != "corp_primary:user-corp_primary" {
 		t.Fatalf("profile pointers = primary %q current %q previous %q, want corp_primary/corp_secondary/corp_primary", resp.PrimaryProfile, resp.CurrentProfile, resp.PreviousProfile)
 	}
 	if len(resp.Profiles) != 2 {
@@ -117,7 +117,7 @@ func TestProfileUseRootCommandSwitchesOrganizationAndLegacyMirror(t *testing.T) 
 	if err != nil {
 		t.Fatalf("LoadProfiles() error = %v", err)
 	}
-	if cfg.CurrentProfile != "corp_primary" || cfg.PreviousProfile != "corp_secondary" {
+	if cfg.CurrentProfile != "corp_primary:user-corp_primary" || cfg.PreviousProfile != "corp_secondary:user-corp_secondary" {
 		t.Fatalf("profile pointers = current %q previous %q, want corp_primary/corp_secondary", cfg.CurrentProfile, cfg.PreviousProfile)
 	}
 	legacyToken, err := authpkg.LoadTokenData(configDir)
@@ -143,7 +143,7 @@ func TestProfileUseRootCommandSwitchesOrganizationAndLegacyMirror(t *testing.T) 
 	if err != nil {
 		t.Fatalf("LoadProfiles() error = %v", err)
 	}
-	if cfg.CurrentProfile != "corp_secondary" || cfg.PreviousProfile != "corp_primary" {
+	if cfg.CurrentProfile != "corp_secondary:user-corp_secondary" || cfg.PreviousProfile != "corp_primary:user-corp_primary" {
 		t.Fatalf("profile pointers = current %q previous %q, want corp_secondary/corp_primary", cfg.CurrentProfile, cfg.PreviousProfile)
 	}
 	legacyToken, err = authpkg.LoadTokenData(configDir)
@@ -176,7 +176,7 @@ func TestProfileSwitchRootCommandSwitchesPrimaryOrganizationAndLegacyMirror(t *t
 	if err != nil {
 		t.Fatalf("LoadProfiles() error = %v", err)
 	}
-	if cfg.CurrentProfile != "corp_primary" || cfg.PreviousProfile != "corp_secondary" {
+	if cfg.CurrentProfile != "corp_primary:user-corp_primary" || cfg.PreviousProfile != "corp_secondary:user-corp_secondary" {
 		t.Fatalf("profile pointers = current %q previous %q, want corp_primary/corp_secondary", cfg.CurrentProfile, cfg.PreviousProfile)
 	}
 	legacyToken, err := authpkg.LoadTokenData(configDir)
@@ -206,7 +206,7 @@ func TestProfileSwitchRootCommandSupportsCorpIDFlag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProfiles() error = %v", err)
 	}
-	if cfg.CurrentProfile != "corp_primary" {
+	if cfg.CurrentProfile != "corp_primary:user-corp_primary" {
 		t.Fatalf("currentProfile = %q, want corp_primary", cfg.CurrentProfile)
 	}
 
@@ -222,7 +222,7 @@ func TestProfileSwitchRootCommandSupportsCorpIDFlag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProfiles() error = %v", err)
 	}
-	if cfg.CurrentProfile != "corp_secondary" {
+	if cfg.CurrentProfile != "corp_secondary:user-corp_secondary" {
 		t.Fatalf("currentProfile = %q, want corp_secondary", cfg.CurrentProfile)
 	}
 }
@@ -283,7 +283,7 @@ func TestProfileSwitchNoArgsUsesTUISelector(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProfiles() error = %v", err)
 	}
-	if cfg.CurrentProfile != "corp_primary" {
+	if cfg.CurrentProfile != "corp_primary:user-corp_primary" {
 		t.Fatalf("currentProfile = %q, want corp_primary", cfg.CurrentProfile)
 	}
 }
@@ -370,8 +370,8 @@ func TestProfileSwitchTUISortsLatestLoggedInProfilesFirst(t *testing.T) {
 	if strings.Join(gotOrder, ",") != strings.Join(wantOrder, ",") {
 		t.Fatalf("profile order = %v, want %v", gotOrder, wantOrder)
 	}
-	if got := model.selectedCorpID(); got != "old" {
-		t.Fatalf("selectedCorpID = %q, want old", got)
+	if got := model.selectedProfileID(); got != "old" {
+		t.Fatalf("selectedProfileID = %q, want old", got)
 	}
 }
 
@@ -503,7 +503,7 @@ func TestProfileUseNoArgsUsesTUISelector(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProfiles() error = %v", err)
 	}
-	if cfg.CurrentProfile != "corp_primary" {
+	if cfg.CurrentProfile != "corp_primary:user-corp_primary" {
 		t.Fatalf("currentProfile = %q, want corp_primary", cfg.CurrentProfile)
 	}
 }

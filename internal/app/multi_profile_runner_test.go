@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
@@ -43,6 +44,10 @@ func TestRuntimeRunnerAggregatesCommaSeparatedProfiles(t *testing.T) {
 	}
 	for i, wantCorpID := range []string{"corp_a", "corp_b"} {
 		entry := profiles[i].(map[string]any)
+		wantProfileID := wantCorpID + ":user-" + wantCorpID
+		if entry["profileId"] != wantProfileID {
+			t.Fatalf("profiles[%d].profileId = %#v, want %q", i, entry["profileId"], wantProfileID)
+		}
 		if entry["corpId"] != wantCorpID {
 			t.Fatalf("profiles[%d].corpId = %#v, want %q", i, entry["corpId"], wantCorpID)
 		}
@@ -50,13 +55,57 @@ func TestRuntimeRunnerAggregatesCommaSeparatedProfiles(t *testing.T) {
 			t.Fatalf("profiles[%d].ok = %#v, want true", i, entry["ok"])
 		}
 		resultPayload := entry["result"].(map[string]any)
-		if resultPayload["runtimeProfile"] != wantCorpID {
-			t.Fatalf("profiles[%d].result.runtimeProfile = %#v, want %q", i, resultPayload["runtimeProfile"], wantCorpID)
+		if resultPayload["runtimeProfile"] != wantProfileID {
+			t.Fatalf("profiles[%d].result.runtimeProfile = %#v, want %q", i, resultPayload["runtimeProfile"], wantProfileID)
 		}
 	}
 }
 
-func TestRuntimeRunnerDeduplicatesCommaSeparatedProfilesByCorpID(t *testing.T) {
+func TestRuntimeRunnerRunsSameCorpDifferentUsers(t *testing.T) {
+	setupAuthLogoutProfiles(t,
+		&authpkg.TokenData{
+			AccessToken:  "access-a",
+			RefreshToken: "refresh-a",
+			ExpiresAt:    time.Now().Add(time.Hour),
+			RefreshExpAt: time.Now().Add(24 * time.Hour),
+			CorpID:       "corp_same",
+			CorpName:     "same org",
+			UserID:       "user_a",
+		},
+		&authpkg.TokenData{
+			AccessToken:  "access-b",
+			RefreshToken: "refresh-b",
+			ExpiresAt:    time.Now().Add(time.Hour),
+			RefreshExpAt: time.Now().Add(24 * time.Hour),
+			CorpID:       "corp_same",
+			CorpName:     "same org",
+			UserID:       "user_b",
+		},
+	)
+	authpkg.SetRuntimeProfile("corp_same:user_a,corp_same:user_b")
+
+	runner := &runtimeRunner{fallback: multiProfileFallbackRunner{}}
+	result, err := runner.Run(context.Background(), executor.Invocation{
+		Kind:             "helper_invocation",
+		CanonicalProduct: "contact",
+		Tool:             "get_current_user_profile",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	profiles := result.Response["content"].(map[string]any)["profiles"].([]any)
+	if len(profiles) != 2 {
+		t.Fatalf("profiles len = %d, want 2", len(profiles))
+	}
+	for i, want := range []string{"corp_same:user_a", "corp_same:user_b"} {
+		entry := profiles[i].(map[string]any)
+		if entry["profileId"] != want {
+			t.Fatalf("profiles[%d].profileId = %#v, want %q", i, entry["profileId"], want)
+		}
+	}
+}
+
+func TestRuntimeRunnerDeduplicatesCommaSeparatedProfilesByProfileID(t *testing.T) {
 	configDir := setupAuthLogoutProfiles(t, authLogoutTestToken("corp_a"), authLogoutTestToken("corp_b"))
 	authpkg.SetRuntimeProfile("corp_a, corp_a org,corp_b")
 

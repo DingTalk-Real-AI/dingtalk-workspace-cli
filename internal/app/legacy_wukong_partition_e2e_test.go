@@ -14,8 +14,10 @@
 package app
 
 import (
+	"strings"
 	"testing"
 
+	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -60,5 +62,33 @@ func TestEditionPartition_SingleSourceOfTruth(t *testing.T) {
 				t.Fatalf("editionPartition()=%q, want %q for edition %q", legacy, tc.want, tc.edition)
 			}
 		})
+	}
+}
+
+func TestRuntimeCachePartitionUsesProfileIdentity(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Cleanup(func() {
+		authpkg.SetRuntimeProfile("")
+		edition.Override(&edition.Hooks{})
+	})
+	edition.Override(&edition.Hooks{})
+
+	authpkg.SetRuntimeProfile("")
+	if got := runtimeCachePartition(); got != editionPartition() {
+		t.Fatalf("runtimeCachePartition()=%q, want edition partition %q without profile", got, editionPartition())
+	}
+
+	authpkg.SetRuntimeProfile("corp_same:user_a")
+	partitionA := runtimeCachePartition()
+	authpkg.SetRuntimeProfile("corp_same:user_b")
+	partitionB := runtimeCachePartition()
+
+	if partitionA == partitionB {
+		t.Fatalf("runtime cache partitions should differ for two profiles: %q", partitionA)
+	}
+	for _, got := range []string{partitionA, partitionB} {
+		if !strings.Contains(got, "/profile/") {
+			t.Fatalf("runtime cache partition %q missing profile namespace", got)
+		}
 	}
 }

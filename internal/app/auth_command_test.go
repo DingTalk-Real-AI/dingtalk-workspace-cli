@@ -228,7 +228,7 @@ func TestAuthStatusProfileOverrideDoesNotSwitchCurrentProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProfiles() error = %v", err)
 	}
-	if cfg.CurrentProfile != "corp_secondary" {
+	if cfg.CurrentProfile != "corp_secondary:user-corp_secondary" {
 		t.Fatalf("currentProfile = %q, want unchanged corp_secondary", cfg.CurrentProfile)
 	}
 }
@@ -274,10 +274,10 @@ func TestAuthLogoutDefaultDeletesAllProfilesAndPreservesAppConfig(t *testing.T) 
 	if cfg.PrimaryProfile != "" || cfg.CurrentProfile != "" || cfg.PreviousProfile != "" || len(cfg.Profiles) != 0 {
 		t.Fatalf("profiles after logout = %#v, want empty", cfg)
 	}
-	if authpkg.TokenDataExistsKeychainForCorpID("corp_primary") {
+	if authpkg.TokenDataExistsKeychainForProfileID("corp_primary:user-corp_primary") {
 		t.Fatal("primary profile token should be deleted")
 	}
-	if authpkg.TokenDataExistsKeychainForCorpID("corp_secondary") {
+	if authpkg.TokenDataExistsKeychainForProfileID("corp_secondary:user-corp_secondary") {
 		t.Fatal("secondary profile token should be deleted")
 	}
 	if authpkg.TokenDataExistsKeychain() {
@@ -318,16 +318,16 @@ func TestAuthLogoutProfileDeletesOnlySelectedProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProfiles() error = %v", err)
 	}
-	if cfg.PrimaryProfile != "corp_secondary" || cfg.CurrentProfile != "corp_secondary" {
+	if cfg.PrimaryProfile != "corp_secondary:user-corp_secondary" || cfg.CurrentProfile != "corp_secondary:user-corp_secondary" {
 		t.Fatalf("profiles pointers = primary %q current %q, want corp_secondary/corp_secondary", cfg.PrimaryProfile, cfg.CurrentProfile)
 	}
 	if len(cfg.Profiles) != 1 || cfg.Profiles[0].CorpID != "corp_secondary" {
 		t.Fatalf("profiles = %#v, want only corp_secondary retained", cfg.Profiles)
 	}
-	if authpkg.TokenDataExistsKeychainForCorpID("corp_primary") {
+	if authpkg.TokenDataExistsKeychainForProfileID("corp_primary:user-corp_primary") {
 		t.Fatal("selected primary profile token should be deleted")
 	}
-	if !authpkg.TokenDataExistsKeychainForCorpID("corp_secondary") {
+	if !authpkg.TokenDataExistsKeychainForProfileID("corp_secondary:user-corp_secondary") {
 		t.Fatal("unselected secondary profile token should be retained")
 	}
 	loaded, err := authpkg.LoadTokenData(configDir)

@@ -40,9 +40,9 @@ func newProfileCommand() *cobra.Command {
 profile switch/use 才会持久修改默认组织上下文。`,
 		Example: `  dws profile list
   dws profile switch
-  dws profile switch <corpId>
+  dws profile switch <profileId|name|corpId>
   dws profile switch -
-  dws --profile <corpId> contact user get-self`,
+  dws --profile <profileId|name|corpId> contact user get-self`,
 		Args:              cobra.NoArgs,
 		TraverseChildren:  true,
 		DisableAutoGenTag: true,
@@ -85,10 +85,10 @@ func newProfileListCommand() *cobra.Command {
 
 func newProfileUseCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "use [name|corpId|-]",
+		Use:   "use [profileId|name|corpId|-]",
 		Short: "切换当前组织 profile（兼容 profile switch）",
-		Long:  "兼容命令，语义等同于 dws profile switch。可用组织名、profile 名、corpId 或 - 切回上一个组织。",
-		Example: `  dws profile use <corpId>
+		Long:  "兼容命令，语义等同于 dws profile switch。可用 profileId、组织名、profile 名、唯一 corpId 或 - 切回上一个组织。",
+		Example: `  dws profile use <profileId|name|corpId>
   dws profile use --name "钉钉"
   dws profile use -`,
 		Args:              cobra.MaximumNArgs(1),
@@ -103,18 +103,18 @@ func newProfileUseCommand() *cobra.Command {
 
 func newProfileSwitchCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "switch [name|corpId|-]",
+		Use:   "switch [profileId|name|corpId|-]",
 		Short: "切换当前组织 profile",
 		Long: `切换默认组织 profile，并记录 previousProfile 以支持 dws profile switch - 快速切回。
 
-不带参数时，交互终端会展示组织选择器；非交互环境请显式传入组织名、profile 名或 corpId。
+不带参数时，交互终端会展示组织选择器；非交互环境请显式传入 profileId、组织名、profile 名或唯一 corpId。
 需要只影响单次业务命令时，请使用全局 --profile。`,
 		Example: `  dws profile switch
-  dws profile switch <corpId>
+  dws profile switch <profileId|name|corpId>
   dws profile switch --corpId <corpId>
   dws profile switch --name "钉钉"
   dws profile switch -
-  dws --profile <corpId> contact user get-self`,
+  dws --profile <profileId|name|corpId> contact user get-self`,
 		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -241,7 +241,7 @@ func switchProfileAndWrite(cmd *cobra.Command, configDir, selector string, usedT
 
 func selectProfileSwitchProfile(cmd *cobra.Command, configDir string) (string, error) {
 	if !profileSwitchInteractiveTerminal() {
-		return "", apperrors.NewValidation("profile selector required in non-interactive mode; use dws profile switch <name|corpId>")
+		return "", apperrors.NewValidation("profile selector required in non-interactive mode; use dws profile switch <profileId|name|corpId>")
 	}
 	if err := authpkg.EnsureProfilesMigration(configDir); err != nil {
 		return "", apperrors.NewInternal(fmt.Sprintf("failed to migrate profiles: %v", err))
@@ -263,8 +263,8 @@ func selectProfileSwitchProfile(cmd *cobra.Command, configDir string) (string, e
 	return runProfileSwitchTUI(cmd, cfg, choice)
 }
 
-func runProfileSwitchTUI(cmd *cobra.Command, cfg *authpkg.ProfilesConfig, selectedCorpID string) (string, error) {
-	model := newProfileSwitchTUIModel(cfg, selectedCorpID)
+func runProfileSwitchTUI(cmd *cobra.Command, cfg *authpkg.ProfilesConfig, selectedProfileID string) (string, error) {
+	model := newProfileSwitchTUIModel(cfg, selectedProfileID)
 	program := tea.NewProgram(
 		model,
 		tea.WithAltScreen(),
@@ -283,7 +283,7 @@ func runProfileSwitchTUI(cmd *cobra.Command, cfg *authpkg.ProfilesConfig, select
 	if !ok || final.aborted || !final.submitted {
 		return "", apperrors.NewValidation("组织选择中止: user aborted")
 	}
-	return final.selectedCorpID(), nil
+	return final.selectedProfileID(), nil
 }
 
 type profileSwitchTUIModel struct {
@@ -295,12 +295,12 @@ type profileSwitchTUIModel struct {
 	aborted   bool
 }
 
-func newProfileSwitchTUIModel(cfg *authpkg.ProfilesConfig, selectedCorpID string) profileSwitchTUIModel {
+func newProfileSwitchTUIModel(cfg *authpkg.ProfilesConfig, selectedProfileID string) profileSwitchTUIModel {
 	model := profileSwitchTUIModel{cfg: cfg}
 	if cfg != nil {
 		model.profiles = profileSwitchSortedProfiles(cfg.Profiles)
 	}
-	model.selected = profileSwitchProfileIndex(model.profiles, selectedCorpID)
+	model.selected = profileSwitchProfileIndex(model.profiles, selectedProfileID)
 	if model.selected < 0 {
 		model.selected = 0
 	}
@@ -449,17 +449,17 @@ func (m *profileSwitchTUIModel) ensureSelectedVisible() {
 	}
 }
 
-func (m profileSwitchTUIModel) selectedCorpID() string {
+func (m profileSwitchTUIModel) selectedProfileID() string {
 	if m.selected < 0 || m.selected >= len(m.profiles) {
 		return ""
 	}
-	return strings.TrimSpace(m.profiles[m.selected].CorpID)
+	return profileLocalID(m.profiles[m.selected])
 }
 
-func profileSwitchProfileIndex(profiles []authpkg.Profile, corpID string) int {
-	corpID = strings.TrimSpace(corpID)
+func profileSwitchProfileIndex(profiles []authpkg.Profile, profileID string) int {
+	profileID = strings.TrimSpace(profileID)
 	for i, p := range profiles {
-		if strings.TrimSpace(p.CorpID) == corpID {
+		if profileLocalID(p) == profileID {
 			return i
 		}
 	}
@@ -479,7 +479,7 @@ func profileSwitchProfileCells(p authpkg.Profile, cfg *authpkg.ProfilesConfig) (
 }
 
 func profileSwitchProfileStatus(p authpkg.Profile, cfg *authpkg.ProfilesConfig) string {
-	if cfg != nil && p.CorpID == cfg.CurrentProfile {
+	if cfg != nil && profileLocalID(p) == cfg.CurrentProfile {
 		return "当前组织"
 	}
 	return ""
@@ -569,6 +569,7 @@ type profileUseResponse struct {
 }
 
 type profileView struct {
+	ProfileID         string   `json:"profileId,omitempty"`
 	CorpID            string   `json:"corpId"`
 	CorpName          string   `json:"corpName"`
 	UserID            string   `json:"userId,omitempty"`
@@ -621,11 +622,11 @@ func writeProfileListTable(w io.Writer, cfg *authpkg.ProfilesConfig) {
 	fmt.Fprintf(w, "%-3s %-3s %-28s %-34s %-10s %s\n", "CUR", "PRI", "ORG_NAME", "CORP_ID", "STATUS", "USER")
 	for _, p := range cfg.Profiles {
 		current := ""
-		if p.CorpID == cfg.CurrentProfile {
+		if profileLocalID(p) == cfg.CurrentProfile {
 			current = "*"
 		}
 		primary := ""
-		if p.CorpID == cfg.PrimaryProfile {
+		if profileLocalID(p) == cfg.PrimaryProfile {
 			primary = "*"
 		}
 		user := p.UserName
@@ -683,7 +684,9 @@ func profileViews(cfg *authpkg.ProfilesConfig) []profileView {
 }
 
 func profileViewFromProfile(p authpkg.Profile, primaryProfile, currentProfile string) profileView {
+	profileID := profileLocalID(p)
 	return profileView{
+		ProfileID:         profileID,
 		CorpID:            p.CorpID,
 		CorpName:          profileOrgName(p),
 		UserID:            p.UserID,
@@ -695,9 +698,19 @@ func profileViewFromProfile(p authpkg.Profile, primaryProfile, currentProfile st
 		RefreshExpAt:      p.RefreshExpAt,
 		LastLoginAt:       p.LastLoginAt,
 		LastUsedAt:        p.LastUsedAt,
-		IsPrimary:         p.CorpID == primaryProfile,
-		IsCurrent:         p.CorpID == currentProfile,
+		IsPrimary:         profileID == primaryProfile,
+		IsCurrent:         profileID == currentProfile,
 	}
+}
+
+func profileLocalID(p authpkg.Profile) string {
+	if id := strings.TrimSpace(p.ProfileID); id != "" {
+		return id
+	}
+	if corpID, userID := strings.TrimSpace(p.CorpID), strings.TrimSpace(p.UserID); corpID != "" && userID != "" {
+		return corpID + ":" + userID
+	}
+	return strings.TrimSpace(p.CorpID)
 }
 
 func clipProfileCell(value string, limit int) string {

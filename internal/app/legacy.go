@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cache"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
@@ -206,6 +207,25 @@ func editionPartition() string {
 	return config.EditionPartition(edition.Get().Name)
 }
 
+func runtimeCachePartition() string {
+	base := editionPartition()
+	profile := runtimeCacheProfileID()
+	if profile == "" {
+		return base
+	}
+	return base + "/profile/" + profile
+}
+
+func runtimeCacheProfileID() string {
+	if profile := strings.TrimSpace(authpkg.RuntimeProfile()); profile != "" {
+		return profile
+	}
+	if current, err := authpkg.ResolveProfile(defaultConfigDir(), ""); err == nil && current != nil {
+		return strings.TrimSpace(current.ProfileID)
+	}
+	return ""
+}
+
 // discoveryTraceEnabled reports whether the user asked for discovery-path diagnostics.
 // loadDynamicCommands runs while building the command tree, before PersistentPreRun
 // applies --debug to slog; we also accept argv --debug and DWS_PERF_DEBUG for consistency.
@@ -381,7 +401,7 @@ func loadCachedToolNames(store *cache.Store, servers []market.ServerDescriptor) 
 	if store == nil {
 		return result
 	}
-	partition := editionPartition()
+	partition := runtimeCachePartition()
 	for _, server := range servers {
 		slug := strings.TrimSpace(server.CLI.ID)
 		if slug == "" || strings.TrimSpace(server.Key) == "" {
@@ -411,7 +431,7 @@ func loadCachedDetailsFast(store *cache.Store, servers []market.ServerDescriptor
 	if store == nil {
 		return result
 	}
-	partition := editionPartition()
+	partition := runtimeCachePartition()
 	for _, server := range servers {
 		if server.DetailLocator.MCPID <= 0 {
 			continue
@@ -442,7 +462,7 @@ func fetchDetailsByServerID(ctx context.Context, client *market.Client, servers 
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	partition := editionPartition()
+	partition := runtimeCachePartition()
 	now := time.Now().UTC()
 	if store != nil && store.Now != nil {
 		now = store.Now().UTC()

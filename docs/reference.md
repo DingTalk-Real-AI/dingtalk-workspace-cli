@@ -43,6 +43,22 @@ dws schema -f pretty ding.send_ding_message          # Pretty (ANSI-colored, sch
 dws todo task list --dry-run    # Preview MCP call without executing / 预览但不执行
 ```
 
+## Profiles / 本地账号
+
+`profileId` is the stable local profile key. New DingTalk logins use `corpId:userId`, so one machine can keep multiple accounts under the same DingTalk organization.
+
+`profileId` 是稳定的本地 profile 标识。新的钉钉登录使用 `corpId:userId`，因此同一台机器可以保存同一组织下的多个账号。
+
+```bash
+dws profile list --format json
+dws profile switch 'dingxxx:user123'
+dws auth logout --profile 'dingxxx:user123'
+```
+
+`corpId` remains a compatibility selector only when it uniquely matches one local profile. If multiple local accounts share the same `corpId`, use `profileId` or a unique profile name.
+
+`corpId` 仍可作为兼容选择器，但必须唯一匹配一个本地 profile；多个本地账号共用同一 `corpId` 时，请使用 `profileId` 或唯一 profile 名。
+
 ## Output to File / 输出到文件
 
 ```bash
