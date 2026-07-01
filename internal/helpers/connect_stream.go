@@ -925,6 +925,12 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 	}
 	defer release()
 
+	// Health heartbeat: record connect/receive/reply/error so `connect status`
+	// can tell a live connector from a dead one (see connect_health.go). Nil
+	// when no clientId identity is available; all calls below are no-ops then.
+	health := newConnectHealth(clientID, channel)
+	health.start(ctx)
+
 	streamLoggerOnce.Do(func() { sdklogger.SetLogger(streamSDKLogger{}) })
 	replier := chatbot.NewChatbotReplier()
 	dedup := newMsgDedup(10000)
@@ -983,6 +989,7 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		}
 		fmt.Fprintf(os.Stderr, "[connect] 收到 @%s: %s (convType=%s convId=%s staffId=%s msgId=%s)\n",
 			sender, truncateRunes(shown, 80), data.ConversationType, data.ConversationId, data.SenderStaffId, data.MsgId)
+		health.onPush()
 		// Ack-first: return now, reply asynchronously via sessionWebhook (which is
 		// independent of the Stream ack). Use a background context so the in-flight
 		// forward is not cancelled by the SDK when this callback returns.
@@ -1118,8 +1125,10 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "[connect] 转发失败 (%s, 耗时 %s): %v\n", channel, time.Since(started).Round(time.Millisecond), err)
 				reply = fmt.Sprintf("（%s 调用失败：%v）", channel, err)
+				health.onError(err)
 			} else {
 				fmt.Fprintf(os.Stderr, "[connect] agent 已生成回复 (%s, 耗时 %s): %s\n", channel, time.Since(started).Round(time.Millisecond), truncateRunes(reply, 80))
+				health.onReply()
 			}
 
 			// Confirmation gate orchestration: if the agent's reply declared
@@ -1208,6 +1217,7 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		return apperrors.NewInternal("stream 建连失败：" + err.Error())
 	}
 	defer cli.Close()
+	health.onConnected()
 	<-ctx.Done()
 	return nil
 }

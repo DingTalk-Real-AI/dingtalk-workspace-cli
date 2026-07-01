@@ -401,8 +401,12 @@ func superviseWait(ctx context.Context, worker *exec.Cmd) error {
 	}
 }
 
-// daemonStatus reports the state of the connector daemon to w.
-func daemonStatus(w io.Writer, dirKey string) error {
+// daemonStatus reports connector health to w. It combines two independent
+// signals: the daemon supervisor pid file (is a supervisor alive) and the
+// connector heartbeat (is the connection live and receiving — see
+// connect_health.go). jsonOut emits the machine-readable health report an
+// external supervisor (launchd/systemd/pm2/cron) consumes to decide restarts.
+func daemonStatus(w io.Writer, dirKey string, jsonOut bool) error {
 	dir, err := connectDaemonDir(dirKey)
 	if err != nil {
 		return apperrors.NewInternal("resolve daemon dir: " + err.Error())
@@ -411,23 +415,59 @@ func daemonStatus(w io.Writer, dirKey string) error {
 	if err != nil {
 		return apperrors.NewInternal(err.Error())
 	}
-	if st == nil {
-		fmt.Fprintf(w, "connect daemon: not running (no pid file under %s)\n", dir)
+	supervised := st != nil && st.Pid > 0 && processAlive(st.Pid)
+
+	hb, err := readConnectHeartbeat(dir)
+	if err != nil {
+		return apperrors.NewInternal("read connector heartbeat: " + err.Error())
+	}
+	report := deriveConnectHealth(hb, supervised, time.Now())
+
+	if jsonOut {
+		data, merr := json.MarshalIndent(report, "", "  ")
+		if merr != nil {
+			return apperrors.NewInternal(merr.Error())
+		}
+		fmt.Fprintln(w, string(data))
 		return nil
 	}
-	if st.Pid <= 0 || !processAlive(st.Pid) {
-		fmt.Fprintf(w, "connect daemon: not running (stale pid file for pid %d at %s)\n", st.Pid, daemonPidPath(dir))
-		return nil
+
+	fmt.Fprintf(w, "connect: %s\n", report.State)
+	if report.Detail != "" {
+		fmt.Fprintf(w, "  detail:    %s\n", report.Detail)
 	}
-	uptime := time.Since(time.Unix(st.StartUnix, 0)).Round(time.Second)
-	fmt.Fprintf(w, "connect daemon: running\n")
-	fmt.Fprintf(w, "  pid:     %d\n", st.Pid)
-	fmt.Fprintf(w, "  uptime:  %s\n", uptime)
-	fmt.Fprintf(w, "  logs:    %s\n", st.LogPath)
-	if st.ClientID != "" {
-		fmt.Fprintf(w, "  client:  %s\n", st.ClientID)
+	if report.Pid > 0 {
+		fmt.Fprintf(w, "  pid:       %d\n", report.Pid)
+	}
+	if report.Channel != "" {
+		fmt.Fprintf(w, "  channel:   %s\n", report.Channel)
+	}
+	if report.ClientID != "" {
+		fmt.Fprintf(w, "  client:    %s\n", report.ClientID)
+	}
+	if report.UptimeSec > 0 {
+		fmt.Fprintf(w, "  uptime:    %s\n", (time.Duration(report.UptimeSec) * time.Second).Round(time.Second))
+	}
+	fmt.Fprintf(w, "  supervisor: %s\n", supervisedLabel(supervised))
+	if hb != nil {
+		if report.LastPushAgoSec > 0 {
+			fmt.Fprintf(w, "  last recv:  %s ago\n", (time.Duration(report.LastPushAgoSec) * time.Second).Round(time.Second))
+		} else {
+			fmt.Fprintf(w, "  last recv:  (none since start)\n")
+		}
+		if report.LastError != "" {
+			fmt.Fprintf(w, "  last error: %s\n", report.LastError)
+		}
+		fmt.Fprintf(w, "  logs:       %s\n", daemonLogPath(dir))
 	}
 	return nil
+}
+
+func supervisedLabel(supervised bool) string {
+	if supervised {
+		return "running (--daemon)"
+	}
+	return "none (foreground or external)"
 }
 
 // daemonStop gracefully stops the connector daemon: SIGTERM the supervisor (it
@@ -483,7 +523,7 @@ func daemonStop(w io.Writer, dirKey string) error {
 func newDevAppRobotConnectStatusCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "status",
-		Short:             "查看后台连接器守护进程状态（pid、运行时长、日志路径）",
+		Short:             "查看连接器健康状态（healthy/degraded/down，pid、收发活动、日志路径；--json 供外部托管消费）",
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -491,12 +531,14 @@ func newDevAppRobotConnectStatusCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return daemonStatus(cmd.OutOrStdout(), dirKey)
+			jsonOut, _ := cmd.Flags().GetBool("json")
+			return daemonStatus(cmd.OutOrStdout(), dirKey, jsonOut)
 		},
 	}
 	preferLegacyLeaf(cmd)
 	cmd.Flags().String("robot-client-id", "", "机器人 clientId（定位守护进程）")
 	cmd.Flags().String("unified-app-id", "", "统一应用 ID（当未用 clientId 起守护进程时定位）")
+	cmd.Flags().Bool("json", false, "以 JSON 输出健康报告（供 launchd/systemd/pm2/cron 判断是否重启）")
 	return cmd
 }
 
