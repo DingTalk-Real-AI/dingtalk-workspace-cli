@@ -39,6 +39,11 @@ func TokenAccountForCorpID(corpID string) string {
 	return keychain.AccountToken + ":" + strings.TrimSpace(corpID)
 }
 
+// TokenAccountForProfileID returns the keychain account used for a profile-bound token.
+func TokenAccountForProfileID(profileID string) string {
+	return keychain.AccountToken + ":" + strings.TrimSpace(profileID)
+}
+
 // SaveTokenDataKeychainForCorpID saves TokenData to a corp-scoped keychain slot.
 func SaveTokenDataKeychainForCorpID(corpID string, data *TokenData) error {
 	corpID = strings.TrimSpace(corpID)
@@ -46,6 +51,15 @@ func SaveTokenDataKeychainForCorpID(corpID string, data *TokenData) error {
 		return fmt.Errorf("corpId is required for profile token storage")
 	}
 	return saveTokenDataKeychainAccount(TokenAccountForCorpID(corpID), data)
+}
+
+// SaveTokenDataKeychainForProfileID saves TokenData to a profile-scoped keychain slot.
+func SaveTokenDataKeychainForProfileID(profileID string, data *TokenData) error {
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		return fmt.Errorf("profileId is required for profile token storage")
+	}
+	return saveTokenDataKeychainAccount(TokenAccountForProfileID(profileID), data)
 }
 
 func saveTokenDataKeychainAccount(account string, data *TokenData) error {
@@ -80,6 +94,15 @@ func LoadTokenDataKeychainForCorpID(corpID string) (*TokenData, error) {
 	return loadTokenDataKeychainAccount(TokenAccountForCorpID(corpID))
 }
 
+// LoadTokenDataKeychainForProfileID loads TokenData from a profile-scoped keychain slot.
+func LoadTokenDataKeychainForProfileID(profileID string) (*TokenData, error) {
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		return nil, fmt.Errorf("profileId is required for profile token storage")
+	}
+	return loadTokenDataKeychainAccount(TokenAccountForProfileID(profileID))
+}
+
 func loadTokenDataKeychainAccount(account string) (*TokenData, error) {
 	jsonStr, err := keychain.Get(keychain.Service, account)
 	if err != nil {
@@ -110,6 +133,15 @@ func DeleteTokenDataKeychainForCorpID(corpID string) error {
 	return keychain.Remove(keychain.Service, TokenAccountForCorpID(corpID))
 }
 
+// DeleteTokenDataKeychainForProfileID removes TokenData from a profile-scoped keychain slot.
+func DeleteTokenDataKeychainForProfileID(profileID string) error {
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		return fmt.Errorf("profileId is required for profile token storage")
+	}
+	return keychain.Remove(keychain.Service, TokenAccountForProfileID(profileID))
+}
+
 // TokenDataExistsKeychain checks if token data exists in keychain.
 func TokenDataExistsKeychain() bool {
 	return keychain.Exists(keychain.Service, keychain.AccountToken)
@@ -122,6 +154,15 @@ func TokenDataExistsKeychainForCorpID(corpID string) bool {
 		return false
 	}
 	return keychain.Exists(keychain.Service, TokenAccountForCorpID(corpID))
+}
+
+// TokenDataExistsKeychainForProfileID checks if a profile-scoped token exists.
+func TokenDataExistsKeychainForProfileID(profileID string) bool {
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		return false
+	}
+	return keychain.Exists(keychain.Service, TokenAccountForProfileID(profileID))
 }
 
 // EnsureMigration performs one-time migration from legacy .data to keychain.

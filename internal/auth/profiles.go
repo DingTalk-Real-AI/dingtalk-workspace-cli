@@ -65,6 +65,7 @@ type ProfilesConfig struct {
 // Profile is a logged-in DingTalk organization identity.
 type Profile struct {
 	Name              string   `json:"name"`
+	ProfileID         string   `json:"profileId,omitempty"`
 	CorpID            string   `json:"corpId"`
 	CorpName          string   `json:"corpName,omitempty"`
 	UserID            string   `json:"userId,omitempty"`
@@ -180,7 +181,8 @@ func ensureProfilesMigrationLocked(configDir string) error {
 	if err != nil || data == nil || strings.TrimSpace(data.CorpID) == "" {
 		return nil
 	}
-	if err := SaveTokenDataKeychainForCorpID(data.CorpID, data); err != nil {
+	data.ProfileID = ProfileIDFromToken(data)
+	if err := SaveTokenDataKeychainForProfileID(data.ProfileID, data); err != nil {
 		return err
 	}
 	return upsertProfileFromToken(configDir, cfg, data, false)
@@ -215,12 +217,15 @@ func upsertProfileFromToken(configDir string, cfg *ProfilesConfig, data *TokenDa
 	if corpID == "" {
 		return nil
 	}
+	profileID := ProfileIDFromToken(data)
+	data.ProfileID = profileID
 	normalizeProfilesConfig(cfg)
 	now := time.Now().Format(time.RFC3339)
-	idx := profileIndexByCorpID(cfg, corpID)
+	idx := profileIndexByProfileID(cfg, profileID)
 	if idx < 0 {
 		profile := Profile{
 			Name:         chooseProfileName(cfg, data),
+			ProfileID:    profileID,
 			CorpID:       corpID,
 			CorpName:     strings.TrimSpace(data.CorpName),
 			UserID:       strings.TrimSpace(data.UserID),
@@ -236,6 +241,7 @@ func upsertProfileFromToken(configDir string, cfg *ProfilesConfig, data *TokenDa
 		cfg.Profiles = append(cfg.Profiles, profile)
 	} else {
 		p := &cfg.Profiles[idx]
+		p.ProfileID = profileID
 		if shouldRefreshProfileName(p, data) {
 			p.Name = chooseProfileName(cfg, data)
 		}
@@ -259,18 +265,40 @@ func upsertProfileFromToken(configDir string, cfg *ProfilesConfig, data *TokenDa
 		p.UpdatedAt = now
 	}
 	if cfg.PrimaryProfile == "" {
-		cfg.PrimaryProfile = corpID
+		cfg.PrimaryProfile = profileID
 	}
-	if makeCurrent && cfg.CurrentProfile != corpID {
+	if makeCurrent && cfg.CurrentProfile != profileID {
 		if cfg.CurrentProfile != "" {
 			cfg.PreviousProfile = cfg.CurrentProfile
 		}
-		cfg.CurrentProfile = corpID
+		cfg.CurrentProfile = profileID
 	}
 	if cfg.CurrentProfile == "" {
-		cfg.CurrentProfile = corpID
+		cfg.CurrentProfile = profileID
 	}
 	return SaveProfiles(configDir, cfg)
+}
+
+// ProfileIDFromToken returns the stable local profile key for a token.
+func ProfileIDFromToken(data *TokenData) string {
+	if data == nil {
+		return ""
+	}
+	corpID := strings.TrimSpace(data.CorpID)
+	userID := strings.TrimSpace(data.UserID)
+	if corpID == "" {
+		return ""
+	}
+	if userID == "" {
+		if id := strings.TrimSpace(data.ProfileID); id != "" {
+			return id
+		}
+		return corpID
+	}
+	if id := strings.TrimSpace(data.ProfileID); id != "" && id != corpID {
+		return id
+	}
+	return corpID + ":" + userID
 }
 
 // ResolveProfile returns a profile selected by name/corpId or by current/primary fallback.
@@ -316,7 +344,7 @@ func resolveProfileForLoad(configDir, selector string) (*Profile, error) {
 		return p, nil
 	}
 	for _, candidate := range []string{cfg.CurrentProfile, cfg.PrimaryProfile} {
-		if p := findProfile(cfg, candidate); p != nil && TokenDataExistsKeychainForCorpID(p.CorpID) {
+		if p := findProfile(cfg, candidate); p != nil && TokenDataExistsKeychainForProfileID(p.ProfileID) {
 			return p, nil
 		}
 	}
@@ -352,20 +380,20 @@ func setCurrentProfileLocked(configDir, selector string) (*Profile, error) {
 	if p == nil {
 		return nil, fmt.Errorf("profile %q not found", strings.TrimSpace(selector))
 	}
-	if cfg.CurrentProfile != p.CorpID {
+	if cfg.CurrentProfile != p.ProfileID {
 		if cfg.CurrentProfile != "" {
 			cfg.PreviousProfile = cfg.CurrentProfile
 		}
-		cfg.CurrentProfile = p.CorpID
+		cfg.CurrentProfile = p.ProfileID
 	}
-	touchProfile(cfg, p.CorpID)
+	touchProfile(cfg, p.ProfileID)
 	if err := SaveProfiles(configDir, cfg); err != nil {
 		return nil, err
 	}
 	if err := syncLegacyTokenMirrorLocked(configDir); err != nil {
 		return nil, err
 	}
-	return findProfile(cfg, p.CorpID), nil
+	return findProfile(cfg, p.ProfileID), nil
 }
 
 // UsePreviousProfile toggles currentProfile and previousProfile.
@@ -395,15 +423,15 @@ func usePreviousProfileLocked(configDir string) (*Profile, error) {
 	if p == nil {
 		return nil, fmt.Errorf("previous profile %q not found", prev)
 	}
-	cfg.PreviousProfile, cfg.CurrentProfile = cfg.CurrentProfile, p.CorpID
-	touchProfile(cfg, p.CorpID)
+	cfg.PreviousProfile, cfg.CurrentProfile = cfg.CurrentProfile, p.ProfileID
+	touchProfile(cfg, p.ProfileID)
 	if err := SaveProfiles(configDir, cfg); err != nil {
 		return nil, err
 	}
 	if err := syncLegacyTokenMirrorLocked(configDir); err != nil {
 		return nil, err
 	}
-	return findProfile(cfg, p.CorpID), nil
+	return findProfile(cfg, p.ProfileID), nil
 }
 
 // RemoveProfile removes a profile from metadata and returns the removed profile.
@@ -429,21 +457,56 @@ func removeProfileLocked(configDir, selector string) (*Profile, error) {
 	removed := *p
 	kept := cfg.Profiles[:0]
 	for _, profile := range cfg.Profiles {
-		if profile.CorpID != removed.CorpID {
+		if profile.ProfileID != removed.ProfileID {
 			kept = append(kept, profile)
 		}
 	}
 	cfg.Profiles = kept
-	if cfg.PrimaryProfile == removed.CorpID {
-		cfg.PrimaryProfile = firstProfileCorpID(cfg)
+	if cfg.PrimaryProfile == removed.ProfileID {
+		cfg.PrimaryProfile = firstProfileID(cfg)
 	}
-	if cfg.CurrentProfile == removed.CorpID {
+	if cfg.CurrentProfile == removed.ProfileID {
 		cfg.CurrentProfile = cfg.PrimaryProfile
 		if cfg.CurrentProfile == "" {
-			cfg.CurrentProfile = firstProfileCorpID(cfg)
+			cfg.CurrentProfile = firstProfileID(cfg)
 		}
 	}
-	if cfg.PreviousProfile == removed.CorpID {
+	if cfg.PreviousProfile == removed.ProfileID {
+		cfg.PreviousProfile = ""
+	}
+	if len(cfg.Profiles) == 0 {
+		cfg.PrimaryProfile = ""
+		cfg.CurrentProfile = ""
+		cfg.PreviousProfile = ""
+	}
+	if err := SaveProfiles(configDir, cfg); err != nil {
+		return nil, err
+	}
+	return &removed, nil
+}
+
+func removeExactProfileIDLocked(configDir, profileID string) (*Profile, error) {
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		return nil, fmt.Errorf("profileId is empty")
+	}
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		return nil, err
+	}
+	idx := profileIndexByProfileID(cfg, profileID)
+	if idx < 0 {
+		return nil, fmt.Errorf("profile %q not found", profileID)
+	}
+	removed := cfg.Profiles[idx]
+	cfg.Profiles = append(cfg.Profiles[:idx], cfg.Profiles[idx+1:]...)
+	if cfg.PrimaryProfile == removed.ProfileID {
+		cfg.PrimaryProfile = firstProfileID(cfg)
+	}
+	if cfg.CurrentProfile == removed.ProfileID {
+		cfg.CurrentProfile = cfg.PrimaryProfile
+	}
+	if cfg.PreviousProfile == removed.ProfileID {
 		cfg.PreviousProfile = ""
 	}
 	if len(cfg.Profiles) == 0 {
@@ -499,7 +562,7 @@ func syncLegacyTokenMirrorLocked(configDir string) error {
 		if p == nil {
 			continue
 		}
-		data, loadErr := LoadTokenDataKeychainForCorpID(p.CorpID)
+		data, loadErr := LoadTokenDataKeychainForProfileID(p.ProfileID)
 		if loadErr != nil {
 			// Transient keychain read failure: do NOT touch the existing mirror.
 			hadReadError = true
@@ -527,15 +590,28 @@ func normalizeProfilesConfig(cfg *ProfilesConfig) {
 	if cfg == nil {
 		return
 	}
-	cfg.Version = 1
+	cfg.Version = 2
 	seen := make(map[string]bool, len(cfg.Profiles))
+	pointerMap := make(map[string]string, len(cfg.Profiles))
 	profiles := cfg.Profiles[:0]
 	for _, p := range cfg.Profiles {
 		p.CorpID = strings.TrimSpace(p.CorpID)
-		if p.CorpID == "" || seen[p.CorpID] {
+		p.UserID = strings.TrimSpace(p.UserID)
+		p.ProfileID = strings.TrimSpace(p.ProfileID)
+		if p.ProfileID == "" || (p.ProfileID == p.CorpID && p.UserID != "") {
+			p.ProfileID = p.CorpID
+			if p.UserID != "" {
+				p.ProfileID = p.CorpID + ":" + p.UserID
+			}
+		}
+		if p.CorpID == "" || p.ProfileID == "" || seen[p.ProfileID] {
 			continue
 		}
-		seen[p.CorpID] = true
+		seen[p.ProfileID] = true
+		if _, ok := pointerMap[p.CorpID]; !ok {
+			pointerMap[p.CorpID] = p.ProfileID
+		}
+		pointerMap[p.ProfileID] = p.ProfileID
 		p.Name = strings.TrimSpace(p.Name)
 		if p.Name == "" {
 			p.Name = p.CorpID
@@ -549,6 +625,9 @@ func normalizeProfilesConfig(cfg *ProfilesConfig) {
 		profiles = append(profiles, p)
 	}
 	cfg.Profiles = profiles
+	cfg.PrimaryProfile = migrateProfilePointer(cfg.PrimaryProfile, pointerMap)
+	cfg.CurrentProfile = migrateProfilePointer(cfg.CurrentProfile, pointerMap)
+	cfg.PreviousProfile = migrateProfilePointer(cfg.PreviousProfile, pointerMap)
 	if cfg.PrimaryProfile != "" && findProfile(cfg, cfg.PrimaryProfile) == nil {
 		cfg.PrimaryProfile = ""
 	}
@@ -559,11 +638,22 @@ func normalizeProfilesConfig(cfg *ProfilesConfig) {
 		cfg.PreviousProfile = ""
 	}
 	if cfg.PrimaryProfile == "" {
-		cfg.PrimaryProfile = firstProfileCorpID(cfg)
+		cfg.PrimaryProfile = firstProfileID(cfg)
 	}
 	if cfg.CurrentProfile == "" {
 		cfg.CurrentProfile = cfg.PrimaryProfile
 	}
+}
+
+func migrateProfilePointer(value string, pointerMap map[string]string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if mapped := pointerMap[value]; mapped != "" {
+		return mapped
+	}
+	return value
 }
 
 func chooseProfileName(cfg *ProfilesConfig, data *TokenData) string {
@@ -621,9 +711,16 @@ func findProfile(cfg *ProfilesConfig, selector string) *Profile {
 		return nil
 	}
 	var corpNameMatch *Profile
+	var corpIDMatch *Profile
 	for i := range cfg.Profiles {
-		if cfg.Profiles[i].CorpID == selector || cfg.Profiles[i].Name == selector {
+		if cfg.Profiles[i].ProfileID == selector || cfg.Profiles[i].Name == selector {
 			return &cfg.Profiles[i]
+		}
+		if cfg.Profiles[i].CorpID == selector {
+			if corpIDMatch != nil {
+				return nil
+			}
+			corpIDMatch = &cfg.Profiles[i]
 		}
 		if strings.TrimSpace(cfg.Profiles[i].CorpName) == selector {
 			if corpNameMatch != nil {
@@ -632,30 +729,33 @@ func findProfile(cfg *ProfilesConfig, selector string) *Profile {
 			corpNameMatch = &cfg.Profiles[i]
 		}
 	}
+	if corpIDMatch != nil {
+		return corpIDMatch
+	}
 	return corpNameMatch
 }
 
-func profileIndexByCorpID(cfg *ProfilesConfig, corpID string) int {
+func profileIndexByProfileID(cfg *ProfilesConfig, profileID string) int {
 	if cfg == nil {
 		return -1
 	}
 	for i := range cfg.Profiles {
-		if cfg.Profiles[i].CorpID == corpID {
+		if cfg.Profiles[i].ProfileID == profileID {
 			return i
 		}
 	}
 	return -1
 }
 
-func firstProfileCorpID(cfg *ProfilesConfig) string {
+func firstProfileID(cfg *ProfilesConfig) string {
 	if cfg == nil || len(cfg.Profiles) == 0 {
 		return ""
 	}
-	return cfg.Profiles[0].CorpID
+	return cfg.Profiles[0].ProfileID
 }
 
-func touchProfile(cfg *ProfilesConfig, corpID string) {
-	if p := findProfile(cfg, corpID); p != nil {
+func touchProfile(cfg *ProfilesConfig, profileID string) {
+	if p := findProfile(cfg, profileID); p != nil {
 		now := time.Now().Format(time.RFC3339)
 		p.LastUsedAt = now
 		p.UpdatedAt = now

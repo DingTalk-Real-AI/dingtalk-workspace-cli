@@ -37,6 +37,7 @@ type TokenData struct {
 	PersistentCode string    `json:"persistent_code"`
 	ExpiresAt      time.Time `json:"expires_at"`
 	RefreshExpAt   time.Time `json:"refresh_expires_at"`
+	ProfileID      string    `json:"profile_id,omitempty"`
 	CorpID         string    `json:"corp_id"`
 	UserID         string    `json:"user_id,omitempty"`
 	UserName       string    `json:"user_name,omitempty"`
@@ -122,12 +123,18 @@ func saveTokenDataLocked(configDir string, data *TokenData) error {
 		return saveTokenViaHook(h, configDir, data)
 	}
 	if data != nil && strings.TrimSpace(data.CorpID) != "" {
-		if err := SaveTokenDataKeychainForCorpID(data.CorpID, data); err != nil {
+		profileID := ProfileIDFromToken(data)
+		data.ProfileID = profileID
+		if err := SaveTokenDataKeychainForProfileID(profileID, data); err != nil {
 			return err
 		}
 		makeCurrent := strings.TrimSpace(RuntimeProfile()) == ""
 		if err := upsertProfileFromTokenWithCurrentLocked(configDir, data, makeCurrent); err != nil {
 			return err
+		}
+		if profileID != strings.TrimSpace(data.CorpID) {
+			_ = DeleteTokenDataKeychainForProfileID(strings.TrimSpace(data.CorpID))
+			_, _ = removeExactProfileIDLocked(configDir, strings.TrimSpace(data.CorpID))
 		}
 		if makeCurrent {
 			if err := SaveTokenDataKeychain(data); err != nil {
@@ -145,6 +152,9 @@ func saveTokenDataLocked(configDir string, data *TokenData) error {
 }
 
 func saveTokenViaHook(h *edition.Hooks, configDir string, data *TokenData) error {
+	if data != nil {
+		data.ProfileID = ProfileIDFromToken(data)
+	}
 	jsonData, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshaling token data for hook: %w", err)
@@ -183,9 +193,16 @@ func LoadTokenDataForProfile(configDir, profile string) (*TokenData, error) {
 		return nil, err
 	}
 	if selected != nil {
-		data, err := LoadTokenDataKeychainForCorpID(selected.CorpID)
+		data, err := LoadTokenDataKeychainForProfileID(selected.ProfileID)
 		if err == nil {
 			return data, nil
+		}
+		if selected.ProfileID != selected.CorpID {
+			if data, legacyErr := LoadTokenDataKeychainForCorpID(selected.CorpID); legacyErr == nil && data != nil {
+				data.ProfileID = selected.ProfileID
+				_ = SaveTokenDataKeychainForProfileID(selected.ProfileID, data)
+				return data, nil
+			}
 		}
 		if strings.TrimSpace(profile) != "" {
 			return nil, err
@@ -242,8 +259,8 @@ func deleteTokenDataForProfileLocked(configDir, profile string) error {
 		return err
 	}
 	if selected != nil {
-		keychainErr := DeleteTokenDataKeychainForCorpID(selected.CorpID)
-		_, removeErr := removeProfileLocked(configDir, selected.CorpID)
+		keychainErr := DeleteTokenDataKeychainForProfileID(selected.ProfileID)
+		_, removeErr := removeProfileLocked(configDir, selected.ProfileID)
 		legacyErr := syncLegacyTokenMirrorLocked(configDir)
 		secureErr := DeleteSecureData(configDir)
 		if keychainErr != nil {
@@ -281,7 +298,7 @@ func DeleteAllTokenData(configDir string) error {
 		// other slot so the user can always self-heal via auth reset / logout.
 		if cfg, err := LoadProfiles(configDir); err == nil {
 			for _, profile := range cfg.Profiles {
-				if e := DeleteTokenDataKeychainForCorpID(profile.CorpID); e != nil && firstErr == nil {
+				if e := DeleteTokenDataKeychainForProfileID(profile.ProfileID); e != nil && firstErr == nil {
 					firstErr = e
 				}
 			}

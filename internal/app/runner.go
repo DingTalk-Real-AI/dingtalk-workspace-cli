@@ -282,10 +282,10 @@ func resolveMultiProfileSelections(configDir, rawSelector string) ([]multiProfil
 		if profile == nil {
 			return nil, false, fmt.Errorf("profile %q not found", selector)
 		}
-		if seen[profile.CorpID] {
+		if seen[profile.ProfileID] {
 			continue
 		}
-		seen[profile.CorpID] = true
+		seen[profile.ProfileID] = true
 		selections = append(selections, multiProfileSelection{
 			Selector: selector,
 			Profile:  *profile,
@@ -306,14 +306,16 @@ func (r *runtimeRunner) runMultiProfile(ctx context.Context, invocation executor
 	failed := 0
 
 	for _, selection := range selections {
-		authpkg.SetRuntimeProfile(selection.Profile.CorpID)
+		authpkg.SetRuntimeProfile(selection.Profile.ProfileID)
 		result, err := r.runSingle(ctx, cloneInvocation(invocation), false)
 
 		entry := map[string]any{
-			"selector": selection.Selector,
-			"corpId":   selection.Profile.CorpID,
-			"corpName": selection.Profile.CorpName,
-			"ok":       err == nil,
+			"selector":  selection.Selector,
+			"profileId": selection.Profile.ProfileID,
+			"corpId":    selection.Profile.CorpID,
+			"corpName":  selection.Profile.CorpName,
+			"userId":    selection.Profile.UserID,
+			"ok":        err == nil,
 		}
 		if err != nil {
 			failed++

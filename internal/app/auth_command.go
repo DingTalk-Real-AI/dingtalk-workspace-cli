@@ -111,7 +111,7 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 
 示例:
   dws auth login              # 本机登录并新增/刷新一个组织 profile
-  dws auth login --profile <corpId>  # 指定本次授权目标组织，不持久切换当前组织
+  dws auth login --profile <profileId|name|corpId>  # 指定本次授权目标组织，不持久切换当前组织
   dws auth login --recommend  # 无交互批量授权服务端推荐权限
   dws auth login --device     # SSH 远程 / 无头环境登录 (设备流)
   dws auth login --force      # 兼容保留；login 默认已忽略缓存并进入授权流程
@@ -238,20 +238,7 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 			} else {
 				fmt.Fprintln(w, authLoginStatusLine("登录成功！"))
 			}
-			if tokenData != nil {
-				if tokenData.CorpName != "" {
-					fmt.Fprintln(w, authLoginInfoLine("企业", tokenData.CorpName))
-				}
-				if tokenData.CorpID != "" {
-					fmt.Fprintln(w, authLoginInfoLine("企业 ID", tokenData.CorpID))
-				}
-				if tokenData.UserName != "" {
-					fmt.Fprintln(w, authLoginInfoLine("用户", tokenData.UserName))
-				}
-				if expiry := authLoginDisplayExpiry(tokenData); expiry != "" {
-					fmt.Fprintln(w, authLoginInfoLine("有效期", expiry))
-				}
-			}
+			writeAuthLoginInfoLines(w, tokenData)
 			fmt.Fprintln(w, authLoginMutedStyle().Render("Token 将自动刷新，无需重复登录"))
 			return nil
 		},
@@ -388,7 +375,7 @@ func newAuthLogoutCommand() *cobra.Command {
 
 默认退出所有已登录组织 profile；指定 --profile 时只退出该组织，不影响其他组织。`,
 		Example: `  dws auth logout
-  dws auth logout --profile <corpId>
+  dws auth logout --profile <profileId|name|corpId>
   dws auth logout --profile "钉钉"`,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -418,7 +405,7 @@ func newAuthLogoutCommand() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().String("profile", "", "指定要退出的 profile 名或 corpId")
+	cmd.Flags().String("profile", "", "指定要退出的 profileId、profile 名或唯一 corpId")
 	return cmd
 }
 
@@ -430,9 +417,9 @@ func newAuthStatusCommand() *cobra.Command {
 
 指定 --profile 时只读取并刷新被选中的 token slot，不会修改 currentProfile。`,
 		Example: `  dws auth status
-  dws auth status --profile <corpId>
+  dws auth status --profile <profileId|name|corpId>
   dws auth status --profile "钉钉"
-  dws auth status --profile <corpId> --format json`,
+  dws auth status --profile <profileId|name|corpId> --format json`,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			configDir := defaultConfigDir()
@@ -462,7 +449,7 @@ func newAuthStatusCommand() *cobra.Command {
 					} else if edition.Get().AutoPurgeToken {
 						_ = authpkg.DeleteTokenData(configDir)
 					} else if tokenData != nil {
-						_ = authpkg.MarkProfileStatus(configDir, tokenData.CorpID, authpkg.ProfileStatusExpired)
+						_ = authpkg.MarkProfileStatus(configDir, authpkg.ProfileIDFromToken(tokenData), authpkg.ProfileStatusExpired)
 					}
 				}
 				if authStatusAuthenticated(tokenData) {
@@ -510,7 +497,7 @@ func newAuthStatusCommand() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().String("profile", "", "指定要查看的 profile 名或 corpId")
+	cmd.Flags().String("profile", "", "指定要查看的 profileId、profile 名或唯一 corpId")
 	return cmd
 }
 
@@ -539,7 +526,7 @@ func logoutAllProfiles(_ *cobra.Command, ctx context.Context, configDir string) 
 		_ = authpkg.RevokeTokenRemote(ctx)
 	} else {
 		for _, profile := range cfg.Profiles {
-			restoreProfile := pushRuntimeProfile(profile.CorpID)
+			restoreProfile := pushRuntimeProfile(profile.ProfileID)
 			_ = authpkg.RevokeTokenRemote(ctx)
 			restoreProfile()
 		}
@@ -947,6 +934,27 @@ func authLoginStatusLine(message string) string {
 	)
 }
 
+func writeAuthLoginInfoLines(w io.Writer, tokenData *authpkg.TokenData) {
+	if tokenData == nil {
+		return
+	}
+	if tokenData.CorpName != "" {
+		fmt.Fprintln(w, authLoginInfoLine("企业", tokenData.CorpName))
+	}
+	if tokenData.CorpID != "" {
+		fmt.Fprintln(w, authLoginInfoLine("企业 ID", tokenData.CorpID))
+	}
+	if tokenData.UserName != "" {
+		fmt.Fprintln(w, authLoginInfoLine("用户", tokenData.UserName))
+	}
+	if profileID := authpkg.ProfileIDFromToken(tokenData); profileID != "" {
+		fmt.Fprintln(w, authLoginInfoLine("profileId", profileID))
+	}
+	if expiry := authLoginDisplayExpiry(tokenData); expiry != "" {
+		fmt.Fprintln(w, authLoginInfoLine("有效期", expiry))
+	}
+}
+
 func authLoginInfoLine(key, value string) string {
 	label := authLoginMutedStyle().Width(14).Render(key + ":")
 	return fmt.Sprintf("%s %s", label, value)
@@ -1268,6 +1276,7 @@ func writeAuthStatusJSON(w io.Writer, authenticated, refreshed bool, data *authp
 type authLoginResponse struct {
 	Success           bool   `json:"success"`
 	Message           string `json:"message"`
+	ProfileID         string `json:"profileId,omitempty"`
 	TokenValid        bool   `json:"token_valid,omitempty"`
 	RefreshTokenValid bool   `json:"refresh_token_valid,omitempty"`
 	ExpiresAt         string `json:"expires_at,omitempty"`
@@ -1300,6 +1309,7 @@ func writeAuthLoginJSON(w io.Writer, data *authpkg.TokenData, forced bool) error
 		resp.CorpName = data.CorpName
 		resp.UserID = data.UserID
 		resp.UserName = data.UserName
+		resp.ProfileID = authpkg.ProfileIDFromToken(data)
 	}
 
 	enc := json.NewEncoder(w)
