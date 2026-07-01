@@ -6,6 +6,8 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.46] - 2026-07-01
+
 ### Fixed
 
 - **PAT agentCode grants no longer split from follow-up command checks** (`internal/auth/agent_code_detect.go`, `internal/app/runner.go`, `internal/pat/chmod_test.go`) — explicit `DINGTALK_DWS_AGENTCODE` declarations are now forwarded verbatim as the common cross-host contract, and unknown hosts no longer synthesize `custom` into `x-dingtalk-dws-agent-code` / `x-dws-agent-instance-id`. `pat chmod --agentCode` remains the highest-priority grant target and still wins over the env fallback.
