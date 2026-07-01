@@ -511,7 +511,7 @@ func TestSkillSetupMultiAdditivePreservesSiblings(t *testing.T) {
 // -s/--skill and -x/--exclude flags are gated on --mode multi.
 func TestRunSkillSetupRejectsSkillFlagInMonoMode(t *testing.T) {
 	cmd := newSkillSetupCommand()
-	cmd.SetArgs([]string{"--mode", "mono", "--yes", "--skill", "aitable"})
+	cmd.SetArgs([]string{"--mode", "mono", "--skill", "aitable"})
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 	err := cmd.Execute()
