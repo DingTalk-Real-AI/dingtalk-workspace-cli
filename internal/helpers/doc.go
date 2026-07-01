@@ -512,6 +512,19 @@ func jsonmlNodeText(node any) string {
 	}
 }
 
+// docLookupNodeName best-effort fetches a document node's current title via
+// get_document_info. Used by `update --mode overwrite` to strip a leading
+// heading that duplicates the title (mirroring the create path, which has the
+// name from --name). Returns "" on any failure so the caller proceeds without
+// stripping rather than blocking the update.
+func docLookupNodeName(cmd *cobra.Command, runner executor.Runner, nodeID string) string {
+	res, err := docInvocationResult(cmd, runner, "doc", "get_document_info", map[string]any{"nodeId": nodeID})
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(docFirstStringRecursive(res.Response, "name", "title"))
+}
+
 func newDocUpdateCommand(runner executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "update",
@@ -553,12 +566,35 @@ func newDocUpdateCommand(runner executor.Runner) *cobra.Command {
 				if err != nil {
 					return err
 				}
+				// overwrite replaces the whole body, so a leading heading equal to
+				// the doc title duplicates the page title (same as create). create
+				// strips it using --name; here we look the title up first. Skipped
+				// on dry-run so a preview never issues a live read.
+				if strings.TrimSpace(mode) == "overwrite" && !commandDryRun(cmd) {
+					if name := docLookupNodeName(cmd, runner, nodeID); name != "" {
+						if stripped, ok := stripLeadingDuplicateTitleJSONML(jsonml, name); ok {
+							fmt.Fprintln(cmd.ErrOrStderr(), `note: 正文首个与文档标题相同的一级标题已自动移除（文档标题会单独渲染为页面标题，保留会出现两个标题）。`)
+							jsonml = stripped
+						}
+					}
+				}
 				params["format"] = "jsonml"
 				params["jsonml"] = jsonml
 				addDocIntParam(cmd, params, "revision", "revision")
 			} else {
 				if sniffJsonMLLike(content) {
 					fmt.Fprintln(cmd.ErrOrStderr(), `warning: 输入内容看起来是 JSONML 结构；若要按 JSONML 解析，请加 --content-format jsonml，否则将按 markdown 解析。`)
+				}
+				// See the jsonml branch: strip a leading H1 that duplicates the
+				// title on overwrite, mirroring create's behaviour. Skipped on
+				// dry-run so a preview never issues a live read.
+				if strings.TrimSpace(mode) == "overwrite" && !commandDryRun(cmd) {
+					if name := docLookupNodeName(cmd, runner, nodeID); name != "" {
+						if stripped, ok := stripLeadingDuplicateTitleHeading(content, name); ok {
+							fmt.Fprintln(cmd.ErrOrStderr(), `note: 正文首行与文档标题相同的一级标题已自动移除（文档标题会单独渲染为页面标题，保留会出现两个标题）。`)
+							content = stripped
+						}
+					}
 				}
 				params["markdown"] = stripDocInputUnsafe(content)
 				addDocIntParam(cmd, params, "index", "index")

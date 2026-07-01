@@ -16,6 +16,8 @@ package helpers
 import (
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 )
 
 func TestStripLeadingDuplicateTitleHeading(t *testing.T) {
@@ -265,4 +267,106 @@ func TestStripLeadingDuplicateTitleJSONML(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestDocUpdateOverwriteStripsDuplicateTitleHeading verifies the overwrite path
+// mirrors create: it looks up the node title (get_document_info) and drops a
+// leading H1 that duplicates it, so `doc update --mode overwrite` no longer
+// re-introduces the two-headings effect create already guards against.
+func TestDocUpdateOverwriteStripsDuplicateTitleHeading(t *testing.T) {
+	runner := &docCommandRunner{responses: []map[string]any{{"name": "命令树参考"}}}
+	root := newDocTestRoot(runner)
+
+	_, errOut, err := executeDocCommand(t, root,
+		"update", "--node", "NODE_1", "--mode", "overwrite", "--yes",
+		"--content", "# 命令树参考\n\n正文内容。")
+	if err != nil {
+		t.Fatalf("execute: %v\nstderr:\n%s", err, errOut)
+	}
+	if len(runner.all) != 2 {
+		t.Fatalf("calls = %d, want 2 (get_document_info + update_document)", len(runner.all))
+	}
+	if runner.all[0].Tool != "get_document_info" {
+		t.Fatalf("first tool = %q, want get_document_info", runner.all[0].Tool)
+	}
+	if runner.all[1].Tool != "update_document" {
+		t.Fatalf("second tool = %q, want update_document", runner.all[1].Tool)
+	}
+	if got, _ := runner.all[1].Params["markdown"].(string); got != "正文内容。" {
+		t.Errorf("markdown param = %q, want duplicate H1 stripped", got)
+	}
+	if !strings.Contains(errOut, "已自动移除") {
+		t.Errorf("stderr = %q, want a note about the removed heading", errOut)
+	}
+}
+
+// TestDocUpdateOverwriteKeepsDistinctHeading ensures the overwrite guard never
+// eats an H1 that differs from the document title.
+func TestDocUpdateOverwriteKeepsDistinctHeading(t *testing.T) {
+	runner := &docCommandRunner{responses: []map[string]any{{"name": "命令树参考"}}}
+	root := newDocTestRoot(runner)
+
+	_, _, err := executeDocCommand(t, root,
+		"update", "--node", "NODE_1", "--mode", "overwrite", "--yes",
+		"--content", "# 背景\n正文")
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if got, _ := runner.all[1].Params["markdown"].(string); got != "# 背景\n正文" {
+		t.Errorf("markdown param = %q, want content untouched", got)
+	}
+}
+
+// TestDocUpdateAppendDoesNotLookupTitle ensures the title lookup (and strip)
+// only runs for overwrite: append inserts content, so a leading H1 there is not
+// a duplicate title and no extra get_document_info call should be made.
+func TestDocUpdateAppendDoesNotLookupTitle(t *testing.T) {
+	runner := &docCommandRunner{}
+	root := newDocTestRoot(runner)
+
+	_, _, err := executeDocCommand(t, root,
+		"update", "--node", "NODE_1", "--mode", "append",
+		"--content", "# 命令树参考\n正文")
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(runner.all) != 1 || runner.all[0].Tool != "update_document" {
+		t.Fatalf("calls = %v, want a single update_document (no title lookup on append)", toolNames(runner.all))
+	}
+	if got, _ := runner.all[0].Params["markdown"].(string); got != "# 命令树参考\n正文" {
+		t.Errorf("markdown param = %q, want content untouched on append", got)
+	}
+}
+
+// TestDocUpdateOverwriteStripsDuplicateTitleJSONML covers the JSONML overwrite
+// path counterpart.
+func TestDocUpdateOverwriteStripsDuplicateTitleJSONML(t *testing.T) {
+	runner := &docCommandRunner{responses: []map[string]any{{"name": "命令树参考"}}}
+	root := newDocTestRoot(runner)
+
+	body := `{"jsonml":[["h1",{},"命令树参考"],["p",{},"正文"]]}`
+	_, errOut, err := executeDocCommand(t, root,
+		"update", "--node", "NODE_1", "--mode", "overwrite", "--yes",
+		"--content-format", "jsonml", "--content", body)
+	if err != nil {
+		t.Fatalf("execute: %v\nstderr:\n%s", err, errOut)
+	}
+	if len(runner.all) != 2 || runner.all[1].Tool != "update_document" {
+		t.Fatalf("calls = %v, want get_document_info + update_document", toolNames(runner.all))
+	}
+	got, _ := runner.all[1].Params["jsonml"].(string)
+	if strings.Contains(got, "命令树参考") {
+		t.Errorf("jsonml = %q, want duplicate h1 stripped", got)
+	}
+	if !strings.Contains(got, "正文") {
+		t.Errorf("jsonml = %q, want body kept", got)
+	}
+}
+
+func toolNames(inv []executor.Invocation) []string {
+	names := make([]string, len(inv))
+	for i, v := range inv {
+		names[i] = v.Tool
+	}
+	return names
 }

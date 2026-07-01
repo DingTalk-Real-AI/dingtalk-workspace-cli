@@ -171,9 +171,12 @@ func TestDocUpdateOverwriteAllowsYesAndDryRun(t *testing.T) {
 		name       string
 		extraArgs  []string
 		wantDryRun bool
+		// Real overwrite looks the title up first (get_document_info) to strip a
+		// duplicate leading H1, so it makes 2 calls; dry-run skips the live read.
+		wantCalls int
 	}{
-		{name: "yes", extraArgs: []string{"--yes"}},
-		{name: "dry run", extraArgs: []string{"--dry-run"}, wantDryRun: true},
+		{name: "yes", extraArgs: []string{"--yes"}, wantCalls: 2},
+		{name: "dry run", extraArgs: []string{"--dry-run"}, wantDryRun: true, wantCalls: 1},
 	}
 
 	for _, tc := range cases {
@@ -194,8 +197,12 @@ func TestDocUpdateOverwriteAllowsYesAndDryRun(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Execute() error = %v\nstderr:\n%s", err, errOut)
 			}
-			if runner.calls != 1 {
-				t.Fatalf("runner calls = %d, want 1", runner.calls)
+			if runner.calls != tc.wantCalls {
+				t.Fatalf("runner calls = %d, want %d", runner.calls, tc.wantCalls)
+			}
+			// The write is always the last call; its DryRun must reflect the flag.
+			if runner.last.Tool != "update_document" {
+				t.Fatalf("last tool = %q, want update_document", runner.last.Tool)
 			}
 			if runner.last.DryRun != tc.wantDryRun {
 				t.Fatalf("DryRun = %v, want %v", runner.last.DryRun, tc.wantDryRun)
