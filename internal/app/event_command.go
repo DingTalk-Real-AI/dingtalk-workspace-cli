@@ -274,7 +274,7 @@ DWS clientId/clientSecret 透传给 portal 建立用户 Stream 连接。`,
 	f.StringVar(&personalOpts.OpenConversationID, "open-conversation-id", "",
 		"group 规则：openConversationId")
 	f.StringVar(&personalOpts.ControlBaseURL, "personal-event-base-url", "",
-		"个人事件控制面 base URL；默认当前 MCP base + /v1/personal-events")
+		"个人事件控制面 base URL；默认当前 MCP base + /dws")
 	f.StringVar(&streamOpts.Mode, "stream-ticket-mode", strings.TrimSpace(os.Getenv("DWS_STREAM_TICKET_MODE")),
 		"Stream 建联模式：app 默认空=SDK app credential；user 默认 normal；normal=portal 托管凭证；custom=传当前 clientId/clientSecret")
 	f.StringVar(&streamOpts.SourceID, "stream-source-id", strings.TrimSpace(os.Getenv("DWS_STREAM_SOURCE_ID")),
@@ -688,7 +688,7 @@ func newEventStatusCommand() *cobra.Command {
 	cmd.Flags().StringVar(&personalOpts.EventKey, "event", "", "个人事件 event_key 过滤")
 	cmd.Flags().StringVar(&personalOpts.Status, "status", "active", "个人订阅状态过滤: active|paused|error|deleted|all")
 	cmd.Flags().StringVar(&personalOpts.SubscribeID, "subscribe-id", "", "个人订阅 ID 过滤")
-	cmd.Flags().StringVar(&personalOpts.ControlBaseURL, "personal-event-base-url", "", "个人事件控制面 base URL")
+	cmd.Flags().StringVar(&personalOpts.ControlBaseURL, "personal-event-base-url", "", "个人事件控制面 base URL；默认当前 MCP base + /dws")
 	cmd.Flags().StringVar(&personalOpts.StreamSourceID, "stream-source-id", strings.TrimSpace(os.Getenv("DWS_STREAM_SOURCE_ID")),
 		"个人事件 sourceId；预发使用 pre_open_source")
 	return cmd
@@ -955,7 +955,7 @@ func newEventStopCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&asIdentity, "as", "bot", "事件身份: bot|user；user 取消个人事件订阅并断开长链接")
-	cmd.Flags().StringVar(&opts.ControlBaseURL, "personal-event-base-url", "", "个人事件控制面 base URL")
+	cmd.Flags().StringVar(&opts.ControlBaseURL, "personal-event-base-url", "", "个人事件控制面 base URL；默认当前 MCP base + /dws")
 	cmd.Flags().StringVar(&opts.StreamSourceID, "stream-source-id", strings.TrimSpace(os.Getenv("DWS_STREAM_SOURCE_ID")),
 		"个人事件 sourceId；预发使用 pre_open_source")
 	cmd.Flags().BoolVar(&opts.All, "all", false, "取消当前身份下本地记录的所有个人订阅")

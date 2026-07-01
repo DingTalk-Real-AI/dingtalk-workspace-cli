@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -28,18 +29,29 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
-const DefaultBasePath = "/v1/personal-events"
+const DefaultBasePath = "/dws"
 
 type Identity struct {
-	AccessToken string `json:"-"`
-	CorpID      string `json:"corp_id"`
-	UserID      string `json:"user_id"`
-	ClientID    string `json:"client_id"`
-	SourceID    string `json:"source_id"`
+	AccessToken  string `json:"-"`
+	LocalSubject string `json:"-"`
+	CorpID       string `json:"corp_id"`
+	UserID       string `json:"user_id"`
+	ClientID     string `json:"client_id"`
+	SourceID     string `json:"source_id"`
 }
 
 func (i Identity) Key() string {
-	return strings.Join([]string{i.CorpID, i.UserID, i.ClientID, i.SourceID}, "\x00")
+	corpID := strings.TrimSpace(i.CorpID)
+	userID := strings.TrimSpace(i.UserID)
+	clientID := strings.TrimSpace(i.ClientID)
+	sourceID := strings.TrimSpace(i.SourceID)
+	if corpID != "" && userID != "" {
+		return strings.Join([]string{"corp_user", corpID, userID, clientID, sourceID}, "\x00")
+	}
+	if localSubject := strings.TrimSpace(i.LocalSubject); localSubject != "" {
+		return strings.Join([]string{"local_subject", localSubject, clientID, sourceID}, "\x00")
+	}
+	return strings.Join([]string{"unknown", corpID, userID, clientID, sourceID}, "\x00")
 }
 
 type Client struct {
@@ -73,6 +85,50 @@ type ListOptions struct {
 	Status      string
 	EventKey    string
 	SubscribeID string
+}
+
+type dwsCreateSubscriptionRequest struct {
+	ClientID     string         `json:"clientId"`
+	SourceID     string         `json:"sourceId,omitempty"`
+	EventKey     string         `json:"eventKey"`
+	FilterRule   string         `json:"filterRule,omitempty"`
+	DeliveryPref string         `json:"deliveryPref,omitempty"`
+	ExpiresAt    string         `json:"expiresAt,omitempty"`
+	Ext          map[string]any `json:"ext,omitempty"`
+}
+
+type dwsSubListResult struct {
+	Total    int               `json:"total,omitempty"`
+	PageNo   int               `json:"pageNo,omitempty"`
+	PageSize int               `json:"pageSize,omitempty"`
+	Items    []dwsSubscription `json:"items"`
+}
+
+type dwsSubscription struct {
+	SubID         string          `json:"subId"`
+	SubscribeID   string          `json:"subscribe_id"`
+	EventKey      string          `json:"eventKey"`
+	EventKeySnake string          `json:"event_key"`
+	RuleType      string          `json:"ruleType,omitempty"`
+	RuleTypeSnake string          `json:"rule_type,omitempty"`
+	ClientID      string          `json:"clientId,omitempty"`
+	SourceID      string          `json:"sourceId"`
+	SourceIDSnake string          `json:"source_id"`
+	DeliveryPref  string          `json:"deliveryPref,omitempty"`
+	Status        json.RawMessage `json:"status,omitempty"`
+	GmtCreate     string          `json:"gmtCreate,omitempty"`
+	CreatedAt     string          `json:"created_at,omitempty"`
+}
+
+func (s dwsSubscription) toSubscription() Subscription {
+	return Subscription{
+		SubscribeID: firstNonEmpty(s.SubID, s.SubscribeID),
+		EventKey:    firstNonEmpty(s.EventKey, s.EventKeySnake),
+		RuleType:    firstNonEmpty(s.RuleType, s.RuleTypeSnake),
+		Status:      dwsStatusString(s.Status),
+		SourceID:    firstNonEmpty(s.SourceID, s.SourceIDSnake),
+		CreatedAt:   firstNonEmpty(s.GmtCreate, s.CreatedAt),
+	}
 }
 
 type APIError struct {
@@ -111,11 +167,8 @@ func (c *Client) CreateSubscription(ctx context.Context, req CreateSubscriptionR
 	if req.EventKey == "" || req.RuleType == "" {
 		return nil, errors.New("personal event: event_key and rule_type are required")
 	}
-	if req.Delivery == nil {
-		req.Delivery = map[string]any{"mode": "stream"}
-	}
 	var sub Subscription
-	if err := c.do(ctx, http.MethodPost, "/subscriptions", nil, req, &sub); err != nil {
+	if err := c.do(ctx, http.MethodPost, "/subscription/user", nil, c.buildCreateRequest(req), &sub); err != nil {
 		var apiErr *APIError
 		if errors.As(err, &apiErr) {
 			if subID, ok := apiErr.Details["subscribe_id"].(string); ok && subID != "" {
@@ -130,6 +183,18 @@ func (c *Client) CreateSubscription(ctx context.Context, req CreateSubscriptionR
 		}
 		return nil, err
 	}
+	if sub.EventKey == "" {
+		sub.EventKey = req.EventKey
+	}
+	if sub.RuleType == "" {
+		sub.RuleType = req.RuleType
+	}
+	if sub.Status == "" {
+		sub.Status = "active"
+	}
+	if sub.SourceID == "" {
+		sub.SourceID = c.Identity.SourceID
+	}
 	return &sub, nil
 }
 
@@ -138,31 +203,45 @@ func (c *Client) GetSubscription(ctx context.Context, subscribeID string) (*Subs
 	if subscribeID == "" {
 		return nil, errors.New("personal event: subscribe_id is required")
 	}
-	var sub Subscription
-	if err := c.do(ctx, http.MethodGet, "/subscriptions/"+url.PathEscape(subscribeID), nil, nil, &sub); err != nil {
+	subs, err := c.ListSubscriptions(ctx, ListOptions{SubscribeID: subscribeID})
+	if err != nil {
 		return nil, err
 	}
-	return &sub, nil
+	if len(subs) == 0 {
+		return nil, &APIError{Code: "PERSONAL_EVENT_NOT_FOUND", Message: "subscription not found"}
+	}
+	return &subs[0], nil
 }
 
 func (c *Client) ListSubscriptions(ctx context.Context, opts ListOptions) ([]Subscription, error) {
 	q := make(url.Values)
-	if opts.Status != "" {
-		q.Set("status", opts.Status)
+	if clientID := strings.TrimSpace(c.Identity.ClientID); clientID != "" {
+		q.Set("clientId", clientID)
 	}
-	if opts.EventKey != "" {
-		q.Set("event_key", opts.EventKey)
+	if sourceID := strings.TrimSpace(c.Identity.SourceID); sourceID != "" {
+		q.Set("sourceId", sourceID)
 	}
-	if opts.SubscribeID != "" {
-		q.Set("subscribe_id", opts.SubscribeID)
-	}
-	var result struct {
-		Items []Subscription `json:"items"`
-	}
-	if err := c.do(ctx, http.MethodGet, "/subscriptions", q, nil, &result); err != nil {
+	q.Set("pageNo", "1")
+	q.Set("pageSize", "100")
+	var result dwsSubListResult
+	if err := c.do(ctx, http.MethodGet, "/event/sublist", q, nil, &result); err != nil {
 		return nil, err
 	}
-	return result.Items, nil
+	items := make([]Subscription, 0, len(result.Items))
+	for _, item := range result.Items {
+		sub := item.toSubscription()
+		if opts.Status != "" && opts.Status != "all" && sub.Status != opts.Status {
+			continue
+		}
+		if opts.EventKey != "" && sub.EventKey != opts.EventKey {
+			continue
+		}
+		if opts.SubscribeID != "" && sub.SubscribeID != opts.SubscribeID {
+			continue
+		}
+		items = append(items, sub)
+	}
+	return items, nil
 }
 
 func (c *Client) DeleteSubscription(ctx context.Context, subscribeID string) error {
@@ -170,11 +249,44 @@ func (c *Client) DeleteSubscription(ctx context.Context, subscribeID string) err
 	if subscribeID == "" {
 		return errors.New("personal event: subscribe_id is required")
 	}
-	err := c.do(ctx, http.MethodDelete, "/subscriptions/"+url.PathEscape(subscribeID), nil, nil, nil)
+	err := c.do(ctx, http.MethodPost, "/subscription/cancel", nil, map[string]string{"subId": subscribeID}, nil)
 	if isNotFound(err) {
 		return nil
 	}
 	return err
+}
+
+func (c *Client) buildCreateRequest(req CreateSubscriptionRequest) dwsCreateSubscriptionRequest {
+	filterRule := ""
+	if req.RuleParam != nil {
+		if b, err := json.Marshal(req.RuleParam); err == nil {
+			filterRule = string(b)
+		}
+	}
+	ext := map[string]any{
+		"ruleType": req.RuleType,
+	}
+	if req.Name != "" {
+		ext["name"] = req.Name
+	}
+	if req.Filter != nil {
+		ext["filter"] = req.Filter
+	}
+	if req.IdempotencyKey != "" {
+		ext["idempotencyKey"] = req.IdempotencyKey
+	}
+	out := dwsCreateSubscriptionRequest{
+		ClientID:     c.Identity.ClientID,
+		SourceID:     c.Identity.SourceID,
+		EventKey:     req.EventKey,
+		FilterRule:   filterRule,
+		DeliveryPref: "realtime",
+		Ext:          ext,
+	}
+	if req.TTLSeconds > 0 {
+		out.ExpiresAt = time.Now().UTC().Add(time.Duration(req.TTLSeconds) * time.Second).Format(time.RFC3339)
+	}
+	return out
 }
 
 func (c *Client) do(ctx context.Context, method, path string, q url.Values, body any, out any) error {
@@ -219,25 +331,47 @@ func (c *Client) do(ctx context.Context, method, path string, q url.Values, body
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if apiErr := decodeAPIError(data); apiErr != nil {
+			apiErr = withRequestDetails(apiErr, method, path, resp.StatusCode, responseRequestID(data))
+			logAPIError(method, path, resp.StatusCode, apiErr)
 			return apiErr
 		}
+		slog.Debug("personal event control request failed",
+			"method", method,
+			"path", path,
+			"http_status", resp.StatusCode,
+		)
 		return fmt.Errorf("personal event: HTTP %d", resp.StatusCode)
 	}
-	if len(bytes.TrimSpace(data)) == 0 || out == nil {
+	if len(bytes.TrimSpace(data)) == 0 {
 		return nil
 	}
 	var env responseEnvelope
-	if err := json.Unmarshal(data, &env); err == nil && (env.Success || env.Error != nil || env.Result != nil) {
-		if !env.Success {
-			if env.Error != nil {
-				return env.Error
+	if err := json.Unmarshal(data, &env); err == nil && (env.Success != nil || env.Error != nil || env.Result != nil || env.ErrorCode != "" || env.ErrorMsg != "") {
+		if env.Success == nil {
+			if apiErr := env.apiError(); apiErr != nil {
+				apiErr = withRequestDetails(apiErr, method, path, resp.StatusCode, env.requestID())
+				logAPIError(method, path, resp.StatusCode, apiErr)
+				return apiErr
+			}
+		}
+		if env.Success != nil && !*env.Success {
+			if apiErr := env.apiError(); apiErr != nil {
+				apiErr = withRequestDetails(apiErr, method, path, resp.StatusCode, env.requestID())
+				logAPIError(method, path, resp.StatusCode, apiErr)
+				return apiErr
 			}
 			return errors.New("personal event: request failed")
 		}
 		if env.Result == nil {
 			return nil
 		}
+		if out == nil {
+			return nil
+		}
 		return decodeResult(env.Result, out)
+	}
+	if out == nil {
+		return nil
 	}
 	return json.Unmarshal(data, out)
 }
@@ -254,33 +388,74 @@ func (c *Client) decorate(req *http.Request) {
 }
 
 type responseEnvelope struct {
-	Success   bool            `json:"success"`
-	RequestID string          `json:"request_id,omitempty"`
-	Result    json.RawMessage `json:"result"`
-	Error     *APIError       `json:"error"`
+	Success    *bool           `json:"success"`
+	RequestID  string          `json:"request_id,omitempty"`
+	RequestID2 string          `json:"requestId,omitempty"`
+	Result     json.RawMessage `json:"result"`
+	Error      *APIError       `json:"error"`
+	ErrorCode  string          `json:"errorCode,omitempty"`
+	ErrorMsg   string          `json:"errorMsg,omitempty"`
+}
+
+func (e responseEnvelope) apiError() *APIError {
+	if e.Error != nil {
+		return e.Error
+	}
+	if e.ErrorCode != "" || e.ErrorMsg != "" {
+		return &APIError{Code: e.ErrorCode, Message: e.ErrorMsg}
+	}
+	return nil
+}
+
+func (e responseEnvelope) requestID() string {
+	return firstNonEmpty(e.RequestID, e.RequestID2)
 }
 
 func decodeResult(raw json.RawMessage, out any) error {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil
 	}
-	if err := json.Unmarshal(raw, out); err == nil {
-		return nil
-	}
-	var ids []string
-	if err := json.Unmarshal(raw, &ids); err == nil && len(ids) > 0 {
-		if sub, ok := out.(*Subscription); ok {
-			sub.SubscribeID = ids[0]
+	if sub, ok := out.(*Subscription); ok {
+		if decoded, ok, err := decodeSubscriptionResult(raw); ok || err != nil {
+			if err != nil {
+				return err
+			}
+			*sub = decoded
 			return nil
 		}
+	}
+	if err := json.Unmarshal(raw, out); err == nil {
+		return nil
 	}
 	return json.Unmarshal(raw, out)
 }
 
+func decodeSubscriptionResult(raw json.RawMessage) (Subscription, bool, error) {
+	var ids []string
+	if err := json.Unmarshal(raw, &ids); err == nil {
+		if len(ids) == 0 {
+			return Subscription{}, true, nil
+		}
+		return Subscription{SubscribeID: ids[0]}, true, nil
+	}
+	var item dwsSubscription
+	if err := json.Unmarshal(raw, &item); err == nil &&
+		(firstNonEmpty(item.SubID, item.SubscribeID) != "" ||
+			firstNonEmpty(item.EventKey, item.EventKeySnake) != "") {
+		return item.toSubscription(), true, nil
+	}
+	return Subscription{}, false, nil
+}
+
 func decodeAPIError(data []byte) *APIError {
 	var env responseEnvelope
-	if err := json.Unmarshal(data, &env); err == nil && env.Error != nil {
-		return env.Error
+	if err := json.Unmarshal(data, &env); err == nil {
+		if env.Error != nil {
+			return env.Error
+		}
+		if env.ErrorCode != "" || env.ErrorMsg != "" {
+			return &APIError{Code: env.ErrorCode, Message: env.ErrorMsg}
+		}
 	}
 	var apiErr APIError
 	if err := json.Unmarshal(data, &apiErr); err == nil && (apiErr.Code != "" || apiErr.Message != "") {
@@ -289,7 +464,82 @@ func decodeAPIError(data []byte) *APIError {
 	return nil
 }
 
+func responseRequestID(data []byte) string {
+	var env responseEnvelope
+	if err := json.Unmarshal(data, &env); err == nil {
+		return env.requestID()
+	}
+	return ""
+}
+
+func withRequestDetails(apiErr *APIError, method, path string, status int, requestID string) *APIError {
+	if apiErr == nil {
+		return nil
+	}
+	if apiErr.Details == nil {
+		apiErr.Details = make(map[string]any, 4)
+	}
+	apiErr.Details["method"] = method
+	apiErr.Details["path"] = path
+	apiErr.Details["http_status"] = status
+	if requestID != "" {
+		apiErr.Details["request_id"] = requestID
+	}
+	return apiErr
+}
+
+func logAPIError(method, path string, status int, apiErr *APIError) {
+	if apiErr == nil {
+		return
+	}
+	attrs := []any{
+		"method", method,
+		"path", path,
+		"http_status", status,
+		"error_code", apiErr.Code,
+		"error_msg", apiErr.Message,
+	}
+	if requestID, _ := apiErr.Details["request_id"].(string); requestID != "" {
+		attrs = append(attrs, "request_id", requestID)
+	}
+	slog.Debug("personal event control request failed", attrs...)
+}
+
 func isNotFound(err error) bool {
 	var apiErr *APIError
 	return errors.As(err, &apiErr) && (apiErr.Code == "PERSONAL_EVENT_NOT_FOUND" || apiErr.Code == "NOT_FOUND")
+}
+
+func dwsStatusString(raw json.RawMessage) string {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return s
+	}
+	var n int
+	if err := json.Unmarshal(raw, &n); err == nil {
+		switch n {
+		case 1:
+			return "active"
+		case 2:
+			return "paused"
+		case 3:
+			return "deleted"
+		default:
+			return fmt.Sprintf("%d", n)
+		}
+	}
+	return string(raw)
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
 }

@@ -39,6 +39,23 @@ func TestCatalogEnabledEvents(t *testing.T) {
 	}
 }
 
+func TestLegacyEventKeysAreUnknown(t *testing.T) {
+	legacyKeys := []string{
+		"im_message_receive_at",
+		"im_message_receive_o2o",
+		"im_message_receive_group",
+		"im_message_receive_user",
+	}
+	for _, key := range legacyKeys {
+		if _, ok := Lookup(key); ok {
+			t.Fatalf("Lookup(%q) succeeded, want unknown", key)
+		}
+		if _, _, err := BuildRuleParam(key, RuleOptions{}); err == nil || !strings.Contains(err.Error(), "unknown personal event key") {
+			t.Fatalf("BuildRuleParam(%q) error = %v, want unknown personal event key", key, err)
+		}
+	}
+}
+
 func TestBuildRuleParamMention(t *testing.T) {
 	rule, param, err := BuildRuleParam(EventMention, RuleOptions{})
 	if err != nil {
@@ -131,5 +148,16 @@ func TestBuildFilterKeywordAndJSON(t *testing.T) {
 	}
 	if !strings.Contains(canonical, "contains_any") {
 		t.Fatalf("canonical = %s, want contains_any", canonical)
+	}
+}
+
+func TestIdempotencyKeyUsesLocalIdentityKey(t *testing.T) {
+	left := Identity{LocalSubject: "refresh:left", ClientID: "client-1", SourceID: "open"}
+	right := Identity{LocalSubject: "refresh:right", ClientID: "client-1", SourceID: "open"}
+	ruleParam := map[string]any{"targetUid": "507971", "targetUidType": "staffId"}
+	leftKey := IdempotencyKey(left, EventSingleChat, "singleChat", ruleParam, "")
+	rightKey := IdempotencyKey(right, EventSingleChat, "singleChat", ruleParam, "")
+	if leftKey == rightKey {
+		t.Fatalf("idempotency key collapsed for different local subjects: %s", leftKey)
 	}
 }

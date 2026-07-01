@@ -23,10 +23,10 @@ import (
 )
 
 const (
-	EventMention    = "im_message_receive_at"
-	EventSingleChat = "im_message_receive_o2o"
-	EventInChat     = "im_message_receive_group"
-	EventFromUser   = "im_message_receive_user"
+	EventMention    = "user_im_message_receive_at"
+	EventSingleChat = "user_im_message_receive_o2o"
+	EventInChat     = "user_im_message_receive_group"
+	EventFromUser   = "user_im_message_receive_user"
 )
 
 const (
@@ -62,7 +62,7 @@ type SchemaPendingError struct {
 }
 
 func (e *SchemaPendingError) Error() string {
-	return fmt.Sprintf("%s schema is pending; try im_message_receive_at or im_message_receive_o2o first", e.EventKey)
+	return fmt.Sprintf("%s schema is pending; try user_im_message_receive_at or user_im_message_receive_o2o first", e.EventKey)
 }
 
 var definitions = []Definition{
@@ -231,10 +231,7 @@ func BuildFilter(filterJSON string, keywordCSV string) (any, string, error) {
 func IdempotencyKey(identity Identity, eventKey, ruleType string, ruleParam map[string]any, filterCanonical string) string {
 	ruleCanonical, _ := CanonicalJSON(ruleParam)
 	sum := sha256.Sum256([]byte(strings.Join([]string{
-		identity.CorpID,
-		identity.UserID,
-		identity.ClientID,
-		identity.SourceID,
+		identity.Key(),
 		eventKey,
 		ruleType,
 		ruleCanonical,

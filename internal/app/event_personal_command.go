@@ -15,6 +15,8 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -415,7 +417,7 @@ func runPersonalEventStatus(c *cobra.Command, opts personalStatusOptions) error 
 
 func renderPersonalStatusText(w io.Writer, identity personal.Identity, identityHash string, subs []personal.Subscription, qs busctl.EntryStatus) {
 	fmt.Fprintf(w, "Personal identity: corp=%s user=%s client=%s source=%s hash=%s\n",
-		identity.CorpID, identity.UserID, identity.ClientID, identity.SourceID, identityHash)
+		displayIdentityPart(identity.CorpID), displayIdentityPart(identity.UserID), identity.ClientID, identity.SourceID, identityHash)
 	fmt.Fprintf(w, "Bus: %s", qs.Entry.State)
 	if qs.Entry.HolderPID > 0 {
 		fmt.Fprintf(w, " pid=%d", qs.Entry.HolderPID)
@@ -500,11 +502,12 @@ func resolvePersonalEventIdentity(ctx context.Context, configDir string, sourceI
 		return personal.Identity{}, err
 	}
 	tokenData, _ := authpkg.LoadTokenData(configDir)
-	var corpID, userID, clientID string
+	var corpID, userID, clientID, refreshToken string
 	if tokenData != nil {
 		corpID = tokenData.CorpID
 		userID = tokenData.UserID
 		clientID = tokenData.ClientID
+		refreshToken = tokenData.RefreshToken
 	}
 	if corpID == "" {
 		corpID = resolveRuntimeDefault(ctx, "$corpId")
@@ -520,9 +523,6 @@ func resolvePersonalEventIdentity(ctx context.Context, configDir string, sourceI
 			clientID = id
 		}
 	}
-	if corpID == "" || userID == "" {
-		return personal.Identity{}, fmt.Errorf("current OAuth token is missing corp_id/user_id; run dws auth login again")
-	}
 	if clientID == "" {
 		return personal.Identity{}, fmt.Errorf("cannot resolve OAuth client_id for personal events")
 	}
@@ -530,13 +530,30 @@ func resolvePersonalEventIdentity(ctx context.Context, configDir string, sourceI
 	if sourceID == "" {
 		sourceID = edition.PersonalEventSourceID()
 	}
+	localSubject := ""
+	if strings.TrimSpace(corpID) == "" || strings.TrimSpace(userID) == "" {
+		localSubject = personalTokenSubject("refresh", refreshToken)
+		if localSubject == "" {
+			localSubject = personalTokenSubject("access", accessToken)
+		}
+	}
 	return personal.Identity{
-		AccessToken: accessToken,
-		CorpID:      corpID,
-		UserID:      userID,
-		ClientID:    clientID,
-		SourceID:    sourceID,
+		AccessToken:  accessToken,
+		LocalSubject: localSubject,
+		CorpID:       corpID,
+		UserID:       userID,
+		ClientID:     clientID,
+		SourceID:     sourceID,
 	}, nil
+}
+
+func personalTokenSubject(kind, token string) string {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(token))
+	return strings.TrimSpace(kind) + ":" + hex.EncodeToString(sum[:])
 }
 
 func resolveRuntimeDefault(ctx context.Context, key string) string {
@@ -614,12 +631,20 @@ func personalEventTypes(eventKey string, explicit []string) []string {
 
 func redactedPersonalIdentity(identity personal.Identity, identityHash string) map[string]string {
 	return map[string]string{
-		"corp_id":       identity.CorpID,
-		"user_id":       identity.UserID,
+		"corp_id":       displayIdentityPart(identity.CorpID),
+		"user_id":       displayIdentityPart(identity.UserID),
 		"client_id":     identity.ClientID,
 		"source_id":     identity.SourceID,
 		"identity_hash": identityHash,
 	}
+}
+
+func displayIdentityPart(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return "unknown"
+	}
+	return v
 }
 
 func firstNonEmptyString(values ...string) string {

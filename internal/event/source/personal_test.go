@@ -68,7 +68,7 @@ func TestPersonalSourceFetchTicketConnectsAndACKs(t *testing.T) {
 				streamevent.DataFrameHeaderKEventId:       "evt-1",
 				streamevent.DataFrameHeaderKEventBornTime: "1234",
 				streamevent.DataFrameHeaderKEventCorpId:   "corp-1",
-				streamevent.DataFrameHeaderKEventType:     "im_message_receive_at",
+				streamevent.DataFrameHeaderKEventType:     "user_im_message_receive_at",
 				"subscribeId":                             "sub-1",
 				"ruleType":                                "at",
 				"sourceId":                                "open",
@@ -113,7 +113,7 @@ func TestPersonalSourceFetchTicketConnectsAndACKs(t *testing.T) {
 		if ev.SubscribeID != "sub-1" || ev.RuleType != "at" || ev.SourceID != "open" {
 			t.Fatalf("event personal fields = %#v", ev)
 		}
-		if ev.EventType != "im_message_receive_at" || ev.EventID != "evt-1" {
+		if ev.EventType != "user_im_message_receive_at" || ev.EventID != "evt-1" {
 			t.Fatalf("event = %#v", ev)
 		}
 	case <-time.After(2 * time.Second):
