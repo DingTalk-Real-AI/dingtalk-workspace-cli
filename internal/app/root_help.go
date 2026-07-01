@@ -72,9 +72,9 @@ func renderRootHelp(root *cobra.Command) {
 	}
 
 	_, _ = fmt.Fprintln(w, tui.Section("Usage:"))
-	_, _ = fmt.Fprintf(w, "  %s %s\n", tui.Bullet(), tui.White("dws <service> [command] [flags]"))
+	_, _ = fmt.Fprintf(w, "  %s dws <service> [command] [flags]\n", tui.Bullet())
 	if len(utilities) > 0 {
-		_, _ = fmt.Fprintf(w, "  %s %s\n", tui.Bullet(), tui.White("dws <command> [flags]"))
+		_, _ = fmt.Fprintf(w, "  %s dws <command> [flags]\n", tui.Bullet())
 	}
 	_, _ = fmt.Fprintln(w)
 	if len(utilities) > 0 {
