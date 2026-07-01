@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app"
+	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/mock_mcp"
@@ -22,6 +24,7 @@ import (
 )
 
 func TestCLIAdaptsToProtocolAddDeleteModifyAfterDiscoveryRefresh(t *testing.T) {
+	useIsolatedProfileConfig(t)
 	server := newEvolvingRuntimeMarketServer(t, protocolFixturePhase1(t))
 	defer server.Close()
 
@@ -50,7 +53,7 @@ func TestCLIAdaptsToProtocolAddDeleteModifyAfterDiscoveryRefresh(t *testing.T) {
 		t.Fatalf("help output missing --folder-id:\n%s", help)
 	}
 
-	payload := mustRunRootJSON(t, []string{"mcp", "doc", "create-doc-v2", "--name", "协议升级文档", "--folder-id", "folder-a"})
+	payload := mustRunRootJSON(t, []string{"mcp", "doc", "create-doc-v2", "--name", "协议升级文档", "--folder-id", "folder-a", "--token", "test-token"})
 	invocation, ok := payload["invocation"].(map[string]any)
 	if !ok {
 		t.Fatalf("invocation payload missing: %#v", payload)
@@ -80,6 +83,7 @@ func TestCLIAdaptsToProtocolAddDeleteModifyAfterDiscoveryRefresh(t *testing.T) {
 }
 
 func TestCLIKeepsCachedProtocolSurfaceUntilManualRefreshAfterCacheAges(t *testing.T) {
+	useIsolatedProfileConfig(t)
 	server := newEvolvingRuntimeMarketServer(t, protocolFixturePhase1(t))
 	defer server.Close()
 
@@ -628,6 +632,7 @@ func mcpSurface(t *testing.T) map[string][]string {
 }
 
 func TestCLIDoesNotSynchronouslyRevalidateWhenCacheAges(t *testing.T) {
+	useIsolatedProfileConfig(t)
 	server := newEvolvingRuntimeMarketServer(t, protocolFixturePhase2(t))
 	defer server.Close()
 
@@ -675,6 +680,7 @@ func TestCLIDoesNotSynchronouslyRevalidateWhenCacheAges(t *testing.T) {
 }
 
 func TestCLIDoesNotSynchronouslyRevalidateWhenRegistryTTLExpires(t *testing.T) {
+	useIsolatedProfileConfig(t)
 	server := newEvolvingRuntimeMarketServer(t, protocolFixturePhase2(t))
 	defer server.Close()
 
@@ -808,6 +814,14 @@ func runRoot(t *testing.T, args []string) (string, error) {
 	cmd.SetArgs(args)
 	err := cmd.Execute()
 	return out.String(), err
+}
+
+func useIsolatedProfileConfig(t *testing.T) {
+	t.Helper()
+	authpkg.SetRuntimeProfile("")
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Setenv(keychain.StorageDirEnv, t.TempDir())
+	t.Cleanup(func() { authpkg.SetRuntimeProfile("") })
 }
 
 func ageCacheSnapshots(t *testing.T, root string, savedAt time.Time) {
