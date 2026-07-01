@@ -586,6 +586,16 @@ func newCacheCommand() *cobra.Command {
 				transportClient,
 				store,
 			)
+			// cache refresh is explicit and user-initiated: give slow servers a
+			// more generous per-server budget than the 2s hot-path default, and
+			// let DiscoverAllRuntime bound parallel handshakes (default 8) so a
+			// large registry (46+ servers in pre) does not overwhelm the gateway
+			// and make healthy servers time out. Both honor DWS_DISCOVERY_TIMEOUT
+			// / DWS_DISCOVERY_CONCURRENCY overrides.
+			service.PerServerTimeout = discovery.RefreshTimeout()
+			// Wire the diagnostics logger so per-server discovery failures land
+			// in ~/.dws/logs/dws.log with the underlying error and timeout flag.
+			service.Logger = slog.Default()
 
 			resp, err := fetchRegistryServers(cmd.Context(), ipv4HTTPClient(config.HTTPTimeout))
 			if err != nil {
@@ -608,10 +618,18 @@ func newCacheCommand() *cobra.Command {
 
 			refreshable := filterRefreshableServers(selected)
 			_, failures := service.DiscoverAllRuntime(cmd.Context(), refreshable)
+			// A weak/rate-limited gateway (e.g. pre) can squeeze out servers
+			// under parallel load even though each is healthy on its own. Retry
+			// just the failures once, serialized, so the happy path stays fast
+			// while stragglers get a contention-free second chance.
+			if retry := failedDescriptors(refreshable, failures); len(retry) > 0 {
+				service.Concurrency = 1
+				_, failures = service.DiscoverAllRuntime(cmd.Context(), retry)
+			}
 			_, err = fmt.Fprintf(
 				cmd.OutOrStdout(),
 				"[OK] 缓存刷新完成：已刷新 %d 个服务，失败 %d 个\n缓存目录: %s\n",
-				len(refreshable),
+				len(refreshable)-len(failures),
 				len(failures),
 				store.Root,
 			)
@@ -1144,6 +1162,26 @@ func filterRefreshableServers(servers []market.ServerDescriptor) []market.Server
 		filtered = append(filtered, server)
 	}
 	return filtered
+}
+
+// failedDescriptors maps a set of runtime failures back to the descriptors
+// that produced them, preserving order, so the caller can retry just those
+// servers without re-running the whole registry.
+func failedDescriptors(servers []market.ServerDescriptor, failures []discovery.RuntimeFailure) []market.ServerDescriptor {
+	if len(failures) == 0 {
+		return nil
+	}
+	failed := make(map[string]struct{}, len(failures))
+	for _, f := range failures {
+		failed[f.ServerKey] = struct{}{}
+	}
+	retry := make([]market.ServerDescriptor, 0, len(failures))
+	for _, server := range servers {
+		if _, ok := failed[server.Key]; ok {
+			retry = append(retry, server)
+		}
+	}
+	return retry
 }
 
 func clearRuntimeCacheForServers(store *cache.Store, partition string, servers []market.ServerDescriptor) error {

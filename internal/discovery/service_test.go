@@ -3,9 +3,12 @@ package discovery
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cache"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
@@ -334,6 +337,120 @@ func TestDiscoverAllRuntime_SkipsCLISkippedServersWithoutWritingCache(t *testing
 
 	if _, _, err := svc.Cache.LoadTools("test-tenant/test-identity", "skipped"); err == nil {
 		t.Fatal("LoadTools(skipped) error = nil, want skipped service to avoid cache writes")
+	}
+}
+
+func TestDiscoverAllRuntime_BoundsConcurrency(t *testing.T) {
+	t.Parallel()
+
+	var inFlight int32
+	var maxObserved int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
+		cur := atomic.AddInt32(&inFlight, 1)
+		for {
+			prev := atomic.LoadInt32(&maxObserved)
+			if cur <= prev || atomic.CompareAndSwapInt32(&maxObserved, prev, cur) {
+				break
+			}
+		}
+		// Hold the request open briefly so overlapping handshakes stack up and
+		// the semaphore's effect becomes observable.
+		time.Sleep(15 * time.Millisecond)
+		atomic.AddInt32(&inFlight, -1)
+
+		var req map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		method, _ := req["method"].(string)
+		id := req["id"]
+		switch method {
+		case "initialize":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"jsonrpc": "2.0", "id": id,
+				"result": map[string]any{
+					"protocolVersion": "2025-03-26",
+					"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
+					"serverInfo":      map[string]any{"name": "test", "version": "1.0"},
+				},
+			})
+		case "notifications/initialized":
+			w.WriteHeader(http.StatusOK)
+		case "tools/list":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"jsonrpc": "2.0", "id": id,
+				"result": map[string]any{"tools": []map[string]any{}},
+			})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"jsonrpc": "2.0", "id": id,
+				"error": map[string]any{"code": -32601, "message": "method not found"},
+			})
+		}
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	svc := newTestService(t, srv.URL, srv)
+	svc.Concurrency = 2
+
+	servers := make([]market.ServerDescriptor, 0, 8)
+	for i := 0; i < 8; i++ {
+		servers = append(servers, market.ServerDescriptor{
+			Key:      fmt.Sprintf("srv-%d", i),
+			Endpoint: srv.URL + "/mcp",
+		})
+	}
+
+	results, failures := svc.DiscoverAllRuntime(context.Background(), servers)
+	if len(failures) != 0 {
+		t.Fatalf("failures = %d, want 0", len(failures))
+	}
+	if len(results) != len(servers) {
+		t.Fatalf("results = %d, want %d", len(results), len(servers))
+	}
+	if got := atomic.LoadInt32(&maxObserved); got > 2 {
+		t.Fatalf("max concurrent handshakes = %d, want <= 2 (semaphore not enforced)", got)
+	}
+}
+
+func TestResolveDiscoveryTimeout(t *testing.T) {
+	if got := resolveDiscoveryTimeout(3 * time.Second); got != 3*time.Second {
+		t.Fatalf("override should win: got %v", got)
+	}
+	t.Setenv(discoveryTimeoutEnv, "5s")
+	if got := resolveDiscoveryTimeout(0); got != 5*time.Second {
+		t.Fatalf("env should apply when no override: got %v", got)
+	}
+	if got := resolveDiscoveryTimeout(3 * time.Second); got != 3*time.Second {
+		t.Fatalf("override should still win over env: got %v", got)
+	}
+	t.Setenv(discoveryTimeoutEnv, "garbage")
+	if got := resolveDiscoveryTimeout(0); got != defaultPerServerDiscoveryTimeout {
+		t.Fatalf("invalid env should fall back to default: got %v", got)
+	}
+}
+
+func TestResolveDiscoveryConcurrency(t *testing.T) {
+	if got := resolveDiscoveryConcurrency(4); got != 4 {
+		t.Fatalf("override should win: got %d", got)
+	}
+	t.Setenv(discoveryConcurrencyEnv, "3")
+	if got := resolveDiscoveryConcurrency(0); got != 3 {
+		t.Fatalf("env should apply: got %d", got)
+	}
+	t.Setenv(discoveryConcurrencyEnv, "0")
+	if got := resolveDiscoveryConcurrency(0); got != defaultDiscoveryConcurrency {
+		t.Fatalf("non-positive env should fall back to default: got %d", got)
+	}
+}
+
+func TestRefreshTimeout(t *testing.T) {
+	if got := RefreshTimeout(); got != refreshDiscoveryTimeout {
+		t.Fatalf("default refresh timeout = %v, want %v", got, refreshDiscoveryTimeout)
+	}
+	t.Setenv(discoveryTimeoutEnv, "12s")
+	if got := RefreshTimeout(); got != 12*time.Second {
+		t.Fatalf("env override for refresh = %v, want 12s", got)
 	}
 }
 

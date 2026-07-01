@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -43,11 +44,25 @@ func init() {
 		Description:  "缓存分区的认证身份标识",
 		DefaultValue: "default",
 	})
+	configmeta.Register(configmeta.ConfigItem{
+		Name:         discoveryTimeoutEnv,
+		Category:     configmeta.CategoryCore,
+		Description:  "单个服务运行时发现的超时时间（如 2s、5s）；留空使用内置默认值",
+		DefaultValue: defaultPerServerDiscoveryTimeout.String(),
+	})
+	configmeta.Register(configmeta.ConfigItem{
+		Name:         discoveryConcurrencyEnv,
+		Category:     configmeta.CategoryCore,
+		Description:  "运行时发现的并发握手上限；留空使用内置默认值",
+		DefaultValue: strconv.Itoa(defaultDiscoveryConcurrency),
+	})
 }
 
 const (
-	tenantEnv       = "DWS_TENANT"
-	authIdentityEnv = "DWS_AUTH_IDENTITY"
+	tenantEnv               = "DWS_TENANT"
+	authIdentityEnv         = "DWS_AUTH_IDENTITY"
+	discoveryTimeoutEnv     = "DWS_DISCOVERY_TIMEOUT"
+	discoveryConcurrencyEnv = "DWS_DISCOVERY_CONCURRENCY"
 )
 
 var errCLIServerSkipped = errors.New("server marked cli.skip")
@@ -61,9 +76,14 @@ type Service struct {
 	Logger       *slog.Logger
 	// PerServerTimeout overrides the default per-server discovery timeout
 	// when greater than zero. Useful for tests and for callers that need a
-	// tighter or looser bound. When zero, defaultPerServerDiscoveryTimeout
-	// applies.
+	// tighter or looser bound. When zero, DWS_DISCOVERY_TIMEOUT or
+	// defaultPerServerDiscoveryTimeout applies.
 	PerServerTimeout time.Duration
+	// Concurrency caps the number of servers discovered in parallel when
+	// greater than zero. When zero, DWS_DISCOVERY_CONCURRENCY or
+	// defaultDiscoveryConcurrency applies. Bounding concurrency avoids a
+	// thundering herd of handshakes when the registry lists many servers.
+	Concurrency int
 }
 
 type RuntimeServer struct {
@@ -178,8 +198,62 @@ func (s *Service) DiscoverServerRuntime(ctx context.Context, server market.Serve
 // defaultPerServerDiscoveryTimeout bounds the time spent discovering tools on
 // a single registry-listed server. Tightened to 2s so a slow/unreachable
 // server cannot stall every CLI command — a healthy MCP endpoint negotiates
-// well under a second. See issue #119.
+// well under a second. See issue #119. Explicit callers such as `cache refresh`
+// raise this via Service.PerServerTimeout; power users can override it globally
+// with DWS_DISCOVERY_TIMEOUT.
 const defaultPerServerDiscoveryTimeout = 2 * time.Second
+
+// refreshDiscoveryTimeout is the per-server budget for the explicit, user-
+// initiated `cache refresh` command. It is deliberately more generous than the
+// 2s hot-path default because completeness matters more than snappiness there.
+const refreshDiscoveryTimeout = 8 * time.Second
+
+// RefreshTimeout returns the per-server timeout `cache refresh` should use:
+// DWS_DISCOVERY_TIMEOUT when set to a valid duration, otherwise the generous
+// refresh default. This lets operators widen the budget against a slow gateway
+// (e.g. pre) without touching the latency-sensitive hot-path default.
+func RefreshTimeout() time.Duration {
+	if v := strings.TrimSpace(os.Getenv(discoveryTimeoutEnv)); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+	}
+	return refreshDiscoveryTimeout
+}
+
+// defaultDiscoveryConcurrency caps how many servers are discovered in parallel.
+// The registry can list dozens of servers (46+ in pre); firing every handshake
+// at once overwhelms the gateway and makes healthy servers time out too. A
+// modest cap keeps each handshake within its per-server budget.
+const defaultDiscoveryConcurrency = 8
+
+// resolveDiscoveryTimeout picks the per-server timeout: an explicit override
+// wins, then DWS_DISCOVERY_TIMEOUT, then the built-in default.
+func resolveDiscoveryTimeout(override time.Duration) time.Duration {
+	if override > 0 {
+		return override
+	}
+	if v := strings.TrimSpace(os.Getenv(discoveryTimeoutEnv)); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+	}
+	return defaultPerServerDiscoveryTimeout
+}
+
+// resolveDiscoveryConcurrency picks the parallel-handshake cap: an explicit
+// override wins, then DWS_DISCOVERY_CONCURRENCY, then the built-in default.
+func resolveDiscoveryConcurrency(override int) int {
+	if override > 0 {
+		return override
+	}
+	if v := strings.TrimSpace(os.Getenv(discoveryConcurrencyEnv)); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return defaultDiscoveryConcurrency
+}
 
 func (s *Service) DiscoverAllRuntime(ctx context.Context, servers []market.ServerDescriptor) ([]RuntimeServer, []RuntimeFailure) {
 	type discoveryResult struct {
@@ -187,10 +261,7 @@ func (s *Service) DiscoverAllRuntime(ctx context.Context, servers []market.Serve
 		failure *RuntimeFailure
 	}
 
-	perServerTimeout := defaultPerServerDiscoveryTimeout
-	if s.PerServerTimeout > 0 {
-		perServerTimeout = s.PerServerTimeout
-	}
+	perServerTimeout := resolveDiscoveryTimeout(s.PerServerTimeout)
 
 	filtered := make([]market.ServerDescriptor, 0, len(servers))
 	for _, srv := range servers {
@@ -202,12 +273,28 @@ func (s *Service) DiscoverAllRuntime(ctx context.Context, servers []market.Serve
 		return nil, nil
 	}
 
+	concurrency := resolveDiscoveryConcurrency(s.Concurrency)
+	if concurrency > len(filtered) {
+		concurrency = len(filtered)
+	}
+	// sem bounds parallel handshakes. Acquisition happens before the
+	// per-server timeout starts so queue wait is not charged against a
+	// server's discovery budget.
+	sem := make(chan struct{}, concurrency)
+
 	ch := make(chan discoveryResult, len(filtered))
 	var wg sync.WaitGroup
 	for _, srv := range filtered {
 		wg.Add(1)
 		go func(server market.ServerDescriptor) {
 			defer wg.Done()
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-ctx.Done():
+				ch <- discoveryResult{failure: &RuntimeFailure{ServerKey: server.Key, Err: ctx.Err()}}
+				return
+			}
 			serverCtx, cancel := context.WithTimeout(ctx, perServerTimeout)
 			defer cancel()
 			start := time.Now()
