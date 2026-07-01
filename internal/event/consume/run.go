@@ -39,8 +39,10 @@ type Config struct {
 	// ClientID is forwarded to busctl.Spawn so it can pass --client-id
 	// when forking _bus.
 	ClientID string
-	// SpawnExtraArgs are appended when consume needs busctl to start _bus
-	// with a non-default source kind, such as personal_stream.
+	// SpawnExtraArgs are forwarded to the hidden _bus process when consume.Run
+	// needs to start a daemon. Used for source-mode options that must be
+	// reproduced in the child process, including portal ticket mode and
+	// personal_stream.
 	SpawnExtraArgs []string
 
 	// EventTypes / Filter / Compact are forwarded to the bus via Hello

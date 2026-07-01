@@ -120,7 +120,7 @@ func (s *PersonalSource) Start(ctx context.Context, emit dwsevent.EmitFn) error 
 	}()
 	s.machine.OnConnected()
 
-	closeOnContext(ctx, conn)
+	closePersonalWebSocketOnContext(ctx, conn)
 	for {
 		messageType, data, err := conn.ReadMessage()
 		if err != nil {
@@ -256,7 +256,7 @@ func endpointWithTicket(endpoint, ticket string) (string, error) {
 	return u.String(), nil
 }
 
-func closeOnContext(ctx context.Context, conn *websocket.Conn) {
+func closePersonalWebSocketOnContext(ctx context.Context, conn *websocket.Conn) {
 	go func() {
 		<-ctx.Done()
 		_ = conn.Close()

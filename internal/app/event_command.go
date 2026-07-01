@@ -86,6 +86,7 @@ func newEventConsumeCommand() *cobra.Command {
 		foreground   bool
 		asIdentity   string
 		personalOpts personalConsumeOptions
+		streamOpts   eventStreamTicketOptions
 	)
 
 	cmd := &cobra.Command{
@@ -107,7 +108,11 @@ bus 上游永远全订阅 (开放平台后台勾选的所有事件类型)；--ev
 
 凭证：默认 bot/app 模式优先从 DWS_CLIENT_ID + DWS_CLIENT_SECRET 环境变量读取
 (成组覆盖)，否则走 dws config init 配置的 keychain。--as user 使用当前
-OAuth 登录态自动创建/复用个人订阅并建立个人长连接。`,
+OAuth 登录态自动创建/复用个人订阅并建立个人长连接。
+
+应用事件流：默认走 SDK app credential；指定 --stream-ticket-mode normal/custom
+后可走 portal 取票接口。normal 使用 portal 托管 DWS 凭证；custom 使用当前
+DWS clientId/clientSecret 透传给 portal 建立用户 Stream 连接。`,
 		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(c *cobra.Command, args []string) error {
@@ -127,6 +132,9 @@ OAuth 登录态自动创建/复用个人订阅并建立个人长连接。`,
 					DryRun:     dryRun,
 					Foreground: foreground,
 				}
+				personalOpts.StreamTicketMode = streamOpts.Mode
+				personalOpts.StreamTicketURL = streamOpts.TicketURL
+				personalOpts.StreamSourceID = streamOpts.SourceID
 				return runPersonalEventConsume(c, personalOpts)
 			}
 			if len(args) > 0 {
@@ -137,7 +145,7 @@ OAuth 登录态自动创建/复用个人订阅并建立个人长连接。`,
 
 			// Step 1: resolve credentials (strict).
 			configDir := defaultConfigDir()
-			clientID, _, _, _, err := authpkg.ResolveAppCredentialsStrict(configDir)
+			clientID, clientSecret, _, _, err := authpkg.ResolveAppCredentialsStrict(configDir)
 			if err != nil {
 				return fmt.Errorf("event consume: %w", err)
 			}
@@ -173,23 +181,24 @@ OAuth 登录态自动创建/复用个人订阅并建立个人长连接。`,
 			}
 
 			cfg := consume.Config{
-				WorkDir:     workDir,
-				IPCEndpoint: ipcEndpoint,
-				ClientID:    clientID,
-				EventTypes:  eventTypesWithDefault(eventTypes),
-				Filter:      filter,
-				Compact:     compact,
-				MaxEvents:   maxEvents,
-				Duration:    duration,
-				Format:      normalised,
-				OutputDir:   outputDir,
-				Routes:      routes,
-				Stdout:      c.OutOrStdout(),
-				Stderr:      c.ErrOrStderr(),
-				Quiet:       quiet,
-				Foreground:  foreground,
-				Force:       force,
-				DryRun:      dryRun,
+				WorkDir:        workDir,
+				IPCEndpoint:    ipcEndpoint,
+				ClientID:       clientID,
+				EventTypes:     eventTypesWithDefault(eventTypes),
+				Filter:         filter,
+				Compact:        compact,
+				MaxEvents:      maxEvents,
+				Duration:       duration,
+				Format:         normalised,
+				OutputDir:      outputDir,
+				Routes:         routes,
+				Stdout:         c.OutOrStdout(),
+				Stderr:         c.ErrOrStderr(),
+				Quiet:          quiet,
+				Foreground:     foreground,
+				Force:          force,
+				DryRun:         dryRun,
+				SpawnExtraArgs: streamOpts.spawnArgs(),
 			}
 
 			// Step 5: validation (flag-only rules).
@@ -206,7 +215,7 @@ OAuth 登录态自动创建/复用个人订阅并建立个人长连接。`,
 			// Step 6: foreground mode runs the bus in-process. Otherwise
 			// consume.Run discovers / forks the bus and dials it.
 			if foreground {
-				return runForegroundBus(ctx, cfg, configDir)
+				return runForegroundBus(ctx, cfg, configDir, clientSecret, streamOpts)
 			}
 			return consume.Run(ctx, cfg)
 		},
@@ -264,12 +273,12 @@ OAuth 登录态自动创建/复用个人订阅并建立个人长连接。`,
 		"group 规则：openConversationId (P1)")
 	f.StringVar(&personalOpts.ControlBaseURL, "personal-event-base-url", "",
 		"个人事件控制面 base URL；默认当前 MCP base + /v1/personal-events")
-	f.StringVar(&personalOpts.StreamTicketMode, "stream-ticket-mode", "normal",
-		"个人长链接取票模式: normal|custom")
-	f.StringVar(&personalOpts.StreamTicketURL, "stream-ticket-url", "",
-		"个人长链接取票 URL；默认当前 MCP base + /stream/connections/ticket")
-	f.StringVar(&personalOpts.StreamSourceID, "stream-source-id", "",
-		"个人长链接 sourceId；默认 edition.PersonalEventSourceID")
+	f.StringVar(&streamOpts.Mode, "stream-ticket-mode", strings.TrimSpace(os.Getenv("DWS_STREAM_TICKET_MODE")),
+		"Stream 建联模式：app 默认空=SDK app credential；user 默认 normal；normal=portal 托管凭证；custom=传当前 clientId/clientSecret")
+	f.StringVar(&streamOpts.SourceID, "stream-source-id", strings.TrimSpace(os.Getenv("DWS_STREAM_SOURCE_ID")),
+		"Stream sourceId；app portal 默认 open/pre_open_source，user 默认 edition.PersonalEventSourceID")
+	f.StringVar(&streamOpts.TicketURL, "stream-ticket-url", strings.TrimSpace(os.Getenv("DWS_STREAM_TICKET_URL")),
+		"Stream 取票 URL；默认 <MCP_BASE>/stream/connections/ticket")
 	return cmd
 }
 
@@ -283,15 +292,8 @@ OAuth 登录态自动创建/复用个人订阅并建立个人长连接。`,
 // stdout. For v1 we keep it simple: --foreground runs bus only; the user
 // can run `dws event consume` from another shell to consume the events.
 // v2 may add a "foreground + in-process consumer" combined mode.
-func runForegroundBus(ctx context.Context, cfg consume.Config, configDir string) error {
-	_, clientSecret, _, _, err := authpkg.ResolveAppCredentialsStrict(configDir)
-	if err != nil {
-		return err
-	}
-	src, err := source.New(source.Config{
-		ClientID:     cfg.ClientID,
-		ClientSecret: clientSecret,
-	})
+func runForegroundBus(ctx context.Context, cfg consume.Config, configDir, clientSecret string, streamOpts eventStreamTicketOptions) error {
+	src, err := newEventSource(ctx, configDir, cfg.ClientID, clientSecret, streamOpts)
 	if err != nil {
 		return err
 	}
@@ -309,6 +311,86 @@ func runForegroundBus(ctx context.Context, cfg consume.Config, configDir string)
 	return bus.Run(ctx, busCfg)
 }
 
+type eventStreamTicketOptions struct {
+	Mode      string
+	SourceID  string
+	TicketURL string
+}
+
+func (o eventStreamTicketOptions) enabled() bool {
+	return strings.TrimSpace(o.Mode) != ""
+}
+
+func (o eventStreamTicketOptions) spawnArgs() []string {
+	if !o.enabled() {
+		return nil
+	}
+	args := []string{"--stream-ticket-mode", strings.TrimSpace(o.Mode)}
+	if sourceID := strings.TrimSpace(o.SourceID); sourceID != "" {
+		args = append(args, "--stream-source-id", sourceID)
+	}
+	if ticketURL := strings.TrimSpace(o.TicketURL); ticketURL != "" {
+		args = append(args, "--stream-ticket-url", ticketURL)
+	}
+	return args
+}
+
+func newEventSource(ctx context.Context, configDir, clientID, clientSecret string, streamOpts eventStreamTicketOptions) (*source.DingtalkSource, error) {
+	if !streamOpts.enabled() {
+		return source.New(source.Config{
+			ClientID:     clientID,
+			ClientSecret: clientSecret,
+		})
+	}
+
+	token, err := ResolveAuxiliaryAccessToken(ctx, configDir, "")
+	if err != nil {
+		return nil, fmt.Errorf("event stream ticket: resolve user token: %w", err)
+	}
+	if strings.TrimSpace(token) == "" {
+		return nil, errors.New("event stream ticket: empty user token")
+	}
+
+	return source.New(source.Config{
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		PortalTicket: &source.PortalTicketConfig{
+			TicketURL:    eventStreamTicketURL(streamOpts.TicketURL),
+			AccessToken:  token,
+			SourceID:     eventStreamSourceID(streamOpts.SourceID),
+			Mode:         streamOpts.Mode,
+			ClientID:     clientID,
+			ClientSecret: clientSecret,
+			UserAgent:    "dws-event-consume",
+		},
+	})
+}
+
+func eventStreamTicketURL(raw string) string {
+	if v := strings.TrimSpace(raw); v != "" {
+		return v
+	}
+	return strings.TrimRight(config.GetMCPBaseURL(), "/") + "/stream/connections/ticket"
+}
+
+func defaultEventStreamSourceID() string {
+	if v := strings.TrimSpace(os.Getenv("DWS_STREAM_SOURCE_ID")); v != "" {
+		return v
+	}
+	base := strings.ToLower(config.GetMCPBaseURL())
+	if strings.Contains(base, "pre-mcp") {
+		return "pre_open_source"
+	}
+	return "open"
+}
+
+func eventStreamSourceID(raw string) string {
+	if v := strings.TrimSpace(raw); v != "" {
+		return v
+	}
+	return defaultEventStreamSourceID()
+}
+
 // ─────────────────────────────────────────────────────────────────────
 //  event _bus  (hidden — auto-forked by consume)
 // ─────────────────────────────────────────────────────────────────────
@@ -318,9 +400,7 @@ func newEventBusCommand() *cobra.Command {
 		clientIDOverride string
 		idleTimeout      time.Duration
 		sourceKindRaw    string
-		sourceIDOverride string
-		streamTicketMode string
-		streamTicketURL  string
+		streamOpts       eventStreamTicketOptions
 	)
 	cmd := &cobra.Command{
 		Use:               "_bus",
@@ -350,7 +430,7 @@ func newEventBusCommand() *cobra.Command {
 				sourceKind = dwsevent.SourceKindAppStream
 			}
 			if sourceKind == dwsevent.SourceKindPersonalStream {
-				identity, err := resolvePersonalEventIdentity(ctx, configDir, sourceIDOverride)
+				identity, err := resolvePersonalEventIdentity(ctx, configDir, streamOpts.SourceID)
 				if err != nil {
 					return failEarly(fmt.Errorf("event _bus: %w", err))
 				}
@@ -364,8 +444,8 @@ func newEventBusCommand() *cobra.Command {
 				src, err := newPersonalStreamSource(ctx, personalStreamSourceOptions{
 					ConfigDir:        configDir,
 					Identity:         identity,
-					TicketMode:       streamTicketMode,
-					TicketURL:        streamTicketURL,
+					TicketMode:       streamOpts.Mode,
+					TicketURL:        streamOpts.TicketURL,
 					ClientIDOverride: clientIDOverride,
 				})
 				if err != nil {
@@ -408,10 +488,7 @@ func newEventBusCommand() *cobra.Command {
 			workDir := eventWorkDir(configDir, editionName, dwsevent.SourceKindAppStream, clientIDHash)
 			endpoint := defaultIPCEndpoint(workDir, editionName, dwsevent.SourceKindAppStream, clientIDHash)
 
-			src, err := source.New(source.Config{
-				ClientID:     clientID,
-				ClientSecret: secret,
-			})
+			src, err := newEventSource(ctx, configDir, clientID, secret, streamOpts)
 			if err != nil {
 				return failEarly(err)
 			}
@@ -452,12 +529,12 @@ func newEventBusCommand() *cobra.Command {
 		"exit after this long with zero consumers (0 = disabled)")
 	cmd.Flags().StringVar(&sourceKindRaw, "source-kind", string(dwsevent.SourceKindAppStream),
 		"event source kind: app_stream|personal_stream")
-	cmd.Flags().StringVar(&sourceIDOverride, "source-id", "",
-		"personal stream source id")
-	cmd.Flags().StringVar(&streamTicketMode, "stream-ticket-mode", "normal",
-		"personal stream ticket mode: normal|custom")
-	cmd.Flags().StringVar(&streamTicketURL, "stream-ticket-url", "",
-		"personal stream ticket URL")
+	cmd.Flags().StringVar(&streamOpts.Mode, "stream-ticket-mode", strings.TrimSpace(os.Getenv("DWS_STREAM_TICKET_MODE")),
+		"用户 Stream 建联模式：空=SDK app credential；normal/custom=portal 取票")
+	cmd.Flags().StringVar(&streamOpts.SourceID, "stream-source-id", strings.TrimSpace(os.Getenv("DWS_STREAM_SOURCE_ID")),
+		"portal 用户 Stream sourceId")
+	cmd.Flags().StringVar(&streamOpts.TicketURL, "stream-ticket-url", strings.TrimSpace(os.Getenv("DWS_STREAM_TICKET_URL")),
+		"portal 用户 Stream 取票 URL")
 	return cmd
 }
 

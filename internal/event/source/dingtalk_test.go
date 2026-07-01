@@ -15,6 +15,9 @@ package source
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -42,6 +45,82 @@ func TestNew_DefaultsNow(t *testing.T) {
 	}
 	if s.cfg.Now == nil {
 		t.Fatal("Now should default to time.Now")
+	}
+}
+
+func TestNew_AcceptsPortalTicketNormalWithoutClientSecret(t *testing.T) {
+	if _, err := New(Config{
+		ClientID: "id",
+		PortalTicket: &PortalTicketConfig{
+			TicketURL:   "https://example.com/stream/connections/ticket",
+			AccessToken: "token",
+			SourceID:    "pre_open_source",
+			Mode:        "normal",
+		},
+	}); err != nil {
+		t.Fatalf("New: %v", err)
+	}
+}
+
+func TestNew_RejectsPortalTicketCustomWithoutSecret(t *testing.T) {
+	if _, err := New(Config{
+		ClientID: "id",
+		PortalTicket: &PortalTicketConfig{
+			TicketURL:   "https://example.com/stream/connections/ticket",
+			AccessToken: "token",
+			SourceID:    "pre_open_source",
+			Mode:        "custom",
+			ClientID:    "custom_client",
+		},
+	}); err == nil {
+		t.Fatal("expected error when custom portal ticket secret is empty")
+	}
+}
+
+func TestRequestPortalTicketCustomBody(t *testing.T) {
+	var got struct {
+		SourceID     string `json:"sourceId"`
+		ChannelType  string `json:"channelType"`
+		Mode         string `json:"mode"`
+		ClientID     string `json:"clientId"`
+		ClientSecret string `json:"clientSecret"`
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if token := r.Header.Get("x-user-access-token"); token != "token-123" {
+			t.Fatalf("x-user-access-token = %q", token)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": true,
+			"result": map[string]string{
+				"endpoint": "wss://pre-wss-open-connection.dingtalk.com/connect",
+				"ticket":   "ticket-123",
+			},
+		})
+	}))
+	defer srv.Close()
+
+	ticket, err := requestPortalTicket(context.Background(), &PortalTicketConfig{
+		TicketURL:    srv.URL,
+		AccessToken:  "token-123",
+		SourceID:     "pre_open_source",
+		Mode:         "custom",
+		ClientID:     "custom_client",
+		ClientSecret: "custom_secret",
+	})
+	if err != nil {
+		t.Fatalf("requestPortalTicket: %v", err)
+	}
+	if ticket.Endpoint == "" || ticket.Ticket == "" {
+		t.Fatalf("ticket = %#v", ticket)
+	}
+	if got.SourceID != "pre_open_source" || got.ChannelType != "pre_open_source" {
+		t.Fatalf("source fields = %#v", got)
+	}
+	if got.Mode != "custom" || got.ClientID != "custom_client" || got.ClientSecret != "custom_secret" {
+		t.Fatalf("custom fields = %#v", got)
 	}
 }
 

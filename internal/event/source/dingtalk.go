@@ -35,6 +35,11 @@ import (
 type Config struct {
 	ClientID     string
 	ClientSecret string
+	// PortalTicket switches the source to the portal-managed user Stream
+	// ticket flow. When set, Start fetches endpoint+ticket over HTTP and
+	// dials the returned WebSocket directly instead of asking the SDK to
+	// open an app-credential connection.
+	PortalTicket *PortalTicketConfig
 	// Now is injected for tests. Defaults to time.Now when nil.
 	Now func() time.Time
 }
@@ -65,8 +70,13 @@ func New(cfg Config, _ ...SourceOption) (*DingtalkSource, error) {
 	if cfg.ClientID == "" {
 		return nil, errors.New("source: ClientID is required")
 	}
-	if cfg.ClientSecret == "" {
+	if cfg.PortalTicket == nil && cfg.ClientSecret == "" {
 		return nil, errors.New("source: ClientSecret is required")
+	}
+	if cfg.PortalTicket != nil {
+		if err := cfg.PortalTicket.Valid(); err != nil {
+			return nil, err
+		}
 	}
 	if cfg.Now == nil {
 		cfg.Now = time.Now
@@ -95,10 +105,14 @@ func (s *DingtalkSource) Start(ctx context.Context, emit dwsevent.EmitFn) error 
 	if s.cli != nil {
 		return errors.New("source: Start called twice")
 	}
+	if s.cfg.PortalTicket != nil {
+		return s.startPortalTicket(ctx, emit)
+	}
 
-	s.cli = client.NewStreamClient(
+	options := []client.ClientOption{
 		client.WithAppCredential(client.NewAppCredentialConfig(s.cfg.ClientID, s.cfg.ClientSecret)),
-	)
+	}
+	s.cli = client.NewStreamClient(options...)
 	s.cli.RegisterAllEventRouter(s.makeHandler(emit))
 
 	s.machine.OnConnecting()
