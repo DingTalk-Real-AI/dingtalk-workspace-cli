@@ -266,11 +266,11 @@ DWS clientId/clientSecret 透传给 portal 建立用户 Stream 连接。`,
 	f.StringVar(&personalOpts.PeerUnionID, "peer-union-id", "",
 		"singleChat 规则：对端 unionId")
 	f.StringVar(&personalOpts.SenderUserID, "sender-user-id", "",
-		"sender 规则：发送人 userId (P1)")
+		"sender 规则：发送人 userId")
 	f.StringVar(&personalOpts.SenderUnionID, "sender-union-id", "",
-		"sender 规则：发送人 unionId (P1)")
+		"sender 规则：发送人 unionId")
 	f.StringVar(&personalOpts.OpenConversationID, "open-conversation-id", "",
-		"group 规则：openConversationId (P1)")
+		"group 规则：openConversationId")
 	f.StringVar(&personalOpts.ControlBaseURL, "personal-event-base-url", "",
 		"个人事件控制面 base URL；默认当前 MCP base + /v1/personal-events")
 	f.StringVar(&streamOpts.Mode, "stream-ticket-mode", strings.TrimSpace(os.Getenv("DWS_STREAM_TICKET_MODE")),
@@ -659,6 +659,8 @@ func newEventStatusCommand() *cobra.Command {
 	cmd.Flags().StringVar(&personalOpts.Status, "status", "active", "个人订阅状态过滤: active|paused|error|deleted|all")
 	cmd.Flags().StringVar(&personalOpts.SubscribeID, "subscribe-id", "", "个人订阅 ID 过滤")
 	cmd.Flags().StringVar(&personalOpts.ControlBaseURL, "personal-event-base-url", "", "个人事件控制面 base URL")
+	cmd.Flags().StringVar(&personalOpts.StreamSourceID, "stream-source-id", strings.TrimSpace(os.Getenv("DWS_STREAM_SOURCE_ID")),
+		"个人事件 sourceId；预发使用 pre_open_source")
 	return cmd
 }
 
@@ -924,6 +926,8 @@ func newEventStopCommand() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&asIdentity, "as", "bot", "事件身份: bot|user；user 取消个人事件订阅并断开长链接")
 	cmd.Flags().StringVar(&opts.ControlBaseURL, "personal-event-base-url", "", "个人事件控制面 base URL")
+	cmd.Flags().StringVar(&opts.StreamSourceID, "stream-source-id", strings.TrimSpace(os.Getenv("DWS_STREAM_SOURCE_ID")),
+		"个人事件 sourceId；预发使用 pre_open_source")
 	cmd.Flags().BoolVar(&opts.All, "all", false, "取消当前身份下本地记录的所有个人订阅")
 	return cmd
 }

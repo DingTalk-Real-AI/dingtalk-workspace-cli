@@ -14,9 +14,30 @@
 package personal
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
+
+func TestCatalogEnabledEvents(t *testing.T) {
+	items := Catalog("", true, false)
+	keys := make([]string, 0, len(items))
+	for _, item := range items {
+		keys = append(keys, item.EventKey)
+		if item.Status != StatusEnabled {
+			t.Fatalf("%s status = %q, want enabled", item.EventKey, item.Status)
+		}
+	}
+	want := []string{
+		EventMention,
+		EventSingleChat,
+		EventInChat,
+		EventFromUser,
+	}
+	if !reflect.DeepEqual(keys, want) {
+		t.Fatalf("keys = %#v, want %#v", keys, want)
+	}
+}
 
 func TestBuildRuleParamMention(t *testing.T) {
 	rule, param, err := BuildRuleParam(EventMention, RuleOptions{})
@@ -44,16 +65,57 @@ func TestBuildRuleParamSingleChatRequiresPeer(t *testing.T) {
 	if rule != "singleChat" {
 		t.Fatalf("rule = %q, want singleChat", rule)
 	}
-	peer := param["peer"].(map[string]any)
-	if peer["id_type"] != "unionId" || peer["id"] != "union-1" {
-		t.Fatalf("peer = %#v", peer)
+	if param["targetUidType"] != "unionId" || param["targetUid"] != "union-1" {
+		t.Fatalf("param = %#v", param)
 	}
 }
 
-func TestBuildRuleParamPending(t *testing.T) {
-	_, _, err := BuildRuleParam(EventFromUser, RuleOptions{SenderUserID: "u1"})
-	if !IsSchemaPending(err) {
-		t.Fatalf("error = %v, want schema pending", err)
+func TestBuildRuleParamSingleChatUserIDMapsToStaffID(t *testing.T) {
+	rule, param, err := BuildRuleParam(EventSingleChat, RuleOptions{PeerUserID: "staff-1"})
+	if err != nil {
+		t.Fatalf("BuildRuleParam() error = %v", err)
+	}
+	if rule != "singleChat" {
+		t.Fatalf("rule = %q, want singleChat", rule)
+	}
+	if param["targetUidType"] != "staffId" || param["targetUid"] != "staff-1" {
+		t.Fatalf("param = %#v", param)
+	}
+}
+
+func TestBuildRuleParamSender(t *testing.T) {
+	_, _, err := BuildRuleParam(EventFromUser, RuleOptions{})
+	if err == nil || !strings.Contains(err.Error(), "--sender-user-id") {
+		t.Fatalf("error = %v, want sender requirement", err)
+	}
+
+	rule, param, err := BuildRuleParam(EventFromUser, RuleOptions{SenderUserID: "staff-1"})
+	if err != nil {
+		t.Fatalf("BuildRuleParam() error = %v", err)
+	}
+	if rule != "sender" {
+		t.Fatalf("rule = %q, want sender", rule)
+	}
+	if param["targetUidType"] != "staffId" || param["targetUid"] != "staff-1" {
+		t.Fatalf("param = %#v", param)
+	}
+}
+
+func TestBuildRuleParamGroup(t *testing.T) {
+	_, _, err := BuildRuleParam(EventInChat, RuleOptions{})
+	if err == nil || !strings.Contains(err.Error(), "--open-conversation-id") {
+		t.Fatalf("error = %v, want open conversation requirement", err)
+	}
+
+	rule, param, err := BuildRuleParam(EventInChat, RuleOptions{OpenConversationID: "cid-1"})
+	if err != nil {
+		t.Fatalf("BuildRuleParam() error = %v", err)
+	}
+	if rule != "group" {
+		t.Fatalf("rule = %q, want group", rule)
+	}
+	if param["openConversationId"] != "cid-1" {
+		t.Fatalf("param = %#v", param)
 	}
 }
 

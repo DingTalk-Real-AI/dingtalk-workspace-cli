@@ -19,15 +19,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 )
 
 const (
-	EventMention    = "im.message.mention_v1"
-	EventSingleChat = "im.message.single_chat_v1"
-	EventFromUser   = "im.message.from_user_v1"
-	EventInChat     = "im.message.in_chat_v1"
+	EventMention    = "im_message_receive_at"
+	EventSingleChat = "im_message_receive_o2o"
+	EventInChat     = "im_message_receive_group"
+	EventFromUser   = "im_message_receive_user"
 )
 
 const (
@@ -63,7 +62,7 @@ type SchemaPendingError struct {
 }
 
 func (e *SchemaPendingError) Error() string {
-	return fmt.Sprintf("%s schema is pending; try im.message.mention_v1 or im.message.single_chat_v1 first", e.EventKey)
+	return fmt.Sprintf("%s schema is pending; try im_message_receive_at or im_message_receive_o2o first", e.EventKey)
 }
 
 var definitions = []Definition{
@@ -94,27 +93,27 @@ var definitions = []Definition{
 		PayloadSchema:  imMessagePayloadSchema(),
 	},
 	{
-		EventKey:       EventFromUser,
-		DisplayName:    "指定发送人消息",
-		Description:    "当前用户收到的指定发送人消息",
-		Category:       "im",
-		RuleType:       "sender",
-		Status:         StatusPending,
-		SchemaIDs:      nil,
-		RequiredParams: []string{"sender-user-id or sender-union-id"},
-		Auth:           map[string]any{"identity": "user"},
-		FilterSchema:   defaultFilterSchema(),
-		PayloadSchema:  imMessagePayloadSchema(),
-	},
-	{
 		EventKey:       EventInChat,
 		DisplayName:    "指定群消息",
 		Description:    "当前用户所在指定会话的消息",
 		Category:       "im",
 		RuleType:       "group",
-		Status:         StatusPending,
+		Status:         StatusEnabled,
 		SchemaIDs:      nil,
 		RequiredParams: []string{"open-conversation-id"},
+		Auth:           map[string]any{"identity": "user"},
+		FilterSchema:   defaultFilterSchema(),
+		PayloadSchema:  imMessagePayloadSchema(),
+	},
+	{
+		EventKey:       EventFromUser,
+		DisplayName:    "指定发送人消息",
+		Description:    "当前用户收到的指定发送人消息",
+		Category:       "im",
+		RuleType:       "sender",
+		Status:         StatusEnabled,
+		SchemaIDs:      nil,
+		RequiredParams: []string{"sender-user-id or sender-union-id"},
 		Auth:           map[string]any{"identity": "user"},
 		FilterSchema:   defaultFilterSchema(),
 		PayloadSchema:  imMessagePayloadSchema(),
@@ -123,7 +122,6 @@ var definitions = []Definition{
 
 func Definitions() []Definition {
 	out := append([]Definition(nil), definitions...)
-	sort.Slice(out, func(i, j int) bool { return out[i].EventKey < out[j].EventKey })
 	return out
 }
 
@@ -151,7 +149,6 @@ func Catalog(category string, enabledOnly, includePending bool) []Definition {
 		}
 		out = append(out, def)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].EventKey < out[j].EventKey })
 	return out
 }
 
@@ -170,15 +167,30 @@ func BuildRuleParam(eventKey string, opts RuleOptions) (ruleType string, rulePar
 	case "at":
 		return def.RuleType, map[string]any{}, nil
 	case "singleChat":
-		idType, id, err := oneOfIdentity("--peer-user-id", opts.PeerUserID, "--peer-union-id", opts.PeerUnionID)
+		targetUidType, targetUid, err := oneOfTarget("--peer-user-id", opts.PeerUserID, "--peer-union-id", opts.PeerUnionID)
 		if err != nil {
 			return "", nil, err
 		}
 		return def.RuleType, map[string]any{
-			"peer": map[string]any{
-				"id_type": idType,
-				"id":      id,
-			},
+			"targetUid":     targetUid,
+			"targetUidType": targetUidType,
+		}, nil
+	case "sender":
+		targetUidType, targetUid, err := oneOfTarget("--sender-user-id", opts.SenderUserID, "--sender-union-id", opts.SenderUnionID)
+		if err != nil {
+			return "", nil, err
+		}
+		return def.RuleType, map[string]any{
+			"targetUid":     targetUid,
+			"targetUidType": targetUidType,
+		}, nil
+	case "group":
+		openConversationID := strings.TrimSpace(opts.OpenConversationID)
+		if openConversationID == "" {
+			return "", nil, fmt.Errorf("--open-conversation-id is required")
+		}
+		return def.RuleType, map[string]any{
+			"openConversationId": openConversationID,
 		}, nil
 	default:
 		return "", nil, &SchemaPendingError{EventKey: eventKey}
@@ -242,14 +254,14 @@ func CanonicalJSON(v any) (string, error) {
 	return string(b), nil
 }
 
-func oneOfIdentity(leftName, left, rightName, right string) (idType, id string, err error) {
+func oneOfTarget(leftName, left, rightName, right string) (targetUidType, targetUid string, err error) {
 	left = strings.TrimSpace(left)
 	right = strings.TrimSpace(right)
 	switch {
 	case left != "" && right != "":
 		return "", "", fmt.Errorf("%s and %s are mutually exclusive", leftName, rightName)
 	case left != "":
-		return "userId", left, nil
+		return "staffId", left, nil
 	case right != "":
 		return "unionId", right, nil
 	default:

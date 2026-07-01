@@ -86,12 +86,14 @@ type personalStatusOptions struct {
 	SubscribeID    string
 	Format         string
 	ControlBaseURL string
+	StreamSourceID string
 }
 
 type personalStopOptions struct {
 	SubscribeID    string
 	All            bool
 	ControlBaseURL string
+	StreamSourceID string
 }
 
 type personalStreamSourceOptions struct {
@@ -358,7 +360,7 @@ func ensurePersonalSubscription(ctx context.Context, client *personal.Client, id
 func runPersonalEventStatus(c *cobra.Command, opts personalStatusOptions) error {
 	ctx := c.Context()
 	configDir := defaultConfigDir()
-	identity, err := resolvePersonalEventIdentity(ctx, configDir, "")
+	identity, err := resolvePersonalEventIdentity(ctx, configDir, opts.StreamSourceID)
 	if err != nil {
 		return fmt.Errorf("event status --as user: %w", err)
 	}
@@ -435,7 +437,7 @@ func renderPersonalStatusText(w io.Writer, identity personal.Identity, identityH
 func runPersonalEventStop(c *cobra.Command, opts personalStopOptions) error {
 	ctx := c.Context()
 	configDir := defaultConfigDir()
-	identity, err := resolvePersonalEventIdentity(ctx, configDir, "")
+	identity, err := resolvePersonalEventIdentity(ctx, configDir, opts.StreamSourceID)
 	if err != nil {
 		return fmt.Errorf("event stop --as user: %w", err)
 	}
@@ -589,7 +591,7 @@ func newPersonalStreamSource(ctx context.Context, opts personalStreamSourceOptio
 func personalBusSpawnArgs(identity personal.Identity, ticketMode, ticketURL string) []string {
 	args := []string{
 		"--source-kind", string(dwsevent.SourceKindPersonalStream),
-		"--source-id", identity.SourceID,
+		"--stream-source-id", identity.SourceID,
 	}
 	if strings.TrimSpace(ticketMode) != "" {
 		args = append(args, "--stream-ticket-mode", ticketMode)
