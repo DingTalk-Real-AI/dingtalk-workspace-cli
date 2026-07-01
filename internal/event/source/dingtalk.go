@@ -30,8 +30,9 @@ import (
 )
 
 // Config carries the credentials and behavioural knobs needed to construct a
-// DingtalkSource. ClientID/ClientSecret are required; everything else has a
-// safe default.
+// DingtalkSource. ClientID/ClientSecret are required for app-credential SDK
+// mode. Portal ticket normal mode uses portal-side managed credentials, so it
+// does not require local app credentials.
 type Config struct {
 	ClientID     string
 	ClientSecret string
@@ -67,15 +68,19 @@ type DingtalkSource struct {
 // fields are missing — keep the boundary tight so misconfiguration fails
 // loudly rather than at first-event time.
 func New(cfg Config, _ ...SourceOption) (*DingtalkSource, error) {
-	if cfg.ClientID == "" {
-		return nil, errors.New("source: ClientID is required")
-	}
-	if cfg.PortalTicket == nil && cfg.ClientSecret == "" {
-		return nil, errors.New("source: ClientSecret is required")
-	}
 	if cfg.PortalTicket != nil {
 		if err := cfg.PortalTicket.Valid(); err != nil {
 			return nil, err
+		}
+		if cfg.PortalTicket.normalizedMode() == PortalTicketModeCustom && cfg.ClientID == "" {
+			return nil, errors.New("source: ClientID is required")
+		}
+	} else {
+		if cfg.ClientID == "" {
+			return nil, errors.New("source: ClientID is required")
+		}
+		if cfg.ClientSecret == "" {
+			return nil, errors.New("source: ClientSecret is required")
 		}
 	}
 	if cfg.Now == nil {

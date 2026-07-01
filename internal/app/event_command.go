@@ -143,13 +143,15 @@ DWS clientId/clientSecret 透传给 portal 建立用户 Stream 连接。`,
 			ctx, cancel := signal.NotifyContext(c.Context(), os.Interrupt, syscall.SIGTERM)
 			defer cancel()
 
-			// Step 1: resolve credentials (strict).
+			// Step 1: resolve credentials.
+			// Portal ticket normal mode uses portal-managed app credentials, so
+			// local ClientSecret is intentionally not required there.
 			configDir := defaultConfigDir()
-			clientID, clientSecret, _, _, err := authpkg.ResolveAppCredentialsStrict(configDir)
+			clientID, clientSecret, err := resolveEventCredentials(configDir, streamOpts)
 			if err != nil {
 				return fmt.Errorf("event consume: %w", err)
 			}
-			if authpkg.EnvHalfSet() {
+			if !streamOpts.usesPortalNormalMode() && authpkg.EnvHalfSet() {
 				fmt.Fprintln(c.ErrOrStderr(),
 					"WARN: only one of DWS_CLIENT_ID/DWS_CLIENT_SECRET is set; env fallback disabled, using keychain/app config")
 			}
@@ -321,6 +323,14 @@ func (o eventStreamTicketOptions) enabled() bool {
 	return strings.TrimSpace(o.Mode) != ""
 }
 
+func (o eventStreamTicketOptions) normalizedMode() string {
+	return strings.ToLower(strings.TrimSpace(o.Mode))
+}
+
+func (o eventStreamTicketOptions) usesPortalNormalMode() bool {
+	return o.enabled() && o.normalizedMode() == source.PortalTicketModeNormal
+}
+
 func (o eventStreamTicketOptions) spawnArgs() []string {
 	if !o.enabled() {
 		return nil
@@ -333,6 +343,19 @@ func (o eventStreamTicketOptions) spawnArgs() []string {
 		args = append(args, "--stream-ticket-url", ticketURL)
 	}
 	return args
+}
+
+func resolveEventCredentials(configDir string, streamOpts eventStreamTicketOptions) (clientID, clientSecret string, err error) {
+	if !streamOpts.usesPortalNormalMode() {
+		clientID, clientSecret, _, _, err = authpkg.ResolveAppCredentialsStrict(configDir)
+		return clientID, clientSecret, err
+	}
+	return eventStreamBusID(streamOpts), "", nil
+}
+
+func eventStreamBusID(streamOpts eventStreamTicketOptions) string {
+	sourceID := eventStreamSourceID(streamOpts.SourceID)
+	return "portal-ticket-normal:" + sourceID
 }
 
 func newEventSource(ctx context.Context, configDir, clientID, clientSecret string, streamOpts eventStreamTicketOptions) (*source.DingtalkSource, error) {
@@ -351,16 +374,23 @@ func newEventSource(ctx context.Context, configDir, clientID, clientSecret strin
 		return nil, errors.New("event stream ticket: empty user token")
 	}
 
+	portalClientID := clientID
+	portalClientSecret := clientSecret
+	if streamOpts.usesPortalNormalMode() {
+		portalClientID = ""
+		portalClientSecret = ""
+	}
+
 	return source.New(source.Config{
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
+		ClientID:     portalClientID,
+		ClientSecret: portalClientSecret,
 		PortalTicket: &source.PortalTicketConfig{
 			TicketURL:    eventStreamTicketURL(streamOpts.TicketURL),
 			AccessToken:  token,
 			SourceID:     eventStreamSourceID(streamOpts.SourceID),
 			Mode:         streamOpts.Mode,
-			ClientID:     clientID,
-			ClientSecret: clientSecret,
+			ClientID:     portalClientID,
+			ClientSecret: portalClientSecret,
 			UserAgent:    "dws-event-consume",
 		},
 	})
@@ -475,7 +505,7 @@ func newEventBusCommand() *cobra.Command {
 				return bus.Run(ctx, busCfg)
 			}
 
-			resolvedID, secret, _, _, err := authpkg.ResolveAppCredentialsStrict(configDir)
+			resolvedID, secret, err := resolveEventCredentials(configDir, streamOpts)
 			if err != nil {
 				return failEarly(fmt.Errorf("event _bus: %w", err))
 			}

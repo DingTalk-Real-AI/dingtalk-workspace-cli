@@ -50,7 +50,6 @@ func TestNew_DefaultsNow(t *testing.T) {
 
 func TestNew_AcceptsPortalTicketNormalWithoutClientSecret(t *testing.T) {
 	if _, err := New(Config{
-		ClientID: "id",
 		PortalTicket: &PortalTicketConfig{
 			TicketURL:   "https://example.com/stream/connections/ticket",
 			AccessToken: "token",
