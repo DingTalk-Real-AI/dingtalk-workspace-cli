@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"time"
 
+	dwsevent "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
@@ -39,12 +40,15 @@ const MetaFileName = "bus.meta"
 // on Close — keeping it on disk helps `event status` diagnose an orphan
 // (bus.lock empty + bus.meta present + PID dead = clean orphan).
 type Meta struct {
-	ClientID   string    `json:"client_id"`
-	Edition    string    `json:"edition"`
-	StartedAt  time.Time `json:"started_at"`
-	SDKVersion string    `json:"sdk_version,omitempty"`
-	BusVersion string    `json:"bus_version"`
-	BusPID     int       `json:"bus_pid"`
+	ClientID     string              `json:"client_id"`
+	Edition      string              `json:"edition"`
+	SourceKind   dwsevent.SourceKind `json:"source_kind,omitempty"`
+	IdentityHash string              `json:"identity_hash,omitempty"`
+	SourceID     string              `json:"source_id,omitempty"`
+	StartedAt    time.Time           `json:"started_at"`
+	SDKVersion   string              `json:"sdk_version,omitempty"`
+	BusVersion   string              `json:"bus_version"`
+	BusPID       int                 `json:"bus_pid"`
 }
 
 // CurrentBusVersion identifies the bus wire/storage compatibility level.

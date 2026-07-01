@@ -58,6 +58,7 @@ func newEventCommand() *cobra.Command {
 	cmd.AddCommand(
 		newEventConsumeCommand(),
 		newEventListCommand(),
+		newEventSchemaCommand(),
 		newEventStatusCommand(),
 		newEventStopCommand(),
 		newEventBusCommand(),
@@ -71,22 +72,24 @@ func newEventCommand() *cobra.Command {
 
 func newEventConsumeCommand() *cobra.Command {
 	var (
-		eventTypes []string
-		filter     string
-		compact    bool
-		formatRaw  string
-		outputDir  string
-		routesRaw  []string
-		maxEvents  int
-		duration   time.Duration
-		quiet      bool
-		force      bool
-		dryRun     bool
-		foreground bool
+		eventTypes   []string
+		filter       string
+		compact      bool
+		formatRaw    string
+		outputDir    string
+		routesRaw    []string
+		maxEvents    int
+		duration     time.Duration
+		quiet        bool
+		force        bool
+		dryRun       bool
+		foreground   bool
+		asIdentity   string
+		personalOpts personalConsumeOptions
 	)
 
 	cmd := &cobra.Command{
-		Use:   "consume",
+		Use:   "consume [event_key]",
 		Short: "订阅事件流并输出到 stdout",
 		Long: `订阅 DingTalk Stream 事件并将每条事件以 NDJSON 输出到 stdout。
 
@@ -102,11 +105,33 @@ bus 上游永远全订阅 (开放平台后台勾选的所有事件类型)；--ev
 影响 bus → consume 这一段投递。开放平台后台未勾选的事件类型即使设置 --event-types
 也收不到。
 
-凭证：bot-only。优先从 DWS_CLIENT_ID + DWS_CLIENT_SECRET 环境变量读取
-(成组覆盖)，否则走 dws config init 配置的 keychain。`,
-		Args:              cobra.NoArgs,
+凭证：默认 bot/app 模式优先从 DWS_CLIENT_ID + DWS_CLIENT_SECRET 环境变量读取
+(成组覆盖)，否则走 dws config init 配置的 keychain。--as user 使用当前
+OAuth 登录态自动创建/复用个人订阅并建立个人长连接。`,
+		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
-		RunE: func(c *cobra.Command, _ []string) error {
+		RunE: func(c *cobra.Command, args []string) error {
+			if normalizeEventAs(asIdentity) == "user" {
+				personalOpts.EventKey = firstArg(args)
+				personalOpts.Common = commonConsumeOptions{
+					EventTypes: eventTypes,
+					Filter:     filter,
+					Compact:    compact,
+					FormatRaw:  formatRaw,
+					OutputDir:  outputDir,
+					RoutesRaw:  routesRaw,
+					MaxEvents:  maxEvents,
+					Duration:   duration,
+					Quiet:      quiet,
+					Force:      force,
+					DryRun:     dryRun,
+					Foreground: foreground,
+				}
+				return runPersonalEventConsume(c, personalOpts)
+			}
+			if len(args) > 0 {
+				return fmt.Errorf("event consume: event_key is only supported with --as user")
+			}
 			ctx, cancel := signal.NotifyContext(c.Context(), os.Interrupt, syscall.SIGTERM)
 			defer cancel()
 
@@ -124,8 +149,8 @@ bus 上游永远全订阅 (开放平台后台勾选的所有事件类型)；--ev
 			// Step 2: derive bus working directory + IPC endpoint.
 			editionName := editionNameOrDefault()
 			clientIDHash := dwsevent.ClientIDHash(clientID)
-			workDir := filepath.Join(configDir, "events", editionName, clientIDHash)
-			ipcEndpoint := defaultIPCEndpoint(workDir, editionName, clientIDHash)
+			workDir := eventWorkDir(configDir, editionName, dwsevent.SourceKindAppStream, clientIDHash)
+			ipcEndpoint := defaultIPCEndpoint(workDir, editionName, dwsevent.SourceKindAppStream, clientIDHash)
 
 			// Step 3: parse routes.
 			routes, err := consume.ParseRoutes(routesRaw)
@@ -188,6 +213,7 @@ bus 上游永远全订阅 (开放平台后台勾选的所有事件类型)；--ev
 	}
 
 	f := cmd.Flags()
+	f.StringVar(&asIdentity, "as", "bot", "事件身份: bot|user；user 使用个人事件订阅")
 	f.StringSliceVar(&eventTypes, "event-types", nil,
 		"逗号分隔事件类型（开放平台 event_type 值）；省略 = catch-all")
 	f.StringVar(&filter, "filter", "",
@@ -212,6 +238,38 @@ bus 上游永远全订阅 (开放平台后台勾选的所有事件类型)；--ev
 		"仅打印解析后的配置，不连接 bus / 云端")
 	f.BoolVar(&foreground, "foreground", false,
 		"不 fork daemon，当前进程跑 bus (systemd/k8s/launchd 友好)")
+	f.StringVar(&personalOpts.SubscribeID, "subscribe-id", "",
+		"个人事件订阅 ID；传入后复用已有订阅")
+	f.StringVar(&personalOpts.Rule, "rule", "",
+		"个人事件规则类型；默认根据 event_key 推断")
+	f.StringVar(&personalOpts.Name, "name", "",
+		"个人事件订阅名称")
+	f.StringVar(&personalOpts.FilterJSON, "filter-json", "",
+		"个人事件 Filter DSL JSON")
+	f.StringVar(&personalOpts.KeywordCSV, "keyword", "",
+		"按消息文本关键词过滤，逗号分隔")
+	f.DurationVar(&personalOpts.TTL, "ttl", 0,
+		"个人订阅 TTL (Go duration，如 24h；0 表示不过期)")
+	f.BoolVar(&personalOpts.Ephemeral, "ephemeral", false,
+		"consume 退出时自动取消个人订阅")
+	f.StringVar(&personalOpts.PeerUserID, "peer-user-id", "",
+		"singleChat 规则：对端 userId")
+	f.StringVar(&personalOpts.PeerUnionID, "peer-union-id", "",
+		"singleChat 规则：对端 unionId")
+	f.StringVar(&personalOpts.SenderUserID, "sender-user-id", "",
+		"sender 规则：发送人 userId (P1)")
+	f.StringVar(&personalOpts.SenderUnionID, "sender-union-id", "",
+		"sender 规则：发送人 unionId (P1)")
+	f.StringVar(&personalOpts.OpenConversationID, "open-conversation-id", "",
+		"group 规则：openConversationId (P1)")
+	f.StringVar(&personalOpts.ControlBaseURL, "personal-event-base-url", "",
+		"个人事件控制面 base URL；默认当前 MCP base + /v1/personal-events")
+	f.StringVar(&personalOpts.StreamTicketMode, "stream-ticket-mode", "normal",
+		"个人长链接取票模式: normal|custom")
+	f.StringVar(&personalOpts.StreamTicketURL, "stream-ticket-url", "",
+		"个人长链接取票 URL；默认当前 MCP base + /stream/connections/ticket")
+	f.StringVar(&personalOpts.StreamSourceID, "stream-source-id", "",
+		"个人长链接 sourceId；默认 edition.PersonalEventSourceID")
 	return cmd
 }
 
@@ -238,12 +296,14 @@ func runForegroundBus(ctx context.Context, cfg consume.Config, configDir string)
 		return err
 	}
 	busCfg := bus.Config{
-		WorkDir:     cfg.WorkDir,
-		IPCEndpoint: cfg.IPCEndpoint,
-		ClientID:    cfg.ClientID,
-		Edition:     editionNameOrDefault(),
-		Source:      src,
-		Logger:      slog.Default(),
+		WorkDir:      cfg.WorkDir,
+		IPCEndpoint:  cfg.IPCEndpoint,
+		ClientID:     cfg.ClientID,
+		Edition:      editionNameOrDefault(),
+		SourceKind:   dwsevent.SourceKindAppStream,
+		IdentityHash: dwsevent.ClientIDHash(cfg.ClientID),
+		Source:       src,
+		Logger:       slog.Default(),
 	}
 	bus.ApplyEnvTuning(&busCfg)
 	return bus.Run(ctx, busCfg)
@@ -257,6 +317,10 @@ func newEventBusCommand() *cobra.Command {
 	var (
 		clientIDOverride string
 		idleTimeout      time.Duration
+		sourceKindRaw    string
+		sourceIDOverride string
+		streamTicketMode string
+		streamTicketURL  string
 	)
 	cmd := &cobra.Command{
 		Use:               "_bus",
@@ -281,6 +345,56 @@ func newEventBusCommand() *cobra.Command {
 			}
 
 			configDir := defaultConfigDir()
+			sourceKind := dwsevent.SourceKind(strings.TrimSpace(sourceKindRaw))
+			if sourceKind == "" {
+				sourceKind = dwsevent.SourceKindAppStream
+			}
+			if sourceKind == dwsevent.SourceKindPersonalStream {
+				identity, err := resolvePersonalEventIdentity(ctx, configDir, sourceIDOverride)
+				if err != nil {
+					return failEarly(fmt.Errorf("event _bus: %w", err))
+				}
+				if clientIDOverride != "" {
+					identity.ClientID = clientIDOverride
+				}
+				identityHash := dwsevent.IdentityHash(identity.Key())
+				editionName := editionNameOrDefault()
+				workDir := eventWorkDir(configDir, editionName, dwsevent.SourceKindPersonalStream, identityHash)
+				endpoint := defaultIPCEndpoint(workDir, editionName, dwsevent.SourceKindPersonalStream, identityHash)
+				src, err := newPersonalStreamSource(ctx, personalStreamSourceOptions{
+					ConfigDir:        configDir,
+					Identity:         identity,
+					TicketMode:       streamTicketMode,
+					TicketURL:        streamTicketURL,
+					ClientIDOverride: clientIDOverride,
+				})
+				if err != nil {
+					return failEarly(err)
+				}
+				if err := os.MkdirAll(workDir, config.DirPerm); err == nil {
+					if lf, ferr := os.OpenFile(filepath.Join(workDir, "bus.log"),
+						os.O_CREATE|os.O_WRONLY|os.O_APPEND, config.FilePerm); ferr == nil {
+						defer lf.Close()
+						slog.SetDefault(slog.New(slog.NewTextHandler(lf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+					}
+				}
+				busCfg := bus.Config{
+					WorkDir:      workDir,
+					IPCEndpoint:  endpoint,
+					ClientID:     identity.ClientID,
+					Edition:      editionName,
+					SourceKind:   dwsevent.SourceKindPersonalStream,
+					IdentityHash: identityHash,
+					SourceID:     identity.SourceID,
+					Source:       src,
+					IdleTimeout:  idleTimeout,
+					ReadyPipe:    readyPipe,
+					Logger:       slog.Default(),
+				}
+				bus.ApplyEnvTuning(&busCfg)
+				return bus.Run(ctx, busCfg)
+			}
+
 			resolvedID, secret, _, _, err := authpkg.ResolveAppCredentialsStrict(configDir)
 			if err != nil {
 				return failEarly(fmt.Errorf("event _bus: %w", err))
@@ -291,8 +405,8 @@ func newEventBusCommand() *cobra.Command {
 			}
 			editionName := editionNameOrDefault()
 			clientIDHash := dwsevent.ClientIDHash(clientID)
-			workDir := filepath.Join(configDir, "events", editionName, clientIDHash)
-			endpoint := defaultIPCEndpoint(workDir, editionName, clientIDHash)
+			workDir := eventWorkDir(configDir, editionName, dwsevent.SourceKindAppStream, clientIDHash)
+			endpoint := defaultIPCEndpoint(workDir, editionName, dwsevent.SourceKindAppStream, clientIDHash)
 
 			src, err := source.New(source.Config{
 				ClientID:     clientID,
@@ -315,14 +429,16 @@ func newEventBusCommand() *cobra.Command {
 			}
 
 			busCfg := bus.Config{
-				WorkDir:     workDir,
-				IPCEndpoint: endpoint,
-				ClientID:    clientID,
-				Edition:     editionName,
-				Source:      src,
-				IdleTimeout: idleTimeout,
-				ReadyPipe:   readyPipe,
-				Logger:      slog.Default(),
+				WorkDir:      workDir,
+				IPCEndpoint:  endpoint,
+				ClientID:     clientID,
+				Edition:      editionName,
+				SourceKind:   dwsevent.SourceKindAppStream,
+				IdentityHash: clientIDHash,
+				Source:       src,
+				IdleTimeout:  idleTimeout,
+				ReadyPipe:    readyPipe,
+				Logger:       slog.Default(),
 			}
 			// env-var tuning (only fills in fields left at zero; explicit
 			// flags above keep precedence).
@@ -334,6 +450,14 @@ func newEventBusCommand() *cobra.Command {
 		"override clientID resolved from app config / env (used by busctl/Spawn)")
 	cmd.Flags().DurationVar(&idleTimeout, "idle-timeout", 5*time.Minute,
 		"exit after this long with zero consumers (0 = disabled)")
+	cmd.Flags().StringVar(&sourceKindRaw, "source-kind", string(dwsevent.SourceKindAppStream),
+		"event source kind: app_stream|personal_stream")
+	cmd.Flags().StringVar(&sourceIDOverride, "source-id", "",
+		"personal stream source id")
+	cmd.Flags().StringVar(&streamTicketMode, "stream-ticket-mode", "normal",
+		"personal stream ticket mode: normal|custom")
+	cmd.Flags().StringVar(&streamTicketURL, "stream-ticket-url", "",
+		"personal stream ticket URL")
 	return cmd
 }
 
@@ -347,6 +471,8 @@ func newEventBusCommand() *cobra.Command {
 type listEntry struct {
 	ClientID     string                     `json:"client_id"`
 	ClientIDHash string                     `json:"client_id_hash"`
+	SourceKind   dwsevent.SourceKind        `json:"source_kind,omitempty"`
+	SourceID     string                     `json:"source_id,omitempty"`
 	Edition      string                     `json:"edition"`
 	BusPID       int                        `json:"bus_pid"`
 	BusState     busctl.BusEntryState       `json:"bus_state"`
@@ -358,10 +484,14 @@ type listEntry struct {
 
 func newEventListCommand() *cobra.Command {
 	var (
-		all          bool
-		allEditions  bool
-		formatRaw    string
-		clientIDOver string
+		all            bool
+		allEditions    bool
+		formatRaw      string
+		clientIDOver   string
+		asIdentity     string
+		category       string
+		enabledOnly    bool
+		includePending bool
 	)
 	cmd := &cobra.Command{
 		Use:               "list",
@@ -370,6 +500,14 @@ func newEventListCommand() *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(c *cobra.Command, _ []string) error {
+			if normalizeEventAs(asIdentity) == "user" {
+				return runPersonalEventList(c, personalListOptions{
+					Category:       category,
+					EnabledOnly:    enabledOnly,
+					IncludePending: includePending,
+					Format:         formatRaw,
+				})
+			}
 			entries, err := collectEntries(c, clientIDOver, all, allEditions)
 			if err != nil {
 				return err
@@ -385,6 +523,10 @@ func newEventListCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&allEditions, "all-editions", false, "跨 edition 列出（罕用，调试用）")
 	cmd.Flags().StringVar(&clientIDOver, "client-id", "", "指定具体 ClientID（覆盖凭证解析）")
 	cmd.Flags().StringVarP(&formatRaw, "format", "f", "table", "输出格式: table|json")
+	cmd.Flags().StringVar(&asIdentity, "as", "bot", "事件身份: bot|user；user 展示个人事件目录")
+	cmd.Flags().StringVar(&category, "category", "", "个人事件目录分类")
+	cmd.Flags().BoolVar(&enabledOnly, "enabled-only", false, "个人事件目录只显示 enabled")
+	cmd.Flags().BoolVar(&includePending, "include-pending", false, "个人事件目录包含 pending 项")
 	return cmd
 }
 
@@ -399,6 +541,8 @@ func newEventStatusCommand() *cobra.Command {
 		formatRaw    string
 		clientIDOver string
 		failOnOrphan bool
+		asIdentity   string
+		personalOpts personalStatusOptions
 	)
 	cmd := &cobra.Command{
 		Use:               "status",
@@ -407,6 +551,10 @@ func newEventStatusCommand() *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(c *cobra.Command, _ []string) error {
+			if normalizeEventAs(asIdentity) == "user" {
+				personalOpts.Format = formatRaw
+				return runPersonalEventStatus(c, personalOpts)
+			}
 			entries, err := collectEntries(c, clientIDOver, all, allEditions)
 			if err != nil {
 				return err
@@ -429,6 +577,11 @@ func newEventStatusCommand() *cobra.Command {
 	cmd.Flags().StringVar(&clientIDOver, "client-id", "", "指定具体 ClientID")
 	cmd.Flags().StringVarP(&formatRaw, "format", "f", "text", "输出格式: text|json")
 	cmd.Flags().BoolVar(&failOnOrphan, "fail-on-orphan", false, "检测到 orphan 时退出码 2")
+	cmd.Flags().StringVar(&asIdentity, "as", "bot", "事件身份: bot|user；user 显示个人事件订阅状态")
+	cmd.Flags().StringVar(&personalOpts.EventKey, "event", "", "个人事件 event_key 过滤")
+	cmd.Flags().StringVar(&personalOpts.Status, "status", "active", "个人订阅状态过滤: active|paused|error|deleted|all")
+	cmd.Flags().StringVar(&personalOpts.SubscribeID, "subscribe-id", "", "个人订阅 ID 过滤")
+	cmd.Flags().StringVar(&personalOpts.ControlBaseURL, "personal-event-base-url", "", "个人事件控制面 base URL")
 	return cmd
 }
 
@@ -476,13 +629,17 @@ func collectEntries(c *cobra.Command, clientIDOver string, all, allEditions bool
 		// sees a useful answer instead of an error.
 		return []busctl.EntryStatus{
 			{Entry: busctl.BusEntry{
-				WorkDir:      filepath.Join(configDir, "events", editionName, hash),
+				WorkDir:      eventWorkDir(configDir, editionName, dwsevent.SourceKindAppStream, hash),
 				Edition:      editionName,
+				SourceKind:   dwsevent.SourceKindAppStream,
 				ClientIDHash: hash,
+				IdentityHash: hash,
 				State:        busctl.BusStateNotRunning,
 				Meta: &bus.Meta{
-					ClientID: clientID,
-					Edition:  editionName,
+					ClientID:     clientID,
+					Edition:      editionName,
+					SourceKind:   dwsevent.SourceKindAppStream,
+					IdentityHash: hash,
 				},
 			}},
 		}, nil
@@ -504,6 +661,7 @@ func queryAll(entries []busctl.BusEntry) []busctl.EntryStatus {
 func buildListEntry(qs busctl.EntryStatus) listEntry {
 	le := listEntry{
 		ClientIDHash: qs.Entry.ClientIDHash,
+		SourceKind:   qs.Entry.SourceKind,
 		Edition:      qs.Entry.Edition,
 		BusPID:       qs.Entry.HolderPID,
 		BusState:     qs.Entry.State,
@@ -511,6 +669,7 @@ func buildListEntry(qs busctl.EntryStatus) listEntry {
 	}
 	if qs.Entry.Meta != nil {
 		le.ClientID = qs.Entry.Meta.ClientID
+		le.SourceID = qs.Entry.Meta.SourceID
 	}
 	if qs.Live != nil {
 		le.Consumers = qs.Live.Consumers
@@ -529,7 +688,7 @@ func renderList(w io.Writer, entries []listEntry, format string) error {
 	// Table: one line per consumer, prefixed by client_id. Buses with no
 	// consumers still get one row (so users see they exist).
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "CLIENT_ID\tBUS\tCONSUMER PID\tEVENT KEYS\tRECEIVED\tDROPPED")
+	fmt.Fprintln(tw, "SOURCE\tCLIENT_ID\tBUS\tCONSUMER PID\tEVENT KEYS\tSUBSCRIBE_ID\tRECEIVED\tDROPPED")
 	for _, le := range entries {
 		busDisplay := fmt.Sprintf("%s pid=%d", le.BusState, le.BusPID)
 		if le.BusState == busctl.BusStateNotRunning {
@@ -540,7 +699,7 @@ func renderList(w io.Writer, entries []listEntry, format string) error {
 			clientLabel = "(unknown — hash=" + le.ClientIDHash + ")"
 		}
 		if len(le.Consumers) == 0 {
-			fmt.Fprintf(tw, "%s\t%s\t-\t-\t-\t-\n", clientLabel, busDisplay)
+			fmt.Fprintf(tw, "%s\t%s\t%s\t-\t-\t-\t-\t-\n", sourceKindLabel(le.SourceKind), clientLabel, busDisplay)
 			continue
 		}
 		for _, cs := range le.Consumers {
@@ -548,8 +707,12 @@ func renderList(w io.Writer, entries []listEntry, format string) error {
 			if keys == "" {
 				keys = "(catch-all)"
 			}
-			fmt.Fprintf(tw, "%s\t%s\t%d\t%s\t%d\t%d\n",
-				clientLabel, busDisplay, cs.PID, keys, cs.Received, cs.Dropped)
+			subID := cs.SubscribeID
+			if subID == "" {
+				subID = "-"
+			}
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\t%s\t%d\t%d\n",
+				sourceKindLabel(le.SourceKind), clientLabel, busDisplay, cs.PID, keys, subID, cs.Received, cs.Dropped)
 		}
 	}
 	return tw.Flush()
@@ -579,6 +742,10 @@ func renderStatusBlock(w io.Writer, qs busctl.EntryStatus) {
 	}
 	fmt.Fprintf(w, "ClientID: %s\n", clientLabel)
 	fmt.Fprintf(w, "  Edition  : %s\n", qs.Entry.Edition)
+	fmt.Fprintf(w, "  Source   : %s\n", sourceKindLabel(qs.Entry.SourceKind))
+	if qs.Entry.Meta != nil && qs.Entry.Meta.SourceID != "" {
+		fmt.Fprintf(w, "  SourceID : %s\n", qs.Entry.Meta.SourceID)
+	}
 	fmt.Fprintf(w, "  Workdir  : %s\n", qs.Entry.WorkDir)
 
 	switch qs.Entry.State {
@@ -627,25 +794,38 @@ func renderStatusBlock(w io.Writer, qs busctl.EntryStatus) {
 	if len(live.Consumers) > 0 {
 		fmt.Fprintln(w, "  Consumers:")
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "    PID\tEVENT KEYS\tRECEIVED\tDROPPED")
+		fmt.Fprintln(tw, "    PID\tEVENT KEYS\tSUBSCRIBE_ID\tRECEIVED\tDROPPED")
 		for _, cs := range live.Consumers {
 			keys := strings.Join(cs.EventTypes, ",")
 			if keys == "" {
 				keys = "(catch-all)"
 			}
-			fmt.Fprintf(tw, "    %d\t%s\t%d\t%d\n", cs.PID, keys, cs.Received, cs.Dropped)
+			subID := cs.SubscribeID
+			if subID == "" {
+				subID = "-"
+			}
+			fmt.Fprintf(tw, "    %d\t%s\t%s\t%d\t%d\n", cs.PID, keys, subID, cs.Received, cs.Dropped)
 		}
 		_ = tw.Flush()
 	}
 }
 
 func newEventStopCommand() *cobra.Command {
-	return &cobra.Command{
+	var asIdentity string
+	var opts personalStopOptions
+	cmd := &cobra.Command{
 		Use:               "stop",
 		Short:             "优雅停止 bus 守护进程",
-		Args:              cobra.NoArgs,
+		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
-		RunE: func(c *cobra.Command, _ []string) error {
+		RunE: func(c *cobra.Command, args []string) error {
+			if normalizeEventAs(asIdentity) == "user" {
+				opts.SubscribeID = firstArg(args)
+				return runPersonalEventStop(c, opts)
+			}
+			if len(args) > 0 {
+				return fmt.Errorf("event stop: subscribe_id is only supported with --as user")
+			}
 			configDir := defaultConfigDir()
 			clientID, _, _, _, err := authpkg.ResolveAppCredentialsStrict(configDir)
 			if err != nil {
@@ -653,7 +833,7 @@ func newEventStopCommand() *cobra.Command {
 			}
 			editionName := editionNameOrDefault()
 			clientIDHash := dwsevent.ClientIDHash(clientID)
-			workDir := filepath.Join(configDir, "events", editionName, clientIDHash)
+			workDir := eventWorkDir(configDir, editionName, dwsevent.SourceKindAppStream, clientIDHash)
 			if err := busctl.Stop(busctl.StopConfig{WorkDir: workDir}); err != nil {
 				if errors.Is(err, busctl.ErrNotRunning) {
 					fmt.Fprintln(c.OutOrStdout(), "bus is not running")
@@ -665,6 +845,10 @@ func newEventStopCommand() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&asIdentity, "as", "bot", "事件身份: bot|user；user 取消个人事件订阅并断开长链接")
+	cmd.Flags().StringVar(&opts.ControlBaseURL, "personal-event-base-url", "", "个人事件控制面 base URL")
+	cmd.Flags().BoolVar(&opts.All, "all", false, "取消当前身份下本地记录的所有个人订阅")
+	return cmd
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -684,11 +868,44 @@ func editionNameOrDefault() string {
 // defaultIPCEndpoint returns the canonical Unix socket path / Windows pipe
 // name for the bus. Encapsulates the platform-specific shape so callers
 // don't sprinkle GOOS checks throughout the cobra layer.
-func defaultIPCEndpoint(workDir, editionName, clientIDHash string) string {
+func defaultIPCEndpoint(workDir, editionName string, sourceKind dwsevent.SourceKind, identityHash string) string {
 	if runtime.GOOS == "windows" {
-		return `\\.\pipe\dws-event-` + editionName + "-" + clientIDHash
+		return `\\.\pipe\dws-event-` + editionName + "-" + sourceKindLabel(sourceKind) + "-" + identityHash
 	}
 	return filepath.Join(workDir, "bus.sock")
+}
+
+func eventWorkDir(configDir, editionName string, sourceKind dwsevent.SourceKind, identityHash string) string {
+	if sourceKind == "" {
+		sourceKind = dwsevent.SourceKindAppStream
+	}
+	return filepath.Join(configDir, "events", editionName, string(sourceKind), identityHash)
+}
+
+func sourceKindLabel(kind dwsevent.SourceKind) string {
+	if kind == "" {
+		return string(dwsevent.SourceKindAppStream)
+	}
+	return string(kind)
+}
+
+func normalizeEventAs(v string) string {
+	v = strings.ToLower(strings.TrimSpace(v))
+	switch v {
+	case "", "bot", "app":
+		return "bot"
+	case "user":
+		return "user"
+	default:
+		return v
+	}
+}
+
+func firstArg(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	return args[0]
 }
 
 // eventTypesWithDefault picks the catch-all list from registry when the

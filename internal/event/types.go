@@ -16,7 +16,16 @@ package event
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"strings"
 	"time"
+)
+
+// SourceKind identifies the upstream event connection family.
+type SourceKind string
+
+const (
+	SourceKindAppStream      SourceKind = "app_stream"
+	SourceKindPersonalStream SourceKind = "personal_stream"
 )
 
 // RawEvent is one event delivered by the Source layer to the Hub. It mirrors
@@ -33,9 +42,13 @@ type RawEvent struct {
 	EventCorpID       string            `json:"event_corp_id"`        // tenant corp id
 	EventType         string            `json:"event_type"`           // catch-all/filter routing key
 	EventUnifiedAppID string            `json:"event_unified_app_id"` // app id
-	Data              string            `json:"data"`                 // raw JSON payload from SDK
-	Headers           map[string]string `json:"headers,omitempty"`    // full DataFrame.Headers, passthrough
-	ReceivedAt        time.Time         `json:"received_at"`          // bus receive time (UTC)
+	EventScope        string            `json:"event_scope,omitempty"`
+	SubscribeID       string            `json:"subscribe_id,omitempty"`
+	SourceID          string            `json:"source_id,omitempty"`
+	RuleType          string            `json:"rule_type,omitempty"`
+	Data              string            `json:"data"`              // raw JSON payload from SDK
+	Headers           map[string]string `json:"headers,omitempty"` // full DataFrame.Headers, passthrough
+	ReceivedAt        time.Time         `json:"received_at"`       // bus receive time (UTC)
 }
 
 // EmitFn is the non-blocking handoff from Source to Hub. Implementations MUST
@@ -88,10 +101,17 @@ func itoa(n int64) string {
 // while keeping the Unix socket path under macOS's 104-byte sun_path limit.
 // The original ClientID is stored in bus.meta and shown in status output.
 func ClientIDHash(clientID string) string {
-	if clientID == "" {
+	return IdentityHash(clientID)
+}
+
+// IdentityHash returns the path-safe identifier derived from any event
+// identity string. It intentionally uses the same algorithm as ClientIDHash
+// so existing app-stream paths remain stable when the identity is client_id.
+func IdentityHash(identity string) string {
+	if strings.TrimSpace(identity) == "" {
 		return ""
 	}
-	h := sha256.Sum256([]byte(clientID))
+	h := sha256.Sum256([]byte(identity))
 	return hex.EncodeToString(h[:8])
 }
 

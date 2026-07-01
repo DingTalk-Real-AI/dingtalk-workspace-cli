@@ -74,6 +74,12 @@ type Hooks struct {
 	// to DefaultOSSClawType; overlays set their own value (e.g. "wukong").
 	ClawTypeValue string
 
+	// PersonalEventSourceID identifies the personal-event source channel
+	// used by dws event --as user. Empty → "open". Overlays set their own
+	// value through Override; open-source core never infers custom sources
+	// from environment/user input.
+	PersonalEventSourceID string
+
 	// --- runtime mode ---
 	IsEmbedded     bool // true when running inside a host application
 	HideAuthLogin  bool // true suppresses the "dws auth login" command
@@ -181,4 +187,12 @@ func ClawType() string {
 		return v
 	}
 	return DefaultOSSClawType
+}
+
+// PersonalEventSourceID returns the source channel for user-level events.
+func PersonalEventSourceID() string {
+	if v := Get().PersonalEventSourceID; v != "" {
+		return v
+	}
+	return "open"
 }

@@ -31,7 +31,7 @@ import (
 // (P5) from flag values + strict resolver output.
 type Config struct {
 	// WorkDir is the bus working directory:
-	// <ConfigDir>/events/<edition>/<clientIDHash>/
+	// <ConfigDir>/events/<edition>/<source_kind>/<identity_hash>/
 	WorkDir string
 	// IPCEndpoint is the Unix socket path / Windows pipe name. Caller
 	// computes from WorkDir on Unix, from edition+hash on Windows.
@@ -39,12 +39,16 @@ type Config struct {
 	// ClientID is forwarded to busctl.Spawn so it can pass --client-id
 	// when forking _bus.
 	ClientID string
+	// SpawnExtraArgs are appended when consume needs busctl to start _bus
+	// with a non-default source kind, such as personal_stream.
+	SpawnExtraArgs []string
 
 	// EventTypes / Filter / Compact are forwarded to the bus via Hello
 	// for server-side pushdown filtering.
-	EventTypes []string
-	Filter     string
-	Compact    bool
+	EventTypes  []string
+	Filter      string
+	SubscribeID string
+	Compact     bool
 
 	// MaxEvents: stop after receiving this many events. 0 = no limit.
 	MaxEvents int
@@ -142,9 +146,10 @@ func Run(ctx context.Context, cfg Config) error {
 	defer pipeline.Close()
 
 	conn, err := busctl.Discover(busctl.DiscoverConfig{
-		WorkDir:     cfg.WorkDir,
-		IPCEndpoint: cfg.IPCEndpoint,
-		ClientID:    cfg.ClientID,
+		WorkDir:        cfg.WorkDir,
+		IPCEndpoint:    cfg.IPCEndpoint,
+		ClientID:       cfg.ClientID,
+		SpawnExtraArgs: cfg.SpawnExtraArgs,
 	})
 	if err != nil {
 		return fmt.Errorf("consume: discover bus: %w", err)
@@ -162,6 +167,7 @@ func Run(ctx context.Context, cfg Config) error {
 		ConsumerPID: os.Getpid(),
 		EventTypes:  cfg.EventTypes,
 		Filter:      cfg.Filter,
+		SubscribeID: cfg.SubscribeID,
 		Compact:     cfg.Compact,
 	}
 	if err := w.WriteJSON(hello); err != nil {

@@ -26,7 +26,8 @@ import (
 )
 
 // LockFileName is the on-disk name of the bus single-instance lock. It lives
-// inside the bus working directory (<ConfigDir>/events/<edition>/<clientIDHash>/).
+// inside the bus working directory
+// (<ConfigDir>/events/<edition>/<source_kind>/<identity_hash>/).
 const LockFileName = "bus.lock"
 
 // ErrBusy is re-exported from lock for callers that only depend on bus.

@@ -47,7 +47,7 @@ type SourceAdapter interface {
 // to ConfigDir / edition rules.
 type Config struct {
 	// WorkDir is the bus working directory:
-	//   <ConfigDir>/events/<edition>/<clientIDHash>/
+	//   <ConfigDir>/events/<edition>/<source_kind>/<identity_hash>/
 	// The caller MUST mkdir this with pkg/config.DirPerm before calling Run.
 	WorkDir string
 
@@ -58,6 +58,13 @@ type Config struct {
 	// ClientID is the human-readable identifier written into bus.meta and
 	// status output. NOT used in any path.
 	ClientID string
+
+	// SourceKind/IdentityHash/SourceID are diagnostic identity fields used by
+	// list/status. Empty SourceKind is interpreted as app_stream for backward
+	// compatibility.
+	SourceKind   dwsevent.SourceKind
+	IdentityHash string
+	SourceID     string
 
 	// Edition is written into bus.meta. Comes from edition.Get().Name with
 	// "open" fallback applied by the caller.
@@ -129,11 +136,14 @@ func Run(ctx context.Context, cfg Config) error {
 
 	// 2. Write bus.meta
 	meta := Meta{
-		ClientID:   cfg.ClientID,
-		Edition:    cfg.Edition,
-		StartedAt:  time.Now().UTC(),
-		SDKVersion: cfg.SDKVersion,
-		BusPID:     os.Getpid(),
+		ClientID:     cfg.ClientID,
+		Edition:      cfg.Edition,
+		SourceKind:   cfg.SourceKind,
+		IdentityHash: cfg.IdentityHash,
+		SourceID:     cfg.SourceID,
+		StartedAt:    time.Now().UTC(),
+		SDKVersion:   cfg.SDKVersion,
+		BusPID:       os.Getpid(),
 	}
 	if err := WriteMeta(cfg.WorkDir, meta); err != nil {
 		return failReady(cfg.ReadyPipe, fmt.Errorf("bus: write meta: %w", err))
@@ -399,6 +409,9 @@ func (d *daemon) handleStatusRPC(w *transport.Writer, r *transport.Reader) {
 			IdleTimeoutSec: int(d.cfg.IdleTimeout / time.Second),
 			ClientID:       d.cfg.ClientID,
 			Edition:        d.cfg.Edition,
+			SourceKind:     d.cfg.SourceKind,
+			IdentityHash:   d.cfg.IdentityHash,
+			SourceID:       d.cfg.SourceID,
 		},
 		SourceState: transport.StatusSource{
 			State:  "connected", // v1: source state plumbed in P3+

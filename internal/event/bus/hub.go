@@ -39,6 +39,7 @@ type Consumer struct {
 	PID          int      // from Hello.ConsumerPID
 	EventTypes   []string // raw wildcard patterns from Hello
 	Filter       string   // raw regex from Hello (for status display)
+	SubscribeID  string   // optional personal subscription filter
 	SubscribedAt time.Time
 	SendCh       chan any // bus → consume frames (Event/SourceState/Heartbeat/Bye)
 	matcher      consumerMatcher
@@ -57,11 +58,13 @@ type consumerMatcher struct {
 	exact    map[string]struct{} // patterns without '*'
 	prefixes []string            // patterns ending in ".*" or "*" — store the prefix only
 	filter   *regexp.Regexp      // nil if no filter
+	subID    string              // nil/empty = do not filter by subscription
 }
 
-func compileMatcher(eventTypes []string, filter string) (consumerMatcher, error) {
+func compileMatcher(eventTypes []string, filter string, subscribeID string) (consumerMatcher, error) {
 	m := consumerMatcher{
 		exact: make(map[string]struct{}),
+		subID: strings.TrimSpace(subscribeID),
 	}
 	if len(eventTypes) == 0 {
 		m.catchAll = true
@@ -96,7 +99,14 @@ func compileMatcher(eventTypes []string, filter string) (consumerMatcher, error)
 	return m, nil
 }
 
-func (m *consumerMatcher) matches(eventType string) bool {
+func (m *consumerMatcher) matches(raw *dwsevent.RawEvent) bool {
+	if raw == nil {
+		return false
+	}
+	if m.subID != "" && raw.SubscribeID != m.subID {
+		return false
+	}
+	eventType := raw.EventType
 	// First the include rules: catchAll OR exact-list OR prefix-list.
 	included := m.catchAll
 	if !included {
@@ -164,7 +174,7 @@ func (e *RegisterError) Unwrap() error { return e.Err }
 // Consumer with the populated ID + sendCh ready to use, or a RegisterError
 // if the Hello's Filter regex is invalid.
 func (h *Hub) Register(hello transport.Hello) (*Consumer, error) {
-	m, err := compileMatcher(hello.EventTypes, hello.Filter)
+	m, err := compileMatcher(hello.EventTypes, hello.Filter, hello.SubscribeID)
 	if err != nil {
 		return nil, &RegisterError{Err: err}
 	}
@@ -176,6 +186,7 @@ func (h *Hub) Register(hello transport.Hello) (*Consumer, error) {
 		PID:          hello.ConsumerPID,
 		EventTypes:   append([]string(nil), hello.EventTypes...),
 		Filter:       hello.Filter,
+		SubscribeID:  strings.TrimSpace(hello.SubscribeID),
 		SubscribedAt: time.Now().UTC(),
 		SendCh:       make(chan any, h.bufferSize),
 		matcher:      m,
@@ -220,7 +231,7 @@ func (h *Hub) Deliver(raw *dwsevent.RawEvent) {
 		if c.closed.Load() {
 			continue
 		}
-		if c.matcher.matches(raw.EventType) {
+		if c.matcher.matches(raw) {
 			matched = append(matched, c)
 		}
 	}
@@ -244,6 +255,10 @@ func (c *Consumer) deliver(raw *dwsevent.RawEvent, hubCounters *PerTypeCounters)
 		EventCorpID:       raw.EventCorpID,
 		EventType:         raw.EventType,
 		EventUnifiedAppID: raw.EventUnifiedAppID,
+		EventScope:        raw.EventScope,
+		SubscribeID:       raw.SubscribeID,
+		SourceID:          raw.SourceID,
+		RuleType:          raw.RuleType,
 		Data:              raw.Data,
 		Headers:           raw.Headers,
 		ReceivedAtUnixMS:  raw.ReceivedAt.UnixMilli(),
@@ -341,6 +356,7 @@ func (h *Hub) Snapshot() []transport.StatusConsumer {
 			PID:            c.PID,
 			EventTypes:     append([]string(nil), c.EventTypes...),
 			Filter:         c.Filter,
+			SubscribeID:    c.SubscribeID,
 			SubscribedAtMS: c.SubscribedAt.UnixMilli(),
 			Received:       c.received.Load(),
 			Dropped:        c.dropped.Load(),

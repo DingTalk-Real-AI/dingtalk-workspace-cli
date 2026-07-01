@@ -16,6 +16,8 @@ package transport
 import (
 	"encoding/json"
 	"fmt"
+
+	dwsevent "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event"
 )
 
 // FrameType discriminates the JSON frames flowing over the IPC channel.
@@ -40,9 +42,10 @@ const (
 type Hello struct {
 	Type        FrameType `json:"type"`
 	ConsumerPID int       `json:"consumer_pid"`
-	EventTypes  []string  `json:"event_types,omitempty"` // wildcard list ("im.*", "approval.*"); empty = catch-all
-	Filter      string    `json:"filter,omitempty"`      // optional regex over event_type
-	Compact     bool      `json:"compact,omitempty"`     // hint to status output; bus does not transform payloads
+	EventTypes  []string  `json:"event_types,omitempty"`  // wildcard list ("im.*", "approval.*"); empty = catch-all
+	Filter      string    `json:"filter,omitempty"`       // optional regex over event_type
+	SubscribeID string    `json:"subscribe_id,omitempty"` // optional personal subscription filter
+	Compact     bool      `json:"compact,omitempty"`      // hint to status output; bus does not transform payloads
 	// Role distinguishes a real consumer (registered for events) from an
 	// ad-hoc tooling connection (status/list/stop). Ad-hoc connections do
 	// NOT register with the Hub.
@@ -82,6 +85,10 @@ type Event struct {
 	EventCorpID       string            `json:"event_corp_id,omitempty"`
 	EventType         string            `json:"event_type"`
 	EventUnifiedAppID string            `json:"event_unified_app_id,omitempty"`
+	EventScope        string            `json:"event_scope,omitempty"`
+	SubscribeID       string            `json:"subscribe_id,omitempty"`
+	SourceID          string            `json:"source_id,omitempty"`
+	RuleType          string            `json:"rule_type,omitempty"`
 	Data              string            `json:"data"`
 	Headers           map[string]string `json:"headers,omitempty"`
 	ReceivedAtUnixMS  int64             `json:"received_at_unix_ms"`
@@ -135,11 +142,14 @@ type StatusResp struct {
 
 // StatusBus is the bus daemon's identity / lifecycle view.
 type StatusBus struct {
-	PID            int    `json:"pid"`
-	UptimeSecs     int64  `json:"uptime_secs"`
-	IdleTimeoutSec int    `json:"idle_timeout_secs"`
-	ClientID       string `json:"client_id"`
-	Edition        string `json:"edition"`
+	PID            int                 `json:"pid"`
+	UptimeSecs     int64               `json:"uptime_secs"`
+	IdleTimeoutSec int                 `json:"idle_timeout_secs"`
+	ClientID       string              `json:"client_id"`
+	Edition        string              `json:"edition"`
+	SourceKind     dwsevent.SourceKind `json:"source_kind,omitempty"`
+	IdentityHash   string              `json:"identity_hash,omitempty"`
+	SourceID       string              `json:"source_id,omitempty"`
 }
 
 // StatusSource is the source.Machine snapshot at status RPC time.
@@ -156,6 +166,7 @@ type StatusConsumer struct {
 	PID            int      `json:"pid"`
 	EventTypes     []string `json:"event_types,omitempty"`
 	Filter         string   `json:"filter,omitempty"`
+	SubscribeID    string   `json:"subscribe_id,omitempty"`
 	SubscribedAtMS int64    `json:"subscribed_at_ms"`
 	Received       uint64   `json:"received"`
 	Dropped        uint64   `json:"dropped"`

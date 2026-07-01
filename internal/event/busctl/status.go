@@ -21,6 +21,7 @@ import (
 	"sort"
 	"time"
 
+	dwsevent "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/bus"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/process"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
@@ -47,11 +48,13 @@ const (
 // lifecycle state. EnumerateBuses produces these; the cobra layer joins
 // them with QueryStatus output to render the full status view.
 type BusEntry struct {
-	WorkDir      string        `json:"workdir"`
-	Edition      string        `json:"edition"`
-	ClientIDHash string        `json:"client_id_hash"`
-	HolderPID    int           `json:"holder_pid"`
-	State        BusEntryState `json:"state"`
+	WorkDir      string              `json:"workdir"`
+	Edition      string              `json:"edition"`
+	SourceKind   dwsevent.SourceKind `json:"source_kind,omitempty"`
+	ClientIDHash string              `json:"client_id_hash"`
+	IdentityHash string              `json:"identity_hash,omitempty"`
+	HolderPID    int                 `json:"holder_pid"`
+	State        BusEntryState       `json:"state"`
 	// Meta, if non-nil, lets list/status display the original ClientID
 	// (reverse-mapped from the hash) and the bus start time.
 	Meta *bus.Meta `json:"meta,omitempty"`
@@ -62,8 +65,16 @@ type BusEntry struct {
 // derived from edition + clientIDHash (same scheme defaultIPCEndpoint
 // uses in the cobra layer).
 func (e BusEntry) IPCEndpoint() string {
+	hash := e.ClientIDHash
+	if e.IdentityHash != "" {
+		hash = e.IdentityHash
+	}
 	if runtime.GOOS == "windows" {
-		return `\\.\pipe\dws-event-` + e.Edition + "-" + e.ClientIDHash
+		kind := string(e.SourceKind)
+		if kind == "" {
+			kind = string(dwsevent.SourceKindAppStream)
+		}
+		return `\\.\pipe\dws-event-` + e.Edition + "-" + kind + "-" + hash
 	}
 	return filepath.Join(e.WorkDir, "bus.sock")
 }
@@ -72,7 +83,7 @@ func (e BusEntry) IPCEndpoint() string {
 // working directories. An empty editionFilter scans every edition
 // directory found under events/.
 //
-// Returns a deterministic slice sorted by (edition, client_id_hash).
+// Returns a deterministic slice sorted by (edition, source_kind, identity_hash).
 // Missing/inaccessible directories are skipped silently — list/status
 // commands should still succeed when only some editions have ever run a
 // bus.
@@ -93,20 +104,36 @@ func EnumerateBuses(configDir string, editionFilter string) ([]BusEntry, error) 
 		if editionFilter != "" && ed != editionFilter {
 			continue
 		}
-		hashDirs, err := listSubdirs(filepath.Join(root, ed))
+		editionDir := filepath.Join(root, ed)
+		hashDirs, err := listSubdirs(editionDir)
 		if err != nil {
 			continue
 		}
 		for _, h := range hashDirs {
-			workDir := filepath.Join(root, ed, h)
-			out = append(out, inspectEntry(workDir, ed, h))
+			candidate := filepath.Join(editionDir, h)
+			if isSourceKindDir(h) {
+				identityDirs, err := listSubdirs(candidate)
+				if err != nil {
+					continue
+				}
+				for _, ih := range identityDirs {
+					workDir := filepath.Join(candidate, ih)
+					out = append(out, inspectEntry(workDir, ed, h, ih))
+				}
+				continue
+			}
+			// Legacy v1 app-stream layout: events/<edition>/<client_hash>.
+			out = append(out, inspectEntry(candidate, ed, "", h))
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Edition != out[j].Edition {
 			return out[i].Edition < out[j].Edition
 		}
-		return out[i].ClientIDHash < out[j].ClientIDHash
+		if out[i].SourceKind != out[j].SourceKind {
+			return out[i].SourceKind < out[j].SourceKind
+		}
+		return out[i].IdentityHash < out[j].IdentityHash
 	})
 	return out, nil
 }
@@ -116,11 +143,28 @@ func EnumerateBuses(configDir string, editionFilter string) ([]BusEntry, error) 
 // or nil if no bus has ever started for it. The caller derives the hash
 // using event.ClientIDHash.
 func FindBusByClientID(configDir, editionName, clientIDHash string) *BusEntry {
-	workDir := filepath.Join(configDir, "events", editionName, clientIDHash)
+	workDir := filepath.Join(configDir, "events", editionName, string(dwsevent.SourceKindAppStream), clientIDHash)
+	if _, err := os.Stat(workDir); err != nil {
+		legacy := filepath.Join(configDir, "events", editionName, clientIDHash)
+		if _, legacyErr := os.Stat(legacy); legacyErr != nil {
+			return nil
+		}
+		workDir = legacy
+	}
+	e := inspectEntry(workDir, editionName, string(dwsevent.SourceKindAppStream), clientIDHash)
+	return &e
+}
+
+// FindBusByIdentity looks up a bus in the source-kind-aware layout.
+func FindBusByIdentity(configDir, editionName string, sourceKind dwsevent.SourceKind, identityHash string) *BusEntry {
+	if sourceKind == "" {
+		sourceKind = dwsevent.SourceKindAppStream
+	}
+	workDir := filepath.Join(configDir, "events", editionName, string(sourceKind), identityHash)
 	if _, err := os.Stat(workDir); err != nil {
 		return nil
 	}
-	e := inspectEntry(workDir, editionName, clientIDHash)
+	e := inspectEntry(workDir, editionName, string(sourceKind), identityHash)
 	return &e
 }
 
@@ -143,15 +187,28 @@ func listSubdirs(path string) ([]string, error) {
 
 // inspectEntry reads bus.meta + bus.lock and derives the lifecycle state.
 // Never returns an error: any read failure folds into BusStateNotRunning.
-func inspectEntry(workDir, editionName, clientIDHash string) BusEntry {
+func inspectEntry(workDir, editionName, sourceKindRaw, identityHash string) BusEntry {
+	sourceKind := dwsevent.SourceKind(sourceKindRaw)
+	if sourceKind == "" {
+		sourceKind = dwsevent.SourceKindAppStream
+	}
 	e := BusEntry{
 		WorkDir:      workDir,
 		Edition:      editionName,
-		ClientIDHash: clientIDHash,
+		SourceKind:   sourceKind,
+		ClientIDHash: identityHash,
+		IdentityHash: identityHash,
 		State:        BusStateNotRunning,
 	}
 	if m, err := bus.ReadMeta(workDir); err == nil {
 		e.Meta = m
+		if m.SourceKind != "" {
+			e.SourceKind = m.SourceKind
+		}
+		if m.IdentityHash != "" {
+			e.IdentityHash = m.IdentityHash
+			e.ClientIDHash = m.IdentityHash
+		}
 	}
 	pid := bus.ReadHolderPID(filepath.Join(workDir, bus.LockFileName))
 	e.HolderPID = pid
@@ -167,6 +224,10 @@ func inspectEntry(workDir, editionName, clientIDHash string) BusEntry {
 		e.State = BusStateNotRunning
 	}
 	return e
+}
+
+func isSourceKindDir(name string) bool {
+	return name == string(dwsevent.SourceKindAppStream) || name == string(dwsevent.SourceKindPersonalStream)
 }
 
 // DefaultStatusRPCTimeout caps how long QueryStatus waits for the bus to
