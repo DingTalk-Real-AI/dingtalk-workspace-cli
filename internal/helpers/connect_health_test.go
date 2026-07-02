@@ -55,6 +55,13 @@ func TestDeriveConnectHealth(t *testing.T) {
 			false, healthHealthy,
 		},
 		{
+			// A long-idle connector whose ticker keeps refreshing UpdatedUnix
+			// must stay healthy — only a genuinely stale heartbeat means down.
+			"idle with fresh ticker heartbeat is healthy",
+			&connectHeartbeat{Pid: alive, StartUnix: now.Unix() - 100000, ConnectedUnix: now.Unix() - 100000, UpdatedUnix: now.Unix() - 10},
+			false, healthHealthy,
+		},
+		{
 			"error after last success is degraded",
 			&connectHeartbeat{Pid: alive, StartUnix: now.Unix() - 100, ConnectedUnix: now.Unix() - 90, LastReplyUnix: now.Unix() - 50, LastErrorUnix: now.Unix() - 5, LastError: "boom"},
 			false, healthDegraded,
@@ -131,6 +138,51 @@ func TestConnectHeartbeatFlushSkipsUnchanged(t *testing.T) {
 		t.Errorf("flushedUnix (%d) should track UpdatedUnix (%d) after flush", h.flushedUnix, h.hb.UpdatedUnix)
 	}
 	_ = fi1
+}
+
+// Regression for the v1.0.50-preview idle false-down: the flush ticker must
+// advance UpdatedUnix on every tick (bare touch) so an idle connector keeps
+// proving liveness; without it the heartbeat goes stale and
+// deriveConnectHealth misreports the connector as down after 30s.
+func TestConnectHeartbeatIdleTickKeepsFresh(t *testing.T) {
+	connectDaemonDirOverride = t.TempDir()
+	t.Cleanup(func() { connectDaemonDirOverride = "" })
+
+	h := newConnectHealth("cid-idle", "codex")
+	if h.hb.UpdatedUnix == 0 {
+		t.Fatal("newConnectHealth must seed UpdatedUnix so the initial flush persists")
+	}
+	h.onConnected()
+	if err := h.flush(); err != nil {
+		t.Fatalf("initial flush: %v", err)
+	}
+	if hb, err := readConnectHeartbeat(h.dir); err != nil || hb == nil {
+		t.Fatalf("initial heartbeat not persisted: hb=%v err=%v", hb, err)
+	}
+
+	// Backdate the heartbeat as if 40 idle seconds passed (beyond the 30s
+	// staleness threshold), then do exactly what the ticker does: a bare
+	// touch plus flush.
+	h.mu.Lock()
+	backdated := h.hb.UpdatedUnix - 40
+	h.hb.UpdatedUnix = backdated
+	h.flushedUnix = backdated
+	h.mu.Unlock()
+
+	h.touch(func(*connectHeartbeat) {})
+	if err := h.flush(); err != nil {
+		t.Fatalf("tick flush: %v", err)
+	}
+	hb, err := readConnectHeartbeat(h.dir)
+	if err != nil || hb == nil {
+		t.Fatalf("tick heartbeat not persisted: hb=%v err=%v", hb, err)
+	}
+	if hb.UpdatedUnix <= backdated {
+		t.Fatalf("bare tick touch must advance persisted UpdatedUnix past %d, got %d", backdated, hb.UpdatedUnix)
+	}
+	if got := deriveConnectHealth(hb, false, time.Now()); got.State != healthHealthy {
+		t.Fatalf("idle connector with ticker-fresh heartbeat = %q (detail=%q), want %q", got.State, got.Detail, healthHealthy)
+	}
 }
 
 func TestConnectHealthNilSafe(t *testing.T) {

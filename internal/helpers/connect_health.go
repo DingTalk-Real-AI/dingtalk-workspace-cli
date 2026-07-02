@@ -71,9 +71,10 @@ type connectHeartbeat struct {
 }
 
 // connectHealth is the in-memory writer owned by a connector. Events update it
-// in memory (cheap, called on the message hot path); a background ticker flushes
-// to disk only when something changed, so a busy bot does not churn the disk and
-// an idle one writes nothing after the initial connect record.
+// in memory (cheap, called on the message hot path); a background ticker bumps
+// UpdatedUnix and flushes on every tick — the periodic write IS the liveness
+// proof consumed by the staleness check in deriveConnectHealth, so an idle
+// connector must keep writing or it would be misreported as down (pid reuse).
 type connectHealth struct {
 	dir string
 	mu  sync.Mutex
@@ -94,13 +95,15 @@ func newConnectHealth(clientID, channel string) *connectHealth {
 	if err != nil {
 		return nil
 	}
+	now := time.Now().Unix()
 	return &connectHealth{
 		dir: dir,
 		hb: connectHeartbeat{
-			Pid:       os.Getpid(),
-			Channel:   channel,
-			ClientID:  clientID,
-			StartUnix: time.Now().Unix(),
+			Pid:         os.Getpid(),
+			Channel:     channel,
+			ClientID:    clientID,
+			StartUnix:   now,
+			UpdatedUnix: now,
 		},
 	}
 }
@@ -158,6 +161,10 @@ func (h *connectHealth) start(ctx context.Context) {
 				h.remove()
 				return
 			case <-t.C:
+				// Each tick is a liveness proof: advance UpdatedUnix even when
+				// nothing else changed, otherwise an idle connector's heartbeat
+				// goes stale and deriveConnectHealth misreports it as down.
+				h.touch(func(*connectHeartbeat) {})
 				_ = h.flush()
 			}
 		}
