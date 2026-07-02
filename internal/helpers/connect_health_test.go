@@ -14,6 +14,7 @@
 package helpers
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"testing"
@@ -144,5 +145,44 @@ func TestConnectHealthNilSafe(t *testing.T) {
 func TestNewConnectHealthNoIdentity(t *testing.T) {
 	if h := newConnectHealth("", ""); h != nil {
 		t.Errorf("expected nil health writer with no clientId, got %+v", h)
+	}
+}
+
+func TestListConnectors(t *testing.T) {
+	connectDaemonDirOverride = t.TempDir()
+	t.Cleanup(func() { connectDaemonDirOverride = "" })
+	now := time.Unix(2_000_000, 0)
+	alive := os.Getpid()
+
+	dirA, _ := connectDaemonDir("dingAAA")
+	writeJSON(t, connectHeartbeatPath(dirA), connectHeartbeat{Pid: alive, Channel: "opencode", ClientID: "dingAAA", StartUnix: now.Unix() - 100, ConnectedUnix: now.Unix() - 90})
+	dirB, _ := connectDaemonDir("dingBBB")
+	writeJSON(t, connectHeartbeatPath(dirB), connectHeartbeat{Pid: deadPid(t), Channel: "codex", ClientID: "dingBBB", StartUnix: now.Unix() - 50, ConnectedUnix: now.Unix() - 40})
+	// Empty leftover dir must be skipped.
+	_, _ = connectDaemonDir("emptyleftover")
+
+	reports, err := listConnectors(now)
+	if err != nil {
+		t.Fatalf("listConnectors: %v", err)
+	}
+	if len(reports) != 2 {
+		t.Fatalf("got %d reports, want 2 (empty dir skipped): %+v", len(reports), reports)
+	}
+	if reports[0].ClientID != "dingAAA" || reports[0].State != healthHealthy {
+		t.Errorf("report[0] = %+v, want dingAAA healthy", reports[0])
+	}
+	if reports[1].ClientID != "dingBBB" || reports[1].State != healthDown {
+		t.Errorf("report[1] = %+v, want dingBBB down", reports[1])
+	}
+}
+
+func writeJSON(t *testing.T, path string, v any) {
+	t.Helper()
+	data, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
 	}
 }

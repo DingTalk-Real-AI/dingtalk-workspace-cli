@@ -555,6 +555,7 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 	cmd.AddCommand(
 		newDevAppRobotConnectStatusCommand(),
 		newDevAppRobotConnectStopCommand(),
+		newDevAppRobotConnectListCommand(),
 	)
 	cmd.Flags().String("channel", "auto", "渠道：auto(默认,自动探测)|openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode|custom(自研/未支持的 AI，配 --agent-cmd)")
 	cmd.Flags().String("agent-cmd", "", "自研/未支持的 AI 工具命令（无头/一次性：问题作为最后一个参数追加，答案打到 stdout）；用来接入内置渠道之外的 AI（如网易有道龙虾 LobsterAI）；等价于 --channel custom + 设 DWS_AGENT_CMD；env: DWS_AGENT_CMD")
