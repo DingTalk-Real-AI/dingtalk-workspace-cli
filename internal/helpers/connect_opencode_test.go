@@ -16,6 +16,7 @@ package helpers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -246,17 +247,17 @@ func TestOpencodeSessionsPersist(t *testing.T) {
 	}
 }
 
-// TestNewOpencodeServerHasNoClientTimeout pins the fix: the shared HTTP client
-// must not carry an overall deadline, otherwise long agent turns get aborted
-// with "Client.Timeout exceeded while awaiting headers". The per-turn ctx is
-// the only thing allowed to bound a message round-trip.
+// TestNewOpencodeServerHasNoClientTimeout pins: the shared HTTP client
+// must not carry an overall deadline — long agent turns would be aborted
+// mid-flight. The per-turn ctx (f.timeout, default 0 = no limit) governs
+// only when the user explicitly sets --agent-timeout / DWS_AGENT_TIMEOUT_MS.
 func TestNewOpencodeServerHasNoClientTimeout(t *testing.T) {
 	s := newOpencodeServer("opencode", nil, "")
 	if s.httpClient == nil {
 		t.Fatal("httpClient must be initialized")
 	}
 	if s.httpClient.Timeout != 0 {
-		t.Fatalf("opencode http client Timeout = %s, want 0 (per-turn ctx governs long agent replies)", s.httpClient.Timeout)
+		t.Fatalf("opencode http client Timeout = %s, want 0 (no client-level cap)", s.httpClient.Timeout)
 	}
 }
 
@@ -311,6 +312,65 @@ func TestOpencodeForwarderMessageGovernedByTurnCtx(t *testing.T) {
 	// the round-trip, so this must error out (proving ctx, not a client cap, wins).
 	if _, err := newForwarder(50*time.Millisecond).forwardStream(context.Background(), "conv-cut", "hi", nil); err == nil {
 		t.Fatal("a reply slower than the turn ctx should fail")
+	}
+}
+
+// TestOpencodeForwarderContextDeadlineExceededRepro reproduces the error seen
+// in the wild: user sends "run tech report", the opencode server processes for
+// longer than the user-configured turn timeout, and the context deadline kills
+// the POST /session/:id/message. The error must surface "context deadline
+// exceeded" so the higher-level formatter produces a meaningful reply.
+func TestOpencodeForwarderContextDeadlineExceededRepro(t *testing.T) {
+	dir := t.TempDir()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/global/health":
+			_, _ = w.Write([]byte(`{"healthy":true}`))
+		case r.URL.Path == "/session":
+			_, _ = w.Write([]byte(`{"id":"ses_1065c16edffeC46Oie6v9WY11l"}`))
+		case r.URL.Path == "/session/ses_1065c16edffeC46Oie6v9WY11l/message":
+			// Simulate a long-running agent that never responds within the turn budget.
+			// Fallback timeout ensures ts.Close() does not hang waiting on the handler.
+			select {
+			case <-r.Context().Done():
+			case <-time.After(1 * time.Second):
+			}
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	f := &opencodeForwarder{
+		bin:      "opencode",
+		timeout:  100 * time.Millisecond, // short turn budget to trigger deadline quickly
+		workDir:  dir,
+		sessions: newOpencodeSessions(filepath.Join(dir, "s.json")),
+		server:   &opencodeServer{baseURL: ts.URL, httpClient: &http.Client{}},
+	}
+
+	_, err := f.forwardStream(context.Background(), "conv-1", "run tech report", nil)
+	if err == nil {
+		t.Fatal("expected context deadline exceeded error, got nil")
+	}
+
+	errStr := err.Error()
+	if !strings.Contains(errStr, "context deadline exceeded") {
+		t.Fatalf("error = %q, want it to contain 'context deadline exceeded'", errStr)
+	}
+	if !strings.Contains(errStr, "/session/ses_1065c16edffeC46Oie6v9WY11l/message") {
+		t.Fatalf("error = %q, want it to contain the session message path", errStr)
+	}
+
+	// Verify the higher-level format matches the screenshot.
+	formatted := fmt.Sprintf("（opencode 调用失败：%v）", err)
+	if !strings.Contains(formatted, "context deadline exceeded") {
+		t.Fatalf("formatted reply = %q, want 'context deadline exceeded'", formatted)
+	}
+	if !strings.HasPrefix(formatted, "（opencode 调用失败：") {
+		t.Fatalf("formatted reply = %q, want prefix '（opencode 调用失败：'", formatted)
 	}
 }
 
