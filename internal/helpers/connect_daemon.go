@@ -28,6 +28,7 @@ import (
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/spf13/cobra"
 )
@@ -401,8 +402,12 @@ func superviseWait(ctx context.Context, worker *exec.Cmd) error {
 	}
 }
 
-// daemonStatus reports the state of the connector daemon to w.
-func daemonStatus(w io.Writer, dirKey string) error {
+// daemonStatus reports connector health to w. It combines two independent
+// signals: the daemon supervisor pid file (is a supervisor alive) and the
+// connector heartbeat (is the connection live and receiving — see
+// connect_health.go). jsonOut emits the machine-readable health report an
+// external supervisor (launchd/systemd/pm2/cron) consumes to decide restarts.
+func daemonStatus(w io.Writer, dirKey string, jsonOut bool) error {
 	dir, err := connectDaemonDir(dirKey)
 	if err != nil {
 		return apperrors.NewInternal("resolve daemon dir: " + err.Error())
@@ -411,23 +416,60 @@ func daemonStatus(w io.Writer, dirKey string) error {
 	if err != nil {
 		return apperrors.NewInternal(err.Error())
 	}
-	if st == nil {
-		fmt.Fprintf(w, "connect daemon: not running (no pid file under %s)\n", dir)
+	supervised := st != nil && st.Pid > 0 && processAlive(st.Pid)
+
+	hb, err := readConnectHeartbeat(dir)
+	if err != nil {
+		return apperrors.NewInternal("read connector heartbeat: " + err.Error())
+	}
+	report := deriveConnectHealth(hb, supervised, time.Now())
+
+	if jsonOut {
+		data, merr := json.MarshalIndent(report, "", "  ")
+		if merr != nil {
+			return apperrors.NewInternal(merr.Error())
+		}
+		fmt.Fprintln(w, string(data))
 		return nil
 	}
-	if st.Pid <= 0 || !processAlive(st.Pid) {
-		fmt.Fprintf(w, "connect daemon: not running (stale pid file for pid %d at %s)\n", st.Pid, daemonPidPath(dir))
-		return nil
+
+	var lines []string
+	lines = append(lines, fmt.Sprintf("%s  %s", tui.Key("state"), colorConnectState(report.State)))
+	if report.Detail != "" {
+		lines = append(lines, fmt.Sprintf("%s %s", tui.Key("detail"), report.Detail))
 	}
-	uptime := time.Since(time.Unix(st.StartUnix, 0)).Round(time.Second)
-	fmt.Fprintf(w, "connect daemon: running\n")
-	fmt.Fprintf(w, "  pid:     %d\n", st.Pid)
-	fmt.Fprintf(w, "  uptime:  %s\n", uptime)
-	fmt.Fprintf(w, "  logs:    %s\n", st.LogPath)
-	if st.ClientID != "" {
-		fmt.Fprintf(w, "  client:  %s\n", st.ClientID)
+	if report.Pid > 0 {
+		lines = append(lines, fmt.Sprintf("%s    %s", tui.Key("pid"), tui.White(fmt.Sprintf("%d", report.Pid))))
 	}
-	return nil
+	if report.Channel != "" {
+		lines = append(lines, fmt.Sprintf("%s %s", tui.Key("channel"), tui.White(report.Channel)))
+	}
+	if report.ClientID != "" {
+		lines = append(lines, fmt.Sprintf("%s %s", tui.Key("client"), tui.White(report.ClientID)))
+	}
+	if report.UptimeSec > 0 {
+		lines = append(lines, fmt.Sprintf("%s %s", tui.Key("uptime"), tui.White((time.Duration(report.UptimeSec)*time.Second).Round(time.Second).String())))
+	}
+	lines = append(lines, fmt.Sprintf("%s  %s", tui.Key("super"), supervisedLabel(supervised)))
+	if hb != nil {
+		if report.LastPushAgoSec > 0 {
+			lines = append(lines, fmt.Sprintf("%s  %s ago", tui.Key("recv"), tui.White((time.Duration(report.LastPushAgoSec)*time.Second).Round(time.Second).String())))
+		} else {
+			lines = append(lines, fmt.Sprintf("%s  %s", tui.Key("recv"), tui.Dim("(none since start)")))
+		}
+		if report.LastError != "" {
+			lines = append(lines, fmt.Sprintf("%s  %s", tui.Key("error"), tui.Danger(report.LastError)))
+		}
+		lines = append(lines, fmt.Sprintf("%s   %s", tui.Key("logs"), tui.Dim(daemonLogPath(dir))))
+	}
+	return tui.Panel(w, tui.Bold("connect status"), lines)
+}
+
+func supervisedLabel(supervised bool) string {
+	if supervised {
+		return "running (--daemon)"
+	}
+	return "none (foreground or external)"
 }
 
 // daemonStop gracefully stops the connector daemon: SIGTERM the supervisor (it
@@ -448,6 +490,28 @@ func daemonStop(w io.Writer, dirKey string) error {
 	}
 	if !processAlive(st.Pid) {
 		_ = os.Remove(daemonPidPath(dir))
+		// The supervisor is dead, but its worker may still be alive (e.g. the
+		// supervisor was kill -9'd). Check the heartbeat for the worker pid and
+		// stop it so we don't leave an orphan.
+		if hb, _ := readConnectHeartbeat(dir); hb != nil && hb.Pid > 0 && processAlive(hb.Pid) {
+			fmt.Fprintf(w, "connect daemon: supervisor (pid %d) was dead, stopping orphan worker (pid %d)...\n", st.Pid, hb.Pid)
+			if proc, perr := os.FindProcess(hb.Pid); perr == nil {
+				_ = proc.Signal(syscall.SIGTERM)
+				deadline := time.Now().Add(daemonStopTimeout)
+				for time.Now().Before(deadline) {
+					if !processAlive(hb.Pid) {
+						break
+					}
+					time.Sleep(200 * time.Millisecond)
+				}
+				if processAlive(hb.Pid) {
+					_ = proc.Signal(syscall.SIGKILL)
+					time.Sleep(200 * time.Millisecond)
+				}
+			}
+			fmt.Fprintf(w, "connect daemon: orphan worker stopped (pid %d)\n", hb.Pid)
+			return nil
+		}
 		fmt.Fprintf(w, "connect daemon: was not running (cleaned up stale pid file for pid %d)\n", st.Pid)
 		return nil
 	}
@@ -483,7 +547,7 @@ func daemonStop(w io.Writer, dirKey string) error {
 func newDevAppRobotConnectStatusCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "status",
-		Short:             "查看后台连接器守护进程状态（pid、运行时长、日志路径）",
+		Short:             "查看连接器健康状态（healthy/degraded/down，pid、收发活动、日志路径；--json 供外部托管消费）",
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -491,12 +555,14 @@ func newDevAppRobotConnectStatusCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return daemonStatus(cmd.OutOrStdout(), dirKey)
+			jsonOut, _ := cmd.Flags().GetBool("json")
+			return daemonStatus(cmd.OutOrStdout(), dirKey, jsonOut)
 		},
 	}
 	preferLegacyLeaf(cmd)
 	cmd.Flags().String("robot-client-id", "", "机器人 clientId（定位守护进程）")
 	cmd.Flags().String("unified-app-id", "", "统一应用 ID（当未用 clientId 起守护进程时定位）")
+	cmd.Flags().Bool("json", false, "以 JSON 输出健康报告（供 launchd/systemd/pm2/cron 判断是否重启）")
 	return cmd
 }
 
@@ -523,6 +589,42 @@ func newDevAppRobotConnectStopCommand() *cobra.Command {
 	return cmd
 }
 
+// newDevAppRobotConnectListCommand implements `dws dev connect list`: enumerate
+// every connector on this machine and its health, so a developer running
+// several robots sees at a glance which are alive/degraded/down without
+// querying each clientId. `--json` emits the array for scripts.
+func newDevAppRobotConnectListCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:               "list",
+		Short:             "列出本机所有连接器及健康状态（healthy/degraded/down）；--json 供脚本消费",
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			reports, err := listConnectors(time.Now())
+			if err != nil {
+				return apperrors.NewInternal(err.Error())
+			}
+			w := cmd.OutOrStdout()
+			if jsonOut, _ := cmd.Flags().GetBool("json"); jsonOut {
+				data, merr := json.MarshalIndent(reports, "", "  ")
+				if merr != nil {
+					return apperrors.NewInternal(merr.Error())
+				}
+				fmt.Fprintln(w, string(data))
+				return nil
+			}
+			if len(reports) == 0 {
+				fmt.Fprintln(w, "no connectors found")
+				return nil
+			}
+			return writeConnectListTable(w, reports)
+		},
+	}
+	preferLegacyLeaf(cmd)
+	cmd.Flags().Bool("json", false, "以 JSON 数组输出（供脚本消费）")
+	return cmd
+}
+
 // connectDaemonDirKeyFromFlags resolves the daemon directory key from the
 // status/stop flags, requiring at least one identifier.
 func connectDaemonDirKeyFromFlags(cmd *cobra.Command) (string, error) {
@@ -533,4 +635,103 @@ func connectDaemonDirKeyFromFlags(cmd *cobra.Command) (string, error) {
 		return "", apperrors.NewValidation("需要 --robot-client-id 或 --unified-app-id 以定位守护进程")
 	}
 	return dirKey, nil
+}
+
+func colorConnectState(state string) string {
+	switch state {
+	case healthHealthy:
+		return tui.Success(state)
+	case healthDegraded:
+		return tui.Warning(state)
+	case healthDown, healthNotRunning:
+		return tui.Danger(state)
+	default:
+		return tui.Cyan(state)
+	}
+}
+
+func writeConnectListTable(w io.Writer, reports []connectHealthReport) error {
+	type col struct {
+		header string
+		width  int
+	}
+	cols := []col{
+		{"STATE", 11},
+		{"CLIENT", 8},
+		{"PID", 6},
+		{"CHANNEL", 7},
+		{"UPTIME", 6},
+	}
+	// compute column widths from data
+	for _, r := range reports {
+		if w := tui.PlainRuneWidth(r.ClientID); w > cols[1].width {
+			cols[1].width = w
+		}
+		if w := tui.PlainRuneWidth(r.Channel); w > cols[3].width {
+			cols[3].width = w
+		}
+	}
+	for i := range cols {
+		if cols[i].width > tui.MaxTableColumnWidth {
+			cols[i].width = tui.MaxTableColumnWidth
+		}
+	}
+
+	writeBorder := func(left, mid, right string, colorFn func(string) string) {
+		fmt.Fprint(w, colorFn(left))
+		for i, c := range cols {
+			if i > 0 {
+				fmt.Fprint(w, colorFn(mid))
+			}
+			fmt.Fprint(w, colorFn(strings.Repeat("─", c.width+2)))
+		}
+		fmt.Fprintln(w, colorFn(right))
+	}
+	writeRowCells := func(cells []string) {
+		fmt.Fprint(w, tui.Gray("│"))
+		for i, c := range cols {
+			cell := ""
+			if i < len(cells) {
+				cell = cells[i]
+			}
+			fmt.Fprintf(w, " %s ", tui.PadRightANSI(cell, c.width))
+			fmt.Fprint(w, tui.Gray("│"))
+		}
+		fmt.Fprintln(w)
+	}
+
+	// header
+	writeBorder("╭", "┬", "╮", tui.Blue)
+	headers := make([]string, len(cols))
+	for i, c := range cols {
+		headers[i] = tui.Brand(c.header)
+	}
+	writeRowCells(headers)
+	writeBorder("├", "┼", "┤", tui.Gray)
+
+	// rows
+	for _, r := range reports {
+		uptime := tui.Dim("-")
+		if r.UptimeSec > 0 {
+			uptime = tui.White((time.Duration(r.UptimeSec) * time.Second).Round(time.Second).String())
+		}
+		pid := tui.Dim("-")
+		if r.Pid > 0 {
+			pid = tui.White(fmt.Sprintf("%d", r.Pid))
+		}
+		channel := tui.Dim("-")
+		if r.Channel != "" {
+			channel = tui.White(r.Channel)
+		}
+		writeRowCells([]string{
+			colorConnectState(r.State),
+			tui.White(r.ClientID),
+			pid,
+			channel,
+			uptime,
+		})
+	}
+
+	writeBorder("╰", "┴", "╯", tui.Blue)
+	return nil
 }

@@ -16,6 +16,7 @@ package helpers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -24,6 +25,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -187,6 +189,9 @@ type connectAgentOptions struct {
 	// "remember" asks once per action kind then reuses that decision. Sourced
 	// from RoleConfig.confirm_policy; empty = manual.
 	ConfirmPolicy string
+	// Timeout caps each agent turn (--agent-timeout seconds /
+	// DWS_AGENT_TIMEOUT_MS milliseconds). 0 = no limit (default).
+	Timeout time.Duration
 }
 
 // isStreamBridgeChannel reports whether a channel is wired through the Go-native
@@ -239,7 +244,7 @@ func (f *execForwarder) label() string {
 }
 
 func (f *execForwarder) forward(ctx context.Context, convID, text string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, f.timeout)
+	ctx, cancel := applyTimeout(ctx, f.timeout)
 	defer cancel()
 	// Session args go right after the binary, before the spec tail — some specs
 	// (qoder) end the tail with `-p` so the prompt must stay the trailing
@@ -765,7 +770,10 @@ func resolveExecAgent(channel string) (argv []string, env []string, err error) {
 // dependency on a live interactive session. opts applies the user-facing agent
 // tuning (--agent-model / --agent-workdir / --agent-memory).
 func forwarderForChannel(channel, clientID string, opts connectAgentOptions) (forwarder, error) {
-	timeout := envDurationMS("DWS_AGENT_TIMEOUT_MS", 300*time.Second)
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = envDurationMS("DWS_AGENT_TIMEOUT_MS", 0)
+	}
 	spec, ok := agentSpecs[channel]
 	if !ok {
 		return nil, apperrors.NewValidation(fmt.Sprintf("渠道 %q 不是 stream-bridge 渠道，无 forwarder", channel))
@@ -909,6 +917,7 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 	if extras == nil {
 		extras = &connectExtras{}
 	}
+	checkFDLimit()
 	if closer, ok := fwd.(forwarderCloser); ok {
 		defer func() {
 			if err := closer.close(); err != nil {
@@ -925,6 +934,12 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 	}
 	defer release()
 
+	// Health heartbeat: record connect/receive/reply/error so `connect status`
+	// can tell a live connector from a dead one (see connect_health.go). Nil
+	// when no clientId identity is available; all calls below are no-ops then.
+	health := newConnectHealth(clientID, channel)
+	health.start(ctx)
+
 	streamLoggerOnce.Do(func() { sdklogger.SetLogger(streamSDKLogger{}) })
 	replier := chatbot.NewChatbotReplier()
 	dedup := newMsgDedup(10000)
@@ -936,9 +951,12 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		mediaCli = newAICardClient(clientID, clientSecret, "")
 	}
 
+	keepAlive := envDurationMS("DWS_CONNECT_KEEPALIVE_MS", 30000)
+	fmt.Fprintf(os.Stderr, "[connect] keepAlive=%s autoReconnect=true\n", keepAlive)
 	cli := client.NewStreamClient(
 		client.WithAppCredential(client.NewAppCredentialConfig(clientID, clientSecret)),
 		client.WithAutoReconnect(true),
+		client.WithKeepAlive(keepAlive),
 	)
 	cli.RegisterChatBotCallbackRouter(func(_ context.Context, data *chatbot.BotCallbackDataModel) ([]byte, error) {
 		text := strings.TrimSpace(data.Text.Content)
@@ -983,6 +1001,7 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		}
 		fmt.Fprintf(os.Stderr, "[connect] 收到 @%s: %s (convType=%s convId=%s staffId=%s msgId=%s)\n",
 			sender, truncateRunes(shown, 80), data.ConversationType, data.ConversationId, data.SenderStaffId, data.MsgId)
+		health.onPush()
 		// Ack-first: return now, reply asynchronously via sessionWebhook (which is
 		// independent of the Stream ack). Use a background context so the in-flight
 		// forward is not cancelled by the SDK when this callback returns.
@@ -1117,9 +1136,20 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 			}
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "[connect] 转发失败 (%s, 耗时 %s): %v\n", channel, time.Since(started).Round(time.Millisecond), err)
-				reply = fmt.Sprintf("（%s 调用失败：%v）", channel, err)
+				if errors.Is(err, context.DeadlineExceeded) {
+					// Self-recovery: drop the conversation's session so the next
+					// message starts fresh instead of reusing a stuck one.
+					if r, ok := fwd.(sessionResetter); ok {
+						r.resetSession(convID)
+					}
+					reply = fmt.Sprintf("（%s 回复超时，已自动重置会话，请重试。如需调整超时上限可用 --agent-timeout）", channel)
+				} else {
+					reply = fmt.Sprintf("（%s 调用失败：%v）", channel, err)
+				}
+				health.onError(err)
 			} else {
 				fmt.Fprintf(os.Stderr, "[connect] agent 已生成回复 (%s, 耗时 %s): %s\n", channel, time.Since(started).Round(time.Millisecond), truncateRunes(reply, 80))
+				health.onReply()
 			}
 
 			// Confirmation gate orchestration: if the agent's reply declared
@@ -1208,6 +1238,7 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		return apperrors.NewInternal("stream 建连失败：" + err.Error())
 	}
 	defer cli.Close()
+	health.onConnected()
 	<-ctx.Done()
 	return nil
 }
@@ -1229,6 +1260,29 @@ func envDurationMS(key string, def time.Duration) time.Duration {
 		}
 	}
 	return def
+}
+
+// checkFDLimit warns when the soft RLIMIT_NOFILE is below 512. Each connector
+// needs a WebSocket fd + agent subprocess pipes + session files; with 3+
+// connectors a low ulimit causes fd exhaustion → WebSocket abnormal closure.
+func checkFDLimit() {
+	var rlim syscall.Rlimit
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlim); err != nil {
+		return
+	}
+	if rlim.Cur < 512 {
+		fmt.Fprintf(os.Stderr, "[connect][warn] 文件描述符上限 %d 偏低，多 agent 并发连接可能不稳定；建议 ulimit -n 1024\n", rlim.Cur)
+	}
+}
+
+// applyTimeout returns a context bounded by timeout when timeout > 0, or the
+// original context unchanged when timeout == 0 (no limit). The returned cancel
+// func is always safe to defer.
+func applyTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if timeout > 0 {
+		return context.WithTimeout(ctx, timeout)
+	}
+	return ctx, func() {}
 }
 
 // truncateRunes truncates by rune so multi-byte characters are never split.

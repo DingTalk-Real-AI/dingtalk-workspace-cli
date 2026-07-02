@@ -103,7 +103,7 @@ func (f *codexAppServerForwarder) forwardStream(ctx context.Context, convID, tex
 }
 
 func (f *codexAppServerForwarder) forwardAppServer(ctx context.Context, convID, text string, onDelta func(string)) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, f.timeout)
+	ctx, cancel := applyTimeout(ctx, f.timeout)
 	defer cancel()
 
 	var state *codexThreadState

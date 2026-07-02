@@ -50,7 +50,7 @@ func (f *execForwarder) forwardStream(ctx context.Context, convID, text string, 
 	if !f.canStream() || onDelta == nil {
 		return f.forward(ctx, convID, text)
 	}
-	ctx, cancel := context.WithTimeout(ctx, f.timeout)
+	ctx, cancel := applyTimeout(ctx, f.timeout)
 	defer cancel()
 
 	var args []string
