@@ -565,6 +565,58 @@ func newDevAppRobotConnectStopCommand() *cobra.Command {
 	return cmd
 }
 
+// newDevAppRobotConnectListCommand implements `dws dev connect list`: enumerate
+// every connector on this machine and its health, so a developer running
+// several robots sees at a glance which are alive/degraded/down without
+// querying each clientId. `--json` emits the array for scripts.
+func newDevAppRobotConnectListCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:               "list",
+		Short:             "列出本机所有连接器及健康状态（healthy/degraded/down）；--json 供脚本消费",
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			reports, err := listConnectors(time.Now())
+			if err != nil {
+				return apperrors.NewInternal(err.Error())
+			}
+			w := cmd.OutOrStdout()
+			if jsonOut, _ := cmd.Flags().GetBool("json"); jsonOut {
+				data, merr := json.MarshalIndent(reports, "", "  ")
+				if merr != nil {
+					return apperrors.NewInternal(merr.Error())
+				}
+				fmt.Fprintln(w, string(data))
+				return nil
+			}
+			if len(reports) == 0 {
+				fmt.Fprintln(w, "no connectors found")
+				return nil
+			}
+			fmt.Fprintf(w, "%-11s %-24s %-8s %-10s %s\n", "STATE", "CLIENT", "PID", "CHANNEL", "UPTIME")
+			for _, r := range reports {
+				uptime := "-"
+				if r.UptimeSec > 0 {
+					uptime = (time.Duration(r.UptimeSec) * time.Second).Round(time.Second).String()
+				}
+				pid := "-"
+				if r.Pid > 0 {
+					pid = fmt.Sprintf("%d", r.Pid)
+				}
+				channel := r.Channel
+				if channel == "" {
+					channel = "-"
+				}
+				fmt.Fprintf(w, "%-11s %-24s %-8s %-10s %s\n", r.State, r.ClientID, pid, channel, uptime)
+			}
+			return nil
+		},
+	}
+	preferLegacyLeaf(cmd)
+	cmd.Flags().Bool("json", false, "以 JSON 数组输出（供脚本消费）")
+	return cmd
+}
+
 // connectDaemonDirKeyFromFlags resolves the daemon directory key from the
 // status/stop flags, requiring at least one identifier.
 func connectDaemonDirKeyFromFlags(cmd *cobra.Command) (string, error) {

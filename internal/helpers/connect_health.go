@@ -17,6 +17,8 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -303,4 +305,53 @@ func deriveConnectHealth(hb *connectHeartbeat, supervised bool, now time.Time) c
 	}
 	r.State = healthHealthy
 	return r
+}
+
+// connectBaseDir returns <configDir>/connect — the directory holding one
+// subdirectory per connector (keyed by dirKey). Honours the test override.
+func connectBaseDir() string {
+	base := connectDaemonDirOverride
+	if base == "" {
+		base = config.DefaultConfigDir()
+	}
+	return filepath.Join(base, "connect")
+}
+
+// listConnectors enumerates every connector on this machine by scanning
+// connect/<dirKey>/ and deriving each one's health from its heartbeat plus any
+// supervising daemon. This is the multi-connector view behind `connect list` —
+// the same signal `status` reports for one robot, over all of them. Directories
+// with neither a heartbeat nor a daemon state are skipped (empty leftovers).
+// Results are sorted by clientId for stable output. now is injected for tests.
+func listConnectors(now time.Time) ([]connectHealthReport, error) {
+	ents, err := os.ReadDir(connectBaseDir())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var out []connectHealthReport
+	for _, e := range ents {
+		if !e.IsDir() {
+			continue
+		}
+		dir := filepath.Join(connectBaseDir(), e.Name())
+		hb, herr := readConnectHeartbeat(dir)
+		if herr != nil {
+			continue // unreadable heartbeat: skip rather than fail the whole list
+		}
+		st, _ := readDaemonState(dir)
+		if hb == nil && st == nil {
+			continue // empty leftover dir
+		}
+		supervised := st != nil && st.Pid > 0 && processAlive(st.Pid)
+		r := deriveConnectHealth(hb, supervised, now)
+		if r.ClientID == "" {
+			r.ClientID = e.Name() // fall back to the dir key when no heartbeat identity
+		}
+		out = append(out, r)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ClientID < out[j].ClientID })
+	return out, nil
 }
