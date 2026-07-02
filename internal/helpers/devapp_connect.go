@@ -535,7 +535,8 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 			// connector alive 7x24. We resolve credentials/channel first (above) so
 			// the parent fails fast on bad input before forking, then re-exec.
 			if daemonMode, _ := cmd.Flags().GetBool(daemonFlag); daemonMode {
-				return startDaemon(cmd, daemonDirKey(clientID, unifiedAppID), clientID)
+				notifyStaffID := devAppStringFlag(cmd, "notify-staff-id")
+				return startDaemon(cmd, daemonDirKey(clientID, unifiedAppID), clientID, unifiedAppID, channel, notifyStaffID)
 			}
 
 			fmt.Fprintf(cmd.ErrOrStderr(), "[connect] channel=%s（%s）凭证来源=%s\n", channel, detectedBy, resolvedBy)
@@ -555,6 +556,7 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 	cmd.AddCommand(
 		newDevAppRobotConnectStatusCommand(),
 		newDevAppRobotConnectStopCommand(),
+		newDevAppRobotConnectRestartCommand(),
 		newDevAppRobotConnectListCommand(),
 	)
 	cmd.Flags().String("channel", "auto", "渠道：auto(默认,自动探测)|openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode|custom(自研/未支持的 AI，配 --agent-cmd)")
@@ -581,6 +583,7 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("role-config", "", "数字员工角色配置 YAML：用角色的主人/人设/知识源填充未显式给出的选项（显式 flag 优先）；role 的 client_id 必须与本机器人一致；env: DWS_ROLE_CONFIG")
 	cmd.Flags().String("audit-sheet", "", "审计在线表格 ID/URL（axls）：确认闸每个操作追加一行到该表格，可在钉钉随时查看；空=仅本地审计文件；env: DWS_AUDIT_SHEET")
 	cmd.Flags().String("audit-sheet-tab", "Sheet1", "审计表格的工作表 ID/名称（配合 --audit-sheet）；env: DWS_AUDIT_SHEET_TAB")
+	cmd.Flags().String("notify-staff-id", "", "状态通知 staffId：机器人启动/停止/崩溃时自动发钉钉消息通知此人；env: DWS_NOTIFY_STAFF_ID")
 	return cmd
 }
 

@@ -59,11 +59,14 @@ const (
 // supervisor pid plus enough context for `status` to report without re-deriving
 // it (start time for uptime, log path, the dir key it was filed under).
 type daemonState struct {
-	Pid       int    `json:"pid"`
-	StartUnix int64  `json:"startUnix"`
-	LogPath   string `json:"logPath"`
-	DirKey    string `json:"dirKey"`
-	ClientID  string `json:"clientId,omitempty"`
+	Pid          int    `json:"pid"`
+	StartUnix    int64  `json:"startUnix"`
+	LogPath      string `json:"logPath"`
+	DirKey       string `json:"dirKey"`
+	ClientID     string `json:"clientId,omitempty"`
+	UnifiedAppID string `json:"unifiedAppId,omitempty"`
+	Channel      string `json:"channel,omitempty"`
+	NotifyStaffID string `json:"notifyStaffId,omitempty"`
 }
 
 // connectDaemonDirOverride lets tests redirect the per-client daemon directory
@@ -191,7 +194,7 @@ func buildWorkerArgs(args []string) []string {
 // startDaemon implements `connect --daemon`: it re-execs dws in supervisor mode
 // detached from the terminal, writes nothing itself to the worker log (the
 // supervisor does), prints the pid + log path, and returns so the parent exits.
-func startDaemon(cmd *cobra.Command, dirKey, clientID string) error {
+func startDaemon(cmd *cobra.Command, dirKey, clientID, unifiedAppID, channel, notifyStaffID string) error {
 	if !daemonDetachSupported {
 		return apperrors.NewValidation("--daemon is not supported on this OS; run the foreground connector under a service manager instead")
 	}
@@ -229,6 +232,9 @@ func startDaemon(cmd *cobra.Command, dirKey, clientID string) error {
 	child.Env = append(os.Environ(),
 		"DWS_CONNECT_DAEMON_DIRKEY="+dirKey,
 		"DWS_CONNECT_DAEMON_CLIENTID="+clientID,
+		"DWS_CONNECT_DAEMON_UNIFIEDAPPID="+unifiedAppID,
+		"DWS_CONNECT_DAEMON_CHANNEL="+channel,
+		"DWS_CONNECT_DAEMON_NOTIFY_STAFF_ID="+notifyStaffID,
 	)
 	if connectDaemonDirOverride != "" {
 		child.Env = append(child.Env, "DWS_CONNECT_DAEMON_DIR="+connectDaemonDirOverride)
@@ -292,16 +298,22 @@ func runSupervisor(cmd *cobra.Command) error {
 		connectDaemonDirOverride = v
 	}
 	clientID := strings.TrimSpace(os.Getenv("DWS_CONNECT_DAEMON_CLIENTID"))
+	unifiedAppID := strings.TrimSpace(os.Getenv("DWS_CONNECT_DAEMON_UNIFIEDAPPID"))
+	channel := strings.TrimSpace(os.Getenv("DWS_CONNECT_DAEMON_CHANNEL"))
+	notifyStaffID := strings.TrimSpace(os.Getenv("DWS_CONNECT_DAEMON_NOTIFY_STAFF_ID"))
 	dir, err := connectDaemonDir(dirKey)
 	if err != nil {
 		return apperrors.NewInternal("create daemon dir: " + err.Error())
 	}
 	st := daemonState{
-		Pid:       os.Getpid(),
-		StartUnix: time.Now().Unix(),
-		LogPath:   daemonLogPath(dir),
-		DirKey:    dirKey,
-		ClientID:  clientID,
+		Pid:           os.Getpid(),
+		StartUnix:     time.Now().Unix(),
+		LogPath:       daemonLogPath(dir),
+		DirKey:        dirKey,
+		ClientID:      clientID,
+		UnifiedAppID:  unifiedAppID,
+		Channel:       channel,
+		NotifyStaffID: notifyStaffID,
 	}
 	if err := writeDaemonState(dir, st); err != nil {
 		return apperrors.NewInternal("write daemon pid file: " + err.Error())
@@ -332,16 +344,19 @@ func runSupervisor(cmd *cobra.Command) error {
 	}
 
 	failures := 0
+	daemonNotifyStateChange(notifyStaffID, channel, clientID, "started", "")
 	for {
 		if delay := backoffDelay(failures, daemonBackoffBase, daemonBackoffCap); delay > 0 {
 			fmt.Fprintf(out, "[daemon] restarting worker in %s (consecutive failures: %d)\n", delay, failures)
 			select {
 			case <-ctx.Done():
+				daemonNotifyStateChange(notifyStaffID, channel, clientID, "stopped", "")
 				return nil
 			case <-time.After(delay):
 			}
 		}
 		if ctx.Err() != nil {
+			daemonNotifyStateChange(notifyStaffID, channel, clientID, "stopped", "")
 			return nil
 		}
 
@@ -354,6 +369,7 @@ func runSupervisor(cmd *cobra.Command) error {
 			fmt.Fprintf(out, "[daemon] failed to start worker: %v\n", err)
 			failures++
 			if failures >= daemonMaxFastFailures {
+				daemonNotifyStateChange(notifyStaffID, channel, clientID, "gave_up", fmt.Sprintf("worker 启动失败 %d 次", failures))
 				return apperrors.NewInternal("daemon worker failed to start too many times; giving up")
 			}
 			continue
@@ -366,6 +382,7 @@ func runSupervisor(cmd *cobra.Command) error {
 		if ctx.Err() != nil {
 			// We were asked to stop; the worker has been (or is being) signalled.
 			fmt.Fprintln(out, "[daemon] stop requested, worker shut down; exiting supervisor")
+			daemonNotifyStateChange(notifyStaffID, channel, clientID, "stopped", "")
 			return nil
 		}
 
@@ -376,8 +393,10 @@ func runSupervisor(cmd *cobra.Command) error {
 		}
 		fmt.Fprintf(out, "[daemon] worker exited after %s (err=%v); consecutive failures: %d\n", ran.Round(time.Second), waitErr, failures)
 		if failures >= daemonMaxFastFailures {
+			daemonNotifyStateChange(notifyStaffID, channel, clientID, "gave_up", fmt.Sprintf("连续崩溃 %d 次", failures))
 			return apperrors.NewInternal(fmt.Sprintf("daemon worker crashed %d times in a row; giving up (check %s)", failures, daemonLogPath(dir)))
 		}
+		daemonNotifyStateChange(notifyStaffID, channel, clientID, "crashed", fmt.Sprintf("worker 退出 (%s)，正在重启", ran.Round(time.Second)))
 	}
 }
 
@@ -589,6 +608,69 @@ func newDevAppRobotConnectStopCommand() *cobra.Command {
 	return cmd
 }
 
+// newDevAppRobotConnectRestartCommand implements `dws devapp robot connect
+// restart`: stop the running daemon (if any) then re-launch it using the
+// persisted unifiedAppId so credentials are freshly fetched from the dev
+// platform — no secrets stored on disk.
+func newDevAppRobotConnectRestartCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "restart",
+		Short: "重启连接器守护进程（通过持久化的 unifiedAppId 重新拉取密钥，无需本地存密钥）",
+		Args:  cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			dirKey, err := connectDaemonDirKeyFromFlags(cmd)
+			if err != nil {
+				return err
+			}
+			dir, err := connectDaemonDir(dirKey)
+			if err != nil {
+				return apperrors.NewInternal("resolve daemon dir: " + err.Error())
+			}
+			st, err := readDaemonState(dir)
+			if err != nil {
+				return apperrors.NewInternal(err.Error())
+			}
+			if st == nil {
+				return apperrors.NewValidation("未找到连接器记录（没有 daemon.pid）；请用 `dws dev connect --daemon` 首次启动")
+			}
+			unifiedAppID := st.UnifiedAppID
+			if unifiedAppID == "" {
+				return apperrors.NewValidation("该连接器未持久化 unifiedAppId（可能是用 --robot-client-id 直接启动的）；重启请用 `dws dev connect --daemon --robot-client-id <id> --robot-client-secret <secret>` 手动指定凭证，或改用 --unified-app-id 启动以便后续重启")
+			}
+			// Stop the running daemon first (ignore "not running" — that's fine).
+			fmt.Fprintln(cmd.OutOrStdout(), "stopping existing daemon...")
+			if err := daemonStop(cmd.OutOrStdout(), dirKey); err != nil {
+				fmt.Fprintf(cmd.OutOrStderr(), "warning: stop returned %v (continuing with restart)\n", err)
+			}
+			// Re-exec dws dev connect --daemon with the stored flags.
+			exe, err := os.Executable()
+			if err != nil {
+				return apperrors.NewInternal("resolve executable: " + err.Error())
+			}
+			args := []string{"dev", "connect", "--daemon", "--unified-app-id", unifiedAppID}
+			if st.Channel != "" {
+				args = append(args, "--channel", st.Channel)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "restarting connector: --unified-app-id %s --channel %s\n", unifiedAppID, st.Channel)
+			restartCmd := exec.Command(exe, args...)
+			restartCmd.Stdout = cmd.OutOrStdout()
+			restartCmd.Stderr = cmd.OutOrStderr()
+			restartCmd.Stdin = nil
+			applyDetach(restartCmd)
+			if err := restartCmd.Start(); err != nil {
+				return apperrors.NewInternal("start restart daemon: " + err.Error())
+			}
+			_ = restartCmd.Process.Release()
+			return nil
+		},
+	}
+	preferLegacyLeaf(cmd)
+	cmd.Flags().String("robot-client-id", "", "机器人 clientId（定位守护进程）")
+	cmd.Flags().String("unified-app-id", "", "统一应用 ID（当未用 clientId 起守护进程时定位）")
+	return cmd
+}
+
 // newDevAppRobotConnectListCommand implements `dws dev connect list`: enumerate
 // every connector on this machine and its health, so a developer running
 // several robots sees at a glance which are alive/degraded/down without
@@ -734,4 +816,44 @@ func writeConnectListTable(w io.Writer, reports []connectHealthReport) error {
 
 	writeBorder("╰", "┴", "╯", tui.Blue)
 	return nil
+}
+
+// daemonNotifyStateChange sends a DingTalk message to the configured staff
+// when the connector state changes. No-op when notifyStaffID is empty. It
+// execs `dws chat message send` as a subprocess (fire-and-forget) so the
+// supervisor is never blocked by notification delivery.
+func daemonNotifyStateChange(notifyStaffID, channel, clientID, event, detail string) {
+	if notifyStaffID == "" {
+		return
+	}
+	var msg string
+	switch event {
+	case "started":
+		msg = fmt.Sprintf("机器人已启动 ✅\n渠道: %s\nclientId: %s", channel, clientID)
+	case "stopped":
+		msg = fmt.Sprintf("机器人已停止 ⏹️\n渠道: %s\nclientId: %s", channel, clientID)
+	case "crashed":
+		msg = fmt.Sprintf("机器人已崩溃 ⚠️\n渠道: %s\n%s\n正在自动重启...", channel, detail)
+	case "gave_up":
+		msg = fmt.Sprintf("机器人重启失败 ❌\n渠道: %s\n%s\n请检查日志后手动重启", channel, detail)
+	default:
+		return
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	go func() {
+		cmd := exec.Command(exe, "chat", "message", "send",
+			"--staff-id", notifyStaffID,
+			"--text", msg,
+			"--ai-tag=false",
+			"--yes",
+			"--format", "json",
+		)
+		cmd.Stdin = nil
+		cmd.Stdout = nil
+		cmd.Stderr = nil
+		_ = cmd.Run()
+	}()
 }
