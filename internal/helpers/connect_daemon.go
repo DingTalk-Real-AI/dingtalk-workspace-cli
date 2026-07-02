@@ -28,6 +28,7 @@ import (
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/spf13/cobra"
 )
@@ -432,35 +433,36 @@ func daemonStatus(w io.Writer, dirKey string, jsonOut bool) error {
 		return nil
 	}
 
-	fmt.Fprintf(w, "connect: %s\n", report.State)
+	var lines []string
+	lines = append(lines, fmt.Sprintf("%s  %s", tui.Key("state"), colorConnectState(report.State)))
 	if report.Detail != "" {
-		fmt.Fprintf(w, "  detail:    %s\n", report.Detail)
+		lines = append(lines, fmt.Sprintf("%s %s", tui.Key("detail"), report.Detail))
 	}
 	if report.Pid > 0 {
-		fmt.Fprintf(w, "  pid:       %d\n", report.Pid)
+		lines = append(lines, fmt.Sprintf("%s    %s", tui.Key("pid"), tui.White(fmt.Sprintf("%d", report.Pid))))
 	}
 	if report.Channel != "" {
-		fmt.Fprintf(w, "  channel:   %s\n", report.Channel)
+		lines = append(lines, fmt.Sprintf("%s %s", tui.Key("channel"), tui.White(report.Channel)))
 	}
 	if report.ClientID != "" {
-		fmt.Fprintf(w, "  client:    %s\n", report.ClientID)
+		lines = append(lines, fmt.Sprintf("%s %s", tui.Key("client"), tui.White(report.ClientID)))
 	}
 	if report.UptimeSec > 0 {
-		fmt.Fprintf(w, "  uptime:    %s\n", (time.Duration(report.UptimeSec) * time.Second).Round(time.Second))
+		lines = append(lines, fmt.Sprintf("%s %s", tui.Key("uptime"), tui.White((time.Duration(report.UptimeSec)*time.Second).Round(time.Second).String())))
 	}
-	fmt.Fprintf(w, "  supervisor: %s\n", supervisedLabel(supervised))
+	lines = append(lines, fmt.Sprintf("%s  %s", tui.Key("super"), supervisedLabel(supervised)))
 	if hb != nil {
 		if report.LastPushAgoSec > 0 {
-			fmt.Fprintf(w, "  last recv:  %s ago\n", (time.Duration(report.LastPushAgoSec) * time.Second).Round(time.Second))
+			lines = append(lines, fmt.Sprintf("%s  %s ago", tui.Key("recv"), tui.White((time.Duration(report.LastPushAgoSec)*time.Second).Round(time.Second).String())))
 		} else {
-			fmt.Fprintf(w, "  last recv:  (none since start)\n")
+			lines = append(lines, fmt.Sprintf("%s  %s", tui.Key("recv"), tui.Dim("(none since start)")))
 		}
 		if report.LastError != "" {
-			fmt.Fprintf(w, "  last error: %s\n", report.LastError)
+			lines = append(lines, fmt.Sprintf("%s  %s", tui.Key("error"), tui.Danger(report.LastError)))
 		}
-		fmt.Fprintf(w, "  logs:       %s\n", daemonLogPath(dir))
+		lines = append(lines, fmt.Sprintf("%s   %s", tui.Key("logs"), tui.Dim(daemonLogPath(dir))))
 	}
-	return nil
+	return tui.Panel(w, tui.Bold("connect status"), lines)
 }
 
 func supervisedLabel(supervised bool) string {
@@ -615,23 +617,7 @@ func newDevAppRobotConnectListCommand() *cobra.Command {
 				fmt.Fprintln(w, "no connectors found")
 				return nil
 			}
-			fmt.Fprintf(w, "%-11s %-24s %-8s %-10s %s\n", "STATE", "CLIENT", "PID", "CHANNEL", "UPTIME")
-			for _, r := range reports {
-				uptime := "-"
-				if r.UptimeSec > 0 {
-					uptime = (time.Duration(r.UptimeSec) * time.Second).Round(time.Second).String()
-				}
-				pid := "-"
-				if r.Pid > 0 {
-					pid = fmt.Sprintf("%d", r.Pid)
-				}
-				channel := r.Channel
-				if channel == "" {
-					channel = "-"
-				}
-				fmt.Fprintf(w, "%-11s %-24s %-8s %-10s %s\n", r.State, r.ClientID, pid, channel, uptime)
-			}
-			return nil
+			return writeConnectListTable(w, reports)
 		},
 	}
 	preferLegacyLeaf(cmd)
@@ -649,4 +635,103 @@ func connectDaemonDirKeyFromFlags(cmd *cobra.Command) (string, error) {
 		return "", apperrors.NewValidation("需要 --robot-client-id 或 --unified-app-id 以定位守护进程")
 	}
 	return dirKey, nil
+}
+
+func colorConnectState(state string) string {
+	switch state {
+	case healthHealthy:
+		return tui.Success(state)
+	case healthDegraded:
+		return tui.Warning(state)
+	case healthDown, healthNotRunning:
+		return tui.Danger(state)
+	default:
+		return tui.Cyan(state)
+	}
+}
+
+func writeConnectListTable(w io.Writer, reports []connectHealthReport) error {
+	type col struct {
+		header string
+		width  int
+	}
+	cols := []col{
+		{"STATE", 11},
+		{"CLIENT", 8},
+		{"PID", 6},
+		{"CHANNEL", 7},
+		{"UPTIME", 6},
+	}
+	// compute column widths from data
+	for _, r := range reports {
+		if w := tui.PlainRuneWidth(r.ClientID); w > cols[1].width {
+			cols[1].width = w
+		}
+		if w := tui.PlainRuneWidth(r.Channel); w > cols[3].width {
+			cols[3].width = w
+		}
+	}
+	for i := range cols {
+		if cols[i].width > tui.MaxTableColumnWidth {
+			cols[i].width = tui.MaxTableColumnWidth
+		}
+	}
+
+	writeBorder := func(left, mid, right string, colorFn func(string) string) {
+		fmt.Fprint(w, colorFn(left))
+		for i, c := range cols {
+			if i > 0 {
+				fmt.Fprint(w, colorFn(mid))
+			}
+			fmt.Fprint(w, colorFn(strings.Repeat("─", c.width+2)))
+		}
+		fmt.Fprintln(w, colorFn(right))
+	}
+	writeRowCells := func(cells []string) {
+		fmt.Fprint(w, tui.Gray("│"))
+		for i, c := range cols {
+			cell := ""
+			if i < len(cells) {
+				cell = cells[i]
+			}
+			fmt.Fprintf(w, " %s ", tui.PadRightANSI(cell, c.width))
+			fmt.Fprint(w, tui.Gray("│"))
+		}
+		fmt.Fprintln(w)
+	}
+
+	// header
+	writeBorder("╭", "┬", "╮", tui.Blue)
+	headers := make([]string, len(cols))
+	for i, c := range cols {
+		headers[i] = tui.Brand(c.header)
+	}
+	writeRowCells(headers)
+	writeBorder("├", "┼", "┤", tui.Gray)
+
+	// rows
+	for _, r := range reports {
+		uptime := tui.Dim("-")
+		if r.UptimeSec > 0 {
+			uptime = tui.White((time.Duration(r.UptimeSec) * time.Second).Round(time.Second).String())
+		}
+		pid := tui.Dim("-")
+		if r.Pid > 0 {
+			pid = tui.White(fmt.Sprintf("%d", r.Pid))
+		}
+		channel := tui.Dim("-")
+		if r.Channel != "" {
+			channel = tui.White(r.Channel)
+		}
+		writeRowCells([]string{
+			colorConnectState(r.State),
+			tui.White(r.ClientID),
+			pid,
+			channel,
+			uptime,
+		})
+	}
+
+	writeBorder("╰", "┴", "╯", tui.Blue)
+	return nil
 }

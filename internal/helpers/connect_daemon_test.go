@@ -210,7 +210,7 @@ func TestDaemonStatusHealthy(t *testing.T) {
 		t.Fatalf("daemonStatus: %v", err)
 	}
 	out := buf.String()
-	for _, want := range []string{healthHealthy, "pid:", "channel:", "opencode", "cidX", "supervisor:"} {
+	for _, want := range []string{healthHealthy, "pid:", "channel:", "opencode", "cidX", "super:"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("status output missing %q; got %q", want, out)
 		}
