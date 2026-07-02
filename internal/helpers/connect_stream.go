@@ -25,7 +25,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -1260,19 +1259,6 @@ func envDurationMS(key string, def time.Duration) time.Duration {
 		}
 	}
 	return def
-}
-
-// checkFDLimit warns when the soft RLIMIT_NOFILE is below 512. Each connector
-// needs a WebSocket fd + agent subprocess pipes + session files; with 3+
-// connectors a low ulimit causes fd exhaustion → WebSocket abnormal closure.
-func checkFDLimit() {
-	var rlim syscall.Rlimit
-	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlim); err != nil {
-		return
-	}
-	if rlim.Cur < 512 {
-		fmt.Fprintf(os.Stderr, "[connect][warn] 文件描述符上限 %d 偏低，多 agent 并发连接可能不稳定；建议 ulimit -n 1024\n", rlim.Cur)
-	}
 }
 
 // applyTimeout returns a context bounded by timeout when timeout > 0, or the
