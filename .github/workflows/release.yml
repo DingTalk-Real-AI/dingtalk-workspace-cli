@@ -34,6 +34,16 @@ jobs:
       - name: Multi Profile E2E
         run: bash scripts/dev/test-multi-profile-e2e.sh
 
+      - name: PAT Auth E2E
+        run: bash scripts/dev/test-pat-auth-e2e.sh --skip-go-tests
+        env:
+          DWS_CI_TEST_CORP_ID: ${{ vars.DWS_CI_TEST_CORP_ID }}
+          DWS_CI_TEST_CORP_NAME: ${{ vars.DWS_CI_TEST_CORP_NAME }}
+          DWS_CI_TEST_USER_ID: ${{ vars.DWS_CI_TEST_USER_ID }}
+          DWS_CI_TEST_USER_NAME: ${{ vars.DWS_CI_TEST_USER_NAME }}
+          DWS_CI_TEST_ACCESS_TOKEN: ${{ secrets.DWS_CI_TEST_ACCESS_TOKEN }}
+          DWS_CI_TEST_REFRESH_TOKEN: ${{ secrets.DWS_CI_TEST_REFRESH_TOKEN }}
+
       - name: Install rcodesign (ad-hoc sign darwin binaries from Linux)
         run: |
           set -eu
