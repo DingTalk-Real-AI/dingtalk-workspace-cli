@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestBrandReply covers the qoderwork identity rewrite using the exact replies
@@ -120,5 +121,27 @@ func TestClaudeUserSettingsEnv(t *testing.T) {
 		if !seen {
 			t.Fatalf("missing %q in %v", kv, got)
 		}
+	}
+}
+
+// TestCheckFDLimit verifies that checkFDLimit runs without panic and respects
+// the envDurationMS pattern for the keepAlive default.
+func TestCheckFDLimit(t *testing.T) {
+	// Should not panic regardless of the actual ulimit.
+	checkFDLimit()
+}
+
+func TestEnvDurationMS(t *testing.T) {
+	def := 30000 * time.Millisecond // 30s
+	if got := envDurationMS("DWS_CONNECT_KEEPALIVE_MS_TEST_ABSENT", def); got != def {
+		t.Fatalf("default keepAlive = %v, want %v", got, def)
+	}
+	t.Setenv("DWS_CONNECT_KEEPALIVE_MS_TEST", "10000")
+	if got := envDurationMS("DWS_CONNECT_KEEPALIVE_MS_TEST", def); got != 10*time.Second {
+		t.Fatalf("env override = %v, want 10s", got)
+	}
+	t.Setenv("DWS_CONNECT_KEEPALIVE_MS_TEST", "bogus")
+	if got := envDurationMS("DWS_CONNECT_KEEPALIVE_MS_TEST", def); got != def {
+		t.Fatalf("invalid env falls back to default = %v, want %v", got, def)
 	}
 }
