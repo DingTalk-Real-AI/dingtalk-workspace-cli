@@ -41,7 +41,6 @@ type Definition struct {
 	Category       string         `json:"category"`
 	RuleType       string         `json:"rule_type"`
 	Status         string         `json:"status"`
-	SchemaIDs      []string       `json:"schema_ids"`
 	RequiredParams []string       `json:"required_params"`
 	Auth           map[string]any `json:"auth,omitempty"`
 	FilterSchema   map[string]any `json:"filter_schema,omitempty"`
@@ -73,7 +72,6 @@ var definitions = []Definition{
 		Category:       "im",
 		RuleType:       "at",
 		Status:         StatusEnabled,
-		SchemaIDs:      []string{"im_msg_29"},
 		RequiredParams: nil,
 		Auth:           map[string]any{"identity": "user"},
 		FilterSchema:   defaultFilterSchema(),
@@ -86,7 +84,6 @@ var definitions = []Definition{
 		Category:       "im",
 		RuleType:       "singleChat",
 		Status:         StatusEnabled,
-		SchemaIDs:      []string{"im_msg_23"},
 		RequiredParams: []string{"peer-user-id or peer-union-id"},
 		Auth:           map[string]any{"identity": "user"},
 		FilterSchema:   defaultFilterSchema(),
@@ -99,7 +96,6 @@ var definitions = []Definition{
 		Category:       "im",
 		RuleType:       "group",
 		Status:         StatusEnabled,
-		SchemaIDs:      nil,
 		RequiredParams: []string{"open-conversation-id"},
 		Auth:           map[string]any{"identity": "user"},
 		FilterSchema:   defaultFilterSchema(),
@@ -112,7 +108,6 @@ var definitions = []Definition{
 		Category:       "im",
 		RuleType:       "sender",
 		Status:         StatusEnabled,
-		SchemaIDs:      nil,
 		RequiredParams: []string{"sender-user-id or sender-union-id"},
 		Auth:           map[string]any{"identity": "user"},
 		FilterSchema:   defaultFilterSchema(),

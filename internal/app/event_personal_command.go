@@ -117,8 +117,12 @@ func newEventSchemaCommand() *cobra.Command {
 		Args:              cobra.ExactArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(c *cobra.Command, args []string) error {
-			if normalizeEventAs(asIdentity) != "user" {
-				return fmt.Errorf("event schema currently supports --as user")
+			as, err := normalizeEventAs(asIdentity)
+			if err != nil {
+				return err
+			}
+			if as != "user" {
+				return fmt.Errorf("event schema is only supported with --as user")
 			}
 			def, ok := personal.Lookup(args[0])
 			if !ok {
@@ -127,7 +131,7 @@ func newEventSchemaCommand() *cobra.Command {
 			return renderPersonalSchema(c.OutOrStdout(), def, formatRaw)
 		},
 	}
-	cmd.Flags().StringVar(&asIdentity, "as", "bot", "事件身份: bot|user；user 显示个人事件 schema")
+	cmd.Flags().StringVar(&asIdentity, "as", "user", "事件身份: user|app；默认 user")
 	cmd.Flags().StringVarP(&formatRaw, "format", "f", "table", "输出格式: table|json")
 	return cmd
 }
@@ -140,10 +144,10 @@ func runPersonalEventList(c *cobra.Command, opts personalListOptions) error {
 		return enc.Encode(items)
 	}
 	tw := tabwriter.NewWriter(c.OutOrStdout(), 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "EVENT_KEY\tRULE\tSTATUS\tSCHEMA_IDS\tDESCRIPTION")
+	fmt.Fprintln(tw, "EVENT_KEY\tRULE\tSTATUS\tDESCRIPTION")
 	for _, it := range items {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
-			it.EventKey, it.RuleType, it.Status, strings.Join(it.SchemaIDs, ","), it.Description)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n",
+			it.EventKey, it.RuleType, it.Status, it.Description)
 	}
 	return tw.Flush()
 }
@@ -158,7 +162,6 @@ func renderPersonalSchema(w io.Writer, def personal.Definition, format string) e
 	fmt.Fprintf(w, "Rule     : %s\n", def.RuleType)
 	fmt.Fprintf(w, "Status   : %s\n", def.Status)
 	fmt.Fprintf(w, "Category : %s\n", def.Category)
-	fmt.Fprintf(w, "Schemas  : %s\n", strings.Join(def.SchemaIDs, ","))
 	if len(def.RequiredParams) > 0 {
 		fmt.Fprintf(w, "Required : %s\n", strings.Join(def.RequiredParams, ", "))
 	}

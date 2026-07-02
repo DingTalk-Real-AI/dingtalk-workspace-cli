@@ -14,6 +14,7 @@
 package personal
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -52,6 +53,19 @@ func TestLegacyEventKeysAreUnknown(t *testing.T) {
 		}
 		if _, _, err := BuildRuleParam(key, RuleOptions{}); err == nil || !strings.Contains(err.Error(), "unknown personal event key") {
 			t.Fatalf("BuildRuleParam(%q) error = %v, want unknown personal event key", key, err)
+		}
+	}
+}
+
+func TestDefinitionJSONHidesInternalSchemaIDs(t *testing.T) {
+	raw, err := json.Marshal(Definitions())
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	out := string(raw)
+	for _, leaked := range []string{"schema_ids", "im_msg_23", "im_msg_29"} {
+		if strings.Contains(out, leaked) {
+			t.Fatalf("definitions JSON leaked %q: %s", leaked, out)
 		}
 	}
 }

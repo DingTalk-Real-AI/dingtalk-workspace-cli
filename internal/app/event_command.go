@@ -102,13 +102,15 @@ func newEventConsumeCommand() *cobra.Command {
   raw             仅 SDK 原始 payload，无外层封装
   compact         扁平化 + 解析嵌套 + 抽取语义字段（Agent 友好）
 
+个人事件是默认入口；应用事件 Stream 请显式传 --as app。
+
 bus 上游永远全订阅 (开放平台后台勾选的所有事件类型)；--event-types/--filter 只
 影响 bus → consume 这一段投递。开放平台后台未勾选的事件类型即使设置 --event-types
 也收不到。
 
-凭证：默认 bot/app 模式优先从 DWS_CLIENT_ID + DWS_CLIENT_SECRET 环境变量读取
-(成组覆盖)，否则走 dws config init 配置的 keychain。--as user 使用当前
-OAuth 登录态自动创建/复用个人订阅并建立个人长连接。
+凭证：默认 user 模式使用当前 OAuth 登录态自动创建/复用个人订阅并建立个人长连接。
+--as app 模式优先从 DWS_CLIENT_ID + DWS_CLIENT_SECRET 环境变量读取 (成组覆盖)，
+否则走 dws config init 配置的 keychain。
 
 应用事件流：默认走 SDK app credential；指定 --stream-ticket-mode normal/custom
 后可走 portal 取票接口。normal 使用 portal 托管 DWS 凭证；custom 使用当前
@@ -116,7 +118,11 @@ DWS clientId/clientSecret 透传给 portal 建立用户 Stream 连接。`,
 		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(c *cobra.Command, args []string) error {
-			if normalizeEventAs(asIdentity) == "user" {
+			as, err := normalizeEventAs(asIdentity)
+			if err != nil {
+				return err
+			}
+			if as == "user" {
 				personalOpts.EventKey = firstArg(args)
 				personalOpts.Common = commonConsumeOptions{
 					EventTypes: eventTypes,
@@ -139,6 +145,23 @@ DWS clientId/clientSecret 透传给 portal 建立用户 Stream 连接。`,
 			}
 			if personalOpts.DebugRawEvents {
 				return fmt.Errorf("event consume: --debug-raw-events is only supported with --as user")
+			}
+			if err := rejectChangedFlags(c, "user",
+				"subscribe-id",
+				"rule",
+				"name",
+				"filter-json",
+				"keyword",
+				"ttl",
+				"ephemeral",
+				"peer-user-id",
+				"peer-union-id",
+				"sender-user-id",
+				"sender-union-id",
+				"open-conversation-id",
+				"personal-event-base-url",
+			); err != nil {
+				return fmt.Errorf("event consume: %w", err)
 			}
 			if len(args) > 0 {
 				return fmt.Errorf("event consume: event_key is only supported with --as user")
@@ -227,7 +250,7 @@ DWS clientId/clientSecret 透传给 portal 建立用户 Stream 连接。`,
 	}
 
 	f := cmd.Flags()
-	f.StringVar(&asIdentity, "as", "bot", "事件身份: bot|user；user 使用个人事件订阅")
+	f.StringVar(&asIdentity, "as", "user", "事件身份: user|app；默认 user")
 	f.StringSliceVar(&eventTypes, "event-types", nil,
 		"逗号分隔事件类型（开放平台 event_type 值）；省略 = catch-all")
 	f.StringVar(&filter, "filter", "",
@@ -612,13 +635,23 @@ func newEventListCommand() *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(c *cobra.Command, _ []string) error {
-			if normalizeEventAs(asIdentity) == "user" {
+			as, err := normalizeEventAs(asIdentity)
+			if err != nil {
+				return err
+			}
+			if as == "user" {
+				if err := rejectChangedFlags(c, "app", "all", "all-editions", "client-id"); err != nil {
+					return fmt.Errorf("event list: %w", err)
+				}
 				return runPersonalEventList(c, personalListOptions{
 					Category:       category,
 					EnabledOnly:    enabledOnly,
 					IncludePending: includePending,
 					Format:         formatRaw,
 				})
+			}
+			if err := rejectChangedFlags(c, "user", "category", "enabled-only", "include-pending"); err != nil {
+				return fmt.Errorf("event list: %w", err)
 			}
 			entries, err := collectEntries(c, clientIDOver, all, allEditions)
 			if err != nil {
@@ -635,7 +668,7 @@ func newEventListCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&allEditions, "all-editions", false, "跨 edition 列出（罕用，调试用）")
 	cmd.Flags().StringVar(&clientIDOver, "client-id", "", "指定具体 ClientID（覆盖凭证解析）")
 	cmd.Flags().StringVarP(&formatRaw, "format", "f", "table", "输出格式: table|json")
-	cmd.Flags().StringVar(&asIdentity, "as", "bot", "事件身份: bot|user；user 展示个人事件目录")
+	cmd.Flags().StringVar(&asIdentity, "as", "user", "事件身份: user|app；默认 user")
 	cmd.Flags().StringVar(&category, "category", "", "个人事件目录分类")
 	cmd.Flags().BoolVar(&enabledOnly, "enabled-only", false, "个人事件目录只显示 enabled")
 	cmd.Flags().BoolVar(&includePending, "include-pending", false, "个人事件目录包含 pending 项")
@@ -663,9 +696,19 @@ func newEventStatusCommand() *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(c *cobra.Command, _ []string) error {
-			if normalizeEventAs(asIdentity) == "user" {
+			as, err := normalizeEventAs(asIdentity)
+			if err != nil {
+				return err
+			}
+			if as == "user" {
+				if err := rejectChangedFlags(c, "app", "all", "all-editions", "client-id", "fail-on-orphan"); err != nil {
+					return fmt.Errorf("event status: %w", err)
+				}
 				personalOpts.Format = formatRaw
 				return runPersonalEventStatus(c, personalOpts)
+			}
+			if err := rejectChangedFlags(c, "user", "event", "status", "subscribe-id", "personal-event-base-url", "stream-source-id"); err != nil {
+				return fmt.Errorf("event status: %w", err)
 			}
 			entries, err := collectEntries(c, clientIDOver, all, allEditions)
 			if err != nil {
@@ -689,7 +732,7 @@ func newEventStatusCommand() *cobra.Command {
 	cmd.Flags().StringVar(&clientIDOver, "client-id", "", "指定具体 ClientID")
 	cmd.Flags().StringVarP(&formatRaw, "format", "f", "text", "输出格式: text|json")
 	cmd.Flags().BoolVar(&failOnOrphan, "fail-on-orphan", false, "检测到 orphan 时退出码 2")
-	cmd.Flags().StringVar(&asIdentity, "as", "bot", "事件身份: bot|user；user 显示个人事件订阅状态")
+	cmd.Flags().StringVar(&asIdentity, "as", "user", "事件身份: user|app；默认 user")
 	cmd.Flags().StringVar(&personalOpts.EventKey, "event", "", "个人事件 event_key 过滤")
 	cmd.Flags().StringVar(&personalOpts.Status, "status", "active", "个人订阅状态过滤: active|paused|error|deleted|all")
 	cmd.Flags().StringVar(&personalOpts.SubscribeID, "subscribe-id", "", "个人订阅 ID 过滤")
@@ -933,9 +976,16 @@ func newEventStopCommand() *cobra.Command {
 		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(c *cobra.Command, args []string) error {
-			if normalizeEventAs(asIdentity) == "user" {
+			as, err := normalizeEventAs(asIdentity)
+			if err != nil {
+				return err
+			}
+			if as == "user" {
 				opts.SubscribeID = firstArg(args)
 				return runPersonalEventStop(c, opts)
+			}
+			if err := rejectChangedFlags(c, "user", "all", "personal-event-base-url", "stream-source-id"); err != nil {
+				return fmt.Errorf("event stop: %w", err)
 			}
 			if len(args) > 0 {
 				return fmt.Errorf("event stop: subscribe_id is only supported with --as user")
@@ -959,7 +1009,7 @@ func newEventStopCommand() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&asIdentity, "as", "bot", "事件身份: bot|user；user 取消个人事件订阅并断开长链接")
+	cmd.Flags().StringVar(&asIdentity, "as", "user", "事件身份: user|app；默认 user")
 	cmd.Flags().StringVar(&opts.ControlBaseURL, "personal-event-base-url", "", "个人事件控制面 base URL；默认当前 MCP base + /dws")
 	cmd.Flags().StringVar(&opts.StreamSourceID, "stream-source-id", strings.TrimSpace(os.Getenv("DWS_STREAM_SOURCE_ID")),
 		"个人事件 sourceId；预发使用 pre_open_source")
@@ -1005,16 +1055,31 @@ func sourceKindLabel(kind dwsevent.SourceKind) string {
 	return string(kind)
 }
 
-func normalizeEventAs(v string) string {
+func normalizeEventAs(v string) (string, error) {
 	v = strings.ToLower(strings.TrimSpace(v))
 	switch v {
-	case "", "bot", "app":
-		return "bot"
-	case "user":
-		return "user"
+	case "", "user":
+		return "user", nil
+	case "app":
+		return "app", nil
+	case "bot":
+		return "", fmt.Errorf("--as bot is no longer supported; use --as app")
 	default:
-		return v
+		return "", fmt.Errorf("--as must be one of user or app")
 	}
+}
+
+func rejectChangedFlags(c *cobra.Command, supportedAs string, names ...string) error {
+	changed := make([]string, 0, len(names))
+	for _, name := range names {
+		if f := c.Flags().Lookup(name); f != nil && f.Changed {
+			changed = append(changed, "--"+name)
+		}
+	}
+	if len(changed) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%s are only supported with --as %s", strings.Join(changed, ", "), supportedAs)
 }
 
 func firstArg(args []string) string {
