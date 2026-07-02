@@ -14,8 +14,10 @@
 package source
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -23,12 +25,15 @@ import (
 	"time"
 
 	dwsevent "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/bus"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
 	"github.com/gorilla/websocket"
 	streamevent "github.com/open-dingtalk/dingtalk-stream-sdk-go/event"
 	"github.com/open-dingtalk/dingtalk-stream-sdk-go/payload"
 )
 
 func TestPersonalSourceFetchTicketConnectsAndACKs(t *testing.T) {
+	logs := capturePersonalSourceDebugLogs(t)
 	var wsEndpoint string
 	ackCh := make(chan payload.DataFrameResponse, 1)
 	upgrader := websocket.Upgrader{}
@@ -72,8 +77,9 @@ func TestPersonalSourceFetchTicketConnectsAndACKs(t *testing.T) {
 				"subscribeId":                             "sub-1",
 				"ruleType":                                "at",
 				"sourceId":                                "open",
+				"accessToken":                             "header-secret-token",
 			},
-			Data: `{"message":{"text":"hi"}}`,
+			Data: `{"message":{"text":"hi"},"access_token":"data-secret-token","client_secret":"data-secret","ticket":"data-ticket","Authorization":"Bearer data-auth"}`,
 		}
 		if err := conn.WriteJSON(df); err != nil {
 			t.Fatalf("write dataframe: %v", err)
@@ -116,6 +122,17 @@ func TestPersonalSourceFetchTicketConnectsAndACKs(t *testing.T) {
 		if ev.EventType != "user_im_message_receive_at" || ev.EventID != "evt-1" {
 			t.Fatalf("event = %#v", ev)
 		}
+		out := logs.String()
+		for _, want := range []string{"personal source received dataframe", "user_im_message_receive_at", "evt-1", "sub-1", "sourceId", "message", "<redacted>"} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("debug log missing %q: %s", want, out)
+			}
+		}
+		for _, leaked := range []string{"header-secret-token", "data-secret-token", "data-secret", "data-ticket", "Bearer data-auth"} {
+			if strings.Contains(out, leaked) {
+				t.Fatalf("debug log leaked %q: %s", leaked, out)
+			}
+		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for event")
 	}
@@ -136,4 +153,149 @@ func TestPersonalSourceFetchTicketConnectsAndACKs(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("source did not stop after cancel")
 	}
+}
+
+func TestPersonalSourceParsesUppercaseHeaders(t *testing.T) {
+	src := personalSourceForRawEventTests()
+	data := `{"payload":true}`
+	raw := src.rawEventFromDataFrame(&payload.DataFrame{
+		Time: 12345,
+		Headers: payload.DataFrameHeader{
+			"EVENT_TYPE": "user_im_message_receive_o2o",
+			"SUB_ID":     "sub-1",
+			"SOURCE_ID":  "pre_open_source",
+			"MESSAGE_ID": "evt-1",
+		},
+		Data: data,
+	})
+
+	if raw.EventType != "user_im_message_receive_o2o" {
+		t.Fatalf("EventType = %q", raw.EventType)
+	}
+	if raw.SubscribeID != "sub-1" {
+		t.Fatalf("SubscribeID = %q", raw.SubscribeID)
+	}
+	if raw.SourceID != "pre_open_source" {
+		t.Fatalf("SourceID = %q", raw.SourceID)
+	}
+	if raw.EventID != "evt-1" {
+		t.Fatalf("EventID = %q", raw.EventID)
+	}
+	if raw.EventScope != "personal" {
+		t.Fatalf("EventScope = %q", raw.EventScope)
+	}
+	if raw.Data != data {
+		t.Fatalf("Data changed: %q", raw.Data)
+	}
+}
+
+func TestPersonalSourceParsesTopicFallbackAndIgnoresWildcard(t *testing.T) {
+	src := personalSourceForRawEventTests()
+	raw := src.rawEventFromDataFrame(&payload.DataFrame{
+		Headers: payload.DataFrameHeader{
+			"TOPIC": "user_im_message_receive_o2o",
+			"topic": "*",
+		},
+	})
+	if raw.EventType != "user_im_message_receive_o2o" {
+		t.Fatalf("EventType from TOPIC = %q", raw.EventType)
+	}
+
+	raw = src.rawEventFromDataFrame(&payload.DataFrame{
+		Headers: payload.DataFrameHeader{"topic": "*"},
+	})
+	if raw.EventType != "" {
+		t.Fatalf("EventType from wildcard topic = %q, want empty", raw.EventType)
+	}
+}
+
+func TestPersonalSourceParsesDataFallbackWithoutChangingData(t *testing.T) {
+	src := personalSourceForRawEventTests()
+	payloadJSON := `{"eventKey":"user_im_message_receive_o2o","subId":"sub-data","eventId":"evt-data","ext":{"ruleType":"singleChat"}}`
+	encodedPayload, err := json.Marshal(payloadJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := string(encodedPayload)
+
+	raw := src.rawEventFromDataFrame(&payload.DataFrame{Data: data})
+	if raw.EventType != "user_im_message_receive_o2o" {
+		t.Fatalf("EventType = %q", raw.EventType)
+	}
+	if raw.SubscribeID != "sub-data" {
+		t.Fatalf("SubscribeID = %q", raw.SubscribeID)
+	}
+	if raw.EventID != "evt-data" {
+		t.Fatalf("EventID = %q", raw.EventID)
+	}
+	if raw.RuleType != "singleChat" {
+		t.Fatalf("RuleType = %q", raw.RuleType)
+	}
+	if raw.Data != data {
+		t.Fatalf("Data changed: %q", raw.Data)
+	}
+}
+
+func TestPersonalSourceParsesSourceTagDataFallback(t *testing.T) {
+	src := personalSourceForRawEventTests()
+	data := `{"source":{"tag":"user_im_message_receive_group"},"subId":"sub-group"}`
+
+	raw := src.rawEventFromDataFrame(&payload.DataFrame{Data: data})
+	if raw.EventType != "user_im_message_receive_group" {
+		t.Fatalf("EventType = %q", raw.EventType)
+	}
+	if raw.SubscribeID != "sub-group" {
+		t.Fatalf("SubscribeID = %q", raw.SubscribeID)
+	}
+}
+
+func TestPersonalSourceParsedHeadersPassNormalBusFilter(t *testing.T) {
+	src := personalSourceForRawEventTests()
+	raw := src.rawEventFromDataFrame(&payload.DataFrame{
+		Headers: payload.DataFrameHeader{
+			"EVENT_TYPE": "user_im_message_receive_o2o",
+			"SUB_ID":     "sub-1",
+		},
+	})
+	h := bus.NewHub(10)
+	c, err := h.Register(transport.Hello{
+		EventTypes:  []string{"user_im_message_receive_o2o"},
+		SubscribeID: "sub-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h.Deliver(raw)
+
+	select {
+	case frame := <-c.SendCh:
+		ev, ok := frame.(transport.Event)
+		if !ok {
+			t.Fatalf("frame = %T, want transport.Event", frame)
+		}
+		if ev.EventType != "user_im_message_receive_o2o" || ev.SubscribeID != "sub-1" {
+			t.Fatalf("event = %#v", ev)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for filtered event")
+	}
+}
+
+func personalSourceForRawEventTests() *PersonalSource {
+	return &PersonalSource{cfg: PersonalConfig{
+		SourceID: "fallback_source",
+		Now:      func() time.Time { return time.Unix(20, 0) },
+	}}
+}
+
+func capturePersonalSourceDebugLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() {
+		slog.SetDefault(previous)
+	})
+	return &buf
 }

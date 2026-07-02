@@ -14,8 +14,10 @@
 package personal
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -131,7 +133,53 @@ func TestClientCreateSubscriptionObjectResponses(t *testing.T) {
 	}
 }
 
+func TestClientDebugLogCreateSubscriptionRequestResponse(t *testing.T) {
+	logs := captureClientDebugLogs(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success":   true,
+			"requestId": "req-ok",
+			"result":    []string{"sub-1"},
+		})
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, Identity{AccessToken: "secret-token", ClientID: "client-1", SourceID: "pre_open_source"})
+	if _, err := c.CreateSubscription(t.Context(), CreateSubscriptionRequest{
+		EventKey: EventSingleChat,
+		RuleType: "singleChat",
+		RuleParam: map[string]any{
+			"targetUid":     "507971",
+			"targetUidType": "staffId",
+		},
+		IdempotencyKey: "idem-1",
+	}); err != nil {
+		t.Fatalf("CreateSubscription() error = %v", err)
+	}
+	out := logs.String()
+	for _, want := range []string{
+		"personal event control request",
+		"/subscription/user",
+		"client-1",
+		"pre_open_source",
+		EventSingleChat,
+		"filterRule",
+		"targetUid",
+		"507971",
+		"sub-1",
+		"req-ok",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("debug log missing %q: %s", want, out)
+		}
+	}
+	if strings.Contains(out, "secret-token") {
+		t.Fatalf("debug log leaked access token: %s", out)
+	}
+}
+
 func TestClientBusinessErrorHTTP200(t *testing.T) {
+	logs := captureClientDebugLogs(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"success":   false,
@@ -158,6 +206,12 @@ func TestClientBusinessErrorHTTP200(t *testing.T) {
 	if apiErr.Details["method"] != http.MethodPost || apiErr.Details["path"] != "/subscription/user" ||
 		apiErr.Details["http_status"] != http.StatusOK || apiErr.Details["request_id"] != "req-1" {
 		t.Fatalf("details = %#v", apiErr.Details)
+	}
+	out := logs.String()
+	for _, want := range []string{"/subscription/user", "INVALID_PARAM", "clientId is empty", "req-1", "request", "response"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("debug log missing %q: %s", want, out)
+		}
 	}
 }
 
@@ -250,6 +304,89 @@ func TestClientDeleteSubscriptionBusinessError(t *testing.T) {
 	}
 }
 
+func TestClientDebugLogListAndDeleteSubscription(t *testing.T) {
+	logs := captureClientDebugLogs(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/event/sublist":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"success": true,
+				"result":  map[string]any{"items": []map[string]any{}},
+			})
+		case "/subscription/cancel":
+			_ = json.NewEncoder(w).Encode(map[string]any{"success": true})
+		default:
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, Identity{AccessToken: "token", ClientID: "client", SourceID: "open"})
+	if _, err := c.ListSubscriptions(t.Context(), ListOptions{Status: "active"}); err != nil {
+		t.Fatalf("ListSubscriptions() error = %v", err)
+	}
+	if err := c.DeleteSubscription(t.Context(), "sub-1"); err != nil {
+		t.Fatalf("DeleteSubscription() error = %v", err)
+	}
+	out := logs.String()
+	for _, want := range []string{"/event/sublist", "clientId=client", "sourceId=open", "/subscription/cancel", "sub-1"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("debug log missing %q: %s", want, out)
+		}
+	}
+}
+
+func TestClientDebugLogRedactsSensitivePayloadFields(t *testing.T) {
+	logs := captureClientDebugLogs(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success":   true,
+			"requestId": "req-secret",
+			"result": map[string]any{
+				"access_token":  "resp-access-token",
+				"client_secret": "resp-client-secret",
+				"ticket":        "resp-ticket",
+				"Authorization": "Bearer resp-auth",
+				"safe":          "ok",
+			},
+		})
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, Identity{AccessToken: "header-token-secret", ClientID: "client", SourceID: "open"})
+	err := c.do(t.Context(), http.MethodPost, "/subscription/user", nil, map[string]any{
+		"access_token":  "req-access-token",
+		"client_secret": "req-client-secret",
+		"ticket":        "req-ticket",
+		"Authorization": "Bearer req-auth",
+		"safe":          "ok",
+	}, nil)
+	if err != nil {
+		t.Fatalf("do() error = %v", err)
+	}
+	out := logs.String()
+	for _, leaked := range []string{
+		"header-token-secret",
+		"req-access-token",
+		"req-client-secret",
+		"req-ticket",
+		"Bearer req-auth",
+		"resp-access-token",
+		"resp-client-secret",
+		"resp-ticket",
+		"Bearer resp-auth",
+	} {
+		if strings.Contains(out, leaked) {
+			t.Fatalf("debug log leaked %q: %s", leaked, out)
+		}
+	}
+	for _, want := range []string{"<redacted>", "safe", "ok", "req-secret"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("debug log missing %q: %s", want, out)
+		}
+	}
+}
+
 func TestClientListSubscriptionsDWSSublist(t *testing.T) {
 	var gotQuery string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -320,4 +457,15 @@ func TestClientGetSubscriptionFiltersSublist(t *testing.T) {
 	if sub.SubscribeID != "sub-2" || sub.EventKey != EventSingleChat {
 		t.Fatalf("subscription = %#v", sub)
 	}
+}
+
+func captureClientDebugLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() {
+		slog.SetDefault(previous)
+	})
+	return &buf
 }

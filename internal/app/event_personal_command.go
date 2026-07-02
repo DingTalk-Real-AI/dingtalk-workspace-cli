@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -57,6 +58,7 @@ type commonConsumeOptions struct {
 type personalConsumeOptions struct {
 	Common             commonConsumeOptions
 	EventKey           string
+	DebugRawEvents     bool
 	SubscribeID        string
 	Rule               string
 	Name               string
@@ -194,9 +196,6 @@ func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) erro
 			WorkDir:     workDir,
 			IPCEndpoint: ipcEndpoint,
 			ClientID:    identity.ClientID,
-			EventTypes:  personalEventTypes(opts.EventKey, opts.Common.EventTypes),
-			Filter:      opts.Common.Filter,
-			SubscribeID: strings.TrimSpace(opts.SubscribeID),
 			Compact:     opts.Common.Compact,
 			MaxEvents:   opts.Common.MaxEvents,
 			Duration:    opts.Common.Duration,
@@ -209,6 +208,7 @@ func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) erro
 			Force:       opts.Common.Force,
 			DryRun:      true,
 		}
+		applyPersonalConsumeFilters(&cfg, opts, strings.TrimSpace(opts.SubscribeID), opts.EventKey)
 		return consume.Run(ctx, cfg)
 	}
 
@@ -243,9 +243,6 @@ func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) erro
 		IPCEndpoint:    ipcEndpoint,
 		ClientID:       identity.ClientID,
 		SpawnExtraArgs: personalBusSpawnArgs(identity, opts.StreamTicketMode, opts.StreamTicketURL),
-		EventTypes:     personalEventTypes(eventKey, opts.Common.EventTypes),
-		Filter:         opts.Common.Filter,
-		SubscribeID:    sub.SubscribeID,
 		Compact:        opts.Common.Compact,
 		MaxEvents:      opts.Common.MaxEvents,
 		Duration:       opts.Common.Duration,
@@ -257,6 +254,11 @@ func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) erro
 		Quiet:          opts.Common.Quiet,
 		Foreground:     opts.Common.Foreground,
 		Force:          opts.Common.Force,
+	}
+	applyPersonalConsumeFilters(&cfg, opts, sub.SubscribeID, eventKey)
+	if opts.DebugRawEvents && !opts.Common.Quiet {
+		fmt.Fprintf(c.ErrOrStderr(), "debug raw events enabled: local event filters disabled\nworkdir: %s\nbus_log: %s\n",
+			workDir, filepath.Join(workDir, "bus.log"))
 	}
 	if err := consume.ValidateConfig(cfg); err != nil {
 		return err
@@ -301,6 +303,21 @@ func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) erro
 		cleanup()
 	}
 	return err
+}
+
+func applyPersonalConsumeFilters(cfg *consume.Config, opts personalConsumeOptions, subscribeID, eventKey string) {
+	if cfg == nil {
+		return
+	}
+	if opts.DebugRawEvents {
+		cfg.EventTypes = nil
+		cfg.Filter = ""
+		cfg.SubscribeID = ""
+		return
+	}
+	cfg.EventTypes = personalEventTypes(eventKey, opts.Common.EventTypes)
+	cfg.Filter = opts.Common.Filter
+	cfg.SubscribeID = strings.TrimSpace(subscribeID)
 }
 
 func ensurePersonalSubscription(ctx context.Context, client *personal.Client, identity personal.Identity, opts personalConsumeOptions) (*personal.Subscription, string, string, error) {

@@ -31,6 +31,8 @@ import (
 
 const DefaultBasePath = "/dws"
 
+const controlLogPayloadLimit = 8192
+
 type Identity struct {
 	AccessToken  string `json:"-"`
 	LocalSubject string `json:"-"`
@@ -301,11 +303,13 @@ func (c *Client) do(ctx context.Context, method, path string, q url.Values, body
 		u += "?" + q.Encode()
 	}
 	var r io.Reader
+	requestLog := ""
 	if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
 			return fmt.Errorf("personal event: encode request: %w", err)
 		}
+		requestLog = sanitizeLogPayload(b)
 		r = bytes.NewReader(b)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, u, r)
@@ -329,20 +333,18 @@ func (c *Client) do(ctx context.Context, method, path string, q url.Values, body
 	if err != nil {
 		return fmt.Errorf("personal event: read response: %w", err)
 	}
+	responseLog := sanitizeLogPayload(data)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if apiErr := decodeAPIError(data); apiErr != nil {
 			apiErr = withRequestDetails(apiErr, method, path, resp.StatusCode, responseRequestID(data))
-			logAPIError(method, path, resp.StatusCode, apiErr)
+			logControlRequest("personal event control request failed", method, path, q, resp.StatusCode, requestLog, responseLog, responseRequestID(data), apiErr)
 			return apiErr
 		}
-		slog.Debug("personal event control request failed",
-			"method", method,
-			"path", path,
-			"http_status", resp.StatusCode,
-		)
+		logControlRequest("personal event control request failed", method, path, q, resp.StatusCode, requestLog, responseLog, responseRequestID(data), nil)
 		return fmt.Errorf("personal event: HTTP %d", resp.StatusCode)
 	}
 	if len(bytes.TrimSpace(data)) == 0 {
+		logControlRequest("personal event control request", method, path, q, resp.StatusCode, requestLog, responseLog, "", nil)
 		return nil
 	}
 	var env responseEnvelope
@@ -350,18 +352,20 @@ func (c *Client) do(ctx context.Context, method, path string, q url.Values, body
 		if env.Success == nil {
 			if apiErr := env.apiError(); apiErr != nil {
 				apiErr = withRequestDetails(apiErr, method, path, resp.StatusCode, env.requestID())
-				logAPIError(method, path, resp.StatusCode, apiErr)
+				logControlRequest("personal event control request failed", method, path, q, resp.StatusCode, requestLog, responseLog, env.requestID(), apiErr)
 				return apiErr
 			}
 		}
 		if env.Success != nil && !*env.Success {
 			if apiErr := env.apiError(); apiErr != nil {
 				apiErr = withRequestDetails(apiErr, method, path, resp.StatusCode, env.requestID())
-				logAPIError(method, path, resp.StatusCode, apiErr)
+				logControlRequest("personal event control request failed", method, path, q, resp.StatusCode, requestLog, responseLog, env.requestID(), apiErr)
 				return apiErr
 			}
+			logControlRequest("personal event control request failed", method, path, q, resp.StatusCode, requestLog, responseLog, env.requestID(), nil)
 			return errors.New("personal event: request failed")
 		}
+		logControlRequest("personal event control request", method, path, q, resp.StatusCode, requestLog, responseLog, env.requestID(), nil)
 		if env.Result == nil {
 			return nil
 		}
@@ -371,8 +375,10 @@ func (c *Client) do(ctx context.Context, method, path string, q url.Values, body
 		return decodeResult(env.Result, out)
 	}
 	if out == nil {
+		logControlRequest("personal event control request", method, path, q, resp.StatusCode, requestLog, responseLog, responseRequestID(data), nil)
 		return nil
 	}
+	logControlRequest("personal event control request", method, path, q, resp.StatusCode, requestLog, responseLog, responseRequestID(data), nil)
 	return json.Unmarshal(data, out)
 }
 
@@ -488,21 +494,111 @@ func withRequestDetails(apiErr *APIError, method, path string, status int, reque
 	return apiErr
 }
 
-func logAPIError(method, path string, status int, apiErr *APIError) {
-	if apiErr == nil {
-		return
-	}
+func logControlRequest(message, method, path string, q url.Values, status int, requestPayload, responsePayload, requestID string, apiErr *APIError) {
 	attrs := []any{
 		"method", method,
 		"path", path,
 		"http_status", status,
-		"error_code", apiErr.Code,
-		"error_msg", apiErr.Message,
 	}
-	if requestID, _ := apiErr.Details["request_id"].(string); requestID != "" {
+	if query := redactedQueryString(q); query != "" {
+		attrs = append(attrs, "query", query)
+	}
+	if requestPayload != "" {
+		attrs = append(attrs, "request", requestPayload)
+	}
+	if responsePayload != "" {
+		attrs = append(attrs, "response", responsePayload)
+	}
+	if requestID != "" {
 		attrs = append(attrs, "request_id", requestID)
 	}
-	slog.Debug("personal event control request failed", attrs...)
+	if apiErr != nil {
+		if apiErr.Code != "" {
+			attrs = append(attrs, "error_code", apiErr.Code)
+		}
+		if apiErr.Message != "" {
+			attrs = append(attrs, "error_msg", apiErr.Message)
+		}
+	}
+	slog.Debug(message, attrs...)
+}
+
+func sanitizeLogPayload(data []byte) string {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 {
+		return ""
+	}
+	var parsed any
+	if err := json.Unmarshal(data, &parsed); err == nil {
+		redacted := redactJSONValue(parsed)
+		if s, err := marshalLogJSON(redacted); err == nil {
+			return truncateLogPayload(s)
+		}
+	}
+	return truncateLogPayload(string(data))
+}
+
+func marshalLogJSON(v any) (string, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(buf.String()), nil
+}
+
+func redactJSONValue(v any) any {
+	switch x := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for k, value := range x {
+			if sensitiveLogKey(k) {
+				out[k] = "<redacted>"
+				continue
+			}
+			out[k] = redactJSONValue(value)
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, value := range x {
+			out[i] = redactJSONValue(value)
+		}
+		return out
+	default:
+		return v
+	}
+}
+
+func sensitiveLogKey(key string) bool {
+	key = strings.ToLower(strings.TrimSpace(key))
+	return strings.Contains(key, "token") ||
+		strings.Contains(key, "secret") ||
+		strings.Contains(key, "ticket") ||
+		strings.Contains(key, "authorization")
+}
+
+func redactedQueryString(q url.Values) string {
+	if len(q) == 0 {
+		return ""
+	}
+	clone := make(url.Values, len(q))
+	for key, values := range q {
+		if sensitiveLogKey(key) {
+			clone[key] = []string{"<redacted>"}
+			continue
+		}
+		clone[key] = append([]string(nil), values...)
+	}
+	return clone.Encode()
+}
+
+func truncateLogPayload(s string) string {
+	if len(s) <= controlLogPayloadLimit {
+		return s
+	}
+	return s[:controlLogPayloadLimit] + "...<truncated>"
 }
 
 func isNotFound(err error) bool {

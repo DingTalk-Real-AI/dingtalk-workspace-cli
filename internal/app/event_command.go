@@ -137,6 +137,9 @@ DWS clientId/clientSecret 透传给 portal 建立用户 Stream 连接。`,
 				personalOpts.StreamSourceID = streamOpts.SourceID
 				return runPersonalEventConsume(c, personalOpts)
 			}
+			if personalOpts.DebugRawEvents {
+				return fmt.Errorf("event consume: --debug-raw-events is only supported with --as user")
+			}
 			if len(args) > 0 {
 				return fmt.Errorf("event consume: event_key is only supported with --as user")
 			}
@@ -275,6 +278,8 @@ DWS clientId/clientSecret 透传给 portal 建立用户 Stream 连接。`,
 		"group 规则：openConversationId")
 	f.StringVar(&personalOpts.ControlBaseURL, "personal-event-base-url", "",
 		"个人事件控制面 base URL；默认当前 MCP base + /dws")
+	f.BoolVar(&personalOpts.DebugRawEvents, "debug-raw-events", false,
+		"个人事件联调：绕过本地 event type/subscribe_id 过滤，输出当前 personal stream bus 收到的所有事件")
 	f.StringVar(&streamOpts.Mode, "stream-ticket-mode", strings.TrimSpace(os.Getenv("DWS_STREAM_TICKET_MODE")),
 		"Stream 建联模式：app 默认空=SDK app credential；user 默认 normal；normal=portal 托管凭证；custom=传当前 clientId/clientSecret")
 	f.StringVar(&streamOpts.SourceID, "stream-source-id", strings.TrimSpace(os.Getenv("DWS_STREAM_SOURCE_ID")),
