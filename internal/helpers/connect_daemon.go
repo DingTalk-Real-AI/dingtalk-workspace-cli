@@ -488,6 +488,28 @@ func daemonStop(w io.Writer, dirKey string) error {
 	}
 	if !processAlive(st.Pid) {
 		_ = os.Remove(daemonPidPath(dir))
+		// The supervisor is dead, but its worker may still be alive (e.g. the
+		// supervisor was kill -9'd). Check the heartbeat for the worker pid and
+		// stop it so we don't leave an orphan.
+		if hb, _ := readConnectHeartbeat(dir); hb != nil && hb.Pid > 0 && processAlive(hb.Pid) {
+			fmt.Fprintf(w, "connect daemon: supervisor (pid %d) was dead, stopping orphan worker (pid %d)...\n", st.Pid, hb.Pid)
+			if proc, perr := os.FindProcess(hb.Pid); perr == nil {
+				_ = proc.Signal(syscall.SIGTERM)
+				deadline := time.Now().Add(daemonStopTimeout)
+				for time.Now().Before(deadline) {
+					if !processAlive(hb.Pid) {
+						break
+					}
+					time.Sleep(200 * time.Millisecond)
+				}
+				if processAlive(hb.Pid) {
+					_ = proc.Signal(syscall.SIGKILL)
+					time.Sleep(200 * time.Millisecond)
+				}
+			}
+			fmt.Fprintf(w, "connect daemon: orphan worker stopped (pid %d)\n", hb.Pid)
+			return nil
+		}
 		fmt.Fprintf(w, "connect daemon: was not running (cleaned up stale pid file for pid %d)\n", st.Pid)
 		return nil
 	}

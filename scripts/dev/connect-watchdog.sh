@@ -53,11 +53,12 @@ STATUS_JSON="$("$DWS" dev connect status --robot-client-id "$CLIENT_ID" --json 2
 
 # Extract "state" without a hard jq dependency (fall back to jq when present).
 if command -v jq >/dev/null 2>&1; then
-  STATE="$(printf '%s' "$STATUS_JSON" | jq -r '.state // "unknown"')"
+  STATE="$(printf '%s' "$STATUS_JSON" | jq -r '.state // empty' 2>/dev/null)"
 else
   STATE="$(printf '%s' "$STATUS_JSON" | sed -n 's/.*"state"[[:space:]]*:[[:space:]]*"\([a-z_]*\)".*/\1/p' | head -n1)"
-  [ -n "$STATE" ] || STATE="unknown"
 fi
+# Treat empty, "null", or any non-word value as unknown so the watchdog relaunches.
+case "$STATE" in ""|null) STATE="unknown" ;; esac
 
 case "$STATE" in
   healthy)

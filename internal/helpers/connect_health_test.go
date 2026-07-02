@@ -61,8 +61,13 @@ func TestDeriveConnectHealth(t *testing.T) {
 		},
 		{
 			"error before last reply stays healthy",
-			&connectHeartbeat{Pid: alive, StartUnix: now.Unix() - 100, ConnectedUnix: now.Unix() - 90, LastErrorUnix: now.Unix() - 50, LastReplyUnix: now.Unix() - 5, LastError: "old"},
+			&connectHeartbeat{Pid: alive, StartUnix: now.Unix() - 100, ConnectedUnix: now.Unix() - 90, LastErrorUnix: now.Unix() - 50, LastReplyUnix: now.Unix() - 5, LastError: "old", UpdatedUnix: now.Unix() - 5},
 			false, healthHealthy,
+		},
+		{
+			"stale heartbeat from pid reuse is down",
+			&connectHeartbeat{Pid: alive, StartUnix: now.Unix() - 1000, ConnectedUnix: now.Unix() - 900, UpdatedUnix: now.Unix() - 60},
+			false, healthDown,
 		},
 	}
 	for _, c := range cases {

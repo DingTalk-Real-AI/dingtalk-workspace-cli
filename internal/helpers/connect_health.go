@@ -285,6 +285,14 @@ func deriveConnectHealth(hb *connectHeartbeat, supervised bool, now time.Time) c
 		}
 		return r
 	}
+	// Guard against pid reuse: a live pid whose heartbeat is stale (no flush
+	// within 2× the flush interval) is not our connector.
+	heartbeatStaleThreshold := int64((2 * connectHeartbeatFlush).Seconds())
+	if hb.UpdatedUnix > 0 && (nowUnix-hb.UpdatedUnix) > heartbeatStaleThreshold {
+		r.State = healthDown
+		r.Detail = "heartbeat stale (pid may have been reused by another process)"
+		return r
+	}
 	// Alive but never reached a connected state: still starting or failing to
 	// establish the Stream.
 	if hb.ConnectedUnix == 0 {
