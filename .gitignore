@@ -6,6 +6,8 @@ dist/
 .venv*/
 var/
 .DS_Store
+.direnv/
+result
 .agents/
 /.idea/
 /CLAUDE.md
