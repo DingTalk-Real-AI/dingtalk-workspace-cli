@@ -1,0 +1,19 @@
+# Linux systemd --user unit: keep a dws connector alive. systemd restarts on
+# process death; connect-watchdog (run via a companion timer, or fold the poll
+# into ExecStart) catches the alive-but-deaf case via `status --json`.
+# Edit ExecStart (clientId, channel, absolute dws path), install per README.
+[Unit]
+Description=dws dev connect (DingTalk robot connector)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=DWS_BIN=/usr/local/bin/dws
+# Foreground connector (NOT --daemon: systemd is the supervisor here).
+ExecStart=/usr/local/bin/dws dev connect --robot-client-id REPLACE_CLIENT_ID --channel opencode
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
