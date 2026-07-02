@@ -30,8 +30,9 @@ import (
 type SpawnFunc func(SpawnConfig) (pid int, err error)
 
 // DiscoverConfig describes one discover attempt. WorkDir holds bus.lock and
-// (on Unix) bus.sock; the caller must mkdir it with pkg/config.DirPerm
-// beforehand.
+// usually (on Unix) bus.sock — see dwsevent.IPCEndpoint for the short-path
+// fallback when WorkDir is too deep; the caller must mkdir it with
+// pkg/config.DirPerm beforehand.
 type DiscoverConfig struct {
 	WorkDir     string
 	IPCEndpoint string

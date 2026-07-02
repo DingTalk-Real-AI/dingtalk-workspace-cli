@@ -20,6 +20,7 @@ import (
 	"net"
 	"os"
 
+	dwsevent "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
@@ -38,7 +39,20 @@ func (u *unixListener) Close() error {
 	return err
 }
 
+// checkSocketPath rejects paths over the sun_path budget up front so the
+// caller sees the actual problem instead of the syscall's bare EINVAL
+// ("invalid argument").
+func checkSocketPath(path string) error {
+	if max := dwsevent.MaxUnixSocketPath(); len(path) > max {
+		return fmt.Errorf("transport: unix socket path too long (%d > %d bytes): %s", len(path), max, path)
+	}
+	return nil
+}
+
 func listen(path string) (Listener, error) {
+	if err := checkSocketPath(path); err != nil {
+		return nil, err
+	}
 	// Stale socket cleanup. Caller holds bus.lock so this is race-safe.
 	if _, err := os.Stat(path); err == nil {
 		if err := os.Remove(path); err != nil {
@@ -58,5 +72,8 @@ func listen(path string) (Listener, error) {
 }
 
 func dial(path string) (net.Conn, error) {
+	if err := checkSocketPath(path); err != nil {
+		return nil, err
+	}
 	return net.Dial("unix", path)
 }

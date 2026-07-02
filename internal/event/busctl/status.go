@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"time"
 
@@ -60,23 +59,16 @@ type BusEntry struct {
 	Meta *bus.Meta `json:"meta,omitempty"`
 }
 
-// IPCEndpoint returns the IPC endpoint for this entry. Unix uses the
-// bus.sock path inside WorkDir; Windows uses the deterministic pipe name
-// derived from edition + clientIDHash (same scheme defaultIPCEndpoint
-// uses in the cobra layer).
+// IPCEndpoint returns the IPC endpoint for this entry. Delegates to
+// dwsevent.IPCEndpoint so status/stop dial exactly where consume and the
+// bus daemon bound (including the short-path fallback when WorkDir is too
+// deep for sun_path).
 func (e BusEntry) IPCEndpoint() string {
 	hash := e.ClientIDHash
 	if e.IdentityHash != "" {
 		hash = e.IdentityHash
 	}
-	if runtime.GOOS == "windows" {
-		kind := string(e.SourceKind)
-		if kind == "" {
-			kind = string(dwsevent.SourceKindAppStream)
-		}
-		return `\\.\pipe\dws-event-` + e.Edition + "-" + kind + "-" + hash
-	}
-	return filepath.Join(e.WorkDir, "bus.sock")
+	return dwsevent.IPCEndpoint(e.WorkDir, e.Edition, e.SourceKind, hash)
 }
 
 // EnumerateBuses scans <configDir>/events/<editionFilter>/*/ for bus
