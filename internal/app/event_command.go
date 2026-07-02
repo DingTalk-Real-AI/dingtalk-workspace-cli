@@ -23,7 +23,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"syscall"
@@ -1032,13 +1031,10 @@ func editionNameOrDefault() string {
 }
 
 // defaultIPCEndpoint returns the canonical Unix socket path / Windows pipe
-// name for the bus. Encapsulates the platform-specific shape so callers
-// don't sprinkle GOOS checks throughout the cobra layer.
+// name for the bus. Thin wrapper over dwsevent.IPCEndpoint, which owns the
+// platform shape and the too-long-socket-path fallback.
 func defaultIPCEndpoint(workDir, editionName string, sourceKind dwsevent.SourceKind, identityHash string) string {
-	if runtime.GOOS == "windows" {
-		return `\\.\pipe\dws-event-` + editionName + "-" + sourceKindLabel(sourceKind) + "-" + identityHash
-	}
-	return filepath.Join(workDir, "bus.sock")
+	return dwsevent.IPCEndpoint(workDir, editionName, sourceKind, identityHash)
 }
 
 func eventWorkDir(configDir, editionName string, sourceKind dwsevent.SourceKind, identityHash string) string {
