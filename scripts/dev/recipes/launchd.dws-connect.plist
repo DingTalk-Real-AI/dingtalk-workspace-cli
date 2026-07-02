@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- macOS launchd agent: keep a dws connector alive + watchdog every 5 min.
+     Edit: <clientId>, --channel, and the absolute paths, then load with
+     launchctl (see recipes/README.md). Consumes `dws dev connect status --json`. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.dingtalk.dws.connect</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/absolute/path/to/scripts/dev/connect-watchdog.sh</string>
+    <string>--client-id</string>
+    <string>REPLACE_CLIENT_ID</string>
+    <string>--</string>
+    <string>/usr/local/bin/dws</string>
+    <string>dev</string>
+    <string>connect</string>
+    <string>--robot-client-id</string>
+    <string>REPLACE_CLIENT_ID</string>
+    <string>--channel</string>
+    <string>opencode</string>
+    <string>--daemon</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>DWS_BIN</key>
+    <string>/usr/local/bin/dws</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StartInterval</key>
+  <integer>300</integer>
+  <key>StandardOutPath</key>
+  <string>REPLACE_HOME/.dws/connect/REPLACE_CLIENT_ID/watchdog.log</string>
+  <key>StandardErrorPath</key>
+  <string>REPLACE_HOME/.dws/connect/REPLACE_CLIENT_ID/watchdog.log</string>
+</dict>
+</plist>

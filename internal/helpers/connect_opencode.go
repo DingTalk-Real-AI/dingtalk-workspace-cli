@@ -96,7 +96,7 @@ func (f *opencodeForwarder) forward(ctx context.Context, convID, text string) (s
 }
 
 func (f *opencodeForwarder) forwardStream(ctx context.Context, convID, text string, _ func(string)) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, f.timeout)
+	ctx, cancel := applyTimeout(ctx, f.timeout)
 	defer cancel()
 
 	client, err := f.server.ensure(ctx)
@@ -204,10 +204,9 @@ func newOpencodeServer(bin string, env []string, workDir string) *opencodeServer
 		bin:     bin,
 		env:     env,
 		workDir: workDir,
-		// No client-level Timeout: a turn can legitimately run for minutes, so the
-		// per-request ctx (forwardStream's f.timeout, default 300s) governs instead.
-		// A hardcoded 30s here used to abort long agent replies mid-flight with
-		// "Client.Timeout exceeded while awaiting headers".
+		// No client-level Timeout: a turn can legitimately run for minutes.
+		// f.timeout (from --agent-timeout / DWS_AGENT_TIMEOUT_MS, default 0 =
+		// no limit) governs via the per-request ctx when set.
 		httpClient: &http.Client{},
 	}
 }
