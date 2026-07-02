@@ -1,0 +1,61 @@
+name: PAT Auth E2E
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pat-auth-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pat-auth-e2e:
+    name: PAT/Auth Matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PAT_AUTH_E2E_LOG: .tmp-bin/pat-auth-e2e.log
+      DWS_CI_TEST_CORP_ID: ${{ vars.DWS_CI_TEST_CORP_ID }}
+      DWS_CI_TEST_CORP_NAME: ${{ vars.DWS_CI_TEST_CORP_NAME }}
+      DWS_CI_TEST_USER_ID: ${{ vars.DWS_CI_TEST_USER_ID }}
+      DWS_CI_TEST_USER_NAME: ${{ vars.DWS_CI_TEST_USER_NAME }}
+      DWS_CI_TEST_ACCESS_TOKEN: ${{ secrets.DWS_CI_TEST_ACCESS_TOKEN }}
+      DWS_CI_TEST_REFRESH_TOKEN: ${{ secrets.DWS_CI_TEST_REFRESH_TOKEN }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run isolated PAT/login authorization matrix
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p .tmp-bin
+          bash scripts/dev/test-pat-auth-e2e.sh --keep-workdir | tee "$PAT_AUTH_E2E_LOG"
+          {
+            echo "### PAT Auth E2E"
+            echo "- Command: \`bash scripts/dev/test-pat-auth-e2e.sh --keep-workdir\`"
+            echo "- Scope: unauthenticated login state, direct token login, seeded CI test-account profile, PAT chmod gates, CLI-owned and host-owned PAT stderr JSON, auth-login recommend grants"
+            echo "- Test account: \`${DWS_CI_TEST_CORP_ID:-offline-fallback}\`"
+            echo "- Result: passed"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload debug artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pat-auth-e2e-debug
+          path: |
+            .tmp-bin/pat-auth-e2e.*/out
+            .tmp-bin/pat-auth-e2e.log
+          if-no-files-found: ignore
+          retention-days: 3
