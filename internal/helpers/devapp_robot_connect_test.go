@@ -39,10 +39,12 @@ func TestDevAppRobotConnectRegistered(t *testing.T) {
 // dry-run path (which never launches the Stream connector).
 func TestDevAppRobotConnectValidation(t *testing.T) {
 	cases := []struct {
-		name     string
-		args     []string
-		wantErr  string
-		wantJSON []string // substrings expected in successful dry-run output
+		name       string
+		args       []string
+		wantErr    string
+		wantJSON   []string // substrings expected in successful dry-run output
+		wantStderr []string // substrings expected in combined stderr/stdout stream
+		notStderr  []string // substrings that must NOT appear
 	}{
 		{
 			name:    "no credentials and no unified-app-id",
@@ -55,14 +57,16 @@ func TestDevAppRobotConnectValidation(t *testing.T) {
 			wantErr: "未知渠道",
 		},
 		{
-			name:     "explicit credentials dry-run emits plan",
-			args:     []string{"--channel", "claudecode", "--robot-client-id", "id1", "--robot-client-secret", "sec1", "--dry-run"},
-			wantJSON: []string{"\"credentialSource\"", "flag:--robot-client-id/--robot-client-secret", "stream-bridge", "\"clientId\"", "\"completionState\": \"LOCAL_DEBUG_ONLY\"", "\"doesNotPublish\": true", "\"scope\": \"local_debug_only\""},
+			name:       "explicit credentials dry-run emits plan and secret warning",
+			args:       []string{"--channel", "claudecode", "--robot-client-id", "id1", "--robot-client-secret", "sec1", "--dry-run"},
+			wantJSON:   []string{"\"credentialSource\"", "flag:--robot-client-id/--robot-client-secret", "stream-bridge", "\"clientId\"", "\"completionState\": \"LOCAL_DEBUG_ONLY\"", "\"doesNotPublish\": true", "\"scope\": \"local_debug_only\""},
+			wantStderr: []string{"[connect] WARNING", "--robot-client-secret 出现在命令行", "建议改用 --unified-app-id"},
 		},
 		{
-			name:     "unified-app-id dry-run skips credentials get",
-			args:     []string{"--channel", "qoderwork", "--unified-app-id", "UAID", "--dry-run"},
-			wantJSON: []string{"credentials get, skipped in dry-run", "\"unifiedAppId\"", "\"completionState\": \"LOCAL_DEBUG_ONLY\"", "\"doesNotPublish\": true", "\"scope\": \"local_debug_only\""},
+			name:      "unified-app-id dry-run skips credentials get and emits no secret warning",
+			args:      []string{"--channel", "qoderwork", "--unified-app-id", "UAID", "--dry-run"},
+			wantJSON:  []string{"credentials get, skipped in dry-run", "\"unifiedAppId\"", "\"completionState\": \"LOCAL_DEBUG_ONLY\"", "\"doesNotPublish\": true", "\"scope\": \"local_debug_only\""},
+			notStderr: []string{"[connect] WARNING"},
 		},
 	}
 
@@ -87,6 +91,16 @@ func TestDevAppRobotConnectValidation(t *testing.T) {
 			for _, sub := range tc.wantJSON {
 				if !strings.Contains(out.String(), sub) {
 					t.Fatalf("output missing %q:\n%s", sub, out.String())
+				}
+			}
+			for _, sub := range tc.wantStderr {
+				if !strings.Contains(out.String(), sub) {
+					t.Fatalf("stderr/stdout missing %q:\n%s", sub, out.String())
+				}
+			}
+			for _, sub := range tc.notStderr {
+				if strings.Contains(out.String(), sub) {
+					t.Fatalf("stderr/stdout unexpectedly contains %q:\n%s", sub, out.String())
 				}
 			}
 		})

@@ -4,17 +4,25 @@
 Stream long-connection. By default it runs in the foreground and dies when the
 terminal closes. For an unattended "digital employee" you have two options.
 
+> **Security**: prefer `--unified-app-id <uappid>` over
+> `--robot-client-id/--robot-client-secret`. With `--unified-app-id` the CLI
+> resolves clientId/clientSecret at runtime through `dev app credentials get`,
+> so the secret never appears in `ps` / journald / shell history. Pasting
+> `--robot-client-secret` onto argv lets any local user read your AppSecret
+> with `ps -ef`; the CLI will warn you when you do that.
+
 ## Option A: built-in daemon (recommended for a quick start)
 
 ```bash
 # Detach into a background supervisor that restarts the connector if it crashes.
 dws devapp robot connect --daemon \
   --channel claudecode \
-  --robot-client-id <clientId> --robot-client-secret <clientSecret>
+  --unified-app-id <unifiedAppId>
 
-# Inspect / stop it.
-dws devapp robot connect status --robot-client-id <clientId>
-dws devapp robot connect stop   --robot-client-id <clientId>
+# Inspect / stop / restart it (locate the daemon by unifiedAppId).
+dws devapp robot connect status  --unified-app-id <unifiedAppId>
+dws devapp robot connect stop    --unified-app-id <unifiedAppId>
+dws devapp robot connect restart --unified-app-id <unifiedAppId>
 ```
 
 - The parent prints the daemon pid and the log path, then exits.
@@ -23,9 +31,9 @@ dws devapp robot connect stop   --robot-client-id <clientId>
   10 consecutive fast failures) when it exits abnormally.
 - The single-instance lock (one connector per robot per machine) is reused, so a
   duplicate daemon refuses to start.
-- Logs go to `~/.dws/connect/<clientId>/daemon.log` with size-based rotation
+- Logs go to `~/.dws/connect/<key>/daemon.log` with size-based rotation
   (5 MB x 2 backups), and the pid file lives at
-  `~/.dws/connect/<clientId>/daemon.pid`.
+  `~/.dws/connect/<key>/daemon.pid`.
 - The daemon does NOT survive a reboot. For that, use Option B.
 
 > Windows: `--daemon` is not supported (no `setsid` / POSIX signal stop). Use a
@@ -39,7 +47,7 @@ restart it. This is the most robust way to get boot-time auto-start.
 ### macOS — launchd
 
 Save as `~/Library/LaunchAgents/com.dingtalk.dws.connect.plist`, edit the paths
-and credentials, then `launchctl load -w <path>`.
+and `REPLACE_UNIFIED_APP_ID`, then `launchctl load -w <path>`.
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -57,10 +65,8 @@ and credentials, then `launchctl load -w <path>`.
     <string>connect</string>
     <string>--channel</string>
     <string>claudecode</string>
-    <string>--robot-client-id</string>
-    <string>REPLACE_CLIENT_ID</string>
-    <string>--robot-client-secret</string>
-    <string>REPLACE_CLIENT_SECRET</string>
+    <string>--unified-app-id</string>
+    <string>REPLACE_UNIFIED_APP_ID</string>
   </array>
   <key>RunAtLoad</key>
   <true/>
@@ -86,8 +92,8 @@ itself relies on the single-instance lock to avoid duplicates.
 
 ### Linux — systemd (user service)
 
-Save as `~/.config/systemd/user/dws-connect.service`, edit paths/credentials,
-then:
+Save as `~/.config/systemd/user/dws-connect.service`, edit paths and
+`REPLACE_UNIFIED_APP_ID`, then:
 
 ```bash
 systemctl --user daemon-reload
@@ -106,8 +112,7 @@ Wants=network-online.target
 Type=simple
 ExecStart=/usr/local/bin/dws devapp robot connect \
   --channel claudecode \
-  --robot-client-id REPLACE_CLIENT_ID \
-  --robot-client-secret REPLACE_CLIENT_SECRET
+  --unified-app-id REPLACE_UNIFIED_APP_ID
 Restart=always
 RestartSec=5
 # Optional hardening:
@@ -120,6 +125,22 @@ WantedBy=default.target
 
 `Restart=always` + `RestartSec` gives crash recovery; systemd captures stdout/
 stderr into the journal (`journalctl --user -u dws-connect -f`).
+
+## Legacy: passing clientId/clientSecret directly (not recommended)
+
+If you truly must pass credentials on the command line (e.g. one-off local
+debugging without a unifiedAppId), the CLI still accepts
+`--robot-client-id <id> --robot-client-secret <secret>` and will print a
+security warning to stderr. This form:
+
+- exposes `clientSecret` to every user on the box via `ps -ef`;
+- gets baked into launchd `ProgramArguments` / systemd `ExecStart`, which
+  makes rotation harder;
+- means `dws devapp robot connect restart` cannot re-fetch credentials — you
+  must re-run the full command yourself.
+
+Prefer `--unified-app-id`. Only fall back to the pair when you understand the
+trade-off.
 
 ## Which to choose
 

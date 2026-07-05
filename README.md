@@ -526,8 +526,13 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 `dws dev connect` bridges a DingTalk robot to a local AI CLI (Claude Code / Codex / opencode / Qoder / Gemini, or any tool via `--agent-cmd`): @-mention the bot in a chat and it answers using your local agent, keeping per-conversation multi-turn memory.
 
 ```bash
-dws dev connect --channel auto --robot-client-id <id> --robot-client-secret <secret>
+dws dev connect --channel auto --unified-app-id <unifiedAppId>
 ```
+
+> `--unified-app-id` resolves `clientSecret` at runtime via `dev app credentials get`,
+> so the secret never appears in argv (`ps` / journald / shell history). The
+> legacy `--robot-client-id <id> --robot-client-secret <secret>` still works but
+> the CLI will warn you.
 
 In-chat **session commands** (send the bare command as the whole message — no agent turn, no tokens):
 

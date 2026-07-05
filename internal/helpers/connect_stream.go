@@ -16,6 +16,7 @@ package helpers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -187,6 +188,9 @@ type connectAgentOptions struct {
 	// "remember" asks once per action kind then reuses that decision. Sourced
 	// from RoleConfig.confirm_policy; empty = manual.
 	ConfirmPolicy string
+	// Timeout caps each agent turn (--agent-timeout seconds /
+	// DWS_AGENT_TIMEOUT_MS milliseconds). 0 = no limit (default).
+	Timeout time.Duration
 }
 
 // isStreamBridgeChannel reports whether a channel is wired through the Go-native
@@ -239,7 +243,7 @@ func (f *execForwarder) label() string {
 }
 
 func (f *execForwarder) forward(ctx context.Context, convID, text string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, f.timeout)
+	ctx, cancel := applyTimeout(ctx, f.timeout)
 	defer cancel()
 	// Session args go right after the binary, before the spec tail — some specs
 	// (qoder) end the tail with `-p` so the prompt must stay the trailing
@@ -765,7 +769,10 @@ func resolveExecAgent(channel string) (argv []string, env []string, err error) {
 // dependency on a live interactive session. opts applies the user-facing agent
 // tuning (--agent-model / --agent-workdir / --agent-memory).
 func forwarderForChannel(channel, clientID string, opts connectAgentOptions) (forwarder, error) {
-	timeout := envDurationMS("DWS_AGENT_TIMEOUT_MS", 300*time.Second)
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = envDurationMS("DWS_AGENT_TIMEOUT_MS", 0)
+	}
 	spec, ok := agentSpecs[channel]
 	if !ok {
 		return nil, apperrors.NewValidation(fmt.Sprintf("渠道 %q 不是 stream-bridge 渠道，无 forwarder", channel))
@@ -909,6 +916,7 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 	if extras == nil {
 		extras = &connectExtras{}
 	}
+	checkFDLimit()
 	if closer, ok := fwd.(forwarderCloser); ok {
 		defer func() {
 			if err := closer.close(); err != nil {
@@ -925,6 +933,12 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 	}
 	defer release()
 
+	// Health heartbeat: record connect/receive/reply/error so `connect status`
+	// can tell a live connector from a dead one (see connect_health.go). Nil
+	// when no clientId identity is available; all calls below are no-ops then.
+	health := newConnectHealth(clientID, channel)
+	health.start(ctx)
+
 	streamLoggerOnce.Do(func() { sdklogger.SetLogger(streamSDKLogger{}) })
 	replier := chatbot.NewChatbotReplier()
 	dedup := newMsgDedup(10000)
@@ -936,19 +950,58 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		mediaCli = newAICardClient(clientID, clientSecret, "")
 	}
 
+	keepAlive := envDurationMS("DWS_CONNECT_KEEPALIVE_MS", 30000)
+	fmt.Fprintf(os.Stderr, "[connect] keepAlive=%s autoReconnect=true\n", keepAlive)
 	cli := client.NewStreamClient(
 		client.WithAppCredential(client.NewAppCredentialConfig(clientID, clientSecret)),
 		client.WithAutoReconnect(true),
+		client.WithKeepAlive(keepAlive),
 	)
 	cli.RegisterChatBotCallbackRouter(func(_ context.Context, data *chatbot.BotCallbackDataModel) ([]byte, error) {
 		text := strings.TrimSpace(data.Text.Content)
+		msgtype := strings.TrimSpace(data.Msgtype)
 		// Picture messages carry no text — their payload is a downloadCode
 		// resolved to a local file in the forward goroutine below.
 		picCode := ""
-		if strings.EqualFold(strings.TrimSpace(data.Msgtype), "picture") {
+		if strings.EqualFold(msgtype, "picture") {
 			picCode = pictureDownloadCode(data.Content)
 		}
-		if (text == "" && picCode == "") || data.SessionWebhook == "" {
+		// File callbacks come in two shapes: client-sent files carry a
+		// downloadCode; API-sent files (`dws chat message send --msg-type file
+		// --dentry-id --space-id`) carry dentryId + spaceId instead and have
+		// NO downloadCode. Both have to be recognisable or legit file messages
+		// get silently dropped below.
+		var fileInfo fileInboundInfo
+		if strings.EqualFold(msgtype, "file") {
+			fileInfo = parseFileInbound(data.Content)
+		}
+		// Structured-text fallback: DingTalk leaves data.Text.Content blank on
+		// markdown / richText callbacks (the body ships in data.Content). Without
+		// this, `dws chat message send --group ... --text ...` — which defaults
+		// to msgType=markdown — hits the drop branch below and the bot looks
+		// dead to the sender.
+		if text == "" && picCode == "" {
+			// interactiveCard (a bot @-mentioning this bot) nests the body in
+			// content.cardContent and carries the mention as its own leading
+			// leaf; the leaf-aware extractor drops it so the agent gets the
+			// clean instruction. Other structured-text shapes use the generic
+			// extractor.
+			if strings.EqualFold(msgtype, "interactiveCard") {
+				text = extractInteractiveCardText(data.Content)
+			}
+			if text == "" {
+				if fallback := extractCallbackText(data.Content); fallback != "" {
+					text = fallback
+				}
+			}
+		}
+		if (text == "" && picCode == "" && !fileInfo.hasActionable()) || data.SessionWebhook == "" {
+			// Observability: silent drops are the #1 reason a working connector
+			// looks dead. Log msgtype + a payload summary so an unhandled shape
+			// (e.g. new-style file callback without downloadCode) shows up in
+			// stderr instead of being invisible.
+			fmt.Fprintf(os.Stderr, "[connect] 丢弃消息 msgtype=%q staffId=%s convId=%s msgId=%s content=%s (无正文/图片/可下载文件或 sessionWebhook 为空)\n",
+				msgtype, data.SenderStaffId, data.ConversationId, data.MsgId, summarizeContent(data.Content))
 			return []byte(""), nil
 		}
 		// Drop redelivered duplicates so a retried message is not replied twice.
@@ -978,11 +1031,14 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 			sender = strings.TrimSpace(data.SenderStaffId)
 		}
 		shown := text
-		if shown == "" {
+		if shown == "" && picCode != "" {
 			shown = "[图片]"
+		} else if shown == "" && fileInfo.hasActionable() {
+			shown = "[文件: " + fileInfo.FileName + "]"
 		}
 		fmt.Fprintf(os.Stderr, "[connect] 收到 @%s: %s (convType=%s convId=%s staffId=%s msgId=%s)\n",
 			sender, truncateRunes(shown, 80), data.ConversationType, data.ConversationId, data.SenderStaffId, data.MsgId)
+		health.onPush()
 		// Ack-first: return now, reply asynchronously via sessionWebhook (which is
 		// independent of the Stream ack). Use a background context so the in-flight
 		// forward is not cancelled by the SDK when this callback returns.
@@ -1057,6 +1113,61 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 					prompt = prompt + "\n（用户同时附了一张图片，本地路径 " + localPath + "，请结合图片内容回答。）"
 				}
 			}
+			if fileInfo.hasActionable() {
+				fileName := fileInfo.FileName
+				var localPath string
+				var derr error
+				if fileInfo.DownloadCode != "" {
+					localPath, derr = mediaCli.downloadMessageFile(context.Background(), clientID, fileInfo.DownloadCode)
+					if derr != nil {
+						fmt.Fprintf(os.Stderr, "[connect][media] 文件下载失败: %v\n", derr)
+					}
+				}
+				switch {
+				case localPath != "":
+					if prompt == "" {
+						prompt = "用户发来一个文件「" + fileName + "」（本地路径 " + localPath + "），请读取文件内容并回答。"
+					} else {
+						prompt = prompt + "\n（用户同时附了一个文件「" + fileName + "」，本地路径 " + localPath + "，请结合文件内容回答。）"
+					}
+				case fileInfo.DentryID != 0 && fileInfo.SpaceID != 0:
+					// API-sent file: resolve via storage API (userId→unionId,
+					// then getDownloadInfo). Falls back to metadata-only prompt
+					// if the download chain fails (e.g. missing permissions).
+					senderID := strings.TrimSpace(callbackData.SenderStaffId)
+					if unionID, uerr := mediaCli.getUserUnionID(context.Background(), senderID); uerr != nil {
+						fmt.Fprintf(os.Stderr, "[connect][media] userId→unionId 失败 (%s): %v\n", senderID, uerr)
+					} else if dp, derr := mediaCli.downloadDentryFile(context.Background(), fileInfo.SpaceID, fileInfo.DentryID, unionID, fileName); derr != nil {
+						fmt.Fprintf(os.Stderr, "[connect][media] 钉盘文件下载失败 spaceId=%d dentryId=%d: %v\n", fileInfo.SpaceID, fileInfo.DentryID, derr)
+					} else {
+						localPath = dp
+					}
+					if localPath != "" {
+						if prompt == "" {
+							prompt = "用户发来一个文件「" + fileName + "」（本地路径 " + localPath + "），请读取文件内容并回答。"
+						} else {
+							prompt = prompt + "\n（用户同时附了一个文件「" + fileName + "」，本地路径 " + localPath + "，请结合文件内容回答。）"
+						}
+					} else {
+						meta := fmt.Sprintf("文件名「%s」，dentryId=%d，spaceId=%d", fileName, fileInfo.DentryID, fileInfo.SpaceID)
+						if fileInfo.FileType != "" {
+							meta += "，类型=" + fileInfo.FileType
+						}
+						if fileInfo.FileSize > 0 {
+							meta += fmt.Sprintf("，大小=%d 字节", fileInfo.FileSize)
+						}
+						if prompt == "" {
+							prompt = "用户发来一个文件（" + meta + "）。文件下载失败，请基于文件名与用户随附的文字信息回答，必要时请用户改用客户端上传或补充文字描述。"
+						} else {
+							prompt = prompt + "\n（用户同时附了一个文件：" + meta + "。文件下载失败，请结合文件名与随附文字回答。）"
+						}
+					}
+				default:
+					if prompt == "" {
+						prompt = "（用户发来一个文件「" + fileName + "」，但文件下载失败了。请告知用户文件没收到，建议重新发送。）"
+					}
+				}
+			}
 			if extras.kb != nil {
 				prompt = extras.kb.augment(prompt)
 			}
@@ -1080,8 +1191,14 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 			//   ② agent runs;
 			//   ③ on done: deliver the AI card with the final content;
 			//   ④ swap the chip to "🥳Done".
+			// Reactions attach to the triggering message, but DingTalk rejects a
+			// reaction on an interactiveCard message (a bot @-mentioning this bot)
+			// with a 500 system.error — reactions are only supported on human
+			// messages. Skip the chip for those turns so we don't fire a call the
+			// platform always rejects; the reply itself is unaffected.
+			canReact := !strings.EqualFold(msgtype, "interactiveCard")
 			thinking := false
-			if cardCli != nil {
+			if cardCli != nil && canReact {
 				if terr := cardCli.markThinking(context.Background(), callbackData.ConversationId, msgID); terr != nil {
 					fmt.Fprintf(os.Stderr, "[connect][card] Thinking 表态失败（不影响回复）: %v\n", terr)
 				} else {
@@ -1117,9 +1234,20 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 			}
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "[connect] 转发失败 (%s, 耗时 %s): %v\n", channel, time.Since(started).Round(time.Millisecond), err)
-				reply = fmt.Sprintf("（%s 调用失败：%v）", channel, err)
+				if errors.Is(err, context.DeadlineExceeded) {
+					// Self-recovery: drop the conversation's session so the next
+					// message starts fresh instead of reusing a stuck one.
+					if r, ok := fwd.(sessionResetter); ok {
+						r.resetSession(convID)
+					}
+					reply = fmt.Sprintf("（%s 回复超时，已自动重置会话，请重试。如需调整超时上限可用 --agent-timeout）", channel)
+				} else {
+					reply = fmt.Sprintf("（%s 调用失败：%v）", channel, err)
+				}
+				health.onError(err)
 			} else {
 				fmt.Fprintf(os.Stderr, "[connect] agent 已生成回复 (%s, 耗时 %s): %s\n", channel, time.Since(started).Round(time.Millisecond), truncateRunes(reply, 80))
+				health.onReply()
 			}
 
 			// Confirmation gate orchestration: if the agent's reply declared
@@ -1173,22 +1301,40 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 
 			if !delivered {
 				// Fallback path: plain reply via the inbound sessionWebhook.
-				// Long replies go as markdown, short ones as text.
+				// Retry up to 3 times with exponential backoff (1s, 2s, 4s)
+				// to handle transient network errors (EOF, timeout).
 				var sendErr error
-				if len([]rune(reply)) > 200 {
-					sendErr = replier.SimpleReplyMarkdown(context.Background(), webhook, []byte(channel), []byte(reply))
-				} else {
-					sendErr = replier.SimpleReplyText(context.Background(), webhook, []byte(reply))
+				backoffs := []time.Duration{1 * time.Second, 2 * time.Second, 4 * time.Second}
+				for attempt := 0; attempt <= len(backoffs); attempt++ {
+					if len([]rune(reply)) > 200 {
+						sendErr = replier.SimpleReplyMarkdown(context.Background(), webhook, []byte(channel), []byte(reply))
+					} else {
+						sendErr = replier.SimpleReplyText(context.Background(), webhook, []byte(reply))
+					}
+					if sendErr == nil {
+						break
+					}
+					if attempt < len(backoffs) {
+						fmt.Fprintf(os.Stderr, "[connect] 普通消息发送失败 (%s, attempt %d/%d, msgId=%s): %v，%v 后重试\n",
+							channel, attempt+1, len(backoffs)+1, msgID, sendErr, backoffs[attempt])
+						time.Sleep(backoffs[attempt])
+					}
 				}
 				if sendErr != nil {
-					fmt.Fprintf(os.Stderr, "[connect] 普通消息发送失败 (%s, msgId=%s): %v\n", channel, msgID, sendErr)
+					fmt.Fprintf(os.Stderr, "[connect] 普通消息发送失败（重试耗尽） (%s, msgId=%s): %v\n", channel, msgID, sendErr)
+					delivered = false
 				} else {
 					fmt.Fprintf(os.Stderr, "[connect] 普通消息已发送 (%s, msgId=%s)\n", channel, msgID)
+					delivered = true
 				}
 			}
 
 			if thinking {
-				cardCli.swapThinkingToDone(context.Background(), callbackData.ConversationId, msgID)
+				if delivered {
+					cardCli.swapThinkingToDone(context.Background(), callbackData.ConversationId, msgID)
+				} else {
+					fmt.Fprintf(os.Stderr, "[connect] 回复发送失败，保留思考表态不切换完成 (%s, msgId=%s)\n", channel, msgID)
+				}
 			}
 		})
 		return []byte(""), nil
@@ -1208,6 +1354,7 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		return apperrors.NewInternal("stream 建连失败：" + err.Error())
 	}
 	defer cli.Close()
+	health.onConnected()
 	<-ctx.Done()
 	return nil
 }
@@ -1229,6 +1376,16 @@ func envDurationMS(key string, def time.Duration) time.Duration {
 		}
 	}
 	return def
+}
+
+// applyTimeout returns a context bounded by timeout when timeout > 0, or the
+// original context unchanged when timeout == 0 (no limit). The returned cancel
+// func is always safe to defer.
+func applyTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if timeout > 0 {
+		return context.WithTimeout(ctx, timeout)
+	}
+	return ctx, func() {}
 }
 
 // truncateRunes truncates by rune so multi-byte characters are never split.

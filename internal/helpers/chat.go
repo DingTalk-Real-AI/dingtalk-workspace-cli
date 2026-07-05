@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"regexp"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
@@ -121,7 +122,7 @@ func (chatHandler) Command(runner executor.Runner) *cobra.Command {
 		newChatBotSearchCommand(runner),
 	)
 
-	root.AddCommand(message, group, bot, newChatFileGroup(runner))
+	root.AddCommand(message, group, bot, newChatFileGroup(runner), newChatMediaGroup())
 	return root
 }
 
@@ -324,7 +325,7 @@ func newChatMessageSendCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("text", "", "消息内容，支持 Markdown (也可作位置参数)")
 	cmd.Flags().String("title", "", "消息标题 (可选，未指定时从内容截取)")
 	cmd.Flags().Bool("at-all", false, "@所有人 (仅 --group 群聊生效)")
-	cmd.Flags().String("at-open-dingtalk-ids", "", "@指定成员 openDingTalkId 列表，逗号分隔 (仅 --group 群聊生效)")
+	cmd.Flags().String("at-open-dingtalk-ids", "", "@指定成员 openDingtalkId 列表，逗号分隔 (仅 --group 群聊生效)；@ 群内机器人时，务必使用 `dws chat group bots --group <openConversationId>` 返回的 openDingtalkId（群级别 ID，与全局搜索结果不同）")
 	cmd.Flags().String("uuid", "", "幂等 UUID (可选，24h 内相同 uuid 不重复发送)")
 	cmd.Flags().String("msg-type", "", "富媒体类型: image / file (纯文本/Markdown 留空)")
 	cmd.Flags().String("media-id", "", "图片 mediaId (msg-type=image 时必填)")
@@ -530,7 +531,7 @@ func newChatMessageSendByBotCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			params, tool, err := buildChatMessageSendByBotInvocation(cmd)
+			params, tool, err := buildChatMessageSendByBotInvocation(cmd, runner)
 			if err != nil {
 				return err
 			}
@@ -556,6 +557,9 @@ func newChatMessageSendByBotCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("text", "", "消息内容 Markdown (必填)")
 	cmd.Flags().String("title", "", "消息标题 (必填)")
 	cmd.Flags().String("users", "", "接收者 userId 列表，逗号分隔，最多 20 个 (单聊必填)")
+	cmd.Flags().Bool("at-all", false, "@所有人 (仅 --group 群聊生效)")
+	cmd.Flags().String("at-user-ids", "", "@指定成员 userId 列表，逗号分隔 (仅 --group 生效)；文中的 <@userId> 会被替换为 markdown @userId 语法")
+	cmd.Flags().String("at-open-dingtalk-ids", "", "@指定成员 openDingtalkId 列表，逗号分隔 (仅 --group 生效)；@ 群内机器人时，务必使用 `dws chat group bots --group <openConversationId>` 返回的 openDingtalkId（群级别 ID，与全局搜索结果不同）")
 	return cmd
 }
 
@@ -642,7 +646,7 @@ func newChatGroupCreateCommand(runner executor.Runner) *cobra.Command {
 	return cmd
 }
 
-func buildChatMessageSendByBotInvocation(cmd *cobra.Command) (map[string]any, string, error) {
+func buildChatMessageSendByBotInvocation(cmd *cobra.Command, runner executor.Runner) (map[string]any, string, error) {
 	guard := cli.NewStdinGuard()
 
 	group, err := cmd.Flags().GetString("group")
@@ -690,6 +694,33 @@ func buildChatMessageSendByBotInvocation(cmd *cobra.Command) (map[string]any, st
 	}
 	if strings.TrimSpace(group) != "" {
 		params["openConversationId"] = group
+		atAll, _ := cmd.Flags().GetBool("at-all")
+		atUserIDs, _ := cmd.Flags().GetString("at-user-ids")
+		atOpenIDs, _ := cmd.Flags().GetString("at-open-dingtalk-ids")
+		if atAll {
+			params["atAll"] = true
+		}
+		userIDList := splitCSVStrings(atUserIDs)
+		openIDList := splitCSVStrings(atOpenIDs)
+		// The robot group message API honors two @ dimensions directly:
+		// atUserIds (staffId) and atOpendingtalkIds (openDingTalkId — note the
+		// server's lowercase spelling, verified live: the camelCase
+		// atOpenDingTalkIds is silently ignored). openDingTalkId is the ONLY id
+		// a bot has, so forwarding it verbatim is what makes bot→bot @ work —
+		// no userId reverse-lookup needed (and a bot is not in the member
+		// roster, so a lookup could never resolve it anyway). Each dimension
+		// also needs the matching `@id` token in the body to render the chip
+		// (renderAtMentions below rewrites `<@id>` → `@id` and prepends any
+		// missing mention).
+		if len(userIDList) > 0 {
+			params["atUserIds"] = stringSliceToAny(userIDList)
+		}
+		if len(openIDList) > 0 {
+			params["atOpendingtalkIds"] = stringSliceToAny(openIDList)
+		}
+		if allIDs := append(append([]string{}, userIDList...), openIDList...); len(allIDs) > 0 {
+			params["markdown"] = renderAtMentions(params["markdown"].(string), allIDs)
+		}
 		return params, "send_robot_group_message", nil
 	}
 
@@ -721,6 +752,52 @@ func splitCSVStrings(raw string) []string {
 		values = append(values, trimmed)
 	}
 	return values
+}
+
+// atMentionPlaceholder captures both <@userId> (angle-bracket) and standalone
+// @userId placeholders so a caller can write `<@u123>` or `@u123` in the body
+// and have it rendered as a DingTalk mention chip.
+var atMentionPlaceholder = regexp.MustCompile(`<@([^>\s]+)>`)
+
+// renderAtMentions rewrites mention placeholders in the markdown body so the
+// DingTalk client renders a highlight chip. In DingTalk markdown, a mention is
+// the literal token `@userId` followed by whitespace; the recipient side then
+// looks up the userId in the message's atUserIds array to render it as a chip.
+// We (a) rewrite `<@userId>` → `@userId `, and (b) if none of the mentioned
+// userIds appear in the body at all, prepend them so the chip still shows up.
+func renderAtMentions(body string, userIDs []string) string {
+	if len(userIDs) == 0 {
+		return body
+	}
+	rewritten := atMentionPlaceholder.ReplaceAllString(body, "@$1 ")
+	referenced := map[string]bool{}
+	matches := atMentionPlaceholder.FindAllStringSubmatch(body, -1)
+	for _, m := range matches {
+		if len(m) > 1 {
+			referenced[m[1]] = true
+		}
+	}
+	// Also detect bare @userId occurrences already present in the text.
+	for _, uid := range userIDs {
+		if strings.Contains(rewritten, "@"+uid) {
+			referenced[uid] = true
+		}
+	}
+	var missing []string
+	for _, uid := range userIDs {
+		if !referenced[uid] {
+			missing = append(missing, "@"+uid)
+		}
+	}
+	if len(missing) > 0 {
+		prefix := strings.Join(missing, " ")
+		if strings.TrimSpace(rewritten) == "" {
+			rewritten = prefix
+		} else {
+			rewritten = prefix + " " + rewritten
+		}
+	}
+	return rewritten
 }
 
 func stringSliceToAny(values []string) []any {

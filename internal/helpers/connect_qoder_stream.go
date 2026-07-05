@@ -79,7 +79,7 @@ func (f *qoderStreamForwarder) forward(ctx context.Context, convID, text string)
 }
 
 func (f *qoderStreamForwarder) forwardStream(ctx context.Context, convID, text string, onDelta func(string)) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, f.timeout)
+	ctx, cancel := applyTimeout(ctx, f.timeout)
 	defer cancel()
 
 	f.mu.Lock()

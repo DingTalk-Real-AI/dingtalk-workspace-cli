@@ -449,6 +449,7 @@ Flags:
   - 纯文本/Markdown 单聊发送时 `--user` 和 `--open-dingtalk-id` 都可用；传 `--user` 时直接走 userId 发送能力
   - --group 的别名: --id, --chat, --conversation-id (均可替代 --group)
   - --at-all 和 --at-open-dingtalk-ids 仅在 --group 群聊时生效，单聊时无效；当设置--at-all时，消息内容中一定要包含对应的占位符@all;当设置--at-open-dingtalk-ids openDingTalkId1,openDingTalkId2时，消息内容中一定要包含对应格式的占位符<@openDingTalkId1> <@openDingTalkId2>
+  - **@ 群内机器人**：务必使用 `dws chat group bots --group <openConversationId>` 返回的 openDingtalkId（群级别 ID，与全局搜索结果不同）；全局 `chat bot find` 返回的 ID 无法正确 @ 机器人
   - **换行符**：消息内容按 Markdown 渲染，换行有两层要求，缺一不可：
     1. 必须使用**真实换行符**（Unicode `U+000A`），而非字面量字符串 `\n`（反斜杠 + 字母 n）。程序或大模型构造参数时，须确保已正确反转义；否则全部内容会渲染在同一行
     2. Markdown 规范下**单个换行不产生换行效果**。需要换行时请使用：段落分隔（连续两个真实换行符 `\n\n`）、行尾两个空格 + 真实换行符（硬换行 `<br>`），或直接写 HTML 的 `<br>` 标签

@@ -108,9 +108,9 @@
 - **期望（分步）**：
   1. 新建：`robot submit --name <应用名> --robot-name 小助手 --desc <功能> --dry-run` → `--yes`（拿 taskId）→ 按 `intervalSeconds` 轮询 `robot result --task-id <taskId>`，只有 `SUCCESS` 才用返回 `robotCode/clientId/clientSecret`（敏感）。
   2. 现有应用：`robot get` 若 `robotStatus=UNCONFIGURED` → `robot config --unified-app-id <id> --name ... --mode STREAM --dry-run` → `--yes`（upsert 首次即创建）→ 回读 `robot get` 看 `robotStatus=ONLINE` → 需要时 `robot enable`（停用 `robot disable`）。
-  3. 建联：`dev connect --channel auto --robot-client-id x --robot-client-secret y --dry-run` 看出参 `cli` 字段做依赖预检；正式 connect 是前台长驻进程，对话里跑要后台运行并告诉用户怎么停，或引导自己开终端。
-- **通过判据**：走异步 submit/result（同步建号已下线），轮询到 SUCCESS 再用凭证；未配置时走 config 不是 enable；config 是 upsert；写后回读 `robotStatus`；建联先 dry-run 预检、处理好长驻/缺凭证（先 submit/result 建号）。
-- **易错点**：找「同步一次建好」的命令；WAITING 就用凭证；robot info not exist 时去 enable；前台直接起 connect 卡住对话。
+  3. 建联：`dev connect --channel auto --unified-app-id UAID --dry-run` 看出参 `cli` 字段做依赖预检；正式 connect 是前台长驻进程，对话里跑要后台运行并告诉用户怎么停，或引导自己开终端。
+- **通过判据**：走异步 submit/result（同步建号已下线），轮询到 SUCCESS 再用凭证；未配置时走 config 不是 enable；config 是 upsert；写后回读 `robotStatus`；建联先 dry-run 预检、处理好长驻/缺凭证（先 submit/result 建号）；默认用 `--unified-app-id` 建联而不是把 clientSecret 明文拼进命令行（避免被 `ps` 拉到）。
+- **易错点**：找「同步一次建好」的命令；WAITING 就用凭证；robot info not exist 时去 enable；前台直接起 connect 卡住对话；把 clientSecret 直接怼到命令行上。
 
 ### C9. 事件订阅与上游错误排查
 - **用户说**：「让这个应用订阅『群成员入群』事件，订阅完看下当前订阅了哪些，再把它取消掉；对了我之前发版本报了个 errcode 62012，这是啥意思？」

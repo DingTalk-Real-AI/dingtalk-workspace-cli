@@ -427,6 +427,82 @@ func TestChatMessageSendByBotOmitsClawType(t *testing.T) {
 	}
 }
 
+// send-by-bot --at-user-ids: userIds go into atUserIds AND the body's
+// `<@userId>` placeholder is rewritten to the `@userId ` chip form. Regression
+// guard for 勤泽 2026-07-04 report where the body still shipped raw `<@id>`.
+func TestChatMessageSendByBotAtUserIDsRendersChip(t *testing.T) {
+	runner := &captureRunner{}
+	cmd := newChatMessageSendByBotCommand(runner)
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"--group", "cid-xyz",
+		"--robot-code", "robot-001",
+		"--title", "t",
+		"--text", "<@u1> ping",
+		"--at-user-ids", "u1",
+	})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
+	}
+	got, ok := runner.last.Params["markdown"].(string)
+	if !ok {
+		t.Fatalf("markdown missing or not string; got %#v", runner.last.Params["markdown"])
+	}
+	if !strings.Contains(got, "@u1 ") {
+		t.Fatalf("markdown should contain rewritten @u1 chip, got %q", got)
+	}
+	if strings.Contains(got, "<@u1>") {
+		t.Fatalf("markdown should NOT contain raw placeholder <@u1>, got %q", got)
+	}
+	users, ok := runner.last.Params["atUserIds"].([]any)
+	if !ok || len(users) != 1 || users[0] != "u1" {
+		t.Fatalf("atUserIds = %#v, want [u1]", runner.last.Params["atUserIds"])
+	}
+}
+
+// send-by-bot --at-open-dingtalk-ids: the openDingTalkId is forwarded verbatim
+// as atOpendingtalkIds (the server's lowercase spelling — the camelCase
+// atOpenDingTalkIds is silently ignored), and the `<@openId>` placeholder is
+// rewritten to `@openId` in the body so the chip renders. This is what makes
+// @-ing a bot (whose only id is an openDingTalkId) actually deliver.
+func TestChatMessageSendByBotAtOpenIDsRendersChip(t *testing.T) {
+	runner := &captureRunner{}
+	cmd := newChatMessageSendByBotCommand(runner)
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"--group", "cid-xyz",
+		"--robot-code", "robot-001",
+		"--title", "t",
+		"--text", "<@op1> ping",
+		"--at-open-dingtalk-ids", "op1",
+	})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
+	}
+	got, ok := runner.last.Params["markdown"].(string)
+	if !ok {
+		t.Fatalf("markdown missing or not string; got %#v", runner.last.Params["markdown"])
+	}
+	if !strings.Contains(got, "@op1 ") {
+		t.Fatalf("markdown should contain rewritten @op1 chip, got %q", got)
+	}
+	if strings.Contains(got, "<@op1>") {
+		t.Fatalf("markdown should NOT contain raw placeholder <@op1>, got %q", got)
+	}
+	opens, ok := runner.last.Params["atOpendingtalkIds"].([]any)
+	if !ok || len(opens) != 1 || opens[0] != "op1" {
+		t.Fatalf("atOpendingtalkIds = %#v, want [op1]", runner.last.Params["atOpendingtalkIds"])
+	}
+	// The camelCase field must NOT be set (the server ignores it).
+	if _, exists := runner.last.Params["atOpenDingTalkIds"]; exists {
+		t.Fatalf("must not send camelCase atOpenDingTalkIds; params=%#v", runner.last.Params)
+	}
+}
+
 func equalAny(a, b any) bool {
 	switch av := a.(type) {
 	case []any:
@@ -500,6 +576,54 @@ func TestChatMessageSendByBotRoutesToBotProduct(t *testing.T) {
 			}
 			if got := runner.last.Tool; got != tc.wantTool {
 				t.Fatalf("Tool = %q, want %q", got, tc.wantTool)
+			}
+		})
+	}
+}
+
+func TestRenderAtMentions(t *testing.T) {
+	cases := []struct {
+		name    string
+		body    string
+		userIDs []string
+		want    string
+	}{
+		{
+			name:    "empty userIDs is no-op",
+			body:    "hello",
+			userIDs: nil,
+			want:    "hello",
+		},
+		{
+			name:    "angle placeholder rewritten",
+			body:    "<@u001> 请查收",
+			userIDs: []string{"u001"},
+			want:    "@u001  请查收",
+		},
+		{
+			name:    "missing mention auto-prepended",
+			body:    "请查收",
+			userIDs: []string{"u001", "u002"},
+			want:    "@u001 @u002 请查收",
+		},
+		{
+			name:    "bare @userId already present, no prefix",
+			body:    "hi @u001 please",
+			userIDs: []string{"u001"},
+			want:    "hi @u001 please",
+		},
+		{
+			name:    "mixed: one placeholder + one missing",
+			body:    "<@u001> ping",
+			userIDs: []string{"u001", "u002"},
+			want:    "@u002 @u001  ping",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := renderAtMentions(tc.body, tc.userIDs)
+			if got != tc.want {
+				t.Fatalf("renderAtMentions(%q, %v) = %q, want %q", tc.body, tc.userIDs, got, tc.want)
 			}
 		})
 	}

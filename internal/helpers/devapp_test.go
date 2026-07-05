@@ -1249,8 +1249,11 @@ func TestDevAppRobotResultSuccessAddsPublishAndConnectSteps(t *testing.T) {
 	if connect["blocking"] != false || connect["optional"] != true || connect["scope"] != "local_debug_only" {
 		t.Fatalf("connect step = %#v, want optional local debug non-blocking step", connect)
 	}
-	if command, _ := connect["command"].(string); !strings.Contains(command, "--robot-client-secret <clientSecret-from-result>") {
-		t.Fatalf("connect command = %q, want clientSecret placeholder", command)
+	if command, _ := connect["command"].(string); !strings.Contains(command, "--unified-app-id u-1") {
+		t.Fatalf("connect command = %q, want --unified-app-id form (safe: clientSecret not on argv)", command)
+	}
+	if command, _ := connect["command"].(string); strings.Contains(command, "--robot-client-secret") {
+		t.Fatalf("connect command = %q, must not put clientSecret on argv", command)
 	}
 	assertDevAppStepCommandsDoNotContain(t, steps, "secret-client")
 }

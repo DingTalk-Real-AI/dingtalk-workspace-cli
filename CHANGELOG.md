@@ -6,6 +6,36 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.47] - 2026-07-05
+
+This release adds **connector supervision & health monitoring** (`dev connect list/status/restart/stop`) and fixes **bot-to-bot @-mention** delivery end-to-end.
+
+### Added
+
+- **`dev connect list`** — PM2-style colored table enumerating all local connectors with state (healthy / degraded / down / not_running), PID, channel, and uptime.
+- **`dev connect status`** — panel view with heartbeat, last recv timestamp, session webhook age, and `--json` for external monitoring.
+- **`dev connect restart`** — restarts a daemon via persisted `daemon-state.json` (unified-app-id credential fetch, no local secret storage).
+- **`dev connect stop`** — graceful SIGTERM shutdown releasing the single-instance lock and Stream connection.
+- **Health watchdog** — background goroutine writes `heartbeat.json`; `status`/`list` derive state from heartbeat freshness + process liveness + pid-reuse detection.
+- **`--alwayson` flag** — opt-in auto-restart: supervisor relaunches the worker on crash (requires `--daemon`).
+- **`--notify-staff-id`** — state-change notifications (start / stop / crash) sent as DingTalk messages to the specified staffId.
+- **`--unified-app-id` credential flow for `dev connect`** — fetches clientId/clientSecret at startup via `dev app credentials get`, keeping secrets off the command line and out of `daemon-state.json`.
+- **API-sent file download** (`feat(connect): download API-sent files via storage v2 API`) — file messages sent via `dws chat message send --msg-type file --dentry-id --space-id` are now downloaded by the connector through the storage v2 `getDownloadInfo` API (dentryId + spaceId → presigned URL → local temp file), so file-based Q&A works regardless of how the file was sent.
+- **`--at-open-dingtalk-ids` for `chat message send-by-bot`** — @-mention bots or cross-org users by openDingTalkId in group messages.
+
+### Fixed
+
+- **Bot-to-bot @-mention send side** — `atOpendingtalkIds` (the server's lowercase spelling) is now used instead of the camelCase `atOpenDingTalkIds` which was silently ignored. The unnecessary `openDingTalkId → userId` reverse lookup (always failed for bots) is removed; the id is forwarded verbatim.
+- **Bot-to-bot @-mention receive side** — `interactiveCard` messages (how DingTalk delivers a bot @-mentioning another bot) are now parsed: `extractInteractiveCardText` flattens `cardContent[].children[].value` leaves and strips the leading @-mention by leaf boundary. The `emotion/reply` reaction (which 500s on bot-sent cards) is skipped for `interactiveCard` turns.
+- **Markdown/richText body extraction** — `extractCallbackText` gains a `cardContent` fallback so structured-text messages are no longer silently dropped.
+- **Send-by-bot @ chip rendering** — `<@id>` placeholders in the markdown body are rewritten to `@id` for both userIds and openDingTalkIds so the mention chip renders in all cases.
+- **Connector retry on transient network errors** — `sendBySession` retries on transient failures instead of dropping the reply.
+- **Orphan worker cleanup & watchdog deadlock** — stale workers from a crashed supervisor are detected and cleaned; a channel-capacity fix prevents the watchdog from blocking.
+- **Idle connector false-down** — heartbeat ticker now advances `updatedUnix` so a connector with no inbound traffic is not marked degraded.
+- **FD limit check** — `checkFDLimit` split into platform files for Windows cross-compilation.
+- **Default agent timeout removed** — no timeout by default (was incorrectly defaulting to a low value).
+- **keepAlive shortened to 30 µs** — aligns with Stream SDK expectations; adds `ulimit` check for multi-agent stability.
+
 ## [1.0.46] - 2026-07-01
 
 ### Fixed
