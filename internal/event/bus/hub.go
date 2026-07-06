@@ -39,7 +39,7 @@ type Consumer struct {
 	PID          int      // from Hello.ConsumerPID
 	EventTypes   []string // raw wildcard patterns from Hello
 	Filter       string   // raw regex from Hello (for status display)
-	SubscribeID  string   // optional personal subscription filter
+	SubscribeID  string   // optional personal subscription label for status display
 	SubscribedAt time.Time
 	SendCh       chan any // bus → consume frames (Event/SourceState/Heartbeat/Bye)
 	matcher      consumerMatcher
@@ -58,14 +58,13 @@ type consumerMatcher struct {
 	exact    map[string]struct{} // patterns without '*'
 	prefixes []string            // patterns ending in ".*" or "*" — store the prefix only
 	filter   *regexp.Regexp      // nil if no filter
-	subID    string              // nil/empty = do not filter by subscription
 }
 
 func compileMatcher(eventTypes []string, filter string, subscribeID string) (consumerMatcher, error) {
 	m := consumerMatcher{
 		exact: make(map[string]struct{}),
-		subID: strings.TrimSpace(subscribeID),
 	}
+	_ = subscribeID // kept in the wire/config shape, but no longer filters fan-out.
 	if len(eventTypes) == 0 {
 		m.catchAll = true
 	}
@@ -101,9 +100,6 @@ func compileMatcher(eventTypes []string, filter string, subscribeID string) (con
 
 func (m *consumerMatcher) matches(raw *dwsevent.RawEvent) bool {
 	if raw == nil {
-		return false
-	}
-	if m.subID != "" && raw.SubscribeID != m.subID {
 		return false
 	}
 	eventType := raw.EventType

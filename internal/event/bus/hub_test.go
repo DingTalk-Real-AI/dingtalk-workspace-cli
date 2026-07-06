@@ -110,6 +110,26 @@ func TestHub_DeliverFilterRegex(t *testing.T) {
 	}
 }
 
+func TestHub_DoesNotFilterBySubscribeID(t *testing.T) {
+	h := NewHub(10)
+	c, err := h.Register(transport.Hello{
+		EventTypes:  []string{"user_im_message_receive_at"},
+		SubscribeID: "sub-consumer",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := mkEvent("user_im_message_receive_at", "1")
+	ev.SubscribeID = "sub-upstream"
+
+	h.Deliver(ev)
+
+	got := drain(c, 1, t)
+	if got[0].SubscribeID != "sub-upstream" {
+		t.Fatalf("event subscribe_id = %q, want raw event value", got[0].SubscribeID)
+	}
+}
+
 func TestHub_RegisterRejectsBadFilterRegex(t *testing.T) {
 	h := NewHub(10)
 	_, err := h.Register(transport.Hello{Filter: `(unclosed`})
