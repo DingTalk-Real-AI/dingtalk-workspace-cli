@@ -26,12 +26,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/spf13/cobra"
 )
 
@@ -61,13 +61,13 @@ const (
 // supervisor pid plus enough context for `status` to report without re-deriving
 // it (start time for uptime, log path, the dir key it was filed under).
 type daemonState struct {
-	Pid          int    `json:"pid"`
-	StartUnix    int64  `json:"startUnix"`
-	LogPath      string `json:"logPath"`
-	DirKey       string `json:"dirKey"`
-	ClientID     string `json:"clientId,omitempty"`
-	UnifiedAppID string `json:"unifiedAppId,omitempty"`
-	Channel      string `json:"channel,omitempty"`
+	Pid           int    `json:"pid"`
+	StartUnix     int64  `json:"startUnix"`
+	LogPath       string `json:"logPath"`
+	DirKey        string `json:"dirKey"`
+	ClientID      string `json:"clientId,omitempty"`
+	UnifiedAppID  string `json:"unifiedAppId,omitempty"`
+	Channel       string `json:"channel,omitempty"`
 	NotifyStaffID string `json:"notifyStaffId,omitempty"`
 	// Profile records the --profile selector the connector was started with,
 	// so `restart` re-fetches credentials against the same org instead of the
@@ -112,7 +112,7 @@ func connectDaemonDir(dirKey string) (string, error) {
 
 func daemonPidPath(dir string) string   { return filepath.Join(dir, "daemon.pid") }
 func daemonStatePath(dir string) string { return filepath.Join(dir, "daemon-state.json") }
-func daemonLogPath(dir string) string    { return filepath.Join(dir, "daemon.log") }
+func daemonLogPath(dir string) string   { return filepath.Join(dir, "daemon.log") }
 
 // writeDaemonState atomically persists the daemon state to daemon-state.json
 // (persistent, survives supervisor exit) so restart/list can recover config.
@@ -641,9 +641,9 @@ func newDevAppRobotConnectStopCommand() *cobra.Command {
 // platform — no secrets stored on disk.
 func newDevAppRobotConnectRestartCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "restart",
-		Short: "重启连接器守护进程（通过持久化的 unifiedAppId 重新拉取密钥，无需本地存密钥）",
-		Args:  cobra.NoArgs,
+		Use:               "restart",
+		Short:             "重启连接器守护进程（通过持久化的 unifiedAppId 重新拉取密钥，无需本地存密钥）",
+		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			dirKey, err := connectDaemonDirKeyFromFlags(cmd)
