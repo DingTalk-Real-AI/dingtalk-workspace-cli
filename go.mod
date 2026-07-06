@@ -1,8 +1,9 @@
 module github.com/DingTalk-Real-AI/dingtalk-workspace-cli
 
-go 1.25.8
+go 1.25.9
 
 require (
+	github.com/DingTalk-Real-AI/dws-data v0.0.0
 	github.com/RealAlexandreAI/json-repair v0.0.15
 	github.com/charmbracelet/bubbletea v1.3.6
 	github.com/charmbracelet/huh v1.0.0
@@ -55,3 +56,5 @@ require (
 	github.com/spf13/pflag v1.0.9
 	gopkg.in/yaml.v3 v3.0.1
 )
+
+replace github.com/DingTalk-Real-AI/dws-data => ../dws-data
