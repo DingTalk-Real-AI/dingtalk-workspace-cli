@@ -1,4 +1,4 @@
-# 个人单聊事件自测流程
+# 个人消息事件自测流程
 
 ## 1. 确认登录
 
@@ -8,15 +8,30 @@
 dws auth login
 ```
 
-## 2. 查看单聊事件说明
+## 2. 查看事件说明
 
 ```bash
+dws event schema user_im_message_receive_at
 dws event schema user_im_message_receive_o2o
+dws event schema user_im_message_receive_group
+dws event schema user_im_message_receive_user
 ```
 
-确认事件规则是 `singleChat`，必填参数是 `peer-user-id` 或 `peer-union-id`。
+确认事件规则分别是 `at`、`singleChat`、`group`、`sender`。
 
 ## 3. 启动监听
+
+### 被 @ 消息
+
+```bash
+dws event consume user_im_message_receive_at \
+  --duration 10m \
+  -f ndjson
+```
+
+触发方式：让任意可触达用户在群里 @ 当前登录用户。
+
+### 指定单聊消息
 
 优先用对端 `userId`：
 
@@ -36,22 +51,71 @@ dws event consume user_im_message_receive_o2o \
   -f ndjson
 ```
 
-## 4. 触发事件
+触发方式：让对端用户给当前登录用户发送一条单聊消息。
 
-让对端用户给当前登录用户发送一条单聊消息。stdout 应输出一行事件 JSON。
+### 指定群消息
 
-如果没有输出：
+先拿到目标群的 `openConversationId`。如果只有群名：
 
-1. 确认对端身份参数正确。
-2. 用 `dws event status --event user_im_message_receive_o2o` 查看订阅和本地连接状态。
+```bash
+dws chat search --query "群名" --format json
+```
+
+确认群后启动监听：
+
+```bash
+dws event consume user_im_message_receive_group \
+  --open-conversation-id <openConversationId> \
+  --duration 10m \
+  -f ndjson
+```
+
+触发方式：让任意用户在该群发送一条消息。
+
+### 指定发送人消息
+
+优先用发送人的 `userId`。如果只有人名：
+
+```bash
+dws aisearch person --keyword "张三" --dimension name --format json
+```
+
+确认用户后启动监听：
+
+```bash
+dws event consume user_im_message_receive_user \
+  --sender-user-id <userId> \
+  --duration 10m \
+  -f ndjson
+```
+
+如果只有 `unionId`：
+
+```bash
+dws event consume user_im_message_receive_user \
+  --sender-union-id <unionId> \
+  --duration 10m \
+  -f ndjson
+```
+
+触发方式：让该发送人给当前用户发送单聊消息，或在当前用户能收到的会话里发消息。
+
+## 4. 无输出排查
+
+1. 确认事件码和必填参数正确。
+2. 用 event status 加对应事件码查看订阅和本地连接状态。
 3. 联调服务端时临时加 `--debug --debug-raw-events`，观察当前 personal stream bus 是否收到服务端推送。
+4. 读取业务字段前先抓一条 `-f json --max-events 1` 样本；payload 以实际推送为准。
 
 ## 5. 停止监听
 
 先查订阅 ID：
 
 ```bash
+dws event status --event user_im_message_receive_at
 dws event status --event user_im_message_receive_o2o
+dws event status --event user_im_message_receive_group
+dws event status --event user_im_message_receive_user
 ```
 
 停止指定订阅：

@@ -60,7 +60,7 @@ cli_version: ">=1.0.15"
 | `sheet`           | 在线电子表格(axls)：工作表 CRUD/区域读写/CSV 批量写入/行列增删/合并/查找替换/筛选视图/全局筛选/排序/下拉列表/浮动图片/导出(两步) | [sheet.md](./references/products/sheet.md)                     |
 | `todo`            | 待办：创建(含优先级/截止时间/循环)/查询/修改/标记完成/删除                   | [todo.md](./references/products/todo.md)                       |
 | `wiki`            | 知识库：空间创建/详情/列表/搜索 + 成员管理                                | [wiki.md](./references/products/wiki.md)                       |
-| `event`           | 个人单聊事件：监听当前用户与指定用户的单聊消息，NDJSON 输出（实时驱动 Agent）| [event.md](./references/products/event.md)                     |
+| `event`           | 个人消息事件：监听当前用户被 @、指定单聊、指定群聊、指定发送人消息，NDJSON 输出（实时驱动 Agent）| [event.md](./references/products/event.md)                     |
 
 ## 核心流程（每次请求必须执行，不得跳过）
 
@@ -113,7 +113,7 @@ cli_version: ">=1.0.15"
 用户提到"在线电子表格/钉钉表格/axls/工作表/单元格读写/合并单元格/筛选视图/导出 xlsx" → `sheet`
 用户提到"待办/TODO/任务提醒/循环待办" → `todo`
 用户提到"创建知识库/知识库列表/搜索知识库空间/wiki/团队空间/知识库成员管理/我的文档个人空间" → `wiki`
-用户提到"监听我和某人的单聊消息/订阅个人单聊事件/实时接收某个用户发给我的消息/个人消息事件流/event consume user_im_message_receive_o2o/驱动 Agent 处理单聊消息" → `event`
+用户提到"监听有人@我/监听我和某人的单聊消息/监听某个群消息/监听某人发给我的消息/订阅个人消息事件/实时接收钉钉消息事件/个人消息事件流/event consume user_im_message_receive_at/user_im_message_receive_o2o/user_im_message_receive_group/user_im_message_receive_user/驱动 Agent 处理消息" → `event`
 
 关键区分: **dev(创建/配置/建联机器人)** vs **chat(查询/发消息已有机器人)**。`dws chat bot search/find` 只查询机器人；**建号**（创建钉钉智能体机器人）走 `dws dev app robot submit`；**建联**（把机器人接到本地 agent 的 Stream）走 `dws dev connect`。凡是"创建机器人""建机器人""接入 agent""建联"一律路由到 `dev`，禁止走 `chat`。
 关键区分: aitable(数据表格) vs todo(待办任务)
