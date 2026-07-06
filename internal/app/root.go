@@ -365,7 +365,7 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 	}
 	root.AddCommand(utilityCommands...)
 
-	root.AddCommand(newLegacyPublicCommands(runner)...)
+	root.AddCommand(newLegacyPublicCommands(runner, patCaller)...)
 	root.AddCommand(newLegacyHiddenCommands(runner)...)
 
 	// --- Plugin loading: runs AFTER legacy commands so that

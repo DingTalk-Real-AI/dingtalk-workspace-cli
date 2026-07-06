@@ -24,8 +24,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newLegacyPublicCommands(runner executor.Runner) []*cobra.Command {
+func newLegacyPublicCommands(runner executor.Runner, caller edition.ToolCaller) []*cobra.Command {
 	injectStaticServers()
+	helpers.InitDeps(caller)
 	commands := helpers.NewPublicCommands(runner)
 	return mergeTopLevelCommands(commands)
 }
