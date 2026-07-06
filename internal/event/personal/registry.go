@@ -104,7 +104,7 @@ var definitions = []Definition{
 	{
 		EventKey:       EventFromUser,
 		DisplayName:    "指定发送人消息",
-		Description:    "当前用户收到的指定发送人消息",
+		Description:    "当前用户收到的特别关注用户的消息",
 		Category:       "im",
 		RuleType:       "sender",
 		Status:         StatusEnabled,
