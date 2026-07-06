@@ -1,6 +1,6 @@
 # Running the connector as a 7x24 service
 
-`dws devapp robot connect` keeps a DingTalk robot wired to a local agent over a
+`dws dev connect` keeps a DingTalk robot wired to a local agent over a
 Stream long-connection. By default it runs in the foreground and dies when the
 terminal closes. For an unattended "digital employee" you have two options.
 
@@ -15,14 +15,14 @@ terminal closes. For an unattended "digital employee" you have two options.
 
 ```bash
 # Detach into a background supervisor that restarts the connector if it crashes.
-dws devapp robot connect --daemon \
+dws dev connect --daemon \
   --channel claudecode \
   --unified-app-id <unifiedAppId>
 
 # Inspect / stop / restart it (locate the daemon by unifiedAppId).
-dws devapp robot connect status  --unified-app-id <unifiedAppId>
-dws devapp robot connect stop    --unified-app-id <unifiedAppId>
-dws devapp robot connect restart --unified-app-id <unifiedAppId>
+dws dev connect status  --unified-app-id <unifiedAppId>
+dws dev connect stop    --unified-app-id <unifiedAppId>
+dws dev connect restart --unified-app-id <unifiedAppId>
 ```
 
 - The parent prints the daemon pid and the log path, then exits.
@@ -60,8 +60,7 @@ and `REPLACE_UNIFIED_APP_ID`, then `launchctl load -w <path>`.
   <key>ProgramArguments</key>
   <array>
     <string>/usr/local/bin/dws</string>
-    <string>devapp</string>
-    <string>robot</string>
+    <string>dev</string>
     <string>connect</string>
     <string>--channel</string>
     <string>claudecode</string>
@@ -110,7 +109,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/dws devapp robot connect \
+ExecStart=/usr/local/bin/dws dev connect \
   --channel claudecode \
   --unified-app-id REPLACE_UNIFIED_APP_ID
 Restart=always
@@ -136,7 +135,7 @@ security warning to stderr. This form:
 - exposes `clientSecret` to every user on the box via `ps -ef`;
 - gets baked into launchd `ProgramArguments` / systemd `ExecStart`, which
   makes rotation harder;
-- means `dws devapp robot connect restart` cannot re-fetch credentials — you
+- means `dws dev connect restart` cannot re-fetch credentials — you
   must re-run the full command yourself.
 
 Prefer `--unified-app-id`. Only fall back to the pair when you understand the
