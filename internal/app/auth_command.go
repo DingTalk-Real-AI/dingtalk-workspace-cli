@@ -1028,10 +1028,7 @@ func clipRunes(value string, limit int) string {
 }
 
 func clearCompatCache() {
-	store := cacheStoreFromEnv()
-	if store != nil {
-		_ = os.RemoveAll(store.Root)
-	}
+	// Cache store removed; no-op in static endpoint mode.
 }
 
 func resolveAuthLoginConfig(cmd *cobra.Command) (authLoginConfig, error) {

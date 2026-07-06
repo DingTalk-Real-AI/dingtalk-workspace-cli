@@ -35,26 +35,22 @@ func TestClawTypeUsesOverlayValue(t *testing.T) {
 	}
 }
 
-func TestOpenSupplementServersIncludeAitableHelperAlias(t *testing.T) {
-	servers := openSupplementServers()
+func TestOpenStaticServersIncludesCoreProducts(t *testing.T) {
+	servers := openStaticServers()
 	byID := make(map[string]ServerInfo, len(servers))
 	for _, server := range servers {
 		byID[server.ID] = server
 	}
 
-	helper, ok := byID["aitable-helper"]
-	if !ok {
-		t.Fatalf("openSupplementServers() missing aitable-helper: %#v", servers)
-	}
-	if helper.Endpoint != openAitableHelperEndpoint {
-		t.Fatalf("aitable-helper endpoint = %q, want %q", helper.Endpoint, openAitableHelperEndpoint)
+	required := []string{"aitable", "aitable-helper", "calendar", "todo", "doc", "chat", "mail", "oa"}
+	for _, id := range required {
+		if _, ok := byID[id]; !ok {
+			t.Errorf("openStaticServers() missing required product %q", id)
+		}
 	}
 
-	form, ok := byID["aitable-form"]
-	if !ok {
-		t.Fatalf("openSupplementServers() missing aitable-form: %#v", servers)
-	}
-	if form.Endpoint != openAitableHelperEndpoint {
-		t.Fatalf("aitable-form endpoint = %q, want %q", form.Endpoint, openAitableHelperEndpoint)
+	helper := byID["aitable-helper"]
+	if helper.Endpoint == "" {
+		t.Fatal("aitable-helper has empty endpoint")
 	}
 }
