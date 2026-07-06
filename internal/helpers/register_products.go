@@ -42,7 +42,6 @@ func init() {
 		{"report", newReportCommand},
 		{"drive", newDriveCommand},
 		{"blackboard", newBlackboardCommand},
-		{"law", newLawCommand},
 		{"credit", newCreditCommand},
 		{"docparse", newDocparseCommand},
 		{"aidesign", newAidesignCommand},

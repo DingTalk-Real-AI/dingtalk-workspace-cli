@@ -91,7 +91,6 @@ var cmdToProduct = map[string]string{
 	"report":     "report",
 	"drive":      "drive",
 	"blackboard": "blackboard",
-	"law":        "law",
 	"credit":     "credit-ep",
 	"docparse":   "docparse",
 	"aidesign":   "aidesign",
