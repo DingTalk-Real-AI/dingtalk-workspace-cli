@@ -74,5 +74,11 @@ func openStaticServers() []ServerInfo {
 		{ID: "yida", Name: "宜搭", Endpoint: "https://mcp-gw.dingtalk.com/server/9fb0c65384a256e4f7ef7e640c6a09ed87f2f2e53684f3201e748f9fcf991b1b", Prefixes: []string{"yida"}},
 		{ID: "pat", Name: "行为授权", Endpoint: "https://mcp-gw.dingtalk.com/server/abc3c880fb90f04b52d1426aaf093766e5fc9ec38411688cbb74df42a584d374", Prefixes: []string{"pat"}},
 		{ID: "mcp-meta", Name: "MCP 元服务", Endpoint: "https://mcp-gw.dingtalk.com/server/89833ea5debf30c260a07ffcb5127ffa3bf0c830cd76babadb293d9861485d44"},
+		{ID: "finance", Name: "智能财务", Endpoint: "https://mcp-gw.dingtalk.com/server/651c8c665b1dd7d0ad311ca31f5d2022e44f329c3586506507aa13bd0db45da1", Prefixes: []string{"finance"}},
+		{ID: "law", Name: "法律", Endpoint: "https://mcp-gw.dingtalk.com/server/2365b64a3154c5271ee7d95aa364ba6bd47ce01564a8a6c1a4fd4c2cdfac073b", Prefixes: []string{"law"}},
+		{ID: "credit-ep", Name: "芝麻企业信用", Endpoint: "https://mcp-gw.dingtalk.com/server/467cb8971ddc0614ff059c6ff79ca42863c3f34c1bb81f68feeb01296567906b", Prefixes: []string{"credit"}},
+		{ID: "docparse", Name: "文档解析", Endpoint: "https://mcp-gw.dingtalk.com/server/bf8929e14fa2978e9a28195f0128b3bbcccc6291a54babeb6495dc89fcd74457", Prefixes: []string{"docparse"}},
+		{ID: "aidesign", Name: "AI 设计", Endpoint: "https://mcp-gw.dingtalk.com/server/566ec99a28d4adbdd926a40fa52816745176f084672b1634406f2fe5b0c3c07a", Prefixes: []string{"aidesign", "design"}},
+		{ID: "agoal", Name: "Agoal", Endpoint: "https://mcp-gw.dingtalk.com/server/1db49ea94ffe74c25a7079a68b4df6629c79130fb9095d1b499f507015d847a9", Prefixes: []string{"agoal"}},
 	}
 }
