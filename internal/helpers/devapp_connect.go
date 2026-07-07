@@ -677,7 +677,7 @@ func connectAgentOptionsFromCommand(cmd *cobra.Command) connectAgentOptions {
 		auditSheetTab = "Sheet1"
 	}
 	return connectAgentOptions{Model: model, WorkDir: workDir, Memory: memory,
-		Timeout: time.Duration(agentTimeoutSec) * time.Second,
+		Timeout:   time.Duration(agentTimeoutSec) * time.Second,
 		ReplyCard: replyCard, CardTemplate: cardTemplate,
 		KnowledgeDir:    knowledgeDir,
 		KnowledgeSource: knowledgeSource,

@@ -68,11 +68,11 @@ type Diagnostic struct {
 
 // DiagnosticContext 附加的 schema 上下文信息。
 type DiagnosticContext struct {
-	TagName         string   // 当前/期望 tag
-	Description     string   // P1: tag description from schema
-	AllowedChildren []string // 父节点合法子节点全集
-	AllValidTags    []string // schema 全量 tag 列表（unknown tag 时填充）
-	AllValidAttrs   []string // 当前 tag 全量 attr 列表（unknown attr 时填充）
+	TagName         string    // 当前/期望 tag
+	Description     string    // P1: tag description from schema
+	AllowedChildren []string  // 父节点合法子节点全集
+	AllValidTags    []string  // schema 全量 tag 列表（unknown tag 时填充）
+	AllValidAttrs   []string  // 当前 tag 全量 attr 列表（unknown attr 时填充）
 	AttrSpec        *TypeSpec // 当前属性的 schema 定义
 }
 
@@ -193,10 +193,10 @@ const (
 
 // Layer 0: JSON Syntax errors (reported by jsontext.Decoder).
 const (
-	CodeJSONSyntaxUnexpectedToken  = "JSON_SYNTAX_UNEXPECTED_TOKEN"
-	CodeJSONSyntaxUnterminatedStr  = "JSON_SYNTAX_UNTERMINATED_STRING"
-	CodeJSONSyntaxInvalidEscape    = "JSON_SYNTAX_INVALID_ESCAPE"
-	CodeJSONSyntaxTrailingData     = "JSON_SYNTAX_TRAILING_DATA"
+	CodeJSONSyntaxUnexpectedToken = "JSON_SYNTAX_UNEXPECTED_TOKEN"
+	CodeJSONSyntaxUnterminatedStr = "JSON_SYNTAX_UNTERMINATED_STRING"
+	CodeJSONSyntaxInvalidEscape   = "JSON_SYNTAX_INVALID_ESCAPE"
+	CodeJSONSyntaxTrailingData    = "JSON_SYNTAX_TRAILING_DATA"
 )
 
 // Layer 1: JSONML Grammar errors (structural violations).

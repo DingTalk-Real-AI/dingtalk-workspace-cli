@@ -202,8 +202,8 @@ func newTbCommand() *cobra.Command {
 	}
 
 	taskUpdateTitleCmd := &cobra.Command{
-		Use:   "update-title",
-		Short: "修改任务标题",
+		Use:     "update-title",
+		Short:   "修改任务标题",
 		Example: `  dws tb task update-title --id TID --title "新标题"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "id", "title"); err != nil {
@@ -216,8 +216,8 @@ func newTbCommand() *cobra.Command {
 	}
 
 	taskUpdateStatusCmd := &cobra.Command{
-		Use:   "update-status",
-		Short: "更新任务状态",
+		Use:     "update-status",
+		Short:   "更新任务状态",
 		Example: `  dws tb task update-status --id TID --status "已完成"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "id", "status"); err != nil {
@@ -230,8 +230,8 @@ func newTbCommand() *cobra.Command {
 	}
 
 	taskUpdatePriorityCmd := &cobra.Command{
-		Use:   "update-priority",
-		Short: "更新任务优先级",
+		Use:     "update-priority",
+		Short:   "更新任务优先级",
 		Example: `  dws tb task update-priority --id TID --priority "紧急"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "id", "priority"); err != nil {
@@ -244,8 +244,8 @@ func newTbCommand() *cobra.Command {
 	}
 
 	taskUpdateRemarkCmd := &cobra.Command{
-		Use:   "update-remark",
-		Short: "更新任务备注",
+		Use:     "update-remark",
+		Short:   "更新任务备注",
 		Example: `  dws tb task update-remark --id TID --note "## 进展\n已完成第一阶段"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "id", "note"); err != nil {
@@ -258,8 +258,8 @@ func newTbCommand() *cobra.Command {
 	}
 
 	taskAssignCmd := &cobra.Command{
-		Use:   "assign",
-		Short: "分配执行人",
+		Use:     "assign",
+		Short:   "分配执行人",
 		Example: `  dws tb task assign --id TID --executor userId1`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "id", "executor"); err != nil {
@@ -272,8 +272,8 @@ func newTbCommand() *cobra.Command {
 	}
 
 	taskUpdateDueCmd := &cobra.Command{
-		Use:   "update-due",
-		Short: "设置截止日期",
+		Use:     "update-due",
+		Short:   "设置截止日期",
 		Example: `  dws tb task update-due --id TID --date 2026-03-15`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "id", "date"); err != nil {
@@ -286,8 +286,8 @@ func newTbCommand() *cobra.Command {
 	}
 
 	taskUpdateStartCmd := &cobra.Command{
-		Use:   "update-start",
-		Short: "设置开始时间",
+		Use:     "update-start",
+		Short:   "设置开始时间",
 		Example: `  dws tb task update-start --id TID --date 2026-03-01`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "id", "date"); err != nil {
@@ -300,8 +300,8 @@ func newTbCommand() *cobra.Command {
 	}
 
 	taskCommentCmd := &cobra.Command{
-		Use:   "comment",
-		Short: "添加评论",
+		Use:     "comment",
+		Short:   "添加评论",
 		Example: `  dws tb task comment --id TID --content "进展顺利"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "id", "content"); err != nil {
@@ -314,8 +314,8 @@ func newTbCommand() *cobra.Command {
 	}
 
 	taskAddProgressCmd := &cobra.Command{
-		Use:   "add-progress",
-		Short: "创建任务进展",
+		Use:     "add-progress",
+		Short:   "创建任务进展",
 		Example: `  dws tb task add-progress --id TID --title "周进展" --content "已完成60%"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "id", "title", "content"); err != nil {
@@ -334,8 +334,8 @@ func newTbCommand() *cobra.Command {
 	}
 
 	taskGetProgressCmd := &cobra.Command{
-		Use:   "get-progress",
-		Short: "获取任务进展",
+		Use:     "get-progress",
+		Short:   "获取任务进展",
 		Example: `  dws tb task get-progress --id TID`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "id"); err != nil {
@@ -352,8 +352,8 @@ func newTbCommand() *cobra.Command {
 	worktimeCmd := &cobra.Command{Use: "worktime", Short: "工时管理", RunE: groupRunE}
 
 	worktimeListCmd := &cobra.Command{
-		Use:   "list",
-		Short: "查看任务工时",
+		Use:     "list",
+		Short:   "查看任务工时",
 		Example: `  dws tb worktime list --task TID`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "task"); err != nil {
@@ -366,8 +366,8 @@ func newTbCommand() *cobra.Command {
 	}
 
 	worktimeCreateCmd := &cobra.Command{
-		Use:   "create",
-		Short: "创建工时记录",
+		Use:     "create",
+		Short:   "创建工时记录",
 		Example: `  dws tb worktime create --task TID --executor userId1 --start 2026-03-01 --end 2026-03-01 --hours 28800000`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "task", "executor", "start", "end", "hours"); err != nil {
@@ -384,8 +384,8 @@ func newTbCommand() *cobra.Command {
 	}
 
 	worktimeUpdateCmd := &cobra.Command{
-		Use:   "update",
-		Short: "更新工时记录",
+		Use:     "update",
+		Short:   "更新工时记录",
 		Example: `  dws tb worktime update --id WID --executor userId1 --date 2026-03-09`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "id", "executor", "date"); err != nil {

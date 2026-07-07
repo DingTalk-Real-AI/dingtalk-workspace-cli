@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers/doc"
 	jsonrepair "github.com/RealAlexandreAI/json-repair"
 	"github.com/spf13/cobra"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers/doc"
 )
 
 // dangerousUnicode lists characters stripped from JSONML output.

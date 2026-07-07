@@ -85,7 +85,7 @@ var cmdToProduct = map[string]string{
 	"oa": "oa", "mail": "mail", "ding": "ding",
 	"devdoc":     "devdoc",
 	"attendance": "attendance",
-	"live": "live", "aiapp": "aiapp",
+	"live":       "live", "aiapp": "aiapp",
 	"minutes":    "minutes",
 	"finance":    "finance",
 	"report":     "report",

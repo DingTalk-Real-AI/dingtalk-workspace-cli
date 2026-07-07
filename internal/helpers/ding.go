@@ -144,8 +144,8 @@ func newDingCommand() *cobra.Command {
 			users := parseCSVValues(mustGetFlag(cmd, "users"))
 			toolArgs := map[string]any{
 				"receiverOpenDingTalkIds": users,
-				"content":                mustGetFlag(cmd, "content"),
-				"remindType":             mustGetFlag(cmd, "type"),
+				"content":                 mustGetFlag(cmd, "content"),
+				"remindType":              mustGetFlag(cmd, "type"),
 			}
 			if v, _ := cmd.Flags().GetString("uuid"); v != "" {
 				toolArgs["uuid"] = v
@@ -173,10 +173,10 @@ func newDingCommand() *cobra.Command {
 			}
 			users := parseCSVValues(mustGetFlag(cmd, "users"))
 			toolArgs := map[string]any{
-				"openConversationId":    mustGetFlag(cmd, "group"),
-				"openMessageId":         mustGetFlag(cmd, "message-id"),
+				"openConversationId":      mustGetFlag(cmd, "group"),
+				"openMessageId":           mustGetFlag(cmd, "message-id"),
 				"receiverOpenDingTalkIds": users,
-				"remindType":            mustGetFlag(cmd, "type"),
+				"remindType":              mustGetFlag(cmd, "type"),
 			}
 			if v, _ := cmd.Flags().GetString("uuid"); v != "" {
 				toolArgs["uuid"] = v
