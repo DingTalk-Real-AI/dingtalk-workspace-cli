@@ -12,9 +12,8 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    # 60 (not 30): mirroring every release asset to Gitee is slow; 30 min cut the
-    # Gitee step off mid-upload on the v1.0.42 release. The Gitee step is now also
-    # idempotent (re-runs only upload missing assets).
+    # 60 min headroom for GoReleaser + first Gitee asset upload; subsequent runs
+    # skip by size check and finish quickly.
     timeout-minutes: 60
 
     steps:

@@ -99,21 +99,18 @@ fi
 [ -n "$release_id" ] || { echo "❌ Could not get/create Gitee release for ${VERSION}. Response: ${rel_json}" >&2; exit 1; }
 echo "   Gitee release id = ${release_id}"
 
-# ── Mirror each artifact, verifying content so re-runs self-heal ─────────────
-# Pull the current attachment list (name + attach id + download url) so we can,
-# per file:
-#   • skip it when it is already on Gitee, unique, AND byte-identical,
-#   • REPLACE it when present but stale (different bytes) — e.g. the darwin
-#     binaries are re-signed and so differ between GitHub and a prior mirror
-#     run, which breaks install.sh's checksums.txt verification on macOS,
+# ── Mirror each artifact, using file size to skip unchanged assets ────────────
+# Pull the current attachment list (name + attach id + download url + size) so we
+# can, per file:
+#   • skip it when it is already on Gitee, unique, AND same byte size,
+#   • REPLACE it when present but different size (stale),
 #   • DEDUP it when the same name has >1 attachment — a prior run that failed to
 #     delete (see below) left the old copy *and* an extra upload; Gitee then
 #     serves the OLDER one by name, so the stale binary wins. We delete every
 #     copy and upload one fresh.
 #   • upload it when missing.
-# This brings the Gitee release into byte-for-byte agreement with $DIST_DIR,
-# which the caller fills from the GitHub release whose checksums.txt is what
-# install.sh verifies against.
+# Size comparison avoids downloading every binary from Gitee just to SHA256 it,
+# which took ~40 min on GitHub-hosted runners (slow Gitee download from US).
 #
 # We list attachments via the dedicated /attach_files endpoint, NOT the release
 # detail (/releases/{id}) endpoint: the latter's "assets" array omits the attach
@@ -125,16 +122,11 @@ try:
     data=json.load(sys.stdin)
     rows=data if isinstance(data,list) else data.get("attach_files",[])
     for a in rows:
-        n=a.get("name",""); i=a.get("id",""); u=a.get("browser_download_url","")
+        n=a.get("name",""); i=a.get("id",""); u=a.get("browser_download_url",""); s=a.get("size","")
         if n and i!="":
-            print("%s\t%s\t%s" % (n, i, u))
+            print("%s\t%s\t%s\t%s" % (n, i, u, s))
 except Exception:
     pass' 2>/dev/null || true)"
-
-sha256_of() {  # sha256 of a file ($1) or, with no arg, of stdin
-  if command -v sha256sum >/dev/null 2>&1; then sha256sum ${1:+"$1"} | awk '{print $1}';
-  else shasum -a 256 ${1:+"$1"} | awk '{print $1}'; fi
-}
 
 gitee_attach() {  # upload file $1; success when the response carries a download url
   printf '%s' "$(curl -fsSL -X POST "${base}/releases/${release_id}/attach_files" \
@@ -153,10 +145,10 @@ skipped=0
 for f in "$DIST_DIR"/dws-*.tar.gz "$DIST_DIR"/dws-*.zip "$DIST_DIR"/checksums.txt; do
   [ -f "$f" ] || continue
   fn="$(basename "$f")"
-  local_sha="$(sha256_of "$f")"
+  if stat --version >/dev/null 2>&1; then local_size="$(stat -c%s "$f")"; else local_size="$(stat -f%z "$f")"; fi
   # Every attach id currently carrying this name (may be >1 from a botched run).
   ids="$(printf '%s\n' "$assets_map" | awk -F'\t' -v n="$fn" '$1==n {print $2}')"
-  aurl="$(printf '%s\n' "$assets_map" | awk -F'\t' -v n="$fn" '$1==n {print $3; exit}')"
+  gitee_size="$(printf '%s\n' "$assets_map" | awk -F'\t' -v n="$fn" '$1==n {print $4; exit}')"
   count="$(printf '%s' "$ids" | grep -c . || true)"
 
   if [ "$count" -eq 0 ]; then
@@ -166,13 +158,12 @@ for f in "$DIST_DIR"/dws-*.tar.gz "$DIST_DIR"/dws-*.zip "$DIST_DIR"/checksums.tx
   fi
 
   if [ "$count" -eq 1 ]; then
-    gitee_sha="$(curl -fsSL "$aurl" 2>/dev/null | sha256_of || true)"
-    if [ "$gitee_sha" = "$local_sha" ]; then
-      echo "   ✓ ${fn} already correct on Gitee — skip"
+    if [ "$gitee_size" = "$local_size" ]; then
+      echo "   ✓ ${fn} size matches on Gitee (${local_size} bytes) — skip"
       skipped=$((skipped + 1))
       continue
     fi
-    echo "   ↻ ${fn} differs on Gitee (stale) — deleting + re-uploading"
+    echo "   ↻ ${fn} size mismatch on Gitee (local=${local_size}, gitee=${gitee_size}) — deleting + re-uploading"
   else
     echo "   ↻ ${fn} has ${count} copies on Gitee (dup) — deleting all + re-uploading one"
   fi
