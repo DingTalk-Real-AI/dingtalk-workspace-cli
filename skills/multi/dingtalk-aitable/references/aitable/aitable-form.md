@@ -50,8 +50,8 @@ dws aitable form share get --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_
 
 | 命令 | 用途 | 必填参数 | 说明 |
 |------|------|----------|------|
-| `form list` | 列出表单视图 | `--base-id` `--table-id` | 返回 viewId/name/title/createdAt |
-| `form get` | 按 viewId 取单个表单 | `--base-id` `--table-id` `--view-id` | 内部基于 list_form_views 过滤 |
+| `form list` | 列出表单视图 | `--base-id` `--table-id` | 每条返回 viewId/name；新建表单**无 title 且 createdAt=0**，改过（form update）后才出现 title 和真实 createdAt |
+| `form get` | 按 viewId 取单个表单 | `--base-id` `--table-id` `--view-id` | 客户端按 viewId 过滤后 `data` **即该表单对象**（不是 formViews 数组）；viewId 不存在返回 `form view ... not found` 错误 |
 | `form create` | 创建表单视图 | `--base-id` `--table-id` `--name` | viewType=FormDesigner |
 | `form update` | 更新表单 | `--base-id` `--table-id` `--view-id` | `--title`/`--name`（等价）和 `--description` 至少传一项；同时传 title/name 时 title 优先 |
 | `form delete` | 删除表单 | `--base-id` `--table-id` `--view-id` `--yes` | 不可逆 |
@@ -115,6 +115,6 @@ dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VI
 
 ## 返回结构补充
 
-- `form list` 返回 `data.formViews[]`，**每条仅含** `viewId/name/title/createdAt`；`shareFormUuid` 不在此返回，请用 `form share get` 单独获取。
-- `form get` 返回结构与 `form list` 完全一致（`data.formViews[]`），仅含一条记录（与请求 viewId 一致）。Agent 提取时仍走 `data.formViews[0]`。
+- `form list` 返回 `data.formViews[]`，**每条含** `viewId/name`（+ `createdAt`）；**新建表单没有 `title` 字段且 `createdAt=0`**，只有在 `form update` 碰过之后才会出现 `title` 和真实 `createdAt`。`shareFormUuid` 不在此返回，请用 `form share get` 单独获取。
+- `form get` 的 `data` **就是命中的那一条表单对象**（如 `{viewId, name, createdAt, title?, shareFormUuid?}`），不是 `formViews` 数组。Agent 直接读 `data.viewId` / `data.name` 即可，**不要**再取 `data.formViews[0]`。服务端的 viewIds 过滤参数当前不生效，CLI 在客户端按 viewId 精确筛出单条；传了不存在的 viewId 会返回 `form view <id> not found in table` 错误。
 - `form field list` 仅返回**未隐藏**的字段；`hidden=true` 的字段不在此返回，如需查看全部字段请用 `field get`。

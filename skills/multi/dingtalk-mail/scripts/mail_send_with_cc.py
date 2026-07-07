@@ -63,6 +63,15 @@ def get_my_email(dry_run: bool = False) -> Optional[str]:
         return '<MY_EMAIL>'
     if not data:
         return None
+    if isinstance(data, dict) and isinstance(data.get('emailAccounts'), list):
+        accounts = data['emailAccounts']
+        # 优先企业邮箱(type=ORG)，否则取第一个
+        for acc in accounts:
+            if isinstance(acc, dict) and acc.get('type') == 'ORG' and acc.get('email'):
+                return acc['email']
+        if accounts and isinstance(accounts[0], dict):
+            return accounts[0].get('email')
+        return None
     if isinstance(data, list) and data:
         item = data[0]
         return (item.get('email') or item.get('address')
@@ -99,7 +108,7 @@ def main():
         '--from', from_email or '<MY_EMAIL>',
         '--to', args.to,
         '--subject', args.subject,
-        '--body', args.body,
+        '--content', args.body,
         '--format', 'json',
     ]
     if args.cc:

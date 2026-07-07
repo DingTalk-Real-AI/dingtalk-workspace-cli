@@ -88,10 +88,12 @@ def build_start_args(args: argparse.Namespace) -> list[str]:
         args.base_id,
         "--scope",
         args.scope,
-        "--export-format",
+        "--format",
         args.export_format,
-        "--timeout-sec",
-        str(args.timeout_sec),
+        # CLI 的 --timeout-ms 是单次等待上限（毫秒，最大 30000）；脚本自身的
+        # --timeout-sec 用于整体轮询/子进程超时，二者语义不同，不能混用。
+        "--timeout-ms",
+        "30000",
     ]
     if args.table_id:
         cmd.extend(["--table-id", args.table_id])
@@ -152,8 +154,8 @@ def main() -> None:
                 args.base_id,
                 "--task-id",
                 task_id,
-                "--timeout-sec",
-                str(args.timeout_sec),
+                "--timeout-ms",
+                "30000",
             ],
             timeout_sec=max(120, args.timeout_sec + 60),
         )

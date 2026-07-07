@@ -202,6 +202,28 @@ func isOpenDingTalkID(value string) bool {
 	return len(value) > 0 && (value[0] == 'D' || value[0] == 'd')
 }
 
+// webhookErrcodeFailure 解析自定义机器人 webhook 的响应，判定是否发送失败。
+// webhook 失败时 HTTP 仍是 200 且返回 {errcode!=0, errmsg}，需据 errcode 显式识别。
+// errcode 可能是 JSON 数字或字符串，统一转字符串比较；缺 errcode 或为 0 视为成功。
+func webhookErrcodeFailure(raw string) (code, msg string, failed bool) {
+	var m map[string]any
+	if json.Unmarshal([]byte(raw), &m) != nil {
+		return "", "", false
+	}
+	ec, ok := m["errcode"]
+	if !ok {
+		return "", "", false
+	}
+	code = strings.TrimSpace(fmt.Sprintf("%v", ec))
+	if code == "" || code == "0" || code == "0.0" {
+		return "", "", false
+	}
+	if v, ok := m["errmsg"].(string); ok {
+		msg = v
+	}
+	return code, msg, true
+}
+
 func splitChatIDValues(values []string) (userIDs []string, openDingTalkIDs []string) {
 	for _, raw := range values {
 		value := strings.TrimSpace(raw)
@@ -1841,7 +1863,30 @@ func newChatCommand() *cobra.Command {
 				}
 				toolArgs["atUserIds"] = atUserIds
 			}
-			return callMCPToolOnServer("bot", "send_message_by_custom_robot", toolArgs)
+			// dry-run 只预览参数，不实际发送，交回标准调用路径。
+			if deps.Caller.DryRun() {
+				return callMCPToolOnServer("bot", "send_message_by_custom_robot", toolArgs)
+			}
+			// 自定义机器人 webhook 即使发送失败（如 errcode=300005 token 不存在）
+			// HTTP 仍是 200，会被包成 success:true。这里取原始响应显式识别 errcode，
+			// 非 0 时按失败返回，避免 agent 误判消息已发出。
+			raw, err := callMCPToolReturnTextOnServer(context.Background(), "bot", "send_message_by_custom_robot", toolArgs)
+			if err != nil {
+				return err
+			}
+			if code, msg, failed := webhookErrcodeFailure(raw); failed {
+				return &CLIError{
+					Code:       CodeMCPToolError,
+					Message:    fmt.Sprintf("自定义机器人 webhook 发送失败: errcode=%s errmsg=%s", code, msg),
+					Suggestion: "检查 --token 是否有效、机器人是否仍在群内、以及机器人安全设置（关键词/IP/加签）是否拦截",
+				}
+			}
+			var parsed any
+			if json.Unmarshal([]byte(raw), &parsed) == nil {
+				return deps.Out.PrintJSON(parsed)
+			}
+			deps.Out.PrintRaw(raw)
+			return nil
 		},
 	}
 
@@ -2666,7 +2711,14 @@ func newChatCommand() *cobra.Command {
 				toolArgs["openConversationId"] = groupID
 			}
 			if userID != "" {
-				toolArgs["userId"] = userID
+				// 服务端 get_conversation_info 单聊只认 openDingTalkId（传 userId 键会被
+				// 忽略并报「openCid、cid、peerUid不能同时为空」）。这里把 --user 的 userId
+				// 先解析成 openDingTalkId 再走与 --open-dingtalk-id 相同的通路。
+				resolved, rerr := resolveOpenDingTalkID(context.Background(), userID)
+				if rerr != nil {
+					return rerr
+				}
+				toolArgs["openDingTalkId"] = resolved
 			}
 			if openDingTalkID != "" {
 				toolArgs["openDingTalkId"] = openDingTalkID
@@ -2675,6 +2727,12 @@ func newChatCommand() *cobra.Command {
 		},
 	}
 	chatConversationInfoCmd.Flags().String("group", "", "群聊 openConversationId（群聊时使用）")
+	chatConversationInfoCmd.Flags().String("conversation-id", "", "--group 的别名")
+	chatConversationInfoCmd.Flags().String("id", "", "--group 的别名")
+	chatConversationInfoCmd.Flags().String("chat", "", "--group 的别名")
+	_ = chatConversationInfoCmd.Flags().MarkHidden("conversation-id")
+	_ = chatConversationInfoCmd.Flags().MarkHidden("id")
+	_ = chatConversationInfoCmd.Flags().MarkHidden("chat")
 	chatConversationInfoCmd.Flags().String("user", "", "单聊对方 userId（单聊时使用）")
 	chatConversationInfoCmd.Flags().String("userId", "", "--user 的别名")
 	_ = chatConversationInfoCmd.Flags().MarkHidden("userId")
@@ -4424,7 +4482,7 @@ status 可选值:
 	chatListAllConversationsCmd := &cobra.Command{
 		Use:   "list-all-conversations",
 		Short: "分页获取当前用户的全部会话列表",
-		Long: `分页获取当前用户的全部会话列表（包含单聊和群聊）。--limit 指定每页数量（最大 100），--cursor 传分页游标（首次不传或传 0）。
+		Long: `分页获取当前用户的全部会话列表（包含单聊和群聊）。--limit 指定每页数量（1-100，默认 100），--cursor 传分页游标（首次不传或传 0）。
 返回 hasMore=true 时用 nextCursor 作为下次 --cursor 继续翻页。`,
 		Example: `  dws chat list-all-conversations
   dws chat list-all-conversations --limit 50
@@ -4433,6 +4491,10 @@ status 可选值:
 		RunE: func(cmd *cobra.Command, args []string) error {
 			toolArgs := map[string]any{}
 			if v, err := cmd.Flags().GetInt("limit"); err == nil && v > 0 {
+				// 服务端每页上限 100，超过会被静默截断，这里显式拒绝以免误以为取全。
+				if v > 100 {
+					return fmt.Errorf("--limit 最大 100（服务端上限），got %d；如需取全部会话请配合 --cursor 翻页", v)
+				}
 				toolArgs["limit"] = v
 			}
 			if v, _ := cmd.Flags().GetInt64("cursor"); v > 0 {
@@ -4444,7 +4506,7 @@ status 可选值:
 			return callMCPToolOnServer("im", "list_all_conversations", toolArgs)
 		},
 	}
-	chatListAllConversationsCmd.Flags().Int("limit", 1000, "每页数量（默认 1000）")
+	chatListAllConversationsCmd.Flags().Int("limit", 100, "每页数量（1-100，默认 100）")
 	chatListAllConversationsCmd.Flags().Int64("cursor", 0, "分页游标（首次不传或传 0，翻页传 nextCursor）")
 	chatListAllConversationsCmd.Flags().Bool("exclude-muted", false, "是否排除已免打扰会话（默认 false）")
 
@@ -4564,8 +4626,8 @@ status 可选值:
 	chatMessageUnsetTopMsgCmd.Flags().String("msg-id", "", "消息 openMessageId (必填)")
 	_ = chatMessageUnsetTopMsgCmd.MarkFlagRequired("msg-id")
 
-	chatGroupCmd.AddCommand(chatGroupBotsCmd, chatGroupDismissCmd, chatGroupSetHistoryCmd, chatGroupListMyGroupsCmd)
-	chatGroupMembersCmd.AddCommand(chatGroupMembersRemoveBotCmd)
+	// group 与 members 的子命令在下方（chatGroupCmd.AddCommand / chatGroupMembersCmd.AddCommand
+	// 的完整列表处）统一注册；此处不再重复 AddCommand，否则 --help 会重复列出。
 	// ── group update-nick: 设置用户在群内的群昵称 ──────────────
 
 	chatGroupUpdateNickCmd := &cobra.Command{

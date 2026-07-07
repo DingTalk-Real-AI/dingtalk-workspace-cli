@@ -179,6 +179,8 @@ Flags:
 
 > 接口不支持游标分页，使用 `--limit` 一次性拉取。
 
+> ⚠️ **返回字段限制**：`member list` 每条只返回 `name` / `role` / `type` 三个字段，**不含 userId**（服务端不返回）。因此**无法**从 `member list` 拿到 userId 再去串联 `member update` / `member remove`。要对某人改角色 / 移除，需另行拿到其 userId（例如用 `dws contact user search --query "<姓名>"` 按姓名反查）。
+
 ### 列出知识库节点
 ```
 Usage:
@@ -393,10 +395,13 @@ dws wiki member list --workspace <WS_ID> --format json
 
 # ── 工作流: 移除知识库成员 ──
 
-# 1. 查看当前成员
+# 1. 查看当前成员（只返回 name/role/type，拿不到 userId）
 dws wiki member list --workspace <WS_ID> --format json
 
-# 2. 移除成员
+# 2. 另行按姓名反查目标成员的 userId（member list 不返回 userId）
+dws contact user search --query "<姓名>" --format json
+
+# 3. 移除成员
 dws wiki member remove --workspace <WS_ID> --users <UID> --format json
 
 # ── 工作流: 删除知识库 ──
@@ -419,7 +424,7 @@ dws wiki space delete --workspace <workspaceId> --format json
 | `node list` | `nodeId` | node copy/move/delete 的 --node / `dws doc read` 的 --node |
 | `node search` | `nodeId` | node copy/move/delete 的 --node / `dws doc read` 的 --node |
 | `node create` | `nodeId` | node copy/move/delete 的 --node / `dws doc read` 的 --node |
-| `member list` | `userId` | member update 的 --users / member remove 的 --users |
+| `member list` | `name` / `role` / `type`（**不含 userId**）| 仅用于查看成员名单；**无法**从这里取 userId 去串联 member update/remove，需另行按姓名反查 userId（如 `dws contact user search --query "<姓名>"`）|
 
 ## 相关产品
 

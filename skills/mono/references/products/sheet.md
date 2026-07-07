@@ -83,11 +83,20 @@ dws sheet filter-view --help
 | `sheet copy` | 复制工作表 |
 | `sheet range read` | 读取工作表数据（别名: range get） |
 | `sheet range update` | 更新指定区域内容（值/公式/超链接） |
+| `sheet range clear` | 清除区域（值/格式/全部） |
+| `sheet range sort` | 对区域排序 |
+| `sheet range fill` | 自动填充区域 |
+| `sheet range copy-to` | 复制区域到目标位置 |
+| `sheet range move-to` | 移动区域到目标位置 |
+| `sheet range batch-clear` | 批量清除多个区域（原子事务） |
+| `sheet batch-update` | 批量执行多个写操作（原子事务） |
+| `sheet csv-get` | 以 CSV 格式读取区域数据 |
 | `sheet range set-style` | 设置单元格样式 |
 | `sheet range batch-set-style` | 按配置文件批量设置样式 |
 | `sheet find` | 搜索单元格内容 |
 | `sheet append` | 在末尾追加数据行 |
 | `sheet csv-put` | 将 CSV 数据写入指定位置（纯值，自动扩容） |
+| `sheet delete-sheet` | 删除工作表（不可逆，删除前必须确认） |
 | `sheet replace` | 全局查找替换文本 |
 | `sheet merge-cells` | 合并单元格 |
 | `sheet unmerge-cells` | 取消合并单元格 |
@@ -122,8 +131,43 @@ dws sheet filter-view --help
 | `sheet filter-view info` | 获取单个筛选视图详情 |
 | `sheet filter-view list-criteria` | 列出筛选视图所有列条件 |
 | `sheet filter-view get-criteria` | 获取单列筛选条件详情 |
+| `sheet cond-format list` | 获取条件格式规则 |
+| `sheet cond-format create` | 创建条件格式规则 |
+| `sheet cond-format update` | 更新条件格式规则 |
+| `sheet cond-format delete` | 删除条件格式规则 |
+| `sheet chart list` | 获取浮动图表 |
+| `sheet chart create` | 创建浮动图表 |
+| `sheet chart update` | 更新浮动图表 |
+| `sheet chart delete` | 删除浮动图表 |
+| `sheet template list` | 获取表格模板列表 |
+| `sheet template search` | 搜索表格模板 |
+| `sheet template apply` | 应用模板创建新表格文档 |
 
 > 不确定参数？对任意命令执行 `dws sheet <命令> --help` 查看完整用法。
+
+## 子文档索引（更多命令详细参考）
+
+本文档覆盖高频命令。以下命令的完整参数、示例与工作流在 `sheet/` 子目录，需要时按主题查阅：
+
+| 主题 | 子文档 | 覆盖命令 |
+|------|--------|---------|
+| 表格与工作表管理 | [sheet/sheet-workbook.md](./sheet/sheet-workbook.md) | create / list / info / new / update / copy / delete-sheet |
+| 写入数据 | [sheet/sheet-write-data.md](./sheet/sheet-write-data.md) | range update（对象协议详解）/ append / csv-put |
+| 读取数据 | [sheet/sheet-read-data.md](./sheet/sheet-read-data.md) | range read / csv-get |
+| 区域操作 | [sheet/sheet-range-operations.md](./sheet/sheet-range-operations.md) | range clear / sort / fill / copy-to / move-to |
+| 批量操作 | [sheet/sheet-batch-operations.md](./sheet/sheet-batch-operations.md) | range batch-clear / batch-update |
+| 行列操作 | [sheet/sheet-dimension-operations.md](./sheet/sheet-dimension-operations.md) | insert / delete / update / move / add-dimension |
+| 样式与合并 | [sheet/sheet-style-format.md](./sheet/sheet-style-format.md) | range set-style / batch-set-style / merge-cells / unmerge-cells |
+| 条件格式 | [sheet/sheet-conditional-format.md](./sheet/sheet-conditional-format.md) | cond-format list / create / update / delete |
+| 浮动图表 | [sheet/sheet-chart.md](./sheet/sheet-chart.md) | chart list / create / update / delete |
+| 下拉列表 | [sheet/sheet-dropdown.md](./sheet/sheet-dropdown.md) | set / get / delete-dropdown |
+| 媒体与图片 | [sheet/sheet-media-image.md](./sheet/sheet-media-image.md) | media-upload / write-image / 浮动图片 |
+| 查找替换 | [sheet/sheet-search-replace.md](./sheet/sheet-search-replace.md) | find / replace |
+| 全局筛选 | [sheet/sheet-filter.md](./sheet/sheet-filter.md) | filter get / create / delete / update / clear-criteria / sort |
+| 筛选视图 | [sheet/sheet-filter-view.md](./sheet/sheet-filter-view.md) | filter-view 全系列 |
+| 导出 | [sheet/sheet-export.md](./sheet/sheet-export.md) | export |
+
+> `template list/search/apply` 无独立子文档，直接执行 `dws sheet template <子命令> --help` 查看用法。
 
 ## 意图判断
 
@@ -194,7 +238,7 @@ dws sheet filter-view --help
 
 用户说"删除行/删除列/删掉第几行/删掉某列/移除行/移除列":
 - 删除行或列 → `delete-dimension`
-- 仅清空内容但保留行/列 → `range update --values` 写入空字符串 `""`
+- 仅清空内容但保留行/列 → `range clear`（整片区域清除，比逐格写空更简洁）
 
 用户说"隐藏行/隐藏列/显示行/显示列/设置行高/设置列宽/调整行高/调整列宽/行列属性":
 - 隐藏/显示行或列 → `update-dimension --hidden` / `--hidden=false`
@@ -340,8 +384,9 @@ dws sheet filter-view --help
 以下是最容易出错的规则，**必须严格遵守**：
 
 - ★ **`--sheet-id` 获取规范（强制）**：`sheetId` 未知时必须先通过 `dws sheet list --node <NODE_ID> --format json` 查询，禁止凭空编造（如臆测为 `Sheet1`、`sheet1`、`0`、`default` 等）
-- ★ **`range update` 维度校验（强制）**：`--values` / `--hyperlinks` 的行列数必须与 `--range` 完全一致。例如 `--range "A1:C3"` → `--values` 必须是 3×3 数组
-- ★ **`range update` 清空规范（强制）**：清空单元格用空字符串 `""`，禁止用 `null`（全 null 会被跳过无效果）
+- ★ **`range update` 单元格协议（强制）**：`--values` 是二维 JSON 数组，**每个单元格必须是 object**（如 `{"type":"text","text":"张三"}`），不再支持裸值 `"张三"` / `90` / `null`。裸值会报错「不支持原始值……每个单元格必须是 object」。数字/布尔也写成字符串 object（如 `{"type":"text","text":"90"}`），服务端自动识别类型。超链接写在单元格 object 的 `hyperlink` 字段，**没有 `--hyperlinks` flag**（传了报 unknown flag）
+- ★ **`range update` 维度校验（强制）**：`--values` 的行列数必须与 `--range` 完全一致。例如 `--range "A1:C3"` → `--values` 必须是 3×3 的 object 数组
+- ★ **`range update` 清空规范（强制）**：清空单个单元格用 `{"type":"text","text":""}`；清空整片区域用 `range clear`。跳过某格保留原值用 `{}` 空对象
 - ★ **单次调用上限（强制）**：`range update` / `set-style` 行数 ≤ 1000，单元格总数建议 ≤ 5000（硬限 30000）
 - ★ **大批量纯值写入用 `csv-put` 不用 `range update`**：当写入纯值（无公式/超链接）且数据量较大时（>5 行或 >20 单元格），必须使用 `csv-put`。`csv-put` 接受 CSV 文本直接写入，无需构造二维 JSON 数组，支持自动扩容，更简洁高效。仅在需要写入公式、超链接、或仅更新少量单元格时才使用 `range update`
 - ★ **搜索用 `find` 不用 `range read`**：`find` 是服务端搜索，禁止用 `range read` 全量读取后客户端过滤
@@ -432,15 +477,17 @@ Example:
 Flags:
       --node string              表格文档 ID 或 URL (必填)
       --sheet-id string          工作表 ID 或名称 (必填)
-      --title string             新标题，最长 100 字符，不能包含 / \ ? * [ ] :
+      --name string              新名称，最长 100 字符，不能包含 / \ ? * [ ] :
+      --title string             --name 的别名（兼容）
       --index int                新位置（从 0 开始）
       --hidden                   --hidden=true 隐藏，--hidden=false 取消隐藏
+      --tab-color string         工作表标签颜色，Hex 如 #FF0000；传空字符串清除颜色
       --frozen-row-count int     冻结行数，0 表示取消冻结
       --frozen-column-count int  冻结列数，0 表示取消冻结
 ```
 
-更新工作表标题、位置、隐藏状态、冻结行列。
-`--title` / `--index` / `--hidden` / `--frozen-row-count` / `--frozen-column-count` 至少提供一个；多个属性可同时传入，将在同一次请求中更新。
+更新工作表名称、位置、隐藏状态、标签颜色、冻结行列。
+`--name`（别名 `--title`）/ `--index` / `--hidden` / `--tab-color` / `--frozen-row-count` / `--frozen-column-count` 至少提供一个；多个属性可同时传入，将在同一次请求中更新。
 
 注意：
 - 至少需要保留一个可见的工作表，不能将所有工作表都隐藏
@@ -483,14 +530,19 @@ Example:
 
   # 使用 get 别名，与 read 等价
   dws sheet range get --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:D10"
+
+  # 指定取值模式：原始值 / 公式文本
+  dws sheet range read --node <NODE_ID> --value-render-option raw_value
+  dws sheet range read --node <NODE_ID> --value-render-option formula
 Flags:
-      --node string       表格文档 ID 或 URL (必填)
-      --sheet-id string   工作表 ID 或名称 (不传则默认第一个工作表)
-      --range string      读取范围，A1 表示法 (如 A1:D10，不传则读取全部数据)
+      --node string                  表格文档 ID 或 URL (必填)
+      --sheet-id string              工作表 ID 或名称 (不传则默认第一个工作表)
+      --range string                 读取范围，A1 表示法 (如 A1:D10，不传则读取全部数据)
+      --value-render-option string   取值模式: formatted_value(格式化展示值,默认) | raw_value(原始值) | formula(公式文本,无公式回退原始值)
 ```
 
 **超时处理建议**：读取大范围数据时若出现超时或响应过慢，请主动缩小 `--range` 查询范围，**建议单次读取的单元格数量控制在 5000 个以内**（例如 50 行 × 100 列、100 行 × 50 列）。对于大表可采用分页读取策略：
-- 先通过 `info` 获取 `rowCount` / `lastNonEmptyRow` / `columnCount` 确定数据边界
+- 先通过 `info` 获取 `nonEmptyRange.range` / `nonEmptyRange.lastRow` / `nonEmptyRange.lastColumn` 确定数据边界（空表时这些字段为 null）
 - 按行分批读取，如 `A1:J500`、`A501:J1000`、`A1001:J1500` ……
 - 避免不传 `--range` 直接读取整个大工作表
 
@@ -499,34 +551,50 @@ Flags:
 Usage:
   dws sheet range update [flags]
 Example:
-  # 写入值
+  # 写入文本（每个单元格必须是 object）
   dws sheet range update --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:B2" \
-    --values '[["姓名","分数"],["张三",90]]'
+    --values '[[{"type":"text","text":"姓名"},{"type":"text","text":"分数"}],[{"type":"text","text":"张三"},{"type":"text","text":"90"}]]'
 
-  # 写入公式
+  # 写入公式（text 以 = 开头识别为公式）
   dws sheet range update --node <NODE_ID> --sheet-id <SHEET_ID> --range "C2" \
-    --values '[["=A2&B2"]]'
+    --values '[[{"type":"text","text":"=A2&B2"}]]'
 
-  # 写入超链接
+  # 写入单元格级超链接（写在 cell 的 hyperlink 字段，没有 --hyperlinks flag）
   dws sheet range update --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1" \
-    --hyperlinks '[[{"type":"path","link":"https://dingtalk.com","text":"钉钉"}]]'
+    --values '[[{"type":"text","text":"钉钉","hyperlink":{"type":"path","link":"https://dingtalk.com"}}]]'
 
-  # 清空区域（使用空字符串 ""）
-  dws sheet range update --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:B3" \
-    --values '[["",""],["",""],["",""]]'
+  # 只更新部分单元格：用 {} 空对象占位保留原值
+  dws sheet range update --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:B1" \
+    --values '[[{"type":"text","text":"新值"},{}]]'
+
+  # 清空单个单元格（text 为空字符串）
+  dws sheet range update --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1" \
+    --values '[[{"type":"text","text":""}]]'
+
+  # 清空整片区域请改用 range clear
+  dws sheet range clear --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:B3"
 Flags:
       --node string            表格文档 ID (必填)
       --sheet-id string        工作表 ID 或名称 (必填)
       --range string           目标单元格区域地址，如 A1:B3 (必填)
-      --values string          单元格值，二维 JSON 数组 (与 --hyperlinks 至少传一项)
-      --hyperlinks string      超链接，二维 JSON 数组 (与 --values 至少传一项)
+      --values string          单元格内容，二维 JSON 数组 (必填)；每个元素必须是 object
 ```
+
+**单元格对象协议（重要）**：`--values` 每个元素必须是 object，支持以下形态：
+- `{"type":"text","text":"内容"}`：普通文本；`text` 以 `=` 开头识别为公式；`text` 为 `""` 清空该格；数字/布尔写成字符串（`{"type":"text","text":"100"}`），服务端自动识别类型
+- `{"type":"text","text":"内容","cellStyles":{...}}`：文本 + 整格样式（`fontWeight`/`fontColor`/`backgroundColor`/`numberFormat` 等）
+- `{"type":"richText","texts":[...]}`：富文本，子项可为 text/link/attachment/image，片段样式写在子项 `style`
+- `{"type":"text","text":"钉钉","hyperlink":{"type":"path","link":"https://..."}}`：整格超链接（`type` 可为 `path`/`sheet`/`range`，或 `{"type":"none"}` 清除）
+- `{"dataValidation":{...}}`：写下拉/复选框数据验证
+- `{}`：空对象，跳过该格保留原值（只改部分单元格时占位用）
+
+不再支持裸值（`"张三"` / `90` / `null`），原样传入会报「不支持原始值……每个单元格必须是 object」。
 
 **单次调用建议**：行数 ≤ 1000，单元格总数（行×列）≤ 5000；超过时请拆分多次调用。
 
-**何时该用 `csv-put` 替代**：如果你准备用 `range update` 写入纯值（不含公式和超链接），且数据量超过 5 行或 20 个单元格，应改用 `csv-put`——它接受 CSV 文本直接写入，无需手动拼装二维 JSON 数组，且支持自动扩容行列。仅在需要写入公式（`=SUM(...)`）、超链接（`--hyperlinks`）、或修改少量单元格时才使用 `range update`。
+**何时该用 `csv-put` 替代**：如果你准备用 `range update` 写入纯值（不含公式和超链接），且数据量超过 5 行或 20 个单元格，应改用 `csv-put`——它接受 CSV 文本直接写入，无需手动拼装 object 数组，且支持自动扩容行列。仅在需要写入公式（`=SUM(...)`）、超链接、富文本、或修改少量单元格时才使用 `range update`。
 
-**范围职责**：`range update` 仅负责写入单元格的值与超链接，不接受任何样式参数。如需设置数字格式（百分比 / 货币 / 日期 / 文本等）请使用 `dws sheet range set-style --number-format <格式代码>`，可与其他样式参数同时传入。
+**范围职责**：`range update` 负责写入单元格的值、超链接、per-cell 样式与数据验证。批量刷整片区域的统一样式或数字格式（百分比 / 货币 / 日期 / 文本等）请使用 `dws sheet range set-style --number-format <格式代码>`。
 
 ### 设置单元格样式
 ```
@@ -662,9 +730,11 @@ Flags:
 Usage:
   dws sheet csv-put [flags]
 Example:
+  # 内联多行 CSV：必须用 $'...' 让 \n 变成真换行；普通单引号 '...\n...' 里的 \n 是字面量，会写成一行含字面 \n 的错误数据
   dws sheet csv-put --node <NODE_ID> --sheet-id <SHEET_ID> --start-cell A1 \
-    --csv 'name,score\nAlice,95\nBob,87'
+    --csv $'name,score\nAlice,95\nBob,87'
 
+  # 多行数据推荐用 @文件，最稳妥
   dws sheet csv-put --node <NODE_ID> --sheet-id <SHEET_ID> --start-cell B2 \
     --csv @data.csv --allow-overwrite
 
@@ -750,7 +820,7 @@ Flags:
 在钉钉表格指定工作表中，从指定位置起删除若干连续的行或列。
 `--dimension ROWS` 时，`--position` 为 1-based 行号字符串；`--dimension COLUMNS` 时，`--position` 为列字母。
 支持在 `--position` 中携带工作表前缀（如 `Sheet1!3`），此时忽略 `--sheet-id`。
-删除后后续的行/列会向前移动填补空位；若需要仅清空内容但保留行/列占位，请使用 `range update` 将目标区域写入空字符串 `""`。
+删除后后续的行/列会向前移动填补空位；若需要仅清空内容但保留行/列占位，请使用 `range clear`（整片区域清除，比逐格写空更简洁）。
 
 ### 更新指定范围行/列属性
 ```
@@ -831,6 +901,8 @@ Flags:
       --name string        附件显示名称 (默认使用文件名)
       --mime-type string   文件 MIME 类型 (默认根据扩展名推断)
 ```
+
+`--format json` 输出规整 JSON：`{success, resourceId, resourceUrl, fileName, fileSize}`。`resourceUrl` 可用于 `create-float-image` 的 `--src`。
 
 ### 上传图片并写入表格单元格
 ```
@@ -1083,7 +1155,8 @@ Flags:
 查询指定范围内的下拉列表配置信息，包括选项值、颜色和是否多选。
 - **用途**：查看单元格已设置的下拉列表选项和配置。
 - **场景**：在修改下拉列表前先查询现有配置；确认下拉列表是否设置成功。
-- **返回**：`dataValidations` 数组，相同选项的单元格聚合为一组，每组包含 `conditionValues`（选项值）、`ranges`（覆盖范围）、`options`（含 `enableMultiSelect` 和 `colorValueMap`）。范围内无下拉列表时 `hasDropdown` 为 false。
+- **返回**：`dataValidations` 数组，相同选项的单元格聚合为一组，每组包含 `conditionValues`（选项值）、`ranges`（覆盖范围）、`options`（含 `multipleValues` 和 `colorValueMap`）。**判空以 `hasDropdown` 为准**：无下拉列表时 `hasDropdown` 为 false，但 `dataValidations` 里仍会带 1 个全 null 的幽灵条目，不要用数组长度判空。
+- **已知限制**：`options.multipleValues` 服务端恒返回 `null`（即使该下拉是用 `--multi-select` 建的），且不返回 `enableMultiSelect` 字段——**`get-dropdown` 读回无法判断下拉是否多选**。要判断是否多选，改用 `range read`：其 `cells[].dataValidation.enableMultiSelect` 字段准确（实测有效）。
 
 ### 删除下拉列表
 ```
@@ -1118,7 +1191,7 @@ Flags:
 - **用途**：查看当前工作表上是否存在全局筛选及其配置。
 - **场景**：在修改或删除筛选前，先读取当前筛选配置；创建筛选前先确认是否已存在（每个工作表只能有一个筛选）。
 - **区分**：全局筛选（filter）影响所有协作者看到的数据展示；筛选视图（filter-view）是个人化的。
-- **返回**：`range`（筛选范围，A1 表示法）和 `columnFilterCriteria`（各列条件，key 为列偏移量）。如果未设置筛选，返回筛选信息为空。
+- **返回**：`range`（筛选范围，A1 表示法）、`id`（筛选 ID）和 `criteria`（各列条件对象，key 为列偏移量；无条件时为 `{}`）。如果未设置筛选，返回筛选信息为空。
 
 ### 创建筛选
 ```
@@ -1499,16 +1572,39 @@ Flags:
 - 第 21~30 次：每次间隔 15 秒
 - **硬上限：最多轮询 30 次（约 5 分钟）**，超时后命令返回错误
 
-**命令返回**：
-- `--output` 未指定：进度日志 + 末尾输出 `jobId` 和 `downloadUrl`（链接有时效性，请尽快下载）
-- `--output` 指定为文件路径：下载到该路径并输出 `导出完成: <path>`
-- `--output` 指定为已存在目录：自动从 `downloadUrl` 推断文件名并保存到该目录下
+**命令返回**（`--format json`，默认）：输出规整 JSON `{success, jobId, downloadUrl[, outputPath]}`。轮询进度以 `[INFO] [N/30] 状态: ...` 打到 stderr，不污染 stdout 的 JSON。
+- `--output` 未指定：JSON 含 `jobId` + `downloadUrl`（链接有时效性，请尽快下载）
+- `--output` 指定为文件路径：下载到该路径，JSON 额外含 `outputPath`
+- `--output` 指定为已存在目录：自动从 `downloadUrl` 推断文件名并保存到该目录，JSON 含 `outputPath`
 
 **失败处理（命令内部已处理，Agent 仅需转述）**：
 - MCP 返回 `FAILED`：命令立即返回错误并附带失败原因，**禁止自动重试 `dws sheet export`**，告知用户稍后再试
 - 轮询 30 次仍 `PROCESSING`：命令返回超时错误，告知用户稍后再试
 
 **限制**：仅支持钉钉在线电子表格（alxs）→ xlsx。导出钉钉文字文档请使用 `doc` 产品对应的导出工具。
+
+### 表格模板（list / search / apply）
+```
+Usage:
+  dws sheet template list [flags]     # 列出可用模板（--cursor / --limit 分页）
+  dws sheet template search [flags]   # 按关键词搜索模板
+  dws sheet template apply [flags]    # 应用模板创建新表格文档
+
+template search Flags:
+      --query string    搜索关键词 (必填)
+      --source string   模板来源: MY(我的模版,默认) / PUBLIC(公开模版)
+      --cursor string   分页游标
+      --limit int       返回数量上限
+
+template apply Flags:
+      --template-id string   模板 ID (必填，来自 list/search)
+      --name string          新表格文档名称 (可选)
+      --folder string        目标文件夹 ID (可选，UUID 或 URL)
+      --workspace string     知识库 ID (可选)
+```
+
+- 用户说"用模板建表 / 有哪些模板 / 找个 XX 模板"时走 template 系列
+- 典型链路：`template search --query "..."` 或 `template list` 拿到 `templateId` → `template apply --template-id <ID> --name "..."` 创建新表格，返回新文档的 `nodeId`
 
 ## 核心工作流
 
@@ -1521,12 +1617,12 @@ dws sheet create --name "销售数据" --format json
 # 2. 查看工作表列表 — 提取 sheetId
 dws sheet list --node <NODE_ID> --format json
 
-# 3. 写入表头和数据
+# 3. 写入表头和数据（每个单元格必须是 object；数字也写成字符串）
 dws sheet range update --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:C1" \
-  --values '[["姓名","部门","销售额"]]' --format json
+  --values '[[{"type":"text","text":"姓名"},{"type":"text","text":"部门"},{"type":"text","text":"销售额"}]]' --format json
 
 dws sheet range update --node <NODE_ID> --sheet-id <SHEET_ID> --range "A2:C4" \
-  --values '[["张三","销售部",50000],["李四","市场部",38000],["王五","销售部",62000]]' --format json
+  --values '[[{"type":"text","text":"张三"},{"type":"text","text":"销售部"},{"type":"text","text":"50000"}],[{"type":"text","text":"李四"},{"type":"text","text":"市场部"},{"type":"text","text":"38000"}],[{"type":"text","text":"王五"},{"type":"text","text":"销售部"},{"type":"text","text":"62000"}]]' --format json
 
 # ── 工作流 2: 读取已有表格数据 ──
 
@@ -1547,26 +1643,26 @@ dws sheet range read --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:D10" --f
 # 1. 新建工作表
 dws sheet new --node <NODE_ID> --name "汇总" --format json
 
-# 2. 在新工作表中写入汇总公式
+# 2. 在新工作表中写入汇总公式（公式写在 text，以 = 开头）
 dws sheet range update --node <NODE_ID> --sheet-id <NEW_SHEET_ID> --range "A1:B1" \
-  --values '[["指标","数值"]]' --format json
+  --values '[[{"type":"text","text":"指标"},{"type":"text","text":"数值"}]]' --format json
 
 dws sheet range update --node <NODE_ID> --sheet-id <NEW_SHEET_ID> --range "A2:B2" \
-  --values '[["总销售额","=SUM(Sheet1!C2:C100)"]]' --format json
+  --values '[[{"type":"text","text":"总销售额"},{"type":"text","text":"=SUM(Sheet1!C2:C100)"}]]' --format json
 
 # ── 工作流 4: 写入数据并设置样式 ──
 
 # 1. 写入数据
 dws sheet range update --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:C3" \
-  --values '[["商品","单价","数量"],["苹果",5.5,100],["香蕉",3.2,200]]' --format json
+  --values '[[{"type":"text","text":"商品"},{"type":"text","text":"单价"},{"type":"text","text":"数量"}],[{"type":"text","text":"苹果"},{"type":"text","text":"5.5"},{"type":"text","text":"100"}],[{"type":"text","text":"香蕉"},{"type":"text","text":"3.2"},{"type":"text","text":"200"}]]' --format json
 
-# 2. 设置数字格式（人民币）——请走 set-style，不要放到 range update
+# 2. 设置数字格式（人民币）——批量刷整列走 set-style
 dws sheet range set-style --node <NODE_ID> --sheet-id <SHEET_ID> --range "B2:B3" \
   --number-format "¥#,##0.00" --format json
 
-# 3. 写入超链接
+# 3. 写入超链接（写在 cell 的 hyperlink 字段）
 dws sheet range update --node <NODE_ID> --sheet-id <SHEET_ID> --range "D1" \
-  --hyperlinks '[[{"type":"path","link":"https://dingtalk.com","text":"详情"}]]' --format json
+  --values '[[{"type":"text","text":"详情","hyperlink":{"type":"path","link":"https://dingtalk.com"}}]]' --format json
 
 # ── 工作流 5: 追加数据 ──
 
@@ -1716,8 +1812,8 @@ dws sheet write-image --node <NODE_ID> --sheet-id <SHEET_ID> --range C3:C3 --fil
 # 4. 完整流程: 创建表格 → 写表头 → 写入图片
 dws sheet create --name "产品目录" -f json
 # 提取 nodeId 后:
-dws sheet range update --node <NODE_ID> --sheet-id Sheet1 --range "A1:B1" --values '[["产品名称","产品图片"]]' -f json
-dws sheet range update --node <NODE_ID> --sheet-id Sheet1 --range "A2:A2" --values '[["MacBook Pro"]]' -f json
+dws sheet range update --node <NODE_ID> --sheet-id Sheet1 --range "A1:B1" --values '[[{"type":"text","text":"产品名称"},{"type":"text","text":"产品图片"}]]' -f json
+dws sheet range update --node <NODE_ID> --sheet-id Sheet1 --range "A2:A2" --values '[[{"type":"text","text":"MacBook Pro"}]]' -f json
 dws sheet write-image --node <NODE_ID> --sheet-id Sheet1 --range B2:B2 --file ./macbook.png --width 150 --height 100 -f json
 ```
 
@@ -1789,7 +1885,7 @@ dws sheet export --node <NODE_ID> --output ./
 | `create` | `nodeId` | list / info / new / range read / range update / find 的 --node |
 | `list` | 工作表的 `sheetId` | info / range read / range update / find 的 --sheet-id |
 | `new` | 新工作表的 `sheetId` | range read / range update / find 的 --sheet-id |
-| `info` | `rowCount` / `lastNonEmptyRow` | 确定数据范围、追加写入起始行 |
+| `info` | `rowCount` / `nonEmptyRange.range` / `nonEmptyRange.lastRow` / `nonEmptyRange.lastColumn` / `mergedRanges` | 确定数据范围、追加写入起始行、判断合并结构（空表时 nonEmptyRange.* 为 null） |
 | `find` | `matchedCells` 中的 `a1Notation` | 定位目标单元格，用于 range read / range update |
 | `append` | `a1Notation` 追加数据所在范围 | 确认追加位置 |
 | `csv-put` | `a1Notation` 实际写入的单元格范围 | 确认写入位置和范围 |
@@ -1820,7 +1916,7 @@ dws sheet export --node <NODE_ID> --output ./
 | `filter-view delete-criteria` | `id` 筛选视图 ID | 确认条件清除完成 |
 | `filter-view list-criteria` | 所有列条件（按列偏移量为 key 的对象） | 了解当前视图已设置哪些列的条件 |
 | `filter-view get-criteria` | 指定列的条件详情（`filterType`、`conditions` 等） | 查看某列的具体筛选规则 |
-| `export` | `downloadUrl`（未指定 --output）/ `导出完成: <path>`（指定 --output） | 直接下发给用户或告知文件已保存到本地。命令内部已完成轮询，不要再调用其他 export 相关命令 |
+| `export` | `downloadUrl`（未指定 --output）/ `outputPath`（指定 --output） | 直接下发给用户或告知文件已保存到本地。命令内部已完成轮询，不要再调用其他 export 相关命令 |
 
 ## nodeId 多格式说明
 
@@ -1830,26 +1926,28 @@ dws sheet export --node <NODE_ID> --output ./
 
 ## values 参数格式说明
 
-`--values` 为二维 JSON 数组，第一维为行，第二维为列：
-- 字符串值: `"文本"`
-- 数字值: `100` 或 `3.14`
-- 公式: `"=SUM(B2:B4)"`（以 `=` 开头的字符串自动识别为公式）
-- 清空单元格: 统一使用空字符串 `""`（不要用 `null` 取代，null 不会保留原值且全 null 会被视为无效调用跳过）
+`--values` 为二维 JSON 数组，第一维为行，第二维为列。**每个单元格必须是 object**，不支持裸值 `"文本"` / `100` / `null`：
+- 文本: `{"type":"text","text":"文本"}`
+- 数字/布尔: 写成字符串 `{"type":"text","text":"100"}`，服务端按内容自动识别为数字/布尔
+- 公式: `{"type":"text","text":"=SUM(B2:B4)"}`（`text` 以 `=` 开头识别为公式）
+- 清空单个单元格: `{"type":"text","text":""}`；清空整片区域用 `range clear`
+- 跳过某格保留原值: `{}` 空对象
+- 整格样式: `{"type":"text","text":"重要","cellStyles":{"fontWeight":"bold","fontColor":"#FF0000","numberFormat":"@"}}`
+- 富文本: `{"type":"richText","texts":[...]}`（子项 text/link/attachment/image，片段样式写在子项 `style`）
 
-维度必须与 `--range` 范围一致，例如 `--range "A1:B3"` 需要 3 行 2 列的数组。
+维度必须与 `--range` 范围一致，例如 `--range "A1:B3"` 需要 3 行 2 列的 object 数组。
 
-## hyperlinks 参数格式说明
+## 超链接写法说明
 
-`--hyperlinks` 为二维 JSON 数组，每个元素为对象或 null：
-- `type`: 链接类型，可选 `path`（外部链接）、`sheet`（工作表跳转）、`range`（单元格跳转）
-- `link`: 链接地址
-- `text`: 显示文本
-
-与 `--values` 共存时，hyperlinks 优先级更高。
+**没有 `--hyperlinks` flag**（旧写法已废弃，传入报 unknown flag）。单元格级超链接写在 `--values` 里 cell object 的 `hyperlink` 字段：
+- `{"type":"text","text":"钉钉","hyperlink":{"type":"path","link":"https://dingtalk.com"}}`：写外部链接
+- `hyperlink.type` 可为 `path`（外部链接）/ `sheet`（工作表跳转，link 为工作表名）/ `range`（区域跳转，link 为 `Sheet2!A1`）
+- `{"hyperlink":{"type":"none"}}`：清除整格超链接（保留原值）
+- 富文本片段内的链接写在 `richText` 子项的 `link` 字段，与整格 `hyperlink` 不同
 
 ## number-format 常用值
 
-适用范围：`number-format` 仅在 `range set-style` / `range batch-set-style` 中接受（CLI 对应 `--number-format`，batch 配置文件对应 `numberFormat`）；`range update` 不接受该参数。
+适用范围：`number-format` 在 `range set-style` / `range batch-set-style` 中作为 `--number-format` 参数；`range update` 没有 `--number-format` flag，但可在每个 cell object 的 `cellStyles.numberFormat` 里写同样的格式代码。批量刷整片区域优先用 `set-style`。
 
 | 格式代码 | 说明 | 示例 |
 |----------|------|------|
@@ -1867,20 +1965,20 @@ dws sheet export --node <NODE_ID> --output ./
 > 标 ★ 的条目已在前文「关键注意事项」中列出，此处为完整说明。
 
 - ★ `--sheet-id` 获取规范（强制）：所有涉及 `--sheet-id` 参数的命令（`info` / `new` / `range read` / `range update` / `find` / `append` / `insert-dimension` / `delete-dimension` / `update-dimension` / `move-dimension` / `add-dimension` / `merge-cells` / `unmerge-cells` / `replace` / `write-image` / `set-dropdown` / `get-dropdown` / `delete-dropdown` / `filter-view *` 等），除非用户主动提供了工作表 ID 或工作表名称，否则在 `sheetId` 未知时必须先通过 `dws sheet list --node <NODE_ID> --format json` 查询真实的 `sheetId` / 工作表名称后再调用，禁止凭空编造（如臆测为 `Sheet1`、`sheet1`、`0`、`default` 等）；用户仅给出工作表名称时，也应通过 `list` 校验该名称是否存在，避免名称大小写或拼写不一致导致失败
-- ★ `range update` 维度校验（强制）：调用 `range update` 写入 `--values` 或 `--hyperlinks` 时，必须严格校验二维 JSON 数组的行数与列数与 `--range` 指定的范围完全一致：
-  - 例如 `--range "A1:C3"` 表示 3 行 × 3 列，`--values` 必须是 `[[v1,v2,v3],[v4,v5,v6],[v7,v8,v9]]` 这样 3×3 的数组
-  - `--range "A1"` 表示 1 行 × 1 列，`--values` 必须是 `[[v]]`
-  - 行数不足需要用空字符串补齐，列数不足需要补齐到每行相同长度；禁止出现各行列数不一致或与 `--range` 不匹配的情况，否则调用会直接报错
-  - 同时传入 `--values` 和 `--hyperlinks` 时，两个二维数组的行列数都必须与 `--range` 严格一致
-- ★ `range update` 清空单元格规范（强制）：如需清空单元格内容，统一使用空字符串 `""`。禁止使用 `null`：`null` 不会保留单元格原值，也不存在"选择性保留"场景；且若 `--values` 全部为 `null`，整体调用会被视为无效而跳过，无任何写入效果
+- ★ `range update` 单元格对象协议（强制）：`--values` 每个单元格必须是 object（`{"type":"text","text":...}` / `{"type":"richText",...}` / `{}` 等），不支持裸值 `"张三"` / `90` / `null`，裸值报「不支持原始值……每个单元格必须是 object」。数字/布尔写成字符串 object，服务端自动识别类型。超链接写在 cell object 的 `hyperlink` 字段，没有 `--hyperlinks` flag
+- ★ `range update` 维度校验（强制）：`--values` 二维数组的行数与列数必须与 `--range` 完全一致：
+  - 例如 `--range "A1:C3"` 表示 3 行 × 3 列，`--values` 必须是 3×3 的 object 数组
+  - `--range "A1"` 表示 1 行 × 1 列，`--values` 必须是 `[[{...}]]`
+  - 不改的格用 `{}` 空对象占位补齐；禁止各行列数不一致或与 `--range` 不匹配，否则报错
+- ★ `range update` 清空单元格规范（强制）：清空单个单元格用 `{"type":"text","text":""}`（不是裸 `""`，也不是 `null`）；清空整片区域用 `range clear`；跳过某格保留原值用 `{}` 空对象
 - `create` 不传 `--folder` 和 `--workspace` 时，默认创建在"我的文档"根目录
 - `list` 返回所有工作表的 ID 和名称，是后续操作的必要前置步骤
 - `info` 不传 `--sheet-id` 时默认返回第一个工作表的详情
 - `range read` 不传 `--range` 时默认读取整个工作表的全部非空数据
 - `range read` 的 `--range` 支持 `Sheet1!A1:D10` 格式直接指定工作表（此时忽略 `--sheet-id`）
 - `range read` 遇到超时或响应过慢时，应缩小 `--range` 查询范围，**单次读取的单元格数量建议控制在 5000 个以内**；数据量较大时通过 `info` 获取边界后分批读取，避免不传 `--range` 直接读取整个大工作表
-- `range update` 的 `--values` 和 `--hyperlinks` 至少传入一项
-- `range update` 职责边界：`range update` 仅写入单元格的值与超链接，不接受任何样式参数（包括但不限于数字格式 / 背景色 / 字体 / 对齐方式等）。如需设置数字格式，请使用 `dws sheet range set-style --number-format <格式代码>`；批量场景走 `dws sheet range batch-set-style --batch <config.json>`（配置文件中使用 `numberFormat` 字段）。不要在同一次 `range update` 调用里同时完成写值与格式设置
+- `range update` 只有 `--values` 一个内容参数（必填），超链接/样式/数据验证都写进 cell object 内部字段
+- `range update` 职责边界：可写值、超链接、per-cell 样式（`cellStyles`）与数据验证（`dataValidation`）。批量刷整片区域的统一样式或数字格式优先用 `dws sheet range set-style --number-format <格式代码>`；批量多区域走 `dws sheet range batch-set-style --batch <config.json>`（配置文件用 `numberFormat` 字段）
 - ★ `range update` / `range set-style` / `range batch-set-style` 单次调用上限（强制）：行数 ≤ 1000，单元格总数（行×列）建议≤ 5000（底层硬限 30000）；超限请拆分多次调用。CLI 会在调用前做本地预校验，底层超 30000 会直接报错
 - `range set-style` / `range batch-set-style` 的样式枚举按驼峰书写：`wordWrap` 取 `overflow`/`clip`/`autoWrap`，`fontWeight` 取 `bold`/`normal`，`hAlign` 取 `left`/`center`/`right`/`general`，`vAlign` 取 `top`/`middle`/`bottom`；背景色/字体颜色统一使用 `#RRGGBB` 格式
 - `new` 创建工作表时，如名称与已有工作表重复，系统会自动重命名
@@ -1900,7 +1998,7 @@ dws sheet export --node <NODE_ID> --output ./
 - `delete-dimension` 的 `--dimension` 只接受 `ROWS` 或 `COLUMNS`
 - `delete-dimension` 的 `--position` 支持工作表前缀（如 `Sheet1!3`），此时忽略 `--sheet-id`
 - `delete-dimension` 的 `--length` 最大为 5000
-- `delete-dimension` 若需仅清空内容但保留行/列占位，请使用 `range update` 将目标区域写入空字符串 `""`（参见《range update 清空单元格规范》）
+- `delete-dimension` 若需仅清空内容但保留行/列占位，请使用 `range clear`（整片区域清除，比逐格写空更简洁）
 - `update-dimension` 批量更新连续行/列的显隐状态与行高/列宽
 - `update-dimension` 的 `--dimension` 只接受 `ROWS` 或 `COLUMNS`
 - `update-dimension` 的 `--start-index` 支持工作表前缀（如 `Sheet1!3`），此时忽略 `--sheet-id`
@@ -1939,7 +2037,7 @@ dws sheet export --node <NODE_ID> --output ./
 - `get-dropdown` 查询指定范围内的下拉列表配置，返回 `dataValidations` 数组，相同选项的单元格聚合为一组。无下拉列表时 `hasDropdown` 为 false
 - `delete-dropdown` 删除指定范围内的下拉列表配置，单元格恢复为普通文本格式。已填写的值不会被清除。目标范围不存在下拉列表时操作仍返回成功
 - ★ **全局筛选（filter）与筛选视图（filter-view）的区别**：全局筛选影响所有协作者看到的数据展示，每个工作表最多一个；筛选视图是个人化的，互不影响。用户只说"筛选"时默认走 `filter` 系列
-- `filter get` 获取工作表的全局筛选信息，返回 `range`（筛选范围）和 `columnFilterCriteria`（各列条件）。无筛选时返回空
+- `filter get` 获取工作表的全局筛选信息，返回 `range`（筛选范围）、`id` 和 `criteria`（各列条件对象，无条件时为 `{}`）。无筛选时返回空
 - `filter create` 创建全局筛选时 `--range` 必须包含表头行（如 `A1:E100`），不能只包含数据行。每个工作表只能有一个筛选，已存在时报错
 - `filter create` 的 `--criteria` 可选，不传则仅创建空筛选框架，后续通过 `filter update` 设置条件
 - `filter delete` 删除后所有筛选条件丢失且所有被隐藏行重新显示，不可恢复

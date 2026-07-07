@@ -29,7 +29,7 @@ JsonData = Union[List[Any], Dict[str, Any]]
 
 MAX_FILE_SIZE = 10 * 1024 * 1024
 ALLOWED_FILE_EXTENSIONS = ['.json']
-RESOURCE_ID_PATTERN = re.compile(r'^[A-Za-z0-9_-]{8,128}$')
+RESOURCE_ID_PATTERN = re.compile(r'^[A-Za-z0-9_-]{6,128}$')
 ALLOWED_FIELD_TYPES = {
     'text', 'number', 'singleSelect', 'multipleSelect', 'date', 'currency',
     'user', 'department', 'group', 'progress', 'rating', 'checkbox',

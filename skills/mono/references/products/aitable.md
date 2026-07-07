@@ -19,8 +19,10 @@
 | 命令 | 用途 | 必填参数 | 路由提醒 |
 |------|------|----------|----------|
 | `base list` | 列出最近访问的 Base | — | 仅返回最近访问过的，优先用 `base search` |
-| `base search` | 按名称搜索 Base | `--query` | 关键词 ≥2 字符 |
+| `base search` | 按名称搜索 Base（别名 `aitable search`） | — | `--query` help 标必填但实际可省略：不传时返回最近访问的 Base 列表。`--keyword` 是 `--query` 的隐藏别名，同义 |
 | `base get` | 获取 Base 信息（含 tables 列表） | `--base-id` | 用户给 URL 时提取末尾 ID |
+| `base copy` | 复制整个 Base 到目标文件夹 | `--base-id` `--target-folder-id` | 默认全量复制；`--only-struct` 仅复制结构不含数据 |
+| `base get-primary-doc-id` | 获取某记录的主键文档 ID | `--base-id` `--table-id` `--record-id` | 等价 `record primary-doc-get` 的取 ID 视角 |
 | `base create` | 创建 Base | `--name` | 创建后直接用返回的 baseId |
 | `base update` | 更新 Base 名称 | `--base-id` `--name` | — |
 | `base delete` | 删除 Base | `--base-id` | 不可逆 |
@@ -30,7 +32,8 @@
 | 命令 | 用途 | 必填参数 | 路由提醒 |
 |------|------|----------|----------|
 | `table get` | 获取表结构（字段+视图目录） | `--base-id` | 不传 `--table-ids` 返回全部表 |
-| `table create` | 创建数据表 | `--base-id` `--name` `--fields` | fields 为 JSON 数组，至少 1 个 |
+| `table list` | 获取数据表（`table get` 的别名） | `--base-id` | 与 `table get` 等价 |
+| `table create` | 创建数据表 | `--base-id` `--name` | `--fields` 为 JSON 数组；**可传空数组 `[]`**（默认值即 `[]`），此时服务端自动补一个名为"标题"的 primaryDoc 首列；单次最多 15 个字段 |
 | `table update` | 重命名表 | `--base-id` `--table-id` `--name` | — |
 | `table delete` | 删除表 | `--base-id` `--table-id` | 不可逆 |
 
@@ -39,19 +42,29 @@
 | 命令 | 用途 | 必填参数 | 路由提醒 |
 |------|------|----------|----------|
 | `field get` | 获取字段完整配置 | `--base-id` `--table-id` | 按需展开少量字段 |
+| `field list` | 获取字段信息（`field get` 的别名） | `--base-id` `--table-id` | 与 `field get` 等价 |
 | `field create` | 创建字段 | `--base-id` `--table-id` + (`--name --type` 或 `--fields`) | 支持单字段/批量模式 |
 | `field update` | 更新字段名/配置 | `--base-id` `--table-id` `--field-id` | 不可变更字段类型 |
 | `field delete` | 删除字段 | `--base-id` `--table-id` `--field-id` | 不可逆 |
+| `field search-options` | 搜索单选/多选字段的选项 | `--base-id` `--table-id` `--field-id` | 仅 singleSelect/multipleSelect；`--keyword` 模糊过滤，不传返回全部 |
 
 ### record (记录管理)
 
 | 命令 | 用途 | 必读 reference | 路由提醒 |
 |------|------|----------------|----------|
-| `record query` | 查询/搜索记录 | [aitable-record-query.md](./aitable/aitable-record-query.md) | 先 `table get` 拿 fieldId；`--all` 自动翻页；filters 结构见 reference |
+| `record query` | 查询/搜索记录 | [aitable-record-query.md](./aitable/aitable-record-query.md) | 先 `table get` 拿 fieldId；`--all` 自动翻页；filters 结构见 reference；`--query`（隐藏别名 `--keyword`）全文搜索 |
+| `record list` | 获取记录（`record query` 的别名） | [aitable-record-query.md](./aitable/aitable-record-query.md) | 与 `record query` 等价 |
 | `record get` | 按 ID 取记录（`record query --record-ids` 的窄别名） | [aitable-record-query.md](./aitable/aitable-record-query.md) | 已知 recordId 时首选；必填 `--record-ids`（单次最多 100 条）；未暴露 filters/sort/query/cursor/limit |
+| `record query-empty` | 查询完全没填用户字段的空行 | — | `--base-id` `--table-id`；`--limit` 扫描预算 [1,100]，`--cursor` 翻页 |
 | `record create` | 新增记录 | [aitable-record-create.md](./aitable/aitable-record-create.md) | cells key 必须是 fieldId 不是字段名；单次最多 100 条 |
 | `record update` | 更新记录 | [aitable-record-update.md](./aitable/aitable-record-update.md) | 需先 query 拿 recordId；只传需改字段；**没有** `--record-id` `--cells` flag |
+| `record batch-update` | 把同一份 cells 批量应用到多条记录 | [aitable-record-update.md](./aitable/aitable-record-update.md) | `--record-ids`（≤100）+ `--cells` 共享 patch |
+| `record upsert` | 批量创建或更新（有 recordId 走更新，无则创建） | [aitable-record-upsert.md](./aitable/aitable-record-upsert.md) | `--records`/`--records-file`；单次最多 100 条 |
 | `record delete` | 删除记录 | [aitable-record-delete.md](./aitable/aitable-record-delete.md) | 不可逆，需先 query 确认 |
+| `record share-url` | 批量获取记录分享链接 | [aitable-record-share.md](./aitable/aitable-record-share.md) | `--record-ids`（逗号分隔，单次最多 20 条） |
+| `record history-list` | 查询单条记录的变更历史 | [aitable-record-history.md](./aitable/aitable-record-history.md) | `--record-id` 单条；`--offset`/`--limit`（≤50） |
+| `record primary-doc-get` | 查询记录的主键文档 nodeId | [aitable-primary-doc.md](./aitable/aitable-primary-doc.md) | 无文档时返回 `no record` 错误 |
+| `record primary-doc-create` | 为记录创建主键文档 | [aitable-primary-doc.md](./aitable/aitable-primary-doc.md) | 幂等；`--field-id` 须 primaryDoc 类型 |
 
 ### view (视图管理)
 
@@ -264,8 +277,9 @@ dws aitable chart get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --chart-
 要点：
 
 - `dashboard get` 返回的 `charts[].chartId` 可直接给 `chart get` 使用。
-- `dashboard share get` 可能返回 `404`（资源不存在或未开通），需按可重试错误处理，不要误判为参数拼错。
-- `chart share get` 可正常返回 `enabled/shareUrl`，用于分享状态判断。
+- `dashboard share get` 可能返回 `404`（`retryable:true`，从未分享甚至刚开启分享后立即查都可能 404），按可重试错误处理，不要误判为参数拼错；行为不稳定，别当"是否已分享"的唯一判据。
+- `chart share get` 稳定返回 `success + data`（含 `enabled`），从未分享时 `enabled=false`，不会 404。
+- `dashboard share update` 开 ORG 分享后 `shareType` 回显 `"[1]"`（服务端已知问题）；`chart share update` 正确回显 `ORG`。详见 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)。
 
 ### 导出数据（两阶段轮询）
 

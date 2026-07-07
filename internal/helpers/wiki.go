@@ -580,16 +580,19 @@ ORG 类型授权不会出现在查询结果中。`,
 		Short: "在知识库中创建节点",
 		Long: `在指定知识库中创建文档、文件夹或其他类型的节点。
 
-通过 --type 指定节点类型：
+通过 --type 指定节点类型（服务端支持以下值，asheet 不被支持）：
   adoc      在线文档 (默认)
-  asheet    在线表格
-  folder    文件夹
   axls      在线电子表格
+  able      多维表
+  appt      在线演示
+  adraw     白板/画板
+  amind     脑图
+  folder    文件夹
 
 通过 --folder 指定父节点，不传则创建在知识库根目录。`,
 		Example: `  dws wiki node create --workspace <workspaceId> --name "新文档"
   dws wiki node create --workspace <workspaceId> --name "方案目录" --type folder
-  dws wiki node create --workspace <workspaceId> --name "数据表" --type asheet --folder <parentNodeId>`,
+  dws wiki node create --workspace <workspaceId> --name "数据表" --type axls --folder <parentNodeId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workspaceID, err := mustFlagOrFallback(cmd, "workspace", "workspace-id")
 			if err != nil {
@@ -616,7 +619,7 @@ ORG 类型授权不会出现在查询结果中。`,
 	}
 	nodeCreateCmd.Flags().String("workspace", "", "知识库 ID (必填)")
 	nodeCreateCmd.Flags().String("name", "", "节点名称 (必填)")
-	nodeCreateCmd.Flags().String("type", "adoc", "节点类型: adoc / asheet / folder / axls")
+	nodeCreateCmd.Flags().String("type", "adoc", "节点类型: adoc / axls / able / appt / adraw / amind / folder（asheet 不支持）")
 	nodeCreateCmd.Flags().String("folder", "", "父节点 nodeId (选填，不传则在根目录创建)")
 
 	nodeCopyCmd := &cobra.Command{

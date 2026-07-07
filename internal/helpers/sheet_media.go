@@ -57,7 +57,13 @@ func runSheetMediaUpload(cmd *cobra.Command, _ []string) error {
 
 	ctx := context.Background()
 
-	deps.Out.PrintInfo(fmt.Sprintf("[1/2] 获取附件上传凭证 (%s, %d bytes)...", fileName, fileSize))
+	// json 模式下进度提示会污染 stdout（PrintInfo/PrintKeyValue 都写 stdout），
+	// 使得 agent 无法按 JSON 解析。故 json 模式抑制进度、末尾统一输出结果 JSON。
+	jsonMode := deps.Caller.Format() == "json"
+
+	if !jsonMode {
+		deps.Out.PrintInfo(fmt.Sprintf("[1/2] 获取附件上传凭证 (%s, %d bytes)...", fileName, fileSize))
+	}
 
 	result, err := deps.Caller.CallTool(ctx, "doc", "get_doc_attachment_upload_info", map[string]any{
 		"nodeId":   nodeID,
@@ -91,10 +97,11 @@ func runSheetMediaUpload(cmd *cobra.Command, _ []string) error {
 		resourceURL, _ = credData["resourceUrl"].(string)
 	}
 
-	deps.Out.PrintKeyValue("resourceId", resourceID)
-	deps.Out.PrintKeyValue("resourceUrl", resourceURL)
-
-	deps.Out.PrintInfo("[2/2] 上传文件到 OSS...")
+	if !jsonMode {
+		deps.Out.PrintKeyValue("resourceId", resourceID)
+		deps.Out.PrintKeyValue("resourceUrl", resourceURL)
+		deps.Out.PrintInfo("[2/2] 上传文件到 OSS...")
+	}
 
 	ossHeaders := map[string]string{
 		"Content-Type": mimeType,
@@ -103,6 +110,15 @@ func runSheetMediaUpload(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	if jsonMode {
+		return deps.Out.PrintJSON(map[string]any{
+			"success":     true,
+			"resourceId":  resourceID,
+			"resourceUrl": resourceURL,
+			"fileName":    fileName,
+			"fileSize":    fileSize,
+		})
+	}
 	deps.Out.PrintInfo(fmt.Sprintf("附件已上传: %s (resourceId=%s)", fileName, resourceID))
 	return nil
 }

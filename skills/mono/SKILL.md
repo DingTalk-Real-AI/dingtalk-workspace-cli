@@ -43,7 +43,7 @@ cli_version: ">=1.0.15"
 | `oa`              | OA审批：待处理/详情/同意/拒绝/撤销/记录/已发起/任务/转交/评论/抄送              | [oa.md](./references/products/oa.md)                           |
 | `report`          | 日志：按模版创建/收件箱/已发送/模版查看/详情/已读统计                         | [report.md](./references/products/report.md)                   |
 | `mail`            | 邮箱：邮箱地址查询/邮件搜索(KQL)/邮件详情/发送邮件                        | [mail.md](./references/products/mail.md)                       |
-| `sheet`           | 在线电子表格(axls)：工作表 CRUD/区域读写/CSV 批量写入/行列增删/合并/查找替换/筛选视图/全局筛选/排序/下拉列表/浮动图片/导出(两步) | [sheet.md](./references/products/sheet.md)                     |
+| `sheet`           | 在线电子表格(axls)：工作表 CRUD/区域读写/CSV 批量写入/行列增删/合并/查找替换/筛选视图/全局筛选/排序/下拉列表/条件格式/浮动图片/浮动图表/模板/导出 xlsx(单命令一站式) | [sheet.md](./references/products/sheet.md)                     |
 | `todo`            | 待办：创建(含优先级/截止时间/循环)/查询/修改/标记完成/删除                   | [todo.md](./references/products/todo.md)                       |
 | `wiki`            | 知识库：空间创建/详情/列表/搜索 + 成员管理                                | [wiki.md](./references/products/wiki.md)                       |
 
@@ -130,7 +130,8 @@ dws <command-path> --help
 
 # helper-only schema 查询（如 dev.*），普通产品命令不要依赖 schema 推断参数
 dws schema "dev app create"
-dws schema "dev app create" --jq '.tool.required'
+# 注：--jq 对 schema 输出无效（不过滤，仍返回完整对象）；schema 结构里必填标在
+# .parameters.<字段>.required，没有 .tool 键。要看必填字段自行读 .parameters 即可。
 ```
 
 **何时用哪条路径：**

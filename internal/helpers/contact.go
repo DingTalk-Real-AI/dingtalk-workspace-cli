@@ -539,9 +539,11 @@ contact user profile fields 获取可用字段列表。
 	contactDeptSearchCmd.Flags().String("name", "", "--query 的别名")
 	_ = contactDeptSearchCmd.Flags().MarkHidden("keyword")
 	_ = contactDeptSearchCmd.Flags().MarkHidden("name")
-	contactDeptGetInfoCmd.Flags().String("id", "", "部门 ID (必填)")
-	contactDeptListChildrenCmd.Flags().String("id", "", "部门 ID (必填)")
-	contactDeptListMembersCmd.Flags().String("ids", "", "部门 ID 列表 (必填)")
+	// 主 flag 与 RunE 读取保持一致：get-info / list-children 用 --dept，list-members 用 --depts。
+	// 历史上主 flag 曾误注册为 --id/--ids，导致 RunE 读的 --dept/--depts 未注册、命令行传入报 unknown flag。
+	contactDeptGetInfoCmd.Flags().String("dept", "", "部门 ID (必填)")
+	contactDeptListChildrenCmd.Flags().String("dept", "", "部门 ID (必填)")
+	contactDeptListMembersCmd.Flags().String("depts", "", "部门 ID 列表 (必填)")
 
 	// dept 系列命令统一接受 --id / --ids / --dept-id / --dept-ids 别名（集中注册避免逐命令重复写）。
 	// camelCase --deptId / --deptIds 由 RegisterCamelCaseAliases 自动派生，无需手写。
@@ -550,9 +552,9 @@ contact user profile fields 获取可用字段列表。
 		aliases []string
 	}
 	for _, s := range []deptIDAliasSpec{
-		{contactDeptGetInfoCmd, []string{"dept-id", "ids", "dept-ids"}},
-		{contactDeptListChildrenCmd, []string{"ids", "dept-id", "dept-ids"}},
-		{contactDeptListMembersCmd, []string{"id", "dept-id", "dept-ids"}},
+		{contactDeptGetInfoCmd, []string{"id", "dept-id", "ids", "dept-ids"}},
+		{contactDeptListChildrenCmd, []string{"id", "ids", "dept-id", "dept-ids"}},
+		{contactDeptListMembersCmd, []string{"ids", "id", "dept-id", "dept-ids"}},
 	} {
 		for _, name := range s.aliases {
 			if s.cmd.Flags().Lookup(name) != nil {

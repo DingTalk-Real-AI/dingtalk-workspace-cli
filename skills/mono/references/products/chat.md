@@ -73,6 +73,19 @@ Flags:
       --bot-id string   机器人 openBotId (必填)
 ```
 
+#### 根据成员 ID 批量查询群成员详情 — 传入成员 openDingTalkId 列表批量查询
+```
+Usage:
+  dws chat group members list-by-ids [flags]
+Example:
+  dws chat group members list-by-ids --id <openConversationId> --users openDingTalkId1,openDingTalkId2
+  # 查询群 ID: dws chat search --query "群名"
+  # 查询 openDingTalkId: dws contact user search --query "姓名"
+Flags:
+      --id string      群 ID / openConversationId (必填)
+      --users string   成员 openDingTalkId 列表，逗号分隔 (必填)
+```
+
 #### 更新群名称
 ```
 Usage:
@@ -136,6 +149,7 @@ Example:
 Flags:
       --group string   群聊 openConversationId (必填)
 ```
+> ⚠️ 唯一群主 quit 会直接成功，产生无主群，之后对该群做 dismiss / members 等管理操作会报 listRoles null(11056) 无法管理。与 `chat group members remove` 移除群主有本地拦截不同，quit 无此防护。作为唯一群主想退群，应先 `chat group transfer-owner` 转让群主，或 `chat group dismiss` 解散群。
 
 #### 更新群头像 — 更新指定群聊的群头像
 ```
@@ -149,6 +163,7 @@ Flags:
       --icon-media-id string  群头像 mediaId (必填)
 ```
 > `--icon-media-id` 有本地格式校验：必须是 `@` 开头的媒体 ID（如 `dt_media_upload` 的返回值），非法格式会在本地直接报错。
+> ⚠️ 本地格式校验只查前缀。格式合法但不真实存在的 mediaId 服务端仍会静默返回成功，头像并不会真正更新。务必用 `dt_media_upload` / `chat media upload` 上传真实图片拿到的 mediaId。
 
 #### 更新群设置 — 更新指定群聊的设置项
 
@@ -171,6 +186,30 @@ Flags:
       --group string        群聊 openConversationId (必填)
       --setting-key string  群设置项 key (必填)
       --status int          设置值: 0=关闭, 1=开启 (必填)
+```
+
+#### 设置群备注 — 给群设置只有自己可见的备注标题
+```
+Usage:
+  dws chat group update-alias [flags]
+Example:
+  dws chat group update-alias --group <openConversationId> --alias-title "项目A群"
+  # 查询群 ID: dws chat search --query "群名"
+Flags:
+      --group string         群聊 openConversationId (必填)
+      --alias-title string   群备注标题 (必填)
+```
+
+#### 设置我在群内的群昵称 — 设置当前用户在指定群里显示的昵称
+```
+Usage:
+  dws chat group update-nick [flags]
+Example:
+  dws chat group update-nick --group <openConversationId> --nick "我的群昵称"
+  # 查询群 ID: dws chat search --query "群名"
+Flags:
+      --group string   群聊 openConversationId (必填)
+      --nick string    个人群昵称 (必填)
 ```
 
 #### 查看群内所有机器人 — 获取指定群聊中的所有机器人列表
@@ -294,6 +333,8 @@ Flags:
 ```
 
 #### 移除用户的指定群身份 — 从用户身上移除指定的群身份（不影响其他群身份）
+
+> ⚠️ 当前不可用：真机服务端对该命令恒返回 1002（系统繁忙），历史回归至今未修，属服务端问题。需要清除某人身份时，用 `chat group-role set-user --role-ids ""`（传空 role-ids 覆盖为无身份）兜底；但 set-user 会清掉该用户的**全部**身份，无法只移除其中一个。
 ```
 Usage:
   dws chat group-role remove-user [flags]
@@ -336,6 +377,7 @@ Flags:
       --query string   搜索关键词 (必填)
       --limit int        每页返回数量（默认 20）
       --cursor string    分页游标（默认 "0"，翻页传 nextCursor）
+      --exclude-muted    是否排除已设置免打扰的群聊（默认 false）
 ```
 
 ### data-auth (数据授权)
@@ -371,7 +413,7 @@ Flags:
 
 #### 拉取会话消息内容 — 拉取指定群聊或单聊的会话消息内容
 
---group 指定群聊，--user 指定单聊用户（通过 userId），--open-dingtalk-id 指定单聊用户（通过 openDingTalkId），三者互斥。默认拉取给定时间之后的消息，--forward=false 拉之前的。hasMore=true 时用结果中的边界 createTime 作为下次 --time 翻页。
+--group 指定群聊，--user 指定单聊用户（通过 userId），--open-dingtalk-id 指定单聊用户（通过 openDingTalkId），三者互斥。用 --direction 控制时间方向：newer=从给定时间往现在拉，older=从给定时间往以前拉。hasMore=true 时用结果中的边界 createTime 作为下次 --time 翻页。
 ```
 Usage:
   dws chat message list [flags]
@@ -379,9 +421,9 @@ Example:
   dws chat message list --group <openconversation_id> --time "2025-03-01 00:00:00"
   dws chat message list --user <userId> --time "2025-03-01 00:00:00" --limit 50
   dws chat message list --open-dingtalk-id <openDingTalkId> --time "2025-03-01 00:00:00" --limit 50
-  dws chat message list --group <openconversation_id> --time "2025-03-01 00:00:00" --forward=false
+  dws chat message list --group <openconversation_id> --time "2025-03-01 00:00:00" --direction older
 Flags:
-      --forward                  true=拉给定时间之后的消息，false=拉给定时间之前的消息 (default true)
+      --direction string         时间方向: newer=从给定时间往现在拉，older=从给定时间往以前拉（推荐）
       --group string             群聊 openconversation_id（群聊时必填）
       --limit int                返回数量，不传则不限制
       --time string              开始时间，格式: yyyy-MM-dd HH:mm:ss (必填)
@@ -425,7 +467,7 @@ Example:
   dws chat message send --group <openconversation_id> --title "周报提醒" --text "请大家本周五前提交周报"
   # 幂等发送（24h 内相同 uuid 不重复投递）
   dws chat message send --group <openconversation_id> --text "hello" --uuid "unique-id-123"
-  dws chat message send --group <openconversation_id> --at-all "@all 请大家注意"
+  dws chat message send --group <openconversation_id> --at-all "<@all> 请大家注意"
   dws chat message send --group <openconversation_id> --at-open-dingtalk-ids openDingTalkId1,openDingTalkId2 "<@openDingTalkId1> <@openDingTalkId2> 请查收"
   # 发送图片
   dws chat message send --group <openconversation_id> --msg-type image --media-id <mediaId>
@@ -453,13 +495,14 @@ Flags:
       --file-path string         文件路径（msgType=file 时必填）
       --file-size int64          文件大小，单位字节（msgType=file 时必填）
       --uuid string             幂等 UUID，相同 uuid 在 24h 内不会重复发送（可选）
+      --ai-tag                   消息是否带 AI 发送角标（可选，默认 true）
 
 注意:
   - --text 和位置参数二选一，--text 优先
   - --group、--user、--open-dingtalk-id 三者互斥，只需指定其一：群聊用 --group，单聊用 --user 或 --open-dingtalk-id
   - 纯文本/Markdown 单聊发送时 `--user` 和 `--open-dingtalk-id` 都可用；传 `--user` 时直接走 userId 发送能力
   - --group 的别名: --id, --chat, --conversation-id (均可替代 --group)
-  - --at-all 和 --at-open-dingtalk-ids 仅在 --group 群聊时生效，单聊时无效；当设置--at-all时，消息内容中一定要包含对应的占位符@all;当设置--at-open-dingtalk-ids openDingTalkId1,openDingTalkId2时，消息内容中一定要包含对应格式的占位符<@openDingTalkId1> <@openDingTalkId2>
+  - --at-all 和 --at-open-dingtalk-ids 仅在 --group 群聊时生效，单聊时无效；当设置--at-all时，消息内容中一定要包含对应的占位符<@all>;当设置--at-open-dingtalk-ids openDingTalkId1,openDingTalkId2时，消息内容中一定要包含对应格式的占位符<@openDingTalkId1> <@openDingTalkId2>
   - **换行符**：消息内容按 Markdown 渲染，换行有两层要求，缺一不可：
     1. 必须使用**真实换行符**（Unicode `U+000A`），而非字面量字符串 `\n`（反斜杠 + 字母 n）。程序或大模型构造参数时，须确保已正确反转义；否则全部内容会渲染在同一行
     2. Markdown 规范下**单个换行不产生换行效果**。需要换行时请使用：段落分隔（连续两个真实换行符 `\n\n`）、行尾两个空格 + 真实换行符（硬换行 `<br>`），或直接写 HTML 的 `<br>` 标签
@@ -473,6 +516,26 @@ Flags:
   - 发送文件/媒体消息时，必须先根据文件扩展名判断 msgType：图片(.jpg/.png/.gif/.bmp/.webp)→image，音频(.mp3/.wav/.m4a/.aac/.flac)→audio，视频(.mp4/.mov/.avi/.mkv/.webm)→video，其他所有→file；不可跳过此判断步骤。audio/video 是 file 别名，不代表不支持音频/视频
   - 20MB 降级：图片超过 20MB 时 dt_media_upload 会失败，必须降级走钉盘上传 + Markdown 嵌入方式发送（参见「发送图片+文字消息」章节）。音频/视频/文件走钉盘上传无 20MB 限制
   - 发送文字 + 文件混合消息时的完整流程：除了将文件以 Markdown 链接内嵌到文字消息中发送一条 md 消息外，还必须额外逐个发送独立的文件消息（--msg-type file），确保接收方可以直接下载原始文件。即：先发一条包含文字和文件链接的 md 消息，再对每个涉及的文件各发一条 --msg-type file 的文件消息
+```
+
+### media (上传媒体获取 mediaId)
+
+#### 上传图片/媒体获取 mediaId — 用于 chat message send --msg-type image 等
+
+⚠️ 前置条件：本命令需要应用凭证。必须已通过 `dws auth login --client-id <APP_KEY> --client-secret <APP_SECRET>` 登录，或设置环境变量 `DWS_CLIENT_ID` / `DWS_CLIENT_SECRET`；否则报"缺少应用凭证"。这与其他 chat 命令走用户登录态不同。
+```
+Usage:
+  dws chat media upload [flags]
+Example:
+  dws chat media upload --file ./screenshot.png
+  dws chat media upload --file ./photo.jpg --type image
+Flags:
+      --file string   本地文件路径 (必填)
+      --type string   媒体类型: image/voice/video/file（默认 image）
+
+注意:
+  - 返回的 mediaId 可直接用于 chat message send --msg-type image --media-id
+  - 发图片+文字时，agent 侧一般用独立的 dt_media_upload 工具；本命令是 dws 内置的等价上传入口
 ```
 
 ### file (会话文件上传)
@@ -526,6 +589,7 @@ Flags:
 注意:
   - openTaskId 由 `dws chat message send` 发送消息成功后返回
   - 用于确认消息是否已成功发送或获取发送失败的原因
+  - 返回结果中含发送成功消息的 openMessageId，可用于后续 recall（撤回）、read-status（查已读）等命令
 ```
 
 #### 撤回消息 — 撤回当前用户自己发出的消息
@@ -644,7 +708,7 @@ Flags:
       --topic-id string   话题 ID，由 dws chat message list 返回 (必填)
       --time string       开始时间，格式: yyyy-MM-dd HH:mm:ss（可选）
       --limit int         返回数量（默认 50）
-      --forward           true=从老往新，false=从新往老（默认 false）
+      --direction string  时间方向: newer=从给定时间往现在拉，older=从给定时间往以前拉（推荐，默认 older）
 ```
 
 #### 拉取指定时间范围内当前用户的所有会话消息 — 分页拉取当前登录用户在指定时间范围内的所有会话消息
@@ -753,8 +817,10 @@ Usage:
 Example:
   dws chat message list-unread-conversations
   dws chat message list-unread-conversations --count 20
+  dws chat message list-unread-conversations --exclude-muted
 Flags:
-      --count int    返回未读会话条数（可选）
+      --count int       返回未读会话条数（可选）
+      --exclude-muted   是否排除已设置免打扰的会话（默认 false）
 ```
 
 #### 查询消息的已读/未读状态
@@ -961,6 +1027,7 @@ Example:
 Flags:
       --limit int        每页返回数量（默认 1000）
       --cursor int64     分页游标（首次不传或传 0，翻页传 nextCursor）
+      --exclude-muted    是否排除已设置免打扰的会话（默认 false）
 
 注意:
   - 用户询问"置顶会话"时，直接调用此命令返回置顶会话列表即可
@@ -1010,6 +1077,7 @@ Flags:
       --match-mode string   匹配模式：AND=所有人都在群里，OR=任一人在群里（默认 AND）
       --limit int           每页返回数量（默认 20）
       --cursor string       分页游标（默认 "0"，翻页传 nextCursor）
+      --exclude-muted       是否排除已设置免打扰的群聊（默认 false）
 
 注意:
   - --nicks 传人员昵称（花名），逗号分隔，如 "风雷,山乔"
@@ -1039,6 +1107,76 @@ Flags:
   - --group 的别名: --id, --chat, --conversation-id (均可替代 --group)
   - 返回值中的 newCSpaceIdIM 为会话共享空间 ID，用于 drive upload --space-id 参数
   - 上传到共享空间的文件对方才能打开，上传到个人空间的文件对方无法访问
+```
+
+#### 引用回复消息 — 引用某条消息并回复文字（单聊/群聊均可）
+```
+Usage:
+  dws chat message reply [flags]
+Example:
+  dws chat message reply --conversation-id <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --text "收到，马上处理"
+  # 被引用消息的 openMessageId、发送者 openDingTalkId 通过 dws chat message list 获取
+Flags:
+      --conversation-id string   会话 openConversationId (必填，支持单聊/群聊)
+      --ref-msg-id string        被引用的消息 openMessageId (必填)
+      --ref-sender string        被引用消息的发送者 openDingTalkId (必填)
+      --text string              回复内容 (必填)
+      --ai-tag                   消息是否带 AI 发送角标（可选，默认 true）
+      --uuid string              幂等键（可选）
+
+注意:
+  - 以当前用户身份引用回复，语义同 chat message send；目前回复类型仅支持 text
+```
+
+#### 转发单条消息 — 将一条消息从源会话转发到目标会话（源/目标均支持单聊/群聊）
+```
+Usage:
+  dws chat message forward [flags]
+Example:
+  dws chat message forward --src-conversation-id <srcOpenCid> --msg-id <openMessageId> --dest-conversation-id <destOpenCid>
+Flags:
+      --src-conversation-id string    源会话 openConversationId (必填)
+      --msg-id string                 源消息 openMessageId (必填)
+      --dest-conversation-id string   目标会话 openConversationId (必填)
+      --uuid string                   幂等键（可选）
+
+注意:
+  - 与 combine-forward 区别: forward 转单条，combine-forward 合并多条为一条转发
+```
+
+#### 转发话题消息 — 将一条话题消息转发到目标会话
+```
+Usage:
+  dws chat message forward-topic [flags]
+Example:
+  dws chat message forward-topic --src-conversation-id <srcOpenCid> --src-msg-id <openMessageId> --src-thread-id <convThreadId> --dest-conversation-id <destOpenCid>
+Flags:
+      --src-conversation-id string    源会话 openConversationId (必填，消息所在的会话)
+      --src-msg-id string             源消息 openMessageId (必填，要转发的消息)
+      --src-thread-id string          话题 ID (必填，格式: convThread + 加密后的 convThreadId，即 message list 返回的 openConvThreadId)
+      --dest-conversation-id string   目标会话 openConversationId (必填，转发到的会话)
+```
+
+#### 置顶消息 — 将指定消息置顶到会话顶部
+```
+Usage:
+  dws chat message set-top-msg [flags]
+Example:
+  dws chat message set-top-msg --open-conversation-id <openConversationId> --msg-id <openMessageId>
+Flags:
+      --open-conversation-id string   会话 openConversationId (必填，支持群聊/单聊)
+      --msg-id string                 消息 openMessageId (必填)
+```
+
+#### 取消置顶消息 — 取消会话顶部的置顶消息
+```
+Usage:
+  dws chat message unset-top-msg [flags]
+Example:
+  dws chat message unset-top-msg --open-conversation-id <openConversationId> --msg-id <openMessageId>
+Flags:
+      --open-conversation-id string   会话 openConversationId (必填，支持群聊/单聊)
+      --msg-id string                 消息 openMessageId (必填)
 ```
 
 #### 合并转发多条消息 — 将多条消息合并后转发到目标会话（源/目标会话均支持单聊/群聊）
@@ -1125,10 +1263,10 @@ Flags:
       --size int      每页条数 (默认 50)，别名: --limit
 ```
 
-#### 搜索【全部可用】机器人 — 含他人创建/官方机器人，额外返回 openDingTalkId
+#### 搜索【全部可用】机器人 — 含他人创建/官方机器人，额外返回机器人 openDingTalkId
 
 范围: 当前用户可用的全部机器人（含他人创建、官方机器人）。
-返回字段: 额外返回 openDingTalkId（可用于给机器人发单聊消息），search 没有此字段。
+返回字段: 结果在 `result.bots[]` 中，每项含 `botOpenDingTalkId`（机器人的 openDingTalkId，用于给机器人发单聊消息）和 `name`。注意字段名是 `botOpenDingTalkId`，不是 `openDingTalkId`；search 没有此字段。
 典型触发词: "搜索机器人""找一个机器人""帮我找 XXX 机器人""所有可用机器人""查机器人"。
 
 ```
@@ -1153,7 +1291,7 @@ search 与 find 选择指南:
 | 维度 | `chat bot search` | `chat bot find` |
 |------|-------------------|-----------------|
 | 范围 | 仅我创建的机器人 | 全部可用机器人（含他人/官方） |
-| 额外返回 openDingTalkId | 无 | 有（可用于给机器人发单聊消息） |
+| 额外返回机器人 openDingTalkId | 无 | 有，字段名 `botOpenDingTalkId`（可用于给机器人发单聊消息） |
 | 触发词 | "我创建的""我的""我自己的" | "搜索机器人""找机器人""查机器人" |
 
 ### category (会话分组管理)
@@ -1173,9 +1311,70 @@ Usage:
   dws chat category list-conversations [flags]
 Example:
   dws chat category list-conversations --category-id <分组ID>
+  dws chat category list-conversations --category-id <分组ID> --exclude-muted
   # 分组ID 可通过 dws chat category list 获取
 Flags:
       --category-id int   会话分组 ID (必填)
+      --exclude-muted     是否排除已设置免打扰的会话（默认 false）
+```
+
+#### 创建会话分组
+```
+Usage:
+  dws chat category create [flags]
+Example:
+  dws chat category create --title "工作群"
+Flags:
+      --title string   分组名称 (必填)
+```
+
+#### 删除会话分组
+```
+Usage:
+  dws chat category delete [flags]
+Example:
+  dws chat category delete --category-id <分组ID>
+  # 分组ID 可通过 dws chat category list 获取
+Flags:
+      --category-id int   会话分组 ID (必填)
+```
+
+#### 重命名会话分组
+```
+Usage:
+  dws chat category rename [flags]
+Example:
+  dws chat category rename --category-id <分组ID> --title "新名称"
+  # 分组ID 可通过 dws chat category list 获取
+Flags:
+      --category-id int   会话分组 ID (必填)
+      --title string      新的分组名称 (必填)
+```
+
+#### 将会话加入分组
+```
+Usage:
+  dws chat category add-conv [flags]
+Example:
+  dws chat category add-conv --group <openConversationId> --category-ids 123,456
+  # 分组ID 可通过 dws chat category list 获取
+  # 查询群 ID: dws chat search --query "群名"
+Flags:
+      --group string          会话 openConversationId (必填)
+      --category-ids string   目标分组 ID 列表，逗号分隔 (必填)
+```
+
+#### 将会话移出分组
+```
+Usage:
+  dws chat category remove-conv [flags]
+Example:
+  dws chat category remove-conv --group <openConversationId> --category-ids 123,456
+  # 分组ID 可通过 dws chat category list 获取
+  # 查询群 ID: dws chat search --query "群名"
+Flags:
+      --group string          会话 openConversationId (必填)
+      --category-ids string   目标分组 ID 列表，逗号分隔 (必填)
 ```
 
 ### mute (会话免打扰)
@@ -1224,6 +1423,8 @@ Flags:
 ### mute-at-all (关闭@所有人通知)
 
 #### 关闭/开启 @所有人消息提醒 — 关闭或开启会话中 @所有人的消息通知
+
+> ⚠️ 当前不可用：真机服务端对该命令恒返回 1002（系统繁忙），历史回归至今未修，属服务端问题。命令本身参数合法，但调用不会生效。
 ```
 Usage:
   dws chat mute-at-all [flags]
@@ -1245,6 +1446,8 @@ Flags:
 ### mute-red-envelope (关闭红包通知)
 
 #### 关闭/开启红包消息提醒 — 关闭或开启会话中的红包消息通知
+
+> ⚠️ 当前不可用：真机服务端对该命令恒返回 1002（系统繁忙），历史回归至今未修，属服务端问题。命令本身参数合法，但调用不会生效。
 ```
 Usage:
   dws chat mute-red-envelope [flags]
@@ -1279,7 +1482,7 @@ Flags:
 
 注意:
   - 支持群聊和单聊，openConversationId 可通过 chat search（群聊）或 chat conversation-info（单聊）获取
-  - 标记未读后会话列表中会显示未读状态
+  - API 返回成功，但该未读状态在 API 侧观察不到：`list-all-conversations` 返回的 unreadPoint 不会随之变化，只有钉钉客户端 UI 上能看到未读标记
 ```
 
 ### clear-red-point (清除会话红点)
@@ -1327,13 +1530,14 @@ Example:
   dws chat list-all-conversations --limit 100 --cursor <nextCursor>
   dws chat list-all-conversations --exclude-muted
 Flags:
-      --limit int        每页数量（默认 1000）
+      --limit int        每页数量（1-100，默认 100）；传 >100 会被明确拒绝
       --cursor int       分页游标（首次不传或传 0，翻页传 nextCursor）
       --exclude-muted    是否排除已免打扰会话（默认 false）
 
 注意:
   - 返回结果包含单聊和群聊，不区分会话类型
-  - 翻页: hasMore=true 时用返回的 nextCursor 作为下次 --cursor
+  - --limit 范围 1-100，默认 100，上限 100；传入 >100 会报错拒绝，不会静默截断
+  - 分页当前不可用：真机 hasMore 恒为 false、nextCursor 恒为 null，本命令最多返回 100 条会话，无法用 --cursor 继续翻页取更多
   - 与 list-top-conversations 的区别: 本命令返回全部会话（单聊+群聊），list-top-conversations 仅返回置顶会话
 ```
 
@@ -1394,6 +1598,7 @@ Flags:
 注意:
   - 与 `chat group list-my-groups` 区别: list-all 返回用户加入的所有群；list-my-groups 仅返回用户作为群主/管理员的群
   - 分页: hasMore=true 时用返回的 nextCursor 作为下次 --cursor
+  - ⚠️ 存在同步盲区：新建群后较长时间（实测 15 分钟后全量翻页仍查不到）内不会出现在 list-all 里；而 `chat group list-my-groups` / `chat search` 能立即查到。要确认刚建的群，用 list-my-groups 或 search，别依赖 list-all
 ```
 
 ### group list-join-validations (分页拉取入群验证记录)
@@ -1420,27 +1625,27 @@ Flags:
 
 ### group audit-join-validation (审批入群验证)
 
-#### 审批入群验证 — 通过、拒绝、删除单个审核
+#### 审批入群验证 — 通过、删除单个审核
 
-支持通过、拒绝、删除、忽略、拒绝并拉黑等操作。
+真机当前仅 AuditApprove（通过）和 AuditDelete（删除）两个动作可用。
 
 ```
 Usage:
   dws chat group audit-join-validation [flags]
 Example:
   dws chat group audit-join-validation --group <openConversationId> --record-id 123456 --applicant <openDingTalkId> --inviter <openDingTalkId> --status AuditApprove
-  dws chat group audit-join-validation --group <openConversationId> --record-id 123456 --applicant <openDingTalkId> --inviter <openDingTalkId> --status AuditRefuse --description "不符合入群条件"
+  dws chat group audit-join-validation --group <openConversationId> --record-id 123456 --applicant <openDingTalkId> --inviter <openDingTalkId> --status AuditDelete
   # 查询入群验证记录: dws chat group list-join-validations
 Flags:
       --group string        群 openConversationId (必填)
       --record-id string    申请记录 ID (必填)
       --applicant string    申请人 openDingTalkId (必填)
       --inviter string      邀请人 openDingTalkId (必填)
-      --status string       审批动作: AuditApprove/AuditDelete/AuditIgnore/AuditRefuse/AuditBlock (必填)
+      --status string       审批动作: AuditApprove(通过) / AuditDelete(删除) (必填)
       --description string  审批说明（可选）
 
 注意:
-  - status 可选值: AuditApprove(通过), AuditDelete(删除), AuditIgnore(忽略), AuditRefuse(拒绝), AuditBlock(拒绝且拉黑)
+  - status 真机仅支持 AuditApprove(通过) 和 AuditDelete(删除)；AuditIgnore(忽略)、AuditRefuse(拒绝)、AuditBlock(拒绝且拉黑) 会被服务端拒绝报 unsupported audit status，属服务端限制
   - record-id、applicant、inviter 可通过 dws chat group list-join-validations 查询获得
 ```
 
@@ -1466,6 +1671,9 @@ Flags:
 用户说"踢人/移除群成员" → `chat group members remove`
 用户说"加机器人到群" → `chat group members add-bot`
 用户说"改群名" → `chat group rename`
+用户说"设置群备注/给群加备注" → `chat group update-alias`
+用户说"改我在群里的昵称/设置群昵称" → `chat group update-nick`
+用户说"批量查群成员信息/按ID查群成员" → `chat group members list-by-ids`
 用户说"聊天记录/会话消息/拉取会话" → `chat message list`
 用户说"某人发给我的消息/指定发送者/某人的消息" → `chat message list-by-sender`（用户未明确说"单聊"时优先使用，跨单聊/群聊）
 用户说"拉取和某人的单聊记录/单聊消息" → `chat message list --user`（用户明确说"单聊"时使用）
@@ -1489,6 +1697,11 @@ Flags:
 用户说"置顶会话/置顶消息/我的置顶/查看置顶" → `chat list-top-conversations`
 用户说"查看会话分组/自定义分组" → `chat category list`
 用户说"某个分组下的会话/分组会话列表" → `chat category list-conversations`
+用户说"新建会话分组/创建分组" → `chat category create`
+用户说"删除会话分组" → `chat category delete`
+用户说"重命名分组/改分组名" → `chat category rename`
+用户说"把会话加入分组/会话归类到分组" → `chat category add-conv`
+用户说"把会话移出分组/从分组移除会话" → `chat category remove-conv`
 用户说"根据群号查群信息/群号查群/群号转openConversationId" → `chat group get-by-group-id`（当用户发消息时只提供了群号，用此工具将群号转为 openConversationId，再调用发消息接口）
 用户说"查看群身份/群的自定义身份列表" → `chat group-role list`
 用户说"创建/添加群身份" → `chat group-role add`
@@ -1523,9 +1736,13 @@ Flags:
 用户说"引用回复/回复消息/引用消息回复" → `chat message reply`
 用户说"转发消息/转发一条消息/把消息转发到另一个群" → `chat message forward`
 用户说"合并转发/批量转发/合并转发多条消息" → `chat message combine-forward`
+用户说"转发话题/转发话题消息" → `chat message forward-topic`
+用户说"置顶消息/把消息置顶" → `chat message set-top-msg`
+用户说"取消置顶消息/撤销消息置顶" → `chat message unset-top-msg`
+用户说"上传图片拿mediaId/上传媒体" → `chat media upload`
 用户说"群机器人列表/群里有哪些机器人/查看群机器人" → `chat group bots`
 用户说"从群里移除机器人/踢出机器人" → `chat group members remove-bot`
-用户说"搜索机器人/找机器人/查机器人/帮我找XXX机器人" → `chat bot find`（全部可用机器人，额外返回 openDingTalkId 可发单聊）
+用户说"搜索机器人/找机器人/查机器人/帮我找XXX机器人" → `chat bot find`（全部可用机器人，额外返回 botOpenDingTalkId 可发单聊）
 用户说"给机器人发单聊/给机器人发消息/跟机器人聊天" → 必须先 `chat bot find`（拿 openDingTalkId）→ 再 `chat message send --open-dingtalk-id`（search 没有 openDingTalkId，无法发单聊）
 用户说"我创建的机器人/我的机器人/我自己的机器人/查看我的机器人" → `chat bot search`（仅我创建的机器人，无 openDingTalkId）
 用户说"解散群/解散群聊" → `chat group dismiss`
@@ -1802,7 +2019,7 @@ Flags:
 | `aisearch person` | `userId` | message send 的 --user、send-by-bot 的 --users、send-by-bot 的 --at-user-ids、list-by-sender 的 --sender-user-id |
 | `aisearch person` → `contact user get` | `openDingTalkId` | message send 的 --at-open-dingtalk-ids、--open-dingtalk-id、send-by-bot 的 --open-dingtalk-ids、send-by-bot 的 --at-open-dingtalk-ids、list-by-sender 的 --sender-open-dingtalk-id、message list 的 --open-dingtalk-id |
 | `chat bot search` | `robotCode` | send-by-bot / recall-by-bot 的 --robot-code（仅我创建的机器人，无 openDingTalkId） |
-| `chat bot find` | `openDingTalkId` | 给机器人发单聊消息（全部可用机器人，额外返回 openDingTalkId） |
+| `chat bot find` | `botOpenDingTalkId` | 给机器人发单聊消息（send --open-dingtalk-id；字段名是 botOpenDingTalkId，非 openDingTalkId） |
 | `chat message send-by-bot` | `processQueryKey` | recall-by-bot 的 --keys |
 | `chat message send` | `openTaskId` | query-send-status 的 --open-task-id |
 | `chat message list` | `openMessageId` | recall 的 --msg-id |
@@ -1845,7 +2062,7 @@ Flags:
 - `chat search-common` 搜索共同群，`--nicks` 传人员昵称（逗号分隔），`--match-mode` AND/OR 控制匹配逻辑，分页用 `--limit`（默认 20）/`--cursor`
 - `chat list-top-conversations` 拉取置顶会话列表，分页用 `--limit`（默认 1000）/`--cursor`；用户询问"置顶会话"或"置顶消息"时均路由到此命令
 - `--user` 和 `--open-dingtalk-id` 本质上都是发起单聊操作，只是用户标识格式不同：userId 为企业内部应用常用标识，openDingTalkId 为三方应用或跨组织场景下的用户标识，服务端对两种 ID 的解析逻辑不同
-- `--time` 格式: `yyyy-MM-dd HH:mm:ss`，为拉取消息的起始时间点；`--forward` 控制方向（默认 true，拉给定时间之后的消息），`--limit` 控制数量
+- `--time` 格式: `yyyy-MM-dd HH:mm:ss`，为拉取消息的起始时间点；`--direction` 控制方向（newer=从给定时间往现在拉，older=从给定时间往以前拉），`--limit` 控制数量
 - `chat search` 挂在 `chat` 下（非 `chat group` 下），路径为 `dws chat search`
 - `send-by-bot` 群聊传 `--group`，单聊传 `--users` 或 `--open-dingtalk-ids`，与 `--group` 互斥且必选其一；群聊时可选 `--at-user-ids` @指定成员（传 userId 列表）或 `--at-open-dingtalk-ids` @指定成员（传 openDingtalkId 列表），content 中需包含对应 @标识；`--at-all` @所有人；群聊场景如果返回"机器人不存在"错误，需先通过 `chat group members add-bot --group <openConversationId> --robot-code <robot-code>` 将机器人邀请进群后再发送
 - `recall-by-bot` 群聊传 `--group` + `--keys`，单聊仅传 `--keys`（不传 `--group` 即为单聊撤回）

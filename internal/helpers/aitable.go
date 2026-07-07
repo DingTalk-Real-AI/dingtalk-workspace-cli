@@ -5,11 +5,25 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 )
+
+// parseBoolFlag reads a string flag and parses it as a boolean, accepting the
+// natural `--flag true` / `--flag false` space syntax. Registering these
+// switches as String (not Bool) flags avoids cobra swallowing `false` as a
+// positional arg — which silently inverted `--enabled false` into enable.
+func parseBoolFlag(cmd *cobra.Command, name string) (bool, error) {
+	raw := strings.TrimSpace(mustGetFlag(cmd, name))
+	v, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("--%s 只接受 true 或 false，got %q", name, raw)
+	}
+	return v, nil
+}
 
 // ──────────────────────────────────────────────────────────
 // dws aitable — AI 表格
@@ -615,6 +629,30 @@ func printViewSubBlock(block any) error {
 		"error":  map[string]any{},
 	}
 	return deps.Out.PrintJSON(envelope)
+}
+
+// findFormViewByID 从 list_form_views 响应里递归定位 viewId 匹配的表单对象。
+// 服务端的 viewIds 过滤参数当前不生效（返回全表所有表单），故 form get 在客户端
+// 侧按 viewId 精确筛出单条，避免退化成等价 form list。
+func findFormViewByID(node any, viewID string) (map[string]any, bool) {
+	switch v := node.(type) {
+	case map[string]any:
+		if id, _ := v["viewId"].(string); id == viewID {
+			return v, true
+		}
+		for _, val := range v {
+			if found, ok := findFormViewByID(val, viewID); ok {
+				return found, true
+			}
+		}
+	case []any:
+		for _, el := range v {
+			if found, ok := findFormViewByID(el, viewID); ok {
+				return found, true
+			}
+		}
+	}
+	return nil, false
 }
 
 // collectStringFlag 把 cmd 上 flagName 的字符串值（若非空）以 jsonKey 写入 out map。
@@ -2888,7 +2926,8 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 		Use:   "get",
 		Short: "获取单个表单视图详情",
 		Long: `按 viewId 获取单个表单视图的元信息（name/title/createdAt/shareFormUuid）。
-内部基于 list_form_views 过滤实现，等价于 form list 后筛选指定 viewId。`,
+内部拉取 list_form_views 后在客户端按 viewId 精确筛出单条（服务端的 viewIds
+过滤参数当前不生效，会返回全表所有表单，故在此侧过滤）。data 即命中的表单对象。`,
 		Example: `  dws aitable form get --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "table-id", "view-id"); err != nil {
@@ -2898,11 +2937,30 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 			if err != nil {
 				return err
 			}
-			return callAitableHelperTool("list_form_views", map[string]any{
+			viewID := mustGetFlag(cmd, "view-id")
+			raw, err := callMCPToolReturnTextOnServer(context.Background(), "aitable-helper", "list_form_views", map[string]any{
 				"baseId":  baseID,
 				"tableId": mustGetFlag(cmd, "table-id"),
-				"viewIds": []string{mustGetFlag(cmd, "view-id")},
 			})
+			if err != nil {
+				return err
+			}
+			var parsed any
+			if e := json.Unmarshal([]byte(raw), &parsed); e != nil {
+				return &CLIError{
+					Code:    CodeMCPToolError,
+					Message: fmt.Sprintf("list_form_views response is not valid JSON: %v", e),
+				}
+			}
+			form, ok := findFormViewByID(parsed, viewID)
+			if !ok {
+				return &CLIError{
+					Code:       CodeMCPToolError,
+					Message:    fmt.Sprintf("form view %s not found in table", viewID),
+					Suggestion: "用 dws aitable form list --base-id <baseId> --table-id <tableId> 查看可用 viewId 列表",
+				}
+			}
+			return printViewSubBlock(form)
 		},
 	}
 
@@ -3439,10 +3497,10 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 		Example: `  dws aitable dashboard share update --base-id BASE_ID --dashboard-id DASHBOARD_ID --enabled true --share-type PUBLIC
   dws aitable dashboard share update --base-id BASE_ID --dashboard-id DASHBOARD_ID --enabled false`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "dashboard-id"); err != nil {
+			if err := validateRequiredFlags(cmd, "dashboard-id", "enabled"); err != nil {
 				return err
 			}
-			enabled, err := cmd.Flags().GetBool("enabled")
+			enabled, err := parseBoolFlag(cmd, "enabled")
 			if err != nil {
 				return err
 			}
@@ -3542,11 +3600,15 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 		Use:   "update",
 		Short: "更新图表",
 		Long: `更新指定 chart 的配置或布局。
-调用前建议先调用 chart widgets-example 了解 --config 入参结构和要求。`,
+--config 为必填参数，即使只想改布局也要带上完整的图表配置（服务端会拒绝缺 config 的请求，
+空对象 {} 同样被拒，至少要包含 chartName）。--layout 可选，仅调整位置/大小时追加。
+调用前建议先调用 chart widgets-example 了解 --config 入参结构和要求，
+或先用 chart get 拿到当前 config 再改。`,
 		Example: `  dws aitable chart update --base-id BASE_ID --dashboard-id DASHBOARD_ID --chart-id CHART_ID \
     --config '{"chartName":"新柱图名",...}'
+  # 只改布局也必须带 --config（用 chart get 拿到当前 config 原样回传）：
   dws aitable chart update --base-id BASE_ID --dashboard-id DASHBOARD_ID --chart-id CHART_ID \
-    --layout '{"x":0,"y":4,"w":12,"h":4}'
+    --config '{"chartName":"柱图",...}' --layout '{"x":0,"y":4,"w":12,"h":4}'
   # 查询 chartId: dws aitable dashboard get --base-id <baseId> --dashboard-id <dashboardId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "dashboard-id", "chart-id", "config"); err != nil {
@@ -3634,10 +3696,10 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 		Example: `  dws aitable chart share update --base-id BASE_ID --dashboard-id DASHBOARD_ID --chart-id CHART_ID --enabled true --share-type ORG
   dws aitable chart share update --base-id BASE_ID --dashboard-id DASHBOARD_ID --chart-id CHART_ID --enabled false`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "dashboard-id", "chart-id"); err != nil {
+			if err := validateRequiredFlags(cmd, "dashboard-id", "chart-id", "enabled"); err != nil {
 				return err
 			}
-			enabled, err := cmd.Flags().GetBool("enabled")
+			enabled, err := parseBoolFlag(cmd, "enabled")
 			if err != nil {
 				return err
 			}
@@ -4658,7 +4720,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	dashboardShareGetCmd.Flags().String("dashboard-id", "", "目标 Dashboard ID (必填)")
 	dashboardShareUpdateCmd.Flags().String("base-id", "", "所属 Base ID (必填)")
 	dashboardShareUpdateCmd.Flags().String("dashboard-id", "", "目标 Dashboard ID (必填)")
-	dashboardShareUpdateCmd.Flags().Bool("enabled", false, "分享开关：true 开启，false 关闭")
+	dashboardShareUpdateCmd.Flags().String("enabled", "", "分享开关：true 开启，false 关闭 (必填)")
 	dashboardShareUpdateCmd.Flags().String("share-type", "", "分享类型：PUBLIC 或 ORG（enabled=true 时生效）")
 	dashboardShareUpdateCmd.Flags().Bool("allow-back-to-doc", false, "是否允许从分享页返回源 AI 表格（仅在显式传参时生效）")
 	dashboardShareCmd.AddCommand(dashboardShareGetCmd, dashboardShareUpdateCmd)
@@ -4692,7 +4754,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	chartShareUpdateCmd.Flags().String("base-id", "", "所属 Base ID (必填)")
 	chartShareUpdateCmd.Flags().String("dashboard-id", "", "所属 Dashboard ID (必填)")
 	chartShareUpdateCmd.Flags().String("chart-id", "", "目标 Chart ID (必填)")
-	chartShareUpdateCmd.Flags().Bool("enabled", false, "分享开关：true 开启，false 关闭")
+	chartShareUpdateCmd.Flags().String("enabled", "", "分享开关：true 开启，false 关闭 (必填)")
 	chartShareUpdateCmd.Flags().String("share-type", "", "分享类型：PUBLIC 或 ORG（enabled=true 时生效）")
 	chartShareUpdateCmd.Flags().Bool("allow-back-to-doc", false, "是否允许从分享页返回源 AI 表格（仅在显式传参时生效）")
 	chartShareCmd.AddCommand(chartShareGetCmd, chartShareUpdateCmd)

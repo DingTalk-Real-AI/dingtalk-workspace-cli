@@ -1,6 +1,6 @@
 ---
 name: dingtalk-attendance
-description: 钉钉考勤（只读）。Use when 用户说 考勤/打卡记录/查打卡/查班次/考勤汇总/考勤规则/出勤情况。命令前缀：dws attendance。开源版仅支持只读查询，不支持创建班次、导入排班、修改考勤组等写操作。
+description: 钉钉考勤。Use when 用户说 考勤/打卡记录/查打卡/查班次/考勤汇总/考勤规则/出勤情况/请假加班补卡/排班/考勤组/假期余额。命令前缀：dws attendance。支持查询与写操作（班次、排班、考勤组、个人规则设置、假期规则/余额等），写操作需二次确认后再加 --yes。
 cli_version: ">=0.2.14"
 metadata:
   category: product
@@ -30,11 +30,16 @@ metadata:
 | "查我 / 某人 某天的打卡" | `dws attendance record get --user <userId> --date <YYYY-MM-DD>` |
 | "查考勤组 / 考勤规则 / 打卡范围" | `dws attendance rules --date <YYYY-MM-DD>` |
 | "查班次 / 排班 / 谁今天上什么班" | `dws attendance shift list --users <userId1,userId2> --start <YYYY-MM-DD> --end <YYYY-MM-DD>` |
-| "考勤统计 / 周月汇总 / 出勤天数" | `dws attendance summary --user <userId> --date "<yyyy-MM-dd HH:mm:ss>" --stats-type week\|month` |
+| "考勤统计 / 周月汇总 / 出勤天数" | `dws attendance summary --user <userId> --date <YYYY-MM-DD> --stats-type week\|month` |
+| "请假 / 加班 / 补卡 / 出差 记录或提交链接" | `dws attendance approve list` / `dws attendance approve templates --type <类型>` |
+| "班次 / 补卡规则 / 加班规则 / 考勤组 查询与修改" | `class` / `adjustment` / `overtime` / `group` 子命令 |
+| "排班 / 假期规则 / 假期余额 / 签到 / 报表" | `schedule` / `vacation` / `checkin` / `report` 子命令 |
+
+> 完整命令集（含写操作与参数）见 [references/attendance.md](references/attendance.md)。
 
 ## 评测高频硬约束
 
-- 开源版考勤只有 `record / rules / shift / summary` 四个只读命令；用户提到创建班次、导入排班、加人入考勤组等写操作时，直接告知"开源版不支持"，不要伪装成功。
+- 当前 dws 已注册全部考勤子命令组（`record` / `check` / `approve` / `shift` / `schedule` / `class` / `adjustment` / `overtime` / `group` / `summary` / `rules` / `selfsetting` / `globalsetting` / `vacation` / `checkin` / `report` / `boss-check`），查询与写操作大多可直接调用后端。**不要再以"开源版只读/不支持写操作"为由拒答。** 创建班次、导入排班、加人入考勤组、保存个人规则设置、设置假期余额等写操作真机可执行，但必须先展示参数摘要并二次确认，再追加 `--yes`（或 `--user-say-yes`）执行；不要在未确认时直接写、也不要伪装成功。个别命令受权限/数据影响返回空或权限错误（如 `report` 系列仅管理员），如实说明即可。
 - 查询迟到/缺勤名单时，空打卡结果不等于"没人迟到"。必须结合排班、`NotSigned`、`Absenteeism`、无记录人员分别说明；数据缺失要标为"无记录/无法判断"，不要归为正常。
 - 做部门 Top N 排名时，用户要求前 N 名就必须输出 N 个部门；无打卡记录或无可计算数据的部门按 0 或"无数据"保留在排名中，不能只输出有数据的少数部门。
 - `summary` 必须同时传 `--user`、`--date`、`--stats-type`（week/month），缺一返回 C0002。

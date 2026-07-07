@@ -140,8 +140,10 @@ def main() -> None:
             "data",
             "--import-id",
             import_id,
-            "--timeout-sec",
-            str(args.timeout_sec),
+            # import data 的 --timeout 单位是秒、最大 30；脚本的 --timeout-sec
+            # 是整体子进程预算，不能直接透传，这里用 CLI 允许的最大值。
+            "--timeout",
+            "30",
             "--format",
             "json",
         ],
