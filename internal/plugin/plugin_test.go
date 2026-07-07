@@ -135,6 +135,36 @@ func TestManifestValidate(t *testing.T) {
 			wantErr:    true,
 		},
 		{
+			name: "delivery beta satisfies legacy plugin requirement",
+			manifest: Manifest{
+				Name:          "my-plugin",
+				Version:       "1.0.0",
+				MinCLIVersion: "0.2.33",
+			},
+			cliVersion: "v0.0.48-beta.1",
+			wantErr:    false,
+		},
+		{
+			name: "delivery beta satisfies one dot zero plugin requirement",
+			manifest: Manifest{
+				Name:          "my-plugin",
+				Version:       "1.0.0",
+				MinCLIVersion: "1.0.40",
+			},
+			cliVersion: "v0.0.48-beta.1",
+			wantErr:    false,
+		},
+		{
+			name: "delivery beta remains ordered by patch",
+			manifest: Manifest{
+				Name:          "my-plugin",
+				Version:       "1.0.0",
+				MinCLIVersion: "1.0.40",
+			},
+			cliVersion: "v0.0.35-beta.1",
+			wantErr:    true,
+		},
+		{
 			name: "streamable-http without endpoint",
 			manifest: Manifest{
 				Name:    "my-plugin",

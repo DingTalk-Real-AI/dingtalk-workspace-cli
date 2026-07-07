@@ -29,6 +29,11 @@ import (
 // namePattern validates plugin names: lowercase kebab-case, 3–50 chars.
 var namePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{2,49}$`)
 
+// deliveryBetaVersionPattern matches official low-numbered delivery beta tags
+// such as v0.0.48-beta.1. Those tags are intentionally below v1.x for upgrade
+// ordering, but they carry the same CLI capability line as v1.0.<patch>.
+var deliveryBetaVersionPattern = regexp.MustCompile(`^v?0\.0\.([1-9][0-9]*)(-beta(?:\.[0-9A-Za-z-]+)*)$`)
+
 // Manifest represents the parsed contents of a plugin.json file.
 type Manifest struct {
 	Name          string                `json:"name"`
@@ -124,7 +129,7 @@ func (m *Manifest) Validate(cliVersion string) error {
 		return fmt.Errorf("invalid plugin type %q: must be \"managed\" or \"user\"", m.Type)
 	}
 	if m.MinCLIVersion != "" && cliVersion != "" && cliVersion != "dev" {
-		if compareSemver(cliVersion, m.MinCLIVersion) < 0 {
+		if compareSemver(normalizeCLIVersionForCompatibility(cliVersion), m.MinCLIVersion) < 0 {
 			return fmt.Errorf("plugin requires CLI >= %s, current is %s", m.MinCLIVersion, cliVersion)
 		}
 	}
@@ -231,6 +236,14 @@ func parseSemver(v string) (int, int, int) {
 	minor, _ := strconv.Atoi(nums[1])
 	patch, _ := strconv.Atoi(nums[2])
 	return major, minor, patch
+}
+
+func normalizeCLIVersionForCompatibility(v string) string {
+	trimmed := strings.TrimSpace(v)
+	if match := deliveryBetaVersionPattern.FindStringSubmatch(trimmed); match != nil {
+		return "v1.0." + match[1] + match[2]
+	}
+	return v
 }
 
 // compareSemver compares two semver strings. Returns -1, 0, or 1.

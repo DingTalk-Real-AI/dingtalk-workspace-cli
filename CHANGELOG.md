@@ -10,6 +10,7 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 - **Remove-discovery delivery seal** — pre-release validation line for the static-endpoint delivery branch. It removes dynamic service discovery, keeps legacy CLI compatibility aliases, syncs the open command/help/skill surface with the dws-wukong baseline, and includes the `dev connect` default-yolo behavior plus the beta upgrade track.
 - **Official beta packages stay out of normal `dws upgrade`** — publish the sealed beta as an upstream GitHub pre-release after merge, using a low pre-release tag such as `v0.0.48-beta.1`. Old clients' plain `dws upgrade` / `dws upgrade --check` follows GitHub `releases/latest`, so it does not install pre-releases. New clients' plain `dws upgrade` stays on the stable track, and the low numeric version prevents the sealed beta from being treated as newer than `v1.0.47`. Testers install this sealed beta only by specifying the exact tag.
+- **Plugin compatibility honors low-numbered delivery beta tags** — `v0.0.N-beta.M` tags are now treated as the `v1.0.N` capability line for plugin `minCLIVersion` checks, so managed plugins that require legacy versions such as `0.2.33` no longer warn and get skipped on the official beta build.
 - **Pinned curl install for the official beta package after the upstream pre-release exists**:
 
   ```sh
