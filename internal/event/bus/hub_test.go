@@ -49,6 +49,15 @@ func drain(c *Consumer, n int, t *testing.T) []*transport.Event {
 	return out
 }
 
+func assertNoEvent(c *Consumer, t *testing.T) {
+	t.Helper()
+	select {
+	case f := <-c.SendCh:
+		t.Fatalf("unexpected frame: %#v", f)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
 func TestHub_RegisterAssignsMonotonicID(t *testing.T) {
 	h := NewHub(10)
 	c1, err := h.Register(transport.Hello{ConsumerPID: 1})
@@ -110,24 +119,115 @@ func TestHub_DeliverFilterRegex(t *testing.T) {
 	}
 }
 
-func TestHub_DoesNotFilterBySubscribeID(t *testing.T) {
+func TestHub_DeliverFiltersBySubscribeID(t *testing.T) {
 	h := NewHub(10)
 	c, err := h.Register(transport.Hello{
-		EventTypes:  []string{"user_im_message_receive_at"},
-		SubscribeID: "sub-consumer",
+		EventTypes:  []string{"user_im_message_receive_o2o"},
+		SubscribeID: "sub-b",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	ev := mkEvent("user_im_message_receive_at", "1")
-	ev.SubscribeID = "sub-upstream"
 
+	wrong := mkEvent("user_im_message_receive_o2o", "1")
+	wrong.SubscribeID = "sub-c"
+	h.Deliver(wrong)
+	assertNoEvent(c, t)
+
+	right := mkEvent("user_im_message_receive_o2o", "2")
+	right.SubscribeID = "sub-b"
+	h.Deliver(right)
+
+	got := drain(c, 1, t)
+	if got[0].EventID != "2" || got[0].SubscribeID != "sub-b" {
+		t.Fatalf("event = %#v, want sub-b event 2", got[0])
+	}
+}
+
+func TestHub_DeliverSubscribeIDSeparatesSameEventType(t *testing.T) {
+	h := NewHub(10)
+	b, err := h.Register(transport.Hello{
+		EventTypes:  []string{"user_im_message_receive_o2o"},
+		SubscribeID: "sub-b",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := h.Register(transport.Hello{
+		EventTypes:  []string{"user_im_message_receive_o2o"},
+		SubscribeID: "sub-c",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	evB := mkEvent("user_im_message_receive_o2o", "b-msg")
+	evB.SubscribeID = "sub-b"
+	evC := mkEvent("user_im_message_receive_o2o", "c-msg")
+	evC.SubscribeID = "sub-c"
+	h.Deliver(evB)
+	h.Deliver(evC)
+
+	gotB := drain(b, 1, t)
+	gotC := drain(c, 1, t)
+	if gotB[0].EventID != "b-msg" || gotB[0].SubscribeID != "sub-b" {
+		t.Fatalf("B consumer got %#v", gotB[0])
+	}
+	if gotC[0].EventID != "c-msg" || gotC[0].SubscribeID != "sub-c" {
+		t.Fatalf("C consumer got %#v", gotC[0])
+	}
+	assertNoEvent(b, t)
+	assertNoEvent(c, t)
+}
+
+func TestHub_DeliverDropsMissingSubscribeIDForSpecificConsumer(t *testing.T) {
+	h := NewHub(10)
+	c, err := h.Register(transport.Hello{
+		EventTypes:  []string{"user_im_message_receive_group"},
+		SubscribeID: "sub-group",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h.Deliver(mkEvent("user_im_message_receive_group", "missing-sub"))
+
+	assertNoEvent(c, t)
+}
+
+func TestHub_DeliverEmptyConsumerSubscribeIDReceivesAnySubscribeID(t *testing.T) {
+	h := NewHub(10)
+	c, err := h.Register(transport.Hello{
+		EventTypes: []string{"user_im_message_receive_o2o"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := mkEvent("user_im_message_receive_o2o", "1")
+	ev.SubscribeID = "sub-any"
 	h.Deliver(ev)
 
 	got := drain(c, 1, t)
-	if got[0].SubscribeID != "sub-upstream" {
-		t.Fatalf("event subscribe_id = %q, want raw event value", got[0].SubscribeID)
+	if got[0].SubscribeID != "sub-any" {
+		t.Fatalf("event subscribe_id = %q, want sub-any", got[0].SubscribeID)
 	}
+}
+
+func TestHub_DeliverEventTypeMismatchEvenWithSubscribeID(t *testing.T) {
+	h := NewHub(10)
+	c, err := h.Register(transport.Hello{
+		EventTypes:  []string{"user_im_message_receive_o2o"},
+		SubscribeID: "sub-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := mkEvent("user_im_message_receive_group", "1")
+	ev.SubscribeID = "sub-1"
+
+	h.Deliver(ev)
+
+	assertNoEvent(c, t)
 }
 
 func TestHub_RegisterRejectsBadFilterRegex(t *testing.T) {

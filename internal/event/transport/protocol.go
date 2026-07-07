@@ -44,7 +44,7 @@ type Hello struct {
 	ConsumerPID int       `json:"consumer_pid"`
 	EventTypes  []string  `json:"event_types,omitempty"`  // wildcard list ("im.*", "approval.*"); empty = catch-all
 	Filter      string    `json:"filter,omitempty"`       // optional regex over event_type
-	SubscribeID string    `json:"subscribe_id,omitempty"` // optional personal subscription label for status/debug
+	SubscribeID string    `json:"subscribe_id,omitempty"` // optional personal subscription isolation key; empty = no subscribe_id filter
 	Compact     bool      `json:"compact,omitempty"`      // hint to status output; bus does not transform payloads
 	// Role distinguishes a real consumer (registered for events) from an
 	// ad-hoc tooling connection (status/list/stop). Ad-hoc connections do

@@ -39,7 +39,7 @@ type Consumer struct {
 	PID          int      // from Hello.ConsumerPID
 	EventTypes   []string // raw wildcard patterns from Hello
 	Filter       string   // raw regex from Hello (for status display)
-	SubscribeID  string   // optional personal subscription label for status display
+	SubscribeID  string   // optional personal subscription label and local isolation key
 	SubscribedAt time.Time
 	SendCh       chan any // bus → consume frames (Event/SourceState/Heartbeat/Bye)
 	matcher      consumerMatcher
@@ -52,19 +52,22 @@ type Consumer struct {
 // consumerMatcher pre-compiles EventTypes wildcard patterns and the optional
 // Filter regex into a fast checker invoked once per delivered event per
 // consumer. Empty EventTypes means catch-all (everything matches except
-// what Filter excludes).
+// what Filter excludes). Non-empty SubscribeID is an additional exact-match
+// constraint used by personal_stream consumers so same event_type subscriptions
+// do not fan out to each other.
 type consumerMatcher struct {
-	catchAll bool
-	exact    map[string]struct{} // patterns without '*'
-	prefixes []string            // patterns ending in ".*" or "*" — store the prefix only
-	filter   *regexp.Regexp      // nil if no filter
+	catchAll    bool
+	exact       map[string]struct{} // patterns without '*'
+	prefixes    []string            // patterns ending in ".*" or "*" — store the prefix only
+	filter      *regexp.Regexp      // nil if no filter
+	subscribeID string              // empty = no subscribe_id filtering
 }
 
 func compileMatcher(eventTypes []string, filter string, subscribeID string) (consumerMatcher, error) {
 	m := consumerMatcher{
-		exact: make(map[string]struct{}),
+		exact:       make(map[string]struct{}),
+		subscribeID: strings.TrimSpace(subscribeID),
 	}
-	_ = subscribeID // kept in the wire/config shape, but no longer filters fan-out.
 	if len(eventTypes) == 0 {
 		m.catchAll = true
 	}
@@ -100,6 +103,9 @@ func compileMatcher(eventTypes []string, filter string, subscribeID string) (con
 
 func (m *consumerMatcher) matches(raw *dwsevent.RawEvent) bool {
 	if raw == nil {
+		return false
+	}
+	if m.subscribeID != "" && raw.SubscribeID != m.subscribeID {
 		return false
 	}
 	eventType := raw.EventType
