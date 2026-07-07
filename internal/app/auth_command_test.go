@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -180,6 +181,56 @@ func TestAuthStatusJSONReportsKeychainUnavailable(t *testing.T) {
 	}
 	if !strings.Contains(resp.Hint, keychain.DisableKeychainEnv) {
 		t.Fatalf("hint should mention %s; response=%+v", keychain.DisableKeychainEnv, resp)
+	}
+}
+
+func TestAuthStatusJSONReportsDEKMissing(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", filepath.Join(t.TempDir(), "config"))
+
+	prev := edition.Get()
+	edition.Override(&edition.Hooks{
+		LoadToken: func(configDir string) ([]byte, error) {
+			return nil, fmt.Errorf("load from keychain: %w", keychain.ErrDEKMissing)
+		},
+	})
+	t.Cleanup(func() {
+		edition.Override(prev)
+	})
+
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--format", "json", "auth", "status"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("auth status --format json error = %v\noutput:\n%s", err, out.String())
+	}
+
+	var resp struct {
+		Success       bool   `json:"success"`
+		Authenticated bool   `json:"authenticated"`
+		Reason        string `json:"reason"`
+		Message       string `json:"message"`
+		Hint          string `json:"hint"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal auth status JSON error = %v\noutput:\n%s", err, out.String())
+	}
+	if !resp.Success {
+		t.Fatalf("success = false, want true; response=%+v", resp)
+	}
+	if resp.Authenticated {
+		t.Fatalf("authenticated = true, want false; response=%+v", resp)
+	}
+	if resp.Reason != "dek_missing" {
+		t.Fatalf("reason = %q, want dek_missing; response=%+v", resp.Reason, resp)
+	}
+	if !strings.Contains(resp.Message, "登录密钥") {
+		t.Fatalf("message should mention 登录密钥; response=%+v", resp)
+	}
+	if !strings.Contains(resp.Hint, "重新登录") {
+		t.Fatalf("hint should mention 重新登录; response=%+v", resp)
 	}
 }
 

@@ -1248,7 +1248,17 @@ type authStatusDiagnostic struct {
 }
 
 func authStatusDiagnosticFromError(err error) *authStatusDiagnostic {
-	if err == nil || !keychain.IsUnavailable(err) {
+	if err == nil {
+		return nil
+	}
+	if keychain.IsDEKMissing(err) {
+		return &authStatusDiagnostic{
+			Reason:  "dek_missing",
+			Message: "本地登录密钥缺失，无法解密已保存的登录态",
+			Hint:    "重新登录以生成新的本地登录密钥；如仍异常，可先清理本地登录态后再登录。",
+		}
+	}
+	if !keychain.IsUnavailable(err) {
 		return nil
 	}
 	return &authStatusDiagnostic{
