@@ -6,6 +6,21 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.49] - 2026-07-08
+
+This release lands a full real-machine QA sweep across the CLI, helper scripts, and skill docs (#572), and hardens the release pipeline so npm publishing can no longer be blocked by Gitee mirror issues (#570).
+
+### Fixed
+
+- **Real-machine QA fixes across CLI commands** (#572) — `aitable chart/dashboard share update --enabled` now takes a string so `--enabled false` disables; `chat conversation-info --user` resolves openDingTalkId and registers `--id/--conversation-id/--chat` aliases; `chat list-all-conversations --limit` is capped at 100 and rejects larger values; custom-robot webhook failures surface `errcode` instead of masquerading as success; `contact` registers `--dept/--depts` as the primary flags so the documented spelling actually works; `sheet media-upload` and `sheet export` emit clean JSON under `--format json` (progress lines no longer leak); `wiki node create --type` enum is corrected (drops unsupported `asheet`, adds `axls/able/appt/adraw/amind`); `ding message list --type` defaults to `ALL` since the server rejects empty type.
+- **Helper script fixes (mono and multi)** (#572) — aitable import/export flag names and the tableId regex (7-char default tables were rejected); mail search `--limit`, contact dept response keys (`deptList`/`deptUserList`) and `userInfo` nesting; `attendance_my_record` whoami compatibility; `calendar_schedule_meeting` event-id unwrapping; `drive_tree_list` recursion via `fileId`; report scripts migrated off the deprecated `report list`/`report detail`.
+- **Skill docs sync (mono and multi)** (#572) — command indexes, flag names, enums, return-structure keys and cross-product intent routing are re-aligned to real-machine behavior across all products. Genuinely server-side limitations (permission gates, org-level restrictions, unregistered tool keys) are annotated instead of code-patched, and the cross-cutting hazards (`success` always true, `--jq`/`--fields` currently no-op) are documented.
+
+### Changed
+
+- **Release pipeline unblocks npm publish from Gitee mirror** (#570) — the Release workflow now publishes to npm before touching the Gitee mirror, so Gitee upload issues cannot block `npm/latest`. GitHub→Gitee attachment upload is disabled by default (unreliable from US runners) and only runs when `ENABLE_GITEE_UPLOAD_FALLBACK=true`; the legacy upload fallback path is guarded with timeout and retry so it fails fast when re-enabled.
+- **Repair modes for release republish** (#570) — the Release workflow gains a repair input and a standalone npm-only repair workflow, used to republish an existing release to npm without re-running the full pipeline.
+
 ## [1.0.48] - 2026-07-07
 
 This release promotes the sealed **remove-discovery delivery** from the beta line to the stable `v1.0.48` package. It removes dynamic service discovery from the open-edition runtime, keeps legacy CLI compatibility aliases, syncs the open command/help/skill surface with the dws-wukong baseline, and includes the `dev connect` default-yolo behavior on the stable upgrade track.
