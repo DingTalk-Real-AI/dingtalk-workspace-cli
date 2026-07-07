@@ -1072,7 +1072,8 @@ func validateCallArguments(args map[string]any) error {
 
 func discoveryActions(snapshotPath string) []string {
 	actions := []string{
-		"dws cache refresh",
+		i18n.T("检查 dws-data/syncdata 静态端点生成物是否包含目标 server"),
+		i18n.T("运行 sync-oss 重新生成静态端点与路由后重试"),
 		i18n.T("检查服务连通性和协议版本后重试"),
 	}
 	if snapshotPath != "" {

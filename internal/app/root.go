@@ -368,9 +368,8 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 	root.AddCommand(newLegacyPublicCommands(runner, patCaller)...)
 	root.AddCommand(newLegacyHiddenCommands(runner)...)
 
-	// --- Plugin loading: runs AFTER legacy commands so that
-	// AppendDynamicServer adds plugin endpoints on top of Market
-	// endpoints (SetDynamicServers is called inside loadDynamicCommands).
+	// --- Plugin loading: runs AFTER legacy commands so plugin endpoints can
+	// be appended on top of the static endpoint registry.
 	pluginCmds := loadPlugins(engine, runner)
 	if len(pluginCmds) > 0 {
 		addPluginCommandsSafe(root, pluginCmds)
@@ -503,7 +502,7 @@ func newVersionCommand() *cobra.Command {
 			gc := GitCommit()
 			goVer := "1.24+"
 
-			arch := "MCP Dynamic Aggregation"
+			arch := "MCP Static Endpoint Mode"
 
 			if wantJSON {
 				payload := map[string]any{
@@ -951,9 +950,7 @@ func loadPlugins(engine *pipeline.Engine, runner executor.Runner) []*cobra.Comma
 	return pluginCmds
 }
 
-// pluginCacheKey derives the cache key used to persist a plugin MCP server's
-// tool list. Prefixed with "plugin:" so entries are namespaced apart from the
-// Market-derived cache, and visible distinctly via `dws cache status`.
+// pluginCacheKey derives the stable key for a plugin MCP server.
 func pluginCacheKey(pluginName, serverKey string) string {
 	return "plugin:" + pluginName + ":" + serverKey
 }
@@ -975,8 +972,8 @@ func discoverHTTPTools(p *plugin.Plugin, srv mcptypes.ServerDescriptor, tc *tran
 	// typically responds in <200 ms. Third-party servers with auth get a
 	// slightly larger window to accommodate TLS + auth RTT. Operators with
 	// cross-region endpoints can relax the window via DWS_PLUGIN_COLD_TIMEOUT.
-	// The outcome is persisted as a negative cache so subsequent startups
-	// (80 ms warm) are unaffected. See issue #119.
+	// TODO(remove-discovery): plugin discovery currently has no warm cache, so
+	// unreachable endpoints still pay this timeout during command startup.
 	timeout := timeouts.httpNoAuth
 	if len(srv.AuthHeaders) > 0 {
 		timeout = timeouts.httpAuth
