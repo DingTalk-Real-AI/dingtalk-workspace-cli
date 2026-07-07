@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
 
@@ -1337,7 +1338,11 @@ func newChatCommand() *cobra.Command {
 
 			mediaId, _ := cmd.Flags().GetString("media-id")
 			msgType, _ := cmd.Flags().GetString("msg-type")
-			clawType := "wukong"
+			clawType := ""
+			aiTag, _ := cmd.Flags().GetBool("ai-tag")
+			if aiTag {
+				clawType = edition.ClawType()
+			}
 
 			// ── 富媒体消息（image/audio/video/file） ──
 			// text/markdown 透传到下方的文本消息分支，避免模型填 --msg-type text 报 unsupported
@@ -2244,6 +2249,7 @@ func newChatCommand() *cobra.Command {
 	chatMessageSendCmd.Flags().String("file-type", "", "旧链路兼容：文件类型/扩展名")
 	chatMessageSendCmd.Flags().String("file-path", "", "本地文件路径（msgType=file 时可直接上传发送；旧链路中作为 content.filePath）")
 	chatMessageSendCmd.Flags().Int64("file-size", 0, "旧链路兼容：文件大小，单位字节")
+	chatMessageSendCmd.Flags().Bool("ai-tag", true, "消息是否带 AI 发送角标（默认 true）")
 	chatMessageSendCmd.Flags().String("uuid", "", "幂等 UUID，相同 uuid 在 24h 内不会重复发送（可选）")
 
 	chatMessageSendByBotCmd.Flags().String("robot-code", "", "机器人 Code (必填)")
@@ -3264,11 +3270,16 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			if err != nil {
 				return fmt.Errorf("failed to marshal reply content: %w", err)
 			}
+			clawType := ""
+			aiTag, _ := cmd.Flags().GetBool("ai-tag")
+			if aiTag {
+				clawType = edition.ClawType()
+			}
 			toolArgs := map[string]any{
 				"openConversationId": mustGetFlag(cmd, "conversation-id"),
 				"msgType":            "reply",
 				"content":            string(contentJSON),
-				"clawType":           "wukong",
+				"clawType":           clawType,
 			}
 			if v, _ := cmd.Flags().GetString("uuid"); v != "" {
 				toolArgs["uuid"] = v
@@ -3285,6 +3296,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatMessageReplyCmd.Flags().String("text", "", "回复内容 (必填)")
 	_ = chatMessageReplyCmd.MarkFlagRequired("text")
 	chatMessageReplyCmd.Flags().String("uuid", "", "幂等键（可选）")
+	chatMessageReplyCmd.Flags().Bool("ai-tag", true, "消息是否带 AI 发送角标（默认 true）")
 
 	// ── message forward: 转发单条消息 ────────────────────────
 
@@ -4180,9 +4192,9 @@ status 可选值:
 	// ── clear-all-red-point: 红点清零（全部已读） ─────────────────
 
 	chatClearAllRedPointCmd := &cobra.Command{
-		Use:   "clear-all-red-point",
-		Short: "清除所有会话红点（全部已读）",
-		Long:  `一键清除当前用户所有会话的未读红点，等效于“全部已读”。`,
+		Use:     "clear-all-red-point",
+		Short:   "清除所有会话红点（全部已读）",
+		Long:    `一键清除当前用户所有会话的未读红点，等效于“全部已读”。`,
 		Example: `  dws chat clear-all-red-point`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return callMCPToolOnServer("im", "clear_all_red_point", map[string]any{})

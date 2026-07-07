@@ -28,7 +28,6 @@ func init() {
 		{"attendance", newAttendanceCommand},
 		{"calendar", newCalendarCommand},
 		{"chat", newChatCommand},
-
 		{"contact", newContactCommand},
 		{"devdoc", newDevdocCommand},
 		{"ding", newDingCommand},

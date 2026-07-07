@@ -60,7 +60,7 @@ func degradedHint(reason CatalogDegradedReason, serverCount int) string {
 		if embedded {
 			return fmt.Sprintf("已发现 %d 个服务但连接全部失败，请稍后重试", serverCount)
 		}
-		return fmt.Sprintf("已发现 %d 个服务但连接全部失败，请稍后重试或执行: dws cache refresh", serverCount)
+		return fmt.Sprintf("已发现 %d 个服务但连接全部失败；静态端点模式下请检查 dws-data/syncdata 生成物或稍后重试", serverCount)
 	default:
 		return "MCP 服务发现失败"
 	}
