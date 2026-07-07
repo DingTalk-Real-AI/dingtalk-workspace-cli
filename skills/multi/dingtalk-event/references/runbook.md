@@ -105,7 +105,7 @@ dws event consume user_im_message_receive_user \
 1. 确认事件码和必填参数正确。
 2. 用 event status 加对应事件码查看订阅和本地连接状态。
 3. 联调服务端时临时加 `--debug --debug-raw-events`，观察当前 personal stream bus 是否收到服务端推送。
-4. 读取业务字段前先抓一条 `-f json --max-events 1` 样本；payload 以实际推送为准。
+4. 读取业务字段前先抓一条 `-f json --max-events 1` 样本；`data` 是 JSON 字符串，需要再解析一次，消息文本通常在 `payload.body.content`。
 
 ## 5. 停止监听
 

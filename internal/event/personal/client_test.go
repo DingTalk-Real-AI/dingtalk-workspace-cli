@@ -72,7 +72,7 @@ func TestClientCreateSubscriptionDWSRequestAndArrayResponse(t *testing.T) {
 			"targetUid":     "507971",
 			"targetUidType": "staffId",
 		},
-		Filter:         map[string]any{"field": "message.text", "op": "contains", "value": "P0"},
+		Filter:         map[string]any{"field": "payload.body.content", "op": "contains", "value": "P0"},
 		IdempotencyKey: "idem-1",
 	})
 	if err != nil {

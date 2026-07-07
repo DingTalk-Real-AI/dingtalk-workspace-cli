@@ -130,6 +130,49 @@ func TestPersonalEventSchemaHidesSchemaIDs(t *testing.T) {
 	}
 }
 
+func TestPersonalEventSchemaUsesStreamPayloadPaths(t *testing.T) {
+	for _, eventKey := range []string{
+		personal.EventMention,
+		personal.EventSingleChat,
+		personal.EventInChat,
+		personal.EventFromUser,
+	} {
+		t.Run(eventKey, func(t *testing.T) {
+			cmd := newEventSchemaCommand()
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetArgs([]string{eventKey, "--format", "json"})
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			got := out.String()
+			for _, want := range []string{
+				"payload.body.content",
+				"payload.body.openConversationId",
+				"payload.body.senderOpenDingTalkId",
+				"decoded_data_schema",
+				"content_media_type",
+			} {
+				if !strings.Contains(got, want) {
+					t.Fatalf("schema output for %s missing %q: %s", eventKey, want, got)
+				}
+			}
+			for _, old := range []string{
+				"message.text",
+				"chat.openConversationId",
+				"sender.userId",
+				"sender.unionId",
+			} {
+				if strings.Contains(got, old) {
+					t.Fatalf("schema output for %s leaked old path %q: %s", eventKey, old, got)
+				}
+			}
+		})
+	}
+}
+
 func TestEventSchemaDefaultsToUser(t *testing.T) {
 	cmd := newEventSchemaCommand()
 	cmd.SilenceUsage = true

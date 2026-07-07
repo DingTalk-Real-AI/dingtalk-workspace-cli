@@ -93,7 +93,8 @@ dws event consume user_im_message_receive_o2o \
 - 默认推荐 `-f ndjson`：stdout 每行一个事件 JSON，适合 Agent 管道读取。
 - 人工查看单条样本可用 `-f json --max-events 1`。
 - 长时间监听时用 `--duration` 或外部进程管理控制生命周期。
-- `data` 以服务端实际推送样本为准，不要把 CLI schema 的简化结构当作权威 payload 协议。
+- `data` 是服务端业务 payload 的 JSON 字符串；读取消息内容前先对 `data` 再做一次 JSON 解析。
+- 常用业务字段在解析后的 `payload.body` 下：`content`、`sender`、`openConversationId`、`openMessageId`、`senderOpenDingTalkId`。
 - `--debug-raw-events` 只用于和服务端联调，正常 Agent 消费不要使用。
 
 ## 参考

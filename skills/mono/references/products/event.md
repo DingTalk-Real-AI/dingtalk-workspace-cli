@@ -77,7 +77,8 @@ dws event stop <subscribe_id>
 
 - 推荐 `-f ndjson`：一行一个事件 JSON，适合 Agent 管道读取。
 - 人工取样可用 `-f json --max-events 1`。
-- `data` 以服务端实际推送样本为准，不要把 CLI schema 的简化结构当作权威 payload 协议。
+- `data` 是服务端业务 payload 的 JSON 字符串；读取消息内容前先对 `data` 再做一次 JSON 解析。
+- 解析后的消息文本在 `payload.body.content`，会话 ID 在 `payload.body.openConversationId`。
 - `--debug-raw-events` 仅用于服务端联调，正常消费不要使用。
 
 ## 完整文档

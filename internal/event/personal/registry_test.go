@@ -70,6 +70,53 @@ func TestDefinitionJSONHidesInternalSchemaIDs(t *testing.T) {
 	}
 }
 
+func TestMessageSchemasUseStreamPayloadPaths(t *testing.T) {
+	for _, eventKey := range []string{EventMention, EventSingleChat, EventInChat, EventFromUser} {
+		t.Run(eventKey, func(t *testing.T) {
+			def, ok := Lookup(eventKey)
+			if !ok {
+				t.Fatalf("Lookup(%q) failed", eventKey)
+			}
+			raw, err := json.Marshal(def)
+			if err != nil {
+				t.Fatalf("Marshal() error = %v", err)
+			}
+			out := string(raw)
+			for _, want := range []string{
+				"payload.body.content",
+				"payload.body.openConversationId",
+				"payload.body.senderOpenDingTalkId",
+				"decoded_data_schema",
+				"content_media_type",
+			} {
+				if !strings.Contains(out, want) {
+					t.Fatalf("schema for %s missing %q: %s", eventKey, want, out)
+				}
+			}
+			for _, old := range []string{
+				"message.text",
+				"chat.openConversationId",
+				"sender.userId",
+				"sender.unionId",
+			} {
+				if strings.Contains(out, old) {
+					t.Fatalf("schema for %s leaked old path %q: %s", eventKey, old, out)
+				}
+			}
+			dataSchema, ok := def.PayloadSchema["data"].(map[string]any)
+			if !ok {
+				t.Fatalf("payload_schema.data = %#v, want object", def.PayloadSchema["data"])
+			}
+			if dataSchema["type"] != "string" || dataSchema["content_media_type"] != "application/json" {
+				t.Fatalf("payload_schema.data = %#v, want string application/json", dataSchema)
+			}
+			if _, ok := def.PayloadSchema["decoded_data_schema"].(map[string]any); !ok {
+				t.Fatalf("payload_schema.decoded_data_schema = %#v, want object", def.PayloadSchema["decoded_data_schema"])
+			}
+		})
+	}
+}
+
 func TestBuildRuleParamMention(t *testing.T) {
 	rule, param, err := BuildRuleParam(EventMention, RuleOptions{})
 	if err != nil {
@@ -151,7 +198,7 @@ func TestBuildRuleParamGroup(t *testing.T) {
 }
 
 func TestBuildFilterKeywordAndJSON(t *testing.T) {
-	filter, canonical, err := BuildFilter(`{"field":"chat.openConversationId","op":"eq","value":"cid1"}`, "P0, 故障")
+	filter, canonical, err := BuildFilter(`{"field":"payload.body.openConversationId","op":"eq","value":"cid1"}`, "P0, 故障")
 	if err != nil {
 		t.Fatalf("BuildFilter() error = %v", err)
 	}
@@ -162,6 +209,9 @@ func TestBuildFilterKeywordAndJSON(t *testing.T) {
 	}
 	if !strings.Contains(canonical, "contains_any") {
 		t.Fatalf("canonical = %s, want contains_any", canonical)
+	}
+	if !strings.Contains(canonical, "payload.body.content") || strings.Contains(canonical, "message.text") {
+		t.Fatalf("canonical = %s, want keyword filter on payload.body.content only", canonical)
 	}
 }
 

@@ -205,7 +205,7 @@ func BuildFilter(filterJSON string, keywordCSV string) (any, string, error) {
 	keywords := splitCSV(keywordCSV)
 	if len(keywords) > 0 {
 		parts = append(parts, map[string]any{
-			"field": "message.text",
+			"field": "payload.body.content",
 			"op":    "contains_any",
 			"value": keywords,
 		})
@@ -274,23 +274,141 @@ func splitCSV(raw string) []string {
 
 func defaultFilterSchema() map[string]any {
 	return map[string]any{
-		"fields": []string{
-			"message.text",
-			"chat.openConversationId",
-			"sender.userId",
-			"sender.unionId",
+		"description": "Fields refer to decoded JSON inside the event data string.",
+		"fields": []map[string]any{
+			{"name": "payload.body.content", "type": "string", "ops": []string{"contains", "contains_any", "regex", "eq"}},
+			{"name": "payload.body.openConversationId", "type": "string", "ops": []string{"eq", "in"}},
+			{"name": "payload.body.sender", "type": "string", "ops": []string{"eq", "contains", "in"}},
+			{"name": "payload.body.senderOpenDingTalkId", "type": "string", "ops": []string{"eq", "in"}},
+			{"name": "payload.uid", "type": "integer", "ops": []string{"eq", "in"}},
+			{"name": "subject.uid", "type": "integer", "ops": []string{"eq", "in"}},
+			{"name": "eventKey", "type": "string", "ops": []string{"eq", "in"}},
+			{"name": "subId", "type": "string", "ops": []string{"eq", "in"}},
 		},
-		"ops": []string{"eq", "contains", "contains_any", "in", "regex"},
 	}
 }
 
 func imMessagePayloadSchema() map[string]any {
 	return map[string]any{
+		"type":        "object",
+		"description": "CLI event envelope. The data field is a JSON string; parse it before reading business fields.",
+		"properties": map[string]any{
+			"type":                map[string]any{"type": "string", "enum": []string{"event"}},
+			"seq":                 map[string]any{"type": "integer"},
+			"event_id":            map[string]any{"type": "string"},
+			"event_born_time":     map[string]any{"type": "integer"},
+			"event_type":          map[string]any{"type": "string"},
+			"event_scope":         map[string]any{"type": "string", "enum": []string{"personal"}},
+			"subscribe_id":        map[string]any{"type": "string"},
+			"source_id":           map[string]any{"type": "string"},
+			"data":                map[string]any{"type": "string", "content_media_type": "application/json"},
+			"headers":             map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}},
+			"received_at_unix_ms": map[string]any{"type": "integer"},
+		},
+		"data": map[string]any{
+			"type":               "string",
+			"content_media_type": "application/json",
+			"description":        "Stringified server business payload.",
+		},
+		"decoded_data_schema": imMessageDecodedDataSchema(),
+	}
+}
+
+func imMessageDecodedDataSchema() map[string]any {
+	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"message": map[string]any{"type": "object"},
-			"sender":  map[string]any{"type": "object"},
-			"chat":    map[string]any{"type": "object"},
+			"audit": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"msgIdMetaq": map[string]any{"type": "string"},
+					"traceId":    map[string]any{"type": "string"},
+				},
+			},
+			"deliveredAt":   map[string]any{"type": "string", "format": "date-time"},
+			"delivery":      map[string]any{"type": "string"},
+			"eventId":       map[string]any{"type": "string"},
+			"eventKey":      map[string]any{"type": "string"},
+			"occurredAt":    map[string]any{"type": "string", "format": "date-time"},
+			"occurredAtMs":  map[string]any{"type": "integer"},
+			"receivedAt":    map[string]any{"type": "string", "format": "date-time"},
+			"schemaVersion": map[string]any{"type": "string"},
+			"subId":         map[string]any{"type": "string"},
+			"payload": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"uid":      map[string]any{"type": "integer"},
+					"clientId": map[string]any{"type": "string"},
+					"corpid":   map[string]any{"type": "string"},
+					"bizid":    map[string]any{"type": "string"},
+					"body":     imMessageBodySchema(),
+					"event_time": map[string]any{
+						"type": "integer",
+					},
+				},
+			},
+			"source": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"channel": map[string]any{"type": "string"},
+					"tag":     map[string]any{"type": "string"},
+				},
+			},
+			"subject": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"isSelfLoop": map[string]any{"type": "boolean"},
+					"uid":        map[string]any{"type": "integer"},
+				},
+			},
+			"tenant": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"clientId": map[string]any{"type": "string"},
+					"corpId":   map[string]any{"type": "string"},
+					"orgId":    map[string]any{"type": "integer"},
+				},
+			},
+		},
+		"field_paths": []string{
+			"audit.msgIdMetaq",
+			"audit.traceId",
+			"deliveredAt",
+			"eventId",
+			"eventKey",
+			"occurredAt",
+			"occurredAtMs",
+			"payload.uid",
+			"payload.clientId",
+			"payload.corpid",
+			"payload.bizid",
+			"payload.body.createTime",
+			"payload.body.sender",
+			"payload.body.openMessageId",
+			"payload.body.senderOpenDingTalkId",
+			"payload.body.openConversationId",
+			"payload.body.content",
+			"payload.event_time",
+			"source.tag",
+			"subId",
+			"subject.uid",
+			"tenant.clientId",
+			"tenant.corpId",
+			"tenant.orgId",
+		},
+	}
+}
+
+func imMessageBodySchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"createTime":           map[string]any{"type": "string"},
+			"sender":               map[string]any{"type": "string"},
+			"openMessageId":        map[string]any{"type": "string"},
+			"senderOpenDingTalkId": map[string]any{"type": "string"},
+			"openConversationId":   map[string]any{"type": "string"},
+			"content":              map[string]any{"type": "string"},
 		},
 	}
 }

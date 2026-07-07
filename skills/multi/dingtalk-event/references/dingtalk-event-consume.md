@@ -117,7 +117,20 @@ dws event consume user_im_message_receive_o2o \
 | `headers` | Stream 帧 headers |
 | `received_at_unix_ms` | 本地接收时间 |
 
-业务消息内容通常在 `data` 内部 payload 中。读取业务字段前先看实际样本；不要把 CLI schema 的简化结构当作服务端权威 payload 协议。
+`data` 当前是 JSON 字符串，不是已展开对象。读取业务字段前先对 `data` 再做一次 JSON 解析。
+
+解析后的常用字段：
+
+| 字段 | 说明 |
+|------|------|
+| `payload.body.content` | 消息文本内容 |
+| `payload.body.sender` | 发送人展示名 |
+| `payload.body.openConversationId` | 开放会话 ID |
+| `payload.body.openMessageId` | 开放消息 ID |
+| `payload.body.senderOpenDingTalkId` | 发送人的开放钉钉 ID |
+| `payload.uid` | 当前个人事件主体 uid |
+| `eventKey` | 个人事件码 |
+| `subId` | 服务端订阅 ID |
 
 ## 状态与停止
 
