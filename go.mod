@@ -57,4 +57,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-replace github.com/DingTalk-Real-AI/dws-data => github.com/PeterGuy326/dws-data v0.0.0-20260707023514-53c93c0fbd1f
+replace github.com/DingTalk-Real-AI/dws-data => ../dws-data

@@ -1,7 +1,5 @@
 github.com/MakeNowJust/heredoc v1.0.0 h1:cXCdzVdstXyiTqTvfqk9SDHpKNjxuom+DOlyEeQ4pzQ=
 github.com/MakeNowJust/heredoc v1.0.0/go.mod h1:mG5amYoWBHf8vpLOuehzbGGw0EHxpZZ6lCpQ4fNJ8LE=
-github.com/PeterGuy326/dws-data v0.0.0-20260707023514-53c93c0fbd1f h1:BPet9IK5sSXieBdaFIhZQ12me5ALgVJUidyTd27WNUY=
-github.com/PeterGuy326/dws-data v0.0.0-20260707023514-53c93c0fbd1f/go.mod h1:rIPRVBwBOa4tkEmxHt9Tl3XLQNby8deZK5Sr0WCUe5k=
 github.com/RealAlexandreAI/json-repair v0.0.15 h1:AN8/yt8rcphwQrIs/FZeki+cKaIERUNr25zf1flirIs=
 github.com/RealAlexandreAI/json-repair v0.0.15/go.mod h1:GKJi5borR78O8c7HCVbgqjhoiVibZ6hJldxbc6dGrAI=
 github.com/atotto/clipboard v0.1.4 h1:EH0zSVneZPSuFR11BlR9YppQTVDbh5+16AmcJi4g1z4=
