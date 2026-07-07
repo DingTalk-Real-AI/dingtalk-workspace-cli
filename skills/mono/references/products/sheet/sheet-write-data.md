@@ -100,9 +100,11 @@ Flags:
 Usage:
   dws sheet csv-put [flags]
 Example:
+  # 内联多行 CSV：必须用 $'...' 让 \n 变成真换行；普通单引号 '...\n...' 里的 \n 是字面量，会写成一行含字面 \n 的错误数据
   dws sheet csv-put --node <NODE_ID> --sheet-id <SHEET_ID> --start-cell A1 \
-    --csv 'name,score\nAlice,95\nBob,87'
+    --csv $'name,score\nAlice,95\nBob,87'
 
+  # 多行数据推荐用 @文件，最稳妥
   dws sheet csv-put --node <NODE_ID> --sheet-id <SHEET_ID> --start-cell B2 \
     --csv @data.csv --allow-overwrite
 

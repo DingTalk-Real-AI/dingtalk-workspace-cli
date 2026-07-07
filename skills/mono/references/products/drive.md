@@ -389,6 +389,8 @@ Flags:
       --name string        新名称 (仅 rename 必填)
 ```
 
+> **rename 只传主名，不要带扩展名**：服务端会按文件原扩展名自动补一个后缀。若 `--name` 里已带扩展名（如 `报告.txt`），回读会变成双扩展名 `报告.txt.txt`。正确做法：`dws drive rename --node <ID> --name "报告"`（不含 `.txt`），系统自动补回 `报告.txt`。
+
 权限要求：copy 需对源文档有"阅读"权限且对目标文件夹有"编辑"权限；move 需对源文档有"管理"权限且对目标文件夹有"编辑"权限；rename 需对文档有"编辑"权限。
 
 > **字段选择**：`drive list` 返回中有 `dentryId`（数字格式）和 `fileId`（UUID 格式），**必须使用 `fileId`（UUID 格式）**作为 `--node` 和 `--folder` 参数值。

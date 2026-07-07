@@ -108,14 +108,16 @@ Flags:
       --node string              表格文档 ID 或 URL (必填)
       --sheet-id string          工作表 ID 或名称 (必填)
       --name string              新名称，最长 100 字符，不能包含 / \ ? * [ ] :
+      --title string             --name 的别名（兼容）
       --index int                新位置（从 0 开始）
       --hidden                   --hidden=true 隐藏，--hidden=false 取消隐藏
+      --tab-color string         工作表标签颜色，Hex 如 #FF0000；传空字符串清除颜色
       --frozen-row-count int     冻结行数，0 表示取消冻结
       --frozen-column-count int  冻结列数，0 表示取消冻结
 ```
 
-更新工作表名称、位置、隐藏状态、冻结行列。
-`--name` / `--index` / `--hidden` / `--frozen-row-count` / `--frozen-column-count` 至少提供一个；多个属性可同时传入，将在同一次请求中更新。
+更新工作表名称、位置、隐藏状态、标签颜色、冻结行列。
+`--name`（别名 `--title`）/ `--index` / `--hidden` / `--tab-color` / `--frozen-row-count` / `--frozen-column-count` 至少提供一个；多个属性可同时传入，将在同一次请求中更新。
 
 注意：
 - 至少需要保留一个可见的工作表，不能将所有工作表都隐藏
@@ -174,12 +176,12 @@ dws sheet create --name "销售数据" --format json
 # 2. 查看工作表列表 — 提取 sheetId
 dws sheet list --node <NODE_ID> --format json
 
-# 3. 写入表头和数据
+# 3. 写入表头和数据（每个单元格必须是 object；数字也写成字符串）
 dws sheet range update --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:C1" \
-  --values '[["姓名","部门","销售额"]]' --format json
+  --values '[[{"type":"text","text":"姓名"},{"type":"text","text":"部门"},{"type":"text","text":"销售额"}]]' --format json
 
 dws sheet range update --node <NODE_ID> --sheet-id <SHEET_ID> --range "A2:C4" \
-  --values '[["张三","销售部",50000],["李四","市场部",38000],["王五","销售部",62000]]' --format json
+  --values '[[{"type":"text","text":"张三"},{"type":"text","text":"销售部"},{"type":"text","text":"50000"}],[{"type":"text","text":"李四"},{"type":"text","text":"市场部"},{"type":"text","text":"38000"}],[{"type":"text","text":"王五"},{"type":"text","text":"销售部"},{"type":"text","text":"62000"}]]' --format json
 
 # ── 工作流 2: 读取已有表格数据 ──
 
@@ -200,12 +202,12 @@ dws sheet range read --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:D10" --f
 # 1. 新建工作表
 dws sheet new --node <NODE_ID> --name "汇总" --format json
 
-# 2. 在新工作表中写入汇总公式
+# 2. 在新工作表中写入汇总公式（公式写在 text，以 = 开头）
 dws sheet range update --node <NODE_ID> --sheet-id <NEW_SHEET_ID> --range "A1:B1" \
-  --values '[["指标","数值"]]' --format json
+  --values '[[{"type":"text","text":"指标"},{"type":"text","text":"数值"}]]' --format json
 
 dws sheet range update --node <NODE_ID> --sheet-id <NEW_SHEET_ID> --range "A2:B2" \
-  --values '[["总销售额","=SUM(Sheet1!C2:C100)"]]' --format json
+  --values '[[{"type":"text","text":"总销售额"},{"type":"text","text":"=SUM(Sheet1!C2:C100)"}]]' --format json
 ```
 
 ## 上下文传递

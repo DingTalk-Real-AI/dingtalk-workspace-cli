@@ -31,8 +31,14 @@ func runSheetExport(cmd *cobra.Command, _ []string) error {
 
 	ctx := context.Background()
 
+	// json 模式下进度提示会污染 stdout（PrintInfo/PrintKeyValue 都写 stdout），
+	// 使得 agent 无法按 JSON 解析。故 json 模式抑制进度、末尾统一输出结果 JSON。
+	jsonMode := deps.Caller.Format() == "json"
+
 	// Step 1: submit export job
-	deps.Out.PrintInfo("[1/3] 提交表格导出任务 (xlsx)...")
+	if !jsonMode {
+		deps.Out.PrintInfo("[1/3] 提交表格导出任务 (xlsx)...")
+	}
 	submitText, err := callMCPToolReturnText(ctx, "submit_export_job", map[string]any{
 		"nodeId":       nodeID,
 		"exportFormat": "xlsx",
@@ -44,10 +50,11 @@ func runSheetExport(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	deps.Out.PrintInfo(fmt.Sprintf("导出任务已提交: jobId=%s", jobID))
-
-	// Step 2: progressive backoff polling
-	deps.Out.PrintInfo("[2/3] 轮询任务状态（渐进式退避，最多 30 次约 5 分钟）...")
+	if !jsonMode {
+		deps.Out.PrintInfo(fmt.Sprintf("导出任务已提交: jobId=%s", jobID))
+		// Step 2: progressive backoff polling
+		deps.Out.PrintInfo("[2/3] 轮询任务状态（渐进式退避，最多 30 次约 5 分钟）...")
+	}
 	downloadURL, err := pollSheetExportJob(ctx, jobID)
 	if err != nil {
 		return err
@@ -55,6 +62,13 @@ func runSheetExport(cmd *cobra.Command, _ []string) error {
 
 	// No output path: print the downloadUrl and exit
 	if outputPath == "" {
+		if jsonMode {
+			return deps.Out.PrintJSON(map[string]any{
+				"success":     true,
+				"jobId":       jobID,
+				"downloadUrl": downloadURL,
+			})
+		}
 		deps.Out.PrintKeyValue("jobId", jobID)
 		deps.Out.PrintKeyValue("downloadUrl", downloadURL)
 		deps.Out.PrintInfo("导出完成。downloadUrl 具有时效性，请尽快下载。")
@@ -71,9 +85,19 @@ func runSheetExport(cmd *cobra.Command, _ []string) error {
 		outputPath = filepath.Join(outputPath, filename)
 	}
 
-	deps.Out.PrintInfo(fmt.Sprintf("[3/3] 下载 xlsx 到 %s ...", outputPath))
+	if !jsonMode {
+		deps.Out.PrintInfo(fmt.Sprintf("[3/3] 下载 xlsx 到 %s ...", outputPath))
+	}
 	if err := httpGetFile(ctx, downloadURL, map[string]string{}, outputPath); err != nil {
 		return fmt.Errorf("下载 xlsx 失败: %w", err)
+	}
+	if jsonMode {
+		return deps.Out.PrintJSON(map[string]any{
+			"success":     true,
+			"jobId":       jobID,
+			"outputPath":  outputPath,
+			"downloadUrl": downloadURL,
+		})
 	}
 	deps.Out.PrintInfo(fmt.Sprintf("导出完成: %s", outputPath))
 	return nil
@@ -124,6 +148,8 @@ func exportPollIntervals() []time.Duration {
 // pollExportJob polls query_export_job per the progressive backoff schedule
 // until the job completes successfully, fails, or the 30-attempt cap is hit.
 func pollSheetExportJob(ctx context.Context, jobID string) (string, error) {
+	// json 模式下轮询进度也要抑制，否则 [INFO] 行会混进 stdout 破坏纯 JSON 输出。
+	quiet := deps.Caller.Format() == "json"
 	intervals := exportPollIntervals()
 	for i, wait := range intervals {
 		select {
@@ -136,7 +162,9 @@ func pollSheetExportJob(ctx context.Context, jobID string) (string, error) {
 			"jobId": jobID,
 		})
 		if err != nil {
-			deps.Out.PrintInfo(fmt.Sprintf("  [%d/30] 查询失败，将继续轮询: %v", i+1, err))
+			if !quiet {
+				deps.Out.PrintInfo(fmt.Sprintf("  [%d/30] 查询失败，将继续轮询: %v", i+1, err))
+			}
 			continue
 		}
 
@@ -149,7 +177,9 @@ func pollSheetExportJob(ctx context.Context, jobID string) (string, error) {
 		normStatus := strings.ToUpper(strings.TrimSpace(status))
 		switch normStatus {
 		case "SUCCESS":
-			deps.Out.PrintInfo(fmt.Sprintf("  [%d/30] 状态: SUCCESS", i+1))
+			if !quiet {
+				deps.Out.PrintInfo(fmt.Sprintf("  [%d/30] 状态: SUCCESS", i+1))
+			}
 			if downloadURL == "" {
 				return "", fmt.Errorf("任务成功但未返回 downloadUrl")
 			}
@@ -160,9 +190,13 @@ func pollSheetExportJob(ctx context.Context, jobID string) (string, error) {
 			}
 			return "", fmt.Errorf("%s", message)
 		case "PROCESSING", "RUNNING", "DOING", "PENDING", "":
-			deps.Out.PrintInfo(fmt.Sprintf("  [%d/30] 状态: PROCESSING", i+1))
+			if !quiet {
+				deps.Out.PrintInfo(fmt.Sprintf("  [%d/30] 状态: PROCESSING", i+1))
+			}
 		default:
-			deps.Out.PrintInfo(fmt.Sprintf("  [%d/30] 状态: %s", i+1, status))
+			if !quiet {
+				deps.Out.PrintInfo(fmt.Sprintf("  [%d/30] 状态: %s", i+1, status))
+			}
 		}
 	}
 	return "", fmt.Errorf("导出任务超时：已轮询 30 次（约 5 分钟）仍未完成，请稍后再试")

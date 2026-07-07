@@ -64,6 +64,7 @@ dws calendar room add [flags]
 dws calendar room delete [flags]
 ```
 > room是会议室，用于线下开会场景。
+> **组织限制**：部分企业使用自建会议室系统，未接入钉钉会议室能力。此时 `room search` / `room list-groups` 会返回业务错误 `400056`（"所选组织不支持预定钉钉会议室"）。这是组织级配置限制，不是命令用法问题；应直接告知用户该组织需在钉钉客户端手动预订会议室，不要重试或换参。
 
 ### busy 相关三级子命令
 ```

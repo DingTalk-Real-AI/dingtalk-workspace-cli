@@ -27,7 +27,7 @@ metadata:
 
 | 用户说 | 命令 |
 |--------|------|
-| "发邮件给 a@b.com" | `dws mail message send --from <自己邮箱> --to a@b.com --subject "<标题>" --body "<正文>"` |
+| "发邮件给 a@b.com" | `dws mail message send --from <自己邮箱> --to a@b.com --subject "<标题>" --content "<正文>"`（正文规范 flag 是 `--content`，`--body` 为隐藏别名） |
 | "今天未读邮件" | `python scripts/mail_unread_summary.py` |
 | "带抄送发送" | `python scripts/mail_send_with_cc.py --to a@b.com --cc c@d.com --subject "<标题>" --body "<正文>"` |
 

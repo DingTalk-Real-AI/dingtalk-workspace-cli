@@ -38,8 +38,10 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 dws aitable attachment upload --base-id <BASE_ID> --file-name report.pdf --size 204800 --format json
 # → 返回 uploadUrl、fileToken
 
-# 2. PUT 上传（Content-Type 留空）
-curl -X PUT "<uploadUrl>" -H "Content-Type:" --data-binary @report.pdf
+# 2. PUT 上传（Content-Type 必须与文件类型一致，不能留空）
+#    留空或用 curl 默认的 application/x-www-form-urlencoded 都会被 OSS 拒为 403
+curl -X PUT "<uploadUrl>" -H "Content-Type: application/pdf" --data-binary @report.pdf
+#    例：.txt → text/plain，.png → image/png，.xlsx → application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
 
 # 3. 写入记录
 dws aitable record update --base-id <BASE_ID> --table-id <TABLE_ID> \

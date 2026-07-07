@@ -12,7 +12,7 @@ Example:
 Flags:
       --end string   结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00) (必填)
       --page string  分页页码 (可选)
-      --size string  每页大小 (可选)
+      --limit string 每页大小 (可选)
       --start string 开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00) (必填)
       --query string  关键字搜索 (可选)
 ```
@@ -99,12 +99,12 @@ Flags:
 Usage:
   dws oa approval list-forms [flags]
 Example:
-  dws oa approval list-forms --cursor 0 --size 100
+  dws oa approval list-forms --cursor 0 --limit 100
 Flags:
       --cursor string  分页游标，首次传 0 (默认 "0")
-      --size string    每页大小，最大 100 (默认 "100")
+      --limit string   每页大小，最大 100 (默认 "100")
 ```
-MCP 工具: `list_user_visible_process`；参数: cursor, pageSize（对应 --cursor/--size）。返回结果含 processCode，可用于 list-initiated 的 --process-code。
+MCP 工具: `list_user_visible_process`；参数: cursor, pageSize（对应 --cursor/--limit）。返回结果含 processCode，可用于 list-initiated 的 --process-code。
 
 ### 按关键字模糊搜索审批表单
 ```
@@ -245,25 +245,26 @@ MCP 工具: `redirect_task`；参数: taskId, toActionerId, remark（对应 --ta
 Usage:
   dws oa approval oa-comments [flags]
 Example:
-  dws oa approval oa-comments --instance-id <processInstanceId> --text "同意，请尽快处理"
+  dws oa approval oa-comments --instance-id <processInstanceId> --content "同意，请尽快处理"
 Flags:
       --instance-id string   审批实例 ID (必填)
-      --text string          评论内容 (必填)
+      --content string       评论内容 (必填)
 ```
-MCP 工具: `dingflow_comments`；参数: processInstanceId, text（对应 --instance-id/--text）。processInstanceId 可通过 `list-pending` 或 `detail` 获取。
+MCP 工具: `dingflow_comments`；参数: processInstanceId, text（对应 --instance-id/--content）。processInstanceId 可通过 `list-pending` 或 `detail` 获取。
 
 ### 对审批实例进行抄送
 ```
 Usage:
   dws oa approval oa-cc-noticer [flags]
 Example:
-  dws oa approval oa-cc-noticer --instance-id <processInstanceId> --user-list "68674200835816"
-  dws oa approval oa-cc-noticer --instance-id <processInstanceId> --user-list "userId1,userId2"
+  dws oa approval oa-cc-noticer --instance-id <processInstanceId> --users "68674200835816"
+  dws oa approval oa-cc-noticer --instance-id <processInstanceId> --users "userId1,userId2" --operator-id "123123"
 Flags:
       --instance-id string   审批实例 ID (必填)
-      --user-list string     抄送用户 ID 列表，多个用逗号分隔 (必填)
+      --users string         抄送用户 ID 列表，多个用逗号分隔 (必填)
+      --operator-id string   操作人 ID (可选)
 ```
-MCP 工具: `oa_cc_noticer`；参数: processInstanceId, userList（对应 --instance-id/--user-list）。processInstanceId 可通过 `list-pending` 或 `detail` 获取，抄送用户 ID 可通过 `dws contact user search` 获取。
+MCP 工具: `oa_cc_noticer`；参数: processInstanceId, userList（对应 --instance-id/--users）。processInstanceId 可通过 `list-pending` 或 `detail` 获取，抄送用户 ID 可通过 `dws contact user search` 获取。
 
 ### 对审批任务进行加签
 
@@ -320,8 +321,8 @@ Flags:
 用户说"我审批/处理过的审批单" -> `approval list-executed`
 用户说"抄送我的审批单" -> `approval list-cc`
 用户说"转交审批/转交任务" → `approval redirect-task`（需 --task-id 和 --to-actioner-id）
-用户说"评论审批/添加评论/写评论" → `approval oa-comments`（需 --instance-id 和 --text）
-用户说"抄送审批/添加抄送人" → `approval oa-cc-noticer`（需 --instance-id 和 --user-list）
+用户说"评论审批/添加评论/写评论" → `approval oa-comments`（需 --instance-id 和 --content）
+用户说"抄送审批/添加抄送人" → `approval oa-cc-noticer`（需 --instance-id 和 --users）
 
 ## 核心工作流
 
@@ -348,12 +349,12 @@ dws oa approval revoke --instance-id <id> --remark "误发起" --format json
 dws oa approval records --instance-id <processInstanceId> --format json
 
 # 7. 获取可见审批表单（得到 processCode）
-dws oa approval list-forms --cursor 0 --size 100 --format json
+dws oa approval list-forms --cursor 0 --limit 100 --format json
 
 # 8. 查看自己发起的审批列表（--process-code 来自 list-forms 或 detail）
 dws oa approval list-initiated --process-code <code> \
   --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" \
-  --next-token 0 --max-results 20 --format json
+  --cursor 0 --limit 20 --format json
   
 # 9. 我处理过的审批单
 dws oa approval list-executed --limit <pageSize> --page <pageNumber> --query 关键词 --format json
@@ -367,11 +368,11 @@ dws oa approval redirect-task --task-id <taskId> --to-actioner-id <userId> --for
 dws oa approval redirect-task --task-id <taskId> --to-actioner-id <userId> --remark "请帮忙处理" --format json
 
 # 13. 对审批实例添加评论（processInstanceId 来自 list-pending 或 detail）
-dws oa approval oa-comments --instance-id <processInstanceId> --text "同意，请尽快处理" --format json
+dws oa approval oa-comments --instance-id <processInstanceId> --content "同意，请尽快处理" --format json
 
 # 14. 对审批实例进行抄送（processInstanceId 来自 list-pending 或 detail）
-dws oa approval oa-cc-noticer --instance-id <processInstanceId> --user-list "68674200835816" --format json
-dws oa approval oa-cc-noticer --instance-id <processInstanceId> --user-list "userId1,userId2" --format json
+dws oa approval oa-cc-noticer --instance-id <processInstanceId> --users "68674200835816" --format json
+dws oa approval oa-cc-noticer --instance-id <processInstanceId> --users "userId1,userId2" --format json
 ```
 
 ## 上下文传递表
@@ -391,6 +392,7 @@ dws oa approval oa-cc-noticer --instance-id <processInstanceId> --user-list "use
 - `revoke` 只能撤销自己发起的审批
 - `--remark` 审批意见虽为可选，但建议填写以留存审批痕迹
 - `list-initiated` 的 `--process-code` 可从 `list-forms` 或 `detail` 返回中提取
+- `list-initiated` 的 `--start` / `--end` 区间有后端上限（约 120 天）。超过上限会返回误导性的 `business_error: 时间戳无效`（实为区间过长，不是时间格式问题）。跨度大时请拆成多段短区间分别查询
 
 ## 自动化脚本
 

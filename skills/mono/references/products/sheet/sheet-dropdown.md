@@ -55,10 +55,11 @@ Flags:
       --range string      查询范围，A1 表示法，如 A1:A100 (必填)
 ```
 
-查询指定范围内的下拉列表配置信息，包括选项值、颜色和是否多选。
+查询指定范围内的下拉列表配置信息，包括选项值和颜色。
 - **用途**：查看单元格已设置的下拉列表选项和配置。
 - **场景**：在修改下拉列表前先查询现有配置；确认下拉列表是否设置成功。
-- **返回**：`dataValidations` 数组，相同选项的单元格聚合为一组，每组包含 `conditionValues`（选项值）、`ranges`（覆盖范围）、`options`（含 `enableMultiSelect` 和 `colorValueMap`）。范围内无下拉列表时 `hasDropdown` 为 false。
+- **返回**：`dataValidations` 数组，相同选项的单元格聚合为一组，每组包含 `conditionValues`（选项值）、`ranges`（覆盖范围）、`options`（含 `multipleValues` 和 `colorValueMap`）。**判空以 `hasDropdown` 为准**：范围内无下拉列表时 `hasDropdown` 为 false，但 `dataValidations` 里仍会带 1 个全 null 的幽灵条目，不要用数组长度判空。
+- ⚠️ **已知限制**：`options.multipleValues` 服务端恒返回 `null`（即使该下拉是用 `--multi-select` 建的），也不返回 `enableMultiSelect` 字段——**`get-dropdown` 读回无法判断该下拉是否多选**。要判断是否多选，改用 `range read`：它返回的 `cells[].dataValidation.enableMultiSelect` 字段是准确的（实测有效）。
 
 ### 删除下拉列表
 ```
@@ -90,5 +91,6 @@ Flags:
 
 - ★ **`--sheet-id` 获取规范（强制）**：`sheetId` 未知时必须先通过 `dws sheet list --node <NODE_ID> --format json` 查询，禁止凭空编造（如臆测为 `Sheet1`、`sheet1`、`0`、`default` 等）
 - `set-dropdown` 在指定范围内设置下拉列表，`--options` 为 JSON 数组，每个元素包含 `value`（必填）和 `color`（可选，`#RRGGBB` 格式）。选项值不能包含英文逗号。`--multi-select` 启用多选模式。如果目标范围已存在下拉列表，会被新配置覆盖
-- `get-dropdown` 查询指定范围内的下拉列表配置，返回 `dataValidations` 数组，相同选项的单元格聚合为一组。无下拉列表时 `hasDropdown` 为 false
+- `get-dropdown` 查询指定范围内的下拉列表配置，返回 `dataValidations` 数组，相同选项的单元格聚合为一组。判空以 `hasDropdown` 为准（无下拉时为 false，但 `dataValidations` 仍含 1 个全 null 幽灵条目）
+- ⚠️ `get-dropdown` 的 `options.multipleValues` 恒为 `null`、无 `enableMultiSelect` 字段，读回无法判断是否多选；要判断是否多选改用 `range read`（其 `dataValidation.enableMultiSelect` 准确）
 - `delete-dropdown` 删除指定范围内的下拉列表配置，单元格恢复为普通文本格式。已填写的值不会被清除。目标范围不存在下拉列表时操作仍返回成功

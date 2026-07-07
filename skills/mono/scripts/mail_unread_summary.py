@@ -102,7 +102,7 @@ def main():
         'mail', 'message', 'search',
         '--email', email or '<MY_EMAIL>',
         '--query', kql,
-        '--size', str(args.size),
+        '--limit', str(args.size),
         '--format', 'json',
     ], dry_run=args.dry_run)
 

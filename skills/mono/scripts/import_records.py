@@ -28,7 +28,7 @@ RecordDict = Dict[str, str]
 MAX_FILE_SIZE = 50 * 1024 * 1024
 ALLOWED_CSV_EXTENSIONS = ['.csv']
 ALLOWED_JSON_EXTENSIONS = ['.json']
-RESOURCE_ID_PATTERN = re.compile(r'^[A-Za-z0-9_-]{8,128}$')
+RESOURCE_ID_PATTERN = re.compile(r'^[A-Za-z0-9_-]{6,128}$')
 MAX_RECORDS_PER_BATCH = 100
 DEFAULT_BATCH_SIZE = 50
 

@@ -121,7 +121,7 @@ def main():
         '--from', from_email or '<MY_EMAIL>',
         '--to', args.to,
         '--subject', args.subject,
-        '--body', args.body,
+        '--content', args.body,
         '--format', 'json',
     ]
     if args.cc:

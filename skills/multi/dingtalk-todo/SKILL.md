@@ -46,7 +46,7 @@ metadata:
 - `--id` / `--ids` 是隐藏兼容别名，文档和生成命令统一写 `--task-id`，减少模型漂移。
 - 优先级映射：低=10，普通=20，较高/高/重要=30，紧急/最高/P0/马上处理=40；不要把"较高"写成 40。
 - 截止时间必须是 ISO-8601。相对日期按当前日期计算；例如周五说"下周二"就是紧接下一个自然周的周二，不要再加一周。
-- 附件命令 `task add-attachment` / `list-attachment` / `remove-attachment` 服务端无对应工具，当前不可用，不要生成。
+- 附件命令 `task add-attachment` / `list-attachment` / `remove-attachment` 均可用：`add-attachment --task-id <taskId> --file-path <本地文件>`（真实上传，先确认待办存在，返回 `result.attachmentIds`）；`list-attachment --task-id <taskId>`（返回顶层 `attachments[].attachmentId`）；`remove-attachment --task-id <taskId> --attachment-id <id> --yes`（不可逆，先确认）。
 - 创建、标记完成、重开、删除后必须 `task get` 或对应 `task list --status ...` 验证，不要只凭创建返回或口头计划结束。
 - 所有 dws 命令带 `--format json`。
 

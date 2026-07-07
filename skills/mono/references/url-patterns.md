@@ -136,8 +136,8 @@ dws doc list --folder "https://alidocs.dingtalk.com/i/nodes/ghi789" --format jso
 | extension / contentType | 读取 | 写入 | 删除 | 导出 | 权限 | 媒体 |
 |-------------------------|------|------|------|------|------|------|
 | **adoc**（在线文档） | `doc read` | `doc update` / `doc block update` | ⚠️ `doc delete` | ⚠️ `doc export` (→ docx) | ⚠️ `doc permission *` | ⚠️ `doc media download/insert` |
-| **axls**（在线电子表格） | `sheet range read` / `sheet list` | `sheet range write` / `sheet append` | ⚠️ `doc delete`（节点删除） | `sheet submit_export_job` + `sheet query_export_job`（待吴淼 W-01 收敛为单命令 `sheet export`） | ⚠️ `doc permission *`（节点级，跨产品） | 不适用 |
-| **able**（在线多维表） | `aitable base get` / `aitable record query` | `aitable record create/update` | ⚠️ `doc delete`（节点删除）或 `aitable base delete --yes` | `aitable export data --output ./x.xlsx` | ⚠️ `doc permission *`（节点级） | `aitable attachment upload-file` |
+| **axls**（在线电子表格） | `sheet range read` / `sheet list` | `sheet range update` / `sheet append` | ⚠️ `doc delete`（节点删除） | `sheet export`（单命令一站式：提交→轮询→下载，可选 `--output` 落盘） | ⚠️ `doc permission *`（节点级，跨产品） | 不适用 |
+| **able**（在线多维表） | `aitable base get` / `aitable record query` | `aitable record create/update` | ⚠️ `doc delete`（节点删除）或 `aitable base delete --yes` | `aitable export data --scope all --format excel`（取 downloadUrl，`--output` 不落盘） | ⚠️ `doc permission *`（节点级） | `aitable attachment upload` |
 | **xlsx / xls / xlsm / csv**（本地表格文件） | `doc download` → 本地用 xlsx skill 解析 | 不支持服务端写（先下载改本地再上传） | ⚠️ `doc delete`（节点删除） | 不需要（本身就是 xlsx） | ⚠️ `doc permission *` | 不适用 |
 | **普通文件** (nodeType=file) | `doc download` | 不支持服务端写 | ⚠️ `doc delete` | 不需要 | ⚠️ `doc permission *` | 不适用 |
 | **文件夹** (nodeType=folder) | `doc list --folder <URL>` | `doc create --folder <URL> ...` | ⚠️ `doc delete` | 不适用 | ⚠️ `doc permission *` | 不适用 |

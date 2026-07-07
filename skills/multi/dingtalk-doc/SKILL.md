@@ -42,19 +42,20 @@ metadata:
 |--------|------|
 | "创建文档（短内容）" | `dws doc create --name "<标题>" --content "<内容>"` |
 | "创建+写入（长内容自动分块）" | `python scripts/doc_create_and_write.py --name "<标题>" --content "<内容>" [--mode append\|overwrite]` |
-| "搜文档" | `dws doc search --query "<关键词>"` |
+| "搜文档"（全局） | `dws drive search --query "<关键词>"`（`doc search` 已弃用；切到 `dingtalk-drive`） |
+| "在某知识库里搜文档" | `dws wiki node search --workspace <WS_ID> --query "<关键词>"` |
 | "读文档内容" | `dws doc read --node <nodeId>` |
 | "更新文档内容 / 分块追加" | `dws doc update --node <nodeId> --content "<分块>" --mode append` |
 | "删除块" | `dws doc block delete`（需用户确认） |
 
 ## 评测/多步文档短路径
 
-- 知识库「评测记录」下按日期文件夹执行：`dws wiki space search --keyword "评测记录" --format json` → `dws doc list --workspace <WS_ID> --format json` → 找 `评测-doc-YYYYMMDD`；不存在则 `dws doc folder create --name "评测-doc-YYYYMMDD" --workspace <WS_ID> --format json`。
+- 知识库「评测记录」下按日期文件夹执行：`dws wiki space search --keyword "评测记录" --format json` → `dws wiki node list --workspace <WS_ID> --format json`（或 `dws drive list --workspace <WS_ID>`；`doc list` 已弃用）→ 找 `评测-doc-YYYYMMDD`；不存在则 `dws wiki node create --workspace <WS_ID> --name "评测-doc-YYYYMMDD" --type folder --format json`（`doc folder create` 已弃用）。
 - 在目标文件夹创建文字文档：`dws doc create --name "<标题>" --folder <FOLDER_NODE_ID> --content-file <tmp.md> --format json`。拿到 `nodeId` 后立即回读。
 - 块级编辑固定顺序：`doc block list --node <nodeId>` → 选 `blockId` → `doc block insert/update/delete` → `doc block list` 验证。删除块必须已有用户明确删除意图或二次确认。
 - 插入引用块、代码块、表格、分栏、附件、图片时，优先读 [doc.md](references/doc.md) 对应小节，不要只停在"准备查看 help"。说出"我将插入..."后必须立即执行对应 terminal 调用。
 - 用户要求多个子文档/附件/块操作时，按 checklist 串行完成；最后一条 assistant 消息不能停在"接下来我要..."，必须有实际工具调用或明确失败原因。
-- 用户说"下载文件"时用 `doc download --node ... --output <path>`；用户说"导出在线文档为 docx"时用 `doc export --node ... --output <path>`。
+- 用户说"下载文件"（已有文件）时用 `dws drive download --node ... --output <path>`（`doc download` 已弃用，切到 `dingtalk-drive`）；用户说"导出在线文档为 docx"时用 `doc export --node ... --output <path>`（内容级命令，未迁移）。
 - 所有 dws 命令带 `--format json`；仅参数不确定时查 `--help`，不要把完整 help 当成最终结果。
 
 ## 危险操作

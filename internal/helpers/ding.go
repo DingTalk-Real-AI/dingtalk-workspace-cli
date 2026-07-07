@@ -93,8 +93,9 @@ func newDingCommand() *cobra.Command {
 		Use:   "list",
 		Short: "查询 DING 消息历史",
 		Long: `查询当前用户的 DING 消息列表，支持按类型过滤。
---type 支持: ALL(全部)、UNREAD(未读)、SEND(已发)、NEW_COMMENT(新评论)、DELETED(已删除)。`,
-		Example: `  dws ding message list
+--type 支持: ALL(全部)、UNREAD(未读)、SEND(已发)、NEW_COMMENT(新评论)、DELETED(已删除)。
+--type 为服务端必填字段，空值会报「type不能为空」；不传时 CLI 默认按 ALL 查询。`,
+		Example: `  dws ding message list                 # 默认 --type ALL
   dws ding message list --type UNREAD
   dws ding message list --type SEND --cursor 10`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -102,9 +103,12 @@ func newDingCommand() *cobra.Command {
 			if v, _ := cmd.Flags().GetInt64("cursor"); v > 0 {
 				toolArgs["cursor"] = v
 			}
-			if v, _ := cmd.Flags().GetString("type"); v != "" {
-				toolArgs["type"] = v
+			// type 是服务端必填，空值会报错；不传或传空时兜底为 ALL。
+			t, _ := cmd.Flags().GetString("type")
+			if t == "" {
+				t = "ALL"
 			}
+			toolArgs["type"] = t
 			return callMCPToolOnServer("im", "list_ding_messages", toolArgs)
 		},
 	}
@@ -210,7 +214,7 @@ func newDingCommand() *cobra.Command {
 	dingMessageRecallCmd.Flags().String("robot-code", "", "机器人 ID (必填，或设 DINGTALK_DING_ROBOT_CODE)")
 	dingMessageRecallCmd.Flags().String("id", "", "DING 消息 ID (必填)")
 	dingMessageListCmd.Flags().Int64("cursor", 0, "分页游标（首次传 0，翻页传返回的 nextCursor）")
-	dingMessageListCmd.Flags().String("type", "", "消息类型: ALL / UNREAD / SEND / NEW_COMMENT / DELETED（可选，不传返回全部）")
+	dingMessageListCmd.Flags().String("type", "ALL", "消息类型: ALL / UNREAD / SEND / NEW_COMMENT / DELETED（必填，服务端不接受空值；默认 ALL 全部）")
 	dingMessageReceiverStatusCmd.Flags().String("ding-id", "", "DING 消息 openDingId (必填)")
 	_ = dingMessageReceiverStatusCmd.MarkFlagRequired("ding-id")
 	dingMessageSendPersonalCmd.Flags().String("users", "", "接收者 openDingTalkId 列表，逗号分隔 (必填)")

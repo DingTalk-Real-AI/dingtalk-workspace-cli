@@ -31,12 +31,12 @@ Flags:
 Usage:
   dws ding message list [flags]
 Example:
-  dws ding message list
+  dws ding message list --type ALL
   dws ding message list --type UNREAD
   dws ding message list --type SEND --cursor 10
 Flags:
       --cursor int     分页游标 (首次传 0, 翻页传返回的 nextCursor)
-      --type string    消息类型: ALL / UNREAD / SEND / NEW_COMMENT / DELETED (可选, 不传返回全部)
+      --type string    消息类型: ALL / UNREAD / SEND / NEW_COMMENT / DELETED (默认 ALL; 服务端不接受空值, CLI 不传时会自动按 ALL 查询, 故裸跑 `ding message list` 即可)
 ```
 
 ### 查看 DING 接收状态
@@ -45,7 +45,7 @@ Usage:
   dws ding message receiver-status [flags]
 Example:
   dws ding message receiver-status --ding-id <OPEN_DING_ID>
-  # 查询 dingId: dws ding message list
+  # 查询 dingId: dws ding message list --type ALL
 Flags:
       --ding-id string   DING 消息 openDingId (必填)
 ```
