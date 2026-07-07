@@ -556,7 +556,16 @@ contact user profile fields 获取可用字段列表。
 	// 类似做法见 calendar.go 的 calendarInfoHintSubCmd。
 	contactHintSubCmd := func(use, suggestion string) *cobra.Command {
 		c := hintSubCmd(use, suggestion)
+		runHint := c.RunE
 		c.DisableFlagParsing = true
+		c.RunE = func(cmd *cobra.Command, args []string) error {
+			for _, arg := range args {
+				if arg == "--help" || arg == "-h" {
+					return cmd.Help()
+				}
+			}
+			return runHint(cmd, args)
+		}
 		return c
 	}
 

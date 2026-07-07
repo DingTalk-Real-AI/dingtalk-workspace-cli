@@ -17,6 +17,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 func TestRootHelpKeepsOpenCompatibilityCommandsVisible(t *testing.T) {
@@ -38,4 +40,44 @@ func TestRootHelpKeepsOpenCompatibilityCommandsVisible(t *testing.T) {
 			t.Fatalf("root help missing %q:\n%s", want, help)
 		}
 	}
+}
+
+func TestRootKeepsMainBranchChatCompatibilityCommands(t *testing.T) {
+	root := NewRootCommand()
+	listDirect := mustFindCommand(t, root, "chat", "message", "list-direct")
+	for _, flag := range []string{"user", "open-dingtalk-id", "time", "forward", "limit"} {
+		if listDirect.Flags().Lookup(flag) == nil {
+			t.Fatalf("chat message list-direct missing --%s", flag)
+		}
+	}
+
+	mediaUpload := mustFindCommand(t, root, "chat", "media", "upload")
+	for _, flag := range []string{"file", "type"} {
+		if mediaUpload.Flags().Lookup(flag) == nil {
+			t.Fatalf("chat media upload missing --%s", flag)
+		}
+	}
+
+	mustFindCommand(t, root, "contact", "get")
+	mustFindCommand(t, root, "contact", "search")
+	mustFindCommand(t, root, "contact", "user", "list")
+}
+
+func mustFindCommand(t *testing.T, root *cobra.Command, path ...string) *cobra.Command {
+	t.Helper()
+	cmd := root
+	for _, name := range path {
+		var next *cobra.Command
+		for _, child := range cmd.Commands() {
+			if child.Name() == name {
+				next = child
+				break
+			}
+		}
+		if next == nil {
+			t.Fatalf("missing command path %q under %q", strings.Join(path, " "), cmd.CommandPath())
+		}
+		cmd = next
+	}
+	return cmd
 }

@@ -1268,6 +1268,49 @@ func newChatCommand() *cobra.Command {
 		},
 	}
 
+	chatMessageListDirectCmd := &cobra.Command{
+		Use:   "list-direct",
+		Short: "拉取单聊会话消息（旧路径兼容）",
+		Long:  `按对方 userId 或 openDingTalkId 拉取单聊会话消息。该命令保留旧主干路径，等价于 dws chat message list --user/--open-dingtalk-id。`,
+		Example: `  dws chat message list-direct --user <对方userId> --time "2026-04-01 00:00:00" --forward true --limit 50
+  dws chat message list-direct --open-dingtalk-id <openDingTalkId> --time "2026-04-01 00:00:00" --forward false --limit 20
+  # 查询 userId / openDingTalkId: dws contact user search --query "姓名"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "time"); err != nil {
+				return err
+			}
+			userID, _ := cmd.Flags().GetString("user")
+			openDingTalkID, _ := cmd.Flags().GetString("open-dingtalk-id")
+			if userID != "" && openDingTalkID != "" {
+				return fmt.Errorf("--user and --open-dingtalk-id are mutually exclusive")
+			}
+			if userID == "" && openDingTalkID == "" {
+				return fmt.Errorf("--user or --open-dingtalk-id is required")
+			}
+			if userID != "" && isOpenDingTalkID(userID) {
+				openDingTalkID = userID
+				userID = ""
+			}
+			forward, err := resolveMessageForward(cmd, true)
+			if err != nil {
+				return err
+			}
+			toolArgs := map[string]any{
+				"time":    mustGetFlag(cmd, "time"),
+				"forward": forward,
+			}
+			if userID != "" {
+				toolArgs["userId"] = userID
+			} else {
+				toolArgs["openDingTalkId"] = openDingTalkID
+			}
+			if v, err := cmd.Flags().GetInt("limit"); err == nil && v > 0 {
+				toolArgs["limit"] = v
+			}
+			return callMCPTool("list_individual_chat_message", toolArgs)
+		},
+	}
+
 	chatMessageSendCmd := &cobra.Command{
 		Use:   "send",
 		Short: "以当前用户身份发送消息（--group 群聊 / --user 或 --open-dingtalk-id 单聊）",
@@ -2223,6 +2266,12 @@ func newChatCommand() *cobra.Command {
 	chatMessageListCmd.Flags().String("direction", "", "时间方向: newer=从给定时间往现在拉，older=从给定时间往以前拉（推荐）")
 	chatMessageListCmd.Flags().String("forward", "true", "旧兼容参数: true 等价 --direction newer，false 等价 --direction older")
 	chatMessageListCmd.Flags().Int("limit", 0, "返回数量，不传则不限制")
+	chatMessageListDirectCmd.Flags().String("user", "", "对方 userId（同组织内同事，与 --open-dingtalk-id 二选一）")
+	chatMessageListDirectCmd.Flags().String("open-dingtalk-id", "", "对方 openDingTalkId（非同组织普通好友场景，与 --user 二选一）")
+	chatMessageListDirectCmd.Flags().String("time", "", "开始时间，格式 yyyy-MM-dd HH:mm:ss (必填)")
+	chatMessageListDirectCmd.Flags().String("direction", "", "时间方向: newer=从给定时间往现在拉，older=从给定时间往以前拉")
+	chatMessageListDirectCmd.Flags().String("forward", "true", "旧兼容参数: true 等价 --direction newer，false 等价 --direction older")
+	chatMessageListDirectCmd.Flags().Int("limit", 50, "每页返回数量（默认 50）")
 
 	chatMessageSendCmd.Flags().String("group", "", "群聊 openconversation_id（群聊时必填）")
 	chatMessageSendCmd.Flags().String("user", "", "单聊接收人 userId（单聊时与 --open-dingtalk-id 二选一）")
@@ -4504,9 +4553,9 @@ status 可选值:
 	chatGroupCmd.AddCommand(chatGroupBotsCmd, chatGroupDismissCmd, chatGroupSetHistoryCmd, chatGroupListMyGroupsCmd, chatGroupUpdateNickCmd, chatGroupUpdateAliasCmd, chatGroupListAllCmd, chatGroupListJoinValidationsCmd, chatGroupAuditJoinValidationCmd)
 	chatGroupMembersCmd.AddCommand(chatGroupMembersRemoveBotCmd, chatGroupMembersListByIdsCmd)
 	chatBotCmd.AddCommand(chatBotFindCmd)
-	chatMessageCmd.AddCommand(chatMessageCombineForwardCmd, chatMessageForwardTopicCmd, chatMessageSetPinCmd, chatMessageUnsetPinCmd, chatMessageListPinCmd, chatMessageSetTopMsgCmd, chatMessageUnsetTopMsgCmd)
+	chatMessageCmd.AddCommand(chatMessageListDirectCmd, chatMessageCombineForwardCmd, chatMessageForwardTopicCmd, chatMessageSetPinCmd, chatMessageUnsetPinCmd, chatMessageListPinCmd, chatMessageSetTopMsgCmd, chatMessageUnsetTopMsgCmd)
 
-	root.AddCommand(chatChmodCmd, chatDataAuthCmd, chatGroupCmd, chatSearchCmd, chatSearchCommonCmd, chatMessageCmd, chatFileCmd, chatBotCmd, chatMessageListTopConversationsCmd, chatConversationInfoCmd, chatCategoryCmd, chatGroupRoleCmd, chatMuteCmd, chatSetTopCmd, chatGroupMuteCmd, chatGroupMuteMemberCmd, chatHideCmd, chatMuteAtAllCmd, chatMuteRedEnvelopeCmd, chatMarkUnreadCmd, chatClearRedPointCmd, chatClearAllRedPointCmd, chatListAllConversationsCmd, chatClearMessagesCmd, chatMarkReadCmd)
+	root.AddCommand(chatChmodCmd, chatDataAuthCmd, chatGroupCmd, chatSearchCmd, chatSearchCommonCmd, chatMessageCmd, chatFileCmd, newChatMediaGroup(), chatBotCmd, chatMessageListTopConversationsCmd, chatConversationInfoCmd, chatCategoryCmd, chatGroupRoleCmd, chatMuteCmd, chatSetTopCmd, chatGroupMuteCmd, chatGroupMuteMemberCmd, chatHideCmd, chatMuteAtAllCmd, chatMuteRedEnvelopeCmd, chatMarkUnreadCmd, chatClearRedPointCmd, chatClearAllRedPointCmd, chatListAllConversationsCmd, chatClearMessagesCmd, chatMarkReadCmd)
 
 	// hint: dws chat send → dws chat message send
 	root.AddCommand(hintSubCmd("send", "use: dws chat message send"))
