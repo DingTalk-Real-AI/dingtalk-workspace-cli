@@ -549,10 +549,10 @@ func newMCPCommand(ctx context.Context, loader cli.CatalogLoader, runner executo
 }
 
 // hideNonDirectRuntimeCommands marks top-level product commands as hidden
-// unless they correspond to a product discovered via dynamic server discovery
-// or listed in the edition's VisibleProducts hook.
-// Public utility commands (auth, cache, completion, version) are always kept
-// visible; explicitly hidden commands stay hidden.
+// unless they correspond to a static endpoint product or an edition-visible
+// compatibility command.
+// Public utility commands are always kept visible; explicitly hidden commands
+// stay hidden.
 func hideNonDirectRuntimeCommands(root *cobra.Command) {
 	allowedProducts := resolveVisibleProducts()
 	staticCommands := map[string]bool{
@@ -560,6 +560,7 @@ func hideNonDirectRuntimeCommands(root *cobra.Command) {
 		"api":        true,
 		"cache":      true,
 		"config":     true,
+		"dev":        true,
 		"doctor":     true,
 		"completion": true,
 		"skill":      true,
@@ -570,6 +571,7 @@ func hideNonDirectRuntimeCommands(root *cobra.Command) {
 		"recovery":   true,
 		"schema":     true,
 		"mcp":        true,
+		"upgrade":    true,
 	}
 	for _, cmd := range root.Commands() {
 		name := cmd.Name()

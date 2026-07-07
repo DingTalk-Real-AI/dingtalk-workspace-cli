@@ -9,7 +9,7 @@
 
 工作流:
   1. 通过 --name 搜索通讯录，获取 userId（或直接传 --user）
-  2. 调用 chat message list-direct --user <userId> 拉取单聊消息
+  2. 调用 chat message list --user <userId> 拉取单聊消息
   3. 输出到终端或导出为 JSON 文件
 """
 
@@ -116,7 +116,7 @@ def main():
 
     while page < max_pages and remaining > 0:
         cmd_args = [
-            'chat', 'message', 'list-direct',
+            'chat', 'message', 'list',
             '--user', user_id or '<USER_ID>',
             '--time', current_time,
             '--format', 'json',
@@ -139,12 +139,8 @@ def main():
             page_msgs = data
             has_more = False
         else:
-            # list-direct 返回 {result: {hasMore, messages: [...]}}，先解包 result
-            result_obj = data.get('result', data)
-            if not isinstance(result_obj, dict):
-                result_obj = data
-            page_msgs = result_obj.get('messages', result_obj.get('records', []))
-            has_more = result_obj.get('hasMore', data.get('hasMore', False))
+            page_msgs = data.get('messages', data.get('result', []))
+            has_more = data.get('hasMore', False)
 
         if not page_msgs:
             break
@@ -157,8 +153,7 @@ def main():
             break
 
         last_msg = page_msgs[-1]
-        boundary_time = (last_msg.get('createTime') or last_msg.get('createAt')
-                         or last_msg.get('time', ''))
+        boundary_time = last_msg.get('createAt') or last_msg.get('time', '')
         if not boundary_time or boundary_time == current_time:
             break
         current_time = boundary_time
@@ -188,11 +183,9 @@ def main():
         print(f"  ✓ 已导出 {len(all_messages)} 条消息到 {args.output}")
     else:
         for m in all_messages:
-            if not isinstance(m, dict):
-                continue
             sender = m.get('senderNick') or m.get('sender', '未知')
             text = m.get('text') or m.get('content', '')
-            time_str = m.get('createTime') or m.get('createAt') or m.get('time', '')
+            time_str = m.get('createAt') or m.get('time', '')
             print(f"  [{time_str}] {sender}: {text[:80]}")
         print(f"\n合计: {len(all_messages)} 条消息 ({page} 页)")
 

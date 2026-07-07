@@ -185,24 +185,9 @@ Notes:
   - 跨层级成员展开见 [08-directory.md](./08-directory.md) 的 `cross-level-dept-members` recipe
 ```
 
-### label (角色查询，已下线)
+### label (角色查询)
 
-> `contact label list/get/list-members` 后端工具已下线，命令仅保留兼容提示，不再可用。角色/职责类查人请改用 `aisearch person --keyword "<角色或职责>" --dimension duty`。
-
-#### 获取企业所有角色列表
-```
-已下线。不要再构造 `dws contact label list`，请改用 `dws aisearch person --keyword "<角色或职责>" --dimension duty`。
-```
-
-#### 根据角色名称查询角色
-```
-已下线。不要再构造 `dws contact label get`，请改用 `dws aisearch person --keyword "<角色或职责>" --dimension duty`。
-```
-
-#### 查询角色下的成员
-```
-已下线。不要再构造 `dws contact label list-members`，请改用 `dws aisearch person --keyword "<角色或职责>" --dimension duty`。
-```
+`contact label list` / `contact label get` / `contact label list-members` 三个命令路径保留用于旧版本兼容，但当前后端工具已下线。不要主动使用这些命令完成角色查询；按角色、职责、主管、管理员、财务、HR 等找人时，统一改用 `dws aisearch person --keyword "<角色或职责>" --dimension duty --format json`。
 
 ## 意图判断
 
@@ -218,24 +203,7 @@ Notes:
 用户说"部门详情/部门信息/部门多少人" → `dept get-info`（返回部门ID、部门名称、部门人数；需 deptId，若只有部门名称需先 `dept search`）
 用户说"子部门/下设部门/部门有哪些下级部门/枚举二级部门" → `dept list-children`（需父 deptId；只有部门名先 `dept search`）
 用户说"部门有谁/部门成员/人员名单" → `dept list-members`（需 deptId；**仅本部门不含下级**，含下级先 `dept list-children` 再合并查）
-用户查询涵盖"角色"（主管/管理员/财务/HR/总经理等任意角色名）→ 走 `aisearch person --keyword "<角色或职责>" --dimension duty`；`contact label` 后端工具已下线，不再可用。
-
-> [!IMPORTANT]
-> **角色查询规则**：`contact label` 已下线。任何含"角色/职责/负责"且终点是找人的查询，优先走 `aisearch person --dimension duty`。终点是"某个人是否具备某权限"（如"张三是不是管理员"）时，才走 `user get` 查看个人属性。
-
-> [!IMPORTANT]
-> **角色查人 vs 查某人的角色信息 — 判断口径**：先判断用户的终点是"人"还是"属性"：
-> - 终点是**人**（"管理员角色有哪些人""管理员下都有谁""查XX角色的成员"）→ 角色/职责维度查人，走 `aisearch person --dimension duty`
-> - 终点是**属性**（"张三是不是管理员""查某人的主管/管理员权限"）→ 已知 userId 查个人详情，走 `user get`（返回 isAdmin/leader 等字段）
->
-> 反例对照：
-> - "管理员角色下都有哪些人" → `aisearch person --keyword "管理员" --dimension duty`（终点=角色/职责下的**人员列表**）
-> - "我想知道管理员这个角色下都有谁" → `aisearch person --keyword "管理员" --dimension duty`（终点=角色/职责下的**人员列表**）
-> - "张三是不是管理员" → `user get --ids <userId>`（终点=某个人的**属性**）
-> - "查一下张三的管理员权限" → `user get --ids <userId>`（终点=某个人的**属性**）
-> - "角色ID为55808858的角色下有哪些成员" → 当前 CLI 不支持按 labelId 查成员；说明 `contact label` 已下线，并建议用角色名称走 `aisearch person --dimension duty`
->
-> **角色能力边界**：OA 审批只管审批流程（待审批/同意/拒绝），**不支持**查询角色成员；群角色(chat group-role)只管群内身份，不涉及企业组织角色。组织角色 label 后端工具已下线。
+用户查询涵盖"角色"、"职责"、"主管"、"管理员"、"财务"、"HR" 等找人诉求 → 统一走 `dws aisearch person --keyword "<角色或职责>" --dimension duty --format json`。`contact label` 后端工具已下线，只保留命令路径用于兼容提示，不作为可用查询链路。
 用户说"我关注了谁/我的特别关注列表/我的星标联系人/特别关注的人有哪些" → `relation list-my-followings`
 
 > [!IMPORTANT]
@@ -275,8 +243,14 @@ dws contact dept list-children --dept <父deptId> --format json
 # 6. 查看部门成员
 dws contact dept list-members --depts <deptId> --format json
 
-# 7. 按角色/职责找人
-dws aisearch person --keyword "管理员" --dimension duty --format json
+# 7. 获取企业所有角色列表 — 不知道角色名时先浏览
+dws contact label list --format json
+
+# 8. 根据角色名称查询角色
+dws contact label get --names "管理员" --format json
+
+# 9. 查询角色下的成员
+dws contact label list-members --id <labelId> --format json
 
 # 10. 查询花名册有权限的字段列表
 dws contact user profile fields --format json
@@ -304,7 +278,8 @@ dws contact user dismission search --depts 123456,789012 --hide-retirement=false
 | `user get-self/search` | `orgAuthEmail` | mail message send 的 --to/--cc (跨产品) |
 | `user get-self/search` | `userId` | profile get 的 --staff-id |
 | `user profile fields` | `fieldCode` | profile get 的 --fields |
-| `aisearch person --dimension duty` | `userId` / 人员信息 | 按角色/职责找人（替代已下线的 contact label） |
+| `label list` | `labelId` / `labelName` | `label get --names` 或 `label list-members --id` |
+| `label get` | `labelId` | `label list-members` 的 --id |
 | `dept search/list-children` | `deptId` | dept get-info/list-children/list-members 的 --dept/--depts |
 | `dept search/list-children` | `deptId` | dismission search 的 --depts |
 
@@ -318,7 +293,11 @@ dws contact user dismission search --depts 123456,789012 --hide-retirement=false
 - 建议先执行 `user profile fields` 获取可用字段列表，再根据需要的字段 code 执行 `user profile get`
 - `user dismission search` 的 `--start`/`--end` 必须同时设置或同时不设置，不允许只传其中一个
 - `user dismission search` 默认隐藏退休人员（`--hide-retirement` 默认 true），默认展示合作伙伴（`--hide-partner` 默认 false）
-- `contact label` 后端工具已下线；角色类查询（主管、管理员、财务、HR 等任意角色）优先走 `aisearch person --keyword "<角色或职责>" --dimension duty`
+- `label list` 无需参数，适用于不知道准确角色名称的场景；当用户说“查所有主管/主管理员/财务”等角色类型人员时，优先 `label list` 列出企业全部角色，LLM 灵活匹配目标角色后调用 `label list-members`
+- 角色类查询（主管、管理员、财务、HR 等任意角色）优先走 label 链路，而非 dept list-members 或 aisearch person；label 精确命中角色维度，返回完整名单
+- `label get` 是精确匹配角色名称，不支持模糊搜索；支持逗号分隔同时查询多个角色名称
+- **`label get` 精确匹配无结果时的降级策略**：若 `label get --names "XX"` 返回空结果，必须降级调用 `label list` 获取全部角色列表，从中模糊匹配包含XX关键词的角色（如用户说"管理员"可匹配到"主管理员"和"子管理员"），再对匹配到的角色调用 `label list-members`
+- `label list-members` 需要先通过 `label list` 或 `label get` 获取 labelId，再用 --id 查询角色下的成员
 
 ## 自动化脚本
 

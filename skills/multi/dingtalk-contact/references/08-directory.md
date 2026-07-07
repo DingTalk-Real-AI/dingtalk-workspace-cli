@@ -5,7 +5,7 @@
 
 ## 专用规则（#8 非 lite 步骤必守）
 
-- **角色/职责类查人优先 aisearch**：用户说"角色为XX的员工/XX角色的员工/XX角色的人员""所有主管/主管理员/财务/HR/总经理"等角色类型人员时，**优先** `aisearch person --keyword "<角色或职责>" --dimension duty`；`contact label` 后端工具已下线，不再可用。
+- **角色/职责类查人走 aisearch**：用户说"角色为XX的员工"、"XX角色的人员"、"所有主管/管理员/财务/HR"等诉求时，统一用 `dws aisearch person --keyword "<角色或职责>" --dimension duty --format json`。`contact label` 后端工具已下线，只保留兼容提示。
 - **脚本优先**：按部门拉成员**优先** `python scripts/contact_dept_members.py --query "<部门名>"`（`--dry-run` / `--format json`）；失败再 `dept search` → `dept list-members --ids`。
 - **详情链路**：用户要子部门、职位、联系方式、汇报关系等，在 `user search` 之后**必须**再 `contact user get --ids <userId>`；禁止仅用 search 的浅表字段交差。
 - **`user get` 后部门仍空**：不得过早结束或只建议用户去 App；须在 CLI 能力内尝试 **用户点名的部门** `dept search` + `dept list-members` 等与 `userId` 交叉核对，再结构化汇总「返回中有哪些字段 / 哪些为空及可能原因」。
@@ -20,7 +20,7 @@
 
 ## 与其他场景消歧
 
-- **按角色/职位类型查人（主管/管理员/财务等）** → 优先 `aisearch person --dimension duty`（按职责维度找人）；`contact label` 后端工具已下线。
+- **按角色/职位类型查人（主管/管理员/财务等）** → `dws aisearch person --keyword "<角色或职责>" --dimension duty --format json`。
 - **搜人/找人/找同事/查工号/查手机号** → 首选 **`aisearch person`**（AI 语义搜索，支持姓名/部门/职责/上下级/手机号/工号维度），见 `dingtalk-aisearch/references/aisearch.md`。
 - **需要 userId 做后续操作 / 按手机号查 / 按 userId 查详情** → `contact`（精确查询）。
 - **纯查部门与子部门成员 / 验证归属 / 组织关系** → `contact`。
@@ -31,7 +31,6 @@
 
 | Recipe | 步骤 |
 |--------|------|
-| `lookup-role-members` | 1. `aisearch person --keyword "<角色或职责>" --dimension duty` → 按职责维度找人（`contact label` 已下线） |
 | `search-user-by-mobile` | 1. `contact user search-mobile --mobile "<手机号>"` → 按需 `contact user get --ids <userId>` |
 | `lookup-dept-id` | 1. `contact dept search --query "<部门关键词>"` → 回显 `deptId`（多命中须消歧） |
 | `list-subdepts` | 1. 已有父 `deptId` → `contact dept list-children --id <父deptId>` 直接取直属子部门列表<br>2. 只有部门名 → 先 `lookup-dept-id` 取 `deptId`，再 `list-children` |

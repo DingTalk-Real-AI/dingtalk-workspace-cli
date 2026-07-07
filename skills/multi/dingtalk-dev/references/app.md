@@ -2,7 +2,7 @@
 
 > 操作的是「应用」容器本体（见 SKILL.md 概念地图）；启停/删除改的是应用 appStatus，不是版本 versionStatus。
 
-应用列表查询、详情、创建、修改、生命周期启停和删除。参数查 `dws schema dev.app.<method>`（list / get / create / update / delete / disable / enable）。
+应用列表查询、详情、创建、修改、生命周期启停和删除。参数用对应命令的 `--help` 查询。
 
 ## 应用定位
 
@@ -36,7 +36,7 @@
 dws dev app --help
 
 # 查某方法的必填参数、类型、默认值
-dws schema dev.app.<method>
+dws dev <command-path> --help
 ```
 
-按 `dws schema` 输出构造 `--flag`（flag 名 = schema 参数名）。
+按 `--help` 输出构造 flag；不要凭旧 schema 名称猜参数。

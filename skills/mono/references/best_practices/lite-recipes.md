@@ -40,23 +40,7 @@
 
 ### start-conference
 
-> 触发：「发起会议」「开个会」「创建会议」且**没有给出具体时间** → 直接执行，无需追问。
-
-`conference start [--title "<主题>"]`
-
-- 用户给了主题 → 加 `--title`；没给 → 省略（系统用默认标题）
-- 有具体时间（如"明天3点开会"）→ 不走此 recipe，走 03-meeting.md 的 `schedule-meeting`
-
-### invite-participant
-
-1. 查人：`contact user search --query "<姓名>"` → `openDingTalkId`、`nick`
-2. 获取会议 ID：`conference get-id` → `conferenceId`
-3. 邀请：`conference member invite --conference-id <conferenceId> --nicks "<nick>" --open-dingtalk-ids "<openDingTalkId>"`
-
-### share-screen
-
-- 共享屏幕：`conference share start`
-- 停止共享：`conference share stop`
+当前开源 CLI 不暴露视频会议直接发起、邀请入会或共享屏幕命令。用户只说"发起会议/开个会"且未给具体时间时，先说明当前 CLI 不能直接发起视频会议，并询问是否改为预约日程；用户给出具体起止时间后走 03-meeting.md 的 `schedule-meeting`。
 
 ## #4 文档知识
 

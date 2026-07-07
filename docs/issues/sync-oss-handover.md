@@ -15,6 +15,7 @@
 - 悟空业务产品代码必须来自 `dws-wukong` 的 Go module / 编译期同步产物，开源仓不手改 fork。
 - 开源最终指令集只能做加法：`悟空同步产物 + 主干旧开源指令 + 开源定制包装`，不能因为服务发现下线丢老命令。
 - skills 也按同一模型处理：悟空 baseline 同步，开源旧 skill 与定制说明做 overlay，并用最终命令集校验。
+- `--help` 也按同一模型处理：悟空 Cobra baseline + 开源旧命令/定制包装；最终以二进制命令树为事实源。
 - 真下线能力先保留 AI-friendly 提示或标记 unavailable，不能静默删除命令。
 
 ---
@@ -24,9 +25,9 @@
 ### feat/remove-discovery 已完成的工作
 
 1. **移除服务发现** — 切到静态端点模式，`dws schema` 返回 `"note":"static endpoint mode"`  
-2. **移除 conference 产品** — 从 endpoints/routing/registration/synclist 全部去除  
+2. **移除 conference 后端产品** — 从 endpoints/routing/synclist 去除真实 MCP 注册；旧 CLI 路径保留 unavailable 兼容提示
 3. **sync-oss 基线对齐** — `register_products.go` / `dws-data/syncdata/endpoints.go` / `dws-data/syncdata/routing.go` 都已用 sync-oss 从悟空同步  
-4. **skills 同步** — mono + multi skills（193 文件）从 wukong 同步到开源 `.qoder/skills/`  
+4. **skills 同步** — mono + multi skills 从 wukong 同步到开源 `skills/`，`.qoder/skills/` 仅作为 Agent 安装目标
 5. **发版** — 已打包给勤泽/重鱼/郑御白测试  
 6. **`--ai-tag` flag** — `chat message send` 和 `reply` 命令新增 flag，默认 `true`；实际 `clawType` 走 `edition.ClawType()`，开源默认 `openClaw`，悟空版可保持 `wukong`
 7. **静态端点缺口 guardrail** — 新增单测扫描已注册 open 产品 helper 中显式 server 调用，防止 `im` / `bot` / `attendance-wukong` 这类 endpoint 漏注册再次进入
@@ -79,7 +80,7 @@ M  internal/cli/loader.go                degraded hint 去服务发现化
 
 1. **endpoint/catalog**：由 `dws-data/syncdata.StaticServers()` 提供，缺失时会触发 `endpoint_not_resolved`。
 2. **routing**：由 `dws-data/syncdata.CmdToProduct()` 提供，不能漏主干旧命令的 product 映射。
-3. **schema/help**：不能只看悟空同步产物，要以最终 open CLI 命令树为准生成或校验。
+3. **schema/help**：服务发现和动态 schema 下线后，不能再靠远程 schema 推断命令；`--help` 与 skill 必须以最终 open CLI 命令树为准生成或校验。
 4. **不可用能力**：不优先删命令，先给 AI-friendly 提示，说明能力已下线/未注册，并给替代命令或处理建议。
 
 勤泽发现的 `im` / `bot` / `attendance-wukong` 漏注册，本质就是静态端点目录没有完全承接服务发现时代的隐式 endpoint 能力；不是用户参数问题。
@@ -110,7 +111,7 @@ M  internal/cli/loader.go                degraded hint 去服务发现化
 
 | 文件 | 开源特殊实现 |
 |------|-------------|
-| `helpers.go` | `InitDeps()` 依赖注入、`CmdToProduct()` 导出、`isTakenOverByDynamic()` 永远返回 false、cmdToProduct 去掉 conference |
+| `helpers.go` | `InitDeps()` 依赖注入、`CmdToProduct()` 导出、`isTakenOverByDynamic()` 永远返回 false；conference 不进入真实 MCP routing |
 | `chat.go` | `--ai-tag` flag（默认 true）、clawType 走 `edition.ClawType()` |
 
 ### 悟空独有（开源不需要）
@@ -140,7 +141,8 @@ M  internal/cli/loader.go                degraded hint 去服务发现化
 | sync-oss 入口 | `dws-wukong/cmd/sync-oss/main.go` |
 | sync-oss 配置 | `dws-wukong/scripts/sync-oss/synclist.json` |
 | skills 源 | `dws-wukong/target/open-source-cli/skills/` |
-| 开源 skills | `dingtalk-workspace-cli/.qoder/skills/` |
+| 开源 skills 源码 | `dingtalk-workspace-cli/skills/` |
+| Agent 安装目标 | `~/.qoder/skills/`、`~/.codex/skills/` 等，由 `dws skill setup` 写入 |
 
 ---
 
@@ -149,10 +151,10 @@ M  internal/cli/loader.go                degraded hint 去服务发现化
 1. **提交当前 P0 改动** — chat `clawType`、endpoint hint、静态端点覆盖测试
 2. **重新打 tag + release** — 通知勤泽/重鱼/郑御白更新
 3. **主干旧指令兼容清单** — 对比 `origin/main` 与 `feat/remove-discovery`，确认 `dev connect` 等旧开源命令不丢
-4. **schema/help 校验** — 以最终 open CLI 命令树校验 skill.md 与 schema，修复 50+ 文档不符
+4. **help/skill 校验** — 以最终 open CLI 命令树校验 `--help` 与 skill.md，修复 50+ 文档不符
 5. **首次手动全量同步** — 跑 `make sync-oss` 建立 baseline
 6. **真下线能力标记** — 对不可恢复能力补 AI-friendly unavailable 提示和替代命令
-7. ~~conference 移除~~ ✅
+7. ~~conference 后端产品移除~~ ✅（旧 CLI 路径保留 unavailable 兼容提示）
 8. ~~skills 同步~~ ✅
 9. ~~发版测试~~ ✅
 

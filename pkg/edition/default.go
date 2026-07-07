@@ -39,7 +39,8 @@ func defaultHooks() *Hooks {
 			base["claw-type"] = DefaultOSSClawType
 			return base
 		},
-		StaticServers: openStaticServers,
+		StaticServers:   openStaticServers,
+		VisibleProducts: openVisibleProducts,
 	}
 }
 
@@ -53,6 +54,26 @@ func openStaticServers() []ServerInfo {
 			Endpoint: s.Endpoint,
 			Prefixes: s.Prefixes,
 		}
+	}
+	return out
+}
+
+func openVisibleProducts() []string {
+	servers := openStaticServers()
+	out := make([]string, 0, len(servers)+1)
+	seen := make(map[string]bool, len(servers)+1)
+	for _, server := range servers {
+		if server.ID == "" || seen[server.ID] {
+			continue
+		}
+		seen[server.ID] = true
+		out = append(out, server.ID)
+	}
+	// Compatibility-only command paths. These are intentionally not present in
+	// StaticServers: they preserve old help/command routing while returning an
+	// explicit unavailable message instead of trying to call an MCP endpoint.
+	if !seen["conference"] {
+		out = append(out, "conference")
 	}
 	return out
 }

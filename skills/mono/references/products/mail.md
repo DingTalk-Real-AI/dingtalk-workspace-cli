@@ -96,13 +96,13 @@ dws contact user search --keyword "姓名" --format json
 Usage:
   dws mail message search [flags]
 Example:
-  dws mail message search --email user@company.com --query "subject:\"周报\"" --limit 20
-  dws mail message search --email user@company.com --query "from:alice AND date>2025-06-01T00:00:00Z" --limit 10
+  dws mail message search --email user@company.com --query "subject:\"周报\"" --size 20
+  dws mail message search --email user@company.com --query "from:alice AND date>2025-06-01T00:00:00Z" --size 10
 Flags:
       --cursor string   邮件的起始偏移标识, 其值取自响应中的nextCursor字段。""表示从头开始
       --email string    搜索目标邮箱地址 (必填)
       --query string    KQL 查询表达式 (必填), 其中 date 格式需遵循 ISO8601 规范
-      --limit string     每页返回数量(最大限制 100, 默认 20)
+      --size string     每页返回数量(最大限制 100, 默认 20)，别名: --limit, --page-size
 ```
 
 KQL 查询字段: date, size, tag, folderId, isRead, hasAttachments, subject, attachname, body, from, to
@@ -140,9 +140,9 @@ KQL 查询字段: date, size, tag, folderId, isRead, hasAttachments, subject, at
 **翻页示例：**
 ```bash
 # 第一页
-dws mail message search --email user@company.com --query "folderId:2" --limit 20 --format json
+dws mail message search --email user@company.com --query "folderId:2" --size 20 --format json
 # 取返回中的 nextCursor，传入下一次请求（nextCursor="$" 时停止）
-dws mail message search --email user@company.com --query "folderId:2" --limit 20 --cursor <nextCursor> --format json
+dws mail message search --email user@company.com --query "folderId:2" --size 20 --cursor <nextCursor> --format json
 ```
 
 ### 查看邮件完整内容
@@ -168,17 +168,17 @@ Usage:
   dws mail message send [flags]
 Example:
   dws mail message send --from user@company.com --to colleague@company.com \
-    --subject "周报" --content "本周完成任务A和任务B"
+    --subject "周报" --body "本周完成任务A和任务B"
   dws mail message send --from user@company.com --to colleague@company.com \
-    --subject "周报" --content "见附件" --attachment ./report.pdf
+    --subject "周报" --body "见附件" --attachment ./report.pdf
   dws mail message send --from user@company.com --to colleague@company.com \
-    --subject "周报" --content "见附件" --attachment ./a.pdf --attachment ./b.xlsx
+    --subject "周报" --body "见附件" --attachment ./a.pdf --attachment ./b.xlsx
   dws mail message send --from user@company.com --to colleague@company.com \
-    --subject "图表周报" --content "图表如下：[inline:chart.png]" --inline-attachment ./chart.png
+    --subject "图表周报" --body "图表如下：[inline:chart.png]" --inline-attachment ./chart.png
   dws mail message send --from user@company.com --to colleague@company.com \
-    --subject "带图文档" --content "见附件，图表：[inline:img.png]" --attachment ./doc.pdf --inline-attachment ./img.png
+    --subject "带图文档" --body "见附件，图表：[inline:img.png]" --attachment ./doc.pdf --inline-attachment ./img.png
 Flags:
-      --content string                     邮件正文 (必填)
+      --body string                     邮件正文 (必填)
       --cc string                       抄送人列表
       --from string                     发件人邮箱 (必填)，别名: --sender
       --subject string                  邮件标题 (必填)
@@ -202,7 +202,7 @@ Flags:
 
 - 仅支持图片类型：`jpg` / `jpeg` / `png` / `gif` / `webp` / `bmp` / `svg`
 - CLI 自动生成 contentId，格式：`inline-{文件名(不含扩展名)}-{序号}@alimail.com`，例：`inline-chart-1@alimail.com`
-- 在 `--content` 中使用占位符 `[inline:文件名]` 引用图片，CLI 自动替换为 `<img src="cid:...">` 标签
+- 在 `--body` 中使用占位符 `[inline:文件名]` 引用图片，CLI 自动替换为 `<img src="cid:...">` 标签
 - 若 body 中没有对应占位符，内联图片会自动追加到正文末尾
 - 非图片类型（PDF、视频、音频等）请改用 `--attachment`
 
@@ -339,13 +339,13 @@ Usage:
   dws mail message reply [flags]
 Example:
   dws mail message reply --from user@company.com --id <messageId>
-  dws mail message reply --from user@company.com --id <messageId> --subject "Re: 周报" --content "已收到，谢谢！"
+  dws mail message reply --from user@company.com --id <messageId> --subject "Re: 周报" --body "已收到，谢谢！"
 Flags:
       --from string                     发件人邮箱 (必填)，别名: --sender
       --to string                       收件人列表（可选）
       --id string                       要回复的邮件 ID (必填)
       --subject string                  回复邮件标题（可选）
-      --content string                     回复正文（可选）
+      --body string                     回复正文（可选）
       --attachment stringArray          附件文件路径，可多次指定 (可选)
       --inline-attachment stringArray   内联图片路径，可多次指定，cid 自动生成 (可选)
 ```
@@ -371,13 +371,13 @@ Usage:
   dws mail message reply-all [flags]
 Example:
   dws mail message reply-all --from user@company.com --id <messageId>
-  dws mail message reply-all --from user@company.com --id <messageId> --subject "Re: 周报" --content "感谢大家的参与！"
+  dws mail message reply-all --from user@company.com --id <messageId> --subject "Re: 周报" --body "感谢大家的参与！"
 Flags:
       --from string                     发件人邮箱 (必填)，别名: --sender
       --to string                       收件人列表（可选，包含发件人及所有原始收件人）
       --id string                       要回复的邮件 ID (必填)
       --subject string                  回复邮件标题（可选）
-      --content string                     回复正文（可选）
+      --body string                     回复正文（可选）
       --attachment stringArray          附件文件路径，可多次指定 (可选)
       --inline-attachment stringArray   内联图片路径，可多次指定，cid 自动生成 (可选)
 ```
@@ -409,7 +409,7 @@ Flags:
       --to string                       转发收件人列表（可选）
       --id string                       要转发的邮件 ID (必填)
       --subject string                  转发邮件标题（可选）
-      --content string                     转发附言（可选）
+      --body string                     转发附言（可选）
       --attachment stringArray          附件文件路径，可多次指定 (可选)
       --inline-attachment stringArray   内联图片路径，可多次指定，cid 自动生成 (可选)
 ```
@@ -461,27 +461,27 @@ Usage:
   dws mail draft create [flags]
 Example:
   dws mail draft create --from user@company.com --to colleague@company.com \
-    --subject "草稿标题" --content "草稿正文"
+    --subject "草稿标题" --body "草稿正文"
   dws mail draft create --from user@company.com --subject "草稿标题"
   dws mail draft create --from user@company.com --subject "带附件草稿" \
-    --content "见附件" --attachment ./report.pdf
+    --body "见附件" --attachment ./report.pdf
   dws mail draft create --from user@company.com --subject "带图片草稿" \
-    --content "图表：[inline:chart.png]" --inline-attachment ./chart.png
+    --body "图表：[inline:chart.png]" --inline-attachment ./chart.png
 Flags:
       --from string                     发件人邮箱 (必填)，别名: --sender
       --subject string                  邮件标题 (必填)
       --to string                       收件人列表（可选，有确定收件人时才传）
       --cc string                       抄送人列表（可选，有确定抄送人时才传）
-      --content string                     邮件正文（可选，有正文内容时才传）
+      --body string                     邮件正文（可选，有正文内容时才传）
       --attachment stringArray          附件文件路径，可多次指定 (可选)
       --inline-attachment stringArray   内联图片路径，可多次指定，cid 自动生成 (可选)
 ```
 
-> **注意：** `--to`、`--cc`、`--content` 均为可选参数，**仅在用户明确提供对应信息时才传入**。若用户未指定收件人，不要传 `--to ""`（空字符串）。
+> **注意：** `--to`、`--cc`、`--body` 均为可选参数，**仅在用户明确提供对应信息时才传入**。若用户未指定收件人，不要传 `--to ""`（空字符串）。
 
 **附件说明：**
 
-指定 `--attachment` 或 `--inline-attachment` 时，CLI 自动完成草稿创建和附件上传，**草稿保留在草稿箱，不会发送**。内联图片用法同 `message send`（`--content` 中使用 `[inline:文件名]` 占位符）。
+指定 `--attachment` 或 `--inline-attachment` 时，CLI 自动完成草稿创建和附件上传，**草稿保留在草稿箱，不会发送**。内联图片用法同 `message send`（`--body` 中使用 `[inline:文件名]` 占位符）。
 
 **返回字段：**
 
@@ -494,24 +494,24 @@ Flags:
 Usage:
   dws mail draft update [flags]
 Example:
-  dws mail draft update --from user@company.com --id <messageId> --subject "新标题" --content "新正文"
-  dws mail draft update --from user@company.com --id <messageId> --content "见附件" --attachment ./report.pdf
+  dws mail draft update --from user@company.com --id <messageId> --subject "新标题" --body "新正文"
+  dws mail draft update --from user@company.com --id <messageId> --body "见附件" --attachment ./report.pdf
   dws mail draft update --from user@company.com --id <messageId> \
-    --content "图表：[inline:chart.png]" --inline-attachment ./chart.png
+    --body "图表：[inline:chart.png]" --inline-attachment ./chart.png
 Flags:
       --from string                     发件人邮箱 (必填)，别名: --sender
       --id string                       草稿邮件 ID (必填)
       --to string                       收件人列表（可选）
       --cc string                       抄送人列表（可选）
       --subject string                  邮件标题（可选）
-      --content string                     邮件正文（可选）
+      --body string                     邮件正文（可选）
       --attachment stringArray          附件文件路径，可多次指定 (可选)
       --inline-attachment stringArray   内联图片路径，可多次指定，cid 自动生成 (可选)
 ```
 
 **附件说明：**
 
-指定 `--attachment` 或 `--inline-attachment` 时，CLI 自动完成草稿更新和附件上传，**草稿保留在草稿箱，不会发送**。内联图片用法同 `message send`（`--content` 中使用 `[inline:文件名]` 占位符）。
+指定 `--attachment` 或 `--inline-attachment` 时，CLI 自动完成草稿更新和附件上传，**草稿保留在草稿箱，不会发送**。内联图片用法同 `message send`（`--body` 中使用 `[inline:文件名]` 占位符）。
 
 ### 发送草稿
 ```
@@ -533,13 +533,13 @@ Usage:
 Example:
   dws mail user search --keyword "张三"
   dws mail user search --email user@company.com --keyword "张三"
-  dws mail user search --email user@company.com --keyword "alice" --limit 10
+  dws mail user search --email user@company.com --keyword "alice" --size 10
   dws mail user search --email user@company.com --keyword "alice" --cursor <nextCursor>
 Flags:
       --email string    搜索目标邮箱地址 (可选)
       --keyword string  搜索关键词 (必填)
       --cursor string   分页游标，取自响应中的 nextCursor 字段（可选）
-      --limit string     每页返回数量（可选）
+      --size string     每页返回数量（可选）
 ```
 
 > **重要区别：**
@@ -621,29 +621,29 @@ dws mail mailbox list --format json
 
 # 2. 搜索邮件 — 提取 messageId
 dws mail message search --email user@company.com \
-  --query "subject:\"周报\" AND date>2025-06-01T00:00:00Z" --limit 10 --format json
+  --query "subject:\"周报\" AND date>2025-06-01T00:00:00Z" --size 10 --format json
 
 # 3. 查看邮件详情
 dws mail message get --email user@company.com --id <messageId> --format json
 
 # 4. 发送邮件（纯文本）
 dws mail message send --from user@company.com --to colleague@company.com \
-  --subject "周报" --content "本周完成…" --format json
+  --subject "周报" --body "本周完成…" --format json
 
 # 4b. 发送带附件的邮件（自动编排：创建草稿→上传附件→发送草稿）
 dws mail message send --from user@company.com --to colleague@company.com \
-  --subject "周报" --content "见附件" --attachment ./report.pdf --format json
+  --subject "周报" --body "见附件" --attachment ./report.pdf --format json
 
 # 4c. 发送带内联图片的邮件（正文自动转 HTML，<img> 标签自动注入）
 dws mail message send --from user@company.com --to colleague@company.com \
-  --subject "图表周报" --content "本周图表如下：[inline:chart.png]" \
+  --subject "图表周报" --body "本周图表如下：[inline:chart.png]" \
   --inline-attachment ./chart.png --format json
 
 # 5. 下载邮件附件到本地（每次只能下载一个附件，不支持批量下载）
 # 步骤 5.1：搜索匹配的邮件，获取 messageId 列表
 # 示例：下载4月所有发票邮件的附件
 dws mail message search --email user@company.com \
-  --query "subject:发票 AND date>2025-04-01T00:00:00Z AND date<2025-05-01T00:00:00Z AND hasAttachments:true" --limit 50 --format json
+  --query "subject:发票 AND date>2025-04-01T00:00:00Z AND date<2025-05-01T00:00:00Z AND hasAttachments:true" --size 50 --format json
 
 # 步骤 5.2：对每封邮件，列出附件获取 attachmentId 和 name
 # （对搜索结果中的每封邮件都要执行一次）
@@ -656,7 +656,7 @@ dws mail attachment download --email user@company.com \
 # 5. 获取邮件所属会话详情（thread）
 # 步骤 5.1：先通过 message search 或 message get 获取邮件中的 conversationId
 dws mail message search --email user@company.com \
-  --query "subject:\"周报\"" --limit 5 --format json
+  --query "subject:\"周报\"" --size 5 --format json
 # 从返回的邮件列表中提取 conversationId 字段
 
 # 步骤 5.2：用 conversationId 获取会话详情

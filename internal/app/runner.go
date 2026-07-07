@@ -416,7 +416,7 @@ func (r *runtimeRunner) handleCatalogMiss(ctx context.Context, invocation execut
 	actions := []string{
 		"确认 dws-data/syncdata.StaticServers() 是否包含该 product/server",
 		"运行 sync-oss 重新生成静态端点与路由",
-		"若该能力已下线，请在 skill/schema 中标记 unavailable 并提供替代命令",
+		"若该能力已下线，请在 skill 与 --help 中标记 unavailable 并提供替代命令",
 	}
 	if strings.TrimSpace(invocation.CanonicalProduct) == devappProductID {
 		hint = "dev app（product id: devapp）是 helper-only 产品，命令树不依赖服务发现；真实调用需要通过 StaticServers/SupplementServers 注入 MCP endpoint，或本地调试临时设置 DINGTALK_DEVAPP_MCP_URL。"

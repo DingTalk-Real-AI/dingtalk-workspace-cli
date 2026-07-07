@@ -75,10 +75,10 @@ func NewMCPCommand(_ context.Context, _ CatalogLoader, _ executor.Runner, _ *pip
 func NewSchemaCommand(_ CatalogLoader, helperTools HelperToolFetcher) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "schema [path]",
-		Short: "查看 MCP 工具 Schema (产品列表 / 工具参数)",
-		Long: `查看已发现的 MCP 产品和工具的 Schema 元数据。
+		Short: "查看有限的本地 Schema（静态端点模式）",
+		Long: `查看有限的本地 Schema 元数据。
 
-静态端点模式下，仅支持 helper-only 子树的 schema 查询。`,
+服务发现和动态 schema 已下线。静态端点模式下，仅支持 helper-only 子树的 schema 查询；普通产品命令和 flag 以当前二进制的 --help 为准。`,
 		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {

@@ -54,3 +54,20 @@ func TestOpenStaticServersIncludesCoreProducts(t *testing.T) {
 		t.Fatal("aitable-helper has empty endpoint")
 	}
 }
+
+func TestOpenVisibleProductsIncludesCompatibilityOnlyCommands(t *testing.T) {
+	visible := openVisibleProducts()
+	byID := make(map[string]bool, len(visible))
+	for _, id := range visible {
+		byID[id] = true
+	}
+	if !byID["conference"] {
+		t.Fatal("openVisibleProducts() must include conference compatibility command")
+	}
+
+	for _, server := range openStaticServers() {
+		if server.ID == "conference" {
+			t.Fatal("conference must remain compatibility-only and not be added to StaticServers")
+		}
+	}
+}

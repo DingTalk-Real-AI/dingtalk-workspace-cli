@@ -543,5 +543,5 @@ dws calendar event list --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15
 
 ## 相关产品
 
-- [conference](./simple.md) — 仅视频会议预约（返回入会链接），不含参会人/会议室管理
+- 视频会议直接发起/入会控制 — 当前开源 CLI 不支持；如需会议安排请用 calendar 日程，直接会议操作请在钉钉客户端完成
 - [contact](./contact.md) — 搜索同事 userId，用于 attendee add --attendees

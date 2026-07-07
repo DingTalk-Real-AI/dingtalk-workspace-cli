@@ -3,47 +3,52 @@ package helpers
 import (
 	"fmt"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/spf13/cobra"
 )
 
+type openCompatHandler struct {
+	name    string
+	buildFn func() *cobra.Command
+}
+
+func (h openCompatHandler) Name() string { return h.name }
+
+func (h openCompatHandler) Command(_ executor.Runner) *cobra.Command {
+	return h.buildFn()
+}
+
+func init() {
+	RegisterPublic(func() Handler {
+		return openCompatHandler{name: "conference", buildFn: newConferenceCommand}
+	})
+}
+
 func newConferenceCommand() *cobra.Command {
-	root := &cobra.Command{
-		Use:   "conference",
-		Short: "视频会议：发起/预约/邀请入会/会中控制",
-		Long:  `钉钉视频会议：发起即时会议、预约会议、邀请成员入会、会中控制（静音/摄像头/共享/录制/字幕/视图）。`,
-		RunE:  groupRunE,
+	runUnavailable := func(cmd *cobra.Command, args []string) error {
+		return fmt.Errorf("conference 视频会议能力当前不可用：该产品已从开源 CLI 下线\n  hint: 直接发起/邀请/会中控制请在钉钉客户端操作；如需预约日程，请改用 dws calendar event create")
 	}
 
-	meetingCmd := &cobra.Command{Use: "meeting", Short: "会议管理", RunE: groupRunE}
+	root := &cobra.Command{
+		Use:   "conference",
+		Short: "视频会议（已下线，保留兼容提示）",
+		Long: `视频会议产品已从当前开源 CLI 下线。
+
+该命令路径仅作为旧版本兼容入口保留，不再调用后端工具。
+直接发起会议、邀请入会、会中控制请在钉钉客户端操作；如需预约日程，请改用 dws calendar event create。`,
+		RunE: runUnavailable,
+	}
+
+	meetingCmd := &cobra.Command{Use: "meeting", Short: "会议管理（已下线）", RunE: groupRunE}
 
 	meetingCreateCmd := &cobra.Command{
 		Use:     "reserve",
 		Aliases: []string{"create"},
-		Short:   "预约会议",
-		Long:    `预约钉钉会议，指定标题与时间段。注意：不会自动关联日历日程。`,
+		Short:   "预约会议（已下线）",
+		Long:    `视频会议预约能力已下线；如需预约日程，请改用 dws calendar event create。`,
 		Example: `  dws conference meeting reserve --title "产品评审会" \
     --start 2026-03-11T14:00:00+08:00 --end 2026-03-11T15:00:00+08:00`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "title"); err != nil {
-				return err
-			}
-			startTime, err := parseISOTimeToMillis("start", mustGetFlag(cmd, "start"))
-			if err != nil {
-				return err
-			}
-			endTime, err := parseISOTimeToMillis("end", mustGetFlag(cmd, "end"))
-			if err != nil {
-				return err
-			}
-			if err := validateTimeRange(startTime, endTime); err != nil {
-				return err
-			}
-			return callMCPTool("create_meeting_reservation", map[string]any{
-				"title":     mustGetFlag(cmd, "title"),
-				"startTime": startTime,
-				"endTime":   endTime,
-			})
-		},
+		RunE: runUnavailable,
 	}
 
 	meetingCreateCmd.Flags().String("title", "", "会议标题 (必填)")
@@ -53,44 +58,15 @@ func newConferenceCommand() *cobra.Command {
 	root.AddCommand(meetingCmd)
 
 	// member 子命令组 — 成员管理
-	memberCmd := &cobra.Command{Use: "member", Short: "成员管理", RunE: groupRunE}
+	memberCmd := &cobra.Command{Use: "member", Short: "成员管理（已下线）", RunE: groupRunE}
 
 	memberInviteCmd := &cobra.Command{
 		Use:   "invite",
-		Short: "邀请指定人入会",
-		Long:  `邀请指定联系人加入目标会议。需提供 conferenceId 和被邀请人的 openDingTalkId（通过通讯录工具获取）。`,
+		Short: "邀请指定人入会（已下线）",
+		Long:  `视频会议邀请入会能力已下线；请在钉钉客户端操作。`,
 		Example: `  dws conference member invite --conference-id "xxx" \
     --nicks "张三,李四" --open-dingtalk-ids "id1,id2"`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			confID, err := mustFlagOrFallback(cmd, "conference-id", "meeting-id", "conferenceId")
-			if err != nil {
-				return err
-			}
-			nicksStr, err := mustFlagOrFallback(cmd, "nicks", "nick", "nicknames")
-			if err != nil {
-				return err
-			}
-			idsStr, err := mustFlagOrFallback(cmd, "open-dingtalk-ids", "openDingTalkIds", "ids")
-			if err != nil {
-				return err
-			}
-			nicks := parseCSVValues(nicksStr)
-			openDingTalkIds := parseCSVValues(idsStr)
-			if len(nicks) != len(openDingTalkIds) {
-				return fmt.Errorf("--nicks 和 --open-dingtalk-ids 数量不匹配: %d vs %d", len(nicks), len(openDingTalkIds))
-			}
-			inviteeList := make([]map[string]any, len(nicks))
-			for i := range nicks {
-				inviteeList[i] = map[string]any{
-					"nick":           nicks[i],
-					"openDingTalkId": openDingTalkIds[i],
-				}
-			}
-			return callMCPTool("invite_meeting_participants", map[string]any{
-				"inviteeList":  inviteeList,
-				"conferenceId": confID,
-			})
-		},
+		RunE: runUnavailable,
 	}
 	memberInviteCmd.Flags().String("conference-id", "", "会议ID (必填)")
 	memberInviteCmd.Flags().String("meeting-id", "", "会议ID别名")
