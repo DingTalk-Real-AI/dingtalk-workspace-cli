@@ -268,7 +268,7 @@ func newExportCmd() *cobra.Command {
             - 未指定：仅返回 downloadUrl，链接有时效性请尽快下载
 
 支持范围:
-  仅支持钉钉在线电子表格（alxs）→ xlsx；
+  仅支持钉钉在线电子表格（axls）→ xlsx；
   若需导出钉钉文字文档，请使用 dingtalkdoc 侧的导出工具。
 
 权限要求:

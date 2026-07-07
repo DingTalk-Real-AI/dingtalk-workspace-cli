@@ -33,7 +33,7 @@ metadata:
 
 ## 环境
 
-- `DWS_SKILL_API_HOST` 覆盖技能 API 地址（默认 `https://aihub.dingtalk.com`）
+- `DWS_SKILL_API_HOST` 覆盖技能 API 地址（默认 `https://mcp.dingtalk.com`）
 
 ## 兼容提示
 

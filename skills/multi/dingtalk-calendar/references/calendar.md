@@ -5,7 +5,7 @@
 - **二级子命令（必选其一）**：`event`（日程）、`attendee`（参会人）、`room`（会议室）、`busy`（闲忙）、`attachment`（日程附件）、`book`（用户日历列表）。`dws calendar` 后**必须**紧跟上述之一；**禁止**只执行 `dws calendar`（无子命令）。
 - **个人日程 / 给自己留时间块 / 专注时段**：统一走 **`dws calendar event create`**。当前**没有**单独的 `personal schedule create` / `calendar create` 命令。
 - **查日程列表**：`dws calendar event list --start "<ISO-8601>" --end "<ISO-8601>" --format json`，或优先使用脚本 `python scripts/calendar_today_agenda.py [today|tomorrow|week]`（见文末「自动化脚本」）。
-- **查用户日历本列表**：`dws calendar book list`（返回主日历 `id == "primary"` 等）。**重要**可以查询他人共享给自己的日历本，根据日历本id可以进一步查询对方的日程信息。
+- **查用户日历本列表**：`dws calendar book list`（返回字段为 `calendarId`，主日历 `calendarId == "primary"` 等；注意无 `id` 字段，按 `.id` 提取会取空）。**重要**可以查询他人共享给自己的日历本，根据日历本id可以进一步查询对方的日程信息。
 - **CLI 不存在**独立的 `dws calendar list`；若误跑无子命令的 `dws calendar`，会打印整段 Usage，**切勿**将该段 help 当作工具结果再次塞进对话（会急剧增加 token 与首字延迟）。
 - **必须**遵循指令说明进行调用。**绝对禁止**使用虚构指令，使用虚构参数。
 
@@ -511,7 +511,7 @@ dws calendar event list --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15
 | `event respond` | 响应结果 | — |
 | `room search` | `rooms[].roomId` | room add 的 --rooms 或 event create 的 --rooms |
 | `room list-groups` | `groups[].groupId` | room search 的 --group-id |
-| `book list` | `id`（如 `primary`） | event list/get 的 --calendar-id |
+| `book list` | `calendarId`（如 `primary`） | event list/get 的 --calendar-id |
 | 钉盘上传 | 文件 `fileId` | attachment add 的 --files `<fileId>:<name>` |
 
 ## 注意事项
@@ -529,7 +529,7 @@ dws calendar event list --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15
 - **搜房无结果**：在符合早停/用户限定范围内，`room search`（含按分组逐组查）全部返回空或无空闲 → 应**直接向用户报错/说明失败**并结束订房；**禁止**假设 roomId、禁止无合法 `roomId` 时调用 `room add` / `event create --rooms` 试探、禁止用 `event get` 等绕路推断 roomId
 - **评测 / 自动化断言**：凡涉及 `room add` / `event create --rooms` 的流程，`--rooms` 只能填上游 `room search`（或等价接口）返回 JSON 中的 **`rooms[].roomId`**；不得以会议室展示名、楼层文案或用户口语当作 `roomId`
 - **附件**：`attachment add` 仅负责挂载，**不上传**文件；fileId 必须先通过钉盘流程取得；`--files` 多附件用 `<fileId>:<name>` 元素逗号分隔
-- **日历本**：`book list` 返回的 `id` 才是合法 `calendarId`；如无明确说明，`event list` / `event get` 都不要带 `--calendar-id`，让接口默认走 primary 主日历
+- **日历本**：`book list` 返回的 `calendarId` 字段才是合法日历 id（无 `id` 字段）；如无明确说明，`event list` / `event get` 都不要带 `--calendar-id`，让接口默认走 primary 主日历
 - **已弃用入参**：`--max-results`（event list）在新 MCP schema 中被移除；CLI 仍接受但**不会**透传到 MCP；模型生成命令时**禁止**继续使用
 
 ## 自动化脚本

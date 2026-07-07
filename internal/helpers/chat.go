@@ -3069,7 +3069,7 @@ func newChatCommand() *cobra.Command {
 	chatMessageCreateTextEmotionCmd := &cobra.Command{
 		Use:   "create-text-emotion",
 		Short: "创建文字表情（获取 emotionId）",
-		Long:  `创建一个新的文字表情模板。当 list-emotions 中没有所需表情时，使用此命令创建并获取 emotionId，随后可用于 add-text-emotion。`,
+		Long:  `创建一个新的文字表情模板。当内置表情（见 chat-emoji-list.md）中没有所需表情时，使用此命令创建并获取 emotionId，随后可用于 add-text-emotion。`,
 		Example: `  dws chat message create-text-emotion --emotion-name "赞" --text "nice"
   dws chat message create-text-emotion --emotion-name "感谢" --text "感谢" --background-id im_bg_5`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -3228,11 +3228,20 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				return err
 			}
 
-			// 解析输出路径：如果是目录，从 URL 推断文件名
+			// 解析输出路径：目录（已存在的目录，或以分隔符结尾的意图目录）→ 追加推断文件名。
 			fi, statErr := os.Stat(outputPath)
-			if statErr == nil && fi.IsDir() {
+			isDir := (statErr == nil && fi.IsDir()) ||
+				strings.HasSuffix(outputPath, string(os.PathSeparator)) ||
+				strings.HasSuffix(outputPath, "/")
+			if isDir {
 				filename := inferFilename(resourceURL)
 				outputPath = filepath.Join(outputPath, filename)
+			}
+			// 确保目标父目录存在，否则 httpGetFile 打开文件会因目录缺失失败。
+			if dir := filepath.Dir(outputPath); dir != "" && dir != "." {
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					return fmt.Errorf("创建输出目录失败: %w", err)
+				}
 			}
 
 			// Step 2: HTTP GET 下载文件
@@ -4316,16 +4325,16 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatGroupAuditJoinValidationCmd := &cobra.Command{
 		Use:   "audit-join-validation",
 		Short: "审批入群验证（通过、拒绝、删除）",
-		Long: `审批入群验证。支持通过、拒绝、删除、忽略、拒绝并拉黑等操作。
+		Long: `审批入群验证。真机实测服务端仅接受 AuditApprove / AuditDelete，其余状态会被拒绝（unsupported audit status）。
 
 status 可选值:
-  AuditApprove — 通过
-  AuditDelete  — 删除
-  AuditIgnore  — 忽略
-  AuditRefuse  — 拒绝
-  AuditBlock   — 拒绝且不再接受该用户的申请`,
+  AuditApprove — 通过（可用）
+  AuditDelete  — 删除（可用）
+  AuditIgnore  — 忽略（服务端拒绝，不可用）
+  AuditRefuse  — 拒绝（服务端拒绝，不可用）
+  AuditBlock   — 拒绝且不再接受该用户的申请（服务端拒绝，不可用）`,
 		Example: `  dws chat group audit-join-validation --group <openConversationId> --record-id 123456 --applicant <openDingTalkId> --inviter <openDingTalkId> --status AuditApprove
-  dws chat group audit-join-validation --group <openConversationId> --record-id 123456 --applicant <openDingTalkId> --inviter <openDingTalkId> --status AuditRefuse --description "不符合入群条件"
+  dws chat group audit-join-validation --group <openConversationId> --record-id 123456 --applicant <openDingTalkId> --inviter <openDingTalkId> --status AuditDelete --description "不符合入群条件"
   # 查询入群验证记录: dws chat group list-join-validations`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "group", "record-id", "applicant", "inviter", "status"); err != nil {
@@ -4352,7 +4361,7 @@ status 可选值:
 	_ = chatGroupAuditJoinValidationCmd.MarkFlagRequired("group")
 	chatGroupAuditJoinValidationCmd.Flags().String("record-id", "", "申请记录 ID (必填)")
 	_ = chatGroupAuditJoinValidationCmd.MarkFlagRequired("record-id")
-	chatGroupAuditJoinValidationCmd.Flags().String("status", "", "审批动作: AuditApprove/AuditDelete/AuditIgnore/AuditRefuse/AuditBlock (必填)")
+	chatGroupAuditJoinValidationCmd.Flags().String("status", "", "审批动作，真机仅 AuditApprove/AuditDelete 可用；AuditIgnore/AuditRefuse/AuditBlock 服务端拒绝 (必填)")
 	_ = chatGroupAuditJoinValidationCmd.MarkFlagRequired("status")
 	chatGroupAuditJoinValidationCmd.Flags().String("applicant", "", "申请人 openDingTalkId (必填)")
 	_ = chatGroupAuditJoinValidationCmd.MarkFlagRequired("applicant")

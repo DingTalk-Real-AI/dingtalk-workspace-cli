@@ -182,7 +182,13 @@ func runSheetWriteImage(cmd *cobra.Command, _ []string) error {
 
 	ctx := context.Background()
 
-	deps.Out.PrintInfo(fmt.Sprintf("[1/3] 获取附件上传凭证 (%s, %d bytes)...", fileName, fileSize))
+	// json 模式下进度提示会污染 stdout（PrintInfo/PrintKeyValue 都写 stdout），
+	// 使 write_image 的 JSON 响应无法被单独解析。故 json 模式抑制进度。
+	jsonMode := deps.Caller.Format() == "json"
+
+	if !jsonMode {
+		deps.Out.PrintInfo(fmt.Sprintf("[1/3] 获取附件上传凭证 (%s, %d bytes)...", fileName, fileSize))
+	}
 
 	result, err := deps.Caller.CallTool(ctx, "doc", "get_doc_attachment_upload_info", map[string]any{
 		"nodeId":   nodeID,
@@ -216,10 +222,11 @@ func runSheetWriteImage(cmd *cobra.Command, _ []string) error {
 		resourceURL, _ = credData["resourceUrl"].(string)
 	}
 
-	deps.Out.PrintKeyValue("resourceId", resourceID)
-	deps.Out.PrintKeyValue("resourceUrl", resourceURL)
-
-	deps.Out.PrintInfo("[2/3] 上传图片到 OSS...")
+	if !jsonMode {
+		deps.Out.PrintKeyValue("resourceId", resourceID)
+		deps.Out.PrintKeyValue("resourceUrl", resourceURL)
+		deps.Out.PrintInfo("[2/3] 上传图片到 OSS...")
+	}
 
 	ossHeaders := map[string]string{
 		"Content-Type": mimeType,
@@ -228,7 +235,9 @@ func runSheetWriteImage(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	deps.Out.PrintInfo("[3/3] 写入图片到表格单元格...")
+	if !jsonMode {
+		deps.Out.PrintInfo("[3/3] 写入图片到表格单元格...")
+	}
 
 	writeArgs := map[string]any{
 		"nodeId":       nodeID,
@@ -244,10 +253,13 @@ func runSheetWriteImage(cmd *cobra.Command, _ []string) error {
 		writeArgs["height"] = h
 	}
 
+	if jsonMode {
+		// json 模式：write_image 的 JSON 响应就是唯一 stdout 输出。
+		return callMCPTool("write_image", writeArgs)
+	}
 	if err := callMCPTool("write_image", writeArgs); err != nil {
 		return err
 	}
-
 	deps.Out.PrintInfo(fmt.Sprintf("图片已写入表格: %s → %s (resourceId=%s)", fileName, rangeAddress, resourceID))
 	return nil
 }

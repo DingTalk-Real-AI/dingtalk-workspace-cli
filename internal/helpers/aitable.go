@@ -4290,7 +4290,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	baseGetPrimaryDocIdCmd.Flags().String("table-id", "", "Table ID，可通过 list_tables 或 get_base 获取 (必填)")
 	baseGetPrimaryDocIdCmd.Flags().String("record-id", "", "记录 ID (必填)")
 	baseCopyCmd.Flags().String("base-id", "", "源 Base ID (必填)")
-	baseCopyCmd.Flags().String("target-folder-id", "", "目标文件夹 ID (必填), 默认为当前 Base 的父节点")
+	baseCopyCmd.Flags().String("target-folder-id", "", "目标文件夹 ID (必填, 不传会复制失败)")
 	baseCopyCmd.Flags().Bool("only-struct", false, "是否仅复制结构（不含数据），默认 false 表示完整复制")
 	baseCmd.AddCommand(
 		baseListCmd, baseSearchCmd, baseGetCmd,

@@ -67,6 +67,8 @@ func (f *fakeToolCaller) CallTool(_ context.Context, _ string, toolName string, 
 
 func (f *fakeToolCaller) Format() string { return "json" }
 func (f *fakeToolCaller) DryRun() bool   { return f.dryRun }
+func (f *fakeToolCaller) Fields() string { return "" }
+func (f *fakeToolCaller) JQ() string     { return "" }
 
 type recordedToolCall struct {
 	tool           string
@@ -94,6 +96,8 @@ func (f *fallbackToolCaller) CallTool(_ context.Context, _ string, toolName stri
 
 func (f *fallbackToolCaller) Format() string { return "json" }
 func (f *fallbackToolCaller) DryRun() bool   { return false }
+func (f *fallbackToolCaller) Fields() string { return "" }
+func (f *fallbackToolCaller) JQ() string     { return "" }
 
 type fallbackErrorToolCaller struct {
 	calls []recordedToolCall
@@ -198,6 +202,8 @@ func (f *fallbackPATContractErrorToolCaller) CallTool(_ context.Context, _ strin
 
 func (f *fallbackPATContractErrorToolCaller) Format() string { return "json" }
 func (f *fallbackPATContractErrorToolCaller) DryRun() bool   { return false }
+func (f *fallbackPATContractErrorToolCaller) Fields() string { return "" }
+func (f *fallbackPATContractErrorToolCaller) JQ() string     { return "" }
 
 type sequenceToolCaller struct {
 	calls     []recordedToolCall
@@ -227,6 +233,8 @@ func (s *sequenceToolCaller) CallTool(_ context.Context, _ string, toolName stri
 
 func (s *sequenceToolCaller) Format() string { return "json" }
 func (s *sequenceToolCaller) DryRun() bool   { return s.dryRun }
+func (s *sequenceToolCaller) Fields() string { return "" }
+func (s *sequenceToolCaller) JQ() string     { return "" }
 
 func stringSliceArgEqual(got any, want []string) bool {
 	gotSlice, ok := got.([]string)
@@ -372,7 +380,7 @@ func TestPATHelpDocumentsBatchAuthorization(t *testing.T) {
 		"--dry-run 只返回授权计划",
 		"执行批量授权必须显式",
 		"由服务端默认兜底",
-		"aitable.record:read aitable.record:write --grant-type permanent --yes",
+		"aitable.record:query aitable.record:create --grant-type permanent --yes",
 		"dws pat chmod --products calendar,aitable",
 		"dws pat chmod --recommend --grant-type session",
 	} {
@@ -2020,3 +2028,12 @@ func TestResolveAgentCodeFromEnv(t *testing.T) {
 			code, src)
 	}
 }
+
+func (f *fallbackErrorToolCaller) Fields() string            { return "" }
+func (f *fallbackErrorToolCaller) JQ() string                { return "" }
+func (f *fallbackSchemaMismatchToolCaller) Fields() string   { return "" }
+func (f *fallbackSchemaMismatchToolCaller) JQ() string       { return "" }
+func (f *fallbackPermissionDeniedToolCaller) Fields() string { return "" }
+func (f *fallbackPermissionDeniedToolCaller) JQ() string     { return "" }
+func (f *fallbackPATErrorToolCaller) Fields() string         { return "" }
+func (f *fallbackPATErrorToolCaller) JQ() string             { return "" }

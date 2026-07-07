@@ -514,7 +514,7 @@ dws drive copy --node <源文件dentryUuid> --folder <目标文件夹fileId> --f
 - 不传 `--space-id` 时默认使用「我的文件」空间
 - 不传 `--folder` 时默认操作空间根目录
 - `--folder` 只能使用父文件夹的 `dentryUuid`。不要把 `drive info` 返回的数字型 `dentryId` 当作父目录
-- **`--limit` 最大值为 50**，禁止传入超过 50 的值（如 `--limit 100`）。用户要求超过 50 条时，应使用 `--limit 50` 配合 `--cursor` 分页查询
+- **`--limit` 有效上限为 50**：CLI 不做本地校验，传 `--limit 100` 不会报错，但服务端每页最多返回 50 条，超出部分无效。用户要求超过 50 条时，应使用 `--limit 50` 配合 `--cursor` 分页查询
 - `--order-by` 支持: `createTime`、`modifyTime`、`name`
 - **上传文件首选 `dws drive upload` 命令**；手动三步（`upload-info` → HTTP PUT → `commit`）仅用于自定义流式上传等特殊场景。手动三步时 HTTP PUT 必须把 upload-info 返回的 `headers` 全部回传，`Content-Type` 通常要留空；PUT 返回 200 后才能调 `commit`；`uploadId` 有过期时间，过期需重新 `upload-info`；`--folder` 在 upload-info / commit 中要保持一致
 - `--file-name` 必须包含扩展名（如 `report.pdf`）

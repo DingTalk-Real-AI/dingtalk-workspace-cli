@@ -2333,7 +2333,7 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 
 子命令:
   types        查询当前用户假期规则列表
-  save-type    创建或更新假期规则（仅支持无额度模式）
+  update-type  更新假期规则（仅支持无额度模式）
   balance      查询指定员工假期余额
   save-balance 更新员工假期余额
   records      查询指定员工假期余额变更记录`,
@@ -3136,11 +3136,11 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 
 	// vacation balance (get_leave_balance_quota)
 	vacationBalanceCmd.Flags().String("users", "", "目标员工 ID 列表，逗号分隔 (必填)")
-	vacationBalanceCmd.Flags().String("leave-code", "", "假期规则 code (选填，不传则查询所有假期)")
+	vacationBalanceCmd.Flags().String("leave-code", "", "假期规则 code (必填，服务端要求非空，不传返回 INVALID_PARAMS)")
 
 	// vacation records (get_leave_balance_records)
 	vacationRecordsCmd.Flags().String("user", "", "指定查询员工 ID (必填)")
-	vacationRecordsCmd.Flags().String("leave-code", "", "假期规则 code (选填，不传则查询所有假期)")
+	vacationRecordsCmd.Flags().String("leave-code", "", "假期规则 code (必填，服务端要求非空，不传返回 INVALID_PARAMS)")
 	vacationRecordsCmd.Flags().String("start", "", "查询开始日期，格式 YYYY-MM-DD (必填)")
 	vacationRecordsCmd.Flags().String("end", "", "查询结束日期，格式 YYYY-MM-DD (必填)")
 

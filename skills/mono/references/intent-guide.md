@@ -68,8 +68,8 @@
 | "改群昵称/设置群昵称/我在群里的名字" | 设置个人群昵称 | `chat group update-nick` | `chat group rename` | update-nick 改自己的群昵称；rename 改群名称 |
 | "群备注/给群加备注/修改群备注" | 设置群备注 | `chat group update-alias` | `chat group rename` | update-alias 设置仅自己可见的备注；rename 改群名称全员可见 |
 | "隐藏会话/隐藏群聊/隐藏对话" | 隐藏会话 | `chat hide` | `chat mute` | hide 隐藏会话不显示；mute 是免打扰但仍显示 |
-| "关闭@所有人通知/屏蔽@all/不接收@所有人" | 关闭 @所有人提醒 | `chat mute-at-all` | `chat mute` | mute-at-all 仅屏蔽 @所有人；mute 是整个会话免打扰 |
-| "关闭红包通知/屏蔽红包/不接收红包提醒" | 关闭红包提醒 | `chat mute-red-envelope` | `chat mute` | mute-red-envelope 仅屏蔽红包；mute 是整个会话免打扰 |
+| "关闭@所有人通知/屏蔽@all/不接收@所有人" | 关闭 @所有人提醒 | `chat mute-at-all` | `chat mute` | mute-at-all 仅屏蔽 @所有人；mute 是整个会话免打扰。⚠️ 当前服务端稳定返回 1002「系统繁忙」，命令暂不可用，先告知用户到钉钉客户端设置 |
+| "关闭红包通知/屏蔽红包/不接收红包提醒" | 关闭红包提醒 | `chat mute-red-envelope` | `chat mute` | mute-red-envelope 仅屏蔽红包；mute 是整个会话免打扰。⚠️ 同 mute-at-all，服务端稳定 1002，暂不可用 |
 | "解散群/解散群聊" | 解散群聊 | `chat group dismiss` | `chat group quit` | dismiss 是群主解散整个群（不可逆）；quit 是当前用户自己退群 |
 | "新成员看历史/历史消息可见范围" | 设置新成员可见历史消息 | `chat group set-history` | `chat group update-settings` | set-history 控制新成员入群后可见历史消息范围；update-settings 是其他群功能开关 |
 | "群里有哪些机器人/查看群机器人/列出群机器人" | 查看群内机器人列表 | `chat group bots` | `chat group members` | bots 只列机器人；members 列普通群成员 |

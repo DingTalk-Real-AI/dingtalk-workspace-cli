@@ -7,15 +7,16 @@
 ### 搜索开发文档
 ```
 Usage:
-  dws devdoc article search [flags]
+  dws devdoc article search [keyword] [flags]
 Example:
+  dws devdoc article search "MCP"                      # 关键词可作位置参数，等价于 --query
   dws devdoc article search --query "OAuth2 接入"
   dws devdoc article search --query "消息卡片" --page 2 --size 5
   dws devdoc article search --query "机器人" --size 10
 Flags:
-      --query string     搜索关键词 (必填)
-      --page int         分页页码 (从 1 开始，默认 1)
-      --size int         分页大小 (默认 10)
+      --query string     搜索关键词 (必填；也可用位置参数 [keyword] 传)
+      --page string      分页页码 (从 1 开始，default "1")
+      --size string      分页大小 (default "10")
 ```
 
 ## 意图判断

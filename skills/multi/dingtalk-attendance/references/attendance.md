@@ -55,6 +55,19 @@ Flags:
 
 返回每条记录含：用户 ID、实际打卡时间、打卡地址、打卡经纬度、打卡类型（OnDuty/OffDuty）、定位方式（Map/Wifi/etc）。时间跨度不超过 1 个月。
 
+### 查询个人某日考勤详情
+```
+Usage:
+  dws attendance record get [flags]
+Example:
+  dws attendance record get --user 011769261608 --date 2026-03-08
+Flags:
+      --user string  钉钉用户 ID (必填，别名 --users 亦可)
+      --date string  查询日期, 格式 YYYY-MM-DD (必填)
+```
+
+查询单个用户在**某一天**的考勤详情（区别于 `check record`/`check result` 的多人时间段批量查询）。返回 `result` 对象含 `isHasSchedule`（当日是否有排班）、`isRest`（是否休息日）、`isUnSigned`（是否未打卡）、`recordList`（打卡明细）、`approveList`（当日审批单）、`workOvertime`、`workTimeDesc` 等字段。`--user` 只接受**单个** userId；查 userId 用 `dws contact user search --query "姓名"`。
+
 ### 查询审批单
 ```
 Usage:

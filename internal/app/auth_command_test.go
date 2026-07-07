@@ -824,6 +824,10 @@ func (f *authLoginRecommendSequenceCaller) Format() string { return "table" }
 
 func (f *authLoginRecommendSequenceCaller) DryRun() bool { return false }
 
+func (f *authLoginRecommendSequenceCaller) Fields() string { return "" }
+
+func (f *authLoginRecommendSequenceCaller) JQ() string { return "" }
+
 func stringSliceArgEqual(got any, want []string) bool {
 	if got == nil {
 		return len(want) == 0

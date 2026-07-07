@@ -314,7 +314,7 @@ Flags:
 用户说"拒绝审批/驳回" → 先 `tasks` 获取 taskId，再 `reject`
 用户说"撤回审批/取消审批" → `approval revoke`
 用户说"审批记录/操作历史" → `approval records`
-用户说"我发起的审批" → `approval list-initiated`（需 --process-code，可从 list-forms 或 detail 获取）
+用户说"我发起的审批" → `approval list-initiated`（需 --process-code，可从 list-forms / search-forms / detail 获取）
 用户说"有哪些审批表单/可见表单" → `approval list-forms`
 用户说"我有哪些待审的任务" → `approval tasks`
 用户说"我发起的审批单" -> `approval list-submitted`
@@ -351,7 +351,7 @@ dws oa approval records --instance-id <processInstanceId> --format json
 # 7. 获取可见审批表单（得到 processCode）
 dws oa approval list-forms --cursor 0 --limit 100 --format json
 
-# 8. 查看自己发起的审批列表（--process-code 来自 list-forms 或 detail）
+# 8. 查看自己发起的审批列表（--process-code 来自 list-forms / search-forms / detail）
 dws oa approval list-initiated --process-code <code> \
   --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" \
   --cursor 0 --limit 20 --format json
@@ -383,6 +383,7 @@ dws oa approval oa-cc-noticer --instance-id <processInstanceId> --users "userId1
 | `tasks` | `taskId` | approve / reject / redirect-task 的 --task-id |
 | `detail` | `processCode` | list-initiated 的 --process-code |
 | `list-forms` | `processCode` | list-initiated 的 --process-code |
+| `search-forms` | `processCode` | list-initiated 的 --process-code |
 
 ## 注意事项
 
@@ -391,7 +392,7 @@ dws oa approval oa-cc-noticer --instance-id <processInstanceId> --users "userId1
 - `redirect-task` 的 `--to-actioner-id` 可通过 `dws contact user search` 获取目标用户 userId
 - `revoke` 只能撤销自己发起的审批
 - `--remark` 审批意见虽为可选，但建议填写以留存审批痕迹
-- `list-initiated` 的 `--process-code` 可从 `list-forms` 或 `detail` 返回中提取
+- `list-initiated` 的 `--process-code` 可从 `list-forms`、`search-forms` 或 `detail` 返回中提取。当 `list-forms` 返回 `processCodeList` 为空（`totalCount -1`）时，用 `search-forms --query <表单名>`（如 `--query 报销`）按名称精准拿 `processCode` 更稳
 - `list-initiated` 的 `--start` / `--end` 区间有后端上限（约 120 天）。超过上限会返回误导性的 `business_error: 时间戳无效`（实为区间过长，不是时间格式问题）。跨度大时请拆成多段短区间分别查询
 
 ## 自动化脚本

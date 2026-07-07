@@ -17,7 +17,7 @@ def _unwrap_rows(payload: Any) -> List[Any]:
             return value
         if isinstance(value, dict):
             for inner_key in (
-                'items', 'list', 'records', 'minutes',
+                'itemList', 'items', 'list', 'records', 'minutes',
             ):
                 inner = value.get(inner_key)
                 if isinstance(inner, list):
@@ -30,7 +30,8 @@ def uuid_title_pairs_from_payload(payload: Any) -> List[Tuple[str, str]]:
     out: List[Tuple[str, str]] = []
     for item in _unwrap_rows(payload):
         if isinstance(item, dict):
-            uuid = item.get('taskUuid') or item.get('id') or item.get('task_uuid')
+            uuid = (item.get('taskUuid') or item.get('uuid')
+                    or item.get('id') or item.get('task_uuid'))
             if not uuid:
                 continue
             title = item.get('title') or item.get('name') or '无标题'
@@ -53,6 +54,7 @@ def uuid_title_pairs_from_payload(payload: Any) -> List[Tuple[str, str]]:
                     continue
                 uuid = (
                     parsed.get('taskUuid')
+                    or parsed.get('uuid')
                     or parsed.get('id')
                     or parsed.get('task_uuid')
                 )

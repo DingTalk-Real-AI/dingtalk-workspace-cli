@@ -31,7 +31,7 @@ metadata:
 | "按 userId 查详情" | `dws contact user get --ids <userId1>,<userId2>,...`（多个并行） |
 | "按部门名拉成员" | `python scripts/contact_dept_members.py --query "<部门名>"` |
 | "搜部门" | `dws contact dept search --query "<关键词>"` |
-| "部门成员列表" | `dws contact dept list-members --ids <deptId>` |
+| "部门成员列表" | `dws contact dept list-members --depts <deptId>` |
 | "离职员工/离职名单/已离职" | `dws contact user dismission search`（可加 `--name` / `--start` + `--end` / `--depts`） |
 | "花名册/员工档案/学历/银行卡/合同" | `dws contact user profile get --staff-id <STAFF_ID>`（先 `profile fields` 查字段） |
 

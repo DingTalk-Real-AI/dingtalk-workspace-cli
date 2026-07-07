@@ -101,6 +101,17 @@
 
 > **创建表单**有两种等价方式：`form create --name "..."`（推荐）或 `view create --view-type FormDesigner --name "..."`。
 
+### workflow (自动化工作流) → 详见 [aitable-workflow.md](./aitable/aitable-workflow.md)
+
+| 命令 | 用途 | 必填参数 | 路由提醒 |
+|------|------|----------|----------|
+| `workflow list` | 列出 Base 下所有工作流 | `--base-id` | 支持 `--limit [1,100]` / `--offset >=0`；list 出参字段叫 `flowId` |
+| `workflow get` | 获取单个工作流详情（含 flowSchema） | `--base-id` `--workflow-id` | `--workflow-id` 接受 list 里的 `flowId`（同值） |
+| `workflow enable` | 启用工作流 | `--base-id` `--workflow-id` | 返回 `{enabled: true}` 是动作确认；要确认真启用看 list 的 `status` |
+| `workflow disable` | 禁用工作流（高危） | `--base-id` `--workflow-id` `--yes` | 影响业务自动化，建议二次确认；status 变 STOP |
+
+> **当前不支持通过 CLI 新建/修改/删除工作流**，请去 AI 表格 Web 端（数据表页面 → 自动化）配置。
+
 ### dashboard & chart → 详见 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)
 
 | 命令 | 用途 |
@@ -129,6 +140,35 @@
 | 命令 | 用途 | 必填参数 |
 |------|------|----------|
 | `template search` | 搜索模板 | `--query` |
+
+### advperm (高级权限/自定义角色) → 详见 [aitable-advperm.md](./aitable/aitable-advperm.md)
+
+| 命令 | 用途 | 必填参数 | 路由提醒 |
+|------|------|----------|----------|
+| `advperm enable` | 开启 Base 高级权限总开关 | `--base-id` | 不开启时角色规则不生效 |
+| `advperm disable` | 关闭 Base 高级权限总开关（高危） | `--base-id` `--yes` | 关闭后全员回退默认权限 |
+| `advperm role-list` | 列出 Base 下所有角色 | `--base-id` | 同时返回自定义角色和系统角色；`roleType == "custom"` 是自定义，前缀 `system_` 是系统角色 |
+| `advperm role-get` | 获取单角色完整配置 | `--base-id` `--role-id` | 含 subRoles 与字段/行级规则 |
+| `advperm role-create` | 创建自定义角色 | `--base-id` `--name` | 可选 `--sub-roles` 同时指定子角色权限规则 |
+| `advperm role-update` | 增量更新自定义角色（PATCH） | `--base-id` `--role-id` | 未传字段不变；`--sub-roles` 按 (targetId,targetType) 合并 |
+| `advperm role-delete` | 删除自定义角色 | `--base-id` `--role-id` `--yes` | 不可逆；系统角色禁删；**调用者必须是该 AI 表格的管理员/Owner**，非管理员会得到 401 AUTH_ERROR |
+
+> 所有写命令（enable/disable/role-create/role-update/role-delete）需要 Base 管理员权限；非管理员只能调 `role-list` / `role-get`（只读）。
+> "角色 ↔ 成员"绑定当前 CLI 不支持，仍需在 AI 表格 Web 端 → Base 设置 → 高级权限面板手动完成。
+
+### section (文件夹与节点管理)
+
+用于在 Base 的导航树中组织 table / dashboard / 表单视图 / 文档等节点（类似文件夹）。操作前建议先用 `section list-nodes` 拿到 nodeId / sectionId 与父级关系。
+
+| 命令 | 用途 | 必填参数 | 路由提醒 |
+|------|------|----------|----------|
+| `section list-nodes` | 列出 Base 下全部节点 | `--base-id` | 返回 `{nodeId, nodeType, parentSectionId, name?}`；是 move-node / reorder 的前置定位命令 |
+| `section list-empty` | 列出空文件夹 | `--base-id` | 返回 `{sectionId, name, parentSectionId}`，用于清理导航树 |
+| `section create` | 创建文件夹 | `--base-id` `--name` | `--parent-section-id` 不传/空串=根目录；`--index` 指定位置 |
+| `section rename` | 重命名文件夹 | `--base-id` `--section-id` `--new-name` | — |
+| `section delete` | 删除文件夹 | `--base-id` `--section-id` | 不可逆；建议先 list-empty 确认为空 |
+| `section reorder` | 调整文件夹顺序 | `--base-id` `--section-id` `--target-index` | 仅当前父级下调序；跨父级用 move-node |
+| `section move-node` | 移动节点（跨父级） | `--base-id` `--node-id` `--new-parent-section-id` | `--new-parent-section-id ""`=移到根；`--target-index` 调全局位置 |
 
 ## 意图判断
 

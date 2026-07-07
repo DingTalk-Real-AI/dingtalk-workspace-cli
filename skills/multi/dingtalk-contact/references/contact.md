@@ -211,7 +211,7 @@ Example:
 Flags:
   无
 Notes:
-  - 无需参数，返回当前企业全部角色列表（labelId、labelName等）
+  - 无需参数，返回当前企业全部角色，按 `groupName` 分组，每组 `labels[]` 里每个角色是 `{labelId, name}`（字段名是 `name`，不是 `labelName`）
   - 用于不知道准确角色名称时先浏览全部角色
   - 典型场景：用户说“企业所有主管/查所有管理员/财务人员有哪些”→ 先 label list 浏览全部角色，匹配目标角色后 label list-members 获取成员
 ```
@@ -358,7 +358,7 @@ dws contact user dismission search --depts 123456,789012 --hide-retirement=false
 | `user get-self/search` | `orgAuthEmail` | mail message send 的 --to/--cc (跨产品) |
 | `user get-self/search` | `userId` | profile get 的 --staff-id |
 | `user profile fields` | `fieldCode` | profile get 的 --fields |
-| `label list` | `labelId` / `labelName` | `label get --names` 或 `label list-members --id` |
+| `label list` | `labelId` / `name` | `label get --names` 或 `label list-members --id` |
 | `label get` | `labelId` | `label list-members` 的 --id |
 | `dept search/list-children` | `deptId` | dept get-info/list-children/list-members 的 --dept/--depts |
 | `dept search/list-children` | `deptId` | dismission search 的 --depts |

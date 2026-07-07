@@ -694,7 +694,7 @@ Example:
   dws chat message list-by-sender --sender-open-dingtalk-id <openDingTalkId> --start "2026-03-10T00:00:00+08:00" --end "2026-03-11T00:00:00+08:00" --limit 50 --cursor <nextCursor>
 Flags:
       --sender-user-id string                发送者 userId（与 --sender-open-dingtalk-id 二选一）
-      --sender-open-dingtalk-id string        发送者 openDingTalkId（与 --sender-user-id 二选一，适用于无法获取 userId 的场景）
+      --sender-open-dingtalk-id string        发送者 openDingTalkId（与 --sender-user-id 二选一）；真机实测该路径恒返回 result:{}、success:null，当前不可用，请优先用 --sender-user-id
       --start string                          开始时间，ISO-8601 格式 (必填)
       --end string                            结束时间，ISO-8601 格式 (必填)
       --limit int                             每页返回数量（默认 50）
@@ -702,8 +702,8 @@ Flags:
 
 注意:
   - --sender-user-id 和 --sender-open-dingtalk-id 二者互斥，必须且只能指定其一：
-    - --sender-user-id 传 userId（企业内部应用常用）
-    - --sender-open-dingtalk-id 传 openDingTalkId（三方应用或跨组织场景常用，无法获取 userId 时使用）
+    - --sender-user-id 传 userId（企业内部应用常用，当前唯一可用路径）
+    - --sender-open-dingtalk-id 传 openDingTalkId（真机实测恒返回 result:{}、success:null，当前不可用；即使只有 openDingTalkId，也建议先用 contact 换取 userId 后走 --sender-user-id）
   - openDingTalkId 获取方式见下方「openDingTalkId 获取方式」小节
   - 不需要指定单聊/群聊，返回结果自带会话类型标识
   - 时间支持多种 ISO-8601 格式，如 "2026-03-10T00:00:00+08:00"、"2026-03-10 14:00:00"、"2026-03-10" 等
@@ -990,20 +990,20 @@ Flags:
 Usage:
   dws chat message download-media [flags]
 Example:
-  dws chat message download-media --type mediaId --resource-id <mediaId> --message-id <openMessageId> --open-conversation-id <openConversationId> --output ./downloads/
   dws chat message download-media --type mediaId --resource-id <mediaId> --message-id <openMessageId> --open-conversation-id <openConversationId> --output ./photo.jpg
+  dws chat message download-media --type mediaId --resource-id <mediaId> --message-id <openMessageId> --open-conversation-id <openConversationId> --output ./downloads/photo.jpg
 Flags:
       --type string                  资源类型: mediaId (必填)
       --resource-id string           资源 ID，mediaId 类型时为消息中的 mediaId 值 (必填)
       --message-id string            消息 openMessageId (必填)
       --open-conversation-id string  会话 openConversationId (必填)
-      --output string                本地保存路径，文件或目录 (必填)
+      --output string                本地保存路径 (必填)，建议传完整文件路径（含文件名）
 
 注意:
   - resource-id 从 `dws chat message list` 返回的消息内容中获取 mediaId
   - message-id 从 `dws chat message list` 返回的 openMessageId
   - open-conversation-id 从 `dws chat search` 获取 openConversationId
-  - --output 如果指定目录，文件名会从下载 URL 中自动推断
+  - --output 建议传完整文件路径（含扩展名，如 ./photo.jpg）；只传目录（如 ./downloads/）在旧版本会下载失败，请显式带上文件名
 ```
 
 ### search-common (搜索共同群)

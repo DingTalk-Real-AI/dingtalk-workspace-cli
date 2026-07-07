@@ -214,7 +214,9 @@ Flags:
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `message` | `object` | 邮件完整信息，包含主题、发件人、收件人、正文、附件等 |
+| `message` | `object` | 邮件信息，含 subject/from/toRecipients/ccRecipients/markdownBody/conversationId/receivedDateTime/size 等 |
+
+> **注意：** 即使邮件确有附件，`message get` 返回的 `message` 对象也**不含** `attachments`/`isRead`/`tags` 字段（实测 keys 仅上表所列这些）。要取附件请另用 `dws mail attachment list`。
 
 ### 发送邮件
 ```
@@ -1364,6 +1366,8 @@ Flags:
       --actions string     规则动作 JSON 数组 (必填)
 ```
 
+> **⚠️ 实测：** 尽管 `--help` 把 `--conditions` 标为(可选)，服务端实际要求它**非空**——省略或传空会返回 `209 SYS_UNKNOWN_ERROR(1001)` 失败，帮助文本承诺的"命中所有邮件"无条件匹配**不可用**。create 请始终传入有效条件。
+
 **返回字段：**
 
 | 字段 | 类型 | 说明 |
@@ -1375,11 +1379,11 @@ Flags:
 
 #### 更新收信规则
 
-更新已有的收信规则。**除 `--conditions` 外所有参数均为必填**。
+更新已有的收信规则。**所有参数（含 `--conditions`）均须传入有效值**——见下方警告。
 
 > **建议工作流：** 先通过 `dws mail rule list` 获取当前规则的完整配置，再传入需要修改的字段值。
 >
-> `--conditions` 为空或不传表示命中所有邮件（无条件匹配）。`--actions` 格式同 create 命令。
+> **⚠️ 实测：** `--help` 称 `--conditions` 为空即命中所有邮件，但该无条件匹配**不可用**——省略或传空会返回 `209 SYS_UNKNOWN_ERROR(1001)` 失败。update 请始终传入有效条件。`--actions` 格式同 create 命令。
 
 ```
 Usage:
@@ -1398,6 +1402,8 @@ Flags:
       --conditions string  规则条件 JSON 数组 (可选，为空表示命中所有邮件)
       --actions string     规则动作 JSON 数组 (必填)
 ```
+
+> **⚠️ 实测：** 上方 `--conditions` 的"(可选，为空表示命中所有邮件)"是 `--help` 原文，但服务端实际要求它**非空**——省略或传空会返回 `209 SYS_UNKNOWN_ERROR(1001)` 失败。update 须传入有效条件。
 
 **返回字段：**
 
