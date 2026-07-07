@@ -90,7 +90,7 @@ func TestLoadWikiKnowledgeBaseRetrieves(t *testing.T) {
 		},
 		content: map[string]string{
 			"n1": "# 安装\n\ndws 通过 brew install dws 安装。",
-			"n2": "# 缓存问题\n\n出现幽灵命令时运行 dws cache refresh 强制刷新发现配置缓存。",
+			"n2": "# 缓存问题\n\n服务发现已下线。出现 endpoint_not_resolved 时，检查静态端点目录并升级到包含该能力的 dws 版本。",
 		},
 	}
 	src := knowledgeSource{kind: knowledgeSourceWiki, ref: "SPACE123"}
@@ -98,8 +98,8 @@ func TestLoadWikiKnowledgeBaseRetrieves(t *testing.T) {
 	if kb == nil || len(kb.chunks) == 0 {
 		t.Fatalf("expected a non-empty knowledge base, got %+v", kb)
 	}
-	got := kb.augment("cache refresh 是干什么的")
-	if !strings.Contains(got, "强制刷新发现配置缓存") {
+	got := kb.augment("endpoint_not_resolved 是干什么的")
+	if !strings.Contains(got, "静态端点目录") {
 		t.Fatalf("augment missed the cache chunk pulled from wiki:\n%s", got)
 	}
 }
@@ -147,7 +147,7 @@ func TestLoadWikiKnowledgeBaseFailUsesStaleCache(t *testing.T) {
 	// First pull succeeds and populates the cache.
 	good := fakeWikiFetcher{
 		nodes:   []wikiNode{{id: "n1", name: "缓存问题"}},
-		content: map[string]string{"n1": "# 缓存问题\n\n运行 dws cache refresh 强制刷新发现配置缓存。"},
+		content: map[string]string{"n1": "# 缓存问题\n\n服务发现已下线。出现 endpoint_not_resolved 时，检查静态端点目录并升级到包含该能力的 dws 版本。"},
 	}
 	if kb := loadWikiKnowledgeBase(context.Background(), good, src, cacheRoot, io.Discard); len(kb.chunks) == 0 {
 		t.Fatal("warm-up pull should have populated the cache")
@@ -159,7 +159,7 @@ func TestLoadWikiKnowledgeBaseFailUsesStaleCache(t *testing.T) {
 	if kb == nil || len(kb.chunks) == 0 {
 		t.Fatalf("expected stale-cache fallback to keep chunks, got %+v", kb)
 	}
-	if got := kb.augment("cache refresh"); !strings.Contains(got, "强制刷新发现配置缓存") {
+	if got := kb.augment("endpoint_not_resolved"); !strings.Contains(got, "静态端点目录") {
 		t.Fatalf("stale cache content not retrievable:\n%s", got)
 	}
 }

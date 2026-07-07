@@ -1,6 +1,6 @@
 # 考勤 (attendance) 命令参考
 
-> **【开源版命令可用性提示】** 当前开源 dws 已落地 P0 5 条命令：`attendance check result`、`attendance check record`、`attendance group search`、`attendance vacation balance`、`attendance vacation types`。文档中其余 P1 阶段命令（`class` / `overtime` / `adjustment` / `group settings` / `report` / `schedule` / `boss-check` 等共 28 条）暂未通过服务发现推全，调用会返回 `unknown command`，将在后续批次落地。
+> **【开源版命令可用性提示】** 当前开源 dws 已落地 P0 5 条命令：`attendance check result`、`attendance check record`、`attendance group search`、`attendance vacation balance`、`attendance vacation types`。文档中其余 P1 阶段命令（`class` / `overtime` / `adjustment` / `group settings` / `report` / `schedule` / `boss-check` 等共 28 条）暂未在当前开源二进制暴露，调用会返回 `unknown command`，将在后续批次落地。
 
 > **【必读】日期范围严格计算规则 — 所有含 --start/--end 或 --from/--to 的命令均适用**
 >

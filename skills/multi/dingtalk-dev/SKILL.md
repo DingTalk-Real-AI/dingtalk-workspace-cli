@@ -16,7 +16,7 @@ metadata:
 每次执行 dev 命令前，先查清楚再敲，别凭记忆或猜：
 
 1. `--help` 看命令树（一个组下有哪些子命令、flag），例 `dws dev app --help`
-2. `dws schema dev.<resource>.<method>` 看某命令参数（类型 / 必填 / 默认），按它构造、别自己拼——flag 名 = schema 参数名，例 `dws schema dev.app.robot.config`（schema 用点号，命令行用空格）
+2. `--help` 看叶子命令参数（flag、默认值、示例），按当前二进制输出构造；不要再依赖已下线的动态 schema
 3. 全部命令带 `--format json`
 4. 写操作：`--dry-run` 看 `invocation.params` 确认无误，再换 `--yes`（`dev connect` 例外见 [connect.md](references/connect.md)）
 5. 写完回读确认（`get` / `robot get` / `version status`）

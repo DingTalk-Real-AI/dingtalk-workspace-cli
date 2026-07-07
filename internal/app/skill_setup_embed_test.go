@@ -66,3 +66,16 @@ func TestResolveSkillSetupSourceOrEmbeddedFallsBackToEmbedded(t *testing.T) {
 		t.Fatalf("embedded fallback returned non-source-root dir %s", dir)
 	}
 }
+
+func TestRepositoryDoesNotTrackInstalledQoderSkills(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Clean(filepath.Join(wd, "..", ".."))
+	if _, err := os.Stat(filepath.Join(repoRoot, ".qoder", "skills")); err == nil {
+		t.Fatal(".qoder/skills is an Agent install target, not a repository skill source; keep source skills under skills/")
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat .qoder/skills: %v", err)
+	}
+}

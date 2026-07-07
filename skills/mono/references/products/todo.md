@@ -178,6 +178,63 @@ Flags:
       --task-id string        待办任务 ID (必填)
 ```
 
+### 查询子待办列表
+```
+Usage:
+  dws todo task list-sub [flags]
+Example:
+  dws todo task list-sub --task-id <taskId>
+Flags:
+      --task-id string   待办任务 ID (必填)
+```
+
+### 上传待办附件
+
+> ⚠️ 当前不可用：后端未注册该工具，调用报「未找到指定工具」。遇到此需求直接告知用户暂不支持，勿重试或变通。
+
+> ⚠️ 重要：该接口会上传文件到附件，不可用于测试或试探性调用。调用前必须确认待办存在。
+
+```
+Usage:
+  dws todo task add-attachment [flags]
+Example:
+  dws todo task add-attachment --task-id <taskId> --file-path /path/to/file.pdf
+Flags:
+      --file-path string   本地文件路径 (必填)
+      --task-id string     待办任务 ID (必填)
+```
+
+### 查询待办附件列表
+
+> ⚠️ 当前不可用：后端未注册该工具，调用报「未找到指定工具」。遇到此需求直接告知用户暂不支持，勿重试或变通。
+
+```
+Usage:
+  dws todo task list-attachment [flags]
+Example:
+  dws todo task list-attachment --task-id <taskId>
+Flags:
+      --task-id string   待办任务 ID (必填)
+```
+
+### 删除待办附件
+
+> ⚠️ 当前不可用：后端未注册该工具，调用报「未找到指定工具」。遇到此需求直接告知用户暂不支持，勿重试或变通。
+
+> **CAUTION:** 不可逆操作 — 执行前必须向用户确认。
+
+```
+Usage:
+  dws todo task remove-attachment [flags]
+Example:
+  dws todo task remove-attachment --task-id <taskId> --attachment-id <attachmentId>
+  dws todo task remove-attachment --task-id <taskId> --attachment-id <attachmentId> --yes
+Flags:
+      --attachment-id string   待办附件 ID (必填)
+      --task-id string         待办任务 ID (必填)
+```
+附件 attachmentId 使用 `dws todo task list-attachment` 命令获取。
+
 ### 添加待办提醒
 ```
 Usage:

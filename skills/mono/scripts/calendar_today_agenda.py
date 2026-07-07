@@ -91,11 +91,20 @@ def main():
     if dry_run:
         return
 
+    # 兼容两种结构: 顶层 events / {result: {events: [...]}}
     events = []
     if isinstance(data, list):
         events = data
     elif isinstance(data, dict):
-        events = data.get('events', data.get('result', []))
+        events = data.get('events')
+        if events is None:
+            inner = data.get('result')
+            if isinstance(inner, list):
+                events = inner
+            elif isinstance(inner, dict):
+                events = inner.get('events', [])
+    if not isinstance(events, list):
+        events = []
 
     label = {'today': '今天', 'tomorrow': '明天', 'week': '本周'
              }.get(scope, scope)

@@ -92,10 +92,18 @@ jobs:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Publish to npm
+      - name: Publish stable to npm
         # 只有官方仓库发 npm；fork（dev 预览）没有 NPM_TOKEN，跳过以免红叉
-        if: ${{ github.repository_owner == 'DingTalk-Real-AI' }}
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' && !contains(github.ref_name, '-') }}
         working-directory: dist/npm/dingtalk-workspace-cli
         run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish prerelease to npm beta
+        # 预发布版本不能更新 npm latest，避免普通 npm 安装链路拿到 beta。
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' && contains(github.ref_name, '-') }}
+        working-directory: dist/npm/dingtalk-workspace-cli
+        run: npm publish --access public --tag beta
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

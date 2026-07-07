@@ -13,14 +13,14 @@
 
 package edition
 
+import "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/syncdata"
+
 // DefaultOSSClawType is the wire value for request header claw-type in
 // the open-source build. It is intentionally hard-wired — the open-source
 // CLI does NOT derive claw-type from DINGTALK_AGENT or any other caller
 // input, so third-party hosts get a predictable header regardless of
 // their environment.
 const DefaultOSSClawType = "openClaw"
-
-const openAitableHelperEndpoint = "https://mcp-gw.dingtalk.com/server/bb2984ee6b10c1560b4fe943ca620f646bed31f215c551a53abf040b52591a95"
 
 // defaultHooks returns the open-source edition defaults.
 //
@@ -39,23 +39,35 @@ func defaultHooks() *Hooks {
 			base["claw-type"] = DefaultOSSClawType
 			return base
 		},
-		SupplementServers: openSupplementServers,
+		StaticServers:   openStaticServers,
+		VisibleProducts: openVisibleProducts,
 	}
 }
 
-func openSupplementServers() []ServerInfo {
-	return []ServerInfo{
-		{
-			ID:       "aitable-helper",
-			Name:     "AI 多维表(辅助)",
-			Endpoint: openAitableHelperEndpoint,
-			Prefixes: []string{"form", "share_form"},
-		},
-		{
-			ID:       "aitable-form",
-			Name:     "AI 多维表(表单)",
-			Endpoint: openAitableHelperEndpoint,
-			Prefixes: []string{"form", "share_form"},
-		},
+func openStaticServers() []ServerInfo {
+	raw := syncdata.StaticServers()
+	out := make([]ServerInfo, len(raw))
+	for i, s := range raw {
+		out[i] = ServerInfo{
+			ID:       s.ID,
+			Name:     s.Name,
+			Endpoint: s.Endpoint,
+			Prefixes: s.Prefixes,
+		}
 	}
+	return out
+}
+
+func openVisibleProducts() []string {
+	servers := openStaticServers()
+	out := make([]string, 0, len(servers))
+	seen := make(map[string]bool, len(servers))
+	for _, server := range servers {
+		if server.ID == "" || seen[server.ID] {
+			continue
+		}
+		seen[server.ID] = true
+		out = append(out, server.ID)
+	}
+	return out
 }

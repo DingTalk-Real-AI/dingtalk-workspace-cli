@@ -257,53 +257,6 @@ func kebabCase(name string) string {
 	return strings.Trim(out, "-")
 }
 
-// helperProductSummaries returns light product entries for every helper-only
-// subtree, appended to the no-arg `dws schema` product listing so agents
-// browsing all products also see helper commands. Tools are listed by path +
-// summary only; drill in with `dws schema "<path>"` for full parameter schema.
-func helperProductSummaries(root *cobra.Command) []map[string]any {
-	if root == nil {
-		return nil
-	}
-	out := []map[string]any{}
-	for name := range helperSchemaRoots {
-		top, _, err := root.Find([]string{name})
-		if err != nil || top == nil || !top.HasParent() {
-			continue
-		}
-		leaves := []map[string]any{}
-		walkLeafCommands(top, func(leaf *cobra.Command) {
-			leaves = append(leaves, map[string]any{
-				"cli_name":    leaf.Name(),
-				"cli_path":    helperCommandPath(leaf),
-				"description": strings.TrimSpace(leaf.Short),
-			})
-		})
-		out = append(out, map[string]any{
-			"id":          name,
-			"name":        strings.TrimSpace(top.Short),
-			"description": "helper-only 命令组（不走服务发现）；schema 从 op-app MCP 实时拉取，用 `dws schema \"" + helperCommandPath(top) + " ...\"` 查具体参数",
-			"helper":      true,
-			"tools":       leaves,
-		})
-	}
-	return out
-}
-
-// walkLeafCommands invokes fn for every runnable leaf under cmd (depth-first).
-func walkLeafCommands(cmd *cobra.Command, fn func(*cobra.Command)) {
-	if cmd.Runnable() && !cmd.HasAvailableSubCommands() {
-		fn(cmd)
-		return
-	}
-	for _, sub := range cmd.Commands() {
-		if !sub.IsAvailableCommand() || sub.Name() == "help" {
-			continue
-		}
-		walkLeafCommands(sub, fn)
-	}
-}
-
 // helperSubcommands lists a group's runnable children for browse mode, sorted
 // by name for deterministic output.
 func helperSubcommands(cmd *cobra.Command) []map[string]any {

@@ -13,40 +13,44 @@ repository root while preserving repo-local guidance for automation.
 ## Project Snapshot
 
 - `dws` is a Go-based DingTalk Workspace CLI and MCP runtime bridge.
-- One internal Tool IR drives canonical CLI, schema, docs, skills, and snapshots.
-- Compatibility and helper surfaces are overlays, not the canonical truth.
+- Product commands are loaded dynamically via `internal/plugin` from bundled descriptors.
+- Command handlers live in `internal/helpers`; runtime execution flows through `internal/executor` and `internal/transport`.
 
 ## Repository Map
 
 - `cmd`: public CLI entrypoint
-- `internal/app`: root command wiring and command tree mount points
-- `internal/discovery`, `internal/market`, `internal/transport`: runtime discovery and MCP transport
-- `internal/generator`: CLI/schema/docs/skills generation pipeline
-- `internal/compat`, `internal/helpers`: legacy-compatible aliases and helper commands
+- `internal/app`: root command wiring, static utility commands, plugin loading
+- `internal/helpers`: product command handlers (dev, chat, calendar, contact, etc.)
+- `internal/plugin`: plugin-based dynamic command loader
+- `internal/cli`: catalog types and static endpoint loader
+- `internal/executor`: invocation dispatch and result handling
+- `internal/transport`: MCP HTTP client and request signing
+- `internal/auth`: login, token management, agent-code detection
+- `internal/audit`: user operation audit log
+- `internal/errors`: structured error model with categories and hints
+- `internal/keychain`: OS keychain integration for credential storage
+- `internal/security`: endpoint allowlist and domain trust
+- `internal/pat`: PAT (Personal Access Token) authorization flow
 - `docs/`: public architecture and reference docs
-- `hack/`: developer-only helper commands not shipped as public binaries
 - `scripts/`: build, test, lint, packaging, and policy checks
-- `test/`: integration, contract, compatibility, and script validation suites
+- `test/`: CLI, integration, contract, unit, and skill E2E test suites
 
 ## Task Routing
 
-- Add or fix a command path: start from `internal/app` and the related module under `internal/*`
-- Discovery or protocol issues: inspect `internal/discovery`, `internal/market`, `internal/transport`
-- Generated output drift: inspect `internal/generator` and run drift checks
-- Legacy behavior mismatch: inspect `internal/compat` and `test/cli_compat`
-- Failure or degraded mode: inspect `internal/discovery`, `internal/errors`
+- Add or fix a command path: start from `internal/helpers` (handler implementations) or `internal/app` (command tree wiring)
+- Protocol or transport issues: inspect `internal/transport`
+- Auth or login issues: inspect `internal/auth`, `internal/pat`, `internal/keychain`
+- Error message or category issues: inspect `internal/errors`
+- Audit log issues: inspect `internal/audit`
+- Plugin loading or command surface: inspect `internal/plugin`
+- Failure or degraded mode: inspect `internal/errors`, `internal/recovery`
 
-## Generated Artifacts
+## Policy Checks
 
-Prefer editing source logic instead of generated files directly.
+When command surface or plugin descriptors change, run:
 
-- Generated-heavy paths:
-  - `docs/generated/`
-  - `skills/generated/`
-  - `test/golden/generated_outputs/`
-- When generator or command surface changes, run:
-  - `./scripts/policy/check-generated-drift.sh`
-  - `./scripts/policy/check-command-surface.sh --strict`
+- `./scripts/policy/check-command-surface.sh --strict`
+- `./scripts/policy/check-open-source-assets.sh`
 
 ## Common Commands
 
@@ -55,9 +59,6 @@ make build
 make test
 make lint
 ./scripts/dev/ci-local.sh
-./scripts/policy/check-generated-drift.sh
-./scripts/policy/check-command-surface.sh --strict
-./scripts/policy/check-open-source-assets.sh
 git diff --check
 ```
 

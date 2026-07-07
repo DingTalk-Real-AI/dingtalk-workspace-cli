@@ -33,13 +33,45 @@ def run_dws(
             print(f"错误：{result.stderr.strip()}", file=sys.stderr)
             return None
         return json.loads(result.stdout)
-    except (subprocess.TimeoutExpired, json.JSONDecodeError,
-            FileNotFoundError) as e:
+    except subprocess.TimeoutExpired:
+        print('错误：命令执行超时', file=sys.stderr)
+        return None
+    except json.JSONDecodeError:
+        # 输出非 JSON 多为底层错误 (如 TOKEN 失效), 透出原文
+        print(f"错误：dws 返回非 JSON 输出: "
+              f"{result.stdout.strip()[:300]}", file=sys.stderr)
+        return None
+    except FileNotFoundError as e:
         print(f"错误：{e}", file=sys.stderr)
         return None
 
 
-def fetch_all_undone(dry_run: bool = False) -> List[Dict[str, Any]]:
+def extract_todo_cards(data: Any) -> Optional[List[Dict[str, Any]]]:
+    """兼容两种结构: 顶层 todoCards / {result: {todoCards: [...]}}。
+    返回 None 表示结构无法识别或调用失败。"""
+    if isinstance(data, list):
+        return data
+    if not isinstance(data, dict):
+        return None
+    if data.get('success') is False:
+        print(f"错误：todo 查询失败: "
+              f"{data.get('errorMsg') or data.get('errorCode') or data}",
+              file=sys.stderr)
+        return None
+    items = data.get('todoCards')
+    if items is None:
+        inner = data.get('result')
+        if isinstance(inner, dict):
+            items = inner.get('todoCards')
+        elif isinstance(inner, list):
+            items = inner
+    return items if isinstance(items, list) else None
+
+
+def fetch_all_undone(
+    dry_run: bool = False,
+) -> Optional[List[Dict[str, Any]]]:
+    """返回 None 表示查询失败 (与"确实没有待办"区分开)"""
     all_todos: List[Dict[str, Any]] = []
     for page in range(1, MAX_PAGES + 1):
         data = run_dws([
@@ -47,11 +79,14 @@ def fetch_all_undone(dry_run: bool = False) -> List[Dict[str, Any]]:
             '--page', str(page), '--size', str(PAGE_SIZE),
             '--status', 'false', '--format', 'json',
         ], dry_run=dry_run)
-        if dry_run or not data:
-            break
-        items = (data if isinstance(data, list)
-                 else data.get('result', data.get('todoCards', [])))
-        if not items or not isinstance(items, list):
+        if dry_run:
+            return []
+        if data is None:
+            return None if page == 1 else all_todos
+        items = extract_todo_cards(data)
+        if items is None:
+            return None if page == 1 else all_todos
+        if not items:
             break
         all_todos.extend(items)
         if len(items) < PAGE_SIZE:
@@ -84,10 +119,16 @@ def days_overdue(due_ms) -> int:
 
 
 def main():
+    if '--help' in sys.argv or '-h' in sys.argv:
+        print(__doc__)
+        return
     dry_run = '--dry-run' in sys.argv
     todos = fetch_all_undone(dry_run=dry_run)
     if dry_run:
         return
+    if todos is None:
+        print('错误：待办查询失败，无法给出逾期结论', file=sys.stderr)
+        sys.exit(2)
 
     overdue = find_overdue(todos)
     overdue.sort(

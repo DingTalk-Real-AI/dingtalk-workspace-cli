@@ -2,7 +2,7 @@
 
 ## CLI 命令树与黄金路径
 
-- **二级子命令（必选其一）**：`event`（日程）、`attendee`（参会人）、`room`（会议室）、`busy`（闲忙）、`attachment`（日程附件）、`book`（用户日历列表）。`dws calendar` 后**必须**紧跟上述之一；**禁止**只执行 `dws calendar`（无子命令）。
+- **二级子命令（必选其一）**：`event`（日程）、`attendee`（参会人）、`room`（会议室）、`busy`（闲忙）、`attachment`（日程附件）、`book`（我能看哪些日历本）、`acl`（我的日历共享给了谁）。`dws calendar` 后**必须**紧跟上述之一；**禁止**只执行 `dws calendar`（无子命令）。
 - **个人日程 / 给自己留时间块 / 专注时段**：统一走 **`dws calendar event create`**。当前**没有**单独的 `personal schedule create` / `calendar create` 命令。
 - **查日程列表**：`dws calendar event list --start "<ISO-8601>" --end "<ISO-8601>" --format json`，或优先使用脚本 `python scripts/calendar_today_agenda.py [today|tomorrow|week]`（见文末「自动化脚本」）。
 - **查用户日历本列表**：`dws calendar book list`（返回主日历 `id == "primary"` 等）。**重要**可以查询他人共享给自己的日历本，根据日历本id可以进一步查询对方的日程信息。
@@ -10,7 +10,7 @@
 - **必须**遵循指令说明进行调用。**绝对禁止**使用虚构指令，使用虚构参数。
 
 ## 反模式（禁止）
-1. **禁止**执行 `dws calendar` 且不带二级子命令（会刷出大量帮助文本）。合法二级子命令：`event` / `attendee` / `room` / `busy` / `attachment` / `book`。
+1. **禁止**执行 `dws calendar` 且不带二级子命令（会刷出大量帮助文本）。合法二级子命令：`event` / `attendee` / `room` / `busy` / `attachment` / `book` / `acl`。
 2. **禁止**使用不存在的子命令试探（如臆造 `dws calendar list`）；需要日程列表时一律使用 **`dws calendar event list`**（带 `--start` / `--end`，见下文「查询日程列表」示例）；需要日历本列表时使用 **`dws calendar book list`**。
 3. **禁止**将完整 `--help`/Usage 输出作为「观察」重复提交给模型；若误触，应直接改用本节黄金路径中的合法命令并重试。
 4. **禁止**继续使用已弃用的 `--max-results` 参数 —— 它们仍可被解析但**会被丢弃**，不再透传到 MCP，模型生成命令时也不要再带。
@@ -30,6 +30,9 @@
 响应状态（response）：参会人对日程的回应，包括：未响应、接受、待定、拒绝。
 忙闲时间（busy）：查询用户在指定时间段的忙闲状态，查询会议室在指定时间段的预定状态，用于会议时间协调。
 会议室（room）：room是 会议室 ，room可视为日程的资源类参会人，需要加入日程完成预订。注意和location区分，location只是地点，和room不同。
+访问控制 (acl)：用户可通过设置acl将自己的日历访问权限授予给他人（即：共享日历），授予后，他人就可以查看日历下的日程信息。通过 `dws calendar acl list` 可查看当前要用户已经授权出去的权限。若 privilege >= reader，可查询此日历下的日程数据。若 privilege >= writer ，可操作（创建/修改/删除/响应等）此日历下的日程数据。
+共享日历：将自己日历的访问权限授予给他人，用于协作。通过 `dws calendar book list` 查询当前用户日历列表，其中type == `shared` 即他人共享给当前用户的日历。
+订阅日历：创建一个公共日历供他人订阅，他人订阅后即可查询日历下的日程数据。通过 `dws calendar book list` 查询当前用户日历列表，其中type == `subscribed` 即当前用户已订阅的日历。注意：订阅日历下的日程无参会人概念，无法执行 attendee 相关指令，也无法添加会议室。
 
 ## 命令概览
 
@@ -74,10 +77,26 @@ dws calendar busy search [flags]
 dws calendar attachment add [flags]
 ```
 
-### book 相关三级子命令
+### book 相关三级子命令（查"我能看哪些日历本"）
 ```
-# 查询当前用户的所有日历，结果范围：用户自己的日历、已订阅的公共/团队日历、他人共享的日历。
+# 查询我拥有和可访问的所有日历本（含他人共享给我的）
 dws calendar book list [flags]
+# 查询指定日历本信息
+dws calendar book get [flags]
+# 按名称模糊搜索日历本
+dws calendar book search [flags]
+# 更新日历本信息（需 owner 权限）
+dws calendar book update [flags]
+```
+
+### acl 相关三级子命令（查"我的日历共享给了谁"）
+```
+# 查询我的日历共享给了哪些人、各自什么权限
+dws calendar acl list [flags]
+# 把我的日历共享给某人
+dws calendar acl add [flags]
+# 取消我的日历对某人的共享
+dws calendar acl delete [flags]
 ```
 > **说明**: 可以通过 --help 进一步查看指令明细，也可以继续查看下一节 命令总览
 
@@ -217,13 +236,12 @@ Flags:
 Usage:
   dws calendar attendee add [flags]
 Example:
-  dws calendar attendee add --event <EVENT_ID> --users <USER_ID_1>,<USER_ID_2>
-  dws calendar attendee add --event <EVENT_ID> --users <USER_ID> --optional true
+  dws calendar attendee add --event <EVENT_ID> --attendees <USER_ID_1>,<USER_ID_2>
+  dws calendar attendee add --event <EVENT_ID> --attendees <USER_ID> --optional
 Flags:
-      --event string         日程 eventId (必填)
-      --users string         参会人 userId 列表，逗号分隔 (必填)
-      --optional string      是否可选参会人 (可选)
-      --calendar-id string   日历 ID (可选)
+      --event string       日程 ID (必填)
+      --attendees string   参会人 userId 列表，逗号分隔 (必填，最多500人)
+      --optional           参会人可选 (默认必选参会人)
 ```
 
 ### 移除参会人
@@ -234,11 +252,10 @@ Flags:
 Usage:
   dws calendar attendee delete [flags]
 Example:
-  dws calendar attendee delete --event <EVENT_ID> --users <USER_ID> --yes
+  dws calendar attendee delete --event <EVENT_ID> --attendees <USER_ID> --yes
 Flags:
-      --event string         日程 eventId (必填)
-      --users string         参会人 userId 列表，逗号分隔 (必填)
-      --calendar-id string   日历 ID (可选)
+      --event string       日程 ID (必填)
+      --attendees string   参会人 userId 列表，逗号分隔 (必填)
 ```
 
 ### 搜索会议室
@@ -317,10 +334,10 @@ Usage:
   dws calendar room list-groups [flags]
 Example:
   dws calendar room list-groups
-  dws calendar room list-groups --page-size 20 --page-index 0
+  dws calendar room list-groups --limit 20 --page 0
 Flags:
-      --page-size string    页大小 (可选，默认 100，上限 100)
-      --page-index string   分页起始位置 (可选，默认 0)
+      --limit string       页大小 (可选，不填默认 100，超过 100 按 100 处理)
+      --page string        分页起始位置 (可选，不填默认 0)
 ```
 
 ### 添加日程附件
@@ -343,9 +360,87 @@ Usage:
 Example:
   dws calendar book list
 ```
-> 通过此接口可查询当前用户的日历列表，包含 主日历本、他人共享的日历、订阅的公共/团队日历。
+> 通过此接口可查询当前用户的日历列表，包含 主日历本、他人共享的日历、订阅的公共/团队日历。查的是"我能看哪些日历本"；注意区分：`acl list` 是查"我的日历共享**给了谁**"，方向相反。
 > 共享日历本中有来自 xxx 的，且权限大于reader，那么通过 `event list --calendar-id <xxx的日历本id> `可查到xxx完整的日程安排
 > 主日历 `id` 固定为 `primary`，绝大多数日程操作都默认走主日历，只有当用户明确要求查/写其他日历本时才需要带 `--calendar-id`。
+
+### 查询指定日历本
+```
+Usage:
+  dws calendar book get [flags]
+Example:
+  dws calendar book get --id primary
+  dws calendar book get --id CALENDAR_ID
+Flags:
+      --id string   日历 ID (必填，主日历固定为 primary)
+```
+
+> **说明**：根据日历 id 查询指定日历的详细信息。用户主日历本 id 固定为 `primary`。
+
+### 搜索日历本
+```
+Usage:
+  dws calendar book search [flags]
+Example:
+  dws calendar book search --query "项目"
+  dws calendar book search --query "团队周报"
+Flags:
+      --query string   按日历本名称模糊检索 (必填)
+```
+
+> **说明**：搜索当前用户拥有的日历本，支持按日历本名模糊搜索。获取全部日历请使用 `book list`。
+
+### 更新日历本
+```
+Usage:
+  dws calendar book update [flags]
+Example:
+  dws calendar book update --id CALENDAR_ID --summary "新日历名"
+  dws calendar book update --id CALENDAR_ID --desc "日历描述"
+Flags:
+      --id string        日历 ID (必填)
+      --summary string   日历标题
+      --desc string      日历描述
+```
+
+> **说明**：更新日历信息，最低权限要求：privilege == "owner"。注意：用户主日历本 以及 他人共享的日历本 **不支持更新**。
+
+### 查询我的日历共享给了谁
+```
+Usage:
+  dws calendar acl list [flags]
+Example:
+  dws calendar acl list
+```
+
+> **说明**：查询"我的日历共享给了哪些人、各自什么权限"（即主日历的访问控制列表）。注意区分：`book list` 是查"我能看哪些日历本"，方向相反。
+
+### 把我的日历共享给某人
+```
+Usage:
+  dws calendar acl add [flags]
+Example:
+  dws calendar acl add --user USER_ID --privilege reader
+  dws calendar acl add --user USER_ID --privilege writer --no-notification
+Flags:
+      --user string        授予权限的目标用户 ID (必填)
+      --privilege string   授予的日历权限 (必填): free_busy_reader(查看忙闲)|title_reader(查看标题)|reader(查看详情)|writer(创建和编辑)
+      --no-notification    不向被授权用户发送提醒 (默认发送)
+```
+
+> **说明**：把我的日历共享给指定用户，授予对方相应权限。`--privilege` 可选值：`free_busy_reader`（查看忙闲）、`title_reader`（查看标题）、`reader`（查看详情）、`writer`（创建和编辑）。
+
+### 取消我的日历对某人的共享
+```
+Usage:
+  dws calendar acl delete [flags]
+Example:
+  dws calendar acl delete --acl-id ACL_ID
+Flags:
+      --acl-id string   已授予权限的 ID (必填，可通过 acl list 查询)
+```
+
+> **说明**：取消我的日历对某人的共享（撤回已授予的访问权限）。aclId 可通过 `acl list` 获取。
 
 ### 查询用户 / 会议室闲忙状态
 ```
@@ -419,8 +514,8 @@ Flags:
 
 用户说"参会人/与会者":
 - 查看 → `attendee list`
-- 邀请/添加 → `attendee add --users <USER_ID>`（可选参会人加 `--optional true`）
-- 移除 → `attendee delete --users <USER_ID>`
+- 邀请/添加 → `attendee add --attendees <USER_ID>`（可选参会人加 `--optional`）
+- 移除 → `attendee delete --attendees <USER_ID>`
 
 用户说"会议室/订会议室":
 - 哪个空闲 → `room search`
@@ -439,8 +534,18 @@ Flags:
 用户说"日程附件/给会议加文件/上传日程材料":
 - 添加 → `attachment add`（先用钉盘上传得 fileId，再 `attachment add --files <fileId>:<name>`）
 
-用户说"我有几个日历/查所有日历/共享日历本":
-- 列表 → `book list`（主日历 id 固定为 `primary`）
+用户说"我有几个日历/查所有日历/别人共享给我的日历/他人共享给我的日历本":
+- 列表 → `book list`（返回用户拥有和订阅的所有日历本，包括他人共享给自己的；主日历 id 固定为 `primary`）
+- 查指定日历本 → `book get --id <CALENDAR_ID>`
+- 按名称搜索日历本 → `book search --query "关键词"`
+- 修改日历本名称/描述 → `book update --id <CALENDAR_ID> --summary "新名"`
+
+用户说"我的日历共享给了谁/谁能看我日历/日历权限/取消共享/把日历分享给xxx":
+- 查看我共享出去的情况（即谁有权访问我的日历） → `acl list`
+- 把我的日历共享给他人 → `acl add --user <USER_ID> --privilege reader`
+- 取消我的日历对某人的共享 → `acl delete --acl-id <ACL_ID>`（aclId 来自 `acl list`）
+
+> **易混淆辨析**：`book list` 查的是"我能看哪些日历本"（包含别人共享**给我**的）；`acl list` 查的是"我的日历共享**给了谁**"（我的主日历的访问控制列表）。两者方向相反，不可混用。
 
 用户说"查下xxx的日程安排":
 - 查询是否有共享关系 -> `book list`
@@ -479,7 +584,7 @@ dws calendar event create --title "Q1 复盘会" \
   --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15:00:00+08:00" --format json
 
 # Step 2: 添加参会人（必须用 Step 1 返回的 eventId）
-dws calendar attendee add --event <EVENT_ID> --users userId1,userId2 --format json
+dws calendar attendee add --event <EVENT_ID> --attendees userId1,userId2 --format json
 
 # Step 3: 搜索空闲会议室
 dws calendar room search --start ... --end ... --format json
@@ -512,20 +617,24 @@ dws calendar event list --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15
 | `event respond` | 响应结果 | — |
 | `room search` | `rooms[].roomId` | room add 的 --rooms 或 event create 的 --rooms |
 | `room list-groups` | `groups[].groupId` | room search 的 --group-id |
-| `book list` | `id`（如 `primary`） | event list/get 的 --calendar-id |
+| `book list` | `id`（如 `primary`） | event list/get 的 --calendar-id, book get/update 的 --id |
+| `book get` | 日历详细信息 | — |
+| `book search` | 匹配的日历列表 | book get/update 的 --id |
+| `acl list` | `aclId` | acl delete 的 --acl-id |
+| `acl add` | 新增的权限记录 | — |
 | 钉盘上传 | 文件 `fileId` | attachment add 的 --files `<fileId>:<name>` |
 
 ## 注意事项
 
 - 时间格式: `event create/update`、`event list`、`busy search` 和 `event suggest` 用 ISO-8601
 - 时区: `event create/update` 和 `event suggest` 支持 `--timezone` 指定 IANA 时区（如 `Asia/Shanghai`、`America/New_York`），不传默认 `Asia/Shanghai`
-- 创建日程时可通过 `--attendees` 直接指定参会人（最多500人），也可创建后用 `attendee add --users ...` 单独添加
-- `event create` 的 `--attendees` 和 `--open-dingtalk-ids` 至少传一个（如果需要指定参会人）
-- `attendee add` 可通过 `--optional true` 设为可选参会人（默认必选）
+- 创建日程时可通过 `--attendees` 直接指定参会人（最多500人），也可创建后用 `attendee add --attendees ...` 单独添加
+- `--attendees` 和 `--open-dingtalk-ids` 至少传一个（如果需要指定参会人）
+- 添加参会人时可通过 `--optional` 设为可选参会人（默认必选）
 - `event suggest` 根据参会人闲忙自动推荐合适时间，适合会议时间未确定时使用
 - 创建日程**支持**通过 `--rooms` 一步预定会议室（`event create --rooms roomId1,roomId2`）；若创建后再加，仍可用 `room add`
 - `room search` 不带 `--group-id` 时查根目录；企业会议室超过 100 条会报错，此时需先 `room list-groups` 获取分组，再按分组逐一查询
-- `room list-groups` 支持 `--page-size` / `--page-index` 分页（schema 类型为字符串）
+- `room list-groups` 支持 `--limit` / `--page` 分页（schema 类型为字符串）
 - **`event create --rooms` / `room add --rooms` 的唯一合法来源**：最近一次（同一会话、同一时段窗口）`room search` 返回体中的 `roomId`；禁止把用户自然语言会议室名当 `roomId` 传入（否则会 `roomId invalid` 等错误）
 - **搜房无结果**：在符合早停/用户限定范围内，`room search`（含按分组逐组查）全部返回空或无空闲 → 应**直接向用户报错/说明失败**并结束订房；**禁止**假设 roomId、禁止无合法 `roomId` 时调用 `room add` / `event create --rooms` 试探、禁止用 `event get` 等绕路推断 roomId
 - **评测 / 自动化断言**：凡涉及 `room add` / `event create --rooms` 的流程，`--rooms` 只能填上游 `room search`（或等价接口）返回 JSON 中的 **`rooms[].roomId`**；不得以会议室展示名、楼层文案或用户口语当作 `roomId`
@@ -544,4 +653,4 @@ dws calendar event list --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15
 ## 相关产品
 
 - [conference](./simple.md) — 仅视频会议预约（返回入会链接），不含参会人/会议室管理
-- [contact](./contact.md) — 搜索同事 userId，用于 attendee add --users
+- [contact](./contact.md) — 搜索同事 userId，用于 attendee add --attendees

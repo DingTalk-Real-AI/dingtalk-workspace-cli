@@ -146,6 +146,17 @@ dws minutes list shared --query "ROI" --format json
 - **热词管理**：`minutes hot-word add --words "词1,词2"` / `minutes hot-word list`
 - **思维导图**：`minutes mind-graph create --id <taskUuid>` → `mind-graph status --id <taskUuid>` 轮询至完成
 
+### minutes-tag（标签/分组查询）
+
+- 查询标签列表：`minutes tag list` → 返回用户在听记页面创建的所有标签/分组（含 tagId 和名称）
+- 按标签查听记：`minutes tag query --tag-id <tagId> [--limit 20] [--cursor <token>]`
+  - tagId 来自 `tag list` 返回值，不可编造
+  - 支持分页，`--cursor` 传入上一次返回的 nextToken
+
+**典型链路**：用户说"帮我看看'周会'标签下的听记" →
+1. `dws minutes tag list --format json` → 按名称匹配找到 tagId
+2. `dws minutes tag query --tag-id <tagId> --format json`
+
 ### minutes-permission（权限管理）
 
 - 添加成员：`minutes permission add --ids <uuid1,uuid2> --member-uids <uid1,uid2> --policy 4`
@@ -176,6 +187,17 @@ dws minutes upload cancel --session-id <sid> --format json
 | 案例 6 | 通讯录+部门+转写三路印证 | Step 3 画像 + Step 4 `contact user search` 并发 → 置信度 ≥70% → 确认 → 替换 |
 | 案例 7 | grep 花名误判未参会 | **禁止**在转写文本里 grep 人名判参会；**必须**调 `contact user search` |
 | 案例 8 | 听记类 query 不走 dws | **禁止**用 session_search/browser_use/activity:search 替代 dws；模糊请求先 `list mine` |
+| 案例 9 | 按标签筛选听记 | `tag list` → 按名称匹配 tagId → `tag query --tag-id <tagId>`；**禁止**编造 tagId |
+
+### 听记取数深度约束（0609 点踩 case 提炼）
+
+> 详细说明见 [minutes.md](../products/minutes.md)。
+
+- **转写原文硬约束**：用户诉求含「聚焦原话/逐字/沟通细节/具体讨论了什么」等词时，**必须先调 `get transcription` 翻页拉全**，禁止仅凭 summary 出稿
+- **数据源下钻**：听记维度**必须 `get summary`（或 `get transcription`）读正文**，严禁只取标题列表；scope 用 `all`；空时换窗重试或标注
+- **听记链接解析**：聊天消息中遇到听记链接（`flash_minutes_detail`/`SHANJI`）→ 解析 `minutesId` → 调 `minutes get summary/transcription`，禁止把链接降级为关键词
+- **忠实性约束**：源数据无某要素（行动项/责任人/数字）时禁止生成；统计字段基于实际取数计数，不得编造
+- **多源全覆盖**：用户枚举多数据源时每个来源都必须调对应工具；瞬时错误重试；如实声明缺失来源，禁编无来源数字
 
 ### 间接意图识别铁律
 

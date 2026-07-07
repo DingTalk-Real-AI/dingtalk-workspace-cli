@@ -98,7 +98,7 @@ Step 3 → 按下方路由规则映射到对应产品
 > axls vs xlsx 关键区分：
 > - `axls`（钉钉在线电子表格，`contentType=ALIDOC`）→ 走 `sheet` 产品线（读/写/筛选/导出等服务端原子操作）
 > - `xlsx` / `xls` / `xlsm` / `csv`（上传到文档空间的本地表格文件，`contentType=DOCUMENT`）→ 必须走 `dws doc download` 下载到本地后再解析处理，严禁错误路由到 `sheet` 产品线（sheet 命令只支持在线表格，调用 xlsx 节点会直接报错）
-> - 用户想把在线表格导出为 xlsx 文件 → 开源 dws CLI 暂未暴露在线表格导出能力（envelope schema 里有 `submit_export_job` / `query_export_job`，但当前 cobra 未注册），需要在钉钉客户端手动导出 xlsx
+> - 用户想把在线表格导出为 xlsx 文件 → 开源 dws CLI 暂未暴露在线表格导出能力（旧动态 schema 曾包含 `submit_export_job` / `query_export_job`，但当前 cobra 未注册），需要在钉钉客户端手动导出 xlsx
 
 ### 示例
 
@@ -110,10 +110,10 @@ dws doc info --node "https://alidocs.dingtalk.com/i/nodes/abc123" --format json
 dws sheet list --node "https://alidocs.dingtalk.com/i/nodes/abc123" --format json
 
 # 返回 contentType≠ALIDOC, extension=xlsx/xls/csv → 本地表格文件，必须下载处理（禁止走 sheet）
-dws doc download --node "https://alidocs.dingtalk.com/i/nodes/xlsx456" --output ./xlsx456.xlsx
+dws doc download --node "https://alidocs.dingtalk.com/i/nodes/xlsx456"
 
 # 返回 contentType≠ALIDOC, nodeType=file → 普通文件，下载
-dws doc download --node "https://alidocs.dingtalk.com/i/nodes/def456" --output ./def456.bin
+dws doc download --node "https://alidocs.dingtalk.com/i/nodes/def456"
 
 # 返回 nodeType=folder → 文件夹，列出子节点
 dws doc list --folder "https://alidocs.dingtalk.com/i/nodes/ghi789" --format json
@@ -137,7 +137,7 @@ dws doc list --folder "https://alidocs.dingtalk.com/i/nodes/ghi789" --format jso
 |-------------------------|------|------|------|------|------|------|
 | **adoc**（在线文档） | `doc read` | `doc update` / `doc block update` | ⚠️ `doc delete` | ⚠️ `doc export` (→ docx) | ⚠️ `doc permission *` | ⚠️ `doc media download/insert` |
 | **axls**（在线电子表格） | `sheet range read` / `sheet list` | `sheet range write` / `sheet append` | ⚠️ `doc delete`（节点删除） | `sheet submit_export_job` + `sheet query_export_job`（待吴淼 W-01 收敛为单命令 `sheet export`） | ⚠️ `doc permission *`（节点级，跨产品） | 不适用 |
-| **able**（在线多维表） | `aitable base get` / `aitable record query` | `aitable record create/update` | ⚠️ `doc delete`（节点删除）或 `aitable base delete --yes` | `aitable export data --base-id <BASE_ID> --scope all --output ./x.xlsx` | ⚠️ `doc permission *`（节点级） | `aitable attachment upload-file` |
+| **able**（在线多维表） | `aitable base get` / `aitable record query` | `aitable record create/update` | ⚠️ `doc delete`（节点删除）或 `aitable base delete --yes` | `aitable export data --output ./x.xlsx` | ⚠️ `doc permission *`（节点级） | `aitable attachment upload-file` |
 | **xlsx / xls / xlsm / csv**（本地表格文件） | `doc download` → 本地用 xlsx skill 解析 | 不支持服务端写（先下载改本地再上传） | ⚠️ `doc delete`（节点删除） | 不需要（本身就是 xlsx） | ⚠️ `doc permission *` | 不适用 |
 | **普通文件** (nodeType=file) | `doc download` | 不支持服务端写 | ⚠️ `doc delete` | 不需要 | ⚠️ `doc permission *` | 不适用 |
 | **文件夹** (nodeType=folder) | `doc list --folder <URL>` | `doc create --folder <URL> ...` | ⚠️ `doc delete` | 不适用 | ⚠️ `doc permission *` | 不适用 |
@@ -158,6 +158,6 @@ Agent 流程：
 | 用户说 | 路由 | 不要混淆 |
 |--------|------|---------|
 | "把这个文档/表格/多维表分享给张三" | **节点级**：`doc permission add --node <URL> --user <UID> --role EDITOR` | 不是 `wiki member add` |
-| "把张三加到这个知识库" | **容器级**：`wiki member add --workspace <WS> --users <UID> --role <ROLE>` | 不是 `doc permission add` |
+| "把张三加到这个知识库" | **容器级**：`wiki member add --workspace <WS> --user <UID> --role <ROLE>` | 不是 `doc permission add` |
 
 > 区分依据：**doc permission 作用于单个 node（document / file / folder）；wiki member 作用于整个 workspace 容器**。同一用户在 workspace 是 EDITOR、在某个 node 上仍可被单独提升为 MANAGER（节点级覆盖容器级）。

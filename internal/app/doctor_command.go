@@ -21,8 +21,6 @@ import (
 	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cache"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade"
@@ -193,15 +191,12 @@ func doctorCheckNetwork(ctx context.Context, w io.Writer, jsonOut bool, timeout 
 
 	baseURL := config.GetMCPBaseURL()
 	httpClient := &http.Client{Timeout: timeout}
-	client := market.NewClient(baseURL, httpClient)
 
 	start := time.Now()
 	reqCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	_, err := client.FetchServers(reqCtx, 1)
-	latency := time.Since(start)
-
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, baseURL, nil)
 	if err != nil {
 		r := checkResult{
 			Name:    "network",
@@ -214,6 +209,22 @@ func doctorCheckNetwork(ctx context.Context, w io.Writer, jsonOut bool, timeout 
 		}
 		return r
 	}
+
+	resp, err := httpClient.Do(req)
+	latency := time.Since(start)
+	if err != nil {
+		r := checkResult{
+			Name:    "network",
+			Status:  statusFail,
+			Message: fmt.Sprintf("%s 不可达: %v", baseURL, err),
+			Hint:    "请检查网络连接或代理设置",
+		}
+		if !jsonOut {
+			printCheckResult(w, r)
+		}
+		return r
+	}
+	resp.Body.Close()
 
 	r := checkResult{
 		Name:    "network",
@@ -233,64 +244,10 @@ func doctorCheckCache(w io.Writer, jsonOut bool) checkResult {
 		fmt.Fprint(w, tui.Dim("检查缓存状态...       "))
 	}
 
-	store := cacheStoreFromEnv()
-	files, _, err := cacheDirectoryStats(store.Root)
-	if err != nil {
-		r := checkResult{
-			Name:    "cache",
-			Status:  statusFail,
-			Message: fmt.Sprintf("缓存目录不可读: %v", err),
-			Hint:    "运行 dws cache clean 清理后重试",
-		}
-		if !jsonOut {
-			printCheckResult(w, r)
-		}
-		return r
-	}
-
-	entries, _ := store.ListToolsCacheEntries(config.DefaultPartition)
-
-	if files == 0 && len(entries) == 0 {
-		r := checkResult{
-			Name:    "cache",
-			Status:  statusWarn,
-			Message: "缓存为空 (首次使用)",
-			Hint:    "运行任意 dws 命令后将自动建立缓存",
-		}
-		if !jsonOut {
-			printCheckResult(w, r)
-		}
-		return r
-	}
-
-	staleCount := 0
-	for _, e := range entries {
-		if e.Freshness == cache.FreshnessStale {
-			staleCount++
-		}
-	}
-
-	if staleCount > 0 {
-		r := checkResult{
-			Name:    "cache",
-			Status:  statusWarn,
-			Message: fmt.Sprintf("%d 个文件, %d 个工具缓存, %d 个已过期", files, len(entries), staleCount),
-			Hint:    "运行 dws cache refresh 刷新缓存",
-		}
-		if !jsonOut {
-			printCheckResult(w, r)
-		}
-		return r
-	}
-
-	msg := fmt.Sprintf("%d 个文件, %d 个工具缓存", files, len(entries))
-	if len(entries) > 0 {
-		msg += ", 全部新鲜"
-	}
 	r := checkResult{
 		Name:    "cache",
 		Status:  statusPass,
-		Message: msg,
+		Message: "静态端点模式, 无需缓存",
 	}
 	if !jsonOut {
 		printCheckResult(w, r)

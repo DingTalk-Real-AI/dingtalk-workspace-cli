@@ -15,47 +15,11 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
-	"strings"
-	"time"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cache"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/discovery"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/editionmerge"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/ir"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
-
-func init() {
-	configmeta.Register(configmeta.ConfigItem{
-		Name:         "DWS_CACHE_DIR",
-		Category:     configmeta.CategoryCore,
-		Description:  "覆盖缓存目录",
-		DefaultValue: "~/.dws/cache",
-		Example:      "/tmp/dws-cache",
-	})
-	configmeta.Register(configmeta.ConfigItem{
-		Name:        "DWS_CATALOG_FIXTURE",
-		Category:    configmeta.CategoryDebug,
-		Description: "使用本地 JSON 文件替代在线目录发现",
-		Example:     "/path/to/catalog.json",
-		Hidden:      true,
-	})
-	configmeta.Register(configmeta.ConfigItem{
-		Name:         "DWS_PLUGIN_COLD_TIMEOUT",
-		Category:     configmeta.CategoryCore,
-		Description:  "插件 MCP 冷启动发现的超时时长（Go duration 格式，如 2s / 1500ms）。设置后同时覆盖 HTTP 与 stdio 插件的冷启动预算；未设置时使用内置默认值（HTTP 无鉴权 1s / 有鉴权 1.5s / stdio 2s）。",
-		DefaultValue: "",
-		Example:      "3s",
-	})
-}
 
 // CatalogDegradedReason identifies why catalog discovery returned empty.
 type CatalogDegradedReason string
@@ -73,7 +37,7 @@ const (
 type CatalogDegraded struct {
 	Reason      CatalogDegradedReason
 	Hint        string
-	ServerCount int // number of servers discovered (only set for runtime_all_failed)
+	ServerCount int
 }
 
 func (e *CatalogDegraded) Error() string { return string(e.Reason) + ": " + e.Hint }
@@ -95,7 +59,7 @@ func degradedHint(reason CatalogDegradedReason, serverCount int) string {
 		if embedded {
 			return fmt.Sprintf("已发现 %d 个服务但连接全部失败，请稍后重试", serverCount)
 		}
-		return fmt.Sprintf("已发现 %d 个服务但连接全部失败，请稍后重试或执行: dws cache refresh", serverCount)
+		return fmt.Sprintf("已发现 %d 个服务但连接全部失败；静态端点模式下请检查 internal/syncdata 生成物或稍后重试", serverCount)
 	default:
 		return "MCP 服务发现失败"
 	}
@@ -113,388 +77,117 @@ const (
 	CatalogFixtureEnv    = "DWS_CATALOG_FIXTURE"
 	CacheDirEnv          = "DWS_CACHE_DIR"
 	PluginColdTimeoutEnv = "DWS_PLUGIN_COLD_TIMEOUT"
-	DefaultMarketBaseURL = config.DefaultMCPBaseURL
-
-	// defaultDiscoveryTimeout bounds the time spent on live registry discovery.
-	// Tightened to 4s so a slow/unreachable discovery endpoint cannot block
-	// every CLI command invocation. See issue #119.
-	defaultDiscoveryTimeout = 4 * time.Second
 )
 
+// ──────────────────────────────────────────────────────────────────────────
+// Catalog types (formerly in internal/ir, now inlined as minimal stubs)
+// ──────────────────────────────────────────────────────────────────────────
+
+// Catalog holds the discovered MCP product surface.
+type Catalog struct {
+	Products []CanonicalProduct `json:"products"`
+}
+
+// FindProduct returns the product with the given ID.
+func (c Catalog) FindProduct(id string) (CanonicalProduct, bool) {
+	for _, product := range c.Products {
+		if product.ID == id {
+			return product, true
+		}
+	}
+	return CanonicalProduct{}, false
+}
+
+// CanonicalProduct represents a single MCP product in the catalog.
+type CanonicalProduct struct {
+	ID          string           `json:"id"`
+	DisplayName string           `json:"display_name"`
+	Description string           `json:"description,omitempty"`
+	ServerKey   string           `json:"server_key"`
+	Endpoint    string           `json:"endpoint"`
+	Source      string           `json:"source,omitempty"`
+	Tools       []ToolDescriptor `json:"tools"`
+}
+
+// FindTool returns the tool with the given RPC name.
+func (p CanonicalProduct) FindTool(name string) (ToolDescriptor, bool) {
+	for _, tool := range p.Tools {
+		if tool.RPCName == name {
+			return tool, true
+		}
+	}
+	return ToolDescriptor{}, false
+}
+
+// ToolDescriptor represents a single tool in a canonical product.
+type ToolDescriptor struct {
+	RPCName       string `json:"rpc_name"`
+	CanonicalPath string `json:"canonical_path"`
+}
+
+// CLIFlagHint holds CLI flag alias/shorthand metadata for a tool parameter.
+type CLIFlagHint struct {
+	Shorthand string `json:"shorthand,omitempty"`
+	Alias     string `json:"alias,omitempty"`
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// CatalogLoader interface
+// ──────────────────────────────────────────────────────────────────────────
+
+// CatalogLoader loads the canonical catalog.
 type CatalogLoader interface {
-	Load(context.Context) (ir.Catalog, error)
+	Load(context.Context) (Catalog, error)
 }
 
+// StaticLoader returns a pre-built catalog.
 type StaticLoader struct {
-	Catalog ir.Catalog
+	Catalog Catalog
 }
 
-func (l StaticLoader) Load(_ context.Context) (ir.Catalog, error) {
+func (l StaticLoader) Load(_ context.Context) (Catalog, error) {
 	return l.Catalog, nil
 }
 
 // CatalogLoaderFrom creates a CatalogLoader that returns a
-// pre-loaded catalog and error. This allows multiple consumers
-// (schema command, MCP command tree) to share one discovery result.
-func CatalogLoaderFrom(catalog ir.Catalog, err error) CatalogLoader {
+// pre-loaded catalog and error.
+func CatalogLoaderFrom(catalog Catalog, err error) CatalogLoader {
 	return &preloadedLoader{catalog: catalog, err: err}
 }
 
 type preloadedLoader struct {
-	catalog ir.Catalog
+	catalog Catalog
 	err     error
 }
 
-func (l *preloadedLoader) Load(_ context.Context) (ir.Catalog, error) {
+func (l *preloadedLoader) Load(_ context.Context) (Catalog, error) {
 	return l.catalog, l.err
 }
 
-type FixtureLoader struct {
-	Path string
-}
+// ──────────────────────────────────────────────────────────────────────────
+// EnvironmentLoader (static endpoint mode — no longer does live discovery)
+// ──────────────────────────────────────────────────────────────────────────
 
-func (l FixtureLoader) Load(_ context.Context) (ir.Catalog, error) {
-	data, err := os.ReadFile(l.Path)
-	if err != nil {
-		return ir.Catalog{}, fmt.Errorf("read catalog fixture: %w", err)
-	}
-	var catalog ir.Catalog
-	if err := json.Unmarshal(data, &catalog); err != nil {
-		return ir.Catalog{}, fmt.Errorf("decode catalog fixture: %w", err)
-	}
-	return catalog, nil
-}
-
+// EnvironmentLoader provides catalog loading. In the post-discovery
+// architecture this always returns an empty catalog; endpoint resolution
+// is handled by the direct runtime path.
 type EnvironmentLoader struct {
-	LookupEnv func(string) (string, bool)
-	// CatalogBaseURLOverride allows tests to redirect catalog discovery.
+	LookupEnv              func(string) (string, bool)
 	CatalogBaseURLOverride string
-	// DiscoveryTimeout overrides the default timeout for live registry discovery.
-	// Zero means use defaultDiscoveryTimeout.
-	DiscoveryTimeout time.Duration
-	// AuthTokenFunc returns an access token for MCP discovery requests
-	// (initialize, tools/list). When nil, discovery runs without auth.
-	AuthTokenFunc func(context.Context) string
-	// LoggerFunc returns a structured logger for discovery diagnostics.
-	// Called lazily because the file logger may not be initialized at
-	// construction time (it's set up during PersistentPreRunE).
-	LoggerFunc func() *slog.Logger
+	AuthTokenFunc          func(context.Context) string
+	LoggerFunc             func() *slog.Logger
 }
 
-type cachedCatalogState struct {
-	Catalog         ir.Catalog
-	Registry        cache.RegistrySnapshot
-	Available       bool
-	NeedsRevalidate bool
-}
-
+// NewEnvironmentLoader creates an EnvironmentLoader with default settings.
 func NewEnvironmentLoader() EnvironmentLoader {
-	return EnvironmentLoader{LookupEnv: os.LookupEnv}
+	return EnvironmentLoader{}
 }
 
-func (l EnvironmentLoader) Load(ctx context.Context) (ir.Catalog, error) {
-	if fixturePath, ok := l.lookup(CatalogFixtureEnv); ok {
-		return FixtureLoader{Path: fixturePath}.Load(ctx)
-	}
-
-	// Priority: explicit test override > edition-specific discovery URL >
-	// open-source default. For Wukong this pulls the runtime catalog fetch
-	// onto the same Portal endpoint that loadDynamicCommands already uses,
-	// eliminating the historical split where the command tree came from
-	// Wukong Portal while runtime endpoint resolution silently read the
-	// open-source Market cache (see fix-wukong-endpoint-partition plan).
-	baseURL := config.GetMCPBaseURL()
-	if editionURL := strings.TrimSpace(edition.Get().DiscoveryURL); editionURL != "" {
-		baseURL = editionURL
-	}
-	if l.CatalogBaseURLOverride != "" {
-		baseURL = l.CatalogBaseURLOverride
-	}
-
-	cacheDir, _ := l.lookup(CacheDirEnv)
-	store := cache.NewStore(cacheDir)
-	partition := config.EditionPartition(edition.Get().Name)
-
-	// Cache-first: if a cached catalog is available, use it immediately.
-	// Startup command construction should not block on synchronous discovery
-	// just because the cache has aged past the short revalidation window.
-	cached := l.loadFromCache(store)
-	if cached.Available && len(cached.Catalog.Products) > 0 {
-		return cached.Catalog, nil
-	}
-
-	transportClient := transport.NewClient(nil)
-	hasAuth := false
-	if l.AuthTokenFunc != nil {
-		if token := l.AuthTokenFunc(ctx); token != "" {
-			transportClient = transportClient.WithAuth(token, nil)
-			hasAuth = true
-		}
-	}
-
-	if !hasAuth {
-		// Cache / discovery both unreachable without credentials — fall back
-		// to the edition's SupplementServers / FallbackServers hook so that
-		// hardcoded overlay commands can still resolve an endpoint via the
-		// returned catalog. Without this an unauthenticated cold start
-		// produces DegradedUnauthenticated and every hardcoded command
-		// fails even when the edition carries its own static endpoint map.
-		if fb := fallbackRuntimeServers(); len(fb) > 0 {
-			return ir.BuildCatalog(fb), nil
-		}
-		return ir.Catalog{}, newCatalogDegraded(DegradedUnauthenticated, 0)
-	}
-
-	// Use a bounded context so discovery doesn't hang in test or CI environments.
-	timeout := defaultDiscoveryTimeout
-	if l.DiscoveryTimeout > 0 {
-		timeout = l.DiscoveryTimeout
-	}
-	discoverCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	service := discovery.NewService(
-		market.NewClient(baseURL, nil),
-		transportClient,
-		store,
-	)
-	if l.LoggerFunc != nil {
-		service.Logger = l.LoggerFunc()
-	}
-	response, err := service.MarketClient.FetchServers(discoverCtx, 200)
-	if err != nil {
-		if cached.Available && len(cached.Catalog.Products) > 0 {
-			return cached.Catalog, nil
-		}
-		if fb := fallbackRuntimeServers(); len(fb) > 0 {
-			return ir.BuildCatalog(fb), nil
-		}
-		return ir.Catalog{}, newCatalogDegraded(DegradedMarketUnreachable, 0)
-	}
-
-	// Surface Portal-side merge warnings (dropped envelopes, dangling serverDeps,
-	// dangling toolOverrides.*.serverOverride) to stderr so configuration drift
-	// is visible at the first `dws cache refresh` / cold start after Portal
-	// publishes a broken envelope. Non-fatal: discovery continues with the
-	// accepted subset. See plan fix-wukong-discovery-missing-servers Phase 4.3.
-	logDiscoveryWarnings(response.Metadata.Warnings)
-
-	servers := market.NormalizeServersForBaseURL(response, "live_market", baseURL)
-	_ = store.SaveRegistry(partition, cache.RegistrySnapshot{Servers: servers})
-
-	changedKeys := cache.ChangedServerKeysByUpdatedAt(cached.Registry.Servers, servers)
-	unchangedRuntime := make(map[string]discovery.RuntimeServer)
-	toRefresh := make([]market.ServerDescriptor, 0, len(servers))
-	for _, server := range servers {
-		if changedKeys[server.Key] {
-			toRefresh = append(toRefresh, server)
-			continue
-		}
-		toolsSnap, freshness, loadErr := store.LoadTools(partition, server.Key)
-		if loadErr != nil || freshness != cache.FreshnessFresh {
-			toRefresh = append(toRefresh, server)
-			continue
-		}
-		unchangedRuntime[server.Key] = discovery.RuntimeServer{
-			Server:                    server,
-			NegotiatedProtocolVersion: toolsSnap.ProtocolVersion,
-			Tools:                     toolsSnap.Tools,
-			Source:                    "fresh_cache",
-			Degraded:                  false,
-		}
-	}
-
-	refreshed, failures := service.DiscoverAllRuntime(discoverCtx, toRefresh)
-	if len(unchangedRuntime) == 0 && len(refreshed) == 0 && len(failures) > 0 {
-		if cached.Available && len(cached.Catalog.Products) > 0 {
-			return cached.Catalog, nil
-		}
-		if fb := fallbackRuntimeServers(); len(fb) > 0 {
-			return ir.BuildCatalog(fb), nil
-		}
-		return ir.Catalog{}, newCatalogDegraded(DegradedRuntimeAllFailed, len(servers))
-	}
-
-	refreshedByKey := make(map[string]discovery.RuntimeServer, len(refreshed))
-	for _, runtimeServer := range refreshed {
-		refreshedByKey[runtimeServer.Server.Key] = runtimeServer
-	}
-
-	runtimeServers := make([]discovery.RuntimeServer, 0, len(servers))
-	for _, server := range servers {
-		if runtimeServer, ok := refreshedByKey[server.Key]; ok {
-			runtimeServers = append(runtimeServers, runtimeServer)
-			continue
-		}
-		if runtimeServer, ok := unchangedRuntime[server.Key]; ok {
-			runtimeServers = append(runtimeServers, runtimeServer)
-		}
-	}
-	runtimeServers = appendSupplementRuntimeServers(runtimeServers)
-	return ir.BuildCatalog(runtimeServers), nil
+// Load returns an empty catalog. All endpoint resolution now uses the
+// direct runtime path (dynamic server registry).
+func (l EnvironmentLoader) Load(_ context.Context) (Catalog, error) {
+	return Catalog{}, nil
 }
 
-// loadFromCache builds a catalog from cached registry + tools snapshots.
-// When the cache is still within TTL but older than the short revalidation
-// window, the returned state asks the caller to try live discovery before
-// trusting the cache as current truth.
-func (l EnvironmentLoader) loadFromCache(store *cache.Store) cachedCatalogState {
-	partition := config.EditionPartition(edition.Get().Name)
-	regSnap, freshness, err := store.LoadRegistry(partition)
-	if err != nil || len(regSnap.Servers) == 0 {
-		// No cached registry. Still honour the edition's SupplementServers
-		// hook so that hardcoded overlay commands whose products are not
-		// part of the Portal envelope (Wukong gray-release in particular)
-		// can resolve an endpoint via the catalog path as well.
-		if supplement := supplementRuntimeServers(nil); len(supplement) > 0 {
-			return cachedCatalogState{
-				Catalog:         ir.BuildCatalog(supplement),
-				Registry:        regSnap,
-				Available:       true,
-				NeedsRevalidate: true,
-			}
-		}
-		return cachedCatalogState{}
-	}
-
-	now := store.Now().UTC()
-	needsRevalidate := freshness == cache.FreshnessStale || cache.ShouldRevalidate(now, regSnap.SavedAt)
-	runtimeServers := make([]discovery.RuntimeServer, 0, len(regSnap.Servers))
-	existing := make(map[string]bool, len(regSnap.Servers))
-	for _, server := range regSnap.Servers {
-		toolsSnap, toolsFreshness, toolsErr := store.LoadTools(partition, server.Key)
-		if toolsErr != nil || toolsFreshness != cache.FreshnessFresh {
-			needsRevalidate = true
-			continue
-		}
-		runtimeServers = append(runtimeServers, discovery.RuntimeServer{
-			Server:                    server,
-			NegotiatedProtocolVersion: toolsSnap.ProtocolVersion,
-			Tools:                     toolsSnap.Tools,
-			Source:                    "fresh_cache",
-			Degraded:                  false,
-		})
-		if id := server.CLI.ID; id != "" {
-			existing[id] = true
-		}
-		if server.Key != "" {
-			existing[server.Key] = true
-		}
-	}
-	if len(runtimeServers) != len(regSnap.Servers) {
-		needsRevalidate = true
-	}
-	runtimeServers = append(runtimeServers, supplementRuntimeServers(existing)...)
-	return cachedCatalogState{
-		Catalog:         ir.BuildCatalog(runtimeServers),
-		Registry:        regSnap,
-		Available:       true,
-		NeedsRevalidate: needsRevalidate,
-	}
-}
-
-// supplementRuntimeServers materialises the edition.SupplementServers hook
-// as discovery.RuntimeServer values, skipping IDs that already appear in
-// the discovery result. The returned servers carry no tools — they exist
-// only so catalog.FindProduct can resolve an endpoint; tool validation
-// for these products is expected to fall through to directRuntimeEndpoint.
-func supplementRuntimeServers(existing map[string]bool) []discovery.RuntimeServer {
-	fn := edition.Get().SupplementServers
-	if fn == nil {
-		return nil
-	}
-	sup := fn()
-	if len(sup) == 0 {
-		return nil
-	}
-	out := make([]discovery.RuntimeServer, 0, len(sup))
-	for _, s := range sup {
-		if s.ID == "" {
-			continue
-		}
-		if existing != nil && existing[s.ID] {
-			continue
-		}
-		out = append(out, discovery.RuntimeServer{
-			Server:   editionmerge.ToDescriptor(s, "edition_supplement"),
-			Source:   "edition_supplement",
-			Degraded: false,
-		})
-	}
-	return out
-}
-
-// fallbackRuntimeServers materialises the edition.FallbackServers hook,
-// additionally folding in SupplementServers entries the hook omits.
-// Used when every other discovery avenue failed.
-func fallbackRuntimeServers() []discovery.RuntimeServer {
-	fn := edition.Get().FallbackServers
-	if fn == nil {
-		return supplementRuntimeServers(nil)
-	}
-	fb := fn()
-	if len(fb) == 0 {
-		return supplementRuntimeServers(nil)
-	}
-	existing := make(map[string]bool, len(fb))
-	out := make([]discovery.RuntimeServer, 0, len(fb))
-	for _, s := range fb {
-		if s.ID == "" {
-			continue
-		}
-		existing[s.ID] = true
-		out = append(out, discovery.RuntimeServer{
-			Server:   editionmerge.ToDescriptor(s, "edition_fallback"),
-			Source:   "edition_fallback",
-			Degraded: false,
-		})
-	}
-	out = append(out, supplementRuntimeServers(existing)...)
-	return out
-}
-
-// appendSupplementRuntimeServers merges supplement entries into a live
-// discovery result, deduplicating against existing IDs.
-func appendSupplementRuntimeServers(servers []discovery.RuntimeServer) []discovery.RuntimeServer {
-	existing := make(map[string]bool, len(servers))
-	for _, s := range servers {
-		if id := s.Server.CLI.ID; id != "" {
-			existing[id] = true
-		}
-		if s.Server.Key != "" {
-			existing[s.Server.Key] = true
-		}
-	}
-	return append(servers, supplementRuntimeServers(existing)...)
-}
-
-func (l EnvironmentLoader) lookup(key string) (string, bool) {
-	if l.LookupEnv == nil {
-		return "", false
-	}
-	value, ok := l.LookupEnv(key)
-	if !ok {
-		return "", false
-	}
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return "", false
-	}
-	return value, true
-}
-
-// logDiscoveryWarnings prints Portal-side merge warnings via slog (stderr).
-// No-op when the response carries an empty / nil Warnings slice — which is the
-// common case for older Portal builds that don't populate the field.
-func logDiscoveryWarnings(warnings []market.ListWarning) {
-	if len(warnings) == 0 {
-		return
-	}
-	for _, w := range warnings {
-		slog.Warn("discovery: merge warning from Portal",
-			"product", w.ProductID,
-			"reason", w.Reason,
-			"detail", w.Detail,
-		)
-	}
-}
+// Ensure unused imports are consumed.
+var _ = newCatalogDegraded

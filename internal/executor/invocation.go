@@ -20,7 +20,6 @@ import (
 	"strings"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/ir"
 )
 
 type Invocation struct {
@@ -58,21 +57,6 @@ func (EchoRunner) Run(_ context.Context, invocation Invocation) (Result, error) 
 		}, nil
 	}
 	return Result{Invocation: invocation}, nil
-}
-
-func NewInvocation(product ir.CanonicalProduct, tool ir.ToolDescriptor, params map[string]any) Invocation {
-	if params == nil {
-		params = map[string]any{}
-	}
-	return Invocation{
-		Kind:             "canonical_invocation",
-		Stage:            "canonical_cli",
-		Implemented:      false,
-		CanonicalProduct: product.ID,
-		Tool:             tool.RPCName,
-		CanonicalPath:    tool.CanonicalPath,
-		Params:           params,
-	}
 }
 
 func NewCompatibilityInvocation(legacyPath, canonicalProduct, tool string, params map[string]any) Invocation {

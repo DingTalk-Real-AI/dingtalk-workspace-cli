@@ -111,3 +111,30 @@ dws aitable import data --import-id <importId> --table-id <TABLE_ID> --format js
 > **导入数据无法整体撤销**：文件一旦导入成功，数据即写入表中，没有"撤销导入"操作。如需清理导入的测试数据，只能手动通过 `record delete` 逐条或批量删除记录；如果是新建表模式导入的，可以直接 `table delete` 删除整张表。因此：
 > - 测试/验证场景建议导入到**独立的测试表或测试 Base**，用完后整体删除
 > - 如果用户明确表示不想导入测试数据或要求先预览内容再决定，应先解析文件内容展示给用户确认，而非直接导入
+
+---
+
+## 导入数据：两条链路怎么选
+
+用户给文件让导入 AI 表格时，路径选择决定成败：
+
+| 用户原话 | 链路 | 命令 / 脚本 | 行为 |
+|---------|------|------------|------|
+| "把这个 Excel 导入到 AI 表格"（无指定目标表） | **文件导入任务** | `python scripts/aitable_import_via_task.py <baseId> <file>` 或 `dws aitable import upload --base-id B --file ./x.xlsx` + `dws aitable import data --import-id <ID>` | 服务端解析文件，**新建数据表**，自动识别表头 |
+| "把这个 Excel 导入新表 / 自动建表" | 同上 | 同上 | 同上 |
+| "把这批记录追加到已有的『成员表』里" | **记录批量写入** | `python scripts/import_records.py <baseId> <tableId> <file>` | 走 `record create`，**写入已有 tableId**，需要字段名匹配 |
+| "Excel 列名和表字段对不上但要追加" | 文件导入 + 追加 + 字段映射 | `dws aitable import upload --base-id B --file ./x.xlsx` → `dws aitable import data --import-id <ID> --table-id <TBL> --field-mapping '{"目标":"源"}'` | 服务端按映射追加 |
+
+## 大表 / 长任务超时续等
+
+默认整体轮询超时 5 分钟。大表导出/导入超时后命令会返回 `taskId` / `importId`，用同命令带 ID 续等：
+
+```bash
+# 续等导出
+dws aitable export data --base-id <B> --task-id <ID> --output ./out.xlsx
+
+# 续等导入
+dws aitable import data --import-id <ID>
+```
+
+或一次性把 timeout 提到 15 分钟：`--timeout-sec 900`。

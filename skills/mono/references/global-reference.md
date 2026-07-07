@@ -9,10 +9,6 @@ dws auth login
 # 查看状态
 dws auth status
 
-# 沙箱间迁移登录态（Linux，含 refresh token）
-dws auth export -o dws-auth.tar.gz
-dws auth import -i dws-auth.tar.gz
-
 # 退出
 dws auth logout
 
@@ -101,7 +97,7 @@ dws recovery finalize --event-id <event_id> --outcome recovered|failed|handoff -
 | 变量 | 说明 |
 |------|------|
 | `DWS_CONFIG_DIR` | 覆盖默认配置目录 |
-| `DWS_SERVERS_URL` | 自定义服务发现端点 |
+| `DWS_<PRODUCT>_MCP_URL` | 本地开发时覆盖指定产品 MCP endpoint |
 | `DWS_CLIENT_ID` | 覆盖 OAuth Client ID (DingTalk AppKey) |
 | `DWS_CLIENT_SECRET` | 覆盖 OAuth Client Secret (DingTalk AppSecret) |
 

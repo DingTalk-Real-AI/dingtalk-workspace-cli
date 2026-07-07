@@ -562,24 +562,6 @@ func pushRuntimeProfile(selector string) func() {
 	}
 }
 
-func cleanupAuthConfigIfNoProfiles(configDir string) {
-	cfg, err := authpkg.LoadProfiles(configDir)
-	if err == nil && len(cfg.Profiles) > 0 {
-		return
-	}
-	if authpkg.TokenDataExistsKeychain() {
-		return
-	}
-	appKey, _ := authpkg.ResolveAppCredentials(configDir)
-	if appKey != "" {
-		_ = authpkg.DeleteAppTokenData(appKey)
-	}
-	_ = authpkg.DeleteAppConfig(configDir)
-	_ = os.Remove(filepath.Join(configDir, "mcp_url"))
-	_ = os.Remove(filepath.Join(configDir, "token"))
-	_ = authpkg.DeleteTokenMarker(configDir)
-}
-
 func newAuthExportCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "export",
@@ -956,10 +938,6 @@ func authLoginMutedStyle() lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(authLoginMuted)
 }
 
-func authLoginShouldShowPostLoginTUI(cmd *cobra.Command, format string, recommend bool) bool {
-	return authLoginShouldUsePostLoginTUIModeForTerminal(cmd, format, recommend, authLoginInteractiveTerminal())
-}
-
 func authLoginShouldShowPostLoginTUIForTerminal(cmd *cobra.Command, format string, recommend bool, interactive bool) bool {
 	return authLoginShouldUsePostLoginTUIModeForTerminal(cmd, format, recommend, interactive)
 }
@@ -1028,10 +1006,7 @@ func clipRunes(value string, limit int) string {
 }
 
 func clearCompatCache() {
-	store := cacheStoreFromEnv()
-	if store != nil {
-		_ = os.RemoveAll(store.Root)
-	}
+	// Cache store removed; no-op in static endpoint mode.
 }
 
 func resolveAuthLoginConfig(cmd *cobra.Command) (authLoginConfig, error) {

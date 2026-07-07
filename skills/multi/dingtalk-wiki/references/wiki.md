@@ -30,32 +30,12 @@ Usage:
   dws wiki space create [flags]
 Example:
   dws wiki space create --name "产品文档库" --format json
-  dws wiki space create --name "技术方案" --desc "团队技术方案归档" --format json
+  dws wiki space create --name "技术方案" --description "团队技术方案归档" --format json
 Flags:
       --name string          知识库名称 (必填，不超过 100 字符)
-      --desc string   知识库描述 (选填，不超过 500 字符)
+      --description string   知识库描述 (选填，不超过 500 字符)
       --icon string          知识库图标标识 (选填)
 ```
-
-### 删除知识库
-
-> **CAUTION:** 不可逆操作 — 执行前必须向用户确认。
-
-```
-Usage:
-  dws wiki space delete [flags]
-Example:
-  dws wiki space delete --workspace <workspaceId>
-  dws wiki space delete --workspace "https://alidocs.dingtalk.com/i/spaces/xxx/overview"
-Flags:
-      --workspace string   知识库 ID 或 URL (必填)
-```
-
-将指定知识库移入回收站。删除后知识库会进入回收站，可在回收站中恢复。
-
-> **重要约束**：
-> - 操作者必须具备知识库的 OWNER 角色。
-> - 删除操作不可逆（从回收站恢复除外），请确认后再执行。
 
 ### 查看知识库详情
 ```
@@ -82,7 +62,7 @@ Example:
 Flags:
       --type string        知识库类型: myWikiSpace / orgWikiSpace (默认 orgWikiSpace)
       --limit string       每页数量 1-50 (默认 20)
-      --cursor string  分页游标 (首页留空)
+      --page-token string  分页游标 (首页留空)
 ```
 
 - `myWikiSpace`：返回当前用户的「我的文档」个人空间（固定 1 条，不支持分页）
@@ -93,65 +73,47 @@ Flags:
 Usage:
   dws wiki space search [flags]
 Example:
-  dws wiki space search --query "产品文档" --format json
-  dws wiki space search --query "技术方案" --limit 20 --format json
-  dws wiki space search --type myWikiSpace --format json
+  dws wiki space search --keyword "产品文档" --format json
+  dws wiki space search --keyword "技术方案" --limit 20 --format json
+  dws wiki space list --type myWikiSpace --format json
 Flags:
-      --query string     搜索关键词 (--type myWikiSpace 时可省略)
+      --keyword string     搜索关键词 (--type myWikiSpace 时可省略)
       --type string        知识库类型: myWikiSpace 时直接返回「我的文档」，省略则搜索组织知识库
       --limit string       返回数量 1-20 (默认 10)
 ```
 
-当 `--type myWikiSpace` 时，忽略 `--query`，直接返回「我的文档」个人空间。
+当 `--type myWikiSpace` 时，忽略 `--keyword`，直接返回「我的文档」个人空间。
 
 ### 添加知识库成员（容器级授权）
 ```
 Usage:
   dws wiki member add [flags]
 Example:
-  dws wiki member add --workspace <WS_ID> --users uid1 --role READER
-  dws wiki member add --workspace <WS_ID> --users uid1,uid2 --role EDITOR
-  dws wiki member add --workspace "https://alidocs.dingtalk.com/i/spaces/<WS_ID>/overview" --users uid1 --role MANAGER
+  dws wiki member add --workspace <WS_ID> --user uid1 --role READER
+  dws wiki member add --workspace <WS_ID> --user uid1,uid2 --role EDITOR
+  dws wiki member add --workspace "https://alidocs.dingtalk.com/i/spaces/<WS_ID>/overview" --user uid1 --role MANAGER
 Flags:
-      --workspace string    目标知识库 ID 或 URL (必填)
-      --users strings   被加入的用户 userId 列表，逗号分隔 (必填，单次最多 30 个)
+      --workspace string 目标知识库 ID 或 URL (必填)
+      --user string     被加入的用户 userId 列表，逗号分隔 (必填，单次最多 30 个)
       --role string     授予的角色 (必填，大小写敏感，必须全大写): MANAGER (管理者) / EDITOR (可编辑) / DOWNLOADER (可下载) / READER (可阅读)
 ```
 
-> **重要约束**：
+> **❗ 重要约束**：
 > - 仅支持 USER 类型。
 > - 角色枚举严格大写：MANAGER / EDITOR / DOWNLOADER / READER（OWNER 不可通过此接口添加，知识库创建者默认为所有者）。
 > - 操作者需具备知识库的 OWNER 或 MANAGER 权限。
-> - 「我的文档」(myWikiSpace) 是个人空间，**不支持容器级成员管理**；后端会直接拒绝。如果你的目标只是把某篇文档分享给别人，请改用 `dws drive permission add` 在节点级别授权。
-
-### 移除知识库成员
-```
-Usage:
-  dws wiki member remove [flags]
-Example:
-  dws wiki member remove --workspace <WS_ID> --users uid1
-  dws wiki member remove --workspace <WS_ID> --users uid1,uid2
-Flags:
-      --workspace string    目标知识库 ID 或 URL (必填)
-      --users strings   被移除的用户 userId 列表，逗号分隔 (必填，单次最多 30 个)
-```
-
-> **重要约束**：
-> - OWNER 角色不可通过此接口移除。
-> - 操作者需具备知识库的 OWNER 或 MANAGER 权限。
-> - 移除后相关用户将无法访问该知识库下的内容（除非通过节点级权限另行授权）。
-> - 「我的文档」(myWikiSpace) 是个人空间，**不支持容器级成员管理**。
+> - 「我的文档」(myWikiSpace) 是个人空间，**不支持容器级成员管理**；后端会直接拒绝。如果你的目标只是把某篇文档分享给别人，节点级权限授权在开源 dws v1.0.30 暂不支持，请在钉钉客户端文档中通过「分享」设置。
 
 ### 修改知识库成员角色
 ```
 Usage:
   dws wiki member update [flags]
 Example:
-  dws wiki member update --workspace <WS_ID> --users uid1 --role EDITOR
-  dws wiki member update --workspace <WS_ID> --users uid1,uid2 --role READER
+  dws wiki member update --workspace <WS_ID> --user uid1 --role EDITOR
+  dws wiki member update --workspace <WS_ID> --user uid1,uid2 --role READER
 Flags:
-      --workspace string    目标知识库 ID 或 URL (必填)
-      --users strings   目标用户 userId 列表，逗号分隔 (必填，单次最多 30 个)
+      --workspace string 目标知识库 ID 或 URL (必填)
+      --user string     目标用户 userId 列表，逗号分隔 (必填，单次最多 30 个)
       --role string     新角色 (必填，大小写敏感，必须全大写): MANAGER / EDITOR / DOWNLOADER / READER
 ```
 
@@ -164,161 +126,35 @@ Example:
   dws wiki member list --workspace <WS_ID> --limit 100
   dws wiki member list --workspace <WS_ID> --filter-role EDITOR
 Flags:
-      --workspace string         目标知识库 ID 或 URL (必填)
-      --limit int             返回数量上限，最大 200 (默认 50)
-      --filter-role string   按角色过滤: MANAGER / EDITOR / DOWNLOADER / READER (选填)
+      --workspace string     目标知识库 ID 或 URL (必填)
+      --limit int            返回成员数上限
+      --filter-role string   按角色过滤，逗号分隔: MANAGER / EDITOR / DOWNLOADER / READER (选填)
 ```
 
 > 接口不支持游标分页，使用 `--limit` 一次性拉取。
-
-### 列出知识库节点
-```
-Usage:
-  dws wiki node list [flags]
-Aliases:
-  list, ls
-Example:
-  dws wiki node list --workspace <workspaceId> --format json
-  dws wiki node list --workspace <workspaceId> --folder <parentNodeId> --format json
-  dws wiki node list --workspace <workspaceId> --limit 20 --cursor <pageToken> --format json
-Flags:
-      --workspace string   知识库 ID (必填)
-      --folder string      父节点 nodeId (选填，不传则列出根目录)
-      --limit int          每页数量 (默认 50，最大 50)
-      --cursor string      分页游标
-```
-
-### 在知识库中创建节点
-```
-Usage:
-  dws wiki node create [flags]
-Example:
-  dws wiki node create --workspace <workspaceId> --name "新文档" --format json
-  dws wiki node create --workspace <workspaceId> --name "方案目录" --type folder --format json
-  dws wiki node create --workspace <workspaceId> --name "数据表" --type asheet --folder <parentNodeId> --format json
-Flags:
-      --workspace string   知识库 ID (必填)
-      --name string        节点名称 (必填)
-      --type string        节点类型: adoc / asheet / folder / axls (默认 adoc)
-      --folder string      父节点 nodeId (选填，不传则在根目录创建)
-```
-
-### 复制知识库节点
-```
-Usage:
-  dws wiki node copy [flags]
-Example:
-  dws wiki node copy --workspace <workspaceId> --node <nodeId> --format json
-  dws wiki node copy --workspace <workspaceId> --node <nodeId> --folder <targetFolderId> --format json
-Flags:
-      --workspace string   知识库 ID (必填)
-      --node string        源节点 ID (必填)
-      --folder string      目标文件夹 nodeId (选填)
-```
-
-### 移动知识库节点
-```
-Usage:
-  dws wiki node move [flags]
-Example:
-  dws wiki node move --workspace <workspaceId> --node <nodeId> --folder <targetFolderId> --format json
-  dws wiki node move --workspace <workspaceId> --node <nodeId> --format json
-Flags:
-      --workspace string   知识库 ID (必填)
-      --node string        源节点 ID (必填)
-      --folder string      目标文件夹 nodeId (选填)
-```
-
-### 删除知识库节点
-
-> **CAUTION:** 不可逆操作 — 执行前必须向用户确认。
-
-```
-Usage:
-  dws wiki node delete [flags]
-Example:
-  dws wiki node delete --workspace <workspaceId> --node <nodeId>
-  dws wiki node delete --workspace <workspaceId> --node <nodeId> --yes
-Flags:
-      --workspace string   知识库 ID (必填，用于权限校验)
-      --node string        节点 ID (必填)
-```
-
-将知识库中的节点移入回收站。权限要求: 对节点有"管理"权限。
-
-### 在知识库中搜索节点
-```
-Usage:
-  dws wiki node search [flags]
-Example:
-  dws wiki node search --workspace <workspaceId> --query "方案" --format json
-  dws wiki node search --workspace <workspaceId> --query "周报" --limit 10 --format json
-  dws wiki node search --workspace <workspaceId> --query "设计" --extensions adoc,asheet --format json
-Flags:
-      --workspace string   知识库 ID (必填)
-      --query string       搜索关键词 (必填)
-      --extensions string  按文件类型过滤，逗号分隔: adoc,asheet 等 (选填)
-      --limit int          每页数量 (选填)
-      --cursor string      分页游标 (选填)
-```
-
-在指定知识库空间内搜索节点。与 `drive search` 的区别：
-- `wiki node search` — 限定在某个知识库空间内搜索（需要 `--workspace`）
-- `drive search` — 全局搜索，聚合钉盘 + 文档空间结果
-
-### 列出空间（支持钉盘空间类型）
-
-`wiki space list` 除了支持知识库类型（`orgWikiSpace` / `myWikiSpace`），还支持钉盘空间类型：
-
-```
-Usage:
-  dws wiki space list --type orgSpace --format json     # 钉盘企业空间
-  dws wiki space list --type mySpace --format json      # 钉盘「我的文件」
-  dws wiki space list --type orgWikiSpace --format json  # 知识库（默认）
-  dws wiki space list --type myWikiSpace --format json   # 我的文档
-Flags:
-      --type string    空间类型:
-                         orgWikiSpace (默认) — 组织知识库
-                         myWikiSpace — 我的文档个人空间
-                         orgSpace — 钉盘企业空间
-                         mySpace — 钉盘「我的文件」
-      --limit string   每页数量 1-50 (默认 20)
-      --cursor string  分页游标 (首页留空)
-```
-
-> 钉盘空间类型（`orgSpace` / `mySpace`）会自动路由到钉盘 MCP 服务，等同于原 `drive list-spaces`（已 deprecated）。
 
 ## 意图判断
 
 - 用户说"创建知识库/新建知识库" → `space create`
 - 用户说"查看知识库/知识库详情" → `space get`
 - 用户说"我的知识库/知识库列表/有哪些知识库" → `space list`
-- 用户说"列出钉盘空间/钉盘团队空间" → `space list --type orgSpace`
 - 用户说"搜索知识库/找知识库" → `space search`
 - 用户说"我的文档/个人空间" → `space list --type myWikiSpace`
-- 用户说"知识库下的文件/知识库里有哪些文档/浏览知识库内容" → `node list`（需 `--workspace`）
-- 用户说"在知识库里搜文档/空间内搜索" → `node search`（需 `--workspace` + `--query`）
-- 用户说"在知识库里创建文档/新建文件夹" → `node create`（需 `--workspace` + `--name`）
-- 用户说"复制知识库里的文档" → `node copy`（需 `--workspace` + `--node`）
-- 用户说"移动知识库里的文档" → `node move`（需 `--workspace` + `--node`）
-- 用户说"删除知识库里的文档/节点" → `node delete`（需 `--workspace` + `--node`）
 - 用户说"把知识库分享给某人/给某人加入知识库/邀请进知识库" → `member add`（需 `--workspace` + `--user` + `--role`）
 - 用户说"修改某人在知识库的权限/调整成员角色" → `member update`
-- 用户说"移除知识库成员/把某人从知识库移除/删除知识库成员" → `member remove`（需 `--workspace` + `--users`）
 - 用户说"知识库有哪些成员/查看知识库成员" → `member list`
-- 用户说"删除知识库/移除知识库/把知识库删了" → `space delete`（需 `--workspace`）
 
-> **跨产品路由说明**：知识库节点的**内容操作**（读取/编辑/块级操作）仍由 `dws doc` 承担：
->- 用户说"读某个知识库里的某篇文档" → 先 `node list` 拿到 nodeId，再走 **`dws doc read --node <nodeId>`**
->- 用户说"搜文件"（不指定空间） → 走 **`dws drive search`**（全局聚合搜索）
+> **跨产品路由（重要）**：`dws wiki` 只管知识库容器（space/member），**不提供查看知识库文件/文档的能力**。以下意图必须走 `dws doc`，不要在 wiki 下尝试 `node`/`file`/`list` 等子命令：
+> - 用户说"知识库下的文件/知识库里有哪些文档/浏览知识库内容" → 先用 `dws wiki space list` 或 `space search` 拿到 `workspaceId`，再走 **`dws doc list --workspace <workspaceId>`**
+> - 用户说"读某个知识库里的某篇文档" → 先通过上面的方式找到 nodeId，再走 **`dws doc read --node <nodeId>`**
+> - 用户说"在知识库里搜文档" → 走 **`dws doc search --workspace-ids <workspaceId>`**
+> - 用户说"在知识库里创建文档" → 走 **`dws doc create --workspace <workspaceId>`**
 
-关键区分（两层模型）：
-- **wiki node**（空间管理层：节点的列出/创建/复制/移动/删除/搜索）vs **doc**（内容层：读写/编辑/块级/评论/导出）vs **drive**（存储层：文件上传/下载/搜索/权限，不关心格式）
-- **wiki node search**（空间内搜索，需 `--workspace`）vs **drive search**（全局搜索，聚合钉盘+文档空间）
-- **wiki node create**（在空间中创建空文件实体）vs **doc create**（创建文档并写入内容）
-- **wiki member**（容器级，授权整个知识库）vs **doc permission / drive permission**（节点级，授权单篇文档）
-  - 「我的文档」**只能用** `doc permission` / `drive permission`，不能用 `wiki member`
-- **wiki space list --type orgSpace/mySpace**（列出钉盘空间）vs **wiki space list**（默认列出知识库）
+关键区分：
+- wiki(知识库空间级管理：创建/查询/列出/搜索/成员管理) vs doc(文档内容级操作：搜索/读写/编辑/节点级权限)
+- wiki space(知识库容器) vs drive(钉盘文件存储/上传/下载)
+- **wiki member**（容器级，授权整个知识库）；节点级 `doc permission` 在开源 dws v1.0.30 不可用
+  - 「我的文档」当前开源版本不能通过 CLI 改权限；在钉钉客户端用「分享」设置
 
 ## 核心工作流
 
@@ -330,67 +166,16 @@ dws wiki space list --format json
 dws wiki space list --type myWikiSpace --format json
 
 # 搜索知识库
-dws wiki space search --query "产品" --format json
+dws wiki space search --keyword "产品" --format json
+
+# 搜索「我的文档」
+dws wiki space list --type myWikiSpace --format json
 
 # 创建知识库
-dws wiki space create --name "新项目文档" --desc "项目相关文档归档" --format json
+dws wiki space create --name "新项目文档" --description "项目相关文档归档" --format json
 
 # 查看知识库详情
 dws wiki space get --workspace <workspaceId> --format json
-
-# ── 工作流: 浏览知识库内容 ──
-
-# 1. 获取知识库 ID
-dws wiki space list --format json
-
-# 2. 列出根目录节点
-dws wiki node list --workspace <workspaceId> --format json
-
-# 3. 进入子目录
-dws wiki node list --workspace <workspaceId> --folder <parentNodeId> --format json
-
-# 4. 读取文档内容（跨到 doc）
-dws doc read --node <nodeId> --format json
-
-# ── 工作流: 在知识库中创建文档 ──
-
-# 1. 创建文档节点
-dws wiki node create --workspace <workspaceId> --name "新方案" --format json
-
-# 2. 创建文件夹
-dws wiki node create --workspace <workspaceId> --name "方案归档" --type folder --format json
-
-# 3. 在指定文件夹下创建
-dws wiki node create --workspace <workspaceId> --name "子文档" --folder <parentNodeId> --format json
-
-# ── 工作流: 在知识库中搜索 ──
-
-# 在指定知识库内搜索
-dws wiki node search --workspace <workspaceId> --query "方案" --format json
-
-# 按文件类型过滤
-dws wiki node search --workspace <workspaceId> --query "周报" --extensions adoc --format json
-
-# ── 工作流: 列出钉盘空间 ──
-
-# 列出钉盘企业空间
-dws wiki space list --type orgSpace --format json
-
-# 获取钉盘「我的文件」
-dws wiki space list --type mySpace --format json
-
-# ── 工作流: 复制/移动节点 ──
-
-# 复制节点到另一个文件夹
-dws wiki node copy --workspace <workspaceId> --node <nodeId> --folder <targetFolderId> --format json
-
-# 移动节点到另一个文件夹
-dws wiki node move --workspace <workspaceId> --node <nodeId> --folder <targetFolderId> --format json
-
-# ── 工作流: 删除知识库节点 ──
-
-# 删除节点（会要求确认）
-dws wiki node delete --workspace <workspaceId> --node <nodeId>
 
 # ── 工作流: 给知识库加成员 ──
 
@@ -398,42 +183,23 @@ dws wiki node delete --workspace <workspaceId> --node <nodeId>
 dws wiki space list --format json   # 注意：不要 --type myWikiSpace
 
 # 2. 添加成员
-dws wiki member add --workspace <WS_ID> --users <UID> --role EDITOR --format json
+dws wiki member add --workspace <WS_ID> --user <UID> --role EDITOR --format json
 
 # 3. 查看当前成员
 dws wiki member list --workspace <WS_ID> --format json
-
-# ── 工作流: 移除知识库成员 ──
-
-# 1. 查看当前成员
-dws wiki member list --workspace <WS_ID> --format json
-
-# 2. 移除成员
-dws wiki member remove --workspace <WS_ID> --users <UID> --format json
-
-# ── 工作流: 删除知识库 ──
-
-# 1. 确认知识库信息
-dws wiki space get --workspace <workspaceId> --format json
-
-# 2. 删除知识库
-dws wiki space delete --workspace <workspaceId> --format json
 ```
 
 ## 上下文传递表
 
 | 操作 | 从返回中提取 | 用于 |
 |------|-------------|------|
-| `space create` | `workspaceId` | node list / member add 的 --workspace |
-| `space list` | `workspaceId` | node list / member add 的 --workspace |
-| `space search` | `workspaceId` | node list / member add 的 --workspace |
+| `space create` | `workspaceId` | space get 的 --workspace / member add 的 --workspace |
+| `space list` | `workspaceId` | space get 的 --workspace / member add 的 --workspace |
+| `space search` | `workspaceId` | space get 的 --workspace / member add 的 --workspace |
 | `space get` | `spaceUrl` | 分享给用户 |
-| `node list` | `nodeId` | node copy/move/delete 的 --node / `dws doc read` 的 --node |
-| `node search` | `nodeId` | node copy/move/delete 的 --node / `dws doc read` 的 --node |
-| `node create` | `nodeId` | node copy/move/delete 的 --node / `dws doc read` 的 --node |
-| `member list` | `userId` | member update 的 --users / member remove 的 --users |
+| `member list` | `userId` | member update 的 --user |
 
 ## 相关产品
 
-- [doc](./doc.md) — 内容层：文档读写/编辑/块级操作/评论/导出（仅对自研文档有意义）
-- [drive](./drive.md) — 存储层：文件列出/搜索/上传/下载/复制/移动/重命名/删除/权限（不关心文件格式）
+- [doc](./doc.md) — 文档内容级操作（搜索/读写/编辑文档、知识库内文档管理）
+- [drive](./drive.md) — 钉盘文件存储/上传/下载

@@ -96,7 +96,7 @@ def main():
     if not content:
         print('错误：需要 --content 或 --content-file')
         sys.exit(1)
-    chunk_size = 10000
+    chunk_size = 30000
 
     create_args = ['doc', 'create', '--name', args.name, '--format', 'json']
     if args.folder:

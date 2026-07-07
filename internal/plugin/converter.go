@@ -20,8 +20,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/mcptypes"
 )
 
 // UserContext holds the minimal user identity fields injected into
@@ -96,11 +96,11 @@ func expandPluginVars(s, root string) string {
 }
 
 // ToServerDescriptors converts a loaded plugin's MCP servers into
-// market.ServerDescriptor values suitable for SetDynamicServers.
+// mcptypes.ServerDescriptor values suitable for SetDynamicServers.
 // Only streamable-http servers are converted; stdio servers are
 // skipped (they require the stdio transport extension).
-func (p *Plugin) ToServerDescriptors() []market.ServerDescriptor {
-	var descriptors []market.ServerDescriptor
+func (p *Plugin) ToServerDescriptors() []mcptypes.ServerDescriptor {
+	var descriptors []mcptypes.ServerDescriptor
 	for key, srv := range p.Manifest.MCPServers {
 		if srv.Type != "streamable-http" {
 			slog.Debug("plugin: skipping non-http server",
@@ -111,7 +111,7 @@ func (p *Plugin) ToServerDescriptors() []market.ServerDescriptor {
 			continue
 		}
 
-		overlay := market.CLIOverlay{}
+		overlay := mcptypes.CLIOverlay{}
 		if len(srv.CLI) > 0 {
 			if err := json.Unmarshal(srv.CLI, &overlay); err != nil {
 				slog.Warn("plugin: failed to parse CLIOverlay",
@@ -141,7 +141,7 @@ func (p *Plugin) ToServerDescriptors() []market.ServerDescriptor {
 			}
 		}
 
-		descriptors = append(descriptors, market.ServerDescriptor{
+		descriptors = append(descriptors, mcptypes.ServerDescriptor{
 			Key:         key,
 			DisplayName: p.Manifest.Name + "/" + key,
 			Description: p.Manifest.Description,

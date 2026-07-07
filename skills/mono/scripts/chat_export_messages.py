@@ -135,12 +135,21 @@ def main():
         if not data:
             break
 
+        # 兼容两种结构: 顶层 messages / {result: {messages, hasMore}}
         if isinstance(data, list):
             page_msgs = data
             has_more = False
         else:
-            page_msgs = data.get('messages', data.get('result', []))
-            has_more = data.get('hasMore', False)
+            container = data
+            inner = data.get('result')
+            if isinstance(inner, dict):
+                container = inner
+            page_msgs = container.get('messages')
+            if page_msgs is None and isinstance(inner, list):
+                page_msgs = inner
+            if not isinstance(page_msgs, list):
+                page_msgs = []
+            has_more = bool(container.get('hasMore', False))
 
         if not page_msgs:
             break
@@ -153,7 +162,9 @@ def main():
             break
 
         last_msg = page_msgs[-1]
-        boundary_time = last_msg.get('createAt') or last_msg.get('time', '')
+        boundary_time = (last_msg.get('createTime')
+                         or last_msg.get('createAt')
+                         or last_msg.get('time', ''))
         if not boundary_time or boundary_time == current_time:
             break
         current_time = boundary_time
@@ -163,28 +174,18 @@ def main():
         print('未拉取到消息')
         return
 
-    if isinstance(data, list):
-        messages = data
-    elif isinstance(data, dict):
-        inner = data.get('result', data)
-        if isinstance(inner, dict):
-            messages = inner.get('messages', inner.get('records', []))
-        elif isinstance(inner, list):
-            messages = inner
-        else:
-            messages = []
-    else:
-        messages = []
-
     if args.output:
         with open(args.output, 'w', encoding='utf-8') as f:
             json.dump(all_messages, f, ensure_ascii=False, indent=2)
         print(f"  ✓ 已导出 {len(all_messages)} 条消息到 {args.output}")
     else:
         for m in all_messages:
-            sender = m.get('senderNick') or m.get('sender', '未知')
-            text = m.get('text') or m.get('content', '')
-            time_str = m.get('createAt') or m.get('time', '')
+            # 实际字段: sender/createTime/content (兼容旧字段名)
+            sender = (m.get('sender') or m.get('senderNick')
+                      or m.get('senderOpenDingTalkId', '未知'))
+            text = m.get('content') or m.get('text', '')
+            time_str = (m.get('createTime') or m.get('createAt')
+                        or m.get('time', ''))
             print(f"  [{time_str}] {sender}: {text[:80]}")
         print(f"\n合计: {len(all_messages)} 条消息 ({page} 页)")
 

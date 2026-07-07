@@ -1,13 +1,10 @@
 package cli_test
 
 import (
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 )
 
@@ -17,17 +14,6 @@ func TestMain(m *testing.M) {
 	absFixture, _ := filepath.Abs("testdata/empty_catalog.json")
 	os.Setenv(cli.CatalogFixtureEnv, absFixture)
 
-	// Serve the local servers.json fixture at /cli/discovery/apis/cedar so that
-	// the dynamic command generator can build CLI commands without network
-	// access. FetchServers calls {baseURL}/cli/discovery/apis/cedar.
-	mux := http.NewServeMux()
-	mux.HandleFunc("/cli/discovery/apis/cedar", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "testdata/servers.json")
-	})
-	srv := httptest.NewServer(mux)
-	app.SetDiscoveryBaseURL(srv.URL)
-
 	code := m.Run()
-	srv.Close()
 	os.Exit(code)
 }
