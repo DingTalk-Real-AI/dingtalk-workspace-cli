@@ -59,7 +59,6 @@ func (EchoRunner) Run(_ context.Context, invocation Invocation) (Result, error) 
 	return Result{Invocation: invocation}, nil
 }
 
-
 func NewCompatibilityInvocation(legacyPath, canonicalProduct, tool string, params map[string]any) Invocation {
 	if params == nil {
 		params = map[string]any{}

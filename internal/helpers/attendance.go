@@ -2411,9 +2411,9 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 				return fmt.Errorf("invalid --end date format, use YYYY-MM-DD: %w", err)
 			}
 			req := map[string]any{
-				"targetUserId": mustGetFlag(cmd, "user"),
-				"startTimeStamp":    startT.UnixMilli(),
-				"endTimeStamp":      endT.UnixMilli(),
+				"targetUserId":   mustGetFlag(cmd, "user"),
+				"startTimeStamp": startT.UnixMilli(),
+				"endTimeStamp":   endT.UnixMilli(),
 			}
 			if leaveCode := mustGetFlag(cmd, "leave-code"); leaveCode != "" {
 				req["leaveCode"] = leaveCode

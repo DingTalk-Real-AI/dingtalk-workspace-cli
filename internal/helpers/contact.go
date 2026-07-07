@@ -216,9 +216,9 @@ func newContactCommand() *cobra.Command {
 	}
 
 	contactLabelGetCmd := &cobra.Command{
-		Use:     "get",
-		Short:   "根据角色名称查询角色",
-		Long:    `根据角色名称精确匹配查询角色信息（角色ID、名称等）。支持同时查询多个角色名称，逗号分隔。无需分页。
+		Use:   "get",
+		Short: "根据角色名称查询角色",
+		Long: `根据角色名称精确匹配查询角色信息（角色ID、名称等）。支持同时查询多个角色名称，逗号分隔。无需分页。
 
 注意：精确匹配可能无结果（如用户输入"管理员"但企业只有"主管理员"和"子管理员"），
 此时应降级使用 label list 获取全部角色列表，从中模糊匹配包含关键词的角色。`,

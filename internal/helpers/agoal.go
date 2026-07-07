@@ -70,9 +70,9 @@ scopeType 支持:
 	strategyListCmd.Flags().String("request-id", "", "requestId (可选)")
 
 	strategyDetailCmd := &cobra.Command{
-		Use:   "detail",
-		Short: "获取战略解码详情",
-		Long:  `根据战略解码 id (profileId) 获取战略解码的详细信息。`,
+		Use:     "detail",
+		Short:   "获取战略解码详情",
+		Long:    `根据战略解码 id (profileId) 获取战略解码的详细信息。`,
 		Example: `  dws agoal strategy detail --profile-id PROFILE_ID`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "profile-id"); err != nil {
@@ -362,9 +362,9 @@ scopeType 支持:
 	userCmd := &cobra.Command{Use: "user", Short: "用户目标管理", RunE: groupRunE}
 
 	userRulesCmd := &cobra.Command{
-		Use:     "rules",
-		Short:   "获取用户的规则周期列表",
-		Long:    `获取用户的规则周期列表。不传 dingUserId 时默认取操作人自己的规则。`,
+		Use:   "rules",
+		Short: "获取用户的规则周期列表",
+		Long:  `获取用户的规则周期列表。不传 dingUserId 时默认取操作人自己的规则。`,
 		Example: `  dws agoal user rules
   dws agoal user rules --user-id USER_ID`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -382,9 +382,9 @@ scopeType 支持:
 	userRulesCmd.Flags().String("request-id", "", "requestId (可选)")
 
 	userObjectivesCmd := &cobra.Command{
-		Use:   "objectives",
-		Short: "查询用户目标列表",
-		Long:  `根据用户、规则 id 和周期列表查询用户的目标。`,
+		Use:     "objectives",
+		Short:   "查询用户目标列表",
+		Long:    `根据用户、规则 id 和周期列表查询用户的目标。`,
 		Example: `  dws agoal user objectives --user-id USER_ID --rule-id RULE_ID --period-ids "period1,period2"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "user-id", "rule-id", "period-ids"); err != nil {

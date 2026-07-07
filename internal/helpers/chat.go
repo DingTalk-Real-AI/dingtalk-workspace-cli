@@ -4180,9 +4180,9 @@ status 可选值:
 	// ── clear-all-red-point: 红点清零（全部已读） ─────────────────
 
 	chatClearAllRedPointCmd := &cobra.Command{
-		Use:   "clear-all-red-point",
-		Short: "清除所有会话红点（全部已读）",
-		Long:  `一键清除当前用户所有会话的未读红点，等效于“全部已读”。`,
+		Use:     "clear-all-red-point",
+		Short:   "清除所有会话红点（全部已读）",
+		Long:    `一键清除当前用户所有会话的未读红点，等效于“全部已读”。`,
 		Example: `  dws chat clear-all-red-point`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return callMCPToolOnServer("im", "clear_all_red_point", map[string]any{})
