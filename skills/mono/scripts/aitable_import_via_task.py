@@ -24,7 +24,7 @@ from typing import Any, Dict, Optional, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-RESOURCE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
+RESOURCE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{6,128}$")
 ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls"}
 
 
@@ -140,7 +140,7 @@ def main() -> None:
             "data",
             "--import-id",
             import_id,
-            "--timeout-sec",
+            "--timeout",
             str(args.timeout_sec),
             "--format",
             "json",

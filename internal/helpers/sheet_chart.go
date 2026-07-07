@@ -145,7 +145,11 @@ func newChartCmd() *cobra.Command {
 			if v, _ := cmd.Flags().GetString("chart-id"); v != "" {
 				toolArgs["floatChartId"] = v
 			}
-			return callMCPTool("list_float_charts", toolArgs)
+			text, err := callMCPToolReturnText(cmd.Context(), "list_float_charts", toolArgs)
+			if err != nil {
+				return err
+			}
+			return printSanitizedMCPText(text, "floatCharts")
 		},
 	}
 	chartListCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")

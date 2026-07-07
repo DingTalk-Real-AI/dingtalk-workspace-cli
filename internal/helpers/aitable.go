@@ -47,6 +47,130 @@ func resolveRecordsFlag(cmd *cobra.Command) (string, error) {
 	return "", fmt.Errorf("missing required flag(s): --records (example: --records '[{\"cells\":{\"fldTextId\":\"文本内容\"}}]')\n  hint: for large payloads or Windows, use --records-file ./path/to/records.json")
 }
 
+func boolFlagAllowSpaceValue(cmd *cobra.Command, args []string, name string) (bool, error) {
+	if !cmd.Flags().Changed(name) {
+		return false, fmt.Errorf("--%s is required", name)
+	}
+	value, err := cmd.Flags().GetBool(name)
+	if err != nil {
+		return false, err
+	}
+	remaining := args
+	if len(remaining) > 0 {
+		switch strings.ToLower(strings.TrimSpace(remaining[0])) {
+		case "true":
+			value = true
+			remaining = remaining[1:]
+		case "false":
+			value = false
+			remaining = remaining[1:]
+		}
+	}
+	if len(remaining) > 0 {
+		return false, fmt.Errorf("unexpected argument(s): %s", strings.Join(remaining, " "))
+	}
+	return value, nil
+}
+
+func printFilteredAitableFormGet(raw, viewID string) error {
+	var parsed any
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return fmt.Errorf("list_form_views response is not valid JSON: %w", err)
+	}
+	root, ok := parsed.(map[string]any)
+	if !ok {
+		return fmt.Errorf("list_form_views response is not a JSON object")
+	}
+	container := root
+	if data, ok := root["data"].(map[string]any); ok {
+		container = data
+	} else if result, ok := root["result"].(map[string]any); ok {
+		container = result
+	}
+	views, _ := container["formViews"].([]any)
+	filtered := make([]any, 0, len(views))
+	for _, item := range views {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if firstStringField(m, "viewId", "viewID", "id") == viewID {
+			filtered = append(filtered, item)
+		}
+	}
+	if len(filtered) == 0 {
+		return &CLIError{
+			Code:       CodeMCPToolError,
+			Message:    fmt.Sprintf("form view %s not found", viewID),
+			Suggestion: "用 dws aitable form list --table-id <tableId> 查看可用表单 viewId",
+		}
+	}
+	container["formViews"] = filtered
+	if total, ok := container["total"].(float64); ok && total > float64(len(filtered)) {
+		container["total"] = len(filtered)
+	}
+	return printFilteredPayload(parsed)
+}
+
+func fixJSONCMissingCommas(text string) string {
+	lines := strings.Split(text, "\n")
+	nextSignificant := func(start int) string {
+		for j := start; j < len(lines); j++ {
+			trimmed := strings.TrimSpace(lines[j])
+			if trimmed == "" || strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "/*") || strings.HasPrefix(trimmed, "*") {
+				continue
+			}
+			return trimmed
+		}
+		return ""
+	}
+	for i := 0; i < len(lines)-1; i++ {
+		trimmed := strings.TrimSpace(lines[i])
+		if trimmed == "" || strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "/*") || strings.HasPrefix(trimmed, "*") {
+			continue
+		}
+		if strings.HasSuffix(trimmed, ",") || strings.HasSuffix(trimmed, "{") || strings.HasSuffix(trimmed, "[") || strings.HasSuffix(trimmed, ":") {
+			continue
+		}
+		next := nextSignificant(i + 1)
+		if strings.HasPrefix(next, "\"") {
+			lines[i] += ","
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func fixWidgetsExamplePayload(value any) any {
+	switch v := value.(type) {
+	case map[string]any:
+		for k, child := range v {
+			v[k] = fixWidgetsExamplePayload(child)
+		}
+		return v
+	case []any:
+		for i, child := range v {
+			v[i] = fixWidgetsExamplePayload(child)
+		}
+		return v
+	case string:
+		if strings.Contains(v, "chartType") || strings.Contains(v, "STANDARD_LIST_VIEW") {
+			return fixJSONCMissingCommas(v)
+		}
+		return v
+	default:
+		return v
+	}
+}
+
+func aggregateBlockHasClear(block map[string]any) bool {
+	for _, v := range block {
+		if v == nil {
+			return true
+		}
+	}
+	return false
+}
+
 // recordQueryFetchAll implements --all auto-pagination for record query.
 //   - pageLimit controls max pages (default 50, 0 = unlimited)
 //   - Mid-loop errors break gracefully, outputting already-fetched data
@@ -2403,9 +2527,9 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 		Use:   "aggregate",
 		Short: "更新视图字段聚合统计（仅 Grid）",
 		Long: `更新 Grid 视图的 aggregate 配置。value 为 map[fieldId]→AggregateAction string，
-传 null 清除单个字段聚合。便捷 flag：--field-id / --action 单字段写入；--clear-field-id 单/多清除。`,
+便捷 flag：--field-id / --action 单字段写入。
+注意：当前服务端会静默忽略 null 清除语义，因此 CLI 会拒绝 --clear-field-id 或 JSON null，避免假成功。`,
 		Example: `  dws aitable view update aggregate --view-id VIEW_ID --field-id fldX --action SUM
-  dws aitable view update aggregate --view-id VIEW_ID --clear-field-id fldX,fldY
   dws aitable view update aggregate --view-id VIEW_ID --json '{"fldA":"AVG","fldB":"MAX"}'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			baseID, tableID, viewID, blockKey, err := viewUpdateCommonPreflight(cmd, "aggregate", []string{"Grid"}, false)
@@ -2422,14 +2546,15 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 				typed[fldID] = action
 			}
 			if v, _ := cmd.Flags().GetString("clear-field-id"); v != "" {
-				for _, k := range parseCSVValues(v) {
-					typed[k] = nil
-				}
+				return fmt.Errorf("--clear-field-id is not supported: upstream currently ignores aggregate clear requests; set a new --action instead")
 			}
 			jsonStr, _ := cmd.Flags().GetString("json")
 			block, err := mergeUpdateBlock(jsonStr, typed)
 			if err != nil {
 				return err
+			}
+			if aggregateBlockHasClear(block) {
+				return fmt.Errorf("aggregate JSON null is not supported: upstream currently ignores aggregate clear requests")
 			}
 			return callUpdateViewWithBlock(baseID, tableID, viewID, blockKey, block, nil)
 		},
@@ -2898,11 +3023,16 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 			if err != nil {
 				return err
 			}
-			return callAitableHelperTool("list_form_views", map[string]any{
+			viewID := mustGetFlag(cmd, "view-id")
+			raw, err := callMCPToolReturnTextOnServer(cmd.Context(), "aitable-helper", "list_form_views", map[string]any{
 				"baseId":  baseID,
 				"tableId": mustGetFlag(cmd, "table-id"),
-				"viewIds": []string{mustGetFlag(cmd, "view-id")},
+				"viewIds": []string{viewID},
 			})
+			if err != nil {
+				return err
+			}
+			return printFilteredAitableFormGet(raw, viewID)
 		},
 	}
 
@@ -3442,7 +3572,7 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 			if err := validateRequiredFlags(cmd, "dashboard-id"); err != nil {
 				return err
 			}
-			enabled, err := cmd.Flags().GetBool("enabled")
+			enabled, err := boolFlagAllowSpaceValue(cmd, args, "enabled")
 			if err != nil {
 				return err
 			}
@@ -3478,7 +3608,16 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 可作为 chart create / chart update 的 --config 参数结构参考，根据目标图表类型选取对应示例。`,
 		Example: `  dws aitable chart widgets-example`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return callAitableTool("get_dashboard_widgets_example", map[string]any{})
+			raw, err := callMCPToolReturnTextOnServer(cmd.Context(), "aitable", "get_dashboard_widgets_example", map[string]any{})
+			if err != nil {
+				return err
+			}
+			var parsed any
+			if err := json.Unmarshal([]byte(raw), &parsed); err == nil {
+				return printFilteredPayload(fixWidgetsExamplePayload(parsed))
+			}
+			deps.Out.PrintRaw(fixJSONCMissingCommas(raw))
+			return nil
 		},
 	}
 
@@ -3549,8 +3688,13 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
     --layout '{"x":0,"y":4,"w":12,"h":4}'
   # 查询 chartId: dws aitable dashboard get --base-id <baseId> --dashboard-id <dashboardId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "dashboard-id", "chart-id", "config"); err != nil {
+			if err := validateRequiredFlags(cmd, "dashboard-id", "chart-id"); err != nil {
 				return err
+			}
+			config, _ := cmd.Flags().GetString("config")
+			layout, _ := cmd.Flags().GetString("layout")
+			if config == "" && layout == "" {
+				return fmt.Errorf("--config or --layout is required")
 			}
 			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
 			if err != nil {
@@ -3560,10 +3704,12 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 				"baseId":      baseID,
 				"dashboardId": mustGetFlag(cmd, "dashboard-id"),
 				"chartId":     mustGetFlag(cmd, "chart-id"),
-				"config":      jsonStringToMap(mustGetFlag(cmd, "config")),
 			}
-			if v, _ := cmd.Flags().GetString("layout"); v != "" {
-				toolArgs["layout"] = jsonStringToMap(v)
+			if config != "" {
+				toolArgs["config"] = jsonStringToMap(config)
+			}
+			if layout != "" {
+				toolArgs["layout"] = jsonStringToMap(layout)
 			}
 			return callAitableTool("update_chart", toolArgs)
 		},
@@ -3637,7 +3783,7 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 			if err := validateRequiredFlags(cmd, "dashboard-id", "chart-id"); err != nil {
 				return err
 			}
-			enabled, err := cmd.Flags().GetBool("enabled")
+			enabled, err := boolFlagAllowSpaceValue(cmd, args, "enabled")
 			if err != nil {
 				return err
 			}
@@ -4531,7 +4677,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	// aggregate: Grid 专属
 	viewUpdateAggregateCmd.Flags().String("field-id", "", "单字段 ID（配合 --action 写入单个聚合）")
 	viewUpdateAggregateCmd.Flags().String("action", "", "聚合 action: SUM|AVG|MAX|MIN|MEDIAN|RANGE|...（配合 --field-id）")
-	viewUpdateAggregateCmd.Flags().String("clear-field-id", "", "清除聚合的字段 ID 列表 (CSV)")
+	viewUpdateAggregateCmd.Flags().String("clear-field-id", "", "暂不支持：服务端会忽略清除聚合请求，传入会 fail-fast")
 	viewUpdateAggregateCmd.Flags().String("json", "", "完整 aggregate map JSON")
 	// field-widths: Grid 专属
 	viewUpdateFieldWidthsCmd.Flags().String("field-id", "", "单字段 ID（配合 --width）")
@@ -4680,7 +4826,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	chartUpdateCmd.Flags().String("base-id", "", "所属 Base ID (必填)")
 	chartUpdateCmd.Flags().String("dashboard-id", "", "所属 Dashboard ID (必填)")
 	chartUpdateCmd.Flags().String("chart-id", "", "目标 Chart ID (必填)")
-	chartUpdateCmd.Flags().String("config", "", "图表配置 JSON (必填)")
+	chartUpdateCmd.Flags().String("config", "", "图表配置 JSON（与 --layout 至少传一项）")
 	chartUpdateCmd.Flags().String("layout", "", "图表布局更新 JSON")
 	chartDeleteCmd.Flags().String("base-id", "", "所属 Base ID (必填)")
 	chartDeleteCmd.Flags().String("dashboard-id", "", "所属 Dashboard ID (必填)")

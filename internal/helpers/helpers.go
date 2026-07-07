@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	clioutput "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -75,6 +76,29 @@ func GetCaller() edition.ToolCaller {
 		return nil
 	}
 	return deps.Caller
+}
+
+type outputFilterProvider interface {
+	Fields() string
+	JQ() string
+}
+
+func currentOutputFilters() (fields, jq string) {
+	if deps == nil || deps.Caller == nil {
+		return "", ""
+	}
+	if p, ok := deps.Caller.(outputFilterProvider); ok {
+		return p.Fields(), p.JQ()
+	}
+	return "", ""
+}
+
+func printFilteredPayload(payload any) error {
+	if deps == nil || deps.Caller == nil {
+		return nil
+	}
+	fields, jq := currentOutputFilters()
+	return clioutput.WriteFiltered(deps.Out.w, clioutput.Format(deps.Caller.Format()), payload, fields, jq)
 }
 
 // cmdToProduct maps CLI command names to MCP server IDs for direct routing.
@@ -292,6 +316,14 @@ func callMCPToolInternalOpts(explicitServerID, toolName string, args map[string]
 				// 业务逻辑错误
 				if isBusinessError(errBody) {
 					return &CLIError{Code: CodeMCPToolError, Message: c.Text, Suggestion: suggestForBusinessError(errBody)}
+				}
+			}
+
+			fields, jq := currentOutputFilters()
+			if fields != "" || jq != "" {
+				var parsed any
+				if err := json.Unmarshal([]byte(c.Text), &parsed); err == nil {
+					return clioutput.WriteFiltered(deps.Out.w, clioutput.Format(flagFormat), parsed, fields, jq)
 				}
 			}
 

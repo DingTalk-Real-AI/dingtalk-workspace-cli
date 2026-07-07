@@ -62,8 +62,9 @@ def main():
         print('未找到匹配部门')
         sys.exit(1)
 
-    depts = (dept_data if isinstance(dept_data, list)
-             else dept_data.get('result', dept_data.get('items', [])))
+    container = dept_data.get('result', dept_data) if isinstance(dept_data, dict) else dept_data
+    depts = (container if isinstance(container, list)
+             else container.get('deptList', container.get('items', [])))
     if not depts:
         print('未找到匹配部门')
         sys.exit(1)
@@ -85,9 +86,11 @@ def main():
             print('  无法获取成员列表')
             continue
 
-        members = (members_data if isinstance(members_data, list)
-                   else members_data.get('result',
-                        members_data.get('userlist', [])))
+        member_container = (members_data.get('result', members_data)
+                            if isinstance(members_data, dict) else members_data)
+        members = (member_container if isinstance(member_container, list)
+                   else member_container.get('deptUserList',
+                        member_container.get('userlist', [])))
         if not members:
             print('  (暂无成员)')
             continue

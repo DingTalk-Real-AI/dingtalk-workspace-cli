@@ -100,7 +100,11 @@ def main():
 
     event_id = None
     if not args.dry_run and isinstance(result, dict):
-        event_id = result.get('eventId') or result.get('id')
+        inner = result.get('result', result)
+        if isinstance(inner, dict):
+            event_id = inner.get('eventId') or inner.get('id')
+        else:
+            event_id = result.get('eventId') or result.get('id')
     print(f"  ✓ 日程已创建" +
           (f" (eventId: {event_id})" if event_id else ""))
 
@@ -133,8 +137,9 @@ def main():
         ], dry_run=args.dry_run)
 
         if not args.dry_run and rooms_data:
-            rooms = (rooms_data if isinstance(rooms_data, list)
-                     else rooms_data.get('rooms', []))
+            inner = rooms_data.get('result', rooms_data) if isinstance(rooms_data, dict) else rooms_data
+            rooms = (inner if isinstance(inner, list)
+                     else inner.get('rooms', []))
             if rooms:
                 room = rooms[0]
                 room_id = room.get('roomId') or room.get('id')

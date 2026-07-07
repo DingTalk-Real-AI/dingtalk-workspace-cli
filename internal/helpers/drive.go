@@ -174,16 +174,8 @@ func runDriveUploadToDocSpace(cmd *cobra.Command, filePath, fileName string, fil
 }
 
 func validateDriveParentID(parentID string) error {
-	value := strings.TrimSpace(parentID)
-	if value == "" {
-		return nil
-	}
-	for _, r := range value {
-		if r < '0' || r > '9' {
-			return nil
-		}
-	}
-	return fmt.Errorf("invalid drive --folder %q: pure numeric IDs are usually dentryId values for chat --dentry-id, not drive parent dentryUuid values; use a parent folder dentryUuid from drive list or omit --folder to use the space root", parentID)
+	_ = strings.TrimSpace(parentID)
+	return nil
 }
 
 // parseDriveUploadInfo extracts the upload URL, uploadId and headers from the
@@ -269,9 +261,9 @@ func newDriveCommand() *cobra.Command {
   默认（无 --workspace）       → 列出钉盘「我的文件」
   --space-id <纯数字>          → 列出钉盘指定空间
   --workspace <加密string/URL> → 列出文档空间/知识库文件（等同于原 list-docs）
-  --folder <nodeId>            → 列出指定文件夹下的子节点`,
+  --folder <parentId>          → 列出指定文件夹下的子节点（可用 drive list 返回的 dentryId）`,
 		Example: `  dws drive list --limit 20
-  dws drive list --folder <dentryUuid> --order-by name --order asc
+  dws drive list --folder <dentryId> --order-by name --order asc
   dws drive list --workspace <workspaceId>
   dws drive list --workspace <workspaceId> --folder <folderId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -515,7 +507,7 @@ func newDriveCommand() *cobra.Command {
 	_ = driveListCmd.Flags().MarkHidden("max")
 	driveListCmd.Flags().String("space-id", "", "钉盘空间 ID (纯数字)，不传则使用「我的文件」(可选)")
 	driveListCmd.Flags().String("workspace", "", "文档空间/知识库 ID (加密 string 或 URL)，传入则路由到文档空间 (可选)")
-	driveListCmd.Flags().String("folder", "", "父节点 ID (dentryUuid)，不传则列出空间根目录 (可选)")
+	driveListCmd.Flags().String("folder", "", "父节点 ID（可用 drive list 返回的 dentryId），不传则列出空间根目录 (可选)")
 	driveListCmd.Flags().String("cursor", "", "分页游标，首次不传 (可选)")
 	driveListCmd.Flags().String("order-by", "", "排序字段: createTime|modifyTime|name (可选，仅钉盘)")
 	driveListCmd.Flags().String("order", "", "排序方向: asc|desc，默认 desc (可选，仅钉盘)")

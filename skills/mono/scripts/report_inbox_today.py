@@ -14,6 +14,7 @@ import subprocess
 import argparse
 from datetime import datetime, timedelta
 from typing import List, Any, Optional
+from urllib.parse import parse_qs, urlparse
 
 
 def run_dws(
@@ -39,6 +40,38 @@ def run_dws(
 
 def to_iso(dt: datetime) -> str:
     return dt.strftime('%Y-%m-%dT%H:%M:%S+08:00')
+
+
+def first_value(data: dict, *keys: str, default: str = '') -> str:
+    for key in keys:
+        value = data.get(key)
+        if value not in (None, ''):
+            return str(value)
+    return default
+
+
+def report_id_from_link(link: str) -> str:
+    if not link:
+        return ''
+    query = parse_qs(urlparse(link).query)
+    for key in ('reportId', 'report_id', 'id'):
+        values = query.get(key)
+        if values:
+            return values[0]
+    return ''
+
+
+def unwrap_reports(data: Any) -> list:
+    if isinstance(data, list):
+        return data
+    if not isinstance(data, dict):
+        return []
+    inner = data.get('result', data.get('data', data))
+    if isinstance(inner, list):
+        return inner
+    if isinstance(inner, dict):
+        return inner.get('report_list', inner.get('reports', inner.get('items', [])))
+    return []
 
 
 def main():
@@ -73,8 +106,7 @@ def main():
         print('未查到日志')
         return
 
-    reports = (data if isinstance(data, list)
-               else data.get('result', data.get('reports', [])))
+    reports = unwrap_reports(data)
     if not reports:
         print('  ✅ 暂无收到的日志')
         return
@@ -83,10 +115,14 @@ def main():
     print('=' * 50)
 
     for r in reports:
-        rid = r.get('reportId') or r.get('id', '')
-        creator = r.get('creatorName') or r.get('creator', '未知')
-        template = r.get('templateName') or r.get('template', '')
-        create_time = r.get('createTime', '')
+        if not isinstance(r, dict):
+            print(f"\n  📝 {r}")
+            continue
+        link = first_value(r, '钉钉链接', 'dingTalkUrl', 'url')
+        rid = first_value(r, 'reportId', 'id') or report_id_from_link(link)
+        creator = first_value(r, 'creatorName', 'creator', '发送人', default='未知')
+        template = first_value(r, 'templateName', 'template', '标题')
+        create_time = r.get('createTime') or r.get('日期') or ''
         if isinstance(create_time, (int, float)):
             create_time = datetime.fromtimestamp(
                 create_time / 1000

@@ -88,6 +88,7 @@ def print_tree(
         if is_dir and depth < max_depth:
             child_prefix = prefix + ('    ' if is_last else '│   ')
             dentry_id = (item.get('dentryUuid')
+                         or item.get('dentryId')
                          or item.get('id', ''))
             if dentry_id:
                 children = list_dir(dentry_id, dry_run=dry_run)

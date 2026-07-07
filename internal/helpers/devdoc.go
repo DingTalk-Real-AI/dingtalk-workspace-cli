@@ -45,7 +45,7 @@ func newDevdocArticleSearchCommand() *cobra.Command {
 			if size < 1 {
 				size = 10
 			}
-			return callMCPTool("search_open_platform_docs", map[string]any{
+			return callMCPToolOnServer("devdoc", "search_open_platform_docs", map[string]any{
 				"keyword": flagOrFallback(cmd, "query", "keyword"),
 				"page":    page,
 				"size":    size,

@@ -9,6 +9,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var wikiNodeCreateTypes = map[string]bool{
+	"adoc": true, "axls": true, "appt": true, "adraw": true,
+	"amind": true, "able": true, "folder": true,
+}
+
 // ──────────────────────────────────────────────────────────
 // 跨产品透明路由（Proxy Route）
 //
@@ -582,14 +587,17 @@ ORG 类型授权不会出现在查询结果中。`,
 
 通过 --type 指定节点类型：
   adoc      在线文档 (默认)
-  asheet    在线表格
   folder    文件夹
   axls      在线电子表格
+  appt      演示文稿
+  adraw     画板
+  amind     脑图
+  able      AI 表格
 
 通过 --folder 指定父节点，不传则创建在知识库根目录。`,
 		Example: `  dws wiki node create --workspace <workspaceId> --name "新文档"
   dws wiki node create --workspace <workspaceId> --name "方案目录" --type folder
-  dws wiki node create --workspace <workspaceId> --name "数据表" --type asheet --folder <parentNodeId>`,
+  dws wiki node create --workspace <workspaceId> --name "数据表" --type axls --folder <parentNodeId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workspaceID, err := mustFlagOrFallback(cmd, "workspace", "workspace-id")
 			if err != nil {
@@ -603,6 +611,9 @@ ORG 类型授权不会出现在查询结果中。`,
 				"name":        mustGetFlag(cmd, "name"),
 			}
 			if v := mustGetFlag(cmd, "type"); v != "" {
+				if !wikiNodeCreateTypes[v] {
+					return fmt.Errorf("invalid --type %q: supported values are adoc, axls, appt, adraw, amind, able, folder", v)
+				}
 				toolArgs["type"] = v
 			}
 			if folder := docFolderFlag(cmd, "folder", "parent-id"); folder != "" {
@@ -616,7 +627,7 @@ ORG 类型授权不会出现在查询结果中。`,
 	}
 	nodeCreateCmd.Flags().String("workspace", "", "知识库 ID (必填)")
 	nodeCreateCmd.Flags().String("name", "", "节点名称 (必填)")
-	nodeCreateCmd.Flags().String("type", "adoc", "节点类型: adoc / asheet / folder / axls")
+	nodeCreateCmd.Flags().String("type", "adoc", "节点类型: adoc / axls / appt / adraw / amind / able / folder")
 	nodeCreateCmd.Flags().String("folder", "", "父节点 nodeId (选填，不传则在根目录创建)")
 
 	nodeCopyCmd := &cobra.Command{

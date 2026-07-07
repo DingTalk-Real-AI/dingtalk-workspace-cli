@@ -998,14 +998,46 @@ func firstStringField(data map[string]any, keys ...string) string {
 }
 
 func printMCPText(text string) error {
-	if deps.Caller.Format() == "json" {
+	fields, jq := currentOutputFilters()
+	if deps.Caller.Format() == "json" || fields != "" || jq != "" {
 		var parsed any
 		if err := json.Unmarshal([]byte(text), &parsed); err == nil {
-			return deps.Out.PrintJSONUnescaped(parsed)
+			return printFilteredPayload(parsed)
 		}
 	}
 	deps.Out.PrintRaw(text)
 	return nil
+}
+
+func printWebhookSendResponse(text string) error {
+	var body map[string]any
+	if err := json.Unmarshal([]byte(text), &body); err == nil {
+		errCode := stringFromJSONScalar(body["errcode"])
+		if errCode == "" {
+			errCode = stringFromJSONScalar(body["errorCode"])
+		}
+		if errCode != "" && errCode != "0" {
+			msg := stringFromJSONScalar(body["errmsg"])
+			if msg == "" {
+				msg = stringFromJSONScalar(body["errorMsg"])
+			}
+			if msg == "" {
+				msg = "webhook send failed"
+			}
+			return &CLIError{
+				Code:    CodeMCPToolError,
+				Message: fmt.Sprintf("webhook send failed: errcode=%s errmsg=%s", errCode, msg),
+			}
+		}
+		if success, ok := body["success"].(bool); ok && !success {
+			msg := firstStringField(body, "errmsg", "errorMsg", "message")
+			if msg == "" {
+				msg = "webhook send failed"
+			}
+			return &CLIError{Code: CodeMCPToolError, Message: msg}
+		}
+	}
+	return printMCPText(text)
 }
 
 // ──────────────────────────────────────────────────────────
@@ -1841,7 +1873,11 @@ func newChatCommand() *cobra.Command {
 				}
 				toolArgs["atUserIds"] = atUserIds
 			}
-			return callMCPToolOnServer("bot", "send_message_by_custom_robot", toolArgs)
+			text, err := callMCPToolReturnTextOnServer(cmd.Context(), "bot", "send_message_by_custom_robot", toolArgs)
+			if err != nil {
+				return err
+			}
+			return printWebhookSendResponse(text)
 		},
 	}
 
@@ -2003,6 +2039,9 @@ func newChatCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			toolArgs := map[string]any{}
 			if v, err := cmd.Flags().GetInt("limit"); err == nil && v > 0 {
+				if v > 100 {
+					return fmt.Errorf("--limit must be <= 100")
+				}
 				toolArgs["limit"] = v
 			}
 			if v, _ := cmd.Flags().GetInt64("cursor"); v > 0 {
@@ -2020,7 +2059,10 @@ func newChatCommand() *cobra.Command {
   dws chat list-top-conversations --limit 1000 --cursor <nextCursor>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			toolArgs := map[string]any{}
-			if v, err := cmd.Flags().GetInt("limit"); err == nil && v > 0 {
+			if v, err := cmd.Flags().GetInt("limit"); err == nil {
+				if v < 1 || v > 100 {
+					return fmt.Errorf("--limit must be between 1 and 100")
+				}
 				toolArgs["limit"] = v
 			}
 			if v, _ := cmd.Flags().GetInt64("cursor"); v > 0 {
@@ -2666,7 +2708,7 @@ func newChatCommand() *cobra.Command {
 				toolArgs["openConversationId"] = groupID
 			}
 			if userID != "" {
-				toolArgs["userId"] = userID
+				toolArgs["peerUid"] = userID
 			}
 			if openDingTalkID != "" {
 				toolArgs["openDingTalkId"] = openDingTalkID
@@ -4257,21 +4299,22 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 
 	chatGroupAuditJoinValidationCmd := &cobra.Command{
 		Use:   "audit-join-validation",
-		Short: "审批入群验证（通过、拒绝、删除）",
-		Long: `审批入群验证。支持通过、拒绝、删除、忽略、拒绝并拉黑等操作。
+		Short: "审批入群验证（通过、删除）",
+		Long: `审批入群验证。当前服务端仅支持通过与删除。
 
 status 可选值:
   AuditApprove — 通过
-  AuditDelete  — 删除
-  AuditIgnore  — 忽略
-  AuditRefuse  — 拒绝
-  AuditBlock   — 拒绝且不再接受该用户的申请`,
+  AuditDelete  — 删除`,
 		Example: `  dws chat group audit-join-validation --group <openConversationId> --record-id 123456 --applicant <openDingTalkId> --inviter <openDingTalkId> --status AuditApprove
-  dws chat group audit-join-validation --group <openConversationId> --record-id 123456 --applicant <openDingTalkId> --inviter <openDingTalkId> --status AuditRefuse --description "不符合入群条件"
+  dws chat group audit-join-validation --group <openConversationId> --record-id 123456 --applicant <openDingTalkId> --inviter <openDingTalkId> --status AuditDelete --description "删除无效申请"
   # 查询入群验证记录: dws chat group list-join-validations`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "group", "record-id", "applicant", "inviter", "status"); err != nil {
 				return err
+			}
+			status := mustGetFlag(cmd, "status")
+			if status != "AuditApprove" && status != "AuditDelete" {
+				return fmt.Errorf("invalid --status %q: current server supports only AuditApprove or AuditDelete", status)
 			}
 			recordID, err := strconv.ParseInt(mustGetFlag(cmd, "record-id"), 10, 64)
 			if err != nil {
@@ -4282,7 +4325,7 @@ status 可选值:
 				"applyRecordId":           recordID,
 				"applicantOpenDingTalkId": mustGetFlag(cmd, "applicant"),
 				"inviterOpenDingTalkId":   mustGetFlag(cmd, "inviter"),
-				"status":                  mustGetFlag(cmd, "status"),
+				"status":                  status,
 			}
 			if v, _ := cmd.Flags().GetString("description"); v != "" {
 				toolArgs["auditDescription"] = v
@@ -4294,7 +4337,7 @@ status 可选值:
 	_ = chatGroupAuditJoinValidationCmd.MarkFlagRequired("group")
 	chatGroupAuditJoinValidationCmd.Flags().String("record-id", "", "申请记录 ID (必填)")
 	_ = chatGroupAuditJoinValidationCmd.MarkFlagRequired("record-id")
-	chatGroupAuditJoinValidationCmd.Flags().String("status", "", "审批动作: AuditApprove/AuditDelete/AuditIgnore/AuditRefuse/AuditBlock (必填)")
+	chatGroupAuditJoinValidationCmd.Flags().String("status", "", "审批动作: AuditApprove/AuditDelete (必填)")
 	_ = chatGroupAuditJoinValidationCmd.MarkFlagRequired("status")
 	chatGroupAuditJoinValidationCmd.Flags().String("applicant", "", "申请人 openDingTalkId (必填)")
 	_ = chatGroupAuditJoinValidationCmd.MarkFlagRequired("applicant")
@@ -4383,7 +4426,10 @@ status 可选值:
   dws chat list-all-conversations --exclude-muted`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			toolArgs := map[string]any{}
-			if v, err := cmd.Flags().GetInt("limit"); err == nil && v > 0 {
+			if v, err := cmd.Flags().GetInt("limit"); err == nil {
+				if v < 1 || v > 100 {
+					return fmt.Errorf("--limit must be between 1 and 100")
+				}
 				toolArgs["limit"] = v
 			}
 			if v, _ := cmd.Flags().GetInt64("cursor"); v > 0 {
@@ -4395,7 +4441,7 @@ status 可选值:
 			return callMCPToolOnServer("im", "list_all_conversations", toolArgs)
 		},
 	}
-	chatListAllConversationsCmd.Flags().Int("limit", 1000, "每页数量（默认 1000）")
+	chatListAllConversationsCmd.Flags().Int("limit", 100, "每页数量（默认 100，最大 100）")
 	chatListAllConversationsCmd.Flags().Int64("cursor", 0, "分页游标（首次不传或传 0，翻页传 nextCursor）")
 	chatListAllConversationsCmd.Flags().Bool("exclude-muted", false, "是否排除已免打扰会话（默认 false）")
 

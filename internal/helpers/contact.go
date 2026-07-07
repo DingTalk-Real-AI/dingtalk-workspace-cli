@@ -582,20 +582,26 @@ contact user profile fields 获取可用字段列表。
 	contactDeptSearchCmd.Flags().String("name", "", "--query 的别名")
 	_ = contactDeptSearchCmd.Flags().MarkHidden("keyword")
 	_ = contactDeptSearchCmd.Flags().MarkHidden("name")
-	contactDeptGetInfoCmd.Flags().String("id", "", "部门 ID (必填)")
-	contactDeptListChildrenCmd.Flags().String("id", "", "部门 ID (必填)")
-	contactDeptListMembersCmd.Flags().String("ids", "", "部门 ID 列表 (必填)")
+	contactDeptGetInfoCmd.Flags().String("dept", "", "部门 ID (必填)")
+	contactDeptGetInfoCmd.Flags().String("id", "", "--dept 的别名")
+	_ = contactDeptGetInfoCmd.Flags().MarkHidden("id")
+	contactDeptListChildrenCmd.Flags().String("dept", "", "部门 ID (必填)")
+	contactDeptListChildrenCmd.Flags().String("id", "", "--dept 的别名")
+	_ = contactDeptListChildrenCmd.Flags().MarkHidden("id")
+	contactDeptListMembersCmd.Flags().String("depts", "", "部门 ID 列表 (必填)")
+	contactDeptListMembersCmd.Flags().String("ids", "", "--depts 的别名")
+	_ = contactDeptListMembersCmd.Flags().MarkHidden("ids")
 
-	// dept 系列命令统一接受 --id / --ids / --dept-id / --dept-ids 别名（集中注册避免逐命令重复写）。
-	// camelCase --deptId / --deptIds 由 RegisterCamelCaseAliases 自动派生，无需手写。
+	// dept 系列命令统一接受 --dept/--depts 及 --id / --ids / --dept-id /
+	// --dept-ids / --deptId / --deptIds 别名（集中注册避免逐命令重复写）。
 	type deptIDAliasSpec struct {
 		cmd     *cobra.Command
 		aliases []string
 	}
 	for _, s := range []deptIDAliasSpec{
-		{contactDeptGetInfoCmd, []string{"dept-id", "ids", "dept-ids"}},
-		{contactDeptListChildrenCmd, []string{"ids", "dept-id", "dept-ids"}},
-		{contactDeptListMembersCmd, []string{"id", "dept-id", "dept-ids"}},
+		{contactDeptGetInfoCmd, []string{"ids", "dept-id", "dept-ids", "deptId", "deptIds"}},
+		{contactDeptListChildrenCmd, []string{"ids", "dept-id", "dept-ids", "deptId", "deptIds"}},
+		{contactDeptListMembersCmd, []string{"id", "dept-id", "dept-ids", "deptId", "deptIds"}},
 	} {
 		for _, name := range s.aliases {
 			if s.cmd.Flags().Lookup(name) != nil {

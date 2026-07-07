@@ -30,9 +30,12 @@ func runSheetExport(cmd *cobra.Command, _ []string) error {
 	}
 
 	ctx := context.Background()
+	jsonOutput := deps.Caller.Format() == "json"
 
 	// Step 1: submit export job
-	deps.Out.PrintInfo("[1/3] 提交表格导出任务 (xlsx)...")
+	if !jsonOutput {
+		deps.Out.PrintInfo("[1/3] 提交表格导出任务 (xlsx)...")
+	}
 	submitText, err := callMCPToolReturnText(ctx, "submit_export_job", map[string]any{
 		"nodeId":       nodeID,
 		"exportFormat": "xlsx",
@@ -44,10 +47,14 @@ func runSheetExport(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	deps.Out.PrintInfo(fmt.Sprintf("导出任务已提交: jobId=%s", jobID))
+	if !jsonOutput {
+		deps.Out.PrintInfo(fmt.Sprintf("导出任务已提交: jobId=%s", jobID))
+	}
 
 	// Step 2: progressive backoff polling
-	deps.Out.PrintInfo("[2/3] 轮询任务状态（渐进式退避，最多 30 次约 5 分钟）...")
+	if !jsonOutput {
+		deps.Out.PrintInfo("[2/3] 轮询任务状态（渐进式退避，最多 30 次约 5 分钟）...")
+	}
 	downloadURL, err := pollSheetExportJob(ctx, jobID)
 	if err != nil {
 		return err
@@ -55,6 +62,16 @@ func runSheetExport(cmd *cobra.Command, _ []string) error {
 
 	// No output path: print the downloadUrl and exit
 	if outputPath == "" {
+		if jsonOutput {
+			return printFilteredPayload(map[string]any{
+				"status": "success",
+				"data": map[string]any{
+					"jobId":       jobID,
+					"downloadUrl": downloadURL,
+				},
+				"error": map[string]any{},
+			})
+		}
 		deps.Out.PrintKeyValue("jobId", jobID)
 		deps.Out.PrintKeyValue("downloadUrl", downloadURL)
 		deps.Out.PrintInfo("导出完成。downloadUrl 具有时效性，请尽快下载。")
@@ -71,9 +88,22 @@ func runSheetExport(cmd *cobra.Command, _ []string) error {
 		outputPath = filepath.Join(outputPath, filename)
 	}
 
-	deps.Out.PrintInfo(fmt.Sprintf("[3/3] 下载 xlsx 到 %s ...", outputPath))
+	if !jsonOutput {
+		deps.Out.PrintInfo(fmt.Sprintf("[3/3] 下载 xlsx 到 %s ...", outputPath))
+	}
 	if err := httpGetFile(ctx, downloadURL, map[string]string{}, outputPath); err != nil {
 		return fmt.Errorf("下载 xlsx 失败: %w", err)
+	}
+	if jsonOutput {
+		return printFilteredPayload(map[string]any{
+			"status": "success",
+			"data": map[string]any{
+				"jobId":       jobID,
+				"downloadUrl": downloadURL,
+				"output":      outputPath,
+			},
+			"error": map[string]any{},
+		})
 	}
 	deps.Out.PrintInfo(fmt.Sprintf("导出完成: %s", outputPath))
 	return nil
@@ -136,7 +166,9 @@ func pollSheetExportJob(ctx context.Context, jobID string) (string, error) {
 			"jobId": jobID,
 		})
 		if err != nil {
-			deps.Out.PrintInfo(fmt.Sprintf("  [%d/30] 查询失败，将继续轮询: %v", i+1, err))
+			if deps.Caller.Format() != "json" {
+				deps.Out.PrintInfo(fmt.Sprintf("  [%d/30] 查询失败，将继续轮询: %v", i+1, err))
+			}
 			continue
 		}
 
@@ -149,7 +181,9 @@ func pollSheetExportJob(ctx context.Context, jobID string) (string, error) {
 		normStatus := strings.ToUpper(strings.TrimSpace(status))
 		switch normStatus {
 		case "SUCCESS":
-			deps.Out.PrintInfo(fmt.Sprintf("  [%d/30] 状态: SUCCESS", i+1))
+			if deps.Caller.Format() != "json" {
+				deps.Out.PrintInfo(fmt.Sprintf("  [%d/30] 状态: SUCCESS", i+1))
+			}
 			if downloadURL == "" {
 				return "", fmt.Errorf("任务成功但未返回 downloadUrl")
 			}
@@ -160,9 +194,13 @@ func pollSheetExportJob(ctx context.Context, jobID string) (string, error) {
 			}
 			return "", fmt.Errorf("%s", message)
 		case "PROCESSING", "RUNNING", "DOING", "PENDING", "":
-			deps.Out.PrintInfo(fmt.Sprintf("  [%d/30] 状态: PROCESSING", i+1))
+			if deps.Caller.Format() != "json" {
+				deps.Out.PrintInfo(fmt.Sprintf("  [%d/30] 状态: PROCESSING", i+1))
+			}
 		default:
-			deps.Out.PrintInfo(fmt.Sprintf("  [%d/30] 状态: %s", i+1, status))
+			if deps.Caller.Format() != "json" {
+				deps.Out.PrintInfo(fmt.Sprintf("  [%d/30] 状态: %s", i+1, status))
+			}
 		}
 	}
 	return "", fmt.Errorf("导出任务超时：已轮询 30 次（约 5 分钟）仍未完成，请稍后再试")

@@ -56,8 +56,11 @@ func runSheetMediaUpload(cmd *cobra.Command, _ []string) error {
 	}
 
 	ctx := context.Background()
+	jsonOutput := deps.Caller.Format() == "json"
 
-	deps.Out.PrintInfo(fmt.Sprintf("[1/2] 获取附件上传凭证 (%s, %d bytes)...", fileName, fileSize))
+	if !jsonOutput {
+		deps.Out.PrintInfo(fmt.Sprintf("[1/2] 获取附件上传凭证 (%s, %d bytes)...", fileName, fileSize))
+	}
 
 	result, err := deps.Caller.CallTool(ctx, "doc", "get_doc_attachment_upload_info", map[string]any{
 		"nodeId":   nodeID,
@@ -91,10 +94,14 @@ func runSheetMediaUpload(cmd *cobra.Command, _ []string) error {
 		resourceURL, _ = credData["resourceUrl"].(string)
 	}
 
-	deps.Out.PrintKeyValue("resourceId", resourceID)
-	deps.Out.PrintKeyValue("resourceUrl", resourceURL)
+	if !jsonOutput {
+		deps.Out.PrintKeyValue("resourceId", resourceID)
+		deps.Out.PrintKeyValue("resourceUrl", resourceURL)
+	}
 
-	deps.Out.PrintInfo("[2/2] 上传文件到 OSS...")
+	if !jsonOutput {
+		deps.Out.PrintInfo("[2/2] 上传文件到 OSS...")
+	}
 
 	ossHeaders := map[string]string{
 		"Content-Type": mimeType,
@@ -103,6 +110,20 @@ func runSheetMediaUpload(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	if jsonOutput {
+		return printFilteredPayload(map[string]any{
+			"status": "success",
+			"data": map[string]any{
+				"nodeId":      nodeID,
+				"fileName":    fileName,
+				"fileSize":    fileSize,
+				"mimeType":    mimeType,
+				"resourceId":  resourceID,
+				"resourceUrl": resourceURL,
+			},
+			"error": map[string]any{},
+		})
+	}
 	deps.Out.PrintInfo(fmt.Sprintf("附件已上传: %s (resourceId=%s)", fileName, resourceID))
 	return nil
 }

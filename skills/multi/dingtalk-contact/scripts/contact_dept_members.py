@@ -67,7 +67,7 @@ def main():
     elif isinstance(dept_data, dict):
         inner = dept_data.get('result', dept_data)
         if isinstance(inner, dict):
-            depts = inner.get('items', inner.get('depts', []))
+            depts = inner.get('deptList', inner.get('items', inner.get('depts', [])))
         elif isinstance(inner, list):
             depts = inner
         else:
@@ -100,8 +100,9 @@ def main():
         elif isinstance(members_data, dict):
             inner = members_data.get('result', members_data)
             if isinstance(inner, dict):
-                members = inner.get('userlist',
-                                    inner.get('list', []))
+                members = inner.get('deptUserList',
+                                    inner.get('userlist',
+                                              inner.get('list', [])))
             elif isinstance(inner, list):
                 members = inner
             else:

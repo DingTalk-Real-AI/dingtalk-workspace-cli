@@ -26,7 +26,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-RESOURCE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
+RESOURCE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{6,128}$")
 ALLOWED_FORMATS = {"excel", "attachment", "excel_and_attachment", "excel_with_inline_images"}
 
 
@@ -80,6 +80,7 @@ def fail(msg: str, code: int = 1) -> None:
 
 
 def build_start_args(args: argparse.Namespace) -> list[str]:
+    timeout_ms = max(1, min(args.timeout_sec * 1000, 30000))
     cmd = [
         "aitable",
         "export",
@@ -88,10 +89,10 @@ def build_start_args(args: argparse.Namespace) -> list[str]:
         args.base_id,
         "--scope",
         args.scope,
-        "--export-format",
+        "--format",
         args.export_format,
-        "--timeout-sec",
-        str(args.timeout_sec),
+        "--timeout-ms",
+        str(timeout_ms),
     ]
     if args.table_id:
         cmd.extend(["--table-id", args.table_id])
@@ -152,8 +153,8 @@ def main() -> None:
                 args.base_id,
                 "--task-id",
                 task_id,
-                "--timeout-sec",
-                str(args.timeout_sec),
+                "--timeout-ms",
+                str(max(1, min(args.timeout_sec * 1000, 30000))),
             ],
             timeout_sec=max(120, args.timeout_sec + 60),
         )

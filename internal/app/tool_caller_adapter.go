@@ -54,6 +54,20 @@ func (a *toolCallerAdapter) DryRun() bool {
 	return a.flags != nil && a.flags.DryRun
 }
 
+func (a *toolCallerAdapter) Fields() string {
+	if a.flags != nil {
+		return a.flags.Fields
+	}
+	return ""
+}
+
+func (a *toolCallerAdapter) JQ() string {
+	if a.flags != nil {
+		return a.flags.JQ
+	}
+	return ""
+}
+
 func convertResult(r executor.Result) *edition.ToolResult {
 	resp := r.Response
 	if resp == nil {

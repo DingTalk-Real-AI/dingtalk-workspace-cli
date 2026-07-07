@@ -34,7 +34,11 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 			if v, _ := cmd.Flags().GetString("rule-id"); v != "" {
 				toolArgs["ruleId"] = v
 			}
-			return callMCPTool("get_cond_format", toolArgs)
+			text, err := callMCPToolReturnText(cmd.Context(), "get_cond_format", toolArgs)
+			if err != nil {
+				return err
+			}
+			return printSanitizedMCPText(text, "rules")
 		},
 	}
 	condFormatListCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
