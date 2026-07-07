@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -160,6 +161,40 @@ func TestDoctorCheckAuthReportsKeychainUnavailable(t *testing.T) {
 	}
 	if !strings.Contains(r.Hint, keychain.DisableKeychainEnv) {
 		t.Fatalf("hint should mention %s; result=%+v", keychain.DisableKeychainEnv, r)
+	}
+}
+
+func TestDoctorCheckAuthReportsDEKMissing(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", filepath.Join(t.TempDir(), "config"))
+
+	prev := edition.Get()
+	edition.Override(&edition.Hooks{
+		LoadToken: func(configDir string) ([]byte, error) {
+			return nil, fmt.Errorf("load from keychain: %w", keychain.ErrDEKMissing)
+		},
+	})
+	t.Cleanup(func() {
+		edition.Override(prev)
+	})
+
+	var buf bytes.Buffer
+	r := doctorCheckAuth(context.Background(), &buf, false)
+
+	if r.Name != "auth" {
+		t.Fatalf("name = %q, want auth", r.Name)
+	}
+	if r.Status != statusFail {
+		t.Fatalf("status = %q, want fail", r.Status)
+	}
+	if !strings.Contains(r.Message, "登录密钥") {
+		t.Fatalf("message should mention 登录密钥; result=%+v", r)
+	}
+	if !strings.Contains(r.Hint, "重新登录") {
+		t.Fatalf("hint should mention 重新登录; result=%+v", r)
+	}
+	detail, ok := r.Detail.(map[string]string)
+	if !ok || detail["reason"] != "dek_missing" {
+		t.Fatalf("detail = %#v, want reason=dek_missing", r.Detail)
 	}
 }
 

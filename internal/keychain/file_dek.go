@@ -63,3 +63,18 @@ func fileDEK(service string) ([]byte, error) {
 
 	return key, nil
 }
+
+func fileDEKReadOnly(service string) ([]byte, error) {
+	keyPath := filepath.Join(StorageDir(service), "dek")
+	key, err := os.ReadFile(keyPath)
+	if err == nil && len(key) == dekBytes {
+		return key, nil
+	}
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, ErrDEKMissing
+		}
+		return nil, fmt.Errorf("read dek: %w", err)
+	}
+	return nil, fmt.Errorf("read dek: %w", ErrDEKMissing)
+}

@@ -32,6 +32,10 @@ func getDEK(service string) ([]byte, error) {
 	return fileDEK(service)
 }
 
+func getDEKReadOnly(service string) ([]byte, error) {
+	return fileDEKReadOnly(service)
+}
+
 const (
 	dekBytes = 32 // DEK = Data Encryption Key (AES-256)
 	ivBytes  = 12
@@ -106,15 +110,15 @@ func decryptData(data []byte, key []byte) (string, error) {
 }
 
 func platformGet(service, account string) (string, error) {
-	key, err := getDEK(service)
-	if err != nil {
-		return "", err
-	}
 	data, err := os.ReadFile(filepath.Join(StorageDir(service), safeFileName(account)))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "", nil // Not found is not an error
 		}
+		return "", err
+	}
+	key, err := getDEKReadOnly(service)
+	if err != nil {
 		return "", err
 	}
 	plaintext, err := decryptData(data, key)

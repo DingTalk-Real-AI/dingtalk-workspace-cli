@@ -99,6 +99,23 @@ func TestKeychainNonExistentAccount(t *testing.T) {
 	}
 }
 
+func TestGetNonExistentAccountDoesNotCreateFileDEK(t *testing.T) {
+	service := "test-service-readonly-" + t.Name()
+	account := "nonexistent-account"
+	dekPath := filepath.Join(StorageDir(service), "dek")
+
+	got, err := Get(service, account)
+	if err != nil {
+		t.Fatalf("Get() error = %v, want nil", err)
+	}
+	if got != "" {
+		t.Fatalf("Get() = %q, want empty string", got)
+	}
+	if _, err := os.Stat(dekPath); !os.IsNotExist(err) {
+		t.Fatalf("Get() created DEK at %s; stat error = %v", dekPath, err)
+	}
+}
+
 func TestKeychainOverwrite(t *testing.T) {
 	t.Parallel()
 
