@@ -80,7 +80,7 @@ func newContactCommand() *cobra.Command {
 通讯录功能：
   - contact user get-self/search/search-mobile/get: 通讯录用户查询
   - contact dept search/get-info/list-children/list-members: 部门查询
-  - contact label list/get/list-members: 角色查询
+  - contact label list/get/list-members: 角色查询（已下线，保留兼容提示）
   - contact relation list-my-followings: 特别关注人查询
 
 基础人事功能（HR 花名册）：
@@ -200,54 +200,32 @@ func newContactCommand() *cobra.Command {
 
 	contactLabelCmd := &cobra.Command{
 		Use:   "label",
-		Short: "角色查询",
-		Long: `角色查询：获取企业所有角色列表、根据角色名称查询角色ID、根据角色ID查询角色下的成员。
+		Short: "角色查询（已下线）",
+		Long: `角色查询后端工具已下线，保留该命令仅用于兼容旧指令。
 
-【何时用哪个命令】
-  - 获取企业所有角色列表           → contact label list
-  - 根据角色名称查询角色ID       → contact label get
-  - 根据角色ID查询角色下的成员   → contact label list-members
-
-【典型场景：查询某类角色的人员（如主管、管理员、财务等）】
-  1. contact label list          → 获取企业全部角色列表
-  2. 从返回结果中匹配目标角色名称及 labelId
-  3. contact label list-members --id <labelId>  → 获取该角色下的成员`,
+请改用 aisearch person 按职责维度找人，例如：
+  dws aisearch person --keyword "管理员" --dimension duty`,
 		RunE: groupRunE,
+	}
+	contactLabelUnavailable := func(cmd *cobra.Command, args []string) error {
+		return fmt.Errorf("contact label 角色查询能力当前不可用：后端工具已下线\n  hint: 请改用 dws aisearch person --keyword <角色或职责> --dimension duty")
 	}
 
 	contactLabelGetCmd := &cobra.Command{
-		Use:     "get",
-		Short:   "根据角色名称查询角色",
-		Long:    `根据角色名称精确匹配查询角色信息（角色ID、名称等）。支持同时查询多个角色名称，逗号分隔。无需分页。
-
-注意：精确匹配可能无结果（如用户输入"管理员"但企业只有"主管理员"和"子管理员"），
-此时应降级使用 label list 获取全部角色列表，从中模糊匹配包含关键词的角色。`,
+		Use:   "get",
+		Short: "根据角色名称查询角色（已下线）",
+		Long:  `contact label 后端工具已下线。请改用 aisearch person --dimension duty 按职责维度找人。`,
 		Example: `  dws contact label get --names "管理员"
   dws contact label get --names "管理员,财务"`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlagWithAliases(cmd, "names", "name", "query", "keyword"); err != nil {
-				return err
-			}
-			raw := flagOrFallback(cmd, "names", "name", "query", "keyword")
-			return callMCPTool("search_label_by_name", map[string]any{
-				"labelNames": parseCSVValues(raw),
-			})
-		},
+		RunE: contactLabelUnavailable,
 	}
 
 	contactLabelListMembersCmd := &cobra.Command{
 		Use:     "list-members",
-		Short:   "查询角色下的成员",
-		Long:    `根据角色ID查询该角色下的成员列表。`,
+		Short:   "查询角色下的成员（已下线）",
+		Long:    `contact label 后端工具已下线。请改用 aisearch person --dimension duty 按职责维度找人。`,
 		Example: `  dws contact label list-members --id 12345  # 查询 labelId: dws contact label get --names "角色名"`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlagWithAliases(cmd, "id", "label-id", "role-id"); err != nil {
-				return err
-			}
-			return callMCPTool("get_label_members_by_labelId", map[string]any{
-				"labelId": flagOrFallback(cmd, "id", "label-id", "role-id"),
-			})
-		},
+		RunE:    contactLabelUnavailable,
 	}
 
 	contactLabelGetCmd.Flags().String("names", "", "角色名称，逗号分隔 (必填)")
@@ -265,19 +243,11 @@ func newContactCommand() *cobra.Command {
 	_ = contactLabelListMembersCmd.Flags().MarkHidden("role-id")
 
 	contactLabelListAllCmd := &cobra.Command{
-		Use:   "list",
-		Short: "获取企业所有角色列表",
-		Long: `获取当前企业的所有角色（标签）列表，返回角色ID、角色名称等信息。无需参数。
-
-用于不知道准确角色名称时，先列出全部角色，再根据需要选择目标角色查询成员。
-
-【典型场景】
-  - 用户说"企业所有主管/查所有管理员/财务人员有哪些"
-    → 先 label list 浏览全部角色，匹配目标角色后 label list-members 获取成员`,
+		Use:     "list",
+		Short:   "获取企业所有角色列表（已下线）",
+		Long:    `contact label 后端工具已下线。请改用 aisearch person --dimension duty 按职责维度找人。`,
 		Example: `  dws contact label list`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return callMCPTool("get_org_labels", map[string]any{})
-		},
+		RunE:    contactLabelUnavailable,
 	}
 
 	contactLabelCmd.AddCommand(contactLabelListAllCmd, contactLabelGetCmd, contactLabelListMembersCmd)
@@ -590,12 +560,12 @@ contact user profile fields 获取可用字段列表。
 		return c
 	}
 
-	root.AddCommand(contactHintSubCmd("search", "use: dws contact user search\n  also available: dws contact dept search / dws contact label get"))
+	root.AddCommand(contactHintSubCmd("search", "use: dws contact user search\n  also available: dws contact dept search / dws aisearch person --dimension duty"))
 
 	// hint: dws contact find/list/get → 指向正确子命令
-	root.AddCommand(contactHintSubCmd("find", "use: dws contact user search --query <关键词>  or  dws contact dept search --query <关键词>  or  dws contact label get --names <角色名>"))
-	root.AddCommand(contactHintSubCmd("list", "use: dws contact dept list-members --depts <部门ID>  or  dws contact user get --ids <用户ID>  or  dws contact label list"))
-	root.AddCommand(contactHintSubCmd("get", "use: dws contact user get --ids <用户ID>  or  dws contact dept get-info --dept <部门ID>  or  dws contact label get --names <角色名>"))
+	root.AddCommand(contactHintSubCmd("find", "use: dws contact user search --query <关键词>  or  dws contact dept search --query <关键词>  or  dws aisearch person --keyword <角色或职责> --dimension duty"))
+	root.AddCommand(contactHintSubCmd("list", "use: dws contact dept list-members --depts <部门ID>  or  dws contact user get --ids <用户ID>"))
+	root.AddCommand(contactHintSubCmd("get", "use: dws contact user get --ids <用户ID>  or  dws contact dept get-info --dept <部门ID>"))
 
 	// hint: dws contact self/me/whoami → user get-self（当前用户语义）
 	root.AddCommand(contactHintSubCmd("self", "use: dws contact user get-self"))
@@ -607,7 +577,7 @@ contact user profile fields 获取可用字段列表。
 	root.AddCommand(contactHintSubCmd("user-self", "use: dws contact user get-self"))
 	root.AddCommand(contactHintSubCmd("current-user", "use: dws contact user get-self"))
 	root.AddCommand(contactHintSubCmd("department", "use: dws contact dept [search|list-members|list-children|get-info]"))
-	root.AddCommand(contactHintSubCmd("role", "use: dws contact label [list|get|list-members]"))
+	root.AddCommand(contactHintSubCmd("role", "contact label 已下线; use: dws aisearch person --keyword <角色或职责> --dimension duty"))
 
 	// hint: dws contact user find/list/info/detail → 指向 user search / user get
 	userCmd.AddCommand(contactHintSubCmd("find", "use: dws contact user search --query <关键词>"))
@@ -623,13 +593,13 @@ contact user profile fields 获取可用字段列表。
 	contactDeptCmd.AddCommand(contactHintSubCmd("info", "use: dws contact dept get-info --dept <部门ID>"))
 	contactDeptCmd.AddCommand(contactHintSubCmd("detail", "use: dws contact dept get-info --dept <部门ID>"))
 
-	// hint: dws contact label find/search/info/detail → 指向 label get / label list / label list-members
+	// hint: dws contact label find/search/info/detail → 指向 aisearch 替代路径。
 	// 注：list 已是真命令（label list），不再注册 hintSubCmd（会与真命令冲突）。
-	contactLabelCmd.AddCommand(contactHintSubCmd("find", "use: dws contact label get --names <角色名>  or  dws contact label list"))
-	contactLabelCmd.AddCommand(contactHintSubCmd("search", "use: dws contact label get --names <角色名>  or  dws contact label list"))
-	contactLabelCmd.AddCommand(contactHintSubCmd("info", "use: dws contact label get --names <角色名>"))
-	contactLabelCmd.AddCommand(contactHintSubCmd("detail", "use: dws contact label list-members --id <角色ID>"))
-	contactLabelCmd.AddCommand(contactHintSubCmd("list-all", "use: dws contact label list"))
+	contactLabelCmd.AddCommand(contactHintSubCmd("find", "contact label 已下线; use: dws aisearch person --keyword <角色或职责> --dimension duty"))
+	contactLabelCmd.AddCommand(contactHintSubCmd("search", "contact label 已下线; use: dws aisearch person --keyword <角色或职责> --dimension duty"))
+	contactLabelCmd.AddCommand(contactHintSubCmd("info", "contact label 已下线; use: dws aisearch person --keyword <角色或职责> --dimension duty"))
+	contactLabelCmd.AddCommand(contactHintSubCmd("detail", "contact label 已下线; use: dws aisearch person --keyword <角色或职责> --dimension duty"))
+	contactLabelCmd.AddCommand(contactHintSubCmd("list-all", "contact label 已下线; use: dws aisearch person --keyword <角色或职责> --dimension duty"))
 
 	// contact 子树统一错误兜底：任何 flag 解析失败均在尾部追加 "See '<CommandPath> --help' for usage."
 	// 与 docker / kubectl / gh 的 UX 一致。unknown subcommand 由 cobra 自带 Did-You-Mean 处理。
