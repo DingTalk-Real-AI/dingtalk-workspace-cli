@@ -1919,14 +1919,6 @@ func devAppYes(cmd *cobra.Command) bool {
 	return false
 }
 
-func devAppCloneParams(src map[string]any) map[string]any {
-	out := make(map[string]any, len(src)+1)
-	for k, v := range src {
-		out[k] = v
-	}
-	return out
-}
-
 func devAppPermissionScopes(cmd *cobra.Command) []string {
 	values := parseDevAppListFlag(cmd, "scope-values")
 	out := make([]string, 0, len(values))

@@ -8,7 +8,7 @@
 # --help` but fail at invocation ("tool not found"). This is the discovery-side
 # (Plan A) complement to the runtime guard in internal/compat/dynamic_commands.go.
 #
-# TRUTH SOURCE: the live tools/list snapshots written by `dws cache refresh`
+# TRUTH SOURCE: archived live tools/list snapshots from the legacy discovery CLI.
 # into <cache-dir>/<partition>/tools/*.json, mapped to servers via
 # <cache-dir>/<partition>/market/servers.json (cli.id slug -> server key).
 #
@@ -23,7 +23,7 @@
 # Exit code: 1 if any UN-acknowledged phantom override is found, else 0.
 #
 # Usage:
-#   dws cache refresh
+#   use a cache directory captured by a pre-static-discovery CLI build
 #   python3 scripts/dev/check-phantom-overrides.py
 #   python3 scripts/dev/check-phantom-overrides.py --envelope envelope/discovery.pre.json
 
@@ -51,7 +51,9 @@ def load_real_tools(cache_dir, partition):
 
     servers_path = os.path.join(base, "market", "servers.json")
     if not os.path.exists(servers_path):
-        sys.exit(f"error: {servers_path} not found — run `dws cache refresh` first")
+        sys.exit(
+            f"error: {servers_path} not found — provide --cache-dir from an archived/pre-static-discovery run"
+        )
     servers = json.load(open(servers_path)).get("servers", [])
 
     name2tools, slug2tools = {}, {}
@@ -82,7 +84,9 @@ def main():
 
     name2tools, slug2tools, real_by_key = load_real_tools(args.cache_dir, args.partition)
     if not real_by_key:
-        sys.exit("error: no tools snapshots in cache — run `dws cache refresh` first")
+        sys.exit(
+            "error: no tools snapshots in cache — provide --cache-dir from an archived/pre-static-discovery run"
+        )
 
     env = json.load(open(args.envelope))
     phantom, acknowledged = [], []

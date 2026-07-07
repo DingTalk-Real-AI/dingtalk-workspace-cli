@@ -1,6 +1,6 @@
 module github.com/DingTalk-Real-AI/dingtalk-workspace-cli
 
-go 1.25.8
+go 1.25.9
 
 require (
 	github.com/RealAlexandreAI/json-repair v0.0.15

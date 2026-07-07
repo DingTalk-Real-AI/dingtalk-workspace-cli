@@ -40,6 +40,7 @@ type codexAppServerForwarder struct {
 	timeout  time.Duration
 	workDir  string
 	model    string
+	yolo     bool
 	sessions *codexThreadSessions
 }
 
@@ -57,6 +58,7 @@ func newCodexAppServerForwarder(bin string, env []string, timeout time.Duration,
 		timeout:  timeout,
 		workDir:  opts.WorkDir,
 		model:    opts.Model,
+		yolo:     opts.Yolo,
 		sessions: sessions,
 	}
 }
@@ -167,11 +169,15 @@ func (f *codexAppServerForwarder) cwd() string {
 }
 
 func (f *codexAppServerForwarder) threadParams(threadID string) map[string]any {
+	sandbox := "read-only"
+	if f.yolo {
+		sandbox = "workspace-write"
+	}
 	params := map[string]any{
 		"approvalPolicy":        "never",
 		"cwd":                   f.cwd(),
 		"developerInstructions": codexRobotDeveloperInstructions,
-		"sandbox":               "read-only",
+		"sandbox":               sandbox,
 	}
 	if f.model != "" {
 		params["model"] = f.model

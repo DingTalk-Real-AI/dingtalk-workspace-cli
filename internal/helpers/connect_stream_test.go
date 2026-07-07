@@ -81,6 +81,8 @@ func TestBrandReply(t *testing.T) {
 func TestClaudeUserSettingsEnv(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	unsetEnvForTest(t, "ANTHROPIC_BASE_URL")
+	unsetEnvForTest(t, "ANTHROPIC_AUTH_TOKEN")
 
 	// No settings file → no injection.
 	if got := claudeUserSettingsEnv(); len(got) != 0 {
@@ -122,6 +124,21 @@ func TestClaudeUserSettingsEnv(t *testing.T) {
 			t.Fatalf("missing %q in %v", kv, got)
 		}
 	}
+}
+
+func unsetEnvForTest(t *testing.T, key string) {
+	t.Helper()
+	old, hadOld := os.LookupEnv(key)
+	if err := os.Unsetenv(key); err != nil {
+		t.Fatalf("unset %s: %v", key, err)
+	}
+	t.Cleanup(func() {
+		if hadOld {
+			_ = os.Setenv(key, old)
+			return
+		}
+		_ = os.Unsetenv(key)
+	})
 }
 
 // TestCheckFDLimit verifies that checkFDLimit runs without panic and respects

@@ -116,6 +116,117 @@ func TestFetchAllReleases(t *testing.T) {
 	}
 }
 
+func TestFetchReleaseVersions_ByTrack(t *testing.T) {
+	releases := []GitHubRelease{
+		{TagName: "delivery/remove-discovery-yolo-latest", PublishedAt: "2026-04-04T09:00:00Z", Draft: false, Prerelease: true},
+		{TagName: "v1.0.7-beta.2", PublishedAt: "2026-04-03T09:00:00Z", Draft: false, Prerelease: true},
+		{TagName: "feat/remove-discovery-v1", PublishedAt: "2026-04-02T09:00:00Z", Draft: false, Prerelease: false},
+		{TagName: "v1.0.6", PublishedAt: "2026-04-01T09:00:00Z", Draft: false, Prerelease: false},
+		{TagName: "v1.0.7-beta.1", PublishedAt: "2026-03-28T09:00:00Z", Draft: false, Prerelease: true},
+		{TagName: "v1.0.5", PublishedAt: "2026-03-25T09:00:00Z", Draft: false, Prerelease: false},
+		{TagName: "v1.0.8-beta-draft", PublishedAt: "2026-04-04T09:00:00Z", Draft: true, Prerelease: true},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(releases)
+	}))
+	defer server.Close()
+
+	client := NewClientWithBaseURL(server.URL)
+
+	stable, err := client.FetchReleaseVersions(ReleaseTrackRelease)
+	if err != nil {
+		t.Fatalf("FetchReleaseVersions(release) error = %v", err)
+	}
+	if len(stable) != 2 || stable[0].Version != "1.0.6" || stable[1].Version != "1.0.5" {
+		t.Fatalf("stable versions = %#v, want 1.0.6 and 1.0.5", stable)
+	}
+
+	beta, err := client.FetchReleaseVersions(ReleaseTrackBeta)
+	if err != nil {
+		t.Fatalf("FetchReleaseVersions(beta) error = %v", err)
+	}
+	if len(beta) != 2 || beta[0].Version != "1.0.7-beta.2" || beta[1].Version != "1.0.7-beta.1" {
+		t.Fatalf("beta versions = %#v, want beta.2 and beta.1", beta)
+	}
+}
+
+func TestFetchLatestStableRelease(t *testing.T) {
+	releases := []GitHubRelease{
+		{TagName: "feat/remove-discovery-v1", PublishedAt: "2026-04-02T09:00:00Z", Draft: false, Prerelease: false},
+		{TagName: "v1.0.7-beta.1", PublishedAt: "2026-04-01T09:00:00Z", Draft: false, Prerelease: true},
+		{TagName: "v1.0.6", PublishedAt: "2026-03-30T09:00:00Z", Draft: false, Prerelease: false},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		expected := "/repos/DingTalk-Real-AI/dingtalk-workspace-cli/releases"
+		if r.URL.Path != expected {
+			t.Errorf("path = %q, want %q", r.URL.Path, expected)
+		}
+		json.NewEncoder(w).Encode(releases)
+	}))
+	defer server.Close()
+
+	client := NewClientWithBaseURL(server.URL)
+	info, err := client.FetchLatestStableRelease()
+	if err != nil {
+		t.Fatalf("FetchLatestStableRelease() error = %v", err)
+	}
+	if info.Version != "1.0.6" {
+		t.Errorf("Version = %q, want 1.0.6", info.Version)
+	}
+	if info.Prerelease {
+		t.Error("Prerelease = true, want false")
+	}
+}
+
+func TestFetchLatestPrerelease(t *testing.T) {
+	releases := []GitHubRelease{
+		{TagName: "delivery/remove-discovery-yolo-latest", PublishedAt: "2026-04-02T09:00:00Z", Draft: false, Prerelease: true},
+		{TagName: "v1.0.6", PublishedAt: "2026-04-01T09:00:00Z", Draft: false, Prerelease: false},
+		{TagName: "v1.0.7-beta.2", PublishedAt: "2026-03-30T09:00:00Z", Draft: false, Prerelease: true},
+		{TagName: "v1.0.7-beta.1", PublishedAt: "2026-03-28T09:00:00Z", Draft: false, Prerelease: true},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		expected := "/repos/DingTalk-Real-AI/dingtalk-workspace-cli/releases"
+		if r.URL.Path != expected {
+			t.Errorf("path = %q, want %q", r.URL.Path, expected)
+		}
+		json.NewEncoder(w).Encode(releases)
+	}))
+	defer server.Close()
+
+	client := NewClientWithBaseURL(server.URL)
+	info, err := client.FetchLatestPrerelease()
+	if err != nil {
+		t.Fatalf("FetchLatestPrerelease() error = %v", err)
+	}
+	if info.Version != "1.0.7-beta.2" {
+		t.Errorf("Version = %q, want 1.0.7-beta.2", info.Version)
+	}
+	if !info.Prerelease {
+		t.Error("Prerelease = false, want true")
+	}
+}
+
+func TestFetchLatestPrerelease_NotFound(t *testing.T) {
+	releases := []GitHubRelease{
+		{TagName: "v1.0.6", Draft: false, Prerelease: false},
+		{TagName: "v1.0.7-beta.1", Draft: true, Prerelease: true},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(releases)
+	}))
+	defer server.Close()
+
+	client := NewClientWithBaseURL(server.URL)
+	if _, err := client.FetchLatestPrerelease(); err == nil {
+		t.Fatal("FetchLatestPrerelease() error = nil, want not found")
+	}
+}
+
 func TestFindBinaryAsset(t *testing.T) {
 	assets := []GitHubAsset{
 		{Name: "checksums.txt", Size: 534},
@@ -431,6 +542,76 @@ func TestGithubToken(t *testing.T) {
 	t.Setenv("GH_TOKEN", "gh-alt-456")
 	if got := githubToken(); got != "gh-alt-456" {
 		t.Errorf("expected gh-alt-456, got %q", got)
+	}
+}
+
+func TestRepositoryFromEnv(t *testing.T) {
+	t.Setenv("DWS_UPGRADE_REPOSITORY", "")
+	owner, repo, err := repositoryFromEnv()
+	if err != nil {
+		t.Fatalf("repositoryFromEnv default error = %v", err)
+	}
+	if owner != defaultOwner || repo != defaultRepo {
+		t.Fatalf("repositoryFromEnv default = %s/%s, want %s/%s", owner, repo, defaultOwner, defaultRepo)
+	}
+
+	t.Setenv("DWS_UPGRADE_REPOSITORY", "PeterGuy326/dingtalk-workspace-cli")
+	owner, repo, err = repositoryFromEnv()
+	if err != nil {
+		t.Fatalf("repositoryFromEnv owner/repo error = %v", err)
+	}
+	if owner != "PeterGuy326" || repo != "dingtalk-workspace-cli" {
+		t.Fatalf("repositoryFromEnv owner/repo = %s/%s", owner, repo)
+	}
+
+	t.Setenv("DWS_UPGRADE_REPOSITORY", "https://github.com/PeterGuy326/dingtalk-workspace-cli.git")
+	owner, repo, err = repositoryFromEnv()
+	if err != nil {
+		t.Fatalf("repositoryFromEnv URL error = %v", err)
+	}
+	if owner != "PeterGuy326" || repo != "dingtalk-workspace-cli" {
+		t.Fatalf("repositoryFromEnv URL = %s/%s", owner, repo)
+	}
+}
+
+func TestRepositoryFromEnv_Invalid(t *testing.T) {
+	t.Setenv("DWS_UPGRADE_REPOSITORY", "not-a-repository")
+	client := NewClient()
+	if _, err := client.FetchLatestRelease(); err == nil {
+		t.Fatal("FetchLatestRelease with invalid DWS_UPGRADE_REPOSITORY error = nil")
+	}
+}
+
+func TestIsVersionLikeTag(t *testing.T) {
+	tests := []struct {
+		tag  string
+		want bool
+	}{
+		{"v1.0.7", true},
+		{"1.0.7", true},
+		{"v1.0.7-beta.1", true},
+		{"v1.0.50-yolo-preview", true},
+		{"delivery/remove-discovery-yolo-latest", false},
+		{"feat/remove-discovery-v1", false},
+		{"v1.0", false},
+	}
+	for _, tt := range tests {
+		if got := isVersionLikeTag(tt.tag); got != tt.want {
+			t.Errorf("isVersionLikeTag(%q) = %v, want %v", tt.tag, got, tt.want)
+		}
+	}
+
+	if !isStableVersionTag("v1.0.7") {
+		t.Error("isStableVersionTag(v1.0.7) = false, want true")
+	}
+	if isStableVersionTag("v1.0.7-beta.1") {
+		t.Error("isStableVersionTag(v1.0.7-beta.1) = true, want false")
+	}
+	if !isPrereleaseVersionTag("v1.0.7-beta.1") {
+		t.Error("isPrereleaseVersionTag(v1.0.7-beta.1) = false, want true")
+	}
+	if isPrereleaseVersionTag("v1.0.7") {
+		t.Error("isPrereleaseVersionTag(v1.0.7) = true, want false")
 	}
 }
 

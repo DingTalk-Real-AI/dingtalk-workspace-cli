@@ -21,17 +21,6 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
-// serverDiagFields maps the various JSON field names the server may use
-// for diagnostic information. Both snake_case and camelCase are supported.
-type serverDiagFields struct {
-	TraceID         string `json:"trace_id"`
-	TraceIDCamel    string `json:"traceId"`
-	Code            string `json:"code"`
-	ErrorCode       string `json:"errorCode"`
-	TechnicalDetail string `json:"technical_detail"`
-	Retryable       *bool  `json:"retryable"`
-}
-
 // ExtractServerDiagnostics parses server diagnostic fields from a JSON
 // payload (typically from RPCError.Data). Returns an empty struct if
 // the payload is empty or unparseable.

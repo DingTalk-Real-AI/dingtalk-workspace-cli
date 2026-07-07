@@ -58,6 +58,7 @@ type opencodeForwarder struct {
 	timeout  time.Duration
 	workDir  string
 	model    string
+	yolo     bool
 	sessions *opencodeSessions // convID→opencode sessionID, persisted; nil = stateless
 	server   *opencodeServer
 }
@@ -73,9 +74,10 @@ func newOpencodeForwarder(bin string, env []string, timeout time.Duration, opts 
 		timeout:  timeout,
 		workDir:  opts.WorkDir,
 		model:    opts.Model,
+		yolo:     opts.Yolo,
 		sessions: sessions,
 	}
-	f.server = newOpencodeServer(bin, env, f.cwd())
+	f.server = newOpencodeServer(bin, env, f.cwd(), opts.Yolo)
 	return f
 }
 
@@ -191,6 +193,7 @@ type opencodeServer struct {
 	bin        string
 	env        []string
 	workDir    string
+	yolo       bool
 	mu         sync.Mutex
 	baseURL    string
 	password   string
@@ -199,11 +202,12 @@ type opencodeServer struct {
 	httpClient *http.Client
 }
 
-func newOpencodeServer(bin string, env []string, workDir string) *opencodeServer {
+func newOpencodeServer(bin string, env []string, workDir string, yolo bool) *opencodeServer {
 	return &opencodeServer{
 		bin:     bin,
 		env:     env,
 		workDir: workDir,
+		yolo:    yolo,
 		// No client-level Timeout: a turn can legitimately run for minutes.
 		// f.timeout (from --agent-timeout / DWS_AGENT_TIMEOUT_MS, default 0 =
 		// no limit) governs via the per-request ctx when set.
@@ -241,6 +245,9 @@ func (s *opencodeServer) ensure(ctx context.Context) (*opencodeHTTPClient, error
 		"OPENCODE_SERVER_USERNAME="+opencodeServerUsername,
 		"OPENCODE_SERVER_PASSWORD="+password,
 	)
+	if !s.yolo {
+		cmd.Env = append(cmd.Env, `OPENCODE_PERMISSION={"bash":"ask","edit":"ask","write":"ask"}`)
+	}
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {

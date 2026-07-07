@@ -935,7 +935,7 @@ func jsonrpcEnvelopeError(method string, rpcErr *RPCError, snapshotPath, headerT
 	if method == "tools/call" {
 		if rpcErr.Code == -32600 || rpcErr.Code == -32601 {
 			opts = append(opts,
-				apperrors.WithHint(i18n.T("工具协议不兼容；请检查服务版本、工具名或刷新发现缓存。")),
+				apperrors.WithHint(i18n.T("工具协议不兼容；请检查服务版本、工具名或升级到包含最新静态端点的 dws 版本。")),
 				apperrors.WithActions(discoveryActions(snapshotPath)...),
 			)
 			return apperrors.NewDiscovery(message, opts...)
@@ -948,7 +948,7 @@ func jsonrpcEnvelopeError(method string, rpcErr *RPCError, snapshotPath, headerT
 	}
 
 	opts = append(opts,
-		apperrors.WithHint(i18n.T("服务发现/协商失败；请检查网络、服务版本或执行缓存刷新。")),
+		apperrors.WithHint(i18n.T("静态端点/协商失败；请检查网络、服务版本或升级到包含最新静态端点的 dws 版本。")),
 		apperrors.WithActions(discoveryActions(snapshotPath)...),
 	)
 	return apperrors.NewDiscovery(message, opts...)
@@ -1072,7 +1072,8 @@ func validateCallArguments(args map[string]any) error {
 
 func discoveryActions(snapshotPath string) []string {
 	actions := []string{
-		"dws cache refresh",
+		i18n.T("检查 internal/syncdata 静态端点生成物是否包含目标 server"),
+		i18n.T("运行 sync-oss 重新生成静态端点与路由后重试"),
 		i18n.T("检查服务连通性和协议版本后重试"),
 	}
 	if snapshotPath != "" {

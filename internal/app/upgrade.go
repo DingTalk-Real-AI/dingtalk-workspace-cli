@@ -42,6 +42,7 @@ func newUpgradeCommand() *cobra.Command {
 		flagForce      bool
 		flagSkipSkills bool
 		flagAll        bool
+		flagBeta       bool
 	)
 
 	cmd := &cobra.Command{
@@ -54,8 +55,10 @@ func newUpgradeCommand() *cobra.Command {
 		Example: `  dws upgrade                    # 交互式升级到最新版本
   dws upgrade --check            # 仅检查是否有新版本
   dws upgrade --list             # 列出最近版本
-  dws upgrade --list --all       # 列出所有版本
-  dws upgrade --version v1.0.5   # 升级到指定版本
+  dws upgrade --list --all       # 列出所选轨道的全部版本
+  dws upgrade --beta             # 升级到最新 beta 预发布版本
+  dws upgrade --version v1.0.7   # 升级到指定正式版本
+  dws upgrade --version v1.0.8-beta.1  # 升级到指定 beta 版本
   dws upgrade --rollback         # 回滚到上一版本
   dws upgrade --dry-run          # 仅预览升级步骤，不实际执行
   dws upgrade -y                 # 跳过确认直接升级`,
@@ -72,19 +75,23 @@ func newUpgradeCommand() *cobra.Command {
 			yes, _ := cmd.Flags().GetBool("yes")
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
 			format := resolveUpgradeFormat(cmd)
+			track := upgradeTrack(flagBeta)
+			if flagBeta && flagVersion != "" {
+				return fmt.Errorf("--beta 与 --version 不能同时使用；安装指定 beta 版本请直接使用 --version vX.Y.Z-beta.N")
+			}
 
 			if flagList {
 				limit := defaultListLimit
 				if flagAll {
 					limit = 0
 				}
-				return runUpgradeList(cmd, format, limit)
+				return runUpgradeList(cmd, format, limit, track)
 			}
 			if flagRollback {
 				return runUpgradeRollback(yes)
 			}
 			if flagCheck {
-				return runUpgradeCheck(cmd, format)
+				return runUpgradeCheck(cmd, format, track)
 			}
 			return runUpgrade(cmd.Context(), upgradeOptions{
 				targetVersion: flagVersion,
@@ -92,14 +99,16 @@ func newUpgradeCommand() *cobra.Command {
 				skipSkills:    flagSkipSkills,
 				yes:           yes,
 				dryRun:        dryRun,
+				track:         track,
 			})
 		},
 	}
 
 	cmd.Flags().BoolVar(&flagCheck, "check", false, "仅检查是否有新版本")
-	cmd.Flags().BoolVar(&flagList, "list", false, "列出可用版本")
-	cmd.Flags().BoolVar(&flagAll, "all", false, "与 --list 搭配，显示所有版本")
+	cmd.Flags().BoolVar(&flagList, "list", false, "列出正式 release 版本（配合 --beta 查看 beta）")
+	cmd.Flags().BoolVar(&flagAll, "all", false, "与 --list 搭配，显示所选轨道的全部版本")
 	cmd.Flags().StringVar(&flagVersion, "version", "", "升级到指定版本")
+	cmd.Flags().BoolVar(&flagBeta, "beta", false, "使用最新 beta 预发布版本（默认使用正式 release）")
 	cmd.Flags().BoolVar(&flagRollback, "rollback", false, "回滚到上一版本")
 	cmd.Flags().BoolVar(&flagForce, "force", false, "强制重新安装当前版本")
 	cmd.Flags().BoolVar(&flagSkipSkills, "skip-skills", false, "跳过技能包更新")
@@ -113,18 +122,19 @@ type upgradeOptions struct {
 	skipSkills    bool
 	yes           bool
 	dryRun        bool
+	track         upgrade.ReleaseTrack
 }
 
 // --- dws upgrade --check ---
 
-func runUpgradeCheck(cmd *cobra.Command, format string) error {
+func runUpgradeCheck(cmd *cobra.Command, format string, track upgrade.ReleaseTrack) error {
 	client := upgrade.NewClient()
 
 	if format != "json" {
-		fmt.Printf("  %s\n", ugDim("检查更新..."))
+		fmt.Printf("  %s\n", ugDim(fmt.Sprintf("检查更新%s...", upgradeTrackSuffix(track))))
 	}
 
-	latest, err := client.FetchLatestRelease()
+	latest, err := client.FetchLatestReleaseForTrack(track)
 	if err != nil {
 		return fmt.Errorf("检查更新失败: %w", err)
 	}
@@ -137,6 +147,7 @@ func runUpgradeCheck(cmd *cobra.Command, format string) error {
 			"current_version": ensureV(currentVer),
 			"latest_version":  "v" + latest.Version,
 			"needs_upgrade":   needsUpgrade,
+			"track":           string(track),
 			"release_date":    latest.Date,
 			"prerelease":      latest.Prerelease,
 			"changelog":       parseChangelogEntries(latest.Changelog, 10),
@@ -155,7 +166,7 @@ func runUpgradeCheck(cmd *cobra.Command, format string) error {
 		fmt.Printf("  %s  %s\n", ugBold("发布日期:  "), latest.Date)
 	}
 	if latest.Prerelease {
-		fmt.Printf("  %s  %s\n", ugBold("通道:      "), ugYellow("pre-release"))
+		fmt.Printf("  %s  %s\n", ugBold("轨道:      "), ugYellow("beta / pre-release"))
 	}
 	if entries := parseChangelogEntries(latest.Changelog, 5); len(entries) > 0 {
 		fmt.Printf("  %s\n", ugBold("更新内容:"))
@@ -164,7 +175,7 @@ func runUpgradeCheck(cmd *cobra.Command, format string) error {
 		}
 	}
 	fmt.Println()
-	fmt.Printf("  %s\n", ugDim("运行 dws upgrade 进行升级"))
+	fmt.Printf("  %s\n", ugDim(upgradeHintForTrack(track)))
 	return nil
 }
 
@@ -172,14 +183,14 @@ func runUpgradeCheck(cmd *cobra.Command, format string) error {
 
 // runUpgradeList displays available versions. When limit > 0, only the most
 // recent `limit` versions are shown; pass 0 to show all (--all flag).
-func runUpgradeList(cmd *cobra.Command, format string, limit int) error {
+func runUpgradeList(cmd *cobra.Command, format string, limit int, track upgrade.ReleaseTrack) error {
 	client := upgrade.NewClient()
 
 	if format != "json" {
-		fmt.Printf("  %s\n", ugDim("获取版本列表..."))
+		fmt.Printf("  %s\n", ugDim(fmt.Sprintf("获取版本列表%s...", upgradeTrackSuffix(track))))
 	}
 
-	versions, err := client.FetchAllReleases()
+	versions, err := client.FetchReleaseVersions(track)
 	if err != nil {
 		return fmt.Errorf("获取版本列表失败: %w", err)
 	}
@@ -194,7 +205,7 @@ func runUpgradeList(cmd *cobra.Command, format string, limit int) error {
 	currentVer := strings.TrimPrefix(version, "v")
 
 	if format == "json" {
-		var items []map[string]any
+		items := make([]map[string]any, 0, len(versions))
 		for _, v := range versions {
 			items = append(items, map[string]any{
 				"version":    "v" + v.Version,
@@ -207,6 +218,7 @@ func runUpgradeList(cmd *cobra.Command, format string, limit int) error {
 		result := map[string]any{
 			"current_version": ensureV(version),
 			"versions":        items,
+			"track":           string(track),
 			"total":           totalCount,
 		}
 		if truncated {
@@ -217,7 +229,7 @@ func runUpgradeList(cmd *cobra.Command, format string, limit int) error {
 	}
 
 	if totalCount == 0 {
-		fmt.Printf("  %s\n", ugYellow("未找到任何版本"))
+		fmt.Printf("  %s\n", ugYellow(fmt.Sprintf("未找到任何%s", upgradeTrackVersionName(track))))
 		return nil
 	}
 
@@ -228,7 +240,7 @@ func runUpgradeList(cmd *cobra.Command, format string, limit int) error {
 	for _, v := range versions {
 		releaseType := ugGreen("stable")
 		if v.Prerelease {
-			releaseType = ugYellow("pre-release")
+			releaseType = ugYellow("beta")
 		}
 		versionStr := fmt.Sprintf("v%-11s", v.Version)
 		marker := ""
@@ -245,7 +257,7 @@ func runUpgradeList(cmd *cobra.Command, format string, limit int) error {
 	if truncated {
 		fmt.Printf("  %s\n", ugDim(fmt.Sprintf("显示最近 %d 个版本（共 %d 个），使用 --list --all 查看全部", limit, totalCount)))
 	}
-	fmt.Printf("  %s\n", ugDim("提示: 使用 dws upgrade --version v1.0.7 安装指定版本"))
+	fmt.Printf("  %s\n", ugDim("提示: 使用 dws upgrade --beta 安装最新 beta；使用 --version v1.0.7 安装指定版本"))
 	return nil
 }
 
@@ -327,7 +339,7 @@ func writeDryRunPlan(w io.Writer, currentVer, binaryAssetName string, hasSkills 
 }
 
 func runUpgrade(ctx context.Context, opts upgradeOptions) error {
-	fmt.Printf("  %s\n", ugDim("检查更新..."))
+	fmt.Printf("  %s\n", ugDim(fmt.Sprintf("检查更新%s...", upgradeTrackSuffix(opts.track))))
 
 	if err := upgrade.EnsureUpgradeDirectories(); err != nil {
 		return fmt.Errorf("初始化目录结构失败: %w", err)
@@ -340,13 +352,13 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 	var err error
 
 	if opts.targetVersion != "" {
-		fmt.Printf("  指定版本: %s\n", ugCyan("v"+opts.targetVersion))
+		fmt.Printf("  指定版本: %s\n", ugCyan(ensureV(opts.targetVersion)))
 		release, err = client.FetchReleaseByTag(opts.targetVersion)
 		if err != nil {
 			return fmt.Errorf("获取版本 %s 信息失败: %w", opts.targetVersion, err)
 		}
 	} else {
-		release, err = client.FetchLatestRelease()
+		release, err = client.FetchLatestReleaseForTrack(opts.track)
 		if err != nil {
 			return fmt.Errorf("检查更新失败: %w", err)
 		}
@@ -364,7 +376,7 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 		fmt.Printf("  %s  %s\n", ugBold("发布日期:  "), release.Date)
 	}
 	if release.Prerelease {
-		fmt.Printf("  %s  %s\n", ugBold("通道:      "), ugYellow("pre-release"))
+		fmt.Printf("  %s  %s\n", ugBold("轨道:      "), ugYellow("beta / pre-release"))
 	}
 
 	// --dry-run: preview only. Resolve the platform asset so a missing build is
@@ -560,15 +572,7 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 		fmt.Printf(" %s\n", ugGreen("✓"))
 	}
 
-	// Clear discovery-derived caches so the upgraded binary rebuilds its
-	// command tree from a fresh fetch instead of inheriting snapshots written
-	// by the old version — a poisoned snapshot used to lock out every
-	// invocation before the build guards landed (#447 / #449).
-	if purged, purgeErr := cacheStoreFromEnv().PurgeDiscoveryData(); purgeErr != nil {
-		fmt.Printf("       %s %s\n", ugYellow("⚠"), ugDim(fmt.Sprintf("清理发现缓存失败 (可手动运行 dws cache refresh): %v", purgeErr)))
-	} else if len(purged) > 0 {
-		fmt.Printf("       %s %s\n", ugGreen("✓"), ugDim("发现缓存已清空, 新版本首次运行时自动重建"))
-	}
+	// Discovery cache purge removed — static endpoint mode has no discovery cache.
 
 	// Cleanup old backups
 	rm.Cleanup(5)
@@ -814,6 +818,34 @@ func ensureV(ver string) string {
 		return "v" + ver
 	}
 	return ver
+}
+
+func upgradeTrack(beta bool) upgrade.ReleaseTrack {
+	if beta {
+		return upgrade.ReleaseTrackBeta
+	}
+	return upgrade.ReleaseTrackRelease
+}
+
+func upgradeTrackSuffix(track upgrade.ReleaseTrack) string {
+	if track == upgrade.ReleaseTrackBeta {
+		return " (beta)"
+	}
+	return ""
+}
+
+func upgradeTrackVersionName(track upgrade.ReleaseTrack) string {
+	if track == upgrade.ReleaseTrackBeta {
+		return "beta 版本"
+	}
+	return "正式 release 版本"
+}
+
+func upgradeHintForTrack(track upgrade.ReleaseTrack) string {
+	if track == upgrade.ReleaseTrackBeta {
+		return "运行 dws upgrade --beta 进行升级"
+	}
+	return "运行 dws upgrade 进行升级"
 }
 
 // resolveUpgradeFormat returns "json" only when the user explicitly passes -f json.
