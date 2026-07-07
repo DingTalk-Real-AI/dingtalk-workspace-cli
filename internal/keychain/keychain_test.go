@@ -19,6 +19,18 @@ import (
 	"testing"
 )
 
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "dws-keychain-test-*")
+	if err != nil {
+		panic(err)
+	}
+	_ = os.Setenv(StorageDirEnv, dir)
+	_ = os.Setenv(DisableKeychainEnv, "1")
+	code := m.Run()
+	_ = os.RemoveAll(dir)
+	os.Exit(code)
+}
+
 func TestKeychainBasicOperations(t *testing.T) {
 	t.Parallel()
 

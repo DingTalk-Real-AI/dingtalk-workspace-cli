@@ -18,8 +18,35 @@ package keychain
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestDefaultKeychainPathFromSecurityOutput(t *testing.T) {
+	got := defaultKeychainPathFromSecurityOutput([]byte("\"/Users/me/Library/Keychains/login.keychain-db\"\n"))
+	if got != "/Users/me/Library/Keychains/login.keychain-db" {
+		t.Fatalf("path = %q", got)
+	}
+}
+
+func TestCheckDefaultKeychainAvailableReportsMissingPath(t *testing.T) {
+	missingPath := filepath.Join(t.TempDir(), "missing.keychain-db")
+	prev := readDefaultKeychain
+	readDefaultKeychain = func() ([]byte, error) {
+		return []byte("\"" + missingPath + "\"\n"), nil
+	}
+	t.Cleanup(func() {
+		readDefaultKeychain = prev
+	})
+
+	err := checkDefaultKeychainAvailable()
+	if !IsUnavailable(err) {
+		t.Fatalf("error = %v, want unavailable", err)
+	}
+	if !strings.Contains(err.Error(), missingPath) {
+		t.Fatalf("error = %v, want missing keychain path", err)
+	}
+}
 
 // TestDisableKeychainFallback verifies that setting DWS_DISABLE_KEYCHAIN
 // routes the DEK to a local file (same scheme as Linux) and the full

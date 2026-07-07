@@ -21,10 +21,14 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -59,6 +63,103 @@ func safeFileName(account string) string {
 	return safeFileNameRe.ReplaceAllString(account, "_") + ".enc"
 }
 
+var readDefaultKeychain = func() ([]byte, error) {
+	return exec.Command("security", "default-keychain", "-d", "user").Output()
+}
+
+func defaultKeychainPathFromSecurityOutput(output []byte) string {
+	value := strings.TrimSpace(string(output))
+	if value == "" {
+		return ""
+	}
+	if unquoted, err := strconv.Unquote(value); err == nil {
+		return unquoted
+	}
+	return strings.Trim(value, `"`)
+}
+
+func checkDefaultKeychainAvailable() error {
+	output, err := readDefaultKeychain()
+	if err != nil {
+		return nil
+	}
+	path := defaultKeychainPathFromSecurityOutput(output)
+	if path == "" {
+		return nil
+	}
+	if _, err := os.Stat(path); err != nil && os.IsNotExist(err) {
+		return NewUnavailableError("read macOS default Keychain", fmt.Errorf("default keychain %q does not exist", path))
+	}
+	return nil
+}
+
+func platformDiagnose() Diagnostic {
+	detail := map[string]string{
+		"platform": "darwin",
+		"service":  Service,
+		"account":  "dek",
+	}
+	if os.Getenv(DisableKeychainEnv) != "" {
+		detail["mode"] = "file_dek"
+		detail["storage_dir"] = StorageDir(Service)
+		return Diagnostic{
+			OK:      true,
+			Message: "macOS Keychain 已禁用, 当前使用 file-DEK 测试模式",
+			Detail:  detail,
+		}
+	}
+
+	output, err := readDefaultKeychain()
+	if err != nil {
+		detail["error"] = err.Error()
+		return Diagnostic{
+			OK:      false,
+			Reason:  "keychain_check_failed",
+			Message: "无法读取 macOS 默认钥匙串配置",
+			Hint:    "检查 /usr/bin/security 是否可用, 并确认当前用户钥匙串配置正常。",
+			Detail:  detail,
+		}
+	}
+
+	path := defaultKeychainPathFromSecurityOutput(output)
+	if path != "" {
+		detail["default_keychain"] = path
+	}
+	if path == "" {
+		return Diagnostic{
+			OK:      false,
+			Reason:  "keychain_unavailable",
+			Message: "macOS 默认钥匙串未配置",
+			Hint:    "恢复默认钥匙串后重试；测试环境可设置 DWS_DISABLE_KEYCHAIN=1 后重新登录。",
+			Detail:  detail,
+		}
+	}
+	if _, err := os.Stat(path); err != nil && os.IsNotExist(err) {
+		return Diagnostic{
+			OK:      false,
+			Reason:  "keychain_unavailable",
+			Message: "macOS 默认钥匙串不存在",
+			Hint:    "恢复默认钥匙串后重试；测试环境可设置 DWS_DISABLE_KEYCHAIN=1 后重新登录。",
+			Detail:  detail,
+		}
+	} else if err != nil {
+		detail["error"] = err.Error()
+		return Diagnostic{
+			OK:      false,
+			Reason:  "keychain_check_failed",
+			Message: "无法访问 macOS 默认钥匙串",
+			Hint:    "检查默认钥匙串路径权限与挂载状态。",
+			Detail:  detail,
+		}
+	}
+
+	return Diagnostic{
+		OK:      true,
+		Message: "macOS 默认钥匙串可用",
+		Detail:  detail,
+	}
+}
+
 // getDEK retrieves or generates the Data Encryption Key.
 // When DWS_DISABLE_KEYCHAIN=1 (set in sandboxed runtimes like Codex App
 // where Keychain APIs are blocked), falls back to a file-based DEK
@@ -67,6 +168,9 @@ func safeFileName(account string) string {
 func getDEK(service string) ([]byte, error) {
 	if os.Getenv(DisableKeychainEnv) != "" {
 		return fileDEK(service)
+	}
+	if err := checkDefaultKeychainAvailable(); err != nil {
+		return nil, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), keychainTimeout)
@@ -89,6 +193,9 @@ func getDEK(service string) ([]byte, error) {
 				resCh <- result{key: key, err: nil}
 				return
 			}
+		} else if !errors.Is(err, keyring.ErrNotFound) {
+			resCh <- result{key: nil, err: NewUnavailableError("read DEK from macOS Keychain", err)}
+			return
 		}
 
 		// Generate new DEK if not found or invalid
@@ -100,15 +207,18 @@ func getDEK(service string) ([]byte, error) {
 
 		// Store in system Keychain
 		encodedKey = base64.StdEncoding.EncodeToString(key)
-		setErr := keyring.Set(service, "dek", encodedKey)
-		resCh <- result{key: key, err: setErr}
+		if setErr := keyring.Set(service, "dek", encodedKey); setErr != nil {
+			resCh <- result{key: nil, err: NewUnavailableError("store DEK in macOS Keychain", setErr)}
+			return
+		}
+		resCh <- result{key: key, err: nil}
 	}()
 
 	select {
 	case res := <-resCh:
 		return res.key, res.err
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, NewUnavailableError("read DEK from macOS Keychain", ctx.Err())
 	}
 }
 

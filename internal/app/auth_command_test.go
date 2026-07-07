@@ -16,6 +16,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -129,6 +130,56 @@ func TestAuthImportRequiresForceWhenPopulated(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "--force") {
 		t.Fatalf("error = %v, want --force hint", err)
+	}
+}
+
+func TestAuthStatusJSONReportsKeychainUnavailable(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", filepath.Join(t.TempDir(), "config"))
+
+	prev := edition.Get()
+	edition.Override(&edition.Hooks{
+		LoadToken: func(configDir string) ([]byte, error) {
+			return nil, keychain.NewUnavailableError("read DEK from macOS Keychain", errors.New("default keychain missing"))
+		},
+	})
+	t.Cleanup(func() {
+		edition.Override(prev)
+	})
+
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--format", "json", "auth", "status"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("auth status --format json error = %v\noutput:\n%s", err, out.String())
+	}
+
+	var resp struct {
+		Success       bool   `json:"success"`
+		Authenticated bool   `json:"authenticated"`
+		Reason        string `json:"reason"`
+		Message       string `json:"message"`
+		Hint          string `json:"hint"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal auth status JSON error = %v\noutput:\n%s", err, out.String())
+	}
+	if !resp.Success {
+		t.Fatalf("success = false, want true; response=%+v", resp)
+	}
+	if resp.Authenticated {
+		t.Fatalf("authenticated = true, want false; response=%+v", resp)
+	}
+	if resp.Reason != "keychain_unavailable" {
+		t.Fatalf("reason = %q, want keychain_unavailable; response=%+v", resp.Reason, resp)
+	}
+	if !strings.Contains(resp.Message, "Keychain") && !strings.Contains(resp.Message, "钥匙串") {
+		t.Fatalf("message should mention Keychain/钥匙串; response=%+v", resp)
+	}
+	if !strings.Contains(resp.Hint, keychain.DisableKeychainEnv) {
+		t.Fatalf("hint should mention %s; response=%+v", keychain.DisableKeychainEnv, resp)
 	}
 }
 
