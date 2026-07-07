@@ -6,15 +6,28 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
-### Delivery Beta
+## [1.0.48] - 2026-07-07
 
-- **Remove-discovery delivery seal** — pre-release validation line for the static-endpoint delivery branch. It removes dynamic service discovery, keeps legacy CLI compatibility aliases, syncs the open command/help/skill surface with the dws-wukong baseline, and includes the `dev connect` default-yolo behavior plus the beta upgrade track.
-- **Official beta packages stay out of normal `dws upgrade`** — publish the sealed beta as an upstream GitHub pre-release after merge, using a low pre-release tag such as `v0.0.48-beta.1`. Old clients' plain `dws upgrade` / `dws upgrade --check` follows GitHub `releases/latest`, so it does not install pre-releases. New clients' plain `dws upgrade` stays on the stable track, and the low numeric version prevents the sealed beta from being treated as newer than `v1.0.47`. Testers install this sealed beta only by specifying the exact tag.
-- **Pinned curl install for the official beta package after the upstream pre-release exists**:
+This release promotes the sealed **remove-discovery delivery** from the beta line to the stable `v1.0.48` package. It removes dynamic service discovery from the open-edition runtime, keeps legacy CLI compatibility aliases, syncs the open command/help/skill surface with the dws-wukong baseline, and includes the `dev connect` default-yolo behavior on the stable upgrade track.
 
-  ```sh
-  curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install.sh | DWS_VERSION=v0.0.48-beta.1 sh
-  ```
+### Changed
+
+- **Remove-discovery delivery is now formal/stable** — the beta validation line is ready to cut as `v1.0.48`; normal stable channels (`dws upgrade`, GitHub `releases/latest`, install scripts, and npm `latest`) should receive this release after the official tag is published.
+- **Static endpoint runtime sealed for stable delivery** — the open edition no longer depends on dynamic service discovery at runtime, while preserving legacy command compatibility aliases and the synced help/skill surface from the beta.
+- **`contact label` is restored as real wukong-compatible functionality** — `dws contact label list/get/list-members` now call `get_org_labels`, `search_label_by_name`, and `get_label_members_by_labelId`; `contact role` remains an alias, and the common top-level compatibility entries (`contact search/find/list/get/self/me/whoami/get-self`) now dispatch to real user/dept/label tools where unambiguous.
+- **Skill docs match the sealed command surface** — contact docs again describe the real `contact label` three-step role lookup flow; video-conference start/invite/share flows remain explicitly unsupported and point users to the DingTalk client.
+
+### Fixed
+
+- **`calendar event list --dry-run` no longer executes the real list call** — the sorted event-list wrapper now respects dry-run and prints the `list_calendar_events` preview instead of calling the backend.
+- **`chat file upload` is downlined** — the hidden compatibility entry now returns a clear downline message and never calls `chat/upload_conversation_file_by_url`; the supported file path remains `chat message send --msg-type file --file-path`.
+- **Optional plugin version validation no longer pollutes every command** — incompatible local plugins such as conference are skipped at debug level during command-tree construction instead of printing a WARN on unrelated commands.
+- **PR #45 review follow-ups are folded into the release** — doc version rollback pagination now unwraps nested result/content/data envelopes for `nextCursor`, mail helper scripts handle `{result:{emailAccounts:[...]}}`, and the generated attendance `.xlsx` fixture is removed from the skill scripts.
+
+### Tests
+
+- **Command-surface regression tests** — root-command tests now cover real `contact label`/`role` dry-runs, hidden top-level contact compatibility entries, `chat file upload` downline behavior, and `calendar event list --dry-run`.
+- **Release hygiene tests** — skill markdown policy still blocks unsupported conference routes, plugin loader tests assert optional validation failures stay quiet at WARN level, and doc version cursor extraction has nested-envelope coverage.
 
 ## [1.0.47] - 2026-07-05
 

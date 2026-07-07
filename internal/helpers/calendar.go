@@ -1899,6 +1899,10 @@ func callFilteredBusyStatus(cmd *cobra.Command, toolArgs map[string]any) error {
 }
 
 func callSortedCalendarEvents(cmd *cobra.Command, toolName string, toolArgs map[string]any) error {
+	if deps.Caller.DryRun() {
+		return callMCPTool(toolName, toolArgs)
+	}
+
 	raw, err := callMCPToolReturnText(cmd.Context(), toolName, toolArgs)
 	if err != nil {
 		return err

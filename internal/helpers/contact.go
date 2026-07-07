@@ -67,6 +67,15 @@ func contactFirstSetFlagName(cmd *cobra.Command, names ...string) string {
 	return ""
 }
 
+func contactAnyFlagChanged(cmd *cobra.Command, names ...string) bool {
+	for _, n := range names {
+		if f := cmd.Flag(n); f != nil && f.Changed {
+			return true
+		}
+	}
+	return false
+}
+
 // contactParseInt64WithAliases 先在主 flag 与全部别名中找出用户实际传入的值（空则报 missing），
 // 再走根部门占位符警告 + int64 解析，避免用户传别名时 RunE 读不到。
 // 报错文案中使用用户实际输入的 flag 名（比如用户传 --ids me，错误里显示 --ids 而不是主 flag --id），
@@ -215,36 +224,65 @@ func newContactCommand() *cobra.Command {
 	// ── label 角色 ──────────────────────────────────────────────────
 
 	contactLabelCmd := &cobra.Command{
-		Use:    "label",
-		Short:  "角色查询",
-		Hidden: true,
-		Long: `角色查询后端工具已下线，保留该命令仅用于兼容旧指令。
+		Use:     "label",
+		Aliases: []string{"role"},
+		Short:   "角色查询",
+		Long: `角色查询：获取企业所有角色列表、根据角色名称查询角色ID、根据角色ID查询角色下的成员。
 
-请改用 aisearch person 按职责维度找人，例如：
-  dws aisearch person --keyword "管理员" --dimension duty`,
+【何时用哪个命令】
+  - 获取企业所有角色列表           → contact label list
+  - 根据角色名称查询角色ID       → contact label get
+  - 根据角色ID查询角色下的成员   → contact label list-members
+
+【典型场景：查询某类角色的人员（如主管、管理员、财务等）】
+  1. contact label list          → 获取企业全部角色列表
+  2. 从返回结果中匹配目标角色名称及 labelId
+  3. contact label list-members --id <labelId>  → 获取该角色下的成员`,
 		RunE: groupRunE,
 	}
-	contactLabelUnavailable := func(cmd *cobra.Command, args []string) error {
-		return fmt.Errorf("contact label 角色查询能力当前不可用：后端工具已下线\n  hint: 请改用 dws aisearch person --keyword <角色或职责> --dimension duty")
+
+	runContactLabelList := func(cmd *cobra.Command, args []string) error {
+		if len(args) > 0 {
+			return fmt.Errorf("contact label list 不接受位置参数: %s", strings.Join(args, " "))
+		}
+		return callMCPTool("get_org_labels", map[string]any{})
+	}
+	runContactLabelGet := func(cmd *cobra.Command, args []string) error {
+		if err := validateRequiredFlagWithAliases(cmd, "names", "name", "query", "keyword"); err != nil {
+			return err
+		}
+		raw := flagOrFallback(cmd, "names", "name", "query", "keyword")
+		return callMCPTool("search_label_by_name", map[string]any{
+			"labelNames": parseCSVValues(raw),
+		})
+	}
+	runContactLabelMembers := func(cmd *cobra.Command, args []string) error {
+		if err := validateRequiredFlagWithAliases(cmd, "id", "label-id", "role-id"); err != nil {
+			return err
+		}
+		return callMCPTool("get_label_members_by_labelId", map[string]any{
+			"labelId": flagOrFallback(cmd, "id", "label-id", "role-id"),
+		})
 	}
 
 	contactLabelGetCmd := &cobra.Command{
-		Use:    "get",
-		Short:  "根据角色名称查询角色",
-		Hidden: true,
-		Long:   `contact label 后端工具已下线。请改用 aisearch person --dimension duty 按职责维度找人。`,
+		Use:   "get",
+		Short: "根据角色名称查询角色",
+		Long: `根据角色名称精确匹配查询角色信息（角色ID、名称等）。支持同时查询多个角色名称，逗号分隔。无需分页。
+
+注意：精确匹配可能无结果（如用户输入"管理员"但企业只有"主管理员"和"子管理员"），
+此时应降级使用 label list 获取全部角色列表，从中模糊匹配包含关键词的角色。`,
 		Example: `  dws contact label get --names "管理员"
   dws contact label get --names "管理员,财务"`,
-		RunE: contactLabelUnavailable,
+		RunE: runContactLabelGet,
 	}
 
 	contactLabelListMembersCmd := &cobra.Command{
 		Use:     "list-members",
 		Short:   "查询角色下的成员",
-		Hidden:  true,
-		Long:    `contact label 后端工具已下线。请改用 aisearch person --dimension duty 按职责维度找人。`,
+		Long:    `根据角色ID查询该角色下的成员列表。`,
 		Example: `  dws contact label list-members --id 12345  # 查询 labelId: dws contact label get --names "角色名"`,
-		RunE:    contactLabelUnavailable,
+		RunE:    runContactLabelMembers,
 	}
 
 	contactLabelGetCmd.Flags().String("names", "", "角色名称，逗号分隔 (必填)")
@@ -262,12 +300,17 @@ func newContactCommand() *cobra.Command {
 	_ = contactLabelListMembersCmd.Flags().MarkHidden("role-id")
 
 	contactLabelListAllCmd := &cobra.Command{
-		Use:     "list",
-		Short:   "获取企业所有角色列表",
-		Hidden:  true,
-		Long:    `contact label 后端工具已下线。请改用 aisearch person --dimension duty 按职责维度找人。`,
+		Use:   "list",
+		Short: "获取企业所有角色列表",
+		Long: `获取当前企业的所有角色（标签）列表，返回角色ID、角色名称等信息。无需参数。
+
+用于不知道准确角色名称时，先列出全部角色，再根据需要选择目标角色查询成员。
+
+【典型场景】
+  - 用户说"企业所有主管/查所有管理员/财务人员有哪些"
+    → 先 label list 浏览全部角色，匹配目标角色后 label list-members 获取成员`,
 		Example: `  dws contact label list`,
-		RunE:    contactLabelUnavailable,
+		RunE:    runContactLabelList,
 	}
 
 	contactLabelCmd.AddCommand(contactLabelListAllCmd, contactLabelGetCmd, contactLabelListMembersCmd)
@@ -567,13 +610,163 @@ contact user profile fields 获取可用字段列表。
 	relationCmd.AddCommand(contactRelationListMyFollowingsCmd)
 	root.AddCommand(userCmd, contactDeptCmd, contactLabelCmd, relationCmd)
 
-	// hint: dws contact search → dws contact user search / dept search
-	//
-	// 使用本地 wrapper contactHintSubCmd，在 cmdutil.HintSubCmd 基础上开启 DisableFlagParsing：
-	// 这样 `dws contact get --user-id X` 这样带未知 flag 的误输入也会进入 RunE，
-	// 输出 `hint: use: dws contact user get --ids <用户ID>` 等正向引导，
-	// 而不是被 cobra 在 flag 解析阶段拦截在 `unknown flag: --user-id`。
-	// 类似做法见 calendar.go 的 calendarInfoHintSubCmd。
+	addQueryFlags := func(cmd *cobra.Command) {
+		cmd.Flags().String("query", "", "搜索关键词 (必填)")
+		cmd.Flags().String("keyword", "", "--query 的别名")
+		cmd.Flags().String("name", "", "--query 的别名")
+		_ = cmd.Flags().MarkHidden("keyword")
+		_ = cmd.Flags().MarkHidden("name")
+	}
+	addUserIDFlags := func(cmd *cobra.Command) {
+		cmd.Flags().String("ids", "", "用户 ID 列表")
+		cmd.Flags().String("user-id", "", "--ids 的别名")
+		cmd.Flags().String("user-ids", "", "--ids 的别名")
+		cmd.Flags().String("userid", "", "--ids 的别名（全小写）")
+		_ = cmd.Flags().MarkHidden("user-id")
+		_ = cmd.Flags().MarkHidden("user-ids")
+		_ = cmd.Flags().MarkHidden("userid")
+	}
+	addLabelNameFlags := func(cmd *cobra.Command) {
+		cmd.Flags().String("names", "", "角色名称，逗号分隔")
+		cmd.Flags().String("name", "", "--names 的别名")
+		cmd.Flags().String("query", "", "--names 的别名")
+		cmd.Flags().String("keyword", "", "--names 的别名")
+		_ = cmd.Flags().MarkHidden("name")
+		_ = cmd.Flags().MarkHidden("query")
+		_ = cmd.Flags().MarkHidden("keyword")
+	}
+	addLabelIDFlags := func(cmd *cobra.Command) {
+		cmd.Flags().String("id", "", "角色 ID")
+		cmd.Flags().String("label-id", "", "--id 的别名")
+		cmd.Flags().String("role-id", "", "--id 的别名")
+		_ = cmd.Flags().MarkHidden("label-id")
+		_ = cmd.Flags().MarkHidden("role-id")
+	}
+	addDeptIDFlags := func(cmd *cobra.Command) {
+		cmd.Flags().String("dept", "", "部门 ID")
+		cmd.Flags().String("id", "", "--dept 的别名")
+		cmd.Flags().String("dept-id", "", "--dept 的别名")
+		cmd.Flags().String("dept-ids", "", "--dept 的别名")
+		_ = cmd.Flags().MarkHidden("id")
+		_ = cmd.Flags().MarkHidden("dept-id")
+		_ = cmd.Flags().MarkHidden("dept-ids")
+	}
+	runContactUserGet := func(cmd *cobra.Command, args []string) error {
+		if err := validateRequiredFlagWithAliases(cmd, contactUserIDFlagKeys[0], contactUserIDFlagKeys[1:]...); err != nil {
+			return err
+		}
+		raw := flagOrFallback(cmd, contactUserIDFlagKeys[0], contactUserIDFlagKeys[1:]...)
+		for _, part := range parseCSVValues(raw) {
+			switch strings.ToLower(strings.TrimSpace(part)) {
+			case "me", "self", "current", "whoami", "i":
+				return fmt.Errorf("--ids 需要真实的 userId，不接受 %q 这类占位符\n  hint: 获取当前用户用: dws contact user get-self", part)
+			}
+		}
+		return callMCPTool("get_user_info_by_user_ids", map[string]any{
+			"user_id_list": parseCSVValues(raw),
+		})
+	}
+	runContactUserSearch := func(cmd *cobra.Command, args []string) error {
+		if err := validateRequiredFlagWithAliases(cmd, "query", "keyword", "name"); err != nil {
+			return err
+		}
+		return callMCPTool("search_contact_by_key_word", map[string]any{
+			"keyword": flagOrFallback(cmd, "query", "keyword", "name"),
+		})
+	}
+
+	contactRootSearchCmd := &cobra.Command{
+		Use:    "search",
+		Short:  "按关键词搜索用户（兼容入口）",
+		Hidden: true,
+		RunE:   runContactUserSearch,
+	}
+	contactRootFindCmd := &cobra.Command{
+		Use:    "find",
+		Short:  "按关键词搜索用户（兼容入口）",
+		Hidden: true,
+		RunE:   runContactUserSearch,
+	}
+	addQueryFlags(contactRootSearchCmd)
+	addQueryFlags(contactRootFindCmd)
+
+	contactRootGetCmd := &cobra.Command{
+		Use:    "get",
+		Short:  "获取用户/部门/角色详情（兼容入口）",
+		Hidden: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			switch {
+			case contactAnyFlagChanged(cmd, contactUserIDFlagKeys...):
+				return runContactUserGet(cmd, args)
+			case contactAnyFlagChanged(cmd, "dept", "id", "dept-id", "dept-ids"):
+				deptID, err := contactParseInt64WithAliases(cmd, "dept", "id", "dept-id", "dept-ids")
+				if err != nil {
+					return err
+				}
+				return callMCPTool("get_dept_info_by_dept_id", map[string]any{"deptId": deptID})
+			case contactAnyFlagChanged(cmd, "names", "name", "query", "keyword"):
+				return runContactLabelGet(cmd, args)
+			case contactAnyFlagChanged(cmd, "label-id", "role-id"):
+				return runContactLabelMembers(cmd, args)
+			default:
+				return fmt.Errorf("contact get 需要指定 --ids <userId>、--dept <deptId>、--names <角色名> 或 --label-id <角色ID>")
+			}
+		},
+	}
+	addUserIDFlags(contactRootGetCmd)
+	addDeptIDFlags(contactRootGetCmd)
+	addLabelNameFlags(contactRootGetCmd)
+	contactRootGetCmd.Flags().String("label-id", "", "角色 ID")
+	contactRootGetCmd.Flags().String("role-id", "", "--label-id 的别名")
+	_ = contactRootGetCmd.Flags().MarkHidden("role-id")
+
+	contactRootListCmd := &cobra.Command{
+		Use:    "list",
+		Short:  "列出角色/部门成员/用户详情（兼容入口）",
+		Hidden: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			switch {
+			case contactAnyFlagChanged(cmd, "depts", "id", "dept-id", "dept-ids"):
+				if err := validateRequiredFlagWithAliases(cmd, "depts", "id", "dept-id", "dept-ids"); err != nil {
+					return err
+				}
+				raw := flagOrFallback(cmd, "depts", "id", "dept-id", "dept-ids")
+				setName := contactFirstSetFlagName(cmd, "depts", "id", "dept-id", "dept-ids")
+				for _, t := range parseCSVValues(raw) {
+					if _, ok := contactRootDeptLikeTokens[strings.ToLower(strings.TrimSpace(t))]; ok {
+						return fmt.Errorf("flag --%s 包含非法占位符 %q；钉钉根部门 deptId=1，请使用 --%s 1", setName, t, setName)
+					}
+				}
+				return callMCPTool("get_dept_members_by_deptId", map[string]any{"deptIds": parseCSVValues(raw)})
+			case contactAnyFlagChanged(cmd, contactUserIDFlagKeys...):
+				return runContactUserGet(cmd, args)
+			case contactAnyFlagChanged(cmd, "names", "name", "query", "keyword"):
+				return runContactLabelGet(cmd, args)
+			default:
+				return runContactLabelList(cmd, args)
+			}
+		},
+	}
+	contactRootListCmd.Flags().String("depts", "", "部门 ID 列表")
+	contactRootListCmd.Flags().String("id", "", "--depts 的别名")
+	contactRootListCmd.Flags().String("dept-id", "", "--depts 的别名")
+	contactRootListCmd.Flags().String("dept-ids", "", "--depts 的别名")
+	_ = contactRootListCmd.Flags().MarkHidden("id")
+	_ = contactRootListCmd.Flags().MarkHidden("dept-id")
+	_ = contactRootListCmd.Flags().MarkHidden("dept-ids")
+	addUserIDFlags(contactRootListCmd)
+	addLabelNameFlags(contactRootListCmd)
+
+	for _, use := range []string{"self", "me", "whoami", "get-self", "user-self", "current-user"} {
+		root.AddCommand(&cobra.Command{
+			Use:    use,
+			Short:  "获取当前用户信息（兼容入口）",
+			Hidden: true,
+			RunE:   contactUserGetSelfCmd.RunE,
+		})
+	}
+	root.AddCommand(contactRootSearchCmd, contactRootFindCmd, contactRootGetCmd, contactRootListCmd)
+
 	contactHintSubCmd := func(use, suggestion string) *cobra.Command {
 		c := hintSubCmd(use, suggestion)
 		runHint := c.RunE
@@ -589,24 +782,7 @@ contact user profile fields 获取可用字段列表。
 		return c
 	}
 
-	root.AddCommand(contactHintSubCmd("search", "use: dws contact user search\n  also available: dws contact dept search / dws aisearch person --dimension duty"))
-
-	// hint: dws contact find/list/get → 指向正确子命令
-	root.AddCommand(contactHintSubCmd("find", "use: dws contact user search --query <关键词>  or  dws contact dept search --query <关键词>  or  dws aisearch person --keyword <角色或职责> --dimension duty"))
-	root.AddCommand(contactHintSubCmd("list", "use: dws contact dept list-members --depts <部门ID>  or  dws contact user get --ids <用户ID>"))
-	root.AddCommand(contactHintSubCmd("get", "use: dws contact user get --ids <用户ID>  or  dws contact dept get-info --dept <部门ID>"))
-
-	// hint: dws contact self/me/whoami → user get-self（当前用户语义）
-	root.AddCommand(contactHintSubCmd("self", "use: dws contact user get-self"))
-	root.AddCommand(contactHintSubCmd("me", "use: dws contact user get-self"))
-	root.AddCommand(contactHintSubCmd("whoami", "use: dws contact user get-self"))
-
-	// 顶层高频误写：get-self / user-self / current-user / department
-	root.AddCommand(contactHintSubCmd("get-self", "use: dws contact user get-self"))
-	root.AddCommand(contactHintSubCmd("user-self", "use: dws contact user get-self"))
-	root.AddCommand(contactHintSubCmd("current-user", "use: dws contact user get-self"))
 	root.AddCommand(contactHintSubCmd("department", "use: dws contact dept [search|list-members|list-children|get-info]"))
-	root.AddCommand(contactHintSubCmd("role", "contact label 已下线; use: dws aisearch person --keyword <角色或职责> --dimension duty"))
 
 	// hint: dws contact user find/list/info/detail → 指向 user search / user get
 	userCmd.AddCommand(contactHintSubCmd("find", "use: dws contact user search --query <关键词>"))
@@ -622,13 +798,17 @@ contact user profile fields 获取可用字段列表。
 	contactDeptCmd.AddCommand(contactHintSubCmd("info", "use: dws contact dept get-info --dept <部门ID>"))
 	contactDeptCmd.AddCommand(contactHintSubCmd("detail", "use: dws contact dept get-info --dept <部门ID>"))
 
-	// hint: dws contact label find/search/info/detail → 指向 aisearch 替代路径。
+	// dws contact label find/search/info/detail/list-all → 真实兼容入口。
 	// 注：list 已是真命令（label list），不再注册 hintSubCmd（会与真命令冲突）。
-	contactLabelCmd.AddCommand(contactHintSubCmd("find", "contact label 已下线; use: dws aisearch person --keyword <角色或职责> --dimension duty"))
-	contactLabelCmd.AddCommand(contactHintSubCmd("search", "contact label 已下线; use: dws aisearch person --keyword <角色或职责> --dimension duty"))
-	contactLabelCmd.AddCommand(contactHintSubCmd("info", "contact label 已下线; use: dws aisearch person --keyword <角色或职责> --dimension duty"))
-	contactLabelCmd.AddCommand(contactHintSubCmd("detail", "contact label 已下线; use: dws aisearch person --keyword <角色或职责> --dimension duty"))
-	contactLabelCmd.AddCommand(contactHintSubCmd("list-all", "contact label 已下线; use: dws aisearch person --keyword <角色或职责> --dimension duty"))
+	for _, use := range []string{"find", "search", "info"} {
+		cmd := &cobra.Command{Use: use, Hidden: true, RunE: runContactLabelGet}
+		addLabelNameFlags(cmd)
+		contactLabelCmd.AddCommand(cmd)
+	}
+	contactLabelDetailCmd := &cobra.Command{Use: "detail", Hidden: true, RunE: runContactLabelMembers}
+	addLabelIDFlags(contactLabelDetailCmd)
+	contactLabelCmd.AddCommand(contactLabelDetailCmd)
+	contactLabelCmd.AddCommand(&cobra.Command{Use: "list-all", Hidden: true, RunE: runContactLabelList})
 
 	// contact 子树统一错误兜底：任何 flag 解析失败均在尾部追加 "See '<CommandPath> --help' for usage."
 	// 与 docker / kubectl / gh 的 UX 一致。unknown subcommand 由 cobra 自带 Did-You-Mean 处理。

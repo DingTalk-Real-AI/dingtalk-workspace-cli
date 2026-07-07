@@ -475,41 +475,22 @@ Flags:
   - 发送文字 + 文件混合消息时的完整流程：除了将文件以 Markdown 链接内嵌到文字消息中发送一条 md 消息外，还必须额外逐个发送独立的文件消息（--msg-type file），确保接收方可以直接下载原始文件。即：先发一条包含文字和文件链接的 md 消息，再对每个涉及的文件各发一条 --msg-type file 的文件消息
 ```
 
-### file (会话文件上传)
+### file (会话文件上传，已下线)
 
-#### 上传本地文件或 URL 文件到会话文件空间 — 不暴露 spaceId
+#### chat file upload 已下线
 
-上传文件到指定会话关联的文件空间。调用方只需要提供会话和文件来源，不需要先调用 conversation-info，也不需要传递 spaceId。若只是发送本地文件，优先使用 `dws chat message send --msg-type file --file-path <本地文件>`。
+`dws chat file upload` 已隐藏下线，不再调用 `chat/upload_conversation_file_by_url`，URL 文件服务端代传当前不可用。
+
+发送本地文件消息仍然支持，统一使用：
 ```
-Usage:
-  dws chat file upload [flags]
-Example:
-  # 本地文件：CLI 会初始化上传、直传文件内容并提交
-  dws chat file upload --group <openConversationId> --file ./report.pdf --format json
-  dws chat file upload --user <userId> --file ./report.pdf --format json
-  dws chat file upload --open-dingtalk-id <openDingTalkId> --file ./report.pdf --format json
-
-  # URL 文件：服务端拉取 URL 并上传到会话文件空间
-  dws chat file upload --group <openConversationId> --url https://example.com/report.pdf --file-name report.pdf --format json
-Flags:
-      --group string              群聊 openConversationId（群聊时使用）
-      --user string               单聊对方 userId（单聊时使用）
-      --open-dingtalk-id string   单聊对方 openDingTalkId（单聊时使用）
-      --file string               本地文件路径（与 --url 二选一）
-      --url string                远程文件 URL（与 --file 二选一，服务端代传）
-      --file-name string          文件名（可选，本地文件默认取文件名，URL 默认从 URL 推断）
-      --md5 string                文件 MD5（可选，本地文件不传时自动计算）
-      --uuid string               幂等 UUID（可选）
+dws chat message send --group <openConversationId> --msg-type file --file-path ./report.pdf --format json
+dws chat message send --open-dingtalk-id <openDingTalkId> --msg-type file --file-path ./report.pdf --format json
+```
 
 注意:
-  - --group、--user、--open-dingtalk-id 互斥，必须且只能指定其一
-  - --file 和 --url 互斥，必须且只能指定其一
-  - 本地文件由一个命令内部完成：获取上传链接 → CLI 直传文件内容 → 提交上传
-  - URL 文件走服务端代传：服务端自行解析会话空间并上传到会话文件空间
-  - 若只是发送本地文件，直接使用 `dws chat message send --msg-type file --file-path <本地文件>`，CLI 会复用同一套上传逻辑
-  - 发图片/文件优先走 `chat message send --msg-type file --file-path <本地路径>`，无需调用 `chat file upload`；本节只在以下场景使用：(a) URL 文件由服务端代传 (`--url`)；(b) 业务需要先拿到下载链接再以 Markdown 形式内嵌到文字消息中
-  - **文字 + 文件双消息**（仅适用于非图片文件；图片直接 `--msg-type file --file-path` 单条消息即可，不要走双发）：先发一条 Markdown 文字消息引用下载链接，再对每个文件各补发一条 `--msg-type file` 文件消息，确保接收方既看到文字说明又能直接下载原始文件
-```
+  - 不要再构造 `dws chat file upload --url ...`，该路径会直接返回下线提示
+  - 常规发图/发文件/发音视频都走 `chat message send --msg-type file --file-path <本地路径>`
+  - 若需要“文字 + 文件”双消息，先发送文件消息，再补一条文本或 Markdown 消息说明
 
 #### 查询消息发送状态 — 查询以当前用户身份发送的消息的发送状态
 
@@ -1572,7 +1553,7 @@ Flags:
 - `chat clear-messages` — 清空当前用户视角下指定会话的聊天记录（不影响其他成员）
 - `chat group list-all` — 分页拉取当前用户加入的所有群（list-my-groups 仅返回群主/管理员的群）
 - `chat group list-join-validations` / `chat group audit-join-validation` — 拉取入群验证记录 / 审批入群验证（通过/拒绝/删除/忽略/拉黑）
-- `chat file upload` — 上传本地文件或 URL 文件到会话文件空间（不暴露 spaceId；纯发文件优先用 `chat message send --msg-type file --file-path`）
+- `chat file upload` — 已下线；不要调用 `chat/upload_conversation_file_by_url`，本地文件发送改用 `chat message send --msg-type file --file-path`
 - `chat group transfer-owner` — 转让群主
 - `chat group invite-url` — 获取群邀请链接
 - `chat message reply` — 引用回复消息（在群聊中引用某条消息并回复文字）
@@ -1810,7 +1791,7 @@ Flags:
 | `chat message search-advanced` | `nextCursor` | 下次 message search-advanced 的 --cursor |
 | `chat search-common` | `openConversationId` | message send/list 等的 --group |
 | `chat conversation-info` | `newCSpaceIdIM` | drive upload 的 --space-id（发送文件消息前获取共享空间） |
-| `chat file upload` | 下载链接字段 | message send 的 Markdown 链接文本（仅文字+非图片文件双发场景；常规发图/发文件用 `--msg-type file --file-path`） |
+| `chat file upload` | 无（已下线） | 不要调用；常规发图/发文件用 `chat message send --msg-type file --file-path` |
 | `chat message list` | `openMsgId` | message read-status 的 --message-id |
 | `chat group-role list` | `openRoleId` | group-role update/remove/set-user/remove-user 的 --role-id |
 | `chat message create-text-emotion` | `emotionId` | add-text-emotion 的 --emotion-id |

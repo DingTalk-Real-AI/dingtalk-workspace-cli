@@ -40,23 +40,18 @@
 
 ### start-conference
 
-> 触发：「发起会议」「开个会」「创建会议」且**没有给出具体时间** → 直接执行，无需追问。
+> 当前 CLI 不提供视频会议（conference）发起/入会/会中控制能力。触发「发起会议」「开个会」「创建会议」且**没有给出具体时间**时，不要构造 `conference` 命令；直接告知用户请在钉钉客户端操作。
 
-`conference start [--title "<主题>"]`
-
-- 用户给了主题 → 加 `--title`；没给 → 省略（系统用默认标题）
-- 有具体时间（如"明天3点开会"）→ 不走此 recipe，走 03-meeting.md 的 `schedule-meeting`
+- 有具体时间（如"明天3点开会"）或明确预约日程 → 走 03-meeting.md 的 `schedule-meeting`
+- 只有实时视频会议诉求 → 说明当前 CLI 不支持，请在钉钉客户端发起
 
 ### invite-participant
 
-1. 查人：`contact user search --query "<姓名>"` → `openDingTalkId`、`nick`
-2. 获取会议 ID：`conference get-id` → `conferenceId`
-3. 邀请：`conference member invite --conference-id <conferenceId> --nicks "<nick>" --open-dingtalk-ids "<openDingTalkId>"`
+视频会议邀请入会当前 CLI 不支持，请在钉钉客户端操作。若用户要给已有日程加参会人，走 `calendar participant add`。
 
 ### share-screen
 
-- 共享屏幕：`conference share start`
-- 停止共享：`conference share stop`
+共享屏幕/停止共享属于会中控制，当前 CLI 不支持，请在钉钉客户端操作。
 
 ## #4 文档知识
 

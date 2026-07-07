@@ -62,16 +62,31 @@ func docVersionExists(ctx context.Context, nodeID string, version int) (bool, er
 
 // docVersionNextCursor 从 list_doc_versions 响应中提取分页游标；没有下一页时返回 ""。
 func docVersionNextCursor(v any) string {
-	m, ok := v.(map[string]any)
-	if !ok {
-		return ""
-	}
-	if hasMore, ok := m["hasMore"].(bool); ok && !hasMore {
-		return ""
-	}
-	for _, key := range []string{"nextCursor", "nextToken", "cursor"} {
-		if s, ok := m[key].(string); ok && s != "" {
-			return s
+	switch val := v.(type) {
+	case map[string]any:
+		if hasMore, ok := val["hasMore"].(bool); ok && !hasMore {
+			return ""
+		}
+		for _, key := range []string{"nextCursor", "nextToken", "cursor"} {
+			if s, ok := val[key].(string); ok && s != "" {
+				return s
+			}
+		}
+		for _, key := range []string{"result", "content", "data"} {
+			if s := docVersionNextCursor(val[key]); s != "" {
+				return s
+			}
+		}
+		for _, item := range val {
+			if s := docVersionNextCursor(item); s != "" {
+				return s
+			}
+		}
+	case []any:
+		for _, item := range val {
+			if s := docVersionNextCursor(item); s != "" {
+				return s
+			}
 		}
 	}
 	return ""

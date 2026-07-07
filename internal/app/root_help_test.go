@@ -15,6 +15,8 @@ package app
 
 import (
 	"bytes"
+	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -65,6 +67,172 @@ func TestRootKeepsMainBranchChatCompatibilityCommands(t *testing.T) {
 	mustFindCommand(t, root, "contact", "search")
 	mustFindCommand(t, root, "contact", "user", "list")
 	mustFindCommand(t, root, "conference", "meeting", "reserve")
+}
+
+func TestRootKeepsContactWukongCompatibilityCommands(t *testing.T) {
+	root := NewRootCommand()
+	label := mustFindCommand(t, root, "contact", "label")
+	if label.Hidden {
+		t.Fatal("contact label should be visible as a real command group")
+	}
+	if !containsString(label.Aliases, "role") {
+		t.Fatal("contact label missing role alias")
+	}
+	mustFindCommand(t, root, "contact", "label", "get")
+	mustFindCommand(t, root, "contact", "label", "list")
+	mustFindCommand(t, root, "contact", "label", "list-members")
+	mustFindCommand(t, root, "contact", "label", "find")
+	mustFindCommand(t, root, "contact", "label", "search")
+	mustFindCommand(t, root, "contact", "label", "info")
+	mustFindCommand(t, root, "contact", "label", "detail")
+	mustFindCommand(t, root, "contact", "label", "list-all")
+
+	getSelf := mustFindCommand(t, root, "contact", "user", "get-self")
+	for _, alias := range []string{"self", "me", "whoami", "current"} {
+		if !containsString(getSelf.Aliases, alias) {
+			t.Fatalf("contact user get-self missing alias %q", alias)
+		}
+	}
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{
+			name: "label list",
+			args: []string{"--dry-run", "contact", "label", "list"},
+			want: []string{"get_org_labels"},
+		},
+		{
+			name: "label get",
+			args: []string{"--dry-run", "contact", "label", "get", "--names", "admin,finance"},
+			want: []string{"search_label_by_name", "labelNames", "admin", "finance"},
+		},
+		{
+			name: "label members",
+			args: []string{"--dry-run", "contact", "label", "list-members", "--id", "123"},
+			want: []string{"get_label_members_by_labelId", "labelId", "123"},
+		},
+		{
+			name: "role shim",
+			args: []string{"--dry-run", "contact", "role", "list"},
+			want: []string{"get_org_labels"},
+		},
+		{
+			name: "label fuzzy shim",
+			args: []string{"--dry-run", "contact", "label", "find", "--names", "admin"},
+			want: []string{"search_label_by_name", "labelNames", "admin"},
+		},
+		{
+			name: "label detail shim",
+			args: []string{"--dry-run", "contact", "label", "detail", "--id", "123"},
+			want: []string{"get_label_members_by_labelId", "labelId", "123"},
+		},
+		{
+			name: "contact search shim",
+			args: []string{"--dry-run", "contact", "search", "--query", "admin"},
+			want: []string{"search_contact_by_key_word", "keyword", "admin"},
+		},
+		{
+			name: "contact find shim",
+			args: []string{"--dry-run", "contact", "find", "--query", "admin"},
+			want: []string{"search_contact_by_key_word", "keyword", "admin"},
+		},
+		{
+			name: "contact list defaults to label list",
+			args: []string{"--dry-run", "contact", "list"},
+			want: []string{"get_org_labels"},
+		},
+		{
+			name: "contact list department members",
+			args: []string{"--dry-run", "contact", "list", "--depts", "1"},
+			want: []string{"get_dept_members_by_deptId", "deptIds", "1"},
+		},
+		{
+			name: "contact get user details",
+			args: []string{"--dry-run", "contact", "get", "--ids", "user1"},
+			want: []string{"get_user_info_by_user_ids", "user_id_list", "user1"},
+		},
+		{
+			name: "contact get label by name",
+			args: []string{"--dry-run", "contact", "get", "--names", "admin"},
+			want: []string{"search_label_by_name", "labelNames", "admin"},
+		},
+		{
+			name: "contact self shim",
+			args: []string{"--dry-run", "contact", "self"},
+			want: []string{"get_current_user_profile"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := executeRootCaptureStdout(t, tc.args)
+			if err != nil {
+				t.Fatalf("Execute(%v) error = %v\n%s", tc.args, err, got)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(got, want) {
+					t.Fatalf("Execute(%v) output missing %q:\n%s", tc.args, want, got)
+				}
+			}
+		})
+	}
+}
+
+func TestChatFileUploadDownlinedButMessageFileSendStays(t *testing.T) {
+	root := NewRootCommand()
+	fileCmd := mustFindCommand(t, root, "chat", "file")
+	if !fileCmd.Hidden {
+		t.Fatal("chat file should be hidden after upload_conversation_file_by_url downline")
+	}
+	upload := mustFindCommand(t, root, "chat", "file", "upload")
+	if !upload.Hidden {
+		t.Fatal("chat file upload should be hidden after downline")
+	}
+	for _, flag := range []string{"group", "url", "file", "file-name"} {
+		if upload.Flags().Lookup(flag) == nil {
+			t.Fatalf("chat file upload missing compatibility flag --%s", flag)
+		}
+	}
+
+	send := mustFindCommand(t, root, "chat", "message", "send")
+	for _, flag := range []string{"msg-type", "file-path"} {
+		if send.Flags().Lookup(flag) == nil {
+			t.Fatalf("chat message send missing --%s", flag)
+		}
+	}
+
+	got, err := executeRootCaptureStdout(t, []string{
+		"chat", "file", "upload",
+		"--group", "cid",
+		"--url", "https://example.com/report.pdf",
+		"--file-name", "report.pdf",
+	})
+	if err == nil {
+		t.Fatalf("chat file upload error = nil, want downline error\n%s", got)
+	}
+	got = got + "\n" + err.Error()
+	for _, want := range []string{"已下线", "upload_conversation_file_by_url", "chat message send --msg-type file --file-path"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("chat file upload output missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestCalendarEventListDryRunPreviewsOnly(t *testing.T) {
+	got, err := executeRootCaptureStdout(t, []string{
+		"--dry-run", "calendar", "event", "list",
+		"--start", "2026-07-07T00:00:00+08:00",
+		"--end", "2026-07-07T01:00:00+08:00",
+	})
+	if err != nil {
+		t.Fatalf("calendar event list --dry-run error = %v\n%s", err, got)
+	}
+	for _, want := range []string{"list_calendar_events", "startTime", "endTime"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("calendar dry-run output missing %q:\n%s", want, got)
+		}
+	}
 }
 
 func TestRootKeepsSVIPChatCompatibilityFlags(t *testing.T) {
@@ -160,4 +328,39 @@ func mustFindCommand(t *testing.T, root *cobra.Command, path ...string) *cobra.C
 		cmd = next
 	}
 	return cmd
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func executeRootCaptureStdout(t *testing.T, args []string) (string, error) {
+	t.Helper()
+
+	oldStdout := os.Stdout
+	readPipe, writePipe, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe error = %v", err)
+	}
+	os.Stdout = writePipe
+
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs(args)
+	execErr := cmd.Execute()
+
+	_ = writePipe.Close()
+	os.Stdout = oldStdout
+	captured, readErr := io.ReadAll(readPipe)
+	if readErr != nil {
+		t.Fatalf("read stdout pipe error = %v", readErr)
+	}
+	return out.String() + string(captured), execErr
 }

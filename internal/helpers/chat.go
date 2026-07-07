@@ -2682,73 +2682,24 @@ func newChatCommand() *cobra.Command {
 
 	// ── file 子命令（会话文件上传，不暴露 spaceId）───────────────
 
-	chatFileCmd := &cobra.Command{Use: "file", Short: "会话文件上传", RunE: groupRunE}
+	chatFileCmd := &cobra.Command{
+		Use:    "file",
+		Short:  "会话文件上传（已下线）",
+		Hidden: true,
+		RunE:   groupRunE,
+	}
 
 	chatFileUploadCmd := &cobra.Command{
-		Use:   "upload",
-		Short: "上传本地文件或 URL 文件到会话文件空间",
-		Long: `上传文件到指定会话关联的文件空间，CLI 和服务端会自动完成会话空间解析，调用方无需获取或传递 spaceId。
+		Use:    "upload",
+		Short:  "上传本地文件或 URL 文件到会话文件空间（已下线）",
+		Hidden: true,
+		Long: `chat file upload 已下线，不再调用 chat/upload_conversation_file_by_url。
 
-本地文件：一个命令内部完成获取上传链接、HTTP PUT 文件上传和提交。
-	URL 文件：uploadConversationFileByUrl，由服务端拉取并上传。`,
-		Example: `  dws chat file upload --group <openConversationId> --file ./report.pdf --format json
-  dws chat file upload --user <userId> --file ./report.pdf --format json
-  dws chat file upload --open-dingtalk-id <openDingTalkId> --url https://example.com/report.pdf --file-name report.pdf --format json`,
+发送本地文件消息请改用 chat message send --msg-type file --file-path；该路径仍然可用，CLI 内部会完成本地文件上传和消息发送。`,
+		Example: `  dws chat message send --group <openConversationId> --msg-type file --file-path ./report.pdf --format json
+  dws chat message send --open-dingtalk-id <openDingTalkId> --msg-type file --file-path ./report.pdf --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			targetArgs, err := buildConversationTargetArgs(cmd)
-			if err != nil {
-				return err
-			}
-			filePath, _ := cmd.Flags().GetString("file")
-			fileURL, _ := cmd.Flags().GetString("url")
-			if filePath == "" && fileURL == "" {
-				return fmt.Errorf("--file or --url is required")
-			}
-			if filePath != "" && fileURL != "" {
-				return fmt.Errorf("--file and --url are mutually exclusive")
-			}
-
-			fileName, _ := cmd.Flags().GetString("file-name")
-			md5Value, _ := cmd.Flags().GetString("md5")
-			uuid, _ := cmd.Flags().GetString("uuid")
-
-			if fileURL != "" {
-				if fileName == "" {
-					fileName = inferFilename(fileURL)
-				}
-				toolArgs := targetArgs
-				toolArgs["fileUrl"] = fileURL
-				toolArgs["fileName"] = fileName
-				if md5Value != "" {
-					toolArgs["md5"] = md5Value
-				}
-				if uuid != "" {
-					toolArgs["uuid"] = uuid
-				}
-				return callMCPToolOnServer("chat", "upload_conversation_file_by_url", toolArgs)
-			}
-
-			meta, err := buildConversationLocalFileMeta(filePath, fileName, md5Value)
-			if err != nil {
-				return err
-			}
-			if deps.Caller.DryRun() {
-				deps.Out.PrintKeyValue("操作", "上传本地文件到会话文件空间")
-				deps.Out.PrintKeyValue("文件", meta.LocalPath)
-				deps.Out.PrintKeyValue("名称", meta.FileName)
-				deps.Out.PrintKeyValue("大小", fmt.Sprintf("%d bytes", meta.FileSize))
-				deps.Out.PrintKeyValue("MD5", meta.MD5)
-				return nil
-			}
-
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-			defer cancel()
-
-			commitText, err := uploadConversationLocalFile(ctx, targetArgs, meta, uuid)
-			if err != nil {
-				return err
-			}
-			return printMCPText(commitText)
+			return fmt.Errorf("chat file upload 已下线；chat/upload_conversation_file_by_url 当前不可用。发送本地文件请改用: dws chat message send --msg-type file --file-path <本地路径>")
 		},
 	}
 	chatFileUploadCmd.Flags().String("group", "", "群聊 openConversationId（群聊时使用）")

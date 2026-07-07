@@ -1,6 +1,6 @@
 ---
 name: dingtalk-calendar
-description: 钉钉日历与会议室。Use when 用户说 约会议/查日程/订会议室/查闲忙/加参会人/改期/取消会议/今天的日程/本周日程/共同空闲。Distinct from dingtalk-conference(视频会议发起/预约/邀请入会/会中控制)、dingtalk-minutes(听记)、dingtalk-todo(待办)。命令前缀：dws calendar。
+description: 钉钉日历与会议室。Use when 用户说 约会议/查日程/订会议室/查闲忙/加参会人/改期/取消会议/今天的日程/本周日程/共同空闲。视频会议发起/邀请入会/会中控制当前 CLI 不支持，应提示在钉钉客户端操作。Distinct from dingtalk-minutes(听记)、dingtalk-todo(待办)。命令前缀：dws calendar。
 cli_version: ">=0.2.14"
 metadata:
   category: product
@@ -45,7 +45,7 @@ metadata:
 
 ## 跨产品协作
 
-- 视频会议发起 / 入会链接 / 邀请入会 / 会中控制 → 切到 `dingtalk-conference`
+- 视频会议发起 / 入会链接 / 邀请入会 / 会中控制 → 当前 CLI 不支持，请在钉钉客户端操作；预约日程仍走 `calendar`
 - 会后摘要 / 待办 → 切到 `dingtalk-minutes`
 - 参会人按人名 → 先用 `dingtalk-aisearch` 解析
 
