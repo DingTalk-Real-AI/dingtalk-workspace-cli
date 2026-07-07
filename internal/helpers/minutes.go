@@ -748,14 +748,11 @@ func newMinutesCommand() *cobra.Command {
 				return fmt.Errorf("flag --policy must be an integer between 0 and 4 (0=管理员, 1=所有者, 2=可编辑, 3=可查看/下载, 4=仅查看)")
 			}
 
-			memberUidStrs := parseCSVValues(mustGetFlag(cmd, "member-uids"))
-			memberUids := make([]float64, 0, len(memberUidStrs))
-			for _, s := range memberUidStrs {
-				uid, parseErr := strconv.ParseFloat(strings.TrimSpace(s), 64)
-				if parseErr != nil {
-					return fmt.Errorf("flag --member-uids contains invalid UID %q: must be a number", s)
+			memberUids := parseCSVValues(mustGetFlag(cmd, "member-uids"))
+			for _, uid := range memberUids {
+				if strings.TrimSpace(uid) == "" {
+					return fmt.Errorf("flag --member-uids contains empty UID")
 				}
-				memberUids = append(memberUids, uid)
 			}
 
 			toolArgs := map[string]any{
@@ -808,14 +805,11 @@ func newMinutesCommand() *cobra.Command {
 				return err
 			}
 
-			memberUidStrs := parseCSVValues(mustGetFlag(cmd, "member-uids"))
-			memberUids := make([]float64, 0, len(memberUidStrs))
-			for _, s := range memberUidStrs {
-				uid, parseErr := strconv.ParseFloat(strings.TrimSpace(s), 64)
-				if parseErr != nil {
-					return fmt.Errorf("flag --member-uids contains invalid UID %q: must be a number", s)
+			memberUids := parseCSVValues(mustGetFlag(cmd, "member-uids"))
+			for _, uid := range memberUids {
+				if strings.TrimSpace(uid) == "" {
+					return fmt.Errorf("flag --member-uids contains empty UID")
 				}
-				memberUids = append(memberUids, uid)
 			}
 
 			return callMCPTool("remove_member_permission", map[string]any{
