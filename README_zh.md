@@ -152,11 +152,17 @@ dws 内置自升级能力，直接从 [GitHub Releases](https://github.com/DingT
 ```bash
 dws upgrade                    # 交互式升级到最新版本
 dws upgrade --check            # 仅检查是否有新版本
-dws upgrade --list             # 列出所有可用版本
+dws upgrade --list             # 列出正式 release 版本
+dws upgrade --beta             # 升级到最新 beta 预发布版本
+dws upgrade --check --beta     # 仅检查 beta 轨道是否有新版本
+dws upgrade --list --beta      # 列出 beta 预发布版本
 dws upgrade --version v1.0.7   # 升级到指定版本
+dws upgrade --version v1.0.8-beta.1  # 升级到指定 beta 版本
 dws upgrade --rollback         # 回滚到上一版本
 dws upgrade -y                 # 跳过确认直接升级
 ```
+
+默认情况下，`dws upgrade` 只跟随正式 release 轨道。只有显式传入 `--beta` 时，才会选择 GitHub pre-release 里的 beta 构建。
 
 <details>
 <summary><strong>工作原理</strong></summary>
@@ -171,8 +177,9 @@ dws upgrade -y                 # 跳过确认直接升级
 | Flag | 说明 |
 |------|------|
 | `--check` | 仅检查更新，不安装 |
-| `--list` | 列出所有可用版本及更新日志 |
-| `--version` | 升级到指定版本（如 `v1.0.7`） |
+| `--list` | 列出正式 release 版本及更新日志 |
+| `--beta` | 对 `upgrade`、`--check`、`--list` 使用 beta 预发布轨道 |
+| `--version` | 升级到指定版本（如 `v1.0.7` 或 `v1.0.8-beta.1`） |
 | `--rollback` | 回滚到上一个备份版本 |
 | `--force` | 强制重新安装，即使已是最新版本 |
 | `--skip-skills` | 跳过技能包更新 |

@@ -152,11 +152,17 @@ dws has built-in self-upgrade capability. Updates are pulled directly from [GitH
 ```bash
 dws upgrade                    # interactive upgrade to latest version
 dws upgrade --check            # check for new versions without installing
-dws upgrade --list             # list all available versions
+dws upgrade --list             # list stable release versions
+dws upgrade --beta             # upgrade to the latest beta pre-release
+dws upgrade --check --beta     # check the beta track without installing
+dws upgrade --list --beta      # list beta pre-release versions
 dws upgrade --version v1.0.7   # upgrade to a specific version
+dws upgrade --version v1.0.8-beta.1  # upgrade to a specific beta version
 dws upgrade --rollback         # rollback to the previous version
 dws upgrade -y                 # skip confirmation prompt
 ```
+
+By default, `dws upgrade` follows the stable release track. Use `--beta` only when you explicitly want the newest GitHub pre-release build.
 
 <details>
 <summary><strong>How it works</strong></summary>
@@ -171,8 +177,9 @@ A backup of the current version is automatically created before each upgrade. Us
 | Flag | Description |
 |------|-------------|
 | `--check` | Check for updates without installing |
-| `--list` | List all available versions with changelogs |
-| `--version` | Upgrade to a specific version (e.g. `v1.0.7`) |
+| `--list` | List available stable release versions with changelogs |
+| `--beta` | Use the beta pre-release track for `upgrade`, `--check`, or `--list` |
+| `--version` | Upgrade to a specific version (e.g. `v1.0.7` or `v1.0.8-beta.1`) |
 | `--rollback` | Rollback to the previous backed-up version |
 | `--force` | Force reinstall even if already on the latest version |
 | `--skip-skills` | Skip skill package update |
