@@ -122,7 +122,7 @@ func (chatHandler) Command(runner executor.Runner) *cobra.Command {
 		newChatBotSearchCommand(runner),
 	)
 
-	root.AddCommand(message, group, bot, newChatFileGroup(runner), newChatMediaGroup())
+	root.AddCommand(message, group, bot, newChatDataAuthCommand(runner), newChatFileGroup(runner), newChatMediaGroup())
 	return root
 }
 
@@ -141,6 +141,96 @@ func botInvoke(runner executor.Runner, cmd *cobra.Command, tool string, params m
 		return err
 	}
 	return writeCommandPayload(cmd, result)
+}
+
+var chatValidGrantTypes = map[string]bool{
+	"once":      true,
+	"session":   true,
+	"timed":     true,
+	"permanent": true,
+}
+
+func newChatDataAuthCommand(runner executor.Runner) *cobra.Command {
+	dataAuth := &cobra.Command{
+		Use:               "data-auth",
+		Short:             "授予 chat 数据读取权限",
+		Long:              "授予 chat 数据读取权限。该命令用于跨组织消息拉取等数据访问场景，不用于发送、撤回、群管理等命令操作。",
+		Args:              cobra.NoArgs,
+		TraverseChildren:  true,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+
+	crossOrg := &cobra.Command{
+		Use:               "cross-org",
+		Short:             "授予所有目标组织的 chat 数据访问权限",
+		Long:              `授予所有目标组织的跨组织 chat 数据访问权限。该命令固定使用 targetOrgId 通配符 "*"。`,
+		Example:           "  dws chat data-auth cross-org --all --grant-type timed --ttl 24h",
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			params, err := buildChatCrossOrgDataAuthArgs(cmd)
+			if err != nil {
+				return err
+			}
+			invocation := executor.NewHelperInvocation(
+				cobracmd.LegacyCommandPath(cmd),
+				"im",
+				"chat_permission_grant",
+				params,
+			)
+			invocation.DryRun = commandDryRun(cmd)
+			result, err := runner.Run(cmd.Context(), invocation)
+			if err != nil {
+				return err
+			}
+			return writeCommandPayload(cmd, result)
+		},
+	}
+	preferLegacyLeaf(crossOrg)
+	crossOrg.Flags().Bool("all", false, "授权所有目标组织")
+	crossOrg.Flags().String("agentCode", "wukong", "Agent 标识，默认 wukong")
+	crossOrg.Flags().String("grant-type", "timed", "授权策略: once|session|timed|permanent")
+	crossOrg.Flags().String("ttl", "24h", "timed 授权有效期，如 1h/4h/24h/7d")
+	crossOrg.Flags().String("session-id", "", "session 授权的会话标识")
+	dataAuth.AddCommand(crossOrg)
+	return dataAuth
+}
+
+func buildChatCrossOrgDataAuthArgs(cmd *cobra.Command) (map[string]any, error) {
+	all, _ := cmd.Flags().GetBool("all")
+	if !all {
+		return nil, apperrors.NewValidation("--all is required")
+	}
+	grantType, _ := cmd.Flags().GetString("grant-type")
+	if !chatValidGrantTypes[grantType] {
+		return nil, apperrors.NewValidation("invalid --grant-type " + grantType + ", must be one of: once, session, timed, permanent")
+	}
+	ttl, _ := cmd.Flags().GetString("ttl")
+	sessionID, _ := cmd.Flags().GetString("session-id")
+	if grantType == "timed" && strings.TrimSpace(ttl) == "" {
+		return nil, apperrors.NewValidation("--ttl is required when --grant-type is timed")
+	}
+	if grantType == "session" && strings.TrimSpace(sessionID) == "" {
+		return nil, apperrors.NewValidation("--session-id is required when --grant-type is session")
+	}
+	agentCode, _ := cmd.Flags().GetString("agentCode")
+	params := map[string]any{
+		"agentCode":     agentCode,
+		"scope":         "chat.data:cross-org",
+		"grantType":     grantType,
+		"grantCategory": "data",
+		"grantParams":   `{"targetOrgId":"*"}`,
+	}
+	if grantType == "timed" {
+		params["ttl"] = ttl
+	}
+	if strings.TrimSpace(sessionID) != "" {
+		params["sessionId"] = sessionID
+	}
+	return params, nil
 }
 
 func newChatBotFindCommand(runner executor.Runner) *cobra.Command {
@@ -327,7 +417,7 @@ func newChatMessageSendCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().Bool("at-all", false, "@所有人 (仅 --group 群聊生效)")
 	cmd.Flags().String("at-open-dingtalk-ids", "", "@指定成员 openDingtalkId 列表，逗号分隔 (仅 --group 群聊生效)；@ 群内机器人时，务必使用 `dws chat group bots --group <openConversationId>` 返回的 openDingtalkId（群级别 ID，与全局搜索结果不同）")
 	cmd.Flags().String("uuid", "", "幂等 UUID (可选，24h 内相同 uuid 不重复发送)")
-	cmd.Flags().String("msg-type", "", "富媒体类型: image / file (纯文本/Markdown 留空)")
+	cmd.Flags().String("msg-type", "", "富媒体类型: image / file / audio / video (audio/video 为 file 别名；纯文本/Markdown 留空)")
 	cmd.Flags().String("media-id", "", "图片 mediaId (msg-type=image 时必填)")
 	cmd.Flags().Int64("dentry-id", 0, "钉盘文件 dentryId (msg-type=file 时必填)")
 	cmd.Flags().Int64("space-id", 0, "钉盘空间 ID (msg-type=file 时必填)")
@@ -421,10 +511,14 @@ func buildChatMessageSendInvocation(cmd *cobra.Command, args []string) (map[stri
 
 	// ── 富媒体消息 (image / file)：走 send_personal_message，后端 schema 支持
 	// content + msgType (image 经 content 携带 mediaId；file 经 content 携带
-	// dentryId/spaceId)。本地 --file-path 自动上传暂未移植，使用钉盘 dentry/space。
+	// dentryId/spaceId)。audio/video 是 CLI 输入别名，发给服务端仍统一为 file。
+	// 本地 --file-path 自动上传暂未移植，使用钉盘 dentry/space。
 	msgType, _ := cmd.Flags().GetString("msg-type")
 	if msgType == "text" || msgType == "markdown" {
 		msgType = ""
+	}
+	if msgType == "audio" || msgType == "video" {
+		msgType = "file"
 	}
 	if msgType != "" {
 		var contentJSON string
@@ -452,7 +546,7 @@ func buildChatMessageSendInvocation(cmd *cobra.Command, args []string) (map[stri
 			})
 			contentJSON = string(b)
 		default:
-			return nil, "", apperrors.NewValidation("unsupported --msg-type: " + msgType + " (supported: image, file)")
+			return nil, "", apperrors.NewValidation("unsupported --msg-type: " + msgType + " (supported: image, file, audio, video)")
 		}
 		params := map[string]any{"msgType": msgType, "content": contentJSON}
 		attachAITag(cmd, params)

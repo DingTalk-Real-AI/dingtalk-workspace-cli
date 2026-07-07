@@ -393,15 +393,17 @@ Flags:
 --group 指定群聊 openConversationId 发群消息；--user 指定用户 userId 发单聊；--open-dingtalk-id 指定用户 openDingTalkId 发单聊。三者只能选其一，不能同时指定。纯文本/Markdown 单聊传 --user 时直接走 userId 发送能力，不需要先手动查询 openDingTalkId。推荐使用 --text flag 传递消息内容（也支持位置参数）。可选 --title 作为消息标题。
 若用户只提供了数字群号而非 openConversationId，需先调用 `chat group get-by-group-id` 将群号转为 openConversationId，再传入 --group。
 --群聊时可选 --at-all @所有人，或 --at-open-dingtalk-ids 指定成员（仅群聊时生效）。
---富媒体消息：通过 --msg-type 指定类型（image/file），必须根据文件扩展名判断 msgType 后再发送。
+--富媒体消息：通过 --msg-type 指定类型（image/file/audio/video），audio/video 是 file 的别名，最终按 file 发送；必须根据文件扩展名判断 msgType 后再发送。
 ```
 Usage:
   dws chat message send [flags] [<text>]
 
 富媒体消息 msgType 决策（必须按此规则判断，不可跳过）:
   文件扩展名                               → msgType → 发送参数
-  .jpg/.jpeg/.png/.gif/.bmp/.webp          → image   → dt_media_upload 上传 → `python scripts/extract_media_id.py <URL>` 提取 mediaId → --msg-type image --media-id
-  其他所有（.mp3/.wav/.mp4/.avi/.pdf/.doc/.xls/.zip 等） → file → conversation-info 获取 spaceId → drive upload --space-id 上传 → drive info 获取 dentryId → --msg-type file --dentry-id --space-id --file-name --file-type --file-path --file-size
+  .jpg/.jpeg/.png/.gif/.bmp/.webp          → image       → dt_media_upload 上传 → `python scripts/extract_media_id.py <URL>` 提取 mediaId → --msg-type image --media-id
+  .mp3/.wav/.m4a/.aac/.flac                → audio(file) → conversation-info 获取 spaceId → drive upload --space-id 上传 → drive info 获取 dentryId → --msg-type audio --dentry-id --space-id --file-name --file-type --file-path --file-size
+  .mp4/.mov/.avi/.mkv/.webm                → video(file) → conversation-info 获取 spaceId → drive upload --space-id 上传 → drive info 获取 dentryId → --msg-type video --dentry-id --space-id --file-name --file-type --file-path --file-size
+  其他所有（.pdf/.doc/.xls/.zip 等）         → file        → conversation-info 获取 spaceId → drive upload --space-id 上传 → drive info 获取 dentryId → --msg-type file --dentry-id --space-id --file-name --file-type --file-path --file-size
 
 Example:
   dws chat message send --group <openconversation_id> --text "hello"
@@ -429,7 +431,7 @@ Flags:
       --at-all                   @所有人（仅群聊时生效，可选，默认 false）
       --at-open-dingtalk-ids string  @指定成员的 openDingTalkId 列表，逗号分隔（仅群聊时生效，可选）
       --media-id string          图片 mediaId（dt_media_upload 上传后用 `python scripts/extract_media_id.py <URL>` 提取，仅 msgType=image）
-      --msg-type string          消息类型: image/file（image 用 mediaId，file 用钉盘上传）
+      --msg-type string          消息类型: image/file/audio/video（audio/video 是 file 别名；image 用 mediaId，file/audio/video 用钉盘上传）
       --dentry-id int64          钉盘文件 dentryId（msgType=file 时必填，通过 drive info 获取）
       --space-id int64           钉盘空间 ID（msgType=file 时必填）
       --file-name string         文件名（msgType=file 时必填）
@@ -450,11 +452,12 @@ Flags:
     2. Markdown 规范下**单个换行不产生换行效果**。需要换行时请使用：段落分隔（连续两个真实换行符 `\n\n`）、行尾两个空格 + 真实换行符（硬换行 `<br>`），或直接写 HTML 的 `<br>` 标签
   - 富媒体消息类型与参数对应关系：
     - image（图片）：--msg-type image --media-id
-    - file（音频/视频/文档等所有非图片文件）：先 conversation-info 获取 spaceId → drive upload --space-id 上传 → drive info 获取 dentryId → --msg-type file --dentry-id --space-id --file-name --file-type --file-path --file-size
+    - audio/video：file 的语义别名，发给服务端仍是 file；先 conversation-info 获取 spaceId → drive upload --space-id 上传 → drive info 获取 dentryId → --msg-type audio 或 --msg-type video --dentry-id --space-id --file-name --file-type --file-path --file-size
+    - file（文档/压缩包等其他非图片文件）：先 conversation-info 获取 spaceId → drive upload --space-id 上传 → drive info 获取 dentryId → --msg-type file --dentry-id --space-id --file-name --file-type --file-path --file-size
   - mediaId 通过 dt_media_upload 上传获得，必须用脚本提取：`python scripts/extract_media_id.py "<URL>"`（输出如 @lQLPxxx，直接用于 --media-id）。禁止手动从 URL 中截取或拼接 mediaId，手动解析会因 URL 格式不稳定导致尺寸后缀残留
   - --uuid 用于幂等发送，传入相同 uuid 在 24h 内不会重复投递消息（可选，群聊和单聊均支持）
   - 富媒体消息的单聊优先使用 `--open-dingtalk-id`；传 `--user` 时 CLI 会尝试解析成 openDingTalkId 后发送
-  - 发送文件/媒体消息时，必须先根据文件扩展名判断 msgType：图片(.jpg/.png/.gif/.bmp/.webp)→image，其他所有→file；不可跳过此判断步骤
+  - 发送文件/媒体消息时，必须先根据文件扩展名判断 msgType：图片(.jpg/.png/.gif/.bmp/.webp)→image，音频(.mp3/.wav/.m4a/.aac/.flac)→audio，视频(.mp4/.mov/.avi/.mkv/.webm)→video，其他所有→file；不可跳过此判断步骤。audio/video 是 file 别名，不代表不支持音频/视频
   - 20MB 降级：图片超过 20MB 时 dt_media_upload 会失败，必须降级走钉盘上传 + Markdown 嵌入方式发送（参见「发送图片+文字消息」章节）。音频/视频/文件走钉盘上传无 20MB 限制
   - 发送文字 + 文件混合消息时的完整流程：除了将文件以 Markdown 链接内嵌到文字消息中发送一条 md 消息外，还必须额外逐个发送独立的文件消息（--msg-type file），确保接收方可以直接下载原始文件。即：先发一条包含文字和文件链接的 md 消息，再对每个涉及的文件各发一条 --msg-type file 的文件消息
 ```
