@@ -332,11 +332,11 @@ func ensurePersonalSubscription(ctx context.Context, client *personal.Client, id
 		if err != nil {
 			return nil, "", "", err
 		}
-		eventKey := firstNonEmptyString(opts.EventKey, sub.EventKey)
+		eventKey := firstNonEmptyPersonalString(opts.EventKey, sub.EventKey)
 		if eventKey == "" {
 			return nil, "", "", fmt.Errorf("event_key is required when --subscribe-id lookup returns no event_key")
 		}
-		ruleType := firstNonEmptyString(sub.RuleType, opts.Rule)
+		ruleType := firstNonEmptyPersonalString(sub.RuleType, opts.Rule)
 		if ruleType == "" {
 			if def, ok := personal.Lookup(eventKey); ok {
 				ruleType = def.RuleType
@@ -670,7 +670,7 @@ func displayIdentityPart(v string) string {
 	return v
 }
 
-func firstNonEmptyString(values ...string) string {
+func firstNonEmptyPersonalString(values ...string) string {
 	for _, v := range values {
 		if strings.TrimSpace(v) != "" {
 			return strings.TrimSpace(v)
