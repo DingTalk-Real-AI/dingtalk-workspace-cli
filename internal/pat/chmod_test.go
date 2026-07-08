@@ -382,7 +382,7 @@ func TestPATHelpDocumentsBatchAuthorization(t *testing.T) {
 		"由服务端默认兜底",
 		"aitable.record:query aitable.record:create --grant-type permanent --yes",
 		"dws pat chmod --products calendar,aitable",
-		"dws pat chmod --recommend --grant-type session",
+		"dws pat chmod --recommend --yes",
 	} {
 		if !strings.Contains(chmodHelp, want) {
 			t.Fatalf("pat chmod help missing %q\nhelp:\n%s", want, chmodHelp)
@@ -486,6 +486,7 @@ func TestChmod_productsSessionModePassesIdentityArgsAndCompatEnv(t *testing.T) {
 		`{"success":true,"data":{"grantedScopes":["calendar.event:read"]}}`,
 	}}
 	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("grant-type", "session")
 	_ = cmd.Flags().Set("products", "calendar")
 	_ = cmd.Flags().Set("session-id", "session-123")
 	setBatchYesForTest(t, cmd)
@@ -851,7 +852,7 @@ func TestChmod_grantTypeAndSessionParameterMatrix(t *testing.T) {
 	}
 }
 
-func TestChmod_productsDryRunUsesSessionIDFromEnv(t *testing.T) {
+func TestChmod_productsSessionDryRunUsesSessionIDFromEnv(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 	t.Setenv(sessionIDEnvDWS, "env-session-123")
 	fake := &sequenceToolCaller{
@@ -861,6 +862,7 @@ func TestChmod_productsDryRunUsesSessionIDFromEnv(t *testing.T) {
 		},
 	}
 	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("grant-type", "session")
 	_ = cmd.Flags().Set("products", "calendar")
 
 	if err := cmd.RunE(cmd, nil); err != nil {
@@ -1064,6 +1066,7 @@ func TestChmod_sessionModeUsesDingtalkSessionEnv(t *testing.T) {
 
 	fake := &fakeToolCaller{resultOK: true}
 	cmd := buildChmod(t, fake)
+	_ = cmd.Flags().Set("grant-type", "session")
 
 	if err := cmd.RunE(cmd, []string{"aitable.record:read"}); err != nil {
 		t.Fatalf("chmod RunE error = %v", err)
@@ -1089,6 +1092,7 @@ func TestChmod_explicitSessionIDOverridesStaleDingtalkSessionEnv(t *testing.T) {
 
 	fake := &fakeToolCaller{resultOK: true}
 	cmd := buildChmod(t, fake)
+	_ = cmd.Flags().Set("grant-type", "session")
 	_ = cmd.Flags().Set("session-id", "flag-session")
 
 	if err := cmd.RunE(cmd, []string{"aitable.record:read"}); err != nil {
@@ -1116,7 +1120,6 @@ func TestChmod_recommendFlagPlansThenGrantsWithoutPositionalScopes(t *testing.T)
 		`{"success":true,"data":{"grantedScopes":["recommended.scope:read"]}}`,
 	}}
 	cmd := newChmodCommand(fake)
-	_ = cmd.Flags().Set("grant-type", "once")
 	_ = cmd.Flags().Set("recommend", "true")
 	setBatchYesForTest(t, cmd)
 
@@ -1133,8 +1136,14 @@ func TestChmod_recommendFlagPlansThenGrantsWithoutPositionalScopes(t *testing.T)
 	if got := fake.calls[0].args["recommend"]; got != true {
 		t.Fatalf("recommend = %#v, want true", got)
 	}
+	if got := fake.calls[0].args["grantType"]; got != grantTypePermanent {
+		t.Fatalf("plan grantType = %#v, want %q", got, grantTypePermanent)
+	}
 	if fake.calls[1].tool != patBatchGrantToolName {
 		t.Fatalf("second tool = %q, want %q", fake.calls[1].tool, patBatchGrantToolName)
+	}
+	if got := fake.calls[1].args["grantType"]; got != grantTypePermanent {
+		t.Fatalf("grant grantType = %#v, want %q", got, grantTypePermanent)
 	}
 }
 
