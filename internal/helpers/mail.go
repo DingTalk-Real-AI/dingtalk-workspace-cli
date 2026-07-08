@@ -104,7 +104,7 @@ func newMailCommand() *cobra.Command {
 		Long: `查询当前用户绑定的所有邮箱地址。
 
 返回字段：
-  mailboxes  邮箱列表，每条包含邮箱地址、账号类型、所属企业
+  emailAccounts  邮箱列表，每条包含邮箱地址(email)、账号类型(type)、所属企业(orgName)
 
 错误说明：
   domain.notFound  该用户的邮箱不是由钉钉邮箱托管，无法完成操作`,

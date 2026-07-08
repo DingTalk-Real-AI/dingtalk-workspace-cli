@@ -1128,13 +1128,13 @@ dws attendance report query-leave --users userId1,userId2 \
 dws attendance vacation types --format json
 
 # 查看指定员工假期余额
-dws attendance vacation balance --users userId1,userId2 --format json
+dws attendance vacation balance --users userId1,userId2 --leave-code <假期类型code> --format json
 
 # 查看指定员工某类假期余额
 dws attendance vacation balance --users userId1 --leave-code a1b2c3d4-e5f6-7890-abcd-ef1234567890 --format json
 
 # 查看指定员工假期余额变更记录
-dws attendance vacation records --user USER_ID --start 2026-04-01 --end 2026-04-22 --format json
+dws attendance vacation records --user USER_ID --leave-code <假期类型code> --start 2026-04-01 --end 2026-04-22 --format json
 
 # 更新假期规则名称
 dws attendance vacation update-type --leave-code a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
