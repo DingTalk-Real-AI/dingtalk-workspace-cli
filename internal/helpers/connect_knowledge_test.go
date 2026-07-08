@@ -29,7 +29,7 @@ dws 通过 brew install dws 安装，升级用 dws upgrade。
 
 # 缓存问题
 
-出现幽灵命令或命令缺失时，运行 dws cache refresh 强制刷新发现配置缓存。
+服务发现已下线。出现命令缺失或 endpoint_not_resolved 时，检查静态端点目录并升级到包含该能力的 dws 版本。
 `
 	bot := `# 机器人建联
 
@@ -82,8 +82,8 @@ func TestKnowledgeAugmentEnglishTerms(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := kb.augment("cache refresh 是干什么的")
-	if !strings.Contains(got, "强制刷新发现配置缓存") {
+	got := kb.augment("endpoint_not_resolved 是干什么的")
+	if !strings.Contains(got, "静态端点目录") {
 		t.Fatalf("augment missed the cache chunk:\n%s", got)
 	}
 }

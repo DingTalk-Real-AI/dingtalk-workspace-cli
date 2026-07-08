@@ -40,6 +40,7 @@ type codexAppServerForwarder struct {
 	timeout  time.Duration
 	workDir  string
 	model    string
+	yolo     bool
 	sessions *codexThreadSessions
 }
 
@@ -57,6 +58,7 @@ func newCodexAppServerForwarder(bin string, env []string, timeout time.Duration,
 		timeout:  timeout,
 		workDir:  opts.WorkDir,
 		model:    opts.Model,
+		yolo:     opts.Yolo,
 		sessions: sessions,
 	}
 }
@@ -103,7 +105,7 @@ func (f *codexAppServerForwarder) forwardStream(ctx context.Context, convID, tex
 }
 
 func (f *codexAppServerForwarder) forwardAppServer(ctx context.Context, convID, text string, onDelta func(string)) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, f.timeout)
+	ctx, cancel := applyTimeout(ctx, f.timeout)
 	defer cancel()
 
 	var state *codexThreadState
@@ -167,11 +169,15 @@ func (f *codexAppServerForwarder) cwd() string {
 }
 
 func (f *codexAppServerForwarder) threadParams(threadID string) map[string]any {
+	sandbox := "read-only"
+	if f.yolo {
+		sandbox = "workspace-write"
+	}
 	params := map[string]any{
 		"approvalPolicy":        "never",
 		"cwd":                   f.cwd(),
 		"developerInstructions": codexRobotDeveloperInstructions,
-		"sandbox":               "read-only",
+		"sandbox":               sandbox,
 	}
 	if f.model != "" {
 		params["model"] = f.model

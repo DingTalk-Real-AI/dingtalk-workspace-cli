@@ -474,7 +474,10 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 			clientID := devAppStringFlag(cmd, "robot-client-id")
 			clientSecret := devAppStringFlag(cmd, "robot-client-secret")
 			unifiedAppID := devAppStringFlag(cmd, "unified-app-id")
-			opts := connectAgentOptionsFromCommand(cmd)
+			opts, err := connectAgentOptionsFromCommand(cmd)
+			if err != nil {
+				return err
+			}
 
 			// Credential resolution: explicit pair wins; otherwise reuse dev app's
 			// credentials get against --unified-app-id.
@@ -519,6 +522,16 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 				}
 			}
 
+			// Security: if the caller pasted clientSecret onto argv, warn once —
+			// any user on the box can lift it with `ps -ef`. The safe path is
+			// --unified-app-id, which resolves the secret through
+			// `dev app credentials get` at runtime so it never touches argv.
+			// Emit before dry-run so both preview and real launch surface the
+			// warning; the warning is idempotent (one line per invocation).
+			if strings.HasPrefix(resolvedBy, "flag:") {
+				fmt.Fprintln(cmd.ErrOrStderr(), "[connect] WARNING: --robot-client-secret 出现在命令行，任何本机用户都能通过 `ps` 看到；建议改用 --unified-app-id <uappid>，由 dev app credentials get 后台取密钥。")
+			}
+
 			if commandDryRun(cmd) {
 				return writeCommandPayload(cmd, connectPreviewEnvelope(map[string]any{
 					"channel":          channel,
@@ -535,7 +548,10 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 			// connector alive 7x24. We resolve credentials/channel first (above) so
 			// the parent fails fast on bad input before forking, then re-exec.
 			if daemonMode, _ := cmd.Flags().GetBool(daemonFlag); daemonMode {
-				return startDaemon(cmd, daemonDirKey(clientID, unifiedAppID), clientID)
+				notifyStaffID := devAppStringFlag(cmd, "notify-staff-id")
+				profile, _ := cmd.Root().PersistentFlags().GetString("profile")
+				alwaysOn, _ := cmd.Flags().GetBool("alwayson")
+				return startDaemon(cmd, daemonDirKey(clientID, unifiedAppID), clientID, unifiedAppID, channel, notifyStaffID, strings.TrimSpace(profile), alwaysOn)
 			}
 
 			fmt.Fprintf(cmd.ErrOrStderr(), "[connect] channel=%s（%s）凭证来源=%s\n", channel, detectedBy, resolvedBy)
@@ -546,7 +562,8 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 	preferLegacyLeaf(cmd)
 	// Daemon mode (see connect_daemon.go). --daemon detaches the connector into a
 	// self-restarting background supervisor; status/stop are sibling subcommands.
-	cmd.Flags().Bool(daemonFlag, false, "守护进程模式：把连接器放到后台常驻（脱离终端、崩溃自拉起），父进程打印 pid/日志路径后退出（Windows 暂不支持）")
+	cmd.Flags().Bool(daemonFlag, false, "守护进程模式：把连接器放到后台运行（脱离终端），父进程打印 pid/日志路径后退出（Windows 暂不支持）")
+	cmd.Flags().Bool("alwayson", false, "常驻模式：worker 崩溃后自动重启（仅 --daemon 生效）")
 	// Internal re-exec mode flags, hidden from help.
 	cmd.Flags().Bool(daemonSuperviseFlag, false, "internal: run the daemon supervisor (set automatically by --daemon)")
 	cmd.Flags().Bool(daemonWorkerFlag, false, "internal: run a single supervised connector worker (set automatically by the supervisor)")
@@ -555,6 +572,8 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 	cmd.AddCommand(
 		newDevAppRobotConnectStatusCommand(),
 		newDevAppRobotConnectStopCommand(),
+		newDevAppRobotConnectRestartCommand(),
+		newDevAppRobotConnectListCommand(runner),
 	)
 	cmd.Flags().String("channel", "auto", "渠道：auto(默认,自动探测)|openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode|custom(自研/未支持的 AI，配 --agent-cmd)")
 	cmd.Flags().String("agent-cmd", "", "自研/未支持的 AI 工具命令（无头/一次性：问题作为最后一个参数追加，答案打到 stdout）；用来接入内置渠道之外的 AI（如网易有道龙虾 LobsterAI）；等价于 --channel custom + 设 DWS_AGENT_CMD；env: DWS_AGENT_CMD")
@@ -567,6 +586,10 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("agent-model", "", "覆盖本地 agent 模型（如 claude 的 sonnet/opus；默认用渠道内置模型，求快）；env: DWS_AGENT_MODEL")
 	cmd.Flags().String("agent-workdir", "", "本地 agent 的运行目录（放知识文件可给机器人上下文；默认空白临时目录，求快）；env: DWS_AGENT_WORKDIR")
 	cmd.Flags().Bool("agent-memory", true, "按会话续聊：同一群/单聊共享 agent 会话上下文（codex/opencode/qoder/qoderwork/claudecode/codebuddy/workbuddy 支持；--agent-memory=false 关闭）")
+	cmd.Flags().Int("agent-timeout", 0, "每次 agent 调用的超时时间（秒），0=不限制（默认）；env: DWS_AGENT_TIMEOUT_MS（毫秒）")
+	cmd.Flags().String("agent-permission-mode", "", "agent 权限模式：bypass(默认, 最高权限)|ask(需要确认/受限)；env: DWS_AGENT_PERMISSION_MODE")
+	cmd.Flags().String("agent-approval-mode", "", "agent 审批模式：yolo(默认, 最高权限)|ask(需要确认/受限)，兼容 Gemini/Codex 社区语义；env: DWS_AGENT_APPROVAL_MODE")
+	cmd.Flags().Bool("yolo", false, "最高权限模式短命令；等价于 --agent-permission-mode bypass / --agent-approval-mode yolo")
 	cmd.Flags().Bool("reply-card", true, "用 AI 卡片回复（思考中→完成状态，同官方渠道体验）；卡片失败自动回退普通消息；--reply-card=false 关闭")
 	cmd.Flags().String("card-template", "", "AI 卡片模板 ID（开发者后台·本应用·AI 卡片设置里获取；模板按应用授权，强烈建议注册自己应用的模板）；env: DWS_CARD_TEMPLATE")
 	cmd.Flags().String("knowledge-dir", "", "答疑知识目录（.md/.txt）：每条消息本地检索 top-k 片段拼进 prompt，agent 仍在空目录跑、不拖慢回复；env: DWS_KNOWLEDGE_DIR")
@@ -579,13 +602,14 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("role-config", "", "数字员工角色配置 YAML：用角色的主人/人设/知识源填充未显式给出的选项（显式 flag 优先）；role 的 client_id 必须与本机器人一致；env: DWS_ROLE_CONFIG")
 	cmd.Flags().String("audit-sheet", "", "审计在线表格 ID/URL（axls）：确认闸每个操作追加一行到该表格，可在钉钉随时查看；空=仅本地审计文件；env: DWS_AUDIT_SHEET")
 	cmd.Flags().String("audit-sheet-tab", "Sheet1", "审计表格的工作表 ID/名称（配合 --audit-sheet）；env: DWS_AUDIT_SHEET_TAB")
+	cmd.Flags().String("notify-staff-id", "", "状态通知 staffId：机器人启动/停止/崩溃时自动发钉钉消息通知此人；env: DWS_NOTIFY_STAFF_ID")
 	return cmd
 }
 
 // connectAgentOptionsFromCommand reads the agent tuning flags, falling back to
 // the mirrored env vars so connectors run from scripts/services can be
 // configured without flags.
-func connectAgentOptionsFromCommand(cmd *cobra.Command) connectAgentOptions {
+func connectAgentOptionsFromCommand(cmd *cobra.Command) (connectAgentOptions, error) {
 	model := devAppStringFlag(cmd, "agent-model")
 	if model == "" {
 		model = strings.TrimSpace(os.Getenv("DWS_AGENT_MODEL"))
@@ -595,6 +619,11 @@ func connectAgentOptionsFromCommand(cmd *cobra.Command) connectAgentOptions {
 		workDir = strings.TrimSpace(os.Getenv("DWS_AGENT_WORKDIR"))
 	}
 	memory, _ := cmd.Flags().GetBool("agent-memory")
+	agentTimeoutSec, _ := cmd.Flags().GetInt("agent-timeout")
+	yolo, err := resolveAgentYoloMode(cmd)
+	if err != nil {
+		return connectAgentOptions{}, err
+	}
 	replyCard, _ := cmd.Flags().GetBool("reply-card")
 	// Env kill-switch for scripted/service runs: DWS_REPLY_CARD=0 disables
 	// cards regardless of the flag default.
@@ -658,6 +687,8 @@ func connectAgentOptionsFromCommand(cmd *cobra.Command) connectAgentOptions {
 		auditSheetTab = "Sheet1"
 	}
 	return connectAgentOptions{Model: model, WorkDir: workDir, Memory: memory,
+		Timeout:   time.Duration(agentTimeoutSec) * time.Second,
+		Yolo:      yolo,
 		ReplyCard: replyCard, CardTemplate: cardTemplate,
 		KnowledgeDir:    knowledgeDir,
 		KnowledgeSource: knowledgeSource,
@@ -667,7 +698,54 @@ func connectAgentOptionsFromCommand(cmd *cobra.Command) connectAgentOptions {
 		ApprovalCardTemplate: approvalTemplate,
 		RoleConfigPath:       roleConfig,
 		AuditSheetNode:       auditSheet,
-		AuditSheetTab:        auditSheetTab}
+		AuditSheetTab:        auditSheetTab}, nil
+}
+
+func resolveAgentYoloMode(cmd *cobra.Command) (bool, error) {
+	if v := strings.ToLower(strings.TrimSpace(devAppStringFlag(cmd, "agent-permission-mode"))); v != "" {
+		switch v {
+		case "ask":
+			return false, nil
+		case "bypass":
+			return true, nil
+		default:
+			return false, apperrors.NewValidation("--agent-permission-mode 仅支持 ask|bypass")
+		}
+	}
+	if v := strings.ToLower(strings.TrimSpace(os.Getenv("DWS_AGENT_PERMISSION_MODE"))); v != "" {
+		switch v {
+		case "ask":
+			return false, nil
+		case "bypass":
+			return true, nil
+		default:
+			return false, apperrors.NewValidation("DWS_AGENT_PERMISSION_MODE 仅支持 ask|bypass")
+		}
+	}
+	if v := strings.ToLower(strings.TrimSpace(devAppStringFlag(cmd, "agent-approval-mode"))); v != "" {
+		switch v {
+		case "ask":
+			return false, nil
+		case "yolo":
+			return true, nil
+		default:
+			return false, apperrors.NewValidation("--agent-approval-mode 仅支持 ask|yolo")
+		}
+	}
+	if v := strings.ToLower(strings.TrimSpace(os.Getenv("DWS_AGENT_APPROVAL_MODE"))); v != "" {
+		switch v {
+		case "ask":
+			return false, nil
+		case "yolo":
+			return true, nil
+		default:
+			return false, apperrors.NewValidation("DWS_AGENT_APPROVAL_MODE 仅支持 ask|yolo")
+		}
+	}
+	if yolo, _ := cmd.Flags().GetBool("yolo"); yolo {
+		return true, nil
+	}
+	return true, nil
 }
 
 // connectAgentOptionsPayload renders the effective agent tuning for the
@@ -719,7 +797,11 @@ func connectAgentOptionsPayload(channel string, opts connectAgentOptions) map[st
 			replyStyle = "text/markdown + thinking/done表态（配 --card-template 升级为卡片）"
 		}
 	}
-	return map[string]any{"model": model, "workdir": workDir, "memory": memory, "replyStyle": replyStyle}
+	payload := map[string]any{"model": model, "workdir": workDir, "memory": memory, "replyStyle": replyStyle}
+	if opts.Yolo {
+		payload["yolo"] = "enabled"
+	}
+	return payload
 }
 
 // devAppFetchCredentials reuses dev app 的 get_dev_app_credentials tool to

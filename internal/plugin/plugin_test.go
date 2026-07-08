@@ -14,9 +14,12 @@
 package plugin
 
 import (
+	"bytes"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -174,6 +177,43 @@ func TestManifestValidate(t *testing.T) {
 				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestLoadAllSuppressesOptionalPluginValidationWarnings(t *testing.T) {
+	dir := t.TempDir()
+	pluginDir := filepath.Join(dir, "user", "conference")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := `{
+		"name": "conference",
+		"version": "1.0.0",
+		"description": "音视频会议",
+		"type": "user",
+		"minCLIVersion": "9.0.0",
+		"mcpServers": {
+			"conference": {
+				"type": "streamable-http",
+				"endpoint": "https://example.com"
+			}
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var logs bytes.Buffer
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	defer slog.SetDefault(oldLogger)
+
+	loader := &Loader{PluginsDir: dir, CLIVersion: "1.0.48"}
+	if got := loader.LoadAll(); len(got) != 0 {
+		t.Fatalf("LoadAll loaded incompatible plugin: %#v", got)
+	}
+	if strings.Contains(logs.String(), "validation failed") {
+		t.Fatalf("optional plugin validation should not warn at default level:\n%s", logs.String())
 	}
 }
 

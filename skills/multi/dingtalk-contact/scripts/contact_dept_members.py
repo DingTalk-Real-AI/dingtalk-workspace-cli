@@ -8,10 +8,18 @@
 """
 
 import sys
+import re
 import json
 import subprocess
 import argparse
 from typing import List, Any, Optional
+
+
+def strip_highlight(text: str) -> str:
+    """去除 dept search 返回名称中的 <red>…</red> 高亮标签。"""
+    if not isinstance(text, str):
+        return text
+    return re.sub(r'</?red>', '', text)
 
 
 def run_dws(
@@ -67,7 +75,11 @@ def main():
     elif isinstance(dept_data, dict):
         inner = dept_data.get('result', dept_data)
         if isinstance(inner, dict):
-            depts = inner.get('items', inner.get('depts', []))
+            # dept search 真机返回顶层 deptList；兼容历史 items/depts 键。
+            depts = (inner.get('deptList')
+                     or inner.get('items')
+                     or inner.get('depts')
+                     or [])
         elif isinstance(inner, list):
             depts = inner
         else:
@@ -80,7 +92,9 @@ def main():
 
     for dept in depts:
         dept_id = dept.get('id') or dept.get('deptId')
-        dept_name = dept.get('name') or dept.get('deptName', '未知')
+        dept_name = strip_highlight(
+            dept.get('name') or dept.get('deptName', '未知')
+        )
         if not dept_id:
             continue
 
@@ -100,8 +114,11 @@ def main():
         elif isinstance(members_data, dict):
             inner = members_data.get('result', members_data)
             if isinstance(inner, dict):
-                members = inner.get('userlist',
-                                    inner.get('list', []))
+                # list-members 真机返回 deptUserList；兼容历史 userlist/list 键。
+                members = (inner.get('deptUserList')
+                           or inner.get('userlist')
+                           or inner.get('list')
+                           or [])
             elif isinstance(inner, list):
                 members = inner
             else:
@@ -113,9 +130,12 @@ def main():
             continue
 
         for m in members:
-            name = m.get('name') or m.get('userName', '未知')
-            title = m.get('title') or m.get('position', '')
-            uid = m.get('userId') or m.get('userid', '')
+            # list-members 真机每项形如 {"userInfo": {"name":..., "userId":...}}，
+            # 成员字段嵌在 userInfo 下；兼容历史扁平结构。
+            info = m.get('userInfo', m)
+            name = info.get('name') or info.get('userName', '未知')
+            title = info.get('title') or info.get('position', '')
+            uid = info.get('userId') or info.get('userid', '')
             line = f"  👤 {name}"
             if title:
                 line += f" ({title})"

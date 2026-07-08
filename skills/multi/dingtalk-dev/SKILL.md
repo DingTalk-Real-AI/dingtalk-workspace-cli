@@ -16,7 +16,7 @@ metadata:
 每次执行 dev 命令前，先查清楚再敲，别凭记忆或猜：
 
 1. `--help` 看命令树（一个组下有哪些子命令、flag），例 `dws dev app --help`
-2. `dws schema dev.<resource>.<method>` 看某命令参数（类型 / 必填 / 默认），按它构造、别自己拼——flag 名 = schema 参数名，例 `dws schema dev.app.robot.config`（schema 用点号，命令行用空格）
+2. `--help` 看叶子命令参数（flag、默认值、示例），按当前二进制输出构造；不要再依赖已下线的动态 schema
 3. 全部命令带 `--format json`
 4. 写操作：`--dry-run` 看 `invocation.params` 确认无误，再换 `--yes`（`dev connect` 例外见 [connect.md](references/connect.md)）
 5. 写完回读确认（`get` / `robot get` / `version status`）
@@ -84,13 +84,13 @@ metadata:
 6. 选审批人时优先原样展示 `approvalPromptText`（成品文案）；需结构化时读 `approvalOptions[].label`；只有都缺时才用原始 `approvalCandidates` 的 `name（userId: xxx）` 自己拼标签。
 
 ### 通用出参约定（跨所有命令）
-- 游标分页（list / permission list / version list / event list / doc search）：首次不传 `--cursor`，出参带 `nextCursor`（空=到底）原样回传续翻；`hasMore == nextCursor 非空`。cursor 是上游不透明令牌，不要自己解析或构造，也不要跨命令复用。
+- 游标分页（list / permission list / version list / event list / `devdoc article search`）：首次不传 `--cursor`，出参带 `nextCursor`（空=到底）原样回传续翻；`hasMore == nextCursor 非空`。cursor 是上游不透明令牌，不要自己解析或构造，也不要跨命令复用。
 - 批量聚合：`permission remove` 出参是 `{removed, removedScopeValues, rejectedScopeValues, success, message}`，逐条看 `removedScopeValues`/`rejectedScopeValues` 判断每个权限点成败。
 - pretty：`--format pretty` 会在应用/版本状态字段旁附 `*Text` 可读标签（如 `appStatusText`）；JSON 格式不附，以原始字段为准。
 - 失败：`ServiceResult.success=false` 原样透传 `errorCode/errorMsg`，不编造解释，解读走下方文档 RAG。
 
 ## 开放平台文档 RAG / 错误码排查
-- dev 命令执行中，只要用户问开放平台 API、接口参数、字段含义、权限点、回调、SDK、配额、错误码，或命令返回上游 OpenAPI/SDK 错误，必须先用 `dws dev doc search --keyword "<关键词>" --format json` 做官方文档 RAG。
+- dev 命令执行中，只要用户问开放平台 API、接口参数、字段含义、权限点、回调、SDK、配额、错误码，或命令返回上游 OpenAPI/SDK 错误，必须先用 `dws devdoc article search --query "<关键词>" --format json` 做官方文档 RAG（`dev doc search` 当前网关未注册该工具键，会报「未找到指定工具」，一律走 `devdoc article search`；flag 是 `--query` 不是 `--keyword`）。
 - 业务错误（`ServiceResult.success=false`）原样透传 `errorCode/errorMsg`，不要编造解释；需要解读错误含义时走 devdoc RAG。
 - 查询词优先保留原始 API 名、能力名、权限点、完整错误码和 message；首轮形如 `errcode <code> <message>`，无结果再换 `<产品/场景> <错误码>`、`<接口名> 参数`。
 - 本地 CLI 错误（如 `unknown command` / `unknown flag` / 认证 / recovery）仍按 root `dws` / `dws-shared` 的错误处理执行；`devdoc` 用于开放平台业务错误码和接口语义排查。

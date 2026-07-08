@@ -18,11 +18,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
@@ -143,9 +145,13 @@ func (p *OAuthProvider) refreshWithRefreshToken(ctx context.Context, data *Token
 	updated.CorpID = data.CorpID
 	updated.UserID = data.UserID
 	updated.UserName = data.UserName
-	updated.CorpName = data.CorpName
+	if updated.CorpName == "" {
+		updated.CorpName = data.CorpName
+	}
 
-	if err := SaveTokenData(p.configDir, updated); err != nil {
+	// Refresh runs under lockedRefresh's dual-layer lock; use the lock-free
+	// saver to avoid re-acquiring the non-reentrant lock (deadlock).
+	if err := saveTokenDataLocked(p.configDir, updated); err != nil {
 		return nil, fmt.Errorf("保存刷新后的 token 失败（旧 refresh_token 已失效，请重新登录）: %w", err)
 	}
 	return updated, nil
@@ -185,9 +191,13 @@ func (p *OAuthProvider) refreshViaMCP(ctx context.Context, data *TokenData) (*To
 	updated.CorpID = data.CorpID
 	updated.UserID = data.UserID
 	updated.UserName = data.UserName
-	updated.CorpName = data.CorpName
+	if updated.CorpName == "" {
+		updated.CorpName = data.CorpName
+	}
 
-	if err := SaveTokenData(p.configDir, updated); err != nil {
+	// Refresh runs under lockedRefresh's dual-layer lock; use the lock-free
+	// saver to avoid re-acquiring the non-reentrant lock (deadlock).
+	if err := saveTokenDataLocked(p.configDir, updated); err != nil {
 		return nil, fmt.Errorf("保存刷新后的 token 失败（旧 refresh_token 已失效，请重新登录）: %w", err)
 	}
 	return updated, nil
@@ -203,6 +213,7 @@ func (p *OAuthProvider) postJSON(ctx context.Context, endpoint string, body any)
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	applyEditionEnterpriseCredentialHeaders(req)
 
 	client := p.httpClient
 	if client == nil {
@@ -259,7 +270,7 @@ func (p *OAuthProvider) parseTokenResponse(body []byte) (*TokenData, error) {
 }
 
 // parseMCPTokenResponse parses token response from MCP proxy.
-// MCP OAuth response format: {"accessToken": "...", "refreshToken": "...", "expiresIn": 7200, "corpId": "..."}
+// MCP OAuth response format: {"accessToken": "...", "refreshToken": "...", "expiresIn": 7200, "corpId": "...", "corpName": "..."}
 func (p *OAuthProvider) parseMCPTokenResponse(body []byte) (*TokenData, error) {
 	var resp struct {
 		AccessToken    string `json:"accessToken"`
@@ -267,6 +278,9 @@ func (p *OAuthProvider) parseMCPTokenResponse(body []byte) (*TokenData, error) {
 		PersistentCode string `json:"persistentCode"`
 		ExpiresIn      int64  `json:"expiresIn"`
 		CorpID         string `json:"corpId"`
+		CorpName       string `json:"corpName"`
+		CorpNameSnake  string `json:"corp_name"`
+		OrgName        string `json:"orgName"`
 		// Error fields (when request fails)
 		ErrorCode string `json:"errorCode,omitempty"`
 		ErrorMsg  string `json:"errorMsg,omitempty"`
@@ -293,6 +307,7 @@ func (p *OAuthProvider) parseMCPTokenResponse(body []byte) (*TokenData, error) {
 		ExpiresAt:    now.Add(time.Duration(expiresIn) * time.Second),
 		RefreshExpAt: now.Add(config.DefaultRefreshTokenLifetime),
 		CorpID:       resp.CorpID,
+		CorpName:     firstNonEmpty(resp.CorpName, resp.CorpNameSnake, resp.OrgName),
 	}
 	if resp.PersistentCode != "" {
 		data.PersistentCode = resp.PersistentCode
@@ -300,13 +315,25 @@ func (p *OAuthProvider) parseMCPTokenResponse(body []byte) (*TokenData, error) {
 	return data, nil
 }
 
-func buildAuthURL(clientID, redirectURI string) string {
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if trimmed := strings.TrimSpace(v); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func buildAuthURL(clientID, redirectURI, targetCorpID string) string {
 	params := url.Values{
 		"client_id":     {clientID},
 		"redirect_uri":  {redirectURI},
 		"response_type": {"code"},
 		"scope":         {DefaultScopes},
 		"prompt":        {"consent"},
+	}
+	if targetCorpID = strings.TrimSpace(targetCorpID); targetCorpID != "" {
+		params.Set("corpId", targetCorpID)
 	}
 	return AuthorizeURL + "?" + params.Encode()
 }
@@ -1118,6 +1145,112 @@ const channelDeniedHTML = `<!doctype html>
   </body>
 </html>`
 
+const enterpriseDeniedHTML = `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>钉钉 CLI</title>
+    <style>
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        margin: 0;
+        background: #f5f5f5;
+        padding: 20px;
+      }
+      .card {
+        height: 600px;
+        width: 480px;
+        border-radius: 16px;
+        background: #ffffff;
+        box-sizing: border-box;
+        border: 1px solid #f2f2f6;
+        box-shadow: 0px 2px 4px 0px rgba(0, 0, 0, 0.12);
+        padding: 32px 24px 24px;
+        text-align: center;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+      }
+      .lock-icon {
+        width: 120px;
+        height: 120px;
+        margin: 0 auto;
+        object-fit: contain;
+        display: block;
+      }
+      h1 {
+        margin: 8px 0 0;
+        font-family:
+          "PingFang SC",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          "Helvetica Neue",
+          Arial,
+          sans-serif;
+        font-size: 18px;
+        font-weight: 600;
+        line-height: 44px;
+        text-align: center;
+        letter-spacing: normal;
+        color: #181c1f;
+      }
+      p {
+        margin: 0;
+        font-family:
+          "PingFang SC",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          "Helvetica Neue",
+          Arial,
+          sans-serif;
+        font-size: 14px;
+        font-weight: normal;
+        line-height: 21px;
+        text-align: center;
+        letter-spacing: normal;
+        color: rgba(24, 28, 31, 0.6);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <img
+        class="lock-icon"
+        src="https://img.alicdn.com/imgextra/i4/O1CN01fS3xxz1vbzZSGjbe0_!!6000000006192-2-tps-480-480.png"
+        alt="lock icon"
+      />
+      <h1>企业安全认证未通过</h1>
+      <p>__ENTERPRISE_DENIED_MSG__</p>
+    </div>
+  </body>
+</html>`
+
+// defaultEnterpriseDeniedMsg is shown when the server returns no errorMsg.
+const defaultEnterpriseDeniedMsg = "本次请求未通过企业安全认证"
+
+// renderEnterpriseDeniedHTML injects the server-provided denial message (falling
+// back to the default text) into the enterprise-denied page. The message is
+// HTML-escaped before insertion.
+func renderEnterpriseDeniedHTML(serverMsg string) string {
+	msg := strings.TrimSpace(serverMsg)
+	if msg == "" {
+		msg = defaultEnterpriseDeniedMsg
+	}
+	return strings.ReplaceAll(enterpriseDeniedHTML, "__ENTERPRISE_DENIED_MSG__", html.EscapeString(msg)+" 此页面可以关闭。")
+}
+
 // CLIAuthStatus represents the response from /cli/cliAuthEnabled API.
 type CLIAuthStatus struct {
 	Success   bool           `json:"success"`
@@ -1153,6 +1286,9 @@ type CLIAuthResult struct {
 func classifyDenialReason(status *CLIAuthStatus, currentChannel string) string {
 	if status.ErrorCode == "CHANNEL_REQUIRED" {
 		return "channel_required"
+	}
+	if status.ErrorCode == "ENTERPRISE_NOT_AUTHORIZED" {
+		return "enterprise_not_authorized"
 	}
 	if status.ErrorCode == "NO_AUTH" {
 		return "no_auth"
@@ -1243,6 +1379,7 @@ func (p *OAuthProvider) doCheckCLIAuthEnabled(ctx context.Context, accessToken s
 	if ch := os.Getenv("DWS_CHANNEL"); ch != "" {
 		req.Header.Set("x-dws-channel", ch)
 	}
+	applyEditionEnterpriseCredentialHeaders(req)
 
 	client := p.httpClient
 	if client == nil {
@@ -1294,6 +1431,7 @@ func doGetSuperAdmins(ctx context.Context, accessToken string) (*SuperAdminRespo
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("x-user-access-token", accessToken)
+	applyEditionEnterpriseCredentialHeaders(req)
 
 	resp, err := oauthHTTPClient.Do(req)
 	if err != nil {
@@ -1341,6 +1479,7 @@ func doSendCliAuthApply(ctx context.Context, accessToken, adminStaffID string) (
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("x-user-access-token", accessToken)
+	applyEditionEnterpriseCredentialHeaders(req)
 
 	resp, err := oauthHTTPClient.Do(req)
 	if err != nil {

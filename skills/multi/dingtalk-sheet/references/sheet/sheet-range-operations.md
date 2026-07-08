@@ -82,8 +82,10 @@ Flags:
       --sheet-id string        工作表 ID 或名称 (必填)
       --source-range string    源数据范围，A1 表示法 (必填)
       --target-range string      目标填充范围，A1 表示法 (必填)
-      --fill-type string       填充类型: series(序列,默认) / copy(复制) / onlystyle(仅格式) / withoutstyle(仅值)
+      --fill-type string       填充类型: 不传则自动检测 / copy(复制) / onlystyle(仅格式) / withoutstyle(仅值)
 ```
+
+`--fill-type` **不传时自动检测**（根据源数据智能判断：数值序列递增、日期递增、文本复制等），这是填序列的默认行为，无需显式传值。`--help` 枚举的可选值只有 `copy` / `onlystyle` / `withoutstyle`；服务端另外也接受 `series`（强制按序列填充），但它不在 `--help` 列表里，一般用不到——要序列递增直接不传 `--fill-type` 即可。
 
 目标范围须与源范围在行或列维度对齐（不支持对角填充）。
 

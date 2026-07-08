@@ -1611,7 +1611,7 @@ func normalizeDevAppRobotResult(content map[string]any) {
 			devAppMarkVersionPublishBlocked(content)
 		}
 		if localConnectReady {
-			steps = append(steps, devAppRobotConnectStep(clientID))
+			steps = append(steps, devAppRobotConnectStep(clientID, unifiedAppID))
 		}
 	case "FAIL":
 		lifecycle["phase"] = "failed"
@@ -1725,14 +1725,29 @@ func devAppRobotRetryStep(taskID string, reuseTaskID bool) map[string]any {
 	})
 }
 
-func devAppRobotConnectStep(clientID string) map[string]any {
-	if clientID == "" {
-		clientID = "<clientId>"
+// devAppRobotConnectStep advertises the local-debug connect command. The
+// preferred form is `--unified-app-id`, which reuses `dev app credentials get`
+// to fetch clientSecret at runtime — the secret never appears in argv, so it
+// stays hidden from `ps` / journald / shell history. Only when unifiedAppID is
+// unavailable do we fall back to `--robot-client-id`, and even then we point
+// the caller at the safe path in doneWhen instead of hardcoding a
+// clientSecret placeholder into the command string.
+func devAppRobotConnectStep(clientID, unifiedAppID string) map[string]any {
+	var command, doneWhen string
+	if unifiedAppID != "" {
+		command = fmt.Sprintf("dws dev connect --unified-app-id %s --format json", unifiedAppID)
+		doneWhen = "本地 Stream 建联成功，进程保持运行；密钥由 credentials get 后台取回，命令行不出现 clientSecret"
+	} else {
+		if clientID == "" {
+			clientID = "<clientId>"
+		}
+		command = fmt.Sprintf("dws dev connect --robot-client-id %s --format json", clientID)
+		doneWhen = "本地 Stream 建联成功；建议改用 --unified-app-id <uappid>，避免 clientSecret 出现在命令行被 ps 看到"
 	}
 	step := devAppNextStep(devAppStep{
 		ID:       "connect_local",
-		Command:  fmt.Sprintf("dws dev connect --robot-client-id %s --robot-client-secret <clientSecret-from-result> --format json", clientID),
-		DoneWhen: "本地 Stream 建联成功，进程保持运行；clientSecret 只使用返回值，不写入命令建议",
+		Command:  command,
+		DoneWhen: doneWhen,
 	})
 	step["sensitiveFields"] = []string{"clientSecret"}
 	step["optional"] = true
@@ -1902,14 +1917,6 @@ func devAppYes(cmd *cobra.Command) bool {
 		}
 	}
 	return false
-}
-
-func devAppCloneParams(src map[string]any) map[string]any {
-	out := make(map[string]any, len(src)+1)
-	for k, v := range src {
-		out[k] = v
-	}
-	return out
 }
 
 func devAppPermissionScopes(cmd *cobra.Command) []string {

@@ -6,9 +6,117 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.49] - 2026-07-08
+
+This release lands a full real-machine QA sweep across the CLI, helper scripts, and skill docs (#572), and hardens the release pipeline so npm publishing can no longer be blocked by Gitee mirror issues (#570).
+
+### Fixed
+
+- **Real-machine QA fixes across CLI commands** (#572) — `aitable chart/dashboard share update --enabled` now takes a string so `--enabled false` disables; `chat conversation-info --user` resolves openDingTalkId and registers `--id/--conversation-id/--chat` aliases; `chat list-all-conversations --limit` is capped at 100 and rejects larger values; custom-robot webhook failures surface `errcode` instead of masquerading as success; `contact` registers `--dept/--depts` as the primary flags so the documented spelling actually works; `sheet media-upload` and `sheet export` emit clean JSON under `--format json` (progress lines no longer leak); `wiki node create --type` enum is corrected (drops unsupported `asheet`, adds `axls/able/appt/adraw/amind`); `ding message list --type` defaults to `ALL` since the server rejects empty type.
+- **Helper script fixes (mono and multi)** (#572) — aitable import/export flag names and the tableId regex (7-char default tables were rejected); mail search `--limit`, contact dept response keys (`deptList`/`deptUserList`) and `userInfo` nesting; `attendance_my_record` whoami compatibility; `calendar_schedule_meeting` event-id unwrapping; `drive_tree_list` recursion via `fileId`; report scripts migrated off the deprecated `report list`/`report detail`.
+- **Skill docs sync (mono and multi)** (#572) — command indexes, flag names, enums, return-structure keys and cross-product intent routing are re-aligned to real-machine behavior across all products. Genuinely server-side limitations (permission gates, org-level restrictions, unregistered tool keys) are annotated instead of code-patched, and the cross-cutting hazards (`success` always true, `--jq`/`--fields` currently no-op) are documented.
+
+### Changed
+
+- **Release pipeline unblocks npm publish from Gitee mirror** (#570) — the Release workflow now publishes to npm before touching the Gitee mirror, so Gitee upload issues cannot block `npm/latest`. GitHub→Gitee attachment upload is disabled by default (unreliable from US runners) and only runs when `ENABLE_GITEE_UPLOAD_FALLBACK=true`; the legacy upload fallback path is guarded with timeout and retry so it fails fast when re-enabled.
+- **Repair modes for release republish** (#570) — the Release workflow gains a repair input and a standalone npm-only repair workflow, used to republish an existing release to npm without re-running the full pipeline.
+
+## [1.0.48] - 2026-07-07
+
+This release promotes the sealed **remove-discovery delivery** from the beta line to the stable `v1.0.48` package. It removes dynamic service discovery from the open-edition runtime, keeps legacy CLI compatibility aliases, syncs the open command/help/skill surface with the dws-wukong baseline, and includes the `dev connect` default-yolo behavior on the stable upgrade track.
+
+### Changed
+
+- **Remove-discovery delivery is now formal/stable** — the beta validation line is ready to cut as `v1.0.48`; normal stable channels (`dws upgrade`, GitHub `releases/latest`, install scripts, and npm `latest`) should receive this release after the official tag is published.
+- **Static endpoint runtime sealed for stable delivery** — the open edition no longer depends on dynamic service discovery at runtime, while preserving legacy command compatibility aliases and the synced help/skill surface from the beta.
+- **`contact label` is restored as real wukong-compatible functionality** — `dws contact label list/get/list-members` now call `get_org_labels`, `search_label_by_name`, and `get_label_members_by_labelId`; `contact role` remains an alias, and the common top-level compatibility entries (`contact search/find/list/get/self/me/whoami/get-self`) now dispatch to real user/dept/label tools where unambiguous.
+- **Skill docs match the sealed command surface** — contact docs again describe the real `contact label` three-step role lookup flow; video-conference start/invite/share flows remain explicitly unsupported and point users to the DingTalk client.
+
+### Fixed
+
+- **`calendar event list --dry-run` no longer executes the real list call** — the sorted event-list wrapper now respects dry-run and prints the `list_calendar_events` preview instead of calling the backend.
+- **`chat file upload` is downlined** — the hidden compatibility entry now returns a clear downline message and never calls `chat/upload_conversation_file_by_url`; the supported file path remains `chat message send --msg-type file --file-path`.
+- **Optional plugin version validation no longer pollutes every command** — incompatible local plugins such as conference are skipped at debug level during command-tree construction instead of printing a WARN on unrelated commands.
+- **PR #45 review follow-ups are folded into the release** — doc version rollback pagination now unwraps nested result/content/data envelopes for `nextCursor`, mail helper scripts handle `{result:{emailAccounts:[...]}}`, and the generated attendance `.xlsx` fixture is removed from the skill scripts.
+
+### Tests
+
+- **Command-surface regression tests** — root-command tests now cover real `contact label`/`role` dry-runs, hidden top-level contact compatibility entries, `chat file upload` downline behavior, and `calendar event list --dry-run`.
+- **Release hygiene tests** — skill markdown policy still blocks unsupported conference routes, plugin loader tests assert optional validation failures stay quiet at WARN level, and doc version cursor extraction has nested-envelope coverage.
+
+## [1.0.47] - 2026-07-05
+
+This release adds **connector supervision & health monitoring** (`dev connect list/status/restart/stop`) and fixes **bot-to-bot @-mention** delivery end-to-end.
+
+### Added
+
+- **`dev connect list`** — PM2-style colored table enumerating all local connectors with state (healthy / degraded / down / not_running), PID, channel, and uptime.
+- **`dev connect status`** — panel view with heartbeat, last recv timestamp, session webhook age, and `--json` for external monitoring.
+- **`dev connect restart`** — restarts a daemon via persisted `daemon-state.json` (unified-app-id credential fetch, no local secret storage).
+- **`dev connect stop`** — graceful SIGTERM shutdown releasing the single-instance lock and Stream connection.
+- **Health watchdog** — background goroutine writes `heartbeat.json`; `status`/`list` derive state from heartbeat freshness + process liveness + pid-reuse detection.
+- **`--alwayson` flag** — opt-in auto-restart: supervisor relaunches the worker on crash (requires `--daemon`).
+- **`--notify-staff-id`** — state-change notifications (start / stop / crash) sent as DingTalk messages to the specified staffId.
+- **`--unified-app-id` credential flow for `dev connect`** — fetches clientId/clientSecret at startup via `dev app credentials get`, keeping secrets off the command line and out of `daemon-state.json`.
+- **API-sent file download** (`feat(connect): download API-sent files via storage v2 API`) — file messages sent via `dws chat message send --msg-type file --dentry-id --space-id` are now downloaded by the connector through the storage v2 `getDownloadInfo` API (dentryId + spaceId → presigned URL → local temp file), so file-based Q&A works regardless of how the file was sent.
+- **`--at-open-dingtalk-ids` for `chat message send-by-bot`** — @-mention bots or cross-org users by openDingTalkId in group messages.
+
+### Fixed
+
+- **Bot-to-bot @-mention send side** — `atOpendingtalkIds` (the server's lowercase spelling) is now used instead of the camelCase `atOpenDingTalkIds` which was silently ignored. The unnecessary `openDingTalkId → userId` reverse lookup (always failed for bots) is removed; the id is forwarded verbatim.
+- **Bot-to-bot @-mention receive side** — `interactiveCard` messages (how DingTalk delivers a bot @-mentioning another bot) are now parsed: `extractInteractiveCardText` flattens `cardContent[].children[].value` leaves and strips the leading @-mention by leaf boundary. The `emotion/reply` reaction (which 500s on bot-sent cards) is skipped for `interactiveCard` turns.
+- **Markdown/richText body extraction** — `extractCallbackText` gains a `cardContent` fallback so structured-text messages are no longer silently dropped.
+- **Send-by-bot @ chip rendering** — `<@id>` placeholders in the markdown body are rewritten to `@id` for both userIds and openDingTalkIds so the mention chip renders in all cases.
+- **Connector retry on transient network errors** — `sendBySession` retries on transient failures instead of dropping the reply.
+- **Orphan worker cleanup & watchdog deadlock** — stale workers from a crashed supervisor are detected and cleaned; a channel-capacity fix prevents the watchdog from blocking.
+- **Idle connector false-down** — heartbeat ticker now advances `updatedUnix` so a connector with no inbound traffic is not marked degraded.
+- **FD limit check** — `checkFDLimit` split into platform files for Windows cross-compilation.
+- **Default agent timeout removed** — no timeout by default (was incorrectly defaulting to a low value).
+- **keepAlive shortened to 30 µs** — aligns with Stream SDK expectations; adds `ulimit` check for multi-agent stability.
+
+## [1.0.46] - 2026-07-01
+
+### Fixed
+
+- **PAT agentCode grants no longer split from follow-up command checks** (`internal/auth/agent_code_detect.go`, `internal/app/runner.go`, `internal/pat/chmod_test.go`) — explicit `DINGTALK_DWS_AGENTCODE` declarations are now forwarded verbatim as the common cross-host contract, and unknown hosts no longer synthesize `custom` into `x-dingtalk-dws-agent-code` / `x-dws-agent-instance-id`. `pat chmod --agentCode` remains the highest-priority grant target and still wins over the env fallback.
+
+## [1.0.45] - 2026-06-29
+
+This release adds **multi-organization (profile) support** (#500): `dws` can stay logged in to several DingTalk organizations at once and switch between them, while staying fully backward/forward compatible with the previous single-org token. A profile is one logged-in organization (corp); the current profile decides which org a command runs against. The release also hardens the new credential store for concurrency and corruption recovery, documents the capability in both the mono and multi skill sets, and flips `--ai-tag` on by default so messages sent through `dws` carry the DingTalk 「通过AI发送」 badge (#524).
+
+### Added
+
+- **Multi-organization login & `profile` management** (`internal/auth/profiles.go`, `internal/app/profile_command.go`) — `dws auth login` against a new organization adds a profile (the first login becomes the primary); `dws profile list` shows logged-in orgs with primary / current markers, status and validity; `dws profile switch <name|corpId|->` persistently switches the default org (`-` toggles back to the previous one, no-arg opens a TUI selector on a terminal); `dws profile use` is an alias of `switch`. `dws auth status [--profile <name>]` reports a specific profile. Credentials are stored per organization in keychain slots keyed by corpId (`auth-token:<corpId>`), with a plaintext `profiles.json` registry holding only metadata and the primary/current/previous pointers (no tokens).
+- **Global `--profile <name|corpId>` flag** — run a single command against a specific organization without changing the default (one-shot; does not move currentProfile). Cross-org reads are orchestrated by the agent (list profiles → query each with `--profile` → merge); there is intentionally no built-in `--all-orgs`.
+- **Backward / forward compatibility with the legacy single token slot** — a pre-existing single-slot token is migrated into `auth-token:<corpId>` and marked primary on first multi-profile use; the current (or primary) profile's token is mirrored back into the legacy slot so older binaries and the embedded host keep working. `profiles.json` is additive and ignored by older versions.
+- **`dingtalk-profile` and `dws-shared` skills + multi-org documentation** (`skills/`) — a standalone `dingtalk-profile` skill plus a new `dws-shared` skill that carries auth, global flags and the multi-org rule, so every multi-mode product skill's PREREQUISITE resolves and all read/search skills inherit cross-org behavior. The mono skill gains a "multi-org / profile" section, trigger conditions, a decision-tree entry and a corrected logout danger note. Multi-mode install now always ships `dws-shared` even when `--skill` / `--exclude` narrows the set.
+
+### Changed
+
+- **`--ai-tag` now defaults on — DingTalk 「通过AI发送」 badge for dws-sent messages** (`internal/helpers/chat.go`, #524) — `chat message send` / `reply` flip the `--ai-tag` default from false to true, attaching the AI `clawType` by default so messages sent through `dws` (and by AI agents) transparently carry the 「通过AI发送」 badge; pass `--ai-tag=false` to send as the user with no badge.
+- **Concurrency-safe, self-healing `profiles.json`** (`internal/auth/profiles.go`, `internal/auth/token.go`) — every read-modify-write on `profiles.json` and the legacy mirror is serialized under the existing dual-layer (process + cross-process) lock, split into public (locking) entry points and lock-free `*Locked` variants so the non-reentrant lock is never re-acquired (the refresh path and the load-path migration use the lock-free savers). `profiles.json` and the token marker are written via per-write random temp names + atomic rename so concurrent writers can no longer corrupt a fixed `.tmp`. An unparseable `profiles.json` is quarantined (`*.corrupt-*`) and rebuilt empty so the CLI self-heals; `auth reset` / `logout` proceed even when it cannot be read and sweep the quarantined files.
+
+### Fixed
+
+- **No silent fallback to a different org's token** (`internal/auth/token.go`) — when the resolved current/primary profile's keychain slot fails to read and no `--profile` was given, the loader now only falls back to the legacy single slot if it belongs to the same organization; otherwise it surfaces the error instead of acting as a different org.
+- **Legacy mirror no longer wiped on a transient keychain read error** (`internal/auth/profiles.go`) — `SyncLegacyTokenMirror` distinguishes "token genuinely absent" from "keychain momentarily unreadable" and keeps the existing mirror in the latter case, so a host app's login state is not dropped by a transient failure.
+
+## [1.0.44] - 2026-06-28
+
+This release hardens the dynamic-command surface and finishes the dws-wukong parity pass for structured input. Phantom override commands whose backing MCP tool isn't deployed are hidden from `--help`; `report entry submit` reads `--contents-file` / stdin natively; structured JSON flags accept `@file` / `@-`; and `sheet range update` / `range read` now accept the same plain shapes wukong does (scalar cells, flat `values`, null-clears-cell, a `--hyperlinks` flag). On the wukong01 sandbox this lifts the full open-edition cli_to_mcp pass rate from 77.6% to 95.5% (sheet 28.5% → 99.8%, report → 100%); the remaining failures are account / org / out-of-scope, not CLI defects.
+
 ### Added
 
 - **`dingtalk-dev` skill: image-upload → `mediaId` recipe + per-resource command discovery** (`skills/multi/dingtalk-dev/references/`) — documents how to obtain a `mediaId` for app / robot icons via the DingTalk OpenAPI (`credentials get` → `gettoken` → `/media/upload?type=image` → `--icon-media-id` → read back), since the dev command set has no upload command; and adds a "discovering commands" block to all 10 product refs pointing at each group's `--help` and `dws schema dev.app.<group>.<method>` (`dws schema dev.connect` for connect), so agents inspect commands instead of relying on memory.
+- **`report entry submit --contents-file <path>` / `--contents -` (stdin) read natively** (#514, `internal/compat/report_hooks.go`) — the envelope publishes `entry submit` (MCP `create_report`) with a `--contents` (json_parse, required) flag plus a sibling `--contents-file` that had no transform / mapsTo, so a `--contents-file`-only submit silently sent `contents: [null]` and the report failed (only inline `--contents` worked, which is why `report create` succeeded while `report entry submit --contents-file` did not). A build-time compat hook now resolves the file / stdin natively (10MB cap, UTF-8 check, wukong priority `--contents-file` > `--contents -` > inline) and relaxes the individual `required` on `--contents` into a `contents` / `contents-file` one-of group. No discovery-config change needed.
+- **`@file` / `@-` input for structured JSON flags** (`internal/compat/transform.go`) — `json_parse` / `json_parse_strict` now expand a leading `@` before parsing (`@-` reads stdin, `@<path>` reads a file), so long / complex payloads (many records, big 2D cell ranges, filter criteria) skip shell-quoting hell. A JSON / YAML value never starts with `@`, so the sentinel is unambiguous; the error hint that already advertised `@path/to/file.json` is now truthful. `sheet`'s shared `sheetParseJSONFlag` routes through `cli.ResolveInputSource` so the same support reaches `--values` / `--criteria` / `--sort-keys`.
+- **`sheet range update --hyperlinks`** (`internal/helpers/sheet.go`) — a wukong-shaped 2D hyperlink grid (`[[{"type":"path","link":"...","text":"..."}]]`) overlaid onto the cells grid as each cell's `hyperlink` field; `--values` or `--hyperlinks` is now required (at least one).
+
+### Changed
+
+- **Phantom override commands hidden from `--help`** (#515, `internal/compat/dynamic_commands.go`) — override leaves whose backing MCP tool isn't actually deployed used to render in `dws <svc> --help` and then fail at invocation with *tool not found*. A tool-existence guard now hides them, and command groups left empty by the hidden leaves are collapsed, so `--help` reflects only invokable commands. Skill references are re-aligned to the real CLI surface (phantom commands dropped; role/duty "who is responsible" queries routed to `aisearch`, not `contact`).
+- **`sheet range update` accepts scalar cells; `sheet range read` projects a flat `values`; `--values '[[null]]'` clears a cell** (`internal/helpers/sheet.go`, `internal/helpers/sheet_cell_validation.go`) — dws-wukong parity. `range update` (set_cell_range) auto-wraps a scalar cell (string / number / bool) into `{type:text,text:"..."}` instead of rejecting it, so the plain `[["姓名","部门"]]` shape that `sheet append` and wukong's update_range accept now works; a null cell clears content (matching wukong); `{}` still means keep-original. `range read` (get_cell_infos) now also exposes a flat `values` 2D array next to the rich `cells` payload, matching wukong's get_range shape without dropping cell styles.
+- **report skill aligned to `entry submit` / `inbox list` / `outbox list`** (`skills/multi/dingtalk-report/`, `skills/mono/references/intent-guide.md`) — the multi skill tree was two versions behind and still taught the deprecated flat aliases (`report create` / `sent` / `list` / `detail` / `stats`) and falsely claimed `report inbox` was unimplemented. Re-aligned to the canonical resource.verb commands consistently (old aliases still execute with a stderr deprecation notice).
 
 ## [1.0.43] - 2026-06-26
 

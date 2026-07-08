@@ -2,12 +2,11 @@
 
 Every runtime command the `dws` CLI exposes when loaded with the **pre** environment configuration.
 
-- **Source**: `dws-wukong/envelope/channel/open/pre/config.json`
 - **Products**: 13
 - **Total commands**: 160
-- **Generated from**: `internal/compat.BuildDynamicCommands` rendering of the pre config — the same code path the CLI uses at runtime.
+- **Generated from**: `internal/plugin` command descriptors — the same code path the CLI uses at runtime.
 
-> Auto-generated. Edit `pre/config.json`, not this file.
+> Auto-generated. Update plugin descriptors in `internal/plugin/`, not this file.
 
 ## Global flags
 

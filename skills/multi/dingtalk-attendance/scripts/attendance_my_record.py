@@ -48,7 +48,25 @@ def get_my_user_id(dry_run: bool = False) -> Optional[str]:
         return '<MY_USER_ID>'
     if not data or not isinstance(data, dict):
         return None
-    return data.get('userId') or data.get('userid')
+    # 兼容两种结构:
+    # 1) 顶层直接给 userId
+    # 2) {result: [{orgEmployeeModel: {userId}}]} 包裹
+    uid = data.get('userId') or data.get('userid')
+    if uid:
+        return uid
+    inner = data.get('result')
+    if isinstance(inner, dict):
+        inner = [inner]
+    if isinstance(inner, list):
+        for item in inner:
+            if not isinstance(item, dict):
+                continue
+            emp = item.get('orgEmployeeModel')
+            if isinstance(emp, dict) and emp.get('userId'):
+                return emp['userId']
+            if item.get('userId'):
+                return item['userId']
+    return None
 
 
 def main():

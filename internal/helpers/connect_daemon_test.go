@@ -15,6 +15,7 @@ package helpers
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -71,8 +72,9 @@ func TestBuildWorkerArgs(t *testing.T) {
 	in := []string{"devapp", "robot", "connect", "--daemon", "--robot-client-id", "abc", "--channel=claudecode"}
 	got := buildWorkerArgs(in)
 	joined := strings.Join(got, " ")
+	// only the appended --daemon-worker may contain "daemon"
 	if strings.Contains(joined, "--daemon ") || strings.HasSuffix(joined, "--daemon") {
-		// only the appended --daemon-worker may contain "daemon"
+		t.Errorf("worker args must not contain bare --daemon, got %q", joined)
 	}
 	if !strings.HasSuffix(joined, "--daemon-worker") {
 		t.Errorf("worker args must end with --daemon-worker, got %q", joined)
@@ -127,7 +129,7 @@ func TestDaemonStateRoundTrip(t *testing.T) {
 	if st, err := readDaemonState(dir); err != nil || st != nil {
 		t.Fatalf("expected (nil,nil) for missing pid file, got (%v,%v)", st, err)
 	}
-	want := daemonState{Pid: 4242, StartUnix: time.Now().Unix(), LogPath: "/x/y.log", DirKey: "roundtrip", ClientID: "cid"}
+	want := daemonState{Pid: 4242, StartUnix: time.Now().Unix(), LogPath: "/x/y.log", DirKey: "roundtrip", ClientID: "cid", Profile: "ding123", AlwaysOn: true}
 	if err := writeDaemonState(dir, want); err != nil {
 		t.Fatalf("writeDaemonState: %v", err)
 	}
@@ -137,6 +139,12 @@ func TestDaemonStateRoundTrip(t *testing.T) {
 	}
 	if got.Pid != want.Pid || got.DirKey != want.DirKey || got.ClientID != want.ClientID || got.LogPath != want.LogPath {
 		t.Errorf("round trip mismatch: got %+v want %+v", *got, want)
+	}
+	if got.Profile != want.Profile {
+		t.Errorf("Profile round trip: got %q want %q", got.Profile, want.Profile)
+	}
+	if got.AlwaysOn != want.AlwaysOn {
+		t.Errorf("AlwaysOn round trip: got %v want %v", got.AlwaysOn, want.AlwaysOn)
 	}
 }
 
@@ -152,48 +160,87 @@ func TestReadDaemonStateCorrupt(t *testing.T) {
 	}
 }
 
+// seedHeartbeat writes a connector heartbeat under dirKey for status tests.
+func seedHeartbeat(t *testing.T, dirKey string, hb connectHeartbeat) string {
+	t.Helper()
+	dir, err := connectDaemonDir(dirKey)
+	if err != nil {
+		t.Fatalf("connectDaemonDir: %v", err)
+	}
+	data, err := json.MarshalIndent(hb, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal heartbeat: %v", err)
+	}
+	if err := os.WriteFile(connectHeartbeatPath(dir), data, 0o644); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	return dir
+}
+
 func TestDaemonStatusNotRunning(t *testing.T) {
 	connectDaemonDirOverride = t.TempDir()
 	t.Cleanup(func() { connectDaemonDirOverride = "" })
 	var buf bytes.Buffer
-	if err := daemonStatus(&buf, "nope"); err != nil {
+	// No daemon pid file and no connector heartbeat.
+	if err := daemonStatus(&buf, "nope", false); err != nil {
 		t.Fatalf("daemonStatus: %v", err)
 	}
-	if !strings.Contains(buf.String(), "not running") {
-		t.Errorf("expected 'not running', got %q", buf.String())
+	if !strings.Contains(buf.String(), healthNotRunning) {
+		t.Errorf("expected %q, got %q", healthNotRunning, buf.String())
 	}
 }
 
-func TestDaemonStatusStalePid(t *testing.T) {
+func TestDaemonStatusConnectorDown(t *testing.T) {
 	connectDaemonDirOverride = t.TempDir()
 	t.Cleanup(func() { connectDaemonDirOverride = "" })
-	dir, _ := connectDaemonDir("stale")
-	// pid that is essentially certain to be dead.
-	writeDaemonState(dir, daemonState{Pid: deadPid(t), StartUnix: time.Now().Unix(), LogPath: "/l", DirKey: "stale"})
+	// Heartbeat from a connector whose process is gone: down.
+	seedHeartbeat(t, "gone", connectHeartbeat{Pid: deadPid(t), StartUnix: time.Now().Unix() - 100, ConnectedUnix: time.Now().Unix() - 90})
 	var buf bytes.Buffer
-	if err := daemonStatus(&buf, "stale"); err != nil {
+	if err := daemonStatus(&buf, "gone", false); err != nil {
 		t.Fatalf("daemonStatus: %v", err)
 	}
-	if !strings.Contains(buf.String(), "stale pid file") {
-		t.Errorf("expected stale pid report, got %q", buf.String())
+	if !strings.Contains(buf.String(), healthDown) {
+		t.Errorf("expected %q, got %q", healthDown, buf.String())
 	}
 }
 
-func TestDaemonStatusRunning(t *testing.T) {
+func TestDaemonStatusHealthy(t *testing.T) {
 	connectDaemonDirOverride = t.TempDir()
 	t.Cleanup(func() { connectDaemonDirOverride = "" })
+	// Live connector (our pid) that connected: healthy. Also file a live
+	// supervisor to exercise the supervised label.
 	dir, _ := connectDaemonDir("live")
-	// Use our own pid: guaranteed alive.
 	writeDaemonState(dir, daemonState{Pid: os.Getpid(), StartUnix: time.Now().Add(-90 * time.Second).Unix(), LogPath: "/l.log", DirKey: "live", ClientID: "cidX"})
+	seedHeartbeat(t, "live", connectHeartbeat{Pid: os.Getpid(), Channel: "opencode", ClientID: "cidX", StartUnix: time.Now().Unix() - 90, ConnectedUnix: time.Now().Unix() - 88, LastReplyUnix: time.Now().Unix() - 5})
 	var buf bytes.Buffer
-	if err := daemonStatus(&buf, "live"); err != nil {
+	if err := daemonStatus(&buf, "live", false); err != nil {
 		t.Fatalf("daemonStatus: %v", err)
 	}
 	out := buf.String()
-	for _, want := range []string{"running", "pid:", "uptime:", "/l.log", "cidX"} {
+	for _, want := range []string{healthHealthy, "pid:", "channel:", "opencode", "cidX", "super:"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("status output missing %q; got %q", want, out)
 		}
+	}
+}
+
+func TestDaemonStatusJSON(t *testing.T) {
+	connectDaemonDirOverride = t.TempDir()
+	t.Cleanup(func() { connectDaemonDirOverride = "" })
+	seedHeartbeat(t, "j", connectHeartbeat{Pid: os.Getpid(), Channel: "codex", ClientID: "cidJ", StartUnix: time.Now().Unix() - 30, ConnectedUnix: time.Now().Unix() - 28})
+	var buf bytes.Buffer
+	if err := daemonStatus(&buf, "j", true); err != nil {
+		t.Fatalf("daemonStatus json: %v", err)
+	}
+	var report connectHealthReport
+	if err := json.Unmarshal(buf.Bytes(), &report); err != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", err, buf.String())
+	}
+	if report.State != healthHealthy {
+		t.Errorf("state = %q, want %q", report.State, healthHealthy)
+	}
+	if report.Channel != "codex" {
+		t.Errorf("channel = %q, want codex", report.Channel)
 	}
 }
 

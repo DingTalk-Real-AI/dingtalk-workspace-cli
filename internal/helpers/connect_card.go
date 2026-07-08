@@ -168,15 +168,21 @@ func (c *aiCardClient) callRaw(ctx context.Context, method, path string, payload
 	if err != nil {
 		return "", err
 	}
-	body, err := json.Marshal(payload)
+	var bodyReader io.Reader
+	if payload != nil {
+		body, merr := json.Marshal(payload)
+		if merr != nil {
+			return "", merr
+		}
+		bodyReader = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, dingtalkCardAPIBase+path, bodyReader)
 	if err != nil {
 		return "", err
 	}
-	req, err := http.NewRequestWithContext(ctx, method, dingtalkCardAPIBase+path, bytes.NewReader(body))
-	if err != nil {
-		return "", err
+	if payload != nil {
+		req.Header.Set("Content-Type", "application/json")
 	}
-	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-acs-dingtalk-access-token", token)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

@@ -2,7 +2,7 @@
 
 > 权限点 scopeValue 是授权单元，一个权限点授权一组 OpenAPI；requiredApproval=true 的变更走版本通道生效（见 SKILL.md 生效模型）。
 
-查询、申请、取消开放平台应用的 APP 应用权限和 SNS 个人权限。参数查 `dws schema dev.app.permission.<method>`。
+查询、申请、取消开放平台应用的 APP 应用权限和 SNS 个人权限。参数用对应命令的 `--help` 查询。
 
 ## 权限列表
 
@@ -50,7 +50,7 @@ scopeValue 选择顺序：
 dws dev app permission --help
 
 # 查某方法的必填参数、类型、默认值
-dws schema dev.app.permission.<method>
+dws dev <command-path> --help
 ```
 
-按 `dws schema` 输出构造 `--flag`（flag 名 = schema 参数名）。
+按 `--help` 输出构造 flag；不要凭旧 schema 名称猜参数。

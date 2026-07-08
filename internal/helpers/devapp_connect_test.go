@@ -28,6 +28,7 @@ func clearChannelEnv(t *testing.T) {
 		"HERMES_AGENT", "HERMES", "QODER_CLI", "QODERCLI_INTEGRATION_MODE",
 		"DWS_CONNECT_CMD", "DWS_AGENT_CMD",
 		"WORKBUDDY_CONFIG_DIR", "WORKBUDDY_APP_NAME", "CLAUDECODE",
+		"DWS_AGENT_PERMISSION_MODE", "DWS_AGENT_APPROVAL_MODE",
 	} {
 		t.Setenv(k, "")
 	}
@@ -168,6 +169,53 @@ func TestConnectExternalCommand(t *testing.T) {
 			t.Errorf("hermes with no built-in command should return nil, got %v", got)
 		}
 	})
+}
+
+func TestResolveAgentYoloMode(t *testing.T) {
+	cases := []struct {
+		name    string
+		flags   map[string]string
+		env     map[string]string
+		want    bool
+		wantErr bool
+	}{
+		{"default yolo", nil, nil, true, false},
+		{"permission bypass", map[string]string{"agent-permission-mode": "bypass"}, nil, true, false},
+		{"permission ask", map[string]string{"agent-permission-mode": "ask", "yolo": "true"}, nil, false, false},
+		{"approval yolo", map[string]string{"agent-approval-mode": "yolo"}, nil, true, false},
+		{"short yolo", map[string]string{"yolo": "true"}, nil, true, false},
+		{"env permission bypass", nil, map[string]string{"DWS_AGENT_PERMISSION_MODE": "bypass"}, true, false},
+		{"env approval yolo", nil, map[string]string{"DWS_AGENT_APPROVAL_MODE": "yolo"}, true, false},
+		{"invalid permission mode", map[string]string{"agent-permission-mode": "full"}, nil, false, true},
+		{"invalid approval mode", map[string]string{"agent-approval-mode": "bypass"}, nil, false, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			clearChannelEnv(t)
+			cmd := newDevAppRobotConnectCommand(nil)
+			for k, v := range tc.env {
+				t.Setenv(k, v)
+			}
+			for k, v := range tc.flags {
+				if err := cmd.Flags().Set(k, v); err != nil {
+					t.Fatalf("set flag %s=%s: %v", k, v, err)
+				}
+			}
+			got, err := resolveAgentYoloMode(cmd)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("resolveAgentYoloMode err = nil, want error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("resolveAgentYoloMode err = %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("resolveAgentYoloMode = %v, want %v", got, tc.want)
+			}
+		})
+	}
 }
 
 func TestForwarderForChannel(t *testing.T) {

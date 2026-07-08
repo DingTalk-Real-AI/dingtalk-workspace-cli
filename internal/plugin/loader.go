@@ -120,13 +120,13 @@ func (l *Loader) loadPlugin(dir string) *Plugin {
 	manifestPath := filepath.Join(dir, "plugin.json")
 	manifest, err := ParseManifest(manifestPath)
 	if err != nil {
-		slog.Warn("plugin: failed to parse manifest",
+		slog.Debug("plugin: failed to parse manifest",
 			"path", manifestPath, "error", err)
 		return nil
 	}
 
 	if err := manifest.Validate(l.CLIVersion); err != nil {
-		slog.Warn("plugin: validation failed",
+		slog.Debug("plugin: validation failed",
 			"plugin", manifest.Name, "error", err)
 		return nil
 	}

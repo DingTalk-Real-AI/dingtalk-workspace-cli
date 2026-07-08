@@ -23,6 +23,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -37,12 +38,13 @@ var oauthHTTPClient = &http.Client{
 
 // OAuthProvider handles the DingTalk OAuth 2.0 authorization code flow.
 type OAuthProvider struct {
-	configDir  string
-	clientID   string
-	logger     *slog.Logger
-	Output     io.Writer
-	httpClient *http.Client
-	NoBrowser  bool
+	configDir    string
+	clientID     string
+	logger       *slog.Logger
+	Output       io.Writer
+	httpClient   *http.Client
+	NoBrowser    bool
+	TargetCorpID string
 }
 
 // NewOAuthProvider creates a new OAuth provider.
@@ -149,6 +151,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		err             error
 		cliAuthDisabled bool
 		denialReason    string
+		errorMsg        string // server-provided errorMsg from /cli/cliAuthEnabled
 	}
 	resultCh := make(chan callbackResult, 1)
 	errCh := make(chan error, 1)
@@ -269,6 +272,13 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		}
 		cliAuthEnabled := denialReason == ""
 
+		// Server-provided errorMsg (nil-safe), surfaced both on the page and to
+		// the terminal so portal can update copy without releasing the CLI.
+		serverMsg := ""
+		if authStatus != nil {
+			serverMsg = authStatus.ErrorMsg
+		}
+
 		// Update CLI auth disabled state
 		callbackTokenMu.Lock()
 		callbackAuthDisabled = !cliAuthEnabled
@@ -283,6 +293,8 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 			_, _ = fmt.Fprint(w, accessDeniedHTML)
 		case denialReason == "channel_not_allowed" || denialReason == "channel_required":
 			_, _ = fmt.Fprint(w, channelDeniedHTML)
+		case denialReason == "enterprise_not_authorized":
+			_, _ = fmt.Fprint(w, renderEnterpriseDeniedHTML(serverMsg))
 		default:
 			_, _ = fmt.Fprint(w, notEnabledHTML)
 		}
@@ -292,7 +304,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		}
 		// Notify main goroutine with full result
 		select {
-		case resultCh <- callbackResult{token: tokenData, cliAuthDisabled: !cliAuthEnabled, denialReason: denialReason}:
+		case resultCh <- callbackResult{token: tokenData, cliAuthDisabled: !cliAuthEnabled, denialReason: denialReason, errorMsg: serverMsg}:
 		default:
 		}
 	})
@@ -397,7 +409,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		_ = server.Shutdown(shutCtx)
 	}()
 
-	authURL := buildAuthURL(p.clientID, redirectURI)
+	authURL := buildAuthURL(p.clientID, redirectURI, p.TargetCorpID)
 	if p.logger != nil {
 		p.logger.Debug("authorization URL", "url", authURL)
 	}
@@ -443,6 +455,11 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 			return nil, errors.New(i18n.T("您不在该组织的 CLI 授权人员范围内，请联系组织管理员将您加入授权名单"))
 		case "channel_not_allowed", "channel_required":
 			return nil, errors.New(i18n.T("当前渠道未获得该组织授权，或组织已开启渠道管控，请联系组织管理员开通渠道访问权限，或升级到最新版本的 CLI"))
+		case "enterprise_not_authorized":
+			if msg := strings.TrimSpace(result.errorMsg); msg != "" {
+				return nil, errors.New(msg)
+			}
+			return nil, errors.New(i18n.T("本次请求未通过企业安全认证"))
 		}
 
 		_, _ = fmt.Fprintln(p.output(), "")
@@ -547,9 +564,12 @@ func (p *OAuthProvider) GetAccessToken(ctx context.Context) (string, error) {
 		if rErr == nil {
 			return refreshed.AccessToken, nil
 		}
+		_ = MarkProfileStatus(p.configDir, data.CorpID, ProfileStatusExpired)
 		if p.logger != nil {
 			p.logger.Warn(i18n.T("refresh_token 刷新失败"), "error", rErr)
 		}
+	} else {
+		_ = MarkProfileStatus(p.configDir, data.CorpID, ProfileStatusExpired)
 	}
 
 	return "", errors.New(i18n.T("所有凭证已失效，请运行 dws auth login 重新登录"))

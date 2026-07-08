@@ -1,0 +1,51 @@
+name: Gitee Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag to build on Gitee, e.g. v1.0.48"
+        required: false
+        type: string
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install packaging tools
+        run: |
+          set -eu
+          sudo apt-get update
+          sudo apt-get install -y zip unzip curl
+
+      - name: Install rcodesign
+        run: |
+          set -eu
+          RCS_VERSION="0.27.0"
+          curl -fsSL -o /tmp/rcodesign.tar.gz \
+            "https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F${RCS_VERSION}/apple-codesign-${RCS_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+          mkdir -p /tmp/rcodesign
+          tar -xzf /tmp/rcodesign.tar.gz -C /tmp/rcodesign --strip-components=1
+          sudo install -m 0755 /tmp/rcodesign/rcodesign /usr/local/bin/rcodesign
+          rcodesign --version
+
+      - name: Build and publish Gitee release
+        env:
+          VERSION: ${{ inputs.version || github.ref_name }}
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_REPO: DingTalk-Real-AI/dingtalk-workspace-cli
+        run: ./scripts/release/build-and-publish-gitee.sh

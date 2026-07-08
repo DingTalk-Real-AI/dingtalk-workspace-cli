@@ -42,6 +42,7 @@ type qoderStreamForwarder struct {
 	timeout  time.Duration
 	workDir  string
 	model    string
+	yolo     bool
 	sessions *convSessions
 
 	mu     sync.Mutex
@@ -60,6 +61,7 @@ func newQoderStreamForwarder(name, bin string, env []string, timeout time.Durati
 		timeout:  timeout,
 		workDir:  opts.WorkDir,
 		model:    opts.Model,
+		yolo:     opts.Yolo,
 		sessions: sessions,
 	}
 }
@@ -79,7 +81,7 @@ func (f *qoderStreamForwarder) forward(ctx context.Context, convID, text string)
 }
 
 func (f *qoderStreamForwarder) forwardStream(ctx context.Context, convID, text string, onDelta func(string)) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, f.timeout)
+	ctx, cancel := applyTimeout(ctx, f.timeout)
 	defer cancel()
 
 	f.mu.Lock()
@@ -160,9 +162,15 @@ func (f *qoderStreamForwarder) commandArgs() []string {
 		"--print",
 		"--output-format", "stream-json",
 		"--input-format", "stream-json",
-		"--system-prompt", "",
-		"--setting-sources", "",
-		"--disable-builtin-skills",
+	}
+	if f.yolo {
+		args = append(args, "--dangerously-skip-permissions")
+	} else {
+		args = append(args,
+			"--system-prompt", "",
+			"--setting-sources", "",
+			"--tools", "",
+		)
 	}
 	if f.model != "" {
 		args = append(args, "--model", f.model)

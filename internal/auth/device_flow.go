@@ -276,6 +276,14 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 			_, _ = fmt.Fprintln(p.output(), i18n.T("   请升级到最新版本的 CLI 后重试。"))
 			_, _ = fmt.Fprintln(p.output(), "")
 			return nil, errors.New(i18n.T("当前组织已开启渠道管控，请升级到最新版本的 CLI 后重试"))
+		case "enterprise_not_authorized":
+			msg := i18n.T("本次请求未通过企业安全认证")
+			if authStatus != nil && strings.TrimSpace(authStatus.ErrorMsg) != "" {
+				msg = strings.TrimSpace(authStatus.ErrorMsg)
+			}
+			_, _ = fmt.Fprintln(p.output(), dfRed("⚠️  "+msg))
+			_, _ = fmt.Fprintln(p.output(), "")
+			return nil, errors.New(msg)
 		case "no_auth":
 			_, _ = fmt.Fprintln(p.output(), dfRed(i18n.T("⚠️  认证已失效")))
 			_, _ = fmt.Fprintln(p.output(), i18n.T("   请执行 dws auth 重新登录。"))

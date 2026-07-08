@@ -5,7 +5,7 @@
 | Variable | Purpose / 用途 |
 |---------|---------|
 | `DWS_CONFIG_DIR` | Override default config directory / 覆盖默认配置目录 |
-| `DWS_SERVERS_URL` | Point discovery at a custom server registry endpoint / 将服务发现指向自定义端点 |
+| `DWS_<PRODUCT>_MCP_URL` | Override a product MCP endpoint for local development / 本地开发时覆盖指定产品 MCP endpoint |
 | `DWS_CLIENT_ID` | OAuth client ID (DingTalk AppKey) |
 | `DWS_CLIENT_SECRET` | OAuth client secret (DingTalk AppSecret) |
 | `DWS_TRUSTED_DOMAINS` | Comma-separated trusted domains for bearer token (default: `*.dingtalk.com`). `*` for dev only / Bearer token 允许发送的域名白名单，默认 `*.dingtalk.com`，仅开发环境可设为 `*` |
@@ -22,7 +22,7 @@
 | 3 | Validation | Invalid input, flags, or parameter schema mismatch / 输入参数校验失败 |
 | 4 | PAT | PAT authorization interception; stderr carries raw machine-readable PAT JSON / PAT 授权拦截；stderr 返回原始机器可解析 JSON |
 | 5 | Internal | Unexpected internal error / 未预期的内部错误 |
-| 6 | Discovery | Server discovery, cache, or protocol negotiation failure / 服务发现、缓存或协议协商失败 |
+| 6 | Discovery | Static endpoint resolution or protocol negotiation failure / 静态端点解析或协议协商失败 |
 
 With `-f json`, error responses include structured payloads: `category`, `reason`, `hint`, `actions`.
 
@@ -34,7 +34,7 @@ With `-f json`, error responses include structured payloads: `category`, `reason
 dws contact user search --query "Alice" -f table   # Table (default, human-friendly / 表格，默认)
 dws contact user search --query "Alice" -f json    # JSON (for agents and piping / 适合 agent)
 dws contact user search --query "Alice" -f raw     # Raw API response / 原始响应
-dws schema -f pretty ding.send_ding_message          # Pretty (ANSI-colored, schema-aware / 彩色分区，专为 schema 设计)
+dws schema -f pretty "dev app create"                # Pretty helper-only schema view / helper-only schema 彩色分区展示
 ```
 
 ## Dry Run / 试运行
@@ -51,26 +51,24 @@ dws contact user search --query "Alice" -o result.json
 
 ## Schema Introspection / Schema 查询
 
-`dws schema` 查询已发现的 MCP 产品和工具元数据。不带参数列出所有产品，带路径输出单个工具的完整 schema。
+静态端点模式下，产品命令和 flag 以当前二进制的 `--help` 与内置 Skill 为准。`dws schema` 仅保留 helper-only 子树（如 `dev.*`）的 schema 查询。
 
 ### 路径写法
 
 ```bash
-dws schema                                  # 列出所有产品 + 工具名
-dws schema ding.send_ding_message           # canonical: product.rpc_name
-dws schema ding.message.send                # CLI 点路径: product.group.cli_name
-dws schema "ding message send"              # CLI 空格路径（同上）
-dws schema --cli-path "ding message send"   # 显式 flag（脚本友好，免转义）
-dws schema -f pretty ding.send_ding_message # ANSI 着色分区展示（人肉查看最舒服）
+dws schema                                  # 静态端点模式提示
+dws schema "dev app create"                 # CLI 空格路径
+dws schema --cli-path "dev app create"      # 显式 flag（脚本友好，免转义）
+dws schema -f pretty "dev app create"       # ANSI 着色分区展示（人肉查看最舒服）
 ```
 
-Canonical 路径先匹配；落空后走 CLI 路径（product → group.. → cli_name）。
+helper-only schema 以 CLI 路径为准；普通产品命令请使用 `dws <path> --help` 查看参数。
 
 ### 单工具输出字段
 
 | 字段 | 说明 |
 |------|------|
-| `name` / `cli_name` / `canonical_path` | MCP RPC 名 / CLI 叶子名 / `product.rpc_name` |
+| `name` / `cli_name` / `canonical_path` | MCP RPC 名 / CLI 叶子名 / helper-only canonical path |
 | `group` | CLI 父级 group 路径（dot-separated） |
 | `title` / `description` | 工具名/说明（overlay 优先） |
 | `parameters` / `required` | MCP 输入 JSON Schema 的 properties / required |
@@ -85,10 +83,8 @@ Canonical 路径先匹配；落空后走 CLI 路径（product → group.. → cl
 ### 筛选输出
 
 ```bash
-dws schema ding.send_ding_message --jq '.tool.flag_overlay'       # 只看 overlay
-dws schema calendar.create_event --jq '.tool.auth'                # 只看授权元数据
-dws schema --jq '.products[] | {id, count: (.tools|length)}'      # 各产品工具数
-dws schema aitable.delete_base --jq '.tool.annotations'           # 敏感操作提示
+dws schema "dev app create" --jq '.tool.parameters'               # 只看参数 schema
+dws schema "dev app create" --jq '.tool.required'                 # 只看必填字段
 ```
 
 ## Shell Completion / 自动补全

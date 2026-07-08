@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,6 +26,13 @@ func init() {
 		Description:  "覆盖 GitHub API 地址 (镜像/测试)",
 		DefaultValue: "https://api.github.com",
 		Example:      "https://mirror.example.com/api",
+	})
+	configmeta.Register(configmeta.ConfigItem{
+		Name:         "DWS_UPGRADE_REPOSITORY",
+		Category:     configmeta.CategoryNetwork,
+		Description:  "覆盖升级使用的 GitHub 仓库 owner/repo (测试/灰度)",
+		DefaultValue: defaultOwner + "/" + defaultRepo,
+		Example:      "PeterGuy326/dingtalk-workspace-cli",
 	})
 	configmeta.Register(configmeta.ConfigItem{
 		Name:        "GITHUB_TOKEN",
@@ -89,12 +97,22 @@ type VersionEntry struct {
 	Prerelease bool
 }
 
+// ReleaseTrack selects which release stream an upgrade operation should use.
+type ReleaseTrack string
+
+const (
+	ReleaseTrackRelease ReleaseTrack = "release"
+	ReleaseTrackBeta    ReleaseTrack = "beta"
+	ReleaseTrackAll     ReleaseTrack = "all"
+)
+
 // Client communicates with the GitHub Releases API.
 type Client struct {
 	httpClient *http.Client
 	owner      string
 	repo       string
 	baseURL    string // overridable for testing or mirrors
+	configErr  error
 }
 
 // NewClient creates a GitHub release client with default settings.
@@ -103,11 +121,13 @@ func NewClient() *Client {
 	if env := os.Getenv("DWS_UPGRADE_URL"); env != "" {
 		baseURL = strings.TrimRight(env, "/")
 	}
+	owner, repo, configErr := repositoryFromEnv()
 	return &Client{
 		httpClient: &http.Client{Timeout: httpTimeout},
-		owner:      defaultOwner,
-		repo:       defaultRepo,
+		owner:      owner,
+		repo:       repo,
 		baseURL:    baseURL,
+		configErr:  configErr,
 	}
 }
 
@@ -123,6 +143,9 @@ func NewClientWithBaseURL(baseURL string) *Client {
 
 // FetchLatestRelease returns the latest non-draft release.
 func (c *Client) FetchLatestRelease() (*ReleaseInfo, error) {
+	if err := c.validateConfig(); err != nil {
+		return nil, err
+	}
 	url := fmt.Sprintf("%s/repos/%s/%s/releases/latest", c.baseURL, c.owner, c.repo)
 
 	var gh GitHubRelease
@@ -133,8 +156,54 @@ func (c *Client) FetchLatestRelease() (*ReleaseInfo, error) {
 	return ghReleaseToInfo(&gh), nil
 }
 
+// FetchLatestReleaseForTrack returns the latest release in the requested track.
+func (c *Client) FetchLatestReleaseForTrack(track ReleaseTrack) (*ReleaseInfo, error) {
+	switch track {
+	case ReleaseTrackBeta:
+		return c.FetchLatestPrerelease()
+	case ReleaseTrackRelease, "":
+		return c.FetchLatestStableRelease()
+	default:
+		return nil, fmt.Errorf("未知升级轨道: %s", track)
+	}
+}
+
+// FetchLatestStableRelease returns the newest non-draft, non-prerelease release
+// whose tag is a formal semantic version (vX.Y.Z).
+func (c *Client) FetchLatestStableRelease() (*ReleaseInfo, error) {
+	releases, err := c.fetchReleases()
+	if err != nil {
+		return nil, fmt.Errorf("获取正式 release 版本失败: %w", err)
+	}
+	for i := range releases {
+		if !releaseMatchesTrack(releases[i], ReleaseTrackRelease) {
+			continue
+		}
+		return ghReleaseToInfo(&releases[i]), nil
+	}
+	return nil, fmt.Errorf("未找到正式 release 版本（需要非 pre-release 且 tag 形如 vX.Y.Z）")
+}
+
+// FetchLatestPrerelease returns the newest non-draft prerelease.
+func (c *Client) FetchLatestPrerelease() (*ReleaseInfo, error) {
+	releases, err := c.fetchReleases()
+	if err != nil {
+		return nil, fmt.Errorf("获取 beta 版本失败: %w", err)
+	}
+	for i := range releases {
+		if !releaseMatchesTrack(releases[i], ReleaseTrackBeta) {
+			continue
+		}
+		return ghReleaseToInfo(&releases[i]), nil
+	}
+	return nil, fmt.Errorf("未找到 beta 版本（需要 GitHub pre-release 且 tag 形如 vX.Y.Z-*）")
+}
+
 // FetchReleaseByTag returns the release for a specific tag (e.g. "v1.0.5").
 func (c *Client) FetchReleaseByTag(tag string) (*ReleaseInfo, error) {
+	if err := c.validateConfig(); err != nil {
+		return nil, err
+	}
 	if !strings.HasPrefix(tag, "v") {
 		tag = "v" + tag
 	}
@@ -150,16 +219,20 @@ func (c *Client) FetchReleaseByTag(tag string) (*ReleaseInfo, error) {
 
 // FetchAllReleases returns all non-draft releases, newest first.
 func (c *Client) FetchAllReleases() ([]VersionEntry, error) {
-	url := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=100", c.baseURL, c.owner, c.repo)
+	return c.FetchReleaseVersions(ReleaseTrackAll)
+}
 
-	var ghReleases []GitHubRelease
-	if err := c.getJSON(url, &ghReleases); err != nil {
+// FetchReleaseVersions returns non-draft releases matching the requested track,
+// newest first. The GitHub API already returns releases newest first.
+func (c *Client) FetchReleaseVersions(track ReleaseTrack) ([]VersionEntry, error) {
+	ghReleases, err := c.fetchReleases()
+	if err != nil {
 		return nil, fmt.Errorf("获取版本列表失败: %w", err)
 	}
 
 	var versions []VersionEntry
 	for _, gh := range ghReleases {
-		if gh.Draft {
+		if !releaseMatchesTrack(gh, track) {
 			continue
 		}
 		versions = append(versions, VersionEntry{
@@ -170,6 +243,42 @@ func (c *Client) FetchAllReleases() ([]VersionEntry, error) {
 		})
 	}
 	return versions, nil
+}
+
+func (c *Client) fetchReleases() ([]GitHubRelease, error) {
+	if err := c.validateConfig(); err != nil {
+		return nil, err
+	}
+	url := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=100", c.baseURL, c.owner, c.repo)
+
+	var ghReleases []GitHubRelease
+	if err := c.getJSON(url, &ghReleases); err != nil {
+		return nil, err
+	}
+	return ghReleases, nil
+}
+
+func releaseMatchesTrack(gh GitHubRelease, track ReleaseTrack) bool {
+	if gh.Draft {
+		return false
+	}
+	switch track {
+	case ReleaseTrackBeta:
+		return gh.Prerelease && isPrereleaseVersionTag(gh.TagName)
+	case ReleaseTrackRelease, "":
+		return !gh.Prerelease && isStableVersionTag(gh.TagName)
+	case ReleaseTrackAll:
+		return true
+	default:
+		return false
+	}
+}
+
+func (c *Client) validateConfig() error {
+	if c.configErr != nil {
+		return c.configErr
+	}
+	return nil
 }
 
 // FindBinaryAsset locates the platform-specific binary archive from the release assets.
@@ -276,6 +385,33 @@ func githubToken() string {
 	return ""
 }
 
+func repositoryFromEnv() (string, string, error) {
+	raw := strings.TrimSpace(os.Getenv("DWS_UPGRADE_REPOSITORY"))
+	if raw == "" {
+		return defaultOwner, defaultRepo, nil
+	}
+	owner, repo, ok := parseGitHubRepository(raw)
+	if !ok {
+		return defaultOwner, defaultRepo, fmt.Errorf("DWS_UPGRADE_REPOSITORY 必须是 owner/repo 格式，当前值: %q", raw)
+	}
+	return owner, repo, nil
+}
+
+func parseGitHubRepository(raw string) (string, string, bool) {
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimPrefix(raw, "https://github.com/")
+	raw = strings.TrimPrefix(raw, "http://github.com/")
+	raw = strings.TrimPrefix(raw, "github.com/")
+	raw = strings.TrimSuffix(raw, ".git")
+	raw = strings.Trim(raw, "/")
+
+	parts := strings.Split(raw, "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", false
+	}
+	return parts[0], strings.TrimSuffix(parts[1], ".git"), true
+}
+
 func ghReleaseToInfo(gh *GitHubRelease) *ReleaseInfo {
 	return &ReleaseInfo{
 		Version:    stripV(gh.TagName),
@@ -289,6 +425,35 @@ func ghReleaseToInfo(gh *GitHubRelease) *ReleaseInfo {
 
 func stripV(tag string) string {
 	return strings.TrimPrefix(tag, "v")
+}
+
+func isVersionLikeTag(tag string) bool {
+	tag = stripV(tag)
+	core := tag
+	if idx := strings.IndexByte(core, '-'); idx >= 0 {
+		core = core[:idx]
+	}
+	parts := strings.Split(core, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	for _, p := range parts {
+		if p == "" {
+			return false
+		}
+		if _, err := strconv.Atoi(p); err != nil {
+			return false
+		}
+	}
+	return true
+}
+
+func isStableVersionTag(tag string) bool {
+	return isVersionLikeTag(tag) && !strings.Contains(stripV(tag), "-")
+}
+
+func isPrereleaseVersionTag(tag string) bool {
+	return isVersionLikeTag(tag) && strings.Contains(stripV(tag), "-")
 }
 
 func formatDate(published string) string {

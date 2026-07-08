@@ -108,11 +108,8 @@ func TestDoctorCheckCacheEmpty(t *testing.T) {
 	var buf bytes.Buffer
 	r := doctorCheckCache(&buf, false)
 
-	if r.Status != statusWarn {
-		t.Errorf("expected warn for empty cache, got %s", r.Status)
-	}
-	if !strings.Contains(r.Message, "缓存为空") {
-		t.Errorf("expected empty cache message, got %q", r.Message)
+	if r.Status != statusPass {
+		t.Errorf("expected pass for static endpoint mode, got %s", r.Status)
 	}
 }
 
@@ -122,8 +119,8 @@ func TestDoctorCheckCacheEmptyJSON(t *testing.T) {
 	var buf bytes.Buffer
 	r := doctorCheckCache(&buf, true)
 
-	if r.Status != statusWarn {
-		t.Errorf("expected warn for empty cache, got %s", r.Status)
+	if r.Status != statusPass {
+		t.Errorf("expected pass for static endpoint mode, got %s", r.Status)
 	}
 	if buf.Len() != 0 {
 		t.Error("expected no output in JSON mode")

@@ -1,6 +1,6 @@
 # 考勤 (attendance) 命令参考
 
-> **【开源版命令可用性提示】** 当前开源 dws 已落地 P0 5 条命令：`attendance check result`、`attendance check record`、`attendance group search`、`attendance vacation balance`、`attendance vacation types`。文档中其余 P1 阶段命令（`class` / `overtime` / `adjustment` / `group settings` / `report` / `schedule` / `boss-check` 等共 28 条）暂未通过服务发现推全，调用会返回 `unknown command`，将在后续批次落地。
+> **【命令可用性提示】** 当前 dws 已注册全部考勤子命令组（`record` / `check` / `approve` / `shift` / `schedule` / `class` / `adjustment` / `overtime` / `group` / `summary` / `rules` / `selfsetting` / `globalsetting` / `vacation` / `checkin` / `report` / `boss-check`）。查询与写操作大多可直接调用后端，不会再返回 `unknown command`，不要以"开源版不支持"为由拒答。个别命令返回受账号权限和组织数据影响：`report` 系列仅管理员可用；非管理员或数据为空时可能返回空列表或权限错误。执行前可用 `dws <cmd> --help` 或 `--dry-run` 验证参数。
 
 > **【必读】日期范围严格计算规则 — 所有含 --start/--end 或 --from/--to 的命令均适用**
 >
@@ -21,6 +21,40 @@
 > 3. 计算日期时必须参考当前系统时间，不得使用硬编码或模糊估算。
 > 4. 如果用户指定了具体日期范围（如"4月1日到4月15日"），直接使用用户给定的范围，不套用上述规则。
 > 5. 日期格式统一按各命令要求：`shift list` / `check result` 等使用 `YYYY-MM-DD`；`report query-data` / `report query-leave` 等使用 `yyyy-MM-dd HH:mm:ss`（start 取当天 `00:00:00`，end 取当天 `23:59:59`）。
+
+## 签到（checkin）— 优先路由
+
+> **只要用户句中含"签到"二字（签到记录/签到数据/签到明细/外勤签到/导出签到/签到报表），就走本节，不要走 `check record`（打卡流水）。"签到" ≠ "打卡"，签到是外勤场景的独立功能。**
+
+### 导出 vs 查询 判断规则（必须先判断）
+
+| 用户说 | 路由 |
+|--------|------|
+| 含"导出"/"报表"/"Excel"/"表格"/"生成"中**任何一个** + 含"签到" | → **导出签到报表**（走脚本） |
+| 不含上述导出关键词，仅"查签到"/"签到记录"/"看看签到" | → **查询签到记录**（走命令） |
+
+> **示例**："帮我导出最近一个月的签到记录" → 含"导出" → 走报表脚本
+> "查一下张三的签到记录" → 不含导出关键词 → 走查询命令
+
+- **导出签到报表** → **必须先 `read_file` 读取 [attendance-report.md](./attendance-report.md) 后按其中的工作流执行（报表类型为"签到报表"）**，对应脚本 `attendance_report_checkin.py`
+  - **严禁**绕过 `attendance-report.md` 直接调用脚本
+  - **严禁**自己手动分段调用 `dws attendance checkin records` 来拼数据，必须用脚本
+- **查询签到记录**（无需导出，仅查看） → `dws attendance checkin records`（数据源为 MCP 工具 `get_checkin_record`）
+
+签到记录返回字段（`result.list` 数组，按 sortedProps 顺序）：
+- `corpId`（string）：企业 ID
+- `name`（string）：用户名称
+- `userId`（string）：用户 ID
+- `timestamp`（number）：签到时间
+- `place`（string）：签到地点
+- `detailPlace`（string）：签到详细地点
+- `longitude`（number）：签到地点经度
+- `latitude`（number）：签到地点纬度
+- `remark`（string）：备注信息
+- `imageList`（string[]）：图片列表
+- `customers`（string）：拜访客户
+- `checkinType`（string）：签到类型
+- `mobileId`（string）：设备 ID
 
 ## 命令总览
 
@@ -55,22 +89,32 @@ Flags:
 
 返回每条记录含：用户 ID、实际打卡时间、打卡地址、打卡经纬度、打卡类型（OnDuty/OffDuty）、定位方式（Map/Wifi/etc）。时间跨度不超过 1 个月。
 
-### 查询审批单
+### 查询审批单（补卡/加班/请假/出差外出）
 ```
 Usage:
   dws attendance approve list [flags]
 Example:
   dws attendance approve list --users userId1 --types overtime,leave --start 2026-04-01 --end 2026-04-30
+  dws attendance approve list --users userId1 --types trip --start 2026-04-01 --end 2026-04-30      # 同时返回出差与外出
+  dws attendance approve list --users userId1 --types 加班,请假,补卡 --start 2026-04-01 --end 2026-04-30
 Flags:
       --start string  起始日期, 格式 YYYY-MM-DD (必填)
       --end string    结束日期, 格式 YYYY-MM-DD (必填)
-      --types string  审批类型, 逗号分隔: overtime/trip/leave/patch (必填)
+      --types string  审批类型, 逗号分隔: overtime/加班、trip/travel/business_trip/出差/外出、leave/请假、patch/repair-check/补卡 (必填)
       --users string  用户 ID 列表, 逗号分隔 (必填)
 ```
 
-审批类型映射：overtime=加班, trip=出差, leave=请假, patch=补卡。返回每条记录含：用户 ID、审批标签、审批子类型、审批类型、生效时间、时长、时长单位、流程实例 ID。
+审批类型映射（关键词 → bizType）：
+- `overtime` / `加班` → `1`
+- `trip` / `travel` / `business_trip` / `business-trip` / `出差` / `外出` → `2`（**服务端查询接口 bizType=2 同时覆盖出差与外出，两者合并为同一类、不再细分**；传入任一别名都会返回这两类记录）
+- `leave` / `请假` → `3`
+- `patch` / `repair-check` / `repair_check` / `补卡` → `4`
 
-### 查询补卡/请假/加班审批提交链接 (必须走引导流程)
+> 查询不区分外出与出差，如果需要在提交入口区分外出（`TRAVEL`）与出差（`OUT`），请改用 `dws attendance approve templates --type travel|out`。
+
+返回每条记录含：用户 ID、审批标签、审批子类型、审批类型、生效时间、时长、时长单位、流程实例 ID。
+
+### 查询补卡/请假/加班/外出/出差审批提交链接 (必须走引导流程)
 ```
 Usage:
   dws attendance approve templates [flags]
@@ -78,13 +122,15 @@ Example:
   dws attendance approve templates --type leave
   dws attendance approve templates --type REPAIR_CHECK
   dws attendance approve templates --type 加班
+  dws attendance approve templates --type travel    # 外出，等价 --type TRAVEL
+  dws attendance approve templates --type 出差       # 出差，等价 --type OUT
 Flags:
-      --type string      审批类型：repair-check/patch/补卡、leave/请假、overtime/加班，或 REPAIR_CHECK/LEAVE/OVERTIME（必填）
+      --type string      审批类型：repair-check/patch/补卡、leave/请假、overtime/加班、travel/外出、out/trip/出差，或 REPAIR_CHECK/LEAVE/OVERTIME/TRAVEL/OUT（必填）
 ```
 
-当用户提到需要提交补卡、请假或加班时，优先使用该命令查询考勤审批表单模板提交链接，并引导用户点击返回的 `submitUrl` 提交。
+当用户提到需要提交补卡、请假、加班、外出或出差时，优先使用该命令查询考勤审批表单模板提交链接，并引导用户点击返回的 `submitUrl` 提交。
 `corpId` 和 `opUserId` 由系统参数自动注入，无需通过命令参数传入。
-审批类型映射：补卡=`REPAIR_CHECK`，请假=`LEAVE`，加班=`OVERTIME`。返回结果为列表，每条记录包含 `approveType`、`formName`、`processCode`、`submitUrl`。
+审批类型映射：补卡=`REPAIR_CHECK`，请假=`LEAVE`，加班=`OVERTIME`，外出=`TRAVEL`，出差=`OUT`（`trip` / `business_trip` / `business-trip` 亦映射为 `OUT`）。返回结果为列表，每条记录包含 `approveType`、`formName`、`processCode`、`submitUrl`。
 #### 引导用户自主选择合适的表单模板流程
 如果返回多个表单模板，必须将多个可用模板都返回给用户，并引导用户根据实际场景自主选择合适的模板提交：
 - 请假场景：可根据 `formName` 将与用户请假类型更匹配的模板放在前面展示。例如用户明确说年假、事假、病假、调休时，将名称中包含对应假期类型的模板靠前；如果用户只泛化表达“请假”，将名称最通用的请假模板靠前，例如“请假”“员工请假”“通用请假”等，避免把专项或特殊场景模板放在最前。
@@ -97,21 +143,20 @@ Usage:
   dws attendance schedule import [flags]
 Example:
   dws attendance schedule import --group-id 123456 \
-    --schedules '[{"userId":"user001","classId":123,"workDate":"2026-04-22","checkBeginTime":"09:00","checkEndTime":"18:00"}]' \
+    --schedules '[{"userId":"user001","classId":123,"workDate":"2026-04-22","isRest":"N"}]' \
     --yes
 Flags:
-      --group-id string   考勤组（必填，传入考勤组ID）
-      --schedules string  排班记录 JSON 数组（必填）
-      --yes               跳过确认提示
+      --group-id string   考勤组（必填，传入考勤组ID）；--help 主名为 --groupId，--group-id 为别名
+      --schedules string  排班记录 JSON 数组（必填）；--help 主名为 --scheduleVOS，--schedules 为别名
+      --yes               跳过确认提示；--help 主名为 --user-say-yes，--yes 为别名
 ```
 
 为排班制考勤组导入排班记录。`--schedules` 为 JSON 数组，每条记录包含：
-- `userId`: 员工ID
-- `classId`: 班次ID
-- `workDate`: 工作日期（YYYY-MM-DD），如 2026-04-22
-- `checkBeginTime`: 开始打卡时间
-- `checkEndTime`: 结束打卡时间
-- `isRest`: 是否休息日 Y/N（可选）
+- `userId`: 员工ID（必填）
+- `classId`: 班次ID（必填）
+- `workDate`: 工作日期（YYYY-MM-DD），如 2026-04-22（必填）
+- `isRest`: 是否休息日 Y/N（**必填**，服务端要求传入）
+- `checkBeginTime` / `checkEndTime`: 开始/结束打卡时间（可传，但当前不会进入后端 payload，实际打卡时段以 `classId` 对应班次为准）
 
 #### AI 调用 `schedule import` 的二次确认流程
 
@@ -259,7 +304,7 @@ Flags:
       --adjustment-id int   补卡规则主键 ID (必填)
 ```
 
-根据补卡规则主键 ID 查询对应的补卡规则详情。主键 ID 可从 `adjustment search` 返回结果中提取，也有可能来源于用户手动输入。**注意：已被删除或被更新覆盖的补卡规则无法查询到。**
+**注意：本命令当前拿不到有效的补卡规则详情，不要依赖它。** 服务端对任意 `--adjustment-id`（含不存在的 ID）都返回同一个 `{"success":true,"有效期类型":"..."}`，不返回规则明细，也无法据此判断规则是否存在；且 `adjustment search` 返回的默认补卡规则 `entityVO.id` 为 `null`，`search → get` 取 id 的链路走不通。补卡规则内容请直接看 `adjustment search` 的返回结果。
 
 ### 分页查询加班规则，支持按名称搜素
 ```
@@ -534,11 +579,16 @@ Flags:
 Usage:
   dws attendance summary [flags]
 Example:
-  dws attendance summary --user USER_ID --date "2026-03-12 15:00:00"
+  dws attendance summary --user USER_ID --date 2026-03-12 --stats-type week
+  dws attendance summary --user USER_ID --date "2026-03-12 15:00:00" --stats-type month
 Flags:
-      --date string   工作日期, 格式 yyyy-MM-dd HH:mm:ss (必填)
-      --user string   钉钉用户 ID (必填)
+      --date string        查询日期, 格式 YYYY-MM-DD 或 YYYY-MM-DD HH:mm:ss (必填)
+      --stats-type string  统计类型: week 周统计 / month 月统计 (必填)
+      --tag-name string    标签名称 (可选)
+      --user string        钉钉用户 ID (必填)
 ```
+
+`summary` 必须同时传 `--user`、`--date`、`--stats-type`，缺一即报错（如 C0002）。`--stats-type` 只能是 `week`（周统计）或 `month`（月统计）。
 
 ### 查询考勤组与考勤规则
 ```
@@ -801,10 +851,10 @@ Example:
   dws attendance vacation balance --users userId1,userId2 --leave-code a1b2c3d4-e5f6-7890-abcd-ef1234567890
 Flags:
       --users string       目标员工 ID 列表, 逗号分隔 (必填)
-      --leave-code string  假期规则 code (选填，不传则查询所有假期规则余额)
+      --leave-code string  假期规则 code (必填，服务端要求非空，不传返回 INVALID_PARAMS)
 ```
 
-调用 MCP 工具 get_leave_balance_quota 查询指定员工的假期余额。例如：查询某员工年假还剩多少、病假额度等。`--leave-code` 可通过 `vacation types` 获取；不传 `--leave-code` 时查询所有假期规则余额。认证信息（corpId、opUserId）由系统自动注入。
+调用 MCP 工具 get_leave_balance_quota 查询指定员工的假期余额。例如：查询某员工年假还剩多少、病假额度等。`--leave-code` 可通过 `vacation types` 获取。**注意：`--help` 虽标"选填"，但服务端要求 `leaveCode` 非空，实际必填；不传会返回 `INVALID_PARAMS`（corpId、opUserId、leaveCode、targetUserIds 不能为空）。** 若要一次查所有假期规则余额，必须走 [attendance-vacation.md](./attendance-vacation.md) 工作流脚本逐个规则遍历。认证信息（corpId、opUserId）由系统自动注入。
 
 如用户需要“所有假期规则余额  / 导出假期余额列表 / 所有假期规则余额 Excel / 按截图样式导出假期余额”，必须先读取 [attendance-vacation.md](./attendance-vacation.md)，再按其中工作流调用脚本生成 Excel。
 
@@ -821,7 +871,7 @@ Flags:
       --end string         查询结束日期, 格式 YYYY-MM-DD (必填)
 ```
 
-调用 MCP 工具 get_leave_balance_records 查询指定员工的假期余额变更记录。例如：查询某员工年假变更历史、请假扣减记录等。`--leave-code` 可通过 `vacation types` 获取。认证信息（corpId、opUserId）由系统自动注入。
+调用 MCP 工具 get_leave_balance_records_v2 查询指定员工的假期余额变更记录。例如：查询某员工年假变更历史、请假扣减记录等。`--leave-code` 必填，可通过 `vacation types` 获取。认证信息（corpId、opUserId）由系统自动注入。
 
 ### 更新假期规则（写场景接口，必须走二次确认流程）
 
@@ -956,7 +1006,7 @@ Usage:
   dws attendance checkin records [flags]
 Example:
   dws attendance checkin records \
-    --operator-staff-id op001 --staff-ids user001,user002 --start "2026-04-01 00:00:00" --end "2026-04-07 00:00:00"
+    --operator-corp-id corp001 --operator-staff-id op001 --staff-ids user001,user002 --start "2026-04-01 00:00:00" --end "2026-04-07 00:00:00"
 Flags:
       --end string                结束时间, 格式 yyyy-MM-dd HH:mm:ss（必填）
       --operator-corp-id string   操作者企业 ID（必填）
@@ -986,7 +1036,7 @@ Flags:
 用户说"班次详情/某个班次的具体信息" → `class search --name "..."`（search 直出，直接返回详情）。`class get` 仅在需要按已知 classId 精确查询时使用
 用户说"更新班次/修改班次/班次改名/修改上下班时间" → `class update`
 用户说"补卡规则/补卡设置" → `adjustment search`（返回结果已包含全量属性，无需再调 get）
-用户说"补卡规则详情/某条补卡规则的具体信息" → `adjustment search --name "..."`（search 直出）。`adjustment get` 仅在需要按已知 adjustmentId 精确查询时使用
+用户说"补卡规则详情/某条补卡规则的具体信息" → `adjustment search --name "..."`（search 直出，已含全量属性）。**不要用 `adjustment get`**：当前服务端对任意 id 都只返回"有效期类型"、拿不到规则明细
 用户说"加班规则/加班设置/加班计算" → `overtime search`（返回结果已包含全量属性，无需再调 get）
 用户说"加班规则详情/某条加班规则的具体信息" → `overtime search --name "..."`（search 直出）。如需查已删除/被覆盖的历史记录 → `overtime get`
 用户说"考勤组列表/有哪些考勤组" → `group search`
@@ -1022,7 +1072,7 @@ Flags:
 ```bash
 # 导入排班记录
 dws attendance schedule import --group-id 123456 \
-  --schedules '[{"userId":"user001","classId":123,"workDate":"2026-04-22","checkBeginTime":"09:00","checkEndTime":"18:00"}]' \
+  --schedules '[{"userId":"user001","classId":123,"workDate":"2026-04-22","isRest":"N"}]' \
   --yes --format json
 
 #  获取排班记录 — 禁止直接调用，必须走 attendance-schedule.md 排班查询导出工作流
@@ -1077,8 +1127,8 @@ dws attendance group update --group-id 123456 --group-vo '{"positions":[{"title"
 dws attendance group create --name "研发考勤组" --type FIXED --group-vo '{"defaultClassId":1170996821,"workDayClassList":[0,1170996821,0,0,0,0,0]}' --timeout 10 --format json
 dws attendance group create --name "自由工时分组" --type NONE --timeout 10 --format json
 
-# 查看考勤统计摘要
-dws attendance summary --user <USER_ID> --date "2026-03-12 15:00:00" --format json
+# 查看考勤统计摘要（--stats-type 必填：week 周统计 / month 月统计）
+dws attendance summary --user <USER_ID> --date 2026-03-12 --stats-type week --format json
 
 # 查看考勤组和规则
 dws attendance rules --date 2026-03-14 --format json
@@ -1156,7 +1206,7 @@ dws attendance vacation save-balance --target user001 \
   --num 8 --reason "绩效奖励发放3天" --format json
 
 # 查询签到记录
-dws attendance checkin records --operator-staff-id op001 --staff-ids user001,user002 \
+dws attendance checkin records --operator-corp-id corp001 --operator-staff-id op001 --staff-ids user001,user002 \
   --start "2026-04-01 00:00:00" --end "2026-04-07 00:00:00" --format json
 ```
 
@@ -1187,7 +1237,7 @@ dws attendance checkin records --operator-staff-id op001 --staff-ids user001,use
 - `class get` 的 `--class-id` 必填，班次 ID 可从 `class search` 结果中提取
 - `class search` 返回结果已包含全量属性，无需再调用 `class get`；`class get` 仅在需要按已知 classId 精确查询时使用
 - `class update` 的 `--class-id` 必填，其余均可选，仅需对要修改的字段赋值，未传字段会自动从已有配置补充；由于保存班次耗时较久，建议加 `--timeout 10`
-- `adjustment search` 返回结果已包含全量属性，无需再调用 `adjustment get`；`adjustment get` 仅在需要按已知 adjustmentId 精确查询时使用
+- `adjustment search` 返回结果已包含全量属性；`adjustment get` 当前服务端对任意 id 都只返回"有效期类型"、无规则明细，不可用，补卡规则详情一律看 `adjustment search` 返回
 - `overtime search` 返回结果已包含全量属性，无需再调用 `overtime get`；`overtime get` 仅在需要按已知 overtimeId 查询时使用（包括已删除/被覆盖的历史记录）
 - `adjustment search` / `overtime search` 分页字段为 `--page` 和 `--limit`，不传时自动使用默认值 1 / 20
 - `group search` 的分页字段为 `--page` 和 `--limit`，不传时自动使用默认值 1 / 20
@@ -1196,7 +1246,7 @@ dws attendance checkin records --operator-staff-id op001 --staff-ids user001,use
 - `group update` 的 --group-id 必填，其余均可选，至少需指定一个修改项；仅需对要修改的字段赋値，未传字段会从已有配置自动补充；修改打卡地址/wifi/蓝牙等复杂子对象时用 `--group-vo` 传入完整 JSON；`--group-vo` 与单字段 flag 同时传入时单字段 flag 优先级更高
 - `group create` 的 `--name` 和 `--type` 必填，`--type` 必须为 FIXED/TURN/NONE 之一；type=FIXED 时 `--group-vo` 必须包含 `workDayClassList`（非空）和 `defaultClassId`（非 null）；由于保存考勤组耗时较久，建议加 `--timeout 10`
 - `group filtered-get` 的 `--group-id` 必填，`--member/--position/--wifi/--bles` 均可选，默认 false。**返回结果中如含成员 userId 列表，必须调用 `dws contact user get --ids <userId1>,<userId2>,...`（支持逗号分隔传多个 ID），将 userId 转换为员工姓名后再输出；不得直接输出裸 userId。**
-- `summary` 的 `--date` 格式: yyyy-MM-dd HH:mm:ss（如 `2026-03-12 15:00:00`）
+- `summary` 必须同时传 `--user`、`--date`、`--stats-type`（week 周统计 / month 月统计），三者缺一即报错；`--date` 支持 `YYYY-MM-DD` 或 `yyyy-MM-dd HH:mm:ss`；`--tag-name` 可选
 - `rules` 的 `--date` 支持 YYYY-MM-DD 或 yyyy-MM-dd HH:mm:ss 两种格式
 - `selfsetting get/save` 的 `--setting-scene` 必须是 `checkRemind`、`fastCheck`、`checkResultNotify`、`lackRemind`、`personalAttendStatNotify`、`bossAttendStatNotify` 之一
 - `selfsetting get/save` 的 MCP 入参 `userId` 为必填；CLI 的 `--user` 也必填，必须显式传入目标用户 ID
@@ -1209,8 +1259,8 @@ dws attendance checkin records --operator-staff-id op001 --staff-ids user001,use
 - 用户 ID 需从 `contact user get-self` 或 `aisearch person` 获取
 - 考勤组 ID 需从 `rules` 命令返回结果中获取
 - `vacation types` 无需任何参数，认证信息自动注入
-- `vacation balance` 的 `--users` 为目标员工 ID 列表，逗号分隔；`--leave-code` 选填，可通过 `vacation types` 获取
-- `vacation records` 的 `--start/--end` 使用 YYYY-MM-DD 格式，CLI 自动转换为毫秒时间戳；`--leave-code` 选填
+- `vacation balance` 的 `--users` 为目标员工 ID 列表，逗号分隔；`--leave-code` 服务端要求非空、实际必填（`--help` 标"选填"不准），不传返回 `INVALID_PARAMS`，可通过 `vacation types` 获取
+- `vacation records` 的 `--start/--end` 使用 YYYY-MM-DD 格式，CLI 自动转换为毫秒时间戳；`--leave-code` 必填（不传无法查询），底层 MCP 工具为 `get_leave_balance_records_v2`
 - `vacation balance` 和 `vacation records` 的认证参数（corpId、opUserId）由系统自动注入，无需手动传入
 - `vacation update-type` 的 `--leave-code` 必填；其他字段均为可选，但至少需传一个更新字段
 - `vacation update-type` 的 `--visibility-rules` 为 JSON 数组字符串，格式：`[{"type":"dept","visible":["1","2","3"]}]`，type 可取值 staff/label/dept

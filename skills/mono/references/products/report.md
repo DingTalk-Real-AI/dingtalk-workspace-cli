@@ -343,8 +343,8 @@ dws report outbox list --cursor 0 --size 20 --format json
 
 | 操作 | 从返回中提取 | 用于 |
 |------|-------------|------|
-| `template list` | template 名称（result.items[].report_template_name） | `template get` 的 --name |
-| `template list` | `report_template_id` | `entry submit` 的 --template-id |
+| `template list` | template 名称（`items[].report_template_name`；顶层键只有 `items` 和 `success`，**无 `result` 包裹**） | `template get` 的 --name |
+| `template list` | `items[].report_template_id` | `entry submit` 的 --template-id |
 | `template get` | `result.report_template_fields[].field_name` / `field_sort` / `field_type` | 拼 `entry submit` 的 --contents JSON（按下表映射）|
 | `entry submit` | `reportId`、`dingtalkOpenMarkdownLink`、`dingtalkOpenUrl`（CLI 自动反查详情后追加）| final reply 优先直接使用 `dingtalkOpenMarkdownLink`；需要结构化展示时用 `dingtalkOpenLink.title` + `dingtalkOpenLink.url` |
 | `inbox list` / `outbox list` | `reportId` | `entry get` / `entry stats` 的 --report-id |
@@ -376,11 +376,11 @@ dws report outbox list --cursor 0 --size 20 --format json
 | Code | ExitCode | 真实含义 | 建议动作 |
 |------|---------|---------|---------|
 | `INPUT_INVALID_JSON` | 3 | `--contents` 或 `--contents-file` 内容非合法 JSON | 检查 JSON 数组结构，每项必须是 object，含 `key`/`sort`/`content`/`contentType`/`type` 五个字段 |
-| `INPUT_FILE_NOT_FOUND` | 3 | `--contents-file` 路径不存在 / sandbox OS 风格不匹配（macOS 路径在 Windows 沙箱）| 先确认 sandbox OS 与路径风格；改写到 `os.tmpdir()` 等可移植目录 |
+| `INPUT_FILE_NOT_FOUND` | 3 | `--contents-file` 指向的文件不存在（路径必须在当前工作目录 CWD 之下）| 确认文件存在且位于 CWD 内；把 contents JSON 写到 CWD 下的相对路径再传 |
+| `INPUT_INVALID_PATH` | 3 | `--contents-file` 路径越出当前工作目录（如 `/tmp`、`os.tmpdir()`、`../` 或指向目录外的符号链接）| **不要**用 `/tmp` / `os.tmpdir()` / `../`；把 contents JSON 写到当前工作目录之下再传 |
 | `INPUT_MISSING_PARAM` | 3 | `--template-id` / `--contents` 必填缺失 | 显式传值；从 `template list` 取合法 templateId |
 | `INPUT_TOO_LARGE` | 3 | contents JSON 超过 10MB 限制 | **不支持分批次提交**。需精简内容或拆分为多个独立日志分别提交 |
-| `MCP_TOOL_ERROR` | 1 | 服务端业务错（含 `server_error_code: PARAM_ERROR`，覆盖 templateId 错 / 字段名错 / 字段值错 / contents 空等多种形态）| 查看 `server_error_code` / `technical_detail`；服务端不区分具体子错因，按提交链路重新走 `template list → template get → entry submit`；连续 ≥ 2 次仍失败必须停止重试，降级 final_reply |
-| `RESOURCE_NOT_FOUND` | 1 | reportId / templateId 在服务端找不到 | 用 `list` 或 `template list` 重新获取 |
+| `MCP_TOOL_ERROR` / `[UNCLASSIFIED] business error` | 1 | 服务端业务错，`success=false`、`code=1`。覆盖：submit 时 templateId 错 / 字段名错 / 字段值错 / contents 空（`server_error_code: PARAM_ERROR`）；`entry get` / `entry stats` 传了不存在的 reportId（`server_error_code: BUSINESS_ERROR`，technical_detail 含 `report not exist`）；`template get` 传了不存在的模版名（`server_error_code: PARAM_ERROR`）| 查看 `server_error_code` / `technical_detail`；reportId / 模版名找不到时先用 `inbox list` / `outbox list` / `template list` 重新取合法值，不要猜；submit 类错误按链路重走 `template list → template get → entry submit`，连续 ≥ 2 次仍失败必须停止重试，降级 final_reply |
 
 ## 何时停止重试
 

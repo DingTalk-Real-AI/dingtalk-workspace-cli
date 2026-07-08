@@ -46,4 +46,5 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_USER: ${{ secrets.GITEE_USER }}
           GITEE_REPO: ${{ secrets.GITEE_REPO }}

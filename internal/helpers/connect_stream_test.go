@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestBrandReply covers the qoderwork identity rewrite using the exact replies
@@ -80,6 +81,8 @@ func TestBrandReply(t *testing.T) {
 func TestClaudeUserSettingsEnv(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	unsetEnvForTest(t, "ANTHROPIC_BASE_URL")
+	unsetEnvForTest(t, "ANTHROPIC_AUTH_TOKEN")
 
 	// No settings file → no injection.
 	if got := claudeUserSettingsEnv(); len(got) != 0 {
@@ -120,5 +123,42 @@ func TestClaudeUserSettingsEnv(t *testing.T) {
 		if !seen {
 			t.Fatalf("missing %q in %v", kv, got)
 		}
+	}
+}
+
+func unsetEnvForTest(t *testing.T, key string) {
+	t.Helper()
+	old, hadOld := os.LookupEnv(key)
+	if err := os.Unsetenv(key); err != nil {
+		t.Fatalf("unset %s: %v", key, err)
+	}
+	t.Cleanup(func() {
+		if hadOld {
+			_ = os.Setenv(key, old)
+			return
+		}
+		_ = os.Unsetenv(key)
+	})
+}
+
+// TestCheckFDLimit verifies that checkFDLimit runs without panic and respects
+// the envDurationMS pattern for the keepAlive default.
+func TestCheckFDLimit(t *testing.T) {
+	// Should not panic regardless of the actual ulimit.
+	checkFDLimit()
+}
+
+func TestEnvDurationMS(t *testing.T) {
+	def := 30000 * time.Millisecond // 30s
+	if got := envDurationMS("DWS_CONNECT_KEEPALIVE_MS_TEST_ABSENT", def); got != def {
+		t.Fatalf("default keepAlive = %v, want %v", got, def)
+	}
+	t.Setenv("DWS_CONNECT_KEEPALIVE_MS_TEST", "10000")
+	if got := envDurationMS("DWS_CONNECT_KEEPALIVE_MS_TEST", def); got != 10*time.Second {
+		t.Fatalf("env override = %v, want 10s", got)
+	}
+	t.Setenv("DWS_CONNECT_KEEPALIVE_MS_TEST", "bogus")
+	if got := envDurationMS("DWS_CONNECT_KEEPALIVE_MS_TEST", def); got != def {
+		t.Fatalf("invalid env falls back to default = %v, want %v", got, def)
 	}
 }

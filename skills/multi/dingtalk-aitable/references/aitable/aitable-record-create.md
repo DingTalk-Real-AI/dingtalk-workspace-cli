@@ -27,7 +27,6 @@ Flags:
 | cells key 用字段名 | ❌ cells key 必须是 fieldId（如 `fldXXX`），不是字段名称（如 `"课程名称"`） |
 | 不先获取 fieldId | ❌ 必须先 `table get` 获取 fieldId，再写入记录 |
 | 单次超 100 条 | ❌ 单次最多 100 条，超过需分批 |
-| 附件/图片字段直传 URL | ❌ 严禁 `{"url":"https://..."}` — 会触发 TIMEOUT_ERROR。必须先 `attachment upload` 获取 `fileToken`，再用 `{"fileToken":"ft_xxx"}` 写入。详见 [aitable-attachment.md](./aitable-attachment.md) |
 
 ## 正确流程
 

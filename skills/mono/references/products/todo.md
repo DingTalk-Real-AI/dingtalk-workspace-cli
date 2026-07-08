@@ -178,6 +178,64 @@ Flags:
       --task-id string        待办任务 ID (必填)
 ```
 
+### 查询子待办列表
+```
+Usage:
+  dws todo task list-sub [flags]
+Example:
+  dws todo task list-sub --task-id <taskId>
+Flags:
+      --task-id string   待办任务 ID (必填)
+```
+
+返回结构：子待办在**顶层** `subTasks[]` 数组里（不在 `result` 下），每个元素含 `taskId`（子待办 ID）、`subject`、`priority` 等字段。取子待办的 `taskId` 用于后续操作。
+注意：`task get` 返回的 `result.todoDetailModel.subTodos[]` 里**没有 taskId 字段**，要拿子待办 ID 必须用本命令 `task list-sub`。
+
+### 上传待办附件
+
+> ⚠️ 重要：该接口会真实上传文件到附件，不可用于测试或试探性调用。调用前必须确认待办存在。
+
+```
+Usage:
+  dws todo task add-attachment [flags]
+Example:
+  dws todo task add-attachment --task-id <taskId> --file-path /path/to/file.pdf
+Flags:
+      --file-path string   本地文件路径 (必填)
+      --task-id string     待办任务 ID (必填)
+```
+
+返回 `result.attachmentIds`（数组，如 `["6a4cffb79e2b520ed3600960"]`），即新上传附件的 attachmentId。
+
+### 查询待办附件列表
+
+```
+Usage:
+  dws todo task list-attachment [flags]
+Example:
+  dws todo task list-attachment --task-id <taskId>
+Flags:
+      --task-id string   待办任务 ID (必填)
+```
+
+返回 `attachments[]`（顶层数组），每个元素含 `attachmentId`、`fileName`、`fileSize`；无附件时返回空数组。
+
+### 删除待办附件
+
+> **CAUTION:** 不可逆操作 — 执行前必须向用户确认。
+
+```
+Usage:
+  dws todo task remove-attachment [flags]
+Example:
+  dws todo task remove-attachment --task-id <taskId> --attachment-id <attachmentId>
+  dws todo task remove-attachment --task-id <taskId> --attachment-id <attachmentId> --yes
+Flags:
+      --attachment-id string   待办附件 ID (必填)
+      --task-id string         待办任务 ID (必填)
+```
+附件 attachmentId 使用 `dws todo task list-attachment` 命令获取。删除后可再 `list-attachment` 复查，返回空数组即删除成功。
+
 ### 添加待办提醒
 ```
 Usage:
@@ -256,7 +314,7 @@ JSON 数组，每个元素为一条提醒规则，支持两种 `baseTime` 模式
 ## 核心工作流
 
 ```bash
-# 1. 创建待办 — 提取 todoTaskId
+# 1. 创建待办 — 从返回 result.taskId 提取任务 ID
 dws todo task create --title "修复线上Bug" --executors userId1,userId2 \
   --priority 40 --due "2026-03-10T18:00:00+08:00" --format json
 
@@ -310,18 +368,28 @@ dws todo task add-reminder --task-id <taskId> --base-time customTime --reminder-
 dws todo task reset-reminder --task-id <taskId> --format json
 # 17. 重置待办提醒（指定新规则）
 dws todo task reset-reminder --task-id <taskId> --reminder-rules '<reminderRules>' --format json
+
+# 18. 上传附件（真实上传，先确认待办存在）— 从返回 result.attachmentIds 取 attachmentId
+dws todo task add-attachment --task-id <taskId> --file-path /path/to/file.pdf --format json
+# 19. 查询附件列表 — 从返回 attachments[].attachmentId 取 ID
+dws todo task list-attachment --task-id <taskId> --format json
+# 20. 删除附件（用户确认后加 --yes；删完可 list-attachment 复查为空）
+dws todo task remove-attachment --task-id <taskId> --attachment-id <attachmentId> --yes --format json
+
+# 21. 查询子待办 — 从顶层 subTasks[].taskId 取子待办 ID
+dws todo task list-sub --task-id <taskId> --format json
 ```
 
 ## 上下文传递表
 
 | 操作 | 从返回中提取 | 用于                                          |
 |------|-------------|---------------------------------------------|
-| `task create` | `todoTaskId` | update/done/get/delete 的 --task-id          |
-| `task list` | `result[].id` | update/done/get/delete 的 --task-id          |
-| `task create` | `todoTaskId` | update/done/get/delete/comment 的 --task-id  |
-| `task list` | `result[].id` | update/done/get/delete/comment/add-executor/remove-executor/add-participant/remove-participant 的 --task-id |
-| `task get` | `result.todoDetailModel.subTodos[]` | 获取子待办列表，提取子待办的 `taskId` 用于后续操作              |
-| `comment list` | `result[].commentId` | `comment delete` 的 --comment-id             |
+| `task create` / `task create-sub` | `result.taskId` | update/done/get/delete/comment 的 --task-id  |
+| `task list` | `result.todoCards[].taskId` | update/done/get/delete/comment/add-executor/remove-executor/add-participant/remove-participant 的 --task-id |
+| `task list-sub` | `subTasks[].taskId`（顶层数组，不在 `result` 下） | 子待办的后续操作 --task-id |
+| `add-attachment` | `result.attachmentIds[]` | 新上传附件的 attachmentId |
+| `list-attachment` | `attachments[].attachmentId`（顶层数组） | `remove-attachment` 的 --attachment-id |
+| `comment list` | `result.comments[].id` | `comment delete` 的 --comment-id             |
 
 ## 注意事项
 
@@ -341,6 +409,9 @@ dws todo task reset-reminder --task-id <taskId> --reminder-rules '<reminderRules
 - 执行人 (executor) 与参与人 (participant) 的区别：执行人负责完成待办，参与人仅关注待办进度
 - `task add-reminder` 用于为待办添加提醒，`--base-time` 支持 `dueTime`（基于截止时间偏移，待办必须有截止时间）和 `customTime`（自定义时间戳）两种模式
 - `task reset-reminder` 用于重置待办提醒规则，不传 `--reminder-rules` 则清除所有提醒
+- `task add-attachment` / `list-attachment` / `remove-attachment` 三条附件命令均可用；`add-attachment` 会真实上传文件，勿用于试探性调用，先确认待办存在
+- 附件 ID 的取法：`add-attachment` 从 `result.attachmentIds[]` 取，`list-attachment` 从顶层 `attachments[].attachmentId` 取；`remove-attachment` 用 `--attachment-id` + `--yes`
+- 子待办 ID 只能从 `task list-sub` 的顶层 `subTasks[].taskId` 取；`task get` 的 `result.todoDetailModel.subTodos[]` 没有 taskId 字段
 
 
 ## 自动化脚本

@@ -395,7 +395,7 @@ func TestNewUpgradeCommand_Flags(t *testing.T) {
 		t.Errorf("Use = %q, want upgrade", cmd.Use)
 	}
 
-	expectedFlags := []string{"check", "list", "version", "rollback", "force", "skip-skills"}
+	expectedFlags := []string{"check", "list", "version", "beta", "rollback", "force", "skip-skills"}
 	for _, name := range expectedFlags {
 		if cmd.Flags().Lookup(name) == nil {
 			t.Errorf("missing flag: --%s", name)
@@ -430,10 +430,37 @@ func TestNewUpgradeCommand_Help(t *testing.T) {
 	if !strings.Contains(help, "--rollback") {
 		t.Error("help should contain --rollback")
 	}
+	if !strings.Contains(help, "--beta") {
+		t.Error("help should contain --beta")
+	}
 	// Regression for #364: --dry-run must be discoverable from upgrade help so
 	// users know it is supported (and is now actually honored).
 	if !strings.Contains(help, "--dry-run") {
 		t.Error("help should advertise --dry-run for upgrade")
+	}
+}
+
+func TestNewUpgradeCommand_BetaAndVersionAreMutuallyExclusive(t *testing.T) {
+	cmd := newUpgradeCommand()
+	cmd.SetArgs([]string{"--beta", "--version", "v1.0.8-beta.1"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for --beta with --version")
+	}
+	if !strings.Contains(err.Error(), "--beta") || !strings.Contains(err.Error(), "--version") {
+		t.Fatalf("error = %q, want to mention --beta and --version", err.Error())
+	}
+}
+
+func TestUpgradeTrack(t *testing.T) {
+	if got := upgradeTrack(false); got != "release" {
+		t.Fatalf("upgradeTrack(false) = %q, want release", got)
+	}
+	if got := upgradeTrack(true); got != "beta" {
+		t.Fatalf("upgradeTrack(true) = %q, want beta", got)
+	}
+	if got := upgradeHintForTrack("beta"); !strings.Contains(got, "--beta") {
+		t.Fatalf("upgradeHintForTrack(beta) = %q, want --beta hint", got)
 	}
 }
 

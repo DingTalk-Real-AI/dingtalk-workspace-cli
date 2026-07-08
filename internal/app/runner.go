@@ -162,6 +162,18 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 	// invocations within the same process free.
 	logHostOwnedPATDecisionOnce()
 
+	selections, multi, err := resolveMultiProfileSelections(defaultConfigDir(), authpkg.RuntimeProfile())
+	if err != nil {
+		return executor.Result{}, apperrors.NewValidation(err.Error())
+	}
+	if multi {
+		return r.runMultiProfile(ctx, invocation, selections)
+	}
+
+	return r.runSingle(ctx, invocation, true)
+}
+
+func (r *runtimeRunner) runSingle(ctx context.Context, invocation executor.Invocation, prefetchToken bool) (executor.Result, error) {
 	if r.loader == nil || r.transport == nil {
 		return r.fallback.Run(ctx, invocation)
 	}
@@ -179,7 +191,9 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 	// Prefetch the Keychain token in the background. Keychain access costs
 	// ~70ms on macOS; starting it here lets the load overlap with endpoint
 	// resolution and catalog loading below.
-	go getCachedRuntimeToken(ctx)
+	if prefetchToken {
+		go getCachedRuntimeToken(ctx)
+	}
 
 	if shouldUseDirectRuntime(invocation) {
 		if endpoint, ok := directRuntimeEndpoint(invocation.CanonicalProduct, invocation.Tool); ok {
@@ -239,6 +253,144 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 	return r.executeInvocation(ctx, endpoint, invocation)
 }
 
+type multiProfileSelection struct {
+	Selector string
+	Profile  authpkg.Profile
+}
+
+func resolveMultiProfileSelections(configDir, rawSelector string) ([]multiProfileSelection, bool, error) {
+	rawSelector = strings.TrimSpace(rawSelector)
+	if rawSelector == "" || !strings.Contains(rawSelector, ",") {
+		return nil, false, nil
+	}
+	if p, err := authpkg.ResolveProfile(configDir, rawSelector); err == nil && p != nil {
+		return nil, false, nil
+	}
+
+	parts := strings.Split(rawSelector, ",")
+	selections := make([]multiProfileSelection, 0, len(parts))
+	seen := make(map[string]bool, len(parts))
+	for _, part := range parts {
+		selector := strings.TrimSpace(part)
+		if selector == "" {
+			return nil, false, fmt.Errorf("--profile contains an empty profile selector: %q", rawSelector)
+		}
+		profile, err := authpkg.ResolveProfile(configDir, selector)
+		if err != nil {
+			return nil, false, err
+		}
+		if profile == nil {
+			return nil, false, fmt.Errorf("profile %q not found", selector)
+		}
+		if seen[profile.CorpID] {
+			continue
+		}
+		seen[profile.CorpID] = true
+		selections = append(selections, multiProfileSelection{
+			Selector: selector,
+			Profile:  *profile,
+		})
+	}
+	if len(selections) == 0 {
+		return nil, false, nil
+	}
+	return selections, true, nil
+}
+
+func (r *runtimeRunner) runMultiProfile(ctx context.Context, invocation executor.Invocation, selections []multiProfileSelection) (executor.Result, error) {
+	previousProfile := authpkg.RuntimeProfile()
+	defer authpkg.SetRuntimeProfile(previousProfile)
+
+	entries := make([]any, 0, len(selections))
+	succeeded := 0
+	failed := 0
+
+	for _, selection := range selections {
+		authpkg.SetRuntimeProfile(selection.Profile.CorpID)
+		result, err := r.runSingle(ctx, cloneInvocation(invocation), false)
+
+		entry := map[string]any{
+			"selector": selection.Selector,
+			"corpId":   selection.Profile.CorpID,
+			"corpName": selection.Profile.CorpName,
+			"ok":       err == nil,
+		}
+		if err != nil {
+			failed++
+			entry["error"] = multiProfileErrorPayload(err)
+		} else {
+			succeeded++
+			if payload := multiProfileResultPayload(result); payload != nil {
+				entry["result"] = payload
+			}
+			if result.Response != nil {
+				if endpoint, ok := result.Response["endpoint"]; ok {
+					entry["endpoint"] = endpoint
+				}
+			}
+		}
+		entries = append(entries, entry)
+	}
+
+	invocation.Implemented = true
+	return executor.Result{
+		Invocation: invocation,
+		Response: map[string]any{
+			"content": map[string]any{
+				"success":      failed == 0,
+				"multiProfile": true,
+				"summary": map[string]any{
+					"total":     len(selections),
+					"succeeded": succeeded,
+					"failed":    failed,
+				},
+				"profiles": entries,
+			},
+		},
+	}, nil
+}
+
+func cloneInvocation(invocation executor.Invocation) executor.Invocation {
+	cloned := invocation
+	if invocation.Params != nil {
+		cloned.Params = make(map[string]any, len(invocation.Params))
+		for key, value := range invocation.Params {
+			cloned.Params[key] = value
+		}
+	}
+	return cloned
+}
+
+func multiProfileResultPayload(result executor.Result) any {
+	if result.Response == nil {
+		return nil
+	}
+	if content, ok := result.Response["content"]; ok {
+		return content
+	}
+	return result.Response
+}
+
+func multiProfileErrorPayload(err error) map[string]any {
+	payload := map[string]any{
+		"message": err.Error(),
+	}
+	var typed *apperrors.Error
+	if errors.As(err, &typed) {
+		payload["category"] = string(typed.Category)
+		if typed.Reason != "" {
+			payload["reason"] = typed.Reason
+		}
+		if typed.Operation != "" {
+			payload["operation"] = typed.Operation
+		}
+		if code := typed.ExitCode(); code != 0 {
+			payload["exitCode"] = code
+		}
+	}
+	return payload
+}
+
 // handleCatalogMiss decides what to do when discovery catalog does not cover the
 // requested product / tool and no `directRuntimeEndpoint` match fired earlier.
 //
@@ -260,12 +412,16 @@ func (r *runtimeRunner) handleCatalogMiss(ctx context.Context, invocation execut
 		invocation.DryRun = true
 		return r.fallback.Run(ctx, invocation)
 	}
-	hint := "产品 envelope 可能未下发到 discovery，或已经被 serverDeps fail-fast 丢弃；可执行 'dws cache refresh' 强制重新 discovery，仍失败请向 Portal 确认 envelope 状态。"
-	actions := []string{"dws cache refresh"}
+	hint := "当前命令已注册，但静态端点目录中缺少对应 product/server endpoint。这通常是服务发现下线后的同步产物缺口，不是参数错误；请不要通过反复调整 flag 重试。"
+	actions := []string{
+		"确认 internal/syncdata.StaticServers() 是否包含该 product/server",
+		"运行 sync-oss 重新生成静态端点与路由",
+		"若该能力已下线，请在 skill 与 --help 中标记 unavailable 并提供替代命令",
+	}
 	if strings.TrimSpace(invocation.CanonicalProduct) == devappProductID {
-		hint = "dev app（product id: devapp）是 helper-only 产品，命令树不依赖 discovery；真实调用需要内部版通过 SupplementServers/StaticServers 注入 MCP endpoint，或本地调试临时设置 DINGTALK_DEVAPP_MCP_URL。"
+		hint = "dev app（product id: devapp）是 helper-only 产品，命令树不依赖服务发现；真实调用需要通过 StaticServers/SupplementServers 注入 MCP endpoint，或本地调试临时设置 DINGTALK_DEVAPP_MCP_URL。"
 		actions = []string{
-			"检查内部版 SupplementServers/StaticServers 是否包含 devapp endpoint",
+			"检查 StaticServers/SupplementServers 是否包含 devapp endpoint",
 			"本地调试可临时设置 DINGTALK_DEVAPP_MCP_URL 后重试",
 		}
 	}
@@ -604,28 +760,40 @@ func resolveRuntimeAuthToken(ctx context.Context, explicitToken string) string {
 
 // Cached token state for process lifetime
 var (
-	cachedRuntimeToken     string
-	cachedRuntimeTokenOnce sync.Once
+	cachedRuntimeTokenMu sync.Mutex
+	cachedRuntimeTokens  = map[string]string{}
 )
 
 // getCachedRuntimeToken returns a cached access token, loading it only once per process.
 // This avoids repeated Keychain access which takes ~70ms each time.
 func getCachedRuntimeToken(ctx context.Context) string {
-	cachedRuntimeTokenOnce.Do(func() {
-		loadStart := time.Now()
-		defer func() { RecordTiming(ctx, "auth_keychain", time.Since(loadStart)) }()
+	cacheKey := strings.TrimSpace(authpkg.RuntimeProfile())
+	if cacheKey == "" {
+		cacheKey = "__default__"
+	}
+	cachedRuntimeTokenMu.Lock()
+	if token := cachedRuntimeTokens[cacheKey]; token != "" {
+		cachedRuntimeTokenMu.Unlock()
+		return token
+	}
+	cachedRuntimeTokenMu.Unlock()
 
-		configDir := defaultConfigDir()
-		token, tokenErr := resolveAccessTokenFromDir(ctx, configDir)
-		if tokenErr != nil && errors.Is(tokenErr, authpkg.ErrTokenDecryption) {
-			slog.Error(tokenErr.Error())
-			return
-		}
-		if token != "" {
-			cachedRuntimeToken = token
-		}
-	})
-	return cachedRuntimeToken
+	loadStart := time.Now()
+	defer func() { RecordTiming(ctx, "auth_keychain", time.Since(loadStart)) }()
+
+	configDir := defaultConfigDir()
+	token, tokenErr := resolveAccessTokenFromDir(ctx, configDir)
+	if tokenErr != nil && errors.Is(tokenErr, authpkg.ErrTokenDecryption) {
+		slog.Error(tokenErr.Error())
+		return ""
+	}
+	if token == "" {
+		return ""
+	}
+	cachedRuntimeTokenMu.Lock()
+	cachedRuntimeTokens[cacheKey] = token
+	cachedRuntimeTokenMu.Unlock()
+	return token
 }
 
 // generateExecutionID returns a random 16-char hex string used to correlate
@@ -640,8 +808,9 @@ func generateExecutionID() string {
 // ResetRuntimeTokenCache clears the cached token, forcing a reload on next access.
 // This should be called after login/logout operations.
 func ResetRuntimeTokenCache() {
-	cachedRuntimeTokenOnce = sync.Once{}
-	cachedRuntimeToken = ""
+	cachedRuntimeTokenMu.Lock()
+	defer cachedRuntimeTokenMu.Unlock()
+	cachedRuntimeTokens = map[string]string{}
 }
 
 func newRuntimeContentScanner() safety.Scanner {
@@ -714,20 +883,21 @@ func resolveIdentityHeaders() map[string]string {
 	if sessionID == "" {
 		sessionID = os.Getenv(envRewindSessionID)
 	}
-	// Resolve the agent_code (accuracy-first; unknown hosts -> custom) and the
-	// per-(machine × agent_code) instance id. This is what makes agent_code
-	// actually report a value: previously it was sent only when the host
-	// injected DINGTALK_DWS_AGENTCODE (empty ~99.98% of the time), so the
-	// gateway logged no agent_code at all. DetectAgentCode always yields a code.
+	// Resolve the agent_code (accuracy-first; unknown hosts stay empty) and the
+	// per-(machine × agent_code) instance id when a code is known. Synthetic
+	// fallbacks must not be sent because PAT authorization checks use the same
+	// header as their grant key.
 	//
 	// Backward-compat by design (additive, not breaking):
 	//   - x-dws-agent-id keeps its v1 meaning = machine-level install UUID
 	//     (set by id.Headers() above), so old/new clients stay comparable.
-	//   - x-dws-agent-instance-id is NEW: the per-(machine × agent_code) id.
-	//     Old clients don't send it, which is itself a clean old/new signal.
+	//   - x-dws-agent-instance-id is NEW: the per-(machine × agent_code) id,
+	//     sent only when x-dingtalk-dws-agent-code is non-empty.
 	// Note: x-dws-channel (DWS_CHANNEL) is a separate axis, untouched.
 	agentCode, agentCodeSig := authpkg.DetectAgentCode()
-	headers["x-dws-agent-instance-id"] = id.ResolveAgentID(defaultConfigDir(), agentCode, agentCodeSig)
+	if agentInstanceID := id.ResolveAgentID(defaultConfigDir(), agentCode, agentCodeSig); agentInstanceID != "" {
+		headers["x-dws-agent-instance-id"] = agentInstanceID
+	}
 
 	// Emit the CLI version on the wire so the gateway can segment old vs new
 	// clients (and scope agent_code coverage / adoption). The header constant
@@ -755,6 +925,9 @@ func resolveIdentityHeaders() map[string]string {
 	}
 
 	if fn := edition.Get().MergeHeaders; fn != nil {
+		headers = fn(headers)
+	}
+	if fn := edition.Get().EnterpriseCredentialHeaders; fn != nil {
 		headers = fn(headers)
 	}
 	return headers

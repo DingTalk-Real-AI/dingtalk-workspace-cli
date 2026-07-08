@@ -110,6 +110,7 @@ cp dws ~/.local/bin/         # 安装到 PATH
 ```
 
 > 需要 Go 1.25+。也可以用 `make package` 构建所有平台产物（macOS / Linux / Windows × amd64 / arm64）。
+> 静态端点数据由悟空基线生成并提交在本仓库 `internal/syncdata`，源码构建不需要额外 checkout 数据仓库。
 
 </details>
 
@@ -152,11 +153,17 @@ dws 内置自升级能力，直接从 [GitHub Releases](https://github.com/DingT
 ```bash
 dws upgrade                    # 交互式升级到最新版本
 dws upgrade --check            # 仅检查是否有新版本
-dws upgrade --list             # 列出所有可用版本
+dws upgrade --list             # 列出正式 release 版本
+dws upgrade --beta             # 升级到最新 beta 预发布版本
+dws upgrade --check --beta     # 仅检查 beta 轨道是否有新版本
+dws upgrade --list --beta      # 列出 beta 预发布版本
 dws upgrade --version v1.0.7   # 升级到指定版本
+dws upgrade --version v1.0.8-beta.1  # 升级到指定 beta 版本
 dws upgrade --rollback         # 回滚到上一版本
 dws upgrade -y                 # 跳过确认直接升级
 ```
+
+默认情况下，`dws upgrade` 只跟随正式 release 轨道。只有显式传入 `--beta` 时，才会选择 GitHub pre-release 里的 beta 构建。
 
 <details>
 <summary><strong>工作原理</strong></summary>
@@ -171,8 +178,9 @@ dws upgrade -y                 # 跳过确认直接升级
 | Flag | 说明 |
 |------|------|
 | `--check` | 仅检查更新，不安装 |
-| `--list` | 列出所有可用版本及更新日志 |
-| `--version` | 升级到指定版本（如 `v1.0.7`） |
+| `--list` | 列出正式 release 版本及更新日志 |
+| `--beta` | 对 `upgrade`、`--check`、`--list` 使用 beta 预发布轨道 |
+| `--version` | 升级到指定版本（如 `v1.0.7` 或 `v1.0.8-beta.1`） |
 | `--rollback` | 回滚到上一个备份版本 |
 | `--force` | 强制重新安装，即使已是最新版本 |
 | `--skip-skills` | 跳过技能包更新 |
@@ -234,6 +242,22 @@ dws auth login --client-id <your-app-key> --client-secret <your-app-secret>
 </details>
 
 <details>
+<summary><strong>多组织（profile）</strong></summary>
+
+`dws` 可以同时登录多个钉钉组织。一个组织就是一个 **profile**，当前 profile 决定本次命令操作哪个组织（凭证按组织分别存储）。
+
+```bash
+dws auth login                              # 再登录一个组织 → 新增一个 profile（首次登录的为主组织）
+dws profile list                            # 列出已登录组织（主 / 当前标记、状态）
+dws profile switch <名称|corpId>            # 切换默认组织（用 - 切回上一个）
+dws --profile <名称|corpId> contact user search --query "..."   # 单次对指定组织执行，不改默认组织
+```
+
+跨组织读取由 agent 编排，而非内置 `--all-orgs`：先 `dws profile list` 拿到组织，再对每个组织带 `--profile` 各查一遍，然后合并。写操作默认只在当前组织进行——跨组织写之前先确认目标组织。
+
+</details>
+
+<details>
 <summary><strong>沙箱间迁移登录态（Linux）</strong></summary>
 
 仅拷贝 `~/.dws/app.json` 无法带走 refresh token；access token 约 2 小时后会失效。请使用官方导出/导入：
@@ -284,18 +308,18 @@ dws contact user search --query "张三" --dry-run
 dws contact user get-self --jq '.result[0].orgEmployeeModel | {name: .orgUserName, dept: .depts[0].deptName, userId}'
 ```
 
-### Schema 发现
+### 命令帮助与 Schema
 
-Agent 无需预置所有命令知识，通过 `dws schema` 动态发现可用能力：
+产品命令在静态端点模式下已经编译进二进制。Agent 以 `--help` 和内置 Skill 为事实源；`dws schema` 仅保留给 `dev.*` 等 helper-only schema 查询。
 
 ```bash
-# 第一步：发现所有可用产品
-dws schema --jq '.products[] | {id, tool_count: (.tools | length)}'
+# 查看当前编译出的命令面
+dws aitable record query --help
 
-# 第二步：查看目标工具的参数结构
-dws schema aitable.query_records --jq '.tool.parameters'
+# helper-only schema 自省
+dws schema "dev app create"
 
-# 第三步：构造正确的调用
+# 构造正确的调用
 dws aitable record query --base-id BASE_ID --table-id TABLE_ID --limit 10
 ```
 
@@ -502,7 +526,7 @@ dws aitable record query --base-id BASE_ID --tabel-id TABLE_ID       # --tabel-i
 ```bash
 # 内置 jq 表达式
 dws aitable record query --base-id BASE_ID --table-id TABLE_ID --jq '.invocation.params'
-dws schema --jq '.products[] | {id, tools: (.tools | length)}'
+dws schema "dev app create" --jq '.tool.required'
 
 # 只返回指定字段
 dws aitable record query --base-id BASE_ID --table-id TABLE_ID --fields invocation,response
@@ -511,13 +535,12 @@ dws aitable record query --base-id BASE_ID --table-id TABLE_ID --fields invocati
 </details>
 
 <details>
-<summary><strong>Schema 自省</strong> — 调用前查询任意工具的参数结构</summary>
+<summary><strong>Schema 自省</strong> — 静态端点模式下的 helper-only schema</summary>
 
 ```bash
-dws schema                                              # 列出所有产品和工具
-dws schema aitable.query_records                        # 查看参数 Schema
-dws schema aitable.query_records --jq '.tool.required'   # 查看必填字段
-dws schema --jq '.products[].id'                        # 提取所有产品 ID
+dws schema                                              # 静态端点模式提示
+dws schema "dev app create"                             # 查看 helper-only schema
+dws schema "dev app create" --jq '.tool.required'        # 查看必填字段
 ```
 
 </details>
@@ -562,29 +585,29 @@ dws dev connect --channel auto --robot-client-id <id> --robot-client-secret <sec
 
 ## 核心服务
 
-| 服务 | 命令 | 命令数 | 子命令 | 描述 |
-|------|------|:------:|--------|------|
-| 通讯录 | `contact` | 15 | `user` `dept` `label` `relation` | 按姓名 / 手机号 / 工号搜索、批量查询、部门树、角色标签、人员关系、花名册与离职、当前用户信息 |
-| 群聊 | `chat`（别名 `im`）| 65 | `message` `group` `bot` `conversation-info` `search` `search-common` `list-top-conversations` `group-mute` `group-mute-member` `mute` `set-top` `list-categories` `list-conversations` | 消息（发送 / 回复 / 列表 / list-all / 按发送者 / @我 / 关注 / 未读 / 话题回复 / 搜索 / 高级搜索 / 转发 / 卡片 / 表情与文本表情反应 / 撤回 / 已读与发送状态查询）、群增删改 + 成员管理（成员增 / 删 / 查 / `add-bot`、成员角色增删改查、邀请链接、群图标、群设置、转让群主、设置管理员、退群）、机器人身份消息（`send-by-bot` / `recall-by-bot` / `send-by-webhook`）、会话信息查询、共同群聊、群/成员/会话免打扰、会话置顶、会话分类 |
-| 日历 | `calendar` | 17 | `event` `room` `participant` `busy` | 日程 CRUD + 建议时间 + 附件、会议室预订、闲忙查询、参与者管理 |
-| 待办 | `todo` | 16 | `task` `comment` | 创建、列表、修改、完成、详情、删除，以及任务评论 |
-| 审批 | `oa` | 15 | `approval` | 同意 / 拒绝 / 撤销 / 转交、待我审批 / 我发起 / 已提交 / 已办 / 抄送、流程表单、评论、操作记录 |
-| 考勤 | `attendance` | 4 | `record` `shift` `summary` `rules` | 打卡记录、排班查询、考勤摘要、考勤组规则 |
-| DING | `ding` | 2 | `message` | 发送 / 撤回 DING 消息 |
-| 日志 | `report` | 20 | `create` `submit` `list` `detail` `template` `stats` `inbox` `outbox` `entry` | 创建 / 提交日志、收发（收件箱 / 发件箱）列表、模版（获取 / 列表）、详情、统计、单条获取 |
-| AI 表格 | `aitable` | 52 | `base` `table` `record` `field` `view` `dashboard` `chart` `import` `export` `attachment` `template` `form` | Base / 数据表 / 记录 / 字段 / 视图 全量 CRUD；图表 + 仪表盘（含分享配置）；数据导入导出；附件（仅获取凭证的 `upload` + 一键上传 `upload-file`）；数据表表单；模板 |
-| 文档 | `doc` | 28 | `search` `list` `info` `read` `create` `update` `upload` `download` `copy` `move` `rename` `file` `folder` `block` `comment` | 搜索 / 读写文档、文件与文件夹创建、块级编辑、评论（list / create / reply / create-inline）、上传 / 下载 |
-| 钉盘 | `drive` | 9 | `list` `list-spaces` `info` `download` `mkdir` `upload` `upload-info` `commit` `delete` | 钉盘文件操作：列出空间、文件列表 / 详情 / 下载、创建文件夹、一键 `upload`（三步合成）或两阶段 `upload-info` + `commit`、删除 |
-| AI 听记 | `minutes` | 19 | `list` `get` `update` `mind-graph` `speaker` `hot-word` `upload` | 听记列表（我创建 / 共享给我）、详情（info / summary / keywords / transcription / todos / batch）、标题/摘要更新、思维导图、发言人替换、热词、上传会话 |
-| 邮箱 | `mail` | 18 | `mailbox` `message` `draft` `folder` `tag` `thread` `attachment` `user` | 邮箱地址列表、KQL 邮件搜索、读取与发送邮件、草稿、文件夹、标签、会话、附件、通讯录用户搜索 |
-| 在线电子表格 | `sheet` | 23 | `range` `filter-view`（顶层：`create` `new` `list` `info` `read` `get` `update` `find` `replace` `append` `merge-cells` `unmerge-cells` `add-dimension` `insert-dimension` `delete-dimension` `move-dimension` `update-dimension` `write-image`） | 在线电子表格（`contentType=ALIDOC`、`extension=axls`）：工作表 CRUD、区域读写/追加、行列操作、合并/取消合并、查找替换、命名筛选视图 + 表级筛选、写入图片 |
-| 知识库 | `wiki` | 21 | `space` `member` `node` `doc` `file` | 知识库管理：空间（`create` / `get` / `list` / `search`）、成员（`add` / `list` / `update`）、节点树、文档与文件 |
-| 开发者文档 | `devdoc` | 2 | `article` `error` | 搜索钉钉开放平台文档并排查 API 调用错误 |
-| AI 搜问 | `aisearch` | 3 | `person` | 企业人员搜索：按姓名 / 部门 / 职位 / 职责 / 上级 / 下级 / 手机号 / 工号 多维度过滤（单命令） |
-| 直播 | `live` | 1 | `stream` | 钉钉直播：查看我的直播列表 |
-| Raw API | `api` | 1 | — | 直接调用任意钉钉 OpenAPI（api / oapi 双形态），自动管理应用级 Token |
+| 服务 | 命令 | 能力 |
+|------|------|------|
+| 通讯录 | `contact` | 按姓名 / 手机号 / 工号查人，部门、角色标签、花名册与离职 |
+| 群聊 | `chat`（`im`）| 发送 / 回复 / 搜索消息，群与成员管理，机器人与 Webhook 发消息，表情反应，撤回 |
+| 日历 | `calendar` | 日程 CRUD、参与者、会议室、闲忙与时间建议 |
+| 待办 | `todo` | 创建 / 列表 / 修改 / 完成待办及评论 |
+| 审批 | `oa` | 同意 / 拒绝 / 撤销 / 转交，查待办 / 已发起 / 抄送及表单 |
+| 考勤 | `attendance` | 打卡记录、排班、考勤摘要、考勤组规则（只读） |
+| DING | `ding` | 发送 / 撤回 DING 消息 |
+| 日志 | `report` | 创建 / 提交日志，收发件箱，模版，统计 |
+| AI 表格 | `aitable` | Base / 数据表 / 记录 / 字段 / 视图，权限与角色，自动化，图表与仪表盘，导入导出 |
+| 文档 | `doc` | 搜索 / 读写文档，块级编辑，评论，权限，媒体，上传 / 下载 |
+| 钉盘 | `drive` | 列表 / 搜索 / 下载，文件夹，上传，复制 / 移动 / 重命名，权限 |
+| AI 听记 | `minutes` | 听记列表、摘要 / 关键词 / 转写 / 待办、思维导图、发言人、标签 |
+| 邮箱 | `mail` | 邮箱、KQL 搜索、读 / 发、草稿、文件夹、模版、联系人 |
+| 在线电子表格 | `sheet` | 在线表格：工作表与区域读写、筛选、条件格式、图片、CSV |
+| 知识库 | `wiki` | 知识库：空间、成员、节点树、文档与文件 |
+| 开发者文档 | `devdoc` | 搜索开放平台文档并排查 API 错误 |
+| AI 搜问 | `aisearch` | 企业人员搜索：按姓名 / 部门 / 角色 / 职责 / 上下级 / 手机号 / 工号 |
+| 直播 | `live` | 查看我的直播列表 |
+| Raw API | `api` | 直接调用任意钉钉 OpenAPI，自动管理应用级 Token |
 
-> **18 个产品，331 条命令。** 完整命令清单（带描述与使用场景）：[`docs/command-index.md`](./docs/command-index.md)。运行 `dws --help` 查看顶层命令树，或 `dws <service> --help` 查看子命令。
+> 完整命令清单（带描述与使用场景）：[`docs/command-index.md`](./docs/command-index.md)。运行 `dws --help` 查看顶层命令树，或 `dws <service> --help` 查看任一服务的子命令。
 
 > **关于 `chat bot`**：机器人能力（`send-by-bot` / `recall-by-bot` / `add-bot` / `send-by-webhook` / bot 搜索）已合并到对应的 `chat` 子树下（例如 `dws chat message send-by-bot`、`dws chat group members add-bot`），保持 agent 视角下的命令面扁平易发现。不再有独立的顶层 `bot` 产品。
 
@@ -645,7 +668,7 @@ dws dev connect --channel auto --robot-client-id <id> --robot-client-secret <sec
 
 - [命令索引](./docs/command-index.md) — 全部运行时命令，带描述与使用场景
 - [参考手册](./docs/reference.md) — 环境变量、退出码、输出格式、Shell 补全
-- [架构设计](./docs/architecture.md) — 发现驱动管道、IR、Transport 层
+- [架构设计](./docs/architecture.md) — 静态端点管道、命令面、Transport 层
 - [开放平台应用指令设计](./docs/dev-yulan-command-routing.md) — yulan dev app 应用侧命令、MCP overlay、权限流程与 Agent 路由
 - [更新日志](./CHANGELOG.md) — 版本历史与迁移说明
 

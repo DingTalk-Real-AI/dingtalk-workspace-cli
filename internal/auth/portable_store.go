@@ -52,6 +52,9 @@ func PortableAuthTargetPopulated(configDir string) bool {
 	if TokenDataExistsKeychain() {
 		return true
 	}
+	if _, err := os.Stat(ProfilesPath(configDir)); err == nil {
+		return true
+	}
 	if _, err := os.Stat(filepath.Join(configDir, "app.json")); err == nil {
 		return true
 	}
@@ -199,7 +202,7 @@ func ImportPortableAuthBundle(configDir string, r io.Reader) (PortableImportRepo
 
 func portableConfigFiles(configDir string) ([]string, error) {
 	var files []string
-	patterns := []string{"app*.json", "mcp_url", "terminal_url"}
+	patterns := []string{"app*.json", profilesJSONFile, "mcp_url", "terminal_url"}
 	for _, pattern := range patterns {
 		matches, err := filepath.Glob(filepath.Join(configDir, pattern))
 		if err != nil {

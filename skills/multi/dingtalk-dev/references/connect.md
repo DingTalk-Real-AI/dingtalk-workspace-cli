@@ -102,7 +102,7 @@ dws dev connect --unified-app-id <unifiedAppId> --channel codex --format json
 dws dev connect --help
 
 # 查 connect 的必填参数、类型、默认值
-dws schema dev.connect
+dws dev <command-path> --help
 ```
 
-按 `dws schema` 输出构造 `--flag`（flag 名 = schema 参数名）。
+按 `--help` 输出构造 flag；不要凭旧 schema 名称猜参数。

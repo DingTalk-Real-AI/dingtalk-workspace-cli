@@ -18,6 +18,7 @@ package cobracmd
 import (
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -43,7 +44,7 @@ func FlagChanged(cmd *cobra.Command, name string) bool {
 
 // NewGroupCommand creates a non-leaf parent command that shows help when invoked.
 func NewGroupCommand(use, short string) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:               use,
 		Short:             short,
 		Args:              cobra.NoArgs,
@@ -53,6 +54,11 @@ func NewGroupCommand(use, short string) *cobra.Command {
 			return cmd.Help()
 		},
 	}
+	// Tag as a group container: its RunE only prints help, so cobra's
+	// Runnable() can't distinguish it from a real leaf — callers that need to
+	// collapse empty groups rely on this annotation.
+	cmdutil.MarkGroup(cmd)
+	return cmd
 }
 
 // NewHiddenGroupCommand creates a hidden non-leaf parent command.

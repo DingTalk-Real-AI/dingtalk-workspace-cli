@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
@@ -30,6 +31,24 @@ var (
 // SaveTokenDataKeychain saves TokenData to the platform keychain.
 // This is the new secure storage method using random master key.
 func SaveTokenDataKeychain(data *TokenData) error {
+	return saveTokenDataKeychainAccount(keychain.AccountToken, data)
+}
+
+// TokenAccountForCorpID returns the keychain account used for a corp-bound token.
+func TokenAccountForCorpID(corpID string) string {
+	return keychain.AccountToken + ":" + strings.TrimSpace(corpID)
+}
+
+// SaveTokenDataKeychainForCorpID saves TokenData to a corp-scoped keychain slot.
+func SaveTokenDataKeychainForCorpID(corpID string, data *TokenData) error {
+	corpID = strings.TrimSpace(corpID)
+	if corpID == "" {
+		return fmt.Errorf("corpId is required for profile token storage")
+	}
+	return saveTokenDataKeychainAccount(TokenAccountForCorpID(corpID), data)
+}
+
+func saveTokenDataKeychainAccount(account string, data *TokenData) error {
 	jsonData, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal token data: %w", err)
@@ -41,7 +60,7 @@ func SaveTokenDataKeychain(data *TokenData) error {
 		}
 	}()
 
-	if err := keychain.Set(keychain.Service, keychain.AccountToken, string(jsonData)); err != nil {
+	if err := keychain.Set(keychain.Service, account, string(jsonData)); err != nil {
 		return fmt.Errorf("save to keychain: %w", err)
 	}
 	return nil
@@ -49,12 +68,25 @@ func SaveTokenDataKeychain(data *TokenData) error {
 
 // LoadTokenDataKeychain loads TokenData from the platform keychain.
 func LoadTokenDataKeychain() (*TokenData, error) {
-	jsonStr, err := keychain.Get(keychain.Service, keychain.AccountToken)
+	return loadTokenDataKeychainAccount(keychain.AccountToken)
+}
+
+// LoadTokenDataKeychainForCorpID loads TokenData from a corp-scoped keychain slot.
+func LoadTokenDataKeychainForCorpID(corpID string) (*TokenData, error) {
+	corpID = strings.TrimSpace(corpID)
+	if corpID == "" {
+		return nil, fmt.Errorf("corpId is required for profile token storage")
+	}
+	return loadTokenDataKeychainAccount(TokenAccountForCorpID(corpID))
+}
+
+func loadTokenDataKeychainAccount(account string) (*TokenData, error) {
+	jsonStr, err := keychain.Get(keychain.Service, account)
 	if err != nil {
 		return nil, fmt.Errorf("load from keychain: %w", err)
 	}
 	if jsonStr == "" {
-		return nil, fmt.Errorf("no token data in keychain")
+		return nil, fmt.Errorf("no token data in keychain account %q", account)
 	}
 
 	var data TokenData
@@ -69,9 +101,27 @@ func DeleteTokenDataKeychain() error {
 	return keychain.Remove(keychain.Service, keychain.AccountToken)
 }
 
+// DeleteTokenDataKeychainForCorpID removes TokenData from a corp-scoped keychain slot.
+func DeleteTokenDataKeychainForCorpID(corpID string) error {
+	corpID = strings.TrimSpace(corpID)
+	if corpID == "" {
+		return fmt.Errorf("corpId is required for profile token storage")
+	}
+	return keychain.Remove(keychain.Service, TokenAccountForCorpID(corpID))
+}
+
 // TokenDataExistsKeychain checks if token data exists in keychain.
 func TokenDataExistsKeychain() bool {
 	return keychain.Exists(keychain.Service, keychain.AccountToken)
+}
+
+// TokenDataExistsKeychainForCorpID checks if a corp-scoped token exists.
+func TokenDataExistsKeychainForCorpID(corpID string) bool {
+	corpID = strings.TrimSpace(corpID)
+	if corpID == "" {
+		return false
+	}
+	return keychain.Exists(keychain.Service, TokenAccountForCorpID(corpID))
 }
 
 // EnsureMigration performs one-time migration from legacy .data to keychain.

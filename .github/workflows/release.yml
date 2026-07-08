@@ -5,12 +5,18 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      repair_npm_version:
+        description: "Only publish an existing release to npm, e.g. v1.0.48"
+        required: false
+        type: string
 
 permissions:
   contents: write
 
 jobs:
   release:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.repair_npm_version == '' }}
     runs-on: ubuntu-latest
     # 60 (not 30): mirroring every release asset to Gitee is slow; 30 min cut the
     # Gitee step off mid-upload on the v1.0.42 release. The Gitee step is now also
@@ -30,6 +36,9 @@ jobs:
 
       - name: Install archive tooling
         run: sudo apt-get update && sudo apt-get install -y zip unzip
+
+      - name: Multi Profile E2E
+        run: bash scripts/dev/test-multi-profile-e2e.sh
 
       - name: Install rcodesign (ad-hoc sign darwin binaries from Linux)
         run: |
@@ -73,15 +82,81 @@ jobs:
           OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
           OSS_PREFIX: ${{ secrets.OSS_PREFIX }}
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Publish stable to npm
+        # 只有官方仓库发 npm；fork（dev 预览）没有 NPM_TOKEN，跳过以免红叉。
+        # 必须在 Gitee mirror 前发布：Gitee 附件上传偶发长时间挂住，不能阻塞 npm/latest。
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' && !contains(github.ref_name, '-') }}
+        working-directory: dist/npm/dingtalk-workspace-cli
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish prerelease to npm beta
+        # 预发布版本不能更新 npm latest，避免普通 npm 安装链路拿到 beta。
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' && contains(github.ref_name, '-') }}
+        working-directory: dist/npm/dingtalk-workspace-cli
+        run: npm publish --access public --tag beta
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Mirror release to Gitee (China)
         # 把 release 附件（二进制/校验和/skills 包）镜像到 Gitee release，供 install.sh
         # 的 DWS_GITEE_REPO 开关消费（仓库代码由 Gitee 仓库镜像功能自动同步，附件不在其内）。
-        # 脚本自带门控：未配置 GITEE_TOKEN / GITEE_REPO 时优雅跳过，不影响海外发布。
+        # 默认关闭：国内 release 应由 Gitee 侧本地构建发布，避免 GitHub -> Gitee 跨境传大包卡住。
+        # 仅在需要临时补救时设置 repo variable ENABLE_GITEE_UPLOAD_FALLBACK=true。
+        if: ${{ vars.ENABLE_GITEE_UPLOAD_FALLBACK == 'true' }}
+        timeout-minutes: 20
         run: ./scripts/release/sync-to-gitee.sh
         env:
           VERSION: ${{ github.ref_name }}
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_USER: ${{ secrets.GITEE_USER }}
           GITEE_REPO: ${{ secrets.GITEE_REPO }}
+
+  repair-npm:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.repair_npm_version != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download GitHub release assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          mkdir -p dist
+          gh release download "${{ inputs.repair_npm_version }}" \
+            --repo "${{ github.repository }}" \
+            --dir dist \
+            --pattern 'dws-*' \
+            --pattern 'checksums.txt' \
+            --clobber
+          ls -la dist
+
+      - name: Stage npm package
+        run: |
+          set -eu
+          version="${{ inputs.repair_npm_version }}"
+          semver="${version#v}"
+          pkg_root="dist/npm/dingtalk-workspace-cli"
+          rm -rf "$pkg_root"
+          mkdir -p "$pkg_root/assets" "$pkg_root/bin"
+          cp build/npm/install.js "$pkg_root/install.js"
+          cp build/npm/bin/dws.js "$pkg_root/bin/dws.js"
+          cp build/npm/README.md "$pkg_root/README.md"
+          sed "s|__VERSION__|${semver}|g" build/npm/package.json.tmpl > "$pkg_root/package.json"
+          cp dist/dws-* "$pkg_root/assets/"
+          cp dist/checksums.txt "$pkg_root/assets/"
+          test -f "$pkg_root/assets/dws-skills.zip"
+          cat "$pkg_root/package.json"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -89,10 +164,16 @@ jobs:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Publish to npm
-        # 只有官方仓库发 npm；fork（dev 预览）没有 NPM_TOKEN，跳过以免红叉
-        if: ${{ github.repository_owner == 'DingTalk-Real-AI' }}
+      - name: Publish stable to npm
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' && !contains(inputs.repair_npm_version, '-') }}
         working-directory: dist/npm/dingtalk-workspace-cli
         run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish prerelease to npm beta
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' && contains(inputs.repair_npm_version, '-') }}
+        working-directory: dist/npm/dingtalk-workspace-cli
+        run: npm publish --access public --tag beta
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
