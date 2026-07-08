@@ -130,7 +130,7 @@ func TestPersonalEventSchemaHidesSchemaIDs(t *testing.T) {
 	}
 }
 
-func TestPersonalEventSchemaUsesStreamPayloadPaths(t *testing.T) {
+func TestPersonalEventSchemaUsesBusinessPayloadFields(t *testing.T) {
 	for _, eventKey := range []string{
 		personal.EventMention,
 		personal.EventSingleChat,
@@ -149,24 +149,42 @@ func TestPersonalEventSchemaUsesStreamPayloadPaths(t *testing.T) {
 			}
 			got := out.String()
 			for _, want := range []string{
+				"output_schema",
+				"data_json_path",
+				"content",
+				"sender",
+				"sender_open_dingtalk_id",
+				"conversation_id",
+				"message_id",
+				"create_time",
+				"event_time",
 				"payload.body.content",
 				"payload.body.openConversationId",
 				"payload.body.senderOpenDingTalkId",
-				"decoded_data_schema",
 				"content_media_type",
 			} {
 				if !strings.Contains(got, want) {
 					t.Fatalf("schema output for %s missing %q: %s", eventKey, want, got)
 				}
 			}
-			for _, old := range []string{
+			for _, leaked := range []string{
 				"message.text",
 				"chat.openConversationId",
 				"sender.userId",
 				"sender.unionId",
+				"resolved_output_schema",
+				"decoded_data_schema",
+				"headers",
+				"audit",
+				"tenant",
+				"subject",
+				"traceId",
+				"msgIdMetaq",
+				"at_users",
+				"sender_user_id",
 			} {
-				if strings.Contains(got, old) {
-					t.Fatalf("schema output for %s leaked old path %q: %s", eventKey, old, got)
+				if strings.Contains(got, leaked) {
+					t.Fatalf("schema output for %s leaked %q: %s", eventKey, leaked, got)
 				}
 			}
 		})

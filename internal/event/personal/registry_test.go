@@ -70,7 +70,7 @@ func TestDefinitionJSONHidesInternalSchemaIDs(t *testing.T) {
 	}
 }
 
-func TestMessageSchemasUseStreamPayloadPaths(t *testing.T) {
+func TestMessageSchemasUseBusinessPayloadFields(t *testing.T) {
 	for _, eventKey := range []string{EventMention, EventSingleChat, EventInChat, EventFromUser} {
 		t.Run(eventKey, func(t *testing.T) {
 			def, ok := Lookup(eventKey)
@@ -83,35 +83,53 @@ func TestMessageSchemasUseStreamPayloadPaths(t *testing.T) {
 			}
 			out := string(raw)
 			for _, want := range []string{
+				"output_schema",
+				"data_json_path",
+				"content",
+				"sender",
+				"sender_open_dingtalk_id",
+				"conversation_id",
+				"message_id",
+				"create_time",
+				"event_time",
 				"payload.body.content",
 				"payload.body.openConversationId",
 				"payload.body.senderOpenDingTalkId",
-				"decoded_data_schema",
 				"content_media_type",
 			} {
 				if !strings.Contains(out, want) {
 					t.Fatalf("schema for %s missing %q: %s", eventKey, want, out)
 				}
 			}
-			for _, old := range []string{
+			for _, leaked := range []string{
 				"message.text",
 				"chat.openConversationId",
 				"sender.userId",
 				"sender.unionId",
+				"resolved_output_schema",
+				"decoded_data_schema",
+				"headers",
+				"audit",
+				"tenant",
+				"subject",
+				"traceId",
+				"msgIdMetaq",
+				"at_users",
+				"sender_user_id",
 			} {
-				if strings.Contains(out, old) {
-					t.Fatalf("schema for %s leaked old path %q: %s", eventKey, old, out)
+				if strings.Contains(out, leaked) {
+					t.Fatalf("schema for %s leaked %q: %s", eventKey, leaked, out)
 				}
 			}
-			dataSchema, ok := def.PayloadSchema["data"].(map[string]any)
+			props, ok := def.PayloadSchema["properties"].(map[string]any)
 			if !ok {
-				t.Fatalf("payload_schema.data = %#v, want object", def.PayloadSchema["data"])
+				t.Fatalf("payload_schema.properties = %#v, want object", def.PayloadSchema["properties"])
 			}
-			if dataSchema["type"] != "string" || dataSchema["content_media_type"] != "application/json" {
-				t.Fatalf("payload_schema.data = %#v, want string application/json", dataSchema)
+			if _, ok := props["content"].(map[string]any); !ok {
+				t.Fatalf("payload_schema.properties.content = %#v, want object", props["content"])
 			}
-			if _, ok := def.PayloadSchema["decoded_data_schema"].(map[string]any); !ok {
-				t.Fatalf("payload_schema.decoded_data_schema = %#v, want object", def.PayloadSchema["decoded_data_schema"])
+			if def.DataJSONPath != ".data | fromjson" {
+				t.Fatalf("data_json_path = %q, want .data | fromjson", def.DataJSONPath)
 			}
 		})
 	}
@@ -198,7 +216,7 @@ func TestBuildRuleParamGroup(t *testing.T) {
 }
 
 func TestBuildFilterKeywordAndJSON(t *testing.T) {
-	filter, canonical, err := BuildFilter(`{"field":"payload.body.openConversationId","op":"eq","value":"cid1"}`, "P0, 故障")
+	filter, canonical, err := BuildFilter(`{"field":"conversation_id","op":"eq","value":"cid1"}`, "P0, 故障")
 	if err != nil {
 		t.Fatalf("BuildFilter() error = %v", err)
 	}
@@ -212,6 +230,9 @@ func TestBuildFilterKeywordAndJSON(t *testing.T) {
 	}
 	if !strings.Contains(canonical, "payload.body.content") || strings.Contains(canonical, "message.text") {
 		t.Fatalf("canonical = %s, want keyword filter on payload.body.content only", canonical)
+	}
+	if !strings.Contains(canonical, "payload.body.openConversationId") || strings.Contains(canonical, "conversation_id") {
+		t.Fatalf("canonical = %s, want conversation_id alias mapped to payload.body.openConversationId", canonical)
 	}
 }
 
