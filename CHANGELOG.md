@@ -6,6 +6,21 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.50] - 2026-07-08
+
+This release fixes a long-standing gap where the global `--jq` / `--fields` output filters were silently ignored on product commands, lands a JSON-mode output path for the sheet batch-style command, and aligns the bundled skill surface with the real command semantics uncovered by the round-2 real-machine QA sweep.
+
+### Fixed
+
+- **Global `--jq` / `--fields` are honored on product commands** (#575) — `Formatter.PrintJSON` / `PrintJSONUnescaped` now route through `output.WriteFiltered` when either flag is set, so product commands accept the same filters that `dws api` has always supported. The tool-caller adapter exposes `Fields()` / `JQ()` so helpers can read the flags without re-parsing.
+- **`skill setup --dry-run` is a no-op preview** (#575) — it now prints what would be written without touching the skill directory, the registry, or the agent config. Help text and docs are updated to match.
+- **Skill docs alignment to the real command surface** (#575) — per-product references and the cross-product intent guide clarify that `--fields` projects top-level / list keys only (use `--jq` for nested paths); `minutes_extract_todos.py`, `calendar_free_slot_finder.py`, `chat_export_messages.py` / `chat_history_with_user.py`, and `contact_dept_members.py` are rewritten against the current response shapes; `aisearch` / `aitable` / `attendance` / `calendar` / `chat` / `contact` / `dev` / `doc` / `doc-comment` / `doc-file-ops` / `doc-list` / `doc-search` / `drive` / `mail` / `minutes` / `oa` / `sheet` / `sheet-export` / `url-patterns` / `best_practices/lite-recipes.md` / `global-reference.md` / `intent-guide.md` are re-synced; the QA voice ("真机" phrasing) and environment-specific quirks stated as absolute rules are removed from the docs.
+
+### Changed
+
+- **`sheet range batch-set-style` emits per-row JSON in JSON mode** (#575) — when `--format json` is set, each update is reported as `{index, sheetId, range, ok, error}` instead of only the final aggregate, so callers can programmatically track partial failures under `--continue-on-error`.
+- **Command-merge helpers exported** — `pkg/cmdutil.LeafMerge*` and the provenance helpers are now public so downstream command trees can reuse the same merge semantics.
+
 ## [1.0.49] - 2026-07-08
 
 This release lands a full real-machine QA sweep across the CLI, helper scripts, and skill docs (#572), and hardens the release pipeline so npm publishing can no longer be blocked by Gitee mirror issues (#570).
