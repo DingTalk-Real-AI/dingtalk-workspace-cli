@@ -101,10 +101,6 @@ func mediaResolveAppToken(ctx context.Context) (string, error) {
 			"缺少应用凭证。chat media upload 需要 DWS_CLIENT_ID / DWS_CLIENT_SECRET 环境变量。\n" +
 				"请使用 dws auth login --client-id <APP_KEY> --client-secret <APP_SECRET> 登录。")
 	}
-	// media/upload is only served by the legacy oapi endpoint and requires the
-	// legacy access_token from oapi.dingtalk.com/gettoken (NOT the v1.0
-	// accessToken). Using the v1.0 token against media/upload returns
-	// HTTP 404 InvalidAction.NotFound.
 	url := "https://oapi.dingtalk.com/gettoken?appkey=" + appKey + "&appsecret=" + appSecret
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -153,12 +149,9 @@ func mediaUploadFile(ctx context.Context, token, filePath, mediaType string) (st
 		defer f.Close()
 		if _, err := io.Copy(part, f); err != nil {
 			pw.CloseWithError(err)
-			return
 		}
 	}()
 
-	// media/upload takes access_token + type as query params, media file as
-	// multipart form field "media"; returns { errcode, errmsg, media_id }.
 	url := "https://oapi.dingtalk.com/media/upload?access_token=" + token + "&type=" + mediaType
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, pr)
 	if err != nil {

@@ -252,7 +252,7 @@ func TestOpencodeSessionsPersist(t *testing.T) {
 // mid-flight. The per-turn ctx (f.timeout, default 0 = no limit) governs
 // only when the user explicitly sets --agent-timeout / DWS_AGENT_TIMEOUT_MS.
 func TestNewOpencodeServerHasNoClientTimeout(t *testing.T) {
-	s := newOpencodeServer("opencode", nil, "")
+	s := newOpencodeServer("opencode", nil, "", false)
 	if s.httpClient == nil {
 		t.Fatal("httpClient must be initialized")
 	}

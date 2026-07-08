@@ -653,6 +653,88 @@ func TestSkillSearchCommandValidation(t *testing.T) {
 	}
 }
 
+func TestSkillSearchHelpUsesWukongSourceAndKeepsScopesHidden(t *testing.T) {
+	cmd := NewRootCommand()
+	cmd.SetArgs([]string{"skill", "search", "--help"})
+
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	help := out.String()
+	if !strings.Contains(help, "--source") {
+		t.Fatalf("help missing --source:\n%s", help)
+	}
+	if strings.Contains(help, "--scopes") {
+		t.Fatalf("deprecated --scopes should stay hidden from help:\n%s", help)
+	}
+
+	search := mustFindCommand(t, NewRootCommand(), "skill", "search")
+	if search.Flags().Lookup("scopes") == nil {
+		t.Fatal("skill search missing hidden compatibility --scopes")
+	}
+}
+
+func TestSkillSearchUsesSourceQueryAndKeepsScopesCompat(t *testing.T) {
+	configDir := filepath.Join(t.TempDir(), "config")
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+	if err := authpkg.SaveTokenData(configDir, &authpkg.TokenData{
+		AccessToken:  "test-token",
+		RefreshToken: "refresh-token",
+		ExpiresAt:    time.Now().Add(time.Hour),
+		RefreshExpAt: time.Now().Add(24 * time.Hour),
+	}); err != nil {
+		t.Skipf("SaveTokenData() unavailable in this environment: %v", err)
+	}
+
+	var gotSources []string
+	var gotScopes []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/cli/find-skills" {
+			t.Fatalf("path = %q, want /cli/find-skills", r.URL.Path)
+		}
+		if got := r.Header.Get("x-user-access-token"); got != "test-token" {
+			t.Fatalf("x-user-access-token = %q, want test-token", got)
+		}
+		q := r.URL.Query()
+		gotSources = append(gotSources, q.Get("source"))
+		gotScopes = append(gotScopes, q.Get("scopes"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"success":true,"result":[]}`))
+	}))
+	defer server.Close()
+	t.Setenv("DWS_SKILL_API_HOST", server.URL)
+
+	run := func(args ...string) {
+		t.Helper()
+		cmd := NewRootCommand()
+		cmd.SetArgs(args)
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		cmd.SetErr(&out)
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("Execute(%v) error = %v\n%s", args, err, out.String())
+		}
+	}
+
+	run("skill", "search", "--query", "周报", "--source", "OrgInternal", "--format", "json")
+	run("skill", "search", "--query", "周报", "--scopes", "DingtalkMarket", "--format", "json")
+
+	if len(gotSources) != 2 {
+		t.Fatalf("request count = %d, want 2", len(gotSources))
+	}
+	if gotSources[0] != "OrgInternal" || gotSources[1] != "DingtalkMarket" {
+		t.Fatalf("source query values = %#v, want OrgInternal/DingtalkMarket", gotSources)
+	}
+	if gotScopes[0] != "" || gotScopes[1] != "" {
+		t.Fatalf("deprecated scopes must be normalized to source query, got scopes=%#v", gotScopes)
+	}
+}
+
 func TestSkillFindHintCommand(t *testing.T) {
 	cmd := NewRootCommand()
 	cmd.SetArgs([]string{"skill", "find"})

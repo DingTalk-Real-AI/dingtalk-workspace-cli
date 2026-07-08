@@ -16,6 +16,10 @@ on:
     - cron: '0 18 * * *'
   workflow_dispatch:
 
+concurrency:
+  group: gitee-code-mirror
+  cancel-in-progress: false
+
 jobs:
   mirror:
     runs-on: ubuntu-latest
@@ -36,6 +40,14 @@ jobs:
         run: |
           set -eu
           REMOTE="https://${GITEE_USER}:${GITEE_TOKEN}@gitee.com/${GITEE_REPO}.git"
+
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            git fetch --force --tags origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+            git push --force "$REMOTE" "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+            echo "✅ 已镜像 tag ${GITHUB_REF_NAME} 到 Gitee ${GITEE_REPO}"
+            exit 0
+          fi
+
           # 取到 main 与所有 tag（落到 origin/* 与本地 tags，避免推当前分支引用冲突）
           git fetch --force --tags origin 'refs/heads/main:refs/remotes/origin/main'
 

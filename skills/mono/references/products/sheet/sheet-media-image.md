@@ -48,6 +48,8 @@ Flags:
       --mime-type string   文件 MIME 类型 (默认根据扩展名推断)
 ```
 
+`--format json` 输出规整 JSON：`{success, resourceId, resourceUrl, fileName, fileSize}`。`resourceUrl` 可用于 `create-float-image` 的 `--src`。
+
 ### 上传图片并写入表格单元格
 ```
 Usage:
@@ -204,8 +206,8 @@ dws sheet write-image --node <NODE_ID> --sheet-id <SHEET_ID> --range C3:C3 --fil
 # 4. 完整流程: 创建表格 → 写表头 → 写入图片
 dws sheet create --name "产品目录" -f json
 # 提取 nodeId 后:
-dws sheet range update --node <NODE_ID> --sheet-id Sheet1 --range "A1:B1" --values '[["产品名称","产品图片"]]' -f json
-dws sheet range update --node <NODE_ID> --sheet-id Sheet1 --range "A2:A2" --values '[["MacBook Pro"]]' -f json
+dws sheet range update --node <NODE_ID> --sheet-id Sheet1 --range "A1:B1" --values '[[{"type":"text","text":"产品名称"},{"type":"text","text":"产品图片"}]]' -f json
+dws sheet range update --node <NODE_ID> --sheet-id Sheet1 --range "A2:A2" --values '[[{"type":"text","text":"MacBook Pro"}]]' -f json
 dws sheet write-image --node <NODE_ID> --sheet-id Sheet1 --range B2:B2 --file ./macbook.png --width 150 --height 100 -f json
 ```
 

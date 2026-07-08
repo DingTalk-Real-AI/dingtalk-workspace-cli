@@ -1,0 +1,71 @@
+name: Publish npm release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag to publish to npm (e.g. v1.0.48)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish-npm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download GitHub release assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          mkdir -p dist
+          gh release download "${{ inputs.version }}" \
+            --repo "${{ github.repository }}" \
+            --dir dist \
+            --pattern 'dws-*' \
+            --pattern 'checksums.txt' \
+            --clobber
+          ls -la dist
+
+      - name: Stage npm package
+        run: |
+          set -eu
+          version="${{ inputs.version }}"
+          semver="${version#v}"
+          pkg_root="dist/npm/dingtalk-workspace-cli"
+          rm -rf "$pkg_root"
+          mkdir -p "$pkg_root/assets" "$pkg_root/bin"
+          cp build/npm/install.js "$pkg_root/install.js"
+          cp build/npm/bin/dws.js "$pkg_root/bin/dws.js"
+          cp build/npm/README.md "$pkg_root/README.md"
+          sed "s|__VERSION__|${semver}|g" build/npm/package.json.tmpl > "$pkg_root/package.json"
+          cp dist/dws-* "$pkg_root/assets/"
+          cp dist/checksums.txt "$pkg_root/assets/"
+          test -f "$pkg_root/assets/dws-skills.zip"
+          cat "$pkg_root/package.json"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Publish stable to npm
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' && !contains(inputs.version, '-') }}
+        working-directory: dist/npm/dingtalk-workspace-cli
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish prerelease to npm beta
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' && contains(inputs.version, '-') }}
+        working-directory: dist/npm/dingtalk-workspace-cli
+        run: npm publish --access public --tag beta
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

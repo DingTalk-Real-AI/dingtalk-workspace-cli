@@ -21,60 +21,21 @@ import (
 
 // MergeHardcodedLeaves grafts leaves from hardcodedRoot onto dynamicRoot when
 // the same-named path does not already exist. Groups recurse. On leaf
-// conflicts the dynamic side wins by default, because the discovery envelope
-// is the runtime authority — hardcoded commands are retained only as a
-// leaf-level fallback for behaviour the envelope explicitly does not
-// declare. See _docs/discovery-overlay-authority.md.
+// conflicts, the dynamic side wins by default because the runtime envelope is
+// authoritative; hardcoded commands are retained as fallback for paths the
+// envelope does not declare.
 //
-// Explicit opt-in override: a hardcoded leaf may promote itself over a
-// same-named dynamic leaf by carrying a strictly higher OverridePriority
-// (see SetOverridePriority / OverridePriority). This exists for the narrow
-// case where the envelope exposes one dispatch path but the hardcoded leaf
-// needs richer flag-based routing (e.g. `chat message send` fanning out to
-// multiple MCP tools depending on --group vs --user), which the envelope
-// cannot currently express. Helpers without the annotation still lose to
-// the envelope, so the default authority contract is preserved.
+// A hardcoded leaf or group can opt into replacement by carrying a strictly
+// higher OverridePriority than the dynamic command at the same path.
 //
-// PRECONDITION: dynamicRoot must be envelope-sourced (carry the
-// SourceAnnotation=SourceEnvelope marker set by BuildDynamicCommands via
-// MarkEnvelopeSource). Callers that might otherwise pass a helper-fallback
-// root with the same name are responsible for evicting it upstream —
-// otherwise the "envelope is authority" rule silently promotes helper leaves
-// over same-named hardcoded leaves and the overlay loses its ability to
-// override routing. The wukong overlay's RegisterProducts gates this call on
-// IsEnvelopeSourced(dynamicRoot); new callers must do the same.
-//
-// Conflict resolution table:
-//
-//	dynamic  hardcoded                          →  action
-//	-------  ---------------------------------  -----------------------------
-//	absent   anything                              graft hardcoded subtree
-//	leaf     leaf (hc priority ≤ dyn)              dynamic wins (no-op)
-//	leaf     leaf (hc priority > dyn)              hardcoded replaces dynamic
-//	group    group                                 recurse
-//	leaf     group (hc priority > dyn)             hardcoded group replaces dyn leaf
-//	leaf     group (hc priority ≤ dyn)             dynamic wins, warn
-//	group    leaf                                  dynamic wins, warn
-//
-// The "leaf vs group" priority promotion path (added for issue #164) covers
-// the case where the envelope exposes a single tool at a CLI path but the
-// hardcoded helper restructures that path into a group of richer subcommands
-// (e.g. `chat group members` published as a leaf for `get_group_members`,
-// but the helper provides `list / add / remove / add-bot` siblings). Without
-// this path the helper subtree is silently dropped on every release, which
-// is exactly the regression the OverridePriority annotation exists to prevent
-// for leaf-vs-leaf — extending it to leaf-vs-group keeps the contract honest.
-//
-// MergeHardcodedLeaves mutates dynamicRoot in place and returns it so callers
-// can chain. hardcodedRoot is treated as a donor: grafted children are
-// detached from it so their cobra parent pointer points at the new parent.
+// MergeHardcodedLeaves mutates dynamicRoot in place and returns it. Grafted
+// commands are detached from hardcodedRoot so Cobra parent pointers remain
+// correct.
 func MergeHardcodedLeaves(dynamicRoot, hardcodedRoot *cobra.Command) *cobra.Command {
 	if dynamicRoot == nil || hardcodedRoot == nil {
 		return dynamicRoot
 	}
-	// Snapshot children before mutating hardcodedRoot — RemoveCommand during
-	// iteration over hardcodedRoot.Commands() is unsafe because cobra returns
-	// a slice backed by an internal field that is re-sliced on removal.
+
 	children := append([]*cobra.Command(nil), hardcodedRoot.Commands()...)
 	for _, hc := range children {
 		dyn := findChildByName(dynamicRoot, hc.Name())
@@ -88,7 +49,6 @@ func MergeHardcodedLeaves(dynamicRoot, hardcodedRoot *cobra.Command) *cobra.Comm
 				dynamicRoot.RemoveCommand(dyn)
 				dynamicRoot.AddCommand(hc)
 			}
-			// else: envelope is authority; hardcoded leaf is ignored.
 		case !IsLeafCmd(hc) && !IsLeafCmd(dyn) && OverridePriority(hc) > OverridePriority(dyn):
 			hardcodedRoot.RemoveCommand(hc)
 			dynamicRoot.RemoveCommand(dyn)
@@ -96,9 +56,6 @@ func MergeHardcodedLeaves(dynamicRoot, hardcodedRoot *cobra.Command) *cobra.Comm
 		case !IsLeafCmd(hc) && !IsLeafCmd(dyn):
 			MergeHardcodedLeaves(dyn, hc)
 		case IsLeafCmd(dyn) && !IsLeafCmd(hc) && OverridePriority(hc) > OverridePriority(dyn):
-			// Helper restructures a dynamic leaf into a richer subcommand
-			// group; honour the explicit OverridePriority opt-in just like
-			// the leaf-vs-leaf case.
 			hardcodedRoot.RemoveCommand(hc)
 			dynamicRoot.RemoveCommand(dyn)
 			dynamicRoot.AddCommand(hc)
@@ -112,8 +69,7 @@ func MergeHardcodedLeaves(dynamicRoot, hardcodedRoot *cobra.Command) *cobra.Comm
 	return dynamicRoot
 }
 
-// IsLeafCmd reports whether a command has no subcommands. Leaves carry a RunE
-// and are invocation targets; groups merely organise subcommands.
+// IsLeafCmd reports whether cmd has no subcommands.
 func IsLeafCmd(cmd *cobra.Command) bool {
 	if cmd == nil {
 		return false
@@ -121,8 +77,6 @@ func IsLeafCmd(cmd *cobra.Command) bool {
 	return !cmd.HasSubCommands()
 }
 
-// findChildByName scans parent's direct children for a matching Name(). A
-// local helper so pkg/cmdutil stays independent of internal/cobracmd.
 func findChildByName(parent *cobra.Command, name string) *cobra.Command {
 	if parent == nil {
 		return nil

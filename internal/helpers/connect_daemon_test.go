@@ -72,8 +72,9 @@ func TestBuildWorkerArgs(t *testing.T) {
 	in := []string{"devapp", "robot", "connect", "--daemon", "--robot-client-id", "abc", "--channel=claudecode"}
 	got := buildWorkerArgs(in)
 	joined := strings.Join(got, " ")
+	// only the appended --daemon-worker may contain "daemon"
 	if strings.Contains(joined, "--daemon ") || strings.HasSuffix(joined, "--daemon") {
-		// only the appended --daemon-worker may contain "daemon"
+		t.Errorf("worker args must not contain bare --daemon, got %q", joined)
 	}
 	if !strings.HasSuffix(joined, "--daemon-worker") {
 		t.Errorf("worker args must end with --daemon-worker, got %q", joined)

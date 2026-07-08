@@ -15,28 +15,7 @@ Example:
 Flags:
       --query string     搜索关键词 (必填)
       --page string      页码 (默认 1)
-      --cursor string    分页游标，翻页传上次返回的 nextCursor；传入后不再使用 --page
       --size string      每页数量 (默认 10)
-```
-
-### 错误排查
-```
-Usage:
-  dws devdoc error diagnose [flags]
-Example:
-  dws devdoc error diagnose --request-id 15r6h45w0muec --format json
-  dws devdoc error diagnose --error-code 33012 --error-message "missing scope" --format json
-Flags:
-      --query string           原始排查问题
-      --request-id string      开放平台 requestId
-      --trace-id string        requestId 的兼容别名
-      --error-code string      错误码
-      --error-message string   错误描述，会合并进原始问题
-      --api string             API 名称，会合并进原始问题作为补充检索词
-      --context string         额外排查上下文，会合并进原始问题
-      --page int               分页页码 (默认 1)
-      --cursor string          分页游标，翻页传上次返回的 nextCursor；传入后不再使用 --page
-      --size int               分页大小 (默认 10)
 ```
 
 ## live — 直播
@@ -62,12 +41,15 @@ Usage:
   dws skill search [flags]
 Example:
   dws skill search --query "周报"
-  dws skill search --query "日报" --scopes "OrgInternal"
-  dws skill search --query "日报" --scopes "DingtalkMarket OrgInternal"
+  dws skill search --query "日报" --source "OrgInternal"
+  dws skill search --query "日报" --source "DingtalkMarket OrgInternal"
 Flags:
       --query string     搜索关键词 (必填)
-      --scopes string    查询范围，空格分隔。备选值：DingtalkMarket（钉钉市场）、OrgInternal（企业内部）。为空默认查市场技能
+      --source string    查询范围，空格分隔。备选值：DingtalkMarket（钉钉市场）、OrgInternal（企业内部）。为空默认查市场技能
 ```
+
+> `--scopes` 已废弃（真机会打 `Flag --scopes has been deprecated, 请使用 --source 替代` 警告），一律用 `--source`。
+> 前置：`skill search` 依赖企业开通技能市场；未开通时真机报「当前企业暂未开放此功能」，这是企业级开关，非命令写法问题。
 
 返回字段:
 - `skillId` — 技能 ID（后续 `install` 需要）
@@ -112,8 +94,7 @@ Args:
 
 ## 意图判断
 
-- 用户说"开发文档/API 文档/接口文档" → `devdoc article search`
-- 用户说"调用报错/requestId/traceId/错误码/错误描述" → `devdoc error diagnose`；若返回 `PARAM_ERROR - 未找到指定工具`，降级 `devdoc article search` 并标记后端工具注册待闭环
+- 用户说"开发文档/API 文档/接口文档/调用报错" → `devdoc article search`
 - 用户说"直播/我的直播" → `live stream list`
 - 用户说"搜索技能/找技能/安装技能/技能市场" → `skill search` / `skill install`（按步骤衔接）
 
@@ -121,8 +102,7 @@ Args:
 
 | 操作 | 从返回中提取 | 用于 |
 |------|-------------|------|
-| `devdoc article search` | 文档链接、nextCursor | 直接展示给用户；hasMore=true 时用 --cursor 翻页 |
-| `devdoc error diagnose` | diagnosticInfo、references、materials、nextCursor | 排查开放平台调用错误；hasMore=true 时用 --cursor 翻页；不可用时退回文档搜索 |
+| `devdoc article search` | 文档链接 | 直接展示给用户 |
 | `skill search` | `skillId`、名称、描述 | 用户选型后传给 `skill install <skillId> <target>` |
 | `skill install` | 安装成功/失败信息 | 确认目标 Agent 目录已注册 |
 | `skill publish` | 发布结果（成功或错误信息） | 确认企业技能库已更新 |
@@ -130,4 +110,4 @@ Args:
 ## 相关产品
 
 - `dingtalk-calendar` (`references/calendar.md`) — 日历日程管理（含参与者/会议室）
-- `dingtalk-conference` (`references/conference.md`) — 视频会议（发起/预约/邀请入会/会中控制）
+- 视频会议（conference）— 当前 CLI 不提供对应 skill；发起/预约/邀请入会/会中控制请在钉钉客户端操作

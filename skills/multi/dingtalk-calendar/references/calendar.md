@@ -61,6 +61,7 @@ dws calendar room add [flags]
 dws calendar room delete [flags]
 ```
 > room是会议室，用于线下开会场景。
+> **组织限制**：部分企业使用自建会议室系统，未接入钉钉会议室能力。此时 `room search` / `room list-groups` 会返回业务错误 `400056`（"所选组织不支持预定钉钉会议室"）。这是组织级配置限制，不是命令用法问题；应直接告知用户该组织需在钉钉客户端手动预订会议室，不要重试或换参。
 
 ### busy 相关三级子命令
 ```
@@ -100,8 +101,6 @@ Flags:
 
 **默认行为**：不传 `--start` / `--end` 时，默认返回今天的日程（00:00:00 ~ 23:59:59）。
 **权限**：查询共享日历下的日程时，至少要有reader权限。
-
-补充：当前用户的个人日程也可用 `dws calendar event list-mine` 查询，参数与 `event list` 一致。
 
 ### 获取日程详情
 ```
@@ -531,7 +530,7 @@ dws calendar event list --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15
 - **评测 / 自动化断言**：凡涉及 `room add` / `event create --rooms` 的流程，`--rooms` 只能填上游 `room search`（或等价接口）返回 JSON 中的 **`rooms[].roomId`**；不得以会议室展示名、楼层文案或用户口语当作 `roomId`
 - **附件**：`attachment add` 仅负责挂载，**不上传**文件；fileId 必须先通过钉盘流程取得；`--files` 多附件用 `<fileId>:<name>` 元素逗号分隔
 - **日历本**：`book list` 返回的 `id` 才是合法 `calendarId`；如无明确说明，`event list` / `event get` 都不要带 `--calendar-id`，让接口默认走 primary 主日历
-- **已弃用入参**：`--max-results`（event list / list-mine）在新 MCP schema 中被移除；CLI 仍接受但**不会**透传到 MCP；模型生成命令时**禁止**继续使用
+- **已弃用入参**：`--max-results`（event list）在新 MCP schema 中被移除；CLI 仍接受但**不会**透传到 MCP；模型生成命令时**禁止**继续使用
 
 ## 自动化脚本
 
@@ -543,5 +542,5 @@ dws calendar event list --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15
 
 ## 相关产品
 
-- [conference](./simple.md) — 仅视频会议预约（返回入会链接），不含参会人/会议室管理
+- conference 视频会议 — 当前 CLI 不支持发起/预约/邀请入会/会中控制；请在钉钉客户端操作
 - [contact](./contact.md) — 搜索同事 userId，用于 attendee add --attendees

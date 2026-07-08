@@ -30,6 +30,13 @@ func TestClassifyDenialReason(t *testing.T) {
 			want: "channel_required",
 		},
 		{
+			name: "error ENTERPRISE_NOT_AUTHORIZED",
+			status: &CLIAuthStatus{
+				ErrorCode: "ENTERPRISE_NOT_AUTHORIZED",
+			},
+			want: "enterprise_not_authorized",
+		},
+		{
 			name: "error NO_AUTH",
 			status: &CLIAuthStatus{
 				ErrorCode: "NO_AUTH",

@@ -24,22 +24,22 @@
 | Recipe | 步骤 |
 |--------|------|
 | `mail-get` | `mail message get --email <邮箱> --id <messageId>` → 查看邮件完整内容（含正文） |
-| `mail-folder-list` | `mail folder list --email <邮箱>` → 列举文件夹；`--folder-id <id>` 查子文件夹 |
+| `mail-folder-list` | `mail folder list --email <邮箱>` → 列举文件夹；`--folder <id>` 查子文件夹 |
 | `mail-tag-list` | `mail tag list --email <邮箱>` → 列举邮件标签 |
 | `mail-thread-get` | `mail thread get --email <邮箱> --id <conversationId>` → 获取会话（邮件线程）详情 |
 | `mail-attachment-list` | `mail attachment list --email <邮箱> --id <messageId>` → 列举指定邮件的附件 |
 | `mail-attachment-download` | 1. `mail attachment list --email <邮箱> --id <messageId>` → 取附件 `id` 和 `name`<br>2. `mail attachment download --email <邮箱> --message-id <messageId> --attachment-id <attachmentId> --name <文件名>` |
 | `mail-batch-move` | `mail message batch-move --email <邮箱> --ids <id1,id2,...> --folder <folderId>`（常用 folderId: 2=收件箱, 6=已删除） |
 | `mail-batch-delete` | `mail message batch-delete --email <邮箱> --ids <id1,id2,...> --yes`（**危险操作，须先确认**） |
-| `mail-draft-create` | `mail draft create --from <邮箱> --subject "<标题>"` → 取 `messageId`（可选 `--to`、`--body`、`--cc`） |
-| `mail-draft-update` | `mail draft update --from <邮箱> --id <draftId> --subject "<新标题>"`（可选 `--body`、`--to`、`--cc`） |
+| `mail-draft-create` | `mail draft create --from <邮箱> --subject "<标题>"` → 取草稿 ID `result.message.id`（可选 `--to`、`--content`、`--cc`） |
+| `mail-draft-update` | `mail draft update --from <邮箱> --id <draftId> --subject "<新标题>"`（可选 `--content`、`--to`、`--cc`） |
 | `mail-draft-send` | `mail draft send --from <邮箱> --id <draftId>` |
 
 ## Full / 多步组合
 
 | Recipe | 行动指南（固定路线） |
 |--------|---------------------|
-| search-and-download-attachment | 1. `mail mailbox list` → 取邮箱<br>2. `mail message search --email <邮箱> --query "<KQL>" --size 20` → 取 `messageId` 列表<br>3. 对每封邮件执行 `mail attachment list --email <邮箱> --id <messageId>` → 列出附件取 `id` 和 `name`<br>4. 对每个附件逐个执行 `mail attachment download --email <邮箱> --message-id <messageId> --attachment-id <attachmentId> --name <文件名>`（**仅支持逐个下载，不存在批量下载命令**） |
-| search-reply-forward | 1. `mail mailbox list` → 取邮箱<br>2. `mail message search --email <邮箱> --query "<KQL>" --size 10` → 取 `messageId`<br>3. 展示搜索结果供用户选择<br>4. 按用户指示执行 reply / reply-all / forward（参见 lite `mail-reply-forward`） |
-| batch-mail-cleanup | 1. `mail mailbox list` → 取邮箱<br>2. `mail message search --email <邮箱> --query "<KQL>" --size 100` → 取多个 `messageId`<br>3. 展示列表供用户确认<br>4. `mail message batch-move --email <邮箱> --ids <id1,id2,...> --folder 6 ` 移到已删除；或 `batch-delete` 永久删除 |
-| send-to-person-by-name | 1. `mail mailbox list` → 取发件邮箱<br>2. 走「查找他人邮箱地址」三路并发查询获取收件人邮箱（见 [mail.md](../products/mail.md)）<br>3. `mail message send --from <发件邮箱> --to <收件邮箱> --subject "<标题>" --body "<内容>"` |
+| search-and-download-attachment | 1. `mail mailbox list` → 取邮箱<br>2. `mail message search --email <邮箱> --query "<KQL>" --limit 20` → 取 `messageId` 列表<br>3. 对每封邮件执行 `mail attachment list --email <邮箱> --id <messageId>` → 列出附件取 `id` 和 `name`<br>4. 对每个附件逐个执行 `mail attachment download --email <邮箱> --message-id <messageId> --attachment-id <attachmentId> --name <文件名>`（**仅支持逐个下载，不存在批量下载命令**） |
+| search-reply-forward | 1. `mail mailbox list` → 取邮箱<br>2. `mail message search --email <邮箱> --query "<KQL>" --limit 10` → 取 `messageId`<br>3. 展示搜索结果供用户选择<br>4. 按用户指示执行 reply / reply-all / forward（参见 lite `mail-reply-forward`） |
+| batch-mail-cleanup | 1. `mail mailbox list` → 取邮箱（返回字段是 `emailAccounts`）<br>2. `mail message search --email <邮箱> --query "<KQL>" --limit 100` → 取多个 `messageId`<br>3. 展示列表供用户确认<br>4. `mail message batch-move --email <邮箱> --ids <id1,id2,...> --folder 6 ` 或 `batch-delete` **都是移入「已删除」文件夹，并非物理永久删除**（对已在已删除文件夹的邮件再执行返回 success 但无效；CLI 无永久删除路径，需在客户端手动清空） |
+| send-to-person-by-name | 1. `mail mailbox list` → 取发件邮箱<br>2. 走「查找他人邮箱地址」三路并发查询获取收件人邮箱（见 [mail.md](../products/mail.md)）<br>3. `mail message send --from <发件邮箱> --to <收件邮箱> --subject "<标题>" --content "<内容>"` |

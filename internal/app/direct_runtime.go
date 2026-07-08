@@ -23,8 +23,8 @@ import (
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/mcptypes"
 )
 
 var (
@@ -57,12 +57,12 @@ func devappMCPEndpoint() string {
 	return defaultPATGatewayBaseURL() + devappServerPath
 }
 
-func defaultPATServerDescriptor() market.ServerDescriptor {
-	return market.ServerDescriptor{
+func defaultPATServerDescriptor() mcptypes.ServerDescriptor {
+	return mcptypes.ServerDescriptor{
 		Key:         defaultPATProductID,
 		DisplayName: defaultPATDisplayName,
 		Endpoint:    defaultPATMCPEndpoint(),
-		CLI: market.CLIOverlay{
+		CLI: mcptypes.CLIOverlay{
 			ID:       defaultPATProductID,
 			Command:  defaultPATProductID,
 			Prefixes: []string{defaultPATProductID},
@@ -104,7 +104,7 @@ func defaultPATGatewayBaseURL() string {
 
 // SetDynamicServers injects server data discovered from servers.json.
 // All product endpoints are resolved dynamically from this data.
-func SetDynamicServers(servers []market.ServerDescriptor) {
+func SetDynamicServers(servers []mcptypes.ServerDescriptor) {
 	dynamicMu.Lock()
 	defer dynamicMu.Unlock()
 
@@ -167,7 +167,7 @@ func SetDynamicServers(servers []market.ServerDescriptor) {
 	dynamicToolEndpoints = toolEndpoints
 }
 
-func registerDynamicServer(server market.ServerDescriptor, endpoints map[string]string, products map[string]bool, aliases map[string]string, toolEndpoints map[string]string) {
+func registerDynamicServer(server mcptypes.ServerDescriptor, endpoints map[string]string, products map[string]bool, aliases map[string]string, toolEndpoints map[string]string) {
 	if server.CLI.Skip {
 		return
 	}
@@ -363,7 +363,7 @@ func DirectRuntimeProductIDs() map[string]bool {
 // dynamic server registry without replacing the current entries. This
 // is used by the plugin loader to inject plugin servers alongside
 // Market-discovered servers.
-func AppendDynamicServer(server market.ServerDescriptor) {
+func AppendDynamicServer(server mcptypes.ServerDescriptor) {
 	dynamicMu.Lock()
 	defer dynamicMu.Unlock()
 

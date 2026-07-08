@@ -18,38 +18,44 @@ metadata:
 
 <!-- SAFETY_PREAMBLE_INJECT -->
 
-> ⚠️ **命令可用性可能因企业服务发现配置而异**。本文档列出的命令基于 dws envelope schema 与本仓库 v1.0.30 实测，但部分命令的 cobra 子命令暴露与否还取决于你的企业 MCP gateway 是否注册了对应 tool。如果跑某条命令报 `unknown command` 或 fall back 到父级 help，说明当前账号企业未开通该能力。实际调用前可用 `dws <cmd> --help` 或 `--dry-run` 验证。
+> ⚠️ **命令可用性以当前 dws 二进制为准**。服务发现已下线，本文档随内置 skill 发布；如果 `dws <cmd> --help` 不存在，说明当前版本未暴露该命令。若命令存在但调用失败，请按错误中的 endpoint 或 tool 提示确认静态端点目录和后端工具注册。实际调用前可用 `dws <cmd> --help` 或 `--dry-run` 验证。
 
 
 > 命令参考：[wiki.md](references/wiki.md)。
 
-## 开放平台文档 RAG / 错误码排查
-
-- 任何产品执行中，只要用户问开放平台 API、接口参数、字段含义、权限点、回调、SDK、配额、错误码，或命令返回上游 OpenAPI/SDK 错误，必须先用 `dws devdoc article search --query "<关键词>" --format json` 做官方文档 RAG。
-- 查询词优先保留原始 API 名、能力名、权限点、完整错误码和 message；首轮形如 `errcode <code> <message>`，无结果再换 `<产品/场景> <错误码>`、`<接口名> 参数`。
-- 本地 CLI 错误（如 `unknown command` / `unknown flag` / 认证 / recovery）仍按 root `dws` / `dws-shared` 的错误处理执行；`devdoc` 用于开放平台业务错误码和接口语义排查。
-- `devdoc` 只查钉钉开放平台开发者文档，不查业务数据；排查结论必须基于命中条目的标题、摘要或链接，不能编造错误原因或不存在的命令。
-
 ## 意图表
+
+`dws wiki` 三个命令族：`space`（知识库容器）、`node`（库内节点：文档/文件夹/表格等）、`member`（容器级成员）。
 
 | 用户说 | 命令 |
 |--------|------|
 | "创建知识库" | `dws wiki space create --name "<名称>" [--desc "<描述>"]` |
+| "查看知识库详情" | `dws wiki space get --workspace <workspaceId>` |
 | "搜索知识库空间" | `dws wiki space search --query "<关键词>" [--limit <1-20>]` |
 | "我的文档 / 个人知识库" | `dws wiki space list --type myWikiSpace` |
 | "列出组织知识库" | `dws wiki space list [--type orgWikiSpace] [--limit <1-50>]` |
+| "删除知识库" | `dws wiki space delete --workspace <workspaceId>`（不可逆，先确认）|
+| "知识库里有哪些文档/浏览内容" | `dws wiki node list --workspace <workspaceId> [--folder <nodeId>]` |
+| "在知识库里创建文档/文件夹" | `dws wiki node create --workspace <workspaceId> --name "<名>" [--type folder\|axls\|...]` |
+| "空间内搜文档" | `dws wiki node search --workspace <workspaceId> --query "<关键词>"` |
+| "复制 / 移动库内节点" | `dws wiki node copy` / `dws wiki node move --workspace <workspaceId> --node <nodeId> [--folder <targetId>]` |
+| "删除库内节点" | `dws wiki node delete --workspace <workspaceId> --node <nodeId>`（不可逆，先确认）|
+| "把知识库分享给某人 / 加成员" | `dws wiki member add --workspace <WS_ID> --users <UID> --role EDITOR` |
+| "改成员角色" | `dws wiki member update --workspace <WS_ID> --users <UID> --role <ROLE>` |
+| "移除知识库成员" | `dws wiki member remove --workspace <WS_ID> --users <UID>` |
+| "查看知识库成员" | `dws wiki member list --workspace <WS_ID>` |
 
 ## 评测高频硬约束
 
-- `space search` 用 `--query`；`search` 支持 `--type myWikiSpace` 查询个人知识库，但按类型列出空间优先走 `space list --type myWikiSpace/orgWikiSpace`。
-- 用户说"我的文档/个人空间/my workspace"时优先用 `dws wiki space list --type myWikiSpace --format json`。
+- `space search` / `node search` 关键词 flag 是 `--query`（`--keyword` 是遗留别名，仍可跑通，但优先用 `--query`）；`space create --desc`、`space list --cursor` 同理（`--description` / `--page-token` 为旧别名）。
+- 按类型列出空间优先走 `space list --type myWikiSpace/orgWikiSpace`；用户说"我的文档/个人空间"时用 `dws wiki space list --type myWikiSpace --format json`。
 - 用户给空关键词时，不要构造空 `--query ""`；若语义是我的文档则走 `space list --type myWikiSpace`，否则请用户补关键词。
-- 搜到空间后复用返回的 `workspaceId/id`，知识库内具体文档的创建、搜索、读写切到 `dingtalk-doc`，不要在 `wiki` 下编造 doc 子命令。
-- `workspaceId` 是知识库空间 ID，只能用于 `wiki space/member --workspace`、`doc --workspace` 或 `doc search --workspace-ids`；不要传给 `doc list --folder`，也不要使用不存在的 `--space-id`。
-- 读取知识库内指定文档固定链路：`wiki space search/list` 取 `workspaceId` → `doc search --query "<文档名>" --workspace-ids <workspaceId>` 取 `nodeId` → `doc read --node <nodeId>`。
+- `node create --type` 服务端支持 `adoc / axls / able / appt / adraw / amind / folder`；**`asheet` 不支持**，创建在线表格用 `axls`。
+- `member` 的 `--users` 是复数、逗号分隔；`--role` 大小写不敏感（`editor` 与 `EDITOR` 都行）。`member list` 只返回 `name/role/type`，**不含 userId**，拿不到 userId 去串联 update/remove，需用 `dws contact user search --query "<姓名>"` 反查。
+- 知识库内节点的**内容读写**（读取/编辑文档正文）切到 `dingtalk-doc`（先 `node list`/`node search` 拿 nodeId，再 `dws doc read --node <nodeId>`）；不要在 `wiki` 下编造 doc 子命令。
 - 所有 `dws wiki` 命令加 `--format json`。
 
 ## 跨产品协作
 
-- 知识库内具体文档读写 → 切到 `dingtalk-doc`
-- 文件存储 → 切到 `dingtalk-drive`
+- 知识库内文档内容读写 → 切到 `dingtalk-doc`
+- 文件存储 / 全局搜索 → 切到 `dingtalk-drive`

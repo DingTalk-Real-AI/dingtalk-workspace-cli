@@ -2,7 +2,7 @@
 
 > 版本是配置变更生效的唯一通道——改配置不等于上线，发布到 RELEASE 才生效（见 SKILL.md 生效模型）。
 
-管理应用版本：基于当前配置建版本、查列表/详情、预检审批、发布、查状态。参数查 `dws schema dev.app.version.<method>`。版本用 `--unified-app-id` 定位，单个版本再加 `--version-id`；`corpId`/`userId` 系统注入，CLI 不传。
+管理应用版本：基于当前配置建版本、查列表/详情、预检审批、发布、查状态。参数用对应命令的 `--help` 查询。版本用 `--unified-app-id` 定位，单个版本再加 `--version-id`；`corpId`/`userId` 系统注入，CLI 不传。
 
 ## 典型流程
 
@@ -93,7 +93,7 @@ permission add（requiredApproval=true 写入版本变更）
 dws dev app version --help
 
 # 查某方法的必填参数、类型、默认值
-dws schema dev.app.version.<method>
+dws dev <command-path> --help
 ```
 
-按 `dws schema` 输出构造 `--flag`（flag 名 = schema 参数名）。
+按 `--help` 输出构造 flag；不要凭旧 schema 名称猜参数。

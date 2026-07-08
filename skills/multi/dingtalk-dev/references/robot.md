@@ -2,7 +2,7 @@
 
 > 机器人是应用的能力扩展之一；建号/配置在此，接到本地 agent 调试用 `dws dev connect`（见 connect.md）。
 
-为开放平台企业内部应用创建和配置机器人。参数查 `dws schema dev.app.robot.<method>`。分两类场景：
+为开放平台企业内部应用创建和配置机器人。参数用对应命令的 `--help` 查询。分两类场景：
 
 1. 新建智能体机器人：异步创建一个新的 Agent 应用 + 承载机器人（`submit` / `result`），当前不绑定已有开放平台应用。
 2. 现有应用配置机器人：在已存在的应用上配置/启用/停用机器人（`get` / `config`(upsert) / `enable` / `disable`），用 `--unified-app-id` 定位。
@@ -68,7 +68,7 @@
 dws dev app robot --help
 
 # 查某方法的必填参数、类型、默认值
-dws schema dev.app.robot.<method>
+dws dev <command-path> --help
 ```
 
-按 `dws schema` 输出构造 `--flag`（flag 名 = schema 参数名）。
+按 `--help` 输出构造 flag；不要凭旧 schema 名称猜参数。

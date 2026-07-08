@@ -110,6 +110,7 @@ cp dws ~/.local/bin/         # 安装到 PATH
 ```
 
 > 需要 Go 1.25+。也可以用 `make package` 构建所有平台产物（macOS / Linux / Windows × amd64 / arm64）。
+> 静态端点数据由悟空基线生成并提交在本仓库 `internal/syncdata`，源码构建不需要额外 checkout 数据仓库。
 
 </details>
 
@@ -152,11 +153,17 @@ dws 内置自升级能力，直接从 [GitHub Releases](https://github.com/DingT
 ```bash
 dws upgrade                    # 交互式升级到最新版本
 dws upgrade --check            # 仅检查是否有新版本
-dws upgrade --list             # 列出所有可用版本
+dws upgrade --list             # 列出正式 release 版本
+dws upgrade --beta             # 升级到最新 beta 预发布版本
+dws upgrade --check --beta     # 仅检查 beta 轨道是否有新版本
+dws upgrade --list --beta      # 列出 beta 预发布版本
 dws upgrade --version v1.0.7   # 升级到指定版本
+dws upgrade --version v1.0.8-beta.1  # 升级到指定 beta 版本
 dws upgrade --rollback         # 回滚到上一版本
 dws upgrade -y                 # 跳过确认直接升级
 ```
+
+默认情况下，`dws upgrade` 只跟随正式 release 轨道。只有显式传入 `--beta` 时，才会选择 GitHub pre-release 里的 beta 构建。
 
 <details>
 <summary><strong>工作原理</strong></summary>
@@ -171,8 +178,9 @@ dws upgrade -y                 # 跳过确认直接升级
 | Flag | 说明 |
 |------|------|
 | `--check` | 仅检查更新，不安装 |
-| `--list` | 列出所有可用版本及更新日志 |
-| `--version` | 升级到指定版本（如 `v1.0.7`） |
+| `--list` | 列出正式 release 版本及更新日志 |
+| `--beta` | 对 `upgrade`、`--check`、`--list` 使用 beta 预发布轨道 |
+| `--version` | 升级到指定版本（如 `v1.0.7` 或 `v1.0.8-beta.1`） |
 | `--rollback` | 回滚到上一个备份版本 |
 | `--force` | 强制重新安装，即使已是最新版本 |
 | `--skip-skills` | 跳过技能包更新 |
@@ -300,18 +308,18 @@ dws contact user search --query "张三" --dry-run
 dws contact user get-self --jq '.result[0].orgEmployeeModel | {name: .orgUserName, dept: .depts[0].deptName, userId}'
 ```
 
-### Schema 发现
+### 命令帮助与 Schema
 
-Agent 无需预置所有命令知识，通过 `dws schema` 动态发现可用能力：
+产品命令在静态端点模式下已经编译进二进制。Agent 以 `--help` 和内置 Skill 为事实源；`dws schema` 仅保留给 `dev.*` 等 helper-only schema 查询。
 
 ```bash
-# 第一步：发现所有可用产品
-dws schema --jq '.products[] | {id, tool_count: (.tools | length)}'
+# 查看当前编译出的命令面
+dws aitable record query --help
 
-# 第二步：查看目标工具的参数结构
-dws schema aitable.query_records --jq '.tool.parameters'
+# helper-only schema 自省
+dws schema "dev app create"
 
-# 第三步：构造正确的调用
+# 构造正确的调用
 dws aitable record query --base-id BASE_ID --table-id TABLE_ID --limit 10
 ```
 
@@ -476,7 +484,7 @@ dws aitable record query --base-id BASE_ID --tabel-id TABLE_ID       # --tabel-i
 ```bash
 # 内置 jq 表达式
 dws aitable record query --base-id BASE_ID --table-id TABLE_ID --jq '.invocation.params'
-dws schema --jq '.products[] | {id, tools: (.tools | length)}'
+dws schema "dev app create" --jq '.tool.required'
 
 # 只返回指定字段
 dws aitable record query --base-id BASE_ID --table-id TABLE_ID --fields invocation,response
@@ -485,13 +493,12 @@ dws aitable record query --base-id BASE_ID --table-id TABLE_ID --fields invocati
 </details>
 
 <details>
-<summary><strong>Schema 自省</strong> — 调用前查询任意工具的参数结构</summary>
+<summary><strong>Schema 自省</strong> — 静态端点模式下的 helper-only schema</summary>
 
 ```bash
-dws schema                                              # 列出所有产品和工具
-dws schema aitable.query_records                        # 查看参数 Schema
-dws schema aitable.query_records --jq '.tool.required'   # 查看必填字段
-dws schema --jq '.products[].id'                        # 提取所有产品 ID
+dws schema                                              # 静态端点模式提示
+dws schema "dev app create"                             # 查看 helper-only schema
+dws schema "dev app create" --jq '.tool.required'        # 查看必填字段
 ```
 
 </details>
@@ -619,7 +626,7 @@ dws dev connect --channel auto --robot-client-id <id> --robot-client-secret <sec
 
 - [命令索引](./docs/command-index.md) — 全部运行时命令，带描述与使用场景
 - [参考手册](./docs/reference.md) — 环境变量、退出码、输出格式、Shell 补全
-- [架构设计](./docs/architecture.md) — 发现驱动管道、IR、Transport 层
+- [架构设计](./docs/architecture.md) — 静态端点管道、命令面、Transport 层
 - [开放平台应用指令设计](./docs/dev-yulan-command-routing.md) — yulan dev app 应用侧命令、MCP overlay、权限流程与 Agent 路由
 - [更新日志](./CHANGELOG.md) — 版本历史与迁移说明
 

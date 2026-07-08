@@ -2,7 +2,7 @@
 
 > 凭证=应用调 OpenAPI 的身份（appKey=clientId / appSecret=clientSecret）；见 SKILL.md 概念地图。
 
-`dws dev app credentials get --unified-app-id <id>` 读取应用凭证。参数查 `dws schema dev.app.credentials.get`。
+`dws dev app credentials get --unified-app-id <id>` 读取应用凭证。参数用对应命令的 `--help` 查询。
 
 返回字段：`clientId`/`appKey`（同值）、`clientSecret`/`appSecret`（同值）、`currentSecretStatus`、`hasPendingExpireTask`、`unifiedAppId` 等。
 
@@ -20,7 +20,7 @@
 dws dev app credentials --help
 
 # 查某方法的必填参数、类型、默认值
-dws schema dev.app.credentials.get
+dws dev <command-path> --help
 ```
 
-按 `dws schema` 输出构造 `--flag`（flag 名 = schema 参数名）。
+按 `--help` 输出构造 flag；不要凭旧 schema 名称猜参数。

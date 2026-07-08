@@ -98,7 +98,7 @@ Step 3 → 按下方路由规则映射到对应产品
 > axls vs xlsx 关键区分：
 > - `axls`（钉钉在线电子表格，`contentType=ALIDOC`）→ 走 `sheet` 产品线（读/写/筛选/导出等服务端原子操作）
 > - `xlsx` / `xls` / `xlsm` / `csv`（上传到文档空间的本地表格文件，`contentType=DOCUMENT`）→ 必须走 `dws doc download` 下载到本地后再解析处理，严禁错误路由到 `sheet` 产品线（sheet 命令只支持在线表格，调用 xlsx 节点会直接报错）
-> - 用户想把在线表格导出为 xlsx 文件 → 开源 dws CLI 暂未暴露在线表格导出能力（envelope schema 里有 `submit_export_job` / `query_export_job`，但当前 cobra 未注册），需要在钉钉客户端手动导出 xlsx
+> - 用户想把在线表格导出为 xlsx 文件 → 开源 dws CLI 暂未暴露在线表格导出能力（旧动态 schema 曾包含 `submit_export_job` / `query_export_job`，但当前 cobra 未注册），需要在钉钉客户端手动导出 xlsx
 
 ### 示例
 

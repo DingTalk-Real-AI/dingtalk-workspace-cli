@@ -15,6 +15,7 @@ package cmdutil
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -43,6 +44,20 @@ func ParseISOTimeToMillis(flagName, value string) (int64, error) {
 	if value == "" {
 		return 0, fmt.Errorf("flag --%s is required\n  hint: example: 2026-03-10T14:00:00+08:00", flagName)
 	}
+	if isDecimalDigits(value) {
+		switch len(value) {
+		case 13:
+			ms, err := strconv.ParseInt(value, 10, 64)
+			if err == nil {
+				return ms, nil
+			}
+		case 10:
+			sec, err := strconv.ParseInt(value, 10, 64)
+			if err == nil {
+				return sec * 1000, nil
+			}
+		}
+	}
 	loc, _ := time.LoadLocation("Asia/Shanghai")
 	if loc == nil {
 		loc = time.Local
@@ -56,6 +71,18 @@ func ParseISOTimeToMillis(flagName, value string) (int64, error) {
 	return 0, fmt.Errorf(
 		"cannot parse time for --%s (input: %q)\n  hint: supported formats: 2026-03-23T14:00:00+08:00, 2026-03-23 14:00:00, 2026-03-23",
 		flagName, value)
+}
+
+func isDecimalDigits(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // ValidateTimeRange checks that endMs is strictly after startMs.

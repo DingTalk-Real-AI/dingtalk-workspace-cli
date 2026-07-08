@@ -15,7 +15,6 @@ package helpers
 
 import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
-	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -29,38 +28,11 @@ func preferLegacyLeaf(cmd *cobra.Command) {
 	cli.SetOverridePriority(cmd, 100)
 }
 
-// resolveStringFlag reads a string flag, resolves @file/@- input sources,
-// and falls back to stdin pipe when the flag is the designated primary
-// content flag and the user did not provide an explicit value.
-//
-// primaryContent indicates this flag is the default stdin receiver for the
-// command (e.g. --text for chat send). When true and the flag value is empty,
-// stdin pipe data is used automatically.
-func resolveStringFlag(cmd *cobra.Command, flagName string, guard *cli.StdinGuard, primaryContent bool) (string, error) {
-	raw, err := cmd.Flags().GetString(flagName)
-	if err != nil {
-		return "", apperrors.NewInternal("failed to read --" + flagName)
-	}
-
-	// Resolve @file / @- syntax.
-	resolved, err := cli.ResolveInputSource(raw, flagName, guard)
-	if err != nil {
-		return "", err
-	}
-
-	// Implicit stdin fallback: only for the primary content flag, only when
-	// the user did not provide an explicit value and stdin is unclaimed.
-	if resolved == "" && primaryContent && !guard.Claimed() && cli.StdinIsPipe() {
-		if claimErr := guard.Claim("implicit stdin → --" + flagName); claimErr != nil {
-			return "", claimErr
-		}
-		return cli.ReadStdin()
-	}
-
-	return resolved, nil
+func commandDryRun(cmd *cobra.Command) bool {
+	return commandBoolFlag(cmd, "dry-run")
 }
 
-func commandDryRun(cmd *cobra.Command) bool {
+func commandBoolFlag(cmd *cobra.Command, name string) bool {
 	if cmd == nil {
 		return false
 	}
@@ -73,11 +45,11 @@ func commandDryRun(cmd *cobra.Command) bool {
 		if flags == nil {
 			continue
 		}
-		flag := flags.Lookup("dry-run")
+		flag := flags.Lookup(name)
 		if flag == nil {
 			continue
 		}
-		value, err := flags.GetBool("dry-run")
+		value, err := flags.GetBool(name)
 		if err == nil {
 			return value
 		}

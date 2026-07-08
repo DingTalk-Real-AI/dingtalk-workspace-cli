@@ -9,10 +9,6 @@ dws auth login
 # 查看状态
 dws auth status
 
-# 沙箱间迁移登录态（Linux，含 refresh token）
-dws auth export -o dws-auth.tar.gz
-dws auth import -i dws-auth.tar.gz
-
 # 退出
 dws auth logout
 
@@ -68,8 +64,8 @@ dws recovery finalize --event-id <event_id> --outcome recovered|failed|handoff -
 | 标志 | 短名 | 说明 | 默认 |
 |------|:---:|------|------|
 | `--format` | `-f` | 输出格式: json / table / raw | json |
-| `--jq` | | jq 表达式过滤输出 (如: `.items[] \| .name`) | 无 |
-| `--fields` | | 筛选输出字段 (逗号分隔, 如: name,id,status) | 无 |
+| `--jq` | | jq 表达式过滤输出 ⚠️**当前为 no-op，不生效**：仍返回完整 JSON，不要依赖它过滤，改在拿到 JSON 后自行处理 | 无 |
+| `--fields` | | 筛选输出字段 ⚠️**当前为 no-op，不生效**：仍返回全量字段 | 无 |
 | `--verbose` | `-v` | 详细日志 | false |
 | `--debug` | | 调试日志 | false |
 | `--yes` | `-y` | 跳过确认提示 | false |
@@ -101,7 +97,7 @@ dws recovery finalize --event-id <event_id> --outcome recovered|failed|handoff -
 | 变量 | 说明 |
 |------|------|
 | `DWS_CONFIG_DIR` | 覆盖默认配置目录 |
-| `DWS_SERVERS_URL` | 自定义服务发现端点 |
+| `DWS_<PRODUCT>_MCP_URL` | 本地开发时覆盖指定产品 MCP endpoint |
 | `DWS_CLIENT_ID` | 覆盖 OAuth Client ID (DingTalk AppKey) |
 | `DWS_CLIENT_SECRET` | 覆盖 OAuth Client Secret (DingTalk AppSecret) |
 

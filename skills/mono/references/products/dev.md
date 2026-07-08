@@ -6,7 +6,7 @@
 |--------|------|
 | `dev app` | 应用生命周期（创建/查询/更新/删除/凭证/权限/成员/安全/网页/机器人/**建号**/版本/事件订阅） |
 | `dev connect` | **建联**：把现成机器人接到当前本地 agent（起 Stream，不建号） |
-| `dev doc` | 开放平台开发文档搜索（同 `dws devdoc`） |
+| `dev doc` | 开放平台开发文档搜索入口（当前网关未注册该工具键，`dev doc search` 会报「未找到指定工具」不可用；文档搜索一律走 `dws devdoc article search --query <关键词>`） |
 
 > ⚠️ **关键区分**：`dws chat bot search/find` 只查询已有机器人（IM 视角）；**创建/建号**机器人走 `dws dev app robot submit`；**建联**走 `dws dev connect`。"创建机器人"/"建联"一律走 `dev`，禁止走 `chat`。
 
@@ -75,8 +75,9 @@ dws dev app get --unified-app-id <unifiedAppId> --format json
 # 创建应用
 dws dev app create --name <名称> --desc <描述> --format json
 
-# 更新应用信息
-dws dev app update --unified-app-id <unifiedAppId> --name <新名称> --format json
+# 更新应用信息（写操作：先 --dry-run 预览，确认后加 --yes 执行；不加 --yes 会被拦下）
+dws dev app update --unified-app-id <unifiedAppId> --name <新名称> --dry-run --format json
+dws dev app update --unified-app-id <unifiedAppId> --name <新名称> --yes --format json
 
 # 停用/启用应用
 dws dev app disable --unified-app-id <unifiedAppId> --yes --format json
@@ -186,8 +187,8 @@ dws dev app event unsubscribe --unified-app-id <unifiedAppId> --event-codes <cod
 
 ```bash
 dws dev app permission list  --unified-app-id <unifiedAppId> --format json
-dws dev app permission add   --unified-app-id <unifiedAppId> --scope-code <scopeValue> --format json
-dws dev app permission remove --unified-app-id <unifiedAppId> --scope-code <scopeValue> --yes --format json
+dws dev app permission add   --unified-app-id <unifiedAppId> --scope-values <scopeValue> --format json
+dws dev app permission remove --unified-app-id <unifiedAppId> --scope-values <scopeValue> --yes --format json
 ```
 
 ---

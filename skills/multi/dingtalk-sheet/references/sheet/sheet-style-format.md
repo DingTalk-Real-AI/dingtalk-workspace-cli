@@ -219,9 +219,9 @@ Flags:
 ```bash
 # ── 工作流 4: 写入数据并设置样式 ──
 
-# 1. 写入数据
+# 1. 写入数据（每个单元格必须是 object；数字也写成字符串）
 dws sheet range update --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:C3" \
-  --values '[["商品","单价","数量"],["苹果",5.5,100],["香蕉",3.2,200]]' --format json
+  --values '[[{"type":"text","text":"商品"},{"type":"text","text":"单价"},{"type":"text","text":"数量"}],[{"type":"text","text":"苹果"},{"type":"text","text":"5.5"},{"type":"text","text":"100"}],[{"type":"text","text":"香蕉"},{"type":"text","text":"3.2"},{"type":"text","text":"200"}]]' --format json
 
 # 2. 设置数字格式（人民币）
 dws sheet range set-style --node <NODE_ID> --sheet-id <SHEET_ID> --range "B2:B3" \

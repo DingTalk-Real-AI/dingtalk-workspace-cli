@@ -14,6 +14,7 @@
 package helpers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -192,7 +193,7 @@ func TestConnectHealthNilSafe(t *testing.T) {
 	h.onPush()
 	h.onReply()
 	h.onError(errors.New("x"))
-	h.start(nil)
+	h.start(context.TODO())
 	if err := h.flush(); err != nil {
 		t.Fatalf("nil flush: %v", err)
 	}

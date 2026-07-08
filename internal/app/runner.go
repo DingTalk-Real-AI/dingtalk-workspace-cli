@@ -415,12 +415,16 @@ func (r *runtimeRunner) handleCatalogMiss(ctx context.Context, invocation execut
 		invocation.DryRun = true
 		return r.fallback.Run(ctx, invocation)
 	}
-	hint := "产品 envelope 可能未下发到 discovery，或已经被 serverDeps fail-fast 丢弃；可执行 'dws cache refresh' 强制重新 discovery，仍失败请向 Portal 确认 envelope 状态。"
-	actions := []string{"dws cache refresh"}
+	hint := "当前命令已注册，但静态端点目录中缺少对应 product/server endpoint。这通常是服务发现下线后的同步产物缺口，不是参数错误；请不要通过反复调整 flag 重试。"
+	actions := []string{
+		"确认 internal/syncdata.StaticServers() 是否包含该 product/server",
+		"运行 sync-oss 重新生成静态端点与路由",
+		"若该能力已下线，请在 skill 与 --help 中标记 unavailable 并提供替代命令",
+	}
 	if strings.TrimSpace(invocation.CanonicalProduct) == devappProductID {
-		hint = "dev app（product id: devapp）是 helper-only 产品，命令树不依赖 discovery；真实调用需要内部版通过 SupplementServers/StaticServers 注入 MCP endpoint，或本地调试临时设置 DINGTALK_DEVAPP_MCP_URL。"
+		hint = "dev app（product id: devapp）是 helper-only 产品，命令树不依赖服务发现；真实调用需要通过 StaticServers/SupplementServers 注入 MCP endpoint，或本地调试临时设置 DINGTALK_DEVAPP_MCP_URL。"
 		actions = []string{
-			"检查内部版 SupplementServers/StaticServers 是否包含 devapp endpoint",
+			"检查 StaticServers/SupplementServers 是否包含 devapp endpoint",
 			"本地调试可临时设置 DINGTALK_DEVAPP_MCP_URL 后重试",
 		}
 	}
@@ -925,6 +929,9 @@ func resolveIdentityHeaders() map[string]string {
 	}
 
 	if fn := edition.Get().MergeHeaders; fn != nil {
+		headers = fn(headers)
+	}
+	if fn := edition.Get().EnterpriseCredentialHeaders; fn != nil {
 		headers = fn(headers)
 	}
 	return headers
