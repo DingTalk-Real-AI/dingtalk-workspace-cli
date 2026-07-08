@@ -53,6 +53,10 @@ type ToolCaller interface {
 	Format() string
 	// DryRun returns true when --dry-run is active.
 	DryRun() bool
+	// Fields returns the global --fields output projection ("" if unset).
+	Fields() string
+	// JQ returns the global --jq output filter expression ("" if unset).
+	JQ() string
 }
 
 // RuntimeDefaultFn resolves a single runtimeDefault placeholder (e.g.

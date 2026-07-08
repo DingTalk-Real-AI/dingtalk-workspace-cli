@@ -244,7 +244,7 @@ func newChmodCommand(c edition.ToolCaller) *cobra.Command {
 		Long: `授予指定 scope 的操作权限。
 
 scope 格式: <product>.<entity>:<permission>
-  例: aitable.record:read  chat.group:write  calendar.event:read
+  例: aitable.record:query  chat.message:list  calendar.event:get
 
 grantType 规则:
   once       一次性，执行一次后自动失效
@@ -271,9 +271,9 @@ agentCode 配置:
 			}
 			return cobra.MinimumNArgs(1)(cmd, args)
 		},
-		Example: `  dws pat chmod aitable.record:read --grant-type session --session-id session-xxx
+		Example: `  dws pat chmod aitable.record:query --grant-type session --session-id session-xxx
   dws pat chmod chat.message:list --grant-type once
-  dws pat chmod aitable.record:read aitable.record:write --grant-type permanent --yes
+  dws pat chmod aitable.record:query aitable.record:create --grant-type permanent --yes
   dws pat chmod --product calendar --product aitable --grant-type once --dry-run --format json
   dws pat chmod --products calendar,aitable --grant-type session --session-id session-xxx --yes
   dws pat chmod --domain calendar --domain chat --grant-type once --yes

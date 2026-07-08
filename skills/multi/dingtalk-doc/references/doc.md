@@ -27,7 +27,7 @@ dws doc permission --help
 
 ### 搜索 / 遍历文件（已迁移，不再是 doc 子命令）
 
-> **弃用提示**：`dws doc search` 和 `dws doc list` 已迁移到 `drive` / `wiki`。真机上这两条虽仍能跑，但每次都会打印弃用警告，请改用下面的命令，命令详情见 dingtalk-drive skill。
+> **弃用提示**：`dws doc search` 和 `dws doc list` 已迁移到 `drive` / `wiki`。这两条虽仍能跑，但每次都会打印弃用警告，请改用下面的命令，命令详情见 dingtalk-drive skill。
 
 | 旧命令（弃用） | 改用 | 场景 |
 |--------------|------|------|
@@ -83,7 +83,7 @@ Flags:
 
 ### 创建其他类型文件 (表格/脑图/白板/多维表/画板/文件夹)
 
-> **弃用提示**：`dws doc file create --type` 已弃用，真机每次执行都会打印 `deprecated, use 'dws wiki node create --type <type>'`。创建各类型文件节点改用 `dws wiki node create`（与 intent-guide 一致）；创建普通文件夹用 `dws drive mkdir`。
+> **弃用提示**：`dws doc file create --type` 已弃用，执行时会打印 `deprecated, use 'dws wiki node create --type <type>'`。创建各类型文件节点改用 `dws wiki node create`（与 intent-guide 一致）；创建普通文件夹用 `dws drive mkdir`。
 
 ```
 Usage:
@@ -133,7 +133,7 @@ Flags:
 
 ### 下载文件到本地（已迁移到 drive）
 
-> **弃用提示**：`dws doc download` 已迁移到 `dws drive download`（真机执行 `doc download` 会打印弃用警告）。下载已有文件（PDF/图片/附件等非在线文档）改用：
+> **弃用提示**：`dws doc download` 已迁移到 `dws drive download`（执行 `doc download` 会打印弃用警告）。下载已有文件（PDF/图片/附件等非在线文档）改用：
 
 ```
 dws drive download --node <NODE_ID> --output ~/downloads/
@@ -261,11 +261,11 @@ Usage:
 Example:
   dws doc comment list --node <DOC_ID>
   dws doc comment list --node <DOC_ID> --type inline --resolve-status unresolved
-  dws doc comment list --node <DOC_ID> --page-size 20 --next-token <TOKEN>
+  dws doc comment list --node <DOC_ID> --limit 20 --cursor <TOKEN>
 Flags:
       --node string            目标文档的标识，支持传入 URL 或 ID (必填)
-      --page-size int          每页返回的评论数量，默认 50，最大 50
-      --next-token string      分页游标，从上一次请求的返回结果中获取 (首次请求不传)
+      --limit int              每页返回的评论数量，默认 50，最大 50
+      --cursor string          分页游标，从上一次请求的返回结果中获取 (首次请求不传)
       --type string            按评论类型过滤: global (全文评论) / inline (划词评论)
       --resolve-status string  按解决状态过滤: resolved (已解决) / unresolved (未解决)
 ```

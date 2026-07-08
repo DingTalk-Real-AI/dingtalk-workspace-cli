@@ -31,7 +31,7 @@ dws aitable chart get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --chart-
 | `dashboard delete` | 删除仪表盘 | `--base-id` `--dashboard-id` `--yes` | — |
 | `dashboard config-example` | 查看仪表盘配置模板 | 无 | 创建前先调此命令了解 config 结构 |
 | `dashboard share get` | 获取仪表盘分享配置 | `--base-id` `--dashboard-id` | 可能 404，见上方要点 |
-| `dashboard share update` | 更新仪表盘分享配置 | `--base-id` `--dashboard-id` `--enabled` | `--enabled true` 开启（配 `--share-type PUBLIC/ORG`）/ `--enabled false` 关闭；ORG 回显 `shareType="[1]"` |
+| `dashboard share update` | 更新仪表盘分享配置 | `--base-id` `--dashboard-id` `--enabled` | `--enabled true` 开启，`--share-type` 用 `ORG`（ORG 回显 `shareType="[1]"`）；部分组织禁用了 `PUBLIC` 公开分享；若报 `Illegal argument`，改用 `ORG`（组织内分享）。`--enabled false` 关闭 |
 
 ## chart 子命令
 
@@ -43,7 +43,7 @@ dws aitable chart get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --chart-
 | `chart delete` | 删除图表 | `--base-id` `--dashboard-id` `--chart-id` `--yes` |
 | `chart widgets-example` | 查看图表 widgets 配置模板 | 无 |
 | `chart share get` | 获取图表分享配置 | `--base-id` `--dashboard-id` `--chart-id` |
-| `chart share update` | 更新图表分享配置（`--enabled true/false`，开启配 `--share-type PUBLIC/ORG`） | `--base-id` `--dashboard-id` `--chart-id` `--enabled` |
+| `chart share update` | 更新图表分享配置（`--enabled true/false`，开启配 `--share-type`，用 `ORG`；部分组织禁用了 `PUBLIC` 公开分享；报 `Illegal argument` 时改用 `ORG`） | `--base-id` `--dashboard-id` `--chart-id` `--enabled` |
 
 > `chart create` 的 `--layout` 是**必填**（12 列网格布局，如 `{"x":0,"y":0,"w":6,"h":4}`）；不传本地校验直接拒。`chart update` 的 `--config` 也**必填**——即便只想改 layout，也要带完整 config，否则服务端拒绝。
 

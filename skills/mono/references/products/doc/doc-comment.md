@@ -15,11 +15,11 @@ Usage:
 Example:
   dws doc comment list --node <DOC_ID>
   dws doc comment list --node <DOC_ID> --type inline --resolve-status unresolved
-  dws doc comment list --node <DOC_ID> --page-size 20 --next-token <TOKEN>
+  dws doc comment list --node <DOC_ID> --limit 20 --cursor <TOKEN>
 Flags:
       --node string            目标文档的标识，支持传入 URL 或 ID (必填)
-      --page-size int      每页返回的评论数量
-      --next-token string  下一页 token，从上一次请求的返回结果中获取 (首次请求不传)
+      --limit int          每页返回的评论数量，默认 50，最大 50
+      --cursor string      分页游标，从上一次请求的返回结果中获取 (首次请求不传)
       --type string            按评论类型过滤: global (全文评论) / inline (划词评论)
       --resolve-status string  按解决状态过滤: resolved (已解决) / unresolved (未解决)
 ```

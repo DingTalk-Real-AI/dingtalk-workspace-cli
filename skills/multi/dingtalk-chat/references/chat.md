@@ -336,7 +336,7 @@ Flags:
 
 #### 移除用户的指定群身份 — 从用户身上移除指定的群身份（不影响其他群身份）
 
-> ⚠️ 当前不可用：真机服务端对该命令恒返回 1002（系统繁忙），历史回归至今未修，属服务端问题。需要清除某人身份时，用 `chat group-role set-user --role-ids ""`（传空 role-ids 覆盖为无身份）兜底；但 set-user 会清掉该用户的**全部**身份，无法只移除其中一个。
+> ⚠️ 当前不可用：该命令当前调用常失败（服务端返回 1002 系统繁忙），多为服务端侧限制。需要清除某人身份时，用 `chat group-role set-user --role-ids ""`（传空 role-ids 覆盖为无身份）兜底；但 set-user 会清掉该用户的**全部**身份，无法只移除其中一个。
 ```
 Usage:
   dws chat group-role remove-user [flags]
@@ -694,7 +694,7 @@ Example:
   dws chat message list-by-sender --sender-open-dingtalk-id <openDingTalkId> --start "2026-03-10T00:00:00+08:00" --end "2026-03-11T00:00:00+08:00" --limit 50 --cursor <nextCursor>
 Flags:
       --sender-user-id string                发送者 userId（与 --sender-open-dingtalk-id 二选一）
-      --sender-open-dingtalk-id string        发送者 openDingTalkId（与 --sender-user-id 二选一，适用于无法获取 userId 的场景）
+      --sender-open-dingtalk-id string        发送者 openDingTalkId（与 --sender-user-id 二选一）；该路径当前返回 result:{}、success:null（疑似服务端问题），优先用 --sender-user-id
       --start string                          开始时间，ISO-8601 格式 (必填)
       --end string                            结束时间，ISO-8601 格式 (必填)
       --limit int                             每页返回数量（默认 50）
@@ -702,8 +702,8 @@ Flags:
 
 注意:
   - --sender-user-id 和 --sender-open-dingtalk-id 二者互斥，必须且只能指定其一：
-    - --sender-user-id 传 userId（企业内部应用常用）
-    - --sender-open-dingtalk-id 传 openDingTalkId（三方应用或跨组织场景常用，无法获取 userId 时使用）
+    - --sender-user-id 传 userId（企业内部应用常用，当前唯一可用路径）
+    - --sender-open-dingtalk-id 传 openDingTalkId（当前返回 result:{}、success:null（疑似服务端问题）；即使只有 openDingTalkId，也建议先用 contact 换取 userId 后走 --sender-user-id）
   - openDingTalkId 获取方式见下方「openDingTalkId 获取方式」小节
   - 不需要指定单聊/群聊，返回结果自带会话类型标识
   - 时间支持多种 ISO-8601 格式，如 "2026-03-10T00:00:00+08:00"、"2026-03-10 14:00:00"、"2026-03-10" 等
@@ -990,20 +990,20 @@ Flags:
 Usage:
   dws chat message download-media [flags]
 Example:
-  dws chat message download-media --type mediaId --resource-id <mediaId> --message-id <openMessageId> --open-conversation-id <openConversationId> --output ./downloads/
   dws chat message download-media --type mediaId --resource-id <mediaId> --message-id <openMessageId> --open-conversation-id <openConversationId> --output ./photo.jpg
+  dws chat message download-media --type mediaId --resource-id <mediaId> --message-id <openMessageId> --open-conversation-id <openConversationId> --output ./downloads/photo.jpg
 Flags:
       --type string                  资源类型: mediaId (必填)
       --resource-id string           资源 ID，mediaId 类型时为消息中的 mediaId 值 (必填)
       --message-id string            消息 openMessageId (必填)
       --open-conversation-id string  会话 openConversationId (必填)
-      --output string                本地保存路径，文件或目录 (必填)
+      --output string                本地保存路径 (必填)，建议传完整文件路径（含文件名）
 
 注意:
   - resource-id 从 `dws chat message list` 返回的消息内容中获取 mediaId
   - message-id 从 `dws chat message list` 返回的 openMessageId
   - open-conversation-id 从 `dws chat search` 获取 openConversationId
-  - --output 如果指定目录，文件名会从下载 URL 中自动推断
+  - --output 建议传完整文件路径（含扩展名，如 ./photo.jpg）；只传目录（如 ./downloads/）在旧版本会下载失败，请显式带上文件名
 ```
 
 ### search-common (搜索共同群)
@@ -1387,7 +1387,7 @@ Flags:
 
 #### 关闭/开启 @所有人消息提醒 — 关闭或开启会话中 @所有人的消息通知
 
-> ⚠️ 当前不可用：真机服务端对该命令恒返回 1002（系统繁忙），历史回归至今未修，属服务端问题。命令本身参数合法，但调用不会生效。
+> ⚠️ 当前不可用：该命令当前调用常失败（服务端返回 1002 系统繁忙），多为服务端侧限制。命令本身参数合法，但调用不会生效。
 ```
 Usage:
   dws chat mute-at-all [flags]
@@ -1405,7 +1405,7 @@ Flags:
 
 #### 关闭/开启红包消息提醒 — 关闭或开启会话中的红包消息通知
 
-> ⚠️ 当前不可用：真机服务端对该命令恒返回 1002（系统繁忙），历史回归至今未修，属服务端问题。命令本身参数合法，但调用不会生效。
+> ⚠️ 当前不可用：该命令当前调用常失败（服务端返回 1002 系统繁忙），多为服务端侧限制。命令本身参数合法，但调用不会生效。
 ```
 Usage:
   dws chat mute-red-envelope [flags]
@@ -1487,7 +1487,7 @@ Flags:
 注意:
   - 返回结果包含单聊和群聊，不区分会话类型
   - --limit 范围 1-100，默认 100，上限 100；传入 >100 会报错拒绝，不会静默截断
-  - 分页当前不可用：真机 hasMore 恒为 false、nextCursor 恒为 null，本命令最多返回 100 条会话，无法用 --cursor 继续翻页取更多
+  - 分页当前不可用：当前 hasMore 恒为 false、nextCursor 恒为 null，本命令最多返回 100 条会话，无法用 --cursor 继续翻页取更多
   - 与 list-top-conversations 的区别: 本命令返回全部会话（单聊+群聊），list-top-conversations 仅返回置顶会话
 ```
 
@@ -1574,7 +1574,7 @@ Flags:
 
 #### 审批入群验证 — 通过、删除单个审核
 
-真机当前仅 AuditApprove（通过）和 AuditDelete（删除）两个动作可用。
+当前仅 AuditApprove（通过）和 AuditDelete（删除）两个动作可用。
 ```
 Usage:
   dws chat group audit-join-validation [flags]
@@ -1591,7 +1591,7 @@ Flags:
       --description string  审批说明（可选）
 
 注意:
-  - status 真机仅支持 AuditApprove(通过) 和 AuditDelete(删除)；AuditIgnore(忽略)、AuditRefuse(拒绝)、AuditBlock(拒绝且拉黑) 会被服务端拒绝报 unsupported audit status，属服务端限制
+  - status 仅支持 AuditApprove(通过) 和 AuditDelete(删除)；AuditIgnore(忽略)、AuditRefuse(拒绝)、AuditBlock(拒绝且拉黑) 会被服务端拒绝报 unsupported audit status，属服务端限制
   - record-id、applicant、inviter 可通过 dws chat group list-join-validations 查询获得
 ```
 

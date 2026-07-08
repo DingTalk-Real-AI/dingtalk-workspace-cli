@@ -64,8 +64,8 @@ dws recovery finalize --event-id <event_id> --outcome recovered|failed|handoff -
 | 标志 | 短名 | 说明 | 默认 |
 |------|:---:|------|------|
 | `--format` | `-f` | 输出格式: json / table / raw | json |
-| `--jq` | | jq 表达式过滤输出 ⚠️**当前为 no-op，不生效**：仍返回完整 JSON，不要依赖它过滤，改在拿到 JSON 后自行处理 | 无 |
-| `--fields` | | 筛选输出字段 ⚠️**当前为 no-op，不生效**：仍返回全量字段 | 无 |
+| `--jq` | | jq 表达式过滤输出（如 `.result[].name`）。对产品命令（aitable/chat/mail/... 走 MCP 的）已生效；少数工具命令（auth/config/profile/doctor/schema 等）仍直接编码、暂不过滤 | 无 |
+| `--fields` | | 筛选输出字段（逗号分隔）。按**顶层信封键**（data/result/success/status…）或**列表元素字段**投影；取 data 内的嵌套字段（如 baseName）请改用 `--jq '.data.baseName'`，`--fields baseName` 会因顶层无此键返回 `{}`。同 `--jq`：产品命令已生效，个别工具命令暂不生效 | 无 |
 | `--verbose` | `-v` | 详细日志 | false |
 | `--debug` | | 调试日志 | false |
 | `--yes` | `-y` | 跳过确认提示 | false |

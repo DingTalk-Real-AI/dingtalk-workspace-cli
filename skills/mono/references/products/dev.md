@@ -118,11 +118,8 @@ dws dev app robot disable --unified-app-id <unifiedAppId> --format json
 ## dev app credentials — 凭证
 
 ```bash
-# 查询 clientId/clientSecret
+# 查询 clientId/clientSecret（credentials 下只有 get 子命令）
 dws dev app credentials get --unified-app-id <unifiedAppId> --format json
-
-# 重置凭证（旧 secret 立即失效）
-dws dev app credentials reset --unified-app-id <unifiedAppId> --yes --format json
 ```
 
 ---
@@ -147,8 +144,8 @@ dws dev connect --channel opencode \
 dws dev connect --daemon \
   --robot-client-id <clientId> --robot-client-secret <clientSecret>
 
-# 查看/停止后台连接器
-dws dev connect status --format json
+# 查看/停止后台连接器（status/list 忽略全局 --format，出 JSON 用专属 --json）
+dws dev connect status --json
 dws dev connect stop
 ```
 
@@ -208,7 +205,7 @@ dws dev app version status         --unified-app-id <unifiedAppId> --version-id 
 
 ## 注意事项
 
-- **`clientSecret` 只在 `robot result` 返回一次**，务必立即保存；遗失需走 `credentials reset` 重置
+- **`clientSecret` 只在 `robot result` 返回一次**，务必立即保存；dws 只能 `credentials get` 读取，不支持重置，遗失后到开放平台控制台重置密钥
 - 改配置后机器人不自动生效，需走 `version create → publish` 才上线
 - `hermes`/`openclaw` 渠道走官方建联，`dws dev connect` 不代建机器人，会输出指引后退出
 - 应用名在企业内唯一；`app list/get` 用 `--app-key` 过滤但不能定位单应用，定位单应用须用 `--unified-app-id`

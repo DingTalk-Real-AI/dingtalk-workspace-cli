@@ -1,6 +1,6 @@
 # doc search（已弃用 → drive search / wiki node search）
 
-> **弃用提示**：`dws doc search` 已迁移，不再是 `doc` 子命令。真机上它虽仍能跑，但每次都会打印弃用警告：
+> **弃用提示**：`dws doc search` 已迁移，不再是 `doc` 子命令。它虽仍能跑，但每次都会打印弃用警告：
 > `'dws doc search' is deprecated, use 'dws drive search' or 'dws wiki node search --workspace <id>'`。
 > 搜索文档/文件请切到 `dingtalk-drive` skill，用下面的命令。
 

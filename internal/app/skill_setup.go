@@ -128,6 +128,19 @@ func runSkillSetup(cmd *cobra.Command, _ []string) error {
 		multiSkillNames = ensureMandatorySharedSkill(filtered, allMultiSkillNames)
 	}
 
+	// --dry-run：仅预览将安装的内容与目标目录，不写入任何文件、不弹确认。
+	if dryRun, _ := cmd.Flags().GetBool("dry-run"); dryRun {
+		fmt.Fprintf(out, "[DRY-RUN] 预览（不写入任何文件）：mode=%s，来源 %s\n", mode, skillSrc)
+		fmt.Fprintln(out, "将安装到：")
+		for _, d := range dests {
+			fmt.Fprintf(out, "  - %s\n", d)
+		}
+		if mode == skillSetupModeMulti && len(multiSkillNames) > 0 {
+			fmt.Fprintf(out, "子 skill：%s\n", strings.Join(multiSkillNames, ", "))
+		}
+		return nil
+	}
+
 	if !autoYes {
 		ok, err := confirmSkillSetup(out, mode, skillSrc, dests, multiSkillNames)
 		if err != nil {

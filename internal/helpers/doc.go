@@ -400,7 +400,11 @@ func inferFilename(rawURL string) string {
 		if decoded, err := url.PathUnescape(name); err == nil {
 			name = decoded
 		}
-		if name != "" {
+		// 解码后可能含 %2F 还原出的路径分隔符（如 "ddmedia/xxx.png"），只取
+		// 末段 base 名，避免拼出调用方未创建的子目录导致写文件失败。
+		name = strings.ReplaceAll(name, "\\", "/")
+		name = filepath.Base(name)
+		if name != "" && name != "." && name != "/" {
 			return name
 		}
 	}

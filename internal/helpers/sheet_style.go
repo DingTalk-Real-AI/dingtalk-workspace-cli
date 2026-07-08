@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -397,6 +398,9 @@ func newRangeBatchSetStyleCmd() *cobra.Command {
 			node := mustGetFlag(cmd, "node")
 			batchPath := mustGetFlag(cmd, "batch")
 			continueOnErr, _ := cmd.Flags().GetBool("continue-on-error")
+			jsonMode := deps.Caller.Format() == "json"
+			ctx := context.Background()
+			var jsonResults []any
 
 			data, err := os.ReadFile(batchPath)
 			if err != nil {
@@ -457,6 +461,34 @@ func newRangeBatchSetStyleCmd() *cobra.Command {
 					continue
 				}
 				fmt.Fprintf(os.Stderr, "[%d/%d] update_range sheet=%s range=%s\n", i+1, total, item.SheetID, item.Range)
+				if jsonMode {
+					text, cerr := callMCPToolReturnText(ctx, "update_range", toolArgs)
+					entry := map[string]any{"index": i + 1, "sheetId": item.SheetID, "range": item.Range}
+					if cerr != nil {
+						entry["ok"] = false
+						entry["error"] = cerr.Error()
+						jsonResults = append(jsonResults, entry)
+						cerr = fmt.Errorf("第 %d/%d 条 update_range 失败: %w", i+1, total, cerr)
+						fmt.Fprintln(os.Stderr, cerr)
+						failed++
+						if firstErr == nil {
+							firstErr = cerr
+						}
+						if !continueOnErr {
+							break
+						}
+						continue
+					}
+					var parsed any
+					if json.Unmarshal([]byte(text), &parsed) == nil {
+						entry["result"] = parsed
+					} else {
+						entry["result"] = text
+					}
+					entry["ok"] = true
+					jsonResults = append(jsonResults, entry)
+					continue
+				}
 				if err := callMCPTool("update_range", toolArgs); err != nil {
 					err = fmt.Errorf("第 %d/%d 条 update_range 失败: %w", i+1, total, err)
 					fmt.Fprintln(os.Stderr, err)
@@ -470,6 +502,14 @@ func newRangeBatchSetStyleCmd() *cobra.Command {
 				}
 			}
 			fmt.Fprintf(os.Stderr, "batch-set-style 完成：共 %d 条，失败 %d 条\n", total, failed)
+			if jsonMode {
+				_ = deps.Out.PrintJSON(map[string]any{
+					"total":   total,
+					"failed":  failed,
+					"results": jsonResults,
+					"success": failed == 0,
+				})
+			}
 			if failed > 0 && !continueOnErr {
 				return firstErr
 			}
