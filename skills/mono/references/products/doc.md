@@ -27,7 +27,7 @@ dws doc permission --help
 
 ### 搜索 / 遍历文件（已迁移，不再是 doc 子命令）
 
-> **弃用提示**：`dws doc search` 和 `dws doc list` 已迁移到 `drive` / `wiki`。真机上这两条虽仍能跑，但每次都会打印弃用警告，请改用下面的命令，命令详情见 [drive.md](./drive.md)。
+> **弃用提示**：`dws doc search` 和 `dws doc list` 已迁移到 `drive` / `wiki`。这两条虽仍能跑，但每次都会打印弃用警告，请改用下面的命令，命令详情见 [drive.md](./drive.md)。
 
 | 旧命令（弃用） | 改用 | 场景 |
 |--------------|------|------|
@@ -83,7 +83,7 @@ Flags:
 
 ### 创建其他类型文件 (表格/脑图/白板/多维表/画板/文件夹)
 
-> **弃用提示**：`dws doc file create --type` 已弃用，真机每次执行都会打印 `deprecated, use 'dws wiki node create --type <type>'`。创建各类型文件节点改用 `dws wiki node create`（与 intent-guide 一致）；创建普通文件夹用 `dws drive mkdir`。
+> **弃用提示**：`dws doc file create --type` 已弃用，执行时会打印 `deprecated, use 'dws wiki node create --type <type>'`。创建各类型文件节点改用 `dws wiki node create`（与 intent-guide 一致）；创建普通文件夹用 `dws drive mkdir`。
 
 ```
 Usage:
@@ -133,7 +133,7 @@ Flags:
 
 ### 下载文件到本地（已迁移到 drive）
 
-> **弃用提示**：`dws doc download` 已迁移到 `dws drive download`（真机执行 `doc download` 会打印弃用警告）。下载已有文件（PDF/图片/附件等非在线文档）改用：
+> **弃用提示**：`dws doc download` 已迁移到 `dws drive download`（执行 `doc download` 会打印弃用警告）。下载已有文件（PDF/图片/附件等非在线文档）改用：
 
 ```
 dws drive download --node <NODE_ID> --output ~/downloads/

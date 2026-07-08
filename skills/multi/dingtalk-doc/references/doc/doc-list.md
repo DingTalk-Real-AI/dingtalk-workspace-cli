@@ -1,6 +1,6 @@
 # doc list（已弃用 → drive list / wiki node list）
 
-> **弃用提示**：`dws doc list` 已迁移，不再是 `doc` 子命令。真机上它虽仍能跑，但每次都会打印弃用警告：
+> **弃用提示**：`dws doc list` 已迁移，不再是 `doc` 子命令。它虽仍能跑，但每次都会打印弃用警告：
 > `'dws doc list' is deprecated, use 'dws drive list --workspace <workspaceId>' or 'dws wiki node list --workspace <workspaceId>'`。
 > 遍历文件夹/知识库请切到 `dingtalk-drive` skill，用下面的命令。
 

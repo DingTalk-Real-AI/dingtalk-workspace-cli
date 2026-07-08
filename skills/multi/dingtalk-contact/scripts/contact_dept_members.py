@@ -75,7 +75,7 @@ def main():
     elif isinstance(dept_data, dict):
         inner = dept_data.get('result', dept_data)
         if isinstance(inner, dict):
-            # dept search 真机返回顶层 deptList；兼容历史 items/depts 键。
+            # dept search 返回顶层 deptList；兼容历史 items/depts 键。
             depts = (inner.get('deptList')
                      or inner.get('items')
                      or inner.get('depts')
@@ -114,7 +114,7 @@ def main():
         elif isinstance(members_data, dict):
             inner = members_data.get('result', members_data)
             if isinstance(inner, dict):
-                # list-members 真机返回 deptUserList；兼容历史 userlist/list 键。
+                # list-members 返回 deptUserList；兼容历史 userlist/list 键。
                 members = (inner.get('deptUserList')
                            or inner.get('userlist')
                            or inner.get('list')
@@ -130,7 +130,7 @@ def main():
             continue
 
         for m in members:
-            # list-members 真机每项形如 {"userInfo": {"name":..., "userId":...}}，
+            # list-members 每项形如 {"userInfo": {"name":..., "userId":...}}，
             # 成员字段嵌在 userInfo 下；兼容历史扁平结构。
             info = m.get('userInfo', m)
             name = info.get('name') or info.get('userName', '未知')

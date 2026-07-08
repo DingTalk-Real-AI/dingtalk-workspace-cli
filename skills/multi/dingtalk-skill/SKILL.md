@@ -38,5 +38,5 @@ metadata:
 ## 兼容提示
 
 - `dws skill find` → 用 `dws skill search --query <关键词>`
-- `--scopes` 已废弃（真机打 `Flag --scopes has been deprecated, 请使用 --source 替代` 警告）→ 用 `--source`
-- 前置：`skill search` 依赖企业开通技能市场；未开通时真机报「当前企业暂未开放此功能」，属企业级开关，非命令写法问题
+- `--scopes` 已废弃（会打印 `Flag --scopes has been deprecated, 请使用 --source 替代` 警告）→ 用 `--source`
+- 前置：`skill search` 依赖企业开通技能市场；未开通时报「当前企业暂未开放此功能」，属企业级开关，非命令写法问题

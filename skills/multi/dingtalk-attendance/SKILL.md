@@ -39,7 +39,7 @@ metadata:
 
 ## 评测高频硬约束
 
-- 当前 dws 已注册全部考勤子命令组（`record` / `check` / `approve` / `shift` / `schedule` / `class` / `adjustment` / `overtime` / `group` / `summary` / `rules` / `selfsetting` / `globalsetting` / `vacation` / `checkin` / `report` / `boss-check`），查询与写操作大多可直接调用后端。**不要再以"开源版只读/不支持写操作"为由拒答。** 创建班次、导入排班、加人入考勤组、保存个人规则设置、设置假期余额等写操作真机可执行，但必须先展示参数摘要并二次确认，再追加 `--yes`（或 `--user-say-yes`）执行；不要在未确认时直接写、也不要伪装成功。个别命令受权限/数据影响返回空或权限错误（如 `report` 系列仅管理员），如实说明即可。
+- 当前 dws 已注册全部考勤子命令组（`record` / `check` / `approve` / `shift` / `schedule` / `class` / `adjustment` / `overtime` / `group` / `summary` / `rules` / `selfsetting` / `globalsetting` / `vacation` / `checkin` / `report` / `boss-check`），查询与写操作大多可直接调用后端。**不要再以"开源版只读/不支持写操作"为由拒答。** 创建班次、导入排班、加人入考勤组、保存个人规则设置、设置假期余额等写操作可执行，但必须先展示参数摘要并二次确认，再追加 `--yes`（或 `--user-say-yes`）执行；不要在未确认时直接写、也不要伪装成功。个别命令受权限/数据影响返回空或权限错误（如 `report` 系列仅管理员），如实说明即可。
 - 查询迟到/缺勤名单时，空打卡结果不等于"没人迟到"。必须结合排班、`NotSigned`、`Absenteeism`、无记录人员分别说明；数据缺失要标为"无记录/无法判断"，不要归为正常。
 - 做部门 Top N 排名时，用户要求前 N 名就必须输出 N 个部门；无打卡记录或无可计算数据的部门按 0 或"无数据"保留在排名中，不能只输出有数据的少数部门。
 - `summary` 必须同时传 `--user`、`--date`、`--stats-type`（week/month），缺一返回 C0002。

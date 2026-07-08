@@ -100,7 +100,7 @@ def main():
 
     event_id = None
     if not args.dry_run and isinstance(result, dict):
-        # event create 真机返回 {result:{id,...}, success:true}，id 在 result 内层，
+        # event create 返回 {result:{id,...}, success:true}，id 在 result 内层，
         # 顶层取 id 恒 None 会导致参会人/订房支路被静默跳过。先解包 result 再取。
         inner = result.get('result') if isinstance(result.get('result'), dict) else result
         event_id = (inner.get('eventId') or inner.get('id')

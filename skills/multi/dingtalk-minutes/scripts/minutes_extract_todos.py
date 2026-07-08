@@ -47,7 +47,7 @@ def run_dws(
 def todos_from_payload(payload: Any) -> List[dict]:
     """解析 `minutes get todos` 返回为待办列表。
 
-    真机结构: result.dingtalkTodoList(对象数组, 含 title 等)与
+    返回结构: result.dingtalkTodoList(对象数组, 含 title 等)与
     result.actions(JSON 字符串数组, 每条形如
     {"mark":[],"value":"..."}). 二者无 todos 键。
     优先取 dingtalkTodoList; 为空时回退解析 actions。
