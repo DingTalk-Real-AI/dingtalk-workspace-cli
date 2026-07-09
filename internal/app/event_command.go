@@ -961,8 +961,14 @@ func newEventStopCommand() *cobra.Command {
 	var asIdentity string
 	var opts personalStopOptions
 	cmd := &cobra.Command{
-		Use:               "stop",
-		Short:             "优雅停止 bus 守护进程",
+		Use:   "stop [subscribe_id]",
+		Short: "取消个人事件订阅并停止本地消费",
+		Long: `取消个人事件订阅并停止本地消费，清理对应本地消费状态，并尝试停止对应前台 consume。
+
+默认 --as user：传 subscribe_id 时取消该个人订阅；传 --all 时取消当前身份下
+本地记录的全部个人订阅。取消后如果没有剩余本地个人订阅，会停止 personal bus。
+
+--as app 保留旧应用事件语义：只停止应用事件 app bus，不调用个人订阅取消接口。`,
 		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(c *cobra.Command, args []string) error {

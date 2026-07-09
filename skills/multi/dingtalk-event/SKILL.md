@@ -14,7 +14,7 @@ description: 钉钉个人消息事件长连接监听、订阅与消费，输出 
 | `dws event list` | 查看当前个人事件目录；不要把它当能力菜单主动展示 |
 | `dws event schema <event_key>` | 查看事件参数和输出字段 schema，默认 JSON |
 | `dws event consume <event_key> [flags]` | 阻塞消费；事件写到 stdout，推荐 `-f ndjson` |
-| `dws event status --event <event_key>` | 查看个人订阅和本地连接状态 |
+| `dws event status --event <event_key>` | 查看个人订阅、personal bus 和本地 consume |
 | `dws event stop <subscribe_id>` | 取消个人订阅并停止对应本地消费 |
 | `dws event stop --all` | 清理当前身份下本地记录的全部个人订阅 |
 
@@ -46,14 +46,16 @@ description: 钉钉个人消息事件长连接监听、订阅与消费，输出 
 2. 需要了解字段时运行 `dws event schema <event_key>`，读取 `jq_root_path` 和 `schema.properties`。
 3. 启动 `dws event consume <event_key> ... -f ndjson`，等待 stderr 出现 `connected bus pid=...` 后开始读 stdout。
 4. stdout 每行是一个事件 JSON；业务字段在 `data` JSON 字符串内，按 `jq_root_path` 解析。
-5. 任务完成后用 `dws event stop <subscribe_id>`；如果是临时测试，可以在 consume 上加 `--max-events` 或 `--duration` 自动退出。
+5. 需要确认监听状态时运行 `dws event status --event <event_key>`，查看 `Subscriptions` 和 `Consumers`。
+6. 任务完成后用 `dws event stop <subscribe_id>` 取消订阅；如果是临时测试，可以在 consume 上加 `--max-events` 或 `--duration` 自动退出。
 
 ## Subprocess contract
 
 - `event consume` 是阻塞式长连接命令。stdout 只处理事件；stderr 只处理状态、debug 和错误。
 - 不要使用 `--quiet`，否则 Agent 会看不到建联状态和排障信息。
 - 无界监听需要外部进程管理；有界自测优先用 `--max-events N` 或 `--duration 10m`。
-- 不要 `kill -9` 消费进程。优先 Ctrl+C、等待 duration/max-events 结束，或用 `dws event stop <subscribe_id>` 清理订阅。
+- 不要 `kill -9` 消费进程。Ctrl+C、duration、max-events 只结束本地前台进程；取消订阅必须使用 `dws event stop <subscribe_id>`。
+- 不要运行裸 `dws event stop`；批量清理必须显式使用 `dws event stop --all`。
 - 一个 consume 对应一个事件订阅。监听多个对象时启动多个 consume；底层本机连接可以复用，但输出按 `subscribe_id` 隔离。
 
 ## Examples

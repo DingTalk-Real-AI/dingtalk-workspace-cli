@@ -8,7 +8,7 @@
 |---|---|
 | `dws event schema <event_key>` | 查看事件参数和输出字段 schema，默认 JSON |
 | `dws event consume <event_key> [flags]` | 阻塞消费；事件写到 stdout，推荐 `-f ndjson` |
-| `dws event status --event <event_key>` | 查看个人订阅和本地连接状态 |
+| `dws event status --event <event_key>` | 查看个人订阅、personal bus 和本地 consume |
 | `dws event stop <subscribe_id>` | 取消个人订阅并停止对应本地消费 |
 | `dws event stop --all` | 清理当前身份下本地记录的全部个人订阅 |
 
@@ -44,7 +44,8 @@
 2. 需要了解字段时运行 `dws event schema <event_key>`，读取 `jq_root_path` 和 `schema.properties`。
 3. 启动 `dws event consume <event_key> ... -f ndjson`，等待 stderr 出现 `connected bus pid=...` 后开始读 stdout。
 4. stdout 每行是一个事件 JSON；业务字段在 `data` JSON 字符串内，按 `jq_root_path` 解析。
-5. 任务完成后用 `dws event stop <subscribe_id>`；临时测试可以在 consume 上加 `--max-events` 或 `--duration`。
+5. 需要确认监听状态时运行 `dws event status --event <event_key>`，查看 `Subscriptions` 和 `Consumers`。
+6. 任务完成后用 `dws event stop <subscribe_id>` 取消订阅；临时测试可以在 consume 上加 `--max-events` 或 `--duration`。
 
 ## Common commands
 
@@ -84,6 +85,10 @@ dws event status --event user_im_message_receive_group
 dws event status --event user_im_message_receive_user
 dws event stop <subscribe_id>
 ```
+
+`status` 的 `Consumers` 表展示本地 consume 的 PID、事件码、`subscribe_id` 和 received/dropped 计数，可用于确认监听是否仍在 personal bus 上。
+
+裸 `dws event stop` 不会取消订阅；批量清理必须显式使用 `dws event stop --all`。Ctrl+C、`--duration`、`--max-events` 只结束本地前台消费进程，不等价于取消服务端订阅。
 
 ## Output parsing
 

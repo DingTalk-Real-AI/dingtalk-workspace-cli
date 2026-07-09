@@ -438,27 +438,76 @@ func renderPersonalStatusText(w io.Writer, identity personal.Identity, identityH
 	fmt.Fprintf(w, "\nWorkdir: %s\n", qs.Entry.WorkDir)
 	if len(subs) == 0 {
 		fmt.Fprintln(w, "Subscriptions: none")
+	} else {
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(tw, "SUBSCRIBE_ID\tEVENT_KEY\tRULE\tSTATUS\tSOURCE")
+		for _, sub := range subs {
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
+				sub.SubscribeID, sub.EventKey, sub.RuleType, sub.Status, sub.SourceID)
+		}
+		_ = tw.Flush()
+	}
+	renderPersonalConsumers(w, qs)
+}
+
+func renderPersonalConsumers(w io.Writer, qs busctl.EntryStatus) {
+	if qs.Entry.State != busctl.BusStateRunning {
+		fmt.Fprintln(w, "Consumers: none")
 		return
 	}
+	if qs.Live == nil {
+		fmt.Fprintln(w, "Consumers: unavailable (status RPC failed)")
+		return
+	}
+	if len(qs.Live.Consumers) == 0 {
+		fmt.Fprintln(w, "Consumers: none")
+		return
+	}
+	fmt.Fprintln(w, "Consumers:")
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "SUBSCRIBE_ID\tEVENT_KEY\tRULE\tSTATUS\tSOURCE")
-	for _, sub := range subs {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
-			sub.SubscribeID, sub.EventKey, sub.RuleType, sub.Status, sub.SourceID)
+	fmt.Fprintln(tw, "PID\tEVENT_KEYS\tSUBSCRIBE_ID\tFILTER\tRECEIVED\tDROPPED")
+	for _, cs := range qs.Live.Consumers {
+		eventKeys := strings.Join(cs.EventTypes, ",")
+		if eventKeys == "" {
+			eventKeys = "(catch-all)"
+		}
+		subscribeID := displayPersonalStatusValue(cs.SubscribeID)
+		filter := displayPersonalStatusValue(cs.Filter)
+		fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%d\t%d\n",
+			cs.PID, eventKeys, subscribeID, filter, cs.Received, cs.Dropped)
 	}
 	_ = tw.Flush()
 }
 
+func displayPersonalStatusValue(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return "-"
+	}
+	return v
+}
+
 func runPersonalEventStop(c *cobra.Command, opts personalStopOptions) error {
 	ctx := c.Context()
+	explicitSubscribeID := strings.TrimSpace(opts.SubscribeID)
+	isSingleTarget := explicitSubscribeID != ""
+	if explicitSubscribeID != "" && opts.All {
+		return fmt.Errorf("event stop --as user: subscribe_id and --all are mutually exclusive")
+	}
+	if explicitSubscribeID == "" && !opts.All {
+		return fmt.Errorf("event stop --as user: subscribe_id is required unless --all is set")
+	}
+
 	configDir := defaultConfigDir()
 	identity, err := resolvePersonalEventIdentity(ctx, configDir, opts.StreamSourceID)
 	if err != nil {
 		return fmt.Errorf("event stop --as user: %w", err)
 	}
 	identityHash := dwsevent.IdentityHash(identity.Key())
-	workDir := eventWorkDir(configDir, editionNameOrDefault(), dwsevent.SourceKindPersonalStream, identityHash)
-	subscribeIDs, err := personalStopTargets(workDir, opts.SubscribeID)
+	editionName := editionNameOrDefault()
+	workDir := eventWorkDir(configDir, editionName, dwsevent.SourceKindPersonalStream, identityHash)
+	ipcEndpoint := defaultIPCEndpoint(workDir, editionName, dwsevent.SourceKindPersonalStream, identityHash)
+	subscribeIDs, err := personalStopTargets(workDir, explicitSubscribeID, opts.All)
 	if err != nil {
 		return fmt.Errorf("event stop --as user: %w", err)
 	}
@@ -471,29 +520,41 @@ func runPersonalEventStop(c *cobra.Command, opts personalStopOptions) error {
 	if err := personal.RemoveRunStates(workDir, subscribeIDs); err != nil {
 		return fmt.Errorf("event stop --as user: update local state: %w", err)
 	}
-	if err := busctl.Stop(busctl.StopConfig{WorkDir: workDir}); err != nil {
-		if errors.Is(err, busctl.ErrNotRunning) {
-			if len(subscribeIDs) == 0 {
-				fmt.Fprintln(c.OutOrStdout(), "personal bus is not running")
-			} else {
-				fmt.Fprintf(c.OutOrStdout(), "cancelled %d personal subscription(s); personal bus is not running\n", len(subscribeIDs))
-			}
-			return nil
-		}
-		return err
+	if err := interruptPersonalConsumers(ipcEndpoint, subscribeIDs); err != nil {
+		fmt.Fprintf(c.ErrOrStderr(), "WARN: failed to stop matching local consume process: %v\n", err)
 	}
-	if len(subscribeIDs) == 0 {
-		fmt.Fprintln(c.OutOrStdout(), "personal bus stopped")
+
+	remaining, err := personal.LoadRunStates(workDir)
+	if err != nil {
+		return fmt.Errorf("event stop --as user: load remaining local state: %w", err)
+	}
+	if len(remaining) > 0 {
+		printPersonalStopResult(c.OutOrStdout(), subscribeIDs, isSingleTarget, "personal bus still running")
 		return nil
 	}
-	fmt.Fprintf(c.OutOrStdout(), "cancelled %d personal subscription(s); personal bus stopped\n", len(subscribeIDs))
+
+	busState := "personal bus stopped"
+	if err := busctl.Stop(busctl.StopConfig{WorkDir: workDir}); err != nil {
+		if errors.Is(err, busctl.ErrNotRunning) {
+			busState = "personal bus is not running"
+		} else {
+			return err
+		}
+	}
+	printPersonalStopResult(c.OutOrStdout(), subscribeIDs, isSingleTarget, busState)
 	return nil
 }
 
-func personalStopTargets(workDir, explicit string) ([]string, error) {
+func personalStopTargets(workDir, explicit string, all bool) ([]string, error) {
 	explicit = strings.TrimSpace(explicit)
+	if explicit != "" && all {
+		return nil, fmt.Errorf("subscribe_id and --all are mutually exclusive")
+	}
 	if explicit != "" {
 		return []string{explicit}, nil
+	}
+	if !all {
+		return nil, fmt.Errorf("subscribe_id is required unless --all is set")
 	}
 	states, err := personal.LoadRunStates(workDir)
 	if err != nil {
@@ -507,6 +568,52 @@ func personalStopTargets(workDir, explicit string) ([]string, error) {
 	}
 	sort.Strings(ids)
 	return ids, nil
+}
+
+func interruptPersonalConsumers(ipcEndpoint string, subscribeIDs []string) error {
+	targets := make(map[string]struct{}, len(subscribeIDs))
+	for _, id := range subscribeIDs {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			targets[id] = struct{}{}
+		}
+	}
+	if ipcEndpoint == "" || len(targets) == 0 {
+		return nil
+	}
+	status, err := busctl.QueryStatus(ipcEndpoint)
+	if err != nil {
+		return nil
+	}
+	signalled := make(map[int]struct{})
+	for _, consumer := range status.Consumers {
+		if _, ok := targets[strings.TrimSpace(consumer.SubscribeID)]; !ok {
+			continue
+		}
+		if consumer.PID <= 0 || consumer.PID == os.Getpid() {
+			continue
+		}
+		if _, ok := signalled[consumer.PID]; ok {
+			continue
+		}
+		proc, err := os.FindProcess(consumer.PID)
+		if err != nil {
+			return fmt.Errorf("find consume pid=%d: %w", consumer.PID, err)
+		}
+		if err := proc.Signal(os.Interrupt); err != nil && !errors.Is(err, os.ErrProcessDone) {
+			return fmt.Errorf("signal consume pid=%d: %w", consumer.PID, err)
+		}
+		signalled[consumer.PID] = struct{}{}
+	}
+	return nil
+}
+
+func printPersonalStopResult(w io.Writer, subscribeIDs []string, single bool, busState string) {
+	if single && len(subscribeIDs) == 1 {
+		fmt.Fprintf(w, "cancelled personal subscription %s; %s\n", subscribeIDs[0], busState)
+		return
+	}
+	fmt.Fprintf(w, "cancelled %d personal subscription(s); %s\n", len(subscribeIDs), busState)
 }
 
 func resolvePersonalEventIdentity(ctx context.Context, configDir string, sourceIDOverride string) (personal.Identity, error) {

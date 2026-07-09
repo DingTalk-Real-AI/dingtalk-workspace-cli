@@ -146,6 +146,8 @@ dws event status --event user_im_message_receive_group
 dws event status --event user_im_message_receive_user
 ```
 
+`status` 同时展示服务端 `Subscriptions` 和本地 `Consumers`。`Consumers` 表里的 PID、事件码、`subscribe_id`、received/dropped 计数用于确认当前前台 consume 是否还挂在 personal bus 上。
+
 停止指定订阅：
 
 ```bash
@@ -157,6 +159,8 @@ dws event stop <subscribe_id>
 ```bash
 dws event stop --all
 ```
+
+裸 `dws event stop` 不会取消订阅。前台 `consume` 进程用 Ctrl+C 只会停止本地进程；需要取消服务端订阅时，使用事件输出或 `status` 里的 `subscribe_id` 执行 `dws event stop <subscribe_id>`。
 
 ## Troubleshooting
 
