@@ -161,14 +161,23 @@ def value_for(flag: str, param: dict[str, Any], canonical_path: str) -> str | No
     return scalar_value(flag, param, canonical_path)
 
 
+def smoke_extra_flags(canonical_path: str) -> set[str]:
+    # Avoid environment-dependent auto-detection in dry-run smoke. The command
+    # accepts --email as optional, but without it the CLI probes the bound mailbox.
+    return {
+        "mail.search_mail_users": {"email"},
+    }.get(canonical_path, set())
+
+
 def build_command(binary: str, leaf: dict[str, Any], include_optional: bool) -> list[str]:
     cli_path = str(leaf["cli_path"])
     canonical_path = str(leaf.get("canonical_path", ""))
+    extra_flags = smoke_extra_flags(canonical_path)
     argv = [binary, *shlex.split(cli_path)]
     params = leaf.get("parameters") or {}
     for flag in sorted(params):
         param = params[flag] or {}
-        if not include_optional and not bool(param.get("required")):
+        if not include_optional and not bool(param.get("required")) and flag not in extra_flags:
             continue
         if str(param.get("type", "")).lower() == "boolean":
             argv.append(f"--{flag}")

@@ -60,3 +60,10 @@ This document records issues found while packaging, building, and executing comm
 - Cause: the smoke harness had generic JSON samples and did not know which commands require non-empty objects or arrays.
 - Fix: Generated non-empty record payloads and command-specific non-empty JSON samples for aitable aggregate/card/field-widths/timebar updates.
 - Verification: targeted smoke for the remaining 20 paths passed 20/20, and the rebuilt CLI passed full smoke 359/359.
+
+### Issue 8: mail user smoke depended on bound mailbox auto-detection
+
+- Symptom: `mail.search_mail_users` failed in dry-run smoke on accounts without an enterprise mailbox, even after `dws auth login`, because the command attempted mailbox auto-detection when `--email` was omitted.
+- Cause: schema correctly marks `email` as optional for normal use, but the smoke harness used required parameters only; this made dry-run depend on the tester account's mailbox binding.
+- Fix: Added a smoke-only extra flag rule so `mail.search_mail_users` supplies a sample `--email` while leaving the runtime schema unchanged.
+- Verification: `dws mail user search --email user@example.com --keyword keyword-smoke --dry-run --yes --format json` passed; full smoke passed 359/359 after this fix.
