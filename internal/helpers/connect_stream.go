@@ -250,19 +250,24 @@ func (f *execForwarder) label() string {
 	return fmt.Sprintf("exec:%s (%s, %s)", f.name, f.argv[0], memo)
 }
 
-func (f *execForwarder) forward(ctx context.Context, convID, text string) (string, error) {
-	ctx, cancel := applyTimeout(ctx, f.timeout)
-	defer cancel()
+func (f *execForwarder) hasSession(convID string) bool {
+	return f.sessions != nil && strings.TrimSpace(convID) != ""
+}
+
+func (f *execForwarder) commandArgs(argv []string, convID, text string) []string {
 	// Session args go right after the binary, before the spec tail — some specs
 	// (qoder) end the tail with `-p` so the prompt must stay the trailing
 	// positional argument.
 	var args []string
-	if f.sessions != nil && strings.TrimSpace(convID) != "" {
+	if f.hasSession(convID) {
 		args = append(args, f.sessions.args(convID)...)
 	}
-	args = append(args, f.argv[1:]...)
+	args = append(args, argv[1:]...)
 	args = append(args, text)
-	cmd := exec.CommandContext(ctx, f.argv[0], args...)
+	return args
+}
+
+func (f *execForwarder) configureCommand(cmd *exec.Cmd) {
 	// Run the agent CLI from a clean, empty directory rather than inheriting the
 	// connector's CWD (often $HOME). Some agents scan the working tree / nearby
 	// config on startup — e.g. `claude -p` takes ~29s from a large $HOME but ~4s
@@ -278,37 +283,60 @@ func (f *execForwarder) forward(ctx context.Context, convID, text string) (strin
 	if len(f.env) > 0 {
 		cmd.Env = append(os.Environ(), f.env...)
 	}
-	out, err := cmd.Output()
-	s := strings.TrimSpace(string(out))
-	// Guard against a backend error being mistaken for the answer: some agent
-	// CLIs (claude) print "API Error: 4xx ..." to stdout and still exit 0, so a
-	// non-empty stdout is not proof of a real reply. If stdout is a bare backend
-	// error, return an actionable hint instead of forwarding the raw error into
-	// the chat (issue #14: a custom-provider 422 was echoed to the group).
-	if s != "" && !agentReplyIsError(s) {
-		return brandReply(f.name, s), nil
-	}
-	if s != "" && agentReplyIsError(s) {
-		if f.sessions != nil && strings.TrimSpace(convID) != "" {
-			f.sessions.reset(convID)
+}
+
+func (f *execForwarder) forward(ctx context.Context, convID, text string) (string, error) {
+	ctx, cancel := applyTimeout(ctx, f.timeout)
+	defer cancel()
+
+	run := func() (string, string, error) {
+		args := f.commandArgs(f.argv, convID, text)
+		cmd := exec.CommandContext(ctx, f.argv[0], args...)
+		f.configureCommand(cmd)
+		out, err := cmd.Output()
+		s := strings.TrimSpace(string(out))
+		// Guard against a backend error being mistaken for the answer: some agent
+		// CLIs (claude) print "API Error: 4xx ..." to stdout and still exit 0, so a
+		// non-empty stdout is not proof of a real reply. If stdout is a bare backend
+		// error, return an actionable hint instead of forwarding the raw error into
+		// the chat (issue #14: a custom-provider 422 was echoed to the group).
+		if s != "" && !agentReplyIsError(s) {
+			return brandReply(f.name, s), "", nil
 		}
-		return agentBackendErrorReply(s), nil
+		if s != "" && agentReplyIsError(s) {
+			if f.hasSession(convID) {
+				f.sessions.reset(convID)
+			}
+			return agentBackendErrorReply(s), "", nil
+		}
+		if err != nil {
+			msg := execErrorMessage(err)
+			return "", msg, err
+		}
+		return "（本地 agent 无文本输出）", "", nil
 	}
-	if err != nil {
+
+	reply, msg, err := run()
+	if err == nil {
+		return reply, nil
+	}
+
+	if f.hasSession(convID) && agentSessionMissingError(msg) {
+		f.sessions.reset(convID)
+		reply, msg, err = run()
+		if err == nil {
+			return reply, nil
+		}
+	}
+
+	if f.hasSession(convID) {
 		// Self-heal session state: if this conversation's session is broken
 		// (e.g. --resume of a session that was never created or got cleaned),
 		// drop the mapping so the next message starts a fresh session instead
 		// of failing forever.
-		if f.sessions != nil && strings.TrimSpace(convID) != "" {
-			f.sessions.reset(convID)
-		}
-		msg := err.Error()
-		if ee, ok := err.(*exec.ExitError); ok && len(ee.Stderr) > 0 {
-			msg = strings.TrimSpace(string(ee.Stderr))
-		}
-		return "", fmt.Errorf("本地 %s agent 调用失败：%s", f.name, truncateRunes(msg, 300))
+		f.sessions.reset(convID)
 	}
-	return "（本地 agent 无文本输出）", nil
+	return "", fmt.Errorf("本地 %s agent 调用失败：%s", f.name, truncateRunes(msg, 300))
 }
 
 // convSessions maps a DingTalk conversation to a stable agent session ID, so a
@@ -415,6 +443,17 @@ func brandReply(channel, reply string) string {
 	return qoderworkIdentityRe.ReplaceAllString(reply, "我是 QoderWork 助手，钉钉群里的智能助手。")
 }
 
+func execErrorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	if ee, ok := err.(*exec.ExitError); ok && len(ee.Stderr) > 0 {
+		msg = strings.TrimSpace(string(ee.Stderr))
+	}
+	return msg
+}
+
 // agentReplyIsError reports whether an agent's stdout is a bare backend error
 // rather than a real answer. Claude Code prints provider failures as
 // "API Error: <status> ..." on stdout and may still exit 0, so the connector
@@ -422,6 +461,16 @@ func brandReply(channel, reply string) string {
 // leading marker; a legitimate reply never starts with "API Error:".
 func agentReplyIsError(s string) bool {
 	return strings.HasPrefix(strings.TrimSpace(s), "API Error:")
+}
+
+// agentSessionMissingError recognizes stale addressable sessions. Agent CLIs
+// differ in wording, but the operational meaning is the same: the connector's
+// persisted session id points at a conversation the CLI can no longer resume.
+func agentSessionMissingError(msg string) bool {
+	lower := strings.ToLower(strings.TrimSpace(msg))
+	return strings.Contains(lower, "no conversation found with session id") ||
+		strings.Contains(lower, "conversation not found") ||
+		strings.Contains(lower, "session not found")
 }
 
 // agentBackendErrorReply turns a bare backend error into a short, actionable

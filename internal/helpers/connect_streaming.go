@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 )
@@ -53,76 +52,79 @@ func (f *execForwarder) forwardStream(ctx context.Context, convID, text string, 
 	ctx, cancel := applyTimeout(ctx, f.timeout)
 	defer cancel()
 
-	var args []string
-	if f.sessions != nil && strings.TrimSpace(convID) != "" {
-		args = append(args, f.sessions.args(convID)...)
-	}
-	args = append(args, f.streamArgv[1:]...)
-	args = append(args, text)
-	cmd := exec.CommandContext(ctx, f.streamArgv[0], args...)
-	if f.workDir != "" {
-		cmd.Dir = f.workDir
-	} else {
-		cmd.Dir = connectWorkDir()
-	}
-	if len(f.env) > 0 {
-		cmd.Env = append(os.Environ(), f.env...)
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return "", err
-	}
-	var stderrBuf strings.Builder
-	cmd.Stderr = &stderrBuf
-	if err := cmd.Start(); err != nil {
-		return "", err
+	run := func() (string, string, error) {
+		args := f.commandArgs(f.streamArgv, convID, text)
+		cmd := exec.CommandContext(ctx, f.streamArgv[0], args...)
+		f.configureCommand(cmd)
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			return "", err.Error(), err
+		}
+		var stderrBuf strings.Builder
+		cmd.Stderr = &stderrBuf
+		if err := cmd.Start(); err != nil {
+			return "", err.Error(), err
+		}
+
+		var acc strings.Builder // accumulated visible text ("cc" deltas / "qoder" turns)
+		finalText := ""
+		scanner := bufio.NewScanner(stdout)
+		scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" || !strings.HasPrefix(line, "{") {
+				continue
+			}
+			delta, final := parseStreamLine(f.parser, line)
+			if delta != "" {
+				acc.WriteString(delta)
+				onDelta(brandReply(f.name, acc.String()))
+			}
+			if final != "" {
+				finalText = final
+			}
+		}
+		waitErr := cmd.Wait()
+
+		if finalText == "" {
+			finalText = strings.TrimSpace(acc.String())
+		}
+		// A bare backend error (e.g. claude's "API Error: 4xx ...") must not be
+		// forwarded as the answer (issue #14): return an actionable hint instead.
+		if agentReplyIsError(finalText) {
+			if f.hasSession(convID) {
+				f.sessions.reset(convID)
+			}
+			return agentBackendErrorReply(finalText), "", nil
+		}
+		if finalText != "" {
+			return brandReply(f.name, finalText), "", nil
+		}
+		if waitErr != nil {
+			msg := waitErr.Error()
+			if s := strings.TrimSpace(stderrBuf.String()); s != "" {
+				msg = s
+			}
+			return "", msg, waitErr
+		}
+		return "（本地 agent 无文本输出）", "", nil
 	}
 
-	var acc strings.Builder // accumulated visible text ("cc" deltas / "qoder" turns)
-	finalText := ""
-	scanner := bufio.NewScanner(stdout)
-	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || !strings.HasPrefix(line, "{") {
-			continue
-		}
-		delta, final := parseStreamLine(f.parser, line)
-		if delta != "" {
-			acc.WriteString(delta)
-			onDelta(brandReply(f.name, acc.String()))
-		}
-		if final != "" {
-			finalText = final
+	reply, msg, err := run()
+	if err == nil {
+		return reply, nil
+	}
+	if f.hasSession(convID) && agentSessionMissingError(msg) {
+		f.sessions.reset(convID)
+		reply, msg, err = run()
+		if err == nil {
+			return reply, nil
 		}
 	}
-	waitErr := cmd.Wait()
-
-	if finalText == "" {
-		finalText = strings.TrimSpace(acc.String())
-	}
-	// A bare backend error (e.g. claude's "API Error: 4xx ...") must not be
-	// forwarded as the answer (issue #14): return an actionable hint instead.
-	if agentReplyIsError(finalText) {
-		if f.sessions != nil && strings.TrimSpace(convID) != "" {
-			f.sessions.reset(convID)
-		}
-		return agentBackendErrorReply(finalText), nil
-	}
-	if finalText != "" {
-		return brandReply(f.name, finalText), nil
-	}
-	if f.sessions != nil && strings.TrimSpace(convID) != "" {
+	if f.hasSession(convID) {
 		f.sessions.reset(convID)
 	}
-	if waitErr != nil {
-		msg := waitErr.Error()
-		if s := strings.TrimSpace(stderrBuf.String()); s != "" {
-			msg = s
-		}
-		return "", fmt.Errorf("本地 %s agent 调用失败：%s", f.name, truncateRunes(msg, 300))
-	}
-	return "（本地 agent 无文本输出）", nil
+	return "", fmt.Errorf("本地 %s agent 调用失败：%s", f.name, truncateRunes(msg, 300))
 }
 
 // parseStreamLine extracts (visible-text delta, final text) from one JSONL
