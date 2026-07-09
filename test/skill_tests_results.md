@@ -1425,15 +1425,7 @@
 **event_event_consume_o2o_001** ✅ PASS
 
 - Prompt: 监听我和 userId 507971 的单聊消息
-- Expected: `dws event consume user_im_message_receive_o2o --peer-user-id 507971 -f ndjson`
-- Skill Reference: references/products/event.md
-- Command path: PASS (event consume user_im_message_receive_o2o)
-- Flags: PASS (1 flags validated)
-
-**event_event_consume_o2o_002** ✅ PASS
-
-- Prompt: 订阅 unionId union123 给我发来的单聊消息
-- Expected: `dws event consume user_im_message_receive_o2o --peer-union-id union123 -f ndjson`
+- Expected: `dws event consume user_im_message_receive_o2o --user 507971 -f ndjson`
 - Skill Reference: references/products/event.md
 - Command path: PASS (event consume user_im_message_receive_o2o)
 - Flags: PASS (1 flags validated)
@@ -1450,7 +1442,7 @@
 **event_event_consume_group_001** ✅ PASS
 
 - Prompt: 监听 openConversationId cid123 的群消息
-- Expected: `dws event consume user_im_message_receive_group --open-conversation-id cid123 -f ndjson`
+- Expected: `dws event consume user_im_message_receive_group --group cid123 -f ndjson`
 - Skill Reference: references/products/event.md
 - Command path: PASS (event consume user_im_message_receive_group)
 - Flags: PASS (1 flags validated)
@@ -1458,7 +1450,7 @@
 **event_event_consume_user_001** ✅ PASS
 
 - Prompt: 监听 userId 507971 发给我的消息
-- Expected: `dws event consume user_im_message_receive_user --sender-user-id 507971 -f ndjson`
+- Expected: `dws event consume user_im_message_receive_user --user 507971 -f ndjson`
 - Skill Reference: references/products/event.md
 - Command path: PASS (event consume user_im_message_receive_user)
 - Flags: PASS (1 flags validated)

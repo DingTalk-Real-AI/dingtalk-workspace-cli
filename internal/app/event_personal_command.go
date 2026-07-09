@@ -58,25 +58,22 @@ type commonConsumeOptions struct {
 }
 
 type personalConsumeOptions struct {
-	Common             commonConsumeOptions
-	EventKey           string
-	DebugRawEvents     bool
-	SubscribeID        string
-	Rule               string
-	Name               string
-	FilterJSON         string
-	KeywordCSV         string
-	TTL                time.Duration
-	Ephemeral          bool
-	PeerUserID         string
-	PeerUnionID        string
-	SenderUserID       string
-	SenderUnionID      string
-	OpenConversationID string
-	ControlBaseURL     string
-	StreamTicketMode   string
-	StreamTicketURL    string
-	StreamSourceID     string
+	Common           commonConsumeOptions
+	EventKey         string
+	DebugRawEvents   bool
+	SubscribeID      string
+	Rule             string
+	Name             string
+	FilterJSON       string
+	QueryCSV         string
+	TTL              time.Duration
+	Ephemeral        bool
+	UserID           string
+	GroupID          string
+	ControlBaseURL   string
+	StreamTicketMode string
+	StreamTicketURL  string
+	StreamSourceID   string
 }
 
 type personalListOptions struct {
@@ -345,17 +342,14 @@ func ensurePersonalSubscription(ctx context.Context, client *personal.Client, id
 		return nil, "", "", fmt.Errorf("event_key is required unless --subscribe-id is provided")
 	}
 	ruleType, ruleParam, err := personal.BuildRuleParam(opts.EventKey, personal.RuleOptions{
-		RuleType:           opts.Rule,
-		PeerUserID:         opts.PeerUserID,
-		PeerUnionID:        opts.PeerUnionID,
-		SenderUserID:       opts.SenderUserID,
-		SenderUnionID:      opts.SenderUnionID,
-		OpenConversationID: opts.OpenConversationID,
+		RuleType: opts.Rule,
+		UserID:   opts.UserID,
+		GroupID:  opts.GroupID,
 	})
 	if err != nil {
 		return nil, "", "", err
 	}
-	filter, filterCanonical, err := personal.BuildFilter(opts.FilterJSON, opts.KeywordCSV)
+	filter, filterCanonical, err := personal.BuildFilter(opts.FilterJSON, opts.QueryCSV)
 	if err != nil {
 		return nil, "", "", err
 	}

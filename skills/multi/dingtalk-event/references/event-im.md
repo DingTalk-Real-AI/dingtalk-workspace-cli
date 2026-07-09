@@ -28,9 +28,9 @@ schema 默认 JSON。业务字段说明在 `schema.properties`，当前业务 pa
 | 事件码 | 规则 | 用途 | 必填参数 |
 |---|---|---|---|
 | `user_im_message_receive_at` | `at` | 当前用户被 @ 的消息 | 无 |
-| `user_im_message_receive_o2o` | `singleChat` | 当前用户与指定用户的单聊消息 | `--peer-user-id` 或 `--peer-union-id` |
-| `user_im_message_receive_group` | `group` | 当前用户所在指定群聊/会话的消息 | `--open-conversation-id` |
-| `user_im_message_receive_user` | `sender` | 当前用户收到的指定发送人消息 | `--sender-user-id` 或 `--sender-union-id` |
+| `user_im_message_receive_o2o` | `singleChat` | 当前用户与指定用户的单聊消息 | `--user` |
+| `user_im_message_receive_group` | `group` | 当前用户所在指定群聊/会话的消息 | `--group` |
+| `user_im_message_receive_user` | `sender` | 当前用户收到的指定发送人消息 | `--user` |
 
 默认身份就是当前用户。不要额外加身份切换 flag，不要使用应用凭证模式，不要使用本表以外的事件码。
 
@@ -49,27 +49,17 @@ dws event consume user_im_message_receive_at -f ndjson
 
 # 指定单聊消息
 dws event consume user_im_message_receive_o2o \
-  --peer-user-id 507971 \
-  -f ndjson
-
-# 指定单聊消息，只有 unionId 时
-dws event consume user_im_message_receive_o2o \
-  --peer-union-id union123 \
+  --user 507971 \
   -f ndjson
 
 # 指定群消息
 dws event consume user_im_message_receive_group \
-  --open-conversation-id cidxxxxxxxx \
+  --group cidxxxxxxxx \
   -f ndjson
 
 # 指定发送人消息
 dws event consume user_im_message_receive_user \
-  --sender-user-id 507971 \
-  -f ndjson
-
-# 指定发送人消息，只有 unionId 时
-dws event consume user_im_message_receive_user \
-  --sender-union-id union123 \
+  --user 507971 \
   -f ndjson
 ```
 
@@ -78,9 +68,9 @@ dws event consume user_im_message_receive_user \
 | 事件码 | 自测参数 | 触发方式 |
 |---|---|---|
 | `user_im_message_receive_at` | `--duration 10m -f ndjson` | 让任意可触达用户在群里 @ 当前登录用户 |
-| `user_im_message_receive_o2o` | `--peer-user-id <userId> --duration 10m -f ndjson` | 让对端用户给当前登录用户发送单聊消息 |
-| `user_im_message_receive_group` | `--open-conversation-id <id> --duration 10m -f ndjson` | 让任意用户在该群发送消息 |
-| `user_im_message_receive_user` | `--sender-user-id <userId> --duration 10m -f ndjson` | 让该发送人在当前用户能收到的会话里发消息 |
+| `user_im_message_receive_o2o` | `--user <userId> --duration 10m -f ndjson` | 让对端用户给当前登录用户发送单聊消息 |
+| `user_im_message_receive_group` | `--group <openConversationId> --duration 10m -f ndjson` | 让任意用户在该群发送消息 |
+| `user_im_message_receive_user` | `--user <userId> --duration 10m -f ndjson` | 让该发送人在当前用户能收到的会话里发消息 |
 
 stderr 出现 `connected bus pid=...` 表示本地 consume 已连接到事件 bus。stdout 每行是一个事件 JSON。
 
@@ -95,7 +85,7 @@ stderr 出现 `connected bus pid=...` 表示本地 consume 已连接到事件 bu
 | `--output-dir <dir>` | 每个事件写入一个文件 |
 | `--route '<regex>=dir:<path>'` | 按事件类型路由到目录 |
 | `--subscribe-id <id>` | 复用已有个人订阅 |
-| `--keyword <csv>` | 按消息正文关键词过滤，逗号分隔 |
+| `--query <csv>` | 按消息正文关键词过滤，逗号分隔 |
 | `--filter-json <json>` | 使用个人事件 Filter DSL 过滤 |
 | `--debug-raw-events` | 联调用：绕过本地过滤，输出当前 personal stream 实际收到的可解析事件 |
 
@@ -132,16 +122,16 @@ stderr 出现 `connected bus pid=...` 表示本地 consume 已连接到事件 bu
 
 优先用订阅规则参数缩小服务端推送范围：
 
-- 单聊用 `--peer-user-id` 或 `--peer-union-id`。
-- 群消息用 `--open-conversation-id`。
-- 指定发送人用 `--sender-user-id` 或 `--sender-union-id`。
+- 单聊用 `--user`。
+- 群消息用 `--group`。
+- 指定发送人用 `--user`。
 
-额外文本过滤再用 `--keyword` 或 `--filter-json`：
+额外文本过滤再用 `--query` 或 `--filter-json`：
 
 ```bash
 dws event consume user_im_message_receive_group \
-  --open-conversation-id cidxxxxxxxx \
-  --keyword "报警,故障" \
+  --group cidxxxxxxxx \
+  --query "报警,故障" \
   -f ndjson
 ```
 

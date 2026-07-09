@@ -260,7 +260,7 @@ main() {
     say "  dws version"
   fi
   say "  dws event schema user_im_message_receive_o2o"
-  say "  dws event consume user_im_message_receive_o2o --peer-user-id <userId> -f ndjson"
+  say "  dws event consume user_im_message_receive_o2o --user <userId> -f ndjson"
   say ""
   say "If an Agent session is already open, restart it or reload skills before testing event routing."
   case ":$PATH:" in

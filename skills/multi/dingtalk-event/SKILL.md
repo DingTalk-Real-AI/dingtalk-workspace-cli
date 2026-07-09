@@ -23,9 +23,9 @@ description: 钉钉个人消息事件长连接监听、订阅与消费，输出 
 | 事件码 | 场景 | 必填参数 |
 |---|---|---|
 | `user_im_message_receive_at` | 当前用户被 @ 的消息 | 无 |
-| `user_im_message_receive_o2o` | 当前用户与指定用户的单聊消息 | `--peer-user-id` 或 `--peer-union-id` |
-| `user_im_message_receive_group` | 当前用户所在指定群聊/会话的消息 | `--open-conversation-id` |
-| `user_im_message_receive_user` | 当前用户收到的指定发送人消息 | `--sender-user-id` 或 `--sender-union-id` |
+| `user_im_message_receive_o2o` | 当前用户与指定用户的单聊消息 | `--user` |
+| `user_im_message_receive_group` | 当前用户所在指定群聊/会话的消息 | `--group` |
+| `user_im_message_receive_user` | 当前用户收到的指定发送人消息 | `--user` |
 
 只承认上表 4 个事件码。其它身份模式、应用凭证模式、非个人消息事件不在本 skill 范围内。
 
@@ -64,17 +64,17 @@ dws event consume user_im_message_receive_at -f ndjson
 
 # 当前用户与指定用户的单聊消息
 dws event consume user_im_message_receive_o2o \
-  --peer-user-id 507971 \
+  --user 507971 \
   -f ndjson
 
 # 指定群聊/会话消息
 dws event consume user_im_message_receive_group \
-  --open-conversation-id cidxxxxxxxx \
+  --group cidxxxxxxxx \
   -f ndjson
 
 # 指定发送人的消息
 dws event consume user_im_message_receive_user \
-  --sender-user-id 507971 \
+  --user 507971 \
   -f ndjson
 
 # 有界自测
@@ -84,7 +84,7 @@ dws event consume user_im_message_receive_at \
 
 # 抓一条样本
 dws event consume user_im_message_receive_o2o \
-  --peer-user-id 507971 \
+  --user 507971 \
   --max-events 1 \
   -f json
 ```

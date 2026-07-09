@@ -69,3 +69,63 @@ func TestEventConsumeAsAppRejectsEventKey(t *testing.T) {
 		t.Fatalf("Execute() error = %v, want event_key validation", err)
 	}
 }
+
+func TestEventConsumePersonalParamSpecFlags(t *testing.T) {
+	cmd := newEventConsumeCommand()
+	for _, name := range []string{"user", "group", "query"} {
+		if cmd.Flags().Lookup(name) == nil {
+			t.Fatalf("flag --%s is not registered", name)
+		}
+	}
+	for _, name := range []string{
+		"peer-user-id",
+		"peer-union-id",
+		"sender-user-id",
+		"sender-union-id",
+		"open-conversation-id",
+		"keyword",
+	} {
+		if cmd.Flags().Lookup(name) != nil {
+			t.Fatalf("retired flag --%s is still registered", name)
+		}
+	}
+}
+
+func TestEventConsumeRetiredPersonalFlagsAreUnknown(t *testing.T) {
+	for _, name := range []string{
+		"peer-user-id",
+		"peer-union-id",
+		"sender-user-id",
+		"sender-union-id",
+		"open-conversation-id",
+		"keyword",
+	} {
+		t.Run(name, func(t *testing.T) {
+			cmd := newEventConsumeCommand()
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+			cmd.SetArgs([]string{personal.EventSingleChat, "--" + name, "x"})
+			err := cmd.Execute()
+			if err == nil || !strings.Contains(err.Error(), "unknown flag: --"+name) {
+				t.Fatalf("Execute() error = %v, want unknown flag", err)
+			}
+		})
+	}
+}
+
+func TestEventConsumeAsAppRejectsPersonalParamSpecFlags(t *testing.T) {
+	for _, args := range [][]string{
+		{"--as", "app", "--user", "507971"},
+		{"--as", "app", "--group", "cid"},
+		{"--as", "app", "--query", "报警"},
+	} {
+		cmd := newEventConsumeCommand()
+		cmd.SilenceUsage = true
+		cmd.SilenceErrors = true
+		cmd.SetArgs(args)
+		err := cmd.Execute()
+		if err == nil || !strings.Contains(err.Error(), "only supported with --as user") {
+			t.Fatalf("Execute(%v) error = %v, want user-only validation", args, err)
+		}
+	}
+}

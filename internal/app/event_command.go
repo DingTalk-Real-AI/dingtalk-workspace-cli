@@ -150,14 +150,11 @@ DWS clientId/clientSecret 透传给 portal 建立用户 Stream 连接。`,
 				"rule",
 				"name",
 				"filter-json",
-				"keyword",
+				"query",
 				"ttl",
 				"ephemeral",
-				"peer-user-id",
-				"peer-union-id",
-				"sender-user-id",
-				"sender-union-id",
-				"open-conversation-id",
+				"user",
+				"group",
 				"personal-event-base-url",
 			); err != nil {
 				return fmt.Errorf("event consume: %w", err)
@@ -282,21 +279,15 @@ DWS clientId/clientSecret 透传给 portal 建立用户 Stream 连接。`,
 		"个人事件订阅名称")
 	f.StringVar(&personalOpts.FilterJSON, "filter-json", "",
 		"个人事件 Filter DSL JSON")
-	f.StringVar(&personalOpts.KeywordCSV, "keyword", "",
+	f.StringVar(&personalOpts.QueryCSV, "query", "",
 		"按消息文本关键词过滤，逗号分隔")
 	f.DurationVar(&personalOpts.TTL, "ttl", 0,
 		"个人订阅 TTL (Go duration，如 24h；0 表示不过期)")
 	f.BoolVar(&personalOpts.Ephemeral, "ephemeral", false,
 		"consume 退出时自动取消个人订阅")
-	f.StringVar(&personalOpts.PeerUserID, "peer-user-id", "",
-		"singleChat 规则：对端 userId")
-	f.StringVar(&personalOpts.PeerUnionID, "peer-union-id", "",
-		"singleChat 规则：对端 unionId")
-	f.StringVar(&personalOpts.SenderUserID, "sender-user-id", "",
-		"sender 规则：发送人 userId")
-	f.StringVar(&personalOpts.SenderUnionID, "sender-union-id", "",
-		"sender 规则：发送人 unionId")
-	f.StringVar(&personalOpts.OpenConversationID, "open-conversation-id", "",
+	f.StringVar(&personalOpts.UserID, "user", "",
+		"个人事件 userId：singleChat 表示单聊对端，sender 表示发送人")
+	f.StringVar(&personalOpts.GroupID, "group", "",
 		"group 规则：openConversationId")
 	f.StringVar(&personalOpts.ControlBaseURL, "personal-event-base-url", "",
 		"个人事件控制面 base URL；临时默认预发 https://pre-mcp.dingtalk.com/dws，配置 mcp_url 时按配置派生")

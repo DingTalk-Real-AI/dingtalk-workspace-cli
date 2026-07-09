@@ -164,24 +164,13 @@ func TestBuildRuleParamMention(t *testing.T) {
 
 func TestBuildRuleParamSingleChatRequiresPeer(t *testing.T) {
 	_, _, err := BuildRuleParam(EventSingleChat, RuleOptions{})
-	if err == nil || !strings.Contains(err.Error(), "--peer-user-id") {
-		t.Fatalf("error = %v, want peer requirement", err)
-	}
-
-	rule, param, err := BuildRuleParam(EventSingleChat, RuleOptions{PeerUnionID: "union-1"})
-	if err != nil {
-		t.Fatalf("BuildRuleParam() error = %v", err)
-	}
-	if rule != "singleChat" {
-		t.Fatalf("rule = %q, want singleChat", rule)
-	}
-	if param["targetUidType"] != "unionId" || param["targetUid"] != "union-1" {
-		t.Fatalf("param = %#v", param)
+	if err == nil || !strings.Contains(err.Error(), "--user is required") {
+		t.Fatalf("error = %v, want user requirement", err)
 	}
 }
 
 func TestBuildRuleParamSingleChatUserIDMapsToStaffID(t *testing.T) {
-	rule, param, err := BuildRuleParam(EventSingleChat, RuleOptions{PeerUserID: "staff-1"})
+	rule, param, err := BuildRuleParam(EventSingleChat, RuleOptions{UserID: "staff-1"})
 	if err != nil {
 		t.Fatalf("BuildRuleParam() error = %v", err)
 	}
@@ -195,11 +184,11 @@ func TestBuildRuleParamSingleChatUserIDMapsToStaffID(t *testing.T) {
 
 func TestBuildRuleParamSender(t *testing.T) {
 	_, _, err := BuildRuleParam(EventFromUser, RuleOptions{})
-	if err == nil || !strings.Contains(err.Error(), "--sender-user-id") {
+	if err == nil || !strings.Contains(err.Error(), "--user is required") {
 		t.Fatalf("error = %v, want sender requirement", err)
 	}
 
-	rule, param, err := BuildRuleParam(EventFromUser, RuleOptions{SenderUserID: "staff-1"})
+	rule, param, err := BuildRuleParam(EventFromUser, RuleOptions{UserID: "staff-1"})
 	if err != nil {
 		t.Fatalf("BuildRuleParam() error = %v", err)
 	}
@@ -213,11 +202,11 @@ func TestBuildRuleParamSender(t *testing.T) {
 
 func TestBuildRuleParamGroup(t *testing.T) {
 	_, _, err := BuildRuleParam(EventInChat, RuleOptions{})
-	if err == nil || !strings.Contains(err.Error(), "--open-conversation-id") {
-		t.Fatalf("error = %v, want open conversation requirement", err)
+	if err == nil || !strings.Contains(err.Error(), "--group is required") {
+		t.Fatalf("error = %v, want group requirement", err)
 	}
 
-	rule, param, err := BuildRuleParam(EventInChat, RuleOptions{OpenConversationID: "cid-1"})
+	rule, param, err := BuildRuleParam(EventInChat, RuleOptions{GroupID: "cid-1"})
 	if err != nil {
 		t.Fatalf("BuildRuleParam() error = %v", err)
 	}
@@ -229,7 +218,19 @@ func TestBuildRuleParamGroup(t *testing.T) {
 	}
 }
 
-func TestBuildFilterKeywordAndJSON(t *testing.T) {
+func TestBuildRuleParamRejectsWrongScopedFlags(t *testing.T) {
+	if _, _, err := BuildRuleParam(EventMention, RuleOptions{UserID: "staff-1"}); err == nil || !strings.Contains(err.Error(), "--user is only supported") {
+		t.Fatalf("mention with user error = %v, want unsupported user", err)
+	}
+	if _, _, err := BuildRuleParam(EventSingleChat, RuleOptions{UserID: "staff-1", GroupID: "cid-1"}); err == nil || !strings.Contains(err.Error(), "--group is only supported") {
+		t.Fatalf("singleChat with group error = %v, want unsupported group", err)
+	}
+	if _, _, err := BuildRuleParam(EventInChat, RuleOptions{UserID: "staff-1", GroupID: "cid-1"}); err == nil || !strings.Contains(err.Error(), "--user is only supported") {
+		t.Fatalf("group with user error = %v, want unsupported user", err)
+	}
+}
+
+func TestBuildFilterQueryAndJSON(t *testing.T) {
 	filter, canonical, err := BuildFilter(`{"field":"conversation_id","op":"eq","value":"cid1"}`, "P0, 故障")
 	if err != nil {
 		t.Fatalf("BuildFilter() error = %v", err)
@@ -243,7 +244,7 @@ func TestBuildFilterKeywordAndJSON(t *testing.T) {
 		t.Fatalf("canonical = %s, want contains_any", canonical)
 	}
 	if !strings.Contains(canonical, "payload.body.content") || strings.Contains(canonical, "message.text") {
-		t.Fatalf("canonical = %s, want keyword filter on payload.body.content only", canonical)
+		t.Fatalf("canonical = %s, want query filter on payload.body.content only", canonical)
 	}
 	if !strings.Contains(canonical, "payload.body.openConversationId") || strings.Contains(canonical, "conversation_id") {
 		t.Fatalf("canonical = %s, want conversation_id alias mapped to payload.body.openConversationId", canonical)

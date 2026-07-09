@@ -17,9 +17,9 @@
 | 事件码 | 场景 | 必填参数 |
 |---|---|---|
 | `user_im_message_receive_at` | 当前用户被 @ 的消息 | 无 |
-| `user_im_message_receive_o2o` | 当前用户与指定用户的单聊消息 | `--peer-user-id` 或 `--peer-union-id` |
-| `user_im_message_receive_group` | 当前用户所在指定群聊/会话的消息 | `--open-conversation-id` |
-| `user_im_message_receive_user` | 当前用户收到的指定发送人消息 | `--sender-user-id` 或 `--sender-union-id` |
+| `user_im_message_receive_o2o` | 当前用户与指定用户的单聊消息 | `--user` |
+| `user_im_message_receive_group` | 当前用户所在指定群聊/会话的消息 | `--group` |
+| `user_im_message_receive_user` | 当前用户收到的指定发送人消息 | `--user` |
 
 只承认上表 4 个事件码。默认身份就是当前用户，不要额外加身份切换 flag。
 
@@ -28,8 +28,7 @@
 | 用户说 | 下一步 |
 |---|---|
 | "监听有人 @ 我的消息" | `event consume`，事件码 `user_im_message_receive_at`，参数 `-f ndjson` |
-| "监听我和 userId 507971 的单聊消息" | `event consume`，事件码 `user_im_message_receive_o2o`，参数 `--peer-user-id 507971 -f ndjson` |
-| "订阅 unionId union123 给我发来的单聊消息" | `event consume`，事件码 `user_im_message_receive_o2o`，参数 `--peer-union-id union123 -f ndjson` |
+| "监听我和 userId 507971 的单聊消息" | `event consume`，事件码 `user_im_message_receive_o2o`，参数 `--user 507971 -f ndjson` |
 | "监听 XX 群消息" | 先 `dws chat search --query "XX" --format json`，确认后 consume group |
 | "监听张三发给我的消息" | 先 `dws aisearch person --keyword "张三" --dimension name --format json`，确认后 consume user |
 | "监听并自动回复某人的单聊消息" | 先解析对端 userId，再启动 o2o consume；不要写轮询脚本 |
@@ -62,19 +61,19 @@ dws event consume user_im_message_receive_at -f ndjson
 
 ```bash
 dws event consume user_im_message_receive_o2o \
-  --peer-user-id 507971 \
+  --user 507971 \
   -f ndjson
 ```
 
 ```bash
 dws event consume user_im_message_receive_group \
-  --open-conversation-id <openConversationId> \
+  --group <openConversationId> \
   -f ndjson
 ```
 
 ```bash
 dws event consume user_im_message_receive_user \
-  --sender-user-id <userId> \
+  --user <userId> \
   -f ndjson
 ```
 

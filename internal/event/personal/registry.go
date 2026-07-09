@@ -57,12 +57,9 @@ type SchemaDocument struct {
 }
 
 type RuleOptions struct {
-	RuleType           string
-	PeerUserID         string
-	PeerUnionID        string
-	SenderUserID       string
-	SenderUnionID      string
-	OpenConversationID string
+	RuleType string
+	UserID   string
+	GroupID  string
 }
 
 type SchemaPendingError struct {
@@ -91,7 +88,7 @@ var definitions = []Definition{
 		Category:       "im",
 		RuleType:       "singleChat",
 		Status:         StatusEnabled,
-		RequiredParams: []string{"peer-user-id or peer-union-id"},
+		RequiredParams: []string{"user"},
 		Auth:           map[string]any{"identity": "user"},
 	},
 	{
@@ -101,7 +98,7 @@ var definitions = []Definition{
 		Category:       "im",
 		RuleType:       "group",
 		Status:         StatusEnabled,
-		RequiredParams: []string{"open-conversation-id"},
+		RequiredParams: []string{"group"},
 		Auth:           map[string]any{"identity": "user"},
 	},
 	{
@@ -111,7 +108,7 @@ var definitions = []Definition{
 		Category:       "im",
 		RuleType:       "sender",
 		Status:         StatusEnabled,
-		RequiredParams: []string{"sender-user-id or sender-union-id"},
+		RequiredParams: []string{"user"},
 		Auth:           map[string]any{"identity": "user"},
 	},
 }
@@ -174,41 +171,55 @@ func BuildRuleParam(eventKey string, opts RuleOptions) (ruleType string, rulePar
 	if def.Status == StatusPending {
 		return "", nil, &SchemaPendingError{EventKey: eventKey}
 	}
+	userID := strings.TrimSpace(opts.UserID)
+	groupID := strings.TrimSpace(opts.GroupID)
 	switch def.RuleType {
 	case "at":
+		if userID != "" {
+			return "", nil, fmt.Errorf("--user is only supported for %s and %s", EventSingleChat, EventFromUser)
+		}
+		if groupID != "" {
+			return "", nil, fmt.Errorf("--group is only supported for %s", EventInChat)
+		}
 		return def.RuleType, map[string]any{}, nil
 	case "singleChat":
-		targetUidType, targetUid, err := oneOfTarget("--peer-user-id", opts.PeerUserID, "--peer-union-id", opts.PeerUnionID)
-		if err != nil {
-			return "", nil, err
+		if groupID != "" {
+			return "", nil, fmt.Errorf("--group is only supported for %s", EventInChat)
+		}
+		if userID == "" {
+			return "", nil, fmt.Errorf("--user is required")
 		}
 		return def.RuleType, map[string]any{
-			"targetUid":     targetUid,
-			"targetUidType": targetUidType,
+			"targetUid":     userID,
+			"targetUidType": "staffId",
 		}, nil
 	case "sender":
-		targetUidType, targetUid, err := oneOfTarget("--sender-user-id", opts.SenderUserID, "--sender-union-id", opts.SenderUnionID)
-		if err != nil {
-			return "", nil, err
+		if groupID != "" {
+			return "", nil, fmt.Errorf("--group is only supported for %s", EventInChat)
+		}
+		if userID == "" {
+			return "", nil, fmt.Errorf("--user is required")
 		}
 		return def.RuleType, map[string]any{
-			"targetUid":     targetUid,
-			"targetUidType": targetUidType,
+			"targetUid":     userID,
+			"targetUidType": "staffId",
 		}, nil
 	case "group":
-		openConversationID := strings.TrimSpace(opts.OpenConversationID)
-		if openConversationID == "" {
-			return "", nil, fmt.Errorf("--open-conversation-id is required")
+		if userID != "" {
+			return "", nil, fmt.Errorf("--user is only supported for %s and %s", EventSingleChat, EventFromUser)
+		}
+		if groupID == "" {
+			return "", nil, fmt.Errorf("--group is required")
 		}
 		return def.RuleType, map[string]any{
-			"openConversationId": openConversationID,
+			"openConversationId": groupID,
 		}, nil
 	default:
 		return "", nil, &SchemaPendingError{EventKey: eventKey}
 	}
 }
 
-func BuildFilter(filterJSON string, keywordCSV string) (any, string, error) {
+func BuildFilter(filterJSON string, queryCSV string) (any, string, error) {
 	var parts []any
 	filterJSON = strings.TrimSpace(filterJSON)
 	if filterJSON != "" {
@@ -219,12 +230,12 @@ func BuildFilter(filterJSON string, keywordCSV string) (any, string, error) {
 		v = normalizeFilterAliases(v)
 		parts = append(parts, v)
 	}
-	keywords := splitCSV(keywordCSV)
-	if len(keywords) > 0 {
+	queries := splitCSV(queryCSV)
+	if len(queries) > 0 {
 		parts = append(parts, map[string]any{
 			"field": "payload.body.content",
 			"op":    "contains_any",
-			"value": keywords,
+			"value": queries,
 		})
 	}
 	switch len(parts) {
@@ -261,21 +272,6 @@ func CanonicalJSON(v any) (string, error) {
 		return "", err
 	}
 	return string(b), nil
-}
-
-func oneOfTarget(leftName, left, rightName, right string) (targetUidType, targetUid string, err error) {
-	left = strings.TrimSpace(left)
-	right = strings.TrimSpace(right)
-	switch {
-	case left != "" && right != "":
-		return "", "", fmt.Errorf("%s and %s are mutually exclusive", leftName, rightName)
-	case left != "":
-		return "staffId", left, nil
-	case right != "":
-		return "unionId", right, nil
-	default:
-		return "", "", fmt.Errorf("one of %s or %s is required", leftName, rightName)
-	}
 }
 
 func splitCSV(raw string) []string {
