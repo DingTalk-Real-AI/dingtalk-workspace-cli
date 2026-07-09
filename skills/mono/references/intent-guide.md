@@ -35,6 +35,10 @@
 | "CPU 超过 90% 自动告警" | Webhook 告警 | `chat message send-by-webhook` | `chat message send-by-bot` | 系统告警场景，需自定义 Webhook |
 | "帮我看看收到的日报" | 收到的日志 | `report` | `doc` | 钉钉日志系统（日报/周报），不是文档 |
 | "帮我创建一个待办提醒" | 个人待办 | `todo` | `report` | 个人任务提醒，不是日志汇报 |
+| "帮我看看战略解码" | 查看战略目标 | `agoal strategy` | `todo` | 战略解码是组织级目标分解，不是个人待办 |
+| "我的目标/OKR" | 查看个人目标 | `agoal user objectives` | `todo` | OKR/目标管理 vs 个人待办任务 |
+| "周月报提交情况/跟催" | 查看周月报统计 | `agoal report` | `report` | agoal 周月报是目标跟踪体系的跟催，report 是钉钉日志(日报/周报模版) |
+| "经营合约/KPI合约" | 查看经营合约 | `agoal contract` | — | 经营合约是目标管理体系中的合约 |
 | "拉取一下上周项目群的聊天记录" | 拉取会话消息 | `chat message list` | — | 拉取指定群聊的消息列表 |
 | "看看张三发给我的消息" | 按发送者查询消息 | `chat message list-by-sender` | `chat message list --user` | 用户未明确说"单聊"时优先用 list-by-sender（跨单聊/群聊） |
 | "拉取和张三的单聊记录" | 拉取单聊消息 | `chat message list --user` | `chat message list-by-sender` | 用户明确说"单聊"时用 list --user |
@@ -315,7 +319,33 @@ dws chat message send --open-dingtalk-id <openDingTalkId> --msg-type file --file
 
 ---
 
-### 6. report vs doc vs todo — 日志 vs 文档 vs 待办
+### 6. agoal vs todo vs report — 目标管理 vs 待办 vs 日志
+
+**用 `agoal` 的场景**：
+- "查看战略解码/OGSM" — 组织级战略目标分解
+- "查看经营合约/KPI合约" — 经营合约管理
+- "查看计分卡/绩效看板" — 计分卡详情与更新
+- "我的目标/OKR/个人目标" — 用户目标查询
+- "周月报跟催/提交情况统计" — 目标跟踪体系的周月报统计（看谁按时/迟交/未提交）
+- "目标模板管理" — 模板列表/新增/更新
+
+**用 `todo` 的场景**：
+- "记一下这周要做的事" — 个人任务提醒
+- "创建一个待办提醒" — 个人任务清单
+
+**用 `report` 的场景**：
+- "写/提交今天的日报（钉钉日志模版）" — 日志系统按模版创建
+- "看看收到的日报" — 日志收件箱
+
+**判断关键**：
+- 提到"战略解码/OGSM/经营合约/计分卡/OKR/目标模板" → `agoal`
+- 提到"周月报跟催/提交率/谁迟交了" → `agoal report`（目标跟踪体系的跟催）
+- 提到"日报/周报模版/日志汇报" → `report`（钉钉日志系统）
+- 提到"待办/任务清单/提醒" → `todo`
+
+---
+
+### 7. report vs doc vs todo — 日志 vs 文档 vs 待办
 
 **用 `report` 的场景**：
 - "帮我看看收到的日报" — 收件箱列表 (`report inbox list`)
@@ -336,7 +366,7 @@ dws chat message send --open-dingtalk-id <openDingTalkId> --msg-type file --file
 
 ---
 
-### 6.1 attendance approve vs oa approval — 考勤业务审批 vs 通用 OA 审批
+### 7.1 attendance approve vs oa approval — 考勤业务审批 vs 通用 OA 审批
 
 **用 `attendance approve` 的场景**（考勤业务审批单）：
 - "上周谁请假了 / 某人近期的加班记录 / 外出出差单 / 补卡审批单" — `attendance approve list --types overtime,leave,trip,patch`（`trip` 同时覆盖出差与外出，两者合并为同一类，查询不再细分）
@@ -360,7 +390,7 @@ dws chat message send --open-dingtalk-id <openDingTalkId> --msg-type file --file
 
 ---
 
-### 7. 纯通讯录查询 vs 跨产品
+### 8. 纯通讯录查询 vs 跨产品
 
 **仅查人/部门/成员/归属/组织关系**（没有「发消息、写文档、建待办」等第二动作）→ 属通讯录场景（行动指南 [08-directory.md](./best_practices/08-directory.md)），不要走汇报或文档场景。
 
