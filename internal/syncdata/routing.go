@@ -5,6 +5,7 @@ package syncdata
 
 func CmdToProduct() map[string]string {
 	return map[string]string{
+		"agoal":      "agoal",
 		"aisearch":   "aisearch",
 		"aitable":    "aitable",
 		"attendance": "attendance",

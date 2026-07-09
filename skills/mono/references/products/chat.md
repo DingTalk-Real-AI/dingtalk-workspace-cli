@@ -139,6 +139,26 @@ Flags:
       --expires-seconds int64   链接有效期（秒），0 表示永久有效，不传使用服务端默认值
 ```
 
+#### 分享群聊链接到会话 — 将指定群的邀请链接分享到另一个会话或单聊用户
+
+`--target` 和 `--receiver` 二选一：`--target` 指定目标会话，`--receiver` 指定单聊用户。
+
+```
+Usage:
+  dws chat group share-invite [flags]
+Example:
+  dws chat group share-invite --source <被分享群openConversationId> --target <目标会话openConversationId>
+  dws chat group share-invite --source <被分享群openConversationId> --receiver <接收者openDingTalkId>
+  dws chat group share-invite --source <openConversationId> --target <openConversationId> --expires-seconds 86400
+  # 查询群 ID: dws chat search --query "群名"
+Flags:
+      --source string            被分享群的 openConversationId (必填)
+      --target string            接收分享消息的会话 openConversationId（与 --receiver 二选一）
+      --receiver string          接收分享消息的单聊用户 openDingTalkId（与 --target 二选一）
+      --expires-seconds int64    链接有效期（秒），0 表示永久有效，不传使用服务端默认值
+      --uuid string              消息幂等键（可选）
+```
+
 #### 退出群聊 — 当前用户退出指定群聊
 ```
 Usage:
@@ -270,6 +290,65 @@ Flags:
   - 底层先拉取最近 1000 条会话，剔除单聊和话题圈后筛选出群主/管理员的群
   - 内部群会校验 orgId 归属
   - 不传 --role 时返回群主 + 管理员的所有群
+```
+
+### group notice (群公告管理)
+
+#### 发布群公告 — 在指定群聊中发布群公告，支持 Markdown、定时发布
+
+```
+Usage:
+  dws chat group notice create [flags]
+Example:
+  dws chat group notice create --group <openConversationId> --content "今晚 22 点系统维护，请提前保存工作内容"
+  dws chat group notice create --group <openConversationId> --content "# 重要通知\n请大家查收" --sticky --send-ding
+  dws chat group notice create --group <openConversationId> --content "明早九点例会" --run-at "2026-07-03T09:00:00+08:00"
+Flags:
+      --group string       群聊 openConversationId (必填)
+      --content string     公告正文，Markdown 格式 (必填)
+      --sticky             是否吊顶置顶（默认 false）
+      --send-ding          是否发 DING 提醒（默认 false）
+      --run-at string      定时发布时间 ISO-8601（传入则定时发布）
+```
+
+#### 修改群公告 — 整体替换指定群公告的内容
+```
+Usage:
+  dws chat group notice edit [flags]
+Example:
+  dws chat group notice edit --group <openConversationId> --notice-id <dataId> --content "更新后的公告内容"
+Flags:
+      --group string       群聊 openConversationId (必填)
+      --notice-id string   群公告 dataId (必填)
+      --content string     公告新正文，Markdown 格式 (必填)
+      --sticky             是否吊顶置顶
+      --send-ding          是否发 DING 提醒
+```
+
+#### 查看群公告详情
+```
+Usage:
+  dws chat group notice get [flags]
+Example:
+  dws chat group notice get --group <openConversationId> --notice-id <dataId>
+Flags:
+      --group string       群聊 openConversationId (必填)
+      --notice-id string   群公告 dataId (必填)
+```
+
+#### 查看群公告列表
+```
+Usage:
+  dws chat group notice list [flags]
+Example:
+  dws chat group notice list --group <openConversationId>
+  dws chat group notice list --group <openConversationId> --limit 20 --cursor <nextPageCursor>
+  dws chat group notice list --group <openConversationId> --scheduled
+Flags:
+      --group string    群聊 openConversationId (必填)
+      --limit int       每页返回数量（默认 10，最大 100）
+      --cursor string   分页游标
+      --scheduled       是否查询定时公告列表
 ```
 
 ### group-role (群身份管理)
@@ -994,6 +1073,20 @@ Flags:
   - 如果已有合适的表情，无需创建新的
 ```
 
+#### 批量拉取消息的表情回复和文字回复
+
+根据消息 ID 列表批量查询消息的表情回复和文字回复信息。
+
+```
+Usage:
+  dws chat message list-emotion-replies [flags]
+Example:
+  dws chat message list-emotion-replies --msg-ids msgId1,msgId2,msgId3
+  # 消息 ID 可通过 dws chat message list 获取
+Flags:
+      --msg-ids string   消息 ID 列表，逗号分隔 (必填)
+```
+
 ### list-top-conversations (置顶会话)
 
 #### 拉取置顶会话列表
@@ -1309,6 +1402,21 @@ Flags:
       --title string   分组名称 (必填)
 ```
 
+#### 创建智能会话分组 — 可指定群名称关键词和群内成员作为匹配规则
+```
+Usage:
+  dws chat category create-smart [flags]
+Example:
+  dws chat category create-smart --name "工作群"
+  dws chat category create-smart --name "项目组" --keywords "项目,开发"
+  dws chat category create-smart --name "团队群" --members openDingTalkId1,openDingTalkId2
+  dws chat category create-smart --name "重点群" --keywords "重点" --members openDingTalkId1
+Flags:
+      --name string       分组名称 (必填)
+      --keywords string   群名称关键词列表，逗号分隔（可选）
+      --members string    群内成员 openDingTalkId 列表，逗号分隔（可选）
+```
+
 #### 删除会话分组
 ```
 Usage:
@@ -1357,6 +1465,23 @@ Flags:
       --group string          会话 openConversationId (必填)
       --category-ids string   目标分组 ID 列表，逗号分隔 (必填)
 ```
+
+### text (文本内容处理)
+
+#### 翻译文本内容
+```
+Usage:
+  dws chat text translate [flags]
+Example:
+  dws chat text translate --query "你好世界" --to en_US
+  dws chat text translate --query "Hello World" --to zh_CN
+  dws chat text translate --query "Bonjour" --to ja_JP
+Flags:
+      --query string   待翻译的文本内容 (必填)
+      --to string      目标语言代码 (必填)
+```
+
+支持的目标语言代码：`en_US`, `zh_CN`, `zh_TW`, `zh_HK`, `ja_JP`, `ko_KR`, `vi_VN`, `th_TH`, `id_ID`, `ms_MY`, `es_419`, `fr_FR`, `pt_BR`, `tr_TR`, `ru_RU`, `de_DE`, `hi_IN`, `hu_HU`, `pl_PL`, `sv_SE`, `fi_FI`, `cs_CZ`, `ar_SA`, `tl_PH`, `he_IL`, `nl_NL`, `lo_LA`, `it_IT`。
 
 ### mute (会话免打扰)
 
@@ -1679,6 +1804,7 @@ Flags:
 用户说"查看会话分组/自定义分组" → `chat category list`
 用户说"某个分组下的会话/分组会话列表" → `chat category list-conversations`
 用户说"新建会话分组/创建分组" → `chat category create`
+用户说"创建智能分组/新建智能会话分组" → `chat category create-smart`
 用户说"删除会话分组" → `chat category delete`
 用户说"重命名分组/改分组名" → `chat category rename`
 用户说"把会话加入分组/会话归类到分组" → `chat category add-conv`
@@ -1693,7 +1819,10 @@ Flags:
 用户说"查询某人的群身份/某人在群里有什么身份" → `chat group-role query-user`
 用户说"转让群主/换群主/群主转让" → `chat group transfer-owner`
 用户说"群邀请链接/入群链接/加群链接" → `chat group invite-url`
+用户说"分享群链接/把群分享给某人/群链接发到某群" → `chat group share-invite`
+用户说"群公告/发布公告/修改公告/查看公告/定时公告" → `chat group notice create/edit/get/list`
 用户说"批量查消息/按ID查消息/根据消息ID查" → `chat message list-by-ids`
+用户说"批量查消息回复/表情回复/文字回复/消息回应列表" → `chat message list-emotion-replies`
 用户说"emoji回应/表情回应/给消息加表情" → `chat message add-emoji`
 用户说"取消emoji回应/移除表情回应" → `chat message remove-emoji`
 用户说"文字表情回应/添加文字表情" → `chat message add-text-emotion`
@@ -1732,6 +1861,7 @@ Flags:
 用户说"全员禁言/群禁言/解除禁言" → `chat group-mute`
 用户说"禁言某人/指定成员禁言/解除某人禁言" → `chat group-mute-member`
 用户说"设管理员/取消管理员/设置群管理员" → `chat group set-admin`
+用户说"翻译文本/把这段话翻译成英文/翻译成中文" → `chat text translate`
 
 关键区分:
 - `chat search` — 搜**群/会话名**返回 `openConversationId`，**不**搜消息内容；要搜消息内容请用 `chat message search-advanced`（首选）/ `chat message search` / `list-by-sender` / `list-all`，**勿混淆**
@@ -1756,10 +1886,12 @@ Flags:
 - `chat message search-advanced` — 多维度搜索消息（支持关键词、发送者、@我、@指定人、多个会话等维度组合，与 `search` 的区别：`search` 仅支持关键词且必填，`search-advanced` 所有参数均可选）
 - `chat message list-by-ids` — 根据消息 ID 批量查询消息（最多 50 条）
 - `chat message add-emoji` / `remove-emoji` — 对消息添加/移除 emoji 表情回应
+- `chat message list-emotion-replies` — 批量拉取消息的表情回复和文字回复
 - `chat message add-text-emotion` / `remove-text-emotion` — 对消息添加/移除文字表情回应
 - `chat message create-text-emotion` — 创建文字表情模板，返回 emotionId 供 add-text-emotion 使用
 - `chat category list` — 获取用户自定义会话分组列表
 - `chat category list-conversations` — 拉取指定分组下的会话列表
+- `chat category create-smart` — 创建智能会话分组（可指定群名称关键词和成员作为匹配规则）
 - `chat mute` — 开启/关闭会话消息免打扰（默认开启，--off 关闭）
 - `chat hide` — 在会话列表中隐藏会话（支持单聊/群聊，收到新消息时重新出现）
 - `chat mute-at-all` — 关闭/开启 @所有人消息提醒（默认关闭，--off 恢复）
@@ -1773,6 +1905,8 @@ Flags:
 - `chat file upload` — 已下线；不要调用 `chat/upload_conversation_file_by_url`，本地文件发送改用 `chat message send --msg-type file --file-path`
 - `chat group transfer-owner` — 转让群主
 - `chat group invite-url` — 获取群邀请链接
+- `chat group share-invite` — 分享群聊链接到会话
+- `chat group notice create/edit/get/list` — 群公告发布、修改、详情、列表
 - `chat message reply` — 引用回复消息（在群聊中引用某条消息并回复文字）
 - `chat message forward` — 转发单条消息（将一条消息从源会话转发到目标会话）
 - `chat set-top` — 设置/取消会话置顶（默认置顶，--off 取消）

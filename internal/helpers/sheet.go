@@ -48,6 +48,8 @@ func newSheetCommand() *cobra.Command {
   dws sheet insert-dimension                    在指定位置插入行或列
   dws sheet delete-dimension                    删除指定位置的行或列
   dws sheet update-dimension                    更新指定范围行/列属性（显隐、行高/列宽）
+  dws sheet group-dimension                     对指定连续行/列创建分组
+  dws sheet ungroup-dimension                   取消指定连续行/列分组
   dws sheet media-upload                        上传附件到表格
   dws sheet write-image                         上传图片并写入表格单元格
   dws sheet replace                             全局查找替换文本
