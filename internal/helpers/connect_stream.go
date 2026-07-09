@@ -935,6 +935,80 @@ type connectExtras struct {
 	persona string
 }
 
+type connectQueuedTurn struct {
+	convID           string
+	text             string
+	picCode          string
+	fileInfo         fileInboundInfo
+	webhook          string
+	msgID            string
+	msgType          string
+	senderStaffID    string
+	conversationID   string
+	conversationType string
+	callbackData     chatbot.BotCallbackDataModel
+}
+
+func mergeConnectQueuedTurns(turns []connectQueuedTurn) connectQueuedTurn {
+	if len(turns) == 0 {
+		return connectQueuedTurn{}
+	}
+	if len(turns) == 1 {
+		return turns[0]
+	}
+	for i := len(turns) - 1; i >= 0; i-- {
+		if connectTurnShouldStayStandalone(turns[i]) {
+			return turns[i]
+		}
+	}
+	merged := turns[len(turns)-1]
+	lines := make([]string, 0, len(turns)+1)
+	lines = append(lines, "用户在上一轮处理期间连续发送了以下消息，请把它们作为同一个最新请求一起处理：")
+	for i, turn := range turns {
+		lines = append(lines, fmt.Sprintf("%d. %s", i+1, connectTurnSummary(turn)))
+	}
+	merged.text = strings.Join(lines, "\n")
+	if merged.picCode == "" && !merged.fileInfo.hasActionable() {
+		for i := len(turns) - 1; i >= 0; i-- {
+			if turns[i].picCode != "" {
+				merged.picCode = turns[i].picCode
+				break
+			}
+			if turns[i].fileInfo.hasActionable() {
+				merged.fileInfo = turns[i].fileInfo
+				break
+			}
+		}
+	}
+	return merged
+}
+
+func connectTurnShouldStayStandalone(turn connectQueuedTurn) bool {
+	if _, ok := parseConnectControlCommand(turn.text); ok {
+		return true
+	}
+	if _, ok := parseDecisionWord(turn.text); ok {
+		return true
+	}
+	return isRetryWord(turn.text)
+}
+
+func connectTurnSummary(turn connectQueuedTurn) string {
+	if text := strings.TrimSpace(turn.text); text != "" {
+		return text
+	}
+	if turn.picCode != "" {
+		return "[图片]"
+	}
+	if turn.fileInfo.hasActionable() {
+		if name := strings.TrimSpace(turn.fileInfo.FileName); name != "" {
+			return "[文件: " + name + "]"
+		}
+		return "[文件]"
+	}
+	return "[空消息]"
+}
+
 func runStreamConnector(ctx context.Context, channel, clientID, clientSecret string, fwd forwarder, cardCli *aiCardClient, extras *connectExtras) error {
 	if extras == nil {
 		extras = &connectExtras{}
@@ -1072,11 +1146,36 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		if convID == "" {
 			convID = strings.TrimSpace(data.SenderStaffId)
 		}
-		callbackData := data
 		msgID := strings.TrimSpace(data.MsgId)
-		// Same-conversation messages run in arrival order (follow-ups need the
-		// previous turn's session state); different conversations in parallel.
-		queue.run(convID, func() {
+		turn := connectQueuedTurn{
+			convID:           convID,
+			text:             text,
+			picCode:          picCode,
+			fileInfo:         fileInfo,
+			webhook:          webhook,
+			msgID:            msgID,
+			msgType:          msgtype,
+			senderStaffID:    strings.TrimSpace(data.SenderStaffId),
+			conversationID:   strings.TrimSpace(data.ConversationId),
+			conversationType: strings.TrimSpace(data.ConversationType),
+			callbackData:     *data,
+		}
+		// Same-conversation agent calls never run in parallel; messages received
+		// while a turn is running are merged into one pending follow-up instead
+		// of forming an unbounded stale FIFO.
+		queue.submit(turn, func(turns []connectQueuedTurn) {
+			turn := mergeConnectQueuedTurns(turns)
+			if len(turns) > 1 {
+				fmt.Fprintf(os.Stderr, "[connect] 合并 %d 条待处理消息 (convId=%s, latestMsgId=%s)\n", len(turns), turn.convID, turn.msgID)
+			}
+			text := turn.text
+			picCode := turn.picCode
+			fileInfo := turn.fileInfo
+			webhook := turn.webhook
+			convID := turn.convID
+			msgID := turn.msgID
+			msgtype := turn.msgType
+			callbackData := &turn.callbackData
 			// Digital-twin text approval: if this is the OWNER replying
 			// 「同意」/「拒绝」 (in their 1:1 chat with the bot) to the pending
 			// request, route it to the gate (decide → execute/decline, with
