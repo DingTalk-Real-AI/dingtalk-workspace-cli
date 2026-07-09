@@ -637,10 +637,11 @@ func claudeUserSettingsEnv() []string {
 	return out
 }
 
-// agentSpecs is the registry of local-agent channels. Most forward to a local
+// agentSpecs is the registry of agent channels. Most forward to a local
 // headless CLI (one-shot per message, 24/7, no interactive session). Codex uses
-// the local CLI binary only to host app-server. Exact headless flags for
-// non-Codex channels can be overridden per run with DWS_AGENT_CMD.
+// the local CLI binary only to host app-server; Gemini uses its HTTP API.
+// Exact headless flags for CLI channels can be overridden per run with
+// DWS_AGENT_CMD.
 //
 // Install policy: npm/pipx (package managers) are auto-installed; curl|bash
 // remote-script installs and desktop apps are hint-only (we do not silently pipe
@@ -657,9 +658,8 @@ var agentSpecs = map[string]agentSpec{
 	"codex": {app: "OpenAI Codex CLI", bins: []string{"codex"},
 		install: []string{"npm", "i", "-g", "@openai/codex"}, hint: "npm i -g @openai/codex",
 		modelFlag: "-m"},
-	"gemini": {app: "Gemini CLI", bins: []string{"gemini"}, argvTail: []string{"-p"},
-		install: []string{"npm", "i", "-g", "@google/gemini-cli"}, hint: "npm i -g @google/gemini-cli",
-		modelFlag: "-m"},
+	"gemini": {app: "Gemini API",
+		hint: "设置 GEMINI_API_KEY（或 GOOGLE_API_KEY）；模型可用 --agent-model 指定；Gemini-compatible 代理可设置 GEMINI_API_BASE_URL"},
 	// opencode is resolved here only to find the local binary. The forwarder
 	// uses `opencode serve --pure` plus HTTP session/message APIs instead of
 	// parsing `opencode run` stdout.
@@ -768,6 +768,17 @@ func connectCliStatus(channel string) map[string]any {
 			status["command"] = command
 		}
 		return status
+	case "gemini":
+		status := map[string]any{
+			"required":    "GEMINI_API_KEY or GOOGLE_API_KEY",
+			"installed":   geminiAPIKey() != "",
+			"autoInstall": false,
+			"installHint": "设置 GEMINI_API_KEY（或 GOOGLE_API_KEY）；模型可用 --agent-model 指定；Gemini-compatible 代理可设置 GEMINI_API_BASE_URL",
+		}
+		if base := strings.TrimSpace(geminiAPIBaseURL()); base != "" {
+			status["baseURL"] = base
+		}
+		return status
 	}
 	spec, ok := agentSpecs[channel]
 	if !ok {
@@ -834,6 +845,10 @@ func forwarderForChannel(channel, clientID string, opts connectAgentOptions) (fo
 	if !ok {
 		return nil, apperrors.NewValidation(fmt.Sprintf("渠道 %q 不是 stream-bridge 渠道，无 forwarder", channel))
 	}
+	overridden := strings.TrimSpace(os.Getenv("DWS_AGENT_CMD")) != "" && channel != "codex"
+	if channel == "gemini" && !overridden {
+		return newGeminiAPIForwarder(timeout, opts)
+	}
 	// Resolve the agent CLI (PATH → app bundle → auto-install → guidance) and
 	// preflight here so a missing dependency errors at connect time.
 	argv, env, err := resolveExecAgent(channel)
@@ -844,7 +859,6 @@ func forwarderForChannel(channel, clientID string, opts connectAgentOptions) (fo
 	// model or session flags we cannot know are valid for it. Codex ignores the
 	// override because its channel is app-server only; custom commands belong on
 	// --channel custom.
-	overridden := strings.TrimSpace(os.Getenv("DWS_AGENT_CMD")) != "" && channel != "codex"
 	userPickedModel := opts.Model != "" || strings.TrimSpace(os.Getenv("DWS_AGENT_MODEL")) != ""
 	if !overridden && opts.Model != "" {
 		if spec.modelFlag == "" {
@@ -902,11 +916,6 @@ func forwarderForChannel(channel, clientID string, opts connectAgentOptions) (fo
 			argv = append(argv, "--permission-mode", "bypassPermissions", "--dangerously-skip-permissions")
 			if len(streamArgv) > 0 {
 				streamArgv = append(streamArgv, "--permission-mode", "bypassPermissions", "--dangerously-skip-permissions")
-			}
-		case "gemini":
-			argv = insertBeforeArg(argv, "-p", "--approval-mode=yolo", "--skip-trust")
-			if len(streamArgv) > 0 {
-				streamArgv = insertBeforeArg(streamArgv, "-p", "--approval-mode=yolo", "--skip-trust")
 			}
 		}
 	}

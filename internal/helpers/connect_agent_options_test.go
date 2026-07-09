@@ -57,8 +57,8 @@ func TestConvSessions(t *testing.T) {
 }
 
 // TestApplyModelArg covers both shapes: replacing an existing model pin
-// (claudecode's built-in haiku) and inserting before the tail (gemini-style
-// tails that end with -p and need the prompt to stay trailing).
+// (claudecode's built-in haiku) and inserting before a prompt tail that must
+// stay trailing.
 func TestApplyModelArg(t *testing.T) {
 	replaced := applyModelArg(
 		[]string{"claude", "-p", "--model", "claude-haiku-4-5-20251001", "--strict-mcp-config"},
@@ -153,7 +153,7 @@ func TestBuiltInAgentForwardersDefaultToPureChannelPermissions(t *testing.T) {
 	t.Setenv("DWS_AGENT_CMD", "")
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	stub := t.TempDir()
-	for _, name := range []string{"claude", "codebuddy", "gemini", "codex", "opencode", "qodercli"} {
+	for _, name := range []string{"claude", "codebuddy", "codex", "opencode", "qodercli"} {
 		if err := writeExecStub(stub, name); err != nil {
 			t.Fatalf("stub %s: %v", name, err)
 		}
@@ -167,7 +167,6 @@ func TestBuiltInAgentForwardersDefaultToPureChannelPermissions(t *testing.T) {
 		{"claudecode", []string{"--permission-mode", "bypassPermissions", "--dangerously-skip-permissions"}},
 		{"codebuddy", []string{"--permission-mode", "bypassPermissions", "--dangerously-skip-permissions"}},
 		{"workbuddy", []string{"--permission-mode", "bypassPermissions", "--dangerously-skip-permissions"}},
-		{"gemini", []string{"--approval-mode=yolo", "--skip-trust"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.channel, func(t *testing.T) {
@@ -185,9 +184,6 @@ func TestBuiltInAgentForwardersDefaultToPureChannelPermissions(t *testing.T) {
 					t.Fatalf("%s argv missing %q: %s", tc.channel, want, got)
 				}
 			}
-			if tc.channel == "gemini" && !strings.Contains(got, "--approval-mode=yolo --skip-trust -p") {
-				t.Fatalf("gemini approval args must precede -p prompt flag: %s", got)
-			}
 			if len(ef.streamArgv) > 0 {
 				streamGot := strings.Join(ef.streamArgv, " ")
 				for _, want := range tc.want {
@@ -198,6 +194,21 @@ func TestBuiltInAgentForwardersDefaultToPureChannelPermissions(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("gemini", func(t *testing.T) {
+		t.Setenv("GEMINI_API_KEY", "test-key")
+		fwd, err := forwarderForChannel("gemini", "gemini-client", connectAgentOptions{Memory: true, Yolo: true, Model: "gemini-test"})
+		if err != nil {
+			t.Fatalf("forwarderForChannel(gemini): %v", err)
+		}
+		gf, ok := fwd.(*geminiAPIForwarder)
+		if !ok {
+			t.Fatalf("gemini forwarder = %T, want *geminiAPIForwarder", fwd)
+		}
+		if gf.model != "gemini-test" {
+			t.Fatalf("gemini model = %q, want gemini-test", gf.model)
+		}
+	})
 
 	for _, ch := range []string{"qoder", "qoderwork"} {
 		t.Run(ch, func(t *testing.T) {

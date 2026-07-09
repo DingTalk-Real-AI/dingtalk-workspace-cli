@@ -583,7 +583,7 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("robot-client-id", "", "现成机器人 clientId（AppKey）")
 	cmd.Flags().String("robot-client-secret", "", "现成机器人 clientSecret（AppSecret）")
 	cmd.Flags().String("unified-app-id", "", "统一应用 ID：复用 dev app credentials get 自动取凭证（替代手填 robot-client-id/secret）")
-	cmd.Flags().String("agent-model", "", "覆盖本地 agent 模型（如 claude 的 sonnet/opus；默认用渠道内置模型，求快）；env: DWS_AGENT_MODEL")
+	cmd.Flags().String("agent-model", "", "覆盖 agent 模型（如 claude 的 sonnet/opus、gemini-2.5-pro；默认用渠道内置模型，求快）；env: DWS_AGENT_MODEL")
 	cmd.Flags().String("agent-workdir", "", "本地 agent 的运行目录（放知识文件可给机器人上下文；默认空白临时目录，求快）；env: DWS_AGENT_WORKDIR")
 	cmd.Flags().Bool("agent-memory", true, "按会话续聊：同一群/单聊共享 agent 会话上下文（codex/opencode/qoder/qoderwork/claudecode/codebuddy/workbuddy 支持；--agent-memory=false 关闭）")
 	cmd.Flags().Int("agent-timeout", 0, "每次 agent 调用的超时时间（秒），0=不限制（默认）；env: DWS_AGENT_TIMEOUT_MS（毫秒）")
@@ -751,7 +751,7 @@ func resolveAgentYoloMode(cmd *cobra.Command) (bool, error) {
 // connectAgentOptionsPayload renders the effective agent tuning for the
 // dry-run preview, including whether session memory actually applies to the
 // chosen channel (Codex uses app-server threads, opencode uses opencode serve
-// sessions, CLI session channels use --session-id/--resume, and gemini stays
+// sessions, CLI session channels use --session-id/--resume, and Gemini API stays
 // stateless today).
 func connectAgentOptionsPayload(channel string, opts connectAgentOptions) map[string]any {
 	spec, ok := agentSpecs[channel]
