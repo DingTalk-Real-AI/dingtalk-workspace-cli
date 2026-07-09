@@ -33,10 +33,18 @@ func TestCatalogEnabledEvents(t *testing.T) {
 		EventMention,
 		EventSingleChat,
 		EventInChat,
-		EventFromUser,
 	}
 	if !reflect.DeepEqual(keys, want) {
 		t.Fatalf("keys = %#v, want %#v", keys, want)
+	}
+}
+
+func TestEventFromUserRemainsInternalButNotPublic(t *testing.T) {
+	if _, ok := Lookup(EventFromUser); !ok {
+		t.Fatalf("Lookup(%q) failed, want internal definition retained", EventFromUser)
+	}
+	if IsPublic(EventFromUser) {
+		t.Fatalf("IsPublic(%q) = true, want hidden", EventFromUser)
 	}
 }
 

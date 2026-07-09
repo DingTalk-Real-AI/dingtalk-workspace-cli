@@ -127,6 +127,9 @@ func newEventSchemaCommand() *cobra.Command {
 			if !ok {
 				return fmt.Errorf("unknown personal event key %q", args[0])
 			}
+			if !def.Public {
+				return personal.PublicAvailabilityError(args[0])
+			}
 			return renderPersonalSchema(c.OutOrStdout(), def, formatRaw)
 		},
 	}
@@ -167,6 +170,9 @@ func renderPersonalSchema(w io.Writer, def personal.Definition, format string) e
 
 func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) error {
 	ctx := c.Context()
+	if err := ensurePublicPersonalEvent(opts.EventKey); err != nil {
+		return err
+	}
 	configDir := defaultConfigDir()
 	identity, err := resolvePersonalEventIdentity(ctx, configDir, opts.StreamSourceID)
 	if err != nil {
@@ -330,6 +336,9 @@ func ensurePersonalSubscription(ctx context.Context, client *personal.Client, id
 		if eventKey == "" {
 			return nil, "", "", fmt.Errorf("event_key is required when --subscribe-id lookup returns no event_key")
 		}
+		if err := ensurePublicPersonalEvent(eventKey); err != nil {
+			return nil, "", "", err
+		}
 		ruleType := firstNonEmptyPersonalString(sub.RuleType, opts.Rule)
 		if ruleType == "" {
 			if def, ok := personal.Lookup(eventKey); ok {
@@ -341,6 +350,9 @@ func ensurePersonalSubscription(ctx context.Context, client *personal.Client, id
 	}
 	if strings.TrimSpace(opts.EventKey) == "" {
 		return nil, "", "", fmt.Errorf("event_key is required unless --subscribe-id is provided")
+	}
+	if err := ensurePublicPersonalEvent(opts.EventKey); err != nil {
+		return nil, "", "", err
 	}
 	ruleType, ruleParam, err := personal.BuildRuleParam(opts.EventKey, personal.RuleOptions{
 		RuleType: opts.Rule,
@@ -375,6 +387,9 @@ func ensurePersonalSubscription(ctx context.Context, client *personal.Client, id
 
 func runPersonalEventStatus(c *cobra.Command, opts personalStatusOptions) error {
 	ctx := c.Context()
+	if err := ensurePublicPersonalEvent(opts.EventKey); err != nil {
+		return err
+	}
 	configDir := defaultConfigDir()
 	identity, err := resolvePersonalEventIdentity(ctx, configDir, opts.StreamSourceID)
 	if err != nil {
@@ -426,6 +441,17 @@ func runPersonalEventStatus(c *cobra.Command, opts personalStatusOptions) error 
 		})
 	}
 	renderPersonalStatusText(c.OutOrStdout(), identity, identityHash, subs, qs)
+	return nil
+}
+
+func ensurePublicPersonalEvent(eventKey string) error {
+	eventKey = strings.TrimSpace(eventKey)
+	if eventKey == "" {
+		return nil
+	}
+	if def, ok := personal.Lookup(eventKey); ok && !def.Public {
+		return personal.PublicAvailabilityError(eventKey)
+	}
 	return nil
 }
 

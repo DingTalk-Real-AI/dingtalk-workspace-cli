@@ -41,7 +41,11 @@ func TestPersonalEventListHidesSchemaIDs(t *testing.T) {
 			if err := cmd.Execute(); err != nil {
 				t.Fatalf("Execute() error = %v", err)
 			}
-			assertPersonalOutputHidesSchemaIDs(t, out.String())
+			got := out.String()
+			assertPersonalOutputHidesSchemaIDs(t, got)
+			if strings.Contains(got, personal.EventFromUser) {
+				t.Fatalf("list output exposed hidden event %s: %s", personal.EventFromUser, got)
+			}
 		})
 	}
 }
@@ -59,6 +63,9 @@ func TestEventListDefaultsToUser(t *testing.T) {
 	got := out.String()
 	if !strings.Contains(got, personal.EventSingleChat) || !strings.Contains(got, "EVENT_KEY") {
 		t.Fatalf("list output = %s, want personal event catalog", got)
+	}
+	if strings.Contains(got, personal.EventFromUser) {
+		t.Fatalf("list output exposed hidden event %s: %s", personal.EventFromUser, got)
 	}
 	if strings.Contains(got, "CLIENT_ID") || strings.Contains(got, "ClientSecret") {
 		t.Fatalf("list default appears to use legacy application output: %s", got)
@@ -174,7 +181,6 @@ func TestPersonalEventSchemaUsesSingleJSONSchema(t *testing.T) {
 		personal.EventMention,
 		personal.EventSingleChat,
 		personal.EventInChat,
-		personal.EventFromUser,
 	} {
 		t.Run(eventKey, func(t *testing.T) {
 			cmd := newEventSchemaCommand()
@@ -274,6 +280,40 @@ func TestEventSchemaDefaultsToUser(t *testing.T) {
 	}
 	if doc["event_key"] != personal.EventSingleChat {
 		t.Fatalf("event_key = %#v, want %s", doc["event_key"], personal.EventSingleChat)
+	}
+}
+
+func TestPersonalEventFromUserIsNotPubliclyAvailable(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cmd  *cobra.Command
+		args []string
+	}{
+		{
+			name: "schema",
+			cmd:  newEventSchemaCommand(),
+			args: []string{personal.EventFromUser},
+		},
+		{
+			name: "consume",
+			cmd:  newEventConsumeCommand(),
+			args: []string{personal.EventFromUser, "--user", "507971", "--dry-run"},
+		},
+		{
+			name: "status",
+			cmd:  newEventStatusCommand(),
+			args: []string{"--event", personal.EventFromUser},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.cmd.SilenceUsage = true
+			tc.cmd.SilenceErrors = true
+			tc.cmd.SetArgs(tc.args)
+			err := tc.cmd.Execute()
+			if err == nil || !strings.Contains(err.Error(), "event "+personal.EventFromUser+" is not publicly available yet") {
+				t.Fatalf("Execute() error = %v, want not publicly available", err)
+			}
+		})
 	}
 }
 

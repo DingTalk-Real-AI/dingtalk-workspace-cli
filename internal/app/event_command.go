@@ -276,7 +276,7 @@ func newEventConsumeCommand() *cobra.Command {
 	f.BoolVar(&personalOpts.Ephemeral, "ephemeral", false,
 		"consume 退出时自动取消个人订阅")
 	f.StringVar(&personalOpts.UserID, "user", "",
-		"个人事件 userId：singleChat 表示单聊对端，sender 表示发送人")
+		"个人单聊对端 userId")
 	f.StringVar(&personalOpts.GroupID, "group", "",
 		"group 规则：openConversationId")
 	f.StringVar(&personalOpts.ControlBaseURL, "personal-event-base-url", "",

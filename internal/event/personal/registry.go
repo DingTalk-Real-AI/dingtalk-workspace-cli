@@ -43,6 +43,7 @@ type Definition struct {
 	Status         string         `json:"status"`
 	RequiredParams []string       `json:"required_params"`
 	Auth           map[string]any `json:"auth,omitempty"`
+	Public         bool           `json:"-"`
 }
 
 type SchemaDocument struct {
@@ -80,6 +81,7 @@ var definitions = []Definition{
 		Status:         StatusEnabled,
 		RequiredParams: nil,
 		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
 	},
 	{
 		EventKey:       EventSingleChat,
@@ -90,6 +92,7 @@ var definitions = []Definition{
 		Status:         StatusEnabled,
 		RequiredParams: []string{"user"},
 		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
 	},
 	{
 		EventKey:       EventInChat,
@@ -100,6 +103,7 @@ var definitions = []Definition{
 		Status:         StatusEnabled,
 		RequiredParams: []string{"group"},
 		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
 	},
 	{
 		EventKey:       EventFromUser,
@@ -110,6 +114,7 @@ var definitions = []Definition{
 		Status:         StatusEnabled,
 		RequiredParams: []string{"user"},
 		Auth:           map[string]any{"identity": "user"},
+		Public:         false,
 	},
 }
 
@@ -127,10 +132,22 @@ func Lookup(eventKey string) (Definition, bool) {
 	return Definition{}, false
 }
 
+func IsPublic(eventKey string) bool {
+	def, ok := Lookup(eventKey)
+	return ok && def.Public
+}
+
+func PublicAvailabilityError(eventKey string) error {
+	return fmt.Errorf("event %s is not publicly available yet", eventKey)
+}
+
 func Catalog(category string, enabledOnly, includePending bool) []Definition {
 	category = strings.TrimSpace(category)
 	var out []Definition
 	for _, def := range definitions {
+		if !def.Public {
+			continue
+		}
 		if category != "" && def.Category != category {
 			continue
 		}
@@ -176,7 +193,7 @@ func BuildRuleParam(eventKey string, opts RuleOptions) (ruleType string, rulePar
 	switch def.RuleType {
 	case "at":
 		if userID != "" {
-			return "", nil, fmt.Errorf("--user is only supported for %s and %s", EventSingleChat, EventFromUser)
+			return "", nil, fmt.Errorf("--user is only supported for %s", EventSingleChat)
 		}
 		if groupID != "" {
 			return "", nil, fmt.Errorf("--group is only supported for %s", EventInChat)
@@ -206,7 +223,7 @@ func BuildRuleParam(eventKey string, opts RuleOptions) (ruleType string, rulePar
 		}, nil
 	case "group":
 		if userID != "" {
-			return "", nil, fmt.Errorf("--user is only supported for %s and %s", EventSingleChat, EventFromUser)
+			return "", nil, fmt.Errorf("--user is only supported for %s", EventSingleChat)
 		}
 		if groupID == "" {
 			return "", nil, fmt.Errorf("--group is required")

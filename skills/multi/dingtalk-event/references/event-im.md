@@ -1,6 +1,6 @@
 # IM 个人消息事件
 
-先读上层 [SKILL.md](../SKILL.md) 的命令规则、调用流和子进程契约。本参考覆盖当前已经实现的 IM 个人消息事件：被 @、指定单聊、指定群聊、指定发送人。
+先读上层 [SKILL.md](../SKILL.md) 的命令规则、调用流和子进程契约。本参考覆盖当前公开的 IM 个人消息事件：被 @、指定单聊、指定群聊。
 
 实时监听、自动回复、订阅事件都必须使用 `dws event consume` 长连接，不要写轮询脚本。
 
@@ -18,7 +18,6 @@ dws auth login
 dws event schema user_im_message_receive_at
 dws event schema user_im_message_receive_o2o
 dws event schema user_im_message_receive_group
-dws event schema user_im_message_receive_user
 ```
 
 schema 默认 JSON。业务字段说明在 `schema.properties`，当前业务 payload 解析起点看 `jq_root_path`。
@@ -30,7 +29,6 @@ schema 默认 JSON。业务字段说明在 `schema.properties`，当前业务 pa
 | `user_im_message_receive_at` | `at` | 当前用户被 @ 的消息 | 无 |
 | `user_im_message_receive_o2o` | `singleChat` | 当前用户与指定用户的单聊消息 | `--user` |
 | `user_im_message_receive_group` | `group` | 当前用户所在指定群聊/会话的消息 | `--group` |
-| `user_im_message_receive_user` | `sender` | 当前用户收到的指定发送人消息 | `--user` |
 
 默认身份就是当前用户。不要额外加身份切换 flag，不要使用应用凭证模式，不要使用本表以外的事件码。
 
@@ -56,11 +54,6 @@ dws event consume user_im_message_receive_o2o \
 dws event consume user_im_message_receive_group \
   --group cidxxxxxxxx \
   -f ndjson
-
-# 指定发送人消息
-dws event consume user_im_message_receive_user \
-  --user 507971 \
-  -f ndjson
 ```
 
 ## Self-test triggers
@@ -70,7 +63,6 @@ dws event consume user_im_message_receive_user \
 | `user_im_message_receive_at` | `--duration 10m -f ndjson` | 让任意可触达用户在群里 @ 当前登录用户 |
 | `user_im_message_receive_o2o` | `--user <userId> --duration 10m -f ndjson` | 让对端用户给当前登录用户发送单聊消息 |
 | `user_im_message_receive_group` | `--group <openConversationId> --duration 10m -f ndjson` | 让任意用户在该群发送消息 |
-| `user_im_message_receive_user` | `--user <userId> --duration 10m -f ndjson` | 让该发送人在当前用户能收到的会话里发消息 |
 
 stderr 出现 `connected bus pid=...` 表示本地 consume 已连接到事件 bus。stdout 每行是一个事件 JSON。
 
@@ -124,7 +116,6 @@ stderr 出现 `connected bus pid=...` 表示本地 consume 已连接到事件 bu
 
 - 单聊用 `--user`。
 - 群消息用 `--group`。
-- 指定发送人用 `--user`。
 
 额外文本过滤再用 `--query` 或 `--filter-json`：
 
@@ -143,7 +134,6 @@ dws event consume user_im_message_receive_group \
 dws event status --event user_im_message_receive_at
 dws event status --event user_im_message_receive_o2o
 dws event status --event user_im_message_receive_group
-dws event status --event user_im_message_receive_user
 ```
 
 `status` 同时展示服务端 `Subscriptions` 和本地 `Consumers`。`Consumers` 表里的 PID、事件码、`subscribe_id`、received/dropped 计数用于确认当前前台 consume 是否还挂在 personal bus 上。
@@ -165,7 +155,7 @@ dws event stop --all
 ## Troubleshooting
 
 - 没有输出：先确认 stderr 已出现 `connected bus pid=...`。
-- 参数缺失：单聊必须有对端 ID，群消息必须有 openConversationId，指定发送人必须有发送人 ID。
+- 参数缺失：单聊必须有对端 ID，群消息必须有 openConversationId。
 - 收到非预期消息：检查 stdout 的 `subscribe_id` 是否等于当前命令创建/复用的订阅 ID。
 - 需要判断服务端是否推到当前连接：临时加 `--debug --debug-raw-events`，排查后去掉。
 - 需要长期运行：交给外部进程管理；不要把消息历史查询写成轮询脚本。

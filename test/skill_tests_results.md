@@ -1447,14 +1447,6 @@
 - Command path: PASS (event consume user_im_message_receive_group)
 - Flags: PASS (1 flags validated)
 
-**event_event_consume_user_001** ✅ PASS
-
-- Prompt: 监听 userId 507971 发给我的消息
-- Expected: `dws event consume user_im_message_receive_user --user 507971 -f ndjson`
-- Skill Reference: references/products/event.md
-- Command path: PASS (event consume user_im_message_receive_user)
-- Flags: PASS (1 flags validated)
-
 **event_lookup_group_001** ✅ PASS
 
 - Prompt: 监听项目群的消息

@@ -1,6 +1,6 @@
 ---
 name: dingtalk-event
-description: 钉钉个人消息事件长连接监听、订阅与消费，输出 NDJSON 到 stdout。Use when 用户提到 监听个人消息事件、被@消息、监听我和某人的单聊消息、监听某个群消息、监听指定发送人发给我的消息、实时接收钉钉消息事件、dws event consume user_im_message_receive_at/user_im_message_receive_o2o/user_im_message_receive_group/user_im_message_receive_user、用事件驱动 Agent 处理钉钉消息、监听并自动回复消息。命令前缀：dws event。
+description: 钉钉个人消息事件长连接监听、订阅与消费，输出 NDJSON 到 stdout。Use when 用户提到 监听个人消息事件、被@消息、监听我和某人的单聊消息、监听某个群消息、实时接收钉钉消息事件、dws event consume user_im_message_receive_at/user_im_message_receive_o2o/user_im_message_receive_group、用事件驱动 Agent 处理钉钉消息、监听并自动回复消息。命令前缀：dws event。
 ---
 
 # 钉钉个人消息事件
@@ -25,9 +25,8 @@ description: 钉钉个人消息事件长连接监听、订阅与消费，输出 
 | `user_im_message_receive_at` | 当前用户被 @ 的消息 | 无 |
 | `user_im_message_receive_o2o` | 当前用户与指定用户的单聊消息 | `--user` |
 | `user_im_message_receive_group` | 当前用户所在指定群聊/会话的消息 | `--group` |
-| `user_im_message_receive_user` | 当前用户收到的指定发送人消息 | `--user` |
 
-只承认上表 4 个事件码。其它身份模式、应用凭证模式、非个人消息事件不在本 skill 范围内。
+只承认上表 3 个事件码。其它身份模式、应用凭证模式、非个人消息事件不在本 skill 范围内。
 
 ## Command rules
 
@@ -35,7 +34,7 @@ description: 钉钉个人消息事件长连接监听、订阅与消费，输出 
 - 使用当前用户 OAuth 登录态；未登录或 token 失效时，引导用户执行 `dws auth login`。
 - 不主动运行 `dws event list` 作为能力菜单；按用户意图直接选择上表事件。
 - 缺少必填 ID 时先解析或追问，不要猜测 ID。
-- 用户只给人名时，先运行 `dws aisearch person --keyword "<name>" --dimension name --format json` 解析 userId；多候选必须让用户确认。
+- 用户只给单聊对端人名时，先运行 `dws aisearch person --keyword "<name>" --dimension name --format json` 解析 userId；多候选必须让用户确认。
 - 用户只给群名时，先运行 `dws chat search --query "<group>" --format json` 解析 openConversationId；多候选必须让用户确认。
 - 正常 Agent 消费使用 `-f ndjson`。抓一条样本可用 `--max-events 1 -f json`。
 - `--debug-raw-events` 只用于联调确认服务端推送是否到达本地连接；正常任务不要使用。
@@ -74,11 +73,6 @@ dws event consume user_im_message_receive_group \
   --group cidxxxxxxxx \
   -f ndjson
 
-# 指定发送人的消息
-dws event consume user_im_message_receive_user \
-  --user 507971 \
-  -f ndjson
-
 # 有界自测
 dws event consume user_im_message_receive_at \
   --duration 10m \
@@ -102,4 +96,4 @@ dws event consume user_im_message_receive_o2o \
 
 | Topic | Reference | Coverage |
 |---|---|---|
-| IM | [references/event-im.md](references/event-im.md) | 四类个人消息事件命令、参数、生命周期、输出解析、自测、过滤和排障 |
+| IM | [references/event-im.md](references/event-im.md) | 三类个人消息事件命令、参数、生命周期、输出解析、自测、过滤和排障 |
