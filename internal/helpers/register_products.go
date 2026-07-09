@@ -23,6 +23,7 @@ func init() {
 		name string
 		fn   func() *cobra.Command
 	}{
+		{"agoal", newAgoalCommand},
 		{"aisearch", newAisearchCommand},
 		{"aitable", newAitableCommand},
 		{"attendance", newAttendanceCommand},

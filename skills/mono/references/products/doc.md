@@ -131,6 +131,27 @@ Flags:
       --convert            是否转换为钉钉在线文档
 ```
 
+### 导入本地文件为在线文档
+
+详见 [doc/doc-import.md](./doc/doc-import.md)。
+
+```
+Usage:
+  dws doc import [flags]
+  dws doc import get [flags]
+Example:
+  dws doc import --file ./report.docx
+  dws doc import --file ./notes.md --folder <FOLDER_ID>
+  dws doc import --file ./data.xlsx --workspace <WS_ID>
+  dws doc import get --task-id <TASK_ID>
+Flags:
+      --file string        本地文件路径 (必填)
+      --folder string      目标文件夹 ID 或 URL
+      --workspace string   目标知识库 ID 或 URL
+      --name string        导入后文档名称 (默认取文件名)
+      --task-id string     导入任务 ID (import get 必填)
+```
+
 ### 下载文件到本地（已迁移到 drive）
 
 > **弃用提示**：`dws doc download` 已迁移到 `dws drive download`（执行 `doc download` 会打印弃用警告）。下载已有文件（PDF/图片/附件等非在线文档）改用：
@@ -618,6 +639,12 @@ Flags:
 - 上传 → `upload`（需本地文件路径）
 - 上传并转换 → `upload --convert`
 
+用户说"导入文件/导入为在线文档/导入 Word/导入 Excel/导入 xmind/导入 Markdown/把本地文件转在线文档":
+- 导入并转换为在线文档 → `doc import --file <本地路径>`
+- 支持 docx/doc/xlsx/xls/md/txt/xmind/mark，文件大小不超过 20MB
+- 如果用户指定知识库或文件夹，补充 `--workspace` 或 `--folder`
+- 不要把本地文件内容先读出来再 `doc create/update`；应直接使用 `doc import`
+
 用户说"下载/导出/下载到本地/导出文档/导出为Word/导出为docx/把文档导出来":
 - **必须先判断目标文件类型**，再决定走 `doc export` 还是 `drive download`：
   - 在线文档（alidocs/adoc）→ **`doc export`**（内容级命令，格式转换后导出为 docx，未迁移）
@@ -768,6 +795,20 @@ dws drive download --node <NODE_ID> --output ~/downloads/
 # 如果是在线文档 (ALIDOC)，用 doc export：
 dws doc export --node <NODE_ID> --output ~/downloads/
 
+# ── 工作流 5a: 导入本地文件为在线文档 ──
+
+# 导入到默认位置
+dws doc import --file ./report.docx --format json
+
+# 导入到指定文件夹
+dws doc import --file ./notes.md --folder <DOC_FOLDER_NODE_ID> --format json
+
+# 导入到知识库
+dws doc import --file ./data.xlsx --workspace <WS_ID> --format json
+
+# 如果导入命令超时或中断，可用 import get 手动查询任务状态：
+# dws doc import get --task-id <TASK_ID>
+
 # ── 工作流 6: 上传附件并插入文档 ──
 
 # media insert 自动完成三步流程:
@@ -882,6 +923,7 @@ dws doc export --node <DOC_ID_OR_URL> --output ./exported.docx
 | `drive list`（原 `doc list`，已弃用） | `nodes[].nodeId` / folder 类型 `nodeId` | read / info / update / block 的 --node；folder 用作 `--folder` |
 | `drive search`（原 `doc search`，已弃用） | 文档 `nodeId` / URL / `createTime` / `creatorUid` | read / info / update 的 --node；创建时间与创建者信息 |
 | `create` | `nodeId` | update / block 操作的 --node |
+| `import` | `nodeId` / `documentUrl` / `documentName` / `documentType`；中断时提取 `taskId` | 后续 read / info / sheet 操作；中断后用 `doc import get --task-id` |
 | `drive mkdir`（原 `doc folder create`，已弃用） | `nodeId` | create 的 --folder |
 | `block list` | `blockId` | block insert 的 --ref-block, block update/delete 的 --block-id |
 | `comment list` | `commentList[].commentKey` | comment reply 的 --comment-key |

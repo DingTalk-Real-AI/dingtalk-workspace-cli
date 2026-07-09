@@ -26,6 +26,7 @@
 - 需要对**多个**不同区域执行 `merge-cells` / `unmerge-cells` 时（如按分组合并多列相同内容）
 - 需要对**多个**不同区域执行 `update-dimension` 时（如统一调整多列列宽或多行行高，含 hidden + pixelSize）
 - 需要先插入行列再写入数据时（`add-dimension` + `range update` / `csv-put`）
+- 需要批量创建或取消行列分组时（`group-dimension` / `ungroup-dimension`）
 - 需要对多个区域执行不同写入操作时（多次 `range update` + `range clear` 等组合）
 
 当同一工具需要对多个区域重复调用时，**推荐**改用 `batch-update` 合并为单次请求——`batch-update` 是原子提交（要么全成功要么整批回滚）；逐个调用非原子，中途失败会留下半成品。
@@ -80,6 +81,7 @@ Flags:
 toolName 用 CLI 命令名，input 的键用 CLI flag 名去掉 --：
   range clear / range update / merge-cells / unmerge-cells / update-dimension
   range fill / range copy-to / add-dimension / delete-dimension / move-dimension
+  group-dimension / ungroup-dimension
   set-dropdown / delete-dropdown / csv-put / delete-float-image
 Notes:
   - 默认严格事务模式：任一子操作失败 → 整批回滚到初始状态
@@ -177,6 +179,8 @@ Cause: The requested resource was not found by the identifier 'NonExistentSheet'
 | `add-dimension` | [sheet-dimension-operations](./sheet-dimension-operations.md) |
 | `delete-dimension` | [sheet-dimension-operations](./sheet-dimension-operations.md) |
 | `move-dimension` | [sheet-dimension-operations](./sheet-dimension-operations.md) |
+| `group-dimension` | [sheet-dimension-operations](./sheet-dimension-operations.md) |
+| `ungroup-dimension` | [sheet-dimension-operations](./sheet-dimension-operations.md) |
 | `set-dropdown` | [sheet-dropdown](./sheet-dropdown.md) |
 | `delete-dropdown` | [sheet-dropdown](./sheet-dropdown.md) |
 | `csv-put` | [sheet-write-data](./sheet-write-data.md) |
@@ -230,6 +234,19 @@ Cause: The requested resource was not found by the identifier 'NonExistentSheet'
 ]
 ```
 
+### 批量创建行列分组
+
+```jsonc
+[
+  {"toolName":"group-dimension",
+   "input":{"sheet-id":"...","range":"3:7","group-state":"expand"}},
+  {"toolName":"group-dimension",
+   "input":{"sheet-id":"...","range":"C:F"}},
+  {"toolName":"ungroup-dimension",
+   "input":{"sheet-id":"...","range":"10:12"}}
+]
+```
+
 ## 上下文传递
 
 | 操作 | 从返回中提取 | 用于 |
@@ -244,3 +261,5 @@ Cause: The requested resource was not found by the identifier 'NonExistentSheet'
 - ★ **需要组合多个不同写操作（清除+写入等）时，用 `batch-update`**：原子事务，任一操作失败则整批回滚，避免留下半成品
 - ★ **批次完成后必须回读校验**：用 `range read` 或 `csv-get` 抽样回读受影响区域，至少校验 3-5 个代表性单元格（首 / 中 / 末），与预期值对照
 - ★ **`batch-update` 不支持嵌套**：`--operations` 中的 `toolName` 必须是原子操作，不可再嵌套 `batch-update`
+- `batch-update` 支持 `group-dimension` / `ungroup-dimension`；`input.range` 只接受整行或整列范围，如 `3:7`、`C:F`
+- 需要创建后立即折叠分组时，优先使用独立 `dws sheet group-dimension --group-state fold`

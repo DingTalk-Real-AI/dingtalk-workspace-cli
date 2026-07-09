@@ -39,6 +39,8 @@ var batchOpDispatch = map[string]batchOpMapping{
 	"csv-put":            {"set_range_from_csv", BuildCsvPutArgs},
 	"delete-float-image": {"delete_float_image", BuildDeleteFloatImageArgs},
 	"update-dimension":   {"update_dimension", BuildUpdateDimensionArgs},
+	"group-dimension":    {"group_dimension", BuildGroupDimensionArgs},
+	"ungroup-dimension":  {"ungroup_dimension", BuildUngroupDimensionArgs},
 }
 
 // translateBatchOp translates a batch operation from CLI format to MCP format.
@@ -269,6 +271,27 @@ func BuildUpdateDimensionArgs(input map[string]any) map[string]any {
 	return args
 }
 
+// BuildGroupDimensionArgs converts CLI flags to MCP params for group_dimension.
+func BuildGroupDimensionArgs(input map[string]any) map[string]any {
+	groupState := batchStr(input, "group-state", "groupState")
+	if groupState == "" {
+		groupState = "expand"
+	}
+	return map[string]any{
+		"sheetId":    batchStr(input, "sheet-id"),
+		"range":      batchStr(input, "range"),
+		"groupState": groupState,
+	}
+}
+
+// BuildUngroupDimensionArgs converts CLI flags to MCP params for ungroup_dimension.
+func BuildUngroupDimensionArgs(input map[string]any) map[string]any {
+	return map[string]any{
+		"sheetId": batchStr(input, "sheet-id"),
+		"range":   batchStr(input, "range"),
+	}
+}
+
 // resolveCsvContent resolves @filepath and - stdin to CSV text, matching standalone csv-put behavior.
 func resolveCsvContent(csvVal string) string {
 	switch {
@@ -307,7 +330,11 @@ CLI 层自动翻译为 MCP toolName + 参数名，无需记忆 MCP 参数名。
 支持的 CLI 命令名:
   range clear / range update / merge-cells / unmerge-cells / update-dimension
   range fill / range copy-to / add-dimension / delete-dimension / move-dimension
+  group-dimension / ungroup-dimension
   set-dropdown / delete-dropdown / csv-put / delete-float-image
+
+注意：batch-update 中 group-dimension 适合默认展开分组；需要 --group-state fold 时请使用独立
+dws sheet group-dimension 命令。
 
 --operations 是 JSON 数组，每项包含:
   toolName  CLI 命令名（如 "range clear", "range update"）
