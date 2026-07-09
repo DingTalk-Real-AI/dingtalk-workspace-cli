@@ -15,10 +15,10 @@
 // daemon, consume, and the cobra command layer:
 //
 //   - CatchAll: the default event_type list passed to `consume`'s Hello
-//     when --event-types is omitted (mirroring lark-cli's 24-type catch-all).
-//     v1 (P4) ships an empty list so the consumer falls back to bus-wide
-//     catch-all; P7 fills in the curated DingTalk default set after P0
-//     SDK verification confirms the exact event_type string values.
+//     when --event-types is omitted. v1 (P4) ships an empty list so the
+//     consumer falls back to bus-wide catch-all; P7 fills in the curated
+//     DingTalk default set after P0 SDK verification confirms the exact
+//     event_type string values.
 //
 //   - CompactProcessors: per-event_type formatters that flatten the SDK
 //     RawEvent into an agent-friendly map[string]any. A generic processor

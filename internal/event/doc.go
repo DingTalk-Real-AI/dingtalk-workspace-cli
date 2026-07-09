@@ -14,9 +14,9 @@
 // Package event implements the DingTalk Stream event subscription pipeline for
 // dws. The architecture is a single-cloud-connection bus daemon (one per
 // ClientID) plus N local consumer processes communicating over Unix socket /
-// Windows Named Pipe, mirroring lark-cli's design with several improvements
-// (one-layer CLI, observable connection state, per-event-type metrics,
-// Hello-time filter pushdown).
+// Windows Named Pipe. The bus keeps one cloud connection per identity while
+// exposing observable connection state, per-event-type metrics, and Hello-time
+// filter pushdown to local consumers.
 //
 // Package layout:
 //

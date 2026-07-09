@@ -858,8 +858,8 @@ func renderList(w io.Writer, entries []listEntry, format string) error {
 	return tw.Flush()
 }
 
-// renderStatus prints a multi-line block per bus, matching lark-cli's
-// status output shape. JSON mode dumps the raw EntryStatus slice.
+// renderStatus prints a multi-line block per bus. JSON mode dumps the raw
+// EntryStatus slice.
 func renderStatus(w io.Writer, entries []busctl.EntryStatus, format string) error {
 	if format == "json" {
 		enc := json.NewEncoder(w)

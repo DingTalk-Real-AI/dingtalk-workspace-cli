@@ -161,7 +161,7 @@ func liftFromNested(v *CompactView, nestedKey string, keys ...string) {
 func compactIMMessage(ev transport.Event) CompactView {
 	v := GenericProcessor(ev)
 	liftFromNested(&v, "message", "message_id", "chat_id", "chat_type", "message_type", "content")
-	// Sender open_id is doubly-nested in lark-shape payloads: sender.sender_id.open_id.
+	// Sender open_id may be doubly nested: sender.sender_id.open_id.
 	if sender, ok := v.Extra["sender"].(map[string]any); ok {
 		if sid, ok := sender["sender_id"].(map[string]any); ok {
 			if open, ok := sid["open_id"]; ok {

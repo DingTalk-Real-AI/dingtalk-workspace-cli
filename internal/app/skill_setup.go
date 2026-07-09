@@ -216,8 +216,7 @@ func normalizeMultiSkillName(name string) string {
 	return multiSkillPrefix + n
 }
 
-// filterMultiSkillNames narrows `all` by include / exclude lists.
-// Semantics mirror lark-cli's `npx skills add -s lark-calendar`:
+// filterMultiSkillNames narrows `all` by include / exclude lists:
 //
 //   - include + exclude are mutually exclusive (both → error)
 //   - names accept short or full form; normalized before matching
