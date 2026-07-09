@@ -1,87 +1,88 @@
 ---
 name: dingtalk-event
-description: 钉钉个人消息事件监听、订阅与消费。Use when 用户提到 监听个人消息事件、被@消息、监听我和某人的单聊消息、监听某个群消息、监听指定发送人发给我的消息、实时接收钉钉消息事件、dws event consume user_im_message_receive_at/user_im_message_receive_o2o/user_im_message_receive_group/user_im_message_receive_user、用事件驱动 Agent 处理钉钉消息。命令前缀：dws event。
+description: 钉钉个人消息事件长连接监听、订阅与消费，输出 NDJSON 到 stdout。Use when 用户提到 监听个人消息事件、被@消息、监听我和某人的单聊消息、监听某个群消息、监听指定发送人发给我的消息、实时接收钉钉消息事件、dws event consume user_im_message_receive_at/user_im_message_receive_o2o/user_im_message_receive_group/user_im_message_receive_user、用事件驱动 Agent 处理钉钉消息、监听并自动回复消息。命令前缀：dws event。
 ---
 
-# 钉钉个人消息事件 Skill
+# 钉钉个人消息事件
 
-本 skill 只暴露个人消息事件里已经实现的 4 个事件：
+只使用 `dws event consume` 建立个人消息事件长连接。用户要求实时监听、订阅、自动回复或驱动 Agent 时，不要写轮询脚本，不要用消息历史查询模拟事件。
+
+## Core commands
+
+| Command | Purpose |
+|---|---|
+| `dws event list` | 查看当前个人事件目录；不要把它当能力菜单主动展示 |
+| `dws event schema <event_key>` | 查看事件参数和输出字段 schema，默认 JSON |
+| `dws event consume <event_key> [flags]` | 阻塞消费；事件写到 stdout，推荐 `-f ndjson` |
+| `dws event status --event <event_key>` | 查看个人订阅和本地连接状态 |
+| `dws event stop <subscribe_id>` | 取消个人订阅并停止对应本地消费 |
+| `dws event stop --all` | 清理当前身份下本地记录的全部个人订阅 |
+
+## Event catalog
 
 | 事件码 | 场景 | 必填参数 |
-|--------|------|----------|
+|---|---|---|
 | `user_im_message_receive_at` | 当前用户被 @ 的消息 | 无 |
 | `user_im_message_receive_o2o` | 当前用户与指定用户的单聊消息 | `--peer-user-id` 或 `--peer-union-id` |
 | `user_im_message_receive_group` | 当前用户所在指定群聊/会话的消息 | `--open-conversation-id` |
 | `user_im_message_receive_user` | 当前用户收到的指定发送人消息 | `--sender-user-id` 或 `--sender-union-id` |
 
-当前 skill 只覆盖个人消息事件；其它身份模式不在本 skill 范围内。
+只承认上表 4 个事件码。其它身份模式、应用凭证模式、非个人消息事件不在本 skill 范围内。
 
-## 前置规则
+## Command rules
 
-- 使用当前用户 OAuth 登录态；需要时先让用户执行 auth login。
-- `user` 是 event 命令的默认身份，不要额外加身份 flag。
-- 不主动运行事件目录列表作为能力菜单；只承认上表 4 个事件码。
+- 默认身份就是当前用户，不要额外加身份切换 flag。
+- 使用当前用户 OAuth 登录态；未登录或 token 失效时，引导用户执行 `dws auth login`。
+- 不主动运行 `dws event list` 作为能力菜单；按用户意图直接选择上表事件。
 - 缺少必填 ID 时先解析或追问，不要猜测 ID。
-- 用户只给人名时，先用 AI 搜问人员搜索按姓名解析 userId；多候选必须让用户确认。
-- 用户只给群名时，先用群聊搜索解析 `openConversationId`；多候选必须让用户确认。
+- 用户只给人名时，先运行 `dws aisearch person --keyword "<name>" --dimension name --format json` 解析 userId；多候选必须让用户确认。
+- 用户只给群名时，先运行 `dws chat search --query "<group>" --format json` 解析 openConversationId；多候选必须让用户确认。
+- 正常 Agent 消费使用 `-f ndjson`。抓一条样本可用 `--max-events 1 -f json`。
+- `--debug-raw-events` 只用于联调确认服务端推送是否到达本地连接；正常任务不要使用。
 
-## 核心命令
+## Call flow
 
-| 意图 | 命令 |
-|------|------|
-| 查看事件说明 | event schema + 事件码 |
-| 监听被 @ 消息 | event consume + `user_im_message_receive_at` + `-f ndjson` |
-| 监听指定单聊 | event consume + `user_im_message_receive_o2o` + `--peer-user-id <userId>` 或 `--peer-union-id <unionId>` + `-f ndjson` |
-| 监听指定群消息 | event consume + `user_im_message_receive_group` + `--open-conversation-id <openConversationId>` + `-f ndjson` |
-| 监听指定发送人 | event consume + `user_im_message_receive_user` + `--sender-user-id <userId>` 或 `--sender-union-id <unionId>` + `-f ndjson` |
-| 查看订阅状态 | event status + `--event <event_code>` |
-| 停止指定订阅 | event stop + `subscribe_id` |
-| 停止当前身份下所有本地记录的个人订阅 | event stop all |
+1. 从用户意图选择事件码；人名或群名先解析成必填 ID。
+2. 需要了解字段时运行 `dws event schema <event_key>`，读取 `jq_root_path` 和 `schema.properties`。
+3. 启动 `dws event consume <event_key> ... -f ndjson`，等待 stderr 出现 `connected bus pid=...` 后开始读 stdout。
+4. stdout 每行是一个事件 JSON；业务字段在 `data` JSON 字符串内，按 `jq_root_path` 解析。
+5. 任务完成后用 `dws event stop <subscribe_id>`；如果是临时测试，可以在 consume 上加 `--max-events` 或 `--duration` 自动退出。
 
-## 常用模式
+## Subprocess contract
 
-### 监听被 @ 消息
+- `event consume` 是阻塞式长连接命令。stdout 只处理事件；stderr 只处理状态、debug 和错误。
+- 不要使用 `--quiet`，否则 Agent 会看不到建联状态和排障信息。
+- 无界监听需要外部进程管理；有界自测优先用 `--max-events N` 或 `--duration 10m`。
+- 不要 `kill -9` 消费进程。优先 Ctrl+C、等待 duration/max-events 结束，或用 `dws event stop <subscribe_id>` 清理订阅。
+- 一个 consume 对应一个事件订阅。监听多个对象时启动多个 consume；底层本机连接可以复用，但输出按 `subscribe_id` 隔离。
 
-```bash
-dws event consume user_im_message_receive_at \
-  -f ndjson
-```
-
-### 监听指定用户的单聊消息
+## Examples
 
 ```bash
+# 当前用户被 @ 的消息
+dws event consume user_im_message_receive_at -f ndjson
+
+# 当前用户与指定用户的单聊消息
 dws event consume user_im_message_receive_o2o \
   --peer-user-id 507971 \
   -f ndjson
-```
 
-### 监听指定群消息
-
-```bash
+# 指定群聊/会话消息
 dws event consume user_im_message_receive_group \
   --open-conversation-id cidxxxxxxxx \
   -f ndjson
-```
 
-### 监听指定发送人的消息
-
-```bash
+# 指定发送人的消息
 dws event consume user_im_message_receive_user \
   --sender-user-id 507971 \
   -f ndjson
-```
 
-### 有界自测
-
-```bash
+# 有界自测
 dws event consume user_im_message_receive_at \
   --duration 10m \
   -f ndjson
-```
 
-### 抓一条样本
-
-```bash
+# 抓一条样本
 dws event consume user_im_message_receive_o2o \
   --peer-user-id 507971 \
   --max-events 1 \
@@ -90,14 +91,13 @@ dws event consume user_im_message_receive_o2o \
 
 ## 输出处理
 
-- 默认推荐 `-f ndjson`：stdout 每行一个事件 JSON，适合 Agent 管道读取。
-- 人工查看单条样本可用 `-f json --max-events 1`。
-- 长时间监听时用 `--duration` 或外部进程管理控制生命周期。
-- `data` 是服务端业务 payload 的 JSON 字符串；读取消息内容前先对 `data` 再做一次 JSON 解析。
-- 常用业务字段在解析后的 `payload.body` 下：`content`、`sender`、`openConversationId`、`openMessageId`、`senderOpenDingTalkId`。
-- `--debug-raw-events` 只用于和服务端联调，正常 Agent 消费不要使用。
+- `dws event schema <event_key>` 是写解析逻辑的依据。
+- 顶层 `jq_root_path` 说明业务字段起点；当前值是 `.data | fromjson`。
+- `schema.properties` 是业务字段列表，例如 `content`、`sender`、`conversation_id`、`message_id`、`event_time`。
+- 不要假设 `data` 已经展开。读取消息正文时先解析 `data`，再读 `payload.body.content` 或 schema 中对应字段。
 
-## 参考
+## Topic index
 
-- 详细消费参数：[references/dingtalk-event-consume.md](references/dingtalk-event-consume.md)
-- 自测流程：[references/runbook.md](references/runbook.md)
+| Topic | Reference | Coverage |
+|---|---|---|
+| IM | [references/event-im.md](references/event-im.md) | 四类个人消息事件命令、参数、生命周期、输出解析、自测、过滤和排障 |

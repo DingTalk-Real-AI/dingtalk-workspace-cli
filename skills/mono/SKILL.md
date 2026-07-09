@@ -22,6 +22,7 @@ cli_version: ">=1.0.15"
 - 单次批量操作不超过 30 条记录
 - 所有命令必须**严格遵循**对应产品参考文档里面规定的参数格式（如：如果有参数值，则参数和参数值之间至少用一个空格隔开）
 - **脚本优先**：[scripts/](./scripts/) 下的 `python scripts/<name>.py` 已封装翻页/轮询/批量逻辑，遇到对应场景（如 AI 表格批量导入导出、AI 应用创建轮询、文档创建后写内容、钉盘目录树等）**优先调用脚本**而非手写多步命令。脚本均支持 `--dry-run` 预览、`--format json` 输出，失败时回退到手动步骤
+- **实时个人消息事件例外**：用户要监听消息、订阅事件、自动回复消息或事件驱动 Agent 时，必须走 `dws event consume` 长连接，不要写脚本轮询消息历史
 
 
 ## 产品总览
@@ -68,7 +69,7 @@ cli_version: ">=1.0.15"
 用户提到"在线电子表格/钉钉表格/axls/工作表/单元格读写/合并单元格/筛选视图/导出 xlsx" → `sheet`
 用户提到"待办/TODO/任务提醒/循环待办" → `todo`
 用户提到"创建知识库/知识库列表/搜索知识库空间/wiki/团队空间/知识库成员管理/我的文档个人空间" → `wiki`
-用户提到"监听有人@我/监听我和某人的单聊消息/监听某个群消息/监听某人发给我的消息/订阅个人消息事件/实时接收钉钉消息事件/个人消息事件流/event consume user_im_message_receive_at/user_im_message_receive_o2o/user_im_message_receive_group/user_im_message_receive_user/驱动 Agent 处理消息" → `event`
+用户提到"监听有人@我/监听我和某人的单聊消息/监听某个群消息/监听某人发给我的消息/订阅个人消息事件/实时接收钉钉消息事件/个人消息事件流/event consume user_im_message_receive_at/user_im_message_receive_o2o/user_im_message_receive_group/user_im_message_receive_user/监听并自动回复消息/驱动 Agent 处理消息" → `event`
 
 关键区分: aitable(数据表格) vs todo(待办任务)
 关键区分: report(钉钉日志/日报周报) vs todo(待办任务)
