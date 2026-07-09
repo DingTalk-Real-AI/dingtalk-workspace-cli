@@ -590,6 +590,29 @@ func makePATErrorJSONWithURI(flowID, clientID, uri string) string {
 	return string(data)
 }
 
+func makePATErrorJSONWithAuthorizationURL(flowID, clientID, authURL string) string {
+	type patData struct {
+		Desc             string `json:"desc"`
+		FlowID           string `json:"flowId"`
+		AuthorizationURL string `json:"authorizationUrl"`
+		ClientID         string `json:"clientId"`
+	}
+	payload := struct {
+		Code string  `json:"code"`
+		Data patData `json:"data"`
+	}{
+		Code: "AGENT_CODE_NOT_EXISTS",
+		Data: patData{
+			Desc:             "test auth",
+			FlowID:           flowID,
+			AuthorizationURL: authURL,
+			ClientID:         clientID,
+		},
+	}
+	data, _ := json.Marshal(payload)
+	return string(data)
+}
+
 func patTestAuthorizationURL(server *httptest.Server) string {
 	return server.URL + "/pat"
 }
@@ -1204,7 +1227,7 @@ func TestHandlePatAuthCheck_NonJSONModeRespectsBrowserPolicy(t *testing.T) {
 		globalFlags: &GlobalFlags{Format: "table"},
 	}
 	authURL := patTestAuthorizationURL(server)
-	raw := `{"code":"AGENT_CODE_NOT_EXISTS","data":{"desc":"test auth","flowId":"flow-approved","authorizationUrl":"` + authURL + `","clientId":"test-client-id"}}`
+	raw := makePATErrorJSONWithAuthorizationURL("flow-approved", "test-client-id", authURL)
 
 	var buf bytes.Buffer
 	_, err := handlePatAuthCheck(context.Background(), runner, executor.Invocation{
