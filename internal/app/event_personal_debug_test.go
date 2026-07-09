@@ -54,19 +54,19 @@ func TestEventConsumeDebugRawEventsRequiresUserMode(t *testing.T) {
 	cmd.SilenceErrors = true
 	cmd.SetArgs([]string{"--as", "app", "--debug-raw-events"})
 	err := cmd.Execute()
-	if err == nil || !strings.Contains(err.Error(), "--debug-raw-events is only supported with --as user") {
-		t.Fatalf("Execute() error = %v, want --as user validation", err)
+	if err == nil || !strings.Contains(err.Error(), "app event is not publicly available yet") {
+		t.Fatalf("Execute() error = %v, want public availability guard", err)
 	}
 }
 
-func TestEventConsumeAsAppRejectsEventKey(t *testing.T) {
+func TestEventConsumeAsAppRejectedBeforeEventKeyValidation(t *testing.T) {
 	cmd := newEventConsumeCommand()
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 	cmd.SetArgs([]string{"--as", "app", personal.EventSingleChat})
 	err := cmd.Execute()
-	if err == nil || !strings.Contains(err.Error(), "event_key is only supported with --as user") {
-		t.Fatalf("Execute() error = %v, want event_key validation", err)
+	if err == nil || !strings.Contains(err.Error(), "app event is not publicly available yet") {
+		t.Fatalf("Execute() error = %v, want public availability guard", err)
 	}
 }
 
@@ -113,7 +113,7 @@ func TestEventConsumeRetiredPersonalFlagsAreUnknown(t *testing.T) {
 	}
 }
 
-func TestEventConsumeAsAppRejectsPersonalParamSpecFlags(t *testing.T) {
+func TestEventConsumeAsAppRejectedBeforePersonalParamSpecFlags(t *testing.T) {
 	for _, args := range [][]string{
 		{"--as", "app", "--user", "507971"},
 		{"--as", "app", "--group", "cid"},
@@ -124,8 +124,8 @@ func TestEventConsumeAsAppRejectsPersonalParamSpecFlags(t *testing.T) {
 		cmd.SilenceErrors = true
 		cmd.SetArgs(args)
 		err := cmd.Execute()
-		if err == nil || !strings.Contains(err.Error(), "only supported with --as user") {
-			t.Fatalf("Execute(%v) error = %v, want user-only validation", args, err)
+		if err == nil || !strings.Contains(err.Error(), "app event is not publicly available yet") {
+			t.Fatalf("Execute(%v) error = %v, want public availability guard", args, err)
 		}
 	}
 }

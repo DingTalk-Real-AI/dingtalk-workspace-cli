@@ -91,7 +91,7 @@ func newEventConsumeCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "consume [event_key]",
 		Short: "订阅事件流并输出到 stdout",
-		Long: `订阅 DingTalk Stream 事件并将每条事件以 NDJSON 输出到 stdout。
+		Long: `订阅 DingTalk 个人事件并将每条事件以 NDJSON 输出到 stdout。
 
 输出格式（事件流默认 ndjson；显式 -f json/pretty/raw 可覆盖；-f table/csv 对
 事件流无意义会 fallback 到 ndjson）：
@@ -101,19 +101,9 @@ func newEventConsumeCommand() *cobra.Command {
   raw             仅 SDK 原始 payload，无外层封装
   compact         扁平化 + 解析嵌套 + 抽取语义字段（Agent 友好）
 
-个人事件是默认入口；应用事件 Stream 请显式传 --as app。
-
-bus 上游永远全订阅 (开放平台后台勾选的所有事件类型)；--event-types/--filter 只
-影响 bus → consume 这一段投递。开放平台后台未勾选的事件类型即使设置 --event-types
-也收不到。
-
-凭证：默认 user 模式使用当前 OAuth 登录态自动创建/复用个人订阅并建立个人长连接。
---as app 模式优先从 DWS_CLIENT_ID + DWS_CLIENT_SECRET 环境变量读取 (成组覆盖)，
-否则走 dws config init 配置的 keychain。
-
-应用事件流：默认走 SDK app credential；指定 --stream-ticket-mode normal/custom
-后可走 portal 取票接口。normal 使用 portal 托管 DWS 凭证；custom 使用当前
-DWS clientId/clientSecret 透传给 portal 建立用户 Stream 连接。`,
+默认使用当前 OAuth 登录态自动创建/复用个人订阅并建立个人长连接。
+--event-types/--filter 只影响本地 bus → consume 这一段投递；普通个人事件消费
+通常不需要设置。`,
 		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(c *cobra.Command, args []string) error {
@@ -246,9 +236,9 @@ DWS clientId/clientSecret 透传给 portal 建立用户 Stream 连接。`,
 	}
 
 	f := cmd.Flags()
-	f.StringVar(&asIdentity, "as", "user", "事件身份: user|app；默认 user")
+	f.StringVar(&asIdentity, "as", "user", "事件身份: user")
 	f.StringSliceVar(&eventTypes, "event-types", nil,
-		"逗号分隔事件类型（开放平台 event_type 值）；省略 = catch-all")
+		"逗号分隔事件类型；省略时按 event_key 过滤")
 	f.StringVar(&filter, "filter", "",
 		"客户端正则过滤事件类型 (下推到 bus 减少 IPC 投递量)")
 	f.BoolVar(&compact, "compact", false,
@@ -294,11 +284,12 @@ DWS clientId/clientSecret 透传给 portal 建立用户 Stream 连接。`,
 	f.BoolVar(&personalOpts.DebugRawEvents, "debug-raw-events", false,
 		"个人事件联调：绕过本地 event type/subscribe_id 过滤，输出当前 personal stream bus 收到的所有事件")
 	f.StringVar(&streamOpts.Mode, "stream-ticket-mode", strings.TrimSpace(os.Getenv("DWS_STREAM_TICKET_MODE")),
-		"Stream 建联模式：app 默认空=SDK app credential；user 默认 normal；normal=portal 托管凭证；custom=传当前 clientId/clientSecret")
+		"个人 Stream 建联模式；默认 normal")
 	f.StringVar(&streamOpts.SourceID, "stream-source-id", strings.TrimSpace(os.Getenv("DWS_STREAM_SOURCE_ID")),
-		"Stream sourceId；user 临时默认 pre_open_source，app portal 默认 open/pre_open_source")
+		"个人 Stream sourceId；临时默认 pre_open_source")
 	f.StringVar(&streamOpts.TicketURL, "stream-ticket-url", strings.TrimSpace(os.Getenv("DWS_STREAM_TICKET_URL")),
-		"Stream 取票 URL；user 临时默认预发 ticket，app 默认 <MCP_BASE>/stream/connections/ticket")
+		"个人 Stream 取票 URL；临时默认预发 ticket")
+	hideEventInternalFlags(cmd, "as")
 	return cmd
 }
 
@@ -620,8 +611,8 @@ func newEventListCommand() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:               "list",
-		Short:             "列出当前 edition 下所有 event 消费者",
-		Long:              "列出 bus 守护进程下挂载的消费者。默认只显示当前 ClientID；--all 列出当前 edition 所有；--all-editions 跨 edition。",
+		Short:             "列出个人事件目录",
+		Long:              "列出当前支持的个人事件目录。",
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(c *cobra.Command, _ []string) error {
@@ -630,7 +621,7 @@ func newEventListCommand() *cobra.Command {
 				return err
 			}
 			if as == "user" {
-				if err := rejectChangedFlags(c, "app", "all", "all-editions", "client-id"); err != nil {
+				if err := rejectPersonalEventUnsupportedFlags(c, "all", "all-editions", "client-id"); err != nil {
 					return fmt.Errorf("event list: %w", err)
 				}
 				return runPersonalEventList(c, personalListOptions{
@@ -658,10 +649,11 @@ func newEventListCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&allEditions, "all-editions", false, "跨 edition 列出（罕用，调试用）")
 	cmd.Flags().StringVar(&clientIDOver, "client-id", "", "指定具体 ClientID（覆盖凭证解析）")
 	cmd.Flags().StringVarP(&formatRaw, "format", "f", "table", "输出格式: table|json")
-	cmd.Flags().StringVar(&asIdentity, "as", "user", "事件身份: user|app；默认 user")
+	cmd.Flags().StringVar(&asIdentity, "as", "user", "事件身份: user")
 	cmd.Flags().StringVar(&category, "category", "", "个人事件目录分类")
 	cmd.Flags().BoolVar(&enabledOnly, "enabled-only", false, "个人事件目录只显示 enabled")
 	cmd.Flags().BoolVar(&includePending, "include-pending", false, "个人事件目录包含 pending 项")
+	hideEventInternalFlags(cmd, "as", "all", "all-editions", "client-id")
 	return cmd
 }
 
@@ -681,8 +673,8 @@ func newEventStatusCommand() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:               "status",
-		Short:             "显示 bus 守护进程健康状态",
-		Long:              "显示 bus 进程的连接状态、消费者数量、per-event-type 计数。--fail-on-orphan 在检测到 orphan 时退出码 2。",
+		Short:             "显示个人事件订阅和本地消费状态",
+		Long:              "显示当前用户个人事件订阅、personal bus 状态和本地 consume 进程。",
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(c *cobra.Command, _ []string) error {
@@ -691,7 +683,7 @@ func newEventStatusCommand() *cobra.Command {
 				return err
 			}
 			if as == "user" {
-				if err := rejectChangedFlags(c, "app", "all", "all-editions", "client-id", "fail-on-orphan"); err != nil {
+				if err := rejectPersonalEventUnsupportedFlags(c, "all", "all-editions", "client-id", "fail-on-orphan"); err != nil {
 					return fmt.Errorf("event status: %w", err)
 				}
 				personalOpts.Format = formatRaw
@@ -722,13 +714,14 @@ func newEventStatusCommand() *cobra.Command {
 	cmd.Flags().StringVar(&clientIDOver, "client-id", "", "指定具体 ClientID")
 	cmd.Flags().StringVarP(&formatRaw, "format", "f", "text", "输出格式: text|json")
 	cmd.Flags().BoolVar(&failOnOrphan, "fail-on-orphan", false, "检测到 orphan 时退出码 2")
-	cmd.Flags().StringVar(&asIdentity, "as", "user", "事件身份: user|app；默认 user")
+	cmd.Flags().StringVar(&asIdentity, "as", "user", "事件身份: user")
 	cmd.Flags().StringVar(&personalOpts.EventKey, "event", "", "个人事件 event_key 过滤")
 	cmd.Flags().StringVar(&personalOpts.Status, "status", "active", "个人订阅状态过滤: active|paused|error|deleted|all")
 	cmd.Flags().StringVar(&personalOpts.SubscribeID, "subscribe-id", "", "个人订阅 ID 过滤")
 	cmd.Flags().StringVar(&personalOpts.ControlBaseURL, "personal-event-base-url", "", "个人事件控制面 base URL；临时默认预发 https://pre-mcp.dingtalk.com/dws，配置 mcp_url 时按配置派生")
 	cmd.Flags().StringVar(&personalOpts.StreamSourceID, "stream-source-id", strings.TrimSpace(os.Getenv("DWS_STREAM_SOURCE_ID")),
 		"个人事件 sourceId；临时默认 pre_open_source")
+	hideEventInternalFlags(cmd, "as", "all", "all-editions", "client-id", "fail-on-orphan")
 	return cmd
 }
 
@@ -965,10 +958,8 @@ func newEventStopCommand() *cobra.Command {
 		Short: "取消个人事件订阅并停止本地消费",
 		Long: `取消个人事件订阅并停止本地消费，清理对应本地消费状态，并尝试停止对应前台 consume。
 
-默认 --as user：传 subscribe_id 时取消该个人订阅；传 --all 时取消当前身份下
-本地记录的全部个人订阅。取消后如果没有剩余本地个人订阅，会停止 personal bus。
-
---as app 保留旧应用事件语义：只停止应用事件 app bus，不调用个人订阅取消接口。`,
+传 subscribe_id 时取消该个人订阅；传 --all 时取消当前身份下本地记录的全部个人订阅。
+取消后如果没有剩余本地个人订阅，会停止 personal bus。`,
 		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(c *cobra.Command, args []string) error {
@@ -1005,11 +996,12 @@ func newEventStopCommand() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&asIdentity, "as", "user", "事件身份: user|app；默认 user")
+	cmd.Flags().StringVar(&asIdentity, "as", "user", "事件身份: user")
 	cmd.Flags().StringVar(&opts.ControlBaseURL, "personal-event-base-url", "", "个人事件控制面 base URL；临时默认预发 https://pre-mcp.dingtalk.com/dws，配置 mcp_url 时按配置派生")
 	cmd.Flags().StringVar(&opts.StreamSourceID, "stream-source-id", strings.TrimSpace(os.Getenv("DWS_STREAM_SOURCE_ID")),
 		"个人事件 sourceId；临时默认 pre_open_source")
 	cmd.Flags().BoolVar(&opts.All, "all", false, "取消当前身份下本地记录的所有个人订阅")
+	hideEventInternalFlags(cmd, "as")
 	return cmd
 }
 
@@ -1053,13 +1045,30 @@ func normalizeEventAs(v string) (string, error) {
 	switch v {
 	case "", "user":
 		return "user", nil
-	case "app":
-		return "app", nil
-	case "bot":
-		return "", fmt.Errorf("--as bot is no longer supported; use --as app")
+	case "app", "bot":
+		return "", fmt.Errorf("app event is not publicly available yet")
 	default:
-		return "", fmt.Errorf("--as must be one of user or app")
+		return "", fmt.Errorf("--as only supports user")
 	}
+}
+
+func hideEventInternalFlags(cmd *cobra.Command, names ...string) {
+	for _, name := range names {
+		_ = cmd.Flags().MarkHidden(name)
+	}
+}
+
+func rejectPersonalEventUnsupportedFlags(c *cobra.Command, names ...string) error {
+	changed := make([]string, 0, len(names))
+	for _, name := range names {
+		if f := c.Flags().Lookup(name); f != nil && f.Changed {
+			changed = append(changed, "--"+name)
+		}
+	}
+	if len(changed) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%s are not supported for personal events", strings.Join(changed, ", "))
 }
 
 func rejectChangedFlags(c *cobra.Command, supportedAs string, names ...string) error {

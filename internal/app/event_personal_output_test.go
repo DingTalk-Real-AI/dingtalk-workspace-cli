@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
+	"github.com/spf13/cobra"
 )
 
 func TestPersonalEventListHidesSchemaIDs(t *testing.T) {
@@ -60,38 +61,75 @@ func TestEventListDefaultsToUser(t *testing.T) {
 		t.Fatalf("list output = %s, want personal event catalog", got)
 	}
 	if strings.Contains(got, "CLIENT_ID") || strings.Contains(got, "ClientSecret") {
-		t.Fatalf("list default appears to use app stream output: %s", got)
+		t.Fatalf("list default appears to use legacy application output: %s", got)
 	}
 }
 
-func TestEventListAppOnlyFlagsRequireApp(t *testing.T) {
+func TestEventPublicHelpHidesAppMode(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cmd  *cobra.Command
+	}{
+		{name: "consume", cmd: newEventConsumeCommand()},
+		{name: "list", cmd: newEventListCommand()},
+		{name: "schema", cmd: newEventSchemaCommand()},
+		{name: "status", cmd: newEventStatusCommand()},
+		{name: "stop", cmd: newEventStopCommand()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			tc.cmd.SetOut(&out)
+			tc.cmd.SetArgs([]string{"--help"})
+			if tc.name == "schema" {
+				tc.cmd.SetArgs([]string{personal.EventSingleChat, "--help"})
+			}
+			if err := tc.cmd.Execute(); err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			got := out.String()
+			for _, hidden := range []string{"--as", "user|app", "应用事件" + " Stream"} {
+				if strings.Contains(got, hidden) {
+					t.Fatalf("%s help leaked %q:\n%s", tc.name, hidden, got)
+				}
+			}
+		})
+	}
+}
+
+func TestEventListAppOnlyFlagsRejectedForPersonalEvents(t *testing.T) {
 	cmd := newEventListCommand()
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 	cmd.SetArgs([]string{"--all"})
 	err := cmd.Execute()
-	if err == nil || !strings.Contains(err.Error(), "--all are only supported with --as app") {
-		t.Fatalf("Execute() error = %v, want app-only flag validation", err)
+	if err == nil || !strings.Contains(err.Error(), "--all are not supported for personal events") {
+		t.Fatalf("Execute() error = %v, want unsupported flag validation", err)
 	}
 }
 
-func TestEventListAsAppAllStillUsesAppStream(t *testing.T) {
+func TestEventAsAppRejected(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
-	cmd := newEventListCommand()
-	cmd.SilenceUsage = true
-	cmd.SilenceErrors = true
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetArgs([]string{"--as", "app", "--all"})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if !strings.Contains(out.String(), "SOURCE") || !strings.Contains(out.String(), "CLIENT_ID") {
-		t.Fatalf("app list output = %s, want app stream table", out.String())
+	for _, cmd := range []*cobra.Command{
+		newEventListCommand(),
+		newEventStatusCommand(),
+		newEventConsumeCommand(),
+		newEventStopCommand(),
+		newEventSchemaCommand(),
+	} {
+		cmd.SilenceUsage = true
+		cmd.SilenceErrors = true
+		cmd.SetArgs([]string{"--as", "app"})
+		if cmd.Use == "schema <event_key>" {
+			cmd.SetArgs([]string{personal.EventSingleChat, "--as", "app"})
+		}
+		err := cmd.Execute()
+		if err == nil || !strings.Contains(err.Error(), "app event is not publicly available yet") {
+			t.Fatalf("%s Execute() error = %v, want public availability guard", cmd.Use, err)
+		}
 	}
 }
 
-func TestEventStatusAppOnlyFlagsRequireApp(t *testing.T) {
+func TestEventStatusAppOnlyFlagsRejectedForPersonalEvents(t *testing.T) {
 	cmd := newEventStatusCommand()
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
@@ -100,8 +138,8 @@ func TestEventStatusAppOnlyFlagsRequireApp(t *testing.T) {
 	if err == nil ||
 		!strings.Contains(err.Error(), "--all") ||
 		!strings.Contains(err.Error(), "--fail-on-orphan") ||
-		!strings.Contains(err.Error(), "only supported with --as app") {
-		t.Fatalf("Execute() error = %v, want app-only flag validation", err)
+		!strings.Contains(err.Error(), "not supported for personal events") {
+		t.Fatalf("Execute() error = %v, want unsupported flag validation", err)
 	}
 }
 
@@ -256,8 +294,8 @@ func TestEventAsBotRejected(t *testing.T) {
 	cmd.SilenceErrors = true
 	cmd.SetArgs([]string{"--as", "bot"})
 	err := cmd.Execute()
-	if err == nil || !strings.Contains(err.Error(), "--as bot is no longer supported; use --as app") {
-		t.Fatalf("Execute() error = %v, want bot deprecation error", err)
+	if err == nil || !strings.Contains(err.Error(), "app event is not publicly available yet") {
+		t.Fatalf("Execute() error = %v, want public availability guard", err)
 	}
 }
 

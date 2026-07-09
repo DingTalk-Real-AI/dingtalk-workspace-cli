@@ -35,14 +35,15 @@ func TestEventStopHelpDescribesPersonalSubscription(t *testing.T) {
 		"stop [subscribe_id]",
 		"取消个人事件订阅并停止本地消费",
 		"取消个人事件订阅并停止本地消费，清理对应本地消费状态",
-		"--as app 保留旧应用事件语义",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("help missing %q:\n%s", want, got)
 		}
 	}
-	if strings.Contains(got, "优雅停止 bus 守护进程") {
-		t.Fatalf("help still contains stale bus wording:\n%s", got)
+	for _, stale := range []string{"优雅停止 bus 守护进程", strings.Join([]string{"--as", "app"}, " "), "应用事件"} {
+		if strings.Contains(got, stale) {
+			t.Fatalf("help still contains stale public app wording %q:\n%s", stale, got)
+		}
 	}
 }
 
@@ -73,8 +74,8 @@ func TestEventStopAsAppRejectsSubscribeID(t *testing.T) {
 	cmd.SilenceErrors = true
 	cmd.SetArgs([]string{"--as", "app", "subId-1"})
 	err := cmd.Execute()
-	if err == nil || !strings.Contains(err.Error(), "subscribe_id is only supported with --as user") {
-		t.Fatalf("Execute() error = %v, want app subscribe_id rejection", err)
+	if err == nil || !strings.Contains(err.Error(), "app event is not publicly available yet") {
+		t.Fatalf("Execute() error = %v, want public availability guard", err)
 	}
 }
 

@@ -130,8 +130,9 @@ func newEventSchemaCommand() *cobra.Command {
 			return renderPersonalSchema(c.OutOrStdout(), def, formatRaw)
 		},
 	}
-	cmd.Flags().StringVar(&asIdentity, "as", "user", "事件身份: user|app；默认 user")
+	cmd.Flags().StringVar(&asIdentity, "as", "user", "事件身份: user")
 	cmd.Flags().StringVarP(&formatRaw, "format", "f", "json", "输出格式: json")
+	hideEventInternalFlags(cmd, "as")
 	return cmd
 }
 
