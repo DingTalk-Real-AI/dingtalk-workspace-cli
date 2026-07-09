@@ -21,12 +21,12 @@ import (
 	"unicode"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // helperSchemaRoots are top-level command names whose subtrees are helper-only
-// (hard-coded cobra commands, not in the discovery catalog). `dws schema` still
-// answers for them, but unlike discovery products the schema CONTENT is fetched
-// LIVE from the helper's pinned MCP server (op-app) and rendered in the flat
+// hard-coded cobra commands. `dws schema` still answers for them, but the schema
+// CONTENT is fetched LIVE from the helper's pinned MCP server (op-app) and rendered in the flat
 // gws-aligned shape — never synthesized from local cobra flags, never
 // hardcoded. The mapping from a leaf command to its MCP tool comes from the
 // `mcp-tool` cobra annotation set in internal/helpers/devapp.go.
@@ -52,13 +52,12 @@ type HelperToolSchema struct {
 type HelperToolFetcher func(ctx context.Context, source string) (map[string]HelperToolSchema, error)
 
 // renderHelperSchema builds the `dws schema` payload for helper-only command
-// subtrees. Returns (payload, true) when the path targets a helper subtree (so
-// the caller skips catalog resolution); (nil, false) otherwise so the caller
-// falls back to the discovery catalog.
+// subtrees. Returns (payload, true) when the path targets a helper subtree;
+// (nil, false) otherwise so the caller falls back to runtime command schema.
 //
-// Leaf commands render the gws-flat object {description, path, source,
-// parameters{<kebab>:{type,description,default?,required}}} with all CONTENT
-// pulled live from the MCP tool named by the command's `mcp-tool` annotation.
+// Leaf commands render the same gws-flat object as runtime schema leaves, with
+// CONTENT pulled live from the MCP tool named by the command's `mcp-tool`
+// annotation.
 // Group/root paths render a browse listing {path, commands:[...]} from the
 // cobra tree (no MCP needed).
 func renderHelperSchema(ctx context.Context, root *cobra.Command, rawPath string, fetch HelperToolFetcher) (map[string]any, bool, error) {
@@ -67,6 +66,17 @@ func renderHelperSchema(ctx context.Context, root *cobra.Command, rawPath string
 	}
 	tokens := splitSchemaPathTokens(rawPath)
 	if len(tokens) == 0 || !helperSchemaRoots[tokens[0]] {
+		return nil, false, nil
+	}
+	helperRoot, _, err := root.Find([]string{tokens[0]})
+	if err != nil || helperRoot == nil || !helperRoot.HasParent() {
+		return nil, false, nil
+	}
+	if strings.Contains(rawPath, ".") && len(tokens) == 2 {
+		if leaf, ok := helperLeafByToolName(helperRoot, tokens[1]); ok {
+			payload, err := helperLeafSchema(ctx, leaf, fetch)
+			return payload, true, err
+		}
 		return nil, false, nil
 	}
 
@@ -89,6 +99,9 @@ func renderHelperSchema(ctx context.Context, root *cobra.Command, rawPath string
 	// A runnable leaf → emit its live MCP schema in gws-flat shape.
 	// A group → browse its subcommands.
 	if target.Runnable() && !target.HasAvailableSubCommands() {
+		if !helperLeafHasMCPTool(target) {
+			return nil, false, nil
+		}
 		payload, err := helperLeafSchema(ctx, target, fetch)
 		return payload, true, err
 	}
@@ -101,14 +114,9 @@ func renderHelperSchema(ctx context.Context, root *cobra.Command, rawPath string
 
 // helperLeafSchema renders a single leaf command as the gws-flat object,
 // fetching its MCP tool schema live. The command must carry an `mcp-tool`
-// annotation; commands without one (e.g. `dev connect`, `dev doc search`) are
-// not devapp tools and get a clear, non-fatal explanation instead.
+// annotation; local helper commands without one are not part of `dws schema`.
 func helperLeafSchema(ctx context.Context, cmd *cobra.Command, fetch HelperToolFetcher) (map[string]any, error) {
-	toolName, source := "", ""
-	if cmd.Annotations != nil {
-		toolName = strings.TrimSpace(cmd.Annotations["mcp-tool"])
-		source = strings.TrimSpace(cmd.Annotations["mcp-source"])
-	}
+	toolName, source := helperLeafToolBinding(cmd)
 	// Default source is op-app (dev app commands); dev doc commands annotate
 	// mcp-source=devdoc to pull from the devdoc MCP server instead.
 	if source == "" {
@@ -140,21 +148,53 @@ func helperLeafSchema(ctx context.Context, cmd *cobra.Command, fetch HelperToolF
 		}, nil
 	}
 
-	return map[string]any{
-		"description": tool.Description,
-		"path":        path,
-		"source":      "mcp:" + source,
-		"parameters":  helperFlatParameters(tool),
-	}, nil
+	meta := helperSchemaLeafForCommand(cmd)
+	productID := meta.ProductID
+	if productID == "" {
+		productID = helperProductID(cmd)
+	}
+	canonicalPath := meta.CanonicalPath
+	if canonicalPath == "" {
+		canonicalPath = productID + "." + toolName
+	}
+	hint := schemaHintForCanonicalPath(canonicalPath)
+	parameters := helperFlatParameters(tool, cmd, hint.Parameters)
+	if parameters == nil {
+		parameters = map[string]any{}
+	}
+	primaryCLIPath := meta.PrimaryCLIPath
+	if primaryCLIPath == "" {
+		primaryCLIPath = path
+	}
+	payload := map[string]any{
+		"name":             toolName,
+		"cli_name":         cmd.Name(),
+		"canonical_path":   canonicalPath,
+		"path":             canonicalPath,
+		"cli_path":         path,
+		"primary_cli_path": primaryCLIPath,
+		"is_alias":         meta.IsAlias,
+		"source":           "mcp:" + source,
+		"product_id":       productID,
+		"display":          helperProductDisplay(cmd),
+		"title":            strings.TrimSpace(cmd.Short),
+		"description":      tool.Description,
+		"parameters":       parameters,
+		"has_parameters":   len(parameters) > 0,
+		"parameter_count":  len(parameters),
+	}
+	if len(meta.Aliases) > 0 {
+		payload["aliases"] = meta.Aliases
+	}
+	return payload, nil
 }
 
 // helperFlatParameters projects an MCP tool's inputSchema into the gws-flat
-// per-parameter object. Keys are kebab-case of the MCP param name (== the CLI
-// flag); each value is {type, description, default?, required} with type mapped
-// to a JSON-type string, description verbatim from MCP, default only when MCP
-// provides one (stringified), and required inline (true iff the param is in the
-// tool's required[]).
-func helperFlatParameters(tool HelperToolSchema) map[string]any {
+// per-parameter object. Keys are kebab-case of the MCP param name when that key
+// is an actual flag on the current helper leaf; live MCP-only parameters that
+// are fixed internally by the helper command are intentionally omitted so schema
+// output remains executable as CLI.
+func helperFlatParameters(tool HelperToolSchema, cmd *cobra.Command, hints map[string]ParameterSchemaHint) map[string]any {
 	required := make(map[string]bool, len(tool.Required))
 	for _, r := range tool.Required {
 		required[r] = true
@@ -162,18 +202,70 @@ func helperFlatParameters(tool HelperToolSchema) map[string]any {
 
 	params := make(map[string]any, len(tool.Properties))
 	for name, raw := range tool.Properties {
-		prop, _ := raw.(map[string]any)
-		entry := map[string]any{
-			"type":        mcpJSONType(prop),
-			"description": mcpString(prop, "description"),
-			"required":    required[name],
+		flagName := kebabCase(name)
+		if !helperCommandHasFlag(cmd, flagName) {
+			continue
 		}
-		if def, ok := mcpDefault(prop); ok {
+		hint, _, hasHint := lookupParameterSchemaHint(hints, name, flagName)
+		if hasHint && strings.TrimSpace(hint.FlagName) != "" {
+			flagName = strings.TrimSpace(hint.FlagName)
+			if !helperCommandHasFlag(cmd, flagName) {
+				continue
+			}
+		}
+		prop, _ := raw.(map[string]any)
+		paramType := mcpJSONType(prop)
+		if hasHint && strings.TrimSpace(hint.Type) != "" {
+			paramType = strings.TrimSpace(hint.Type)
+		}
+		description := mcpString(prop, "description")
+		if hasHint && strings.TrimSpace(hint.Description) != "" {
+			description = strings.TrimSpace(hint.Description)
+		}
+		paramRequired := required[name] || helperFlagRequired(cmd, flagName)
+		if hasHint && hint.Required != nil {
+			paramRequired = *hint.Required
+		}
+		entry := map[string]any{
+			"type":        paramType,
+			"description": description,
+			"required":    paramRequired,
+			"property":    name,
+		}
+		if hasHint && strings.TrimSpace(hint.Default) != "" {
+			entry["default"] = strings.TrimSpace(hint.Default)
+		} else if def, ok := mcpDefault(prop); ok {
 			entry["default"] = def
 		}
-		params[kebabCase(name)] = entry
+		params[flagName] = entry
 	}
 	return params
+}
+
+func helperFlagRequired(cmd *cobra.Command, flagName string) bool {
+	if cmd == nil || strings.TrimSpace(flagName) == "" {
+		return false
+	}
+	flag := cmd.Flags().Lookup(flagName)
+	if flag == nil {
+		flag = cmd.InheritedFlags().Lookup(flagName)
+	}
+	if flag == nil {
+		return false
+	}
+	return usageImpliesRequired(flag.Usage)
+}
+
+func helperCommandHasFlag(cmd *cobra.Command, flagName string) bool {
+	if cmd == nil || strings.TrimSpace(flagName) == "" {
+		return false
+	}
+	for _, flags := range []*pflag.FlagSet{cmd.Flags(), cmd.InheritedFlags()} {
+		if flags != nil && flags.Lookup(flagName) != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // mcpJSONType normalizes the MCP property "type" to a JSON-type string. MCP
@@ -257,6 +349,120 @@ func kebabCase(name string) string {
 	return strings.Trim(out, "-")
 }
 
+type helperSchemaLeaf struct {
+	Command        *cobra.Command
+	ProductID      string
+	ToolName       string
+	Source         string
+	CanonicalPath  string
+	CLIPath        string
+	PrimaryCLIPath string
+	Aliases        []string
+	IsAlias        bool
+}
+
+func collectHelperSchemaLeaves(top *cobra.Command) []helperSchemaLeaf {
+	if top == nil {
+		return nil
+	}
+	productID := helperProductID(top)
+	leaves := []helperSchemaLeaf{}
+	walkLeafCommands(top, func(leaf *cobra.Command) {
+		toolName, source := helperLeafToolBinding(leaf)
+		if toolName == "" {
+			return
+		}
+		if source == "" {
+			source = "op-app"
+		}
+		leaves = append(leaves, helperSchemaLeaf{
+			Command:       leaf,
+			ProductID:     productID,
+			ToolName:      toolName,
+			Source:        source,
+			CanonicalPath: productID + "." + toolName,
+			CLIPath:       helperCommandPath(leaf),
+		})
+	})
+	sort.Slice(leaves, func(i, j int) bool {
+		if leaves[i].CanonicalPath != leaves[j].CanonicalPath {
+			return leaves[i].CanonicalPath < leaves[j].CanonicalPath
+		}
+		return leaves[i].CLIPath < leaves[j].CLIPath
+	})
+	annotateHelperSchemaAliases(leaves)
+	return leaves
+}
+
+func annotateHelperSchemaAliases(leaves []helperSchemaLeaf) {
+	groups := map[string][]int{}
+	for idx, leaf := range leaves {
+		groups[leaf.CanonicalPath] = append(groups[leaf.CanonicalPath], idx)
+	}
+	for _, indexes := range groups {
+		primary := choosePrimaryHelperLeaf(leaves, indexes)
+		aliases := make([]string, 0, len(indexes)-1)
+		for _, idx := range indexes {
+			if idx == primary {
+				continue
+			}
+			aliases = append(aliases, leaves[idx].CLIPath)
+		}
+		sort.Strings(aliases)
+		primaryPath := leaves[primary].CLIPath
+		for _, idx := range indexes {
+			leaves[idx].PrimaryCLIPath = primaryPath
+			leaves[idx].Aliases = append([]string(nil), aliases...)
+			leaves[idx].IsAlias = idx != primary
+		}
+	}
+}
+
+func choosePrimaryHelperLeaf(leaves []helperSchemaLeaf, indexes []int) int {
+	if len(indexes) == 0 {
+		return 0
+	}
+	if primaryHint := schemaPrimaryCLIPath(leaves[indexes[0]].ProductID, leaves[indexes[0]].ToolName); primaryHint != "" {
+		for _, idx := range indexes {
+			if leaves[idx].CLIPath == primaryHint {
+				return idx
+			}
+		}
+	}
+	toolParts := map[string]bool{}
+	for _, part := range strings.FieldsFunc(leaves[indexes[0]].ToolName, func(r rune) bool { return r == '_' || r == '-' }) {
+		if part != "" {
+			toolParts[part] = true
+		}
+	}
+	for _, idx := range indexes {
+		if toolParts[leaves[idx].Command.Name()] {
+			return idx
+		}
+	}
+	return indexes[0]
+}
+
+func helperSchemaLeafForCommand(cmd *cobra.Command) helperSchemaLeaf {
+	top := topLevelCommand(cmd)
+	for _, leaf := range collectHelperSchemaLeaves(top) {
+		if leaf.Command == cmd {
+			return leaf
+		}
+	}
+	return helperSchemaLeaf{}
+}
+
+func helperLeafByToolName(top *cobra.Command, toolName string) (*cobra.Command, bool) {
+	canonicalPath := helperProductID(top) + "." + strings.TrimSpace(toolName)
+	for _, leaf := range collectHelperSchemaLeaves(top) {
+		if leaf.CanonicalPath == canonicalPath && !leaf.IsAlias {
+			return leaf.Command, true
+		}
+	}
+	return nil, false
+}
+
 // helperProductSummaries returns light product entries for every helper-only
 // subtree, appended to the no-arg `dws schema` product listing so agents
 // browsing all products also see helper commands. Tools are listed by path +
@@ -271,20 +477,35 @@ func helperProductSummaries(root *cobra.Command) []map[string]any {
 		if err != nil || top == nil || !top.HasParent() {
 			continue
 		}
-		leaves := []map[string]any{}
-		walkLeafCommands(top, func(leaf *cobra.Command) {
-			leaves = append(leaves, map[string]any{
-				"cli_name":    leaf.Name(),
-				"cli_path":    helperCommandPath(leaf),
-				"description": strings.TrimSpace(leaf.Short),
-			})
-		})
+		leafEntries := collectHelperSchemaLeaves(top)
+		tools := []map[string]any{}
+		for _, leaf := range leafEntries {
+			if leaf.IsAlias {
+				continue
+			}
+			tool := map[string]any{
+				"name":             leaf.ToolName,
+				"cli_name":         leaf.Command.Name(),
+				"canonical_path":   leaf.CanonicalPath,
+				"cli_path":         leaf.CLIPath,
+				"primary_cli_path": leaf.PrimaryCLIPath,
+				"source":           "mcp:" + leaf.Source,
+				"description":      strings.TrimSpace(leaf.Command.Short),
+			}
+			if len(leaf.Aliases) > 0 {
+				tool["aliases"] = leaf.Aliases
+			}
+			tools = append(tools, tool)
+		}
+		if len(tools) == 0 {
+			continue
+		}
 		out = append(out, map[string]any{
 			"id":          name,
 			"name":        strings.TrimSpace(top.Short),
-			"description": "helper-only 命令组（不走服务发现）；schema 从 op-app MCP 实时拉取，用 `dws schema \"" + helperCommandPath(top) + " ...\"` 查具体参数",
+			"description": "helper-only 命令组；schema 从 op-app MCP 实时拉取，用 `dws schema \"" + helperCommandPath(top) + " ...\"` 查具体参数",
 			"helper":      true,
-			"tools":       leaves,
+			"tools":       tools,
 		})
 	}
 	return out
@@ -312,6 +533,9 @@ func helperSubcommands(cmd *cobra.Command) []map[string]any {
 		if !sub.IsAvailableCommand() || sub.Name() == "help" {
 			continue
 		}
+		if !helperCommandHasSchemaLeaf(sub) {
+			continue
+		}
 		out = append(out, map[string]any{
 			"cli_path":    helperCommandPath(sub),
 			"description": strings.TrimSpace(sub.Short),
@@ -321,6 +545,53 @@ func helperSubcommands(cmd *cobra.Command) []map[string]any {
 		return out[i]["cli_path"].(string) < out[j]["cli_path"].(string)
 	})
 	return out
+}
+
+func helperLeafToolBinding(cmd *cobra.Command) (toolName, source string) {
+	if cmd == nil || cmd.Annotations == nil {
+		return "", ""
+	}
+	return strings.TrimSpace(cmd.Annotations["mcp-tool"]), strings.TrimSpace(cmd.Annotations["mcp-source"])
+}
+
+func helperLeafHasMCPTool(cmd *cobra.Command) bool {
+	toolName, _ := helperLeafToolBinding(cmd)
+	return toolName != ""
+}
+
+func helperCommandHasSchemaLeaf(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+	if cmd.Runnable() && !cmd.HasAvailableSubCommands() {
+		return helperLeafHasMCPTool(cmd)
+	}
+	for _, sub := range cmd.Commands() {
+		if !sub.IsAvailableCommand() || sub.Name() == "help" {
+			continue
+		}
+		if helperCommandHasSchemaLeaf(sub) {
+			return true
+		}
+	}
+	return false
+}
+
+func helperProductID(cmd *cobra.Command) string {
+	parts := splitSchemaPathTokens(helperCommandPath(cmd))
+	if len(parts) > 0 {
+		return parts[0]
+	}
+	return "helper"
+}
+
+func helperProductDisplay(cmd *cobra.Command) string {
+	for c := cmd; c != nil && c.HasParent(); c = c.Parent() {
+		if !c.Parent().HasParent() {
+			return strings.TrimSpace(c.Short)
+		}
+	}
+	return ""
 }
 
 // helperCommandPath returns the space-joined path from root to cmd, e.g.

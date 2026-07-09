@@ -33,6 +33,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/convert"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 type FlagKind string
@@ -103,31 +104,31 @@ func NewMCPCommand(ctx context.Context, loader CatalogLoader, runner executor.Ru
 	return cmd
 }
 
-func NewSchemaCommand(loader CatalogLoader, helperTools HelperToolFetcher) *cobra.Command {
+func NewSchemaCommand(helperTools HelperToolFetcher) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "schema [path]",
 		Short: "查看 MCP 工具 Schema (产品列表 / 工具参数)",
-		Long: `查看已发现的 MCP 产品和工具的 Schema 元数据。
+		Long: `查看当前可运行命令的 Schema 元数据。
 
-不带参数时列出所有产品及其工具数量；带路径时输出该工具的完整
-输入 Schema（JSON Schema 格式）、输出 Schema、授权元数据、MCP
-注解和 CLI 层的 flag overlay（alias/transform/env_default）。
+	不带参数时列出当前命令树中可查询 schema 的产品及工具数量；带路径
+	时输出该命令的扁平参数 Schema。普通产品 schema 来自实际运行命令
+	的 overlay/hardcoded metadata，helper-only 命令可按需实时拉取 MCP schema。
 
 路径支持三种写法：
   product.rpc_name           规范路径 (e.g. ding.send_ding_message)
   product.group.cli_name     CLI 点路径 (e.g. ding.message.send)
   "product group cli_name"   CLI 空格/斜杠路径 (e.g. "ding message send")
 
-示例:
-  dws schema                                # 列出所有产品
-  dws schema ding.send_ding_message         # 规范路径
-  dws schema "ding message send"            # CLI 路径（空格）
-  dws schema --cli-path "ding message send" # 同上，显式 flag（脚本友好）
-  dws schema calendar.create_event --jq '.tool.auth'
-  dws schema -f pretty ding.send_ding_message  # ANSI 彩色分区展示
-  dws schema --jq '.tool.flag_overlay'      # 只看 CLI overlay
+	示例:
+	  dws schema                                # 列出所有产品
+	  dws schema ding.send_ding_message         # 规范路径
+	  dws schema "ding message send"            # CLI 路径（空格）
+	  dws schema --cli-path "ding message send" # 同上，显式 flag（脚本友好）
+	  dws schema ding.send_ding_message --jq '.parameters'
+	  dws schema -f pretty ding.send_ding_message  # ANSI 彩色分区展示
+	  dws schema --jq '.products[] | {id, count: (.tools|length)}'
 
-helper-only 命令组（如 dev，不走服务发现）也支持查询，schema 从 op-app
+helper-only 命令组（如 dev）也支持查询，schema 从 op-app
 MCP 服务端实时拉取，输出对齐 gws 的扁平格式（parameters 内联 required，
 键为 CLI flag）：
   dws schema "dev app robot config"         # 实时 MCP 参数 schema（gws-flat）
@@ -144,12 +145,9 @@ MCP 服务端实时拉取，输出对齐 gws 的扁平格式（parameters 内联
 				args = []string{cliPath}
 			}
 
-			// Helper-only subtrees (e.g. `dws dev ...`) aren't in the discovery
-			// catalog; their schema CONTENT is fetched LIVE from the helper's
-			// pinned MCP server (op-app) and rendered in the gws-flat shape, so
-			// `dws schema "dev app robot config"` answers without touching
-			// discovery. Only the `dev` root claims this path; everything else
-			// falls through to the catalog below.
+			// Helper-only subtrees (e.g. `dws dev ...`) use the helper's pinned MCP
+			// server (op-app) for schema content. Only the `dev` root claims this
+			// path; everything else falls through to runtime command annotations.
 			if len(args) > 0 {
 				payload, ok, err := renderHelperSchema(cmd.Context(), cmd.Root(), args[0], helperTools)
 				if err != nil {
@@ -166,31 +164,7 @@ MCP 服务端实时拉取，输出对齐 gws 的扁平格式（parameters 内联
 				}
 			}
 
-			catalog, err := loader.Load(cmd.Context())
-			if err != nil {
-				var degraded *CatalogDegraded
-				if errors.As(err, &degraded) {
-					fmt.Fprintf(cmd.ErrOrStderr(), "hint: %s\n", degraded.Hint)
-					payload := map[string]any{
-						"kind":     "schema",
-						"count":    0,
-						"products": []any{},
-						"degraded": true,
-						"reason":   string(degraded.Reason),
-						"hint":     degraded.Hint,
-					}
-					return output.WriteFiltered(
-						cmd.OutOrStdout(),
-						output.ResolveFormat(cmd, output.FormatJSON),
-						payload,
-						output.ResolveFields(cmd),
-						output.ResolveJQ(cmd),
-					)
-				}
-				return err
-			}
-
-			payload, err := schemaPayload(catalog, args)
+			payload, err := runtimeSchemaPayload(cmd.Root(), args)
 			if err != nil {
 				return err
 			}
@@ -420,14 +394,7 @@ func newToolCommand(product ir.CanonicalProduct, tool ir.ToolDescriptor, runner 
 			if warning := lifecycleWarning(product); warning != "" {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", warning)
 			}
-			dryRun := false
-			if cmd.Flags().Lookup("dry-run") != nil {
-				value, err := cmd.Flags().GetBool("dry-run")
-				if err != nil {
-					return apperrors.NewInternal("failed to read --dry-run")
-				}
-				dryRun = value
-			}
+			dryRun := commandBoolFlag(cmd, "dry-run")
 
 			// One guard per invocation ensures stdin is read at most once.
 			guard := NewStdinGuard()
@@ -572,6 +539,24 @@ func newToolCommand(product ir.CanonicalProduct, tool ir.ToolDescriptor, runner 
 	cmd.Flags().String("params", "", "Additional JSON object payload merged after --json")
 	applyFlagSpecs(cmd, specs)
 	return cmd
+}
+
+func commandBoolFlag(cmd *cobra.Command, name string) bool {
+	if cmd == nil || strings.TrimSpace(name) == "" {
+		return false
+	}
+	var rootFlags *pflag.FlagSet
+	if root := cmd.Root(); root != nil {
+		rootFlags = root.PersistentFlags()
+	}
+	for _, flags := range []*pflag.FlagSet{cmd.Flags(), cmd.InheritedFlags(), rootFlags} {
+		if flags == nil || flags.Lookup(name) == nil {
+			continue
+		}
+		value, err := flags.GetBool(name)
+		return err == nil && value
+	}
+	return false
 }
 
 // canRegisterToolFlag reports whether a long flag named name can be
@@ -748,82 +733,17 @@ func collectOverrides(cmd *cobra.Command, specs []FlagSpec, guard *StdinGuard) (
 	return overrides, nil
 }
 
-func schemaPayload(catalog ir.Catalog, args []string) (map[string]any, error) {
-	if len(args) == 0 {
-		products := make([]map[string]any, 0, len(catalog.Products))
-		for _, p := range catalog.Products {
-			tools := make([]map[string]any, 0, len(p.Tools))
-			for _, t := range p.Tools {
-				tools = append(tools, compactTool(t))
-			}
-			products = append(products, map[string]any{
-				"id":          p.ID,
-				"name":        p.DisplayName,
-				"description": p.Description,
-				"tools":       tools,
-			})
-		}
-		return map[string]any{
-			"kind":     "schema",
-			"count":    len(products),
-			"products": products,
-		}, nil
-	}
-
-	product, tool, ok := resolveSchemaPath(catalog, args[0])
-	if !ok {
-		return nil, apperrors.NewValidation(fmt.Sprintf("unknown canonical schema path %q", args[0]))
-	}
-	return map[string]any{
-		"kind":    "schema",
-		"path":    args[0],
-		"product": map[string]any{"id": product.ID, "name": product.DisplayName},
-		"tool":    compactTool(tool),
-	}, nil
-}
-
-// resolveSchemaPath accepts three input forms and maps to (product, tool):
-//   - "product.rpc_name"   (canonical, e.g. "ding.send_ding_message")
-//   - "product.cli_name"   (single-level CLI path, e.g. "doc.create")
-//   - CLI path with group  ("ding message send" or "ding.message.send";
-//     also accepts "/" and multiple whitespace between tokens)
-//
-// Canonical form is tried first so existing callers and scripts keep
-// working; only when that fails does the CLI-path resolver run.
-func resolveSchemaPath(catalog ir.Catalog, raw string) (ir.CanonicalProduct, ir.ToolDescriptor, bool) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ir.CanonicalProduct{}, ir.ToolDescriptor{}, false
-	}
-
-	if product, tool, ok := catalog.FindTool(raw); ok {
-		return product, tool, true
-	}
-
-	tokens := splitSchemaPathTokens(raw)
-	if len(tokens) < 2 {
-		return ir.CanonicalProduct{}, ir.ToolDescriptor{}, false
-	}
-
-	productID := tokens[0]
-	leaf := tokens[len(tokens)-1]
-	groupPath := strings.Join(tokens[1:len(tokens)-1], ".")
-
-	product, ok := catalog.FindProduct(productID)
-	if !ok {
-		return ir.CanonicalProduct{}, ir.ToolDescriptor{}, false
-	}
-
-	for _, tool := range product.Tools {
-		if tool.CLIName != leaf {
-			continue
-		}
-		if strings.TrimSpace(tool.Group) != groupPath {
-			continue
-		}
-		return product, tool, true
-	}
-	return ir.CanonicalProduct{}, ir.ToolDescriptor{}, false
+// FlatToolSchemaPayload renders a single Tool IR descriptor using the same
+// gws-flat leaf shape as runtime schema commands. It is kept for offline
+// generated artifacts; the interactive `dws schema` command uses runtime command
+// annotations instead of enumerating Tool IR descriptors.
+func FlatToolSchemaPayload(product ir.CanonicalProduct, tool ir.ToolDescriptor) map[string]any {
+	payload := compactTool(tool)
+	payload["path"] = tool.CanonicalPath
+	payload["source"] = "mcp:" + product.ID
+	payload["product_id"] = product.ID
+	payload["display"] = product.DisplayName
+	return payload
 }
 
 // splitSchemaPathTokens splits a CLI path on dots, slashes, and
@@ -849,21 +769,34 @@ func splitSchemaPathTokens(raw string) []string {
 // CLI flag overlay (alias/transform/envDefault/default) that shapes
 // how raw MCP parameters appear on the command line.
 func compactTool(t ir.ToolDescriptor) map[string]any {
+	hint := schemaHintForTool(t)
+	title := t.Title
+	if strings.TrimSpace(hint.Title) != "" {
+		title = strings.TrimSpace(hint.Title)
+	}
+	description := t.Description
+	if strings.TrimSpace(hint.Description) != "" {
+		description = strings.TrimSpace(hint.Description)
+	}
 	tool := map[string]any{
 		"name":           t.RPCName,
 		"cli_name":       t.CLIName,
 		"canonical_path": t.CanonicalPath,
-		"title":          t.Title,
-		"description":    t.Description,
+		"title":          title,
+		"description":    description,
 		"sensitive":      t.Sensitive,
 	}
 
 	if strings.TrimSpace(t.Group) != "" {
 		tool["group"] = t.Group
 	}
-	if props, ok := t.InputSchema["properties"]; ok {
-		tool["parameters"] = props
+	params := buildFlatSchemaParameters(t.InputSchema, t.FlagOverlay, hint.Parameters)
+	if params == nil {
+		params = map[string]any{}
 	}
+	tool["parameters"] = params
+	tool["has_parameters"] = len(params) > 0
+	tool["parameter_count"] = len(params)
 	if req := requiredFields(t.InputSchema); len(req) > 0 {
 		tool["required"] = req
 	}
@@ -881,6 +814,77 @@ func compactTool(t ir.ToolDescriptor) map[string]any {
 	}
 
 	return tool
+}
+
+// BuildFlatSchemaParameters projects an MCP input JSON Schema into the same
+// gws-flat parameter map used by helper schema rendering. Keys are the effective
+// CLI flag names: explicit flag_overlay alias wins, otherwise the MCP parameter
+// name is converted to kebab-case.
+func BuildFlatSchemaParameters(schema map[string]any, overlay map[string]ir.FlagOverlay) map[string]any {
+	return buildFlatSchemaParameters(schema, overlay, nil)
+}
+
+func buildFlatSchemaParameters(schema map[string]any, overlay map[string]ir.FlagOverlay, hints map[string]ParameterSchemaHint) map[string]any {
+	properties, ok := nestedMap(schema, "properties")
+	if !ok || len(properties) == 0 {
+		return nil
+	}
+
+	required := map[string]bool{}
+	for _, name := range requiredFields(schema) {
+		required[name] = true
+	}
+
+	keys := make([]string, 0, len(properties))
+	for key := range properties {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	params := make(map[string]any, len(keys))
+	for _, name := range keys {
+		prop, _ := properties[name].(map[string]any)
+		flagName := kebabCase(name)
+		if ov, ok := overlay[name]; ok && strings.TrimSpace(ov.Alias) != "" {
+			flagName = strings.TrimSpace(ov.Alias)
+		}
+
+		hint, _, hasHint := lookupParameterSchemaHint(hints, name, flagName)
+		if hasHint && strings.TrimSpace(hint.FlagName) != "" {
+			flagName = strings.TrimSpace(hint.FlagName)
+		}
+
+		paramType := mcpJSONType(prop)
+		if hasHint && strings.TrimSpace(hint.Type) != "" {
+			paramType = strings.TrimSpace(hint.Type)
+		}
+		description := schemaDescription(prop)
+		if ov, ok := overlay[name]; ok && strings.TrimSpace(ov.Description) != "" {
+			description = strings.TrimSpace(ov.Description)
+		}
+		if hasHint && strings.TrimSpace(hint.Description) != "" {
+			description = strings.TrimSpace(hint.Description)
+		}
+		isRequired := required[name]
+		if hasHint && hint.Required != nil {
+			isRequired = *hint.Required
+		}
+
+		entry := map[string]any{
+			"type":        paramType,
+			"description": description,
+			"required":    isRequired,
+		}
+		if hasHint && strings.TrimSpace(hint.Default) != "" {
+			entry["default"] = strings.TrimSpace(hint.Default)
+		} else if ov, ok := overlay[name]; ok && strings.TrimSpace(ov.Default) != "" {
+			entry["default"] = strings.TrimSpace(ov.Default)
+		} else if def, ok := mcpDefault(prop); ok {
+			entry["default"] = def
+		}
+		params[flagName] = entry
+	}
+	return params
 }
 
 func confirmSensitiveTool(cmd *cobra.Command, tool ir.ToolDescriptor, guard *StdinGuard) error {
@@ -1009,22 +1013,35 @@ func flagKindForSchema(schema map[string]any) (FlagKind, bool) {
 
 func schemaDescription(schema map[string]any) string {
 	value, _ := schema["description"].(string)
-	return strings.TrimSpace(value)
+	if strings.TrimSpace(value) != "" {
+		return strings.TrimSpace(value)
+	}
+	title, _ := schema["title"].(string)
+	return strings.TrimSpace(title)
 }
 
 func requiredFields(schema map[string]any) []string {
-	raw, ok := schema["required"].([]any)
-	if !ok {
+	switch raw := schema["required"].(type) {
+	case []any:
+		fields := make([]string, 0, len(raw))
+		for _, entry := range raw {
+			value, ok := entry.(string)
+			if ok && value != "" {
+				fields = append(fields, value)
+			}
+		}
+		return fields
+	case []string:
+		fields := make([]string, 0, len(raw))
+		for _, value := range raw {
+			if value != "" {
+				fields = append(fields, value)
+			}
+		}
+		return fields
+	default:
 		return nil
 	}
-	fields := make([]string, 0, len(raw))
-	for _, entry := range raw {
-		value, ok := entry.(string)
-		if ok && value != "" {
-			fields = append(fields, value)
-		}
-	}
-	return fields
 }
 
 func preferredProductRouteToken(product ir.CanonicalProduct) string {

@@ -185,6 +185,38 @@ func TestPretty_SchemaToolRendersAllSections(t *testing.T) {
 	}
 }
 
+func TestPretty_FlatSchemaToolRendersSchemaView(t *testing.T) {
+	forceNoColor(t)
+
+	payload := map[string]any{
+		"name":           "send_ding_message",
+		"cli_name":       "send",
+		"canonical_path": "ding.send_ding_message",
+		"path":           "ding.send_ding_message",
+		"product_id":     "ding",
+		"display":        "DING消息",
+		"group":          "message",
+		"parameters": map[string]any{
+			"robot-code": map[string]any{
+				"type":        "string",
+				"description": "机器人Code",
+				"required":    true,
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	if err := writePretty(&buf, payload); err != nil {
+		t.Fatalf("writePretty() error = %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{"Tool send_ding_message", "product:", "ding", "Parameters", "* robot-code"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("flat pretty missing %q; full output:\n%s", want, out)
+		}
+	}
+}
+
 func TestPretty_NonSchemaFallsBackToTableish(t *testing.T) {
 	forceNoColor(t)
 

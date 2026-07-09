@@ -368,8 +368,9 @@ func TestBuildCatalogCarriesToolOverrideGroupAndFlagOverlay(t *testing.T) {
 							IsSensitive: true,
 							Flags: map[string]market.CLIFlagOverride{
 								"receiverUserIdList": {
-									Alias:     "users",
-									Transform: "csv_to_array",
+									Alias:       "users",
+									Transform:   "csv_to_array",
+									Description: "接收人列表",
 								},
 								"robotCode": {
 									Alias:      "robot-code",
@@ -421,7 +422,7 @@ func TestBuildCatalogCarriesToolOverrideGroupAndFlagOverlay(t *testing.T) {
 		t.Fatalf("ReadOnlyHint should be nil when source is unknown, got %#v", *tool.Annotations.ReadOnlyHint)
 	}
 	users := tool.FlagOverlay["receiverUserIdList"]
-	if users.Alias != "users" || users.Transform != "csv_to_array" {
+	if users.Alias != "users" || users.Transform != "csv_to_array" || users.Description != "接收人列表" {
 		t.Fatalf("receiverUserIdList overlay = %#v", users)
 	}
 	robot := tool.FlagOverlay["robotCode"]

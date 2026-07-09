@@ -349,7 +349,7 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 
 	bindPersistentFlags(root, flags)
 
-	schemaCmd := newSchemaCommand(loader)
+	schemaCmd := newSchemaCommand()
 	genSkillsCmd := newGenerateSkillsCommand()
 	genSkillsCmd.Hidden = true
 	mcpCmd := newMCPCommand(rootCtx, loader, runner, engine)
@@ -628,8 +628,8 @@ func newVersionCommand() *cobra.Command {
 	}
 }
 
-func newSchemaCommand(loader cli.CatalogLoader) *cobra.Command {
-	return cli.NewSchemaCommand(loader, newHelperToolFetcher())
+func newSchemaCommand() *cobra.Command {
+	return cli.NewSchemaCommand(newHelperToolFetcher())
 }
 
 func newGenerateSkillsCommand() *cobra.Command {

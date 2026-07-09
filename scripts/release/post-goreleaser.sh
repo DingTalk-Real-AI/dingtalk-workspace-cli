@@ -226,6 +226,11 @@ update_checksum_entry() {
 }
 
 sign_darwin_archives() {
+  if [ "${DWS_SKIP_DARWIN_SIGNING:-}" = "1" ]; then
+    say "  (DWS_SKIP_DARWIN_SIGNING=1, skipping)"
+    return 0
+  fi
+
   work="$(mktemp -d)"
   found_any=0
   for archive in "$DIST_DIR"/dws-darwin-*.tar.gz; do

@@ -79,7 +79,9 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 	cmd := exec.Command("sh", scriptPath)
 	cmd.Env = append(os.Environ(),
 		"DWS_PACKAGE_DIST_DIR="+distDir,
+		"DWS_PACKAGE_VERSION=1.2.3",
 		"DWS_RELEASE_BASE_URL=https://downloads.example.com/dws/releases/v1.2.3",
+		"DWS_SKIP_DARWIN_SIGNING=1",
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -201,7 +203,9 @@ func TestPostGoreleaserAllPlatformNpmAssets(t *testing.T) {
 	cmd := exec.Command("sh", scriptPath)
 	cmd.Env = append(os.Environ(),
 		"DWS_PACKAGE_DIST_DIR="+distDir,
+		"DWS_PACKAGE_VERSION=9.9.9",
 		"DWS_RELEASE_BASE_URL=https://downloads.example.com/dws/releases/v9.9.9",
+		"DWS_SKIP_DARWIN_SIGNING=1",
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -281,7 +285,9 @@ func TestPostGoreleaserSkillsZipLayout(t *testing.T) {
 	cmd := exec.Command("sh", scriptPath)
 	cmd.Env = append(os.Environ(),
 		"DWS_PACKAGE_DIST_DIR="+distDir,
+		"DWS_PACKAGE_VERSION=0.0.0",
 		"DWS_RELEASE_BASE_URL=https://downloads.example.com/dws/releases/v0.0.0",
+		"DWS_SKIP_DARWIN_SIGNING=1",
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {

@@ -9,7 +9,7 @@ cli_version: ">=1.0.15"
 通过 `dws` 命令管理钉钉产品能力。
 
 
-> ⚠️ **命令可用性可能因企业服务发现配置而异**。本文档列出的命令基于 dws envelope schema 与本仓库 v1.0.30 实测，但部分命令的 cobra 子命令暴露与否还取决于你的企业 MCP gateway 是否注册了对应 tool。如果跑某条命令报 `unknown command` 或 fall back 到父级 help，说明当前账号企业未开通该能力。实际调用前可用 `dws <cmd> --help` 或 `--dry-run` 验证。
+> ⚠️ **命令可用性以当前 dws runtime command surface 为准**。本文档列出的命令基于 runtime schema 与本仓库 v1.0.30 实测；实际调用前用 `dws <cmd> --help`、`dws schema "<cmd>"` 或 `--dry-run` 验证。若报 `unknown command` / `unknown flag` 或 fall back 到父级 help，必须按当前 help/schema 调整，禁止编造路径或 flag。
 
 ## 严格禁止 (NEVER DO)
 - 不要使用 dws 命令以外的方式操作（禁止 curl、HTTP API、浏览器）
@@ -161,19 +161,19 @@ Step 3 → 加 --yes 执行命令
 
 ## 命令发现（flag / 参数以 binary 为准）
 
-产品参考文档（`references/products/*.md`）里的 flag 列表是**便于理解用途的参考**，不是权威契约。参数名称、默认值、必填约束随服务发现动态变化，**以下两个命令的输出才是调用的事实源**：
+产品参考文档（`references/products/*.md`）里的 flag 列表是**便于理解用途的参考**，不是权威契约。参数名称、默认值、必填约束以当前 runtime command surface 和 `dws schema` 为准，**以下两个命令的输出才是调用的事实源**：
 
 ```bash
 # 1) 人读视图：看 Usage / Example / Flags
 dws <command-path> --help
 # 例：dws calendar event list --help
 
-# 2) 机读视图：JSON Schema + flag 别名映射 + 必填字段
+# 2) 机读视图：运行时参数 schema + 实际 flag 名 + 必填字段
 dws schema                                 # 列出所有产品及工具
 dws schema <product>.<canonical_name>      # 规范路径（如 calendar.list_suggested_event_times）
 dws schema "<product> <group> <cli_name>"  # CLI 路径（如 "calendar event list"）
-dws schema <path> --jq '.tool.flag_overlay'  # 只看 flag 别名
-dws schema <path> --jq '.tool.required'      # 只看必填字段
+dws schema <path> --jq '.parameters'         # 只看参数
+dws schema <path> --jq '.parameters.<flag>'  # 只看某个 flag
 ```
 
 **何时用哪条路径：**
@@ -181,7 +181,7 @@ dws schema <path> --jq '.tool.required'      # 只看必填字段
 - 构造 `--params` / `--json` 时不确定字段类型、必填、别名 → `dws schema <path>`
 - 参考文档和 `--help` 冲突时 → **以 `--help` / `dws schema` 为准**，文档视为过期
 
-`dws schema` 输出的 `flag_overlay[key].alias` 就是实际生效的 flag 名（如 `attendeeUserIds → --attendee-user-ids`）；`parameters[key]` 是原始 JSON Schema；`required` 是必填字段数组；`sensitive: true` 表示写/删操作，须先向用户确认再加 `--yes`。
+`dws schema` 输出为 GWS-style flat schema：`parameters` key 就是实际生效的 flag 名；每个参数里的 `property` 是最终发送给 MCP 的字段名，`required` / `default` 以内联字段呈现。无业务入参时仍有 `parameters: {}`，并用 `has_parameters:false` / `parameter_count:0` 标识。同一 canonical tool 有多个 CLI 入口时，使用 `primary_cli_path` 和 `aliases` 判断主入口与别名入口。完整契约见仓库 `docs/schema-contract.md`。
 
 ## 错误处理
 1. 遇到错误，加 `--verbose` 重试**一次**

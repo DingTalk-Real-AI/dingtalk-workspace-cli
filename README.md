@@ -292,11 +292,8 @@ Agents don't need pre-built knowledge of every command. Use `dws schema` to dyna
 # Step 1: Discover all available products
 dws schema --jq '.products[] | {id, tool_count: (.tools | length)}'
 
-# Step 2: Inspect target tool's parameter schema
-dws schema aitable.query_records --jq '.tool.parameters'
-
-# Optional: inspect DingTalk authorization metadata for PAT planning
-dws schema aitable.query_records --jq '.tool.auth'
+# Step 2: Inspect target command's runtime parameter schema
+dws schema "aitable record query" --jq '.parameters'
 
 # Step 3: Construct the correct call
 dws aitable record query --base-id BASE_ID --table-id TABLE_ID --limit 10
@@ -517,12 +514,13 @@ dws aitable record query --base-id BASE_ID --table-id TABLE_ID --fields invocati
 <summary><strong>Schema Introspection</strong> — query parameter schemas before making calls</summary>
 
 ```bash
-dws schema                                              # list all products and tools
-dws schema aitable.query_records                        # view parameter schema
-dws schema aitable.query_records --jq '.tool.required'   # view required fields
-dws schema aitable.query_records --jq '.tool.auth'       # view authorization metadata
+dws schema                                              # list runtime products and tools
+dws schema "aitable record query"                       # view parameter schema
+dws schema "aitable record query" --jq '.parameters'     # view flags, required, defaults
 dws schema --jq '.products[].id'                        # extract all product IDs
 ```
+
+Schema output follows the flat runtime contract in [docs/schema-contract.md](docs/schema-contract.md).
 
 </details>
 

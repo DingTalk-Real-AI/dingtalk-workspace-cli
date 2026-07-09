@@ -91,33 +91,43 @@ func TestFixtureLoaderLoadsCatalog(t *testing.T) {
 	}
 }
 
-func TestSchemaPayloadFindsTool(t *testing.T) {
+func TestRuntimeSchemaPayloadFindsTool(t *testing.T) {
 	t.Parallel()
 
-	payload, err := schemaPayload(ir.Catalog{
-		Products: []ir.CanonicalProduct{
-			{
-				ID: "doc",
-				Tools: []ir.ToolDescriptor{
-					{
-						RPCName:       "create_document",
-						CanonicalPath: "doc.create_document",
-						InputSchema: map[string]any{
-							"type": "object",
-							"required": []any{
-								"title",
-							},
-						},
-					},
-				},
-			},
-		},
-	}, []string{"doc.create_document"})
+	payload, err := runtimeSchemaPayload(buildRuntimeSchemaTestRoot(), []string{"doc.create_document"})
 	if err != nil {
-		t.Fatalf("schemaPayload() error = %v", err)
+		t.Fatalf("runtimeSchemaPayload() error = %v", err)
 	}
-	if payload["kind"] != "schema" {
-		t.Fatalf("schemaPayload() kind = %#v, want schema", payload["kind"])
+	if payload["path"] != "doc.create_document" {
+		t.Fatalf("runtimeSchemaPayload() path = %#v, want doc.create_document", payload["path"])
+	}
+	if payload["product_id"] != "doc" {
+		t.Fatalf("runtimeSchemaPayload() product_id = %#v, want doc", payload["product_id"])
+	}
+}
+
+func TestRuntimeSchemaPayloadMarksNoParameterCommands(t *testing.T) {
+	t.Parallel()
+
+	root := buildRuntimeSchemaTestRoot()
+	noop := &cobra.Command{Use: "noop", Short: "No params", Run: func(*cobra.Command, []string) {}}
+	AttachRuntimeSchema(noop, "doc", "noop", "runtime:doc")
+	doc, _, err := root.Find([]string{"doc"})
+	if err != nil || doc == nil {
+		t.Fatalf("find doc command: %v", err)
+	}
+	doc.AddCommand(noop)
+
+	payload, err := runtimeSchemaPayload(root, []string{"doc.noop"})
+	if err != nil {
+		t.Fatalf("runtimeSchemaPayload() error = %v", err)
+	}
+	params, ok := payload["parameters"].(map[string]any)
+	if !ok {
+		t.Fatalf("parameters type = %T", payload["parameters"])
+	}
+	if len(params) != 0 || payload["has_parameters"] != false || payload["parameter_count"] != 0 {
+		t.Fatalf("no-param marker mismatch: parameters=%#v has=%#v count=%#v", params, payload["has_parameters"], payload["parameter_count"])
 	}
 }
 
@@ -129,7 +139,7 @@ func TestCompactToolEmitsExtendedFields(t *testing.T) {
 		RPCName:       "send_ding_message",
 		CLIName:       "send",
 		Group:         "message",
-		CanonicalPath: "ding.send_ding_message",
+		CanonicalPath: "sample.send_ding_message",
 		Title:         "发送DING消息",
 		Description:   "desc",
 		Sensitive:     true,
@@ -137,7 +147,8 @@ func TestCompactToolEmitsExtendedFields(t *testing.T) {
 			"type":     "object",
 			"required": []any{"robotCode"},
 			"properties": map[string]any{
-				"robotCode": map[string]any{"type": "string"},
+				"receiverUserIdList": map[string]any{"type": "array", "description": "接收人"},
+				"robotCode":          map[string]any{"type": "string", "title": "机器人编码", "default": "robot-default"},
 			},
 		},
 		OutputSchema: map[string]any{
@@ -154,7 +165,7 @@ func TestCompactToolEmitsExtendedFields(t *testing.T) {
 			AuthMetaHash:        "sha256:test",
 		},
 		FlagOverlay: map[string]ir.FlagOverlay{
-			"receiverUserIdList": {Alias: "users", Transform: "csv_to_array"},
+			"receiverUserIdList": {Alias: "users", Transform: "csv_to_array", Description: "CLI 接收人列表"},
 		},
 	}
 
@@ -165,11 +176,29 @@ func TestCompactToolEmitsExtendedFields(t *testing.T) {
 	if out["cli_name"] != "send" {
 		t.Errorf("cli_name = %v", out["cli_name"])
 	}
-	if out["canonical_path"] != "ding.send_ding_message" {
+	if out["canonical_path"] != "sample.send_ding_message" {
 		t.Errorf("canonical_path = %v", out["canonical_path"])
 	}
 	if out["group"] != "message" {
 		t.Errorf("group = %v", out["group"])
+	}
+	params, ok := out["parameters"].(map[string]any)
+	if !ok {
+		t.Fatalf("parameters type = %T", out["parameters"])
+	}
+	robot, _ := params["robot-code"].(map[string]any)
+	if robot == nil || robot["type"] != "string" || robot["required"] != true || robot["default"] != "robot-default" {
+		t.Fatalf("robot-code = %#v, want flat string required default", robot)
+	}
+	if robot["description"] != "机器人编码" {
+		t.Fatalf("robot-code description = %#v, want schema title fallback", robot["description"])
+	}
+	users, _ := params["users"].(map[string]any)
+	if users == nil || users["type"] != "array" || users["required"] != false {
+		t.Fatalf("users = %#v, want alias-backed array", users)
+	}
+	if users["description"] != "CLI 接收人列表" {
+		t.Fatalf("users description = %#v, want overlay description", users["description"])
 	}
 	if _, ok := out["output_schema"]; !ok {
 		t.Errorf("output_schema missing, keys = %v", keysOf(out))
@@ -193,6 +222,47 @@ func TestCompactToolEmitsExtendedFields(t *testing.T) {
 	}
 }
 
+func TestCompactToolAppliesHardcodedSchemaHints(t *testing.T) {
+	t.Parallel()
+
+	tool := ir.ToolDescriptor{
+		RPCName:       "send_ding_message",
+		CLIName:       "send",
+		CanonicalPath: "ding.send_ding_message",
+		Description:   "remote description",
+		InputSchema: map[string]any{
+			"type":     "object",
+			"required": []any{},
+			"properties": map[string]any{
+				"robotCode":          map[string]any{"type": "string", "description": "remote robot"},
+				"receiverUserIdList": map[string]any{"type": "array", "description": "remote users"},
+				"remindType":         map[string]any{"type": "integer", "description": "remote type"},
+			},
+		},
+		FlagOverlay: map[string]ir.FlagOverlay{
+			"receiverUserIdList": {Alias: "users", Transform: "csv_to_array"},
+			"remindType":         {Alias: "type"},
+		},
+	}
+
+	out := compactTool(tool)
+	if out["description"] == "remote description" {
+		t.Fatalf("description was not overridden by hardcoded hint")
+	}
+	params, ok := out["parameters"].(map[string]any)
+	if !ok {
+		t.Fatalf("parameters type = %T", out["parameters"])
+	}
+	robot, _ := params["robot-code"].(map[string]any)
+	if robot == nil || robot["description"] == "remote robot" || robot["required"] != true {
+		t.Fatalf("robot-code hardcoded hint not applied: %#v", robot)
+	}
+	remind, _ := params["type"].(map[string]any)
+	if remind == nil || remind["default"] != "app" {
+		t.Fatalf("type hardcoded default not applied: %#v", remind)
+	}
+}
+
 func TestCompactToolOmitsEmptyExtras(t *testing.T) {
 	t.Parallel()
 
@@ -208,34 +278,19 @@ func TestCompactToolOmitsEmptyExtras(t *testing.T) {
 			t.Errorf("key %q should be omitted when empty, got %#v", key, out[key])
 		}
 	}
+	params, ok := out["parameters"].(map[string]any)
+	if !ok {
+		t.Fatalf("parameters type = %T", out["parameters"])
+	}
+	if len(params) != 0 || out["has_parameters"] != false || out["parameter_count"] != 0 {
+		t.Fatalf("no-param marker mismatch: parameters=%#v has=%#v count=%#v", params, out["has_parameters"], out["parameter_count"])
+	}
 }
 
-func TestSchemaPayloadResolvesCLIPath(t *testing.T) {
+func TestRuntimeSchemaPayloadResolvesCLIPath(t *testing.T) {
 	t.Parallel()
 
-	catalog := ir.Catalog{
-		Products: []ir.CanonicalProduct{
-			{
-				ID: "ding",
-				Tools: []ir.ToolDescriptor{
-					{
-						RPCName:       "send_ding_message",
-						CLIName:       "send",
-						Group:         "message",
-						CanonicalPath: "ding.send_ding_message",
-						InputSchema:   map[string]any{"type": "object"},
-					},
-					{
-						RPCName:       "recall_ding_message",
-						CLIName:       "recall",
-						Group:         "message",
-						CanonicalPath: "ding.recall_ding_message",
-						InputSchema:   map[string]any{"type": "object"},
-					},
-				},
-			},
-		},
-	}
+	root := buildRuntimeSchemaTestRoot()
 
 	cases := []struct {
 		name    string
@@ -253,46 +308,78 @@ func TestSchemaPayloadResolvesCLIPath(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			payload, err := schemaPayload(catalog, []string{tc.input})
+			payload, err := runtimeSchemaPayload(root, []string{tc.input})
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("err = %v, wantErr = %v", err, tc.wantErr)
 			}
 			if tc.wantErr {
 				return
 			}
-			tool, ok := payload["tool"].(map[string]any)
-			if !ok {
-				t.Fatalf("payload tool missing, got %#v", payload)
-			}
-			if tool["name"] != tc.wantRPC {
-				t.Errorf("tool name = %v, want %s", tool["name"], tc.wantRPC)
+			if payload["name"] != tc.wantRPC {
+				t.Errorf("tool name = %v, want %s", payload["name"], tc.wantRPC)
 			}
 		})
+	}
+}
+
+func TestRuntimeSchemaPayloadMarksCanonicalAliases(t *testing.T) {
+	t.Parallel()
+
+	root := &cobra.Command{Use: "dws"}
+	list := &cobra.Command{Use: "list", Short: "List records", Run: func(*cobra.Command, []string) {}}
+	AttachRuntimeSchema(list, "aitable", "query_records", "hardcoded:aitable")
+	query := &cobra.Command{Use: "query", Short: "Query records", Run: func(*cobra.Command, []string) {}}
+	AttachRuntimeSchema(query, "aitable", "query_records", "hardcoded:aitable")
+	record := &cobra.Command{Use: "record", Short: "Records"}
+	record.AddCommand(list, query)
+	aitable := &cobra.Command{Use: "aitable", Short: "AI 表格"}
+	aitable.AddCommand(record)
+	root.AddCommand(aitable)
+
+	entries := collectRuntimeSchemaEntries(root)
+	listing := runtimeSchemaListPayload(entries)
+	products, _ := listing["products"].([]map[string]any)
+	if len(products) != 1 {
+		t.Fatalf("products len = %d, want 1", len(products))
+	}
+	tools, _ := products[0]["tools"].([]map[string]any)
+	if len(tools) != 1 {
+		t.Fatalf("tools len = %d, want one primary entry; tools=%#v", len(tools), tools)
+	}
+	if tools[0]["cli_path"] != "aitable record query" || tools[0]["primary_cli_path"] != "aitable record query" {
+		t.Fatalf("primary tool = %#v, want query primary", tools[0])
+	}
+	aliases, _ := tools[0]["aliases"].([]string)
+	if len(aliases) != 1 || aliases[0] != "aitable record list" {
+		t.Fatalf("aliases = %#v, want record list", tools[0]["aliases"])
+	}
+
+	canonical, err := runtimeSchemaPayload(root, []string{"aitable.query_records"})
+	if err != nil {
+		t.Fatalf("canonical payload: %v", err)
+	}
+	if canonical["cli_path"] != "aitable record query" || canonical["is_alias"] != false {
+		t.Fatalf("canonical payload = %#v, want primary query", canonical)
+	}
+
+	alias, err := runtimeSchemaPayload(root, []string{"aitable record list"})
+	if err != nil {
+		t.Fatalf("alias payload: %v", err)
+	}
+	if alias["cli_path"] != "aitable record list" || alias["primary_cli_path"] != "aitable record query" || alias["is_alias"] != true {
+		t.Fatalf("alias payload = %#v, want list alias to query", alias)
 	}
 }
 
 func TestSchemaCommandCLIPathFlag(t *testing.T) {
 	t.Parallel()
 
-	loader := StaticLoader{Catalog: ir.Catalog{
-		Products: []ir.CanonicalProduct{{
-			ID: "ding",
-			Tools: []ir.ToolDescriptor{{
-				RPCName:       "send_ding_message",
-				CLIName:       "send",
-				Group:         "message",
-				CanonicalPath: "ding.send_ding_message",
-				InputSchema:   map[string]any{"type": "object"},
-			}},
-		}},
-	}}
-
 	t.Run("resolves via --cli-path", func(t *testing.T) {
-		cmd := NewSchemaCommand(loader, nil)
+		cmd := buildSchemaCommandTestRoot()
 		var out bytes.Buffer
 		cmd.SetOut(&out)
 		cmd.SetErr(&bytes.Buffer{})
-		cmd.SetArgs([]string{"--cli-path", "ding message send"})
+		cmd.SetArgs([]string{"schema", "--cli-path", "ding message send"})
 		if err := cmd.Execute(); err != nil {
 			t.Fatalf("Execute() error = %v", err)
 		}
@@ -300,21 +387,17 @@ func TestSchemaCommandCLIPathFlag(t *testing.T) {
 		if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		tool, ok := payload["tool"].(map[string]any)
-		if !ok {
-			t.Fatalf("tool missing: %#v", payload)
-		}
-		if tool["name"] != "send_ding_message" {
-			t.Errorf("tool name = %v", tool["name"])
+		if payload["name"] != "send_ding_message" {
+			t.Errorf("tool name = %v", payload["name"])
 		}
 	})
 
 	t.Run("rejects positional + flag collision", func(t *testing.T) {
-		cmd := NewSchemaCommand(loader, nil)
+		cmd := buildSchemaCommandTestRoot()
 		var out bytes.Buffer
 		cmd.SetOut(&out)
 		cmd.SetErr(&bytes.Buffer{})
-		cmd.SetArgs([]string{"--cli-path", "ding message send", "ding.send_ding_message"})
+		cmd.SetArgs([]string{"schema", "--cli-path", "ding message send", "ding.send_ding_message"})
 		err := cmd.Execute()
 		if err == nil {
 			t.Fatalf("expected mutual-exclusion error, got nil")
@@ -323,6 +406,39 @@ func TestSchemaCommandCLIPathFlag(t *testing.T) {
 			t.Errorf("err = %v, want mutual-exclusion message", err)
 		}
 	})
+}
+
+func buildRuntimeSchemaTestRoot() *cobra.Command {
+	root := &cobra.Command{Use: "dws"}
+
+	create := &cobra.Command{Use: "create", Short: "Create document", Run: func(*cobra.Command, []string) {}}
+	create.Flags().String("title", "", "Document title")
+	AttachRuntimeSchema(create, "doc", "create_document", "runtime:doc")
+	AnnotateRuntimeFlag(create, "title", "title", "string", true, "")
+	doc := &cobra.Command{Use: "doc", Short: "Docs"}
+	doc.AddCommand(create)
+
+	send := &cobra.Command{Use: "send", Short: "Send ding", Run: func(*cobra.Command, []string) {}}
+	send.Flags().String("robot-code", "", "Robot code")
+	AttachRuntimeSchema(send, "ding", "send_ding_message", "runtime:ding")
+	AnnotateRuntimeFlag(send, "robot-code", "robotCode", "string", true, "")
+	recall := &cobra.Command{Use: "recall", Short: "Recall ding", Run: func(*cobra.Command, []string) {}}
+	recall.Flags().String("id", "", "DING message ID")
+	AttachRuntimeSchema(recall, "ding", "recall_ding_message", "runtime:ding")
+	AnnotateRuntimeFlag(recall, "id", "openDingId", "string", true, "")
+	message := &cobra.Command{Use: "message", Short: "DING messages"}
+	message.AddCommand(send, recall)
+	ding := &cobra.Command{Use: "ding", Short: "DING"}
+	ding.AddCommand(message)
+
+	root.AddCommand(doc, ding)
+	return root
+}
+
+func buildSchemaCommandTestRoot() *cobra.Command {
+	root := buildRuntimeSchemaTestRoot()
+	root.AddCommand(NewSchemaCommand(nil))
+	return root
 }
 
 func keysOf(m map[string]any) []string {
@@ -1245,49 +1361,10 @@ func newTestMCPCommand(t *testing.T, catalog ir.Catalog, runner executor.Runner)
 	return cmd
 }
 
-func TestSchemaCommandOutputsDegradedOnUnauthenticated(t *testing.T) {
+func TestSchemaCommandDoesNotNeedDiscovery(t *testing.T) {
 	t.Parallel()
 
-	degradedErr := &CatalogDegraded{
-		Reason: DegradedUnauthenticated,
-		Hint:   "未登录，无法发现 MCP 服务。请先执行: dws auth login",
-	}
-	cmd := NewSchemaCommand(errorLoader{err: degradedErr}, nil)
-
-	var out, errOut bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&errOut)
-
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v, want nil (degraded handled gracefully)", err)
-	}
-
-	var payload map[string]any
-	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
-		t.Fatalf("json.Unmarshal() error = %v\noutput:\n%s", err, out.String())
-	}
-	if payload["degraded"] != true {
-		t.Fatalf("payload[degraded] = %v, want true", payload["degraded"])
-	}
-	if payload["reason"] != "unauthenticated" {
-		t.Fatalf("payload[reason] = %v, want unauthenticated", payload["reason"])
-	}
-	if payload["count"] != float64(0) {
-		t.Fatalf("payload[count] = %v, want 0", payload["count"])
-	}
-	if !strings.Contains(errOut.String(), "hint:") {
-		t.Fatalf("stderr = %q, want hint message", errOut.String())
-	}
-}
-
-func TestSchemaCommandOutputsDegradedOnMarketUnreachable(t *testing.T) {
-	t.Parallel()
-
-	degradedErr := &CatalogDegraded{
-		Reason: DegradedMarketUnreachable,
-		Hint:   "无法连接 MCP 市场，请检查网络",
-	}
-	cmd := NewSchemaCommand(errorLoader{err: degradedErr}, nil)
+	cmd := NewSchemaCommand(nil)
 
 	var out, errOut bytes.Buffer
 	cmd.SetOut(&out)
@@ -1301,24 +1378,11 @@ func TestSchemaCommandOutputsDegradedOnMarketUnreachable(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v\noutput:\n%s", err, out.String())
 	}
-	if payload["reason"] != "market_unreachable" {
-		t.Fatalf("payload[reason] = %v, want market_unreachable", payload["reason"])
+	if payload["count"] != float64(0) {
+		t.Fatalf("payload[count] = %v, want 0", payload["count"])
 	}
-}
-
-func TestSchemaCommandPropagatesNonDegradedError(t *testing.T) {
-	t.Parallel()
-
-	wantErr := errors.New("unexpected failure")
-	cmd := NewSchemaCommand(errorLoader{err: wantErr}, nil)
-
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
-
-	err := cmd.Execute()
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("Execute() error = %v, want %v", err, wantErr)
+	if errOut.String() != "" {
+		t.Fatalf("stderr = %q, want empty", errOut.String())
 	}
 }
 

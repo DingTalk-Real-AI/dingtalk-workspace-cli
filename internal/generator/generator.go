@@ -137,14 +137,7 @@ func Generate(catalog ir.Catalog) ([]Artifact, error) {
 
 	for _, product := range catalog.Products {
 		for _, tool := range product.Tools {
-			payload := map[string]any{
-				"kind":       "generated_schema",
-				"path":       tool.CanonicalPath,
-				"product_id": product.ID,
-				"display":    product.DisplayName,
-				"tool":       tool,
-				"required":   requiredFields(tool.InputSchema),
-			}
+			payload := cli.FlatToolSchemaPayload(product, tool)
 			data, err := marshalJSON(payload)
 			if err != nil {
 				return nil, err
@@ -207,7 +200,7 @@ func Generate(catalog ir.Catalog) ([]Artifact, error) {
 	})
 	indexEntries = append(indexEntries, skillIndexEntry{
 		Name:        "canonical-surface",
-		Description: truncateSkillDescription("DWS canonical MCP surface and schema discovery entrypoint."),
+		Description: truncateSkillDescription("DWS canonical MCP surface and runtime schema entrypoint."),
 		Category:    skillCategoryService,
 		Path:        canonicalPath,
 	})
@@ -349,7 +342,7 @@ func renderCanonicalSurfaceSkill(catalog ir.Catalog) (string, error) {
 	var builder strings.Builder
 	builder.WriteString(renderFrontmatter(frontmatterSpec{
 		Name:        "canonical-surface",
-		Description: "DWS canonical MCP surface and schema discovery entrypoint.",
+		Description: "DWS canonical MCP surface and runtime schema entrypoint.",
 		Category:    "productivity",
 		CLIHelp:     "dws mcp --help",
 	}))

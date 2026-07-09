@@ -55,7 +55,7 @@ const (
 	devAppMemberRemoveTool   = "remove_dev_app_members"
 	devAppSecurityConfigTool = "update_dev_app_security_config"
 
-	// 机器人能力（op-app MCP 工具，硬编码不走服务发现）。
+	// 机器人能力（op-app MCP 工具，硬编码 helper）。
 	devAppRobotSubmitTool    = "submit_robot_create_task"
 	devAppRobotResultTool    = "query_robot_create_result"
 	devAppRobotConfigGetTool = "get_extension_robot_config"
@@ -70,7 +70,7 @@ const (
 	devAppEventSubscribeTool   = "subscribe_dev_app_events"
 	devAppEventUnsubscribeTool = "unsubscribe_dev_app_events"
 
-	// 版本发布能力（op-app MCP 工具，硬编码不走服务发现）。
+	// 版本发布能力（op-app MCP 工具，硬编码 helper）。
 	devAppVersionCreateTool  = "create_dev_app_version"
 	devAppVersionListTool    = "list_dev_app_versions"
 	devAppVersionDetailTool  = "get_dev_app_version_detail"

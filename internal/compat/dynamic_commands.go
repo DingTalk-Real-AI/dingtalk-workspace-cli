@@ -24,6 +24,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/market"
@@ -403,6 +404,7 @@ func buildFlagsFromDetailSchema(cmd *cobra.Command, schemaJSON string, flagOverr
 					f.Usage = help
 				}
 			}
+			cli.AnnotateRuntimeFlag(cmd, flagName, key, schemaTypeFromDetailProp(prop.Type), requiredSet[key], prop.Default)
 			continue
 		}
 
@@ -440,6 +442,16 @@ func buildFlagsFromDetailSchema(cmd *cobra.Command, schemaJSON string, flagOverr
 		if requiredSet[key] {
 			_ = cmd.MarkFlagRequired(flagName)
 		}
+		cli.AnnotateRuntimeFlag(cmd, flagName, key, schemaTypeFromDetailProp(prop.Type), requiredSet[key], prop.Default)
+	}
+}
+
+func schemaTypeFromDetailProp(value string) string {
+	switch value {
+	case "integer", "number", "boolean", "array", "object", "string":
+		return value
+	default:
+		return "string"
 	}
 }
 

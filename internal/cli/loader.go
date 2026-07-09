@@ -69,7 +69,7 @@ const (
 // CatalogDegraded is returned by EnvironmentLoader.Load when discovery
 // fails for a diagnosable reason. Callers that need graceful degradation
 // (e.g. the runtime runner) can check errors.As and fall back to an
-// empty catalog; callers like the schema command can surface the hint.
+// empty catalog.
 type CatalogDegraded struct {
 	Reason      CatalogDegradedReason
 	Hint        string
@@ -134,8 +134,7 @@ func (l StaticLoader) Load(_ context.Context) (ir.Catalog, error) {
 }
 
 // CatalogLoaderFrom creates a CatalogLoader that returns a
-// pre-loaded catalog and error. This allows multiple consumers
-// (schema command, MCP command tree) to share one discovery result.
+// pre-loaded catalog and error.
 func CatalogLoaderFrom(catalog ir.Catalog, err error) CatalogLoader {
 	return &preloadedLoader{catalog: catalog, err: err}
 }

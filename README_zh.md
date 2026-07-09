@@ -292,8 +292,8 @@ Agent 无需预置所有命令知识，通过 `dws schema` 动态发现可用能
 # 第一步：发现所有可用产品
 dws schema --jq '.products[] | {id, tool_count: (.tools | length)}'
 
-# 第二步：查看目标工具的参数结构
-dws schema aitable.query_records --jq '.tool.parameters'
+# 第二步：查看目标命令的运行时参数结构
+dws schema "aitable record query" --jq '.parameters'
 
 # 第三步：构造正确的调用
 dws aitable record query --base-id BASE_ID --table-id TABLE_ID --limit 10
@@ -514,11 +514,13 @@ dws aitable record query --base-id BASE_ID --table-id TABLE_ID --fields invocati
 <summary><strong>Schema 自省</strong> — 调用前查询任意工具的参数结构</summary>
 
 ```bash
-dws schema                                              # 列出所有产品和工具
-dws schema aitable.query_records                        # 查看参数 Schema
-dws schema aitable.query_records --jq '.tool.required'   # 查看必填字段
+dws schema                                              # 列出运行时产品和工具
+dws schema "aitable record query"                       # 查看参数 Schema
+dws schema "aitable record query" --jq '.parameters'     # 查看 flag、必填、默认值
 dws schema --jq '.products[].id'                        # 提取所有产品 ID
 ```
+
+Schema 输出遵循 [docs/schema-contract.md](docs/schema-contract.md) 中定义的扁平 runtime 契约。
 
 </details>
 

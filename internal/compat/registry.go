@@ -270,6 +270,10 @@ func NewDirectCommand(route Route, runner executor.Runner) *cobra.Command {
 			for key, value := range bindingParams {
 				params[key] = value
 			}
+			dryRun := false
+			if root := cmd.Root(); root != nil {
+				dryRun, _ = root.PersistentFlags().GetBool("dry-run")
+			}
 
 			// Inject positional args into params according to each binding's
 			// PositionalIndex. Pure positional bindings are not registered as
@@ -321,19 +325,36 @@ func NewDirectCommand(route Route, runner executor.Runner) *cobra.Command {
 			// handles polling + downloads, and returns the last "call"
 			// step's response as the payload to the formatter.
 			if len(route.Pipeline) > 0 {
+				invocation := executor.NewCompatibilityInvocation(
+					cobracmd.LegacyCommandPath(cmd),
+					route.Target.CanonicalProduct,
+					"pipeline",
+					params,
+				)
+				invocation.DryRun = dryRun
+				if dryRun {
+					return output.WriteCommandPayload(cmd, executor.Result{
+						Invocation: invocation,
+						Response: map[string]any{
+							"dry_run": true,
+							"note":    "execution skipped by --dry-run",
+							"request": map[string]any{
+								"product":   route.Target.CanonicalProduct,
+								"tool":      "pipeline",
+								"arguments": params,
+								"steps":     len(route.Pipeline),
+							},
+						},
+					}, output.FormatJSON)
+				}
 				flagValues := extractFlagValuesByAlias(cmd, route.Bindings)
 				resp, err := runPipeline(cmd.Context(), cmd, runner, route, flagValues)
 				if err != nil {
 					return err
 				}
 				result := executor.Result{
-					Invocation: executor.NewCompatibilityInvocation(
-						cobracmd.LegacyCommandPath(cmd),
-						route.Target.CanonicalProduct,
-						"pipeline",
-						params,
-					),
-					Response: resp,
+					Invocation: invocation,
+					Response:   resp,
 				}
 				if route.OutputTransform != nil && result.Response != nil {
 					// Shape the MCP content payload (the actual data), not the
@@ -356,7 +377,7 @@ func NewDirectCommand(route Route, runner executor.Runner) *cobra.Command {
 				route.Target.Tool,
 				params,
 			)
-			if dryRun, _ := cmd.Root().PersistentFlags().GetBool("dry-run"); dryRun {
+			if dryRun {
 				invocation.DryRun = true
 			}
 			result, err := runner.Run(cmd.Context(), invocation)
@@ -369,6 +390,7 @@ func NewDirectCommand(route Route, runner executor.Runner) *cobra.Command {
 			return output.WriteCommandPayload(cmd, result, output.FormatJSON)
 		},
 	}
+	cli.AttachRuntimeSchema(cmd, route.Target.CanonicalProduct, route.Target.Tool, "runtime:"+route.Target.CanonicalProduct)
 
 	ApplyBindings(cmd, route.Bindings)
 	return cmd
@@ -542,6 +564,7 @@ func ApplyBindings(cmd *cobra.Command, bindings []FlagBinding) {
 		case ValueJSON:
 			cmd.Flags().StringP(primary, short, defStr, binding.Usage+" (JSON)")
 		}
+		cli.AnnotateRuntimeFlag(cmd, primary, binding.Property, schemaTypeFromValueKind(binding.Kind), binding.Required, binding.Default)
 		registerHidden(alias, " (alias)")
 		for _, extra := range extras {
 			registerHidden(extra, " (alias)")
@@ -631,9 +654,36 @@ func registerPositionalAliasFlags(cmd *cobra.Command, binding FlagBinding) {
 	}
 
 	register(primary, true, false, "")
+	cli.AnnotateRuntimeFlag(cmd, primary, binding.Property, schemaTypeFromValueKind(binding.Kind), binding.Required, binding.Default)
 	register(alias, false, true, " (alias)")
 	for _, e := range extras {
 		register(e, false, true, " (alias)")
+	}
+}
+
+func schemaTypeFromValueKind(kind ValueKind) string {
+	switch kind {
+	case ValueInt, ValueIntSlice:
+		if kind == ValueIntSlice {
+			return "array"
+		}
+		return "integer"
+	case ValueFloat, ValueFloatSlice:
+		if kind == ValueFloatSlice {
+			return "array"
+		}
+		return "number"
+	case ValueBool, ValueBoolSlice:
+		if kind == ValueBoolSlice {
+			return "array"
+		}
+		return "boolean"
+	case ValueStringSlice:
+		return "array"
+	case ValueJSON:
+		return "object"
+	default:
+		return "string"
 	}
 }
 

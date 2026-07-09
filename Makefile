@@ -1,4 +1,5 @@
 GO ?= go
+VERSION ?= 0.0.0-SNAPSHOT
 
 .PHONY: all help build rebuild test lint fmt policy edition-test package release publish-homebrew-formula setup-hooks
 
@@ -38,8 +39,8 @@ edition-test:
 	$(GO) test -v -count=1 ./pkg/editiontest/...
 
 package:
-	@./scripts/dev/build-all.sh
-	@./scripts/release/post-goreleaser.sh
+	@VERSION="$(VERSION)" ./scripts/dev/build-all.sh
+	@DWS_PACKAGE_VERSION="$(VERSION)" ./scripts/release/post-goreleaser.sh
 
 publish-homebrew-formula:
 	@./scripts/release/publish-homebrew-formula.sh

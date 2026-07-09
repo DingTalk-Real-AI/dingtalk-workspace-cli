@@ -61,6 +61,7 @@ type FlagOverlay struct {
 	TransformArgs map[string]any `json:"transform_args,omitempty"`
 	EnvDefault    string         `json:"env_default,omitempty"`
 	Default       string         `json:"default,omitempty"`
+	Description   string         `json:"description,omitempty"`
 	Hidden        bool           `json:"hidden,omitempty"`
 }
 
@@ -197,6 +198,7 @@ func BuildCatalog(runtimeServers []discovery.RuntimeServer) Catalog {
 						TransformArgs: cloneTransformArgs(flagOverride.TransformArgs),
 						EnvDefault:    strings.TrimSpace(flagOverride.EnvDefault),
 						Default:       strings.TrimSpace(flagOverride.Default),
+						Description:   strings.TrimSpace(flagOverride.Description),
 						Hidden:        flagOverride.Hidden,
 					}
 				}

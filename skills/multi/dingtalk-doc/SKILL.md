@@ -18,7 +18,7 @@ metadata:
 
 <!-- SAFETY_PREAMBLE_INJECT -->
 
-> ⚠️ **命令可用性可能因企业服务发现配置而异**。本文档列出的命令基于 dws envelope schema 与本仓库 v1.0.30 实测，但部分命令的 cobra 子命令暴露与否还取决于你的企业 MCP gateway 是否注册了对应 tool。如果跑某条命令报 `unknown command` 或 fall back 到父级 help，说明当前账号企业未开通该能力。实际调用前可用 `dws <cmd> --help` 或 `--dry-run` 验证。
+> ⚠️ **命令可用性以当前 dws runtime command surface 为准**。本文档列出的命令基于 runtime schema 与本仓库 v1.0.30 实测；实际调用前用 `dws <cmd> --help`、`dws schema "<cmd>"` 或 `--dry-run` 验证。若报 `unknown command` / `unknown flag` 或 fall back 到父级 help，必须按当前 help/schema 调整，禁止编造路径或 flag。
 
 
 > 渐进式命令参考入口：[doc.md](references/doc.md)；剧本：[04-document.md](references/04-document.md)；URL 识别与类型探测：[url-patterns.md](references/url-patterns.md)。详细参数、示例和踩坑说明按任务读取 `references/doc/` 下对应子文档。

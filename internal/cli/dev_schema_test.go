@@ -33,6 +33,8 @@ func buildHelperTestTree() *cobra.Command {
 		Annotations: map[string]string{"mcp-tool": "create_dev_app"},
 		Run:         func(*cobra.Command, []string) {},
 	}
+	create.Flags().String("name", "", "应用名称")
+	create.Flags().String("desc", "", "应用描述")
 
 	config := &cobra.Command{
 		Use:         "config",
@@ -40,6 +42,10 @@ func buildHelperTestTree() *cobra.Command {
 		Annotations: map[string]string{"mcp-tool": "set_extension_robot_config"},
 		Run:         func(*cobra.Command, []string) {},
 	}
+	config.Flags().String("unified-app-id", "", "统一应用 ID")
+	config.Flags().String("event-callback-url", "", "事件回调地址")
+	config.Flags().String("skills", "", "技能列表")
+	config.Flags().String("mode", "", "机器人模式")
 
 	// A leaf without an mcp-tool annotation (e.g. dev connect / dev doc search).
 	noTool := &cobra.Command{Use: "connect", Short: "无 MCP 工具", Run: func(*cobra.Command, []string) {}}
@@ -94,12 +100,27 @@ func TestRenderHelperSchema_LeafGwsFlat(t *testing.T) {
 		t.Fatal("expected helper renderer to claim the path")
 	}
 
-	// Flat top-level: description / path / source / parameters; no wrapper.
+	// Flat top-level: runtime-aligned leaf identity + parameters; no wrapper.
+	if payload["name"] != "set_extension_robot_config" {
+		t.Fatalf("name = %v", payload["name"])
+	}
+	if payload["product_id"] != "dev" {
+		t.Fatalf("product_id = %v", payload["product_id"])
+	}
+	if payload["canonical_path"] != "dev.set_extension_robot_config" {
+		t.Fatalf("canonical_path = %v", payload["canonical_path"])
+	}
 	if payload["description"] != "创建或更新现有应用的机器人配置" {
 		t.Fatalf("description = %v", payload["description"])
 	}
-	if payload["path"] != "dev app robot config" {
+	if payload["path"] != "dev.set_extension_robot_config" {
 		t.Fatalf("path = %v", payload["path"])
+	}
+	if payload["cli_path"] != "dev app robot config" {
+		t.Fatalf("cli_path = %v", payload["cli_path"])
+	}
+	if payload["primary_cli_path"] != "dev app robot config" || payload["is_alias"] != false {
+		t.Fatalf("alias markers = primary:%v is_alias:%v", payload["primary_cli_path"], payload["is_alias"])
 	}
 	if payload["source"] != "mcp:op-app" {
 		t.Fatalf("source = %v", payload["source"])
@@ -122,6 +143,9 @@ func TestRenderHelperSchema_LeafGwsFlat(t *testing.T) {
 	}
 	if uid["type"] != "string" || uid["required"] != true {
 		t.Fatalf("unified-app-id = %#v, want string+required", uid)
+	}
+	if uid["property"] != "unifiedAppId" {
+		t.Fatalf("unified-app-id property = %#v", uid["property"])
 	}
 	if _, hasDefault := uid["default"]; hasDefault {
 		t.Fatal("unified-app-id must not carry a default (MCP provides none)")
@@ -149,6 +173,24 @@ func TestRenderHelperSchema_LeafGwsFlat(t *testing.T) {
 	}
 }
 
+func TestRenderHelperSchema_CanonicalPath(t *testing.T) {
+	root := buildHelperTestTree()
+	fetch := fakeFetcher(map[string]HelperToolSchema{
+		"set_extension_robot_config": robotConfigToolSchema(),
+	})
+
+	payload, ok, err := renderHelperSchema(context.Background(), root, "dev.set_extension_robot_config", fetch)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected helper renderer to claim canonical helper path")
+	}
+	if payload["path"] != "dev.set_extension_robot_config" || payload["cli_path"] != "dev app robot config" {
+		t.Fatalf("payload paths = %#v", payload)
+	}
+}
+
 func TestRenderHelperSchema_Group(t *testing.T) {
 	root := buildHelperTestTree()
 	payload, ok, err := renderHelperSchema(context.Background(), root, "dev app", nil)
@@ -173,14 +215,22 @@ func TestRenderHelperSchema_NoAnnotation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !ok {
-		t.Fatal("expected claim")
+	if ok || payload != nil {
+		t.Fatalf("local helper command without mcp-tool must not be claimed: ok=%v payload=%#v", ok, payload)
 	}
-	if payload["error"] == nil {
-		t.Fatalf("expected a clear no-MCP-tool error, got %#v", payload)
+}
+
+func TestHelperProductSummariesExcludeLocalCommands(t *testing.T) {
+	root := buildHelperTestTree()
+	summaries := helperProductSummaries(root)
+	if len(summaries) != 1 {
+		t.Fatalf("summaries len = %d, want 1", len(summaries))
 	}
-	if _, present := payload["parameters"]; present {
-		t.Fatal("no-tool command must not emit parameters")
+	tools, _ := summaries[0]["tools"].([]map[string]any)
+	for _, tool := range tools {
+		if tool["cli_path"] == "dev connect" {
+			t.Fatalf("local helper command leaked into schema list: %#v", tools)
+		}
 	}
 }
 

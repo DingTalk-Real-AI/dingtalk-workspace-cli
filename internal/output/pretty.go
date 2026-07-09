@@ -37,8 +37,23 @@ func writePretty(w io.Writer, payload any) error {
 		if kind, _ := m["kind"].(string); kind == "schema" {
 			return writeSchemaPretty(w, m)
 		}
+		if looksLikeFlatSchemaTool(m) {
+			return writeSchemaToolPretty(w, m, m)
+		}
 	}
 	return writeTableish(w, normalized)
+}
+
+func looksLikeFlatSchemaTool(payload map[string]any) bool {
+	if _, ok := payload["parameters"].(map[string]any); !ok {
+		return false
+	}
+	if _, ok := payload["canonical_path"].(string); ok {
+		return true
+	}
+	_, hasPath := payload["path"].(string)
+	_, hasName := payload["name"].(string)
+	return hasPath && hasName
 }
 
 // writeSchemaPretty handles both the list-all shape (has `products`) and
@@ -138,6 +153,10 @@ func writeSchemaToolPretty(
 		pname, _ := product["name"].(string)
 		productID = pid
 		fmt.Fprintf(w, "  %s %s  %s\n", tui.Key("product"), tui.Cyan(pid), tui.Dim(pname))
+	} else if pid, _ := payload["product_id"].(string); pid != "" {
+		productID = pid
+		pname, _ := payload["display"].(string)
+		fmt.Fprintf(w, "  %s %s  %s\n", tui.Key("product"), tui.Cyan(pid), tui.Dim(pname))
 	}
 	if canonical != "" {
 		fmt.Fprintf(w, "  %s %s\n", tui.Key("canonical"), canonical)
@@ -189,6 +208,9 @@ func writeSchemaToolPretty(
 			for name, v := range ov {
 				if m, ok := v.(map[string]any); ok {
 					overlay[name] = m
+					if alias, _ := m["alias"].(string); alias != "" {
+						overlay[alias] = m
+					}
 				}
 			}
 		}
@@ -196,7 +218,8 @@ func writeSchemaToolPretty(
 		fmt.Fprintf(w, "%s\n", tui.Section("Parameters"))
 		for _, name := range sortedMapKeys(params) {
 			prop, _ := params[name].(map[string]any)
-			writeParamPretty(w, name, prop, required[name], overlay[name])
+			inlineRequired, _ := prop["required"].(bool)
+			writeParamPretty(w, name, prop, inlineRequired || required[name], overlay[name])
 		}
 	}
 
