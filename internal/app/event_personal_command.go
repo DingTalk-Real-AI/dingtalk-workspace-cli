@@ -134,7 +134,7 @@ func newEventSchemaCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&asIdentity, "as", "user", "事件身份: user|app；默认 user")
-	cmd.Flags().StringVarP(&formatRaw, "format", "f", "table", "输出格式: table|json")
+	cmd.Flags().StringVarP(&formatRaw, "format", "f", "json", "输出格式: json")
 	return cmd
 }
 
@@ -155,20 +155,16 @@ func runPersonalEventList(c *cobra.Command, opts personalListOptions) error {
 }
 
 func renderPersonalSchema(w io.Writer, def personal.Definition, format string) error {
-	if format == "json" {
-		enc := json.NewEncoder(w)
-		enc.SetIndent("", "  ")
-		return enc.Encode(def)
+	format = strings.ToLower(strings.TrimSpace(format))
+	if format == "" {
+		format = "json"
 	}
-	fmt.Fprintf(w, "EventKey : %s\n", def.EventKey)
-	fmt.Fprintf(w, "Rule     : %s\n", def.RuleType)
-	fmt.Fprintf(w, "Status   : %s\n", def.Status)
-	fmt.Fprintf(w, "Category : %s\n", def.Category)
-	if len(def.RequiredParams) > 0 {
-		fmt.Fprintf(w, "Required : %s\n", strings.Join(def.RequiredParams, ", "))
+	if format != "json" {
+		return fmt.Errorf("event schema only supports json output")
 	}
-	fmt.Fprintf(w, "Desc     : %s\n", def.Description)
-	return nil
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(personal.BuildSchemaDocument(def))
 }
 
 func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) error {

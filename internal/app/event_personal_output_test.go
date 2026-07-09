@@ -15,6 +15,7 @@ package app
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -109,7 +110,7 @@ func TestPersonalEventSchemaHidesSchemaIDs(t *testing.T) {
 		name string
 		args []string
 	}{
-		{name: "table", args: []string{personal.EventSingleChat, "--as", "user"}},
+		{name: "default", args: []string{personal.EventSingleChat, "--as", "user"}},
 		{name: "json", args: []string{personal.EventSingleChat, "--as", "user", "--format", "json"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -130,7 +131,7 @@ func TestPersonalEventSchemaHidesSchemaIDs(t *testing.T) {
 	}
 }
 
-func TestPersonalEventSchemaUsesBusinessPayloadFields(t *testing.T) {
+func TestPersonalEventSchemaUsesSingleJSONSchema(t *testing.T) {
 	for _, eventKey := range []string{
 		personal.EventMention,
 		personal.EventSingleChat,
@@ -143,14 +144,27 @@ func TestPersonalEventSchemaUsesBusinessPayloadFields(t *testing.T) {
 			cmd.SilenceErrors = true
 			var out bytes.Buffer
 			cmd.SetOut(&out)
-			cmd.SetArgs([]string{eventKey, "--format", "json"})
+			cmd.SetArgs([]string{eventKey})
 			if err := cmd.Execute(); err != nil {
 				t.Fatalf("Execute() error = %v", err)
 			}
 			got := out.String()
+			var doc map[string]any
+			if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+				t.Fatalf("schema output for %s is not JSON: %v\n%s", eventKey, err, got)
+			}
 			for _, want := range []string{
-				"output_schema",
-				"data_json_path",
+				"event_key",
+				"display_name",
+				"description",
+				"category",
+				"rule_type",
+				"required_params",
+				"jq_root_path",
+				"schema",
+				"event_id",
+				"timestamp",
+				"subscribe_id",
 				"content",
 				"sender",
 				"sender_open_dingtalk_id",
@@ -158,10 +172,6 @@ func TestPersonalEventSchemaUsesBusinessPayloadFields(t *testing.T) {
 				"message_id",
 				"create_time",
 				"event_time",
-				"payload.body.content",
-				"payload.body.openConversationId",
-				"payload.body.senderOpenDingTalkId",
-				"content_media_type",
 			} {
 				if !strings.Contains(got, want) {
 					t.Fatalf("schema output for %s missing %q: %s", eventKey, want, got)
@@ -172,8 +182,13 @@ func TestPersonalEventSchemaUsesBusinessPayloadFields(t *testing.T) {
 				"chat.openConversationId",
 				"sender.userId",
 				"sender.unionId",
+				"auth",
 				"resolved_output_schema",
 				"decoded_data_schema",
+				"filter_schema",
+				"payload_schema",
+				"output_schema",
+				"data_json_path",
 				"headers",
 				"audit",
 				"tenant",
@@ -186,6 +201,20 @@ func TestPersonalEventSchemaUsesBusinessPayloadFields(t *testing.T) {
 				if strings.Contains(got, leaked) {
 					t.Fatalf("schema output for %s leaked %q: %s", eventKey, leaked, got)
 				}
+			}
+			if doc["jq_root_path"] != ".data | fromjson" {
+				t.Fatalf("jq_root_path = %#v, want .data | fromjson", doc["jq_root_path"])
+			}
+			schema, ok := doc["schema"].(map[string]any)
+			if !ok {
+				t.Fatalf("schema = %#v, want object", doc["schema"])
+			}
+			props, ok := schema["properties"].(map[string]any)
+			if !ok {
+				t.Fatalf("schema.properties = %#v, want object", schema["properties"])
+			}
+			if _, ok := props["content"].(map[string]any); !ok {
+				t.Fatalf("schema.properties.content = %#v, want object", props["content"])
 			}
 		})
 	}
@@ -201,8 +230,23 @@ func TestEventSchemaDefaultsToUser(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if !strings.Contains(out.String(), "Rule     : singleChat") {
-		t.Fatalf("schema output = %s", out.String())
+	var doc map[string]any
+	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+		t.Fatalf("schema output is not JSON: %v\n%s", err, out.String())
+	}
+	if doc["event_key"] != personal.EventSingleChat {
+		t.Fatalf("event_key = %#v, want %s", doc["event_key"], personal.EventSingleChat)
+	}
+}
+
+func TestPersonalEventSchemaRejectsTableFormat(t *testing.T) {
+	cmd := newEventSchemaCommand()
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
+	cmd.SetArgs([]string{personal.EventSingleChat, "--format", "table"})
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "event schema only supports json output") {
+		t.Fatalf("Execute() error = %v, want json-only format validation", err)
 	}
 }
 

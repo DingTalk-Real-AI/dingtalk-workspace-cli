@@ -70,21 +70,31 @@ func TestDefinitionJSONHidesInternalSchemaIDs(t *testing.T) {
 	}
 }
 
-func TestMessageSchemasUseBusinessPayloadFields(t *testing.T) {
+func TestSchemaDocumentsUseSingleJSONSchema(t *testing.T) {
 	for _, eventKey := range []string{EventMention, EventSingleChat, EventInChat, EventFromUser} {
 		t.Run(eventKey, func(t *testing.T) {
 			def, ok := Lookup(eventKey)
 			if !ok {
 				t.Fatalf("Lookup(%q) failed", eventKey)
 			}
-			raw, err := json.Marshal(def)
+			doc := BuildSchemaDocument(def)
+			raw, err := json.Marshal(doc)
 			if err != nil {
 				t.Fatalf("Marshal() error = %v", err)
 			}
 			out := string(raw)
 			for _, want := range []string{
-				"output_schema",
-				"data_json_path",
+				"event_key",
+				"display_name",
+				"description",
+				"category",
+				"rule_type",
+				"required_params",
+				"jq_root_path",
+				"schema",
+				"event_id",
+				"timestamp",
+				"subscribe_id",
 				"content",
 				"sender",
 				"sender_open_dingtalk_id",
@@ -92,10 +102,6 @@ func TestMessageSchemasUseBusinessPayloadFields(t *testing.T) {
 				"message_id",
 				"create_time",
 				"event_time",
-				"payload.body.content",
-				"payload.body.openConversationId",
-				"payload.body.senderOpenDingTalkId",
-				"content_media_type",
 			} {
 				if !strings.Contains(out, want) {
 					t.Fatalf("schema for %s missing %q: %s", eventKey, want, out)
@@ -106,8 +112,13 @@ func TestMessageSchemasUseBusinessPayloadFields(t *testing.T) {
 				"chat.openConversationId",
 				"sender.userId",
 				"sender.unionId",
+				"auth",
 				"resolved_output_schema",
 				"decoded_data_schema",
+				"filter_schema",
+				"payload_schema",
+				"output_schema",
+				"data_json_path",
 				"headers",
 				"audit",
 				"tenant",
@@ -121,15 +132,18 @@ func TestMessageSchemasUseBusinessPayloadFields(t *testing.T) {
 					t.Fatalf("schema for %s leaked %q: %s", eventKey, leaked, out)
 				}
 			}
-			props, ok := def.PayloadSchema["properties"].(map[string]any)
+			if doc.JQRootPath != ".data | fromjson" {
+				t.Fatalf("jq_root_path = %q, want .data | fromjson", doc.JQRootPath)
+			}
+			if doc.RequiredParams == nil {
+				t.Fatalf("required_params = nil, want empty slice")
+			}
+			props, ok := doc.Schema["properties"].(map[string]any)
 			if !ok {
-				t.Fatalf("payload_schema.properties = %#v, want object", def.PayloadSchema["properties"])
+				t.Fatalf("schema.properties = %#v, want object", doc.Schema["properties"])
 			}
 			if _, ok := props["content"].(map[string]any); !ok {
-				t.Fatalf("payload_schema.properties.content = %#v, want object", props["content"])
-			}
-			if def.DataJSONPath != ".data | fromjson" {
-				t.Fatalf("data_json_path = %q, want .data | fromjson", def.DataJSONPath)
+				t.Fatalf("schema.properties.content = %#v, want object", props["content"])
 			}
 		})
 	}
