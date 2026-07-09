@@ -14,7 +14,9 @@
 package helpers
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -122,6 +124,39 @@ func TestQoderForwarderKeepsStreamJSONProcessAlive(t *testing.T) {
 	}
 	if !strings.Contains(lines[0], "--input-format") || !strings.Contains(lines[0], "stream-json") {
 		t.Fatalf("qodercli should start in stream-json input mode, log:\n%s", raw)
+	}
+}
+
+type qoderTestWriteCloser struct {
+	bytes.Buffer
+}
+
+func (w *qoderTestWriteCloser) Close() error { return nil }
+
+func TestQoderControlRequestReturnsImmediately(t *testing.T) {
+	stdin := &qoderTestWriteCloser{}
+	f := &qoderStreamForwarder{name: "qoder", stdin: stdin}
+
+	if !f.handleControlRequestLocked(`{"type":"control_request","request_id":"req-1","request":{"type":"permission","subtype":"permission","tool":"bash"}}`) {
+		t.Fatal("control_request was not handled")
+	}
+
+	var got struct {
+		Type     string `json:"type"`
+		Response struct {
+			Subtype   string `json:"subtype"`
+			RequestID string `json:"request_id"`
+			Code      string `json:"code"`
+		} `json:"response"`
+	}
+	if err := json.Unmarshal(bytes.TrimSpace(stdin.Bytes()), &got); err != nil {
+		t.Fatalf("decode response: %v; raw=%q", err, stdin.String())
+	}
+	if got.Type != "control_response" || got.Response.RequestID != "req-1" {
+		t.Fatalf("response identity mismatch: %#v", got)
+	}
+	if got.Response.Subtype != "error" || got.Response.Code != "unsupported_control_request" {
+		t.Fatalf("response should explicitly unblock with unsupported error: %#v", got.Response)
 	}
 }
 

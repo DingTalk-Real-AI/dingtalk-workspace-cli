@@ -850,14 +850,14 @@ func forwarderForChannel(channel, clientID string, opts connectAgentOptions) (fo
 	if !overridden && opts.Yolo {
 		switch channel {
 		case "claudecode", "codebuddy", "workbuddy":
-			argv = append(argv, "--dangerously-skip-permissions")
+			argv = append(argv, "--permission-mode", "bypassPermissions", "--dangerously-skip-permissions")
 			if len(streamArgv) > 0 {
-				streamArgv = append(streamArgv, "--dangerously-skip-permissions")
+				streamArgv = append(streamArgv, "--permission-mode", "bypassPermissions", "--dangerously-skip-permissions")
 			}
 		case "gemini":
-			argv = append(argv, "--yolo")
+			argv = insertBeforeArg(argv, "-p", "--approval-mode", "yolo", "--yolo")
 			if len(streamArgv) > 0 {
-				streamArgv = append(streamArgv, "--yolo")
+				streamArgv = insertBeforeArg(streamArgv, "-p", "--approval-mode", "yolo", "--yolo")
 			}
 		}
 	}
@@ -881,6 +881,18 @@ func applyModelArg(argv []string, flag, model string) []string {
 		}
 	}
 	return append(out[:1:1], append([]string{flag, model}, out[1:]...)...)
+}
+
+func insertBeforeArg(argv []string, marker string, values ...string) []string {
+	for i := 1; i < len(argv); i++ {
+		if argv[i] == marker {
+			out := append([]string(nil), argv[:i]...)
+			out = append(out, values...)
+			return append(out, argv[i:]...)
+		}
+	}
+	out := append([]string(nil), argv...)
+	return append(out, values...)
 }
 
 // msgDedup tracks recently-seen MsgIds so a redelivered message is not

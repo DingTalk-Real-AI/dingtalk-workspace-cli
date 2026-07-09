@@ -164,7 +164,7 @@ func (f *qoderStreamForwarder) commandArgs() []string {
 		"--input-format", "stream-json",
 	}
 	if f.yolo {
-		args = append(args, "--dangerously-skip-permissions")
+		args = append(args, "--permission-mode", "bypass_permissions", "--dangerously-skip-permissions")
 	} else {
 		args = append(args,
 			"--system-prompt", "",
@@ -334,6 +334,11 @@ func (f *qoderStreamForwarder) handleControlRequestLocked(line string) bool {
 	if json.Unmarshal([]byte(line), &ev) != nil || ev.Type != "control_request" || ev.RequestID == "" {
 		return false
 	}
+	subtype, _ := ev.Request["subtype"].(string)
+	if subtype == "" {
+		subtype, _ = ev.Request["type"].(string)
+	}
+	fmt.Fprintf(os.Stderr, "[connect][qoder] 自动拒绝/跳过未桥接的 control_request subtype=%q requestId=%s\n", subtype, ev.RequestID)
 	response := map[string]any{
 		"type": "control_response",
 		"response": map[string]any{
