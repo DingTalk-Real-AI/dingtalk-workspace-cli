@@ -855,9 +855,9 @@ func forwarderForChannel(channel, clientID string, opts connectAgentOptions) (fo
 				streamArgv = append(streamArgv, "--permission-mode", "bypassPermissions", "--dangerously-skip-permissions")
 			}
 		case "gemini":
-			argv = insertBeforeArg(argv, "-p", "--approval-mode=yolo")
+			argv = insertBeforeArg(argv, "-p", "--approval-mode=yolo", "--skip-trust")
 			if len(streamArgv) > 0 {
-				streamArgv = insertBeforeArg(streamArgv, "-p", "--approval-mode=yolo")
+				streamArgv = insertBeforeArg(streamArgv, "-p", "--approval-mode=yolo", "--skip-trust")
 			}
 		}
 	}

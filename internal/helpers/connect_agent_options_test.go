@@ -167,7 +167,7 @@ func TestBuiltInAgentForwardersDefaultToPureChannelPermissions(t *testing.T) {
 		{"claudecode", []string{"--permission-mode", "bypassPermissions", "--dangerously-skip-permissions"}},
 		{"codebuddy", []string{"--permission-mode", "bypassPermissions", "--dangerously-skip-permissions"}},
 		{"workbuddy", []string{"--permission-mode", "bypassPermissions", "--dangerously-skip-permissions"}},
-		{"gemini", []string{"--approval-mode=yolo"}},
+		{"gemini", []string{"--approval-mode=yolo", "--skip-trust"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.channel, func(t *testing.T) {
@@ -185,7 +185,7 @@ func TestBuiltInAgentForwardersDefaultToPureChannelPermissions(t *testing.T) {
 					t.Fatalf("%s argv missing %q: %s", tc.channel, want, got)
 				}
 			}
-			if tc.channel == "gemini" && !strings.Contains(got, "--approval-mode=yolo -p") {
+			if tc.channel == "gemini" && !strings.Contains(got, "--approval-mode=yolo --skip-trust -p") {
 				t.Fatalf("gemini approval args must precede -p prompt flag: %s", got)
 			}
 			if len(ef.streamArgv) > 0 {
