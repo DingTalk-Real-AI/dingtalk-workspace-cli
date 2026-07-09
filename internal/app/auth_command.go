@@ -446,6 +446,7 @@ func newAuthStatusCommand() *cobra.Command {
 			authenticated := false
 			refreshed := false
 			var tokenData *authpkg.TokenData
+			var statusErr error
 			provider := authpkg.NewOAuthProvider(configDir, nil)
 			configureOAuthProviderCompatibility(provider, configDir)
 			if data, err := provider.Status(); err == nil {
@@ -468,12 +469,15 @@ func newAuthStatusCommand() *cobra.Command {
 				if authStatusAuthenticated(tokenData) {
 					authenticated = true
 				}
+			} else {
+				statusErr = err
 			}
+			diagnostic := authStatusDiagnosticFromError(statusErr)
 
 			// Check if JSON output is requested
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if strings.EqualFold(strings.TrimSpace(format), "json") {
-				return writeAuthStatusJSON(cmd.OutOrStdout(), authenticated, refreshed, tokenData)
+				return writeAuthStatusJSON(cmd.OutOrStdout(), authenticated, refreshed, tokenData, diagnostic)
 			}
 
 			// Default table output
@@ -503,7 +507,10 @@ func newAuthStatusCommand() *cobra.Command {
 				}
 			} else {
 				fmt.Fprintf(w, "%-16s%s\n", "状态:", "未登录")
-				if !edition.Get().IsEmbedded {
+				if diagnostic != nil {
+					fmt.Fprintf(w, "%-16s%s\n", "原因:", diagnostic.Message)
+					fmt.Fprintf(w, "%-16s%s\n", "提示:", diagnostic.Hint)
+				} else if !edition.Get().IsEmbedded {
 					fmt.Fprintln(w, "运行 dws auth login --recommend 进行登录")
 				}
 			}
@@ -1199,6 +1206,8 @@ type authStatusResponse struct {
 	Success           bool   `json:"success"`
 	Authenticated     bool   `json:"authenticated"`
 	Message           string `json:"message,omitempty"`
+	Reason            string `json:"reason,omitempty"`
+	Hint              string `json:"hint,omitempty"`
 	Refreshed         bool   `json:"refreshed,omitempty"`
 	TokenValid        bool   `json:"token_valid,omitempty"`
 	RefreshTokenValid bool   `json:"refresh_token_valid,omitempty"`
@@ -1210,14 +1219,47 @@ type authStatusResponse struct {
 	UserName          string `json:"user_name,omitempty"`
 }
 
-func writeAuthStatusJSON(w io.Writer, authenticated, refreshed bool, data *authpkg.TokenData) error {
+type authStatusDiagnostic struct {
+	Reason  string
+	Message string
+	Hint    string
+}
+
+func authStatusDiagnosticFromError(err error) *authStatusDiagnostic {
+	if err == nil {
+		return nil
+	}
+	if keychain.IsDEKMissing(err) {
+		return &authStatusDiagnostic{
+			Reason:  "dek_missing",
+			Message: "本地登录密钥缺失，无法解密已保存的登录态",
+			Hint:    "重新登录以生成新的本地登录密钥；如仍异常，可先清理本地登录态后再登录。",
+		}
+	}
+	if !keychain.IsUnavailable(err) {
+		return nil
+	}
+	return &authStatusDiagnostic{
+		Reason:  "keychain_unavailable",
+		Message: "无法读取 macOS Keychain 中的登录密钥，无法判断登录状态",
+		Hint:    "检查 macOS 默认钥匙串是否存在且已解锁；修复后重试，或在测试环境设置 DWS_DISABLE_KEYCHAIN=1 后重新登录。",
+	}
+}
+
+func writeAuthStatusJSON(w io.Writer, authenticated, refreshed bool, data *authpkg.TokenData, diagnostic *authStatusDiagnostic) error {
 	resp := authStatusResponse{
 		Success:       true,
 		Authenticated: authenticated,
 	}
 
 	if !authenticated {
-		resp.Message = "未登录"
+		if diagnostic != nil {
+			resp.Message = diagnostic.Message
+			resp.Reason = diagnostic.Reason
+			resp.Hint = diagnostic.Hint
+		} else {
+			resp.Message = "未登录"
+		}
 	} else if data != nil {
 		resp.Refreshed = refreshed
 		resp.TokenValid = data.IsAccessTokenValid()

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade"
@@ -28,6 +29,8 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
+
+var doctorKeychainDiagnose = keychain.Diagnose
 
 // checkStatus represents the outcome of a single doctor check.
 type checkStatus string
@@ -75,6 +78,9 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 
 	authResult := doctorCheckAuth(cmd.Context(), w, jsonOut)
 	checks = append(checks, authResult)
+
+	keychainResult := doctorCheckKeychain(w, jsonOut)
+	checks = append(checks, keychainResult)
 
 	networkResult := doctorCheckNetwork(cmd.Context(), w, jsonOut, networkTimeout)
 	checks = append(checks, networkResult)
@@ -132,6 +138,19 @@ func doctorCheckAuth(ctx context.Context, w io.Writer, jsonOut bool) checkResult
 
 	data, err := provider.Status()
 	if err != nil || data == nil {
+		if diagnostic := authStatusDiagnosticFromError(err); diagnostic != nil {
+			r := checkResult{
+				Name:    "auth",
+				Status:  statusFail,
+				Message: diagnostic.Message,
+				Hint:    diagnostic.Hint,
+				Detail:  map[string]string{"reason": diagnostic.Reason},
+			}
+			if !jsonOut {
+				printCheckResult(w, r)
+			}
+			return r
+		}
 		r := checkResult{Name: "auth", Status: statusFail, Message: "未登录"}
 		if !edition.Get().IsEmbedded {
 			r.Hint = "运行 dws auth login 进行登录"
@@ -175,6 +194,40 @@ func doctorCheckAuth(ctx context.Context, w io.Writer, jsonOut bool) checkResult
 	r := checkResult{Name: "auth", Status: statusFail, Message: "登录已过期"}
 	if !edition.Get().IsEmbedded {
 		r.Hint = "运行 dws auth login 重新登录"
+	}
+	if !jsonOut {
+		printCheckResult(w, r)
+	}
+	return r
+}
+
+// ── Keychain check ─────────────────────────────────────────────────────
+
+func doctorCheckKeychain(w io.Writer, jsonOut bool) checkResult {
+	if !jsonOut {
+		fmt.Fprint(w, tui.Dim("检查钥匙串状态...     "))
+	}
+
+	diagnostic := doctorKeychainDiagnose()
+	r := checkResult{
+		Name:    "keychain",
+		Status:  statusPass,
+		Message: diagnostic.Message,
+		Detail:  diagnostic.Detail,
+	}
+	if !diagnostic.OK {
+		r.Status = statusFail
+		r.Hint = diagnostic.Hint
+		if diagnostic.Detail == nil {
+			r.Detail = map[string]string{"reason": diagnostic.Reason}
+		} else if diagnostic.Reason != "" {
+			detail := make(map[string]string, len(diagnostic.Detail)+1)
+			for k, v := range diagnostic.Detail {
+				detail[k] = v
+			}
+			detail["reason"] = diagnostic.Reason
+			r.Detail = detail
+		}
 	}
 	if !jsonOut {
 		printCheckResult(w, r)

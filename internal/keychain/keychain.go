@@ -17,6 +17,8 @@
 // - Windows: DPAPI + Registry storage
 package keychain
 
+import "errors"
+
 const (
 	// Service is the unified keychain service name for all secrets.
 	Service = "dws-cli"
@@ -40,11 +42,74 @@ const (
 	DisableKeychainEnv = "DWS_DISABLE_KEYCHAIN"
 )
 
+// ErrDEKMissing means encrypted local data may exist, but the Data Encryption
+// Key needed to decrypt it is missing. Read paths must not create a new DEK,
+// because a fresh key cannot decrypt existing ciphertext.
+var ErrDEKMissing = errors.New("dek missing")
+
 // KeychainAccess abstracts keychain Get/Set/Remove for dependency injection.
 type KeychainAccess interface {
 	Get(service, account string) (string, error)
 	Set(service, account, value string) error
 	Remove(service, account string) error
+}
+
+// Diagnostic is a read-only health report for the platform keychain backend.
+// It never mutates credentials, DEKs, or OS keychain settings.
+type Diagnostic struct {
+	OK      bool              `json:"ok"`
+	Reason  string            `json:"reason,omitempty"`
+	Message string            `json:"message"`
+	Hint    string            `json:"hint,omitempty"`
+	Detail  map[string]string `json:"detail,omitempty"`
+}
+
+// UnavailableError marks failures where the platform keychain itself could
+// not be reached, unlocked, or created. Callers can surface a diagnostic
+// instead of treating the result as a normal missing credential.
+type UnavailableError struct {
+	Op  string
+	Err error
+}
+
+func NewUnavailableError(op string, err error) error {
+	return &UnavailableError{Op: op, Err: err}
+}
+
+func (e *UnavailableError) Error() string {
+	if e == nil {
+		return ""
+	}
+	if e.Op == "" {
+		if e.Err != nil {
+			return e.Err.Error()
+		}
+		return "keychain unavailable"
+	}
+	if e.Err == nil {
+		return e.Op + ": keychain unavailable"
+	}
+	return e.Op + ": " + e.Err.Error()
+}
+
+func (e *UnavailableError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
+func IsUnavailable(err error) bool {
+	var unavailable *UnavailableError
+	return errors.As(err, &unavailable)
+}
+
+func IsDEKMissing(err error) bool {
+	return errors.Is(err, ErrDEKMissing)
+}
+
+func Diagnose() Diagnostic {
+	return platformDiagnose()
 }
 
 // Get retrieves a value from the keychain.

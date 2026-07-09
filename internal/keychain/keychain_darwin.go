@@ -21,10 +21,14 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -59,14 +63,168 @@ func safeFileName(account string) string {
 	return safeFileNameRe.ReplaceAllString(account, "_") + ".enc"
 }
 
+var readDefaultKeychain = func() ([]byte, error) {
+	return exec.Command("security", "default-keychain", "-d", "user").Output()
+}
+
+var (
+	keyringGet = keyring.Get
+	keyringSet = keyring.Set
+)
+
+func defaultKeychainPathFromSecurityOutput(output []byte) string {
+	value := strings.TrimSpace(string(output))
+	if value == "" {
+		return ""
+	}
+	if unquoted, err := strconv.Unquote(value); err == nil {
+		return unquoted
+	}
+	return strings.Trim(value, `"`)
+}
+
+func checkDefaultKeychainAvailable() error {
+	output, err := readDefaultKeychain()
+	if err != nil {
+		return nil
+	}
+	path := defaultKeychainPathFromSecurityOutput(output)
+	if path == "" {
+		return nil
+	}
+	if _, err := os.Stat(path); err != nil && os.IsNotExist(err) {
+		return NewUnavailableError("read macOS default Keychain", fmt.Errorf("default keychain %q does not exist", path))
+	}
+	return nil
+}
+
+func platformDiagnose() Diagnostic {
+	detail := map[string]string{
+		"platform": "darwin",
+		"service":  Service,
+		"account":  "dek",
+	}
+	if os.Getenv(DisableKeychainEnv) != "" {
+		detail["mode"] = "file_dek"
+		detail["storage_dir"] = StorageDir(Service)
+		return Diagnostic{
+			OK:      true,
+			Message: "macOS Keychain 已禁用, 当前使用 file-DEK 测试模式",
+			Detail:  detail,
+		}
+	}
+
+	output, err := readDefaultKeychain()
+	if err != nil {
+		detail["error"] = err.Error()
+		return Diagnostic{
+			OK:      false,
+			Reason:  "keychain_check_failed",
+			Message: "无法读取 macOS 默认钥匙串配置",
+			Hint:    "检查 /usr/bin/security 是否可用, 并确认当前用户钥匙串配置正常。",
+			Detail:  detail,
+		}
+	}
+
+	path := defaultKeychainPathFromSecurityOutput(output)
+	if path != "" {
+		detail["default_keychain"] = path
+	}
+	if path == "" {
+		return Diagnostic{
+			OK:      false,
+			Reason:  "keychain_unavailable",
+			Message: "macOS 默认钥匙串未配置",
+			Hint:    "恢复默认钥匙串后重试；测试环境可设置 DWS_DISABLE_KEYCHAIN=1 后重新登录。",
+			Detail:  detail,
+		}
+	}
+	if _, err := os.Stat(path); err != nil && os.IsNotExist(err) {
+		return Diagnostic{
+			OK:      false,
+			Reason:  "keychain_unavailable",
+			Message: "macOS 默认钥匙串不存在",
+			Hint:    "恢复默认钥匙串后重试；测试环境可设置 DWS_DISABLE_KEYCHAIN=1 后重新登录。",
+			Detail:  detail,
+		}
+	} else if err != nil {
+		detail["error"] = err.Error()
+		return Diagnostic{
+			OK:      false,
+			Reason:  "keychain_check_failed",
+			Message: "无法访问 macOS 默认钥匙串",
+			Hint:    "检查默认钥匙串路径权限与挂载状态。",
+			Detail:  detail,
+		}
+	}
+
+	return Diagnostic{
+		OK:      true,
+		Message: "macOS 默认钥匙串可用",
+		Detail:  detail,
+	}
+}
+
 // getDEK retrieves or generates the Data Encryption Key.
 // When DWS_DISABLE_KEYCHAIN=1 (set in sandboxed runtimes like Codex App
 // where Keychain APIs are blocked), falls back to a file-based DEK
 // identical to the Linux scheme. See DisableKeychainEnv docs for the
 // security tradeoff.
 func getDEK(service string) ([]byte, error) {
+	return getOrCreateDEK(service)
+}
+
+func getDEKReadOnly(service string) ([]byte, error) {
+	if os.Getenv(DisableKeychainEnv) != "" {
+		return fileDEKReadOnly(service)
+	}
+	if err := checkDefaultKeychainAvailable(); err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), keychainTimeout)
+	defer cancel()
+
+	type result struct {
+		key []byte
+		err error
+	}
+	resCh := make(chan result, 1)
+
+	go func() {
+		defer func() { recover() }()
+
+		encodedKey, err := keyringGet(service, "dek")
+		if err == nil {
+			key, decodeErr := base64.StdEncoding.DecodeString(encodedKey)
+			if decodeErr == nil && len(key) == dekBytes {
+				resCh <- result{key: key, err: nil}
+				return
+			}
+			resCh <- result{key: nil, err: fmt.Errorf("read DEK from macOS Keychain: %w", ErrDEKMissing)}
+			return
+		}
+		if errors.Is(err, keyring.ErrNotFound) {
+			resCh <- result{key: nil, err: fmt.Errorf("read DEK from macOS Keychain: %w", ErrDEKMissing)}
+			return
+		}
+		resCh <- result{key: nil, err: NewUnavailableError("read DEK from macOS Keychain", err)}
+	}()
+
+	select {
+	case res := <-resCh:
+		return res.key, res.err
+	case <-ctx.Done():
+		return nil, NewUnavailableError("read DEK from macOS Keychain", ctx.Err())
+	}
+}
+
+func getOrCreateDEK(service string) ([]byte, error) {
 	if os.Getenv(DisableKeychainEnv) != "" {
 		return fileDEK(service)
+	}
+	if err := checkDefaultKeychainAvailable(); err != nil {
+		return nil, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), keychainTimeout)
@@ -82,13 +240,16 @@ func getDEK(service string) ([]byte, error) {
 		defer func() { recover() }()
 
 		// Try to get existing DEK from system Keychain
-		encodedKey, err := keyring.Get(service, "dek")
+		encodedKey, err := keyringGet(service, "dek")
 		if err == nil {
 			key, decodeErr := base64.StdEncoding.DecodeString(encodedKey)
 			if decodeErr == nil && len(key) == dekBytes {
 				resCh <- result{key: key, err: nil}
 				return
 			}
+		} else if !errors.Is(err, keyring.ErrNotFound) {
+			resCh <- result{key: nil, err: NewUnavailableError("read DEK from macOS Keychain", err)}
+			return
 		}
 
 		// Generate new DEK if not found or invalid
@@ -100,15 +261,18 @@ func getDEK(service string) ([]byte, error) {
 
 		// Store in system Keychain
 		encodedKey = base64.StdEncoding.EncodeToString(key)
-		setErr := keyring.Set(service, "dek", encodedKey)
-		resCh <- result{key: key, err: setErr}
+		if setErr := keyringSet(service, "dek", encodedKey); setErr != nil {
+			resCh <- result{key: nil, err: NewUnavailableError("store DEK in macOS Keychain", setErr)}
+			return
+		}
+		resCh <- result{key: key, err: nil}
 	}()
 
 	select {
 	case res := <-resCh:
 		return res.key, res.err
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, NewUnavailableError("read DEK from macOS Keychain", ctx.Err())
 	}
 }
 
@@ -157,15 +321,15 @@ func decryptData(data []byte, key []byte) (string, error) {
 }
 
 func platformGet(service, account string) (string, error) {
-	key, err := getDEK(service)
-	if err != nil {
-		return "", err
-	}
 	data, err := os.ReadFile(filepath.Join(StorageDir(service), safeFileName(account)))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "", nil // Not found is not an error
 		}
+		return "", err
+	}
+	key, err := getDEKReadOnly(service)
+	if err != nil {
 		return "", err
 	}
 	plaintext, err := decryptData(data, key)
@@ -176,7 +340,7 @@ func platformGet(service, account string) (string, error) {
 }
 
 func platformSet(service, account, data string) error {
-	key, err := getDEK(service)
+	key, err := getOrCreateDEK(service)
 	if err != nil {
 		return err
 	}
