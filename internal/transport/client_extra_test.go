@@ -103,7 +103,7 @@ func TestDoWithRetryRedactsGatewayQueryInHeaderDebugLog(t *testing.T) {
 	})})
 	client.FileLogger = logger
 
-	resp, err := client.doWithRetry(context.Background(), "https://mcp-gw.dingtalk.com/server/demo?key=secret#frag", []byte(`{}`))
+	resp, err := client.doWithRetry(context.Background(), "https://mcp-gw.dingtalk.com/server/demo?key=secret#frag", []byte(`{}`), "initialize")
 	if err != nil {
 		t.Fatalf("doWithRetry() error = %v", err)
 	}

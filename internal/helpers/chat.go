@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -4927,17 +4928,26 @@ status 可选值:
   dws chat category create-smart --name "团队群" --members openDingTalkId1,openDingTalkId2
   dws chat category create-smart --name "重点群" --keywords "重点" --members openDingTalkId1`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "name"); err != nil {
-				return err
+			name := strings.TrimSpace(mustGetFlag(cmd, "name"))
+			if name == "" {
+				return apperrors.NewValidation("--name must not be blank")
 			}
 			toolArgs := map[string]any{
-				"title": mustGetFlag(cmd, "name"),
+				"categoryName": name,
 			}
-			if v, _ := cmd.Flags().GetString("keywords"); v != "" {
-				toolArgs["keywords"] = parseCSVValues(v)
+			if cmd.Flags().Changed("keywords") {
+				values := parseCSVValues(mustGetFlag(cmd, "keywords"))
+				if len(values) == 0 {
+					return apperrors.NewValidation("--keywords must contain at least one non-empty value")
+				}
+				toolArgs["groupNameKeywords"] = values
 			}
-			if v, _ := cmd.Flags().GetString("members"); v != "" {
-				toolArgs["memberOpenDingTalkIds"] = parseCSVValues(v)
+			if cmd.Flags().Changed("members") {
+				values := parseCSVValues(mustGetFlag(cmd, "members"))
+				if len(values) == 0 {
+					return apperrors.NewValidation("--members must contain at least one non-empty value")
+				}
+				toolArgs["memberOpenDingTalkIds"] = values
 			}
 			return callMCPToolOnServer("im", "create_smart_conv_category", toolArgs)
 		},

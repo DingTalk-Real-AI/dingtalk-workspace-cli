@@ -416,7 +416,7 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 	}
 	callStart := time.Now()
 
-	resp, err := c.doWithRetry(ctx, endpoint, body)
+	resp, err := c.doWithRetry(ctx, endpoint, body, request.Method)
 	if err != nil {
 		return err
 	}
@@ -493,15 +493,19 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 	return nil
 }
 
-func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte) (*http.Response, error) {
+func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte, method string) (*http.Response, error) {
 	endpoint = sanitizeJSONRPCEndpoint(endpoint)
+	operation := strings.TrimSpace(method)
+	if operation == "" {
+		operation = "jsonrpc"
+	}
 	var lastErr error
 	for attempt := 0; attempt <= c.MaxRetries; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 		if err != nil {
 			return nil, apperrors.NewDiscovery(
 				"failed to create JSON-RPC request",
-				apperrors.WithOperation("jsonrpc"),
+				apperrors.WithOperation(operation),
 				apperrors.WithReason("request_build_failed"),
 				apperrors.WithHint(i18n.T("请检查服务 endpoint 是否为空或格式不合法。")),
 				apperrors.WithCause(&CallError{
@@ -559,37 +563,52 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte) 
 				statusForLog = resp.StatusCode
 			}
 			delay := c.retryDelayForAttempt(attempt, retryAfter)
-			logging.LogRetryAttempt(c.FileLogger, "jsonrpc", c.ExecutionId, attempt, c.MaxRetries, statusForLog, delay, lastErr)
+			logging.LogRetryAttempt(c.FileLogger, operation, c.ExecutionId, attempt, c.MaxRetries, statusForLog, delay, lastErr)
 			if err := c.sleepForRetry(ctx, delay); err != nil {
-				return nil, apperrors.NewDiscovery(
-					"request cancelled during retry",
-					apperrors.WithOperation("jsonrpc"),
+				opts := []apperrors.Option{
+					apperrors.WithOperation(operation),
 					apperrors.WithReason("request_cancelled"),
 					apperrors.WithHint(i18n.T("请求在重试过程中被取消；请检查调用侧超时设置。")),
 					apperrors.WithCause(&CallError{
 						Stage: CallStageRequest,
 						Cause: err,
 					}),
-				)
+				}
+				if operation == "tools/call" {
+					opts = append(opts, apperrors.WithActions(networkActions("")...))
+					return nil, apperrors.NewAPI("request cancelled during retry", opts...)
+				}
+				opts = append(opts, apperrors.WithActions(discoveryActions("")...))
+				return nil, apperrors.NewDiscovery("request cancelled during retry", opts...)
 			}
 		}
 	}
 	reason, hint := classifyRequestFailure(lastErr)
-	logging.LogErrorClassified(c.FileLogger, "jsonrpc", c.ExecutionId,
-		string(apperrors.CategoryDiscovery), reason, 0, 0,
+	category := apperrors.CategoryDiscovery
+	actions := discoveryActions("")
+	if operation == "tools/call" {
+		category = apperrors.CategoryAPI
+		actions = networkActions("")
+	}
+	logging.LogErrorClassified(c.FileLogger, operation, c.ExecutionId,
+		string(category), reason, 0, 0,
 		!isTimeoutError(lastErr), "")
-	return nil, apperrors.NewDiscovery(
-		fmt.Sprintf("request to %s failed: %v", RedactURL(endpoint), lastErr),
-		apperrors.WithOperation("jsonrpc"),
+	opts := []apperrors.Option{
+		apperrors.WithOperation(operation),
 		apperrors.WithReason(reason),
 		apperrors.WithRetryable(!isTimeoutError(lastErr)),
 		apperrors.WithHint(hint),
-		apperrors.WithActions(discoveryActions("")...),
+		apperrors.WithActions(actions...),
 		apperrors.WithCause(&CallError{
 			Stage: CallStageRequest,
 			Cause: lastErr,
 		}),
-	)
+	}
+	message := fmt.Sprintf("request to %s failed: %v", RedactURL(endpoint), lastErr)
+	if category == apperrors.CategoryAPI {
+		return nil, apperrors.NewAPI(message, opts...)
+	}
+	return nil, apperrors.NewDiscovery(message, opts...)
 }
 
 func sanitizeJSONRPCEndpoint(endpoint string) string {
@@ -1032,6 +1051,17 @@ func authActions(snapshotPath string) []string {
 func runtimeActions(snapshotPath string) []string {
 	actions := []string{
 		i18n.T("检查认证、权限和参数后重试原命令"),
+	}
+	if snapshotPath != "" {
+		actions = append(actions, fmt.Sprintf("dws recovery plan --snapshot %s", snapshotPath))
+	}
+	return actions
+}
+
+func networkActions(snapshotPath string) []string {
+	actions := []string{
+		i18n.T("检查网络、代理和 DNS 配置后重试原命令"),
+		i18n.T("确认 MCP 服务可访问；若持续失败请稍后重试"),
 	}
 	if snapshotPath != "" {
 		actions = append(actions, fmt.Sprintf("dws recovery plan --snapshot %s", snapshotPath))

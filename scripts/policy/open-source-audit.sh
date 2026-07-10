@@ -36,6 +36,14 @@ require_no_match() {
   fi
 }
 
+require_no_tracked_path() {
+  path="$1"
+  if git ls-files -- "$path" | grep -q .; then
+    git ls-files -- "$path" >&2
+    err "found forbidden tracked path: $path"
+  fi
+}
+
 require_heading_if_linked() {
   label="$1"
   heading="$2"
@@ -61,6 +69,10 @@ require_no_match 'code\.alibaba-inc\.com|gitlab\.alibaba' README.md CONTRIBUTING
 require_no_match 'scripts/test\.sh|scripts/check-semantic-fixtures\.sh|scripts/run-command-benchmark\.sh|scripts/run-live-smoke\.sh|scripts/run-model-eval\.sh' scripts/README.md
 require_no_match 'scripts/check-semantic-fixtures\.py|test/semantic/cli_to_mcp|test/semantic/model_to_cli|python3 -m pytest test/semantic' CONTRIBUTING.md
 require_no_match '\.github/CODEOWNERS|Tag-triggered GitHub Release asset publishing' CHANGELOG.md
+
+require_no_tracked_path 'auto-test'
+require_no_tracked_path 'eval-runs'
+require_no_tracked_path '.qoder'
 
 require_heading_if_linked '[Environment Variables](#environment-variables)' '## Environment Variables'
 require_heading_if_linked '[Exit Codes](#exit-codes)' '## Exit Codes'
