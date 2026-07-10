@@ -4931,10 +4931,10 @@ status 可选值:
 				return err
 			}
 			toolArgs := map[string]any{
-				"title": mustGetFlag(cmd, "name"),
+				"categoryName": mustGetFlag(cmd, "name"),
 			}
 			if v, _ := cmd.Flags().GetString("keywords"); v != "" {
-				toolArgs["keywords"] = parseCSVValues(v)
+				toolArgs["groupNameKeywords"] = parseCSVValues(v)
 			}
 			if v, _ := cmd.Flags().GetString("members"); v != "" {
 				toolArgs["memberOpenDingTalkIds"] = parseCSVValues(v)
