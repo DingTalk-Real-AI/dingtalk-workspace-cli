@@ -17,8 +17,10 @@ import (
 	"context"
 	"io"
 	"reflect"
+	"strings"
 	"testing"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -60,8 +62,8 @@ func TestChatCategoryCreateSmartUsesMCPParameterNames(t *testing.T) {
 	cmd.SetArgs([]string{
 		"category", "create-smart",
 		"--name", "priority",
-		"--keywords", "alpha,beta",
-		"--members", "open-id-1,open-id-2",
+		"--keywords", "alpha, ,beta,",
+		"--members", "open-id-1, ,open-id-2,",
 	})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("chat category create-smart returned error: %v", err)
@@ -81,5 +83,105 @@ func TestChatCategoryCreateSmartUsesMCPParameterNames(t *testing.T) {
 	}
 	if !reflect.DeepEqual(call.args, want) {
 		t.Fatalf("tool args = %#v, want %#v", call.args, want)
+	}
+}
+
+func TestChatCategoryCreateSmartRejectsBlankInputs(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{
+			name:    "empty name",
+			args:    []string{"--name", ""},
+			wantErr: "--name must not be blank",
+		},
+		{
+			name:    "blank name",
+			args:    []string{"--name", " \t "},
+			wantErr: "--name must not be blank",
+		},
+		{
+			name:    "empty keywords",
+			args:    []string{"--name", "priority", "--keywords", ""},
+			wantErr: "--keywords must contain at least one non-empty value",
+		},
+		{
+			name:    "blank keywords CSV",
+			args:    []string{"--name", "priority", "--keywords", " , , "},
+			wantErr: "--keywords must contain at least one non-empty value",
+		},
+		{
+			name:    "empty keywords JSON array",
+			args:    []string{"--name", "priority", "--keywords", "[]"},
+			wantErr: "--keywords must contain at least one non-empty value",
+		},
+		{
+			name:    "empty members",
+			args:    []string{"--name", "priority", "--members", ""},
+			wantErr: "--members must contain at least one non-empty value",
+		},
+		{
+			name:    "blank members CSV",
+			args:    []string{"--name", "priority", "--members", " , , "},
+			wantErr: "--members must contain at least one non-empty value",
+		},
+		{
+			name:    "blank members JSON array",
+			args:    []string{"--name", "priority", "--members", `["", " "]`},
+			wantErr: "--members must contain at least one non-empty value",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			previousDeps := deps
+			t.Cleanup(func() { deps = previousDeps })
+
+			caller := &chatSmartCategoryCaller{}
+			InitDeps(caller)
+			deps.Out.w = io.Discard
+
+			cmd := newChatCommand()
+			cmd.SilenceErrors = true
+			cmd.SilenceUsage = true
+			cmd.SetArgs(append([]string{"category", "create-smart"}, tt.args...))
+			err := cmd.Execute()
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("error = %v, want containing %q", err, tt.wantErr)
+			}
+			if got := apperrors.ExitCode(err); got != 3 {
+				t.Fatalf("exit code = %d, want validation code 3", got)
+			}
+			if len(caller.calls) != 0 {
+				t.Fatalf("tool call count = %d, want 0", len(caller.calls))
+			}
+		})
+	}
+}
+
+func TestChatCategoryCreateSmartAllowsOmittedRulesAndTrimsName(t *testing.T) {
+	previousDeps := deps
+	t.Cleanup(func() { deps = previousDeps })
+
+	caller := &chatSmartCategoryCaller{}
+	InitDeps(caller)
+	deps.Out.w = io.Discard
+
+	cmd := newChatCommand()
+	cmd.SilenceErrors = true
+	cmd.SilenceUsage = true
+	cmd.SetArgs([]string{"category", "create-smart", "--name", "  priority  "})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("chat category create-smart returned error: %v", err)
+	}
+
+	if len(caller.calls) != 1 {
+		t.Fatalf("tool call count = %d, want 1", len(caller.calls))
+	}
+	want := map[string]any{"categoryName": "priority"}
+	if !reflect.DeepEqual(caller.calls[0].args, want) {
+		t.Fatalf("tool args = %#v, want %#v", caller.calls[0].args, want)
 	}
 }
