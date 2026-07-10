@@ -67,7 +67,11 @@ func PortableAuthTargetPopulated(configDir string) bool {
 
 // PortableAuthSourceReady reports whether encrypted auth token exists for export.
 func PortableAuthSourceReady() bool {
-	return portableAuthSourcePopulated(keychain.StorageDir(keychain.Service))
+	if !portableAuthSourcePopulated(keychain.StorageDir(keychain.Service)) {
+		return false
+	}
+	_, err := LoadTokenDataKeychain()
+	return err == nil
 }
 
 func portableAuthSourcePopulated(keychainDir string) bool {
@@ -93,7 +97,7 @@ func ExportPortableAuthBundle(configDir string, w io.Writer) error {
 		return fmt.Errorf("missing output writer")
 	}
 	if !PortableExportSupported() {
-		return fmt.Errorf("portable export unavailable on macOS while DEK is in system Keychain; set %s=1, re-login, then export", keychain.DisableKeychainEnv)
+		return fmt.Errorf("portable export requires file-DEK mode on macOS; set %s=1 and verify auth first, resetting and re-logging in only if the existing token cannot be decrypted", keychain.DisableKeychainEnv)
 	}
 	keychainDir := keychain.StorageDir(keychain.Service)
 	if _, err := os.Stat(keychainDir); err != nil {
@@ -101,6 +105,9 @@ func ExportPortableAuthBundle(configDir string, w io.Writer) error {
 	}
 	if !portableAuthSourcePopulated(keychainDir) {
 		return fmt.Errorf("auth token is not available for export; run dws auth login first")
+	}
+	if _, err := LoadTokenDataKeychain(); err != nil {
+		return fmt.Errorf("auth token cannot be decrypted with the portable file DEK: %w", err)
 	}
 
 	gz := gzip.NewWriter(w)

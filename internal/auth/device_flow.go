@@ -163,6 +163,10 @@ func (p *DeviceFlowProvider) resetCredentialState() {
 }
 
 func (p *DeviceFlowProvider) Login(ctx context.Context) (*TokenData, error) {
+	if err := preflightTokenPersistence(p.configDir); err != nil {
+		return nil, fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
+	}
+
 	if runtimeClientID, _, ok := getCompleteRuntimeCredentials(); ok {
 		p.clientID = runtimeClientID
 		clientMu.Lock()

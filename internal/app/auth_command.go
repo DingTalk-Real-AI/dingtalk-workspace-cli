@@ -596,7 +596,7 @@ func newAuthExportCommand() *cobra.Command {
 			}
 			if !authpkg.PortableExportSupported() {
 				return apperrors.NewValidation(fmt.Sprintf(
-					"macOS 默认将 DEK 存在系统 Keychain，导出的包无法在其它机器解密；请设置 %s=1 后重新登录再导出",
+					"macOS 导出认证包需要 file-DEK 模式；请先设置 %s=1 并运行 dws auth status 验证，只有提示密钥不匹配且确认可丢弃旧登录态时，才执行 dws auth reset 后重新登录",
 					keychain.DisableKeychainEnv,
 				))
 			}
@@ -1229,11 +1229,18 @@ func authStatusDiagnosticFromError(err error) *authStatusDiagnostic {
 	if err == nil {
 		return nil
 	}
+	if keychain.IsCiphertextKeyMismatch(err) {
+		return &authStatusDiagnostic{
+			Reason:  "ciphertext_key_mismatch",
+			Message: "本地登录态与可用登录密钥不匹配，已拒绝覆盖现有凭证",
+			Hint:    "请确保所有 dws 进程的 DWS_DISABLE_KEYCHAIN 设置一致；确认不再需要旧登录态后，再执行 dws auth reset 并重新登录。",
+		}
+	}
 	if keychain.IsDEKMissing(err) {
 		return &authStatusDiagnostic{
 			Reason:  "dek_missing",
 			Message: "本地登录密钥缺失，无法解密已保存的登录态",
-			Hint:    "重新登录以生成新的本地登录密钥；如仍异常，可先清理本地登录态后再登录。",
+			Hint:    "请先恢复或统一原登录密钥；确认旧登录态不可恢复后，执行 dws auth reset，再重新登录。",
 		}
 	}
 	if !keychain.IsUnavailable(err) {

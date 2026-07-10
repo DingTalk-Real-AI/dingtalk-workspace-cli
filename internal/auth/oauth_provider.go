@@ -110,6 +110,9 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 			}
 		}
 	}
+	if err := preflightTokenPersistence(p.configDir); err != nil {
+		return nil, fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
+	}
 
 	// Fall through: full browser OAuth flow.
 	if runtimeClientID, _, ok := getCompleteRuntimeCredentials(); ok {
@@ -622,6 +625,9 @@ func (p *OAuthProvider) lockedRefresh(ctx context.Context) (*TokenData, error) {
 	// Still expired — we need to actually refresh.
 	if !data.IsRefreshTokenValid() {
 		return nil, fmt.Errorf("refresh_token 已过期")
+	}
+	if err := preflightTokenRefreshPersistence(data); err != nil {
+		return nil, fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
 	}
 
 	if p.logger != nil {

@@ -27,10 +27,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
 func (p *OAuthProvider) exchangeCode(ctx context.Context, code string) (*TokenData, error) {
+	if err := preflightTokenPersistence(p.configDir); err != nil {
+		return nil, fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
+	}
+
 	// Use MCP mode if clientID is from MCP server
 	if IsClientIDFromMCP() {
 		return p.exchangeCodeViaMCP(ctx, code)

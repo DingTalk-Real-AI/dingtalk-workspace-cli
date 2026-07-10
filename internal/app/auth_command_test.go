@@ -232,6 +232,22 @@ func TestAuthStatusJSONReportsDEKMissing(t *testing.T) {
 	if !strings.Contains(resp.Hint, "重新登录") {
 		t.Fatalf("hint should mention 重新登录; response=%+v", resp)
 	}
+	if !strings.Contains(resp.Hint, "dws auth reset") {
+		t.Fatalf("hint should mention dws auth reset; response=%+v", resp)
+	}
+}
+
+func TestAuthStatusDiagnosticReportsCiphertextKeyMismatch(t *testing.T) {
+	diagnostic := authStatusDiagnosticFromError(fmt.Errorf("load token: %w", keychain.ErrCiphertextKeyMismatch))
+	if diagnostic == nil {
+		t.Fatal("authStatusDiagnosticFromError() = nil")
+	}
+	if diagnostic.Reason != "ciphertext_key_mismatch" {
+		t.Fatalf("reason = %q, want ciphertext_key_mismatch", diagnostic.Reason)
+	}
+	if !strings.Contains(diagnostic.Hint, keychain.DisableKeychainEnv) {
+		t.Fatalf("hint should mention %s: %q", keychain.DisableKeychainEnv, diagnostic.Hint)
+	}
 }
 
 func TestAuthStatusRefreshFailureLeavesStoredTokenIntact(t *testing.T) {

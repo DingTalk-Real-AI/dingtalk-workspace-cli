@@ -16,6 +16,8 @@
 package keychain
 
 import (
+	"bytes"
+	"encoding/base64"
 	"errors"
 	"os"
 	"path/filepath"
@@ -220,5 +222,217 @@ func TestDisableKeychainOverwrite(t *testing.T) {
 	}
 	if got != "overwritten" {
 		t.Fatalf("Get() = %q, want %q", got, "overwritten")
+	}
+}
+
+func stubMacOSSystemDEK(t *testing.T, systemDEK []byte, getErr error) *int {
+	t.Helper()
+
+	defaultKeychainPath := filepath.Join(t.TempDir(), "login.keychain-db")
+	if err := os.WriteFile(defaultKeychainPath, nil, 0600); err != nil {
+		t.Fatalf("WriteFile(default keychain) error = %v", err)
+	}
+
+	prevReadDefault := readDefaultKeychain
+	prevGet := keyringGet
+	prevSet := keyringSet
+	readDefaultKeychain = func() ([]byte, error) {
+		return []byte("\"" + defaultKeychainPath + "\"\n"), nil
+	}
+	keyringGet = func(service, account string) (string, error) {
+		if account != "dek" {
+			return "", errors.New("unexpected keyring account")
+		}
+		if getErr != nil {
+			return "", getErr
+		}
+		return base64.StdEncoding.EncodeToString(systemDEK), nil
+	}
+	setCalls := 0
+	keyringSet = func(service, account, value string) error {
+		setCalls++
+		return errors.New("unexpected keyring.Set")
+	}
+	t.Cleanup(func() {
+		readDefaultKeychain = prevReadDefault
+		keyringGet = prevGet
+		keyringSet = prevSet
+	})
+	return &setCalls
+}
+
+func TestSystemKeychainModePreservesFileDEKCredentials(t *testing.T) {
+	t.Setenv(StorageDirEnv, t.TempDir())
+	systemDEK := bytes.Repeat([]byte{0x22}, dekBytes)
+	setCalls := stubMacOSSystemDEK(t, systemDEK, nil)
+
+	service := "test-dek-mode-switch"
+	account := "auth-token"
+
+	t.Setenv(DisableKeychainEnv, "1")
+	if err := Set(service, account, "file-dek-token"); err != nil {
+		t.Fatalf("Set() in file-DEK mode error = %v", err)
+	}
+
+	t.Setenv(DisableKeychainEnv, "")
+	got, err := Get(service, account)
+	if err != nil {
+		t.Fatalf("Get() after switching to system Keychain mode error = %v", err)
+	}
+	if got != "file-dek-token" {
+		t.Fatalf("Get() after switching modes = %q, want file-dek-token", got)
+	}
+	if err := Set(service, account, "updated-token"); err != nil {
+		t.Fatalf("Set() after switching to system Keychain mode error = %v", err)
+	}
+	profileAccount := account + ":corp"
+	if err := Set(service, profileAccount, "profile-token"); err != nil {
+		t.Fatalf("Set() new profile account in system Keychain mode error = %v", err)
+	}
+
+	t.Setenv(DisableKeychainEnv, "1")
+	got, err = Get(service, account)
+	if err != nil {
+		t.Fatalf("Get() after switching back to file-DEK mode error = %v", err)
+	}
+	if got != "updated-token" {
+		t.Fatalf("Get() after switching back = %q, want updated-token", got)
+	}
+	got, err = Get(service, profileAccount)
+	if err != nil {
+		t.Fatalf("Get() new profile account in file-DEK mode error = %v", err)
+	}
+	if got != "profile-token" {
+		t.Fatalf("Get() new profile account = %q, want profile-token", got)
+	}
+	if *setCalls != 0 {
+		t.Fatalf("keyring.Set calls = %d, want 0", *setCalls)
+	}
+}
+
+func TestSystemKeychainModeFallsBackWhenSystemDEKIsMissing(t *testing.T) {
+	t.Setenv(StorageDirEnv, t.TempDir())
+	setCalls := stubMacOSSystemDEK(t, nil, keyringpkg.ErrNotFound)
+
+	service := "test-missing-system-dek-fallback"
+	account := "auth-token"
+	t.Setenv(DisableKeychainEnv, "1")
+	if err := Set(service, account, "file-dek-token"); err != nil {
+		t.Fatalf("Set() in file-DEK mode error = %v", err)
+	}
+
+	t.Setenv(DisableKeychainEnv, "")
+	got, err := Get(service, account)
+	if err != nil {
+		t.Fatalf("Get() with missing system DEK error = %v", err)
+	}
+	if got != "file-dek-token" {
+		t.Fatalf("Get() with missing system DEK = %q, want file-dek-token", got)
+	}
+	if *setCalls != 0 {
+		t.Fatalf("keyring.Set calls = %d, want 0", *setCalls)
+	}
+}
+
+func TestFileDEKModeDoesNotOverwriteSystemKeychainCredentials(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(StorageDirEnv, root)
+	systemDEK := bytes.Repeat([]byte{0x22}, dekBytes)
+	stubMacOSSystemDEK(t, systemDEK, nil)
+
+	service := "test-system-ciphertext-preserved"
+	account := "auth-token"
+	t.Setenv(DisableKeychainEnv, "")
+	if err := Set(service, account, "system-token"); err != nil {
+		t.Fatalf("Set() in system Keychain mode error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(StorageDir(service), "dek")); !os.IsNotExist(err) {
+		t.Fatalf("system Keychain Set created file DEK; stat error = %v", err)
+	}
+
+	targetPath := filepath.Join(StorageDir(service), safeFileName(account))
+	before, err := os.ReadFile(targetPath)
+	if err != nil {
+		t.Fatalf("ReadFile(ciphertext) error = %v", err)
+	}
+	fileDEK := bytes.Repeat([]byte{0x11}, dekBytes)
+	if err := os.WriteFile(filepath.Join(StorageDir(service), "dek"), fileDEK, 0600); err != nil {
+		t.Fatalf("WriteFile(file DEK) error = %v", err)
+	}
+
+	t.Setenv(DisableKeychainEnv, "1")
+	if err := Set(service, account, "file-token"); !IsCiphertextKeyMismatch(err) {
+		t.Fatalf("Set() error = %v, want ciphertext key mismatch", err)
+	}
+	after, err := os.ReadFile(targetPath)
+	if err != nil {
+		t.Fatalf("ReadFile(ciphertext after rejected Set) error = %v", err)
+	}
+	if !bytes.Equal(after, before) {
+		t.Fatal("rejected file-DEK Set overwrote system Keychain ciphertext")
+	}
+
+	t.Setenv(DisableKeychainEnv, "")
+	got, err := Get(service, account)
+	if err != nil {
+		t.Fatalf("Get() in system Keychain mode error = %v", err)
+	}
+	if got != "system-token" {
+		t.Fatalf("Get() after rejected overwrite = %q, want system-token", got)
+	}
+
+	profileAccount := account + ":corp"
+	if err := Set(service, profileAccount, "system-profile-token"); err != nil {
+		t.Fatalf("Set() new profile beside system-backed root error = %v", err)
+	}
+	got, err = Get(service, profileAccount)
+	if err != nil || got != "system-profile-token" {
+		t.Fatalf("Get() new system-backed profile = %q, %v", got, err)
+	}
+
+	t.Setenv(DisableKeychainEnv, "1")
+	if _, err := Get(service, profileAccount); !IsCiphertextKeyMismatch(err) {
+		t.Fatalf("file-DEK Get() of system-backed profile error = %v, want ciphertext key mismatch", err)
+	}
+}
+
+func TestSetDoesNotOverwriteCiphertextWithUnknownDEK(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(StorageDirEnv, root)
+	systemDEK := bytes.Repeat([]byte{0x22}, dekBytes)
+	stubMacOSSystemDEK(t, systemDEK, nil)
+
+	service := "test-unknown-ciphertext-key"
+	account := "auth-token"
+	dir := StorageDir(service)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	fileDEK := bytes.Repeat([]byte{0x11}, dekBytes)
+	if err := os.WriteFile(filepath.Join(dir, "dek"), fileDEK, 0600); err != nil {
+		t.Fatalf("WriteFile(file DEK) error = %v", err)
+	}
+	unknownDEK := bytes.Repeat([]byte{0x33}, dekBytes)
+	ciphertext, err := encryptData("unknown-token", unknownDEK)
+	if err != nil {
+		t.Fatalf("encryptData() error = %v", err)
+	}
+	targetPath := filepath.Join(dir, safeFileName(account))
+	if err := os.WriteFile(targetPath, ciphertext, 0600); err != nil {
+		t.Fatalf("WriteFile(ciphertext) error = %v", err)
+	}
+
+	for _, disableKeychain := range []string{"", "1"} {
+		t.Setenv(DisableKeychainEnv, disableKeychain)
+		if err := Set(service, account, "replacement"); !IsCiphertextKeyMismatch(err) {
+			t.Fatalf("Set() with %s=%q error = %v, want ciphertext key mismatch", DisableKeychainEnv, disableKeychain, err)
+		}
+		after, err := os.ReadFile(targetPath)
+		if err != nil {
+			t.Fatalf("ReadFile(ciphertext after rejected Set) error = %v", err)
+		}
+		if !bytes.Equal(after, ciphertext) {
+			t.Fatalf("rejected Set with %s=%q overwrote ciphertext", DisableKeychainEnv, disableKeychain)
+		}
 	}
 }

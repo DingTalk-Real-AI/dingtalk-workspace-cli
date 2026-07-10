@@ -15,18 +15,23 @@ package auth
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
 var (
 	migrationOnce sync.Once
 	migrationDone bool
 )
+
+// ErrTokenDataNotFound means the requested keychain slot does not exist.
+var ErrTokenDataNotFound = errors.New("token data not found")
 
 // SaveTokenDataKeychain saves TokenData to the platform keychain.
 // This is the new secure storage method using random master key.
@@ -86,7 +91,7 @@ func loadTokenDataKeychainAccount(account string) (*TokenData, error) {
 		return nil, fmt.Errorf("load from keychain: %w", err)
 	}
 	if jsonStr == "" {
-		return nil, fmt.Errorf("no token data in keychain account %q", account)
+		return nil, fmt.Errorf("%w in keychain account %q", ErrTokenDataNotFound, account)
 	}
 
 	var data TokenData
@@ -94,6 +99,63 @@ func loadTokenDataKeychainAccount(account string) (*TokenData, error) {
 		return nil, fmt.Errorf("parse token data: %w", err)
 	}
 	return &data, nil
+}
+
+// preflightTokenPersistence verifies that every registered token slot can be
+// read before an OAuth login or exchange can target any profile.
+// A missing slot is safe (first login or a legacy fallback); any other error
+// stops the remote operation when existing ciphertext is already known to be
+// unreadable and therefore unsafe to update.
+func preflightTokenPersistence(configDir string) error {
+	if h := edition.Get(); h.SaveToken != nil {
+		return nil
+	}
+
+	if _, err := LoadTokenDataKeychain(); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
+		return fmt.Errorf("legacy token slot %q is unreadable: %w", keychain.AccountToken, err)
+	}
+
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		return fmt.Errorf("load token profiles: %w", err)
+	}
+	seen := make(map[string]struct{}, len(cfg.Profiles))
+	for _, profile := range cfg.Profiles {
+		corpID := strings.TrimSpace(profile.CorpID)
+		if corpID == "" {
+			continue
+		}
+		if _, ok := seen[corpID]; ok {
+			continue
+		}
+		seen[corpID] = struct{}{}
+
+		if _, err := LoadTokenDataKeychainForCorpID(corpID); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
+			return fmt.Errorf("profile token slot %q is unreadable: %w", TokenAccountForCorpID(corpID), err)
+		}
+	}
+	return nil
+}
+
+// preflightTokenRefreshPersistence checks only the slots a refresh can write.
+// An unrelated broken profile must not prevent the current profile from using
+// its still-valid credentials.
+func preflightTokenRefreshPersistence(data *TokenData) error {
+	if h := edition.Get(); h.SaveToken != nil {
+		return nil
+	}
+
+	if _, err := LoadTokenDataKeychain(); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
+		return fmt.Errorf("legacy token slot %q is unreadable: %w", keychain.AccountToken, err)
+	}
+	if data == nil || strings.TrimSpace(data.CorpID) == "" {
+		return nil
+	}
+	corpID := strings.TrimSpace(data.CorpID)
+	if _, err := LoadTokenDataKeychainForCorpID(corpID); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
+		return fmt.Errorf("profile token slot %q is unreadable: %w", TokenAccountForCorpID(corpID), err)
+	}
+	return nil
 }
 
 // DeleteTokenDataKeychain removes TokenData from the platform keychain.

@@ -42,10 +42,16 @@ const (
 	DisableKeychainEnv = "DWS_DISABLE_KEYCHAIN"
 )
 
-// ErrDEKMissing means encrypted local data may exist, but the Data Encryption
-// Key needed to decrypt it is missing. Read paths must not create a new DEK,
-// because a fresh key cannot decrypt existing ciphertext.
-var ErrDEKMissing = errors.New("dek missing")
+var (
+	// ErrDEKMissing means encrypted local data may exist, but the Data Encryption
+	// Key needed to decrypt it is missing. Read paths must not create a new DEK,
+	// because a fresh key cannot decrypt existing ciphertext.
+	ErrDEKMissing = errors.New("dek missing")
+
+	// ErrCiphertextKeyMismatch means encrypted data exists but none of the
+	// available DEKs can decrypt it. Write paths must not overwrite the data.
+	ErrCiphertextKeyMismatch = errors.New("ciphertext key mismatch")
+)
 
 // KeychainAccess abstracts keychain Get/Set/Remove for dependency injection.
 type KeychainAccess interface {
@@ -106,6 +112,10 @@ func IsUnavailable(err error) bool {
 
 func IsDEKMissing(err error) bool {
 	return errors.Is(err, ErrDEKMissing)
+}
+
+func IsCiphertextKeyMismatch(err error) bool {
+	return errors.Is(err, ErrCiphertextKeyMismatch)
 }
 
 func Diagnose() Diagnostic {

@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -187,7 +188,7 @@ func LoadTokenDataForProfile(configDir, profile string) (*TokenData, error) {
 		if err == nil {
 			return data, nil
 		}
-		if strings.TrimSpace(profile) != "" {
+		if strings.TrimSpace(profile) != "" || !errors.Is(err, ErrTokenDataNotFound) {
 			return nil, err
 		}
 		// No explicit --profile: `selected` is the resolved current/primary
@@ -197,6 +198,8 @@ func LoadTokenDataForProfile(configDir, profile string) (*TokenData, error) {
 		if legacy, lerr := LoadTokenDataKeychain(); lerr == nil && legacy != nil &&
 			strings.TrimSpace(legacy.CorpID) == strings.TrimSpace(selected.CorpID) {
 			return legacy, nil
+		} else if lerr != nil && !errors.Is(lerr, ErrTokenDataNotFound) {
+			return nil, lerr
 		}
 		return nil, err
 	}
