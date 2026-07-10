@@ -2,7 +2,7 @@ GO ?= go
 VERSION ?= 0.0.0-SNAPSHOT
 SCHEMA_REGISTRY ?= $(HOME)/.dws/cache/default_default/market/servers.json
 
-.PHONY: all help build rebuild test lint fmt policy edition-test generate-schema-agent-metadata generate-schema-interface-metadata package release publish-homebrew-formula setup-hooks
+.PHONY: all help build rebuild test lint fmt policy edition-test generate-schema-command-surface generate-schema-agent-metadata generate-schema-interface-metadata package release publish-homebrew-formula setup-hooks
 
 all: setup-hooks fmt lint build test rebuild
 
@@ -13,6 +13,7 @@ help:
 	@printf "  make lint          - Run formatting checks and golangci-lint when available\n"
 	@printf "  make fmt           - Format Go source files\n"
 	@printf "  make policy        - Run open-source asset and command-surface checks\n"
+	@printf "  make generate-schema-command-surface - Refresh the versioned Agent command-surface snapshot\n"
 	@printf "  make generate-schema-agent-metadata - Regenerate embedded Agent schema metadata from skills\n"
 	@printf "  make generate-schema-interface-metadata - Snapshot sanitized CLI/MCP metadata from SCHEMA_REGISTRY\n"
 	@printf "  make package       - Build all release artifacts locally (goreleaser snapshot)\n"
@@ -40,6 +41,9 @@ policy:
 
 edition-test:
 	$(GO) test -v -count=1 ./pkg/editiontest/...
+
+generate-schema-command-surface:
+	$(GO) run ./internal/generator/cmd_schema_agent_metadata -root . -write-surface internal/cli/schema_command_surface.json
 
 generate-schema-agent-metadata:
 	$(GO) generate ./internal/cli

@@ -1,0 +1,243 @@
+{
+  "product_id": "wiki",
+  "tools": {
+    "wiki doc list": {
+      "use_when": [
+        "2. 列出根目录节点",
+        "3. 进入子目录",
+        "知识库下的文件/知识库里有哪些文档/浏览知识库内容",
+        "读某个知识库里的某篇文档"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws wiki node list --workspace \u003cworkspaceId\u003e --folder \u003cparentNodeId\u003e --format json",
+        "dws wiki node list --workspace \u003cworkspaceId\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/wiki.md"
+      ]
+    },
+    "wiki member add": {
+      "use_when": [
+        "2. 添加成员",
+        "把知识库分享给某人/给某人加入知识库/邀请进知识库",
+        "查看具体命令的完整参数说明"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws wiki member add --help",
+        "dws wiki member add --workspace \u003cWS_ID\u003e --users uid1 --role READER"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/wiki.md"
+      ]
+    },
+    "wiki member list": {
+      "use_when": [
+        "1. 查看当前成员",
+        "3. 查看当前成员",
+        "知识库有哪些成员/查看知识库成员"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws wiki member list --workspace \u003cWS_ID\u003e",
+        "dws wiki member list --workspace \u003cWS_ID\u003e --limit 100"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/wiki.md"
+      ]
+    },
+    "wiki member remove": {
+      "use_when": [
+        "2. 移除成员",
+        "移除知识库成员/把某人从知识库移除/删除知识库成员"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws wiki member remove --workspace \u003cWS_ID\u003e --users uid1",
+        "dws wiki member remove --workspace \u003cWS_ID\u003e --users uid1,uid2"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/wiki.md"
+      ]
+    },
+    "wiki member update": {
+      "use_when": [
+        "修改某人在知识库的权限/调整成员角色"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws wiki member update --workspace \u003cWS_ID\u003e --users uid1 --role EDITOR",
+        "dws wiki member update --workspace \u003cWS_ID\u003e --users uid1,uid2 --role READER"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/wiki.md"
+      ]
+    },
+    "wiki node copy": {
+      "use_when": [
+        "复制知识库里的文档",
+        "复制节点到另一个文件夹"
+      ],
+      "examples": [
+        "dws wiki node copy --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --folder \u003ctargetFolderId\u003e --format json",
+        "dws wiki node copy --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/wiki.md"
+      ]
+    },
+    "wiki node create": {
+      "use_when": [
+        "1. 创建文档节点",
+        "2. 创建文件夹",
+        "3. 在指定文件夹下创建",
+        "在知识库里创建文档/新建文件夹"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws wiki node create --workspace \u003cworkspaceId\u003e --name \"新文档\" --format json",
+        "dws wiki node create --workspace \u003cworkspaceId\u003e --name \"方案目录\" --type folder --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/wiki.md"
+      ]
+    },
+    "wiki node delete": {
+      "use_when": [
+        "删除知识库里的文档/节点",
+        "删除节点（会要求确认）"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws wiki node delete --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e",
+        "dws wiki node delete --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --yes"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/wiki.md"
+      ]
+    },
+    "wiki node move": {
+      "use_when": [
+        "移动知识库里的文档",
+        "移动节点到另一个文件夹"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws wiki node move --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --folder \u003ctargetFolderId\u003e --format json",
+        "dws wiki node move --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/wiki.md"
+      ]
+    },
+    "wiki node search": {
+      "use_when": [
+        "在指定知识库内搜索",
+        "在知识库里搜文档/空间内搜索",
+        "按文件类型过滤"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws wiki node search --workspace \u003cworkspaceId\u003e --query \"周报\" --limit 10 --format json",
+        "dws wiki node search --workspace \u003cworkspaceId\u003e --query \"方案\" --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/wiki.md"
+      ]
+    },
+    "wiki space create": {
+      "use_when": [
+        "创建知识库",
+        "创建知识库/新建知识库"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws wiki space create --name \"产品文档库\" --format json",
+        "dws wiki space create --name \"技术方案\" --desc \"团队技术方案归档\" --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/wiki.md"
+      ]
+    },
+    "wiki space delete": {
+      "use_when": [
+        "2. 删除知识库",
+        "删除知识库/移除知识库/把知识库删了"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws wiki space delete --workspace \"https://alidocs.dingtalk.com/i/spaces/xxx/overview\"",
+        "dws wiki space delete --workspace \u003cworkspaceId\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/wiki.md"
+      ]
+    },
+    "wiki space get": {
+      "use_when": [
+        "1. 确认知识库信息",
+        "查看具体命令的完整参数说明",
+        "查看知识库/知识库详情",
+        "查看知识库详情"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws wiki space get --help",
+        "dws wiki space get --workspace \u003cworkspaceId\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/wiki.md"
+      ]
+    },
+    "wiki space list": {
+      "use_when": [
+        "1. 先确认知识库 ID（避免授权到「我的文档」）",
+        "1. 获取知识库 ID",
+        "列出我有权访问的组织知识库",
+        "列出钉盘企业空间",
+        "列出钉盘空间/钉盘团队空间",
+        "我的文档/个人空间",
+        "我的知识库/知识库列表/有哪些知识库",
+        "获取「我的文档」个人空间",
+        "获取钉盘「我的文件」"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws wiki space list --format json",
+        "dws wiki space list --type myWikiSpace --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/wiki.md"
+      ]
+    },
+    "wiki space search": {
+      "use_when": [
+        "搜索知识库",
+        "搜索知识库/找知识库"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws wiki space search --query \"产品文档\" --format json",
+        "dws wiki space search --query \"技术方案\" --limit 20 --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/wiki.md"
+      ]
+    }
+  }
+}

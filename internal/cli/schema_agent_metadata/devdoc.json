@@ -1,0 +1,40 @@
+{
+  "product_id": "devdoc",
+  "tools": {
+    "devdoc article search": {
+      "use_when": [
+        "命中结果多时翻页",
+        "开发者问\"OAuth2 怎么接",
+        "推荐动态翻页：优先使用上一页返回的 nextCursor",
+        "查错误码 / 字段含义",
+        "简短关键词可直接作为位置参数"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws devdoc article search \"MCP\"",
+        "dws devdoc article search --query \"OAuth2 接入\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/devdoc.md"
+      ]
+    },
+    "devdoc error diagnose": {
+      "use_when": [
+        "只有 traceId 时按 requestId 兼容处理",
+        "只有错误码和错误描述时排查",
+        "已经有 requestId 时排查",
+        "错误排查结果继续翻页"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws devdoc error diagnose --request-id 15r6h45w0muec",
+        "dws devdoc error diagnose --trace-id 15r6h45w0muec --api \"创建日程\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/devdoc.md"
+      ]
+    }
+  }
+}

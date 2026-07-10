@@ -36,11 +36,12 @@ type ToolSchemaHint struct {
 // It can be keyed either by the original MCP parameter name (preferred) or by
 // the final CLI flag name when a hint is purely CLI-facing.
 type ParameterSchemaHint struct {
-	FlagName    string
-	Type        string
-	Description string
-	Default     string
-	Required    *bool
+	FlagName     string
+	Type         string
+	Description  string
+	Default      string
+	Required     *bool
+	RequiredWhen string
 }
 
 type SchemaHintRegistry struct {

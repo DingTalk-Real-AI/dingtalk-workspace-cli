@@ -1,0 +1,491 @@
+{
+  "product_id": "aitable",
+  "tools": {
+    "aitable base create": {
+      "use_when": [
+        "表格/多维表/AI表格；创建"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable base delete": {
+      "use_when": [
+        "表格/多维表/AI表格；删除"
+      ],
+      "effect": "destructive",
+      "effect_source": "skill-explicit",
+      "risk": "high",
+      "confirmation": "user_required",
+      "source_refs": [
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable base get": {
+      "use_when": [
+        "2. 获取 Base 信息 — 提取 tableId",
+        "表格/多维表/AI表格；详情"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws aitable base get --base-id \u003cBASE_ID\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable base search": {
+      "use_when": [
+        "1. 搜索/列出 Base — 提取 baseId",
+        "表格/多维表/AI表格；查看/查找/列表"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws aitable base search --query \"项目\" --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable base update": {
+      "use_when": [
+        "表格/多维表/AI表格；修改"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable chart delete": {
+      "effect": "destructive",
+      "effect_source": "skill-explicit",
+      "risk": "high",
+      "confirmation": "user_required",
+      "source_refs": [
+        "skills/mono/SKILL.md"
+      ]
+    },
+    "aitable chart get": {
+      "use_when": [
+        "2) 先拿 dashboard，再拿 chart 详情"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws aitable chart get --base-id \u003cBASE_ID\u003e --dashboard-id \u003cDASHBOARD_ID\u003e --chart-id \u003cCHART_ID\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable chart widgets-example": {
+      "use_when": [
+        "1) 先看配置模板（JSONC）"
+      ],
+      "examples": [
+        "dws aitable chart widgets-example --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable dashboard arrange": {
+      "use_when": [
+        "仪表盘排版乱了/图表对不齐/重新排布/自动布局/美化仪表盘"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable dashboard config-example": {
+      "use_when": [
+        "1) 先看配置模板（JSONC）"
+      ],
+      "examples": [
+        "dws aitable dashboard config-example --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable dashboard delete": {
+      "effect": "destructive",
+      "effect_source": "skill-explicit",
+      "risk": "high",
+      "confirmation": "user_required",
+      "source_refs": [
+        "skills/mono/SKILL.md"
+      ]
+    },
+    "aitable dashboard get": {
+      "use_when": [
+        "2) 先拿 dashboard，再拿 chart 详情"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws aitable dashboard get --base-id \u003cBASE_ID\u003e --dashboard-id \u003cDASHBOARD_ID\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable export data": {
+      "use_when": [
+        "第一步：创建任务（按 scope 传必要参数）",
+        "第二步：拿 taskId 继续轮询，直到返回 downloadUrl"
+      ],
+      "examples": [
+        "dws aitable export data --base-id \u003cBASE_ID\u003e --scope table --table-id \u003cTABLE_ID\u003e --format excel --timeout-ms 1000",
+        "dws aitable export data --base-id \u003cBASE_ID\u003e --task-id \u003cTASK_ID\u003e --timeout-ms 3000"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable field create": {
+      "use_when": [
+        "字段/列/column；添加"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable field delete": {
+      "use_when": [
+        "字段/列/column；删除"
+      ],
+      "effect": "destructive",
+      "effect_source": "skill-explicit",
+      "risk": "high",
+      "confirmation": "user_required",
+      "source_refs": [
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable field get": {
+      "use_when": [
+        "字段/列/column；查看"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable field search-options": {
+      "examples": [
+        "dws aitable field search-options --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --field-id \u003cFIELD_ID\u003e",
+        "dws aitable field search-options --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --field-id \u003cFIELD_ID\u003e --keyword 已完成"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable field update": {
+      "use_when": [
+        "字段/列/column；修改"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable record create": {
+      "use_when": [
+        "记录/行/数据/row；添加/写入"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable record delete": {
+      "use_when": [
+        "记录/行/数据/row；删除"
+      ],
+      "effect": "destructive",
+      "effect_source": "skill-explicit",
+      "risk": "high",
+      "confirmation": "user_required",
+      "source_refs": [
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable record get": {
+      "use_when": [
+        "记录/行/数据/row；已知 recordId 反查字段值"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable record history-list": {
+      "use_when": [
+        "记录/行/数据/row；查记录的字段变更历史 / 操作审计"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable record query": {
+      "use_when": [
+        "4. 查询记录",
+        "记录/行/数据/row；查看/搜索"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws aitable record query --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable record query-empty": {
+      "use_when": [
+        "记录/行/数据/row；找空行 / 没填东西的行"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable record share-url": {
+      "use_when": [
+        "记录/行/数据/row；取记录分享链接 / 把这行发给同事"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable record update": {
+      "use_when": [
+        "记录/行/数据/row；修改/更新（每条独立 cells）"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable record upsert": {
+      "use_when": [
+        "记录/行/数据/row；不知道有没有"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable section create": {
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws aitable section create --base-id \u003cBASE_ID\u003e --name 子文件夹 --parent-section-id \u003cSECTION_ID\u003e --index 0",
+        "dws aitable section create --base-id \u003cBASE_ID\u003e --name 我的文件夹"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable section delete": {
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws aitable section delete --base-id \u003cBASE_ID\u003e --section-id \u003cSECTION_ID\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable section list-empty": {
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws aitable section list-empty --base-id \u003cBASE_ID\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable section list-nodes": {
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws aitable section list-nodes --base-id \u003cBASE_ID\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable section move-node": {
+      "examples": [
+        "dws aitable section move-node --base-id \u003cBASE_ID\u003e --node-id \u003cNODE_ID\u003e --new-parent-section-id \"\" --target-index 0",
+        "dws aitable section move-node --base-id \u003cBASE_ID\u003e --node-id \u003cNODE_ID\u003e --new-parent-section-id \u003cSECTION_ID\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable section rename": {
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws aitable section rename --base-id \u003cBASE_ID\u003e --section-id \u003cSECTION_ID\u003e --new-name 新名称"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable section reorder": {
+      "examples": [
+        "dws aitable section reorder --base-id \u003cBASE_ID\u003e --section-id \u003cSECTION_ID\u003e --target-index 0"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable table create": {
+      "use_when": [
+        "数据表/子表/table；创建"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable table delete": {
+      "effect": "destructive",
+      "effect_source": "skill-explicit",
+      "risk": "high",
+      "confirmation": "user_required",
+      "source_refs": [
+        "skills/mono/SKILL.md"
+      ]
+    },
+    "aitable table get": {
+      "use_when": [
+        "3. 获取表结构 — 提取 fieldId",
+        "数据表/子表/table；查看"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws aitable table get --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable table update": {
+      "use_when": [
+        "数据表/子表/table；重命名 / 改备注 / 改行命名规则",
+        "行命名规则/记录别名/卡片显示成 task/project/event 这种"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable template search": {
+      "use_when": [
+        "模板"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable view create": {
+      "use_when": [
+        "视图/view；创建"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable view delete": {
+      "use_when": [
+        "视图/view；删除"
+      ],
+      "effect": "destructive",
+      "effect_source": "skill-explicit",
+      "risk": "high",
+      "confirmation": "user_required",
+      "source_refs": [
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable view duplicate": {
+      "use_when": [
+        "复制视图/duplicate view"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable view list": {
+      "use_when": [
+        "视图/view；列出/查看全部视图"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable view lock": {
+      "use_when": [
+        "锁定视图/解锁视图/lock view"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable view update fill-color-rule": {
+      "use_when": [
+        "数据高亮/条件格式/单元格上色/fill color rule"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable view update frozen-cols": {
+      "use_when": [
+        "冻结列/冻结首列/frozen columns"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    },
+    "aitable view update row-height": {
+      "use_when": [
+        "行高/单元格高度/紧凑模式/cell height"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aitable.md"
+      ]
+    }
+  }
+}

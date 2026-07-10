@@ -15,9 +15,23 @@ package cli
 
 func init() {
 	RegisterSchemaHints("calendar", map[string]ToolSchemaHint{
+		"create_calendar_event": {
+			Parameters: calendarRecurrenceSchemaParameters(true),
+		},
 		"query_busy_status": {
 			Parameters: map[string]ParameterSchemaHint{
 				"users": {Required: boolPtr(true)},
+			},
+		},
+		"update_calendar_event": {
+			Parameters: calendarRecurrenceSchemaParameters(false),
+		},
+	})
+
+	RegisterSchemaHints("minutes", map[string]ToolSchemaHint{
+		"get_minutes_ai_summary": {
+			Parameters: map[string]ParameterSchemaHint{
+				"taskUuid": {Required: boolPtr(true)},
 			},
 		},
 	})
@@ -57,4 +71,47 @@ func init() {
 			},
 		},
 	})
+}
+
+func calendarRecurrenceSchemaParameters(includeCreateRequired bool) map[string]ParameterSchemaHint {
+	parameters := map[string]ParameterSchemaHint{
+		"recurrence.pattern.dayOfMonth": {
+			Required:     boolPtr(false),
+			RequiredWhen: "recurrence-type is absoluteMonthly or absoluteYearly",
+		},
+		"recurrence.pattern.daysOfWeek": {
+			Required:     boolPtr(false),
+			RequiredWhen: "recurrence-type is weekly or relativeMonthly",
+		},
+		"recurrence.pattern.index": {
+			Required:     boolPtr(false),
+			RequiredWhen: "recurrence-type is relativeMonthly",
+		},
+		"recurrence.pattern.interval": {
+			Required:     boolPtr(false),
+			RequiredWhen: "any recurrence-* flag is provided",
+		},
+		"recurrence.pattern.type": {
+			Required:     boolPtr(false),
+			RequiredWhen: "any recurrence-* flag is provided",
+		},
+		"recurrence.range.endDate": {
+			Required:     boolPtr(false),
+			RequiredWhen: "recurrence-range-type is endDate",
+		},
+		"recurrence.range.numberOfOccurrences": {
+			Required:     boolPtr(false),
+			RequiredWhen: "recurrence-range-type is numbered",
+		},
+		"recurrence.range.type": {
+			Required:     boolPtr(false),
+			RequiredWhen: "any recurrence-* flag is provided",
+		},
+	}
+	if includeCreateRequired {
+		parameters["summary"] = ParameterSchemaHint{Required: boolPtr(true)}
+		parameters["startDateTime"] = ParameterSchemaHint{Required: boolPtr(true)}
+		parameters["endDateTime"] = ParameterSchemaHint{Required: boolPtr(true)}
+	}
+	return parameters
 }

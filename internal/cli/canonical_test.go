@@ -382,6 +382,24 @@ func TestSchemaCommandProgressiveDisclosure(t *testing.T) {
 		}
 	})
 
+	t.Run("list remains a compact root overview compatibility alias", func(t *testing.T) {
+		cmd := buildSchemaCommandTestRoot()
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		cmd.SetErr(&bytes.Buffer{})
+		cmd.SetArgs([]string{"schema", "list"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("Execute() error = %v", err)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if payload["level"] != "products" || payload["tool_count"] != float64(3) {
+			t.Fatalf("list compatibility payload = %#v", payload)
+		}
+	})
+
 	t.Run("all preserves complete catalog", func(t *testing.T) {
 		cmd := buildSchemaCommandTestRoot()
 		var out bytes.Buffer
@@ -572,6 +590,77 @@ func TestRuntimeSchemaUsesMCPMetadataAnnotations(t *testing.T) {
 	enum, _ := status["enum"].([]string)
 	if !equalStrings(enum, []string{"confirmed", "cancelled"}) {
 		t.Fatalf("status enum = %#v", status["enum"])
+	}
+}
+
+func TestRuntimeSchemaUsesCuratedRequiredSemantics(t *testing.T) {
+	root := &cobra.Command{Use: "dws"}
+
+	create := &cobra.Command{Use: "create", Run: func(*cobra.Command, []string) {}}
+	for _, flag := range []struct {
+		name     string
+		property string
+		required bool
+	}{
+		{name: "title", property: "summary"},
+		{name: "start", property: "startDateTime"},
+		{name: "end", property: "endDateTime"},
+		{name: "recurrence-type", property: "recurrence.pattern.type", required: true},
+		{name: "recurrence-interval", property: "recurrence.pattern.interval", required: true},
+		{name: "recurrence-count", property: "recurrence.range.numberOfOccurrences", required: true},
+	} {
+		create.Flags().String(flag.name, "", flag.property)
+		AnnotateRuntimeFlag(create, flag.name, flag.property, "string", flag.required, "")
+	}
+	AttachRuntimeSchema(create, "calendar", "create_calendar_event", "runtime:calendar")
+	event := &cobra.Command{Use: "event"}
+	event.AddCommand(create)
+	calendar := &cobra.Command{Use: "calendar"}
+	calendar.AddCommand(event)
+
+	summary := &cobra.Command{Use: "summary", Run: func(*cobra.Command, []string) {}}
+	summary.Flags().String("id", "", "task UUID")
+	AnnotateRuntimeFlag(summary, "id", "taskUuid", "string", false, "")
+	AttachRuntimeSchema(summary, "minutes", "get_minutes_ai_summary", "runtime:minutes")
+	get := &cobra.Command{Use: "get"}
+	get.AddCommand(summary)
+	minutes := &cobra.Command{Use: "minutes"}
+	minutes.AddCommand(get)
+	root.AddCommand(calendar, minutes)
+
+	calendarPayload, err := runtimeSchemaPayload(root, []string{"calendar event create"})
+	if err != nil {
+		t.Fatalf("calendar payload: %v", err)
+	}
+	calendarParams, _ := calendarPayload["parameters"].(map[string]any)
+	for _, name := range []string{"title", "start", "end"} {
+		param, _ := calendarParams[name].(map[string]any)
+		if param["required"] != true {
+			t.Fatalf("%s required = %#v, want true", name, param["required"])
+		}
+	}
+	for _, check := range []struct {
+		name string
+		when string
+	}{
+		{name: "recurrence-type", when: "any recurrence-* flag is provided"},
+		{name: "recurrence-interval", when: "any recurrence-* flag is provided"},
+		{name: "recurrence-count", when: "recurrence-range-type is numbered"},
+	} {
+		param, _ := calendarParams[check.name].(map[string]any)
+		if param["required"] != false || param["required_when"] != check.when {
+			t.Fatalf("%s = %#v, want conditional requirement %q", check.name, param, check.when)
+		}
+	}
+
+	minutesPayload, err := runtimeSchemaPayload(root, []string{"minutes get summary"})
+	if err != nil {
+		t.Fatalf("minutes payload: %v", err)
+	}
+	minutesParams, _ := minutesPayload["parameters"].(map[string]any)
+	id, _ := minutesParams["id"].(map[string]any)
+	if id["required"] != true {
+		t.Fatalf("minutes --id required = %#v, want true", id["required"])
 	}
 }
 

@@ -1,0 +1,1785 @@
+{
+  "version": 1,
+  "products": [
+    {
+      "id": "aisearch",
+      "tools": [
+        {
+          "cli_path": "aisearch behavior"
+        },
+        {
+          "cli_path": "aisearch enterprise"
+        },
+        {
+          "cli_path": "aisearch person"
+        }
+      ]
+    },
+    {
+      "id": "aitable",
+      "tools": [
+        {
+          "cli_path": "aitable advperm disable"
+        },
+        {
+          "cli_path": "aitable advperm enable"
+        },
+        {
+          "cli_path": "aitable advperm role-create"
+        },
+        {
+          "cli_path": "aitable advperm role-delete"
+        },
+        {
+          "cli_path": "aitable advperm role-get"
+        },
+        {
+          "cli_path": "aitable advperm role-list"
+        },
+        {
+          "cli_path": "aitable advperm role-update"
+        },
+        {
+          "cli_path": "aitable attachment upload"
+        },
+        {
+          "cli_path": "aitable base copy"
+        },
+        {
+          "cli_path": "aitable base create"
+        },
+        {
+          "cli_path": "aitable base delete"
+        },
+        {
+          "cli_path": "aitable base get"
+        },
+        {
+          "cli_path": "aitable base get-primary-doc-id"
+        },
+        {
+          "cli_path": "aitable base list"
+        },
+        {
+          "cli_path": "aitable base search"
+        },
+        {
+          "cli_path": "aitable base update"
+        },
+        {
+          "cli_path": "aitable chart create"
+        },
+        {
+          "cli_path": "aitable chart delete"
+        },
+        {
+          "cli_path": "aitable chart get"
+        },
+        {
+          "cli_path": "aitable chart share get"
+        },
+        {
+          "cli_path": "aitable chart share update"
+        },
+        {
+          "cli_path": "aitable chart update"
+        },
+        {
+          "cli_path": "aitable chart widgets-example"
+        },
+        {
+          "cli_path": "aitable create"
+        },
+        {
+          "cli_path": "aitable dashboard arrange"
+        },
+        {
+          "cli_path": "aitable dashboard config-example"
+        },
+        {
+          "cli_path": "aitable dashboard create"
+        },
+        {
+          "cli_path": "aitable dashboard delete"
+        },
+        {
+          "cli_path": "aitable dashboard get"
+        },
+        {
+          "cli_path": "aitable dashboard share get"
+        },
+        {
+          "cli_path": "aitable dashboard share update"
+        },
+        {
+          "cli_path": "aitable dashboard update"
+        },
+        {
+          "cli_path": "aitable export data"
+        },
+        {
+          "cli_path": "aitable field create"
+        },
+        {
+          "cli_path": "aitable field delete"
+        },
+        {
+          "cli_path": "aitable field get"
+        },
+        {
+          "cli_path": "aitable field list"
+        },
+        {
+          "cli_path": "aitable field search-options"
+        },
+        {
+          "cli_path": "aitable field update"
+        },
+        {
+          "cli_path": "aitable import data"
+        },
+        {
+          "cli_path": "aitable import upload"
+        },
+        {
+          "cli_path": "aitable info"
+        },
+        {
+          "cli_path": "aitable list"
+        },
+        {
+          "cli_path": "aitable record create"
+        },
+        {
+          "cli_path": "aitable record delete"
+        },
+        {
+          "cli_path": "aitable record get"
+        },
+        {
+          "cli_path": "aitable record history-list"
+        },
+        {
+          "cli_path": "aitable record primary-doc-create"
+        },
+        {
+          "cli_path": "aitable record primary-doc-get"
+        },
+        {
+          "cli_path": "aitable record query",
+          "aliases": [
+            "aitable record list"
+          ]
+        },
+        {
+          "cli_path": "aitable record query-empty"
+        },
+        {
+          "cli_path": "aitable record share-url"
+        },
+        {
+          "cli_path": "aitable record update"
+        },
+        {
+          "cli_path": "aitable record upsert"
+        },
+        {
+          "cli_path": "aitable search"
+        },
+        {
+          "cli_path": "aitable section create"
+        },
+        {
+          "cli_path": "aitable section delete"
+        },
+        {
+          "cli_path": "aitable section list-empty"
+        },
+        {
+          "cli_path": "aitable section list-nodes"
+        },
+        {
+          "cli_path": "aitable section move-node"
+        },
+        {
+          "cli_path": "aitable section rename"
+        },
+        {
+          "cli_path": "aitable section reorder"
+        },
+        {
+          "cli_path": "aitable table create"
+        },
+        {
+          "cli_path": "aitable table delete"
+        },
+        {
+          "cli_path": "aitable table get"
+        },
+        {
+          "cli_path": "aitable table list"
+        },
+        {
+          "cli_path": "aitable table update"
+        },
+        {
+          "cli_path": "aitable template search"
+        },
+        {
+          "cli_path": "aitable view create"
+        },
+        {
+          "cli_path": "aitable view delete"
+        },
+        {
+          "cli_path": "aitable view duplicate"
+        },
+        {
+          "cli_path": "aitable view get aggregate"
+        },
+        {
+          "cli_path": "aitable view get card"
+        },
+        {
+          "cli_path": "aitable view get field-widths"
+        },
+        {
+          "cli_path": "aitable view get fill-color-rule"
+        },
+        {
+          "cli_path": "aitable view get filter"
+        },
+        {
+          "cli_path": "aitable view get frozen-cols"
+        },
+        {
+          "cli_path": "aitable view get group"
+        },
+        {
+          "cli_path": "aitable view get lock"
+        },
+        {
+          "cli_path": "aitable view get row-height"
+        },
+        {
+          "cli_path": "aitable view get sort"
+        },
+        {
+          "cli_path": "aitable view get timebar"
+        },
+        {
+          "cli_path": "aitable view get visible-fields"
+        },
+        {
+          "cli_path": "aitable view list"
+        },
+        {
+          "cli_path": "aitable view lock"
+        },
+        {
+          "cli_path": "aitable view update aggregate"
+        },
+        {
+          "cli_path": "aitable view update card"
+        },
+        {
+          "cli_path": "aitable view update field-widths"
+        },
+        {
+          "cli_path": "aitable view update fill-color-rule"
+        },
+        {
+          "cli_path": "aitable view update filter"
+        },
+        {
+          "cli_path": "aitable view update frozen-cols"
+        },
+        {
+          "cli_path": "aitable view update group"
+        },
+        {
+          "cli_path": "aitable view update name"
+        },
+        {
+          "cli_path": "aitable view update row-height"
+        },
+        {
+          "cli_path": "aitable view update sort"
+        },
+        {
+          "cli_path": "aitable view update timebar"
+        },
+        {
+          "cli_path": "aitable view update visible-fields"
+        },
+        {
+          "cli_path": "aitable workflow disable"
+        },
+        {
+          "cli_path": "aitable workflow enable"
+        },
+        {
+          "cli_path": "aitable workflow get"
+        },
+        {
+          "cli_path": "aitable workflow list"
+        }
+      ]
+    },
+    {
+      "id": "attendance",
+      "tools": [
+        {
+          "cli_path": "attendance record get"
+        },
+        {
+          "cli_path": "attendance rules"
+        },
+        {
+          "cli_path": "attendance shift list"
+        },
+        {
+          "cli_path": "attendance summary"
+        }
+      ]
+    },
+    {
+      "id": "calendar",
+      "tools": [
+        {
+          "cli_path": "calendar acl list"
+        },
+        {
+          "cli_path": "calendar attachment add"
+        },
+        {
+          "cli_path": "calendar attendee add",
+          "aliases": [
+            "calendar participant add"
+          ]
+        },
+        {
+          "cli_path": "calendar attendee delete",
+          "aliases": [
+            "calendar participant delete"
+          ]
+        },
+        {
+          "cli_path": "calendar attendee list",
+          "aliases": [
+            "calendar participant list"
+          ]
+        },
+        {
+          "cli_path": "calendar book get"
+        },
+        {
+          "cli_path": "calendar book list"
+        },
+        {
+          "cli_path": "calendar book search"
+        },
+        {
+          "cli_path": "calendar busy search"
+        },
+        {
+          "cli_path": "calendar event create"
+        },
+        {
+          "cli_path": "calendar event delete"
+        },
+        {
+          "cli_path": "calendar event get"
+        },
+        {
+          "cli_path": "calendar event list"
+        },
+        {
+          "cli_path": "calendar event respond"
+        },
+        {
+          "cli_path": "calendar event suggest"
+        },
+        {
+          "cli_path": "calendar event update"
+        },
+        {
+          "cli_path": "calendar room add"
+        },
+        {
+          "cli_path": "calendar room delete"
+        },
+        {
+          "cli_path": "calendar room list-groups"
+        },
+        {
+          "cli_path": "calendar room search"
+        }
+      ]
+    },
+    {
+      "id": "chat",
+      "tools": [
+        {
+          "cli_path": "chat bot find"
+        },
+        {
+          "cli_path": "chat bot search"
+        },
+        {
+          "cli_path": "chat category list"
+        },
+        {
+          "cli_path": "chat category list-conversations"
+        },
+        {
+          "cli_path": "chat conversation-info"
+        },
+        {
+          "cli_path": "chat file upload"
+        },
+        {
+          "cli_path": "chat group bots"
+        },
+        {
+          "cli_path": "chat group create"
+        },
+        {
+          "cli_path": "chat group dismiss"
+        },
+        {
+          "cli_path": "chat group get-by-group-id"
+        },
+        {
+          "cli_path": "chat group invite-url"
+        },
+        {
+          "cli_path": "chat group list-my-groups"
+        },
+        {
+          "cli_path": "chat group members add"
+        },
+        {
+          "cli_path": "chat group members add-bot"
+        },
+        {
+          "cli_path": "chat group members list"
+        },
+        {
+          "cli_path": "chat group members remove"
+        },
+        {
+          "cli_path": "chat group members remove-bot"
+        },
+        {
+          "cli_path": "chat group quit"
+        },
+        {
+          "cli_path": "chat group rename"
+        },
+        {
+          "cli_path": "chat group set-admin"
+        },
+        {
+          "cli_path": "chat group set-history"
+        },
+        {
+          "cli_path": "chat group transfer-owner"
+        },
+        {
+          "cli_path": "chat group update-icon"
+        },
+        {
+          "cli_path": "chat group update-settings"
+        },
+        {
+          "cli_path": "chat group-mute"
+        },
+        {
+          "cli_path": "chat group-mute-member"
+        },
+        {
+          "cli_path": "chat group-role add"
+        },
+        {
+          "cli_path": "chat group-role list"
+        },
+        {
+          "cli_path": "chat group-role query-user"
+        },
+        {
+          "cli_path": "chat group-role remove"
+        },
+        {
+          "cli_path": "chat group-role remove-user"
+        },
+        {
+          "cli_path": "chat group-role set-user"
+        },
+        {
+          "cli_path": "chat group-role update"
+        },
+        {
+          "cli_path": "chat list-top-conversations"
+        },
+        {
+          "cli_path": "chat message add-emoji"
+        },
+        {
+          "cli_path": "chat message add-text-emotion"
+        },
+        {
+          "cli_path": "chat message combine-forward"
+        },
+        {
+          "cli_path": "chat message create-text-emotion"
+        },
+        {
+          "cli_path": "chat message download-media"
+        },
+        {
+          "cli_path": "chat message forward"
+        },
+        {
+          "cli_path": "chat message forward-topic"
+        },
+        {
+          "cli_path": "chat message list"
+        },
+        {
+          "cli_path": "chat message list-all"
+        },
+        {
+          "cli_path": "chat message list-by-ids"
+        },
+        {
+          "cli_path": "chat message list-by-sender"
+        },
+        {
+          "cli_path": "chat message list-direct"
+        },
+        {
+          "cli_path": "chat message list-focused"
+        },
+        {
+          "cli_path": "chat message list-mentions"
+        },
+        {
+          "cli_path": "chat message list-pin-msg"
+        },
+        {
+          "cli_path": "chat message list-topic-replies"
+        },
+        {
+          "cli_path": "chat message list-unread-conversations"
+        },
+        {
+          "cli_path": "chat message query-send-status"
+        },
+        {
+          "cli_path": "chat message read-status"
+        },
+        {
+          "cli_path": "chat message recall"
+        },
+        {
+          "cli_path": "chat message recall-by-bot"
+        },
+        {
+          "cli_path": "chat message remove-emoji"
+        },
+        {
+          "cli_path": "chat message remove-text-emotion"
+        },
+        {
+          "cli_path": "chat message reply",
+          "aliases": [
+            "chat message send"
+          ]
+        },
+        {
+          "cli_path": "chat message search"
+        },
+        {
+          "cli_path": "chat message search-advanced"
+        },
+        {
+          "cli_path": "chat message send-by-bot"
+        },
+        {
+          "cli_path": "chat message send-by-webhook"
+        },
+        {
+          "cli_path": "chat message send-card"
+        },
+        {
+          "cli_path": "chat message set-pin-msg"
+        },
+        {
+          "cli_path": "chat message unset-pin-msg"
+        },
+        {
+          "cli_path": "chat message update-card"
+        },
+        {
+          "cli_path": "chat mute"
+        },
+        {
+          "cli_path": "chat search"
+        },
+        {
+          "cli_path": "chat search-common"
+        },
+        {
+          "cli_path": "chat set-top"
+        }
+      ]
+    },
+    {
+      "id": "conference",
+      "tools": [
+        {
+          "cli_path": "conference appearance background-setting"
+        },
+        {
+          "cli_path": "conference appearance beauty-setting"
+        },
+        {
+          "cli_path": "conference camera close"
+        },
+        {
+          "cli_path": "conference camera open"
+        },
+        {
+          "cli_path": "conference end"
+        },
+        {
+          "cli_path": "conference get-id"
+        },
+        {
+          "cli_path": "conference interaction panel"
+        },
+        {
+          "cli_path": "conference interpretation close"
+        },
+        {
+          "cli_path": "conference interpretation open"
+        },
+        {
+          "cli_path": "conference invite all"
+        },
+        {
+          "cli_path": "conference invite panel"
+        },
+        {
+          "cli_path": "conference leave"
+        },
+        {
+          "cli_path": "conference mic mute"
+        },
+        {
+          "cli_path": "conference mic mute-all"
+        },
+        {
+          "cli_path": "conference mic unmute"
+        },
+        {
+          "cli_path": "conference photo take"
+        },
+        {
+          "cli_path": "conference record request"
+        },
+        {
+          "cli_path": "conference record start"
+        },
+        {
+          "cli_path": "conference record stop"
+        },
+        {
+          "cli_path": "conference security menu"
+        },
+        {
+          "cli_path": "conference share annotate"
+        },
+        {
+          "cli_path": "conference share panel"
+        },
+        {
+          "cli_path": "conference share start"
+        },
+        {
+          "cli_path": "conference share stop"
+        },
+        {
+          "cli_path": "conference start"
+        },
+        {
+          "cli_path": "conference status"
+        },
+        {
+          "cli_path": "conference subtitle close"
+        },
+        {
+          "cli_path": "conference subtitle open"
+        },
+        {
+          "cli_path": "conference transcript close"
+        },
+        {
+          "cli_path": "conference transcript open"
+        },
+        {
+          "cli_path": "conference view grid"
+        },
+        {
+          "cli_path": "conference view speaker"
+        },
+        {
+          "cli_path": "conference view standard"
+        }
+      ]
+    },
+    {
+      "id": "contact",
+      "tools": [
+        {
+          "cli_path": "contact dept get-info"
+        },
+        {
+          "cli_path": "contact dept list-children"
+        },
+        {
+          "cli_path": "contact dept list-members"
+        },
+        {
+          "cli_path": "contact dept search"
+        },
+        {
+          "cli_path": "contact get",
+          "aliases": [
+            "contact user get"
+          ]
+        },
+        {
+          "cli_path": "contact relation list-my-followings"
+        },
+        {
+          "cli_path": "contact search",
+          "aliases": [
+            "contact user list",
+            "contact user search"
+          ]
+        },
+        {
+          "cli_path": "contact user dismission search"
+        },
+        {
+          "cli_path": "contact user get-self"
+        },
+        {
+          "cli_path": "contact user profile fields"
+        },
+        {
+          "cli_path": "contact user profile get"
+        },
+        {
+          "cli_path": "contact user search-mobile"
+        }
+      ]
+    },
+    {
+      "id": "dev",
+      "tools": [
+        {
+          "cli_path": "dev app create"
+        },
+        {
+          "cli_path": "dev app credentials get"
+        },
+        {
+          "cli_path": "dev app delete"
+        },
+        {
+          "cli_path": "dev app disable"
+        },
+        {
+          "cli_path": "dev app enable"
+        },
+        {
+          "cli_path": "dev app event list"
+        },
+        {
+          "cli_path": "dev app event subscribe"
+        },
+        {
+          "cli_path": "dev app event unsubscribe"
+        },
+        {
+          "cli_path": "dev app get"
+        },
+        {
+          "cli_path": "dev app list"
+        },
+        {
+          "cli_path": "dev app member add"
+        },
+        {
+          "cli_path": "dev app member list"
+        },
+        {
+          "cli_path": "dev app member remove"
+        },
+        {
+          "cli_path": "dev app permission add"
+        },
+        {
+          "cli_path": "dev app permission list"
+        },
+        {
+          "cli_path": "dev app permission remove"
+        },
+        {
+          "cli_path": "dev app robot config"
+        },
+        {
+          "cli_path": "dev app robot disable"
+        },
+        {
+          "cli_path": "dev app robot enable"
+        },
+        {
+          "cli_path": "dev app robot get"
+        },
+        {
+          "cli_path": "dev app robot result"
+        },
+        {
+          "cli_path": "dev app robot submit"
+        },
+        {
+          "cli_path": "dev app security config"
+        },
+        {
+          "cli_path": "dev app update"
+        },
+        {
+          "cli_path": "dev app version create"
+        },
+        {
+          "cli_path": "dev app version get"
+        },
+        {
+          "cli_path": "dev app version list"
+        },
+        {
+          "cli_path": "dev app version publish",
+          "aliases": [
+            "dev app version check-approval"
+          ]
+        },
+        {
+          "cli_path": "dev app version status"
+        },
+        {
+          "cli_path": "dev app webapp config"
+        },
+        {
+          "cli_path": "dev app webapp get"
+        },
+        {
+          "cli_path": "dev connect status"
+        },
+        {
+          "cli_path": "dev connect stop"
+        },
+        {
+          "cli_path": "dev doc search"
+        }
+      ]
+    },
+    {
+      "id": "devdoc",
+      "tools": [
+        {
+          "cli_path": "devdoc article legacy-search",
+          "aliases": [
+            "devdoc article-legacy-search"
+          ]
+        },
+        {
+          "cli_path": "devdoc article legacy-search-open-platform",
+          "aliases": [
+            "devdoc article-legacy-search-open-platform"
+          ]
+        },
+        {
+          "cli_path": "devdoc article rag-pretest",
+          "aliases": [
+            "devdoc article-rag-pretest"
+          ]
+        },
+        {
+          "cli_path": "devdoc article search",
+          "aliases": [
+            "devdoc article-search"
+          ]
+        },
+        {
+          "cli_path": "devdoc error diagnose",
+          "aliases": [
+            "devdoc error-diagnose"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ding",
+      "tools": [
+        {
+          "cli_path": "ding message recall"
+        },
+        {
+          "cli_path": "ding message send"
+        }
+      ]
+    },
+    {
+      "id": "doc",
+      "tools": [
+        {
+          "cli_path": "doc block delete"
+        },
+        {
+          "cli_path": "doc block insert"
+        },
+        {
+          "cli_path": "doc block list"
+        },
+        {
+          "cli_path": "doc block update"
+        },
+        {
+          "cli_path": "doc comment create"
+        },
+        {
+          "cli_path": "doc comment create-inline"
+        },
+        {
+          "cli_path": "doc comment list"
+        },
+        {
+          "cli_path": "doc comment reply"
+        },
+        {
+          "cli_path": "doc copy"
+        },
+        {
+          "cli_path": "doc create"
+        },
+        {
+          "cli_path": "doc delete"
+        },
+        {
+          "cli_path": "doc download"
+        },
+        {
+          "cli_path": "doc export get"
+        },
+        {
+          "cli_path": "doc file create"
+        },
+        {
+          "cli_path": "doc folder create"
+        },
+        {
+          "cli_path": "doc info"
+        },
+        {
+          "cli_path": "doc list"
+        },
+        {
+          "cli_path": "doc media download"
+        },
+        {
+          "cli_path": "doc media insert"
+        },
+        {
+          "cli_path": "doc move"
+        },
+        {
+          "cli_path": "doc permission add"
+        },
+        {
+          "cli_path": "doc permission list"
+        },
+        {
+          "cli_path": "doc permission remove"
+        },
+        {
+          "cli_path": "doc permission update"
+        },
+        {
+          "cli_path": "doc read"
+        },
+        {
+          "cli_path": "doc rename"
+        },
+        {
+          "cli_path": "doc search"
+        },
+        {
+          "cli_path": "doc update"
+        },
+        {
+          "cli_path": "doc upload"
+        }
+      ]
+    },
+    {
+      "id": "doc-comment",
+      "tools": [
+        {
+          "cli_path": "doc-comment create-comment"
+        },
+        {
+          "cli_path": "doc-comment create-inline-comment"
+        },
+        {
+          "cli_path": "doc-comment list-comments"
+        },
+        {
+          "cli_path": "doc-comment reply-comment"
+        }
+      ]
+    },
+    {
+      "id": "drive",
+      "tools": [
+        {
+          "cli_path": "drive commit"
+        },
+        {
+          "cli_path": "drive copy"
+        },
+        {
+          "cli_path": "drive delete"
+        },
+        {
+          "cli_path": "drive download"
+        },
+        {
+          "cli_path": "drive info"
+        },
+        {
+          "cli_path": "drive list"
+        },
+        {
+          "cli_path": "drive list-spaces"
+        },
+        {
+          "cli_path": "drive mkdir"
+        },
+        {
+          "cli_path": "drive move"
+        },
+        {
+          "cli_path": "drive permission add"
+        },
+        {
+          "cli_path": "drive permission list"
+        },
+        {
+          "cli_path": "drive permission remove"
+        },
+        {
+          "cli_path": "drive permission update"
+        },
+        {
+          "cli_path": "drive rename"
+        },
+        {
+          "cli_path": "drive search"
+        },
+        {
+          "cli_path": "drive upload"
+        },
+        {
+          "cli_path": "drive upload-info"
+        }
+      ]
+    },
+    {
+      "id": "hrmregister",
+      "tools": [
+        {
+          "cli_path": "hrmregister get-authorized-emp-roster-info"
+        },
+        {
+          "cli_path": "hrmregister list-authorized-roster-fields"
+        },
+        {
+          "cli_path": "hrmregister query-dismission-employee-list"
+        }
+      ]
+    },
+    {
+      "id": "live",
+      "tools": [
+        {
+          "cli_path": "live list",
+          "aliases": [
+            "live stream list"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mail",
+      "tools": [
+        {
+          "cli_path": "mail attachment download"
+        },
+        {
+          "cli_path": "mail attachment list"
+        },
+        {
+          "cli_path": "mail contact batch-delete"
+        },
+        {
+          "cli_path": "mail contact create"
+        },
+        {
+          "cli_path": "mail contact list"
+        },
+        {
+          "cli_path": "mail contact update"
+        },
+        {
+          "cli_path": "mail draft create"
+        },
+        {
+          "cli_path": "mail draft send"
+        },
+        {
+          "cli_path": "mail draft update"
+        },
+        {
+          "cli_path": "mail folder create"
+        },
+        {
+          "cli_path": "mail folder delete"
+        },
+        {
+          "cli_path": "mail folder list"
+        },
+        {
+          "cli_path": "mail folder update"
+        },
+        {
+          "cli_path": "mail mailbox list"
+        },
+        {
+          "cli_path": "mail message batch-delete"
+        },
+        {
+          "cli_path": "mail message batch-move"
+        },
+        {
+          "cli_path": "mail message forward"
+        },
+        {
+          "cli_path": "mail message get"
+        },
+        {
+          "cli_path": "mail message reply"
+        },
+        {
+          "cli_path": "mail message reply-all"
+        },
+        {
+          "cli_path": "mail message search",
+          "aliases": [
+            "mail message list",
+            "mail search"
+          ]
+        },
+        {
+          "cli_path": "mail message send",
+          "aliases": [
+            "mail send"
+          ]
+        },
+        {
+          "cli_path": "mail tag list"
+        },
+        {
+          "cli_path": "mail template create"
+        },
+        {
+          "cli_path": "mail template delete"
+        },
+        {
+          "cli_path": "mail template get"
+        },
+        {
+          "cli_path": "mail template list"
+        },
+        {
+          "cli_path": "mail template update"
+        },
+        {
+          "cli_path": "mail thread get"
+        },
+        {
+          "cli_path": "mail user search"
+        }
+      ]
+    },
+    {
+      "id": "minutes",
+      "tools": [
+        {
+          "cli_path": "minutes get audio"
+        },
+        {
+          "cli_path": "minutes get batch"
+        },
+        {
+          "cli_path": "minutes get info"
+        },
+        {
+          "cli_path": "minutes get keywords"
+        },
+        {
+          "cli_path": "minutes get summary"
+        },
+        {
+          "cli_path": "minutes get todos"
+        },
+        {
+          "cli_path": "minutes get transcription"
+        },
+        {
+          "cli_path": "minutes hot-word add"
+        },
+        {
+          "cli_path": "minutes hot-word list"
+        },
+        {
+          "cli_path": "minutes list mine",
+          "aliases": [
+            "minutes list all",
+            "minutes list shared"
+          ]
+        },
+        {
+          "cli_path": "minutes mind-graph create"
+        },
+        {
+          "cli_path": "minutes mind-graph status"
+        },
+        {
+          "cli_path": "minutes permission add"
+        },
+        {
+          "cli_path": "minutes permission remove"
+        },
+        {
+          "cli_path": "minutes record pause"
+        },
+        {
+          "cli_path": "minutes record resume"
+        },
+        {
+          "cli_path": "minutes record start"
+        },
+        {
+          "cli_path": "minutes record stop"
+        },
+        {
+          "cli_path": "minutes replace-text"
+        },
+        {
+          "cli_path": "minutes speaker replace"
+        },
+        {
+          "cli_path": "minutes speaker summary create"
+        },
+        {
+          "cli_path": "minutes speaker summary get"
+        },
+        {
+          "cli_path": "minutes tag list"
+        },
+        {
+          "cli_path": "minutes tag query"
+        },
+        {
+          "cli_path": "minutes update summary"
+        },
+        {
+          "cli_path": "minutes update title"
+        },
+        {
+          "cli_path": "minutes upload cancel"
+        },
+        {
+          "cli_path": "minutes upload complete"
+        },
+        {
+          "cli_path": "minutes upload create"
+        }
+      ]
+    },
+    {
+      "id": "oa",
+      "tools": [
+        {
+          "cli_path": "oa approval approve"
+        },
+        {
+          "cli_path": "oa approval detail"
+        },
+        {
+          "cli_path": "oa approval list-cc"
+        },
+        {
+          "cli_path": "oa approval list-executed"
+        },
+        {
+          "cli_path": "oa approval list-forms"
+        },
+        {
+          "cli_path": "oa approval list-initiated"
+        },
+        {
+          "cli_path": "oa approval list-pending"
+        },
+        {
+          "cli_path": "oa approval list-submitted"
+        },
+        {
+          "cli_path": "oa approval oa-cc-noticer"
+        },
+        {
+          "cli_path": "oa approval oa-comments"
+        },
+        {
+          "cli_path": "oa approval records"
+        },
+        {
+          "cli_path": "oa approval redirect-task"
+        },
+        {
+          "cli_path": "oa approval reject"
+        },
+        {
+          "cli_path": "oa approval revoke"
+        },
+        {
+          "cli_path": "oa approval tasks"
+        }
+      ]
+    },
+    {
+      "id": "pat",
+      "tools": [
+        {
+          "cli_path": "pat browser-policy"
+        },
+        {
+          "cli_path": "pat chmod"
+        }
+      ]
+    },
+    {
+      "id": "report",
+      "tools": [
+        {
+          "cli_path": "report entry get",
+          "aliases": [
+            "report detail",
+            "report get"
+          ]
+        },
+        {
+          "cli_path": "report entry stats",
+          "aliases": [
+            "report stats"
+          ]
+        },
+        {
+          "cli_path": "report entry submit",
+          "aliases": [
+            "report create",
+            "report submit"
+          ]
+        },
+        {
+          "cli_path": "report inbox list",
+          "aliases": [
+            "report inbox-list",
+            "report list"
+          ]
+        },
+        {
+          "cli_path": "report outbox list",
+          "aliases": [
+            "report created",
+            "report outbox-list",
+            "report sent"
+          ]
+        },
+        {
+          "cli_path": "report template get",
+          "aliases": [
+            "report template detail",
+            "report template-get"
+          ]
+        },
+        {
+          "cli_path": "report template list",
+          "aliases": [
+            "report template-list"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sheet",
+      "tools": [
+        {
+          "cli_path": "sheet add-dimension"
+        },
+        {
+          "cli_path": "sheet append"
+        },
+        {
+          "cli_path": "sheet cond-format create"
+        },
+        {
+          "cli_path": "sheet cond-format delete"
+        },
+        {
+          "cli_path": "sheet cond-format list"
+        },
+        {
+          "cli_path": "sheet cond-format update"
+        },
+        {
+          "cli_path": "sheet copy"
+        },
+        {
+          "cli_path": "sheet create"
+        },
+        {
+          "cli_path": "sheet create-float-image"
+        },
+        {
+          "cli_path": "sheet csv-get"
+        },
+        {
+          "cli_path": "sheet csv-put"
+        },
+        {
+          "cli_path": "sheet delete-dimension"
+        },
+        {
+          "cli_path": "sheet delete-dropdown"
+        },
+        {
+          "cli_path": "sheet delete-float-image"
+        },
+        {
+          "cli_path": "sheet delete-sheet"
+        },
+        {
+          "cli_path": "sheet export"
+        },
+        {
+          "cli_path": "sheet filter clear-criteria"
+        },
+        {
+          "cli_path": "sheet filter create"
+        },
+        {
+          "cli_path": "sheet filter delete"
+        },
+        {
+          "cli_path": "sheet filter get"
+        },
+        {
+          "cli_path": "sheet filter sort"
+        },
+        {
+          "cli_path": "sheet filter update"
+        },
+        {
+          "cli_path": "sheet filter-view create"
+        },
+        {
+          "cli_path": "sheet filter-view delete"
+        },
+        {
+          "cli_path": "sheet filter-view delete-criteria"
+        },
+        {
+          "cli_path": "sheet filter-view get-criteria"
+        },
+        {
+          "cli_path": "sheet filter-view info"
+        },
+        {
+          "cli_path": "sheet filter-view list"
+        },
+        {
+          "cli_path": "sheet filter-view list-criteria"
+        },
+        {
+          "cli_path": "sheet filter-view update"
+        },
+        {
+          "cli_path": "sheet filter-view update-criteria"
+        },
+        {
+          "cli_path": "sheet find"
+        },
+        {
+          "cli_path": "sheet get"
+        },
+        {
+          "cli_path": "sheet get-dropdown"
+        },
+        {
+          "cli_path": "sheet get-float-image"
+        },
+        {
+          "cli_path": "sheet info"
+        },
+        {
+          "cli_path": "sheet insert-dimension"
+        },
+        {
+          "cli_path": "sheet list"
+        },
+        {
+          "cli_path": "sheet list-float-images"
+        },
+        {
+          "cli_path": "sheet media-upload"
+        },
+        {
+          "cli_path": "sheet merge-cells"
+        },
+        {
+          "cli_path": "sheet move-dimension"
+        },
+        {
+          "cli_path": "sheet new"
+        },
+        {
+          "cli_path": "sheet range batch-set-style"
+        },
+        {
+          "cli_path": "sheet range clear"
+        },
+        {
+          "cli_path": "sheet range copy-to"
+        },
+        {
+          "cli_path": "sheet range fill"
+        },
+        {
+          "cli_path": "sheet range move-to"
+        },
+        {
+          "cli_path": "sheet range read"
+        },
+        {
+          "cli_path": "sheet range set-style"
+        },
+        {
+          "cli_path": "sheet range sort"
+        },
+        {
+          "cli_path": "sheet range update"
+        },
+        {
+          "cli_path": "sheet read"
+        },
+        {
+          "cli_path": "sheet replace"
+        },
+        {
+          "cli_path": "sheet set-dropdown"
+        },
+        {
+          "cli_path": "sheet unmerge-cells"
+        },
+        {
+          "cli_path": "sheet update"
+        },
+        {
+          "cli_path": "sheet update-dimension"
+        },
+        {
+          "cli_path": "sheet update-float-image"
+        },
+        {
+          "cli_path": "sheet write-image"
+        }
+      ]
+    },
+    {
+      "id": "todo",
+      "tools": [
+        {
+          "cli_path": "todo comment add"
+        },
+        {
+          "cli_path": "todo comment delete"
+        },
+        {
+          "cli_path": "todo comment list"
+        },
+        {
+          "cli_path": "todo task add-attachment"
+        },
+        {
+          "cli_path": "todo task add-executor"
+        },
+        {
+          "cli_path": "todo task add-participant"
+        },
+        {
+          "cli_path": "todo task add-reminder"
+        },
+        {
+          "cli_path": "todo task create",
+          "aliases": [
+            "todo create"
+          ]
+        },
+        {
+          "cli_path": "todo task create-sub"
+        },
+        {
+          "cli_path": "todo task delete"
+        },
+        {
+          "cli_path": "todo task done",
+          "aliases": [
+            "todo done"
+          ]
+        },
+        {
+          "cli_path": "todo task get"
+        },
+        {
+          "cli_path": "todo task list",
+          "aliases": [
+            "todo list"
+          ]
+        },
+        {
+          "cli_path": "todo task remove-executor"
+        },
+        {
+          "cli_path": "todo task remove-participant"
+        },
+        {
+          "cli_path": "todo task reset-reminder"
+        },
+        {
+          "cli_path": "todo task update"
+        }
+      ]
+    },
+    {
+      "id": "wiki",
+      "tools": [
+        {
+          "cli_path": "wiki doc list",
+          "aliases": [
+            "wiki node list"
+          ]
+        },
+        {
+          "cli_path": "wiki doc read"
+        },
+        {
+          "cli_path": "wiki doc search",
+          "aliases": [
+            "wiki file search"
+          ]
+        },
+        {
+          "cli_path": "wiki file list"
+        },
+        {
+          "cli_path": "wiki member add"
+        },
+        {
+          "cli_path": "wiki member list"
+        },
+        {
+          "cli_path": "wiki member remove"
+        },
+        {
+          "cli_path": "wiki member update"
+        },
+        {
+          "cli_path": "wiki node copy"
+        },
+        {
+          "cli_path": "wiki node create"
+        },
+        {
+          "cli_path": "wiki node delete"
+        },
+        {
+          "cli_path": "wiki node info"
+        },
+        {
+          "cli_path": "wiki node move"
+        },
+        {
+          "cli_path": "wiki node read"
+        },
+        {
+          "cli_path": "wiki node search"
+        },
+        {
+          "cli_path": "wiki space create",
+          "aliases": [
+            "wiki create"
+          ]
+        },
+        {
+          "cli_path": "wiki space delete",
+          "aliases": [
+            "wiki delete"
+          ]
+        },
+        {
+          "cli_path": "wiki space get",
+          "aliases": [
+            "wiki get"
+          ]
+        },
+        {
+          "cli_path": "wiki space list",
+          "aliases": [
+            "wiki list"
+          ]
+        },
+        {
+          "cli_path": "wiki space search",
+          "aliases": [
+            "wiki search"
+          ]
+        }
+      ]
+    }
+  ]
+}

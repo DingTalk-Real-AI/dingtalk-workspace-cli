@@ -55,12 +55,13 @@ type embeddedMCPToolMetadata struct {
 }
 
 type embeddedMCPParamMeta struct {
-	Type        string   `json:"type,omitempty"`
-	Description string   `json:"description,omitempty"`
-	Default     string   `json:"default,omitempty"`
-	Format      string   `json:"format,omitempty"`
-	Enum        []string `json:"enum,omitempty"`
-	Required    *bool    `json:"required,omitempty"`
+	Type         string   `json:"type,omitempty"`
+	Description  string   `json:"description,omitempty"`
+	Default      string   `json:"default,omitempty"`
+	Format       string   `json:"format,omitempty"`
+	Enum         []string `json:"enum,omitempty"`
+	Required     *bool    `json:"required,omitempty"`
+	RequiredWhen string   `json:"required_when,omitempty"`
 }
 
 var runtimeEmbeddedMCPMetadata = loadEmbeddedMCPMetadata()
@@ -831,6 +832,16 @@ func runtimeCommandParameters(cmd *cobra.Command, hints map[string]ParameterSche
 		if property != "" {
 			entry["property"] = property
 		}
+		requiredWhen := ""
+		if hasEmbeddedParam {
+			requiredWhen = strings.TrimSpace(embeddedParam.RequiredWhen)
+		}
+		if hasHint && strings.TrimSpace(hint.RequiredWhen) != "" {
+			requiredWhen = strings.TrimSpace(hint.RequiredWhen)
+		}
+		if requiredWhen != "" {
+			entry["required_when"] = requiredWhen
+		}
 		if hasHint && strings.TrimSpace(hint.Default) != "" {
 			entry["default"] = strings.TrimSpace(hint.Default)
 		} else if hasEmbeddedParam && strings.TrimSpace(embeddedParam.Default) != "" {
@@ -929,9 +940,13 @@ func usageImpliesRequired(usage string) bool {
 }
 
 func lowerCamelFlagName(flagName string) string {
+	flagName = strings.TrimSpace(flagName)
 	parts := strings.FieldsFunc(flagName, func(r rune) bool { return r == '-' || r == '_' })
 	if len(parts) == 0 {
-		return strings.TrimSpace(flagName)
+		return flagName
+	}
+	if len(parts) == 1 {
+		return parts[0]
 	}
 	for i := range parts {
 		parts[i] = strings.TrimSpace(parts[i])

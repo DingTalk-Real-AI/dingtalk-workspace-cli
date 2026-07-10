@@ -14,15 +14,15 @@
 package cli
 
 import (
-	_ "embed"
+	"embed"
 	"encoding/json"
 	"strings"
 )
 
-//go:generate go run ../generator/cmd_schema_agent_metadata -root ../.. -validate-surface=false -output schema_agent_metadata.json
+//go:generate go run ../generator/cmd_schema_agent_metadata -root ../.. -surface internal/cli/schema_command_surface.json -output-dir schema_agent_metadata
 
-//go:embed schema_agent_metadata.json
-var embeddedAgentMetadataJSON []byte
+//go:embed schema_agent_metadata/*.json
+var embeddedAgentMetadataFS embed.FS
 
 const embeddedAgentMetadataSource = "embedded-skill-metadata"
 
@@ -32,6 +32,7 @@ type embeddedAgentMetadata struct {
 	SurfaceHash string                          `json:"surface_hash,omitempty"`
 	Coverage    embeddedAgentMetadataCoverage   `json:"coverage"`
 	Products    map[string]agentProductMetadata `json:"products"`
+	Domains     []string                        `json:"domains"`
 	Tools       map[string]agentToolMetadata    `json:"tools"`
 }
 
@@ -60,18 +61,39 @@ type agentToolMetadata struct {
 	SourceRefs   []string `json:"source_refs,omitempty"`
 }
 
+type embeddedAgentMetadataDomain struct {
+	ProductID string                       `json:"product_id"`
+	Tools     map[string]agentToolMetadata `json:"tools"`
+}
+
 var runtimeEmbeddedAgentMetadata = loadEmbeddedAgentMetadata()
 
 func loadEmbeddedAgentMetadata() embeddedAgentMetadata {
 	var metadata embeddedAgentMetadata
-	if err := json.Unmarshal(embeddedAgentMetadataJSON, &metadata); err != nil {
+	index, err := embeddedAgentMetadataFS.ReadFile("schema_agent_metadata/index.json")
+	if err != nil || json.Unmarshal(index, &metadata) != nil {
 		return emptyEmbeddedAgentMetadata()
+	}
+	metadata.Tools = map[string]agentToolMetadata{}
+	for _, domain := range metadata.Domains {
+		domain = strings.TrimSpace(domain)
+		if domain == "" || strings.Contains(domain, "/") || strings.Contains(domain, "\\") {
+			return emptyEmbeddedAgentMetadata()
+		}
+		data, err := embeddedAgentMetadataFS.ReadFile("schema_agent_metadata/" + domain + ".json")
+		if err != nil {
+			return emptyEmbeddedAgentMetadata()
+		}
+		var fragment embeddedAgentMetadataDomain
+		if err := json.Unmarshal(data, &fragment); err != nil || strings.TrimSpace(fragment.ProductID) != domain {
+			return emptyEmbeddedAgentMetadata()
+		}
+		for path, tool := range fragment.Tools {
+			metadata.Tools[path] = tool
+		}
 	}
 	if metadata.Products == nil {
 		metadata.Products = map[string]agentProductMetadata{}
-	}
-	if metadata.Tools == nil {
-		metadata.Tools = map[string]agentToolMetadata{}
 	}
 	return metadata
 }

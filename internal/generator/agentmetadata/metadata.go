@@ -564,7 +564,7 @@ func commandTokens(raw string) []string {
 	out := make([]string, 0, len(fields))
 	for _, field := range fields {
 		field = strings.Trim(field, "`(),;:")
-		if field == "" || strings.HasPrefix(field, "--") || strings.HasPrefix(field, "<") || strings.HasPrefix(field, "[") || strings.HasPrefix(field, "{") || strings.HasPrefix(field, "\"") || strings.HasPrefix(field, "'") || strings.Contains(field, "|") || strings.Contains(field, "=") {
+		if field == "" || strings.HasPrefix(field, "#") || strings.HasPrefix(field, "--") || strings.HasPrefix(field, "<") || strings.HasPrefix(field, "[") || strings.HasPrefix(field, "{") || strings.HasPrefix(field, "\"") || strings.HasPrefix(field, "'") || strings.Contains(field, "|") || strings.Contains(field, "=") {
 			break
 		}
 		out = append(out, field)

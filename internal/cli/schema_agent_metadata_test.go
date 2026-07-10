@@ -15,6 +15,19 @@ package cli
 
 import "testing"
 
+func TestEmbeddedAgentMetadataLoadsSplitDomains(t *testing.T) {
+	metadata := loadEmbeddedAgentMetadata()
+	if len(metadata.Domains) < 2 {
+		t.Fatalf("domains = %#v, want split product metadata", metadata.Domains)
+	}
+	if len(metadata.Tools) != metadata.Coverage.ToolsWithMetadata {
+		t.Fatalf("tools = %d, coverage = %#v", len(metadata.Tools), metadata.Coverage)
+	}
+	if _, ok := metadata.Tools["calendar event create"]; !ok {
+		t.Fatalf("calendar domain did not load: %#v", metadata.Domains)
+	}
+}
+
 func TestRuntimeSchemaIncludesEmbeddedAgentMetadata(t *testing.T) {
 	previous := runtimeEmbeddedAgentMetadata
 	runtimeEmbeddedAgentMetadata = embeddedAgentMetadata{

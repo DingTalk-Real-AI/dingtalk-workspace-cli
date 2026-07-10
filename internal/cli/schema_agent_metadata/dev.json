@@ -1,0 +1,323 @@
+{
+  "product_id": "dev",
+  "tools": {
+    "dev app create": {
+      "use_when": [
+        "创建应用",
+        "创建开放平台应用，拿 unifiedAppId"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws dev app create --name \"我的 AI 机器人\" --desc \"接 opencode\" --dry-run --format json",
+        "dws dev app create --name \"我的 AI 机器人\" --desc \"接 opencode\" --yes --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev app credentials get": {
+      "use_when": [
+        "查询 clientId/clientSecret"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws dev app credentials get --unified-app-id \u003cunifiedAppId\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev app delete": {
+      "use_when": [
+        "删除应用（不可逆，需 --confirm-name 二次确认）"
+      ],
+      "effect": "destructive",
+      "effect_source": "skill-comment",
+      "risk": "high",
+      "confirmation": "user_required",
+      "examples": [
+        "dws dev app delete --unified-app-id \u003cunifiedAppId\u003e --confirm-name \u003c应用名\u003e --yes --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev app disable": {
+      "use_when": [
+        "停用/启用应用"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws dev app disable --unified-app-id \u003cunifiedAppId\u003e --yes --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev app enable": {
+      "use_when": [
+        "停用/启用应用"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws dev app enable  --unified-app-id \u003cunifiedAppId\u003e --yes --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev app event list": {
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws dev app event list        --unified-app-id \u003cunifiedAppId\u003e --keyword \u003c关键词\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev app event subscribe": {
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws dev app event subscribe   --unified-app-id \u003cunifiedAppId\u003e --event-codes \u003ccode1\u003e,\u003ccode2\u003e --dry-run --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev app event unsubscribe": {
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws dev app event unsubscribe --unified-app-id \u003cunifiedAppId\u003e --event-codes \u003ccode1\u003e,\u003ccode2\u003e --yes --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev app get": {
+      "use_when": [
+        "查询单个应用详情"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws dev app get --unified-app-id \u003cunifiedAppId\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev app list": {
+      "use_when": [
+        "查询应用列表"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws dev app list --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev app permission add": {
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws dev app permission add   --unified-app-id \u003cunifiedAppId\u003e --scope-code \u003cscopeValue\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev app permission list": {
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws dev app permission list  --unified-app-id \u003cunifiedAppId\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev app permission remove": {
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws dev app permission remove --unified-app-id \u003cunifiedAppId\u003e --scope-code \u003cscopeValue\u003e --yes --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev app robot config": {
+      "use_when": [
+        "创建/更新机器人配置（upsert）",
+        "在明确的 unifiedAppId 上配置机器人能力"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws dev app robot config --unified-app-id \u003cunifiedAppId\u003e --name \"小助手\" --desc \"接 opencode\" --dry-run --format json",
+        "dws dev app robot config --unified-app-id \u003cunifiedAppId\u003e --name \"小助手\" --desc \"接 opencode\" --yes --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev app robot disable": {
+      "use_when": [
+        "启用/停用机器人"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws dev app robot disable --unified-app-id \u003cunifiedAppId\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev app robot enable": {
+      "use_when": [
+        "启用/停用机器人"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws dev app robot enable  --unified-app-id \u003cunifiedAppId\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev app robot get": {
+      "use_when": [
+        "查询现有机器人配置"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws dev app robot get --unified-app-id \u003cunifiedAppId\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev app robot result": {
+      "use_when": [
+        "建号：轮询结果"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws dev app robot result --task-id \u003ctaskId\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev app robot submit": {
+      "use_when": [
+        "建号：异步提交"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws dev app robot submit --name \u003c智能体名\u003e --robot-name \u003c机器人名\u003e --desc \u003c描述\u003e --dry-run --format json",
+        "dws dev app robot submit --name \u003c智能体名\u003e --robot-name \u003c机器人名\u003e --desc \u003c描述\u003e --yes --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev app update": {
+      "use_when": [
+        "更新应用信息"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws dev app update --unified-app-id \u003cunifiedAppId\u003e --name \u003c新名称\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev app version create": {
+      "use_when": [
+        "版本发布/审批，线上搜索、加群、路由消息以 RELEASE 为准"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws dev app version create --unified-app-id \u003cunifiedAppId\u003e --desc \"发布机器人能力\" --dry-run --format json",
+        "dws dev app version create --unified-app-id \u003cunifiedAppId\u003e --desc \"发布机器人能力\" --yes --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev app version publish": {
+      "use_when": [
+        "版本发布/审批，线上搜索、加群、路由消息以 RELEASE 为准"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws dev app version check-approval --unified-app-id \u003cunifiedAppId\u003e --version-id \u003cversionId\u003e --format json",
+        "dws dev app version publish --unified-app-id \u003cunifiedAppId\u003e --version-id \u003cversionId\u003e --dry-run --format json",
+        "dws dev app version publish --unified-app-id \u003cunifiedAppId\u003e --version-id \u003cversionId\u003e --yes --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev app version status": {
+      "use_when": [
+        "版本发布/审批，线上搜索、加群、路由消息以 RELEASE 为准"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws dev app version status         --unified-app-id \u003cunifiedAppId\u003e --version-id \u003cversionId\u003e --format json",
+        "dws dev app version status --unified-app-id \u003cunifiedAppId\u003e --version-id \u003cversionId\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev connect status": {
+      "use_when": [
+        "查看/停止后台连接器"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws dev connect status --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/dev.md"
+      ]
+    },
+    "dev connect stop": {
+      "use_when": [
+        "查看/停止后台连接器"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws dev connect stop"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/dev.md"
+      ]
+    }
+  }
+}

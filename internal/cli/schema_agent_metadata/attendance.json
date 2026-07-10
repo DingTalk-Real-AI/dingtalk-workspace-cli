@@ -1,0 +1,33 @@
+{
+  "product_id": "attendance",
+  "tools": {
+    "attendance rules": {
+      "use_when": [
+        "查看考勤组和规则",
+        "考勤组/考勤规则/打卡规则"
+      ],
+      "examples": [
+        "dws attendance rules --date \"2026-03-14 09:00:00\"",
+        "dws attendance rules --date 2026-03-14"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/attendance.md"
+      ]
+    },
+    "attendance summary": {
+      "use_when": [
+        "查看考勤统计摘要",
+        "考勤汇总/统计"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws attendance summary --user \u003cUSER_ID\u003e --date \"2026-03-12 15:00:00\" --format json",
+        "dws attendance summary --user USER_ID --date \"2026-03-12 15:00:00\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/attendance.md"
+      ]
+    }
+  }
+}

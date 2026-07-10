@@ -1,0 +1,39 @@
+{
+  "product_id": "ding",
+  "tools": {
+    "ding message recall": {
+      "use_when": [
+        "撤回",
+        "撤回 DING"
+      ],
+      "effect": "destructive",
+      "effect_source": "skill-explicit",
+      "risk": "high",
+      "confirmation": "user_required",
+      "examples": [
+        "dws ding message recall --robot-code \u003cROBOT_CODE\u003e --id \u003cOPEN_DING_ID\u003e",
+        "dws ding message recall --robot-code \u003cROBOT_CODE\u003e --id \u003cOPEN_DING_ID\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/ding.md"
+      ]
+    },
+    "ding message send": {
+      "use_when": [
+        "DING 一下/紧急通知/电话提醒",
+        "应用内 DING (免费)",
+        "电话 DING (紧急, 有成本!)"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws ding message send --robot-code \u003cROBOT_CODE\u003e --type app --users userId1,userId2 --content \"请查看\" --format json",
+        "dws ding message send --robot-code \u003cROBOT_CODE\u003e --users \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e --content \"请查看\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/ding.md"
+      ]
+    }
+  }
+}

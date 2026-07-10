@@ -1,0 +1,235 @@
+{
+  "product_id": "todo",
+  "tools": {
+    "todo comment add": {
+      "use_when": [
+        "7. 给待办新增评论",
+        "给待办加条评论/留个备注"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws todo comment add --task-id \u003ctaskId\u003e --content \"已开始处理\" --format json",
+        "dws todo comment add --task-id \u003ctaskId\u003e --content \"评论内容\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/todo.md"
+      ]
+    },
+    "todo comment delete": {
+      "use_when": [
+        "9. 删除待办评论",
+        "删除这条评论"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws todo comment delete --task-id \u003ctaskId\u003e --comment-id \u003ccommentId\u003e",
+        "dws todo comment delete --task-id \u003ctaskId\u003e --comment-id \u003ccommentId\u003e --yes"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/todo.md"
+      ]
+    },
+    "todo comment list": {
+      "use_when": [
+        "8. 查看待办评论列表",
+        "看看这个待办的评论"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws todo comment list --task-id \u003ctaskId\u003e",
+        "dws todo comment list --task-id \u003ctaskId\u003e --page 1 --size 20"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/todo.md"
+      ]
+    },
+    "todo task add-executor": {
+      "use_when": [
+        "10. 添加待办执行人",
+        "加个执行人/添加执行者"
+      ],
+      "examples": [
+        "dws todo task add-executor --task-id \u003ctaskId\u003e --executors \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
+        "dws todo task add-executor --task-id \u003ctaskId\u003e --executors userId1,userId2 --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/todo.md"
+      ]
+    },
+    "todo task add-participant": {
+      "use_when": [
+        "12. 添加待办参与人",
+        "加个参与人/添加参与者"
+      ],
+      "examples": [
+        "dws todo task add-participant --task-id \u003ctaskId\u003e --participants \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
+        "dws todo task add-participant --task-id \u003ctaskId\u003e --participants userId1,userId2 --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/todo.md"
+      ]
+    },
+    "todo task add-reminder": {
+      "use_when": [
+        "14. 添加待办提醒（基于截止时间偏移，待办必须有截止时间）",
+        "15. 添加待办提醒（自定义时间戳）",
+        "给待办加个提醒/设置提醒"
+      ],
+      "examples": [
+        "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time customTime --reminder-time-stamp \"2026-03-10T18:00:00+08:00\"",
+        "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time dueTime --due-date-offset -30"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/todo.md"
+      ]
+    },
+    "todo task create": {
+      "use_when": [
+        "加个待办/记一下/TODO",
+        "每天重复/循环待办/按天重复"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws todo task create --title \"修复线上Bug\" --executors \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e --priority 40",
+        "dws todo task create --title \"每日站会\" --executors \u003cUSER_ID\u003e --due \"2026-03-20T10:00:00+08:00\" --recurrence \"DTSTART:20260320T020000Z\\nRRULE:FREQ=DAILY;INTERVAL=1\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/todo.md"
+      ]
+    },
+    "todo task create-sub": {
+      "use_when": [
+        "加个子任务/创建子待办"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws todo task create-sub --parent-id \u003cPARENT_TASK_ID\u003e --title \"子任务标题\" --executors \u003cUSER_ID\u003e --due \"2026-03-20T10:00:00+08:00\"",
+        "dws todo task create-sub --parent-id \u003cPARENT_TASK_ID\u003e --title \"子任务标题\" --executors \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e --priority 40"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/todo.md"
+      ]
+    },
+    "todo task delete": {
+      "use_when": [
+        "6. 删除待办",
+        "删除待办/取消待办"
+      ],
+      "effect": "destructive",
+      "effect_source": "skill-explicit",
+      "risk": "high",
+      "confirmation": "user_required",
+      "examples": [
+        "dws todo task delete --task-id \u003ctaskId\u003e",
+        "dws todo task delete --task-id \u003ctaskId\u003e --yes"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/todo.md"
+      ]
+    },
+    "todo task done": {
+      "use_when": [
+        "5. 标记待办完成",
+        "做完了/完成待办/标记完成"
+      ],
+      "examples": [
+        "dws todo task done --task-id \u003ctaskId\u003e --status false",
+        "dws todo task done --task-id \u003ctaskId\u003e --status true"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/todo.md"
+      ]
+    },
+    "todo task get": {
+      "use_when": [
+        "3. 查看待办详情",
+        "看看待办详情"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws todo task get --task-id \u003ctaskId\u003e",
+        "dws todo task get --task-id \u003ctaskId\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/todo.md"
+      ]
+    },
+    "todo task list": {
+      "use_when": [
+        "2. 查看未完成待办",
+        "看看待办/我有啥要做"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws todo task list --page 1 --size 20 --status false",
+        "dws todo task list --page 1 --size 20 --status false --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/todo.md"
+      ]
+    },
+    "todo task remove-executor": {
+      "use_when": [
+        "11. 移除待办执行人",
+        "移除执行人/删除执行者"
+      ],
+      "examples": [
+        "dws todo task remove-executor --task-id \u003ctaskId\u003e --executors \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
+        "dws todo task remove-executor --task-id \u003ctaskId\u003e --executors userId1 --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/todo.md"
+      ]
+    },
+    "todo task remove-participant": {
+      "use_when": [
+        "13. 移除待办参与人",
+        "移除参与人/删除参与者"
+      ],
+      "examples": [
+        "dws todo task remove-participant --task-id \u003ctaskId\u003e --participants \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
+        "dws todo task remove-participant --task-id \u003ctaskId\u003e --participants userId1 --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/todo.md"
+      ]
+    },
+    "todo task reset-reminder": {
+      "use_when": [
+        "16. 重置待办提醒",
+        "17. 重置待办提醒（指定新规则）",
+        "重置提醒/清除提醒/修改提醒规则"
+      ],
+      "examples": [
+        "dws todo task reset-reminder --task-id \u003ctaskId\u003e",
+        "dws todo task reset-reminder --task-id \u003ctaskId\u003e --reminder-rules '[{\"dueDateOffset\":-30,\"baseTime\":\"dueTime\"},{\"reminderTimeStamp\":\"2026-03-10T18:00:00+08:00\",\"baseTime\":\"customTime\"}]'"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/todo.md"
+      ]
+    },
+    "todo task update": {
+      "use_when": [
+        "4. 修改待办信息",
+        "改个待办/修改待办标题/改优先级"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws todo task update --task-id \u003ctaskId\u003e --priority 40 --due \"2026-03-10T18:00:00+08:00\"",
+        "dws todo task update --task-id \u003ctaskId\u003e --title \"新标题\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/todo.md"
+      ]
+    }
+  }
+}

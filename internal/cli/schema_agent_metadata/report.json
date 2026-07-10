@@ -1,0 +1,113 @@
+{
+  "product_id": "report",
+  "tools": {
+    "report entry get": {
+      "use_when": [
+        "2c. 仅当 submit 返回中缺少 dingtalkOpenUrl 时，手动补取 dingtalk:// 跳转链接",
+        "4. 查看日报详情（正文/字段明细）",
+        "从列表结果提取 reportId 后，再查正文",
+        "先通过 report inbox list / outbox list / entry submit 取得 reportId，再查正文与跳转链接",
+        "已知 reportId",
+        "我发过 / 我创建的日志",
+        "我收到的日志"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws report entry get --report-id \u003creportId\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/report.md"
+      ]
+    },
+    "report entry stats": {
+      "use_when": [
+        "5. 查看日报已读统计",
+        "日志统计/已读统计"
+      ],
+      "examples": [
+        "dws report entry stats --report-id \u003creportId\u003e",
+        "dws report entry stats --report-id \u003creportId\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/report.md"
+      ]
+    },
+    "report entry submit": {
+      "use_when": [
+        "2b. 提交日志（从步骤 1/2 取 templateId 与 contents 字段）— 推荐 --contents-file 传入避免 shell 引号",
+        "推荐：长内容走文件，避免 shell 引号问题"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws report entry submit --template-id \u003ctemplateId\u003e --contents-file ./report.json --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/report.md"
+      ]
+    },
+    "report inbox list": {
+      "use_when": [
+        "别人发给我的日志/我收到的日志",
+        "我收到的日志",
+        "查日志/看日报/看正文"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws report inbox list --date 2026-05-11 --format json",
+        "dws report inbox list --start-date 2026-05-04 --end-date 2026-05-11 --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/report.md"
+      ]
+    },
+    "report outbox list": {
+      "use_when": [
+        "6. 查看我发出的日报列表",
+        "我发过 / 我创建的日志",
+        "我发过的日志/我创建的日志"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws report outbox list --cursor 0 --size 20",
+        "dws report outbox list --cursor 0 --size 20 --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/report.md"
+      ]
+    },
+    "report template get": {
+      "use_when": [
+        "2. 按名称读取模版字段定义"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws report template get --name \"日报\" --format json",
+        "dws report template get --name \u003ctemplateName\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/report.md"
+      ]
+    },
+    "report template list": {
+      "use_when": [
+        "1. 获取当前用户可用的日志模版",
+        "写日报/提交周报/发日志/填日志",
+        "有什么日志模版"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws report template list",
+        "dws report template list --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/report.md"
+      ]
+    }
+  }
+}

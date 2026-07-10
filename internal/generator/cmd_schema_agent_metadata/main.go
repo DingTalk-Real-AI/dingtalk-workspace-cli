@@ -35,22 +35,41 @@ func main() {
 	var productsDir string
 	var intentGuidePath string
 	var outputPath string
+	var outputDir string
+	var surfacePath string
+	var writeSurfacePath string
 	var maxExamples int
 	var validateSurface bool
 	flag.StringVar(&root, "root", ".", "Repository root")
 	flag.StringVar(&skillPath, "skill", "skills/mono/SKILL.md", "Main DWS SKILL.md path")
 	flag.StringVar(&productsDir, "products", "skills/mono/references/products", "Product skill reference directory")
 	flag.StringVar(&intentGuidePath, "intent-guide", "skills/mono/references/intent-guide.md", "Cross-product intent guide path")
-	flag.StringVar(&outputPath, "output", "internal/cli/schema_agent_metadata.json", "Output embedded Agent metadata JSON")
+	flag.StringVar(&outputPath, "output", "", "Output embedded Agent metadata JSON file (legacy single-file mode)")
+	flag.StringVar(&outputDir, "output-dir", "", "Output directory for split embedded Agent metadata JSON")
+	flag.StringVar(&surfacePath, "surface", "", "Versioned command-surface snapshot path, relative to --root")
+	flag.StringVar(&writeSurfacePath, "write-surface", "", "Write the current runtime command surface snapshot and exit")
 	flag.IntVar(&maxExamples, "max-examples", 2, "Maximum examples retained per command")
-	flag.BoolVar(&validateSurface, "validate-surface", true, "Keep only paths present in the current runtime command schema")
+	flag.BoolVar(&validateSurface, "validate-surface", true, "Keep only paths present in the command-surface snapshot or current runtime schema")
 	flag.Parse()
+	if strings.TrimSpace(writeSurfacePath) != "" {
+		if err := writeCommandSurfaceSnapshot(resolveRootPath(root, writeSurfacePath)); err != nil {
+			fail(fmt.Errorf("write command surface: %w", err))
+		}
+		return
+	}
+	if strings.TrimSpace(outputDir) == "" && strings.TrimSpace(outputPath) == "" {
+		outputDir = "internal/cli/schema_agent_metadata"
+	}
 	var surface commandSurface
 	if validateSurface {
 		var err error
-		surface, err = loadCommandSurface()
+		if strings.TrimSpace(surfacePath) != "" {
+			surface, err = loadCommandSurfaceSnapshot(resolveRootPath(root, surfacePath))
+		} else {
+			surface, err = loadCommandSurface()
+		}
 		if err != nil {
-			fail(fmt.Errorf("load runtime command surface: %w", err))
+			fail(fmt.Errorf("load command surface: %w", err))
 		}
 	}
 
@@ -68,16 +87,18 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	encoded, err := json.MarshalIndent(metadata, "", "  ")
-	if err != nil {
-		fail(fmt.Errorf("encode metadata: %w", err))
-	}
-	encoded = append(encoded, '\n')
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
-		fail(fmt.Errorf("create output directory: %w", err))
-	}
-	if err := os.WriteFile(outputPath, encoded, 0o644); err != nil {
-		fail(fmt.Errorf("write output: %w", err))
+	if strings.TrimSpace(outputDir) != "" {
+		if err := writeMetadataDirectory(outputDir, metadata); err != nil {
+			fail(err)
+		}
+		outputPath = outputDir
+	} else {
+		if strings.TrimSpace(outputPath) == "" {
+			outputPath = "internal/cli/schema_agent_metadata.json"
+		}
+		if err := writeMetadataFile(outputPath, metadata); err != nil {
+			fail(err)
+		}
 	}
 	_, _ = fmt.Fprintf(
 		os.Stderr,
@@ -94,6 +115,108 @@ func main() {
 	)
 }
 
+type agentMetadataIndex struct {
+	Version     int                                      `json:"version"`
+	SourceHash  string                                   `json:"source_hash"`
+	SurfaceHash string                                   `json:"surface_hash,omitempty"`
+	Coverage    agentmetadata.Coverage                   `json:"coverage"`
+	Products    map[string]agentmetadata.ProductMetadata `json:"products"`
+	Domains     []string                                 `json:"domains"`
+}
+
+type agentMetadataDomain struct {
+	ProductID string                                `json:"product_id"`
+	Tools     map[string]agentmetadata.ToolMetadata `json:"tools"`
+}
+
+func writeMetadataFile(path string, metadata agentmetadata.File) error {
+	encoded, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode metadata: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create output directory: %w", err)
+	}
+	if err := os.WriteFile(path, append(encoded, '\n'), 0o644); err != nil {
+		return fmt.Errorf("write output: %w", err)
+	}
+	return nil
+}
+
+func writeMetadataDirectory(dir string, metadata agentmetadata.File) error {
+	dir = strings.TrimSpace(dir)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create metadata directory: %w", err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("read metadata directory: %w", err)
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
+			if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil {
+				return fmt.Errorf("remove stale metadata %s: %w", entry.Name(), err)
+			}
+		}
+	}
+
+	byDomain := map[string]map[string]agentmetadata.ToolMetadata{}
+	for toolPath, tool := range metadata.Tools {
+		domain := firstPathToken(toolPath)
+		if domain == "" {
+			continue
+		}
+		if byDomain[domain] == nil {
+			byDomain[domain] = map[string]agentmetadata.ToolMetadata{}
+		}
+		byDomain[domain][toolPath] = tool
+	}
+	domains := make([]string, 0, len(byDomain))
+	for domain := range byDomain {
+		domains = append(domains, domain)
+	}
+	sort.Strings(domains)
+	index := agentMetadataIndex{
+		Version:     metadata.Version,
+		SourceHash:  metadata.SourceHash,
+		SurfaceHash: metadata.SurfaceHash,
+		Coverage:    metadata.Coverage,
+		Products:    metadata.Products,
+		Domains:     domains,
+	}
+	if err := writeJSON(filepath.Join(dir, "index.json"), index); err != nil {
+		return err
+	}
+	for _, domain := range domains {
+		if err := writeJSON(filepath.Join(dir, domain+".json"), agentMetadataDomain{
+			ProductID: domain,
+			Tools:     byDomain[domain],
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeJSON(path string, value any) error {
+	encoded, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode %s: %w", path, err)
+	}
+	if err := os.WriteFile(path, append(encoded, '\n'), 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	return nil
+}
+
+func firstPathToken(path string) string {
+	parts := strings.Fields(strings.TrimSpace(path))
+	if len(parts) == 0 {
+		return ""
+	}
+	return parts[0]
+}
+
 type commandSurface struct {
 	ToolPaths  map[string]string
 	ProductIDs map[string]bool
@@ -101,33 +224,91 @@ type commandSurface struct {
 	ToolCount  int
 }
 
+const commandSurfaceSnapshotVersion = 1
+
+type commandSurfaceSnapshot struct {
+	Version  int                     `json:"version"`
+	Products []commandSurfaceProduct `json:"products"`
+}
+
+type commandSurfaceProduct struct {
+	ID    string               `json:"id"`
+	Tools []commandSurfaceTool `json:"tools"`
+}
+
+type commandSurfaceTool struct {
+	CLIPath string   `json:"cli_path"`
+	Aliases []string `json:"aliases,omitempty"`
+}
+
 func loadCommandSurface() (commandSurface, error) {
+	snapshot, err := currentCommandSurfaceSnapshot()
+	if err != nil {
+		return commandSurface{}, err
+	}
+	return commandSurfaceFromSnapshot(snapshot), nil
+}
+
+func currentCommandSurfaceSnapshot() (commandSurfaceSnapshot, error) {
 	root := app.NewRootCommand()
 	var stdout, stderr bytes.Buffer
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
 	root.SetArgs([]string{"schema", "--all", "--format", "json"})
 	if err := root.Execute(); err != nil {
-		return commandSurface{}, fmt.Errorf("execute dws schema --all: %w: %s", err, strings.TrimSpace(stderr.String()))
+		return commandSurfaceSnapshot{}, fmt.Errorf("execute dws schema --all: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
-	var payload struct {
-		Products []struct {
-			ID    string `json:"id"`
-			Tools []struct {
-				CLIPath string   `json:"cli_path"`
-				Aliases []string `json:"aliases"`
-			} `json:"tools"`
-		} `json:"products"`
+	var snapshot commandSurfaceSnapshot
+	if err := json.Unmarshal(stdout.Bytes(), &snapshot); err != nil {
+		return commandSurfaceSnapshot{}, fmt.Errorf("decode schema catalog: %w", err)
 	}
-	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
-		return commandSurface{}, fmt.Errorf("decode schema catalog: %w", err)
+	snapshot.Version = commandSurfaceSnapshotVersion
+	return normalizeCommandSurfaceSnapshot(snapshot), nil
+}
+
+func loadCommandSurfaceSnapshot(path string) (commandSurface, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return commandSurface{}, err
 	}
+	var snapshot commandSurfaceSnapshot
+	if err := json.Unmarshal(data, &snapshot); err != nil {
+		return commandSurface{}, fmt.Errorf("decode %s: %w", path, err)
+	}
+	if snapshot.Version != commandSurfaceSnapshotVersion {
+		return commandSurface{}, fmt.Errorf("unsupported command surface version %d", snapshot.Version)
+	}
+	return commandSurfaceFromSnapshot(normalizeCommandSurfaceSnapshot(snapshot)), nil
+}
+
+func writeCommandSurfaceSnapshot(path string) error {
+	snapshot, err := currentCommandSurfaceSnapshot()
+	if err != nil {
+		return err
+	}
+	encoded, err := json.MarshalIndent(snapshot, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode snapshot: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create snapshot directory: %w", err)
+	}
+	if err := os.WriteFile(path, append(encoded, '\n'), 0o644); err != nil {
+		return fmt.Errorf("write snapshot: %w", err)
+	}
+	surface := commandSurfaceFromSnapshot(snapshot)
+	_, _ = fmt.Fprintf(os.Stderr, "generated schema command surface: output=%s products=%d tools=%d hash=%s\n", path, len(surface.ProductIDs), surface.ToolCount, surface.Hash)
+	return nil
+}
+
+func commandSurfaceFromSnapshot(snapshot commandSurfaceSnapshot) commandSurface {
 	surface := commandSurface{
 		ToolPaths:  map[string]string{},
 		ProductIDs: map[string]bool{},
 	}
 	rows := make([]string, 0)
-	for _, product := range payload.Products {
+	seenPrimary := map[string]bool{}
+	for _, product := range snapshot.Products {
 		productID := strings.TrimSpace(product.ID)
 		if productID != "" {
 			surface.ProductIDs[productID] = true
@@ -138,7 +319,10 @@ func loadCommandSurface() (commandSurface, error) {
 				continue
 			}
 			surface.ToolPaths[primary] = primary
-			surface.ToolCount++
+			if !seenPrimary[primary] {
+				seenPrimary[primary] = true
+				surface.ToolCount++
+			}
 			aliases := append([]string(nil), tool.Aliases...)
 			sort.Strings(aliases)
 			for _, alias := range aliases {
@@ -153,7 +337,47 @@ func loadCommandSurface() (commandSurface, error) {
 	sort.Strings(rows)
 	sum := sha256.Sum256([]byte(strings.Join(rows, "\n")))
 	surface.Hash = "sha256:" + hex.EncodeToString(sum[:])
-	return surface, nil
+	return surface
+}
+
+func normalizeCommandSurfaceSnapshot(snapshot commandSurfaceSnapshot) commandSurfaceSnapshot {
+	products := make([]commandSurfaceProduct, 0, len(snapshot.Products))
+	for _, product := range snapshot.Products {
+		product.ID = strings.TrimSpace(product.ID)
+		if product.ID == "" {
+			continue
+		}
+		tools := make([]commandSurfaceTool, 0, len(product.Tools))
+		for _, tool := range product.Tools {
+			tool.CLIPath = strings.TrimSpace(tool.CLIPath)
+			if tool.CLIPath == "" {
+				continue
+			}
+			aliases := make([]string, 0, len(tool.Aliases))
+			seenAliases := map[string]bool{}
+			for _, alias := range tool.Aliases {
+				alias = strings.TrimSpace(alias)
+				if alias != "" && !seenAliases[alias] {
+					seenAliases[alias] = true
+					aliases = append(aliases, alias)
+				}
+			}
+			sort.Strings(aliases)
+			tools = append(tools, commandSurfaceTool{CLIPath: tool.CLIPath, Aliases: aliases})
+		}
+		sort.Slice(tools, func(i, j int) bool { return tools[i].CLIPath < tools[j].CLIPath })
+		products = append(products, commandSurfaceProduct{ID: product.ID, Tools: tools})
+	}
+	sort.Slice(products, func(i, j int) bool { return products[i].ID < products[j].ID })
+	return commandSurfaceSnapshot{Version: commandSurfaceSnapshotVersion, Products: products}
+}
+
+func resolveRootPath(root, path string) string {
+	path = strings.TrimSpace(path)
+	if filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(root, path)
 }
 
 func fail(err error) {

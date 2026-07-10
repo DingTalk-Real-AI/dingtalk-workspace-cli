@@ -1,0 +1,210 @@
+{
+  "version": 1,
+  "source_hash": "sha256:2a8994db5beb9389d5b0a2cf201e67c7160f3d23156996e5747b85bc8474ff74",
+  "surface_hash": "sha256:2499ae17d61030fa3aec1d4adc2efd9d0644d93bc277c4616a8dc327fe893fae",
+  "coverage": {
+    "surface_products": 23,
+    "products_with_metadata": 19,
+    "surface_tools": 518,
+    "tools_with_metadata": 304,
+    "unmatched_skill_tools": 86
+  },
+  "products": {
+    "aisearch": {
+      "use_when": [
+        "找人/搜人/谁负责 XX/某事项的负责人/某项目的人/团队成员/上级/下级/按工号找人/按手机号找人"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md"
+      ]
+    },
+    "aitable": {
+      "use_when": [
+        "帮我建一个项目跟踪表；创建数据表格",
+        "表格/多维表/AI表格/记录/数据/视图/图表/仪表盘"
+      ],
+      "avoid_when": [
+        "帮我记一下明天要做的事；创建个人待办"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md",
+        "skills/mono/references/intent-guide.md"
+      ]
+    },
+    "attendance": {
+      "use_when": [
+        "考勤/打卡/排班"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md"
+      ]
+    },
+    "calendar": {
+      "use_when": [
+        "帮我建一个明天下午的日程；日历日程",
+        "日程/日历/会议室/约会/时间建议"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md",
+        "skills/mono/references/intent-guide.md"
+      ]
+    },
+    "chat": {
+      "use_when": [
+        "群聊/建群/群成员/群管理/发消息/发图片消息/发文件消息/发 Markdown 消息/截图发钉钉/转发消息/引用回复/@我/特别关注消息/机器人发消息/Webhook/机器人群发/机器人单聊/通知"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md"
+      ]
+    },
+    "contact": {
+      "use_when": [
+        "通讯录/同事/部门/组织架构/子部门/部门多少人/离职员工/离职名单/离职花名册/花名册/员工档案/学历/家庭/银行卡/紧急联系人/合同/角色/主管角色/管理员角色/财务/HR/特别关注/星标联系人"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md"
+      ]
+    },
+    "dev": {
+      "use_when": [
+        "创建机器人/新建机器人/建机器人/配置机器人/机器人建号/建联/把机器人连到/接入 agent/opencode/claude/qoder/连接 agent/开放平台应用/开发者应用/app 创建/应用凭证/事件订阅/dws dev"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md"
+      ]
+    },
+    "devdoc": {
+      "use_when": [
+        "开发/API/调用错误 文档",
+        "搜一下 OAuth2 接入文档；搜索开发文档",
+        "查询开放平台 API 错误码/字段说明；搜索开放平台接口文档"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md",
+        "skills/mono/references/intent-guide.md"
+      ]
+    },
+    "ding": {
+      "use_when": [
+        "DING/紧急消息/电话提醒"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md"
+      ]
+    },
+    "doc": {
+      "use_when": [
+        "钉钉文档/云文档/读写文档/知识库里的文档/浏览知识库内容/知识库内搜索文档/块级编辑/文档评论/文档复制移动"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md"
+      ]
+    },
+    "drive": {
+      "use_when": [
+        "云盘/文件存储/文件上传下载/文件夹"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md"
+      ]
+    },
+    "mail": {
+      "use_when": [
+        "邮箱/邮件/发邮件/收邮件/搜邮件/查邮件/邮件草稿/转发邮件/回复邮件/邮件附件/抄送"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md"
+      ]
+    },
+    "minutes": {
+      "use_when": [
+        "听记/AI听记/会议纪要/转写/摘要/思维导图/发言人/热词"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md"
+      ]
+    },
+    "oa": {
+      "use_when": [
+        "审批/请假/报销/出差/加班/同意/拒绝/撤销审批",
+        "帮我提交请假审批；发起审批"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md",
+        "skills/mono/references/intent-guide.md"
+      ]
+    },
+    "pat": {
+      "use_when": [
+        "PAT/行为授权/授权 scope/永久授权/会话授权/授权时打开浏览器"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md"
+      ]
+    },
+    "report": {
+      "use_when": [
+        "帮我看看收到的日报；日志收件箱",
+        "日志/日报/周报/日志统计/写日报/提交周报/发日志/填日志"
+      ],
+      "avoid_when": [
+        "帮我创建一个待办提醒；个人待办"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md",
+        "skills/mono/references/intent-guide.md"
+      ]
+    },
+    "sheet": {
+      "use_when": [
+        "在线电子表格/钉钉表格/axls/工作表/单元格读写/合并单元格/筛选视图/导出 xlsx"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md"
+      ]
+    },
+    "todo": {
+      "use_when": [
+        "帮我创建一个待办提醒；个人待办",
+        "帮我记一下明天要做的事；创建个人待办",
+        "待办/TODO/任务提醒/循环待办"
+      ],
+      "avoid_when": [
+        "帮我建一个项目跟踪表；创建数据表格",
+        "帮我看看收到的日报；日志收件箱"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md",
+        "skills/mono/references/intent-guide.md"
+      ]
+    },
+    "wiki": {
+      "use_when": [
+        "创建知识库/知识库列表/搜索知识库空间/wiki/团队空间/知识库成员管理/我的文档个人空间"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md"
+      ]
+    }
+  },
+  "domains": [
+    "aisearch",
+    "aitable",
+    "attendance",
+    "calendar",
+    "chat",
+    "contact",
+    "dev",
+    "devdoc",
+    "ding",
+    "doc",
+    "drive",
+    "mail",
+    "minutes",
+    "oa",
+    "pat",
+    "report",
+    "todo",
+    "wiki"
+  ]
+}

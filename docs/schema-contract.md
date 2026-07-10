@@ -6,6 +6,7 @@
 
 ```bash
 dws schema                                  # product overview only
+dws schema list                             # compatibility alias for the product overview
 dws schema calendar                         # tools in one product
 dws schema calendar.event                   # tools in one CLI group
 dws schema calendar.create_calendar_event   # one complete tool schema
@@ -25,20 +26,21 @@ dws schema --all                            # complete catalog for audit/CI
 - Helper tools, including `dev app`, derive schema from their real Cobra flags and versioned metadata; schema queries never call MCP `tools/list`.
 - Visible local helper leaves, such as `dev connect status`, use a `hardcoded:<product>` source.
 - Sanitized CLI/MCP descriptions and parameter facts are snapshotted into `internal/cli/schema_mcp_metadata.json`; endpoints, credentials, and cache timestamps are never embedded.
-- Agent affordances are generated from the versioned Skill files into `internal/cli/schema_agent_metadata.json` and embedded in the binary.
+- Agent affordances are generated from the versioned Skill files into the product-domain files in `internal/cli/schema_agent_metadata/` and embedded in the binary. `index.json` carries the routing and coverage summary; each product JSON carries only that product's tool metadata. Their paths are reconciled against the versioned, endpoint-free `internal/cli/schema_command_surface.json` snapshot.
 
 ## Agent Metadata
 
 - Product overview: `use_when`, `avoid_when`, an `interface_metadata` snapshot summary, and an `agent_metadata` version/hash summary.
 - Tool summaries: `use_when`, `avoid_when`, `effect`, `risk`, and `confirmation` when known.
 - Tool detail: summary fields plus `examples`, `effect_source`, and `agent_source_refs`.
-- Skill-derived JSON is deterministic and checked by `scripts/policy/check-generated-drift.sh`.
+- Skill-derived JSON is deterministic and checked by `scripts/policy/check-generated-drift.sh`. Refresh the command-surface snapshot with `make generate-schema-command-surface`, then run `make generate-schema-agent-metadata`.
 - Refresh interface metadata explicitly with `make generate-schema-interface-metadata SCHEMA_REGISTRY=/path/to/servers.json`; release builds embed the committed snapshot and never perform runtime `tools/list` discovery.
 
 ## Path Rules
 
 ```bash
 dws schema                                  # compact product overview
+dws schema list                             # compatibility alias for the compact root overview
 dws schema calendar                         # list one product's tools
 dws schema calendar.event                   # list one command group's tools
 dws schema --all                            # full catalog
@@ -84,7 +86,8 @@ dws schema --cli-path "ding message send"   # explicit CLI-path flag
 - `parameters` is always present.
 - Parameter keys are real CLI flag names, without the `--` prefix.
 - `property` is the field sent to the MCP/API tool.
-- `required` is inline on each parameter.
+- `required` is inline on each parameter and means unconditionally required.
+- `required_when` is present only for a conditional requirement; it explains the flag dependency without incorrectly marking the parameter globally required.
 - `default` is present only when there is an explicit useful default.
 - No-parameter tools use `parameters: {}`, `has_parameters: false`, and `parameter_count: 0`.
 

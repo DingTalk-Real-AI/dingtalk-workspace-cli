@@ -1,0 +1,42 @@
+{
+  "product_id": "aisearch",
+  "tools": {
+    "aisearch behavior": {
+      "use_when": [
+        "我发过/谁发给我/创建过/分享过/收到过/今天我干了什么"
+      ],
+      "examples": [
+        "dws aisearch behavior --queries \"智能化方案\" --types document --format json",
+        "dws aisearch behavior --types mail --behavior-type send --direction \"我-\u003e汐峰\" --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aisearch.md"
+      ]
+    },
+    "aisearch enterprise": {
+      "use_when": [
+        "搜资料/找方案/查文档/搜企业知识/项目相关内容/工作总结/周报总结",
+        "最近/本周/今天 + XX相关消息/文档/邮件有哪些"
+      ],
+      "examples": [
+        "dws aisearch enterprise --queries \"搜索问题\" --types im --time-range \"最近\" --format json",
+        "dws aisearch enterprise --queries \"智能化方案\" --types document --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aisearch.md"
+      ]
+    },
+    "aisearch person": {
+      "use_when": [
+        "搜人/找人/谁负责/上级是谁/哪个部门的人"
+      ],
+      "examples": [
+        "dws aisearch person --keyword \"产品部\" --dimension department --format json",
+        "dws aisearch person --keyword \"张三\" --dimension name --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/aisearch.md"
+      ]
+    }
+  }
+}

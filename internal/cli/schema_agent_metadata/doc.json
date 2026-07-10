@@ -1,0 +1,181 @@
+{
+  "product_id": "doc",
+  "tools": {
+    "doc block delete": {
+      "use_when": [
+        "编辑块/改段落/插入标题/删除块；删除"
+      ],
+      "effect": "destructive",
+      "effect_source": "skill-explicit",
+      "risk": "high",
+      "confirmation": "user_required",
+      "source_refs": [
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/doc.md"
+      ]
+    },
+    "doc block insert": {
+      "use_when": [
+        "查看具体命令的完整参数说明",
+        "编辑块/改段落/插入标题/删除块；插入"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws doc block insert --help"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/doc.md"
+      ]
+    },
+    "doc block list": {
+      "use_when": [
+        "── 工作流 3: 局部改写（保真，首选 JSONML）──",
+        "── 工作流 7: 评论 + 划词（@人 需 userId）──",
+        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；如 URL 明显是文件夹",
+        "编辑块/改段落/插入标题/删除块；查看结构"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws doc block list --node \u003cDOC_ID\u003e --content-format jsonml             # 1. 取 uuid",
+        "dws doc block list --node \u003cDOC_ID\u003e --content-format jsonml --block-id \u003cUUID\u003e   # 2. 读子树"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/doc.md"
+      ]
+    },
+    "doc block update": {
+      "use_when": [
+        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；\"把正文里的一级标题/章节标题改成 X",
+        "编辑块/改段落/插入标题/删除块；修改"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "source_refs": [
+        "skills/mono/references/products/doc.md"
+      ]
+    },
+    "doc comment create": {
+      "use_when": [
+        "── 工作流 7: 评论 + 划词（@人 需 userId）──"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws doc comment create --node \u003cDOC_ID\u003e --content \"请确认\" --mention \u003cuid\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/doc.md"
+      ]
+    },
+    "doc create": {
+      "use_when": [
+        "写文档/创建文档；新建文字文档（adoc）",
+        "查看具体命令的完整参数说明"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws doc create --help"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/doc.md"
+      ]
+    },
+    "doc delete": {
+      "effect": "destructive",
+      "effect_source": "skill-explicit",
+      "risk": "high",
+      "confirmation": "user_required",
+      "source_refs": [
+        "skills/mono/SKILL.md"
+      ]
+    },
+    "doc info": {
+      "use_when": [
+        "── 工作流 1: 定位并阅读文档 ──",
+        "── 工作流 6: 下载 vs 导出（先 info 判 contentType）──",
+        "看文档/读内容/文档内容；元信息",
+        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；\"这个文档的信息"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws doc info --node \u003cDOC_ID\u003e --format json                    # 2. 元信息（含 contentType）",
+        "dws doc info --node \u003cNODE_ID\u003e --format json                    # 必须先查 contentType"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/doc.md"
+      ]
+    },
+    "doc media download": {
+      "use_when": [
+        "下载附件/获取附件/取出文档里的附件；下载附件"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "source_refs": [
+        "skills/mono/references/products/doc.md"
+      ]
+    },
+    "doc media insert": {
+      "use_when": [
+        "── 工作流 5: 上传独立文件 vs 插入附件到文档正文 ──",
+        "插入图片/加图片/放张图/嵌入图片/往文档里插图；插入图片",
+        "插入附件/上传附件到文档/往文档里加文件/加附件；插入附件"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws doc media insert --node \u003cDOC_ID\u003e --file ./report.pdf       # 上传并作为附件块插入正文（内容层）"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/doc.md"
+      ]
+    },
+    "doc permission update": {
+      "effect": "write",
+      "effect_source": "skill-explicit",
+      "risk": "high",
+      "confirmation": "user_required",
+      "source_refs": [
+        "skills/mono/SKILL.md"
+      ]
+    },
+    "doc read": {
+      "use_when": [
+        "── 工作流 1: 定位并阅读文档 ──",
+        "── 工作流 2: 创建文档（含分片自动写入）──",
+        "── 工作流 3: 局部改写（保真，首选 JSONML）──",
+        "── 工作流 4: 整篇 overwrite（仅在新骨架重写时）──",
+        "修改 /tmp/doc.json 中的 jsonml 数组",
+        "查看具体命令的完整参数说明",
+        "看文档/读内容/文档内容；读取",
+        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；\"帮我看看这个文档",
+        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；默认"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws doc read --help",
+        "dws doc read --node \u003cDOC_ID\u003e --format json                    # 3. 读 markdown 正文"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/doc.md"
+      ]
+    },
+    "doc update": {
+      "use_when": [
+        "写文档/创建文档；覆盖替换",
+        "写文档/创建文档；追加内容",
+        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；\"往这个文档追加内容"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "source_refs": [
+        "skills/mono/references/products/doc.md"
+      ]
+    }
+  }
+}

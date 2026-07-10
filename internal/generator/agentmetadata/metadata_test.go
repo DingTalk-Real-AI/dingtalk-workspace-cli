@@ -39,6 +39,8 @@ func TestGenerateCompilesSkillSemantics(t *testing.T) {
 	writeFixture(t, root, "skills/mono/references/products/calendar.md", "# 日历\n"+
 		"### 查询日程\nUsage:\n  dws calendar event list [flags]\n"+
 		"Example:\n  dws calendar event list --start 2026-01-01 --end 2026-01-02\n\n"+
+		"### 搜索会议室\nUsage:\n  dws calendar room search [flags]\n"+
+		"Example:\n  dws calendar room search # 不传时间时使用默认窗口\n\n"+
 		"### 创建日程\nUsage:\n  dws calendar event create [flags]\n"+
 		"Example:\n  dws calendar event create --title \"评审会\" --start 2026-01-01 --end 2026-01-02\n\n"+
 		"### 删除日程\nUsage:\n  dws calendar event delete [flags]\n\n"+
@@ -79,6 +81,12 @@ func TestGenerateCompilesSkillSemantics(t *testing.T) {
 	}
 	if got := metadata.Products["dev"].UseWhen; len(got) != 0 {
 		t.Fatalf("note target polluted dev use_when = %#v", got)
+	}
+	if _, ok := metadata.Tools["calendar room search # 不传时间时使用默认窗口"]; ok {
+		t.Fatalf("inline comment was treated as a command path: %#v", metadata.Tools)
+	}
+	if _, ok := metadata.Tools["calendar room search"]; !ok {
+		t.Fatalf("calendar room search missing from metadata: %#v", metadata.Tools)
 	}
 	create := metadata.Tools["calendar event create"]
 	if len(create.UseWhen) != 1 || create.Effect != "write" || len(create.Examples) != 1 {

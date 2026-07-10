@@ -1,0 +1,857 @@
+{
+  "product_id": "chat",
+  "tools": {
+    "chat bot find": {
+      "use_when": [
+        "搜索机器人 — 提取 openDingTalkId（必须用 find，search 没有此字段）",
+        "搜索机器人/找机器人/查机器人/帮我找XXX机器人",
+        "给机器人发单聊/给机器人发消息/跟机器人聊天"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat bot find --query \"日报\"",
+        "dws chat bot find --query \"日报\" --limit 20"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat bot search": {
+      "use_when": [
+        "我创建的机器人/我的机器人/我自己的机器人/查看我的机器人",
+        "查我的机器人 — 提取 robot-code",
+        "查看我的机器人"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat bot search --page 1",
+        "dws chat bot search --page 1 --size 10 --name \"日报\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat category list": {
+      "use_when": [
+        "查看会话分组/自定义分组"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat category list"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat category list-conversations": {
+      "use_when": [
+        "某个分组下的会话/分组会话列表"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat category list-conversations --category-id \u003c分组ID\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat conversation-info": {
+      "examples": [
+        "dws chat conversation-info --group \u003copenConversationId\u003e --format json",
+        "dws chat conversation-info --user \u003cuserId\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group bots": {
+      "use_when": [
+        "群机器人列表/群里有哪些机器人/查看群机器人"
+      ],
+      "examples": [
+        "dws chat group bots --group \u003copenConversationId\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group create": {
+      "use_when": [
+        "帮我建一个项目群；创建群聊",
+        "建群/创建群聊"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat group create --name \"Q1 项目冲刺群\" --users userId1,userId2,userId3"
+      ],
+      "source_refs": [
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group dismiss": {
+      "use_when": [
+        "解散群/解散群聊"
+      ],
+      "examples": [
+        "dws chat group dismiss --group \u003copenConversationId\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group get-by-group-id": {
+      "use_when": [
+        "根据群号查群信息/群号查群/群号转openConversationId"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat group get-by-group-id --group-id 12345678"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group invite-url": {
+      "use_when": [
+        "群邀请链接/入群链接/加群链接"
+      ],
+      "examples": [
+        "dws chat group invite-url --group \u003copenConversationId\u003e",
+        "dws chat group invite-url --group \u003copenConversationId\u003e --expires-seconds 86400"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group list-my-groups": {
+      "use_when": [
+        "我创建的群/我管理的群/我是群主的群/我当管理员的群"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat group list-my-groups",
+        "dws chat group list-my-groups --role OWNER"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group members add": {
+      "use_when": [
+        "把张三拉进群；添加群成员",
+        "拉人进群/加群成员"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat group members add --id \u003copenconversation_id\u003e --users userId1,userId2"
+      ],
+      "source_refs": [
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group members add-bot": {
+      "use_when": [
+        "加机器人到群",
+        "邀请机器人进群"
+      ],
+      "examples": [
+        "dws chat group members add-bot --group \u003copenconversation_id\u003e --robot-code \u003crobot-code\u003e",
+        "dws chat group members add-bot --robot-code \u003crobot-code\u003e --id \u003copenconversation_id\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group members remove": {
+      "use_when": [
+        "踢人/移除群成员"
+      ],
+      "effect": "destructive",
+      "effect_source": "skill-explicit",
+      "risk": "high",
+      "confirmation": "user_required",
+      "examples": [
+        "dws chat group members remove --id \u003copenconversation_id\u003e --users userId1,userId2"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group members remove-bot": {
+      "use_when": [
+        "从群里移除机器人/踢出机器人"
+      ],
+      "examples": [
+        "dws chat group members remove-bot --id \u003copenConversationId\u003e --bot-id \u003copenBotId\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group quit": {
+      "examples": [
+        "dws chat group quit --group \u003copenConversationId\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group rename": {
+      "use_when": [
+        "改群名"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat group rename --id \u003copenconversation_id\u003e --name \"新群名\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group set-admin": {
+      "use_when": [
+        "设管理员/取消管理员/设置群管理员"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group set-history": {
+      "use_when": [
+        "设置历史消息/新成员看历史/新成员可见消息"
+      ],
+      "examples": [
+        "dws chat group set-history --group \u003copenConversationId\u003e --option FORBIDDEN",
+        "dws chat group set-history --group \u003copenConversationId\u003e --option RECENT_100"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group transfer-owner": {
+      "use_when": [
+        "转让群主/换群主/群主转让"
+      ],
+      "examples": [
+        "dws chat group transfer-owner --group \u003copenConversationId\u003e --new-owner \u003copenDingTalkId\u003e",
+        "dws chat group transfer-owner --group \u003copenConversationId\u003e --user \u003cuserId\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group update-icon": {
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat group update-icon --group \u003copenConversationId\u003e --icon-media-id \u003cmediaId\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group update-settings": {
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat group update-settings --group \u003copenConversationId\u003e --setting-key onlyAdminCanAtAll --status 0",
+        "dws chat group update-settings --group \u003copenConversationId\u003e --setting-key searchable --status 1"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group-mute": {
+      "use_when": [
+        "全员禁言/群禁言/解除禁言"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group-mute-member": {
+      "use_when": [
+        "禁言某人/指定成员禁言/解除某人禁言"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group-role add": {
+      "use_when": [
+        "创建/添加群身份"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat group-role add --group \u003copenConversationId\u003e --name \"管理员\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group-role list": {
+      "use_when": [
+        "查看群身份/群的自定义身份列表"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat group-role list --group \u003copenConversationId\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group-role query-user": {
+      "use_when": [
+        "查询某人的群身份/某人在群里有什么身份"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat group-role query-user --group \u003copenConversationId\u003e --user \u003cuserId\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group-role remove": {
+      "use_when": [
+        "删除群身份"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat group-role remove --group \u003copenConversationId\u003e --role-id \u003copenRoleId\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group-role remove-user": {
+      "use_when": [
+        "移除某人的群身份/撤销群身份"
+      ],
+      "examples": [
+        "dws chat group-role remove-user --group \u003copenConversationId\u003e --user \u003cuserId\u003e --role-ids roleId1,roleId2"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group-role set-user": {
+      "use_when": [
+        "给某人设置群身份/设定用户的群身份"
+      ],
+      "examples": [
+        "dws chat group-role set-user --group \u003copenConversationId\u003e --user \u003cuserId\u003e --role-ids roleId1,roleId2"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat group-role update": {
+      "use_when": [
+        "修改/更新群身份名称"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat group-role update --group \u003copenConversationId\u003e --role-id \u003copenRoleId\u003e --name \"新名称\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat list-top-conversations": {
+      "use_when": [
+        "置顶会话/置顶消息",
+        "置顶会话/置顶消息/我的置顶/查看置顶"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat list-top-conversations --limit 1000",
+        "dws chat list-top-conversations --limit 1000 --cursor \u003cnextCursor\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message add-emoji": {
+      "use_when": [
+        "emoji回应/表情回应/给消息加表情"
+      ],
+      "examples": [
+        "dws chat message add-emoji --conversation-id \u003copenConversationId\u003e --msg-id \u003copenMsgId\u003e --emoji \"赞\"",
+        "dws chat message add-emoji --conversation-id \u003copenConversationId\u003e --msg-id \u003copenMsgId\u003e --emoji \"鼓掌\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message add-text-emotion": {
+      "use_when": [
+        "文字表情回应/添加文字表情"
+      ],
+      "examples": [
+        "dws chat message add-text-emotion --conversation-id \u003copenConversationId\u003e --msg-id \u003copenMsgId\u003e --emotion-id \u003cemotionId\u003e --emotion-name \"赞\" --text \"nice\" --background-id im_bg_5"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message combine-forward": {
+      "use_when": [
+        "合并转发/批量转发/合并转发多条消息"
+      ],
+      "examples": [
+        "dws chat message combine-forward --src-conversation-id \u003csrcOpenCid\u003e --msg-ids \u003cid1\u003e,\u003cid2\u003e --dest-conversation-id \u003cdestOpenCid\u003e --uuid \u003cidempotencyKey\u003e",
+        "dws chat message combine-forward --src-conversation-id \u003csrcOpenCid\u003e --msg-ids \u003cid1\u003e,\u003cid2\u003e,\u003cid3\u003e --dest-conversation-id \u003cdestOpenCid\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message create-text-emotion": {
+      "use_when": [
+        "创建文字表情/新建文字表情"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat message create-text-emotion --emotion-name \"感谢\" --text \"感谢\" --background-id im_bg_5",
+        "dws chat message create-text-emotion --emotion-name \"赞\" --text \"nice\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message download-media": {
+      "examples": [
+        "dws chat message download-media --type mediaId --resource-id \u003cmediaId\u003e --message-id \u003copenMessageId\u003e --open-conversation-id \u003copenConversationId\u003e --output ./downloads/",
+        "dws chat message download-media --type mediaId --resource-id \u003cmediaId\u003e --message-id \u003copenMessageId\u003e --open-conversation-id \u003copenConversationId\u003e --output ./photo.jpg"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message forward": {
+      "use_when": [
+        "转发消息/转发一条消息/把消息转发到另一个群"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message list": {
+      "use_when": [
+        "2. 拉取群消息",
+        "某个群的聊天记录",
+        "聊天记录/会话消息/拉取会话"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat message list --group \u003copenconversation_id\u003e --time \"2025-03-01 00:00:00\"",
+        "dws chat message list --group \u003copenconversation_id\u003e --time \"2025-03-01 00:00:00\" --limit 50"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message list-all": {
+      "use_when": [
+        "我最近所有消息/我今天的消息",
+        "所有消息/全部会话消息/拉取全部消息/时间范围内消息/我的消息/我今天的消息/查我的钉钉消息/最近的消息"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat message list-all --start \"2025-03-01 00:00:00\" --end \"2025-03-31 23:59:59\" --limit 50",
+        "dws chat message list-all --start \"2025-03-01 00:00:00\" --end \"2025-03-31 23:59:59\" --limit 50 --cursor \"abc123token\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message list-by-ids": {
+      "use_when": [
+        "批量查消息/按ID查消息/根据消息ID查"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat message list-by-ids --msg-ids msgId1,msgId2,msgId3"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message list-by-sender": {
+      "use_when": [
+        "某人发给我的消息/指定发送者/某人的消息",
+        "某人发给我的消息/指定发送者的消息/某人最近的消息"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat message list-by-sender --sender-open-dingtalk-id \u003copenDingTalkId\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-11T00:00:00+08:00\" --limit 50 --cursor 0",
+        "dws chat message list-by-sender --sender-user-id \u003cuserId\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-11T00:00:00+08:00\" --limit 50 --cursor 0"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message list-direct": {
+      "use_when": [
+        "和某人的单聊聊天记录/拉某人单聊历史",
+        "拉取和某人的单聊记录/单聊消息"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat message list-direct --user \u003c对方userId\u003e --time \"2025-03-01 00:00:00\" --forward=false",
+        "dws chat message list-direct --user \u003c对方userId\u003e --time \"2025-03-01 00:00:00\" --limit 50"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message list-focused": {
+      "use_when": [
+        "我特别关注的人最近发了什么消息/关注的人最近聊了啥/星标联系人最近的动态",
+        "特别关注人的消息/关注的人的消息/星标联系人的消息"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat message list-focused --limit 20 --cursor \u003cnextCursor\u003e",
+        "dws chat message list-focused --limit 50"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message list-mentions": {
+      "use_when": [
+        "@我的消息/at我的/提及我的",
+        "@我的消息/提及我的"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat message list-mentions --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-11T00:00:00+08:00\" --limit 50 --cursor 0",
+        "dws chat message list-mentions --start \"2026-04-01T00:00:00+08:00\" --end \"2026-04-14T00:00:00+08:00\" --limit 20 --cursor 0"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message list-pin-msg": {
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat message list-pin-msg --open-conversation-id \u003copenConversationId\u003e",
+        "dws chat message list-pin-msg --open-conversation-id \u003copenConversationId\u003e --size 50"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message list-topic-replies": {
+      "use_when": [
+        "群里某条话题的回复",
+        "话题回复/群话题消息回复/拉取话题回复"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat message list-topic-replies --group \u003copenconversation_id\u003e --topic-id \u003ctopicId\u003e",
+        "dws chat message list-topic-replies --group \u003copenconversation_id\u003e --topic-id \u003ctopicId\u003e --time \"2025-03-01 00:00:00\" --limit 20"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message list-unread-conversations": {
+      "use_when": [
+        "2b. 拉取未读会话列表",
+        "未读会话列表",
+        "未读消息会话/未读会话列表/我的未读会话"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat message list-unread-conversations",
+        "dws chat message list-unread-conversations --count 20"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message query-send-status": {
+      "use_when": [
+        "查询消息发送状态/消息发没发成功/消息状态"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat message query-send-status --open-task-id \u003copenTaskId\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message read-status": {
+      "use_when": [
+        "消息已读未读/谁看了消息/查读状态/消息读取状态"
+      ],
+      "examples": [
+        "dws chat message read-status --conversation-id \u003copenConversationId\u003e --message-id \u003copenMessageId\u003e",
+        "dws chat message read-status --conversation-id \u003copenConversationId\u003e --message-id \u003copenMessageId\u003e --user userId1,userId2"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message recall": {
+      "use_when": [
+        "撤回我发的消息/撤回消息"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat message recall --conversation-id \u003copenConversationId\u003e --msg-id \u003copenMessageId\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message recall-by-bot": {
+      "use_when": [
+        "撤回机器人发的消息/机器人撤回消息"
+      ],
+      "effect": "destructive",
+      "effect_source": "skill-explicit",
+      "risk": "high",
+      "confirmation": "user_required",
+      "examples": [
+        "dws chat message recall-by-bot --robot-code \u003crobot-code\u003e --group \u003copenconversation_id\u003e --keys \u003cprocess-query-key\u003e",
+        "dws chat message recall-by-bot --robot-code \u003crobot-code\u003e --keys key1,key2"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message remove-emoji": {
+      "use_when": [
+        "取消emoji回应/移除表情回应"
+      ],
+      "examples": [
+        "dws chat message remove-emoji --conversation-id \u003copenConversationId\u003e --msg-id \u003copenMsgId\u003e --emoji \"赞\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message remove-text-emotion": {
+      "use_when": [
+        "取消文字表情回应/移除文字表情"
+      ],
+      "examples": [
+        "dws chat message remove-text-emotion --conversation-id \u003copenConversationId\u003e --msg-id \u003copenMsgId\u003e --emotion-id \u003cemotionId\u003e --emotion-name \"赞\" --text \"nice\" --background-id \u003cbackgroundId\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message reply": {
+      "use_when": [
+        "3. 以个人身份发送群消息",
+        "4. 以个人身份单聊（通过 userId）",
+        "4b. 以个人身份单聊（通过 openDingTalkId，三方应用等无法获取 userId 时使用）",
+        "再 dws drive info --file-id \u003cfileId\u003e --space-id \u003cspaceId\u003e 获取 dentryId",
+        "发单聊消息(以个人身份)",
+        "发群消息(以个人身份)",
+        "发送图片",
+        "幂等发送（24h 内相同 uuid 不重复投递）",
+        "引用回复/回复消息/引用消息回复",
+        "用 openDingTalkId 发单聊消息"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat message send --group \u003copenconversation_id\u003e --text \"hello\"",
+        "dws chat message send --user \u003cuserId\u003e --text \"请查收\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message search": {
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat message search --query \"changefree\" --start \"2026-04-01T00:00:00+08:00\" --end \"2026-04-15T00:00:00+08:00\" --limit 50 --cursor 0",
+        "dws chat message search --query \"codereview\" --group \u003copenconversation_id\u003e --start \"2026-04-01T00:00:00+08:00\" --end \"2026-04-15T00:00:00+08:00\" --limit 100 --cursor 0"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message search-advanced": {
+      "use_when": [
+        "多维度搜索/按发送者搜索/按人搜消息/指定多个群搜索/@我的消息搜索",
+        "搜索消息/查找关键词/搜一下消息里的XX",
+        "搜索消息里的关键词/包含XX的消息"
+      ],
+      "examples": [
+        "dws chat message search-advanced --query \"周报\" --start \"2026-04-01T00:00:00+08:00\" --end \"2026-04-15T00:00:00+08:00\"",
+        "dws chat message search-advanced --user \u003cuserId\u003e --start \"2026-04-01T00:00:00+08:00\" --end \"2026-04-15T00:00:00+08:00\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message send-by-bot": {
+      "use_when": [
+        "机器人发消息/机器人群发",
+        "给张三发一条机器人单聊消息；机器人单聊",
+        "让机器人在群里发个通知；机器人群发"
+      ],
+      "avoid_when": [
+        "通过 Webhook 发告警到群里；Webhook 告警"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat message send-by-bot --robot-code \u003crobot-code\u003e --group \u003copenconversation_id\u003e --title \"日报\" --text \"## 今日完成...\"",
+        "dws chat message send-by-bot --robot-code \u003crobot-code\u003e --users userId1,userId2 --title \"提醒\" --text \"请提交周报\""
+      ],
+      "source_refs": [
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message send-by-webhook": {
+      "use_when": [
+        "Webhook 发消息/告警消息",
+        "通过 Webhook 发告警到群里；Webhook 告警"
+      ],
+      "avoid_when": [
+        "让机器人在群里发个通知；机器人群发"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat message send-by-webhook --token \u003cwebhook-token\u003e --title \"test\" --text \"hi @118785\" --at-users 118785",
+        "dws chat message send-by-webhook --token \u003cwebhook-token\u003e --title \"告警\" --text \"CPU 超 90% @10\" --at-all"
+      ],
+      "source_refs": [
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message send-card": {
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat message send-card --group \u003copenConversationId\u003e",
+        "dws chat message send-card --receiver \u003copenDingTalkId\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message set-pin-msg": {
+      "examples": [
+        "dws chat message set-pin-msg --open-conversation-id \u003copenConversationId\u003e --msg-id \u003copenMessageId\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message unset-pin-msg": {
+      "examples": [
+        "dws chat message unset-pin-msg --open-conversation-id \u003copenConversationId\u003e --msg-id \u003copenMessageId\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat message update-card": {
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat message update-card --biz-id \u003cbizId\u003e --content \"更新的卡片内容\" --flow-status 2",
+        "dws chat message update-card --biz-id \u003cbizId\u003e --content \"最终内容\" --flow-status 3"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat mute": {
+      "use_when": [
+        "免打扰/消息免打扰/静音/开启免打扰/关闭免打扰"
+      ],
+      "examples": [
+        "dws chat mute --conversation-id \u003copenConversationId\u003e",
+        "dws chat mute --conversation-id \u003copenConversationId\u003e --off"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat search": {
+      "use_when": [
+        "1. 搜索群 — 提取 openconversation_id",
+        "搜索群/找群"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat search --query \"项目冲刺\"",
+        "dws chat search --query \"项目冲刺\" --limit 20 --cursor 0"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat search-common": {
+      "use_when": [
+        "我和XX的共同群/我们都在哪些群/查共同群",
+        "我和某人的共同群"
+      ],
+      "examples": [
+        "dws chat search-common --nicks \"天鸡,乐函\" --match-mode OR --limit 20 --cursor 0",
+        "dws chat search-common --nicks \"风雷,山乔\" --limit 20 --cursor 0"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    },
+    "chat set-top": {
+      "use_when": [
+        "置顶会话/取消置顶/会话置顶"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/chat.md"
+      ]
+    }
+  }
+}

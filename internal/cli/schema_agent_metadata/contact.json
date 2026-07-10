@@ -1,0 +1,169 @@
+{
+  "product_id": "contact",
+  "tools": {
+    "contact dept get-info": {
+      "use_when": [
+        "4. 查看部门详情（部门ID、名称、人数）",
+        "部门详情/部门信息/部门多少人"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws contact dept get-info --dept 12345",
+        "dws contact dept get-info --dept \u003cdeptId\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/contact.md"
+      ]
+    },
+    "contact dept list-children": {
+      "use_when": [
+        "5. 查看直属子部门 — 提取子 deptId 列表",
+        "子部门/下设部门/部门有哪些下级部门/枚举二级部门"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws contact dept list-children --dept 1           # 枚举根部门下的一级部门",
+        "dws contact dept list-children --dept 12345       # 枚举指定部门的直属子部门"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/contact.md"
+      ]
+    },
+    "contact dept list-members": {
+      "use_when": [
+        "6. 查看部门成员",
+        "部门有谁/部门成员/人员名单"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws contact dept list-members --depts 1              # 根部门",
+        "dws contact dept list-members --depts 12345,67890"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/contact.md"
+      ]
+    },
+    "contact dept search": {
+      "use_when": [
+        "3. 查看部门结构 — 提取 deptId",
+        "找部门/哪个部门"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws contact dept search --query \"技术部\"",
+        "dws contact dept search --query \"技术部\" --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/contact.md"
+      ]
+    },
+    "contact get": {
+      "use_when": [
+        "查用户详情/部门/主管/管理员"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws contact user get --ids userId1,userId2"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/contact.md"
+      ]
+    },
+    "contact relation list-my-followings": {
+      "use_when": [
+        "我关注了谁/我的特别关注列表/我的星标联系人/特别关注的人有哪些"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "source_refs": [
+        "skills/mono/references/products/contact.md"
+      ]
+    },
+    "contact search": {
+      "use_when": [
+        "2. 按名字搜索同事或好友 — 可提取 同事的userId，或好友的openDingTalkId"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws contact user search --query \"张三\"",
+        "dws contact user search --query \"张三\" --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/contact.md"
+      ]
+    },
+    "contact user dismission search": {
+      "use_when": [
+        "13. 查询全部离职员工",
+        "14. 按姓名/时间范围/部门筛选离职员工",
+        "离职员工/离职名单/离职人员/已离职"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws contact user dismission search",
+        "dws contact user dismission search --name \"张三\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/contact.md"
+      ]
+    },
+    "contact user get-self": {
+      "use_when": [
+        "1. 查看自己的信息 — 提取 userId",
+        "我是谁/我的信息/我的 userId/当前用户/本人/self/me/whoami"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws contact user get-self",
+        "dws contact user get-self --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/contact.md"
+      ]
+    },
+    "contact user profile fields": {
+      "use_when": [
+        "10. 查询花名册有权限的字段列表",
+        "花名册字段/有哪些字段/字段列表"
+      ],
+      "examples": [
+        "dws contact user profile fields"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/contact.md"
+      ]
+    },
+    "contact user profile get": {
+      "use_when": [
+        "11. 根据字段 code 查询指定员工的花名册信息",
+        "12. 查询所有可见字段的花名册信息",
+        "花名册/员工档案/学历/家庭/银行卡/紧急联系人/合同"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws contact user profile get --staff-id STAFF_ID",
+        "dws contact user profile get --staff-id STAFF_ID --fields fieldCode1,fieldCode2"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/contact.md"
+      ]
+    },
+    "contact user search-mobile": {
+      "examples": [
+        "dws contact user search-mobile --mobile 13800138000"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/contact.md"
+      ]
+    }
+  }
+}

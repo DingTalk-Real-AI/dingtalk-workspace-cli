@@ -1,0 +1,216 @@
+{
+  "product_id": "mail",
+  "tools": {
+    "mail attachment download": {
+      "use_when": [
+        "下载到指定目录",
+        "再下载指定附件到当前目录（每次只能下载一个附件）"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws mail attachment download --email user@company.com --message-id \u003cmessageId\u003e --attachment-id \u003cattachmentId\u003e --name img.png --output /tmp",
+        "dws mail attachment download --email user@company.com --message-id \u003cmessageId\u003e --attachment-id \u003cattachmentId\u003e --name report.pdf"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/mail.md"
+      ]
+    },
+    "mail attachment list": {
+      "use_when": [
+        "先列出附件获取 id 和 name",
+        "（对搜索结果中的每封邮件都要执行一次）"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws mail attachment list --email user@company.com --id \u003cmessageId\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/mail.md"
+      ]
+    },
+    "mail draft create": {
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws mail draft create --from user@company.com --subject \"草稿标题\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/mail.md"
+      ]
+    },
+    "mail draft send": {
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws mail draft send --from user@company.com --id \u003cmessageId\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/mail.md"
+      ]
+    },
+    "mail draft update": {
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws mail draft update --from user@company.com --id \u003cmessageId\u003e --body \"见附件\" --attachment ./report.pdf",
+        "dws mail draft update --from user@company.com --id \u003cmessageId\u003e --subject \"新标题\" --body \"新正文\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/mail.md"
+      ]
+    },
+    "mail folder list": {
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws mail folder list --email user@company.com",
+        "dws mail folder list --email user@company.com --folder-id \u003cfolderId\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/mail.md"
+      ]
+    },
+    "mail mailbox list": {
+      "use_when": [
+        "1. 查看可用邮箱 — 提取邮箱地址",
+        "发带附件的邮件/发邮件附件",
+        "发邮件/写邮件",
+        "我的邮箱/邮箱地址",
+        "获取/查找/得到 某人的邮箱地址"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws mail mailbox list",
+        "dws mail mailbox list --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/mail.md"
+      ]
+    },
+    "mail message batch-delete": {
+      "examples": [
+        "dws mail message batch-delete --email user@company.com --ids \u003cid1\u003e,\u003cid2\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/mail.md"
+      ]
+    },
+    "mail message batch-move": {
+      "examples": [
+        "dws mail message batch-move --email user@company.com --ids \u003cid1\u003e,\u003cid2\u003e --folder 6"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/mail.md"
+      ]
+    },
+    "mail message forward": {
+      "examples": [
+        "dws mail message forward --from user@company.com --id \u003cmessageId\u003e",
+        "dws mail message forward --from user@company.com --to colleague@company.com --id \u003cmessageId\u003e --subject \"Fwd: 周报\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/mail.md"
+      ]
+    },
+    "mail message get": {
+      "use_when": [
+        "3. 查看邮件详情"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws mail message get --email user@company.com --id \u003cmessageId\u003e",
+        "dws mail message get --email user@company.com --id \u003cmessageId\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/mail.md"
+      ]
+    },
+    "mail message reply": {
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws mail message reply --from user@company.com --id \u003cmessageId\u003e",
+        "dws mail message reply --from user@company.com --id \u003cmessageId\u003e --subject \"Re: 周报\" --body \"已收到，谢谢！\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/mail.md"
+      ]
+    },
+    "mail message reply-all": {
+      "examples": [
+        "dws mail message reply-all --from user@company.com --id \u003cmessageId\u003e",
+        "dws mail message reply-all --from user@company.com --id \u003cmessageId\u003e --subject \"Re: 周报\" --body \"感谢大家的参与！\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/mail.md"
+      ]
+    },
+    "mail message search": {
+      "use_when": [
+        "下载附件/保存附件/把附件存到本地/把所有附件下载到...",
+        "发送草稿/把草稿发出去/发这封草稿",
+        "取返回中的 nextCursor，传入下一次请求（nextCursor=\"$\" 时停止）",
+        "找邮件/搜邮件/查邮件",
+        "把XX邮件的所有附件都下载",
+        "查看会话/获取会话/看这封邮件的会话",
+        "查看附件/邮件附件/有什么附件",
+        "看邮件/打开邮件/邮件内容",
+        "第一页"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws mail message search --email user@company.com --query \"from:alice AND date\u003e2025-06-01T00:00:00Z\" --size 10",
+        "dws mail message search --email user@company.com --query \"subject:\\\"周报\\\"\" --size 20"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/mail.md"
+      ]
+    },
+    "mail tag list": {
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws mail tag list --email user@company.com"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/mail.md"
+      ]
+    },
+    "mail thread get": {
+      "use_when": [
+        "步骤 5.2：用 conversationId 获取会话详情",
+        "步骤 5.3（可选）：同时返回会话内所有邮件列表"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws mail thread get --email user@company.com --id \u003cconversationId\u003e",
+        "dws mail thread get --email user@company.com --id \u003cconversationId\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/mail.md"
+      ]
+    },
+    "mail user search": {
+      "use_when": [
+        "搜索/查找/联系 邮箱用户/联系人/某人的邮箱地址",
+        "翻页继续搜索联系人/通讯录",
+        "路径 2：mail user search（仅企业邮箱可用，个人邮箱会报权限错误可忽略）"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws mail user search --email \u003c当前邮箱\u003e --keyword \"姓名\" --format json",
+        "dws mail user search --keyword \"张三\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/mail.md"
+      ]
+    }
+  }
+}

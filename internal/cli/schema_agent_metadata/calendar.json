@@ -1,0 +1,247 @@
+{
+  "product_id": "calendar",
+  "tools": {
+    "calendar attachment add": {
+      "use_when": [
+        "把附件挂到指定日程",
+        "日程附件/给会议加文件/上传日程材料；添加"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws calendar attachment add --event \u003cEVENT_ID\u003e --files \u003cFILE_ID\u003e:report.pdf,\u003cFILE_ID2\u003e:slides.pptx",
+        "dws calendar attachment add --event \u003cEVENT_ID\u003e --files \u003cFILE_ID\u003e:report.pdf,\u003cFILE_ID2\u003e:slides.pptx --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/calendar.md"
+      ]
+    },
+    "calendar attendee add": {
+      "use_when": [
+        "参会人/与会者；邀请/添加",
+        "添加参会人（必须用 Step 1 返回的 eventId）"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws calendar attendee add --event \u003cEVENT_ID\u003e --attendees \u003cUSER_ID\u003e --optional",
+        "dws calendar attendee add --event \u003cEVENT_ID\u003e --attendees \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/calendar.md"
+      ]
+    },
+    "calendar attendee delete": {
+      "use_when": [
+        "参会人/与会者；移除"
+      ],
+      "effect": "destructive",
+      "effect_source": "skill-explicit",
+      "risk": "high",
+      "confirmation": "user_required",
+      "examples": [
+        "dws calendar attendee delete --event \u003cEVENT_ID\u003e --attendees \u003cUSER_ID\u003e --yes"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/calendar.md"
+      ]
+    },
+    "calendar attendee list": {
+      "use_when": [
+        "参会人/与会者；查看"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws calendar attendee list --event \u003cEVENT_ID\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/calendar.md"
+      ]
+    },
+    "calendar book list": {
+      "use_when": [
+        "我有几个日历/查所有日历/共享日历本；列表",
+        "查下xxx的日程安排；查询是否有共享关系"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws calendar book list"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/calendar.md"
+      ]
+    },
+    "calendar busy search": {
+      "use_when": [
+        "有空吗/忙不忙/闲忙；查询会议室闲忙",
+        "有空吗/忙不忙/闲忙；查询用户闲忙",
+        "有空吗/忙不忙/闲忙；用户 + 会议室一起查"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "source_refs": [
+        "skills/mono/references/products/calendar.md"
+      ]
+    },
+    "calendar event create": {
+      "use_when": [
+        "会议室/订会议室；创建新日程并订会议室",
+        "日程/会议/约会/日历；创建/约/给自己留时间块/个人日程"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "source_refs": [
+        "skills/mono/references/products/calendar.md"
+      ]
+    },
+    "calendar event delete": {
+      "use_when": [
+        "日程/会议/约会/日历；取消/删除"
+      ],
+      "effect": "destructive",
+      "effect_source": "skill-explicit",
+      "risk": "high",
+      "confirmation": "user_required",
+      "examples": [
+        "dws calendar event delete --id \u003cEVENT_ID\u003e --yes"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/calendar.md"
+      ]
+    },
+    "calendar event get": {
+      "use_when": [
+        "日程/会议/约会/日历；详情"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws calendar event get --id \u003cEVENT_ID\u003e",
+        "dws calendar event get --id \u003cEVENT_ID\u003e --calendar-id primary"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/calendar.md"
+      ]
+    },
+    "calendar event list": {
+      "use_when": [
+        "日程/会议/约会/日历；查看"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws calendar event list --calendar-id primary",
+        "dws calendar event list --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/calendar.md"
+      ]
+    },
+    "calendar event respond": {
+      "use_when": [
+        "日程/会议/约会/日历；接受/拒绝/暂定日程"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws calendar event respond --id \u003cEVENT_ID\u003e --status accepted",
+        "dws calendar event respond --id \u003cEVENT_ID\u003e --status declined"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/calendar.md"
+      ]
+    },
+    "calendar event suggest": {
+      "use_when": [
+        "日程/会议/约会/日历；推荐时间/什么时候有空/协调时间"
+      ],
+      "examples": [
+        "dws calendar event suggest --start \"2026-03-10T09:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\" --users userId1",
+        "dws calendar event suggest --users userId1,userId2 --duration 60"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/calendar.md"
+      ]
+    },
+    "calendar event update": {
+      "use_when": [
+        "日程/会议/约会/日历；修改/改时间/改描述"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws calendar event update --id \u003cEVENT_ID\u003e --desc \"新描述\" --timezone Asia/Tokyo",
+        "dws calendar event update --id \u003cEVENT_ID\u003e --title \"新标题\""
+      ],
+      "source_refs": [
+        "skills/mono/references/products/calendar.md"
+      ]
+    },
+    "calendar room add": {
+      "use_when": [
+        "会议室/订会议室；给已有日程订会议室",
+        "预定会议室"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws calendar room add --event \u003cEVENT_ID\u003e --rooms \u003cROOM_ID\u003e",
+        "dws calendar room add --event \u003cEVENT_ID\u003e --rooms \u003cROOM_ID\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/calendar.md"
+      ]
+    },
+    "calendar room delete": {
+      "use_when": [
+        "会议室/订会议室；取消预定"
+      ],
+      "effect": "write",
+      "effect_source": "skill-explicit",
+      "risk": "high",
+      "confirmation": "user_required",
+      "examples": [
+        "dws calendar room delete --event \u003cEVENT_ID\u003e --rooms \u003cROOM_ID\u003e --yes"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/calendar.md"
+      ]
+    },
+    "calendar room list-groups": {
+      "use_when": [
+        "会议室/订会议室；分组"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws calendar room list-groups",
+        "dws calendar room list-groups --limit 20 --page 0"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/calendar.md"
+      ]
+    },
+    "calendar room search": {
+      "use_when": [
+        "会议室/订会议室；哪个空闲",
+        "会议室/订会议室；按名找会议室（如「永澄亭」「永澄亭会议室」「约西湖厅」）",
+        "搜索空闲会议室",
+        "搜索空闲会议室，记下 roomId"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws calendar room search --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\"",
+        "dws calendar room search --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\" --group-id \u003cGROUP_ID\u003e"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/calendar.md"
+      ]
+    }
+  }
+}

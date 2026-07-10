@@ -1,0 +1,40 @@
+{
+  "product_id": "pat",
+  "tools": {
+    "pat browser-policy": {
+      "use_when": [
+        "PAT 授权时允许或禁止打开浏览器/配置浏览器授权策略",
+        "允许 PAT 授权流程打开本地浏览器",
+        "禁止指定 Agent 的 PAT 授权流程打开本地浏览器"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws pat browser-policy --enabled --format json",
+        "dws pat browser-policy --enabled=false --agentCode \u003cAGENT_CODE\u003e --format json"
+      ],
+      "source_refs": [
+        "skills/mono/references/products/pat.md"
+      ]
+    },
+    "pat chmod": {
+      "use_when": [
+        "执行批量行为授权（高影响，必须先让用户确认）",
+        "授予 Agent 行为权限/授权 scope/批量授权产品/一次性授权/会话授权/永久授权",
+        "预览按产品展开的批量授权计划，不写入授权"
+      ],
+      "effect": "write",
+      "effect_source": "skill-comment",
+      "risk": "high",
+      "confirmation": "user_required",
+      "examples": [
+        "dws pat chmod --products calendar,aitable --grant-type session --session-id \u003cSESSION_ID\u003e --dry-run --format json",
+        "dws pat chmod --products calendar,aitable --grant-type session --session-id \u003cSESSION_ID\u003e --yes --format json"
+      ],
+      "source_refs": [
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/pat.md"
+      ]
+    }
+  }
+}
