@@ -2,24 +2,24 @@
 # Copyright 2026 Alibaba Group
 # Licensed under the Apache License, Version 2.0
 #
-# One-command installer for dws personal event preview.
-# Downloads the event-capable dws binary and installs:
+# One-command installer for dws personal events.
+# Downloads the official dws binary and installs:
 #   - multi skill: dingtalk-event
 #   - mono skill:  dws
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/wxianfeng/dingtalk-workspace-cli/feat/dws-event/scripts/install-event.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install-event.sh | sh
 #
 # Env (all optional):
-#   EVENT_REPO       repo holding event preview releases (default: wxianfeng/dingtalk-workspace-cli)
-#   EVENT_VERSION    pin a release tag (default: newest release whose tag contains dws-event)
+#   EVENT_REPO       repo holding official releases (default: DingTalk-Real-AI/dingtalk-workspace-cli)
+#   EVENT_VERSION    pin a release tag (default: latest stable release)
 #   DWS_VERSION      alias for EVENT_VERSION when EVENT_VERSION is empty
 #   DWS_INSTALL_DIR  binary dir (default: ~/.local/bin)
 #   DWS_NO_SKILLS    set 1 to skip skill installation
 #   DWS_SKILLS_ONLY  set 1 to install only skills, without touching the binary
 set -eu
 
-EVENT_REPO="${EVENT_REPO:-wxianfeng/dingtalk-workspace-cli}"
+EVENT_REPO="${EVENT_REPO:-DingTalk-Real-AI/dingtalk-workspace-cli}"
 EVENT_VERSION="${EVENT_VERSION:-${DWS_VERSION:-}}"
 INSTALL_DIR="${DWS_INSTALL_DIR:-$HOME/.local/bin}"
 NO_SKILLS="${DWS_NO_SKILLS:-0}"
@@ -70,20 +70,20 @@ resolve_event_version() {
   [ -n "$EVENT_VERSION" ] && return 0
 
   if command -v gh >/dev/null 2>&1; then
-    EVENT_VERSION="$(gh api "repos/${EVENT_REPO}/releases?per_page=30" --jq '[.[] | select(.tag_name | contains("dws-event"))][0].tag_name' 2>/dev/null || true)"
+    EVENT_VERSION="$(gh api "repos/${EVENT_REPO}/releases/latest" --jq '.tag_name' 2>/dev/null || true)"
     [ -n "$EVENT_VERSION" ] && [ "$EVENT_VERSION" != "null" ] && return 0
     EVENT_VERSION=""
   fi
 
   tmpfile="$(mktemp)"
-  http_code="$(curl -sSL -o "$tmpfile" -w '%{http_code}' "https://api.github.com/repos/${EVENT_REPO}/releases?per_page=30" 2>/dev/null || echo "000")"
+  http_code="$(curl -sSL -o "$tmpfile" -w '%{http_code}' "https://api.github.com/repos/${EVENT_REPO}/releases/latest" 2>/dev/null || echo "000")"
   if [ "$http_code" = "403" ] || [ "$http_code" = "429" ]; then
     rm -f "$tmpfile"
     err "GitHub API rate limit hit (HTTP ${http_code}). Install gh or set EVENT_VERSION explicitly."
   fi
-  EVENT_VERSION="$(grep '"tag_name"' "$tmpfile" | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/' | grep 'dws-event' | head -1 || true)"
+  EVENT_VERSION="$(grep -m1 '"tag_name"' "$tmpfile" | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/' || true)"
   rm -f "$tmpfile"
-  [ -n "$EVENT_VERSION" ] || err "No dws-event release found on ${EVENT_REPO}. Set EVENT_VERSION to a published release tag."
+  [ -n "$EVENT_VERSION" ] || err "No stable release found on ${EVENT_REPO}. Set EVENT_VERSION to a published release tag."
 }
 
 copy_tree() {

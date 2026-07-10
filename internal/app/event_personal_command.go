@@ -36,11 +36,10 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/consume"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/source"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
-
-const temporaryPersonalEventPreMCPBaseURL = "https://pre-mcp.dingtalk.com"
 
 type commonConsumeOptions struct {
 	EventTypes []string
@@ -821,17 +820,17 @@ func personalEventStreamSourceID(raw string) string {
 	if v := strings.TrimSpace(raw); v != "" {
 		return v
 	}
-	if v := strings.TrimSpace(edition.Get().PersonalEventSourceID); v != "" {
+	if v := strings.TrimSpace(edition.PersonalEventSourceID()); v != "" {
 		return v
 	}
-	return "pre_open_source"
+	return "open"
 }
 
 func personalEventMCPBaseURL(configDir string) string {
 	if v := configuredMCPBaseURL(configDir); v != "" {
 		return strings.TrimRight(v, "/")
 	}
-	return temporaryPersonalEventPreMCPBaseURL
+	return config.DefaultMCPBaseURL
 }
 
 func configuredMCPBaseURL(configDir string) string {

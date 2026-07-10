@@ -205,8 +205,8 @@ func TestInstallEventScriptStaticExpectations(t *testing.T) {
 	text := string(data)
 
 	for _, want := range []string{
-		"wxianfeng/dingtalk-workspace-cli",
-		"dws-event",
+		"DingTalk-Real-AI/dingtalk-workspace-cli",
+		"releases/latest",
 		"EVENT_VERSION",
 		"DWS_SKILLS_ONLY",
 		"dingtalk-event",
@@ -220,6 +220,8 @@ func TestInstallEventScriptStaticExpectations(t *testing.T) {
 		}
 	}
 	for _, avoid := range []string{
+		"releases?per_page=30",
+		"select(.tag_name",
 		"dingtalk-dev",
 		"client-secret",
 		"--as app",
@@ -280,7 +282,7 @@ func TestInstallEventScriptInstallsBinaryAndEventSkills(t *testing.T) {
 	cmd.Env = append(os.Environ(),
 		"HOME="+fakeHome,
 		"PATH="+stubRoot+":"+os.Getenv("PATH"),
-		"EVENT_VERSION=v1.0.47-dws-event.2",
+		"EVENT_VERSION=v1.0.51",
 		"DWS_INSTALL_DIR="+installDir,
 		"FAKE_RELEASE_DIR="+releaseDir,
 		"FAKE_ASSET_NAME="+assetName,
@@ -291,7 +293,7 @@ func TestInstallEventScriptInstallsBinaryAndEventSkills(t *testing.T) {
 	}
 	got := string(output)
 	for _, want := range []string{
-		"Version: v1.0.47-dws-event.2",
+		"Version: v1.0.51",
 		"Skill dingtalk-event",
 		"Skill dws",
 		"dws event consume user_im_message_receive_o2o",
@@ -358,7 +360,7 @@ func TestInstallEventScriptSkillsOnlySkipsBinary(t *testing.T) {
 	cmd.Env = append(os.Environ(),
 		"HOME="+fakeHome,
 		"PATH="+stubRoot+":"+os.Getenv("PATH"),
-		"EVENT_VERSION=v1.0.47-dws-event.2",
+		"EVENT_VERSION=v1.0.51",
 		"DWS_INSTALL_DIR="+installDir,
 		"DWS_SKILLS_ONLY=1",
 		"FAKE_RELEASE_DIR="+releaseDir,
@@ -373,6 +375,103 @@ func TestInstallEventScriptSkillsOnlySkipsBinary(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(fakeHome, ".agents", "skills", "dingtalk-event", "SKILL.md")); err != nil {
 		t.Fatalf("skills-only should install event skill: %v\noutput:\n%s", err, string(output))
+	}
+}
+
+func TestInstallEventScriptNoSkillsOnlyInstallsBinary(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell installer test is for unix-like hosts")
+	}
+	if runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64" {
+		t.Skipf("unsupported test arch %s", runtime.GOARCH)
+	}
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skipf("unsupported test os %s", runtime.GOOS)
+	}
+
+	root := t.TempDir()
+	fakeHome := filepath.Join(root, "home")
+	installDir := filepath.Join(root, "bin")
+	releaseDir := filepath.Join(root, "release")
+	stubRoot := filepath.Join(root, "stubs")
+	assetName := "dws-" + runtime.GOOS + "-" + runtime.GOARCH + ".tar.gz"
+
+	writeTarGz(t, filepath.Join(releaseDir, assetName), map[string]string{
+		"dws": "fake-event-binary\n",
+	})
+	writeFakeCurl(t, filepath.Join(stubRoot, "curl"))
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install-event.sh"))
+	if err != nil {
+		t.Fatalf("Abs(install-event.sh) error = %v", err)
+	}
+	cmd := exec.Command("sh", scriptPath)
+	cmd.Env = append(os.Environ(),
+		"HOME="+fakeHome,
+		"PATH="+stubRoot+":"+os.Getenv("PATH"),
+		"EVENT_VERSION=v1.0.51",
+		"DWS_INSTALL_DIR="+installDir,
+		"DWS_NO_SKILLS=1",
+		"FAKE_RELEASE_DIR="+releaseDir,
+		"FAKE_ASSET_NAME="+assetName,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("install-event.sh no-skills error = %v\noutput:\n%s", err, string(output))
+	}
+	if _, err := os.Stat(filepath.Join(installDir, "dws")); err != nil {
+		t.Fatalf("DWS_NO_SKILLS=1 should install binary: %v\noutput:\n%s", err, string(output))
+	}
+	if _, err := os.Stat(filepath.Join(fakeHome, ".agents", "skills", "dingtalk-event")); !os.IsNotExist(err) {
+		t.Fatalf("DWS_NO_SKILLS=1 should not install event skill, stat err=%v\noutput:\n%s", err, string(output))
+	}
+}
+
+func TestInstallEventScriptDefaultsToLatestStableRelease(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell installer test is for unix-like hosts")
+	}
+	if runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64" {
+		t.Skipf("unsupported test arch %s", runtime.GOARCH)
+	}
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skipf("unsupported test os %s", runtime.GOOS)
+	}
+
+	root := t.TempDir()
+	fakeHome := filepath.Join(root, "home")
+	installDir := filepath.Join(root, "bin")
+	releaseDir := filepath.Join(root, "release")
+	stubRoot := filepath.Join(root, "stubs")
+	assetName := "dws-" + runtime.GOOS + "-" + runtime.GOARCH + ".tar.gz"
+
+	writeTarGz(t, filepath.Join(releaseDir, assetName), map[string]string{
+		"dws": "fake-event-binary\n",
+	})
+	writeFakeCurl(t, filepath.Join(stubRoot, "curl"))
+	writeFakeGH(t, filepath.Join(stubRoot, "gh"), "v1.0.51")
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install-event.sh"))
+	if err != nil {
+		t.Fatalf("Abs(install-event.sh) error = %v", err)
+	}
+	cmd := exec.Command("sh", scriptPath)
+	cmd.Env = append(os.Environ(),
+		"HOME="+fakeHome,
+		"PATH="+stubRoot+":"+os.Getenv("PATH"),
+		"DWS_INSTALL_DIR="+installDir,
+		"DWS_NO_SKILLS=1",
+		"FAKE_RELEASE_DIR="+releaseDir,
+		"FAKE_ASSET_NAME="+assetName,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("install-event.sh latest release error = %v\noutput:\n%s", err, string(output))
+	}
+	if !strings.Contains(string(output), "Version: v1.0.51") {
+		t.Fatalf("install-event.sh did not resolve the latest stable version:\n%s", string(output))
 	}
 }
 
@@ -714,6 +813,12 @@ case "$url" in
   *) echo "fake curl: unexpected URL $url" >&2; exit 1 ;;
 esac
 `
+	mustWriteFile(t, path, []byte(script), 0o755)
+}
+
+func writeFakeGH(t *testing.T, path, version string) {
+	t.Helper()
+	script := "#!/bin/sh\nprintf '%s\\n' '" + version + "'\n"
 	mustWriteFile(t, path, []byte(script), 0o755)
 }
 

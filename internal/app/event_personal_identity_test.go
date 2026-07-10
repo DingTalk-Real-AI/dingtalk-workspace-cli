@@ -115,7 +115,7 @@ func TestResolvePersonalEventIdentityFallsBackToAccessTokenSubject(t *testing.T)
 	}
 }
 
-func TestResolvePersonalEventIdentityDefaultsSourceIDToPre(t *testing.T) {
+func TestResolvePersonalEventIdentityDefaultsSourceIDToOpen(t *testing.T) {
 	configDir := setupPersonalIdentityToken(t, &authpkg.TokenData{
 		AccessToken: "access-1",
 		ExpiresAt:   time.Now().Add(time.Hour),
@@ -128,26 +128,26 @@ func TestResolvePersonalEventIdentityDefaultsSourceIDToPre(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolvePersonalEventIdentity() error = %v", err)
 	}
-	if identity.SourceID != "pre_open_source" {
-		t.Fatalf("SourceID = %q, want pre_open_source", identity.SourceID)
+	if identity.SourceID != "open" {
+		t.Fatalf("SourceID = %q, want open", identity.SourceID)
 	}
 }
 
-func TestPersonalEventDefaultsUsePreWithoutMCPConfig(t *testing.T) {
+func TestPersonalEventDefaultsUseProductionWithoutMCPConfig(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", dir)
 	prev := edition.Get()
 	edition.Override(&edition.Hooks{})
 	t.Cleanup(func() { edition.Override(prev) })
 
-	if got := personalEventControlBaseURL("", dir); got != "https://pre-mcp.dingtalk.com/dws" {
-		t.Fatalf("personalEventControlBaseURL() = %q, want pre control URL", got)
+	if got := personalEventControlBaseURL("", dir); got != "https://mcp.dingtalk.com/dws" {
+		t.Fatalf("personalEventControlBaseURL() = %q, want production control URL", got)
 	}
-	if got := personalEventStreamTicketURL("", dir); got != "https://pre-mcp.dingtalk.com/stream/connections/ticket" {
-		t.Fatalf("personalEventStreamTicketURL() = %q, want pre ticket URL", got)
+	if got := personalEventStreamTicketURL("", dir); got != "https://mcp.dingtalk.com/stream/connections/ticket" {
+		t.Fatalf("personalEventStreamTicketURL() = %q, want production ticket URL", got)
 	}
-	if got := personalEventStreamSourceID(""); got != "pre_open_source" {
-		t.Fatalf("personalEventStreamSourceID() = %q, want pre_open_source", got)
+	if got := personalEventStreamSourceID(""); got != "open" {
+		t.Fatalf("personalEventStreamSourceID() = %q, want open", got)
 	}
 	if got := config.GetMCPBaseURL(); got != "https://mcp.dingtalk.com" {
 		t.Fatalf("config.GetMCPBaseURL() = %q, want production MCP URL", got)

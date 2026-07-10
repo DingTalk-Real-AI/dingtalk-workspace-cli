@@ -404,44 +404,47 @@ DWS_SKILL_SOURCE=/path/to/skills dws skill setup --mode multi
 ## 功能特性
 
 <details>
-<summary><strong>事件订阅</strong> — 实时订阅钉钉 Stream 事件，驱动事件触发的 Agent</summary>
+<summary><strong>个人事件订阅</strong> — 实时接收钉钉消息，驱动事件触发的 Agent</summary>
 
-`dws event consume` 通过钉钉 Stream 长连接订阅事件（IM 消息、审批状态变更、通讯录/日历/考勤生命周期），将每条事件以 NDJSON 一行输出到 stdout。隐藏 bus daemon（按需 fork）独占一个 ClientID 的云端连接；多个 consumer 进程通过本地 Unix Socket / Windows Named Pipe 共享。
+`dws event consume` 使用当前 OAuth 登录用户建立托管的 Stream WebSocket 长连接，并把每条事件以 NDJSON 一行输出到 stdout。当前公开目录包括：当前用户被 @ 的消息、与指定用户的单聊消息、指定群的消息。
 
-> **前置条件**：bot-only。`dws config init`（keychain）或设 env var `DWS_CLIENT_ID` + `DWS_CLIENT_SECRET`（CI/容器友好）。**不需要 `dws auth login`**。
+> **前置条件**：先运行 `dws auth login`。个人身份从 OAuth token 解析，不允许通过命令行伪造。
+
+只需要 event 能力时，可以使用官方便捷安装脚本：
 
 ```bash
-# 监听 IM 消息，Agent 友好的 compact 格式
-dws event consume --event-types im.message.receive_v1 --compact --quiet
+curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install-event.sh | sh
+```
 
-# 一次性运行：收 10 条或 30 秒
-dws event consume --max-events 10 --duration 30s
+```bash
+# 查看公开个人事件目录和 schema
+dws event list
+dws event schema user_im_message_receive_o2o
 
-# 多路由：im 持久化到 ./im/、approval 到 ./approval/、其它走 stdout
-dws event consume \
-  --route '^im\.=dir:./im/' \
-  --route '^approval\.=dir:./approval/'
+# 监听当前用户被 @ 的消息
+dws event consume user_im_message_receive_at -f ndjson
 
-# systemd / k8s 友好（不 fork）
-dws event consume --foreground --quiet
+# 监听与指定用户的单聊消息
+dws event consume user_im_message_receive_o2o --user <userId> -f ndjson
 
-# Status / list / stop
-dws event status                  # bus 健康 + per-event-type 计数
-dws event list --all              # 列所有 ClientID 的 consumer
-dws event stop                    # 优雅 SIGTERM
+# 监听指定群的消息
+dws event consume user_im_message_receive_group --group <openConversationId> -f ndjson
+
+# 查看本地 consume，并取消指定订阅
+dws event status
+dws event stop <subscribe_id>
 ```
 
 | 特性 | 说明 |
 |------|------|
-| Daemon + 多消费者 | 一个 ClientID 一个 bus，第一次 `consume` 时自动 fork；N 个 consumer 通过 UDS/Named Pipe 共享 |
-| Hello 下推过滤 | `--event-types` + `--filter` 正则在 bus 层评估，减少 IPC 投递量 |
-| Dedup | event_id LRU 吸收 Stream 重连重投递 |
-| 状态可观测 | `status` 显示 source state（inferred）、per-event-type received/dropped、orphan 检测 |
-| 输出格式 | `ndjson` (默认) / `json` / `pretty` / `raw` / `compact`（IM/审批/通讯录/日历/考勤都有专用 processor）|
-| 跨平台 | macOS/Linux 用 Unix Socket，Windows 用 Named Pipe |
-| Env var 调参 | `DWS_EVENT_BUS_IDLE_TIMEOUT` / `DWS_EVENT_CONSUMER_BUFFER` / `DWS_EVENT_DEDUP_LRU` / `DWS_EVENT_DROP_WARN_PCT` |
+| 自动编排 | `consume` 创建或复用个人订阅，`stop` 取消订阅并清理本地状态 |
+| 共享连接 | 同一用户的多个 consumer 共享本地 bus 和云端长连接 |
+| 订阅隔离 | 正常 consumer 同时按事件类型和 `subscribe_id` 匹配 |
+| Agent 友好输出 | Stream 事件写入 stdout，连接状态和诊断信息写入 stderr |
+| 状态可观测 | `status` 同时显示服务端订阅、personal bus 和本地 consumers |
+| 跨平台 | macOS/Linux 使用 Unix Socket，Windows 使用 Named Pipe |
 
-配合 `claude -p` 或任意 LLM CLI 可以快速搭出自动回复机器人 — 详见 `skills/multi/dingtalk-event/SKILL.md` 含完整管道示例和 systemd unit 模板。
+Agent 工作流和事件参数详见 `skills/multi/dingtalk-event/SKILL.md`。
 
 </details>
 

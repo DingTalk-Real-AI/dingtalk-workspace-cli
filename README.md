@@ -407,44 +407,47 @@ Env vars: `DWS_SKILL_MODE=mono|multi` (also honored by `install.sh` / `install.p
 ## Features
 
 <details>
-<summary><strong>Event Subscription</strong> — real-time DingTalk Stream events for event-driven agents</summary>
+<summary><strong>Personal Event Subscription</strong> — real-time DingTalk messages for event-driven agents</summary>
 
-`dws event consume` subscribes to DingTalk Stream events (IM messages, approval state changes, contact/calendar/attendance lifecycle) over a managed WebSocket long-connection and emits each event as one NDJSON line on stdout. A hidden bus daemon (auto-forked) holds the single cloud connection per ClientID; multiple consumer processes share it over a local Unix Socket / Windows Named Pipe.
+`dws event consume` subscribes as the currently logged-in user over a managed Stream WebSocket and emits each event as one NDJSON line on stdout. The public catalog currently covers messages that mention the current user, one-to-one messages with a specified user, and messages in a specified group.
 
-> **Prerequisite**: bot-only auth. Either `dws config init` (keychain) or set `DWS_CLIENT_ID` + `DWS_CLIENT_SECRET` env vars (CI/container friendly). No `dws auth login` required.
+> **Prerequisite**: run `dws auth login`. Personal identity is resolved from the OAuth token and cannot be supplied through command-line identity flags.
+
+For an event-focused installation, use the official convenience installer:
 
 ```bash
-# Listen for IM messages, agent-friendly compact format
-dws event consume --event-types im.message.receive_v1 --compact --quiet
+curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install-event.sh | sh
+```
 
-# Run-once: collect 10 events or 30s
-dws event consume --max-events 10 --duration 30s
+```bash
+# Inspect the public personal event catalog and schema
+dws event list
+dws event schema user_im_message_receive_o2o
 
-# Multi-route: persist im events to ./im/, approval to ./approval/, rest to stdout
-dws event consume \
-  --route '^im\.=dir:./im/' \
-  --route '^approval\.=dir:./approval/'
+# Listen for messages that mention the current user
+dws event consume user_im_message_receive_at -f ndjson
 
-# systemd / k8s friendly (no fork)
-dws event consume --foreground --quiet
+# Listen for one-to-one messages with a specified user
+dws event consume user_im_message_receive_o2o --user <userId> -f ndjson
 
-# Status / list / stop
-dws event status                  # bus health + per-event-type counters
-dws event list --all              # active consumers across all ClientIDs
-dws event stop                    # graceful SIGTERM
+# Listen for messages in a specified group
+dws event consume user_im_message_receive_group --group <openConversationId> -f ndjson
+
+# Inspect local consumers and cancel a subscription
+dws event status
+dws event stop <subscribe_id>
 ```
 
 | Feature | Details |
 |---------|---------|
-| Daemon + multi-consumer | Single bus per ClientID auto-forked on first `consume`; N consumers share it via UDS/Named Pipe |
-| Hello-time filter pushdown | `--event-types` + `--filter` regex evaluated at the bus, not after IPC delivery |
-| Dedup | event_id LRU absorbs Stream redelivery on reconnect |
-| State observability | `status` shows source state (inferred), per-event-type received/dropped, orphan detection |
-| Output formats | `ndjson` (default) / `json` / `pretty` / `raw` / `compact` (per-type processors for IM/approval/contact/calendar/attendance) |
+| Managed lifecycle | `consume` creates or reuses the personal subscription; `stop` cancels it and cleans local state |
+| Shared connection | Consumers for the same user share one local bus and cloud connection |
+| Subscription isolation | Normal consumers match both event type and `subscribe_id` |
+| Agent-friendly output | Stream events are written to stdout as NDJSON; status and diagnostics use stderr |
+| Observability | `status` shows remote subscriptions, the personal bus, and local consumers |
 | Cross-platform | Unix Socket on macOS/Linux, Windows Named Pipe on Windows |
-| Tunable env vars | `DWS_EVENT_BUS_IDLE_TIMEOUT` / `DWS_EVENT_CONSUMER_BUFFER` / `DWS_EVENT_DEDUP_LRU` / `DWS_EVENT_DROP_WARN_PCT` |
 
-Pair with `claude -p` or any LLM CLI for auto-reply agents — see `skills/multi/dingtalk-event/SKILL.md` for the full pipeline guide and a systemd unit template.
+See `skills/multi/dingtalk-event/SKILL.md` for the Agent workflow and supported event parameters.
 
 </details>
 
