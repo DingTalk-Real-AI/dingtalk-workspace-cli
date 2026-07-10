@@ -6,9 +6,29 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.51] - 2026-07-10
+
+This release promotes the sealed `v1.0.51-beta.1` contents to stable. It syncs the hardcoded Wukong command surface, prevents `dev connect` conversations from blocking on messages received mid-turn, and makes local credential failures diagnosable without mutating key material.
+
+### Added
+
+- **Agoal product commands** (#585) — adds `dws agoal` strategy, contract, scorecard, user-objective, report, and objective-template command groups, together with static routing and the bundled mono/multi Agoal skills.
+- **Wukong chat command parity** (#585) — adds `chat group notice create|edit|get|list`, `group share-invite`, `text translate`, `category create-smart`, and `message list-emotion-replies`.
+- **Wukong document import commands** (#585) — adds `doc import` for starting imports and `doc import get` for querying import tasks.
+- **Wukong mail command parity** (#585) — adds mailbox profile, message batch-get, sent-message recall and recall-detail, auto-reply update, plus allow-list and block-list management.
+- **Wukong sheet grouping commands** (#585) — adds `sheet group-dimension` and `sheet ungroup-dimension` for whole-row or whole-column ranges.
+- **Keychain health diagnostics** (#578) — `dws doctor` now includes a keychain check, while `dws auth status` distinguishes ordinary logged-out state from `keychain_unavailable` and `dek_missing` failures and returns remediation hints in table and JSON output.
+
 ### Changed
 
 - **`dws pat chmod` defaults to permanent grants** (#584) — running `dws pat chmod <scope>` without `--grant-type` now requests a `permanent` grant instead of `session`, aligning the direct CLI path with the recommend-authorization helper. Session grants remain available by passing `--grant-type session --session-id <id>`.
+- **The `dev connect --channel gemini` path now uses the Gemini `generateContent` API** (#587) — configure it with `GEMINI_API_KEY` or `GOOGLE_API_KEY`, optionally override the compatible endpoint with `GEMINI_API_BASE_URL` or `GOOGLE_GEMINI_API_BASE_URL`, and select a model with `--agent-model` or `GEMINI_MODEL`; a local `gemini` executable is no longer required.
+
+### Fixed
+
+- **Non-blocking `dev connect` turn scheduling** (#587) — stream and `@`-poll callbacks no longer wait for the active turn to finish. Turns stay serialized per conversation, messages received mid-turn are coalesced into one pending follow-up, and different conversations can continue in parallel.
+- **Connect agent recovery and headless execution** (#587) — stale addressable sessions retry once with a fresh session, unsupported Qoder control requests receive an immediate response instead of hanging, OpenCode and bypass-mode channels receive non-interactive permission settings, and backend/API failures are no longer posted as successful assistant replies.
+- **Side-effect-free credential reads** (#578) — keychain reads inspect encrypted credential data before looking up the DEK and never generate a replacement key on a read path. Missing DEKs and unavailable macOS Keychains are surfaced as explicit diagnostic failures instead of silently mutating credential state.
 
 ## [1.0.50] - 2026-07-08
 
