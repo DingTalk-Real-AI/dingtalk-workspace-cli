@@ -6,6 +6,10 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Changed
+
+- **`dws pat chmod` defaults to permanent grants** (#584) — running `dws pat chmod <scope>` without `--grant-type` now requests a `permanent` grant instead of `session`, aligning the direct CLI path with the recommend-authorization helper. Session grants remain available by passing `--grant-type session --session-id <id>`.
+
 ## [1.0.50] - 2026-07-08
 
 This release fixes a long-standing gap where the global `--jq` / `--fields` output filters were silently ignored on product commands, lands a JSON-mode output path for the sheet batch-style command, and aligns the bundled skill surface with the real command semantics uncovered by the round-2 real-machine QA sweep.

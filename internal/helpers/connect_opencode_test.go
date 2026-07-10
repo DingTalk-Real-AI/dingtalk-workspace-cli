@@ -261,6 +261,53 @@ func TestNewOpencodeServerHasNoClientTimeout(t *testing.T) {
 	}
 }
 
+func TestOpencodeServerEnvDisablesInteractiveGates(t *testing.T) {
+	s := newOpencodeServer("opencode", []string{
+		`OPENCODE_CONFIG_CONTENT={"provider":{"x":true},"tools":{"read":true},"permission":{"bash":"ask","edit":"ask","write":"ask","question":"ask"}}`,
+		`OPENCODE_PERMISSION={"bash":"ask"}`,
+	}, "", false)
+
+	env := s.commandEnv("pw")
+	if got := envValue(env, "OPENCODE_SERVER_USERNAME"); got != opencodeServerUsername {
+		t.Fatalf("server username = %q, want %q", got, opencodeServerUsername)
+	}
+	if got := envValue(env, "OPENCODE_SERVER_PASSWORD"); got != "pw" {
+		t.Fatalf("server password = %q, want pw", got)
+	}
+
+	var cfg map[string]any
+	if err := json.Unmarshal([]byte(envValue(env, opencodeConfigContentEnv)), &cfg); err != nil {
+		t.Fatalf("decode OPENCODE_CONFIG_CONTENT: %v", err)
+	}
+	if _, ok := cfg["provider"].(map[string]any)["x"]; !ok {
+		t.Fatalf("existing config fields were not preserved: %#v", cfg)
+	}
+	tools := cfg["tools"].(map[string]any)
+	if got := tools["question"]; got != false {
+		t.Fatalf("tools.question = %#v, want false", got)
+	}
+	permission := cfg["permission"].(map[string]any)
+	for _, key := range []string{"bash", "edit", "write", "external_directory", "doom_loop"} {
+		if got := permission[key]; got != "allow" {
+			t.Fatalf("permission.%s = %#v, want allow", key, got)
+		}
+	}
+	if got := permission["question"]; got != "deny" {
+		t.Fatalf("permission.question = %#v, want deny", got)
+	}
+
+	var envPermission map[string]string
+	if err := json.Unmarshal([]byte(envValue(env, opencodePermissionEnv)), &envPermission); err != nil {
+		t.Fatalf("decode OPENCODE_PERMISSION: %v", err)
+	}
+	if got := envPermission["bash"]; got != "allow" {
+		t.Fatalf("OPENCODE_PERMISSION.bash = %q, want allow", got)
+	}
+	if got := envPermission["question"]; got != "deny" {
+		t.Fatalf("OPENCODE_PERMISSION.question = %q, want deny", got)
+	}
+}
+
 // TestOpencodeForwarderMessageGovernedByTurnCtx verifies a slow reply is not
 // cut by a fixed client timeout (the old 30s bug) and that the per-turn ctx is
 // the real governor instead.

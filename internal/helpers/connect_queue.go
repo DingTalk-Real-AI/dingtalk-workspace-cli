@@ -15,42 +15,79 @@ package helpers
 
 import "sync"
 
-// convQueue serialises message handling per conversation: same-chat messages
-// run in arrival order — a Q&A follow-up ("还是不行") must see the previous
-// turn's session state, and two parallel agent CLIs racing on one --resume
-// session corrupt the transcript. Different conversations stay parallel.
-// Ported from the hermes gateway's per-session promise chain
-// (gateway/run.py session queues).
+// convQueue serialises agent turns per conversation while coalescing bursts.
+// Same-chat agent calls must never run in parallel — two turns racing on one
+// session corrupt the transcript. But a pure FIFO is also bad UX: if a user
+// keeps sending clarifications while a long turn is running, the bot should not
+// spend the next several minutes answering stale intermediate prompts. Instead,
+// messages arriving during the active turn accumulate in one pending batch; when
+// the active turn finishes, that whole batch is processed as a single follow-up.
+// Different conversations still run in parallel.
 type convQueue struct {
-	mu    sync.Mutex
-	tails map[string]chan struct{}
+	mu     sync.Mutex
+	states map[string]*convQueueState
+}
+
+type convQueueState struct {
+	running bool
+	pending []connectQueuedTurn
+	process func([]connectQueuedTurn)
 }
 
 func newConvQueue() *convQueue {
-	return &convQueue{tails: map[string]chan struct{}{}}
+	return &convQueue{states: map[string]*convQueueState{}}
 }
 
-// run schedules fn after the conversation's previous task and returns
-// immediately (the Stream callback must ack fast). The chain entry is removed
-// once the queue for that conversation drains, so idle chats hold no memory.
-func (q *convQueue) run(convID string, fn func()) {
+// submit schedules turn handling and returns immediately (the Stream callback
+// must ack fast). If the conversation is already running, the turn is appended
+// to that conversation's pending batch instead of creating another queued worker.
+func (q *convQueue) submit(turn connectQueuedTurn, process func([]connectQueuedTurn)) {
+	convID := turn.convID
 	q.mu.Lock()
-	prev := q.tails[convID]
-	done := make(chan struct{})
-	q.tails[convID] = done
-	q.mu.Unlock()
-	go func() {
-		defer func() {
-			close(done)
-			q.mu.Lock()
-			if q.tails[convID] == done {
-				delete(q.tails, convID)
-			}
-			q.mu.Unlock()
-		}()
-		if prev != nil {
-			<-prev
+	st := q.states[convID]
+	if st == nil {
+		st = &convQueueState{}
+		q.states[convID] = st
+	}
+	if st.running {
+		st.pending = append(st.pending, turn)
+		if process != nil {
+			st.process = process
 		}
-		fn()
-	}()
+		q.mu.Unlock()
+		return
+	}
+	st.running = true
+	st.process = process
+	q.mu.Unlock()
+	go q.drain(convID, []connectQueuedTurn{turn})
+}
+
+func (q *convQueue) drain(convID string, batch []connectQueuedTurn) {
+	for {
+		process := q.processFor(convID)
+		if process != nil {
+			process(batch)
+		}
+
+		q.mu.Lock()
+		st := q.states[convID]
+		if st == nil || len(st.pending) == 0 {
+			delete(q.states, convID)
+			q.mu.Unlock()
+			return
+		}
+		batch = append([]connectQueuedTurn(nil), st.pending...)
+		st.pending = nil
+		q.mu.Unlock()
+	}
+}
+
+func (q *convQueue) processFor(convID string) func([]connectQueuedTurn) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if st := q.states[convID]; st != nil {
+		return st.process
+	}
+	return nil
 }

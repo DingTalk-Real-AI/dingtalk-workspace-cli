@@ -250,19 +250,24 @@ func (f *execForwarder) label() string {
 	return fmt.Sprintf("exec:%s (%s, %s)", f.name, f.argv[0], memo)
 }
 
-func (f *execForwarder) forward(ctx context.Context, convID, text string) (string, error) {
-	ctx, cancel := applyTimeout(ctx, f.timeout)
-	defer cancel()
+func (f *execForwarder) hasSession(convID string) bool {
+	return f.sessions != nil && strings.TrimSpace(convID) != ""
+}
+
+func (f *execForwarder) commandArgs(argv []string, convID, text string) []string {
 	// Session args go right after the binary, before the spec tail — some specs
 	// (qoder) end the tail with `-p` so the prompt must stay the trailing
 	// positional argument.
 	var args []string
-	if f.sessions != nil && strings.TrimSpace(convID) != "" {
+	if f.hasSession(convID) {
 		args = append(args, f.sessions.args(convID)...)
 	}
-	args = append(args, f.argv[1:]...)
+	args = append(args, argv[1:]...)
 	args = append(args, text)
-	cmd := exec.CommandContext(ctx, f.argv[0], args...)
+	return args
+}
+
+func (f *execForwarder) configureCommand(cmd *exec.Cmd) {
 	// Run the agent CLI from a clean, empty directory rather than inheriting the
 	// connector's CWD (often $HOME). Some agents scan the working tree / nearby
 	// config on startup — e.g. `claude -p` takes ~29s from a large $HOME but ~4s
@@ -278,37 +283,60 @@ func (f *execForwarder) forward(ctx context.Context, convID, text string) (strin
 	if len(f.env) > 0 {
 		cmd.Env = append(os.Environ(), f.env...)
 	}
-	out, err := cmd.Output()
-	s := strings.TrimSpace(string(out))
-	// Guard against a backend error being mistaken for the answer: some agent
-	// CLIs (claude) print "API Error: 4xx ..." to stdout and still exit 0, so a
-	// non-empty stdout is not proof of a real reply. If stdout is a bare backend
-	// error, return an actionable hint instead of forwarding the raw error into
-	// the chat (issue #14: a custom-provider 422 was echoed to the group).
-	if s != "" && !agentReplyIsError(s) {
-		return brandReply(f.name, s), nil
-	}
-	if s != "" && agentReplyIsError(s) {
-		if f.sessions != nil && strings.TrimSpace(convID) != "" {
-			f.sessions.reset(convID)
+}
+
+func (f *execForwarder) forward(ctx context.Context, convID, text string) (string, error) {
+	ctx, cancel := applyTimeout(ctx, f.timeout)
+	defer cancel()
+
+	run := func() (string, string, error) {
+		args := f.commandArgs(f.argv, convID, text)
+		cmd := exec.CommandContext(ctx, f.argv[0], args...)
+		f.configureCommand(cmd)
+		out, err := cmd.Output()
+		s := strings.TrimSpace(string(out))
+		// Guard against a backend error being mistaken for the answer: some agent
+		// CLIs (claude) print "API Error: 4xx ..." to stdout and still exit 0, so a
+		// non-empty stdout is not proof of a real reply. If stdout is a bare backend
+		// error, return an actionable hint instead of forwarding the raw error into
+		// the chat (issue #14: a custom-provider 422 was echoed to the group).
+		if s != "" && !agentReplyIsError(s) {
+			return brandReply(f.name, s), "", nil
 		}
-		return agentBackendErrorReply(s), nil
+		if s != "" && agentReplyIsError(s) {
+			if f.hasSession(convID) {
+				f.sessions.reset(convID)
+			}
+			return agentBackendErrorReply(s), "", nil
+		}
+		if err != nil {
+			msg := execErrorMessage(err)
+			return "", msg, err
+		}
+		return "（本地 agent 无文本输出）", "", nil
 	}
-	if err != nil {
+
+	reply, msg, err := run()
+	if err == nil {
+		return reply, nil
+	}
+
+	if f.hasSession(convID) && agentSessionMissingError(msg) {
+		f.sessions.reset(convID)
+		reply, msg, err = run()
+		if err == nil {
+			return reply, nil
+		}
+	}
+
+	if f.hasSession(convID) {
 		// Self-heal session state: if this conversation's session is broken
 		// (e.g. --resume of a session that was never created or got cleaned),
 		// drop the mapping so the next message starts a fresh session instead
 		// of failing forever.
-		if f.sessions != nil && strings.TrimSpace(convID) != "" {
-			f.sessions.reset(convID)
-		}
-		msg := err.Error()
-		if ee, ok := err.(*exec.ExitError); ok && len(ee.Stderr) > 0 {
-			msg = strings.TrimSpace(string(ee.Stderr))
-		}
-		return "", fmt.Errorf("本地 %s agent 调用失败：%s", f.name, truncateRunes(msg, 300))
+		f.sessions.reset(convID)
 	}
-	return "（本地 agent 无文本输出）", nil
+	return "", fmt.Errorf("本地 %s agent 调用失败：%s", f.name, truncateRunes(msg, 300))
 }
 
 // convSessions maps a DingTalk conversation to a stable agent session ID, so a
@@ -415,6 +443,17 @@ func brandReply(channel, reply string) string {
 	return qoderworkIdentityRe.ReplaceAllString(reply, "我是 QoderWork 助手，钉钉群里的智能助手。")
 }
 
+func execErrorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	if ee, ok := err.(*exec.ExitError); ok && len(ee.Stderr) > 0 {
+		msg = strings.TrimSpace(string(ee.Stderr))
+	}
+	return msg
+}
+
 // agentReplyIsError reports whether an agent's stdout is a bare backend error
 // rather than a real answer. Claude Code prints provider failures as
 // "API Error: <status> ..." on stdout and may still exit 0, so the connector
@@ -422,6 +461,16 @@ func brandReply(channel, reply string) string {
 // leading marker; a legitimate reply never starts with "API Error:".
 func agentReplyIsError(s string) bool {
 	return strings.HasPrefix(strings.TrimSpace(s), "API Error:")
+}
+
+// agentSessionMissingError recognizes stale addressable sessions. Agent CLIs
+// differ in wording, but the operational meaning is the same: the connector's
+// persisted session id points at a conversation the CLI can no longer resume.
+func agentSessionMissingError(msg string) bool {
+	lower := strings.ToLower(strings.TrimSpace(msg))
+	return strings.Contains(lower, "no conversation found with session id") ||
+		strings.Contains(lower, "conversation not found") ||
+		strings.Contains(lower, "session not found")
 }
 
 // agentBackendErrorReply turns a bare backend error into a short, actionable
@@ -588,10 +637,11 @@ func claudeUserSettingsEnv() []string {
 	return out
 }
 
-// agentSpecs is the registry of local-agent channels. Most forward to a local
+// agentSpecs is the registry of agent channels. Most forward to a local
 // headless CLI (one-shot per message, 24/7, no interactive session). Codex uses
-// the local CLI binary only to host app-server. Exact headless flags for
-// non-Codex channels can be overridden per run with DWS_AGENT_CMD.
+// the local CLI binary only to host app-server; Gemini uses its HTTP API.
+// Exact headless flags for CLI channels can be overridden per run with
+// DWS_AGENT_CMD.
 //
 // Install policy: npm/pipx (package managers) are auto-installed; curl|bash
 // remote-script installs and desktop apps are hint-only (we do not silently pipe
@@ -608,9 +658,8 @@ var agentSpecs = map[string]agentSpec{
 	"codex": {app: "OpenAI Codex CLI", bins: []string{"codex"},
 		install: []string{"npm", "i", "-g", "@openai/codex"}, hint: "npm i -g @openai/codex",
 		modelFlag: "-m"},
-	"gemini": {app: "Gemini CLI", bins: []string{"gemini"}, argvTail: []string{"-p"},
-		install: []string{"npm", "i", "-g", "@google/gemini-cli"}, hint: "npm i -g @google/gemini-cli",
-		modelFlag: "-m"},
+	"gemini": {app: "Gemini API",
+		hint: "设置 GEMINI_API_KEY（或 GOOGLE_API_KEY）；模型可用 --agent-model 指定；Gemini-compatible 代理可设置 GEMINI_API_BASE_URL"},
 	// opencode is resolved here only to find the local binary. The forwarder
 	// uses `opencode serve --pure` plus HTTP session/message APIs instead of
 	// parsing `opencode run` stdout.
@@ -719,6 +768,17 @@ func connectCliStatus(channel string) map[string]any {
 			status["command"] = command
 		}
 		return status
+	case "gemini":
+		status := map[string]any{
+			"required":    "GEMINI_API_KEY or GOOGLE_API_KEY",
+			"installed":   geminiAPIKey() != "",
+			"autoInstall": false,
+			"installHint": "设置 GEMINI_API_KEY（或 GOOGLE_API_KEY）；模型可用 --agent-model 指定；Gemini-compatible 代理可设置 GEMINI_API_BASE_URL",
+		}
+		if base := strings.TrimSpace(geminiAPIBaseURL()); base != "" {
+			status["baseURL"] = base
+		}
+		return status
 	}
 	spec, ok := agentSpecs[channel]
 	if !ok {
@@ -785,6 +845,10 @@ func forwarderForChannel(channel, clientID string, opts connectAgentOptions) (fo
 	if !ok {
 		return nil, apperrors.NewValidation(fmt.Sprintf("渠道 %q 不是 stream-bridge 渠道，无 forwarder", channel))
 	}
+	overridden := strings.TrimSpace(os.Getenv("DWS_AGENT_CMD")) != "" && channel != "codex"
+	if channel == "gemini" && !overridden {
+		return newGeminiAPIForwarder(timeout, opts)
+	}
 	// Resolve the agent CLI (PATH → app bundle → auto-install → guidance) and
 	// preflight here so a missing dependency errors at connect time.
 	argv, env, err := resolveExecAgent(channel)
@@ -795,7 +859,6 @@ func forwarderForChannel(channel, clientID string, opts connectAgentOptions) (fo
 	// model or session flags we cannot know are valid for it. Codex ignores the
 	// override because its channel is app-server only; custom commands belong on
 	// --channel custom.
-	overridden := strings.TrimSpace(os.Getenv("DWS_AGENT_CMD")) != "" && channel != "codex"
 	userPickedModel := opts.Model != "" || strings.TrimSpace(os.Getenv("DWS_AGENT_MODEL")) != ""
 	if !overridden && opts.Model != "" {
 		if spec.modelFlag == "" {
@@ -850,14 +913,9 @@ func forwarderForChannel(channel, clientID string, opts connectAgentOptions) (fo
 	if !overridden && opts.Yolo {
 		switch channel {
 		case "claudecode", "codebuddy", "workbuddy":
-			argv = append(argv, "--dangerously-skip-permissions")
+			argv = append(argv, "--permission-mode", "bypassPermissions", "--dangerously-skip-permissions")
 			if len(streamArgv) > 0 {
-				streamArgv = append(streamArgv, "--dangerously-skip-permissions")
-			}
-		case "gemini":
-			argv = append(argv, "--yolo")
-			if len(streamArgv) > 0 {
-				streamArgv = append(streamArgv, "--yolo")
+				streamArgv = append(streamArgv, "--permission-mode", "bypassPermissions", "--dangerously-skip-permissions")
 			}
 		}
 	}
@@ -881,6 +939,18 @@ func applyModelArg(argv []string, flag, model string) []string {
 		}
 	}
 	return append(out[:1:1], append([]string{flag, model}, out[1:]...)...)
+}
+
+func insertBeforeArg(argv []string, marker string, values ...string) []string {
+	for i := 1; i < len(argv); i++ {
+		if argv[i] == marker {
+			out := append([]string(nil), argv[:i]...)
+			out = append(out, values...)
+			return append(out, argv[i:]...)
+		}
+	}
+	out := append([]string(nil), argv...)
+	return append(out, values...)
 }
 
 // msgDedup tracks recently-seen MsgIds so a redelivered message is not
@@ -933,6 +1003,80 @@ type connectExtras struct {
 	// persona is a role's system-prompt fragment prepended to every forwarded
 	// prompt (empty = no prefix). Sourced from RoleConfig.Persona.
 	persona string
+}
+
+type connectQueuedTurn struct {
+	convID           string
+	text             string
+	picCode          string
+	fileInfo         fileInboundInfo
+	webhook          string
+	msgID            string
+	msgType          string
+	senderStaffID    string
+	conversationID   string
+	conversationType string
+	callbackData     chatbot.BotCallbackDataModel
+}
+
+func mergeConnectQueuedTurns(turns []connectQueuedTurn) connectQueuedTurn {
+	if len(turns) == 0 {
+		return connectQueuedTurn{}
+	}
+	if len(turns) == 1 {
+		return turns[0]
+	}
+	for i := len(turns) - 1; i >= 0; i-- {
+		if connectTurnShouldStayStandalone(turns[i]) {
+			return turns[i]
+		}
+	}
+	merged := turns[len(turns)-1]
+	lines := make([]string, 0, len(turns)+1)
+	lines = append(lines, "用户在上一轮处理期间连续发送了以下消息，请把它们作为同一个最新请求一起处理：")
+	for i, turn := range turns {
+		lines = append(lines, fmt.Sprintf("%d. %s", i+1, connectTurnSummary(turn)))
+	}
+	merged.text = strings.Join(lines, "\n")
+	if merged.picCode == "" && !merged.fileInfo.hasActionable() {
+		for i := len(turns) - 1; i >= 0; i-- {
+			if turns[i].picCode != "" {
+				merged.picCode = turns[i].picCode
+				break
+			}
+			if turns[i].fileInfo.hasActionable() {
+				merged.fileInfo = turns[i].fileInfo
+				break
+			}
+		}
+	}
+	return merged
+}
+
+func connectTurnShouldStayStandalone(turn connectQueuedTurn) bool {
+	if _, ok := parseConnectControlCommand(turn.text); ok {
+		return true
+	}
+	if _, ok := parseDecisionWord(turn.text); ok {
+		return true
+	}
+	return isRetryWord(turn.text)
+}
+
+func connectTurnSummary(turn connectQueuedTurn) string {
+	if text := strings.TrimSpace(turn.text); text != "" {
+		return text
+	}
+	if turn.picCode != "" {
+		return "[图片]"
+	}
+	if turn.fileInfo.hasActionable() {
+		if name := strings.TrimSpace(turn.fileInfo.FileName); name != "" {
+			return "[文件: " + name + "]"
+		}
+		return "[文件]"
+	}
+	return "[空消息]"
 }
 
 func runStreamConnector(ctx context.Context, channel, clientID, clientSecret string, fwd forwarder, cardCli *aiCardClient, extras *connectExtras) error {
@@ -1072,11 +1216,36 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		if convID == "" {
 			convID = strings.TrimSpace(data.SenderStaffId)
 		}
-		callbackData := data
 		msgID := strings.TrimSpace(data.MsgId)
-		// Same-conversation messages run in arrival order (follow-ups need the
-		// previous turn's session state); different conversations in parallel.
-		queue.run(convID, func() {
+		turn := connectQueuedTurn{
+			convID:           convID,
+			text:             text,
+			picCode:          picCode,
+			fileInfo:         fileInfo,
+			webhook:          webhook,
+			msgID:            msgID,
+			msgType:          msgtype,
+			senderStaffID:    strings.TrimSpace(data.SenderStaffId),
+			conversationID:   strings.TrimSpace(data.ConversationId),
+			conversationType: strings.TrimSpace(data.ConversationType),
+			callbackData:     *data,
+		}
+		// Same-conversation agent calls never run in parallel; messages received
+		// while a turn is running are merged into one pending follow-up instead
+		// of forming an unbounded stale FIFO.
+		queue.submit(turn, func(turns []connectQueuedTurn) {
+			turn := mergeConnectQueuedTurns(turns)
+			if len(turns) > 1 {
+				fmt.Fprintf(os.Stderr, "[connect] 合并 %d 条待处理消息 (convId=%s, latestMsgId=%s)\n", len(turns), turn.convID, turn.msgID)
+			}
+			text := turn.text
+			picCode := turn.picCode
+			fileInfo := turn.fileInfo
+			webhook := turn.webhook
+			convID := turn.convID
+			msgID := turn.msgID
+			msgtype := turn.msgType
+			callbackData := &turn.callbackData
 			// Digital-twin text approval: if this is the OWNER replying
 			// 「同意」/「拒绝」 (in their 1:1 chat with the bot) to the pending
 			// request, route it to the gate (decide → execute/decline, with

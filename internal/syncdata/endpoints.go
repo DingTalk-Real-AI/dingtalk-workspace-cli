@@ -5,6 +5,7 @@ package syncdata
 
 func StaticServers() []ServerInfo {
 	return []ServerInfo{
+		{ID: "agoal", Name: "Agoal", Endpoint: "https://mcp-gw.dingtalk.com/server/1db49ea94ffe74c25a7079a68b4df6629c79130fb9095d1b499f507015d847a9", Prefixes: []string{"agoal"}},
 		{ID: "aisearch", Name: "AI 搜问", Endpoint: "https://mcp-gw.dingtalk.com/server/ai-search", Prefixes: []string{"aisearch", "enterprise"}},
 		{ID: "aitable", Name: "AI 多维表", Endpoint: "https://mcp-gw.dingtalk.com/server/5f0d121611f14e878f7d42c3e32bf6c4a790d433066adae38c062a657c397047", Prefixes: []string{"table", "record", "field", "base", "attachment", "view", "dashboard", "chart", "export", "import"}},
 		{ID: "aitable-helper", Name: "AI 多维表(辅助)", Endpoint: "https://mcp-gw.dingtalk.com/server/bb2984ee6b10c1560b4fe943ca620f646bed31f215c551a53abf040b52591a95", Prefixes: []string{"form", "share_form"}},

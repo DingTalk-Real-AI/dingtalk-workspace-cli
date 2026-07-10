@@ -590,6 +590,33 @@ func makePATErrorJSONWithURI(flowID, clientID, uri string) string {
 	return string(data)
 }
 
+func makePATErrorJSONWithAuthorizationURL(flowID, clientID, authURL string) string {
+	type patData struct {
+		Desc             string `json:"desc"`
+		FlowID           string `json:"flowId"`
+		AuthorizationURL string `json:"authorizationUrl"`
+		ClientID         string `json:"clientId"`
+	}
+	payload := struct {
+		Code string  `json:"code"`
+		Data patData `json:"data"`
+	}{
+		Code: "AGENT_CODE_NOT_EXISTS",
+		Data: patData{
+			Desc:             "test auth",
+			FlowID:           flowID,
+			AuthorizationURL: authURL,
+			ClientID:         clientID,
+		},
+	}
+	data, _ := json.Marshal(payload)
+	return string(data)
+}
+
+func patTestAuthorizationURL(server *httptest.Server) string {
+	return server.URL + "/pat"
+}
+
 func TestEnrichPATErrorWithOpenBrowserKeepsAuthorizationURLAmpersandReadable(t *testing.T) {
 	rawURI := "https://open-dev.dingtalk.com/fe/old?hash=%23%2FpersonalAuthorization%3FflowId%3Dflow-copy%26userCode%3DQZYH-D64W#/personalAuthorization?flowId=flow-copy&userCode=QZYH-D64W"
 	raw := makePATErrorJSONWithURI("flow-copy", "test-client-id", rawURI)
@@ -664,10 +691,13 @@ func TestHandlePatAuthCheck_Approved(t *testing.T) {
 
 func TestRunDirectPATAuthCheck_ApprovedRetriesCallback(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
-	server, _ := setupHandlePATServer(t, "APPROVED", "")
+	server, configDir := setupHandlePATServer(t, "APPROVED", "")
 	defer server.Close()
+	if _, err := pat.SetBrowserPolicy(configDir, "", false); err != nil {
+		t.Fatalf("SetBrowserPolicy(default) error = %v", err)
+	}
 
-	patErr := &apperrors.PATError{RawJSON: makePATErrorJSONWithURI("flow-direct", "test-client-id", "https://example.com/pat")}
+	patErr := &apperrors.PATError{RawJSON: makePATErrorJSONWithURI("flow-direct", "test-client-id", patTestAuthorizationURL(server))}
 	var retried atomic.Bool
 	var retryHadKey atomic.Bool
 	err := runDirectPATAuthCheck(context.Background(), &GlobalFlags{}, patErr, func(ctx context.Context) error {
@@ -691,7 +721,7 @@ func TestRunDirectPATAuthCheckWaitOnly_ApprovedDoesNotRetry(t *testing.T) {
 	server, _ := setupHandlePATServer(t, "APPROVED", "")
 	defer server.Close()
 
-	patErr := &apperrors.PATError{RawJSON: makePATErrorJSONWithURI("flow-direct", "test-client-id", "https://example.com/pat")}
+	patErr := &apperrors.PATError{RawJSON: makePATErrorJSONWithURI("flow-direct", "test-client-id", patTestAuthorizationURL(server))}
 	var out bytes.Buffer
 	err := runDirectPATAuthCheckWaitOnly(context.Background(), &GlobalFlags{}, patErr, &out)
 	if err != nil {
@@ -721,7 +751,7 @@ func TestRunDirectPATAuthCheckWaitOnly_SuppressesBrowserOpen(t *testing.T) {
 	}
 	t.Cleanup(func() { openBrowserFunc = origOpenBrowser })
 
-	patErr := &apperrors.PATError{RawJSON: makePATErrorJSONWithURI("flow-direct", "test-client-id", "https://example.com/pat")}
+	patErr := &apperrors.PATError{RawJSON: makePATErrorJSONWithURI("flow-direct", "test-client-id", patTestAuthorizationURL(server))}
 	var out bytes.Buffer
 	err := runDirectPATAuthCheckWaitOnly(context.Background(), &GlobalFlags{}, patErr, &out)
 	if err != nil {
@@ -1196,7 +1226,8 @@ func TestHandlePatAuthCheck_NonJSONModeRespectsBrowserPolicy(t *testing.T) {
 		fallback:    mock,
 		globalFlags: &GlobalFlags{Format: "table"},
 	}
-	raw := `{"code":"AGENT_CODE_NOT_EXISTS","data":{"desc":"test auth","flowId":"flow-approved","authorizationUrl":"https://example.com/pat","clientId":"test-client-id"}}`
+	authURL := patTestAuthorizationURL(server)
+	raw := makePATErrorJSONWithAuthorizationURL("flow-approved", "test-client-id", authURL)
 
 	var buf bytes.Buffer
 	_, err := handlePatAuthCheck(context.Background(), runner, executor.Invocation{
@@ -1216,7 +1247,7 @@ func TestHandlePatAuthCheck_NonJSONModeRespectsBrowserPolicy(t *testing.T) {
 	if !strings.Contains(buf.String(), "需要 PAT 授权") {
 		t.Fatalf("expected human-readable PAT output, got %q", buf.String())
 	}
-	if !strings.Contains(buf.String(), "授权链接: https://example.com/pat") {
+	if !strings.Contains(buf.String(), "授权链接: "+authURL) {
 		t.Fatalf("expected authorization URL in human-readable PAT output, got %q", buf.String())
 	}
 	if strings.Contains(buf.String(), "PAT_AUTHORIZATION_URL=") {

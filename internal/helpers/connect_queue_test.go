@@ -14,36 +14,44 @@
 package helpers
 
 import (
+	"reflect"
 	"sync"
 	"testing"
 	"time"
 )
 
-// TestConvQueueSerialSameConversation: tasks of one conversation run in
-// arrival order even when earlier tasks are slow.
-func TestConvQueueSerialSameConversation(t *testing.T) {
+// TestConvQueueCoalescesSameConversationBurst: while one conversation is
+// running, later messages are batched into one follow-up turn instead of forming
+// a long FIFO of stale prompts.
+func TestConvQueueCoalescesSameConversationBurst(t *testing.T) {
 	q := newConvQueue()
-	var mu sync.Mutex
-	var order []int
-	var wg sync.WaitGroup
-	for i := 1; i <= 5; i++ {
-		i := i
-		wg.Add(1)
-		q.run("conv-1", func() {
-			defer wg.Done()
-			if i == 1 {
-				time.Sleep(50 * time.Millisecond) // slow head must not be overtaken
-			}
-			mu.Lock()
-			order = append(order, i)
-			mu.Unlock()
+	started := make(chan struct{})
+	release := make(chan struct{})
+	batches := make(chan []string, 2)
+	var once sync.Once
+	process := func(batch []connectQueuedTurn) {
+		var got []string
+		for _, turn := range batch {
+			got = append(got, turn.text)
+		}
+		batches <- got
+		once.Do(func() {
+			close(started)
+			<-release
 		})
 	}
-	wg.Wait()
-	for i, v := range order {
-		if v != i+1 {
-			t.Fatalf("order = %v, want 1..5 in sequence", order)
-		}
+
+	q.submit(connectQueuedTurn{convID: "conv-1", text: "first"}, process)
+	<-started
+	q.submit(connectQueuedTurn{convID: "conv-1", text: "second"}, process)
+	q.submit(connectQueuedTurn{convID: "conv-1", text: "third"}, process)
+	close(release)
+
+	if got := <-batches; !reflect.DeepEqual(got, []string{"first"}) {
+		t.Fatalf("first batch = %v, want [first]", got)
+	}
+	if got := <-batches; !reflect.DeepEqual(got, []string{"second", "third"}) {
+		t.Fatalf("pending batch = %v, want [second third]", got)
 	}
 }
 
@@ -53,14 +61,14 @@ func TestConvQueueParallelAcrossConversations(t *testing.T) {
 	q := newConvQueue()
 	slowRelease := make(chan struct{})
 	slowStarted := make(chan struct{})
-	q.run("conv-slow", func() {
+	q.submit(connectQueuedTurn{convID: "conv-slow", text: "slow"}, func([]connectQueuedTurn) {
 		close(slowStarted)
 		<-slowRelease
 	})
 	<-slowStarted
 
 	fastDone := make(chan struct{})
-	q.run("conv-fast", func() { close(fastDone) })
+	q.submit(connectQueuedTurn{convID: "conv-fast", text: "fast"}, func([]connectQueuedTurn) { close(fastDone) })
 	select {
 	case <-fastDone:
 	case <-time.After(2 * time.Second):
@@ -75,12 +83,12 @@ func TestConvQueueDrainsEntries(t *testing.T) {
 	q := newConvQueue()
 	var wg sync.WaitGroup
 	wg.Add(1)
-	q.run("conv-1", func() { wg.Done() })
+	q.submit(connectQueuedTurn{convID: "conv-1", text: "done"}, func([]connectQueuedTurn) { wg.Done() })
 	wg.Wait()
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		q.mu.Lock()
-		n := len(q.tails)
+		n := len(q.states)
 		q.mu.Unlock()
 		if n == 0 {
 			return
