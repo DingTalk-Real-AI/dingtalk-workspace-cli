@@ -214,11 +214,8 @@ func TestFileRead_NonString(t *testing.T) {
 }
 
 // TestFileRead_StdinDashIsAccepted documents the contract: the special value
-// "-" is reserved for stdin. We don't test stdin redirection here (that
-// requires plumbing os.Stdin replacement which complicates the test) — this
-// is a compile-time signal that "-" doesn't path-resolve to a file named "-"
-// in the current directory. The end-to-end stdin path is covered in
-// test/cli_compat once the envelope ships.
+// "-" is reserved for stdin and must not resolve to a file named "-" in the
+// current directory. The pipe below exercises the stdin path directly.
 func TestFileRead_StdinDashIsAccepted(t *testing.T) {
 	t.Parallel()
 
