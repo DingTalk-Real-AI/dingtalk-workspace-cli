@@ -17,9 +17,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -457,6 +459,179 @@ func TestClientGetSubscriptionFiltersSublist(t *testing.T) {
 	if sub.SubscribeID != "sub-2" || sub.EventKey != EventSingleChat {
 		t.Fatalf("subscription = %#v", sub)
 	}
+}
+
+func TestClientListSubscriptionsPaginatesAllResults(t *testing.T) {
+	var pages []int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pageNo, err := strconv.Atoi(r.URL.Query().Get("pageNo"))
+		if err != nil {
+			t.Fatalf("pageNo = %q", r.URL.Query().Get("pageNo"))
+		}
+		pages = append(pages, pageNo)
+		start := (pageNo - 1) * subscriptionListPageSize
+		end := start + subscriptionListPageSize
+		if end > 205 {
+			end = 205
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": true,
+			"result": map[string]any{
+				"total": 205,
+				"items": dwsSubscriptionTestItems(start, end),
+			},
+		})
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, Identity{AccessToken: "token", ClientID: "client", SourceID: "open"})
+	subs, err := c.ListSubscriptions(t.Context(), ListOptions{})
+	if err != nil {
+		t.Fatalf("ListSubscriptions() error = %v", err)
+	}
+	if len(subs) != 205 || subs[204].SubscribeID != "sub-204" {
+		t.Fatalf("subscriptions = %d, last = %#v", len(subs), subs[len(subs)-1])
+	}
+	if fmt.Sprint(pages) != "[1 2 3]" {
+		t.Fatalf("pages = %v, want [1 2 3]", pages)
+	}
+}
+
+func TestClientGetSubscriptionFindsLaterPage(t *testing.T) {
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		pageNo, _ := strconv.Atoi(r.URL.Query().Get("pageNo"))
+		items := dwsSubscriptionTestItems(0, 100)
+		if pageNo == 2 {
+			items = dwsSubscriptionTestItems(100, 101)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": true,
+			"result":  map[string]any{"total": 101, "items": items},
+		})
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, Identity{AccessToken: "token", ClientID: "client", SourceID: "open"})
+	sub, err := c.GetSubscription(t.Context(), "sub-100")
+	if err != nil {
+		t.Fatalf("GetSubscription() error = %v", err)
+	}
+	if sub.SubscribeID != "sub-100" || calls != 2 {
+		t.Fatalf("subscription = %#v, calls = %d", sub, calls)
+	}
+}
+
+func TestClientListSubscriptionsWithoutTotalStopsOnEmptyPage(t *testing.T) {
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		items := dwsSubscriptionTestItems(0, 100)
+		if r.URL.Query().Get("pageNo") == "2" {
+			items = nil
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": true,
+			"result":  map[string]any{"items": items},
+		})
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, Identity{AccessToken: "token", ClientID: "client", SourceID: "open"})
+	subs, err := c.ListSubscriptions(t.Context(), ListOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(subs) != 100 || calls != 2 {
+		t.Fatalf("subscriptions = %d, calls = %d", len(subs), calls)
+	}
+}
+
+func TestClientListSubscriptionsUsesServerPageSize(t *testing.T) {
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		pageNo, _ := strconv.Atoi(r.URL.Query().Get("pageNo"))
+		start := (pageNo - 1) * 20
+		end := start + 20
+		if end > 45 {
+			end = 45
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": true,
+			"result": map[string]any{
+				"total":    45,
+				"pageSize": 20,
+				"items":    dwsSubscriptionTestItems(start, end),
+			},
+		})
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, Identity{AccessToken: "token", ClientID: "client", SourceID: "open"})
+	subs, err := c.ListSubscriptions(t.Context(), ListOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(subs) != 45 || calls != 3 {
+		t.Fatalf("subscriptions = %d, calls = %d", len(subs), calls)
+	}
+}
+
+func TestClientListSubscriptionsDeduplicatesSubscribeID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		items := dwsSubscriptionTestItems(0, 100)
+		if r.URL.Query().Get("pageNo") == "2" {
+			items = append(dwsSubscriptionTestItems(99, 100), dwsSubscriptionTestItems(100, 101)...)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": true,
+			"result":  map[string]any{"total": 101, "items": items},
+		})
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, Identity{AccessToken: "token", ClientID: "client", SourceID: "open"})
+	subs, err := c.ListSubscriptions(t.Context(), ListOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(subs) != 101 || subs[100].SubscribeID != "sub-100" {
+		t.Fatalf("subscriptions = %#v", subs)
+	}
+}
+
+func TestClientListSubscriptionsRejectsRepeatedPage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": true,
+			"result": map[string]any{
+				"total": 200,
+				"items": dwsSubscriptionTestItems(0, 100),
+			},
+		})
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, Identity{AccessToken: "token", ClientID: "client", SourceID: "open"})
+	_, err := c.ListSubscriptions(t.Context(), ListOptions{})
+	if err == nil || !strings.Contains(err.Error(), "pagination made no progress") {
+		t.Fatalf("ListSubscriptions() error = %v", err)
+	}
+}
+
+func dwsSubscriptionTestItems(start, end int) []map[string]any {
+	items := make([]map[string]any, 0, end-start)
+	for i := start; i < end; i++ {
+		items = append(items, map[string]any{
+			"subId":    fmt.Sprintf("sub-%d", i),
+			"eventKey": EventSingleChat,
+			"sourceId": "open",
+			"status":   1,
+		})
+	}
+	return items
 }
 
 func captureClientDebugLogs(t *testing.T) *bytes.Buffer {

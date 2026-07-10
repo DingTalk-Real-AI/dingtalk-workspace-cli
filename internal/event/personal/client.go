@@ -31,7 +31,11 @@ import (
 
 const DefaultBasePath = "/dws"
 
-const controlLogPayloadLimit = 8192
+const (
+	controlLogPayloadLimit       = 8192
+	subscriptionListPageSize     = 100
+	subscriptionListMaxPageGuard = 10000
+)
 
 type Identity struct {
 	AccessToken  string `json:"-"`
@@ -223,15 +227,51 @@ func (c *Client) ListSubscriptions(ctx context.Context, opts ListOptions) ([]Sub
 	if sourceID := strings.TrimSpace(c.Identity.SourceID); sourceID != "" {
 		q.Set("sourceId", sourceID)
 	}
-	q.Set("pageNo", "1")
-	q.Set("pageSize", "100")
-	var result dwsSubListResult
-	if err := c.do(ctx, http.MethodGet, "/event/sublist", q, nil, &result); err != nil {
-		return nil, err
+	q.Set("pageSize", fmt.Sprintf("%d", subscriptionListPageSize))
+	all := make([]Subscription, 0, subscriptionListPageSize)
+	seen := make(map[string]struct{}, subscriptionListPageSize)
+	for pageNo := 1; pageNo <= subscriptionListMaxPageGuard; pageNo++ {
+		q.Set("pageNo", fmt.Sprintf("%d", pageNo))
+		var result dwsSubListResult
+		if err := c.do(ctx, http.MethodGet, "/event/sublist", q, nil, &result); err != nil {
+			return nil, err
+		}
+		if len(result.Items) == 0 {
+			break
+		}
+		effectivePageSize := subscriptionListPageSize
+		if result.PageSize > 0 {
+			effectivePageSize = result.PageSize
+		}
+
+		added := 0
+		for _, item := range result.Items {
+			sub := item.toSubscription()
+			if sub.SubscribeID != "" {
+				if _, ok := seen[sub.SubscribeID]; ok {
+					continue
+				}
+				seen[sub.SubscribeID] = struct{}{}
+			}
+			all = append(all, sub)
+			added++
+		}
+		if added == 0 && (result.Total > len(all) || len(result.Items) >= effectivePageSize) {
+			return nil, fmt.Errorf("personal event: subscription pagination made no progress at page %d", pageNo)
+		}
+		if result.Total > 0 && len(all) >= result.Total {
+			break
+		}
+		if len(result.Items) < effectivePageSize {
+			break
+		}
+		if pageNo == subscriptionListMaxPageGuard {
+			return nil, fmt.Errorf("personal event: subscription pagination exceeded %d pages", subscriptionListMaxPageGuard)
+		}
 	}
-	items := make([]Subscription, 0, len(result.Items))
-	for _, item := range result.Items {
-		sub := item.toSubscription()
+
+	items := make([]Subscription, 0, len(all))
+	for _, sub := range all {
 		if opts.Status != "" && opts.Status != "all" && sub.Status != opts.Status {
 			continue
 		}

@@ -15,6 +15,7 @@ package bus
 
 import (
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -287,6 +288,61 @@ func TestHub_UnregisterIdempotent(t *testing.T) {
 	h.Unregister(c.ID)
 	h.Unregister(c.ID) // must not panic
 	h.Unregister(9999) // unknown ID
+}
+
+func TestHub_ConcurrentDeliverBroadcastUnregister(t *testing.T) {
+	for iteration := 0; iteration < 200; iteration++ {
+		h := NewHub(4)
+		c, err := h.Register(transport.Hello{ConsumerPID: iteration + 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		for producer := 0; producer < 4; producer++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-start
+				for i := 0; i < 25; i++ {
+					h.Deliver(mkEvent("foo", "event"))
+					h.Broadcast(transport.SourceState{Type: transport.FrameTypeSourceState, State: "connected"})
+				}
+			}()
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			h.Unregister(c.ID)
+		}()
+
+		close(start)
+		wg.Wait()
+
+		deadline := time.After(time.Second)
+	drain:
+		for {
+			select {
+			case _, ok := <-c.SendCh:
+				if !ok {
+					break drain
+				}
+			case <-deadline:
+				t.Fatal("SendCh was not closed after concurrent unregister")
+			}
+		}
+
+		seq := c.seq.Load()
+		received := c.received.Load()
+		dropped := c.dropped.Load()
+		h.Deliver(mkEvent("foo", "after-close"))
+		h.Broadcast(transport.Bye{Type: transport.FrameTypeBye})
+		if c.seq.Load() != seq || c.received.Load() != received || c.dropped.Load() != dropped {
+			t.Fatal("closed consumer counters changed after unregister")
+		}
+	}
 }
 
 func TestHub_BroadcastReachesAllConsumers(t *testing.T) {

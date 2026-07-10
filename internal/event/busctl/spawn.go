@@ -125,11 +125,9 @@ func Spawn(cfg SpawnConfig) (pid int, err error) {
 	// signalling, instead of blocking forever.
 	_ = pw.Close()
 
-	// Detach from the child — we don't want to reap it; let it daemonize.
-	// `Release` drops the OS-level Process record so the child becomes an
-	// orphan and gets adopted by init / launchd.
-	go func() { _ = cmd.Wait() }() // drains exit; safe because we Released?
-	// Actually keep cmd around for the wait. Caller doesn't need pid management.
+	// The detached child owns its own process group. Wait in the background to
+	// release its process resources; the caller only retains the numeric PID.
+	go func() { _ = cmd.Wait() }()
 
 	// Wait for ready byte.
 	if err := waitReady(pr); err != nil {

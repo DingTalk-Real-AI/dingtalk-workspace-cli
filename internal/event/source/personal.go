@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	dwsevent "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event"
@@ -33,7 +34,11 @@ import (
 	"github.com/open-dingtalk/dingtalk-stream-sdk-go/payload"
 )
 
-const personalRawDebugPayloadLimit = 8192
+const (
+	personalRawDebugPayloadLimit = 8192
+	personalReconnectMinBackoff  = time.Second
+	personalReconnectMaxBackoff  = 30 * time.Second
+)
 
 type PersonalConfig struct {
 	AccessToken     string
@@ -45,13 +50,22 @@ type PersonalConfig struct {
 	HTTPClient      *http.Client
 	WebSocketDialer *websocket.Dialer
 	Now             func() time.Time
+	ReconnectMin    time.Duration
+	ReconnectMax    time.Duration
 }
 
 type PersonalSource struct {
 	cfg     PersonalConfig
 	machine *Machine
-	conn    *websocket.Conn
+	started atomic.Bool
 }
+
+type retryablePersonalError struct {
+	err error
+}
+
+func (e *retryablePersonalError) Error() string { return e.err.Error() }
+func (e *retryablePersonalError) Unwrap() error { return e.err }
 
 type ticketResponse struct {
 	Endpoint string `json:"endpoint"`
@@ -86,6 +100,15 @@ func NewPersonal(cfg PersonalConfig) (*PersonalSource, error) {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
+	if cfg.ReconnectMin <= 0 {
+		cfg.ReconnectMin = personalReconnectMinBackoff
+	}
+	if cfg.ReconnectMax <= 0 {
+		cfg.ReconnectMax = personalReconnectMaxBackoff
+	}
+	if cfg.ReconnectMax < cfg.ReconnectMin {
+		cfg.ReconnectMax = cfg.ReconnectMin
+	}
 	m := NewMachine()
 	m.now = cfg.Now
 	return &PersonalSource{cfg: cfg, machine: m}, nil
@@ -97,47 +120,77 @@ func (s *PersonalSource) Start(ctx context.Context, emit dwsevent.EmitFn) error 
 	if emit == nil {
 		return errors.New("personal source: emit is required")
 	}
-	if s.conn != nil {
+	if !s.started.CompareAndSwap(false, true) {
 		return errors.New("personal source: Start called twice")
 	}
 	s.machine.OnConnecting()
+	defer s.machine.OnStopped()
+
+	backoff := s.cfg.ReconnectMin
+	for {
+		acked, err := s.runAttempt(ctx, emit)
+		if err == nil {
+			return nil
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if !isRetryablePersonalError(err) {
+			return err
+		}
+		if acked {
+			backoff = s.cfg.ReconnectMin
+		}
+		s.machine.OnReconnect()
+		slog.Warn("personal source reconnecting",
+			"error", personalRetryLogError(err),
+			"retry_in", backoff,
+			"reconnect_count", s.machine.Snapshot().ReconnectCount,
+		)
+		if err := waitPersonalReconnect(ctx, backoff); err != nil {
+			return err
+		}
+		backoff = nextPersonalBackoff(backoff, s.cfg.ReconnectMax)
+	}
+}
+
+func (s *PersonalSource) runAttempt(ctx context.Context, emit dwsevent.EmitFn) (bool, error) {
 	ticket, err := s.fetchTicket(ctx)
 	if err != nil {
-		s.machine.OnStopped()
-		return err
+		return false, err
 	}
 	wsURL, err := endpointWithTicket(ticket.Endpoint, ticket.Ticket)
 	if err != nil {
-		s.machine.OnStopped()
-		return err
+		return false, err
 	}
 	conn, _, err := s.cfg.WebSocketDialer.DialContext(ctx, wsURL, nil)
 	if err != nil {
-		s.machine.OnStopped()
-		return fmt.Errorf("personal source: dial websocket: %w", err)
+		return false, retryPersonal(fmt.Errorf("personal source: dial websocket: %w", err))
 	}
-	s.conn = conn
+	attemptCtx, cancel := context.WithCancel(ctx)
 	defer func() {
+		cancel()
 		_ = conn.Close()
-		s.machine.OnStopped()
 	}()
+	closePersonalWebSocketOnContext(attemptCtx, conn)
 	s.machine.OnConnected()
 
-	closePersonalWebSocketOnContext(ctx, conn)
+	acked := false
 	for {
 		messageType, data, err := conn.ReadMessage()
 		if err != nil {
 			if ctx.Err() != nil {
-				return ctx.Err()
+				return acked, ctx.Err()
 			}
-			return fmt.Errorf("personal source: read websocket: %w", err)
+			return acked, retryPersonal(fmt.Errorf("personal source: read websocket: %w", err))
 		}
 		if messageType != websocket.TextMessage {
 			continue
 		}
 		if err := s.handleFrame(conn, data, emit); err != nil {
-			return err
+			return acked, err
 		}
+		acked = true
 	}
 }
 
@@ -167,15 +220,19 @@ func (s *PersonalSource) fetchTicket(ctx context.Context) (*ticketResponse, erro
 
 	resp, err := s.cfg.HTTPClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("personal source: fetch ticket: %w", err)
+		return nil, retryPersonal(fmt.Errorf("personal source: fetch ticket: %w", err))
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, config.MaxResponseBodySize))
 	if err != nil {
-		return nil, fmt.Errorf("personal source: read ticket response: %w", err)
+		return nil, retryPersonal(fmt.Errorf("personal source: read ticket response: %w", err))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("personal source: ticket HTTP %d", resp.StatusCode)
+		err := fmt.Errorf("personal source: ticket HTTP %d", resp.StatusCode)
+		if retryableTicketStatus(resp.StatusCode) {
+			return nil, retryPersonal(err)
+		}
+		return nil, err
 	}
 	ticket, err := decodeTicket(data)
 	if err != nil {
@@ -195,7 +252,6 @@ func (s *PersonalSource) handleFrame(conn *websocket.Conn, data []byte, emit dws
 	raw := s.rawEventFromDataFrame(df)
 	logPersonalDataFrame(raw, df.Data)
 	emit(raw)
-	s.machine.OnEvent()
 	resp := payload.NewSuccessDataFrameResponse()
 	resp.SetHeader(payload.DataFrameHeaderKMessageId, df.GetMessageId())
 	resp.SetHeader(payload.DataFrameHeaderKContentType, payload.DataFrameContentTypeKJson)
@@ -203,8 +259,9 @@ func (s *PersonalSource) handleFrame(conn *websocket.Conn, data []byte, emit dws
 		return err
 	}
 	if err := conn.WriteJSON(resp); err != nil {
-		return fmt.Errorf("personal source: write ack: %w", err)
+		return retryPersonal(fmt.Errorf("personal source: write ack: %w", err))
 	}
+	s.machine.OnEvent()
 	return nil
 }
 
@@ -282,12 +339,71 @@ func endpointWithTicket(endpoint, ticket string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("personal source: parse endpoint: %w", err)
 	}
+	if (u.Scheme != "ws" && u.Scheme != "wss") || u.Host == "" {
+		return "", errors.New("personal source: ticket response contains invalid websocket endpoint")
+	}
 	q := u.Query()
 	if q.Get("ticket") == "" {
 		q.Set("ticket", ticket)
 		u.RawQuery = q.Encode()
 	}
 	return u.String(), nil
+}
+
+func retryPersonal(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &retryablePersonalError{err: err}
+}
+
+func isRetryablePersonalError(err error) bool {
+	var retryable *retryablePersonalError
+	return errors.As(err, &retryable)
+}
+
+func personalRetryLogError(err error) string {
+	message := err.Error()
+	switch {
+	case strings.Contains(message, "ticket HTTP"):
+		return message
+	case strings.Contains(message, "fetch ticket"):
+		return "personal source: fetch ticket: network error"
+	case strings.Contains(message, "read ticket response"):
+		return "personal source: read ticket response: network error"
+	case strings.Contains(message, "dial websocket"):
+		return "personal source: dial websocket: network error"
+	case strings.Contains(message, "read websocket"):
+		return "personal source: read websocket: connection closed"
+	case strings.Contains(message, "write ack"):
+		return "personal source: write ack: connection error"
+	default:
+		return "personal source: retryable stream error"
+	}
+}
+
+func retryableTicketStatus(status int) bool {
+	return status == http.StatusRequestTimeout ||
+		status == http.StatusTooManyRequests ||
+		status >= http.StatusInternalServerError
+}
+
+func waitPersonalReconnect(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func nextPersonalBackoff(current, maximum time.Duration) time.Duration {
+	if current >= maximum || current > maximum/2 {
+		return maximum
+	}
+	return current * 2
 }
 
 func closePersonalWebSocketOnContext(ctx context.Context, conn *websocket.Conn) {

@@ -15,15 +15,23 @@ package personal
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"time"
 
+	eventlock "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/lock"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
-const StateFileName = "personal_subscriptions.json"
+const (
+	StateFileName        = "personal_subscriptions.json"
+	StateLockFileName    = "personal_subscriptions.lock"
+	stateLockWaitTimeout = 5 * time.Second
+	stateLockRetryDelay  = 25 * time.Millisecond
+)
 
 type RunState struct {
 	SubscribeID  string    `json:"subscribe_id"`
@@ -61,31 +69,29 @@ func UpsertRunState(workDir string, st RunState) error {
 	if st.CreatedAt.IsZero() {
 		st.CreatedAt = time.Now().UTC()
 	}
-	states, err := LoadRunStates(workDir)
-	if err != nil {
-		return err
-	}
-	replaced := false
-	for i := range states {
-		if states[i].SubscribeID == st.SubscribeID {
-			states[i] = st
-			replaced = true
-			break
+	return withRunStateLock(workDir, stateLockWaitTimeout, func() error {
+		states, err := LoadRunStates(workDir)
+		if err != nil {
+			return err
 		}
-	}
-	if !replaced {
-		states = append(states, st)
-	}
-	return writeRunStates(workDir, states)
+		replaced := false
+		for i := range states {
+			if states[i].SubscribeID == st.SubscribeID {
+				states[i] = st
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			states = append(states, st)
+		}
+		return writeRunStates(workDir, states)
+	})
 }
 
 func RemoveRunStates(workDir string, subscribeIDs []string) error {
 	if len(subscribeIDs) == 0 {
 		return nil
-	}
-	states, err := LoadRunStates(workDir)
-	if err != nil {
-		return err
 	}
 	remove := make(map[string]struct{}, len(subscribeIDs))
 	for _, id := range subscribeIDs {
@@ -93,13 +99,46 @@ func RemoveRunStates(workDir string, subscribeIDs []string) error {
 			remove[id] = struct{}{}
 		}
 	}
-	filtered := states[:0]
-	for _, st := range states {
-		if _, ok := remove[st.SubscribeID]; !ok {
-			filtered = append(filtered, st)
+	return withRunStateLock(workDir, stateLockWaitTimeout, func() error {
+		states, err := LoadRunStates(workDir)
+		if err != nil {
+			return err
 		}
+		filtered := states[:0]
+		for _, st := range states {
+			if _, ok := remove[st.SubscribeID]; !ok {
+				filtered = append(filtered, st)
+			}
+		}
+		return writeRunStates(workDir, filtered)
+	})
+}
+
+func withRunStateLock(workDir string, wait time.Duration, fn func() error) error {
+	if err := os.MkdirAll(workDir, config.DirPerm); err != nil {
+		return err
 	}
-	return writeRunStates(workDir, filtered)
+	lockPath := filepath.Join(workDir, StateLockFileName)
+	deadline := time.Now().Add(wait)
+	for {
+		held, err := eventlock.TryAcquire(lockPath)
+		if err == nil {
+			defer held.Close()
+			return fn()
+		}
+		if !errors.Is(err, eventlock.ErrBusy) {
+			return err
+		}
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return fmt.Errorf("personal event: timed out waiting for run-state lock after %s", wait)
+		}
+		delay := stateLockRetryDelay
+		if remaining < delay {
+			delay = remaining
+		}
+		time.Sleep(delay)
+	}
 }
 
 func writeRunStates(workDir string, states []RunState) error {

@@ -43,10 +43,11 @@ type Consumer struct {
 	SubscribedAt time.Time
 	SendCh       chan any // bus → consume frames (Event/SourceState/Heartbeat/Bye)
 	matcher      consumerMatcher
+	sendMu       sync.Mutex    // serialises Deliver/Broadcast with SendCh close
+	closed       bool          // guarded by sendMu
 	seq          atomic.Uint64 // monotonic per-consumer sequence, starts at 1
 	received     atomic.Uint64
 	dropped      atomic.Uint64
-	closed       atomic.Bool // marks the channel as no longer pushable
 }
 
 // consumerMatcher pre-compiles EventTypes wildcard patterns and the optional
@@ -198,7 +199,9 @@ func (h *Hub) Register(hello transport.Hello) (*Consumer, error) {
 }
 
 // Unregister removes a consumer by ID and closes its sendCh. Idempotent —
-// calling twice or on an unknown ID is a no-op.
+// calling twice or on an unknown ID is a no-op. closeSend shares the same
+// per-consumer lock as Deliver/Broadcast, so a stale Hub snapshot cannot send
+// to the channel after it has been closed.
 func (h *Hub) Unregister(id int) {
 	h.mu.Lock()
 	c, ok := h.consumers[id]
@@ -208,10 +211,7 @@ func (h *Hub) Unregister(id int) {
 	}
 	delete(h.consumers, id)
 	h.mu.Unlock()
-	c.closed.Store(true)
-	// Drain any pending sends so the writer goroutine reading SendCh
-	// terminates instead of blocking forever.
-	close(c.SendCh)
+	c.closeSend()
 }
 
 // Deliver fans the raw event out to every matching consumer. Updates
@@ -230,9 +230,6 @@ func (h *Hub) Deliver(raw *dwsevent.RawEvent) {
 	h.mu.RLock()
 	matched := make([]*Consumer, 0, len(h.consumers))
 	for _, c := range h.consumers {
-		if c.closed.Load() {
-			continue
-		}
 		if c.matcher.matches(raw) {
 			matched = append(matched, c)
 		}
@@ -248,6 +245,12 @@ func (h *Hub) Deliver(raw *dwsevent.RawEvent) {
 // it onto sendCh with drop-oldest semantics. Updates per-consumer and
 // bus-wide drop counters.
 func (c *Consumer) deliver(raw *dwsevent.RawEvent, hubCounters *PerTypeCounters) {
+	c.sendMu.Lock()
+	defer c.sendMu.Unlock()
+	if c.closed {
+		return
+	}
+
 	seq := c.seq.Add(1)
 	frame := transport.Event{
 		Type:              transport.FrameTypeEvent,
@@ -265,7 +268,7 @@ func (c *Consumer) deliver(raw *dwsevent.RawEvent, hubCounters *PerTypeCounters)
 		Headers:           raw.Headers,
 		ReceivedAtUnixMS:  raw.ReceivedAt.UnixMilli(),
 	}
-	success, evicted := c.tryPushOrDropOldest(frame)
+	success, evicted := c.tryPushOrDropOldestLocked(frame)
 	if evicted {
 		// An older event we had previously enqueued is gone.
 		c.dropped.Add(1)
@@ -286,8 +289,10 @@ func (c *Consumer) deliver(raw *dwsevent.RawEvent, hubCounters *PerTypeCounters)
 	}
 }
 
-// tryPushOrDropOldest tries to push frame to SendCh non-blockingly. If full,
-// pops the oldest entry to make room and tries once more.
+// tryPushOrDropOldestLocked tries to push frame to SendCh non-blockingly. If
+// full, it pops the oldest entry to make room and tries once more. Caller must
+// hold c.sendMu, which makes drop-oldest a true single-producer operation even
+// when Deliver and Broadcast run concurrently.
 //
 // Returns:
 //
@@ -302,10 +307,10 @@ func (c *Consumer) deliver(raw *dwsevent.RawEvent, hubCounters *PerTypeCounters)
 //	success=false, evicted=false → only possible if reader drained between
 //	  try and we still missed (extremely rare); +1 dropped only.
 //
-// Hub is the sole writer to SendCh, so the second push cannot race another
-// producer. The reader (transport writer goroutine) may receive between
-// our two operations, which only makes more room — never less.
-func (c *Consumer) tryPushOrDropOldest(frame any) (success bool, evicted bool) {
+// The per-consumer send lock makes this block the sole SendCh producer, so the
+// second push cannot race another producer. The transport writer may receive
+// between our two operations, which only makes more room — never less.
+func (c *Consumer) tryPushOrDropOldestLocked(frame any) (success bool, evicted bool) {
 	select {
 	case c.SendCh <- frame:
 		return true, false
@@ -326,6 +331,26 @@ func (c *Consumer) tryPushOrDropOldest(frame any) (success bool, evicted bool) {
 	}
 }
 
+func (c *Consumer) enqueue(frame any) bool {
+	c.sendMu.Lock()
+	defer c.sendMu.Unlock()
+	if c.closed {
+		return false
+	}
+	success, _ := c.tryPushOrDropOldestLocked(frame)
+	return success
+}
+
+func (c *Consumer) closeSend() {
+	c.sendMu.Lock()
+	defer c.sendMu.Unlock()
+	if c.closed {
+		return
+	}
+	c.closed = true
+	close(c.SendCh)
+}
+
 // Broadcast sends the same frame (e.g. SourceState change, Bye on shutdown)
 // to every consumer using drop-oldest semantics. Returns the number of
 // consumers the frame was successfully enqueued for.
@@ -333,14 +358,12 @@ func (h *Hub) Broadcast(frame any) int {
 	h.mu.RLock()
 	cs := make([]*Consumer, 0, len(h.consumers))
 	for _, c := range h.consumers {
-		if !c.closed.Load() {
-			cs = append(cs, c)
-		}
+		cs = append(cs, c)
 	}
 	h.mu.RUnlock()
 	ok := 0
 	for _, c := range cs {
-		if success, _ := c.tryPushOrDropOldest(frame); success {
+		if c.enqueue(frame) {
 			ok++
 		}
 	}
