@@ -19,6 +19,7 @@ test/cli_compat/testdata/
 /internal/compat/testdata/*
 .gitignore
 .worktrees/
+.qoder/
 
 # Secrets & credentials
 .env

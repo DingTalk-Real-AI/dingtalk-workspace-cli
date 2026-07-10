@@ -179,6 +179,60 @@ jobs:
       - name: Generated Drift
         run: ./scripts/policy/check-generated-drift.sh
 
+  interface-integrity:
+    name: Interface Integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: make build
+
+      - name: Compare CLI interface with baseline
+        run: make interface-integrity
+
+  cli-smoke:
+    name: CLI Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: make build
+
+      - name: Check public top-level commands
+        run: make cli-smoke
+
+  mock-mcp-smoke:
+    name: Mock MCP Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Check HTTP and stdio MCP transport
+        run: make mock-mcp-smoke
+
   edition-tests:
     name: Edition Contract Tests
     runs-on: ubuntu-latest
@@ -197,7 +251,7 @@ jobs:
 
   notify-downstream:
     name: Notify Wukong Overlay
-    needs: [test, policy, edition-tests]
+    needs: [test, policy, edition-tests, interface-integrity, cli-smoke, mock-mcp-smoke]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:

@@ -1,6 +1,6 @@
 GO ?= go
 
-.PHONY: all help build rebuild test lint fmt policy edition-test package release publish-homebrew-formula setup-hooks
+.PHONY: all help build rebuild test lint fmt policy edition-test interface-integrity update-interface-baseline cli-smoke mock-mcp-smoke package release publish-homebrew-formula setup-hooks
 
 all: setup-hooks fmt lint build test rebuild
 
@@ -11,6 +11,10 @@ help:
 	@printf "  make lint          - Run formatting checks and golangci-lint when available\n"
 	@printf "  make fmt           - Format Go source files\n"
 	@printf "  make policy        - Run open-source asset and command-surface checks\n"
+	@printf "  make interface-integrity - Compare the public CLI surface with its baseline\n"
+	@printf "  make update-interface-baseline - Regenerate the reviewed CLI surface baseline\n"
+	@printf "  make cli-smoke     - Verify help for every public top-level command\n"
+	@printf "  make mock-mcp-smoke - Verify HTTP and stdio MCP request/response transport\n"
 	@printf "  make package       - Build all release artifacts locally (goreleaser snapshot)\n"
 	@printf "  make release       - Build and publish a release via goreleaser\n"
 	@printf "  make publish-homebrew-formula - Push dist/homebrew/dingtalk-workspace-cli.rb to a tap repo\n"
@@ -36,6 +40,18 @@ policy:
 
 edition-test:
 	$(GO) test -v -count=1 ./pkg/editiontest/...
+
+interface-integrity:
+	@./scripts/policy/check-interface-baseline.sh
+
+update-interface-baseline:
+	@./scripts/policy/check-interface-baseline.sh --update
+
+cli-smoke:
+	@./scripts/policy/check-cli-smoke.sh
+
+mock-mcp-smoke:
+	$(GO) test -v -count=1 -run '^(TestHTTPClientEndToEnd|TestStdioClientEndToEnd)$$' ./internal/transport
 
 package:
 	@./scripts/dev/build-all.sh
