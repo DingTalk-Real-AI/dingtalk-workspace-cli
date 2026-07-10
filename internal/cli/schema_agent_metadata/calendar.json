@@ -1,7 +1,19 @@
 {
   "product_id": "calendar",
   "tools": {
+    "calendar acl list": {
+      "agent_summary": "调用本接口，获取用户主日历的访问控制列表。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "reviewed": false,
+      "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.calendar.list_acls"
+      ]
+    },
     "calendar attachment add": {
+      "agent_summary": "为日程添加附件。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "把附件挂到指定日程",
         "日程附件/给会议加文件/上传日程材料；添加"
@@ -12,11 +24,15 @@
         "dws calendar attachment add --event \u003cEVENT_ID\u003e --files \u003cFILE_ID\u003e:report.pdf,\u003cFILE_ID2\u003e:slides.pptx",
         "dws calendar attachment add --event \u003cEVENT_ID\u003e --files \u003cFILE_ID\u003e:report.pdf,\u003cFILE_ID2\u003e:slides.pptx --format json"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.calendar.add_attachments",
         "skills/mono/references/products/calendar.md"
       ]
     },
     "calendar attendee add": {
+      "agent_summary": "添加参与者",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "参会人/与会者；邀请/添加",
         "添加参会人（必须用 Step 1 返回的 eventId）"
@@ -24,14 +40,18 @@
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
-        "dws calendar attendee add --event \u003cEVENT_ID\u003e --attendees \u003cUSER_ID\u003e --optional",
-        "dws calendar attendee add --event \u003cEVENT_ID\u003e --attendees \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e"
+        "dws calendar attendee add --event \u003cEVENT_ID\u003e --attendees \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
+        "dws calendar attendee add --event \u003cEVENT_ID\u003e --attendees \u003cUSER_ID\u003e --optional"
       ],
       "source_refs": [
-        "skills/mono/references/products/calendar.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.add_calendar_participant",
+        "skills/mono/references/products/calendar.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "calendar attendee delete": {
+      "agent_summary": "移除参与者",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "参会人/与会者；移除"
       ],
@@ -40,27 +60,47 @@
       "risk": "high",
       "confirmation": "user_required",
       "examples": [
-        "dws calendar attendee delete --event \u003cEVENT_ID\u003e --attendees \u003cUSER_ID\u003e --yes"
+        "dws calendar attendee delete --event \u003cEVENT_ID\u003e --attendees \u003cUSER_ID\u003e --yes",
+        "dws calendar participant delete --event EVENT_ID --users userId1 --yes"
       ],
       "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.remove_calendar_participant",
         "skills/mono/SKILL.md",
-        "skills/mono/references/products/calendar.md"
+        "skills/mono/references/products/calendar.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "calendar attendee list": {
+      "agent_summary": "查看参与者",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "参会人/与会者；查看"
       ],
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws calendar attendee list --event \u003cEVENT_ID\u003e"
+        "dws calendar attendee list --event \u003cEVENT_ID\u003e",
+        "dws calendar participant list --event EVENT_ID  # 查询 eventId: dws calendar event list"
       ],
       "source_refs": [
-        "skills/mono/references/products/calendar.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.get_calendar_participants",
+        "skills/mono/references/products/calendar.md",
+        "skills/mono/schema-hints/imported/wukong.json"
+      ]
+    },
+    "calendar book get": {
+      "agent_summary": "根据日历id查询指定日历的信息。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "reviewed": false,
+      "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.calendar.get_calendar"
       ]
     },
     "calendar book list": {
+      "agent_summary": "查询用户的所有日历，其中id = \"primary\"为主日历（name = \"我的日历\"），为固定值。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "我有几个日历/查所有日历/共享日历本；列表",
         "查下xxx的日程安排；查询是否有共享关系"
@@ -70,34 +110,69 @@
       "examples": [
         "dws calendar book list"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.calendar.list_calendars",
         "skills/mono/references/products/calendar.md"
+      ]
+    },
+    "calendar book search": {
+      "agent_summary": "搜索当前用户拥有的日历本，支持按日历本名模糊搜索。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "reviewed": false,
+      "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.calendar.search_calendar"
       ]
     },
     "calendar busy search": {
+      "agent_summary": "查询用户闲忙状态",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
+        "同时查用户 + 会议室",
         "有空吗/忙不忙/闲忙；查询会议室闲忙",
         "有空吗/忙不忙/闲忙；查询用户闲忙",
-        "有空吗/忙不忙/闲忙；用户 + 会议室一起查"
+        "有空吗/忙不忙/闲忙；用户 + 会议室一起查",
+        "查会议室闲忙",
+        "查用户闲忙"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "examples": [
+        "dws calendar busy search --users \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\"",
+        "dws calendar busy search --rooms \u003cROOM_ID_1\u003e,\u003cROOM_ID_2\u003e --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\""
+      ],
       "source_refs": [
-        "skills/mono/references/products/calendar.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.query_busy_status",
+        "skills/mono/references/products/calendar.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "calendar event create": {
+      "agent_summary": "创建新的日程，支持设置时间、参与者、提醒，以及预定会议室等功能。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "会议室/订会议室；创建新日程并订会议室",
+        "创建日程 — 提取 eventId",
+        "创建日程时直接指定参会人 + 会议室",
         "日程/会议/约会/日历；创建/约/给自己留时间块/个人日程"
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "examples": [
+        "dws calendar event create --title \"Q1 复盘会\" --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\"",
+        "dws calendar event create --title \"周会\" --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\" --attendees userId1,userId2"
+      ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.calendar.create_calendar_event",
         "skills/mono/references/products/calendar.md"
       ]
     },
     "calendar event delete": {
+      "agent_summary": "删除日程",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "日程/会议/约会/日历；取消/删除"
       ],
@@ -106,14 +181,19 @@
       "risk": "high",
       "confirmation": "user_required",
       "examples": [
-        "dws calendar event delete --id \u003cEVENT_ID\u003e --yes"
+        "dws calendar event delete --id \u003cEVENT_ID\u003e --yes",
+        "dws calendar event delete --id EVENT_ID --yes  # 查询 eventId: dws calendar event list"
       ],
       "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.delete_calendar_event",
         "skills/mono/SKILL.md",
-        "skills/mono/references/products/calendar.md"
+        "skills/mono/references/products/calendar.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "calendar event get": {
+      "agent_summary": "获取日程详情",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "日程/会议/约会/日历；详情"
       ],
@@ -124,24 +204,32 @@
         "dws calendar event get --id \u003cEVENT_ID\u003e --calendar-id primary"
       ],
       "source_refs": [
-        "skills/mono/references/products/calendar.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.get_calendar_detail",
+        "skills/mono/references/products/calendar.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "calendar event list": {
+      "agent_summary": "查询当前用户指定日历本下的日程列表，按起止时间检索。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "日程/会议/约会/日历；查看"
       ],
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws calendar event list --calendar-id primary",
-        "dws calendar event list --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\""
+        "dws calendar event list --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\"",
+        "dws calendar event list --calendar-id primary"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.calendar.list_calendar_events",
         "skills/mono/references/products/calendar.md"
       ]
     },
     "calendar event respond": {
+      "agent_summary": "作为日程参会人，设置自己的响应状态（接受、拒绝、暂定）。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "日程/会议/约会/日历；接受/拒绝/暂定日程"
       ],
@@ -151,37 +239,49 @@
         "dws calendar event respond --id \u003cEVENT_ID\u003e --status accepted",
         "dws calendar event respond --id \u003cEVENT_ID\u003e --status declined"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.calendar.respond",
         "skills/mono/references/products/calendar.md"
       ]
     },
     "calendar event suggest": {
+      "agent_summary": "根据参会人推荐可用时间",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "日程/会议/约会/日历；推荐时间/什么时候有空/协调时间"
       ],
       "examples": [
-        "dws calendar event suggest --start \"2026-03-10T09:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\" --users userId1",
-        "dws calendar event suggest --users userId1,userId2 --duration 60"
+        "dws calendar event suggest --users userId1,userId2 --duration 60",
+        "dws calendar event suggest --start \"2026-03-10T09:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\" --users userId1"
       ],
       "source_refs": [
-        "skills/mono/references/products/calendar.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.list_suggested_event_times",
+        "skills/mono/references/products/calendar.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "calendar event update": {
+      "agent_summary": "修改现有日程的信息，支持更新标题、时间、地点等任意字段，需要组织者权限。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "日程/会议/约会/日历；修改/改时间/改描述"
       ],
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
-        "dws calendar event update --id \u003cEVENT_ID\u003e --desc \"新描述\" --timezone Asia/Tokyo",
-        "dws calendar event update --id \u003cEVENT_ID\u003e --title \"新标题\""
+        "dws calendar event update --id \u003cEVENT_ID\u003e --title \"新标题\"",
+        "dws calendar event update --id \u003cEVENT_ID\u003e --desc \"新描述\" --timezone Asia/Tokyo"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.calendar.update_calendar_event",
         "skills/mono/references/products/calendar.md"
       ]
     },
     "calendar room add": {
+      "agent_summary": "预定会议室",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "会议室/订会议室；给已有日程订会议室",
         "预定会议室"
@@ -193,10 +293,14 @@
         "dws calendar room add --event \u003cEVENT_ID\u003e --rooms \u003cROOM_ID\u003e --format json"
       ],
       "source_refs": [
-        "skills/mono/references/products/calendar.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.add_meeting_room",
+        "skills/mono/references/products/calendar.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "calendar room delete": {
+      "agent_summary": "移除会议室",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "会议室/订会议室；取消预定"
       ],
@@ -205,14 +309,19 @@
       "risk": "high",
       "confirmation": "user_required",
       "examples": [
-        "dws calendar room delete --event \u003cEVENT_ID\u003e --rooms \u003cROOM_ID\u003e --yes"
+        "dws calendar room delete --event \u003cEVENT_ID\u003e --rooms \u003cROOM_ID\u003e --yes",
+        "dws calendar room delete --event EVENT_ID --rooms room1 --yes"
       ],
       "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.delete_meeting_room",
         "skills/mono/SKILL.md",
-        "skills/mono/references/products/calendar.md"
+        "skills/mono/references/products/calendar.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "calendar room list-groups": {
+      "agent_summary": "会议室分组列表",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "会议室/订会议室；分组"
       ],
@@ -223,10 +332,14 @@
         "dws calendar room list-groups --limit 20 --page 0"
       ],
       "source_refs": [
-        "skills/mono/references/products/calendar.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.list_meeting_room_groups",
+        "skills/mono/references/products/calendar.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "calendar room search": {
+      "agent_summary": "查询 [startTime, endTime] 时间段内所有可用的会议室。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "会议室/订会议室；哪个空闲",
         "会议室/订会议室；按名找会议室（如「永澄亭」「永澄亭会议室」「约西湖厅」）",
@@ -239,7 +352,9 @@
         "dws calendar room search --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\"",
         "dws calendar room search --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\" --group-id \u003cGROUP_ID\u003e"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.calendar.query_available_meeting_room",
         "skills/mono/references/products/calendar.md"
       ]
     }

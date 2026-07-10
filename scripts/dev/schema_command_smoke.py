@@ -261,12 +261,43 @@ def one_of_cases(leaf: dict[str, Any]) -> list[tuple[str, ...]]:
     return cases or [()]
 
 
+def required_when_matches(
+    expression: str,
+    params: dict[str, Any],
+    selected_params: set[str],
+    canonical_path: str,
+) -> bool:
+    expression = expression.strip()
+    value_match = re.fullmatch(r"([a-zA-Z0-9_.-]+) is (.+)", expression)
+    if value_match:
+        controller, expected_raw = value_match.groups()
+        controller_param = params.get(controller) or {}
+        if controller in selected_params:
+            actual = value_for(controller, controller_param, canonical_path)
+            actual_value = "true" if actual is None else str(actual)
+        elif controller_param.get("default") not in (None, ""):
+            actual_value = str(controller_param["default"])
+        else:
+            return False
+        expected = [item.strip() for item in re.split(r"\s+or\s+", expected_raw)]
+        return actual_value in expected
+
+    any_flag_match = re.fullmatch(
+        r"any ([a-zA-Z0-9_.-]+)\* flag is provided", expression
+    )
+    if any_flag_match:
+        prefix = any_flag_match.group(1)
+        return any(name.startswith(prefix) for name in selected_params)
+    return False
+
+
 def selected_inputs(
     leaf: dict[str, Any],
     include_optional: bool,
     one_of_choices: tuple[str, ...] = (),
 ) -> tuple[set[str], set[str]]:
     params = leaf.get("parameters") or {}
+    canonical_path = str(leaf.get("canonical_path", ""))
     positionals = {
         str(item.get("name")): item
         for item in (leaf.get("positionals") or [])
@@ -311,6 +342,15 @@ def selected_inputs(
             for name in group:
                 if not is_selected(name) and select(name):
                     changed = True
+        for name, param in params.items():
+            if name in selected_params:
+                continue
+            required_when = str((param or {}).get("required_when", ""))
+            if required_when_matches(
+                required_when, params, selected_params, canonical_path
+            ):
+                selected_params.add(name)
+                changed = True
 
     for group in constraint_groups(leaf, "mutually_exclusive"):
         selected = [name for name in group if is_selected(name)]

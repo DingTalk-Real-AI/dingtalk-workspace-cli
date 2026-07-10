@@ -14,6 +14,8 @@
 package app
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -21,11 +23,48 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
+	"github.com/spf13/cobra"
 )
+
+func TestSchemaOnlyRootSkipsRuntimeDiscoveryAndPlugins(t *testing.T) {
+	original := loadDynamicCommandsFn
+	var dynamicBuilds atomic.Int32
+	loadDynamicCommandsFn = func(context.Context, executor.Runner) []*cobra.Command {
+		dynamicBuilds.Add(1)
+		return nil
+	}
+	t.Cleanup(func() { loadDynamicCommandsFn = original })
+
+	ctx := context.WithValue(context.Background(), rootBuildProfileContextKey{}, rootBuildProfileSchemaOnly)
+	root := NewRootCommand(ctx)
+	var stdout, stderr bytes.Buffer
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"schema", "--format", "json"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("schema Execute() error = %v\nstderr:\n%s", err, stderr.String())
+	}
+	if got := dynamicBuilds.Load(); got != 0 {
+		t.Fatalf("dynamic command builds = %d, want 0", got)
+	}
+	var payload struct {
+		Count int `json:"count"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("decode schema output: %v", err)
+	}
+	if payload.Count == 0 {
+		t.Fatal("embedded schema catalog is empty")
+	}
+}
 
 func TestRootConstructionRegistersOverlayWithoutCallingMCPEndpoint(t *testing.T) {
 	withCleanDynamicRegistry(t)
+	previousEdition := edition.Get()
+	edition.Override(&edition.Hooks{Name: "discovery-test"})
+	t.Cleanup(func() { edition.Override(previousEdition) })
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	t.Setenv(cli.CacheDirEnv, t.TempDir())
 	t.Setenv(cli.CatalogFixtureEnv, "")

@@ -140,3 +140,173 @@ func TestClassifyEffectVerbIncludesLocalPolicyCommands(t *testing.T) {
 		}
 	}
 }
+
+func TestGenerateRecursesProductReferencesAndJoinsMultilineExamples(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "skills/mono/SKILL.md", "# DWS\n## 意图判断决策树\n用户提到\"表格\" → `sheet`\n")
+	writeFixture(t, root, "skills/mono/references/intent-guide.md", "# Intent guide\n")
+	writeFixture(t, root, "skills/mono/references/products/sheet.md", "# Sheet\n")
+	writeFixture(t, root, "skills/mono/references/products/sheet/sheet-style.md", "# Style\n"+
+		"## 使用场景\n"+
+		"用户说\"设置样式\":\n"+
+		"- 只改样式 → `range set-style`\n\n"+
+		"```bash\n"+
+		"# 设置单元格样式\n"+
+		"dws sheet range set-style --node node-1 \\\n"+
+		"  --sheet-id sheet-1 --range A1:B2 --bg-color '#FFFFFF'\n"+
+		"```\n")
+
+	metadata, stats, err := Generate(Options{
+		Root:            root,
+		SkillPath:       "skills/mono/SKILL.md",
+		ProductsDir:     "skills/mono/references/products",
+		IntentGuidePath: "skills/mono/references/intent-guide.md",
+		ToolPaths: map[string]string{
+			"sheet range set-style": "sheet range set-style",
+		},
+		ProductIDs:       map[string]bool{"sheet": true},
+		SurfaceToolCount: 1,
+	})
+	if err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	tool, ok := metadata.Tools["sheet range set-style"]
+	if !ok {
+		t.Fatalf("recursive sheet metadata missing: %#v", metadata.Tools)
+	}
+	if len(tool.UseWhen) != 2 || len(tool.Examples) != 1 {
+		t.Fatalf("tool metadata = %#v", tool)
+	}
+	wantExample := "dws sheet range set-style --node node-1 --sheet-id sheet-1 --range A1:B2 --bg-color '#FFFFFF'"
+	if tool.Examples[0] != wantExample {
+		t.Fatalf("example = %q, want %q", tool.Examples[0], wantExample)
+	}
+	if stats.SourceFiles != 4 || stats.UnmatchedTools != 0 {
+		t.Fatalf("stats = %#v", stats)
+	}
+	if len(stats.SourceProducts) != 1 || stats.SourceProducts[0] != "sheet" {
+		t.Fatalf("source products = %#v", stats.SourceProducts)
+	}
+}
+
+func TestGenerateReportsUnmatchedReferenceLocationsAndCandidates(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "skills/mono/SKILL.md", "# DWS\n## 意图判断决策树\n用户提到\"表格\" → `sheet`\n")
+	writeFixture(t, root, "skills/mono/references/intent-guide.md", "# Intent guide\n")
+	writeFixture(t, root, "skills/mono/references/products/sheet.md", "# Sheet\n")
+	writeFixture(t, root, "skills/mono/references/products/sheet/style.md", "# Style\n"+
+		"## 使用场景\n"+
+		"用户说\"使用旧样式命令\":\n"+
+		"- 设置样式 → `range set-styles`\n\n"+
+		"Usage:\n"+
+		"  dws sheet range set-style [flags]\n")
+
+	metadata, stats, err := Generate(Options{
+		Root:            root,
+		SkillPath:       "skills/mono/SKILL.md",
+		ProductsDir:     "skills/mono/references/products",
+		IntentGuidePath: "skills/mono/references/intent-guide.md",
+		ToolPaths: map[string]string{
+			"sheet range set-style": "sheet range set-style",
+		},
+		ProductIDs:       map[string]bool{"sheet": true, "live": true},
+		SurfaceToolCount: 1,
+	})
+	if err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	if stats.UnmatchedTools != 1 || len(stats.UnmatchedReferences) != 1 {
+		t.Fatalf("unmatched stats = %#v", stats)
+	}
+	unmatched := stats.UnmatchedReferences[0]
+	if unmatched.ToolPath != "sheet range set-styles" || unmatched.Line != 4 {
+		t.Fatalf("unmatched reference = %#v", unmatched)
+	}
+	if unmatched.Source != "skills/mono/references/products/sheet/style.md" {
+		t.Fatalf("unmatched source = %q", unmatched.Source)
+	}
+	if len(unmatched.Candidates) == 0 || unmatched.Candidates[0] != "sheet range set-style" {
+		t.Fatalf("unmatched candidates = %#v", unmatched.Candidates)
+	}
+	if len(stats.SurfaceProductsWithoutRouting) != 1 || stats.SurfaceProductsWithoutRouting[0] != "live" {
+		t.Fatalf("surface products without routing = %#v", stats.SurfaceProductsWithoutRouting)
+	}
+	audit := BuildAudit(metadata, stats)
+	if len(audit.UnmatchedReferences) != 1 || audit.Coverage.UnmatchedSkillTools != 1 {
+		t.Fatalf("audit = %#v", audit)
+	}
+}
+
+func TestGenerateMergesVersionedHintsByCanonicalPath(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "skills/mono/SKILL.md", "# DWS\n## 意图判断决策树\n用户提到\"日程\" → `calendar`\n")
+	writeFixture(t, root, "skills/mono/references/intent-guide.md", "# Intent guide\n")
+	writeFixture(t, root, "skills/mono/references/products/calendar.md", "# Calendar\n")
+	writeFixture(t, root, "skills/mono/schema-hints/imported/wukong.json", `{
+  "version": 1,
+  "source": {"kind": "imported", "name": "dws-wukong", "revision": "1234567890abcdef"},
+  "products": {
+    "calendar": {"agent_summary": "管理日历日程"}
+  },
+  "tools": {
+    "calendar.get_calendar_detail": {
+      "agent_summary": "获取日程详情",
+      "risk": "high",
+      "confirmation": "user_required",
+      "examples": ["dws calendar event get --id EVENT_ID"]
+    }
+  }
+}`)
+	writeFixture(t, root, "skills/mono/schema-hints/calendar.json", `{
+  "version": 1,
+  "source": {"kind": "explicit", "name": "schema-review"},
+  "tools": {
+    "calendar.get_calendar_detail": {
+      "agent_summary": "读取一个日程的完整详情",
+      "use_when": ["已经取得 eventId，需要查看详情"],
+      "reviewed": true
+    },
+    "aitable.base_copy": {
+      "interface_ref": {"product_id": "aitable", "rpc_name": "copy_base"}
+    }
+  }
+}`)
+
+	metadata, stats, err := Generate(Options{
+		Root:            root,
+		SkillPath:       "skills/mono/SKILL.md",
+		ProductsDir:     "skills/mono/references/products",
+		IntentGuidePath: "skills/mono/references/intent-guide.md",
+		HintsDir:        "skills/mono/schema-hints",
+		ToolPaths: map[string]string{
+			"calendar.get_calendar_detail": "calendar event get",
+			"calendar event get":           "calendar event get",
+			"aitable.base_copy":            "aitable base copy",
+		},
+		ProductIDs:       map[string]bool{"calendar": true, "aitable": true},
+		SurfaceToolCount: 2,
+	})
+	if err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	product := metadata.Products["calendar"]
+	if product.AgentSummary != "管理日历日程" || product.AgentSummarySource != "dws-wukong@1234567890ab" {
+		t.Fatalf("product metadata = %#v", product)
+	}
+	tool := metadata.Tools["calendar event get"]
+	if tool.AgentSummary != "读取一个日程的完整详情" || tool.AgentSummarySource != "schema-review" {
+		t.Fatalf("tool summary = %#v", tool)
+	}
+	if len(tool.Examples) != 1 || len(tool.UseWhen) != 1 || tool.Risk != "high" || tool.Confirmation != "user_required" {
+		t.Fatalf("merged tool metadata = %#v", tool)
+	}
+	if tool.Reviewed == nil || !*tool.Reviewed {
+		t.Fatalf("reviewed = %#v", tool.Reviewed)
+	}
+	if stats.HintFiles != 2 || stats.HintTools != 2 || metadata.Coverage.ToolsWithSummary != 1 {
+		t.Fatalf("hint stats = %#v coverage=%#v", stats, metadata.Coverage)
+	}
+	if _, exists := metadata.Tools["aitable base copy"]; exists {
+		t.Fatal("interface-only hint must not create Agent metadata")
+	}
+}

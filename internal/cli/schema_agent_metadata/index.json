@@ -1,13 +1,14 @@
 {
   "version": 1,
-  "source_hash": "sha256:2a8994db5beb9389d5b0a2cf201e67c7160f3d23156996e5747b85bc8474ff74",
-  "surface_hash": "sha256:bd65a90baa1568a7126eac505e3e1c7f943583333fb7ed6ef56413ca98d2c83f",
+  "source_hash": "sha256:b586fcc360af51716391806bd3b6b5c8600318952f79d405feac30ff199b9fa6",
+  "surface_hash": "sha256:850109b2cca4b17666eccc8cd6adbe4326773251ff62f2328a291ade02049673",
   "coverage": {
-    "surface_products": 23,
-    "products_with_metadata": 19,
-    "surface_tools": 511,
-    "tools_with_metadata": 304,
-    "unmatched_skill_tools": 86
+    "surface_products": 21,
+    "products_with_metadata": 21,
+    "surface_tools": 504,
+    "tools_with_metadata": 461,
+    "tools_with_agent_summary": 423,
+    "unmatched_skill_tools": 99
   },
   "products": {
     "aisearch": {
@@ -19,6 +20,8 @@
       ]
     },
     "aitable": {
+      "agent_summary": "AI 表格操作",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "帮我建一个项目跟踪表；创建数据表格",
         "表格/多维表/AI表格/记录/数据/视图/图表/仪表盘"
@@ -27,42 +30,68 @@
         "帮我记一下明天要做的事；创建个人待办"
       ],
       "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json",
         "skills/mono/SKILL.md",
-        "skills/mono/references/intent-guide.md"
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "attendance": {
+      "agent_summary": "考勤打卡 / 排班 / 统计",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "考勤/打卡/排班"
       ],
       "source_refs": [
-        "skills/mono/SKILL.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.attendance.prod.json",
+        "skills/mono/SKILL.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "calendar": {
+      "agent_summary": "日历日程 / 会议室 / 闲忙查询",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "帮我建一个明天下午的日程；日历日程",
         "日程/日历/会议室/约会/时间建议"
       ],
       "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json",
         "skills/mono/SKILL.md",
-        "skills/mono/references/intent-guide.md"
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "chat": {
+      "agent_summary": "群聊 / 消息 / 机器人",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "群聊/建群/群成员/群管理/发消息/发图片消息/发文件消息/发 Markdown 消息/截图发钉钉/转发消息/引用回复/@我/特别关注消息/机器人发消息/Webhook/机器人群发/机器人单聊/通知"
       ],
       "source_refs": [
-        "skills/mono/SKILL.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json",
+        "skills/mono/SKILL.md",
+        "skills/mono/schema-hints/imported/wukong.json"
+      ]
+    },
+    "conference": {
+      "agent_summary": "视频会议 / 预约",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.conference.prod.json",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "contact": {
+      "agent_summary": "通讯录 / 用户 / 部门",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "通讯录/同事/部门/组织架构/子部门/部门多少人/离职员工/离职名单/离职花名册/花名册/员工档案/学历/家庭/银行卡/紧急联系人/合同/角色/主管角色/管理员角色/财务/HR/特别关注/星标联系人"
       ],
       "source_refs": [
-        "skills/mono/SKILL.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json",
+        "skills/mono/SKILL.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "dev": {
@@ -74,64 +103,100 @@
       ]
     },
     "devdoc": {
+      "agent_summary": "开放平台文档搜索",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "开发/API/调用错误 文档",
         "搜一下 OAuth2 接入文档；搜索开发文档",
         "查询开放平台 API 错误码/字段说明；搜索开放平台接口文档"
       ],
       "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.devdoc.prod.json",
         "skills/mono/SKILL.md",
-        "skills/mono/references/intent-guide.md"
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "ding": {
+      "agent_summary": "DING 消息 / 发送 / 撤回",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "DING/紧急消息/电话提醒"
       ],
       "source_refs": [
-        "skills/mono/SKILL.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.ding.prod.json",
+        "skills/mono/SKILL.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "doc": {
+      "agent_summary": "钉钉文档管理",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "钉钉文档/云文档/读写文档/知识库里的文档/浏览知识库内容/知识库内搜索文档/块级编辑/文档评论/文档复制移动"
       ],
       "source_refs": [
-        "skills/mono/SKILL.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json",
+        "skills/mono/SKILL.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "drive": {
+      "agent_summary": "钉盘文件管理",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "云盘/文件存储/文件上传下载/文件夹"
       ],
       "source_refs": [
-        "skills/mono/SKILL.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.drive.prod.json",
+        "skills/mono/SKILL.md",
+        "skills/mono/schema-hints/imported/wukong.json"
+      ]
+    },
+    "live": {
+      "agent_summary": "直播列表 / 信息",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.live.prod.json",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "mail": {
+      "agent_summary": "邮箱 / 邮件收发",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "邮箱/邮件/发邮件/收邮件/搜邮件/查邮件/邮件草稿/转发邮件/回复邮件/邮件附件/抄送"
       ],
       "source_refs": [
-        "skills/mono/SKILL.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json",
+        "skills/mono/SKILL.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "minutes": {
+      "agent_summary": "AI 听记 / 会议纪要：列表 / 详情 / 摘要 / 转写 / 待办 / 思维导图 / 发言人 / 热词 / 文件上传",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "听记/AI听记/会议纪要/转写/摘要/思维导图/发言人/热词"
       ],
       "source_refs": [
-        "skills/mono/SKILL.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json",
+        "skills/mono/SKILL.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "oa": {
+      "agent_summary": "OA 审批 / 同意 / 拒绝 / 撤销",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "审批/请假/报销/出差/加班/同意/拒绝/撤销审批",
         "帮我提交请假审批；发起审批"
       ],
       "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json",
         "skills/mono/SKILL.md",
-        "skills/mono/references/intent-guide.md"
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "pat": {
@@ -143,6 +208,8 @@
       ]
     },
     "report": {
+      "agent_summary": "日志：模版 / 收件箱 / 发件箱 / 单条详情 / 统计（资源.动词命令树，与 mail 对齐）",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "帮我看看收到的日报；日志收件箱",
         "日志/日报/周报/日志统计/写日报/提交周报/发日志/填日志"
@@ -151,19 +218,27 @@
         "帮我创建一个待办提醒；个人待办"
       ],
       "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json",
         "skills/mono/SKILL.md",
-        "skills/mono/references/intent-guide.md"
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "sheet": {
+      "agent_summary": "钉钉表格管理",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "在线电子表格/钉钉表格/axls/工作表/单元格读写/合并单元格/筛选视图/导出 xlsx"
       ],
       "source_refs": [
-        "skills/mono/SKILL.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.sheet.prod.json",
+        "skills/mono/SKILL.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "todo": {
+      "agent_summary": "待办任务管理",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "帮我创建一个待办提醒；个人待办",
         "帮我记一下明天要做的事；创建个人待办",
@@ -174,8 +249,10 @@
         "帮我看看收到的日报；日志收件箱"
       ],
       "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.todo.prod.json",
         "skills/mono/SKILL.md",
-        "skills/mono/references/intent-guide.md"
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "wiki": {
@@ -199,11 +276,13 @@
     "ding",
     "doc",
     "drive",
+    "live",
     "mail",
     "minutes",
     "oa",
     "pat",
     "report",
+    "sheet",
     "todo",
     "wiki"
   ]

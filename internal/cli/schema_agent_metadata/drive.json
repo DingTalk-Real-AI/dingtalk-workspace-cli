@@ -1,7 +1,20 @@
 {
   "product_id": "drive",
   "tools": {
+    "drive commit": {
+      "agent_summary": "提交文件上传",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+      "examples": [
+        "dws drive commit --file-name \"报告.pdf\" --file-size 102400 --upload-id \u003cuploadId\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.drive.prod.json#drive.commit_upload",
+        "skills/mono/schema-hints/imported/wukong.json"
+      ]
+    },
     "drive copy": {
+      "agent_summary": "将指定节点复制到目标文件夹。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "── 场景 A: 复制到知识库空间根目录 ──",
         "── 场景 C: 复制到钉盘子文件夹 ──",
@@ -12,26 +25,37 @@
         "dws drive copy --node \u003cID\u003e [--folder \u003cTARGET\u003e] [--workspace \u003cWS\u003e]",
         "dws drive copy --node \u003c源文件dentryUuid\u003e --folder \u003c我的文件rootFolderId\u003e --format json"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.drive.copy_document",
         "skills/mono/references/products/drive.md"
       ]
     },
     "drive delete": {
+      "agent_summary": "将指定节点移入回收站，30 天内可从回收站恢复，超过 30 天将被永久删除。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "删除文件/删除文件夹/移到回收站",
         "正确流程：1.向用户展示\"即将删除「文件名」到回收站\" → 2.等用户确认 → 3.执行下面命令"
       ],
-      "effect": "write",
-      "effect_source": "command-verb",
+      "effect": "destructive",
+      "effect_source": "agent-hint",
+      "risk": "high",
+      "confirmation": "user_required",
       "examples": [
         "dws drive delete --node \u003cdentryUuid\u003e --format json    # 查询 fileId: dws drive list",
         "dws drive delete --node \u003cdentryUuid\u003e --yes --format json"
       ],
+      "reviewed": false,
       "source_refs": [
-        "skills/mono/references/products/drive.md"
+        "internal/cli/schema_mcp_metadata.json#tools.drive.delete_document",
+        "skills/mono/references/products/drive.md",
+        "skills/mono/schema-hints/destructive-safety.json"
       ]
     },
     "drive download": {
+      "agent_summary": "获取文件下载链接",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "4. 下载文件到本地",
         "下载文件",
@@ -44,10 +68,14 @@
         "dws drive download --node \u003cdentryUuid\u003e --output ./report.pdf"
       ],
       "source_refs": [
-        "skills/mono/references/products/drive.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.drive.prod.json#drive.download_file",
+        "skills/mono/references/products/drive.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "drive info": {
+      "agent_summary": "获取文件元数据信息",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "3. 查看文件元数据",
         "文件详情/文件信息"
@@ -59,10 +87,14 @@
         "dws drive info --node \u003cdentryUuid\u003e --format json"
       ],
       "source_refs": [
-        "skills/mono/references/products/drive.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.drive.prod.json#drive.get_file_info",
+        "skills/mono/references/products/drive.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "drive list": {
+      "agent_summary": "获取文件/文件夹列表",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "1. 浏览「我的文件」根目录",
         "2. 进入子目录 — 提取 dentryUuid 作为 folder",
@@ -78,10 +110,14 @@
         "dws drive list --limit 20"
       ],
       "source_refs": [
-        "skills/mono/references/products/drive.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.drive.prod.json#drive.list_files",
+        "skills/mono/references/products/drive.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "drive list-spaces": {
+      "agent_summary": "获取当前用户可访问的空间列表。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "── 场景 B: 移动到另一个钉盘 space 根目录 ──",
         "── 场景 默认: 复制/移动到「我的文件」根目录 ──",
@@ -93,24 +129,32 @@
         "dws drive list-spaces",
         "dws drive list-spaces --space-type mySpace"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.drive.list_spaces",
         "skills/mono/references/products/drive.md"
       ]
     },
     "drive mkdir": {
+      "agent_summary": "创建文件夹",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "5. 创建文件夹",
         "新建文件夹/创建目录"
       ],
       "examples": [
-        "dws drive mkdir --name \"子目录\" --folder \u003cdentryUuid\u003e",
-        "dws drive mkdir --name \"项目资料\""
+        "dws drive mkdir --name \"项目资料\"",
+        "dws drive mkdir --name \"子目录\" --folder \u003cdentryUuid\u003e"
       ],
       "source_refs": [
-        "skills/mono/references/products/drive.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.drive.prod.json#drive.create_folder",
+        "skills/mono/references/products/drive.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "drive move": {
+      "agent_summary": "将指定节点移动到目标文件夹。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "── 场景 B: 移动到另一个钉盘 space 根目录 ──"
       ],
@@ -120,11 +164,15 @@
         "dws drive move --node \u003cID\u003e [--folder \u003cTARGET\u003e] [--workspace \u003cWS\u003e]",
         "dws drive move --node \u003c源文件dentryUuid\u003e --folder \u003c目标space的rootFolderId\u003e --format json"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.drive.move_document",
         "skills/mono/references/products/drive.md"
       ]
     },
     "drive permission add": {
+      "agent_summary": "为知识库下的节点（文档、文件夹、文件）添加指定角色的企业用户成员（仅支持 USER 类型）。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "给文档授权/分享权限"
       ],
@@ -133,41 +181,60 @@
       "examples": [
         "dws drive permission add --node \u003cID\u003e --users uid1,uid2 --role READER"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.drive.add_permission",
         "skills/mono/references/products/drive.md"
       ]
     },
     "drive permission list": {
+      "agent_summary": "查询知识库节点当前的成员权限列表。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
         "dws drive permission list --node \u003cID\u003e"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.drive.list_permission",
         "skills/mono/references/products/drive.md"
       ]
     },
     "drive permission remove": {
-      "effect": "write",
-      "effect_source": "command-verb",
+      "agent_summary": "从知识库节点移除指定企业用户的权限（仅支持 USER 类型）。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "destructive",
+      "effect_source": "agent-hint",
+      "risk": "high",
+      "confirmation": "user_required",
       "examples": [
         "dws drive permission remove --node \u003cID\u003e --users uid1"
       ],
+      "reviewed": false,
       "source_refs": [
-        "skills/mono/references/products/drive.md"
+        "internal/cli/schema_mcp_metadata.json#tools.drive.permission_remove",
+        "skills/mono/references/products/drive.md",
+        "skills/mono/schema-hints/destructive-safety.json"
       ]
     },
     "drive permission update": {
+      "agent_summary": "修改企业用户在知识库节点上的角色（仅支持 USER 类型）。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
         "dws drive permission update --node \u003cID\u003e --users uid1 --role EDITOR"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.drive.permission_update",
         "skills/mono/references/products/drive.md"
       ]
     },
     "drive rename": {
+      "agent_summary": "对指定节点进行重命名。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "重命名/改名"
       ],
@@ -176,11 +243,15 @@
       "examples": [
         "dws drive rename --node \u003cID\u003e --name \"新名称\""
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.drive.rename_document",
         "skills/mono/references/products/drive.md"
       ]
     },
     "drive search": {
+      "agent_summary": "在钉盘空间中搜索文件、文件夹或空间，支持通过 searchTarget 参数切换搜索目标。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "搜索钉盘文件/钉盘里找个文件/查找某个钉盘文件/钉盘中搜索",
         "查看具体命令的完整参数说明",
@@ -192,7 +263,9 @@
         "dws drive search --help",
         "dws drive search --query \"季度汇报\""
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.drive.search_files",
         "skills/mono/references/products/drive.md"
       ]
     },
@@ -205,11 +278,23 @@
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
-        "dws drive upload --file ./report.pdf",
-        "dws drive upload --help"
+        "dws drive upload --help",
+        "dws drive upload --file ./report.pdf"
       ],
       "source_refs": [
         "skills/mono/references/products/drive.md"
+      ]
+    },
+    "drive upload-info": {
+      "agent_summary": "获取文件上传信息",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+      "examples": [
+        "dws drive upload-info --file-name \"报告.pdf\" --file-size 102400",
+        "dws drive upload-info --file-name \"readme.txt\" --file-size 1024 --parent-id \u003cdentryUuid\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.drive.prod.json#drive.get_upload_info",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     }
   }

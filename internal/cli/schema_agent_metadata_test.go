@@ -34,7 +34,12 @@ func TestRuntimeSchemaIncludesEmbeddedAgentMetadata(t *testing.T) {
 		Version:    1,
 		SourceHash: "sha256:test",
 		Products: map[string]agentProductMetadata{
-			"doc": {UseWhen: []string{"需要创建或读取文档"}},
+			"doc": {
+				AgentSummary:       "创建、读取和维护钉钉文档",
+				AgentSummarySource: "test-source",
+				UseWhen:            []string{"需要创建或读取文档"},
+				SourceRefs:         []string{"skills/mono/SKILL.md"},
+			},
 		},
 		Tools: map[string]agentToolMetadata{
 			"doc create": {
@@ -84,8 +89,14 @@ func TestRuntimeSchemaIncludesEmbeddedAgentMetadata(t *testing.T) {
 	compact := compactSchemaOverviewPayload(catalog)
 	compactProducts, _ := compact["products"].([]map[string]any)
 	compactDoc := findSchemaProduct(compactProducts, "doc")
-	if useWhen, _ := compactDoc["use_when"].([]string); len(useWhen) != 1 {
-		t.Fatalf("compact product use_when = %#v", compactDoc["use_when"])
+	if compactDoc["agent_summary"] != "创建、读取和维护钉钉文档" {
+		t.Fatalf("compact product summary = %#v", compactDoc)
+	}
+	if _, exists := compactDoc["agent_source_refs"]; exists {
+		t.Fatalf("compact product must omit provenance: %#v", compactDoc)
+	}
+	if _, exists := compactDoc["use_when"]; exists {
+		t.Fatalf("compact product with summary must omit routing expansion: %#v", compactDoc)
 	}
 }
 
@@ -130,9 +141,16 @@ func TestHelperSchemaIncludesEmbeddedAgentMetadata(t *testing.T) {
 func TestRuntimeSchemaReportsEmbeddedInterfaceMetadata(t *testing.T) {
 	previous := runtimeEmbeddedMCPMetadata
 	runtimeEmbeddedMCPMetadata = embeddedMCPMetadata{
-		Version:    1,
-		Source:     "cli-registry",
-		SourceHash: "sha256:interface-test",
+		Version:        1,
+		Source:         "cli-registry",
+		SourceRevision: "revision-test",
+		SourceHash:     "sha256:interface-test",
+		Coverage: embeddedMCPMetadataCoverage{
+			SourceTools:    10,
+			SurfaceTools:   2,
+			MatchedTools:   1,
+			UnmatchedTools: 1,
+		},
 		Tools: map[string]embeddedMCPToolMetadata{
 			"doc.create_document": {Description: "创建文档"},
 		},
@@ -146,6 +164,9 @@ func TestRuntimeSchemaReportsEmbeddedInterfaceMetadata(t *testing.T) {
 	summary, _ := catalog["interface_metadata"].(map[string]any)
 	if summary["source"] != "cli-registry" || summary["source_hash"] != "sha256:interface-test" || summary["tool_count"] != 1 {
 		t.Fatalf("interface metadata summary = %#v", summary)
+	}
+	if summary["source_revision"] != "revision-test" || summary["coverage"] == nil {
+		t.Fatalf("interface metadata provenance = %#v", summary)
 	}
 
 	compact := compactSchemaOverviewPayload(catalog)

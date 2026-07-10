@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "destructive-safety-review"
+  },
+  "tools": {
+    "aitable.advperm_role_delete": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "aitable.section_delete": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "aitable.advperm_disable": { "effect": "write", "risk": "high", "confirmation": "user_required" },
+    "aitable.workflow_disable": { "effect": "write", "risk": "high", "confirmation": "user_required" },
+    "chat.recall_message": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "chat.remove_custom_group_role": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "chat.remove_custom_user_roles": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "chat.remove_robot_in_group": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "dev.remove_dev_app_members": { "agent_summary": "移除开放平台应用的协作成员", "effect": "destructive", "risk": "high", "confirmation": "user_required", "reviewed": true },
+    "dev.remove_dev_app_permissions": { "agent_summary": "移除开放平台应用已授予的权限点", "effect": "destructive", "risk": "high", "confirmation": "user_required", "reviewed": true },
+    "dev.disable_dev_app": { "agent_summary": "停用开放平台应用，停用后应用能力对外不可用（可重新启用）", "effect": "write", "risk": "high", "confirmation": "user_required", "reviewed": true },
+    "dev.disable_dev_app_robot": { "agent_summary": "停用开放平台应用的机器人（可重新启用）", "effect": "write", "risk": "high", "confirmation": "user_required", "reviewed": true },
+    "doc.remove_permission": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "drive.delete_document": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "drive.permission_remove": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "mail.batch_delete_message": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "mail.batch_delete_user_mail_contacts": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "mail.delete_mail_folder": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "mail.delete_user_message_template": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "minutes.remove_member_permission": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "sheet.delete_cond_format": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "sheet.delete_dimension": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "sheet.delete_dropdown_lists": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "sheet.delete_filter": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "sheet.delete_filter_view": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "sheet.delete_float_image": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "sheet.delete_sheet": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "sheet.filter_view_delete_criteria": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "todo.delete_todo_comment": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "todo.remove_task_executors": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "todo.remove_task_participants": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "wiki.delete_document": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "wiki.delete_wikiSpace": { "effect": "destructive", "risk": "high", "confirmation": "user_required" },
+    "wiki.remove_member": { "effect": "destructive", "risk": "high", "confirmation": "user_required" }
+  }
+}

@@ -2,8 +2,11 @@
   "product_id": "oa",
   "tools": {
     "oa approval approve": {
+      "agent_summary": "同意审批",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
-        "4a. 同意审批"
+        "4a. 同意审批",
+        "同意审批/批准"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -12,10 +15,15 @@
         "dws oa approval approve --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e --remark \"同意\""
       ],
       "source_refs": [
-        "skills/mono/references/products/oa.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.approve_processInstance",
+        "skills/mono/references/products/oa.md",
+        "skills/mono/references/products/simple.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "oa approval detail": {
+      "agent_summary": "获取审批实例详情",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "2. 查看审批详情 — 了解审批内容",
         "审批详情/看审批"
@@ -27,10 +35,14 @@
         "dws oa approval detail --instance-id \u003cprocessInstanceId\u003e --format json"
       ],
       "source_refs": [
-        "skills/mono/references/products/oa.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.get_processInstance_detail",
+        "skills/mono/references/products/oa.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "oa approval list-cc": {
+      "agent_summary": "获取抄送用户的列表",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "11. 抄送我的审批单",
         "抄送我的审批单"
@@ -41,11 +53,15 @@
         "dws oa approval list-cc --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词",
         "dws oa approval list-cc --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词 --format json"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.oa.get_noticed_instances",
         "skills/mono/references/products/oa.md"
       ]
     },
     "oa approval list-executed": {
+      "agent_summary": "获取员工已处理任务列表",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "9. 我处理过的审批单",
         "我审批/处理过的审批单"
@@ -56,11 +72,15 @@
         "dws oa approval list-executed --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词",
         "dws oa approval list-executed --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词 --format json"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.oa.get_done_tasks",
         "skills/mono/references/products/oa.md"
       ]
     },
     "oa approval list-forms": {
+      "agent_summary": "获取当前用户可见的审批表单列表",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "7. 获取可见审批表单（得到 processCode）",
         "有哪些审批表单/可见表单"
@@ -72,26 +92,38 @@
         "dws oa approval list-forms --cursor 0 --size 100 --format json"
       ],
       "source_refs": [
-        "skills/mono/references/products/oa.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.list_user_visible_process",
+        "skills/mono/references/products/oa.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "oa approval list-initiated": {
+      "agent_summary": "查询已发起的审批实例列表",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
+        "8. 查看自己发起的审批列表（--process-code 来自 list-forms 或 detail）",
         "我发起的审批"
       ],
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws oa approval list-initiated --process-code \u003ccode\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --next-token 0 --max-results 20"
+        "dws oa approval list-initiated --process-code \u003ccode\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --next-token 0 --max-results 20",
+        "dws oa approval list-initiated --process-code \u003ccode\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --next-token 0 --max-results 20 --format json"
       ],
       "source_refs": [
-        "skills/mono/references/products/oa.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.list_initiated_instances",
+        "skills/mono/references/products/oa.md",
+        "skills/mono/references/products/simple.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "oa approval list-pending": {
+      "agent_summary": "查询待我处理的审批",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "1. 查看待我处理的审批 — 提取 processInstanceId",
-        "待审批/待处理审批"
+        "待审批/待处理审批",
+        "待我审批/我要审批的"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -100,10 +132,15 @@
         "dws oa approval list-pending --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --query 关键词"
       ],
       "source_refs": [
-        "skills/mono/references/products/oa.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.list_pending_approvals",
+        "skills/mono/references/products/oa.md",
+        "skills/mono/references/products/simple.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "oa approval list-submitted": {
+      "agent_summary": "获取已提交实例列表",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "10. 我发起的审批单",
         "我发起的审批单"
@@ -114,11 +151,15 @@
         "dws oa approval list-submitted --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词",
         "dws oa approval list-submitted --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词 --format json"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.oa.get_submitted_instances",
         "skills/mono/references/products/oa.md"
       ]
     },
     "oa approval oa-cc-noticer": {
+      "agent_summary": "抄送审批人",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "14. 对审批实例进行抄送（processInstanceId 来自 list-pending 或 detail）",
         "抄送审批/添加抄送人"
@@ -129,11 +170,15 @@
         "dws oa approval oa-cc-noticer --instance-id \u003cprocessInstanceId\u003e --user-list \"68674200835816\"",
         "dws oa approval oa-cc-noticer --instance-id \u003cprocessInstanceId\u003e --user-list \"userId1,userId2\""
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.oa.oa_cc_noticer",
         "skills/mono/references/products/oa.md"
       ]
     },
     "oa approval oa-comments": {
+      "agent_summary": "用户添加审批评论",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "13. 对审批实例添加评论（processInstanceId 来自 list-pending 或 detail）",
         "评论审批/添加评论/写评论"
@@ -144,11 +189,15 @@
         "dws oa approval oa-comments --instance-id \u003cprocessInstanceId\u003e --text \"同意，请尽快处理\"",
         "dws oa approval oa-comments --instance-id \u003cprocessInstanceId\u003e --text \"同意，请尽快处理\" --format json"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.oa.dingflow_comments",
         "skills/mono/references/products/oa.md"
       ]
     },
     "oa approval records": {
+      "agent_summary": "获取审批操作记录",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "6. 查看审批操作记录",
         "审批记录/操作历史"
@@ -160,10 +209,14 @@
         "dws oa approval records --instance-id \u003cprocessInstanceId\u003e --format json"
       ],
       "source_refs": [
-        "skills/mono/references/products/oa.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.get_processInstance_records",
+        "skills/mono/references/products/oa.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "oa approval redirect-task": {
+      "agent_summary": "转交审批任务",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "12. 转交审批任务（taskId 来自 tasks，toActionerId 来自 contact user search）",
         "转交审批/转交任务"
@@ -174,13 +227,18 @@
         "dws oa approval redirect-task --task-id \u003ctaskId\u003e --to-actioner-id \u003cuserId\u003e",
         "dws oa approval redirect-task --task-id \u003ctaskId\u003e --to-actioner-id \u003cuserId\u003e --remark \"请帮忙处理\""
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.oa.redirect_task",
         "skills/mono/references/products/oa.md"
       ]
     },
     "oa approval reject": {
+      "agent_summary": "拒绝审批",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
-        "4b. 拒绝审批"
+        "4b. 拒绝审批",
+        "拒绝审批/驳回"
       ],
       "effect": "destructive",
       "effect_source": "skill-explicit",
@@ -191,29 +249,40 @@
         "dws oa approval reject --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e --remark \"不符合要求\" --format json"
       ],
       "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.reject_processInstance",
         "skills/mono/SKILL.md",
-        "skills/mono/references/products/oa.md"
+        "skills/mono/references/products/oa.md",
+        "skills/mono/references/products/simple.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "oa approval revoke": {
+      "agent_summary": "撤销已发起的审批",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "5. 撤销自己发起的审批",
-        "撤回审批/取消审批"
+        "撤回审批/取消审批",
+        "撤销审批/撤回"
       ],
       "effect": "write",
       "effect_source": "skill-explicit",
       "risk": "high",
       "confirmation": "user_required",
       "examples": [
-        "dws oa approval revoke --instance-id \u003cid\u003e --remark \"误发起\" --yes",
-        "dws oa approval revoke --instance-id \u003cid\u003e --yes"
+        "dws oa approval revoke --instance-id \u003cid\u003e --yes",
+        "dws oa approval revoke --instance-id \u003cid\u003e --remark \"误发起\" --yes"
       ],
       "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.revoke_processInstance",
         "skills/mono/SKILL.md",
-        "skills/mono/references/products/oa.md"
+        "skills/mono/references/products/oa.md",
+        "skills/mono/references/products/simple.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "oa approval tasks": {
+      "agent_summary": "查询待我审批的任务 ID",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "3. 获取待审批任务 ID — 提取 taskId",
         "同意审批/批准",
@@ -227,7 +296,9 @@
         "dws oa approval tasks --instance-id \u003cprocessInstanceId\u003e --format json"
       ],
       "source_refs": [
-        "skills/mono/references/products/oa.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.list_pending_tasks",
+        "skills/mono/references/products/oa.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     }
   }

@@ -54,6 +54,12 @@ import (
 
 type outputFileContextKey struct{}
 
+type rootBuildProfileContextKey struct{}
+
+type rootBuildProfile string
+
+const rootBuildProfileSchemaOnly rootBuildProfile = "schema-only"
+
 const recoveryEventStderrPrefix = "RECOVERY_EVENT_ID="
 
 var executeRootCommandBuilder = NewRootCommandWithEngine
@@ -76,6 +82,9 @@ func Execute() (exitCode int) {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+	if invocationUsesEmbeddedSchema(os.Args[1:]) {
+		ctx = context.WithValue(ctx, rootBuildProfileContextKey{}, rootBuildProfileSchemaOnly)
+	}
 
 	// Attach timing collector to context for use by child components
 	ctx = WithTimingCollector(ctx, timing)
@@ -113,6 +122,14 @@ func Execute() (exitCode int) {
 
 func isUnknownCommandError(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "unknown command")
+}
+
+func invocationUsesEmbeddedSchema(args []string) bool {
+	return len(args) > 0 && strings.EqualFold(strings.TrimSpace(args[0]), "schema")
+}
+
+func schemaOnlyRootBuild(ctx context.Context) bool {
+	return ctx != nil && ctx.Value(rootBuildProfileContextKey{}) == rootBuildProfileSchemaOnly
 }
 
 // rewordRequiredFlagError rewrites cobra's default missing-required-flag message
@@ -373,24 +390,26 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 	}
 	root.AddCommand(utilityCommands...)
 
-	root.AddCommand(newLegacyPublicCommands(rootCtx, runner)...)
-	root.AddCommand(newLegacyHiddenCommands(runner)...)
+	if !schemaOnlyRootBuild(rootCtx) {
+		root.AddCommand(newLegacyPublicCommands(rootCtx, runner)...)
+		root.AddCommand(newLegacyHiddenCommands(runner)...)
 
-	// --- Plugin loading: runs AFTER legacy commands so that
-	// AppendDynamicServer adds plugin endpoints on top of Market
-	// endpoints (SetDynamicServers is called inside loadDynamicCommands).
-	pluginCmds := loadPlugins(engine, runner)
-	if len(pluginCmds) > 0 {
-		addPluginCommandsSafe(root, pluginCmds)
-	}
+		// --- Plugin loading: runs AFTER legacy commands so that
+		// AppendDynamicServer adds plugin endpoints on top of Market
+		// endpoints (SetDynamicServers is called inside loadDynamicCommands).
+		pluginCmds := loadPlugins(engine, runner)
+		if len(pluginCmds) > 0 {
+			addPluginCommandsSafe(root, pluginCmds)
+		}
 
-	// PAT authorization commands (open-source core)
-	pat.RegisterCommands(root, patCaller)
+		// PAT authorization commands (open-source core)
+		pat.RegisterCommands(root, patCaller)
 
-	if fn := edition.Get().RegisterExtraCommands; fn != nil {
-		caller := newToolCallerAdapter(runner, flags)
-		fn(root, caller)
-		deduplicateCommands(root)
+		if fn := edition.Get().RegisterExtraCommands; fn != nil {
+			caller := newToolCallerAdapter(runner, flags)
+			fn(root, caller)
+			deduplicateCommands(root)
+		}
 	}
 
 	hideNonDirectRuntimeCommands(root)
@@ -736,6 +755,10 @@ func hideNonDirectRuntimeCommands(root *cobra.Command) {
 	for _, cmd := range root.Commands() {
 		name := cmd.Name()
 		if cmd.Hidden {
+			continue
+		}
+		if cli.SchemaProductVisibilityFor(name) != cli.SchemaVisibilityPublic {
+			cmd.Hidden = true
 			continue
 		}
 		if staticCommands[name] {

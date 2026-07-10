@@ -18,6 +18,8 @@
       ]
     },
     "pat chmod": {
+      "agent_summary": "按可信上下文为当前用户执行 PAT 批量授权，支持 dryRun 和 pending flow。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "执行批量行为授权（高影响，必须先让用户确认）",
         "授予 Agent 行为权限/授权 scope/批量授权产品/一次性授权/会话授权/永久授权",
@@ -31,7 +33,9 @@
         "dws pat chmod --products calendar,aitable --grant-type session --session-id \u003cSESSION_ID\u003e --dry-run --format json",
         "dws pat chmod --products calendar,aitable --grant-type session --session-id \u003cSESSION_ID\u003e --yes --format json"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.pat.batch_grant",
         "skills/mono/SKILL.md",
         "skills/mono/references/products/pat.md"
       ]

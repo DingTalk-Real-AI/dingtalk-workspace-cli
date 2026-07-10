@@ -34,21 +34,29 @@ func main() {
 	var skillPath string
 	var productsDir string
 	var intentGuidePath string
+	var hintsDir string
+	var interfaceMetadataPath string
 	var outputPath string
 	var outputDir string
+	var auditOutputPath string
 	var surfacePath string
 	var writeSurfacePath string
 	var maxExamples int
+	var maxInterfaceSummaryRunes int
 	var validateSurface bool
 	flag.StringVar(&root, "root", ".", "Repository root")
 	flag.StringVar(&skillPath, "skill", "skills/mono/SKILL.md", "Main DWS SKILL.md path")
 	flag.StringVar(&productsDir, "products", "skills/mono/references/products", "Product skill reference directory")
 	flag.StringVar(&intentGuidePath, "intent-guide", "skills/mono/references/intent-guide.md", "Cross-product intent guide path")
+	flag.StringVar(&hintsDir, "hints", "skills/mono/schema-hints", "Versioned Agent hint JSON directory")
+	flag.StringVar(&interfaceMetadataPath, "interface-metadata", "internal/cli/schema_mcp_metadata.json", "Sanitized versioned MCP metadata used only for fallback Agent summaries")
 	flag.StringVar(&outputPath, "output", "", "Output embedded Agent metadata JSON file (legacy single-file mode)")
 	flag.StringVar(&outputDir, "output-dir", "", "Output directory for split embedded Agent metadata JSON")
+	flag.StringVar(&auditOutputPath, "audit-output", "", "Optional output path for build-time source and command-surface diagnostics")
 	flag.StringVar(&surfacePath, "surface", "", "Versioned command-surface snapshot path, relative to --root")
 	flag.StringVar(&writeSurfacePath, "write-surface", "", "Write the current runtime command surface snapshot and exit")
 	flag.IntVar(&maxExamples, "max-examples", 2, "Maximum examples retained per command")
+	flag.IntVar(&maxInterfaceSummaryRunes, "max-interface-summary-runes", 120, "Maximum runes retained in an unreviewed MCP-derived Agent summary")
 	flag.BoolVar(&validateSurface, "validate-surface", true, "Keep only paths present in the command-surface snapshot or current runtime schema")
 	flag.Parse()
 	if strings.TrimSpace(writeSurfacePath) != "" {
@@ -74,15 +82,18 @@ func main() {
 	}
 
 	metadata, stats, err := agentmetadata.Generate(agentmetadata.Options{
-		Root:             root,
-		SkillPath:        skillPath,
-		ProductsDir:      productsDir,
-		IntentGuidePath:  intentGuidePath,
-		MaxExamples:      maxExamples,
-		ToolPaths:        surface.ToolPaths,
-		ProductIDs:       surface.ProductIDs,
-		SurfaceHash:      surface.Hash,
-		SurfaceToolCount: surface.ToolCount,
+		Root:                     root,
+		SkillPath:                skillPath,
+		ProductsDir:              productsDir,
+		IntentGuidePath:          intentGuidePath,
+		HintsDir:                 hintsDir,
+		InterfaceMetadataPath:    interfaceMetadataPath,
+		MaxExamples:              maxExamples,
+		MaxInterfaceSummaryRunes: maxInterfaceSummaryRunes,
+		ToolPaths:                surface.ToolPaths,
+		ProductIDs:               surface.ProductIDs,
+		SurfaceHash:              surface.Hash,
+		SurfaceToolCount:         surface.ToolCount,
 	})
 	if err != nil {
 		fail(err)
@@ -100,19 +111,49 @@ func main() {
 			fail(err)
 		}
 	}
+	if strings.TrimSpace(auditOutputPath) != "" {
+		if err := writeAuditFile(auditOutputPath, agentmetadata.BuildAudit(metadata, stats)); err != nil {
+			fail(err)
+		}
+	}
 	_, _ = fmt.Fprintf(
 		os.Stderr,
-		"generated schema Agent metadata: output=%s sources=%d products=%d tools=%d intents=%d examples=%d risk_rules=%d unmatched=%d surface_tools=%d\n",
+		"generated schema Agent metadata: output=%s sources=%d products=%d tools=%d summaries=%d interface_summaries=%d intents=%d examples=%d risk_rules=%d hint_files=%d hint_tools=%d unmatched=%d surface_tools=%d\n",
 		outputPath,
 		stats.SourceFiles,
 		stats.Products,
 		stats.Tools,
+		metadata.Coverage.ToolsWithSummary,
+		interfaceAppliedSummaries(stats),
 		stats.ToolIntents,
 		stats.Examples,
 		stats.RiskRules,
+		stats.HintFiles,
+		stats.HintTools,
 		stats.UnmatchedTools,
 		surface.ToolCount,
 	)
+}
+
+func interfaceAppliedSummaries(stats agentmetadata.Stats) int {
+	if stats.InterfaceMetadata == nil {
+		return 0
+	}
+	return stats.InterfaceMetadata.AppliedSummaries
+}
+
+func writeAuditFile(path string, audit agentmetadata.Audit) error {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create audit output directory: %w", err)
+	}
+	if err := writeJSON(path, audit); err != nil {
+		return fmt.Errorf("write audit: %w", err)
+	}
+	return nil
 }
 
 type agentMetadataIndex struct {
@@ -237,8 +278,10 @@ type commandSurfaceProduct struct {
 }
 
 type commandSurfaceTool struct {
-	CLIPath string   `json:"cli_path"`
-	Aliases []string `json:"aliases,omitempty"`
+	CanonicalPath   string   `json:"canonical_path,omitempty"`
+	SourceProductID string   `json:"source_product_id,omitempty"`
+	CLIPath         string   `json:"cli_path"`
+	Aliases         []string `json:"aliases,omitempty"`
 }
 
 func loadCommandSurface() (commandSurface, error) {
@@ -319,6 +362,9 @@ func commandSurfaceFromSnapshot(snapshot commandSurfaceSnapshot) commandSurface 
 				continue
 			}
 			surface.ToolPaths[primary] = primary
+			if canonical := strings.TrimSpace(tool.CanonicalPath); canonical != "" {
+				surface.ToolPaths[canonical] = primary
+			}
 			if !seenPrimary[primary] {
 				seenPrimary[primary] = true
 				surface.ToolCount++
@@ -331,7 +377,7 @@ func commandSurfaceFromSnapshot(snapshot commandSurfaceSnapshot) commandSurface 
 					surface.ToolPaths[alias] = primary
 				}
 			}
-			rows = append(rows, productID+"\x00"+primary+"\x00"+strings.Join(aliases, "\x00"))
+			rows = append(rows, productID+"\x00"+strings.TrimSpace(tool.CanonicalPath)+"\x00"+strings.TrimSpace(tool.SourceProductID)+"\x00"+primary+"\x00"+strings.Join(aliases, "\x00"))
 		}
 	}
 	sort.Strings(rows)
@@ -349,6 +395,8 @@ func normalizeCommandSurfaceSnapshot(snapshot commandSurfaceSnapshot) commandSur
 		}
 		tools := make([]commandSurfaceTool, 0, len(product.Tools))
 		for _, tool := range product.Tools {
+			tool.CanonicalPath = strings.TrimSpace(tool.CanonicalPath)
+			tool.SourceProductID = strings.TrimSpace(tool.SourceProductID)
 			tool.CLIPath = strings.TrimSpace(tool.CLIPath)
 			if tool.CLIPath == "" {
 				continue
@@ -363,7 +411,12 @@ func normalizeCommandSurfaceSnapshot(snapshot commandSurfaceSnapshot) commandSur
 				}
 			}
 			sort.Strings(aliases)
-			tools = append(tools, commandSurfaceTool{CLIPath: tool.CLIPath, Aliases: aliases})
+			tools = append(tools, commandSurfaceTool{
+				CanonicalPath:   tool.CanonicalPath,
+				SourceProductID: tool.SourceProductID,
+				CLIPath:         tool.CLIPath,
+				Aliases:         aliases,
+			})
 		}
 		sort.Slice(tools, func(i, j int) bool { return tools[i].CLIPath < tools[j].CLIPath })
 		products = append(products, commandSurfaceProduct{ID: product.ID, Tools: tools})

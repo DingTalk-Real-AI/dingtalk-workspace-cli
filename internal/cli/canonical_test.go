@@ -549,7 +549,7 @@ func buildRuntimeSchemaTestRoot() *cobra.Command {
 
 func buildSchemaCommandTestRoot() *cobra.Command {
 	root := buildRuntimeSchemaTestRoot()
-	root.AddCommand(NewSchemaCommand())
+	root.AddCommand(NewSchemaCommandWithRootProvider(func() *cobra.Command { return root }))
 	return root
 }
 
@@ -660,6 +660,32 @@ func TestRuntimeSchemaExcludesHumanOnlyHints(t *testing.T) {
 	}
 }
 
+func TestRuntimeSchemaHidesInternalSourceProductsAndKeepsCanonicalHelpers(t *testing.T) {
+	root := &cobra.Command{Use: "dws"}
+
+	internalLeaf := &cobra.Command{Use: "list-comments", RunE: func(*cobra.Command, []string) error { return nil }}
+	AttachRuntimeSchema(internalLeaf, "doc-comment", "list_comments", "runtime:doc-comment")
+	internalRoot := &cobra.Command{Use: "doc-comment"}
+	internalRoot.AddCommand(internalLeaf)
+
+	publicLeaf := &cobra.Command{Use: "list", RunE: func(*cobra.Command, []string) error { return nil }}
+	AttachRuntimeSchema(publicLeaf, "doc-comment", "list_comments", "hardcoded:doc")
+	comment := &cobra.Command{Use: "comment"}
+	comment.AddCommand(publicLeaf)
+	publicRoot := &cobra.Command{Use: "doc"}
+	publicRoot.AddCommand(comment)
+	root.AddCommand(internalRoot, publicRoot)
+
+	entries := collectRuntimeSchemaEntries(root)
+	if len(entries) != 1 {
+		t.Fatalf("entries = %#v, want only the public canonical helper", entries)
+	}
+	entry := entries[0]
+	if entry.ProductID != "doc" || entry.SourceProductID != "doc-comment" || entry.CLIPath != "doc comment list" {
+		t.Fatalf("entry = %#v", entry)
+	}
+}
+
 func TestRuntimeSchemaUsesCuratedRequiredSemantics(t *testing.T) {
 	root := &cobra.Command{Use: "dws"}
 
@@ -739,9 +765,14 @@ func TestRuntimeSchemaUsesEmbeddedMCPMetadataFallback(t *testing.T) {
 			"calendar.search_events": {
 				Title:       "Embedded title",
 				Description: "Embedded description",
+				InterfaceRef: &embeddedMCPInterfaceRef{
+					ProductID: "calendar",
+					RPCName:   "search_calendar_events",
+				},
 				Parameters: map[string]embeddedMCPParamMeta{
 					"startTime": {
 						Description: "Embedded start time",
+						Type:        "number",
 						Format:      "date-time",
 						Required:    &required,
 					},
@@ -770,9 +801,13 @@ func TestRuntimeSchemaUsesEmbeddedMCPMetadataFallback(t *testing.T) {
 	if payload["metadata_source"] != "embedded-mcp-metadata" {
 		t.Fatalf("metadata_source = %v", payload["metadata_source"])
 	}
+	interfaceRef, _ := payload["interface_ref"].(map[string]any)
+	if interfaceRef["product_id"] != "calendar" || interfaceRef["rpc_name"] != "search_calendar_events" {
+		t.Fatalf("interface_ref = %#v", payload["interface_ref"])
+	}
 	params, _ := payload["parameters"].(map[string]any)
 	start, _ := params["start"].(map[string]any)
-	if start["description"] != "Embedded start time" || start["format"] != "date-time" || start["required"] != true {
+	if start["description"] != "fallback start" || start["interface_description"] != "Embedded start time" || start["format"] != "date-time" || start["required"] != false || start["type"] != "string" || start["interface_type"] != "number" {
 		t.Fatalf("start param = %#v", start)
 	}
 }
@@ -1726,8 +1761,8 @@ func TestSchemaCommandDoesNotNeedDiscovery(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v\noutput:\n%s", err, out.String())
 	}
-	if payload["count"] != float64(0) {
-		t.Fatalf("payload[count] = %v, want 0", payload["count"])
+	if payload["count"] != float64(21) {
+		t.Fatalf("payload[count] = %v, want embedded product count 21", payload["count"])
 	}
 	if errOut.String() != "" {
 		t.Fatalf("stderr = %q, want empty", errOut.String())
@@ -1778,6 +1813,33 @@ func TestRuntimeSchemaRootIncludesVisibleCommandsAndSkipsHiddenCommands(t *testi
 	}
 	if got["pat hidden"] {
 		t.Fatalf("pat schema cli paths = %q, hidden command must not be included", strings.Join(paths, ","))
+	}
+}
+
+func TestRuntimeSchemaRootFallbackDoesNotDuplicateAnnotatedCLIPath(t *testing.T) {
+	t.Parallel()
+
+	root := &cobra.Command{Use: "dws"}
+	attendance := &cobra.Command{Use: "attendance", Short: "考勤"}
+	adjustment := &cobra.Command{Use: "adjustment"}
+	get := &cobra.Command{Use: "get", Short: "查询补卡规则", RunE: func(*cobra.Command, []string) error { return nil }}
+	AttachRuntimeSchema(get, "hrmregister", "get_adjustment_rule_detail", "runtime:hrmregister")
+	adjustment.AddCommand(get)
+	attendance.AddCommand(adjustment)
+	root.AddCommand(attendance)
+
+	entries := collectRuntimeSchemaEntries(root)
+	matched := []runtimeSchemaEntry{}
+	for _, entry := range entries {
+		if entry.CLIPath == "attendance adjustment get" {
+			matched = append(matched, entry)
+		}
+	}
+	if len(matched) != 1 {
+		t.Fatalf("matching entries = %#v, want exactly one", matched)
+	}
+	if matched[0].ToolName != "get_adjustment_rule_detail" || matched[0].SourceProductID != "hrmregister" {
+		t.Fatalf("annotated entry was not preserved: %#v", matched[0])
 	}
 }
 

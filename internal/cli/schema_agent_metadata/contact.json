@@ -2,6 +2,8 @@
   "product_id": "contact",
   "tools": {
     "contact dept get-info": {
+      "agent_summary": "根据指定的部门 ID，获取部门详情。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "4. 查看部门详情（部门ID、名称、人数）",
         "部门详情/部门信息/部门多少人"
@@ -12,11 +14,15 @@
         "dws contact dept get-info --dept 12345",
         "dws contact dept get-info --dept \u003cdeptId\u003e --format json"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.contact.get_dept_info_by_dept_id",
         "skills/mono/references/products/contact.md"
       ]
     },
     "contact dept list-children": {
+      "agent_summary": "根据指定的部门 ID，获取其直接子部门列表，返回每个子部门的部门 ID、名称。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "5. 查看直属子部门 — 提取子 deptId 列表",
         "子部门/下设部门/部门有哪些下级部门/枚举二级部门"
@@ -27,11 +33,15 @@
         "dws contact dept list-children --dept 1           # 枚举根部门下的一级部门",
         "dws contact dept list-children --dept 12345       # 枚举指定部门的直属子部门"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.contact.get_sub_depts_by_dept_id",
         "skills/mono/references/products/contact.md"
       ]
     },
     "contact dept list-members": {
+      "agent_summary": "查看部门成员（逗号分隔 deptId）",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "6. 查看部门成员",
         "部门有谁/部门成员/人员名单"
@@ -39,14 +49,18 @@
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws contact dept list-members --depts 1              # 根部门",
-        "dws contact dept list-members --depts 12345,67890"
+        "dws contact dept list-members --depts 12345,67890",
+        "dws contact dept list-members --depts 1              # 根部门"
       ],
       "source_refs": [
-        "skills/mono/references/products/contact.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.get_dept_members_by_deptId",
+        "skills/mono/references/products/contact.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "contact dept search": {
+      "agent_summary": "按关键词搜索部门",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "3. 查看部门结构 — 提取 deptId",
         "找部门/哪个部门"
@@ -58,20 +72,28 @@
         "dws contact dept search --query \"技术部\" --format json"
       ],
       "source_refs": [
-        "skills/mono/references/products/contact.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.search_dept_by_keyword",
+        "skills/mono/references/products/contact.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "contact relation list-my-followings": {
+      "agent_summary": "获取我的特别关注列表",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "我关注了谁/我的特别关注列表/我的星标联系人/特别关注的人有哪些"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.contact.list_my_followings",
         "skills/mono/references/products/contact.md"
       ]
     },
     "contact user dismission search": {
+      "agent_summary": "获取离职员工列表，支持按照员工姓名、离职时间范围、部门过滤",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "13. 查询全部离职员工",
         "14. 按姓名/时间范围/部门筛选离职员工",
@@ -83,24 +105,33 @@
         "dws contact user dismission search",
         "dws contact user dismission search --name \"张三\""
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.contact.query_dismission_employee_list",
         "skills/mono/references/products/contact.md"
       ]
     },
     "contact user get": {
+      "agent_summary": "批量获取用户详情（逗号分隔 userId）",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "查用户详情/部门/主管/管理员"
       ],
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws contact user get --ids userId1,userId2"
+        "dws contact user get --ids userId1,userId2",
+        "dws contact user get --ids userId1,userId2  # 查询 userId: dws contact user search --keyword \"姓名\""
       ],
       "source_refs": [
-        "skills/mono/references/products/contact.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.get_user_info_by_user_ids",
+        "skills/mono/references/products/contact.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "contact user get-self": {
+      "agent_summary": "获取当前用户信息",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "1. 查看自己的信息 — 提取 userId",
         "我是谁/我的信息/我的 userId/当前用户/本人/self/me/whoami"
@@ -112,10 +143,14 @@
         "dws contact user get-self --format json"
       ],
       "source_refs": [
-        "skills/mono/references/products/contact.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.get_current_user_profile",
+        "skills/mono/references/products/contact.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "contact user profile fields": {
+      "agent_summary": "查询花名册有权限的字段列表，根据当前用户查询花名册有权限的字段列表",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "10. 查询花名册有权限的字段列表",
         "花名册字段/有哪些字段/字段列表"
@@ -123,11 +158,15 @@
       "examples": [
         "dws contact user profile fields"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.contact.list_authorized_roster_fields",
         "skills/mono/references/products/contact.md"
       ]
     },
     "contact user profile get": {
+      "agent_summary": "查询员工花名册字段信息，根据当前用户指定员工和字段列表，查询相应管理范围内员工的字段值信息",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "11. 根据字段 code 查询指定员工的花名册信息",
         "12. 查询所有可见字段的花名册信息",
@@ -139,11 +178,15 @@
         "dws contact user profile get --staff-id STAFF_ID",
         "dws contact user profile get --staff-id STAFF_ID --fields fieldCode1,fieldCode2"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.contact.get_authorized_emp_rosterInfo",
         "skills/mono/references/products/contact.md"
       ]
     },
     "contact user search": {
+      "agent_summary": "按关键词搜索用户",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "2. 按名字搜索同事或好友 — 可提取 同事的userId，或好友的openDingTalkId"
       ],
@@ -154,15 +197,21 @@
         "dws contact user search --query \"张三\" --format json"
       ],
       "source_refs": [
-        "skills/mono/references/products/contact.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.search_contact_by_key_word",
+        "skills/mono/references/products/contact.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "contact user search-mobile": {
+      "agent_summary": "按手机号搜索用户",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "examples": [
         "dws contact user search-mobile --mobile 13800138000"
       ],
       "source_refs": [
-        "skills/mono/references/products/contact.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.search_user_by_mobile",
+        "skills/mono/references/products/contact.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     }
   }

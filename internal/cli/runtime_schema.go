@@ -17,6 +17,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"sort"
+	"strconv"
 	"strings"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -65,16 +66,35 @@ type RuntimeSchemaPositional struct {
 }
 
 type embeddedMCPMetadata struct {
-	Version    int                                `json:"version"`
-	Source     string                             `json:"source"`
-	SourceHash string                             `json:"source_hash"`
-	Tools      map[string]embeddedMCPToolMetadata `json:"tools"`
+	Version        int                                `json:"version"`
+	Source         string                             `json:"source"`
+	SourceRevision string                             `json:"source_revision,omitempty"`
+	SourceHash     string                             `json:"source_hash"`
+	Coverage       embeddedMCPMetadataCoverage        `json:"coverage,omitempty"`
+	Tools          map[string]embeddedMCPToolMetadata `json:"tools"`
+}
+
+type embeddedMCPMetadataCoverage struct {
+	SourceServices   int      `json:"source_services,omitempty"`
+	SnapshotServices int      `json:"snapshot_services,omitempty"`
+	MissingServices  []string `json:"missing_services,omitempty"`
+	SourceTools      int      `json:"source_tools,omitempty"`
+	SurfaceTools     int      `json:"surface_tools,omitempty"`
+	MatchedTools     int      `json:"matched_tools,omitempty"`
+	AliasedTools     int      `json:"aliased_tools,omitempty"`
+	UnmatchedTools   int      `json:"unmatched_tools,omitempty"`
+}
+
+type embeddedMCPInterfaceRef struct {
+	ProductID string `json:"product_id"`
+	RPCName   string `json:"rpc_name"`
 }
 
 type embeddedMCPToolMetadata struct {
-	Title       string                          `json:"title,omitempty"`
-	Description string                          `json:"description,omitempty"`
-	Parameters  map[string]embeddedMCPParamMeta `json:"parameters,omitempty"`
+	Title        string                          `json:"title,omitempty"`
+	Description  string                          `json:"description,omitempty"`
+	Parameters   map[string]embeddedMCPParamMeta `json:"parameters,omitempty"`
+	InterfaceRef *embeddedMCPInterfaceRef        `json:"interface_ref,omitempty"`
 }
 
 type embeddedMCPParamMeta struct {
@@ -102,12 +122,19 @@ func loadEmbeddedMCPMetadata() embeddedMCPMetadata {
 
 func interfaceMetadataSummary() map[string]any {
 	metadata := runtimeEmbeddedMCPMetadata
-	return map[string]any{
+	summary := map[string]any{
 		"source":      strings.TrimSpace(metadata.Source),
 		"version":     metadata.Version,
 		"source_hash": strings.TrimSpace(metadata.SourceHash),
 		"tool_count":  len(metadata.Tools),
 	}
+	if revision := strings.TrimSpace(metadata.SourceRevision); revision != "" {
+		summary["source_revision"] = revision
+	}
+	if metadata.Coverage.SurfaceTools > 0 {
+		summary["coverage"] = metadata.Coverage
+	}
+	return summary
 }
 
 // AttachRuntimeSchema marks a runnable command as part of the runtime schema
@@ -170,9 +197,7 @@ func AnnotateRuntimeFlag(cmd *cobra.Command, flagName, propertyName, paramType s
 	}
 	setFlagAnnotation(flag, runtimeSchemaFlagPropertyAnnotation, strings.TrimSpace(propertyName))
 	setFlagAnnotation(flag, runtimeSchemaFlagTypeAnnotation, strings.TrimSpace(paramType))
-	if required {
-		setFlagAnnotation(flag, runtimeSchemaFlagRequiredAnnotation, "true")
-	}
+	setFlagAnnotation(flag, runtimeSchemaFlagRequiredAnnotation, strconv.FormatBool(required))
 	if strings.TrimSpace(defaultValue) != "" {
 		setFlagAnnotation(flag, runtimeSchemaFlagDefaultAnnotation, defaultValue)
 	}
@@ -349,6 +374,7 @@ func collectRuntimeSchemaEntries(root *cobra.Command) []runtimeSchemaEntry {
 	}
 	entries := []runtimeSchemaEntry{}
 	seen := map[string]bool{}
+	seenCLIPaths := map[string]bool{}
 	walkLeafCommands(root, func(leaf *cobra.Command) {
 		if runtimeSchemaExcluded(leaf) {
 			return
@@ -371,6 +397,9 @@ func collectRuntimeSchemaEntries(root *cobra.Command) []runtimeSchemaEntry {
 			displayProductID = strings.TrimSpace(top.Name())
 			productName = strings.TrimSpace(top.Short)
 		}
+		if defaultSchemaHintRegistry.ProductVisibility(displayProductID) != SchemaVisibilityPublic {
+			return
+		}
 		entry := runtimeSchemaEntry{
 			ProductID:       displayProductID,
 			SourceProductID: productID,
@@ -387,8 +416,12 @@ func collectRuntimeSchemaEntries(root *cobra.Command) []runtimeSchemaEntry {
 		}
 		entries = append(entries, entry)
 		seen[entryKey(entry)] = true
+		seenCLIPaths[entry.ProductID+"\x00"+entry.CLIPath] = true
 	})
 	for productID, hint := range defaultSchemaHintRegistry.RuntimeRoots() {
+		if defaultSchemaHintRegistry.ProductVisibility(productID) != SchemaVisibilityPublic {
+			continue
+		}
 		productRoot, _, err := root.Find([]string{productID})
 		if err != nil || productRoot == nil || !productRoot.HasParent() {
 			continue
@@ -404,6 +437,9 @@ func collectRuntimeSchemaEntries(root *cobra.Command) []runtimeSchemaEntry {
 			}
 			cliPath := strings.Join(parts, " ")
 			if len(hint.IncludeCLIPaths) > 0 && !hint.IncludeCLIPaths[cliPath] {
+				return
+			}
+			if seenCLIPaths[productID+"\x00"+cliPath] {
 				return
 			}
 			toolName := strings.TrimSpace(hint.ToolNames[cliPath])
@@ -437,6 +473,7 @@ func collectRuntimeSchemaEntries(root *cobra.Command) []runtimeSchemaEntry {
 			}
 			entries = append(entries, entry)
 			seen[entryKey(entry)] = true
+			seenCLIPaths[entry.ProductID+"\x00"+entry.CLIPath] = true
 		})
 	}
 	sort.Slice(entries, func(i, j int) bool {
@@ -682,7 +719,7 @@ func runtimeSchemaListPayload(entries []runtimeSchemaEntry) map[string]any {
 // first-hop response. Agents can then query one product or group instead of
 // loading every tool description into context up front.
 func compactSchemaOverviewPayload(payload map[string]any) map[string]any {
-	products, _ := payload["products"].([]map[string]any)
+	products := schemaMapSlice(payload["products"])
 	compact := make([]map[string]any, 0, len(products))
 	totalTools := 0
 	for _, product := range products {
@@ -691,15 +728,18 @@ func compactSchemaOverviewPayload(payload map[string]any) map[string]any {
 		totalTools += toolCount
 		entry := map[string]any{
 			"id":          id,
-			"name":        product["name"],
-			"description": product["description"],
 			"tool_count":  toolCount,
 			"schema_path": id,
 		}
 		if helper, _ := product["helper"].(bool); helper {
 			entry["helper"] = true
 		}
-		applyAgentProductMetadata(entry, id)
+		applyCompactAgentProductMetadata(entry, id)
+		if _, hasSummary := entry["agent_summary"]; !hasSummary {
+			if _, hasUseWhen := entry["use_when"]; !hasUseWhen {
+				entry["description"] = product["description"]
+			}
+		}
 		compact = append(compact, entry)
 	}
 	return map[string]any{
@@ -734,6 +774,7 @@ func schemaProductToolCount(product map[string]any) int {
 
 func runtimeToolSummary(entry runtimeSchemaEntry) map[string]any {
 	title, description, metadataSource := runtimeToolTextMetadata(entry)
+	embeddedMeta, _ := embeddedMCPMetadataForEntry(entry)
 	tool := map[string]any{
 		"name":             entry.ToolName,
 		"cli_name":         entry.CLIName,
@@ -754,6 +795,7 @@ func runtimeToolSummary(entry runtimeSchemaEntry) map[string]any {
 	if len(entry.Aliases) > 0 {
 		tool["aliases"] = entry.Aliases
 	}
+	applyRuntimeInterfaceRef(tool, entry, embeddedMeta, false)
 	applyAgentToolMetadata(tool, false,
 		entry.PrimaryCLIPath,
 		entry.CLIPath,
@@ -932,6 +974,7 @@ func runtimeToolPayload(entry runtimeSchemaEntry) map[string]any {
 	if len(entry.Aliases) > 0 {
 		payload["aliases"] = entry.Aliases
 	}
+	applyRuntimeInterfaceRef(payload, entry, embeddedMeta, true)
 	if rendered := runtimeConstraintsPayload(constraints); len(rendered) > 0 {
 		payload["constraints"] = rendered
 	}
@@ -942,6 +985,24 @@ func runtimeToolPayload(entry runtimeSchemaEntry) map[string]any {
 	paths = append(paths, entry.Aliases...)
 	applyAgentToolMetadata(payload, true, paths...)
 	return payload
+}
+
+func applyRuntimeInterfaceRef(target map[string]any, entry runtimeSchemaEntry, metadata embeddedMCPToolMetadata, always bool) {
+	if target == nil || metadata.InterfaceRef == nil {
+		return
+	}
+	productID := strings.TrimSpace(metadata.InterfaceRef.ProductID)
+	rpcName := strings.TrimSpace(metadata.InterfaceRef.RPCName)
+	if productID == "" || rpcName == "" {
+		return
+	}
+	if !always && productID == entry.ProductID && rpcName == entry.ToolName {
+		return
+	}
+	target["interface_ref"] = map[string]any{
+		"product_id": productID,
+		"rpc_name":   rpcName,
+	}
 }
 
 func runtimeCommandParameters(cmd *cobra.Command, hints map[string]ParameterSchemaHint, embeddedParams map[string]embeddedMCPParamMeta, constraints RuntimeSchemaConstraints) map[string]any {
@@ -964,22 +1025,24 @@ func runtimeCommandParameters(cmd *cobra.Command, hints map[string]ParameterSche
 			flagName = strings.TrimSpace(hint.FlagName)
 		}
 
-		paramType := runtimeFlagType(flag)
+		paramType := runtimeFlagCLIType(flag)
+		interfaceType := firstFlagAnnotation(flag, runtimeSchemaFlagTypeAnnotation)
 		if hasEmbeddedParam && strings.TrimSpace(embeddedParam.Type) != "" {
-			paramType = strings.TrimSpace(embeddedParam.Type)
+			interfaceType = strings.TrimSpace(embeddedParam.Type)
 		}
 		if hasHint && strings.TrimSpace(hint.Type) != "" {
-			paramType = strings.TrimSpace(hint.Type)
+			interfaceType = strings.TrimSpace(hint.Type)
 		}
 		description := strings.TrimSpace(flag.Usage)
-		if hasEmbeddedParam && strings.TrimSpace(embeddedParam.Description) != "" {
-			description = strings.TrimSpace(embeddedParam.Description)
+		interfaceDescription := ""
+		if hasEmbeddedParam {
+			interfaceDescription = strings.TrimSpace(embeddedParam.Description)
 		}
 		if hasHint && strings.TrimSpace(hint.Description) != "" {
 			description = strings.TrimSpace(hint.Description)
 		}
-		required := runtimeFlagRequired(flag)
-		if hasEmbeddedParam && embeddedParam.Required != nil {
+		required, hasCLIRequired := runtimeFlagRequiredState(flag)
+		if !hasCLIRequired && hasEmbeddedParam && embeddedParam.Required != nil {
 			required = *embeddedParam.Required
 		}
 		if hasHint && hint.Required != nil {
@@ -994,6 +1057,12 @@ func runtimeCommandParameters(cmd *cobra.Command, hints map[string]ParameterSche
 		if property != "" {
 			entry["property"] = property
 		}
+		if interfaceDescription != "" && interfaceDescription != description {
+			entry["interface_description"] = interfaceDescription
+		}
+		if interfaceType != "" && interfaceType != paramType {
+			entry["interface_type"] = interfaceType
+		}
 		requiredWhen := ""
 		if hasEmbeddedParam {
 			requiredWhen = strings.TrimSpace(embeddedParam.RequiredWhen)
@@ -1006,17 +1075,17 @@ func runtimeCommandParameters(cmd *cobra.Command, hints map[string]ParameterSche
 		}
 		if hasHint && strings.TrimSpace(hint.Default) != "" {
 			entry["default"] = strings.TrimSpace(hint.Default)
-		} else if hasEmbeddedParam && strings.TrimSpace(embeddedParam.Default) != "" {
-			entry["default"] = strings.TrimSpace(embeddedParam.Default)
 		} else if def := runtimeFlagDefault(flag); def != "" {
 			entry["default"] = def
+		} else if hasEmbeddedParam && strings.TrimSpace(embeddedParam.Default) != "" {
+			entry["default"] = strings.TrimSpace(embeddedParam.Default)
 		}
 		if format := firstFlagAnnotation(flag, "x-cli-format"); format != "" {
 			entry["format"] = format
-		} else if hasEmbeddedParam && strings.TrimSpace(embeddedParam.Format) != "" {
-			entry["format"] = strings.TrimSpace(embeddedParam.Format)
 		} else if format := inferredRuntimeFlagFormat(flag); format != "" {
 			entry["format"] = format
+		} else if hasEmbeddedParam && strings.TrimSpace(embeddedParam.Format) != "" {
+			entry["format"] = strings.TrimSpace(embeddedParam.Format)
 		}
 		if enum := runtimeFlagEnum(flag); len(enum) > 0 {
 			entry["enum"] = enum
@@ -1157,9 +1226,10 @@ func isGenericPayloadFlag(flag *pflag.Flag) bool {
 }
 
 func runtimeFlagType(flag *pflag.Flag) string {
-	if annotated := firstFlagAnnotation(flag, runtimeSchemaFlagTypeAnnotation); annotated != "" {
-		return annotated
-	}
+	return runtimeFlagCLIType(flag)
+}
+
+func runtimeFlagCLIType(flag *pflag.Flag) string {
 	switch flag.Value.Type() {
 	case "int", "int8", "int16", "int32", "int64":
 		return "integer"
@@ -1175,14 +1245,25 @@ func runtimeFlagType(flag *pflag.Flag) string {
 }
 
 func runtimeFlagRequired(flag *pflag.Flag) bool {
-	if strings.EqualFold(firstFlagAnnotation(flag, runtimeSchemaFlagRequiredAnnotation), "true") {
-		return true
+	required, _ := runtimeFlagRequiredState(flag)
+	return required
+}
+
+func runtimeFlagRequiredState(flag *pflag.Flag) (bool, bool) {
+	if raw := firstFlagAnnotation(flag, runtimeSchemaFlagRequiredAnnotation); raw != "" {
+		required, err := strconv.ParseBool(raw)
+		if err == nil {
+			return required, true
+		}
 	}
 	if values := flag.Annotations[cobra.BashCompOneRequiredFlag]; len(values) > 0 {
-		return true
+		return true, true
 	}
 	usage := strings.ToLower(strings.TrimSpace(flag.Usage))
-	return usageImpliesRequired(usage)
+	if usageImpliesRequired(usage) {
+		return true, true
+	}
+	return false, false
 }
 
 func usageImpliesRequired(usage string) bool {
@@ -1190,7 +1271,10 @@ func usageImpliesRequired(usage string) bool {
 	if usage == "" {
 		return false
 	}
-	for _, conditional := range []string{"可选", "时必填", "二选一", "至少传一个", "至少填一个", "至少提供一项", "at least one"} {
+	for _, conditional := range []string{
+		"可选", "时必填", "下必填", "二选一", "至少传一个", "至少填一个", "至少提供一项",
+		"at least one", "required when", "required if", "conditionally required",
+	} {
 		if strings.Contains(usage, conditional) {
 			return false
 		}
@@ -1275,7 +1359,11 @@ func inferredRuntimeFlagFormat(flag *pflag.Flag) string {
 	if flag == nil {
 		return ""
 	}
-	if strings.Contains(strings.ToLower(strings.TrimSpace(flag.Usage)), "a1") {
+	usage := strings.ToLower(strings.TrimSpace(flag.Usage))
+	if strings.Contains(usage, "iso-8601") || strings.Contains(usage, "rfc3339") {
+		return "date-time"
+	}
+	if strings.Contains(usage, "a1") {
 		return "a1-range"
 	}
 	return ""

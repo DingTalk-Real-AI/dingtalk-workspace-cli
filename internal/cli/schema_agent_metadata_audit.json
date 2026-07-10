@@ -1,0 +1,2369 @@
+{
+  "version": 1,
+  "source_hash": "sha256:b586fcc360af51716391806bd3b6b5c8600318952f79d405feac30ff199b9fa6",
+  "surface_hash": "sha256:850109b2cca4b17666eccc8cd6adbe4326773251ff62f2328a291ade02049673",
+  "source_files": 84,
+  "hint_files": 3,
+  "hint_products": 17,
+  "hint_tools": 181,
+  "interface_metadata": {
+    "source": "mcp-tools-list+cli-registry",
+    "revision": "4574f7022c32cf4c033e9b7b4156e2fec815fed8",
+    "source_hash": "sha256:17251f74a4f76142457cc0e87251ecb86c1e3bda0cdf2edc02f351589716ecbc",
+    "source_tools": 419,
+    "surface_tools": 419,
+    "eligible_summaries": 418,
+    "applied_summaries": 272,
+    "preserved_summaries": 146,
+    "rejected_tools": [
+      "chat.unread_message_conversation_list"
+    ]
+  },
+  "coverage": {
+    "surface_products": 21,
+    "products_with_metadata": 21,
+    "surface_tools": 504,
+    "tools_with_metadata": 461,
+    "tools_with_agent_summary": 423,
+    "unmatched_skill_tools": 99
+  },
+  "source_products": [
+    "aisearch",
+    "aitable",
+    "attendance",
+    "calendar",
+    "chat",
+    "conference",
+    "contact",
+    "dev",
+    "devdoc",
+    "ding",
+    "doc",
+    "drive",
+    "event",
+    "live",
+    "mail",
+    "minutes",
+    "oa",
+    "pat",
+    "report",
+    "sheet",
+    "todo",
+    "wiki",
+    "workbench"
+  ],
+  "skill_products_outside_surface": [
+    "event",
+    "workbench"
+  ],
+  "unmatched_references": [
+    {
+      "tool_path": "devdoc",
+      "candidates": [
+        "devdoc article legacy-search",
+        "devdoc article legacy-search-open-platform",
+        "devdoc article rag-pretest"
+      ]
+    },
+    {
+      "tool_path": "doc",
+      "candidates": [
+        "doc block delete",
+        "doc block insert",
+        "doc block list"
+      ]
+    },
+    {
+      "tool_path": "drive",
+      "candidates": [
+        "drive commit",
+        "drive copy",
+        "drive delete"
+      ]
+    },
+    {
+      "tool_path": "minutes",
+      "candidates": [
+        "minutes get audio",
+        "minutes get batch",
+        "minutes get info"
+      ]
+    },
+    {
+      "tool_path": "wiki",
+      "candidates": [
+        "wiki member add",
+        "wiki member list",
+        "wiki member remove"
+      ]
+    },
+    {
+      "tool_path": "workbench app",
+      "source": "skills/mono/references/intent-guide.md",
+      "line": 11
+    },
+    {
+      "tool_path": "aisearch contact",
+      "source": "skills/mono/references/products/aisearch.md",
+      "line": 65,
+      "candidates": [
+        "aisearch behavior",
+        "aisearch enterprise",
+        "aisearch person"
+      ]
+    },
+    {
+      "tool_path": "aitable record batch-update",
+      "source": "skills/mono/references/products/aitable.md",
+      "line": 359,
+      "candidates": [
+        "aitable record create",
+        "aitable record delete",
+        "aitable record get"
+      ]
+    },
+    {
+      "tool_path": "aitable view get",
+      "source": "skills/mono/references/products/aitable.md",
+      "line": 367,
+      "candidates": [
+        "aitable base get",
+        "aitable chart get",
+        "aitable chart share get"
+      ]
+    },
+    {
+      "tool_path": "aitable view update",
+      "source": "skills/mono/references/products/aitable.md",
+      "line": 369,
+      "candidates": [
+        "aitable base update",
+        "aitable chart share update",
+        "aitable chart update"
+      ]
+    },
+    {
+      "tool_path": "aitable view update",
+      "source": "skills/mono/references/products/aitable.md",
+      "line": 370,
+      "candidates": [
+        "aitable base update",
+        "aitable chart share update",
+        "aitable chart update"
+      ]
+    },
+    {
+      "tool_path": "aitable view update",
+      "source": "skills/mono/references/products/aitable/aitable-filter-sort.md",
+      "line": 149,
+      "candidates": [
+        "aitable base update",
+        "aitable chart share update",
+        "aitable chart update"
+      ]
+    },
+    {
+      "tool_path": "aitable view update",
+      "source": "skills/mono/references/products/aitable/aitable-filter-sort.md",
+      "line": 153,
+      "candidates": [
+        "aitable base update",
+        "aitable chart share update",
+        "aitable chart update"
+      ]
+    },
+    {
+      "tool_path": "aitable view update",
+      "source": "skills/mono/references/products/aitable/aitable-filter-sort.md",
+      "line": 157,
+      "candidates": [
+        "aitable base update",
+        "aitable chart share update",
+        "aitable chart update"
+      ]
+    },
+    {
+      "tool_path": "aitable form list",
+      "source": "skills/mono/references/products/aitable/aitable-form.md",
+      "line": 24,
+      "candidates": [
+        "aitable base list",
+        "aitable field list",
+        "aitable list"
+      ]
+    },
+    {
+      "tool_path": "aitable form get",
+      "source": "skills/mono/references/products/aitable/aitable-form.md",
+      "line": 27,
+      "candidates": [
+        "aitable base get",
+        "aitable chart get",
+        "aitable chart share get"
+      ]
+    },
+    {
+      "tool_path": "aitable form field list",
+      "source": "skills/mono/references/products/aitable/aitable-form.md",
+      "line": 30,
+      "candidates": [
+        "aitable field list",
+        "aitable base list",
+        "aitable list"
+      ]
+    },
+    {
+      "tool_path": "aitable form share get",
+      "source": "skills/mono/references/products/aitable/aitable-form.md",
+      "line": 33,
+      "candidates": [
+        "aitable chart share get",
+        "aitable dashboard share get",
+        "aitable base get"
+      ]
+    },
+    {
+      "tool_path": "aitable form create",
+      "source": "skills/mono/references/products/aitable/aitable-form.md",
+      "line": 93,
+      "candidates": [
+        "aitable base create",
+        "aitable chart create",
+        "aitable create"
+      ]
+    },
+    {
+      "tool_path": "aitable form questions create",
+      "source": "skills/mono/references/products/aitable/aitable-form.md",
+      "line": 96,
+      "candidates": [
+        "aitable base create",
+        "aitable chart create",
+        "aitable create"
+      ]
+    },
+    {
+      "tool_path": "aitable form update",
+      "source": "skills/mono/references/products/aitable/aitable-form.md",
+      "line": 100,
+      "candidates": [
+        "aitable base update",
+        "aitable chart share update",
+        "aitable chart update"
+      ]
+    },
+    {
+      "tool_path": "aitable form field update",
+      "source": "skills/mono/references/products/aitable/aitable-form.md",
+      "line": 104,
+      "candidates": [
+        "aitable field update",
+        "aitable base update",
+        "aitable chart share update"
+      ]
+    },
+    {
+      "tool_path": "aitable form field hide",
+      "source": "skills/mono/references/products/aitable/aitable-form.md",
+      "line": 108,
+      "candidates": [
+        "aitable field create",
+        "aitable field delete",
+        "aitable field get"
+      ]
+    },
+    {
+      "tool_path": "aitable form share update",
+      "source": "skills/mono/references/products/aitable/aitable-form.md",
+      "line": 112,
+      "candidates": [
+        "aitable chart share update",
+        "aitable dashboard share update",
+        "aitable base update"
+      ]
+    },
+    {
+      "tool_path": "aitable view update",
+      "source": "skills/mono/references/products/aitable/aitable-view-config.md",
+      "line": 198,
+      "candidates": [
+        "aitable base update",
+        "aitable chart share update",
+        "aitable chart update"
+      ]
+    },
+    {
+      "tool_path": "attendance check result",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 33,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance check record",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 49,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance approve list",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 63,
+      "candidates": [
+        "attendance shift list",
+        "attendance record get",
+        "attendance rules"
+      ]
+    },
+    {
+      "tool_path": "attendance approve templates",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 78,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance approve templates",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 79,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance approve templates",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 80,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance schedule import",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 99,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance class search",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 155,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance class search",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 156,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance class search",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 157,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance class get",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 170,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance class create",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 188,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance class update",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 217,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance class update",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 218,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance adjustment search",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 244,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance adjustment search",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 245,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance adjustment get",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 257,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance overtime search",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 269,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance overtime search",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 270,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance overtime get",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 282,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group search",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 294,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group search",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 295,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group search",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 296,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group get",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 311,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group filtered-get",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 324,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group filtered-get",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 325,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group update-members",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 349,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group update-members",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 350,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group update-members",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 351,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group update",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 375,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group update",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 376,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group update",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 377,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group update",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 378,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group create",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 415,
+      "candidates": [
+        "chat group create",
+        "attendance record get",
+        "attendance rules"
+      ]
+    },
+    {
+      "tool_path": "attendance group create",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 416,
+      "candidates": [
+        "chat group create",
+        "attendance record get",
+        "attendance rules"
+      ]
+    },
+    {
+      "tool_path": "attendance selfsetting get",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 561,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance selfsetting get",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 562,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance selfsetting save",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 601,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance selfsetting save",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 603,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance selfsetting save",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 605,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance globalsetting get",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 679,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance globalsetting get",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 680,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance globalsetting save",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 709,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance globalsetting save",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 710,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance globalsetting save",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 711,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance report columns",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 745,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance report columns",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 747,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance report query-data",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 757,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance report query-leave",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 773,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation types",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 787,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation types",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 789,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation balance",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 801,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation records",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 816,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation update-type",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 840,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation update-type",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 843,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation update-type",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 846,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation save-balance",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 933,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation save-balance",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 937,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance checkin records",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 958,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance check record",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 972,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance check result",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 973,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance check record",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 974,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance approve list",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 975,
+      "candidates": [
+        "attendance shift list",
+        "attendance record get",
+        "attendance rules"
+      ]
+    },
+    {
+      "tool_path": "attendance read_file",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 976,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance read_file",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 980,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance class search",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 985,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance class search",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 986,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance class update",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 987,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance adjustment search",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 988,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance adjustment search",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 989,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance overtime search",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 990,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance overtime search",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 991,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group search",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 992,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group get",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 993,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group filtered-get",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 994,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group update-members",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 995,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group update",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 996,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group create",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 997,
+      "candidates": [
+        "chat group create",
+        "attendance record get",
+        "attendance rules"
+      ]
+    },
+    {
+      "tool_path": "attendance selfsetting get",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1000,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance selfsetting save",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1001,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance report columns",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1002,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance report query-data",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1003,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance report query-leave",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1010,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation types",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1011,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation balance",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1012,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance read_file",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1013,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation records",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1014,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation update-type",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1015,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation balance",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1016,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation balance",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1017,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance checkin records",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1018,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance schedule import",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1024,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance class search",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1032,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance class search",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1033,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance class get",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1036,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance class update",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1039,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance class update",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1040,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance adjustment search",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1043,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance adjustment search",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1044,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance adjustment get",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1047,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance overtime search",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1050,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance overtime get",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1053,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group search",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1056,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group search",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1057,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group get",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1060,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group filtered-get",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1063,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group filtered-get",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1064,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group update-members",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1067,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group update-members",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1068,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group update-members",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1069,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group update",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1072,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group update",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1073,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group update",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1074,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance group create",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1077,
+      "candidates": [
+        "chat group create",
+        "attendance record get",
+        "attendance rules"
+      ]
+    },
+    {
+      "tool_path": "attendance group create",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1078,
+      "candidates": [
+        "chat group create",
+        "attendance record get",
+        "attendance rules"
+      ]
+    },
+    {
+      "tool_path": "attendance selfsetting get",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1087,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance selfsetting get",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1090,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance selfsetting save",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1093,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance selfsetting save",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1096,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance report columns",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1100,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance report query-data",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1103,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance report query-leave",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1107,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation types",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1111,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation balance",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1114,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation balance",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1117,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation records",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1120,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation update-type",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1123,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation update-type",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1127,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation update-type",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1131,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation balance",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1136,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation save-balance",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1142,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation balance",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1148,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance vacation save-balance",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1154,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance checkin records",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1159,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance schedule get",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1265,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance boss-check",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1269,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "attendance boss-check",
+      "source": "skills/mono/references/products/attendance.md",
+      "line": 1272,
+      "candidates": [
+        "attendance record get",
+        "attendance rules",
+        "attendance shift list"
+      ]
+    },
+    {
+      "tool_path": "chat group members",
+      "source": "skills/mono/references/products/chat.md",
+      "line": 23,
+      "candidates": [
+        "chat group members add",
+        "chat group members add-bot",
+        "chat group members list"
+      ]
+    },
+    {
+      "tool_path": "chat group members",
+      "source": "skills/mono/references/products/chat.md",
+      "line": 1182,
+      "candidates": [
+        "chat group members add",
+        "chat group members add-bot",
+        "chat group members list"
+      ]
+    },
+    {
+      "tool_path": "contact user self",
+      "source": "skills/mono/references/products/contact.md",
+      "line": 23,
+      "candidates": [
+        "contact user dismission search",
+        "contact user get",
+        "contact user get-self"
+      ]
+    },
+    {
+      "tool_path": "contact user me",
+      "source": "skills/mono/references/products/contact.md",
+      "line": 24,
+      "candidates": [
+        "contact user dismission search",
+        "contact user get",
+        "contact user get-self"
+      ]
+    },
+    {
+      "tool_path": "contact user whoami",
+      "source": "skills/mono/references/products/contact.md",
+      "line": 25,
+      "candidates": [
+        "contact user dismission search",
+        "contact user get",
+        "contact user get-self"
+      ]
+    },
+    {
+      "tool_path": "contact user current",
+      "source": "skills/mono/references/products/contact.md",
+      "line": 26,
+      "candidates": [
+        "contact user dismission search",
+        "contact user get",
+        "contact user get-self"
+      ]
+    },
+    {
+      "tool_path": "contact label list",
+      "source": "skills/mono/references/products/contact.md",
+      "line": 197,
+      "candidates": [
+        "contact dept get-info",
+        "contact dept list-children",
+        "contact dept list-members"
+      ]
+    },
+    {
+      "tool_path": "contact label list",
+      "source": "skills/mono/references/products/contact.md",
+      "line": 199,
+      "candidates": [
+        "contact dept get-info",
+        "contact dept list-children",
+        "contact dept list-members"
+      ]
+    },
+    {
+      "tool_path": "contact label get",
+      "source": "skills/mono/references/products/contact.md",
+      "line": 213,
+      "candidates": [
+        "contact user get",
+        "contact user profile get",
+        "contact dept get-info"
+      ]
+    },
+    {
+      "tool_path": "contact label get",
+      "source": "skills/mono/references/products/contact.md",
+      "line": 214,
+      "candidates": [
+        "contact user get",
+        "contact user profile get",
+        "contact dept get-info"
+      ]
+    },
+    {
+      "tool_path": "contact label list-members",
+      "source": "skills/mono/references/products/contact.md",
+      "line": 228,
+      "candidates": [
+        "contact dept list-members",
+        "contact dept get-info",
+        "contact dept list-children"
+      ]
+    },
+    {
+      "tool_path": "contact label list",
+      "source": "skills/mono/references/products/contact.md",
+      "line": 316,
+      "candidates": [
+        "contact dept get-info",
+        "contact dept list-children",
+        "contact dept list-members"
+      ]
+    },
+    {
+      "tool_path": "contact label get",
+      "source": "skills/mono/references/products/contact.md",
+      "line": 319,
+      "candidates": [
+        "contact user get",
+        "contact user profile get",
+        "contact dept get-info"
+      ]
+    },
+    {
+      "tool_path": "contact label list-members",
+      "source": "skills/mono/references/products/contact.md",
+      "line": 322,
+      "candidates": [
+        "contact dept list-members",
+        "contact dept get-info",
+        "contact dept list-children"
+      ]
+    },
+    {
+      "tool_path": "dev connect",
+      "source": "skills/mono/references/products/dev.md",
+      "line": 36,
+      "candidates": [
+        "dev connect status",
+        "dev connect stop",
+        "dev app create"
+      ]
+    },
+    {
+      "tool_path": "dev connect",
+      "source": "skills/mono/references/products/dev.md",
+      "line": 38,
+      "candidates": [
+        "dev connect status",
+        "dev connect stop",
+        "dev app create"
+      ]
+    },
+    {
+      "tool_path": "dev app credentials reset",
+      "source": "skills/mono/references/products/dev.md",
+      "line": 124,
+      "candidates": [
+        "dev app credentials get",
+        "dev app create",
+        "dev app delete"
+      ]
+    },
+    {
+      "tool_path": "dev connect",
+      "source": "skills/mono/references/products/dev.md",
+      "line": 133,
+      "candidates": [
+        "dev connect status",
+        "dev connect stop",
+        "dev app create"
+      ]
+    },
+    {
+      "tool_path": "dev connect",
+      "source": "skills/mono/references/products/dev.md",
+      "line": 137,
+      "candidates": [
+        "dev connect status",
+        "dev connect stop",
+        "dev app create"
+      ]
+    },
+    {
+      "tool_path": "dev connect",
+      "source": "skills/mono/references/products/dev.md",
+      "line": 141,
+      "candidates": [
+        "dev connect status",
+        "dev connect stop",
+        "dev app create"
+      ]
+    },
+    {
+      "tool_path": "dev connect",
+      "source": "skills/mono/references/products/dev.md",
+      "line": 146,
+      "candidates": [
+        "dev connect status",
+        "dev connect stop",
+        "dev app create"
+      ]
+    },
+    {
+      "tool_path": "ding message list",
+      "source": "skills/mono/references/products/ding.md",
+      "line": 34,
+      "candidates": [
+        "chat message list",
+        "ding message recall",
+        "ding message send"
+      ]
+    },
+    {
+      "tool_path": "ding message list",
+      "source": "skills/mono/references/products/ding.md",
+      "line": 35,
+      "candidates": [
+        "chat message list",
+        "ding message recall",
+        "ding message send"
+      ]
+    },
+    {
+      "tool_path": "ding message list",
+      "source": "skills/mono/references/products/ding.md",
+      "line": 36,
+      "candidates": [
+        "chat message list",
+        "ding message recall",
+        "ding message send"
+      ]
+    },
+    {
+      "tool_path": "ding message receiver-status",
+      "source": "skills/mono/references/products/ding.md",
+      "line": 47,
+      "candidates": [
+        "ding message recall",
+        "ding message send"
+      ]
+    },
+    {
+      "tool_path": "ding message list",
+      "source": "skills/mono/references/products/ding.md",
+      "line": 57,
+      "candidates": [
+        "chat message list",
+        "ding message recall",
+        "ding message send"
+      ]
+    },
+    {
+      "tool_path": "ding message receiver-status",
+      "source": "skills/mono/references/products/ding.md",
+      "line": 58,
+      "candidates": [
+        "ding message recall",
+        "ding message send"
+      ]
+    },
+    {
+      "tool_path": "doc block",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 43,
+      "candidates": [
+        "doc block delete",
+        "doc block insert",
+        "doc block list"
+      ]
+    },
+    {
+      "tool_path": "doc media",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 44,
+      "candidates": [
+        "doc media download",
+        "doc media insert",
+        "doc block delete"
+      ]
+    },
+    {
+      "tool_path": "doc drive search",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 131,
+      "candidates": [
+        "doc search",
+        "drive search",
+        "dev doc search"
+      ]
+    },
+    {
+      "tool_path": "doc wiki node search",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 132,
+      "candidates": [
+        "wiki node search",
+        "doc search",
+        "dev doc search"
+      ]
+    },
+    {
+      "tool_path": "doc drive list",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 133,
+      "candidates": [
+        "doc block list",
+        "doc comment list",
+        "doc list"
+      ]
+    },
+    {
+      "tool_path": "doc sheet create",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 149,
+      "candidates": [
+        "doc comment create",
+        "doc create",
+        "doc file create"
+      ]
+    },
+    {
+      "tool_path": "doc aitable base create",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 150,
+      "candidates": [
+        "aitable base create",
+        "doc comment create",
+        "doc create"
+      ]
+    },
+    {
+      "tool_path": "doc drive folder create",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 154,
+      "candidates": [
+        "doc folder create",
+        "doc comment create",
+        "doc create"
+      ]
+    },
+    {
+      "tool_path": "doc drive upload",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 158,
+      "candidates": [
+        "doc upload",
+        "drive upload",
+        "doc block delete"
+      ]
+    },
+    {
+      "tool_path": "doc export",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 163,
+      "candidates": [
+        "doc export get",
+        "doc block delete",
+        "doc block insert"
+      ]
+    },
+    {
+      "tool_path": "doc drive download",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 164,
+      "candidates": [
+        "doc download",
+        "doc media download",
+        "drive download"
+      ]
+    },
+    {
+      "tool_path": "doc export",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 166,
+      "candidates": [
+        "doc export get",
+        "doc block delete",
+        "doc block insert"
+      ]
+    },
+    {
+      "tool_path": "doc drive download",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 167,
+      "candidates": [
+        "doc download",
+        "doc media download",
+        "drive download"
+      ]
+    },
+    {
+      "tool_path": "doc export",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 169,
+      "candidates": [
+        "doc export get",
+        "doc block delete",
+        "doc block insert"
+      ]
+    },
+    {
+      "tool_path": "doc drive download",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 170,
+      "candidates": [
+        "doc download",
+        "doc media download",
+        "drive download"
+      ]
+    },
+    {
+      "tool_path": "doc drive copy",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 176,
+      "candidates": [
+        "doc copy",
+        "drive copy",
+        "doc block delete"
+      ]
+    },
+    {
+      "tool_path": "doc drive move",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 180,
+      "candidates": [
+        "doc move",
+        "drive move",
+        "doc block delete"
+      ]
+    },
+    {
+      "tool_path": "doc drive rename",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 184,
+      "candidates": [
+        "doc rename",
+        "drive rename",
+        "doc block delete"
+      ]
+    },
+    {
+      "tool_path": "doc drive delete",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 189,
+      "candidates": [
+        "doc block delete",
+        "doc delete",
+        "drive delete"
+      ]
+    },
+    {
+      "tool_path": "doc drive permission add",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 213,
+      "candidates": [
+        "doc permission add",
+        "drive permission add",
+        "dev app permission add"
+      ]
+    },
+    {
+      "tool_path": "doc drive permission update",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 214,
+      "candidates": [
+        "doc permission update",
+        "drive permission update",
+        "doc block update"
+      ]
+    },
+    {
+      "tool_path": "doc drive permission list",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 215,
+      "candidates": [
+        "doc permission list",
+        "drive permission list",
+        "doc block list"
+      ]
+    },
+    {
+      "tool_path": "doc drive permission remove",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 216,
+      "candidates": [
+        "doc permission remove",
+        "drive permission remove",
+        "dev app permission remove"
+      ]
+    },
+    {
+      "tool_path": "doc drive permission add",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 220,
+      "candidates": [
+        "doc permission add",
+        "drive permission add",
+        "dev app permission add"
+      ]
+    },
+    {
+      "tool_path": "doc wiki member add",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 221,
+      "candidates": [
+        "wiki member add",
+        "doc permission add",
+        "dev app member add"
+      ]
+    },
+    {
+      "tool_path": "doc drive rename",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 235,
+      "candidates": [
+        "doc rename",
+        "drive rename",
+        "doc block delete"
+      ]
+    },
+    {
+      "tool_path": "doc export",
+      "source": "skills/mono/references/products/doc.md",
+      "line": 277,
+      "candidates": [
+        "doc export get",
+        "doc block delete",
+        "doc block insert"
+      ]
+    },
+    {
+      "tool_path": "doc export",
+      "source": "skills/mono/references/products/doc/doc-export.md",
+      "line": 20,
+      "candidates": [
+        "doc export get",
+        "doc block delete",
+        "doc block insert"
+      ]
+    },
+    {
+      "tool_path": "doc export",
+      "source": "skills/mono/references/products/doc/doc-export.md",
+      "line": 21,
+      "candidates": [
+        "doc export get",
+        "doc block delete",
+        "doc block insert"
+      ]
+    },
+    {
+      "tool_path": "doc export",
+      "source": "skills/mono/references/products/doc/doc-export.md",
+      "line": 64,
+      "candidates": [
+        "doc export get",
+        "doc block delete",
+        "doc block insert"
+      ]
+    },
+    {
+      "tool_path": "doc export",
+      "source": "skills/mono/references/products/doc/doc-export.md",
+      "line": 67,
+      "candidates": [
+        "doc export get",
+        "doc block delete",
+        "doc block insert"
+      ]
+    },
+    {
+      "tool_path": "doc export",
+      "source": "skills/mono/references/products/doc/doc-export.md",
+      "line": 70,
+      "candidates": [
+        "doc export get",
+        "doc block delete",
+        "doc block insert"
+      ]
+    },
+    {
+      "tool_path": "drive folder create",
+      "source": "skills/mono/references/products/drive.md",
+      "line": 276,
+      "candidates": [
+        "doc folder create",
+        "mail folder create",
+        "drive commit"
+      ]
+    },
+    {
+      "tool_path": "event schema user_im_message_receive_o2o",
+      "source": "skills/mono/references/products/event.md",
+      "line": 28
+    },
+    {
+      "tool_path": "event consume user_im_message_receive_o2o",
+      "source": "skills/mono/references/products/event.md",
+      "line": 32
+    },
+    {
+      "tool_path": "event consume user_im_message_receive_o2o",
+      "source": "skills/mono/references/products/event.md",
+      "line": 38
+    },
+    {
+      "tool_path": "event status",
+      "source": "skills/mono/references/products/event.md",
+      "line": 45,
+      "candidates": [
+        "conference status",
+        "dev app version status",
+        "dev connect status"
+      ]
+    },
+    {
+      "tool_path": "event stop",
+      "source": "skills/mono/references/products/event.md",
+      "line": 46,
+      "candidates": [
+        "conference record stop",
+        "conference share stop",
+        "dev connect stop"
+      ]
+    },
+    {
+      "tool_path": "mail aisearch person",
+      "source": "skills/mono/references/products/mail.md",
+      "line": 595,
+      "candidates": [
+        "aisearch person",
+        "mail attachment download",
+        "mail attachment list"
+      ]
+    },
+    {
+      "tool_path": "sheet formulaCondition",
+      "source": "skills/mono/references/products/sheet/sheet-conditional-format.md",
+      "line": 59,
+      "candidates": [
+        "sheet add-dimension",
+        "sheet append",
+        "sheet cond-format create"
+      ]
+    },
+    {
+      "tool_path": "sheet range get",
+      "source": "skills/mono/references/products/sheet/sheet-read-data.md",
+      "line": 74,
+      "candidates": [
+        "sheet filter get",
+        "sheet range batch-set-style",
+        "sheet range clear"
+      ]
+    },
+    {
+      "tool_path": "oa approval",
+      "source": "skills/mono/references/products/simple.md",
+      "line": 124,
+      "candidates": [
+        "oa approval approve",
+        "oa approval detail",
+        "oa approval list-cc"
+      ]
+    },
+    {
+      "tool_path": "wiki space",
+      "source": "skills/mono/references/products/wiki.md",
+      "line": 16,
+      "candidates": [
+        "wiki space create",
+        "wiki space delete",
+        "wiki space get"
+      ]
+    },
+    {
+      "tool_path": "wiki member",
+      "source": "skills/mono/references/products/wiki.md",
+      "line": 17,
+      "candidates": [
+        "wiki member add",
+        "wiki member list",
+        "wiki member remove"
+      ]
+    },
+    {
+      "tool_path": "wiki drive search",
+      "source": "skills/mono/references/products/wiki.md",
+      "line": 313,
+      "candidates": [
+        "wiki node search",
+        "wiki space search",
+        "drive search"
+      ]
+    }
+  ]
+}

@@ -29,8 +29,9 @@ func TestLoadCommandSurfaceSnapshotReconcilesAliases(t *testing.T) {
 		Products: []commandSurfaceProduct{{
 			ID: "calendar",
 			Tools: []commandSurfaceTool{{
-				CLIPath: "calendar attendee delete",
-				Aliases: []string{"calendar participant delete"},
+				CanonicalPath: "calendar.delete_participant",
+				CLIPath:       "calendar attendee delete",
+				Aliases:       []string{"calendar participant delete"},
 			}},
 		}},
 	}
@@ -51,6 +52,9 @@ func TestLoadCommandSurfaceSnapshotReconcilesAliases(t *testing.T) {
 	}
 	if got := surface.ToolPaths["calendar participant delete"]; got != "calendar attendee delete" {
 		t.Fatalf("alias primary path = %q, want calendar attendee delete", got)
+	}
+	if got := surface.ToolPaths["calendar.delete_participant"]; got != "calendar attendee delete" {
+		t.Fatalf("canonical primary path = %q, want calendar attendee delete", got)
 	}
 	if surface.Hash == "" {
 		t.Fatalf("surface hash is empty: %#v", surface)

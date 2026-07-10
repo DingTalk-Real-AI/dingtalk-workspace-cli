@@ -47,6 +47,10 @@ func newLegacyPublicCommands(ctx context.Context, runner executor.Runner) []*cob
 		// entirely. The overlay registers its own product commands via
 		// RegisterExtraCommands; we only add the open-source helpers here.
 		commands := helpers.NewPublicCommands(runner)
+		if releaseCatalogSurfaceEnabled() {
+			commands = pickCommands(commands, helpers.NewCatalogFallbackCommands(runner))
+			filterCommandsToCatalogSurface(commands)
+		}
 		return mergeTopLevelCommands(commands)
 	}
 
@@ -104,7 +108,12 @@ func buildEnvelopeCommandsSafe(ctx context.Context, runner executor.Runner) []*c
 		"Warning: building product commands from the local discovery cache failed: %v\n"+
 			"Product commands are temporarily unavailable; utility commands still work.\n"+
 			"Run 'dws cache refresh' to rebuild the cache.\n", panicked)
-	return mergeTopLevelCommands(helpers.NewPublicCommands(runner))
+	commands := helpers.NewPublicCommands(runner)
+	if releaseCatalogSurfaceEnabled() {
+		commands = pickCommands(commands, helpers.NewCatalogFallbackCommands(runner))
+		filterCommandsToCatalogSurface(commands)
+	}
+	return mergeTopLevelCommands(commands)
 }
 
 // tryBuildEnvelopeCommands runs one attempt of the envelope-driven build,
@@ -121,6 +130,10 @@ func tryBuildEnvelopeCommands(ctx context.Context, runner executor.Runner) (cmds
 	dynamicCmds := loadDynamicCommandsFn(ctx, runner)
 	helperCmds := helpers.NewPublicCommands(runner)
 	merged := mergeTopLevelCommands(pickCommands(dynamicCmds, helperCmds))
+	if releaseCatalogSurfaceEnabled() {
+		merged = mergeTopLevelCommands(pickCommands(merged, helpers.NewCatalogFallbackCommands(runner)))
+		filterCommandsToCatalogSurface(merged)
+	}
 	// Post-merge product hooks: tasks the envelope cannot express on its
 	// own (e.g. dual-role group+leaf semantics for deprecated aliases).
 	// Keep each hook narrowly scoped to one product so the open-source
@@ -128,6 +141,59 @@ func tryBuildEnvelopeCommands(ctx context.Context, runner executor.Runner) (cmds
 	helpers.AttachReportLegacyInboxAlias(merged, runner)
 	helpers.AttachReportListReadableEnrichment(merged, runner)
 	return merged, nil
+}
+
+// releaseCatalogSurfaceEnabled keeps the published open-source command
+// contract stable while preserving explicit fixture and discovery test hooks.
+func releaseCatalogSurfaceEnabled() bool {
+	return edition.Get().Name == "open" &&
+		strings.TrimSpace(os.Getenv(cli.CatalogFixtureEnv)) == "" &&
+		strings.TrimSpace(discoveryBaseURLOverride) == ""
+}
+
+func filterCommandsToCatalogSurface(commands []*cobra.Command) {
+	allowed := cli.EmbeddedSchemaCLIPaths()
+	if len(allowed) == 0 {
+		return
+	}
+	for _, command := range commands {
+		if !filterCatalogChildren(command, command.Name(), allowed) {
+			command.Hidden = true
+		}
+	}
+}
+
+func filterCatalogChildren(parent *cobra.Command, prefix string, allowed map[string]bool) bool {
+	for _, child := range append([]*cobra.Command(nil), parent.Commands()...) {
+		path := strings.TrimSpace(prefix + " " + child.Name())
+		hasAllowedChild := filterCatalogChildren(child, path, allowed)
+		allowedLeaf := catalogCommandPathAllowed(path, child.Aliases, allowed)
+		if child.Runnable() && !hasAllowedChild && !allowedLeaf {
+			parent.RemoveCommand(child)
+			continue
+		}
+		if !child.Runnable() && !hasAllowedChild {
+			parent.RemoveCommand(child)
+		}
+	}
+	return len(parent.Commands()) > 0 || catalogCommandPathAllowed(prefix, parent.Aliases, allowed)
+}
+
+func catalogCommandPathAllowed(path string, aliases []string, allowed map[string]bool) bool {
+	if allowed[strings.Join(strings.Fields(path), " ")] {
+		return true
+	}
+	parts := strings.Fields(path)
+	if len(parts) == 0 {
+		return false
+	}
+	prefix := strings.Join(parts[:len(parts)-1], " ")
+	for _, alias := range aliases {
+		if allowed[strings.TrimSpace(prefix+" "+alias)] {
+			return true
+		}
+	}
+	return false
 }
 
 // pickCommands returns the union of dynamic and helpers commands. For

@@ -2,21 +2,28 @@
   "product_id": "mail",
   "tools": {
     "mail attachment download": {
+      "agent_summary": "下载邮件附件",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "下载到指定目录",
-        "再下载指定附件到当前目录（每次只能下载一个附件）"
+        "再下载指定附件到当前目录（每次只能下载一个附件）",
+        "步骤 5.3：对每个附件逐个下载（没有批量下载命令，必须循环调用）"
       ],
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws mail attachment download --email user@company.com --message-id \u003cmessageId\u003e --attachment-id \u003cattachmentId\u003e --name img.png --output /tmp",
-        "dws mail attachment download --email user@company.com --message-id \u003cmessageId\u003e --attachment-id \u003cattachmentId\u003e --name report.pdf"
+        "dws mail attachment download --email user@company.com --message-id \u003cmessageId\u003e --attachment-id \u003cattachmentId\u003e --name report.pdf",
+        "dws mail attachment download --email user@company.com --message-id \u003cmessageId\u003e --attachment-id \u003cattachmentId\u003e --name img.png --output /tmp"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.mail.create_download_session",
         "skills/mono/references/products/mail.md"
       ]
     },
     "mail attachment list": {
+      "agent_summary": "列举邮件附件",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "先列出附件获取 id 和 name",
         "（对搜索结果中的每封邮件都要执行一次）"
@@ -26,42 +33,132 @@
       "examples": [
         "dws mail attachment list --email user@company.com --id \u003cmessageId\u003e"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.mail.list_mail_attachments",
         "skills/mono/references/products/mail.md"
       ]
     },
+    "mail contact batch-delete": {
+      "agent_summary": "批量删除用户邮箱联系人",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "destructive",
+      "effect_source": "agent-hint",
+      "risk": "high",
+      "confirmation": "user_required",
+      "reviewed": false,
+      "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.mail.batch_delete_user_mail_contacts",
+        "skills/mono/schema-hints/destructive-safety.json"
+      ]
+    },
+    "mail contact create": {
+      "agent_summary": "创建用户邮箱联系人",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "reviewed": false,
+      "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.mail.create_user_mail_contact"
+      ]
+    },
+    "mail contact list": {
+      "agent_summary": "列出用户邮箱联系人",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "reviewed": false,
+      "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.mail.list_user_mail_contacts"
+      ]
+    },
+    "mail contact update": {
+      "agent_summary": "修改用户邮箱联系人信息",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "reviewed": false,
+      "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.mail.update_user_mail_contact"
+      ]
+    },
     "mail draft create": {
+      "agent_summary": "创建邮件草稿",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
+        "dws mail draft create --from user@company.com --to colleague@company.com --subject \"草稿标题\" --body \"草稿正文\"",
         "dws mail draft create --from user@company.com --subject \"草稿标题\""
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.mail.create_draft",
         "skills/mono/references/products/mail.md"
       ]
     },
     "mail draft send": {
+      "agent_summary": "发送草稿箱中的邮件",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
         "dws mail draft send --from user@company.com --id \u003cmessageId\u003e"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.mail.send_draft",
         "skills/mono/references/products/mail.md"
       ]
     },
     "mail draft update": {
+      "agent_summary": "更新邮件草稿",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
-        "dws mail draft update --from user@company.com --id \u003cmessageId\u003e --body \"见附件\" --attachment ./report.pdf",
-        "dws mail draft update --from user@company.com --id \u003cmessageId\u003e --subject \"新标题\" --body \"新正文\""
+        "dws mail draft update --from user@company.com --id \u003cmessageId\u003e --subject \"新标题\" --body \"新正文\"",
+        "dws mail draft update --from user@company.com --id \u003cmessageId\u003e --body \"见附件\" --attachment ./report.pdf"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.mail.update_draft",
         "skills/mono/references/products/mail.md"
       ]
     },
+    "mail folder create": {
+      "agent_summary": "创建邮件文件夹",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws mail folder create --email user@company.com --name \"项目资料\"",
+        "dws mail folder create --email user@company.com --name \"子文件夹\" --folder \u003cfolderId\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.create_mail_folder",
+        "skills/mono/schema-hints/imported/wukong.json"
+      ]
+    },
+    "mail folder delete": {
+      "agent_summary": "删除邮件文件夹",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+      "effect": "destructive",
+      "effect_source": "agent-hint",
+      "risk": "high",
+      "confirmation": "user_required",
+      "examples": [
+        "dws mail folder delete --email user@company.com --id \u003cfolderId\u003e"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.delete_mail_folder",
+        "skills/mono/schema-hints/destructive-safety.json",
+        "skills/mono/schema-hints/imported/wukong.json"
+      ]
+    },
     "mail folder list": {
+      "agent_summary": "列举邮件文件夹",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
@@ -69,10 +166,27 @@
         "dws mail folder list --email user@company.com --folder-id \u003cfolderId\u003e"
       ],
       "source_refs": [
-        "skills/mono/references/products/mail.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.list_folders",
+        "skills/mono/references/products/mail.md",
+        "skills/mono/schema-hints/imported/wukong.json"
+      ]
+    },
+    "mail folder update": {
+      "agent_summary": "更新邮件文件夹",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws mail folder update --email user@company.com --id \u003cfolderId\u003e --name \"新文件夹名\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.update_mail_folder",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "mail mailbox list": {
+      "agent_summary": "查询可用邮箱地址",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "1. 查看可用邮箱 — 提取邮箱地址",
         "发带附件的邮件/发邮件附件",
@@ -87,35 +201,56 @@
         "dws mail mailbox list --format json"
       ],
       "source_refs": [
-        "skills/mono/references/products/mail.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.list_user_mailboxes",
+        "skills/mono/references/products/mail.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "mail message batch-delete": {
+      "agent_summary": "批量删除邮件",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "destructive",
+      "effect_source": "agent-hint",
+      "risk": "high",
+      "confirmation": "user_required",
       "examples": [
         "dws mail message batch-delete --email user@company.com --ids \u003cid1\u003e,\u003cid2\u003e"
       ],
+      "reviewed": false,
       "source_refs": [
-        "skills/mono/references/products/mail.md"
+        "internal/cli/schema_mcp_metadata.json#tools.mail.batch_delete_message",
+        "skills/mono/references/products/mail.md",
+        "skills/mono/schema-hints/destructive-safety.json"
       ]
     },
     "mail message batch-move": {
+      "agent_summary": "批量移动邮件到指定文件夹",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "examples": [
         "dws mail message batch-move --email user@company.com --ids \u003cid1\u003e,\u003cid2\u003e --folder 6"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.mail.batch_move_message",
         "skills/mono/references/products/mail.md"
       ]
     },
     "mail message forward": {
+      "agent_summary": "创建转发草稿",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "examples": [
         "dws mail message forward --from user@company.com --id \u003cmessageId\u003e",
         "dws mail message forward --from user@company.com --to colleague@company.com --id \u003cmessageId\u003e --subject \"Fwd: 周报\""
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.mail.create_forward_draft",
         "skills/mono/references/products/mail.md"
       ]
     },
     "mail message get": {
+      "agent_summary": "查看邮件完整内容",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "3. 查看邮件详情"
       ],
@@ -126,31 +261,44 @@
         "dws mail message get --email user@company.com --id \u003cmessageId\u003e --format json"
       ],
       "source_refs": [
-        "skills/mono/references/products/mail.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.get_email_by_message_id",
+        "skills/mono/references/products/mail.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "mail message reply": {
+      "agent_summary": "创建回复草稿",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
         "dws mail message reply --from user@company.com --id \u003cmessageId\u003e",
         "dws mail message reply --from user@company.com --id \u003cmessageId\u003e --subject \"Re: 周报\" --body \"已收到，谢谢！\""
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.mail.create_reply_draft",
         "skills/mono/references/products/mail.md"
       ]
     },
     "mail message reply-all": {
+      "agent_summary": "创建回复全部草稿",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "examples": [
         "dws mail message reply-all --from user@company.com --id \u003cmessageId\u003e",
         "dws mail message reply-all --from user@company.com --id \u003cmessageId\u003e --subject \"Re: 周报\" --body \"感谢大家的参与！\""
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.mail.create_replyall_draft",
         "skills/mono/references/products/mail.md"
       ]
     },
     "mail message search": {
+      "agent_summary": "搜索邮件 (KQL 语法)",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
+        "2. 搜索邮件 — 提取 messageId",
         "下载附件/保存附件/把附件存到本地/把所有附件下载到...",
         "发送草稿/把草稿发出去/发这封草稿",
         "取返回中的 nextCursor，传入下一次请求（nextCursor=\"$\" 时停止）",
@@ -158,30 +306,113 @@
         "把XX邮件的所有附件都下载",
         "查看会话/获取会话/看这封邮件的会话",
         "查看附件/邮件附件/有什么附件",
+        "步骤 5.1：先通过 message search 或 message get 获取邮件中的 conversationId",
         "看邮件/打开邮件/邮件内容",
+        "示例：下载4月所有发票邮件的附件",
         "第一页"
       ],
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws mail message search --email user@company.com --query \"from:alice AND date\u003e2025-06-01T00:00:00Z\" --size 10",
-        "dws mail message search --email user@company.com --query \"subject:\\\"周报\\\"\" --size 20"
+        "dws mail message search --email user@company.com --query \"subject:\\\"周报\\\"\" --size 20",
+        "dws mail message search --email user@company.com --query \"from:alice AND date\u003e2025-06-01T00:00:00Z\" --size 10"
       ],
       "source_refs": [
-        "skills/mono/references/products/mail.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.search_emails",
+        "skills/mono/references/products/mail.md",
+        "skills/mono/schema-hints/imported/wukong.json"
+      ]
+    },
+    "mail message send": {
+      "agent_summary": "发送邮件",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+      "use_when": [
+        "4. 发送邮件（纯文本）",
+        "4b. 发送带附件的邮件（自动编排：创建草稿→上传附件→发送草稿）",
+        "4c. 发送带内联图片的邮件（正文自动转 HTML，\u003cimg\u003e 标签自动注入）"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws mail message send --from user@company.com --to colleague@company.com --subject \"周报\" --body \"本周完成任务A和任务B\"",
+        "dws mail message send --from user@company.com --to colleague@company.com --subject \"周报\" --body \"见附件\" --attachment ./report.pdf"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.send_email",
+        "skills/mono/references/products/mail.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "mail tag list": {
+      "agent_summary": "列举邮件标签",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
         "dws mail tag list --email user@company.com"
       ],
       "source_refs": [
-        "skills/mono/references/products/mail.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.list_tags",
+        "skills/mono/references/products/mail.md",
+        "skills/mono/schema-hints/imported/wukong.json"
+      ]
+    },
+    "mail template create": {
+      "agent_summary": "创建个人邮件模板",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "reviewed": false,
+      "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.mail.create_user_message_template"
+      ]
+    },
+    "mail template delete": {
+      "agent_summary": "删除用户邮件模板",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "destructive",
+      "effect_source": "agent-hint",
+      "risk": "high",
+      "confirmation": "user_required",
+      "reviewed": false,
+      "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.mail.delete_user_message_template",
+        "skills/mono/schema-hints/destructive-safety.json"
+      ]
+    },
+    "mail template get": {
+      "agent_summary": "获取用户邮件模板详情",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "reviewed": false,
+      "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.mail.get_user_message_template"
+      ]
+    },
+    "mail template list": {
+      "agent_summary": "列出用户邮件模板",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "reviewed": false,
+      "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.mail.list_user_message_templates"
+      ]
+    },
+    "mail template update": {
+      "agent_summary": "更新用户邮件模板",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "reviewed": false,
+      "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.mail.update_user_message_template"
       ]
     },
     "mail thread get": {
+      "agent_summary": "获取会话详情",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "步骤 5.2：用 conversationId 获取会话详情",
         "步骤 5.3（可选）：同时返回会话内所有邮件列表"
@@ -193,10 +424,14 @@
         "dws mail thread get --email user@company.com --id \u003cconversationId\u003e --format json"
       ],
       "source_refs": [
-        "skills/mono/references/products/mail.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.get_thread",
+        "skills/mono/references/products/mail.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "mail user search": {
+      "agent_summary": "搜索账号",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "搜索/查找/联系 邮箱用户/联系人/某人的邮箱地址",
         "翻页继续搜索联系人/通讯录",
@@ -208,7 +443,9 @@
         "dws mail user search --email \u003c当前邮箱\u003e --keyword \"姓名\" --format json",
         "dws mail user search --keyword \"张三\""
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.mail.search_mail_users",
         "skills/mono/references/products/mail.md"
       ]
     }

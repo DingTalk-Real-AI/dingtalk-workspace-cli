@@ -45,16 +45,22 @@
       ]
     },
     "dev app disable": {
+      "agent_summary": "停用开放平台应用，停用后应用能力对外不可用（可重新启用）",
+      "agent_summary_source": "destructive-safety-review",
       "use_when": [
         "停用/启用应用"
       ],
       "effect": "write",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
+      "risk": "high",
+      "confirmation": "user_required",
       "examples": [
         "dws dev app disable --unified-app-id \u003cunifiedAppId\u003e --yes --format json"
       ],
+      "reviewed": true,
       "source_refs": [
-        "skills/mono/references/products/dev.md"
+        "skills/mono/references/products/dev.md",
+        "skills/mono/schema-hints/destructive-safety.json"
       ]
     },
     "dev app enable": {
@@ -126,6 +132,18 @@
         "skills/mono/references/products/dev.md"
       ]
     },
+    "dev app member remove": {
+      "agent_summary": "移除开放平台应用的协作成员",
+      "agent_summary_source": "destructive-safety-review",
+      "effect": "destructive",
+      "effect_source": "agent-hint",
+      "risk": "high",
+      "confirmation": "user_required",
+      "reviewed": true,
+      "source_refs": [
+        "skills/mono/schema-hints/destructive-safety.json"
+      ]
+    },
     "dev app permission add": {
       "effect": "write",
       "effect_source": "command-verb",
@@ -147,13 +165,19 @@
       ]
     },
     "dev app permission remove": {
-      "effect": "write",
-      "effect_source": "command-verb",
+      "agent_summary": "移除开放平台应用已授予的权限点",
+      "agent_summary_source": "destructive-safety-review",
+      "effect": "destructive",
+      "effect_source": "agent-hint",
+      "risk": "high",
+      "confirmation": "user_required",
       "examples": [
         "dws dev app permission remove --unified-app-id \u003cunifiedAppId\u003e --scope-code \u003cscopeValue\u003e --yes --format json"
       ],
+      "reviewed": true,
       "source_refs": [
-        "skills/mono/references/products/dev.md"
+        "skills/mono/references/products/dev.md",
+        "skills/mono/schema-hints/destructive-safety.json"
       ]
     },
     "dev app robot config": {
@@ -172,16 +196,22 @@
       ]
     },
     "dev app robot disable": {
+      "agent_summary": "停用开放平台应用的机器人（可重新启用）",
+      "agent_summary_source": "destructive-safety-review",
       "use_when": [
         "启用/停用机器人"
       ],
       "effect": "write",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
+      "risk": "high",
+      "confirmation": "user_required",
       "examples": [
         "dws dev app robot disable --unified-app-id \u003cunifiedAppId\u003e --format json"
       ],
+      "reviewed": true,
       "source_refs": [
-        "skills/mono/references/products/dev.md"
+        "skills/mono/references/products/dev.md",
+        "skills/mono/schema-hints/destructive-safety.json"
       ]
     },
     "dev app robot enable": {
@@ -272,8 +302,7 @@
       "effect_source": "command-verb",
       "examples": [
         "dws dev app version check-approval --unified-app-id \u003cunifiedAppId\u003e --version-id \u003cversionId\u003e --format json",
-        "dws dev app version publish --unified-app-id \u003cunifiedAppId\u003e --version-id \u003cversionId\u003e --dry-run --format json",
-        "dws dev app version publish --unified-app-id \u003cunifiedAppId\u003e --version-id \u003cversionId\u003e --yes --format json"
+        "dws dev app version publish --unified-app-id \u003cunifiedAppId\u003e --version-id \u003cversionId\u003e --dry-run --format json"
       ],
       "source_refs": [
         "skills/mono/references/products/dev.md"
@@ -286,8 +315,8 @@
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws dev app version status         --unified-app-id \u003cunifiedAppId\u003e --version-id \u003cversionId\u003e --format json",
-        "dws dev app version status --unified-app-id \u003cunifiedAppId\u003e --version-id \u003cversionId\u003e --format json"
+        "dws dev app version status --unified-app-id \u003cunifiedAppId\u003e --version-id \u003cversionId\u003e --format json",
+        "dws dev app version status         --unified-app-id \u003cunifiedAppId\u003e --version-id \u003cversionId\u003e --format json"
       ],
       "source_refs": [
         "skills/mono/references/products/dev.md"

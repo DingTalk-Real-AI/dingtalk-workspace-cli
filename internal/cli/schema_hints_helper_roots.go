@@ -14,6 +14,9 @@
 package cli
 
 func init() {
+	RegisterSchemaProductVisibility("doc-comment", SchemaVisibilityInternal)
+	RegisterSchemaProductVisibility("hrmregister", SchemaVisibilityInternal)
+
 	RegisterRuntimeSchemaRoot("doc", RuntimeSchemaRootHint{
 		Source: "hardcoded:doc",
 		ToolNames: map[string]string{
@@ -159,6 +162,16 @@ func init() {
 		Source: "hardcoded:pat",
 		ToolNames: map[string]string{
 			"pat chmod": "batch_grant",
+		},
+	})
+	RegisterSchemaHints("pat", map[string]ToolSchemaHint{
+		"batch_grant": {
+			Parameters: map[string]ParameterSchemaHint{
+				"sessionId": {
+					Required:     boolPtr(false),
+					RequiredWhen: "grant-type is session",
+				},
+			},
 		},
 	})
 

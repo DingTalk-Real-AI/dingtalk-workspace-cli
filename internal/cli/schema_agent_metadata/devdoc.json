@@ -1,9 +1,36 @@
 {
   "product_id": "devdoc",
   "tools": {
+    "devdoc article legacy-search": {
+      "agent_summary": "根据关键词搜索钉钉开放平台的开发文档，返回匹配的文档条目列表，包含标题、摘要、文档链接和相关标签。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "reviewed": false,
+      "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.devdoc.search_dingtalk_open_docs"
+      ]
+    },
+    "devdoc article legacy-search-open-platform": {
+      "agent_summary": "根据关键词搜索钉钉开放平台的开发文档，返回匹配的文档条目列表，包含标题、摘要、文档链接和相关标签。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "reviewed": false,
+      "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.devdoc.search_open_platform_docs"
+      ]
+    },
+    "devdoc article rag-pretest": {
+      "agent_summary": "按关键词检索钉钉开放平台文档，只返回参考资料、参考资料链接和RAG上下文，不生成AI分析答案。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "reviewed": false,
+      "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.devdoc.devdoc_rag_pretest"
+      ]
+    },
     "devdoc article search": {
+      "agent_summary": "按关键词搜索 open.dingtalk.com 开放平台文档",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "命中结果多时翻页",
+        "开发文档/API 文档/接口文档",
         "开发者问\"OAuth2 怎么接",
         "推荐动态翻页：优先使用上一页返回的 nextCursor",
         "查错误码 / 字段含义",
@@ -16,14 +43,20 @@
         "dws devdoc article search --query \"OAuth2 接入\""
       ],
       "source_refs": [
-        "skills/mono/references/products/devdoc.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.devdoc.prod.json#devdoc.search_open_platform_docs",
+        "skills/mono/references/products/devdoc.md",
+        "skills/mono/references/products/simple.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "devdoc error diagnose": {
+      "agent_summary": "按原始问题、requestId/traceId、错误码或错误描述排查钉钉开放平台调用错误；",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "只有 traceId 时按 requestId 兼容处理",
         "只有错误码和错误描述时排查",
         "已经有 requestId 时排查",
+        "调用报错/requestId/traceId/错误码/错误描述",
         "错误排查结果继续翻页"
       ],
       "effect": "read",
@@ -32,8 +65,11 @@
         "dws devdoc error diagnose --request-id 15r6h45w0muec",
         "dws devdoc error diagnose --trace-id 15r6h45w0muec --api \"创建日程\""
       ],
+      "reviewed": false,
       "source_refs": [
-        "skills/mono/references/products/devdoc.md"
+        "internal/cli/schema_mcp_metadata.json#tools.devdoc.search_open_error_code_rag",
+        "skills/mono/references/products/devdoc.md",
+        "skills/mono/references/products/simple.md"
       ]
     }
   }

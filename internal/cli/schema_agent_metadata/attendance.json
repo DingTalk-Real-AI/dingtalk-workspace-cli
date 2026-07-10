@@ -1,20 +1,52 @@
 {
   "product_id": "attendance",
   "tools": {
+    "attendance record get": {
+      "agent_summary": "查询个人考勤详情",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws attendance record get --user USER_ID --date 2026-03-08  # 查询 userId: dws contact user search --keyword \"姓名\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.attendance.prod.json#attendance.get_user_attendance_record",
+        "skills/mono/schema-hints/imported/wukong.json"
+      ]
+    },
     "attendance rules": {
+      "agent_summary": "查询考勤组与考勤规则",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "查看考勤组和规则",
         "考勤组/考勤规则/打卡规则"
       ],
       "examples": [
-        "dws attendance rules --date \"2026-03-14 09:00:00\"",
-        "dws attendance rules --date 2026-03-14"
+        "dws attendance rules --date 2026-03-14",
+        "dws attendance rules --date \"2026-03-14 09:00:00\""
       ],
       "source_refs": [
-        "skills/mono/references/products/attendance.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.attendance.prod.json#attendance.query_attendance_group_or_rules",
+        "skills/mono/references/products/attendance.md",
+        "skills/mono/schema-hints/imported/wukong.json"
+      ]
+    },
+    "attendance shift list": {
+      "agent_summary": "批量查询员工班次信息（间隔 ≤ 7 天，最多 50 人）",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws attendance shift list --users userId1,userId2 --start 2026-03-03 --end 2026-03-07  # 查询 userId: dws contact user search --keyword \"姓名\""
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.attendance.prod.json#attendance.batch_get_employee_shifts",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "attendance summary": {
+      "agent_summary": "查询某个人的考勤统计摘要",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "查看考勤统计摘要",
         "考勤汇总/统计"
@@ -22,11 +54,13 @@
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws attendance summary --user \u003cUSER_ID\u003e --date \"2026-03-12 15:00:00\" --format json",
-        "dws attendance summary --user USER_ID --date \"2026-03-12 15:00:00\""
+        "dws attendance summary --user USER_ID --date \"2026-03-12 15:00:00\"",
+        "dws attendance summary --user \u003cUSER_ID\u003e --date \"2026-03-12 15:00:00\" --format json"
       ],
       "source_refs": [
-        "skills/mono/references/products/attendance.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.attendance.prod.json#attendance.get_attendance_summary",
+        "skills/mono/references/products/attendance.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     }
   }

@@ -27,3 +27,18 @@ func TestLowerCamelFlagName(t *testing.T) {
 		}
 	}
 }
+
+func TestUsageImpliesRequiredExcludesConditionalRequirements(t *testing.T) {
+	for _, usage := range []string{
+		"会话标识（session 模式下必填）",
+		"required when --mode is session",
+		"value is required if --enabled is set",
+	} {
+		if usageImpliesRequired(usage) {
+			t.Errorf("usageImpliesRequired(%q) = true, want false", usage)
+		}
+	}
+	if !usageImpliesRequired("resource id (required)") {
+		t.Fatal("unconditional required usage was not recognized")
+	}
+}

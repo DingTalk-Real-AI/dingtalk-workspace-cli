@@ -2,6 +2,8 @@
   "product_id": "todo",
   "tools": {
     "todo comment add": {
+      "agent_summary": "给待办添加评论",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "7. 给待办新增评论",
         "给待办加条评论/留个备注"
@@ -9,29 +11,40 @@
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
-        "dws todo comment add --task-id \u003ctaskId\u003e --content \"已开始处理\" --format json",
-        "dws todo comment add --task-id \u003ctaskId\u003e --content \"评论内容\""
+        "dws todo comment add --task-id \u003ctaskId\u003e --content \"评论内容\"",
+        "dws todo comment add --task-id \u003ctaskId\u003e --content \"已开始处理\" --format json"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.todo.add_todo_comment",
         "skills/mono/references/products/todo.md"
       ]
     },
     "todo comment delete": {
+      "agent_summary": "删除待办的评论",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "9. 删除待办评论",
         "删除这条评论"
       ],
-      "effect": "write",
-      "effect_source": "command-verb",
+      "effect": "destructive",
+      "effect_source": "agent-hint",
+      "risk": "high",
+      "confirmation": "user_required",
       "examples": [
         "dws todo comment delete --task-id \u003ctaskId\u003e --comment-id \u003ccommentId\u003e",
         "dws todo comment delete --task-id \u003ctaskId\u003e --comment-id \u003ccommentId\u003e --yes"
       ],
+      "reviewed": false,
       "source_refs": [
-        "skills/mono/references/products/todo.md"
+        "internal/cli/schema_mcp_metadata.json#tools.todo.delete_todo_comment",
+        "skills/mono/references/products/todo.md",
+        "skills/mono/schema-hints/destructive-safety.json"
       ]
     },
     "todo comment list": {
+      "agent_summary": "获取待办的评论",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "8. 查看待办评论列表",
         "看看这个待办的评论"
@@ -42,11 +55,23 @@
         "dws todo comment list --task-id \u003ctaskId\u003e",
         "dws todo comment list --task-id \u003ctaskId\u003e --page 1 --size 20"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.todo.list_todo_comment",
         "skills/mono/references/products/todo.md"
       ]
     },
+    "todo task add-attachment": {
+      "agent_summary": "添加待办任务附件",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "reviewed": false,
+      "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.todo.add_todo_attachment"
+      ]
+    },
     "todo task add-executor": {
+      "agent_summary": "添加待办执行人",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "10. 添加待办执行人",
         "加个执行人/添加执行者"
@@ -55,11 +80,15 @@
         "dws todo task add-executor --task-id \u003ctaskId\u003e --executors \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
         "dws todo task add-executor --task-id \u003ctaskId\u003e --executors userId1,userId2 --format json"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.todo.add_task_executors",
         "skills/mono/references/products/todo.md"
       ]
     },
     "todo task add-participant": {
+      "agent_summary": "添加待办参与人",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "12. 添加待办参与人",
         "加个参与人/添加参与者"
@@ -68,26 +97,36 @@
         "dws todo task add-participant --task-id \u003ctaskId\u003e --participants \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
         "dws todo task add-participant --task-id \u003ctaskId\u003e --participants userId1,userId2 --format json"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.todo.add_task_participants",
         "skills/mono/references/products/todo.md"
       ]
     },
     "todo task add-reminder": {
+      "agent_summary": "添加待办提醒",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "14. 添加待办提醒（基于截止时间偏移，待办必须有截止时间）",
         "15. 添加待办提醒（自定义时间戳）",
         "给待办加个提醒/设置提醒"
       ],
       "examples": [
-        "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time customTime --reminder-time-stamp \"2026-03-10T18:00:00+08:00\"",
-        "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time dueTime --due-date-offset -30"
+        "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time dueTime --due-date-offset -30",
+        "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time customTime --reminder-time-stamp \"2026-03-10T18:00:00+08:00\""
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.todo.add_todo_reminder",
         "skills/mono/references/products/todo.md"
       ]
     },
     "todo task create": {
+      "agent_summary": "创建待办",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
+        "1. 创建待办 — 提取 todoTaskId",
+        "1b. 创建按天循环的待办（必须先有 --due；recurrence 与 MCP create_personal_todo 一致）",
         "加个待办/记一下/TODO",
         "每天重复/循环待办/按天重复"
       ],
@@ -98,24 +137,33 @@
         "dws todo task create --title \"每日站会\" --executors \u003cUSER_ID\u003e --due \"2026-03-20T10:00:00+08:00\" --recurrence \"DTSTART:20260320T020000Z\\nRRULE:FREQ=DAILY;INTERVAL=1\""
       ],
       "source_refs": [
-        "skills/mono/references/products/todo.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.todo.prod.json#todo.create_personal_todo",
+        "skills/mono/references/products/todo.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "todo task create-sub": {
+      "agent_summary": "在当前企业组织内创建一条个人待办的子待办事项（要求父待办必须是操作者本人创建），支持设置标题、执行人列表、截止时间、优先级（如高/中/低）。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
+        "1c. 创建子待办（需先获取父待办 ID）",
         "加个子任务/创建子待办"
       ],
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
-        "dws todo task create-sub --parent-id \u003cPARENT_TASK_ID\u003e --title \"子任务标题\" --executors \u003cUSER_ID\u003e --due \"2026-03-20T10:00:00+08:00\"",
-        "dws todo task create-sub --parent-id \u003cPARENT_TASK_ID\u003e --title \"子任务标题\" --executors \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e --priority 40"
+        "dws todo task create-sub --parent-id \u003cPARENT_TASK_ID\u003e --title \"子任务标题\" --executors \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e --priority 40",
+        "dws todo task create-sub --parent-id \u003cPARENT_TASK_ID\u003e --title \"子任务标题\" --executors \u003cUSER_ID\u003e --due \"2026-03-20T10:00:00+08:00\""
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.todo.create_personal_sub_todo",
         "skills/mono/references/products/todo.md"
       ]
     },
     "todo task delete": {
+      "agent_summary": "删除待办",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "6. 删除待办",
         "删除待办/取消待办"
@@ -129,24 +177,32 @@
         "dws todo task delete --task-id \u003ctaskId\u003e --yes"
       ],
       "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.todo.prod.json#todo.delete_todo",
         "skills/mono/SKILL.md",
-        "skills/mono/references/products/todo.md"
+        "skills/mono/references/products/todo.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "todo task done": {
+      "agent_summary": "修改执行者的待办完成状态",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "5. 标记待办完成",
         "做完了/完成待办/标记完成"
       ],
       "examples": [
-        "dws todo task done --task-id \u003ctaskId\u003e --status false",
-        "dws todo task done --task-id \u003ctaskId\u003e --status true"
+        "dws todo task done --task-id \u003ctaskId\u003e --status true",
+        "dws todo task done --task-id \u003ctaskId\u003e --status false"
       ],
       "source_refs": [
-        "skills/mono/references/products/todo.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.todo.prod.json#todo.update_todo_done_status",
+        "skills/mono/references/products/todo.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "todo task get": {
+      "agent_summary": "待办详情",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "3. 查看待办详情",
         "看看待办详情"
@@ -158,10 +214,14 @@
         "dws todo task get --task-id \u003ctaskId\u003e --format json"
       ],
       "source_refs": [
-        "skills/mono/references/products/todo.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.todo.prod.json#todo.get_todo_detail",
+        "skills/mono/references/products/todo.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "todo task list": {
+      "agent_summary": "获取当前用户在所属组织中的个人待办事项列表，返回每项待办的标题、截止日期、优先级（如高/中/低）、完成状态。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "2. 查看未完成待办",
         "看看待办/我有啥要做"
@@ -172,37 +232,59 @@
         "dws todo task list --page 1 --size 20 --status false",
         "dws todo task list --page 1 --size 20 --status false --format json"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.todo.get_user_todos_in_current_org",
         "skills/mono/references/products/todo.md"
       ]
     },
     "todo task remove-executor": {
+      "agent_summary": "移除待办执行人",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "11. 移除待办执行人",
         "移除执行人/删除执行者"
       ],
+      "effect": "destructive",
+      "effect_source": "agent-hint",
+      "risk": "high",
+      "confirmation": "user_required",
       "examples": [
         "dws todo task remove-executor --task-id \u003ctaskId\u003e --executors \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
         "dws todo task remove-executor --task-id \u003ctaskId\u003e --executors userId1 --format json"
       ],
+      "reviewed": false,
       "source_refs": [
-        "skills/mono/references/products/todo.md"
+        "internal/cli/schema_mcp_metadata.json#tools.todo.remove_task_executors",
+        "skills/mono/references/products/todo.md",
+        "skills/mono/schema-hints/destructive-safety.json"
       ]
     },
     "todo task remove-participant": {
+      "agent_summary": "移除待办参与人",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "13. 移除待办参与人",
         "移除参与人/删除参与者"
       ],
+      "effect": "destructive",
+      "effect_source": "agent-hint",
+      "risk": "high",
+      "confirmation": "user_required",
       "examples": [
         "dws todo task remove-participant --task-id \u003ctaskId\u003e --participants \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
         "dws todo task remove-participant --task-id \u003ctaskId\u003e --participants userId1 --format json"
       ],
+      "reviewed": false,
       "source_refs": [
-        "skills/mono/references/products/todo.md"
+        "internal/cli/schema_mcp_metadata.json#tools.todo.remove_task_participants",
+        "skills/mono/references/products/todo.md",
+        "skills/mono/schema-hints/destructive-safety.json"
       ]
     },
     "todo task reset-reminder": {
+      "agent_summary": "重置待办提醒",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "16. 重置待办提醒",
         "17. 重置待办提醒（指定新规则）",
@@ -212,11 +294,15 @@
         "dws todo task reset-reminder --task-id \u003ctaskId\u003e",
         "dws todo task reset-reminder --task-id \u003ctaskId\u003e --reminder-rules '[{\"dueDateOffset\":-30,\"baseTime\":\"dueTime\"},{\"reminderTimeStamp\":\"2026-03-10T18:00:00+08:00\",\"baseTime\":\"customTime\"}]'"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.todo.reset_todo_reminder",
         "skills/mono/references/products/todo.md"
       ]
     },
     "todo task update": {
+      "agent_summary": "修改待办任务",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "4. 修改待办信息",
         "改个待办/修改待办标题/改优先级"
@@ -224,11 +310,13 @@
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
-        "dws todo task update --task-id \u003ctaskId\u003e --priority 40 --due \"2026-03-10T18:00:00+08:00\"",
-        "dws todo task update --task-id \u003ctaskId\u003e --title \"新标题\""
+        "dws todo task update --task-id \u003ctaskId\u003e --title \"新标题\"",
+        "dws todo task update --task-id \u003ctaskId\u003e --priority 40 --due \"2026-03-10T18:00:00+08:00\""
       ],
       "source_refs": [
-        "skills/mono/references/products/todo.md"
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.todo.prod.json#todo.update_todo_task",
+        "skills/mono/references/products/todo.md",
+        "skills/mono/schema-hints/imported/wukong.json"
       ]
     }
   }

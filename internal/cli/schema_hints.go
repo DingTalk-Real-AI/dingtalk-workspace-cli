@@ -44,9 +44,18 @@ type ParameterSchemaHint struct {
 	RequiredWhen string
 }
 
+type SchemaVisibility string
+
+const (
+	SchemaVisibilityPublic   SchemaVisibility = "public"
+	SchemaVisibilityCompat   SchemaVisibility = "compat"
+	SchemaVisibilityInternal SchemaVisibility = "internal"
+)
+
 type SchemaHintRegistry struct {
-	tools        map[string]ToolSchemaHint
-	runtimeRoots map[string]RuntimeSchemaRootHint
+	tools             map[string]ToolSchemaHint
+	runtimeRoots      map[string]RuntimeSchemaRootHint
+	productVisibility map[string]SchemaVisibility
 }
 
 // RuntimeSchemaRootHint opts a hardcoded top-level command tree into `dws
@@ -67,8 +76,9 @@ var defaultSchemaHintRegistry = newSchemaHintRegistry()
 
 func newSchemaHintRegistry() *SchemaHintRegistry {
 	return &SchemaHintRegistry{
-		tools:        map[string]ToolSchemaHint{},
-		runtimeRoots: map[string]RuntimeSchemaRootHint{},
+		tools:             map[string]ToolSchemaHint{},
+		runtimeRoots:      map[string]RuntimeSchemaRootHint{},
+		productVisibility: map[string]SchemaVisibility{},
 	}
 }
 
@@ -85,6 +95,21 @@ func RegisterSchemaHints(productID string, tools map[string]ToolSchemaHint) {
 // maintained in Go helpers rather than generated from ToolOverrides.
 func RegisterRuntimeSchemaRoot(productID string, hint RuntimeSchemaRootHint) {
 	defaultSchemaHintRegistry.RegisterRuntimeRoot(productID, hint)
+}
+
+// RegisterSchemaProductVisibility controls whether a top-level implementation
+// product is independently exposed through Agent schema. Internal and compat
+// products remain executable but must be represented by public canonical
+// helpers or aliases instead of separate tools.
+func RegisterSchemaProductVisibility(productID string, visibility SchemaVisibility) {
+	defaultSchemaHintRegistry.RegisterProductVisibility(productID, visibility)
+}
+
+// SchemaProductVisibilityFor exposes the reviewed public/compat/internal
+// classification to the application help layer. Non-public implementation
+// roots stay executable for compatibility but are hidden from help and Schema.
+func SchemaProductVisibilityFor(productID string) SchemaVisibility {
+	return defaultSchemaHintRegistry.ProductVisibility(productID)
 }
 
 func (r *SchemaHintRegistry) RegisterProduct(productID string, tools map[string]ToolSchemaHint) {
@@ -144,6 +169,22 @@ func (r *SchemaHintRegistry) RegisterRuntimeRoot(productID string, hint RuntimeS
 	r.runtimeRoots[productID] = normalized
 }
 
+func (r *SchemaHintRegistry) RegisterProductVisibility(productID string, visibility SchemaVisibility) {
+	productID = strings.TrimSpace(productID)
+	if productID == "" {
+		panic("schema hints: product visibility product id is required")
+	}
+	switch visibility {
+	case SchemaVisibilityPublic, SchemaVisibilityCompat, SchemaVisibilityInternal:
+	default:
+		panic(fmt.Sprintf("schema hints: unsupported visibility %q for %s", visibility, productID))
+	}
+	if _, exists := r.productVisibility[productID]; exists {
+		panic(fmt.Sprintf("schema hints: duplicate product visibility for %s", productID))
+	}
+	r.productVisibility[productID] = visibility
+}
+
 func (r *SchemaHintRegistry) Lookup(canonicalPath string) (ToolSchemaHint, bool) {
 	canonicalPath = strings.TrimSpace(canonicalPath)
 	if canonicalPath == "" {
@@ -178,6 +219,14 @@ func (r *SchemaHintRegistry) RuntimeRoots() map[string]RuntimeSchemaRootHint {
 		out[productID] = copied
 	}
 	return out
+}
+
+func (r *SchemaHintRegistry) ProductVisibility(productID string) SchemaVisibility {
+	productID = strings.TrimSpace(productID)
+	if visibility := r.productVisibility[productID]; visibility != "" {
+		return visibility
+	}
+	return SchemaVisibilityPublic
 }
 
 func canonicalHintPath(productID, name string) string {

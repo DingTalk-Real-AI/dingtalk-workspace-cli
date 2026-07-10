@@ -1,8 +1,13 @@
 GO ?= go
 VERSION ?= 0.0.0-SNAPSHOT
 SCHEMA_REGISTRY ?= $(HOME)/.dws/cache/default_default/market/servers.json
+SCHEMA_TOOLS_DIR ?= $(patsubst %/market/servers.json,%/tools,$(SCHEMA_REGISTRY))
+SCHEMA_INTERFACE_HINTS ?= skills/mono/schema-hints
+SCHEMA_SOURCE_REVISION ?=
+WUKONG_ENVELOPE_DIR ?=
+WUKONG_REVISION ?=
 
-.PHONY: all help build rebuild test lint fmt policy edition-test generate-schema-command-surface generate-schema-agent-metadata generate-schema-interface-metadata package release publish-homebrew-formula setup-hooks
+.PHONY: all help build rebuild test lint fmt policy edition-test generate-schema-command-surface generate-schema-agent-metadata generate-schema-interface-metadata generate-schema-catalog generate-schema-wukong-agent-hints package release publish-homebrew-formula setup-hooks
 
 all: setup-hooks fmt lint build test rebuild
 
@@ -16,6 +21,8 @@ help:
 	@printf "  make generate-schema-command-surface - Refresh the versioned Agent command-surface snapshot\n"
 	@printf "  make generate-schema-agent-metadata - Regenerate embedded Agent schema metadata from skills\n"
 	@printf "  make generate-schema-interface-metadata - Snapshot sanitized CLI/MCP metadata from SCHEMA_REGISTRY\n"
+	@printf "  make generate-schema-catalog - Freeze the reviewed release Schema catalog\n"
+	@printf "  make generate-schema-wukong-agent-hints - Import sanitized Wukong envelope descriptions at WUKONG_REVISION\n"
 	@printf "  make package       - Build all release artifacts locally (goreleaser snapshot)\n"
 	@printf "  make release       - Build and publish a release via goreleaser\n"
 	@printf "  make publish-homebrew-formula - Push dist/homebrew/dingtalk-workspace-cli.rb to a tap repo\n"
@@ -38,6 +45,7 @@ fmt:
 policy:
 	@./scripts/policy/check-open-source-assets.sh
 	@./scripts/policy/check-command-surface.sh --strict
+	@./scripts/policy/check-schema-catalog.sh
 
 edition-test:
 	$(GO) test -v -count=1 ./pkg/editiontest/...
@@ -50,7 +58,29 @@ generate-schema-agent-metadata:
 
 generate-schema-interface-metadata:
 	@test -f "$(SCHEMA_REGISTRY)" || (printf 'missing SCHEMA_REGISTRY: %s\n' "$(SCHEMA_REGISTRY)" >&2; exit 1)
-	$(GO) run ./internal/generator/cmd_schema_metadata -registry "$(SCHEMA_REGISTRY)" -output internal/cli/schema_mcp_metadata.json
+	@test -d "$(SCHEMA_TOOLS_DIR)" || (printf 'missing SCHEMA_TOOLS_DIR: %s\n' "$(SCHEMA_TOOLS_DIR)" >&2; exit 1)
+	$(GO) run ./internal/generator/cmd_schema_metadata \
+		-registry "$(SCHEMA_REGISTRY)" \
+		-tools-dir "$(SCHEMA_TOOLS_DIR)" \
+		-surface internal/cli/schema_command_surface.json \
+		-hints "$(SCHEMA_INTERFACE_HINTS)" \
+		-source-revision "$(SCHEMA_SOURCE_REVISION)" \
+		-output internal/cli/schema_mcp_metadata.json
+
+generate-schema-catalog:
+	$(GO) run ./internal/generator/cmd_schema_catalog \
+		-surface internal/cli/schema_command_surface.json \
+		-output internal/cli/schema_catalog.json
+
+generate-schema-wukong-agent-hints:
+	@test -d "$(WUKONG_ENVELOPE_DIR)" || (printf 'missing WUKONG_ENVELOPE_DIR: %s\n' "$(WUKONG_ENVELOPE_DIR)" >&2; exit 1)
+	@test -n "$(WUKONG_REVISION)" || (printf '%s\n' 'missing WUKONG_REVISION' >&2; exit 1)
+	$(GO) run ./internal/generator/cmd_wukong_agent_hints \
+		-envelope-dir "$(WUKONG_ENVELOPE_DIR)" \
+		-surface internal/cli/schema_command_surface.json \
+		-revision "$(WUKONG_REVISION)" \
+		-output skills/mono/schema-hints/imported/wukong.json \
+		-audit-output internal/cli/schema_wukong_agent_hints_audit.json
 
 package:
 	@VERSION="$(VERSION)" ./scripts/dev/build-all.sh

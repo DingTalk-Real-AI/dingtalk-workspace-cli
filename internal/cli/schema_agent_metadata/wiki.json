@@ -2,6 +2,8 @@
   "product_id": "wiki",
   "tools": {
     "wiki member add": {
+      "agent_summary": "为知识库添加指定角色的成员。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "2. 添加成员",
         "把知识库分享给某人/给某人加入知识库/邀请进知识库",
@@ -13,11 +15,15 @@
         "dws wiki member add --help",
         "dws wiki member add --workspace \u003cWS_ID\u003e --users uid1 --role READER"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.wiki.add_member",
         "skills/mono/references/products/wiki.md"
       ]
     },
     "wiki member list": {
+      "agent_summary": "查询知识库当前的成员权限列表，支持按角色过滤。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "1. 查看当前成员",
         "3. 查看当前成员",
@@ -29,26 +35,37 @@
         "dws wiki member list --workspace \u003cWS_ID\u003e",
         "dws wiki member list --workspace \u003cWS_ID\u003e --limit 100"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.wiki.list_member",
         "skills/mono/references/products/wiki.md"
       ]
     },
     "wiki member remove": {
+      "agent_summary": "从知识库中移除指定的企业用户成员（仅支持 USER 类型）。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "2. 移除成员",
         "移除知识库成员/把某人从知识库移除/删除知识库成员"
       ],
-      "effect": "write",
-      "effect_source": "command-verb",
+      "effect": "destructive",
+      "effect_source": "agent-hint",
+      "risk": "high",
+      "confirmation": "user_required",
       "examples": [
         "dws wiki member remove --workspace \u003cWS_ID\u003e --users uid1",
         "dws wiki member remove --workspace \u003cWS_ID\u003e --users uid1,uid2"
       ],
+      "reviewed": false,
       "source_refs": [
-        "skills/mono/references/products/wiki.md"
+        "internal/cli/schema_mcp_metadata.json#tools.wiki.remove_member",
+        "skills/mono/references/products/wiki.md",
+        "skills/mono/schema-hints/destructive-safety.json"
       ]
     },
     "wiki member update": {
+      "agent_summary": "修改成员在知识库中的角色。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "修改某人在知识库的权限/调整成员角色"
       ],
@@ -58,24 +75,32 @@
         "dws wiki member update --workspace \u003cWS_ID\u003e --users uid1 --role EDITOR",
         "dws wiki member update --workspace \u003cWS_ID\u003e --users uid1,uid2 --role READER"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.wiki.update_member",
         "skills/mono/references/products/wiki.md"
       ]
     },
     "wiki node copy": {
+      "agent_summary": "将指定节点复制到目标文件夹。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "复制知识库里的文档",
         "复制节点到另一个文件夹"
       ],
       "examples": [
-        "dws wiki node copy --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --folder \u003ctargetFolderId\u003e --format json",
-        "dws wiki node copy --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --format json"
+        "dws wiki node copy --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --format json",
+        "dws wiki node copy --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --folder \u003ctargetFolderId\u003e --format json"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.wiki.node_copy",
         "skills/mono/references/products/wiki.md"
       ]
     },
     "wiki node create": {
+      "agent_summary": "在指定位置创建一个新的文件（文档、表格、演示、白板、脑图、多维表或文件夹）。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "1. 创建文档节点",
         "2. 创建文件夹",
@@ -88,26 +113,37 @@
         "dws wiki node create --workspace \u003cworkspaceId\u003e --name \"新文档\" --format json",
         "dws wiki node create --workspace \u003cworkspaceId\u003e --name \"方案目录\" --type folder --format json"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.wiki.create_file",
         "skills/mono/references/products/wiki.md"
       ]
     },
     "wiki node delete": {
+      "agent_summary": "将指定节点移入回收站，30 天内可从回收站恢复，超过 30 天将被永久删除。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "删除知识库里的文档/节点",
         "删除节点（会要求确认）"
       ],
-      "effect": "write",
-      "effect_source": "command-verb",
+      "effect": "destructive",
+      "effect_source": "agent-hint",
+      "risk": "high",
+      "confirmation": "user_required",
       "examples": [
         "dws wiki node delete --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e",
         "dws wiki node delete --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --yes"
       ],
+      "reviewed": false,
       "source_refs": [
-        "skills/mono/references/products/wiki.md"
+        "internal/cli/schema_mcp_metadata.json#tools.wiki.delete_document",
+        "skills/mono/references/products/wiki.md",
+        "skills/mono/schema-hints/destructive-safety.json"
       ]
     },
     "wiki node list": {
+      "agent_summary": "列出指定文件夹或知识库下的直接子节点列表（文件夹/文档/文件等），支持分页。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "2. 列出根目录节点",
         "3. 进入子目录",
@@ -117,14 +153,18 @@
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws wiki node list --workspace \u003cworkspaceId\u003e --folder \u003cparentNodeId\u003e --format json",
-        "dws wiki node list --workspace \u003cworkspaceId\u003e --format json"
+        "dws wiki node list --workspace \u003cworkspaceId\u003e --format json",
+        "dws wiki node list --workspace \u003cworkspaceId\u003e --folder \u003cparentNodeId\u003e --format json"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.wiki.list_nodes",
         "skills/mono/references/products/wiki.md"
       ]
     },
     "wiki node move": {
+      "agent_summary": "将指定节点移动到目标文件夹。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "移动知识库里的文档",
         "移动节点到另一个文件夹"
@@ -135,11 +175,15 @@
         "dws wiki node move --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --folder \u003ctargetFolderId\u003e --format json",
         "dws wiki node move --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --format json"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.wiki.node_move",
         "skills/mono/references/products/wiki.md"
       ]
     },
     "wiki node search": {
+      "agent_summary": "根据关键词和多种过滤条件搜索当前用户有权限访问的文档列表。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "在指定知识库内搜索",
         "在知识库里搜文档/空间内搜索",
@@ -148,14 +192,18 @@
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws wiki node search --workspace \u003cworkspaceId\u003e --query \"周报\" --limit 10 --format json",
-        "dws wiki node search --workspace \u003cworkspaceId\u003e --query \"方案\" --format json"
+        "dws wiki node search --workspace \u003cworkspaceId\u003e --query \"方案\" --format json",
+        "dws wiki node search --workspace \u003cworkspaceId\u003e --query \"周报\" --limit 10 --format json"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.wiki.node_search",
         "skills/mono/references/products/wiki.md"
       ]
     },
     "wiki space create": {
+      "agent_summary": "创建一个新的钉钉文档知识库（WikiSpace）。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "创建知识库",
         "创建知识库/新建知识库"
@@ -166,26 +214,37 @@
         "dws wiki space create --name \"产品文档库\" --format json",
         "dws wiki space create --name \"技术方案\" --desc \"团队技术方案归档\" --format json"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.wiki.create_wikiSpace",
         "skills/mono/references/products/wiki.md"
       ]
     },
     "wiki space delete": {
+      "agent_summary": "将指定知识库移入回收站。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "2. 删除知识库",
         "删除知识库/移除知识库/把知识库删了"
       ],
-      "effect": "write",
-      "effect_source": "command-verb",
+      "effect": "destructive",
+      "effect_source": "agent-hint",
+      "risk": "high",
+      "confirmation": "user_required",
       "examples": [
-        "dws wiki space delete --workspace \"https://alidocs.dingtalk.com/i/spaces/xxx/overview\"",
-        "dws wiki space delete --workspace \u003cworkspaceId\u003e"
+        "dws wiki space delete --workspace \u003cworkspaceId\u003e",
+        "dws wiki space delete --workspace \"https://alidocs.dingtalk.com/i/spaces/xxx/overview\""
       ],
+      "reviewed": false,
       "source_refs": [
-        "skills/mono/references/products/wiki.md"
+        "internal/cli/schema_mcp_metadata.json#tools.wiki.delete_wikiSpace",
+        "skills/mono/references/products/wiki.md",
+        "skills/mono/schema-hints/destructive-safety.json"
       ]
     },
     "wiki space get": {
+      "agent_summary": "获取指定知识库的详细信息，包括名称、描述、创建者、创建时间、成员数量等。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "1. 确认知识库信息",
         "查看具体命令的完整参数说明",
@@ -198,11 +257,15 @@
         "dws wiki space get --help",
         "dws wiki space get --workspace \u003cworkspaceId\u003e --format json"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.wiki.get_wikiSpace",
         "skills/mono/references/products/wiki.md"
       ]
     },
     "wiki space list": {
+      "agent_summary": "获取当前用户有权访问的知识库列表，支持按类型区分。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "1. 先确认知识库 ID（避免授权到「我的文档」）",
         "1. 获取知识库 ID",
@@ -220,11 +283,15 @@
         "dws wiki space list --format json",
         "dws wiki space list --type myWikiSpace --format json"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.wiki.list_wikiSpaces",
         "skills/mono/references/products/wiki.md"
       ]
     },
     "wiki space search": {
+      "agent_summary": "根据关键词搜索当前用户有权限访问的知识库列表。",
+      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "搜索知识库",
         "搜索知识库/找知识库"
@@ -235,7 +302,9 @@
         "dws wiki space search --query \"产品文档\" --format json",
         "dws wiki space search --query \"技术方案\" --limit 20 --format json"
       ],
+      "reviewed": false,
       "source_refs": [
+        "internal/cli/schema_mcp_metadata.json#tools.wiki.search_wikiSpaces",
         "skills/mono/references/products/wiki.md"
       ]
     }

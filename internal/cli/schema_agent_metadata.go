@@ -19,7 +19,8 @@ import (
 	"strings"
 )
 
-//go:generate go run ../generator/cmd_schema_agent_metadata -root ../.. -surface internal/cli/schema_command_surface.json -output-dir schema_agent_metadata
+//go:generate go run ../generator/cmd_schema_agent_metadata -root ../.. -surface internal/cli/schema_command_surface.json -output-dir schema_agent_metadata -audit-output schema_agent_metadata_audit.json
+//go:generate go run ../generator/cmd_schema_catalog -surface schema_command_surface.json -output schema_catalog.json
 
 //go:embed schema_agent_metadata/*.json
 var embeddedAgentMetadataFS embed.FS
@@ -41,24 +42,34 @@ type embeddedAgentMetadataCoverage struct {
 	ProductsWithMetadata int `json:"products_with_metadata"`
 	SurfaceTools         int `json:"surface_tools,omitempty"`
 	ToolsWithMetadata    int `json:"tools_with_metadata"`
+	ToolsWithSummary     int `json:"tools_with_agent_summary,omitempty"`
 	UnmatchedSkillTools  int `json:"unmatched_skill_tools,omitempty"`
 }
 
 type agentProductMetadata struct {
-	UseWhen    []string `json:"use_when,omitempty"`
-	AvoidWhen  []string `json:"avoid_when,omitempty"`
-	SourceRefs []string `json:"source_refs,omitempty"`
+	AgentSummary       string   `json:"agent_summary,omitempty"`
+	AgentSummarySource string   `json:"agent_summary_source,omitempty"`
+	UseWhen            []string `json:"use_when,omitempty"`
+	AvoidWhen          []string `json:"avoid_when,omitempty"`
+	SourceRefs         []string `json:"source_refs,omitempty"`
 }
 
 type agentToolMetadata struct {
-	UseWhen      []string `json:"use_when,omitempty"`
-	AvoidWhen    []string `json:"avoid_when,omitempty"`
-	Effect       string   `json:"effect,omitempty"`
-	EffectSource string   `json:"effect_source,omitempty"`
-	Risk         string   `json:"risk,omitempty"`
-	Confirmation string   `json:"confirmation,omitempty"`
-	Examples     []string `json:"examples,omitempty"`
-	SourceRefs   []string `json:"source_refs,omitempty"`
+	AgentSummary       string   `json:"agent_summary,omitempty"`
+	AgentSummarySource string   `json:"agent_summary_source,omitempty"`
+	UseWhen            []string `json:"use_when,omitempty"`
+	AvoidWhen          []string `json:"avoid_when,omitempty"`
+	Prerequisites      []string `json:"prerequisites,omitempty"`
+	Tips               []string `json:"tips,omitempty"`
+	Effect             string   `json:"effect,omitempty"`
+	EffectSource       string   `json:"effect_source,omitempty"`
+	Risk               string   `json:"risk,omitempty"`
+	Confirmation       string   `json:"confirmation,omitempty"`
+	Idempotency        string   `json:"idempotency,omitempty"`
+	WorkflowRefs       []string `json:"workflow_refs,omitempty"`
+	Examples           []string `json:"examples,omitempty"`
+	Reviewed           *bool    `json:"reviewed,omitempty"`
+	SourceRefs         []string `json:"source_refs,omitempty"`
 }
 
 type embeddedAgentMetadataDomain struct {
@@ -115,10 +126,31 @@ func applyAgentProductMetadata(target map[string]any, productIDs ...string) bool
 		if !ok {
 			continue
 		}
+		setString(target, "agent_summary", metadata.AgentSummary)
+		setString(target, "agent_summary_source", metadata.AgentSummarySource)
 		setStringSlice(target, "use_when", metadata.UseWhen)
 		setStringSlice(target, "avoid_when", metadata.AvoidWhen)
 		setStringSlice(target, "agent_source_refs", metadata.SourceRefs)
 		target["agent_metadata_source"] = embeddedAgentMetadataSource
+		return true
+	}
+	return false
+}
+
+func applyCompactAgentProductMetadata(target map[string]any, productIDs ...string) bool {
+	if target == nil {
+		return false
+	}
+	for _, productID := range productIDs {
+		metadata, ok := runtimeEmbeddedAgentMetadata.Products[strings.TrimSpace(productID)]
+		if !ok {
+			continue
+		}
+		if summary := strings.TrimSpace(metadata.AgentSummary); summary != "" {
+			target["agent_summary"] = summary
+		} else if len(metadata.UseWhen) > 0 {
+			target["use_when"] = []string{metadata.UseWhen[0]}
+		}
 		return true
 	}
 	return false
@@ -132,11 +164,20 @@ func applyAgentToolMetadata(target map[string]any, includeExamples bool, paths .
 	if !ok {
 		return false
 	}
+	setString(target, "agent_summary", metadata.AgentSummary)
+	setString(target, "agent_summary_source", metadata.AgentSummarySource)
 	setStringSlice(target, "use_when", metadata.UseWhen)
 	setStringSlice(target, "avoid_when", metadata.AvoidWhen)
+	setStringSlice(target, "prerequisites", metadata.Prerequisites)
+	setStringSlice(target, "tips", metadata.Tips)
 	setString(target, "effect", metadata.Effect)
 	setString(target, "risk", metadata.Risk)
 	setString(target, "confirmation", metadata.Confirmation)
+	setString(target, "idempotency", metadata.Idempotency)
+	setStringSlice(target, "workflow_refs", metadata.WorkflowRefs)
+	if metadata.Reviewed != nil {
+		target["reviewed"] = *metadata.Reviewed
+	}
 	if includeExamples {
 		setStringSlice(target, "examples", metadata.Examples)
 		setString(target, "effect_source", metadata.EffectSource)
@@ -183,6 +224,9 @@ func agentMetadataSummary() map[string]any {
 	}
 	if coverage.SurfaceTools > 0 {
 		summary["surface_tools"] = coverage.SurfaceTools
+	}
+	if coverage.ToolsWithSummary > 0 {
+		summary["tools_with_agent_summary"] = coverage.ToolsWithSummary
 	}
 	if coverage.UnmatchedSkillTools > 0 {
 		summary["unmatched_skill_tools"] = coverage.UnmatchedSkillTools

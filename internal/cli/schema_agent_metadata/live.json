@@ -1,0 +1,18 @@
+{
+  "product_id": "live",
+  "tools": {
+    "live stream list": {
+      "agent_summary": "查看我的直播列表",
+      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws live stream list"
+      ],
+      "source_refs": [
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.live.prod.json#live.get_my_lives",
+        "skills/mono/schema-hints/imported/wukong.json"
+      ]
+    }
+  }
+}
