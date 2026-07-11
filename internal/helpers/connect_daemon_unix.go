@@ -36,3 +36,17 @@ func detachSysProcAttr() *syscall.SysProcAttr {
 func applyDetach(cmd *exec.Cmd) {
 	cmd.SysProcAttr = detachSysProcAttr()
 }
+
+// configureWorkerProcessGroup isolates the connector worker and every local
+// agent process it starts (opencode serve, codex app-server, etc.) in one group.
+func configureWorkerProcessGroup(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+}
+
+// cleanupWorkerProcessGroup removes descendants left behind when the worker
+// exits abruptly and cannot run its normal deferred cleanup.
+func cleanupWorkerProcessGroup(pid int) {
+	if pid > 0 {
+		_ = syscall.Kill(-pid, syscall.SIGKILL)
+	}
+}

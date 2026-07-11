@@ -11,21 +11,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build windows
+//go:build !windows
 
 package helpers
 
-import "os/exec"
+import (
+	"os/exec"
+	"testing"
+)
 
-// daemonDetachSupported is false on Windows: the daemon uses POSIX setsid +
-// signal-based stop, which has no direct equivalent here. `connect --daemon`
-// errors out on Windows and users should run the foreground connector under a
-// Windows service wrapper instead.
-const daemonDetachSupported = false
-
-// applyDetach is a no-op on Windows; daemon mode is rejected earlier.
-func applyDetach(_ *exec.Cmd) {}
-
-func configureWorkerProcessGroup(_ *exec.Cmd) {}
-
-func cleanupWorkerProcessGroup(_ int) {}
+func TestConfigureWorkerProcessGroup(t *testing.T) {
+	cmd := exec.Command("true")
+	configureWorkerProcessGroup(cmd)
+	if cmd.SysProcAttr == nil || !cmd.SysProcAttr.Setpgid {
+		t.Fatal("worker must start in its own process group")
+	}
+}

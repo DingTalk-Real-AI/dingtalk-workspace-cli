@@ -1117,7 +1117,7 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		mediaCli = newAICardClient(clientID, clientSecret, "")
 	}
 
-	keepAlive := envDurationMS("DWS_CONNECT_KEEPALIVE_MS", 30000)
+	keepAlive := envDurationMS("DWS_CONNECT_KEEPALIVE_MS", 30*time.Second)
 	fmt.Fprintf(os.Stderr, "[connect] keepAlive=%s autoReconnect=true\n", keepAlive)
 	cli := client.NewStreamClient(
 		client.WithAppCredential(client.NewAppCredentialConfig(clientID, clientSecret)),

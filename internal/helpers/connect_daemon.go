@@ -113,6 +113,50 @@ func connectDaemonDir(dirKey string) (string, error) {
 func daemonPidPath(dir string) string   { return filepath.Join(dir, "daemon.pid") }
 func daemonStatePath(dir string) string { return filepath.Join(dir, "daemon-state.json") }
 func daemonLogPath(dir string) string   { return filepath.Join(dir, "daemon.log") }
+func daemonExecutablePath(dir string) string {
+	return filepath.Join(dir, "dws-daemon")
+}
+
+// stageDaemonExecutable snapshots the current dws binary into the connector's
+// persistent directory. One-click launchers may execute a temporary download
+// (for example dws-latest) and remove it after connect --daemon returns; the
+// supervisor must not depend on that transient path for future worker restarts.
+func stageDaemonExecutable(src, dir string) (string, error) {
+	in, err := os.Open(src)
+	if err != nil {
+		return "", err
+	}
+	defer in.Close()
+
+	tmp, err := os.CreateTemp(dir, ".dws-daemon-*")
+	if err != nil {
+		return "", err
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+
+	if err := tmp.Chmod(daemonExecutablePerm); err != nil {
+		tmp.Close()
+		return "", err
+	}
+	if _, err := io.Copy(tmp, in); err != nil {
+		tmp.Close()
+		return "", err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return "", err
+	}
+	if err := tmp.Close(); err != nil {
+		return "", err
+	}
+
+	dst := daemonExecutablePath(dir)
+	if err := os.Rename(tmpPath, dst); err != nil {
+		return "", err
+	}
+	return dst, nil
+}
 
 // writeDaemonState atomically persists the daemon state to daemon-state.json
 // (persistent, survives supervisor exit) so restart/list can recover config.
@@ -169,8 +213,9 @@ func backoffDelay(consecutiveFailures int, base, maxDelay time.Duration) time.Du
 }
 
 const (
-	daemonBackoffBase = time.Second
-	daemonBackoffCap  = 60 * time.Second
+	daemonBackoffBase                = time.Second
+	daemonBackoffCap                 = 60 * time.Second
+	daemonExecutablePerm os.FileMode = 0o700
 	// daemonMaxFastFailures is the consecutive fast-failure ceiling: after this
 	// many crashes that each happened within daemonHealthyAfter, the supervisor
 	// gives up rather than spin forever (e.g. bad credentials).
@@ -225,6 +270,10 @@ func startDaemon(cmd *cobra.Command, dirKey, clientID, unifiedAppID, channel, no
 	exe, err := os.Executable()
 	if err != nil {
 		return apperrors.NewInternal("resolve executable: " + err.Error())
+	}
+	exe, err = stageDaemonExecutable(exe, dir)
+	if err != nil {
+		return apperrors.NewInternal("stage daemon executable: " + err.Error())
 	}
 	superviseArgs := buildSuperviseArgs(os.Args[1:])
 
@@ -386,6 +435,7 @@ func runSupervisor(cmd *cobra.Command) error {
 		worker.Stdout = out
 		worker.Stderr = out
 		worker.Env = os.Environ()
+		configureWorkerProcessGroup(worker)
 		if err := worker.Start(); err != nil {
 			fmt.Fprintf(out, "[daemon] failed to start worker: %v\n", err)
 			failures++
@@ -398,6 +448,7 @@ func runSupervisor(cmd *cobra.Command) error {
 		fmt.Fprintf(out, "[daemon] worker started (pid %d)\n", worker.Process.Pid)
 
 		waitErr := superviseWait(ctx, worker)
+		cleanupWorkerProcessGroup(worker.Process.Pid)
 		ran := time.Since(started)
 
 		if ctx.Err() != nil {
