@@ -8,7 +8,7 @@
         "打开虚拟背景设置面板"
       ],
       "avoid_when": [
-        "当前开源版本未提供可用会议后端；未安装并启用受审查的会议插件时不要使用"
+        "要“打开美颜设置面板”请改用 dws conference appearance beauty-setting"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -21,7 +21,8 @@
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "unavailable",
       "availability": "unavailable",
@@ -34,7 +35,7 @@
         "打开美颜设置面板"
       ],
       "avoid_when": [
-        "当前开源版本未提供可用会议后端；未安装并启用受审查的会议插件时不要使用"
+        "要“打开虚拟背景设置面板”请改用 dws conference appearance background-setting"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -47,7 +48,8 @@
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "unavailable",
       "availability": "unavailable",
@@ -60,7 +62,7 @@
         "关闭摄像头"
       ],
       "avoid_when": [
-        "当前开源版本未提供可用会议后端；未安装并启用受审查的会议插件时不要使用"
+        "要“打开摄像头”请改用 dws conference camera open"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -73,7 +75,8 @@
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "unavailable",
       "availability": "unavailable",
@@ -86,7 +89,7 @@
         "打开摄像头"
       ],
       "avoid_when": [
-        "当前开源版本未提供可用会议后端；未安装并启用受审查的会议插件时不要使用"
+        "要“关闭摄像头”请改用 dws conference camera close"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -99,7 +102,8 @@
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "unavailable",
       "availability": "unavailable",
@@ -190,7 +194,7 @@
         "关闭同声传译"
       ],
       "avoid_when": [
-        "当前开源版本未提供可用会议后端；未安装并启用受审查的会议插件时不要使用"
+        "要“开启同声传译”请改用 dws conference interpretation open"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -203,7 +207,8 @@
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "unavailable",
       "availability": "unavailable",
@@ -216,7 +221,7 @@
         "开启同声传译"
       ],
       "avoid_when": [
-        "当前开源版本未提供可用会议后端；未安装并启用受审查的会议插件时不要使用"
+        "要“关闭同声传译”请改用 dws conference interpretation close"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -229,7 +234,8 @@
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "unavailable",
       "availability": "unavailable",
@@ -242,7 +248,7 @@
         "一键呼叫所有人"
       ],
       "avoid_when": [
-        "当前开源版本未提供可用会议后端；未安装并启用受审查的会议插件时不要使用"
+        "要“打开邀请选人面板”请改用 dws conference invite panel"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -255,7 +261,8 @@
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "unavailable",
       "availability": "unavailable",
@@ -268,7 +275,7 @@
         "打开邀请选人面板"
       ],
       "avoid_when": [
-        "当前开源版本未提供可用会议后端；未安装并启用受审查的会议插件时不要使用"
+        "要“一键呼叫所有人”请改用 dws conference invite all"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -281,7 +288,8 @@
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "unavailable",
       "availability": "unavailable",
@@ -320,7 +328,8 @@
         "静音自己"
       ],
       "avoid_when": [
-        "当前开源版本未提供可用会议后端；未安装并启用受审查的会议插件时不要使用"
+        "要“主持人将会议内全体参会者静音”请改用 dws conference mic mute-all",
+        "要“取消静音”请改用 dws conference mic unmute"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -333,7 +342,8 @@
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "unavailable",
       "availability": "unavailable",
@@ -346,7 +356,8 @@
         "主持人将会议内全体参会者静音"
       ],
       "avoid_when": [
-        "当前开源版本未提供可用会议后端；未安装并启用受审查的会议插件时不要使用"
+        "要“取消静音”请改用 dws conference mic unmute",
+        "要“静音自己”请改用 dws conference mic mute"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -359,7 +370,8 @@
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "unavailable",
       "availability": "unavailable",
@@ -372,7 +384,8 @@
         "取消静音"
       ],
       "avoid_when": [
-        "当前开源版本未提供可用会议后端；未安装并启用受审查的会议插件时不要使用"
+        "要“主持人将会议内全体参会者静音”请改用 dws conference mic mute-all",
+        "要“静音自己”请改用 dws conference mic mute"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -385,7 +398,8 @@
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "unavailable",
       "availability": "unavailable",
@@ -424,7 +438,8 @@
         "申请录制权限"
       ],
       "avoid_when": [
-        "当前开源版本未提供可用会议后端；未安装并启用受审查的会议插件时不要使用"
+        "要“停止当前会议的云端录制”请改用 dws conference record stop",
+        "要“开始云端录制当前会议”请改用 dws conference record start"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -437,7 +452,8 @@
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "unavailable",
       "availability": "unavailable",
@@ -450,7 +466,8 @@
         "开始云端录制当前会议"
       ],
       "avoid_when": [
-        "当前开源版本未提供可用会议后端；未安装并启用受审查的会议插件时不要使用"
+        "要“停止当前会议的云端录制”请改用 dws conference record stop",
+        "要“申请录制权限”请改用 dws conference record request"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -463,7 +480,8 @@
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "unavailable",
       "availability": "unavailable",
@@ -476,7 +494,8 @@
         "停止当前会议的云端录制"
       ],
       "avoid_when": [
-        "当前开源版本未提供可用会议后端；未安装并启用受审查的会议插件时不要使用"
+        "要“开始云端录制当前会议”请改用 dws conference record start",
+        "要“申请录制权限”请改用 dws conference record request"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -489,7 +508,8 @@
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "unavailable",
       "availability": "unavailable",
@@ -528,7 +548,9 @@
         "打开共享批注"
       ],
       "avoid_when": [
-        "当前开源版本未提供可用会议后端；未安装并启用受审查的会议插件时不要使用"
+        "要“停止屏幕共享”请改用 dws conference share stop",
+        "要“开始共享桌面”请改用 dws conference share start",
+        "要“打开共享选择面板”请改用 dws conference share panel"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -541,7 +563,8 @@
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "unavailable",
       "availability": "unavailable",
@@ -554,7 +577,9 @@
         "打开共享选择面板"
       ],
       "avoid_when": [
-        "当前开源版本未提供可用会议后端；未安装并启用受审查的会议插件时不要使用"
+        "要“停止屏幕共享”请改用 dws conference share stop",
+        "要“开始共享桌面”请改用 dws conference share start",
+        "要“打开共享批注”请改用 dws conference share annotate"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -567,7 +592,8 @@
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "unavailable",
       "availability": "unavailable",
@@ -580,7 +606,9 @@
         "开始共享桌面"
       ],
       "avoid_when": [
-        "当前开源版本未提供可用会议后端；未安装并启用受审查的会议插件时不要使用"
+        "要“停止屏幕共享”请改用 dws conference share stop",
+        "要“打开共享批注”请改用 dws conference share annotate",
+        "要“打开共享选择面板”请改用 dws conference share panel"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -593,7 +621,8 @@
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "unavailable",
       "availability": "unavailable",
@@ -606,7 +635,9 @@
         "停止屏幕共享"
       ],
       "avoid_when": [
-        "当前开源版本未提供可用会议后端；未安装并启用受审查的会议插件时不要使用"
+        "要“开始共享桌面”请改用 dws conference share start",
+        "要“打开共享批注”请改用 dws conference share annotate",
+        "要“打开共享选择面板”请改用 dws conference share panel"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -619,7 +650,8 @@
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "unavailable",
       "availability": "unavailable",
@@ -684,7 +716,7 @@
         "关闭实时字幕"
       ],
       "avoid_when": [
-        "当前开源版本未提供可用会议后端；未安装并启用受审查的会议插件时不要使用"
+        "要“开启实时字幕”请改用 dws conference subtitle open"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -697,7 +729,8 @@
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "unavailable",
       "availability": "unavailable",
@@ -710,7 +743,7 @@
         "开启实时字幕"
       ],
       "avoid_when": [
-        "当前开源版本未提供可用会议后端；未安装并启用受审查的会议插件时不要使用"
+        "要“关闭实时字幕”请改用 dws conference subtitle close"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -723,7 +756,8 @@
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "unavailable",
       "availability": "unavailable",
@@ -736,7 +770,7 @@
         "关闭智能听记"
       ],
       "avoid_when": [
-        "当前开源版本未提供可用会议后端；未安装并启用受审查的会议插件时不要使用"
+        "要“开启智能听记”请改用 dws conference transcript open"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -749,7 +783,8 @@
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "unavailable",
       "availability": "unavailable",
@@ -762,7 +797,7 @@
         "开启智能听记"
       ],
       "avoid_when": [
-        "当前开源版本未提供可用会议后端；未安装并启用受审查的会议插件时不要使用"
+        "要“关闭智能听记”请改用 dws conference transcript close"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -775,7 +810,8 @@
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "unavailable",
       "availability": "unavailable",
@@ -788,7 +824,8 @@
         "切换宫格视图"
       ],
       "avoid_when": [
-        "当前开源版本未提供可用会议后端；未安装并启用受审查的会议插件时不要使用"
+        "要“切换标准视图”请改用 dws conference view standard",
+        "要“切换演讲者视图”请改用 dws conference view speaker"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -801,7 +838,8 @@
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "unavailable",
       "availability": "unavailable",
@@ -814,7 +852,8 @@
         "切换演讲者视图"
       ],
       "avoid_when": [
-        "当前开源版本未提供可用会议后端；未安装并启用受审查的会议插件时不要使用"
+        "要“切换宫格视图”请改用 dws conference view grid",
+        "要“切换标准视图”请改用 dws conference view standard"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -827,7 +866,8 @@
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "unavailable",
       "availability": "unavailable",
@@ -840,7 +880,8 @@
         "切换标准视图"
       ],
       "avoid_when": [
-        "当前开源版本未提供可用会议后端；未安装并启用受审查的会议插件时不要使用"
+        "要“切换宫格视图”请改用 dws conference view grid",
+        "要“切换演讲者视图”请改用 dws conference view speaker"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -853,7 +894,8 @@
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "unavailable",
       "availability": "unavailable",

@@ -14,7 +14,8 @@
         "我收到的日志"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“读取单份日报正文（含字段明细 + 钉钉跳转链接）”"
+        "要“提交一份新日报（按模版）”请改用 dws report entry submit",
+        "要“读取单份日报的已读统计”请改用 dws report entry stats"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -29,7 +30,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_report_entry_details",
         "skills/mono/references/products/report.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "report",
@@ -46,7 +48,8 @@
         "日志统计/已读统计"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“读取单份日报的已读统计”"
+        "要“提交一份新日报（按模版）”请改用 dws report entry submit",
+        "要“读取单份日报正文（含字段明细 + 钉钉跳转链接）”请改用 dws report entry get"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -61,7 +64,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_report_statistics_by_id",
         "skills/mono/references/products/report.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "report",
@@ -79,7 +83,8 @@
         "推荐：长内容走文件，避免 shell 引号问题"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“提交一份新日报（按模版）”所述变更时不要使用"
+        "要“读取单份日报正文（含字段明细 + 钉钉跳转链接）”请改用 dws report entry get",
+        "要“读取单份日报的已读统计”请改用 dws report entry stats"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -94,7 +99,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.create_report",
         "skills/mono/references/products/report.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "report",
@@ -177,7 +183,7 @@
         "2. 按名称读取模版字段定义"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“读取单个日志模版的字段定义”"
+        "要“获取当前用户可用的日志模版列表”请改用 dws report template list"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -192,7 +198,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_template_details_by_name",
         "skills/mono/references/products/report.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "report",
@@ -210,7 +217,7 @@
         "有什么日志模版"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取当前用户可用的日志模版列表”"
+        "要“读取单个日志模版的字段定义”请改用 dws report template get"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -225,7 +232,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_available_report_templates",
         "skills/mono/references/products/report.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "report",

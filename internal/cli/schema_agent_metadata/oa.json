@@ -9,7 +9,9 @@
         "同意审批/批准"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“同意审批”所述变更时不要使用"
+        "要“用户添加审批评论”请改用 dws oa approval oa-comments",
+        "要“获取员工已处理任务列表”请改用 dws oa approval list-executed",
+        "要“获取抄送用户的列表”请改用 dws oa approval list-cc"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -25,7 +27,8 @@
         "skills/mono/references/products/oa.md",
         "skills/mono/references/products/simple.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "oa",
@@ -42,7 +45,9 @@
         "审批详情/看审批"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取审批实例详情”"
+        "要“同意审批”请改用 dws oa approval approve",
+        "要“用户添加审批评论”请改用 dws oa approval oa-comments",
+        "要“获取员工已处理任务列表”请改用 dws oa approval list-executed"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -57,7 +62,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.get_processInstance_detail",
         "skills/mono/references/products/oa.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "oa",
@@ -74,7 +80,9 @@
         "抄送我的审批单"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取抄送用户的列表”"
+        "要“同意审批”请改用 dws oa approval approve",
+        "要“用户添加审批评论”请改用 dws oa approval oa-comments",
+        "要“获取员工已处理任务列表”请改用 dws oa approval list-executed"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -89,7 +97,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.oa.get_noticed_instances",
         "skills/mono/references/products/oa.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -102,7 +111,9 @@
         "我审批/处理过的审批单"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取员工已处理任务列表”"
+        "要“同意审批”请改用 dws oa approval approve",
+        "要“用户添加审批评论”请改用 dws oa approval oa-comments",
+        "要“获取抄送用户的列表”请改用 dws oa approval list-cc"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -117,7 +128,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.oa.get_done_tasks",
         "skills/mono/references/products/oa.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -130,7 +142,9 @@
         "有哪些审批表单/可见表单"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取当前用户可见的审批表单列表”"
+        "要“同意审批”请改用 dws oa approval approve",
+        "要“用户添加审批评论”请改用 dws oa approval oa-comments",
+        "要“获取员工已处理任务列表”请改用 dws oa approval list-executed"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -145,7 +159,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.list_user_visible_process",
         "skills/mono/references/products/oa.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "oa",
@@ -162,7 +177,9 @@
         "我发起的审批"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询已发起的审批实例列表”"
+        "要“同意审批”请改用 dws oa approval approve",
+        "要“用户添加审批评论”请改用 dws oa approval oa-comments",
+        "要“获取员工已处理任务列表”请改用 dws oa approval list-executed"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -178,7 +195,8 @@
         "skills/mono/references/products/oa.md",
         "skills/mono/references/products/simple.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "oa",
@@ -196,7 +214,9 @@
         "待我审批/我要审批的"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询待我处理的审批”"
+        "要“同意审批”请改用 dws oa approval approve",
+        "要“用户添加审批评论”请改用 dws oa approval oa-comments",
+        "要“获取员工已处理任务列表”请改用 dws oa approval list-executed"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -212,7 +232,8 @@
         "skills/mono/references/products/oa.md",
         "skills/mono/references/products/simple.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "oa",
@@ -229,7 +250,9 @@
         "我发起的审批单"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取已提交实例列表”"
+        "要“同意审批”请改用 dws oa approval approve",
+        "要“用户添加审批评论”请改用 dws oa approval oa-comments",
+        "要“获取员工已处理任务列表”请改用 dws oa approval list-executed"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -244,7 +267,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.oa.get_submitted_instances",
         "skills/mono/references/products/oa.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -257,7 +281,9 @@
         "抄送审批/添加抄送人"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“抄送审批人”所述变更时不要使用"
+        "要“同意审批”请改用 dws oa approval approve",
+        "要“用户添加审批评论”请改用 dws oa approval oa-comments",
+        "要“获取员工已处理任务列表”请改用 dws oa approval list-executed"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -272,7 +298,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.oa.oa_cc_noticer",
         "skills/mono/references/products/oa.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -285,7 +312,9 @@
         "评论审批/添加评论/写评论"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“用户添加审批评论”所述变更时不要使用"
+        "要“同意审批”请改用 dws oa approval approve",
+        "要“获取员工已处理任务列表”请改用 dws oa approval list-executed",
+        "要“获取抄送用户的列表”请改用 dws oa approval list-cc"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -300,7 +329,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.oa.dingflow_comments",
         "skills/mono/references/products/oa.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -313,7 +343,9 @@
         "审批记录/操作历史"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取审批操作记录”"
+        "要“同意审批”请改用 dws oa approval approve",
+        "要“用户添加审批评论”请改用 dws oa approval oa-comments",
+        "要“获取员工已处理任务列表”请改用 dws oa approval list-executed"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -328,7 +360,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.get_processInstance_records",
         "skills/mono/references/products/oa.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "oa",
@@ -345,7 +378,9 @@
         "转交审批/转交任务"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“转交审批任务”所述变更时不要使用"
+        "要“同意审批”请改用 dws oa approval approve",
+        "要“用户添加审批评论”请改用 dws oa approval oa-comments",
+        "要“获取员工已处理任务列表”请改用 dws oa approval list-executed"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -360,7 +395,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.oa.redirect_task",
         "skills/mono/references/products/oa.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -373,7 +409,9 @@
         "拒绝审批/驳回"
       ],
       "avoid_when": [
-        "用户未明确要求“拒绝审批”、目标不清楚或尚未确认时不要使用"
+        "要“同意审批”请改用 dws oa approval approve",
+        "要“用户添加审批评论”请改用 dws oa approval oa-comments",
+        "要“获取员工已处理任务列表”请改用 dws oa approval list-executed"
       ],
       "effect": "destructive",
       "effect_source": "skill-explicit",
@@ -390,7 +428,8 @@
         "skills/mono/references/products/oa.md",
         "skills/mono/references/products/simple.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "oa",
@@ -408,7 +447,9 @@
         "撤销审批/撤回"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“撤销已发起的审批”所述变更时不要使用"
+        "要“同意审批”请改用 dws oa approval approve",
+        "要“用户添加审批评论”请改用 dws oa approval oa-comments",
+        "要“获取员工已处理任务列表”请改用 dws oa approval list-executed"
       ],
       "effect": "write",
       "effect_source": "skill-explicit",
@@ -424,7 +465,8 @@
         "skills/mono/references/products/oa.md",
         "skills/mono/references/products/simple.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "oa",
@@ -443,7 +485,9 @@
         "拒绝审批/驳回"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询待我审批的任务 ID”"
+        "要“同意审批”请改用 dws oa approval approve",
+        "要“用户添加审批评论”请改用 dws oa approval oa-comments",
+        "要“获取员工已处理任务列表”请改用 dws oa approval list-executed"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -458,7 +502,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.list_pending_tasks",
         "skills/mono/references/products/oa.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "oa",

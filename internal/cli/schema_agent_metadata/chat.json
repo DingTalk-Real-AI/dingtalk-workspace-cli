@@ -12,7 +12,7 @@
         "给机器人发单聊/给机器人发消息/跟机器人聊天；给机器人发单聊消息"
       ],
       "avoid_when": [
-        "我创建的机器人/我的机器人/我自己的机器人/查看我的机器人；搜索我创建的机器人"
+        "要“搜索我创建的机器人”请改用 dws chat bot search"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -29,7 +29,8 @@
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "bot",
@@ -48,8 +49,7 @@
         "查看我的机器人"
       ],
       "avoid_when": [
-        "搜索机器人/找机器人/查机器人/帮我找XXX机器人；搜索全部可用机器人",
-        "给机器人发单聊/给机器人发消息/跟机器人聊天；给机器人发单聊消息"
+        "要“搜索机器人”请改用 dws chat bot find"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -66,7 +66,8 @@
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/imported/wukong.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "bot",
@@ -83,7 +84,7 @@
         "查看会话分组/自定义分组；获取会话分组"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取用户自定义会话分组”"
+        "要“拉取用户指定自定义会话分组下的会话”请改用 dws chat category list-conversations"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -98,7 +99,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.chat.list_user_define_conv_categories",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -111,7 +113,7 @@
         "某个分组下的会话/分组会话列表"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“拉取用户指定自定义会话分组下的会话”"
+        "要“获取用户自定义会话分组”请改用 dws chat category list"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -127,7 +129,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.chat.list_conversations_by_category",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -167,7 +170,9 @@
         "群里有哪些机器人/查看群机器人/列出群机器人；查看群内机器人列表"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取群内所有机器人”"
+        "要“创建一个群聊，支持指定群名称、初始成员列表等参数”请改用 dws chat group create",
+        "要“根据群号获取群聊信息”请改用 dws chat group get-by-group-id",
+        "要“解散群聊”请改用 dws chat group dismiss"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -183,7 +188,8 @@
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "bot",
@@ -200,7 +206,9 @@
         "建群/创建群聊"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“创建一个群聊，支持指定群名称、初始成员列表等参数。”所述变更时不要使用"
+        "要“根据群号获取群聊信息”请改用 dws chat group get-by-group-id",
+        "要“获取群邀请链接”请改用 dws chat group invite-url",
+        "要“解散群聊”请改用 dws chat group dismiss"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -216,7 +224,8 @@
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "im",
@@ -233,7 +242,9 @@
         "解散群/解散群聊；解散群聊"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“解散群聊”所述变更时不要使用"
+        "要“创建一个群聊，支持指定群名称、初始成员列表等参数”请改用 dws chat group create",
+        "要“根据群号获取群聊信息”请改用 dws chat group get-by-group-id",
+        "要“获取群邀请链接”请改用 dws chat group invite-url"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -248,7 +259,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.chat.dismiss_group",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -261,7 +273,9 @@
         "根据群号查群信息/群号转openConversationId；群号查群聊信息"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“根据群号获取群聊信息”"
+        "要“创建一个群聊，支持指定群名称、初始成员列表等参数”请改用 dws chat group create",
+        "要“获取群邀请链接”请改用 dws chat group invite-url",
+        "要“解散群聊”请改用 dws chat group dismiss"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -276,7 +290,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.chat.get_conv_info_by_group_id",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -288,7 +303,9 @@
         "群邀请链接/入群链接/加群链接"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取群邀请链接”"
+        "要“创建一个群聊，支持指定群名称、初始成员列表等参数”请改用 dws chat group create",
+        "要“根据群号获取群聊信息”请改用 dws chat group get-by-group-id",
+        "要“解散群聊”请改用 dws chat group dismiss"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -303,7 +320,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.get_group_invite_url",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -316,7 +334,9 @@
         "我创建的群/我管理的群/我是群主的群/我当管理员的群；拉取我创建/管理的群"
       ],
       "avoid_when": [
-        "我加入的所有群/拉取全部群列表/我的群；分页拉取所有群"
+        "要“创建一个群聊，支持指定群名称、初始成员列表等参数”请改用 dws chat group create",
+        "要“根据群号获取群聊信息”请改用 dws chat group get-by-group-id",
+        "要“解散群聊”请改用 dws chat group dismiss"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -332,7 +352,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.chat.list_owned_or_admin_groups",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -345,7 +366,9 @@
         "拉人进群/加群成员"
       ],
       "avoid_when": [
-        "设管理员/取消管理员；设置群管理员"
+        "要“从群中移除成员”请改用 dws chat group members remove",
+        "要“将机器人添加到群中”请改用 dws chat group members add-bot",
+        "要“查看群成员列表”请改用 dws chat group members list"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -360,7 +383,8 @@
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "chat",
@@ -377,7 +401,9 @@
         "邀请机器人进群"
       ],
       "avoid_when": [
-        "从群里移除机器人/踢机器人；移除群内机器人"
+        "要“从群中移除成员”请改用 dws chat group members remove",
+        "要“向群中添加成员”请改用 dws chat group members add",
+        "要“查看群成员列表”请改用 dws chat group members list"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -394,7 +420,8 @@
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/imported/wukong.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "bot",
@@ -410,7 +437,9 @@
         "查看群成员列表"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查看群成员列表”"
+        "要“从群中移除成员”请改用 dws chat group members remove",
+        "要“向群中添加成员”请改用 dws chat group members add",
+        "要“将机器人添加到群中”请改用 dws chat group members add-bot"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -423,7 +452,8 @@
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.get_group_members",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "chat",
@@ -439,7 +469,9 @@
         "踢人/移除群成员"
       ],
       "avoid_when": [
-        "退群/退出群聊/离开群；退出群聊"
+        "要“向群中添加成员”请改用 dws chat group members add",
+        "要“将机器人添加到群中”请改用 dws chat group members add-bot",
+        "要“查看群成员列表”请改用 dws chat group members list"
       ],
       "effect": "destructive",
       "effect_source": "skill-explicit",
@@ -455,7 +487,8 @@
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "chat",
@@ -472,7 +505,9 @@
         "从群里移除机器人/踢机器人；移除群内机器人"
       ],
       "avoid_when": [
-        "用户未明确要求“从群内移除机器人”、目标不清楚或尚未确认时不要使用"
+        "要“向群中添加成员”请改用 dws chat group members add",
+        "要“将机器人添加到群中”请改用 dws chat group members add-bot",
+        "要“查看群成员列表”请改用 dws chat group members list"
       ],
       "effect": "destructive",
       "effect_source": "agent-hint",
@@ -489,7 +524,8 @@
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/destructive-safety.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "bot",
@@ -505,7 +541,9 @@
         "退群/退出群聊/离开群；退出群聊"
       ],
       "avoid_when": [
-        "解散群/解散群聊；解散群聊"
+        "要“创建一个群聊，支持指定群名称、初始成员列表等参数”请改用 dws chat group create",
+        "要“根据群号获取群聊信息”请改用 dws chat group get-by-group-id",
+        "要“解散群聊”请改用 dws chat group dismiss"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -520,7 +558,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.chat.quit_group",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -532,9 +571,9 @@
         "改群名"
       ],
       "avoid_when": [
-        "改群头像/更新群头像；更新群头像",
-        "改群昵称/设置群昵称/我在群里的名字；设置个人群昵称",
-        "群备注/给群加备注/修改群备注；设置群备注"
+        "要“创建一个群聊，支持指定群名称、初始成员列表等参数”请改用 dws chat group create",
+        "要“根据群号获取群聊信息”请改用 dws chat group get-by-group-id",
+        "要“解散群聊”请改用 dws chat group dismiss"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -549,7 +588,8 @@
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "chat",
@@ -566,7 +606,9 @@
         "设管理员/取消管理员；设置群管理员"
       ],
       "avoid_when": [
-        "改群设置/群设置开关/群权限/入群许可/禁止私聊；更新群设置"
+        "要“创建一个群聊，支持指定群名称、初始成员列表等参数”请改用 dws chat group create",
+        "要“根据群号获取群聊信息”请改用 dws chat group get-by-group-id",
+        "要“解散群聊”请改用 dws chat group dismiss"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -581,7 +623,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.chat.update_conv_member_roles",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -594,7 +637,9 @@
         "设置历史消息/新成员看历史/新成员可见消息"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“设置新成员入群可查看历史消息选项”所述变更时不要使用"
+        "要“创建一个群聊，支持指定群名称、初始成员列表等参数”请改用 dws chat group create",
+        "要“根据群号获取群聊信息”请改用 dws chat group get-by-group-id",
+        "要“解散群聊”请改用 dws chat group dismiss"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -610,7 +655,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.chat.update_show_history_msg_option",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -622,7 +668,9 @@
         "转让群主/换群主/群主转让"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“群主转让”所述变更时不要使用"
+        "要“创建一个群聊，支持指定群名称、初始成员列表等参数”请改用 dws chat group create",
+        "要“根据群号获取群聊信息”请改用 dws chat group get-by-group-id",
+        "要“解散群聊”请改用 dws chat group dismiss"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -637,7 +685,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.transfer_group_owner",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -649,7 +698,9 @@
         "改群头像/更新群头像；更新群头像"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新群头像”所述变更时不要使用"
+        "要“创建一个群聊，支持指定群名称、初始成员列表等参数”请改用 dws chat group create",
+        "要“根据群号获取群聊信息”请改用 dws chat group get-by-group-id",
+        "要“解散群聊”请改用 dws chat group dismiss"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -664,7 +715,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.chat.update_group_icon",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -676,7 +728,9 @@
         "改群设置/群设置开关/群权限/入群许可/禁止私聊；更新群设置"
       ],
       "avoid_when": [
-        "新成员看历史/历史消息可见范围；设置新成员可见历史消息"
+        "要“创建一个群聊，支持指定群名称、初始成员列表等参数”请改用 dws chat group create",
+        "要“根据群号获取群聊信息”请改用 dws chat group get-by-group-id",
+        "要“解散群聊”请改用 dws chat group dismiss"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -692,7 +746,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.chat.update_group_settings",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -760,7 +815,9 @@
         "创建/添加群身份"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“添加群身份”所述变更时不要使用"
+        "要“删除群身份”请改用 dws chat group-role remove",
+        "要“拉取会话的群身份”请改用 dws chat group-role list",
+        "要“根据用户提供的群和成员为在群里查询成员的群身份”请改用 dws chat group-role query-user"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -774,7 +831,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.add_custom_group_role",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -786,7 +844,9 @@
         "查看群身份/群的自定义身份列表"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“拉取会话的群身份”"
+        "要“删除群身份”请改用 dws chat group-role remove",
+        "要“根据用户提供的群和成员为在群里查询成员的群身份”请改用 dws chat group-role query-user",
+        "要“添加群身份”请改用 dws chat group-role add"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -800,7 +860,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.list_custom_group_roles",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -812,7 +873,9 @@
         "查询某人的群身份/某人在群里有什么身份"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“根据用户提供的群和成员为在群里查询成员的群身份”"
+        "要“删除群身份”请改用 dws chat group-role remove",
+        "要“拉取会话的群身份”请改用 dws chat group-role list",
+        "要“添加群身份”请改用 dws chat group-role add"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -826,7 +889,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.query_custom_user_roles",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -838,7 +902,9 @@
         "删除群身份"
       ],
       "avoid_when": [
-        "用户未明确要求“删除群身份”、目标不清楚或尚未确认时不要使用"
+        "要“拉取会话的群身份”请改用 dws chat group-role list",
+        "要“根据用户提供的群和成员为在群里查询成员的群身份”请改用 dws chat group-role query-user",
+        "要“添加群身份”请改用 dws chat group-role add"
       ],
       "effect": "destructive",
       "effect_source": "agent-hint",
@@ -853,7 +919,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.chat.remove_custom_group_role",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/destructive-safety.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -865,7 +932,9 @@
         "移除某人的群身份/撤销群身份"
       ],
       "avoid_when": [
-        "用户未明确要求“移除用户的群身份”、目标不清楚或尚未确认时不要使用"
+        "要“拉取会话的群身份”请改用 dws chat group-role list",
+        "要“根据用户提供的群和成员为在群里查询成员的群身份”请改用 dws chat group-role query-user",
+        "要“添加群身份”请改用 dws chat group-role add"
       ],
       "effect": "destructive",
       "effect_source": "agent-hint",
@@ -880,7 +949,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.chat.remove_custom_user_roles",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/destructive-safety.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -892,7 +962,9 @@
         "给某人设置群身份/设定用户的群身份"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“根据用户提供的群和身份为用户设置群身份”所述变更时不要使用"
+        "要“拉取会话的群身份”请改用 dws chat group-role list",
+        "要“根据用户提供的群和成员为在群里查询成员的群身份”请改用 dws chat group-role query-user",
+        "要“添加群身份”请改用 dws chat group-role add"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -906,7 +978,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.set_custom_user_roles",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -918,7 +991,9 @@
         "修改/更新群身份名称"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新群身份”所述变更时不要使用"
+        "要“拉取会话的群身份”请改用 dws chat group-role list",
+        "要“根据用户提供的群和成员为在群里查询成员的群身份”请改用 dws chat group-role query-user",
+        "要“添加群身份”请改用 dws chat group-role add"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -932,7 +1007,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.update_custom_group_role",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -974,7 +1050,9 @@
         "emoji回应/表情回应/给消息加表情"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“消息添加 emoji 回应”所述变更时不要使用"
+        "要“创建并推送流式卡片”请改用 dws chat message send-card",
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -989,7 +1067,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.add_emoji_reaction",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -1001,7 +1080,9 @@
         "文字表情回应/添加文字表情"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“添加文字表情”所述变更时不要使用"
+        "要“创建并推送流式卡片”请改用 dws chat message send-card",
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1015,7 +1096,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.add_text_emotion",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -1028,7 +1110,9 @@
         "合并转发/批量转发/合并转发多条消息；合并转发多条消息"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“合并转发消息”所述变更时不要使用"
+        "要“创建并推送流式卡片”请改用 dws chat message send-card",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1044,7 +1128,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.chat.combine_forward_messages",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -1056,7 +1141,9 @@
         "创建文字表情/新建文字表情"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“创建文字表情”所述变更时不要使用"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1071,7 +1158,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.create_text_emotion",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -1083,7 +1171,9 @@
         "下载聊天消息中的图片/视频/语音等资源到本地文件"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“下载聊天消息中的图片/视频/语音等资源到本地文件”"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1098,7 +1188,8 @@
       "source_refs": [
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/catalog-completeness.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "composite",
       "availability": "available",
@@ -1112,8 +1203,9 @@
         "转发消息/转发一条消息/把消息转发到另一个群"
       ],
       "avoid_when": [
-        "合并转发/批量转发/合并转发多条消息；合并转发多条消息",
-        "转发话题/转发话题消息/话题转发到另一个群；转发话题消息"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1128,7 +1220,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.chat.forward_message",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -1141,7 +1234,9 @@
         "转发话题/转发话题消息/话题转发到另一个群；转发话题消息"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“转发某个话题到其他会话”所述变更时不要使用"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1156,7 +1251,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.chat.forward_topic",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -1174,10 +1270,9 @@
         "聊天记录/会话消息/拉取会话"
       ],
       "avoid_when": [
-        "DING消息/查DING/DING历史；查询 DING 消息列表",
-        "查看我今天的所有消息；全量会话消息",
-        "查看钉住的消息/Pin列表/钉住消息列表；拉取钉住消息列表",
-        "看看张三发给我的消息；按发送者查询消息"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1193,7 +1288,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.chat.list_conversation_message_v2",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -1207,7 +1303,9 @@
         "查看我今天的所有消息；全量会话消息"
       ],
       "avoid_when": [
-        "谁@了我/查看提及我的消息；查询@我的消息"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1223,7 +1321,8 @@
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "chat",
@@ -1239,7 +1338,9 @@
         "批量查消息/按ID查消息/根据消息ID查"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“批量查消息”"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1253,7 +1354,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.list_messages_by_ids",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -1267,7 +1369,9 @@
         "看看张三发给我的消息；按发送者查询消息"
       ],
       "avoid_when": [
-        "拉取和张三的单聊记录；拉取单聊消息"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1283,7 +1387,8 @@
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "chat",
@@ -1299,7 +1404,9 @@
         "拉取指定用户的单聊会话消息内容"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“拉取指定用户的单聊会话消息内容”"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1312,7 +1419,8 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.list_individual_chat_message",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -1325,7 +1433,9 @@
         "特别关注人的消息/关注的人的消息/星标联系人的消息"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“拉取特别关注人的消息”"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1340,7 +1450,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.list_special_focus_messages",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "chat",
@@ -1358,7 +1469,9 @@
         "谁@了我/查看提及我的消息；查询@我的消息"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“拉取 @我 的消息”"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1374,7 +1487,8 @@
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "chat",
@@ -1390,7 +1504,9 @@
         "查看钉住的消息/Pin列表/钉住消息列表；拉取钉住消息列表"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“拉取会话中钉住的(pin)消息列表”"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1406,7 +1522,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.chat.list_pin_messages",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -1419,7 +1536,9 @@
         "话题回复/群话题消息回复/拉取话题回复"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“拉取群话题回复消息列表”"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1434,7 +1553,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.list_topic_replies",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "chat",
@@ -1453,7 +1573,9 @@
         "未读消息会话/未读会话列表/我的未读会话；未读会话列表"
       ],
       "avoid_when": [
-        "谁看了这条消息/消息已读未读/查读状态；查询消息已读状态"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1469,7 +1591,8 @@
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "chat",
@@ -1486,7 +1609,9 @@
         "消息发没发成功/查询消息发送状态；查询消息发送状态"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询以当前用户的身份发送的消息的发送状态”"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1501,7 +1626,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.chat.query_message_send_status",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -1514,8 +1640,9 @@
         "谁看了这条消息/消息已读未读/查读状态；查询消息已读状态"
       ],
       "avoid_when": [
-        "DING接收状态/谁收到了DING；DING 接收状态",
-        "未读消息会话/未读会话列表/我的未读会话；未读会话列表"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1531,7 +1658,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.chat.query_msg_read_status",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -1544,7 +1672,9 @@
         "撤回我发的消息/撤回消息；撤回个人消息"
       ],
       "avoid_when": [
-        "撤回DING；撤回 DING 消息"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "destructive",
       "effect_source": "agent-hint",
@@ -1560,7 +1690,8 @@
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/destructive-safety.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -1574,7 +1705,9 @@
         "用同一个 robot-code + processQueryKey 撤回"
       ],
       "avoid_when": [
-        "撤回我发的消息/撤回消息；撤回个人消息"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "destructive",
       "effect_source": "skill-explicit",
@@ -1591,7 +1724,8 @@
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/catalog-completeness.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "composite",
       "availability": "available",
@@ -1604,7 +1738,9 @@
         "取消emoji回应/移除表情回应"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“消息删除emoji回应”所述变更时不要使用"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1618,7 +1754,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.remove_emoji_reaction",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -1630,7 +1767,9 @@
         "取消文字表情回应/移除文字表情"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“删除文字表情”所述变更时不要使用"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1644,7 +1783,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.remove_text_emotion",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -1658,7 +1798,9 @@
         "需要保留被回复消息的引用关系"
       ],
       "avoid_when": [
-        "不需要引用上下文的普通发送使用 chat message send"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "prerequisites": [
         "已取得会话 ID、原消息 ID 和原消息发送者 openDingTalkId"
@@ -1680,7 +1822,8 @@
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "chat",
@@ -1696,8 +1839,9 @@
         "按关键词搜索消息"
       ],
       "avoid_when": [
-        "按发送者搜索/指定多个群搜索/多维度搜消息；多维度搜索消息",
-        "搜一下智能化方案/最近 OKR 相关邮件/最近发版相关消息；搜企业知识内容"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1713,7 +1857,8 @@
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "chat",
@@ -1733,7 +1878,9 @@
         "搜索消息里的关键词/包含XX的消息"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“搜索消息，支持多种维度：时间范围、关键词、发送者、at我的、at指定用户、会话”"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1749,7 +1896,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.chat.search_messages",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -1777,13 +1925,9 @@
         "通知群里的人都来开会；个人身份群发"
       ],
       "avoid_when": [
-        "使用机器人身份发送时选择 send-by-bot 或 send-by-webhook",
-        "发DING/DING通知；发送 DING 消息",
-        "发卡片消息/推送流式卡片；创建并推送流式卡片",
-        "引用回复已有消息时使用 chat message reply",
-        "引用消息回复/回复那条消息；引用回复消息",
-        "让机器人每天推送日报；机器人定时推送",
-        "转发消息/把消息转到另一个群；转发单条消息"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "tips": [
         "发送前确认目标和内容；文件消息使用 --msg-type file --file-path",
@@ -1804,7 +1948,8 @@
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "chat",
@@ -1831,8 +1976,9 @@
         "重新发送"
       ],
       "avoid_when": [
-        "CPU 超过 90% 自动告警；Webhook 告警",
-        "通知群里的人都来开会；个人身份群发"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1848,7 +1994,8 @@
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/catalog-completeness.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "composite",
       "availability": "available",
@@ -1863,7 +2010,9 @@
         "Webhook 发消息/告警消息"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“自定义机器人 Webhook 发送群消息”所述变更时不要使用"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1880,7 +2029,8 @@
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/imported/wukong.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "bot",
@@ -1896,7 +2046,9 @@
         "发卡片消息/推送流式卡片；创建并推送流式卡片"
       ],
       "avoid_when": [
-        "更新卡片/流式更新卡片；流式更新卡片内容"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1912,7 +2064,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.chat.create_and_send_card",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -1924,7 +2077,9 @@
         "钉住消息/Pin消息/置顶消息到会话；钉住消息"
       ],
       "avoid_when": [
-        "取消钉住/Unpin消息；取消钉住消息"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1939,7 +2094,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.chat.set_pin_message",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -1951,7 +2107,9 @@
         "取消钉住/Unpin消息；取消钉住消息"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“取消某条钉住的(pin)消息”所述变更时不要使用"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1966,7 +2124,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.chat.unset_pin_message",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -1978,7 +2137,9 @@
         "更新卡片/流式更新卡片；流式更新卡片内容"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“流式更新卡片内容”所述变更时不要使用"
+        "要“合并转发消息”请改用 dws chat message combine-forward",
+        "要“消息添加 emoji 回应”请改用 dws chat message add-emoji",
+        "要“添加文字表情”请改用 dws chat message add-text-emotion"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1994,7 +2155,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.chat.update_streaming_card",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"

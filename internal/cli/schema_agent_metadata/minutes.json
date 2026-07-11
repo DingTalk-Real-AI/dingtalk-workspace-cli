@@ -9,7 +9,9 @@
         "音频地址/音频链接/录音文件/下载录音/音频下载/视频文件/媒体地址"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询听记的音频/视频地址，入参为 taskUuid 和操作人 uid，操作人需拥有该听记的\"读\"权限及以上才会返回；”"
+        "要“批量查询听记详情 (标题 / 时长 / 参与人 / 创建时间 /”请改用 dws minutes get batch",
+        "要“获取听记 AI 摘要 (Markdown 格式)”请改用 dws minutes get summary",
+        "要“获取听记基础信息 (创建人 / 起止时间 / 标题 / 访问链接”请改用 dws minutes get info"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -23,7 +25,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.minutes.query_minutes_audio_url",
         "skills/mono/references/products/minutes.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -35,7 +38,9 @@
         "批量查询/查多个听记"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“批量查询听记详情 (标题 / 时长 / 参与人 / 创建时间 / 状态)”"
+        "要“获取听记 AI 摘要 (Markdown 格式)”请改用 dws minutes get summary",
+        "要“获取听记关键字列表”请改用 dws minutes get keywords",
+        "要“获取听记基础信息 (创建人 / 起止时间 / 标题 / 访问链接”请改用 dws minutes get info"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -49,7 +54,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.batch_get_minutes_details",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "minutes",
@@ -65,7 +71,9 @@
         "听记详情/听记信息"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取听记基础信息 (创建人 / 起止时间 / 标题 / 访问链接)”"
+        "要“批量查询听记详情 (标题 / 时长 / 参与人 / 创建时间 /”请改用 dws minutes get batch",
+        "要“获取听记 AI 摘要 (Markdown 格式)”请改用 dws minutes get summary",
+        "要“获取听记关键字列表”请改用 dws minutes get keywords"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -79,7 +87,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.get_minutes_basic_info",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "minutes",
@@ -95,7 +104,9 @@
         "关键字/关键词"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取听记关键字列表”"
+        "要“批量查询听记详情 (标题 / 时长 / 参与人 / 创建时间 /”请改用 dws minutes get batch",
+        "要“获取听记 AI 摘要 (Markdown 格式)”请改用 dws minutes get summary",
+        "要“获取听记基础信息 (创建人 / 起止时间 / 标题 / 访问链接”请改用 dws minutes get info"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -109,7 +120,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.get_minutes_keywords",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "minutes",
@@ -128,7 +140,9 @@
         "摘要/总结/会议纪要/纪要"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取听记 AI 摘要 (Markdown 格式)”"
+        "要“批量查询听记详情 (标题 / 时长 / 参与人 / 创建时间 /”请改用 dws minutes get batch",
+        "要“获取听记关键字列表”请改用 dws minutes get keywords",
+        "要“获取听记基础信息 (创建人 / 起止时间 / 标题 / 访问链接”请改用 dws minutes get info"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -143,7 +157,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.get_minutes_ai_summary",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "minutes",
@@ -161,7 +176,9 @@
         "把 XX 改成 YY；用户想提取待办"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取听记中提取的待办事项”"
+        "要“批量查询听记详情 (标题 / 时长 / 参与人 / 创建时间 /”请改用 dws minutes get batch",
+        "要“获取听记 AI 摘要 (Markdown 格式)”请改用 dws minutes get summary",
+        "要“获取听记基础信息 (创建人 / 起止时间 / 标题 / 访问链接”请改用 dws minutes get info"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -176,7 +193,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.list_minutes_todos",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "minutes",
@@ -193,7 +211,9 @@
         "原文/转写/录音文字/逐字稿"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取听记语音转写原文 (含发言人 / 时间戳)”"
+        "要“批量查询听记详情 (标题 / 时长 / 参与人 / 创建时间 /”请改用 dws minutes get batch",
+        "要“获取听记 AI 摘要 (Markdown 格式)”请改用 dws minutes get summary",
+        "要“获取听记基础信息 (创建人 / 起止时间 / 标题 / 访问链接”请改用 dws minutes get info"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -208,7 +228,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.get_minutes_transcription",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "minutes",
@@ -225,7 +246,7 @@
         "加热词/添加热词/设置热词/把某个词加到热词里/这个词总是识别错"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“添加个人热词 (优化识别专有名词 / 人名)”所述变更时不要使用"
+        "要“查询我的热词列表，返回个人的所有听记配置过的热词列表”请改用 dws minutes hot-word list"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -240,7 +261,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.add_personal_hot_word",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "minutes",
@@ -256,7 +278,7 @@
         "看看我的热词/我加了哪些热词/热词列表/查热词"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询我的热词列表，返回个人的所有听记配置过的热词列表”"
+        "要“添加个人热词 (优化识别专有名词 / 人名)”请改用 dws minutes hot-word add"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -270,7 +292,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.minutes.list_my_hotwords",
         "skills/mono/references/products/minutes.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -325,7 +348,7 @@
         "生成思维导图/创建脑图/帮我添加思维导图/基于这个听记做思维导图/把会议内容做成脑图"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“触发思维导图生成任务 (完成状态走 mind-graph status 轮询)”所述变更时不要使用"
+        "要“查询思维导图任务状态 (0=进行中 / 1=成功 / 2=失败)”请改用 dws minutes mind-graph status"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -340,7 +363,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.create_mind_graph",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "minutes",
@@ -357,7 +381,7 @@
         "思维导图状态/脑图进度/思维导图好了吗"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询思维导图任务状态 (0=进行中 / 1=成功 / 2=失败)”"
+        "要“触发思维导图生成任务 (完成状态走 mind-graph sta”请改用 dws minutes mind-graph create"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -372,7 +396,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.query_mind_graph_status",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "minutes",
@@ -391,7 +416,7 @@
         "添加参会者/批量添加参会者/添加成员/批量添加成员/加参会人/加入成员"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“批量给多个听记增加成员，并且设置成员的权限。”所述变更时不要使用"
+        "要“批量移除多个听记的成员的权限”请改用 dws minutes permission remove"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -406,7 +431,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.minutes.add_member_permission",
         "skills/mono/references/products/minutes.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -419,7 +445,7 @@
         "移除某人的权限/取消共享/不让某人看这个听记了"
       ],
       "avoid_when": [
-        "用户未明确要求“批量移除多个听记的成员的权限。”、目标不清楚或尚未确认时不要使用"
+        "要“批量给多个听记增加成员，并且设置成员的权限”请改用 dws minutes permission add"
       ],
       "effect": "destructive",
       "effect_source": "agent-hint",
@@ -435,7 +461,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.minutes.remove_member_permission",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/destructive-safety.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -449,7 +476,9 @@
         "暂停听记录音"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“暂停听记录音”所述变更时不要使用"
+        "要“发起听记 (开始录音)”请改用 dws minutes record start",
+        "要“恢复听记录音”请改用 dws minutes record resume",
+        "要“结束听记录音”请改用 dws minutes record stop"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -465,7 +494,8 @@
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "minutes",
@@ -483,7 +513,9 @@
         "继续/继续录音"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“恢复听记录音”所述变更时不要使用"
+        "要“发起听记 (开始录音)”请改用 dws minutes record start",
+        "要“暂停听记录音”请改用 dws minutes record pause",
+        "要“结束听记录音”请改用 dws minutes record stop"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -499,7 +531,8 @@
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "minutes",
@@ -517,7 +550,9 @@
         "开始听记/开始录音/发起一个听记/启动听记/开始听记录这次会议/我要开始听记了/录音开始/我要听记"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“发起听记 (开始录音)”所述变更时不要使用"
+        "要“恢复听记录音”请改用 dws minutes record resume",
+        "要“暂停听记录音”请改用 dws minutes record pause",
+        "要“结束听记录音”请改用 dws minutes record stop"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -533,7 +568,8 @@
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "minutes",
@@ -551,7 +587,9 @@
         "结束听记录音"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“结束听记录音”所述变更时不要使用"
+        "要“发起听记 (开始录音)”请改用 dws minutes record start",
+        "要“恢复听记录音”请改用 dws minutes record resume",
+        "要“暂停听记录音”请改用 dws minutes record pause"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -567,7 +605,8 @@
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "minutes",
@@ -650,7 +689,7 @@
         "9b. 发言人段落总结（异步：create 触发 → 延迟 5s → 轮询 get，最多 20 次）"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“触发创建发言人的段落总结任务，该任务将听记的发言人的所有撰写内容汇总总结，触发后需要继续调用查询接口去查询总结任务的结果”"
+        "要“查询发言人的段落总结任务的结果，该任务将听记的发言人的所有撰写内”请改用 dws minutes speaker summary get"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -665,7 +704,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.minutes.create_speaker_summary",
         "skills/mono/references/products/minutes.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -677,7 +717,7 @@
         "等待至少 5 秒..."
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询发言人的段落总结任务的结果，该任务将听记的发言人的所有撰写内容汇总总结返回，配合创建任务使用”"
+        "要“触发创建发言人的段落总结任务，该任务将听记的发言人的所有撰写内容”请改用 dws minutes speaker summary create"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -692,7 +732,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.minutes.get_speaker_summary",
         "skills/mono/references/products/minutes.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -706,7 +747,7 @@
         "标签列表/分组列表/有哪些标签/有哪些分组"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询我的的听记的标签或者分组列表，标签或者分组在听记页面创建。”"
+        "要“根据用户的标签或者分组信息来查询听记列表信息，用户的标签通过听记”请改用 dws minutes tag query"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -720,7 +761,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.minutes.query_user_tag_list",
         "skills/mono/references/products/minutes.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -732,7 +774,7 @@
         "查看某个标签下的听记/这个标签下有哪些听记/按标签查听记"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“根据用户的标签或者分组信息来查询听记列表信息，用户的标签通过听记页面手动创建。”"
+        "要“查询我的的听记的标签或者分组列表，标签或者分组在听记页面创建”请改用 dws minutes tag list"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -747,7 +789,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.minutes.query_minutes_by_tag_id",
         "skills/mono/references/products/minutes.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -759,7 +802,7 @@
         "6. 更新纪要内容"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“全量覆盖纪要内容 (不触发 AI 重算)”所述变更时不要使用"
+        "要“修改听记标题”请改用 dws minutes update title"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -774,7 +817,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.update_minutes_summary",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "minutes",
@@ -791,7 +835,7 @@
         "改听记标题/重命名听记/修改标题"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“修改听记标题”所述变更时不要使用"
+        "要“全量覆盖纪要内容 (不触发 AI 重算)”请改用 dws minutes update summary"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -806,7 +850,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.update_minutes_title",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "minutes",
@@ -823,7 +868,8 @@
         "取消上传"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“取消文件上传会话，释放服务端资源”所述变更时不要使用"
+        "要“创建文件上传会话（获取预签名 URL，供 HTTP PUT 上传”请改用 dws minutes upload create",
+        "要“完成文件上传并创建听记（幂等：同一 sessionId 重复调用”请改用 dws minutes upload complete"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -838,7 +884,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.cancel_upload_session",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "minutes",
@@ -854,7 +901,8 @@
         "12c. 通知服务端上传完成，创建听记"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“完成文件上传并创建听记（幂等：同一 sessionId 重复调用返回已有任务）”所述变更时不要使用"
+        "要“创建文件上传会话（获取预签名 URL，供 HTTP PUT 上传”请改用 dws minutes upload create",
+        "要“取消文件上传会话，释放服务端资源”请改用 dws minutes upload cancel"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -869,7 +917,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.complete_upload_session",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "minutes",
@@ -886,7 +935,8 @@
         "把文件转成听记/上传音频文件/上传录音/把这个 mp3 转成听记/帮我把会议录音转写一下/把附件里的音频文件做转写"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“创建文件上传会话（获取预签名 URL，供 HTTP PUT 上传）”所述变更时不要使用"
+        "要“取消文件上传会话，释放服务端资源”请改用 dws minutes upload cancel",
+        "要“完成文件上传并创建听记（幂等：同一 sessionId 重复调用”请改用 dws minutes upload complete"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -901,7 +951,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.create_upload_session",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "minutes",

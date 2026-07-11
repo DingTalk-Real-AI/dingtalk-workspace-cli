@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "source_hash": "sha256:ab8c675e4b0f14dfe7d9520484da1d78a017c8bd39a4d24b7cac0a9f66003623",
+  "source_hash": "sha256:063767a6a24964d97d64babf6f0607908f5c34171840272108fc296eb4c45d25",
   "surface_hash": "sha256:c0a9b75b4e38934db73f4ce1d337b4c64aa5e541257dd9e84c4947da9c9ab664",
-  "source_files": 95,
-  "hint_files": 7,
+  "source_files": 96,
+  "hint_files": 8,
   "hint_products": 21,
-  "hint_tools": 907,
+  "hint_tools": 1302,
   "interface_metadata": {
     "source": "mcp-tools-list+cli-registry",
     "revision": "4574f7022c32cf4c033e9b7b4156e2fec815fed8",

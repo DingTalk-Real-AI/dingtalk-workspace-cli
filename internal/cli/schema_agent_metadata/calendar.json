@@ -63,7 +63,8 @@
         "添加参会人（必须用 Step 1 返回的 eventId）"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“添加参与者”所述变更时不要使用"
+        "要“查看参与者”请改用 dws calendar attendee list",
+        "要“移除参与者”请改用 dws calendar attendee delete"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -78,7 +79,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.add_calendar_participant",
         "skills/mono/references/products/calendar.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "calendar",
@@ -94,7 +96,8 @@
         "参会人/与会者；移除"
       ],
       "avoid_when": [
-        "用户未明确要求“移除参与者”、目标不清楚或尚未确认时不要使用"
+        "要“查看参与者”请改用 dws calendar attendee list",
+        "要“添加参与者”请改用 dws calendar attendee add"
       ],
       "effect": "destructive",
       "effect_source": "skill-explicit",
@@ -109,7 +112,8 @@
         "skills/mono/SKILL.md",
         "skills/mono/references/products/calendar.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "calendar",
@@ -125,7 +129,8 @@
         "参会人/与会者；查看"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查看参与者”"
+        "要“添加参与者”请改用 dws calendar attendee add",
+        "要“移除参与者”请改用 dws calendar attendee delete"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -139,7 +144,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.get_calendar_participants",
         "skills/mono/references/products/calendar.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "calendar",
@@ -155,7 +161,8 @@
         "我有几个日历/查所有日历/别人共享给我的日历/他人共享给我的日历本；查指定日历本"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“根据日历id查询指定日历的信息。”"
+        "要“搜索当前用户拥有的日历本，支持按日历本名模糊搜索”请改用 dws calendar book search",
+        "要“查询用户的所有日历，其中id = \"primary\"为主日历（n”请改用 dws calendar book list"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -170,7 +177,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.calendar.get_calendar",
         "skills/mono/references/products/calendar.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -183,7 +191,8 @@
         "查下xxx的日程安排；查询是否有共享关系"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询用户的所有日历，其中id = \"primary\"为主日历（name = \"我的日历\"），为固定值。”"
+        "要“搜索当前用户拥有的日历本，支持按日历本名模糊搜索”请改用 dws calendar book search",
+        "要“根据日历id查询指定日历的信息”请改用 dws calendar book get"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -197,7 +206,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.calendar.list_calendars",
         "skills/mono/references/products/calendar.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -209,7 +219,8 @@
         "我有几个日历/查所有日历/别人共享给我的日历/他人共享给我的日历本；按名称搜索日历本"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“搜索当前用户拥有的日历本，支持按日历本名模糊搜索。”"
+        "要“查询用户的所有日历，其中id = \"primary\"为主日历（n”请改用 dws calendar book list",
+        "要“根据日历id查询指定日历的信息”请改用 dws calendar book get"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -224,7 +235,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.calendar.search_calendar",
         "skills/mono/references/products/calendar.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -276,7 +288,9 @@
         "给自己留一个明天下午的时间块/建个个人日程；创建个人日程"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“创建新的日程，支持设置时间、参与者、提醒，以及预定会议室等功能。”所述变更时不要使用"
+        "要“删除日程”请改用 dws calendar event delete",
+        "要“查询当前用户指定日历本下的日程列表，按起止时间检索”请改用 dws calendar event list",
+        "要“获取日程详情”请改用 dws calendar event get"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -292,7 +306,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.calendar.create_calendar_event",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/calendar.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -304,7 +319,9 @@
         "日程/会议/约会/日历；取消/删除"
       ],
       "avoid_when": [
-        "用户未明确要求“删除日程”、目标不清楚或尚未确认时不要使用"
+        "要“创建新的日程，支持设置时间、参与者、提醒，以及预定会议室等功能”请改用 dws calendar event create",
+        "要“查询当前用户指定日历本下的日程列表，按起止时间检索”请改用 dws calendar event list",
+        "要“获取日程详情”请改用 dws calendar event get"
       ],
       "effect": "destructive",
       "effect_source": "skill-explicit",
@@ -319,7 +336,8 @@
         "skills/mono/SKILL.md",
         "skills/mono/references/products/calendar.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "calendar",
@@ -335,7 +353,9 @@
         "日程/会议/约会/日历；详情"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取日程详情”"
+        "要“创建新的日程，支持设置时间、参与者、提醒，以及预定会议室等功能”请改用 dws calendar event create",
+        "要“删除日程”请改用 dws calendar event delete",
+        "要“查询当前用户指定日历本下的日程列表，按起止时间检索”请改用 dws calendar event list"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -350,7 +370,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.get_calendar_detail",
         "skills/mono/references/products/calendar.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "calendar",
@@ -366,7 +387,9 @@
         "日程/会议/约会/日历；查看"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询当前用户指定日历本下的日程列表，按起止时间检索。”"
+        "要“创建新的日程，支持设置时间、参与者、提醒，以及预定会议室等功能”请改用 dws calendar event create",
+        "要“删除日程”请改用 dws calendar event delete",
+        "要“获取日程详情”请改用 dws calendar event get"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -381,7 +404,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.calendar.list_calendar_events",
         "skills/mono/references/products/calendar.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -393,7 +417,9 @@
         "日程/会议/约会/日历；接受/拒绝/暂定日程"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“作为日程参会人，设置自己的响应状态（接受、拒绝、暂定）。”所述变更时不要使用"
+        "要“创建新的日程，支持设置时间、参与者、提醒，以及预定会议室等功能”请改用 dws calendar event create",
+        "要“删除日程”请改用 dws calendar event delete",
+        "要“获取日程详情”请改用 dws calendar event get"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -408,7 +434,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.calendar.respond",
         "skills/mono/references/products/calendar.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -420,7 +447,9 @@
         "日程/会议/约会/日历；推荐时间/什么时候有空/协调时间"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“根据参会人推荐可用时间”"
+        "要“创建新的日程，支持设置时间、参与者、提醒，以及预定会议室等功能”请改用 dws calendar event create",
+        "要“删除日程”请改用 dws calendar event delete",
+        "要“获取日程详情”请改用 dws calendar event get"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -435,7 +464,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.list_suggested_event_times",
         "skills/mono/references/products/calendar.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "calendar",
@@ -451,7 +481,9 @@
         "日程/会议/约会/日历；修改/改时间/改描述"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“修改现有日程的信息，支持更新标题、时间、地点等任意字段，需要组织者权限。”所述变更时不要使用"
+        "要“创建新的日程，支持设置时间、参与者、提醒，以及预定会议室等功能”请改用 dws calendar event create",
+        "要“删除日程”请改用 dws calendar event delete",
+        "要“获取日程详情”请改用 dws calendar event get"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -466,7 +498,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.calendar.update_calendar_event",
         "skills/mono/references/products/calendar.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -479,7 +512,9 @@
         "预定会议室"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“预定会议室”所述变更时不要使用"
+        "要“会议室分组列表”请改用 dws calendar room list-groups",
+        "要“查询 [startTime, endTime] 时间段内所有可用”请改用 dws calendar room search",
+        "要“移除会议室”请改用 dws calendar room delete"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -494,7 +529,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.add_meeting_room",
         "skills/mono/references/products/calendar.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "calendar",
@@ -510,7 +546,9 @@
         "会议室/订会议室；取消预定"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“移除会议室”所述变更时不要使用"
+        "要“会议室分组列表”请改用 dws calendar room list-groups",
+        "要“查询 [startTime, endTime] 时间段内所有可用”请改用 dws calendar room search",
+        "要“预定会议室”请改用 dws calendar room add"
       ],
       "effect": "write",
       "effect_source": "skill-explicit",
@@ -525,7 +563,8 @@
         "skills/mono/SKILL.md",
         "skills/mono/references/products/calendar.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "calendar",
@@ -541,7 +580,9 @@
         "会议室/订会议室；分组"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“会议室分组列表”"
+        "要“查询 [startTime, endTime] 时间段内所有可用”请改用 dws calendar room search",
+        "要“移除会议室”请改用 dws calendar room delete",
+        "要“预定会议室”请改用 dws calendar room add"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -556,7 +597,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json#calendar.list_meeting_room_groups",
         "skills/mono/references/products/calendar.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "calendar",
@@ -575,7 +617,9 @@
         "搜索空闲会议室，记下 roomId"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询 [startTime, endTime] 时间段内所有可用的会议室。”"
+        "要“会议室分组列表”请改用 dws calendar room list-groups",
+        "要“移除会议室”请改用 dws calendar room delete",
+        "要“预定会议室”请改用 dws calendar room add"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -590,7 +634,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.calendar.query_available_meeting_room",
         "skills/mono/references/products/calendar.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"

@@ -10,7 +10,9 @@
         "创建开放平台应用，拿 unifiedAppId"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“创建开放平台企业内部应用”所述变更时不要使用"
+        "要“停用开放平台应用，停用后应用能力对外不可用（可重新启用）”请改用 dws dev app disable",
+        "要“删除开放平台企业内部应用（不可逆，需 --confirm-nam”请改用 dws dev app delete",
+        "要“启用开放平台企业内部应用”请改用 dws dev app enable"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -25,7 +27,8 @@
         "skills/mono/references/products/dev.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -74,7 +77,9 @@
         "删除开放平台企业内部应用（不可逆，需 --confirm-name 二次确认）"
       ],
       "avoid_when": [
-        "用户未明确要求“删除开放平台企业内部应用（不可逆，需 --confirm-name 二次确认）”、目标不清楚或尚未确认时不要使用"
+        "要“停用开放平台应用，停用后应用能力对外不可用（可重新启用）”请改用 dws dev app disable",
+        "要“创建开放平台企业内部应用”请改用 dws dev app create",
+        "要“启用开放平台企业内部应用”请改用 dws dev app enable"
       ],
       "effect": "destructive",
       "effect_source": "skill-comment",
@@ -89,7 +94,8 @@
         "skills/mono/references/products/dev.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -105,7 +111,9 @@
         "停用/启用应用"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“停用开放平台应用，停用后应用能力对外不可用（可重新启用）”所述变更时不要使用"
+        "要“创建开放平台企业内部应用”请改用 dws dev app create",
+        "要“删除开放平台企业内部应用（不可逆，需 --confirm-nam”请改用 dws dev app delete",
+        "要“启用开放平台企业内部应用”请改用 dws dev app enable"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -120,7 +128,8 @@
         "skills/mono/references/products/dev.md",
         "skills/mono/schema-hints/destructive-safety.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -137,7 +146,9 @@
         "启用开放平台企业内部应用"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“启用开放平台企业内部应用”所述变更时不要使用"
+        "要“停用开放平台应用，停用后应用能力对外不可用（可重新启用）”请改用 dws dev app disable",
+        "要“创建开放平台企业内部应用”请改用 dws dev app create",
+        "要“删除开放平台企业内部应用（不可逆，需 --confirm-nam”请改用 dws dev app delete"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -152,7 +163,8 @@
         "skills/mono/references/products/dev.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -168,7 +180,8 @@
         "查询应用已订阅的事件列表"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询应用已订阅的事件列表”"
+        "要“取消订阅应用事件”请改用 dws dev app event unsubscribe",
+        "要“订阅应用事件回调”请改用 dws dev app event subscribe"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -183,7 +196,8 @@
         "skills/mono/references/products/dev.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -199,7 +213,8 @@
         "订阅应用事件回调"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“订阅应用事件回调”所述变更时不要使用"
+        "要“取消订阅应用事件”请改用 dws dev app event unsubscribe",
+        "要“查询应用已订阅的事件列表”请改用 dws dev app event list"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -214,7 +229,8 @@
         "skills/mono/references/products/dev.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -230,7 +246,8 @@
         "取消订阅应用事件"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“取消订阅应用事件”所述变更时不要使用"
+        "要“查询应用已订阅的事件列表”请改用 dws dev app event list",
+        "要“订阅应用事件回调”请改用 dws dev app event subscribe"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -245,7 +262,8 @@
         "skills/mono/references/products/dev.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -262,7 +280,9 @@
         "查询开放平台企业内部应用详情"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询开放平台企业内部应用详情”"
+        "要“停用开放平台应用，停用后应用能力对外不可用（可重新启用）”请改用 dws dev app disable",
+        "要“创建开放平台企业内部应用”请改用 dws dev app create",
+        "要“删除开放平台企业内部应用（不可逆，需 --confirm-nam”请改用 dws dev app delete"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -277,7 +297,8 @@
         "skills/mono/references/products/dev.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -294,7 +315,9 @@
         "查询开放平台企业内部应用列表"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询开放平台企业内部应用列表”"
+        "要“停用开放平台应用，停用后应用能力对外不可用（可重新启用）”请改用 dws dev app disable",
+        "要“创建开放平台企业内部应用”请改用 dws dev app create",
+        "要“删除开放平台企业内部应用（不可逆，需 --confirm-nam”请改用 dws dev app delete"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -309,7 +332,8 @@
         "skills/mono/references/products/dev.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -325,7 +349,8 @@
         "添加开放平台应用成员"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“添加开放平台应用成员”所述变更时不要使用"
+        "要“查询开放平台应用成员”请改用 dws dev app member list",
+        "要“移除开放平台应用的协作成员”请改用 dws dev app member remove"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -339,7 +364,8 @@
       "source_refs": [
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -355,7 +381,8 @@
         "查询开放平台应用成员"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询开放平台应用成员”"
+        "要“添加开放平台应用成员”请改用 dws dev app member add",
+        "要“移除开放平台应用的协作成员”请改用 dws dev app member remove"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -369,7 +396,8 @@
       "source_refs": [
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -385,7 +413,8 @@
         "移除开放平台应用的协作成员"
       ],
       "avoid_when": [
-        "用户未明确要求“移除开放平台应用的协作成员”、目标不清楚或尚未确认时不要使用"
+        "要“查询开放平台应用成员”请改用 dws dev app member list",
+        "要“添加开放平台应用成员”请改用 dws dev app member add"
       ],
       "effect": "destructive",
       "effect_source": "agent-hint",
@@ -399,7 +428,8 @@
       "source_refs": [
         "skills/mono/schema-hints/destructive-safety.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -415,7 +445,8 @@
         "申请开放平台应用权限点"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“申请开放平台应用权限点”所述变更时不要使用"
+        "要“查询开放平台应用权限列表”请改用 dws dev app permission list",
+        "要“移除开放平台应用已授予的权限点”请改用 dws dev app permission remove"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -430,7 +461,8 @@
         "skills/mono/references/products/dev.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -446,7 +478,8 @@
         "查询开放平台应用权限列表"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询开放平台应用权限列表”"
+        "要“申请开放平台应用权限点”请改用 dws dev app permission add",
+        "要“移除开放平台应用已授予的权限点”请改用 dws dev app permission remove"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -461,7 +494,8 @@
         "skills/mono/references/products/dev.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -477,7 +511,8 @@
         "移除开放平台应用已授予的权限点"
       ],
       "avoid_when": [
-        "用户未明确要求“移除开放平台应用已授予的权限点”、目标不清楚或尚未确认时不要使用"
+        "要“查询开放平台应用权限列表”请改用 dws dev app permission list",
+        "要“申请开放平台应用权限点”请改用 dws dev app permission add"
       ],
       "effect": "destructive",
       "effect_source": "agent-hint",
@@ -492,7 +527,8 @@
         "skills/mono/references/products/dev.md",
         "skills/mono/schema-hints/destructive-safety.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -510,7 +546,9 @@
         "在明确的 unifiedAppId 上配置机器人能力"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“创建或更新现有应用的机器人配置（upsert）”所述变更时不要使用"
+        "要“停用开放平台应用的机器人（可重新启用）”请改用 dws dev app robot disable",
+        "要“启用现有应用机器人能力（纯启用，无需配置字段）”请改用 dws dev app robot enable",
+        "要“查询现有应用的机器人配置”请改用 dws dev app robot get"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -525,7 +563,8 @@
         "skills/mono/references/products/dev.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -541,7 +580,9 @@
         "启用/停用机器人"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“停用开放平台应用的机器人（可重新启用）”所述变更时不要使用"
+        "要“启用现有应用机器人能力（纯启用，无需配置字段）”请改用 dws dev app robot enable",
+        "要“查询机器人异步创建任务结果”请改用 dws dev app robot result",
+        "要“查询现有应用的机器人配置”请改用 dws dev app robot get"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -556,7 +597,8 @@
         "skills/mono/references/products/dev.md",
         "skills/mono/schema-hints/destructive-safety.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -573,7 +615,9 @@
         "启用现有应用机器人能力（纯启用，无需配置字段）"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“启用现有应用机器人能力（纯启用，无需配置字段）”所述变更时不要使用"
+        "要“停用开放平台应用的机器人（可重新启用）”请改用 dws dev app robot disable",
+        "要“查询机器人异步创建任务结果”请改用 dws dev app robot result",
+        "要“查询现有应用的机器人配置”请改用 dws dev app robot get"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -588,7 +632,8 @@
         "skills/mono/references/products/dev.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -605,7 +650,9 @@
         "查询现有机器人配置"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询现有应用的机器人配置”"
+        "要“停用开放平台应用的机器人（可重新启用）”请改用 dws dev app robot disable",
+        "要“启用现有应用机器人能力（纯启用，无需配置字段）”请改用 dws dev app robot enable",
+        "要“查询机器人异步创建任务结果”请改用 dws dev app robot result"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -620,7 +667,8 @@
         "skills/mono/references/products/dev.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -637,7 +685,9 @@
         "查询机器人异步创建任务结果"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询机器人异步创建任务结果”"
+        "要“停用开放平台应用的机器人（可重新启用）”请改用 dws dev app robot disable",
+        "要“启用现有应用机器人能力（纯启用，无需配置字段）”请改用 dws dev app robot enable",
+        "要“查询现有应用的机器人配置”请改用 dws dev app robot get"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -652,7 +702,8 @@
         "skills/mono/references/products/dev.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -669,7 +720,9 @@
         "异步提交钉钉智能体机器人创建任务（支持失败重试）"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“异步提交钉钉智能体机器人创建任务（支持失败重试）”所述变更时不要使用"
+        "要“停用开放平台应用的机器人（可重新启用）”请改用 dws dev app robot disable",
+        "要“启用现有应用机器人能力（纯启用，无需配置字段）”请改用 dws dev app robot enable",
+        "要“查询现有应用的机器人配置”请改用 dws dev app robot get"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -684,7 +737,8 @@
         "skills/mono/references/products/dev.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -731,7 +785,9 @@
         "更新应用信息（写操作：先 --dry-run 预览，确认后加 --yes 执行；不加 --yes 会被拦下）"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“修改开放平台企业内部应用基础信息”所述变更时不要使用"
+        "要“停用开放平台应用，停用后应用能力对外不可用（可重新启用）”请改用 dws dev app disable",
+        "要“创建开放平台企业内部应用”请改用 dws dev app create",
+        "要“删除开放平台企业内部应用（不可逆，需 --confirm-nam”请改用 dws dev app delete"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -746,7 +802,8 @@
         "skills/mono/references/products/dev.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -763,7 +820,9 @@
         "版本发布/审批，线上搜索、加群、路由消息以 RELEASE 为准"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“基于当前配置创建应用新版本”所述变更时不要使用"
+        "要“分页查询应用版本列表”请改用 dws dev app version list",
+        "要“查询指定版本详情”请改用 dws dev app version get",
+        "要“查询版本发布/审批状态”请改用 dws dev app version status"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -778,7 +837,8 @@
         "skills/mono/references/products/dev.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -794,7 +854,9 @@
         "查询指定版本详情"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询指定版本详情”"
+        "要“分页查询应用版本列表”请改用 dws dev app version list",
+        "要“基于当前配置创建应用新版本”请改用 dws dev app version create",
+        "要“查询版本发布/审批状态”请改用 dws dev app version status"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -808,7 +870,8 @@
       "source_refs": [
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -824,7 +887,9 @@
         "分页查询应用版本列表"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“分页查询应用版本列表”"
+        "要“基于当前配置创建应用新版本”请改用 dws dev app version create",
+        "要“查询指定版本详情”请改用 dws dev app version get",
+        "要“查询版本发布/审批状态”请改用 dws dev app version status"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -838,7 +903,8 @@
       "source_refs": [
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -855,7 +921,9 @@
         "版本发布/审批，线上搜索、加群、路由消息以 RELEASE 为准"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“发布指定版本（含高敏权限需 --confirmed-sensitive）”"
+        "要“基于当前配置创建应用新版本”请改用 dws dev app version create",
+        "要“查询指定版本详情”请改用 dws dev app version get",
+        "要“查询版本发布/审批状态”请改用 dws dev app version status"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -870,7 +938,8 @@
         "skills/mono/references/products/dev.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -887,7 +956,9 @@
         "版本发布/审批，线上搜索、加群、路由消息以 RELEASE 为准"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询版本发布/审批状态”"
+        "要“分页查询应用版本列表”请改用 dws dev app version list",
+        "要“基于当前配置创建应用新版本”请改用 dws dev app version create",
+        "要“查询指定版本详情”请改用 dws dev app version get"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -903,7 +974,8 @@
         "skills/mono/references/products/dev.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -919,7 +991,7 @@
         "配置网页应用能力"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“配置网页应用能力”所述变更时不要使用"
+        "要“查询网页应用配置”请改用 dws dev app webapp get"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -933,7 +1005,8 @@
       "source_refs": [
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -949,7 +1022,7 @@
         "查询网页应用配置"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询网页应用配置”"
+        "要“配置网页应用能力”请改用 dws dev app webapp config"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -963,7 +1036,8 @@
       "source_refs": [
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devapp",
@@ -980,7 +1054,7 @@
         "查看后台连接器守护进程状态（pid、运行时长、日志路径）"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查看后台连接器守护进程状态（pid、运行时长、日志路径）”"
+        "要“优雅停止后台连接器守护进程（释放单实例锁与 Stream 连接）”请改用 dws dev connect stop"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -994,7 +1068,8 @@
       "source_refs": [
         "skills/mono/references/products/dev.md",
         "skills/mono/schema-hints/catalog-completeness.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "local",
       "availability": "available",
@@ -1008,7 +1083,7 @@
         "查看/停止后台连接器（status/list 忽略全局 --format，出 JSON 用专属 --json）"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“优雅停止后台连接器守护进程（释放单实例锁与 Stream 连接）”所述变更时不要使用"
+        "要“查看后台连接器守护进程状态（pid、运行时长、日志路径）”请改用 dws dev connect status"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1022,7 +1097,8 @@
       "source_refs": [
         "skills/mono/references/products/dev.md",
         "skills/mono/schema-hints/catalog-completeness.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "local",
       "availability": "available",

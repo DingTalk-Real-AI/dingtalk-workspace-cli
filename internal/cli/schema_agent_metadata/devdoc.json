@@ -8,7 +8,9 @@
         "根据关键词搜索钉钉开放平台的开发文档，返回匹配的文档条目列表，包含标题、摘要、文档链接和相关标签。"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“根据关键词搜索钉钉开放平台的开发文档，返回匹配的文档条目列表，包含标题、摘要、文档链接和相关标签。”"
+        "要“按关键词搜索 open.dingtalk.com 开放平台文档”请改用 dws devdoc article search",
+        "要“按关键词检索钉钉开放平台文档，只返回参考资料、参考资料链接和RA”请改用 dws devdoc article rag-pretest",
+        "要“根据关键词搜索钉钉开放平台的开发文档，返回匹配的文档条目列表，包”请改用 dws devdoc article legacy-search-open-platform"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -21,7 +23,8 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.devdoc.search_dingtalk_open_docs",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -33,7 +36,9 @@
         "根据关键词搜索钉钉开放平台的开发文档，返回匹配的文档条目列表，包含标题、摘要、文档链接和相关标签。"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“根据关键词搜索钉钉开放平台的开发文档，返回匹配的文档条目列表，包含标题、摘要、文档链接和相关标签。”"
+        "要“按关键词搜索 open.dingtalk.com 开放平台文档”请改用 dws devdoc article search",
+        "要“按关键词检索钉钉开放平台文档，只返回参考资料、参考资料链接和RA”请改用 dws devdoc article rag-pretest",
+        "要“根据关键词搜索钉钉开放平台的开发文档，返回匹配的文档条目列表，包”请改用 dws devdoc article legacy-search"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -46,7 +51,8 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.devdoc.search_open_platform_docs",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -58,7 +64,9 @@
         "按关键词检索钉钉开放平台文档，只返回参考资料、参考资料链接和RAG上下文，不生成AI分析答案。"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“按关键词检索钉钉开放平台文档，只返回参考资料、参考资料链接和RAG上下文，不生成AI分析答案。”"
+        "要“按关键词搜索 open.dingtalk.com 开放平台文档”请改用 dws devdoc article search",
+        "要“根据关键词搜索钉钉开放平台的开发文档，返回匹配的文档条目列表，包”请改用 dws devdoc article legacy-search",
+        "要“根据关键词搜索钉钉开放平台的开发文档，返回匹配的文档条目列表，包”请改用 dws devdoc article legacy-search-open-platform"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -71,7 +79,8 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.devdoc.devdoc_rag_pretest",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -86,7 +95,9 @@
         "查错误码 / 字段含义"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“按关键词搜索 open.dingtalk.com 开放平台文档”"
+        "要“按关键词检索钉钉开放平台文档，只返回参考资料、参考资料链接和RA”请改用 dws devdoc article rag-pretest",
+        "要“根据关键词搜索钉钉开放平台的开发文档，返回匹配的文档条目列表，包”请改用 dws devdoc article legacy-search",
+        "要“根据关键词搜索钉钉开放平台的开发文档，返回匹配的文档条目列表，包”请改用 dws devdoc article legacy-search-open-platform"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -102,7 +113,8 @@
         "skills/mono/references/products/devdoc.md",
         "skills/mono/references/products/simple.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "devdoc",

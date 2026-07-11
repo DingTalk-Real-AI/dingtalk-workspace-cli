@@ -8,7 +8,9 @@
         "开启或关闭指定 Base 的高级权限总开关。"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“开启或关闭指定 Base 的高级权限总开关。”所述变更时不要使用"
+        "要“删除指定 Base 下的自定义角色;”请改用 dws aitable advperm role-delete",
+        "要“在指定 Base 下创建自定义角色;”请改用 dws aitable advperm role-create",
+        "要“开启或关闭指定 Base 的高级权限总开关”请改用 dws aitable advperm enable"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -24,7 +26,8 @@
         "skills/mono/references/products/aitable/aitable-advperm.md",
         "skills/mono/schema-hints/destructive-safety.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -40,7 +43,9 @@
         "1. 确保高级权限已开"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“开启或关闭指定 Base 的高级权限总开关。”所述变更时不要使用"
+        "要“删除指定 Base 下的自定义角色;”请改用 dws aitable advperm role-delete",
+        "要“在指定 Base 下创建自定义角色;”请改用 dws aitable advperm role-create",
+        "要“开启或关闭指定 Base 的高级权限总开关”请改用 dws aitable advperm disable"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -55,7 +60,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.advperm_enable",
         "skills/mono/references/products/aitable/aitable-advperm.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -73,7 +79,9 @@
         "创建时即指定 sub-roles（推荐——避免再走一次 role-update）"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“在指定 Base 下创建自定义角色;”所述变更时不要使用"
+        "要“删除指定 Base 下的自定义角色;”请改用 dws aitable advperm role-delete",
+        "要“开启或关闭指定 Base 的高级权限总开关”请改用 dws aitable advperm disable",
+        "要“开启或关闭指定 Base 的高级权限总开关”请改用 dws aitable advperm enable"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -89,7 +97,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.advperm_role_create",
         "skills/mono/references/products/aitable/aitable-advperm.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -105,7 +114,9 @@
         "删除指定 Base 下的自定义角色;"
       ],
       "avoid_when": [
-        "用户未明确要求“删除指定 Base 下的自定义角色;”、目标不清楚或尚未确认时不要使用"
+        "要“在指定 Base 下创建自定义角色;”请改用 dws aitable advperm role-create",
+        "要“开启或关闭指定 Base 的高级权限总开关”请改用 dws aitable advperm disable",
+        "要“开启或关闭指定 Base 的高级权限总开关”请改用 dws aitable advperm enable"
       ],
       "effect": "destructive",
       "effect_source": "agent-hint",
@@ -121,7 +132,8 @@
         "skills/mono/references/products/aitable/aitable-advperm.md",
         "skills/mono/schema-hints/destructive-safety.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -137,7 +149,9 @@
         "获取指定 Base 下单个角色的完整配置,含 subRoles 与字段/行级权限。"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取指定 Base 下单个角色的完整配置,含 subRoles 与字段/行级权限。”"
+        "要“在指定 Base 下创建自定义角色;”请改用 dws aitable advperm role-create",
+        "要“开启或关闭指定 Base 的高级权限总开关”请改用 dws aitable advperm disable",
+        "要“开启或关闭指定 Base 的高级权限总开关”请改用 dws aitable advperm enable"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -152,7 +166,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.advperm_role_get",
         "skills/mono/references/products/aitable/aitable-advperm.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -168,7 +183,9 @@
         "列出指定 Base 下的全部角色,含系统角色与自定义角色,并标注 isSystem 与默认角色信息。"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“列出指定 Base 下的全部角色,含系统角色与自定义角色,并标注 isSystem 与默认角色信息。”"
+        "要“在指定 Base 下创建自定义角色;”请改用 dws aitable advperm role-create",
+        "要“开启或关闭指定 Base 的高级权限总开关”请改用 dws aitable advperm disable",
+        "要“开启或关闭指定 Base 的高级权限总开关”请改用 dws aitable advperm enable"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -183,7 +200,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.advperm_role_list",
         "skills/mono/references/products/aitable/aitable-advperm.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -201,7 +219,9 @@
         "只改名"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“增量更新自定义角色配置。”所述变更时不要使用"
+        "要“在指定 Base 下创建自定义角色;”请改用 dws aitable advperm role-create",
+        "要“开启或关闭指定 Base 的高级权限总开关”请改用 dws aitable advperm disable",
+        "要“开启或关闭指定 Base 的高级权限总开关”请改用 dws aitable advperm enable"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -217,7 +237,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.advperm_role_update",
         "skills/mono/references/products/aitable/aitable-advperm.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -264,7 +285,9 @@
         "复制当前AI表格到指定的路径下，支持传入目标地址以及是否需要复制元数据还是只是复制表的结构不复制数据，三个参数都是必填的,如果用户传的是链接的话则需要根据实际去调用文档的DWS去获取dentryuuid信息，并且传入"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“复制当前AI表格到指定的路径下，支持传入目标地址以及是否需要复制元数据还是只是复制表的结构不复制数据，三个参数都是必填的,如果用户传的是链接的话则需要根据实际去调用文档的DWS去获取dentryuuid信息，并且传入”所述变更时不要使用"
+        "要“创建 AI 表格 Base”请改用 dws aitable base create",
+        "要“删除 Base（高风险、不可逆）”请改用 dws aitable base delete",
+        "要“获取 Base 资源目录（tables、dashboards s”请改用 dws aitable base get"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -278,7 +301,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.base_copy",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -294,7 +318,9 @@
         "表格/多维表/AI表格；创建"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“创建 AI 表格 Base”所述变更时不要使用"
+        "要“删除 Base（高风险、不可逆）”请改用 dws aitable base delete",
+        "要“复制当前AI表格到指定的路径下，支持传入目标地址以及是否需要复制”请改用 dws aitable base copy",
+        "要“获取 Base 资源目录（tables、dashboards s”请改用 dws aitable base get"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -309,7 +335,8 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/doc.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -325,7 +352,9 @@
         "表格/多维表/AI表格；删除"
       ],
       "avoid_when": [
-        "用户未明确要求“删除 Base（高风险、不可逆）”、目标不清楚或尚未确认时不要使用"
+        "要“创建 AI 表格 Base”请改用 dws aitable base create",
+        "要“复制当前AI表格到指定的路径下，支持传入目标地址以及是否需要复制”请改用 dws aitable base copy",
+        "要“获取 Base 资源目录（tables、dashboards s”请改用 dws aitable base get"
       ],
       "effect": "destructive",
       "effect_source": "skill-explicit",
@@ -340,7 +369,8 @@
         "skills/mono/SKILL.md",
         "skills/mono/references/products/aitable.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -357,7 +387,9 @@
         "表格/多维表/AI表格；详情"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取 Base 资源目录（tables、dashboards summary）”"
+        "要“创建 AI 表格 Base”请改用 dws aitable base create",
+        "要“删除 Base（高风险、不可逆）”请改用 dws aitable base delete",
+        "要“复制当前AI表格到指定的路径下，支持传入目标地址以及是否需要复制”请改用 dws aitable base copy"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -372,7 +404,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.get_base",
         "skills/mono/references/products/aitable.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -388,7 +421,9 @@
         "根据 baseId、tableId 和 recordId 获取主键文档对应的文档信息，会返回对应的文档的dentryuuid，然后利用该uuid去获取文档的内容以及做其他操作"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“根据 baseId、tableId 和 recordId 获取主键文档对应的文档信息，会返回对应的文档的dentryuuid，然后利用该uuid去获取文档的内容以及做其他操作”"
+        "要“创建 AI 表格 Base”请改用 dws aitable base create",
+        "要“删除 Base（高风险、不可逆）”请改用 dws aitable base delete",
+        "要“复制当前AI表格到指定的路径下，支持传入目标地址以及是否需要复制”请改用 dws aitable base copy"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -402,7 +437,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.base_get_primary_doc_id",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -418,7 +454,9 @@
         "获取 AI 表格列表（最近访问）"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取 AI 表格列表（最近访问）”"
+        "要“创建 AI 表格 Base”请改用 dws aitable base create",
+        "要“删除 Base（高风险、不可逆）”请改用 dws aitable base delete",
+        "要“复制当前AI表格到指定的路径下，支持传入目标地址以及是否需要复制”请改用 dws aitable base copy"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -432,7 +470,8 @@
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.list_bases",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -449,7 +488,9 @@
         "表格/多维表/AI表格；查看/查找/列表"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“按名称关键词搜索 AI 表格 Base。”"
+        "要“创建 AI 表格 Base”请改用 dws aitable base create",
+        "要“删除 Base（高风险、不可逆）”请改用 dws aitable base delete",
+        "要“复制当前AI表格到指定的路径下，支持传入目标地址以及是否需要复制”请改用 dws aitable base copy"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -464,7 +505,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.base_search",
         "skills/mono/references/products/aitable.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -480,7 +522,9 @@
         "表格/多维表/AI表格；修改"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新 Base 名称 / 备注”所述变更时不要使用"
+        "要“创建 AI 表格 Base”请改用 dws aitable base create",
+        "要“删除 Base（高风险、不可逆）”请改用 dws aitable base delete",
+        "要“复制当前AI表格到指定的路径下，支持传入目标地址以及是否需要复制”请改用 dws aitable base copy"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -494,7 +538,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.update_base",
         "skills/mono/references/products/aitable.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -510,7 +555,9 @@
         "在 dashboard 下创建 chart（需 --config 与 --layout）"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“在 dashboard 下创建 chart（需 --config 与 --layout）”所述变更时不要使用"
+        "要“删除 chart（同步删除其 dashboard 布局项；不可逆”请改用 dws aitable chart delete",
+        "要“更新 chart 配置 / 布局”请改用 dws aitable chart update",
+        "要“获取 chart 详细信息（widget.config + 布局”请改用 dws aitable chart get"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -523,7 +570,8 @@
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.create_chart",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -539,7 +587,9 @@
         "删除 chart（同步删除其 dashboard 布局项；不可逆）"
       ],
       "avoid_when": [
-        "用户未明确要求“删除 chart（同步删除其 dashboard 布局项；不可逆）”、目标不清楚或尚未确认时不要使用"
+        "要“在 dashboard 下创建 chart（需 --config”请改用 dws aitable chart create",
+        "要“更新 chart 配置 / 布局”请改用 dws aitable chart update",
+        "要“获取 chart 详细信息（widget.config + 布局”请改用 dws aitable chart get"
       ],
       "effect": "destructive",
       "effect_source": "skill-explicit",
@@ -553,7 +603,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.delete_chart",
         "skills/mono/SKILL.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -569,7 +620,9 @@
         "2) 先拿 dashboard，再拿 chart 详情"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取 chart 详细信息（widget.config + 布局）”"
+        "要“删除 chart（同步删除其 dashboard 布局项；不可逆”请改用 dws aitable chart delete",
+        "要“在 dashboard 下创建 chart（需 --config”请改用 dws aitable chart create",
+        "要“更新 chart 配置 / 布局”请改用 dws aitable chart update"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -585,7 +638,8 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-dashboard-chart.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -601,7 +655,7 @@
         "获取 chart 分享配置"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取 chart 分享配置”"
+        "要“更新 chart 分享开关与类型”请改用 dws aitable chart share update"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -614,7 +668,8 @@
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.get_chart_share",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -630,7 +685,7 @@
         "更新 chart 分享开关与类型"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新 chart 分享开关与类型”所述变更时不要使用"
+        "要“获取 chart 分享配置”请改用 dws aitable chart share get"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -644,7 +699,8 @@
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.update_chart_share",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -660,7 +716,9 @@
         "更新 chart 配置 / 布局"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新 chart 配置 / 布局”所述变更时不要使用"
+        "要“删除 chart（同步删除其 dashboard 布局项；不可逆”请改用 dws aitable chart delete",
+        "要“在 dashboard 下创建 chart（需 --config”请改用 dws aitable chart create",
+        "要“获取 chart 详细信息（widget.config + 布局”请改用 dws aitable chart get"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -674,7 +732,8 @@
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.update_chart",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -690,7 +749,9 @@
         "1) 先看配置模板（JSONC）"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“返回所有图表类型的 widget config 示例（JSONC）”"
+        "要“删除 chart（同步删除其 dashboard 布局项；不可逆”请改用 dws aitable chart delete",
+        "要“在 dashboard 下创建 chart（需 --config”请改用 dws aitable chart create",
+        "要“获取 chart 详细信息（widget.config + 布局”请改用 dws aitable chart get"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -706,7 +767,8 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-dashboard-chart.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -752,7 +814,9 @@
         "自动对齐仪表盘中的图表布局，对错乱的图表进行全局重排。"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“自动对齐仪表盘中的图表布局，对错乱的图表进行全局重排。”所述变更时不要使用"
+        "要“删除 dashboard（级联删除其下 chart；不可逆）”请改用 dws aitable dashboard delete",
+        "要“在指定 Base 下创建 dashboard”请改用 dws aitable dashboard create",
+        "要“返回 dashboard config 结构示例（JSONC）”请改用 dws aitable dashboard config-example"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -766,7 +830,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.dashboard_arrange",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -782,7 +847,9 @@
         "1) 先看配置模板（JSONC）"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“返回 dashboard config 结构示例（JSONC）”"
+        "要“删除 dashboard（级联删除其下 chart；不可逆）”请改用 dws aitable dashboard delete",
+        "要“在指定 Base 下创建 dashboard”请改用 dws aitable dashboard create",
+        "要“自动对齐仪表盘中的图表布局，对错乱的图表进行全局重排”请改用 dws aitable dashboard arrange"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -798,7 +865,8 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-dashboard-chart.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -814,7 +882,9 @@
         "在指定 Base 下创建 dashboard。"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“在指定 Base 下创建 dashboard。”所述变更时不要使用"
+        "要“删除 dashboard（级联删除其下 chart；不可逆）”请改用 dws aitable dashboard delete",
+        "要“自动对齐仪表盘中的图表布局，对错乱的图表进行全局重排”请改用 dws aitable dashboard arrange",
+        "要“返回 dashboard config 结构示例（JSONC）”请改用 dws aitable dashboard config-example"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -828,7 +898,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.dashboard_create",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -844,7 +915,9 @@
         "删除 dashboard（级联删除其下 chart；不可逆）"
       ],
       "avoid_when": [
-        "用户未明确要求“删除 dashboard（级联删除其下 chart；不可逆）”、目标不清楚或尚未确认时不要使用"
+        "要“在指定 Base 下创建 dashboard”请改用 dws aitable dashboard create",
+        "要“自动对齐仪表盘中的图表布局，对错乱的图表进行全局重排”请改用 dws aitable dashboard arrange",
+        "要“返回 dashboard config 结构示例（JSONC）”请改用 dws aitable dashboard config-example"
       ],
       "effect": "destructive",
       "effect_source": "skill-explicit",
@@ -858,7 +931,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.delete_dashboard",
         "skills/mono/SKILL.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -874,7 +948,9 @@
         "2) 先拿 dashboard，再拿 chart 详情"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取 dashboard 详情（含 charts summary）”"
+        "要“在指定 Base 下创建 dashboard”请改用 dws aitable dashboard create",
+        "要“自动对齐仪表盘中的图表布局，对错乱的图表进行全局重排”请改用 dws aitable dashboard arrange",
+        "要“返回 dashboard config 结构示例（JSONC）”请改用 dws aitable dashboard config-example"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -890,7 +966,8 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-dashboard-chart.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -906,7 +983,7 @@
         "获取 dashboard 分享配置"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取 dashboard 分享配置”"
+        "要“更新 dashboard 分享开关与类型”请改用 dws aitable dashboard share update"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -919,7 +996,8 @@
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.get_dashboard_share",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -935,7 +1013,7 @@
         "更新 dashboard 分享开关与类型"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新 dashboard 分享开关与类型”所述变更时不要使用"
+        "要“获取 dashboard 分享配置”请改用 dws aitable dashboard share get"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -949,7 +1027,8 @@
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.update_dashboard_share",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -965,7 +1044,9 @@
         "更新指定 dashboard 的配置。"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新指定 dashboard 的配置。”所述变更时不要使用"
+        "要“在指定 Base 下创建 dashboard”请改用 dws aitable dashboard create",
+        "要“自动对齐仪表盘中的图表布局，对错乱的图表进行全局重排”请改用 dws aitable dashboard arrange",
+        "要“返回 dashboard config 结构示例（JSONC）”请改用 dws aitable dashboard config-example"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -979,7 +1060,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.dashboard_update",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -1031,7 +1113,9 @@
         "或者使用批量创建模式:"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“在已有表格中批量新增字段。”所述变更时不要使用"
+        "要“删除字段（不可逆，禁止删除主字段与最后一个字段）”请改用 dws aitable field delete",
+        "要“批量获取字段详细信息（含完整配置）”请改用 dws aitable field get",
+        "要“批量获取指定字段的详细信息，包括 fieldId、名称、类型、d”请改用 dws aitable field list"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1048,7 +1132,8 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-field.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -1064,7 +1149,9 @@
         "字段/列/column；删除"
       ],
       "avoid_when": [
-        "用户未明确要求“删除字段（不可逆，禁止删除主字段与最后一个字段）”、目标不清楚或尚未确认时不要使用"
+        "要“在已有表格中批量新增字段”请改用 dws aitable field create",
+        "要“批量获取字段详细信息（含完整配置）”请改用 dws aitable field get",
+        "要“批量获取指定字段的详细信息，包括 fieldId、名称、类型、d”请改用 dws aitable field list"
       ],
       "effect": "destructive",
       "effect_source": "skill-explicit",
@@ -1080,7 +1167,8 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-field.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -1096,7 +1184,9 @@
         "字段/列/column；查看"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“批量获取字段详细信息（含完整配置）”"
+        "要“删除字段（不可逆，禁止删除主字段与最后一个字段）”请改用 dws aitable field delete",
+        "要“在已有表格中批量新增字段”请改用 dws aitable field create",
+        "要“批量获取指定字段的详细信息，包括 fieldId、名称、类型、d”请改用 dws aitable field list"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1112,7 +1202,8 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-field.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -1128,7 +1219,9 @@
         "批量获取指定字段的详细信息，包括 fieldId、名称、类型、description 以及类型相关完整配置（如格式化、选项、AI 配置等）。"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“批量获取指定字段的详细信息，包括 fieldId、名称、类型、description 以及类型相关完整配置（如格式化、选项、AI 配置等）。”"
+        "要“删除字段（不可逆，禁止删除主字段与最后一个字段）”请改用 dws aitable field delete",
+        "要“在已有表格中批量新增字段”请改用 dws aitable field create",
+        "要“批量获取字段详细信息（含完整配置）”请改用 dws aitable field get"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1142,7 +1235,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.field_list",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -1158,7 +1252,9 @@
         "搜索指定单选/多选字段的 options 列表，支持按关键词模糊匹配（大小写不敏感、contains 模式）。"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“搜索指定单选/多选字段的 options 列表，支持按关键词模糊匹配（大小写不敏感、contains 模式）。”"
+        "要“删除字段（不可逆，禁止删除主字段与最后一个字段）”请改用 dws aitable field delete",
+        "要“在已有表格中批量新增字段”请改用 dws aitable field create",
+        "要“批量获取字段详细信息（含完整配置）”请改用 dws aitable field get"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1172,7 +1268,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.field_search_options",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -1188,7 +1285,9 @@
         "字段/列/column；修改"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新字段名称 / 配置 / AI 配置（至少传一项）”所述变更时不要使用"
+        "要“删除字段（不可逆，禁止删除主字段与最后一个字段）”请改用 dws aitable field delete",
+        "要“在已有表格中批量新增字段”请改用 dws aitable field create",
+        "要“批量获取字段详细信息（含完整配置）”请改用 dws aitable field get"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1204,7 +1303,8 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-field.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -1222,7 +1322,7 @@
         "续等导入"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“触发导入并等待结果；每个 Sheet 新建为独立表”所述变更时不要使用"
+        "要“申请导入文件 OSS 直传地址，返回 uploadUrl 与 i”请改用 dws aitable import upload"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1237,7 +1337,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.import_data",
         "skills/mono/references/products/aitable/aitable-export-import.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -1253,7 +1354,7 @@
         "第 1 步：申请上传凭证"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“申请导入文件 OSS 直传地址，返回 uploadUrl 与 importId”所述变更时不要使用"
+        "要“触发导入并等待结果；每个 Sheet 新建为独立表”请改用 dws aitable import data"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1268,7 +1369,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.prepare_import_upload",
         "skills/mono/references/products/aitable/aitable-export-import.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -1350,7 +1452,9 @@
         "记录/行/数据/row；添加/写入"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“批量新增记录（单次最多 100 条）”所述变更时不要使用"
+        "要“批量删除记录（不可逆，单次最多 100 条）”请改用 dws aitable record delete",
+        "要“查询指定表格中的记录，支持两种模式： 按 ID 取：传入 rec”请改用 dws aitable record get",
+        "要“查询记录（支持按 ID 取或 filters/sort/分页遍历”请改用 dws aitable record query"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1368,7 +1472,8 @@
         "skills/mono/references/products/aitable/aitable-attachment.md",
         "skills/mono/references/products/aitable/aitable-record-create.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -1384,7 +1489,9 @@
         "记录/行/数据/row；删除"
       ],
       "avoid_when": [
-        "用户未明确要求“批量删除记录（不可逆，单次最多 100 条）”、目标不清楚或尚未确认时不要使用"
+        "要“批量新增记录（单次最多 100 条）”请改用 dws aitable record create",
+        "要“查询指定表格中的记录，支持两种模式： 按 ID 取：传入 rec”请改用 dws aitable record get",
+        "要“查询记录（支持按 ID 取或 filters/sort/分页遍历”请改用 dws aitable record query"
       ],
       "effect": "destructive",
       "effect_source": "skill-explicit",
@@ -1401,7 +1508,8 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-record-delete.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -1417,7 +1525,9 @@
         "记录/行/数据/row；已知 recordId 反查字段值"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询指定表格中的记录，支持两种模式： 按 ID 取：传入 recordIds（单次最多 100 个），直接获取指定记录。”"
+        "要“批量删除记录（不可逆，单次最多 100 条）”请改用 dws aitable record delete",
+        "要“批量新增记录（单次最多 100 条）”请改用 dws aitable record create",
+        "要“查询记录（支持按 ID 取或 filters/sort/分页遍历”请改用 dws aitable record query"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1432,7 +1542,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.record_get",
         "skills/mono/references/products/aitable.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -1449,7 +1560,9 @@
         "第 2 页"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询指定行记录的变更历史列表。”"
+        "要“批量删除记录（不可逆，单次最多 100 条）”请改用 dws aitable record delete",
+        "要“批量新增记录（单次最多 100 条）”请改用 dws aitable record create",
+        "要“查询记录（支持按 ID 取或 filters/sort/分页遍历”请改用 dws aitable record query"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1465,7 +1578,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.record_history_list",
         "skills/mono/references/products/aitable/aitable-record-history.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -1481,7 +1595,9 @@
         "2. 为某条记录创建主键文档"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“为指定记录创建主键文档（幂等：若该记录已有主键文档则直接返回已有文档的 nodeId）。”所述变更时不要使用"
+        "要“批量删除记录（不可逆，单次最多 100 条）”请改用 dws aitable record delete",
+        "要“批量新增记录（单次最多 100 条）”请改用 dws aitable record create",
+        "要“查询记录（支持按 ID 取或 filters/sort/分页遍历”请改用 dws aitable record query"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1496,7 +1612,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.record_primary_doc_create",
         "skills/mono/references/products/aitable/aitable-primary-doc.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -1512,7 +1629,9 @@
         "查询指定记录的主键文档信息。"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询指定记录的主键文档信息。”"
+        "要“批量删除记录（不可逆，单次最多 100 条）”请改用 dws aitable record delete",
+        "要“批量新增记录（单次最多 100 条）”请改用 dws aitable record create",
+        "要“查询记录（支持按 ID 取或 filters/sort/分页遍历”请改用 dws aitable record query"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1527,7 +1646,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.record_primary_doc_get",
         "skills/mono/references/products/aitable/aitable-primary-doc.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -1551,7 +1671,9 @@
         "默认（最多 50 页 = 5000 条）"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询记录（支持按 ID 取或 filters/sort/分页遍历）”"
+        "要“批量删除记录（不可逆，单次最多 100 条）”请改用 dws aitable record delete",
+        "要“批量新增记录（单次最多 100 条）”请改用 dws aitable record create",
+        "要“查询指定表格中的记录，支持两种模式： 按 ID 取：传入 rec”请改用 dws aitable record get"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1568,7 +1690,8 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-record-query.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -1584,7 +1707,9 @@
         "查询指定表格中\"完全没填用户字段\"的空行。"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询指定表格中\"完全没填用户字段\"的空行。”"
+        "要“批量删除记录（不可逆，单次最多 100 条）”请改用 dws aitable record delete",
+        "要“批量新增记录（单次最多 100 条）”请改用 dws aitable record create",
+        "要“查询记录（支持按 ID 取或 filters/sort/分页遍历”请改用 dws aitable record query"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1598,7 +1723,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.record_query_empty",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -1616,7 +1742,9 @@
         "批量拿，配合 jq 过滤出 url"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取指定行记录的分享链接，可用于将记录分享给他人。”"
+        "要“批量删除记录（不可逆，单次最多 100 条）”请改用 dws aitable record delete",
+        "要“批量新增记录（单次最多 100 条）”请改用 dws aitable record create",
+        "要“查询记录（支持按 ID 取或 filters/sort/分页遍历”请改用 dws aitable record query"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1632,7 +1760,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.record_share_url",
         "skills/mono/references/products/aitable/aitable-record-share.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -1649,7 +1778,9 @@
         "记录/行/数据/row；修改/更新"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“批量更新记录（单次最多 100 条）”所述变更时不要使用"
+        "要“批量删除记录（不可逆，单次最多 100 条）”请改用 dws aitable record delete",
+        "要“批量新增记录（单次最多 100 条）”请改用 dws aitable record create",
+        "要“查询记录（支持按 ID 取或 filters/sort/分页遍历”请改用 dws aitable record query"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1666,7 +1797,8 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-attachment.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -1685,7 +1817,9 @@
         "4) 长 JSON 用文件"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“批量创建或更新记录（Upsert 语义）。”所述变更时不要使用"
+        "要“批量删除记录（不可逆，单次最多 100 条）”请改用 dws aitable record delete",
+        "要“批量新增记录（单次最多 100 条）”请改用 dws aitable record create",
+        "要“查询记录（支持按 ID 取或 filters/sort/分页遍历”请改用 dws aitable record query"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1701,7 +1835,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.record_upsert",
         "skills/mono/references/products/aitable/aitable-record-upsert.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -1747,7 +1882,9 @@
         "在指定 Base 下创建分区(用于在导航树中组织 table / dashboard,类似文件夹)。"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“在指定 Base 下创建分区(用于在导航树中组织 table / dashboard,类似文件夹)。”所述变更时不要使用"
+        "要“列出指定 Base 下所有没有任何子节点的分区(空文件夹),用于”请改用 dws aitable section list-empty",
+        "要“列出指定 Base 当前版本下的全部 nsheet 节点,包括分”请改用 dws aitable section list-nodes",
+        "要“删除指定分区”请改用 dws aitable section delete"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1763,7 +1900,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.section_create",
         "skills/mono/references/products/aitable.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -1779,7 +1917,9 @@
         "删除指定分区。"
       ],
       "avoid_when": [
-        "用户未明确要求“删除指定分区。”、目标不清楚或尚未确认时不要使用"
+        "要“列出指定 Base 下所有没有任何子节点的分区(空文件夹),用于”请改用 dws aitable section list-empty",
+        "要“列出指定 Base 当前版本下的全部 nsheet 节点,包括分”请改用 dws aitable section list-nodes",
+        "要“在指定 Base 下创建分区(用于在导航树中组织 table /”请改用 dws aitable section create"
       ],
       "effect": "destructive",
       "effect_source": "agent-hint",
@@ -1795,7 +1935,8 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/schema-hints/destructive-safety.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -1811,7 +1952,9 @@
         "列出指定 Base 下所有没有任何子节点的分区(空文件夹),用于清理或诊断导航树。"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“列出指定 Base 下所有没有任何子节点的分区(空文件夹),用于清理或诊断导航树。”"
+        "要“列出指定 Base 当前版本下的全部 nsheet 节点,包括分”请改用 dws aitable section list-nodes",
+        "要“删除指定分区”请改用 dws aitable section delete",
+        "要“在指定 Base 下创建分区(用于在导航树中组织 table /”请改用 dws aitable section create"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1826,7 +1969,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.section_list_empty",
         "skills/mono/references/products/aitable.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -1842,7 +1986,9 @@
         "列出指定 Base 当前版本下的全部 nsheet 节点,包括分区、AI 表格、表单视图、仪表盘、文档、查询视图等。"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“列出指定 Base 当前版本下的全部 nsheet 节点,包括分区、AI 表格、表单视图、仪表盘、文档、查询视图等。”"
+        "要“列出指定 Base 下所有没有任何子节点的分区(空文件夹),用于”请改用 dws aitable section list-empty",
+        "要“删除指定分区”请改用 dws aitable section delete",
+        "要“在指定 Base 下创建分区(用于在导航树中组织 table /”请改用 dws aitable section create"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1857,7 +2003,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.section_list_nodes",
         "skills/mono/references/products/aitable.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -1873,7 +2020,9 @@
         "把任意 nsheet 节点(分区 / 多维表 / 表单视图 / 仪表盘 / 文档 / 查询视图)移动到目标分区下,可选同时调整全局位置。"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“把任意 nsheet 节点(分区 / 多维表 / 表单视图 / 仪表盘 / 文档 / 查询视图)移动到目标分区下,可选同时调整全局位置。”所述变更时不要使用"
+        "要“列出指定 Base 下所有没有任何子节点的分区(空文件夹),用于”请改用 dws aitable section list-empty",
+        "要“删除指定分区”请改用 dws aitable section delete",
+        "要“在指定 Base 下创建分区(用于在导航树中组织 table /”请改用 dws aitable section create"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1889,7 +2038,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.section_move_node",
         "skills/mono/references/products/aitable.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -1905,7 +2055,9 @@
         "重命名指定分区。"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“重命名指定分区。”所述变更时不要使用"
+        "要“列出指定 Base 下所有没有任何子节点的分区(空文件夹),用于”请改用 dws aitable section list-empty",
+        "要“删除指定分区”请改用 dws aitable section delete",
+        "要“在指定 Base 下创建分区(用于在导航树中组织 table /”请改用 dws aitable section create"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1920,7 +2072,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.section_rename",
         "skills/mono/references/products/aitable.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -1936,7 +2089,9 @@
         "在当前父分区下调整分区的展示顺序。"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“在当前父分区下调整分区的展示顺序。”所述变更时不要使用"
+        "要“列出指定 Base 下所有没有任何子节点的分区(空文件夹),用于”请改用 dws aitable section list-empty",
+        "要“删除指定分区”请改用 dws aitable section delete",
+        "要“在指定 Base 下创建分区(用于在导航树中组织 table /”请改用 dws aitable section create"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1951,7 +2106,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.section_reorder",
         "skills/mono/references/products/aitable.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -1967,7 +2123,9 @@
         "数据表/子表/table；创建"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“创建数据表并附带初始字段（最多 15 个）”所述变更时不要使用"
+        "要“删除数据表（不可逆，高风险）”请改用 dws aitable table delete",
+        "要“批量获取指定 Tables（数据表）的表级信息、字段目录与视图目”请改用 dws aitable table list",
+        "要“批量获取数据表目录与字段、视图 summary”请改用 dws aitable table get"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1981,7 +2139,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.create_table",
         "skills/mono/references/products/aitable.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -1997,7 +2156,9 @@
         "数据表/子表/table；删除"
       ],
       "avoid_when": [
-        "用户未明确要求“删除数据表（不可逆，高风险）”、目标不清楚或尚未确认时不要使用"
+        "要“创建数据表并附带初始字段（最多 15 个）”请改用 dws aitable table create",
+        "要“批量获取指定 Tables（数据表）的表级信息、字段目录与视图目”请改用 dws aitable table list",
+        "要“批量获取数据表目录与字段、视图 summary”请改用 dws aitable table get"
       ],
       "effect": "destructive",
       "effect_source": "skill-explicit",
@@ -2012,7 +2173,8 @@
         "skills/mono/SKILL.md",
         "skills/mono/references/products/aitable.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -2032,7 +2194,9 @@
         "数据表/子表/table；查看"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“批量获取数据表目录与字段、视图 summary”"
+        "要“创建数据表并附带初始字段（最多 15 个）”请改用 dws aitable table create",
+        "要“删除数据表（不可逆，高风险）”请改用 dws aitable table delete",
+        "要“批量获取指定 Tables（数据表）的表级信息、字段目录与视图目”请改用 dws aitable table list"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -2050,7 +2214,8 @@
         "skills/mono/references/products/aitable/aitable-primary-doc.md",
         "skills/mono/references/products/aitable/aitable-record-create.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -2066,7 +2231,9 @@
         "批量获取指定 Tables（数据表）的表级信息、字段目录与视图目录。"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“批量获取指定 Tables（数据表）的表级信息、字段目录与视图目录。”"
+        "要“创建数据表并附带初始字段（最多 15 个）”请改用 dws aitable table create",
+        "要“删除数据表（不可逆，高风险）”请改用 dws aitable table delete",
+        "要“批量获取数据表目录与字段、视图 summary”请改用 dws aitable table get"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -2080,7 +2247,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.table_list",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -2099,7 +2267,9 @@
         "用户说\"换成项目\" → 传 project"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“重命名数据表”所述变更时不要使用"
+        "要“创建数据表并附带初始字段（最多 15 个）”请改用 dws aitable table create",
+        "要“删除数据表（不可逆，高风险）”请改用 dws aitable table delete",
+        "要“批量获取数据表目录与字段、视图 summary”请改用 dws aitable table get"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -2115,7 +2285,8 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-record-name-key.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -2162,7 +2333,9 @@
         "第 1 步：创建 Gantt 视图"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“创建视图（Grid/FormDesigner/Gantt/Calendar/Kanban/Gallery）”所述变更时不要使用"
+        "要“删除视图（不可逆；禁止删除最后一个视图或锁定视图）”请改用 dws aitable view delete",
+        "要“复制指定视图(View),生成一个与源视图结构一致的新视图(包含”请改用 dws aitable view duplicate",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view list"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -2177,7 +2350,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.create_view",
         "skills/mono/references/products/aitable/aitable-view-config.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -2193,7 +2367,9 @@
         "删除视图（不可逆；禁止删除最后一个视图或锁定视图）"
       ],
       "avoid_when": [
-        "用户未明确要求“删除视图（不可逆；禁止删除最后一个视图或锁定视图）”、目标不清楚或尚未确认时不要使用"
+        "要“创建视图（Grid/FormDesigner/Gantt/Cal”请改用 dws aitable view create",
+        "要“复制指定视图(View),生成一个与源视图结构一致的新视图(包含”请改用 dws aitable view duplicate",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view list"
       ],
       "effect": "destructive",
       "effect_source": "skill-explicit",
@@ -2207,7 +2383,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.delete_view",
         "skills/mono/SKILL.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -2224,7 +2401,9 @@
         "系统自动命名（一般是 \"原视图名 (副本)\"）"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“复制指定视图(View),生成一个与源视图结构一致的新视图(包含列顺序、筛选、排序、分组、自定义配置等)。”所述变更时不要使用"
+        "要“创建视图（Grid/FormDesigner/Gantt/Cal”请改用 dws aitable view create",
+        "要“删除视图（不可逆；禁止删除最后一个视图或锁定视图）”请改用 dws aitable view delete",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view list"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -2240,7 +2419,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_duplicate",
         "skills/mono/references/products/aitable/aitable-view-extras.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -2256,7 +2436,9 @@
         "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。”"
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get fill-color-rule"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -2271,7 +2453,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_aggregate",
         "skills/mono/references/products/aitable/aitable-view-config.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -2287,7 +2470,9 @@
         "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。”"
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get fill-color-rule"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -2303,7 +2488,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_card",
         "skills/mono/references/products/aitable/aitable-view-config.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -2319,7 +2505,9 @@
         "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。”"
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get fill-color-rule"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -2334,7 +2522,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_field_widths",
         "skills/mono/references/products/aitable/aitable-view-config.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -2351,7 +2540,9 @@
         "看实际生效的 conditionalFormats"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。”"
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -2367,7 +2558,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_fill_color_rule",
         "skills/mono/references/products/aitable/aitable-view-extras.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -2383,7 +2575,9 @@
         "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。”"
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -2398,7 +2592,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_filter",
         "skills/mono/references/products/aitable/aitable-view-config.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -2414,7 +2609,9 @@
         "查询当前冻结列数"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询指定视图(View)当前的冻结列数(左侧固定列)。”"
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -2429,7 +2626,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_frozen_cols",
         "skills/mono/references/products/aitable/aitable-view-extras.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -2445,7 +2643,9 @@
         "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。”"
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -2460,7 +2660,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_group",
         "skills/mono/references/products/aitable/aitable-view-config.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -2476,7 +2677,9 @@
         "查询当前是否锁定"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询指定视图(View)当前的锁定状态。”"
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -2491,7 +2694,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_lock",
         "skills/mono/references/products/aitable/aitable-view-extras.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -2507,7 +2711,9 @@
         "查询当前行高"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询指定视图(View)当前的单元格行高,单位为像素。”"
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -2522,7 +2728,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_row_height",
         "skills/mono/references/products/aitable/aitable-view-extras.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -2538,7 +2745,9 @@
         "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。”"
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -2553,7 +2762,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_sort",
         "skills/mono/references/products/aitable/aitable-view-config.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -2569,7 +2779,9 @@
         "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。”"
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -2584,7 +2796,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_timebar",
         "skills/mono/references/products/aitable/aitable-view-config.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -2600,7 +2813,9 @@
         "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。”"
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
+        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -2615,7 +2830,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_visible_fields",
         "skills/mono/references/products/aitable/aitable-view-config.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -2631,7 +2847,9 @@
         "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。”"
+        "要“创建视图（Grid/FormDesigner/Gantt/Cal”请改用 dws aitable view create",
+        "要“删除视图（不可逆；禁止删除最后一个视图或锁定视图）”请改用 dws aitable view delete",
+        "要“复制指定视图(View),生成一个与源视图结构一致的新视图(包含”请改用 dws aitable view duplicate"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -2645,7 +2863,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_list",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -2663,7 +2882,9 @@
         "锁定（默认）"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“锁定或解锁指定视图(View)。”所述变更时不要使用"
+        "要“创建视图（Grid/FormDesigner/Gantt/Cal”请改用 dws aitable view create",
+        "要“删除视图（不可逆；禁止删除最后一个视图或锁定视图）”请改用 dws aitable view delete",
+        "要“复制指定视图(View),生成一个与源视图结构一致的新视图(包含”请改用 dws aitable view duplicate"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -2679,7 +2900,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_lock",
         "skills/mono/references/products/aitable/aitable-view-extras.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -2695,7 +2917,9 @@
         "更新指定视图（View）的名称、描述或配置。"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新指定视图（View）的名称、描述或配置。”所述变更时不要使用"
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths",
+        "要“设置指定表格视图（Grid View）的条件填色规则（全量覆盖）”请改用 dws aitable view update fill-color-rule"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -2710,7 +2934,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_aggregate",
         "skills/mono/references/products/aitable/aitable-view-config.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -2726,7 +2951,9 @@
         "更新指定视图（View）的名称、描述或配置。"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新指定视图（View）的名称、描述或配置。”所述变更时不要使用"
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths",
+        "要“设置指定表格视图（Grid View）的条件填色规则（全量覆盖）”请改用 dws aitable view update fill-color-rule"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -2742,7 +2969,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_card",
         "skills/mono/references/products/aitable/aitable-view-config.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -2758,7 +2986,9 @@
         "更新指定视图（View）的名称、描述或配置。"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新指定视图（View）的名称、描述或配置。”所述变更时不要使用"
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
+        "要“设置指定表格视图（Grid View）的条件填色规则（全量覆盖）”请改用 dws aitable view update fill-color-rule"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -2774,7 +3004,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_field_widths",
         "skills/mono/references/products/aitable/aitable-view-config.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -2792,7 +3023,9 @@
         "3) 金额 \u003e 100 的单元格上色"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“设置指定表格视图（Grid View）的条件填色规则（全量覆盖）。”所述变更时不要使用"
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -2808,7 +3041,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_fill_color_rule",
         "skills/mono/references/products/aitable/aitable-view-extras.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -2824,7 +3058,9 @@
         "更新指定视图（View）的名称、描述或配置。"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新指定视图（View）的名称、描述或配置。”所述变更时不要使用"
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -2839,7 +3075,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_filter",
         "skills/mono/references/products/aitable/aitable-view-config.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -2857,7 +3094,9 @@
         "取消冻结"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“设置指定视图(View)的冻结列数(左侧固定列),默认 1。”所述变更时不要使用"
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -2873,7 +3112,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_frozen_cols",
         "skills/mono/references/products/aitable/aitable-view-extras.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -2889,7 +3129,9 @@
         "更新指定视图（View）的名称、描述或配置。"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新指定视图（View）的名称、描述或配置。”所述变更时不要使用"
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -2904,7 +3146,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_group",
         "skills/mono/references/products/aitable/aitable-view-config.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -2920,7 +3163,9 @@
         "更新指定视图（View）的名称、描述或配置。"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新指定视图（View）的名称、描述或配置。”所述变更时不要使用"
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -2935,7 +3180,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_name",
         "skills/mono/references/products/aitable/aitable-view-config.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -2952,7 +3198,9 @@
         "设置行高 — 推荐档位 32 / 56 / 88 / 128"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“设置指定视图(View)的单元格高度(行高),单位为像素,默认 32。”所述变更时不要使用"
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -2968,7 +3216,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_row_height",
         "skills/mono/references/products/aitable/aitable-view-extras.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -2984,7 +3233,9 @@
         "更新指定视图（View）的名称、描述或配置。"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新指定视图（View）的名称、描述或配置。”所述变更时不要使用"
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -2999,7 +3250,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_sort",
         "skills/mono/references/products/aitable/aitable-view-config.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -3015,7 +3267,9 @@
         "第 2 步（必须）：绑定日期字段，否则视图为空"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新指定视图（View）的名称、描述或配置。”所述变更时不要使用"
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -3031,7 +3285,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_timebar",
         "skills/mono/references/products/aitable/aitable-view-config.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -3048,7 +3303,9 @@
         "只保留首列和 fldA，其余字段被隐藏"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新指定视图（View）的名称、描述或配置。”所述变更时不要使用"
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
+        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -3064,7 +3321,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_visible_fields",
         "skills/mono/references/products/aitable/aitable-view-config.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable",
@@ -3080,7 +3338,9 @@
         "2. 禁用"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“禁用指定 Base 中的自动化工作流。”所述变更时不要使用"
+        "要“列出指定 Base 中的自动化工作流，直接返回下游 search”请改用 dws aitable workflow list",
+        "要“启用指定 Base 中的自动化工作流”请改用 dws aitable workflow enable",
+        "要“获取指定 Base 中某个自动化工作流的详细信息，直接返回下游”请改用 dws aitable workflow get"
       ],
       "effect": "write",
       "effect_source": "agent-hint",
@@ -3096,7 +3356,8 @@
         "skills/mono/references/products/aitable/aitable-workflow.md",
         "skills/mono/schema-hints/destructive-safety.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -3112,7 +3373,9 @@
         "3. 调试做完后重启"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“启用指定 Base 中的自动化工作流。”所述变更时不要使用"
+        "要“列出指定 Base 中的自动化工作流，直接返回下游 search”请改用 dws aitable workflow list",
+        "要“禁用指定 Base 中的自动化工作流”请改用 dws aitable workflow disable",
+        "要“获取指定 Base 中某个自动化工作流的详细信息，直接返回下游”请改用 dws aitable workflow get"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -3127,7 +3390,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.workflow_enable",
         "skills/mono/references/products/aitable/aitable-workflow.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -3143,7 +3407,9 @@
         "1. 留底当前状态"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取指定 Base 中某个自动化工作流的详细信息，直接返回下游 getFlowDetail 的详情结构。”"
+        "要“列出指定 Base 中的自动化工作流，直接返回下游 search”请改用 dws aitable workflow list",
+        "要“启用指定 Base 中的自动化工作流”请改用 dws aitable workflow enable",
+        "要“禁用指定 Base 中的自动化工作流”请改用 dws aitable workflow disable"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -3159,7 +3425,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.workflow_get",
         "skills/mono/references/products/aitable/aitable-workflow.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",
@@ -3175,7 +3442,9 @@
         "4. 确认 status=RUNNING"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“列出指定 Base 中的自动化工作流，直接返回下游 searchFlows 的响应结构。”"
+        "要“启用指定 Base 中的自动化工作流”请改用 dws aitable workflow enable",
+        "要“禁用指定 Base 中的自动化工作流”请改用 dws aitable workflow disable",
+        "要“获取指定 Base 中某个自动化工作流的详细信息，直接返回下游”请改用 dws aitable workflow get"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -3191,7 +3460,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.workflow_list",
         "skills/mono/references/products/aitable/aitable-workflow.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "aitable-helper",

@@ -75,7 +75,9 @@
         "重复值高亮"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“在指定工作表中创建一条条件格式规则。”所述变更时不要使用"
+        "要“删除指定工作表中的一条条件格式规则”请改用 dws sheet cond-format delete",
+        "要“更新指定工作表中的一条条件格式规则”请改用 dws sheet cond-format update",
+        "要“获取指定工作表中的所有条件格式规则，或通过 ruleId 获取单”请改用 dws sheet cond-format list"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -90,7 +92,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.create_cond_format",
         "skills/mono/references/products/sheet/sheet-conditional-format.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -103,7 +106,9 @@
         "删除条件格式规则（必须加 --yes 确认）"
       ],
       "avoid_when": [
-        "用户未明确要求“删除指定工作表中的一条条件格式规则。”、目标不清楚或尚未确认时不要使用"
+        "要“在指定工作表中创建一条条件格式规则”请改用 dws sheet cond-format create",
+        "要“更新指定工作表中的一条条件格式规则”请改用 dws sheet cond-format update",
+        "要“获取指定工作表中的所有条件格式规则，或通过 ruleId 获取单”请改用 dws sheet cond-format list"
       ],
       "effect": "destructive",
       "effect_source": "agent-hint",
@@ -118,7 +123,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.sheet.delete_cond_format",
         "skills/mono/references/products/sheet/sheet-conditional-format.md",
         "skills/mono/schema-hints/destructive-safety.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -133,7 +139,9 @@
         "获取所有条件格式规则"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取指定工作表中的所有条件格式规则，或通过 ruleId 获取单个规则的详情。”"
+        "要“删除指定工作表中的一条条件格式规则”请改用 dws sheet cond-format delete",
+        "要“在指定工作表中创建一条条件格式规则”请改用 dws sheet cond-format create",
+        "要“更新指定工作表中的一条条件格式规则”请改用 dws sheet cond-format update"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -147,7 +155,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.get_cond_format",
         "skills/mono/references/products/sheet/sheet-conditional-format.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -162,7 +171,9 @@
         "修改样式"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新指定工作表中的一条条件格式规则。”所述变更时不要使用"
+        "要“删除指定工作表中的一条条件格式规则”请改用 dws sheet cond-format delete",
+        "要“在指定工作表中创建一条条件格式规则”请改用 dws sheet cond-format create",
+        "要“获取指定工作表中的所有条件格式规则，或通过 ruleId 获取单”请改用 dws sheet cond-format list"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -177,7 +188,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.update_cond_format",
         "skills/mono/references/products/sheet/sheet-conditional-format.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -507,7 +519,9 @@
         "筛选/过滤/只看某些值/只显示满足条件的行/筛选数据/创建筛选/删除筛选/设置筛选条件/清除筛选/排序；清除某一列条件"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“清除钉钉电子表格中指定工作表筛选的某一列的筛选条件。”所述变更时不要使用"
+        "要“删除钉钉电子表格中指定工作表的筛选”请改用 dws sheet filter delete",
+        "要“在钉钉电子表格的指定工作表中创建筛选”请改用 dws sheet filter create",
+        "要“获取钉钉电子表格中指定工作表的筛选信息”请改用 dws sheet filter get"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -524,7 +538,8 @@
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "sheet",
@@ -543,7 +558,9 @@
         "筛选/过滤/只看某些值/只显示满足条件的行/筛选数据/创建筛选/删除筛选/设置筛选条件/清除筛选/排序；创建筛选"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“在钉钉电子表格的指定工作表中创建筛选。”所述变更时不要使用"
+        "要“删除钉钉电子表格中指定工作表的筛选”请改用 dws sheet filter delete",
+        "要“清除钉钉电子表格中指定工作表筛选的某一列的筛选条件”请改用 dws sheet filter clear-criteria",
+        "要“获取钉钉电子表格中指定工作表的筛选信息”请改用 dws sheet filter get"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -559,7 +576,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.sheet.create_filter",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -571,7 +589,9 @@
         "筛选/过滤/只看某些值/只显示满足条件的行/筛选数据/创建筛选/删除筛选/设置筛选条件/清除筛选/排序；删除筛选"
       ],
       "avoid_when": [
-        "用户未明确要求“删除钉钉电子表格中指定工作表的筛选。”、目标不清楚或尚未确认时不要使用"
+        "要“在钉钉电子表格的指定工作表中创建筛选”请改用 dws sheet filter create",
+        "要“清除钉钉电子表格中指定工作表筛选的某一列的筛选条件”请改用 dws sheet filter clear-criteria",
+        "要“获取钉钉电子表格中指定工作表的筛选信息”请改用 dws sheet filter get"
       ],
       "effect": "destructive",
       "effect_source": "agent-hint",
@@ -587,7 +607,8 @@
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter.md",
         "skills/mono/schema-hints/destructive-safety.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -599,7 +620,9 @@
         "筛选/过滤/只看某些值/只显示满足条件的行/筛选数据/创建筛选/删除筛选/设置筛选条件/清除筛选/排序；查看当前筛选"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取钉钉电子表格中指定工作表的筛选信息。”"
+        "要“删除钉钉电子表格中指定工作表的筛选”请改用 dws sheet filter delete",
+        "要“在钉钉电子表格的指定工作表中创建筛选”请改用 dws sheet filter create",
+        "要“清除钉钉电子表格中指定工作表筛选的某一列的筛选条件”请改用 dws sheet filter clear-criteria"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -615,7 +638,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.sheet.get_filter",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -629,7 +653,9 @@
         "筛选/过滤/只看某些值/只显示满足条件的行/筛选数据/创建筛选/删除筛选/设置筛选条件/清除筛选/排序；按列排序"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“对钉钉电子表格中指定工作表的筛选范围内的数据进行排序。”所述变更时不要使用"
+        "要“删除钉钉电子表格中指定工作表的筛选”请改用 dws sheet filter delete",
+        "要“在钉钉电子表格的指定工作表中创建筛选”请改用 dws sheet filter create",
+        "要“清除钉钉电子表格中指定工作表筛选的某一列的筛选条件”请改用 dws sheet filter clear-criteria"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -645,7 +671,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.sheet.sort_filter",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -659,7 +686,9 @@
         "筛选/过滤/只看某些值/只显示满足条件的行/筛选数据/创建筛选/删除筛选/设置筛选条件/清除筛选/排序；批量设置多列条件"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“批量更新钉钉电子表格中指定工作表的筛选条件。”所述变更时不要使用"
+        "要“删除钉钉电子表格中指定工作表的筛选”请改用 dws sheet filter delete",
+        "要“在钉钉电子表格的指定工作表中创建筛选”请改用 dws sheet filter create",
+        "要“清除钉钉电子表格中指定工作表筛选的某一列的筛选条件”请改用 dws sheet filter clear-criteria"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -675,7 +704,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.sheet.update_filter",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -693,7 +723,9 @@
         "查看具体命令的完整参数说明"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“在钉钉电子表格的指定工作表中创建一个筛选视图。”所述变更时不要使用"
+        "要“删除钉钉电子表格中指定工作表的筛选视图”请改用 dws sheet filter-view delete",
+        "要“清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件”请改用 dws sheet filter-view delete-criteria",
+        "要“获取单列筛选条件”请改用 dws sheet filter-view get-criteria"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -709,7 +741,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.sheet.create_filter_view",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter-view.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -722,7 +755,9 @@
         "删除筛选视图/移除筛选视图；删除筛选视图"
       ],
       "avoid_when": [
-        "用户未明确要求“删除钉钉电子表格中指定工作表的筛选视图。”、目标不清楚或尚未确认时不要使用"
+        "要“在钉钉电子表格的指定工作表中创建一个筛选视图”请改用 dws sheet filter-view create",
+        "要“清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件”请改用 dws sheet filter-view delete-criteria",
+        "要“获取单列筛选条件”请改用 dws sheet filter-view get-criteria"
       ],
       "effect": "destructive",
       "effect_source": "agent-hint",
@@ -739,7 +774,8 @@
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter-view.md",
         "skills/mono/schema-hints/destructive-safety.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -754,7 +790,9 @@
         "清除筛选条件/移除筛选条件/取消筛选条件；清除筛选视图列条件"
       ],
       "avoid_when": [
-        "用户未明确要求“清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件。”、目标不清楚或尚未确认时不要使用"
+        "要“删除钉钉电子表格中指定工作表的筛选视图”请改用 dws sheet filter-view delete",
+        "要“在钉钉电子表格的指定工作表中创建一个筛选视图”请改用 dws sheet filter-view create",
+        "要“获取单列筛选条件”请改用 dws sheet filter-view get-criteria"
       ],
       "effect": "destructive",
       "effect_source": "agent-hint",
@@ -772,7 +810,8 @@
         "skills/mono/references/products/sheet/sheet-filter-view.md",
         "skills/mono/schema-hints/destructive-safety.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "sheet",
@@ -791,7 +830,9 @@
         "获取单列筛选条件"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取单列筛选条件”"
+        "要“删除钉钉电子表格中指定工作表的筛选视图”请改用 dws sheet filter-view delete",
+        "要“在钉钉电子表格的指定工作表中创建一个筛选视图”请改用 dws sheet filter-view create",
+        "要“清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件”请改用 dws sheet filter-view delete-criteria"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -808,7 +849,8 @@
         "skills/mono/references/products/sheet/sheet-filter-view.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "sheet",
@@ -826,7 +868,9 @@
         "获取单个筛选视图详情"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取单个筛选视图详情”"
+        "要“删除钉钉电子表格中指定工作表的筛选视图”请改用 dws sheet filter-view delete",
+        "要“在钉钉电子表格的指定工作表中创建一个筛选视图”请改用 dws sheet filter-view create",
+        "要“清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件”请改用 dws sheet filter-view delete-criteria"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -842,7 +886,8 @@
         "skills/mono/references/products/sheet/sheet-filter-view.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "sheet",
@@ -859,7 +904,9 @@
         "筛选视图/查看筛选视图/有哪些筛选视图/筛选视图列表；获取所有筛选视图"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取钉钉电子表格中指定工作表的所有筛选视图列表。”"
+        "要“删除钉钉电子表格中指定工作表的筛选视图”请改用 dws sheet filter-view delete",
+        "要“在钉钉电子表格的指定工作表中创建一个筛选视图”请改用 dws sheet filter-view create",
+        "要“清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件”请改用 dws sheet filter-view delete-criteria"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -875,7 +922,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.sheet.get_filter_views",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter-view.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -889,7 +937,9 @@
         "查看筛选条件/有哪些筛选条件/筛选视图设了什么条件/列出筛选条件；列出所有列条件"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“列出筛选视图所有列条件”"
+        "要“删除钉钉电子表格中指定工作表的筛选视图”请改用 dws sheet filter-view delete",
+        "要“在钉钉电子表格的指定工作表中创建一个筛选视图”请改用 dws sheet filter-view create",
+        "要“清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件”请改用 dws sheet filter-view delete-criteria"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -905,7 +955,8 @@
         "skills/mono/references/products/sheet/sheet-filter-view.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "sheet",
@@ -925,7 +976,9 @@
         "更新筛选视图范围"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新钉钉电子表格中指定工作表的筛选视图属性（名称、范围和/或筛选条件）。”所述变更时不要使用"
+        "要“删除钉钉电子表格中指定工作表的筛选视图”请改用 dws sheet filter-view delete",
+        "要“在钉钉电子表格的指定工作表中创建一个筛选视图”请改用 dws sheet filter-view create",
+        "要“清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件”请改用 dws sheet filter-view delete-criteria"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -941,7 +994,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.sheet.update_filter_view",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter-view.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -962,7 +1016,9 @@
         "设置筛选条件/添加筛选条件/配置筛选视图条件/按值筛选/按条件筛选/按颜色筛选；设置筛选视图列条件"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新筛选视图列条件”所述变更时不要使用"
+        "要“删除钉钉电子表格中指定工作表的筛选视图”请改用 dws sheet filter-view delete",
+        "要“在钉钉电子表格的指定工作表中创建一个筛选视图”请改用 dws sheet filter-view create",
+        "要“清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件”请改用 dws sheet filter-view delete-criteria"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -979,7 +1035,8 @@
         "skills/mono/references/products/sheet/sheet-filter-view.md",
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "sheet",
@@ -1378,7 +1435,9 @@
         "设置样式/改颜色/设背景色/加粗/居中/换行/字体颜色/字号；批量设置不同 range 的样式"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值、超链接、数字格式等内容。”所述变更时不要使用"
+        "要“基于源数据范围自动填充到目标范围”请改用 dws sheet range fill",
+        "要“将源范围的数据复制到目标位置”请改用 dws sheet range copy-to",
+        "要“清除钉钉电子表格中指定工作表指定范围的单元格内容、格式或全部”请改用 dws sheet range clear"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1395,7 +1454,8 @@
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-style-format.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "sheet",
@@ -1416,7 +1476,9 @@
         "清空整片区域请改用 range clear"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“清除钉钉电子表格中指定工作表指定范围的单元格内容、格式或全部。”所述变更时不要使用"
+        "要“基于源数据范围自动填充到目标范围”请改用 dws sheet range fill",
+        "要“对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值”请改用 dws sheet range batch-set-style",
+        "要“将源范围的数据复制到目标位置”请改用 dws sheet range copy-to"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1432,7 +1494,8 @@
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-dimension-operations.md",
         "skills/mono/references/products/sheet/sheet-range-operations.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -1445,7 +1508,9 @@
         "复制区域/把这块数据复制到/复制到另一个工作表；跨工作表"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“将源范围的数据复制到目标位置。”所述变更时不要使用"
+        "要“基于源数据范围自动填充到目标范围”请改用 dws sheet range fill",
+        "要“对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值”请改用 dws sheet range batch-set-style",
+        "要“清除钉钉电子表格中指定工作表指定范围的单元格内容、格式或全部”请改用 dws sheet range clear"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1461,7 +1526,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.sheet.range_copy_to",
         "skills/mono/references/products/sheet/sheet-range-operations.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "sheet",
@@ -1477,7 +1543,9 @@
         "自动填充/填充序列/向下填充/拖拽填充/序列递增；自动填充"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“基于源数据范围自动填充到目标范围。”所述变更时不要使用"
+        "要“对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值”请改用 dws sheet range batch-set-style",
+        "要“将源范围的数据复制到目标位置”请改用 dws sheet range copy-to",
+        "要“清除钉钉电子表格中指定工作表指定范围的单元格内容、格式或全部”请改用 dws sheet range clear"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1492,7 +1560,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.fill_range",
         "skills/mono/references/products/sheet/sheet-range-operations.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -1505,7 +1574,9 @@
         "移动区域/把数据移到/剪切粘贴/移到另一个工作表；跨工作表"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“将源范围的数据移动到目标位置，源区域将被清空。”所述变更时不要使用"
+        "要“基于源数据范围自动填充到目标范围”请改用 dws sheet range fill",
+        "要“对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值”请改用 dws sheet range batch-set-style",
+        "要“清除钉钉电子表格中指定工作表指定范围的单元格内容、格式或全部”请改用 dws sheet range clear"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1521,7 +1592,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.sheet.range_move_to",
         "skills/mono/references/products/sheet/sheet-range-operations.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "sheet",
@@ -1542,7 +1614,9 @@
         "读数据/看表格内容；需要结构化信息（值+样式+数据验证+富文本+单元格级超链接）、查看公式或原始值"
       ],
       "avoid_when": [
-        "读一下这个 xlsx 的数据\" / xlsx 节点链接；下载本地表格文件"
+        "要“基于源数据范围自动填充到目标范围”请改用 dws sheet range fill",
+        "要“对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值”请改用 dws sheet range batch-set-style",
+        "要“清除钉钉电子表格中指定工作表指定范围的单元格内容、格式或全部”请改用 dws sheet range clear"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -1560,7 +1634,8 @@
         "skills/mono/references/products/sheet/sheet-read-data.md",
         "skills/mono/references/products/sheet/sheet-workbook.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "sheet",
@@ -1586,7 +1661,9 @@
         "设置样式/改颜色/设背景色/加粗/居中/换行/字体颜色/字号；设置单元格样式"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值、超链接、数字格式等内容。”所述变更时不要使用"
+        "要“基于源数据范围自动填充到目标范围”请改用 dws sheet range fill",
+        "要“对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值”请改用 dws sheet range batch-set-style",
+        "要“清除钉钉电子表格中指定工作表指定范围的单元格内容、格式或全部”请改用 dws sheet range clear"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1604,7 +1681,8 @@
         "skills/mono/references/products/sheet/sheet-style-format.md",
         "skills/mono/references/products/sheet/sheet-write-data.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "sheet",
@@ -1620,7 +1698,9 @@
         "排序/给数据排序/按某列排序/升序/降序；区域排序"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“对钉钉电子表格中指定工作表指定范围的数据进行排序。”所述变更时不要使用"
+        "要“基于源数据范围自动填充到目标范围”请改用 dws sheet range fill",
+        "要“对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值”请改用 dws sheet range batch-set-style",
+        "要“清除钉钉电子表格中指定工作表指定范围的单元格内容、格式或全部”请改用 dws sheet range clear"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1635,7 +1715,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.sort_range",
         "skills/mono/references/products/sheet/sheet-range-operations.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -1668,7 +1749,9 @@
         "设置样式/改颜色/设背景色/加粗/居中/换行/字体颜色/字号；写值同时附带样式"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新工作表指定区域内容（--values 与 --hyperlinks 至少传一项）”所述变更时不要使用"
+        "要“基于源数据范围自动填充到目标范围”请改用 dws sheet range fill",
+        "要“对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值”请改用 dws sheet range batch-set-style",
+        "要“清除钉钉电子表格中指定工作表指定范围的单元格内容、格式或全部”请改用 dws sheet range clear"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -1688,7 +1771,8 @@
         "skills/mono/references/products/sheet/sheet-workbook.md",
         "skills/mono/references/products/sheet/sheet-write-data.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "sheet",

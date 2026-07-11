@@ -11,7 +11,9 @@
         "部门详情/部门信息/部门多少人"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“根据指定的部门 ID，获取部门详情。”"
+        "要“按关键词搜索部门”请改用 dws contact dept search",
+        "要“查看部门成员（逗号分隔 deptId）”请改用 dws contact dept list-members",
+        "要“根据指定的部门 ID，获取其直接子部门列表，返回每个子部门的部门”请改用 dws contact dept list-children"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -27,7 +29,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.contact.get_dept_info_by_dept_id",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/contact.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -40,7 +43,9 @@
         "子部门/下设部门/部门有哪些下级部门/枚举二级部门"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“根据指定的部门 ID，获取其直接子部门列表，返回每个子部门的部门 ID、名称。”"
+        "要“按关键词搜索部门”请改用 dws contact dept search",
+        "要“查看部门成员（逗号分隔 deptId）”请改用 dws contact dept list-members",
+        "要“根据指定的部门 ID，获取部门详情”请改用 dws contact dept get-info"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -55,7 +60,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.contact.get_sub_depts_by_dept_id",
         "skills/mono/references/products/contact.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -68,8 +74,9 @@
         "部门有谁/部门成员/人员名单"
       ],
       "avoid_when": [
-        "研发部有多少人；查部门人数",
-        "研发部的详细信息/部门信息；查部门详情"
+        "要“按关键词搜索部门”请改用 dws contact dept search",
+        "要“根据指定的部门 ID，获取其直接子部门列表，返回每个子部门的部门”请改用 dws contact dept list-children",
+        "要“根据指定的部门 ID，获取部门详情”请改用 dws contact dept get-info"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -85,7 +92,8 @@
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/contact.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "contact",
@@ -102,7 +110,9 @@
         "找部门/哪个部门"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“按关键词搜索部门”"
+        "要“查看部门成员（逗号分隔 deptId）”请改用 dws contact dept list-members",
+        "要“根据指定的部门 ID，获取其直接子部门列表，返回每个子部门的部门”请改用 dws contact dept list-children",
+        "要“根据指定的部门 ID，获取部门详情”请改用 dws contact dept get-info"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -117,7 +127,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.search_dept_by_keyword",
         "skills/mono/references/products/contact.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "contact",
@@ -188,7 +199,9 @@
         "查用户详情/部门/主管/管理员"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“批量获取用户详情（逗号分隔 userId）”"
+        "要“按关键词搜索用户”请改用 dws contact user search",
+        "要“按手机号搜索用户”请改用 dws contact user search-mobile",
+        "要“获取当前用户信息”请改用 dws contact user get-self"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -203,7 +216,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.get_user_info_by_user_ids",
         "skills/mono/references/products/contact.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "contact",
@@ -220,7 +234,9 @@
         "我是谁/我的信息/我的 userId/当前用户/本人/self/me/whoami"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取当前用户信息”"
+        "要“批量获取用户详情（逗号分隔 userId）”请改用 dws contact user get",
+        "要“按关键词搜索用户”请改用 dws contact user search",
+        "要“按手机号搜索用户”请改用 dws contact user search-mobile"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -235,7 +251,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.get_current_user_profile",
         "skills/mono/references/products/contact.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "contact",
@@ -252,7 +269,7 @@
         "花名册字段/有哪些字段/字段列表"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询花名册有权限的字段列表，根据当前用户查询花名册有权限的字段列表”"
+        "要“查询员工花名册字段信息，根据当前用户指定员工和字段列表，查询相应”请改用 dws contact user profile get"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -266,7 +283,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.contact.list_authorized_roster_fields",
         "skills/mono/references/products/contact.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -280,7 +298,7 @@
         "花名册/员工档案/学历/家庭/银行卡/紧急联系人/合同"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询员工花名册字段信息，根据当前用户指定员工和字段列表，查询相应管理范围内员工的字段值信息”"
+        "要“查询花名册有权限的字段列表，根据当前用户查询花名册有权限的字段列”请改用 dws contact user profile fields"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -295,7 +313,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.contact.get_authorized_emp_rosterInfo",
         "skills/mono/references/products/contact.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -307,7 +326,9 @@
         "2. 按名字搜索同事或好友 — 可提取 同事的userId，或好友的openDingTalkId"
       ],
       "avoid_when": [
-        "找一下张三/搜同事/找人；AI搜人(首选)"
+        "要“批量获取用户详情（逗号分隔 userId）”请改用 dws contact user get",
+        "要“按手机号搜索用户”请改用 dws contact user search-mobile",
+        "要“获取当前用户信息”请改用 dws contact user get-self"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -323,7 +344,8 @@
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/contact.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "contact",
@@ -339,7 +361,9 @@
         "按手机号搜索用户"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“按手机号搜索用户”"
+        "要“批量获取用户详情（逗号分隔 userId）”请改用 dws contact user get",
+        "要“按关键词搜索用户”请改用 dws contact user search",
+        "要“获取当前用户信息”请改用 dws contact user get-self"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -353,7 +377,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.search_user_by_mobile",
         "skills/mono/references/products/contact.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "contact",

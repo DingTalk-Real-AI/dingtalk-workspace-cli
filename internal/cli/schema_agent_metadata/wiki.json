@@ -10,7 +10,9 @@
         "查看具体命令的完整参数说明"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“为知识库添加指定角色的成员。”所述变更时不要使用"
+        "要“从知识库中移除指定的企业用户成员（仅支持 USER 类型）”请改用 dws wiki member remove",
+        "要“修改成员在知识库中的角色”请改用 dws wiki member update",
+        "要“查询知识库当前的成员权限列表，支持按角色过滤”请改用 dws wiki member list"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -26,7 +28,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.wiki.add_member",
         "skills/mono/references/products/doc.md",
         "skills/mono/references/products/wiki.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -40,7 +43,9 @@
         "知识库有哪些成员/查看知识库成员"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询知识库当前的成员权限列表，支持按角色过滤。”"
+        "要“为知识库添加指定角色的成员”请改用 dws wiki member add",
+        "要“从知识库中移除指定的企业用户成员（仅支持 USER 类型）”请改用 dws wiki member remove",
+        "要“修改成员在知识库中的角色”请改用 dws wiki member update"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -55,7 +60,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.wiki.list_member",
         "skills/mono/references/products/wiki.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -68,7 +74,9 @@
         "移除知识库成员/把某人从知识库移除/删除知识库成员"
       ],
       "avoid_when": [
-        "用户未明确要求“从知识库中移除指定的企业用户成员（仅支持 USER 类型）。”、目标不清楚或尚未确认时不要使用"
+        "要“为知识库添加指定角色的成员”请改用 dws wiki member add",
+        "要“修改成员在知识库中的角色”请改用 dws wiki member update",
+        "要“查询知识库当前的成员权限列表，支持按角色过滤”请改用 dws wiki member list"
       ],
       "effect": "destructive",
       "effect_source": "agent-hint",
@@ -84,7 +92,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.wiki.remove_member",
         "skills/mono/references/products/wiki.md",
         "skills/mono/schema-hints/destructive-safety.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -96,7 +105,9 @@
         "修改某人在知识库的权限/调整成员角色"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“修改成员在知识库中的角色。”所述变更时不要使用"
+        "要“为知识库添加指定角色的成员”请改用 dws wiki member add",
+        "要“从知识库中移除指定的企业用户成员（仅支持 USER 类型）”请改用 dws wiki member remove",
+        "要“查询知识库当前的成员权限列表，支持按角色过滤”请改用 dws wiki member list"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -111,7 +122,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.wiki.update_member",
         "skills/mono/references/products/wiki.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -124,7 +136,9 @@
         "复制节点到另一个文件夹"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“将指定节点复制到目标文件夹。”所述变更时不要使用"
+        "要“列出指定文件夹或知识库下的直接子节点列表（文件夹/文档/文件等）”请改用 dws wiki node list",
+        "要“在指定位置创建一个新的文件（文档、表格、演示、白板、脑图、多维表”请改用 dws wiki node create",
+        "要“将指定节点移入回收站，30 天内可从回收站恢复，超过 30 天将”请改用 dws wiki node delete"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -140,7 +154,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.wiki.node_copy",
         "skills/mono/references/products/wiki.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "doc",
@@ -160,7 +175,9 @@
         "在知识库里创建文档/新建文件夹"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“在指定位置创建一个新的文件（文档、表格、演示、白板、脑图、多维表或文件夹）。”所述变更时不要使用"
+        "要“列出指定文件夹或知识库下的直接子节点列表（文件夹/文档/文件等）”请改用 dws wiki node list",
+        "要“将指定节点复制到目标文件夹”请改用 dws wiki node copy",
+        "要“将指定节点移入回收站，30 天内可从回收站恢复，超过 30 天将”请改用 dws wiki node delete"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -178,7 +195,8 @@
         "skills/mono/references/products/doc.md",
         "skills/mono/references/products/wiki.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "doc",
@@ -195,7 +213,9 @@
         "删除节点（会要求确认）"
       ],
       "avoid_when": [
-        "用户未明确要求“将指定节点移入回收站，30 天内可从回收站恢复，超过 30 天将被永久删除。”、目标不清楚或尚未确认时不要使用"
+        "要“列出指定文件夹或知识库下的直接子节点列表（文件夹/文档/文件等）”请改用 dws wiki node list",
+        "要“在指定位置创建一个新的文件（文档、表格、演示、白板、脑图、多维表”请改用 dws wiki node create",
+        "要“将指定节点复制到目标文件夹”请改用 dws wiki node copy"
       ],
       "effect": "destructive",
       "effect_source": "agent-hint",
@@ -211,7 +231,8 @@
         "skills/mono/references/products/wiki.md",
         "skills/mono/schema-hints/destructive-safety.json",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "doc",
@@ -231,7 +252,9 @@
         "读某个知识库里的某篇文档"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“列出指定文件夹或知识库下的直接子节点列表（文件夹/文档/文件等），支持分页。”"
+        "要“在指定位置创建一个新的文件（文档、表格、演示、白板、脑图、多维表”请改用 dws wiki node create",
+        "要“将指定节点复制到目标文件夹”请改用 dws wiki node copy",
+        "要“将指定节点移入回收站，30 天内可从回收站恢复，超过 30 天将”请改用 dws wiki node delete"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -248,7 +271,8 @@
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/wiki.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "doc",
@@ -265,7 +289,9 @@
         "移动节点到另一个文件夹"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“将指定节点移动到目标文件夹。”所述变更时不要使用"
+        "要“列出指定文件夹或知识库下的直接子节点列表（文件夹/文档/文件等）”请改用 dws wiki node list",
+        "要“在指定位置创建一个新的文件（文档、表格、演示、白板、脑图、多维表”请改用 dws wiki node create",
+        "要“将指定节点移入回收站，30 天内可从回收站恢复，超过 30 天将”请改用 dws wiki node delete"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -281,7 +307,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.wiki.node_move",
         "skills/mono/references/products/wiki.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "doc",
@@ -300,7 +327,9 @@
         "按文件类型过滤"
       ],
       "avoid_when": [
-        "搜一下有没有叫XX的文件；全局搜索"
+        "要“列出指定文件夹或知识库下的直接子节点列表（文件夹/文档/文件等）”请改用 dws wiki node list",
+        "要“在指定位置创建一个新的文件（文档、表格、演示、白板、脑图、多维表”请改用 dws wiki node create",
+        "要“将指定节点移入回收站，30 天内可从回收站恢复，超过 30 天将”请改用 dws wiki node delete"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -317,7 +346,8 @@
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/wiki.md",
         "skills/mono/schema-hints/interface-refs.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "doc",
@@ -334,7 +364,9 @@
         "创建知识库/新建知识库"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“创建一个新的钉钉文档知识库（WikiSpace）。”所述变更时不要使用"
+        "要“将指定知识库移入回收站”请改用 dws wiki space delete",
+        "要“获取当前用户有权访问的知识库列表，支持按类型区分”请改用 dws wiki space list",
+        "要“获取指定知识库的详细信息，包括名称、描述、创建者、创建时间、成员”请改用 dws wiki space get"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -349,7 +381,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.wiki.create_wikiSpace",
         "skills/mono/references/products/wiki.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -362,7 +395,9 @@
         "删除知识库/移除知识库/把知识库删了"
       ],
       "avoid_when": [
-        "用户未明确要求“将指定知识库移入回收站。”、目标不清楚或尚未确认时不要使用"
+        "要“创建一个新的钉钉文档知识库（WikiSpace）”请改用 dws wiki space create",
+        "要“获取当前用户有权访问的知识库列表，支持按类型区分”请改用 dws wiki space list",
+        "要“获取指定知识库的详细信息，包括名称、描述、创建者、创建时间、成员”请改用 dws wiki space get"
       ],
       "effect": "destructive",
       "effect_source": "agent-hint",
@@ -378,7 +413,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.wiki.delete_wikiSpace",
         "skills/mono/references/products/wiki.md",
         "skills/mono/schema-hints/destructive-safety.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -393,7 +429,9 @@
         "查看知识库详情"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取指定知识库的详细信息，包括名称、描述、创建者、创建时间、成员数量等。”"
+        "要“创建一个新的钉钉文档知识库（WikiSpace）”请改用 dws wiki space create",
+        "要“将指定知识库移入回收站”请改用 dws wiki space delete",
+        "要“获取当前用户有权访问的知识库列表，支持按类型区分”请改用 dws wiki space list"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -408,7 +446,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.wiki.get_wikiSpace",
         "skills/mono/references/products/wiki.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -429,7 +468,9 @@
         "获取钉盘「我的文件」"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取当前用户有权访问的知识库列表，支持按类型区分。”"
+        "要“创建一个新的钉钉文档知识库（WikiSpace）”请改用 dws wiki space create",
+        "要“将指定知识库移入回收站”请改用 dws wiki space delete",
+        "要“获取指定知识库的详细信息，包括名称、描述、创建者、创建时间、成员”请改用 dws wiki space get"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -446,7 +487,8 @@
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/drive.md",
         "skills/mono/references/products/wiki.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -459,7 +501,9 @@
         "搜索知识库/找知识库"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“根据关键词搜索当前用户有权限访问的知识库列表。”"
+        "要“创建一个新的钉钉文档知识库（WikiSpace）”请改用 dws wiki space create",
+        "要“将指定知识库移入回收站”请改用 dws wiki space delete",
+        "要“获取指定知识库的详细信息，包括名称、描述、创建者、创建时间、成员”请改用 dws wiki space get"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -474,7 +518,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.wiki.search_wikiSpaces",
         "skills/mono/references/products/wiki.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"

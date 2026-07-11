@@ -10,7 +10,7 @@
         "步骤 5.3：对每个附件逐个下载（没有批量下载命令，必须循环调用）"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“下载邮件附件”"
+        "要“列举邮件附件”请改用 dws mail attachment list"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -25,7 +25,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.mail.create_download_session",
         "skills/mono/references/products/mail.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -38,7 +39,7 @@
         "（对搜索结果中的每封邮件都要执行一次）"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“列举邮件附件”"
+        "要“下载邮件附件”请改用 dws mail attachment download"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -52,7 +53,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.mail.list_mail_attachments",
         "skills/mono/references/products/mail.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -64,7 +66,9 @@
         "批量删除用户邮箱联系人"
       ],
       "avoid_when": [
-        "用户未明确要求“批量删除用户邮箱联系人”、目标不清楚或尚未确认时不要使用"
+        "要“修改用户邮箱联系人信息”请改用 dws mail contact update",
+        "要“列出用户邮箱联系人”请改用 dws mail contact list",
+        "要“创建用户邮箱联系人”请改用 dws mail contact create"
       ],
       "effect": "destructive",
       "effect_source": "agent-hint",
@@ -79,7 +83,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.mail.batch_delete_user_mail_contacts",
         "skills/mono/references/products/mail.md",
         "skills/mono/schema-hints/destructive-safety.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -91,7 +96,9 @@
         "创建用户邮箱联系人"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“创建用户邮箱联系人”所述变更时不要使用"
+        "要“修改用户邮箱联系人信息”请改用 dws mail contact update",
+        "要“列出用户邮箱联系人”请改用 dws mail contact list",
+        "要“批量删除用户邮箱联系人”请改用 dws mail contact batch-delete"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -106,7 +113,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.mail.create_user_mail_contact",
         "skills/mono/references/products/mail.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -118,7 +126,9 @@
         "列出用户邮箱联系人"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“列出用户邮箱联系人”"
+        "要“修改用户邮箱联系人信息”请改用 dws mail contact update",
+        "要“创建用户邮箱联系人”请改用 dws mail contact create",
+        "要“批量删除用户邮箱联系人”请改用 dws mail contact batch-delete"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -133,7 +143,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.mail.list_user_mail_contacts",
         "skills/mono/references/products/mail.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -145,7 +156,9 @@
         "修改用户邮箱联系人信息"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“修改用户邮箱联系人信息”所述变更时不要使用"
+        "要“列出用户邮箱联系人”请改用 dws mail contact list",
+        "要“创建用户邮箱联系人”请改用 dws mail contact create",
+        "要“批量删除用户邮箱联系人”请改用 dws mail contact batch-delete"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -160,7 +173,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.mail.update_user_mail_contact",
         "skills/mono/references/products/mail.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -172,7 +186,8 @@
         "创建邮件草稿"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“创建邮件草稿”所述变更时不要使用"
+        "要“发送草稿箱中的邮件”请改用 dws mail draft send",
+        "要“更新邮件草稿”请改用 dws mail draft update"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -187,7 +202,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.mail.create_draft",
         "skills/mono/references/products/mail.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -199,7 +215,8 @@
         "发送草稿箱中的邮件"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“发送草稿箱中的邮件”所述变更时不要使用"
+        "要“创建邮件草稿”请改用 dws mail draft create",
+        "要“更新邮件草稿”请改用 dws mail draft update"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -213,7 +230,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.mail.send_draft",
         "skills/mono/references/products/mail.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -225,7 +243,8 @@
         "更新邮件草稿"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新邮件草稿”所述变更时不要使用"
+        "要“创建邮件草稿”请改用 dws mail draft create",
+        "要“发送草稿箱中的邮件”请改用 dws mail draft send"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -240,7 +259,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.mail.update_draft",
         "skills/mono/references/products/mail.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -254,7 +274,9 @@
         "创建邮件文件夹/新建邮箱文件夹/新建邮件目录"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“创建邮件文件夹”所述变更时不要使用"
+        "要“列举邮件文件夹”请改用 dws mail folder list",
+        "要“删除邮件文件夹”请改用 dws mail folder delete",
+        "要“更新邮件文件夹”请改用 dws mail folder update"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -269,7 +291,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.create_mail_folder",
         "skills/mono/references/products/mail.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "mail",
@@ -285,7 +308,9 @@
         "1d. 更新或删除邮件文件夹 — 先通过 folder list 获取目标文件夹 id，再传给 --id"
       ],
       "avoid_when": [
-        "用户未明确要求“删除邮件文件夹”、目标不清楚或尚未确认时不要使用"
+        "要“列举邮件文件夹”请改用 dws mail folder list",
+        "要“创建邮件文件夹”请改用 dws mail folder create",
+        "要“更新邮件文件夹”请改用 dws mail folder update"
       ],
       "effect": "destructive",
       "effect_source": "agent-hint",
@@ -301,7 +326,8 @@
         "skills/mono/references/products/mail.md",
         "skills/mono/schema-hints/destructive-safety.json",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "mail",
@@ -323,7 +349,9 @@
         "重命名邮件文件夹/修改邮箱文件夹名称/更新邮件目录名称"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“列举邮件文件夹”"
+        "要“创建邮件文件夹”请改用 dws mail folder create",
+        "要“删除邮件文件夹”请改用 dws mail folder delete",
+        "要“更新邮件文件夹”请改用 dws mail folder update"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -338,7 +366,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.list_folders",
         "skills/mono/references/products/mail.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "mail",
@@ -354,7 +383,9 @@
         "1d. 更新或删除邮件文件夹 — 先通过 folder list 获取目标文件夹 id，再传给 --id"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新邮件文件夹”所述变更时不要使用"
+        "要“列举邮件文件夹”请改用 dws mail folder list",
+        "要“创建邮件文件夹”请改用 dws mail folder create",
+        "要“删除邮件文件夹”请改用 dws mail folder delete"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -369,7 +400,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.update_mail_folder",
         "skills/mono/references/products/mail.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "mail",
@@ -420,7 +452,9 @@
         "批量删除邮件"
       ],
       "avoid_when": [
-        "用户未明确要求“批量删除邮件”、目标不清楚或尚未确认时不要使用"
+        "要“创建回复草稿”请改用 dws mail message reply",
+        "要“创建转发草稿”请改用 dws mail message forward",
+        "要“批量移动邮件到指定文件夹”请改用 dws mail message batch-move"
       ],
       "effect": "destructive",
       "effect_source": "agent-hint",
@@ -435,7 +469,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.mail.batch_delete_message",
         "skills/mono/references/products/mail.md",
         "skills/mono/schema-hints/destructive-safety.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -447,7 +482,9 @@
         "批量移动邮件到指定文件夹"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“批量移动邮件到指定文件夹”所述变更时不要使用"
+        "要“创建回复草稿”请改用 dws mail message reply",
+        "要“创建转发草稿”请改用 dws mail message forward",
+        "要“批量删除邮件”请改用 dws mail message batch-delete"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -461,7 +498,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.mail.batch_move_message",
         "skills/mono/references/products/mail.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -473,7 +511,9 @@
         "创建转发草稿"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“创建转发草稿”所述变更时不要使用"
+        "要“创建回复草稿”请改用 dws mail message reply",
+        "要“批量删除邮件”请改用 dws mail message batch-delete",
+        "要“批量移动邮件到指定文件夹”请改用 dws mail message batch-move"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -488,7 +528,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.mail.create_forward_draft",
         "skills/mono/references/products/mail.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -500,7 +541,9 @@
         "3. 查看邮件详情"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查看邮件完整内容”"
+        "要“创建转发草稿”请改用 dws mail message forward",
+        "要“批量删除邮件”请改用 dws mail message batch-delete",
+        "要“批量移动邮件到指定文件夹”请改用 dws mail message batch-move"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -515,7 +558,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.get_email_by_message_id",
         "skills/mono/references/products/mail.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "mail",
@@ -531,7 +575,9 @@
         "创建回复草稿"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“创建回复草稿”所述变更时不要使用"
+        "要“创建转发草稿”请改用 dws mail message forward",
+        "要“批量删除邮件”请改用 dws mail message batch-delete",
+        "要“批量移动邮件到指定文件夹”请改用 dws mail message batch-move"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -546,7 +592,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.mail.create_reply_draft",
         "skills/mono/references/products/mail.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -558,7 +605,9 @@
         "创建回复全部草稿"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“创建回复全部草稿”所述变更时不要使用"
+        "要“创建转发草稿”请改用 dws mail message forward",
+        "要“批量删除邮件”请改用 dws mail message batch-delete",
+        "要“批量移动邮件到指定文件夹”请改用 dws mail message batch-move"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -573,7 +622,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.mail.create_replyall_draft",
         "skills/mono/references/products/mail.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -596,7 +646,9 @@
         "第一页"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“搜索邮件 (KQL 语法)”"
+        "要“创建转发草稿”请改用 dws mail message forward",
+        "要“批量删除邮件”请改用 dws mail message batch-delete",
+        "要“批量移动邮件到指定文件夹”请改用 dws mail message batch-move"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -610,7 +662,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.search_emails",
         "skills/mono/references/products/mail.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "mail",
@@ -628,7 +681,9 @@
         "4c. 发送带内联图片的邮件（正文自动转 HTML，\u003cimg\u003e 标签自动注入）"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“发送邮件”所述变更时不要使用"
+        "要“创建转发草稿”请改用 dws mail message forward",
+        "要“批量删除邮件”请改用 dws mail message batch-delete",
+        "要“批量移动邮件到指定文件夹”请改用 dws mail message batch-move"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -643,7 +698,8 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json#mail.send_email",
         "skills/mono/references/products/mail.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_ref": {
         "product_id": "mail",
@@ -695,7 +751,9 @@
         "创建个人邮件模板"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“创建个人邮件模板”所述变更时不要使用"
+        "要“列出用户邮件模板”请改用 dws mail template list",
+        "要“删除用户邮件模板”请改用 dws mail template delete",
+        "要“获取用户邮件模板详情”请改用 dws mail template get"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -710,7 +768,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.mail.create_user_message_template",
         "skills/mono/references/products/mail.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -722,7 +781,9 @@
         "删除用户邮件模板"
       ],
       "avoid_when": [
-        "用户未明确要求“删除用户邮件模板”、目标不清楚或尚未确认时不要使用"
+        "要“列出用户邮件模板”请改用 dws mail template list",
+        "要“创建个人邮件模板”请改用 dws mail template create",
+        "要“获取用户邮件模板详情”请改用 dws mail template get"
       ],
       "effect": "destructive",
       "effect_source": "agent-hint",
@@ -737,7 +798,8 @@
         "internal/cli/schema_mcp_metadata.json#tools.mail.delete_user_message_template",
         "skills/mono/references/products/mail.md",
         "skills/mono/schema-hints/destructive-safety.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -749,7 +811,9 @@
         "获取用户邮件模板详情"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“获取用户邮件模板详情”"
+        "要“列出用户邮件模板”请改用 dws mail template list",
+        "要“创建个人邮件模板”请改用 dws mail template create",
+        "要“删除用户邮件模板”请改用 dws mail template delete"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -763,7 +827,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.mail.get_user_message_template",
         "skills/mono/references/products/mail.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -775,7 +840,9 @@
         "列出用户邮件模板"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“列出用户邮件模板”"
+        "要“创建个人邮件模板”请改用 dws mail template create",
+        "要“删除用户邮件模板”请改用 dws mail template delete",
+        "要“获取用户邮件模板详情”请改用 dws mail template get"
       ],
       "effect": "read",
       "effect_source": "command-verb",
@@ -790,7 +857,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.mail.list_user_message_templates",
         "skills/mono/references/products/mail.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -802,7 +870,9 @@
         "更新用户邮件模板"
       ],
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“更新用户邮件模板”所述变更时不要使用"
+        "要“创建个人邮件模板”请改用 dws mail template create",
+        "要“删除用户邮件模板”请改用 dws mail template delete",
+        "要“获取用户邮件模板详情”请改用 dws mail template get"
       ],
       "effect": "write",
       "effect_source": "command-verb",
@@ -817,7 +887,8 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.mail.update_user_message_template",
         "skills/mono/references/products/mail.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
