@@ -1,26 +1,62 @@
 # DWS Agent Schema 统一方案
 
-## 1. 目标
+## 1. 核心定义
 
-DWS 已采用静态端点和固定命令面。本方案在不恢复运行时服务发现的前提下，建立一套可发布、可审计、面向 Agent 的命令契约：
+DWS Schema 是**构建期从当前 Go/Cobra 真实命令树生成的版本化 Agent 执行契约**。它描述当前二进制真实可执行的 CLI surface，并在此基础上合并 Agent 选择语义、安全语义、接口事实和示例。
 
-- `--help` 面向人，描述当前二进制中真实可执行的 Cobra 命令和 flag。
-- `dws schema` 面向 Agent，提供稳定 canonical path、真实 CLI path、参数类型与约束、风险语义和渐进查询。
-- Command Catalog 是构建产物，不是运行时 MCP `tools/list` 缓存。
-- MCP/Wukong 描述只以脱敏、固定 revision 的版本化快照进入构建，不在启动或查询 Schema 时拉取。
-- Skills 负责路由和工作流语义，不负责定义一个并不存在的命令或参数。
+当前定义遵循一条原则：**schema 描述真实 CLI，而不是 schema 反向制造 CLI**。
 
-当前发布面为 21 个产品、504 个工具。
+因此：
 
-## 2. 总体架构
+- `--help` 面向人，展示当前二进制真实可执行的 Cobra 命令和 flag。
+- `dws schema` 面向 Agent/程序，提供稳定 JSON 契约，包括 canonical path、CLI path、参数类型、required、约束、风险语义、接口事实和示例。
+- Command Catalog 是构建期产物，经 `go:embed` 进入二进制；运行时只读，不动态发现。
+- schema 查询不调用 MCP `tools/list`，不访问网络，不读取用户本地 discovery cache。
+- Skill 和 hints 只补充 Agent 语义，不能定义一个真实 Cobra 树里不存在的命令或参数。
+- runtime catalog fallback 已废弃，不再用旧 catalog 反向补 Cobra leaf。
+
+当前生成结果为 **20 个产品 / 537 个工具**。
+
+## 2. 生命周期
 
 ```text
-Go/Cobra 命令与 flag
+开发者修改 Go/Cobra 命令、flag、help、参数注解或 schema hint
+        |
+        v
+make generate-schema-command-surface
+        |
+        v
+internal/cli/schema_command_surface.json
+        |
+        v
+make generate-schema-agent-metadata
+        |
+        v
+internal/cli/schema_agent_metadata/*.json
+internal/cli/schema_agent_metadata_audit.json
+        |
+        v
+make generate-schema-catalog
+        |
+        v
+internal/cli/schema_catalog.json
+        |
+        v
+go:embed 进入二进制
+        |
+        v
+运行时 dws schema 只读内嵌 catalog
+```
+
+## 3. 架构
+
+```text
+Go/Cobra 真实命令树
   + 强类型参数/约束注解
-  + schema_command_surface.json       (审核过的公开命令面)
-  + schema_mcp_metadata.json          (脱敏接口事实快照)
-  + schema-hints/*.json               (显式 Agent 语义)
-  + Skills/Markdown                    (路由、场景、工作流)
+  + schema_parameter_bindings.json      (稳定 flag -> RPC property 映射)
+  + schema_mcp_metadata.json            (固定 revision 的脱敏接口事实)
+  + schema-hints/*.json                 (显式 Agent 语义)
+  + Skills/Markdown                      (路由、场景、工作流)
                  |
                  | 构建期生成
                  v
@@ -35,177 +71,157 @@ Go/Cobra 命令与 flag
        |                    |
        +---------+----------+
                  |
-          CI / smoke / drift gate
+          CI / drift / catalog gate
 ```
 
-运行时不执行 MCP `tools/list` 来生成命令或 Schema。
-
-## 3. 数据分工
+## 4. 数据分工
 
 | 数据源 | 负责内容 | 不负责内容 |
 |---|---|---|
-| Go/Cobra | 可执行路径、flag、类型、默认值、本地兼容逻辑 | Agent 场景描述 |
+| Go/Cobra | 真实可执行路径、flag、类型、默认值、本地兼容逻辑、help 文本 | Agent 场景描述 |
 | 强类型注解 | `required`、`required_when`、one-of、互斥、联动、格式、枚举、位置参数 | 新增命令 |
-| 版本化 parameter binding JSON | 稳定 CLI flag 到 RPC property 的映射 | `required`、约束、命令发现 |
-| `schema_command_surface.json` | 公开 canonical path、primary CLI path、alias、跨产品 source binding | endpoint、token |
-| `schema_mcp_metadata.json` | 固定 revision 的 RPC 名、接口描述和脱敏 input schema | 运行时路由、风险推断 |
-| `schema-hints/*.json` | 审核过的 summary、effect、risk、confirmation、idempotency、use/avoid、示例 | 参数契约 |
-| Skills/Markdown | 产品路由、使用/禁用场景、前置条件、工作流、提示 | 命令存在性 |
+| `schema_parameter_bindings.json` | 稳定 CLI flag 到 RPC property 的映射 | 命令发现、risk 推断 |
+| `schema_command_surface.json` | 当前公开 canonical path、primary CLI path、alias、source binding | endpoint、token |
+| `schema_mcp_metadata.json` | 固定 revision 的 RPC 名、接口描述、脱敏 input schema | 运行时路由、风险推断 |
+| `schema-hints/*.json` | 审核过的 summary、use/avoid、effect、risk、confirmation、idempotency、examples、interface mode | 参数事实 |
+| Skills/Markdown | 产品路由、使用场景、禁用场景、工作流、操作建议 | 命令存在性 |
 | `schema_catalog.json` | 上述信息合并后的发布级 Command Catalog | 手工编辑源 |
 
 `required` 是 CLI 执行契约，只能来自 Cobra required 标记、当前 Go helper 的强类型注解或审核过的参数 hint。MCP input schema 的 `required` 描述 RPC payload，helper 可能负责合成该字段，因此它只能作为接口事实，不能把一个可选 CLI flag 提升为全局必填。
 
-### 3.1 接口事实
+## 5. 生成步骤
 
-“IR/MCP 为接口事实”指 RPC 名称、参数 JSON Schema、接口描述等服务端事实。它们经过脱敏后固定到 `schema_mcp_metadata.json`，并保留 source revision/hash。
-
-接口事实不能直接决定：
-
-- 命令是否公开；
-- CLI 路径和兼容 alias；
-- 写入风险和确认策略；
-- Agent 应在什么业务意图下选择它。
-
-这些决策分别由公开 command surface、Cobra/注解和 Agent hints/Skills 管理。
-
-## 4. Command Catalog
-
-Catalog 是发布版本内的统一命令中间表示，位于 `internal/cli/schema_catalog.json`，包含：
-
-- 稳定 `canonical_path`；
-- `primary_cli_path`、alias、source product/RPC binding；
-- 参数类型、required、条件必填和组合约束；
-- Agent summary、use/avoid、effect、risk、confirmation、idempotency、示例；
-- 来源 revision/hash 和生成 hash。
-
-核心入口位于：
-
-- `internal/cli/schema_catalog.go`：嵌入、校验、查询 Catalog；
-- `internal/generator/cmd_schema_catalog`：从发布命令树生成 Catalog；
-- `internal/helpers/catalog_fallback.go`：以 `-100` 优先级补齐固定契约中缺失的执行叶子。
-
-真实 Go helper 优先于 fallback。fallback 只能补缺，不能覆盖现有命令；低优先级 fallback 也不能把显式隐藏/下线的命令重新显示。经过审核的隐藏兼容命令可以进入固定 Schema；已经下线的入口继续保留错误提示兼容，但必须从公开 command surface 和 Schema 中删除。
-
-内嵌 Catalog 对真实 Go 命令只允许回填稳定 canonical identity，禁止回灌任何参数元数据。flag-to-RPC property binding 固定在版本化 `internal/cli/schema_parameter_bindings.json`，每次人工执行 `make generate-schema` 都先应用该输入；required 和 constraints 则从当前 Cobra 树及强类型注解重算。这样 generator 不依赖上一次 Catalog 自回放。完整旧契约只允许用于 `-100` 优先级的 fallback leaf。
-
-parameter binding 快照由历史 Catalog 的 311 条非默认映射一次性审计得到。当前公开命令面保留 316 条 active binding：5 条旧 alias 已迁移到现行主 flag，3 条与当前 helper/MCP 接口不一致的旧参数被显式排除，另补入 8 条当前 calendar attendee 父级 persistent flag 到 MCP property 的映射。迁移、排除和新增原因都写在同一 JSON 中，生成器不得从上一版 Catalog 自动补回。policy 同时校验 active 数量、历史审计记录和连续两次 Catalog 生成 byte-identical。
-
-## 5. Agent 元数据
-
-每个公开工具必须具备：
-
-- `agent_summary`；
-- `effect`: `read | write | destructive`；
-- `risk`: `low | medium | high`；
-- `confirmation`: `not_required | user_required`；
-- `idempotency`: `idempotent | non_idempotent | unknown`。
-
-每个公开工具都必须固定 `use_when`、`avoid_when`、安全示例、
-`interface_mode` 和 `availability`。`prerequisites`、`tips`、
-`workflow_refs` 按需要补充。选择语义来自版本化
-`selection-review.json`，禁止从上一版 Catalog 自举。
-
-合并优先级为：
-
-1. 显式审核的 JSON hint；
-2. Skill 中可约束解析的语义；
-3. 固定 revision 的 Wukong/MCP 描述；
-4. 命令标题和动作动词推断。
-
-低优先级来源只能填空，不能覆盖显式风险规则。MCP 派生 summary 标记为 `reviewed:false`；所有 `destructive` 工具强制提升为 `risk:high` 和 `confirmation:user_required`，Agent 不能自行确认。
-
-当前生成覆盖：
-
-- 产品元数据：21/21；
-- 工具元数据与 summary：504/504；
-- effect/safety 字段：504/504；
-- use/avoid/example/interface mode：504/504；
-- MCP 接口 summary 应用：271；
-- 固定单 RPC interface_ref：461；
-- 复合实现：7，本地实现：3，明确不可用兼容工具：33；
-- intents：1290；
-- examples：793，且禁止包含 `--yes`；
-- reviewed one-of/互斥/联动约束：30；
-- destructive safety：48/48 通过。
-
-`unmatched_skill_tools` 是 Skill 文档中的旧路径、分组或复合表达，不代表命令缺失。207 个原始引用已在 `reference-review.json` 中固定分类：25 个别名映射到现行工具，其余引用保留 `group`、`stale` 或 `out_of_surface` 状态；未审查引用数必须为 0。
-
-## 6. `--help` 与 `schema`
-
-两者共享真实 CLI path 和 flag，但用途不同：
-
-| 能力 | `--help` | `dws schema` |
-|---|---|---|
-| 面向对象 | 人 | Agent/程序 |
-| 输出稳定性 | 文本，不作为机器契约 | JSON 稳定契约 |
-| 路径 | CLI path | canonical + CLI path + alias |
-| 参数 | flag 用法 | 类型、required、枚举、格式、组合约束 |
-| 风险语义 | 可选提示 | effect/risk/confirmation/idempotency |
-| 查询方式 | 单命令展开 | 产品 -> 分组 -> 工具渐进展开，或 `--all` |
-
-`schema list` 作为兼容入口等价于根概览；新脚本应直接使用 `dws schema`。完整审计使用 `dws schema --all`。
-
-## 7. 无运行时服务发现
-
-以下路径已明确禁止启动期或 Schema 查询期 `tools/list`：
-
-- `dws schema` 只读内嵌 Catalog；内嵌数据损坏时只允许本地 Cobra 回退；
-- HTTP plugin 只从 manifest 注册 endpoint 和鉴权；
-- stdio plugin 只注册 descriptor 和未启动 client；
-- stdio 进程在真实执行时才 `Start + Initialize + tools/call`；
-- Schema 生成不依赖用户登录、网络、个人 token 或本地 MCP cache。
-
-`internal/transport` 仍保留 MCP 协议的 `ListTools` primitive 和协议测试，但 `internal/app`、`internal/cli` 不调用它生成命令面。
-
-## 8. 构建与发布
-
-修改 Skill、hint 或接口快照后执行：
-
-```bash
-make generate-schema
-```
-
-它按顺序生成 Agent metadata 和最终 Catalog。单独调试可使用：
-
-```bash
-make generate-schema-agent-metadata
-make generate-schema-catalog
-```
-
-公开命令面不是普通生成物。只有确认新增、删除或重命名公开命令时才执行并评审：
+### 5.1 生成命令面
 
 ```bash
 make generate-schema-command-surface
 ```
 
-外部 MCP/Wukong 元数据刷新必须满足：固定 commit/revision、脱敏、仅匹配现有公开 command surface、生成 audit；不得携带 endpoint、Authorization、token、secret 或用户数据。
+该目标直接基于 `app.NewRootCommand()` 的真实 Cobra 树构建 command surface，不再通过 `dws schema --all` 读取旧 embedded catalog。
 
-## 9. 质量门禁
+### 5.2 生成 Agent 元数据
 
-`make policy` 执行以下检查：
+```bash
+make generate-schema-agent-metadata
+```
 
-- 公开 surface、Agent index、MCP snapshot、Catalog 数量一致；
-- Catalog canonical paths 与审核 surface 完全一致；
-- 504 个工具均具备 summary/effect/safety/use/avoid/example/interface mode；
-- 461 个单 RPC 工具具备固定 interface_ref，43 个例外均有明确实现类型和原因；
-- Skill 未匹配引用全部有固定审核状态，未审核数为 0；
-- 示例必须以工具主 CLI path 开头且不得包含 `--yes`；
-- destructive 操作必须为 high risk 且要求用户确认；
-- reviewed 组合约束数量固定，避免生成时静默丢失；
-- Catalog 不含 endpoint 或凭据字段；
-- `internal/app`、`internal/cli` 不调用 `ListTools`；
-- 504 条定义都能映射到真实 Cobra 路径，参数都能映射到真实 flag；
-- 隐藏子树不污染 `--help`，但固定 Schema 能正确遍历；
-- metadata 与 Catalog 连续生成无漂移。
+输入包括：
 
-全量 smoke 还应遍历每个工具及 one-of 的每个分支执行 `--dry-run`，不能只测试每组的第一条参数组合。
+- `skills/mono/SKILL.md`
+- `skills/mono/references/products/**/*.md`
+- `skills/mono/schema-hints/*.json`
+- `internal/cli/schema_mcp_metadata.json`
+- `internal/cli/schema_command_surface.json`
+
+输出包括：
+
+- `internal/cli/schema_agent_metadata/index.json`
+- `internal/cli/schema_agent_metadata/<product>.json`
+- `internal/cli/schema_agent_metadata_audit.json`
+
+### 5.3 生成最终 Catalog
+
+```bash
+make generate-schema-catalog
+```
+
+输出：
+
+- `internal/cli/schema_catalog.json`
+
+运行时 `dws schema` 只读该内嵌 Catalog。
+
+## 6. Agent 元数据要求
+
+每个公开工具必须具备：
+
+- `agent_summary`
+- `use_when`
+- `avoid_when`
+- `examples`
+- `effect`: `read | write | destructive`
+- `risk`: `low | medium | high`
+- `confirmation`: `not_required | user_required`
+- `idempotency`: `idempotent | non_idempotent | unknown`
+- `interface_mode`: `mcp | composite | local | unavailable`
+- `availability`: `available | unavailable`
+
+安全规则：
+
+- 所有 `destructive` 工具必须是 `risk: high` 且 `confirmation: user_required`。
+- 所有 `risk: high` 工具必须要求用户确认。
+- 示例不得包含 `--yes`，Agent 必须先向用户确认，再显式传 `--yes` 执行。
+
+当前生成覆盖：
+
+- 产品：20/20
+- 工具：537/537
+- `agent_summary`：537/537
+- `use_when`：537/537
+- `avoid_when`：537/537
+- `examples`：537/537
+- `effect/risk/confirmation`：537/537
+- `interface_mode/availability`：537/537
+
+`unmatched_skill_tools` 是 Skill 文档里的旧路径、分组或复合表达，不代表 schema 命令缺失；它作为 audit 诊断项保留，不阻断 catalog 生成。
+
+## 7. `--help` 与 `dws schema`
+
+两者共享同一真实 CLI surface，但用途不同：
+
+| 能力 | `--help` | `dws schema` |
+|---|---|---|
+| 面向对象 | 人 | Agent/程序 |
+| 输出形式 | 文本 | 稳定 JSON |
+| 路径 | CLI path | canonical path + CLI path + alias |
+| 参数 | flag 用法 | 类型、required、默认值、枚举、格式、组合约束 |
+| 风险语义 | 可在描述中提示 | effect/risk/confirmation/idempotency |
+| 查询方式 | 单命令展开 | 产品 -> 分组 -> 工具渐进展开，或 `--all` |
+
+业务级 persistent flags（如 `calendar --event`、`calendar --calendar-id`）属于 CLI 参数契约，应纳入 schema/help 一致性检查；基础设施级全局 flags（如 `--debug`、`--format`、`--yes`）不属于单工具参数。
+
+## 8. 无运行时发现与无 fallback
+
+以下行为被明确禁止：
+
+- `dws schema` 运行时调用 MCP `tools/list`。
+- `dws schema` 运行时访问网络生成命令面。
+- 根据旧 `schema_catalog.json` 在运行时反向创建 Cobra 命令。
+- 使用 `helpers.NewCatalogFallbackCommands` 补齐不存在的 leaf。
+- 让 schema 暴露真实 Cobra 树里不存在的命令或参数。
+
+如果命令、flag 或 help 发生变化，必须重新生成 schema 并提交生成物。
+
+## 9. CI / 门禁
+
+CI 需要验证：
+
+- `schema_command_surface.json` 与 `schema_catalog.json` 的 canonical paths 完全一致。
+- `schema_catalog.json`、`schema_agent_metadata/index.json` 数量和 surface hash 一致。
+- 所有公开工具具备完整 Agent 元数据字段。
+- `interface_mode == "mcp"` 当且仅当 `interface_ref != null`。
+- `schema_parameter_bindings.json` 的 source hash 等于当前 catalog source hash，且每条 binding 都能映射到当前工具参数。
+- 示例以工具 primary CLI path 开头，且不包含 `--yes`。
+- destructive/high-risk 安全规则成立。
+- 生成物连续生成无漂移。
+
+推荐本地验证命令：
+
+```bash
+make generate-schema-command-surface
+make generate-schema-agent-metadata
+make generate-schema-catalog
+./scripts/policy/check-generated-drift.sh
+./scripts/policy/check-schema-catalog.sh
+go test ./internal/cli ./internal/app ./internal/generator/... -count=1
+```
 
 ## 10. 后续治理
 
-当前已达到“稳定、完整、可生成、无运行时发现”的基础线，但 Agent 语义仍需持续评审：
+当前 schema 已收敛到真实 Cobra 命令树事实源。后续重点：
 
-1. 将 `reviewed:false` 的 MCP/标题回退 summary 按产品逐步转为显式 hint；
-2. 清理 audit 中的旧 Skill 路径和复合表达；
-3. 为 one-of、互斥、`required_when` 增加各分支 smoke；
-4. 将更多 RunE 手工校验迁移为强类型注解，避免参数语义只存在于执行代码；
-5. 变更 command surface 时同时更新 help、Schema、Skill 引用和 dry-run 契约测试。
+1. 修正式 schema/help 双向比对脚本，使其正确区分业务 persistent flags 与基础设施 global flags；
+2. 清理 Skill 文档中的旧路径和复合表达，降低 `unmatched_skill_tools`；
+3. 将更多 RunE 手工校验迁移为强类型注解，避免参数语义只存在于执行代码；
+4. 为 one-of、互斥、`required_when` 增加分支 dry-run smoke；
+5. 新增或修改 CLI 命令时，同时更新 help、schema、Skill 引用和 dry-run 契约测试。

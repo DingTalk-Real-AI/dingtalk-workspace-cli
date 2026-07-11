@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "source_hash": "sha256:b207f3f9977e948b2d1fcf30e81b24d06571344e17de3ca2ac8cfdc7465ef772",
+  "source_hash": "sha256:ae7bbbe03c07a68a4a5fcdaa992428735d298c47a78824c5b33e3b1f12d4a966",
   "surface_hash": "sha256:7fb8d999c27622a1a0ea39074d7b375f7686964d77eebeb4be30e616311ab86d",
   "catalog": {
     "agent_metadata": {
       "products_with_metadata": 20,
       "source": "embedded-skill-metadata",
-      "source_hash": "sha256:2b64df8c64d71e74b91a0e43b7b48d490a33e8831d620fc400ae8b0ed8253bf7",
+      "source_hash": "sha256:003c796f92787cab22545cfff4102244ba5623bbd4b4f3f1fbd4d50b21ac48f0",
       "surface_hash": "sha256:7fb8d999c27622a1a0ea39074d7b375f7686964d77eebeb4be30e616311ab86d",
       "surface_products": 20,
       "surface_tools": 537,
@@ -3748,11 +3748,13 @@
         "tools": [
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "调用 MCP 工具 get_adjustment_rule_detail，根据补卡规则主键 ID 查询对应的补卡规则详情",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "查询单个补卡规则详情",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要调用 MCP 工具 get_adjustment_rule_detail，根据补卡规则主键 ID 查询对应的补卡规则详情时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "不知道补卡规则ID时先用 attendance adjustment search",
+              "查询加班规则详情时使用 attendance overtime get",
+              "查询补卡审批单记录时使用 attendance approve list"
             ],
             "canonical_path": "attendance.adjustment_get",
             "cli_name": "get",
@@ -3765,20 +3767,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "adjustment_get",
             "primary_cli_path": "attendance adjustment get",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "根据补卡规则主键 ID 查询补卡规则详情",
             "use_when": [
-              "查询补卡规则详情"
+              "已取得补卡规则ID，需要查看规则详情"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "根据用户权限查询补卡规则列表，入参封装在 ATRuleQueryParam 对象中",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "查询补卡规则列表",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要根据用户权限查询补卡规则列表，入参封装在 ATRuleQueryParam 对象中时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "已知道补卡规则ID并要看详情时使用 attendance adjustment get",
+              "查询加班规则时使用 attendance overtime search",
+              "查询员工打卡/考勤记录时使用 attendance record get 或 attendance check record"
             ],
             "canonical_path": "attendance.adjustment_search",
             "cli_name": "search",
@@ -3791,75 +3795,78 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "adjustment_search",
             "primary_cli_path": "attendance adjustment search",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "查询当前用户可管理的补卡规则列表",
             "use_when": [
-              "查询补卡规则",
-              "补卡规则/补卡设置",
-              "补卡规则详情/某条补卡规则的具体信息"
+              "需要查看有哪些补卡规则或筛选补卡规则"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "查询指定用户的考勤业务审批单记录（补卡 / 加班 / 请假 / 出差外出）",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "查询考勤相关审批单记录",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要查询指定用户的考勤业务审批单记录（补卡 / 加班 / 请假 / 出差外出）时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "查询假期余额时使用 attendance vacation balance",
+              "查询实际打卡记录时使用 attendance record get 或 attendance check record",
+              "需要获取可提交审批的模板/跳转链接时使用 attendance approve templates"
             ],
             "canonical_path": "attendance.approve_list",
             "cli_name": "list",
             "cli_path": "attendance approve list",
             "confirmation": "not_required",
             "description": "查询指定用户的考勤业务审批单记录（补卡 / 加班 / 请假 / 出差外出）。\n审批类型 --types 支持以下关键词（多个用英文逗号分隔）：\n  - overtime / 加班                                            → bizType=1\n  - trip / travel / business_trip / business-trip / 出差 / 外出  → bizType=2（出差与外出在查询接口合并为同一类，不再细分）\n  - leave / 请假                                                → bizType=3\n  - patch / repair-check / repair_check / 补卡                 → bizType=4\n说明：\n  - 服务端查询接口 bizType=2 同时覆盖出差与外出，传入 trip / travel / 出差 / 外出 任一别名都会返回这两类合并的记录；\n  - 如需在提交入口区分外出（TRAVEL）与出差（OUT），请改用 dws attendance approve templates --type travel|out；\n  - 返回每条记录含：用户 ID、审批标签、审批子类型、审批类型、生效时间、时长、时长单位、流程实例 ID。",
-            "effect": "write",
+            "effect": "read",
             "idempotency": "unknown",
             "interface_mode": "local",
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "approve_list",
             "primary_cli_path": "attendance approve list",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "查询用户审批单（补卡/加班/请假/出差外出）",
             "use_when": [
-              "审批单/请假记录/加班记录/出差记录/补卡记录",
-              "查/提交 请假/加班/补卡 审批单；考勤业务审批单"
+              "查询补卡、加班、请假、出差外出等考勤审批记录"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "当用户需要提交补卡、请假、加班、外出、出差时，查询对应考勤审批表单模板，返回审批提交跳转链接",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "查询考勤审批模板和提交入口",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要当用户需要提交补卡、请假、加班、外出、出差时，查询对应考勤审批表单模板，返回审批提交跳转链接时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "查看已存在审批单记录时使用 attendance approve list",
+              "查询考勤记录/统计时使用 attendance record get 或 attendance summary",
+              "配置考勤规则时使用 attendance group/globalsetting/class 相关命令"
             ],
             "canonical_path": "attendance.approve_templates",
             "cli_name": "templates",
             "cli_path": "attendance approve templates",
             "confirmation": "not_required",
             "description": "当用户需要提交补卡、请假、加班、外出、出差时，查询对应考勤审批表单模板，返回审批提交跳转链接。\n审批类型支持：repair-check/patch/补卡、leave/请假、overtime/加班、travel/外出、out/trip/出差，也支持直接传 REPAIR_CHECK、LEAVE、OVERTIME、TRAVEL、OUT。\n向用户展示提交入口时，不要直接裸露 submitUrl，应使用 Markdown 可点击链接格式：[表单名称](submitUrl)。",
-            "effect": "write",
+            "effect": "read",
             "idempotency": "unknown",
             "interface_mode": "local",
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "approve_templates",
             "primary_cli_path": "attendance approve templates",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "查询补卡/请假/加班/外出/出差审批提交链接",
             "use_when": [
-              "当用户需要提交补卡、请假、加班、外出、出差时，查询对应考勤审批表单模板，返回审批提交跳转链接"
+              "用户要发起补卡、请假、加班、外出或出差审批前查询可用模板"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "批量查询员工班次信息（间隔 ≤ 7 天，最多 50 人）",
-            "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+            "agent_summary": "批量查询员工班次信息",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "需要创建、修改或删除数据时不要使用；本命令只用于“批量查询员工班次信息（间隔 ≤ 7 天，最多 50 人）”"
+              "查询实际排班记录时使用 attendance schedule get",
+              "查询班次定义/班次ID时使用 attendance class search 或 attendance class get",
+              "查询考勤组与规则时使用 attendance rules"
             ],
             "canonical_path": "attendance.batch_get_employee_shifts",
             "cli_name": "list",
@@ -3876,46 +3883,50 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "batch_get_employee_shifts",
             "primary_cli_path": "attendance shift list",
+            "reviewed": true,
             "risk": "low",
             "title": "batch_get_employee_shifts",
             "use_when": [
-              "批量查询员工班次信息（间隔 ≤ 7 天，最多 50 人）"
+              "按员工和日期范围查询班次/排班班次"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "调用 MCP 工具 boss_check 修改员工打卡记录",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "管理员修正员工打卡结果",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要调用 MCP 工具 boss_check 修改员工打卡记录时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "只查询打卡记录时使用 attendance check record/check result",
+              "未获得用户明确确认时不要修改打卡结果",
+              "查询考勤统计时使用 attendance summary"
             ],
             "canonical_path": "attendance.boss_check",
             "cli_name": "boss-check",
             "cli_path": "attendance boss-check",
-            "confirmation": "not_required",
+            "confirmation": "user_required",
             "description": "调用 MCP 工具 boss_check 修改员工打卡记录。管理员可修改打卡时间、打卡结果等信息。\n\n参数说明：\n  --plan-id        排班ID（与 --result-id 二选一）\n                   来源：通过 dws attendance schedule get 获取，返回结果的 id 字段\n                   示例：id: 948964045503 表示某天下班打卡的排班记录ID\n\n  --result-id      打卡结果ID（与 --plan-id 二选一，优先使用）\n                   来源：暂不支持（record get 未返回此字段），建议使用 --plan-id\n\n  --time           新打卡时间，格式 yyyy-MM-dd HH:mm（可选）\n  --result         打卡结果：Normal/TimesResultA/TimesResultB/TimesResultC/TimesResultD/TimesResultE/TimesResultF（可选）\n  --absent-min     缺勤时长（分钟），当 result 为异常状态时需传值（可选）\n  --remark         备注，最长500字符（可选）\n  --user-say-yes   用户已确认，跳过交互式确认提示\n\n打卡结果枚举值：\n  Normal         正常\n  TimesResultA   迟到\n  TimesResultB   早退\n  TimesResultC   缺卡\n  TimesResultD   迟到+早退\n  TimesResultE   缺卡+早退\n  TimesResultF   迟到+缺卡\n\n获取 planId 步骤：\n  1. 查询排班记录：dws attendance schedule get --userIdList USER_ID --workDateBegin DATE --workDateEnd DATE\n  2. 从返回结果中找到对应打卡类型（OnDuty=上班，OffDuty=下班）的 id 字段\n  3. 使用该 id 作为 --plan-id 参数",
-            "effect": "read",
-            "idempotency": "idempotent",
+            "effect": "write",
+            "idempotency": "unknown",
             "interface_mode": "local",
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "boss_check",
             "primary_cli_path": "attendance boss-check",
-            "reviewed": false,
-            "risk": "low",
+            "reviewed": true,
+            "risk": "high",
             "title": "BOSS 改签打卡记录",
             "use_when": [
-              "假设返回 id: 948964045503 (OffDuty 下班打卡)",
-              "同时修改打卡时间"
+              "管理员确认需要人工修正员工打卡记录或打卡结果"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "查询指定用户的打卡流水记录",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "查询打卡记录",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要查询指定用户的打卡流水记录时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "修改打卡结果时使用 attendance boss-check",
+              "查询考勤统计摘要时使用 attendance summary",
+              "查询考勤详情时使用 attendance record get"
             ],
             "canonical_path": "attendance.check_record",
             "cli_name": "record",
@@ -3928,21 +3939,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "check_record",
             "primary_cli_path": "attendance check record",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "查询打卡流水",
             "use_when": [
-              "打卡记录/出勤/考勤",
-              "指定用户打卡流水/打卡详情/打卡时间地点/打卡记录详情"
+              "查询员工打卡流水或打卡记录"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "查询指定用户的打卡结果记录",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "查询打卡结果",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要查询指定用户的打卡结果记录时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "修改打卡结果时使用 attendance boss-check",
+              "查询原始打卡流水时使用 attendance check record",
+              "查询统计摘要时使用 attendance summary"
             ],
             "canonical_path": "attendance.check_result",
             "cli_name": "result",
@@ -3955,20 +3967,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "check_result",
             "primary_cli_path": "attendance check result",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "查询打卡结果",
             "use_when": [
-              "指定用户打卡结果/考勤结果/迟到早退/缺卡异常"
+              "查询员工打卡结果或考勤结果"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "查询指定员工在一段时间内的签到记录",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "查询打卡流水记录",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要查询指定员工在一段时间内的签到记录时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "修改打卡记录时使用 attendance boss-check",
+              "查询班次/排班时使用 attendance shift list 或 schedule get",
+              "查询考勤汇总时使用 attendance summary"
             ],
             "canonical_path": "attendance.checkin_records",
             "cli_name": "records",
@@ -3981,21 +3995,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "checkin_records",
             "primary_cli_path": "attendance checkin records",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "查询指定员工的签到记录",
             "use_when": [
-              "查询签到记录",
-              "签到/签到记录"
+              "查询员工打卡流水、定位或打卡时间记录"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "调用 MCP 工具 create_class_setting，创建一个新的班次",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "创建班次定义",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要调用 MCP 工具 create_class_setting，创建一个新的班次时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "修改已有班次时使用 attendance class update",
+              "导入员工排班时使用 attendance schedule import",
+              "查询已有班次时使用 attendance class search/get"
             ],
             "canonical_path": "attendance.class_create",
             "cli_name": "create",
@@ -4008,20 +4023,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "class_create",
             "primary_cli_path": "attendance class create",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "创建班次",
             "use_when": [
-              "调用 MCP 工具 create_class_setting，创建一个新的班次"
+              "需要新增一个班次/上下班时间规则"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "调用 MCP 工具 get_class_detail，根据班次 ID 查询该班次的详细信息",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "查询单个班次定义详情",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要调用 MCP 工具 get_class_detail，根据班次 ID 查询该班次的详细信息时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "不知道班次ID时先用 attendance class search",
+              "修改班次定义时使用 attendance class update",
+              "查询员工排班记录时使用 attendance schedule get"
             ],
             "canonical_path": "attendance.class_get",
             "cli_name": "get",
@@ -4034,20 +4051,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "class_get",
             "primary_cli_path": "attendance class get",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "根据班次 ID 查询班次详情",
             "use_when": [
-              "查询班次详情"
+              "已取得班次ID，需要查看班次配置"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "查询当前用户有权管理的班次列表（班次定义），支持按名称搜索和类型过滤",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "查询班次定义列表",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要查询当前用户有权管理的班次列表（班次定义），支持按名称搜索和类型过滤时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "创建或修改班次定义时使用 attendance class create/update",
+              "已知道班次ID并要看详情时使用 attendance class get",
+              "查询员工排班记录时使用 attendance schedule get"
             ],
             "canonical_path": "attendance.class_search",
             "cli_name": "search",
@@ -4060,22 +4079,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "class_search",
             "primary_cli_path": "attendance class search",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "查询当前用户可管理的所有班次详情",
             "use_when": [
-              "查询可管理的班次列表",
-              "班次定义/班次列表/有哪些班次/我负责的班次",
-              "班次详情/某个班次的具体信息"
+              "搜索或列出可用班次/班次ID"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "调用 MCP 工具 update_class_setting，更新一个已有的班次",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "更新班次定义",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要调用 MCP 工具 update_class_setting，更新一个已有的班次时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "创建新班次时使用 attendance class create",
+              "查询班次详情时使用 attendance class get",
+              "调整员工排班时使用 attendance schedule import"
             ],
             "canonical_path": "attendance.class_update",
             "cli_name": "update",
@@ -4088,21 +4107,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "class_update",
             "primary_cli_path": "attendance class update",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "更新班次",
             "use_when": [
-              "更新班次",
-              "更新班次/修改班次/班次改名/修改上下班时间"
+              "需要修改已有班次的名称、上下班时间或规则"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "查询某个人的考勤统计摘要",
-            "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+            "agent_summary": "查询个人考勤统计摘要",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "需要创建、修改或删除数据时不要使用；本命令只用于“查询某个人的考勤统计摘要”"
+              "查看单条考勤明细时使用 attendance record get",
+              "查看原始打卡记录时使用 attendance check record",
+              "查看排班时使用 attendance schedule get"
             ],
             "canonical_path": "attendance.get_attendance_summary",
             "cli_name": "summary",
@@ -4119,20 +4139,22 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "get_attendance_summary",
             "primary_cli_path": "attendance summary",
+            "reviewed": true,
             "risk": "low",
             "title": "get_attendance_summary",
             "use_when": [
-              "查看考勤统计摘要（--stats-type 必填：week 周统计 / month 月统计）",
-              "考勤汇总/统计"
+              "查看员工考勤统计、出勤/异常/请假等摘要"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
             "agent_summary": "查询个人考勤详情",
-            "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "需要创建、修改或删除数据时不要使用；本命令只用于“查询个人考勤详情”"
+              "修改打卡结果时使用 attendance boss-check",
+              "查询打卡流水/原始打卡记录时使用 attendance check record 或 checkin records",
+              "查询考勤统计汇总时使用 attendance summary"
             ],
             "canonical_path": "attendance.get_user_attendance_record",
             "cli_name": "get",
@@ -4149,19 +4171,22 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "get_user_attendance_record",
             "primary_cli_path": "attendance record get",
+            "reviewed": true,
             "risk": "low",
             "title": "查询指定用户某一天的考勤详情",
             "use_when": [
-              "查询个人考勤详情"
+              "查询某个员工某天或时间段的考勤明细"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "查询全局规则设置，仅管理员可以调用",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "查询企业全局考勤设置",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要查询全局规则设置，仅管理员可以调用时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "修改全局设置时使用 attendance globalsetting save",
+              "查看个人设置时使用 attendance selfsetting get",
+              "查看考勤组规则时使用 attendance group get/rules"
             ],
             "canonical_path": "attendance.globalsetting_get",
             "cli_name": "get",
@@ -4174,20 +4199,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "globalsetting_get",
             "primary_cli_path": "attendance globalsetting get",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "查询全局规则设置（仅管理员）",
             "use_when": [
-              "查询全局规则设置，仅管理员可以调用"
+              "管理员查看企业级打卡提醒、极速打卡等全局设置"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "更新保存全局规则设置，仅管理员可以调用",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "更新企业全局考勤设置",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要更新保存全局规则设置，仅管理员可以调用时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "修改个人设置时使用 attendance selfsetting save",
+              "修改考勤组配置时使用 attendance group update",
+              "只查看全局设置时使用 attendance globalsetting get"
             ],
             "canonical_path": "attendance.globalsetting_save",
             "cli_name": "save",
@@ -4200,20 +4227,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "globalsetting_save",
             "primary_cli_path": "attendance globalsetting save",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "更新保存全局规则设置（仅管理员）",
             "use_when": [
-              "更新保存全局规则设置，仅管理员可以调用"
+              "管理员需要修改企业级打卡提醒、极速打卡等全局设置"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "调用 MCP 工具 create_group_setting，创建一个新的考勤组",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "创建考勤组",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要调用 MCP 工具 create_group_setting，创建一个新的考勤组时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "仅修改成员时使用 attendance group update-members",
+              "修改已有考勤组时使用 attendance group update",
+              "查询已有考勤组时使用 attendance group search/get"
             ],
             "canonical_path": "attendance.group_create",
             "cli_name": "create",
@@ -4226,21 +4255,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "group_create",
             "primary_cli_path": "attendance group create",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "创建考勤组",
             "use_when": [
-              "创建考勤组",
-              "创建考勤组/新建考勤组/添加考勤组"
+              "需要新建一个考勤组并配置规则"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "调用 MCP 工具 get_group_filtered_detail，根据考勤组 ID 仅返回关心的字段子集， 强烈建议在仅需查询成员信息、打卡地址、蓝牙、W",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "查询考勤组指定字段子集",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要调用 MCP 工具 get_group_filtered_detail，根据考勤组 ID 仅返回关心的字段子集， 强烈建议在仅需查询成员信息、打卡地址、蓝牙、W时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "不知道考勤组ID时先用 attendance group search",
+              "需要修改成员时使用 attendance group update-members",
+              "需要完整考勤组配置时使用 attendance group get"
             ],
             "canonical_path": "attendance.group_filtered_get",
             "cli_name": "filtered-get",
@@ -4253,22 +4283,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "group_filtered_get",
             "primary_cli_path": "attendance group filtered-get",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "根据考勤组 ID 按需查询成员/打卡地址/蓝牙/Wifi 信息",
             "use_when": [
-              "1. 获取考勤组成员",
-              "按需查询考勤组成员/地址/蓝牙/Wifi",
-              "考勤组成员/打卡地址/打卡wifi/打卡蓝牙"
+              "只需要考勤组成员、打卡地址、蓝牙等部分字段，减少返回体积"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "调用 MCP 工具 get_group_detail，根据考勤组 ID 查询该考勤组的全量信息",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "查询考勤组完整详情",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要调用 MCP 工具 get_group_detail，根据考勤组 ID 查询该考勤组的全量信息时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "不知道考勤组ID时先用 attendance group search",
+              "修改考勤组配置时使用 attendance group update",
+              "只需要成员/地址等子集时使用 attendance group filtered-get"
             ],
             "canonical_path": "attendance.group_get",
             "cli_name": "get",
@@ -4281,22 +4311,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "group_get",
             "primary_cli_path": "attendance group get",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "根据考勤组 ID 查询考勤组全量信息",
             "use_when": [
-              "查询考勤组全量信息",
-              "考勤组详情/全量考勤组信息",
-              "获取考勤组详情（含绑定的班次列表）"
+              "已取得考勤组ID，需要查看完整配置"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "根据当前用户的权限和筛选条件获取考勤组简要信息",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "查询考勤组列表",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要根据当前用户的权限和筛选条件获取考勤组简要信息时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "创建/修改考勤组时使用 attendance group create/update",
+              "只需要部分字段时使用 attendance group filtered-get",
+              "已知道考勤组ID并要看详情时使用 attendance group get"
             ],
             "canonical_path": "attendance.group_search",
             "cli_name": "search",
@@ -4309,23 +4339,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "group_search",
             "primary_cli_path": "attendance group search",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "查询当前用户可管理的考勤组列表",
             "use_when": [
-              "1. 确认考勤组并获取关联班次（先查后排）",
-              "1. 获取考勤组成员",
-              "查询考勤组列表",
-              "考勤组列表/有哪些考勤组"
+              "按权限或条件查看考勤组简要信息"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "调用 MCP 工具 update_group_setting，更新考勤组配置信息",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "更新考勤组配置",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要调用 MCP 工具 update_group_setting，更新考勤组配置信息时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "创建新考勤组时使用 attendance group create",
+              "只调整成员时使用 attendance group update-members",
+              "查询考勤组详情时使用 attendance group get"
             ],
             "canonical_path": "attendance.group_update",
             "cli_name": "update",
@@ -4338,21 +4367,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "group_update",
             "primary_cli_path": "attendance group update",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "更新考勤组配置（仅修改需要变更的字段）",
             "use_when": [
-              "修改考勤组/更新考勤组配置/考勤组改名/改变考勤组绑定的班次/修改打卡范围/设置考勤组负责人",
-              "更新考勤组配置"
+              "需要修改已有考勤组的规则、班次、位置或范围"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "调用 MCP 工具 update_group_member，对指定考勤组的成员进行增删操作",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "增删考勤组成员",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要调用 MCP 工具 update_group_member，对指定考勤组的成员进行增删操作时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "修改考勤组规则配置时使用 attendance group update",
+              "创建新考勤组时使用 attendance group create",
+              "只查询成员信息时使用 attendance group filtered-get 或 group get"
             ],
             "canonical_path": "attendance.group_update_members",
             "cli_name": "update-members",
@@ -4365,21 +4395,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "group_update_members",
             "primary_cli_path": "attendance group update-members",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "更新考勤组成员（添加/删除考勤人员、部门、无需考勤人员）",
             "use_when": [
-              "更新考勤组成员",
-              "更新考勤组成员/添加考勤人员/删除考勤人员/添加考勤部门/删除考勤部门/加入考勤组/移出考勤组/设置无需考勤/取消无需考勤"
+              "需要向考勤组添加或移除成员"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "调用 MCP 工具 get_overtime_rule_detail，根据加班规则主键 ID 查询对应的加班规则详情",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "查询单个加班规则详情",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要调用 MCP 工具 get_overtime_rule_detail，根据加班规则主键 ID 查询对应的加班规则详情时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "不知道加班规则ID时先用 attendance overtime search",
+              "查询员工班次时使用 attendance shift list",
+              "查询补卡规则详情时使用 attendance adjustment get"
             ],
             "canonical_path": "attendance.overtime_get",
             "cli_name": "get",
@@ -4392,20 +4423,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "overtime_get",
             "primary_cli_path": "attendance overtime get",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "根据加班规则主键 ID 查询加班规则详情",
             "use_when": [
-              "查询加班规则详情"
+              "已取得加班规则ID，需要查看规则详情"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "根据用户权限查询加班规则列表，入参封装在 ATRuleQueryParam 对象中",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "查询加班规则列表",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要根据用户权限查询加班规则列表，入参封装在 ATRuleQueryParam 对象中时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "已知道加班规则ID并要看详情时使用 attendance overtime get",
+              "查询加班审批单记录时使用 attendance approve list",
+              "查询补卡规则时使用 attendance adjustment search"
             ],
             "canonical_path": "attendance.overtime_search",
             "cli_name": "search",
@@ -4418,22 +4451,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "overtime_search",
             "primary_cli_path": "attendance overtime search",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "查询当前用户可管理的加班规则列表",
             "use_when": [
-              "加班规则/加班设置/加班计算",
-              "加班规则详情/某条加班规则的具体信息",
-              "查询加班规则"
+              "需要查看可用加班规则或筛选加班规则"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
             "agent_summary": "查询考勤组与考勤规则",
-            "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "需要创建、修改或删除数据时不要使用；本命令只用于“查询考勤组与考勤规则”"
+              "需要全局或个人设置时使用 globalsetting/selfsetting get",
+              "需要考勤组完整详情时使用 attendance group get",
+              "需要补卡/加班规则时使用 attendance adjustment/overtime search"
             ],
             "canonical_path": "attendance.query_attendance_group_or_rules",
             "cli_name": "rules",
@@ -4450,24 +4483,22 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "query_attendance_group_or_rules",
             "primary_cli_path": "attendance rules",
+            "reviewed": true,
             "risk": "low",
             "title": "query_attendance_group_or_rules",
             "use_when": [
-              "1. 先查考勤组和关联班次（即使排休也需要确认考勤组）",
-              "1. 先查考勤组并获取关联班次（先查后排）",
-              "查看考勤组和规则",
-              "用户只属于一个考勤组，直接查询即可确定",
-              "考勤组/考勤规则/打卡规则",
-              "自动获取当前用户的考勤组（用户只属于一个考勤组，无需选择）"
+              "需要查看当前可见的考勤组和规则概览"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "根据操作者的列权限，过滤并返回其有权查看的考勤字段列表",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "查询可查看的考勤报表字段",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要根据操作者的列权限，过滤并返回其有权查看的考勤字段列表时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "查询个人考勤明细时使用 attendance record get",
+              "查询假期数据时使用 attendance report query-leave",
+              "查询报表数据时使用 attendance report query-data"
             ],
             "canonical_path": "attendance.report_columns",
             "cli_name": "columns",
@@ -4480,21 +4511,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "report_columns",
             "primary_cli_path": "attendance report columns",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "获取企业考勤字段列表",
             "use_when": [
-              "考勤字段/考勤列",
-              "获取考勤字段列表（管理员）"
+              "查看操作者有权限查询的考勤报表字段"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "根据字段查询考勤数据，含列权限过滤和用户查看权限校验",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "查询考勤报表数据",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要根据字段查询考勤数据，含列权限过滤和用户查看权限校验时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "查询个人单日明细时使用 attendance record get",
+              "查询假期数据时使用 attendance report query-leave",
+              "查询可用字段时先用 attendance report columns"
             ],
             "canonical_path": "attendance.report_query_data",
             "cli_name": "query-data",
@@ -4507,21 +4539,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "report_query_data",
             "primary_cli_path": "attendance report query-data",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "根据字段查询考勤数据",
             "use_when": [
-              "根据字段查询考勤数据（管理员）",
-              "考勤数据/查询考勤报表数据"
+              "按字段查询考勤报表数据并进行权限过滤"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "查询用户假期数据，含用户查看权限校验",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "查询假期报表数据",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要查询用户假期数据，含用户查看权限校验时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "查询假期余额变更记录时使用 attendance vacation records",
+              "查询假期余额时使用 attendance vacation balance",
+              "查询通用考勤报表时使用 attendance report query-data"
             ],
             "canonical_path": "attendance.report_query_leave",
             "cli_name": "query-leave",
@@ -4534,21 +4567,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "report_query_leave",
             "primary_cli_path": "attendance report query-leave",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "查询用户假期数据",
             "use_when": [
-              "假期数据/年假/病假/请假记录",
-              "查询用户假期数据（管理员）"
+              "查询用户假期/请假相关报表数据"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "获取指定用户在一段时间内的排班记录",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "查询员工排班记录",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要获取指定用户在一段时间内的排班记录时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "导入或修改排班时使用 attendance schedule import",
+              "批量查询员工班次结果时使用 attendance shift list",
+              "查询班次定义时使用 attendance class get/search"
             ],
             "canonical_path": "attendance.schedule_get",
             "cli_name": "get",
@@ -4561,20 +4595,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "schedule_get",
             "primary_cli_path": "attendance schedule get",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "获取指定用户的排班记录",
             "use_when": [
-              "步骤1：获取排班记录的 planId"
+              "查询指定员工在日期范围内的排班记录"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "为排班制考勤组导入排班记录",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "导入排班制考勤组排班记录",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要为排班制考勤组导入排班记录时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "不确定 groupId/classId/workDate 时先查询考勤组和班次",
+              "仅查看排班时使用 attendance schedule get 或 attendance shift list",
+              "查询班次定义时使用 attendance class search/get"
             ],
             "canonical_path": "attendance.schedule_import",
             "cli_name": "import",
@@ -4587,20 +4623,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "schedule_import",
             "primary_cli_path": "attendance schedule import",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "导入排班记录到排班制考勤组",
             "use_when": [
-              "导入排班记录"
+              "需要批量导入或覆盖排班记录"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "查询个人规则设置，包括打卡提醒、极速打卡、打卡结果通知、缺卡提醒、个人考勤统计通知、团队考勤统计通知等设置项",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "查询个人考勤设置",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要查询个人规则设置，包括打卡提醒、极速打卡、打卡结果通知、缺卡提醒、个人考勤统计通知、团队考勤统计通知等设置项时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "修改个人设置时使用 attendance selfsetting save",
+              "查询个人考勤记录时使用 attendance record get",
+              "查询企业全局设置时使用 attendance globalsetting get"
             ],
             "canonical_path": "attendance.selfsetting_get",
             "cli_name": "get",
@@ -4613,22 +4651,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "selfsetting_get",
             "primary_cli_path": "attendance selfsetting get",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "查询个人规则设置",
             "use_when": [
-              "查看指定用户的打卡提醒设置",
-              "查看指定用户的极速打卡设置",
-              "查询个人规则设置/查看打卡提醒/查看极速打卡/查看缺卡提醒/查看打卡结果通知/查看个人考勤统计通知/查看团队考勤统计通知"
+              "查看某个员工的个人打卡提醒、极速打卡、结果通知等设置"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "更新保存个人规则设置，包括打卡提醒、极速打卡、打卡结果通知、缺卡提醒、个人考勤统计通知、团队考勤统计通知等设置项",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "更新个人考勤设置",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要更新保存个人规则设置，包括打卡提醒、极速打卡、打卡结果通知、缺卡提醒、个人考勤统计通知、团队考勤统计通知等设置项时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "修改企业全局设置时使用 attendance globalsetting save",
+              "只查看个人设置时使用 attendance selfsetting get",
+              "查询考勤记录时使用 attendance record get"
             ],
             "canonical_path": "attendance.selfsetting_save",
             "cli_name": "save",
@@ -4641,25 +4679,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "selfsetting_save",
             "primary_cli_path": "attendance selfsetting save",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "high",
             "title": "更新保存个人规则设置",
             "use_when": [
-              "开启打卡结果通知（Agent 调用时，必须先完成 ask_human 二次确认，确认后再追加 --yes 执行）",
-              "开启指定用户的打卡结果通知",
-              "更新个人规则设置/保存打卡提醒/修改极速打卡/关闭缺卡提醒/开启打卡结果通知/设置个人考勤统计通知/设置团队考勤统计通知",
-              "更新打卡提醒设置（Agent 调用时，必须先完成 ask_human 二次确认，确认后再追加 --yes 执行）",
-              "更新指定用户的极速打卡设置",
-              "更新极速打卡设置（Agent 调用时，必须先完成 ask_human 二次确认，确认后再追加 --yes 执行）"
+              "需要修改员工个人打卡提醒、极速打卡或结果通知设置"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "调用 MCP 工具 get_leave_balance_quota 查询指定员工的假期余额",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "查询员工假期余额",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要调用 MCP 工具 get_leave_balance_quota 查询指定员工的假期余额时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "修改余额时使用 attendance vacation save-balance",
+              "查询假期余额变更明细时使用 attendance vacation records",
+              "查询假期类型时使用 attendance vacation types"
             ],
             "canonical_path": "attendance.vacation_balance",
             "cli_name": "balance",
@@ -4672,26 +4707,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "vacation_balance",
             "primary_cli_path": "attendance vacation balance",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "查询指定员工假期余额",
             "use_when": [
-              "1. 查询当前余额",
-              "1. 查询当前余额（假设返回5天）",
-              "增加假期余额/发放年假/给员工加年假",
-              "查看指定员工假期余额",
-              "查看指定员工某类假期余额",
-              "病假余额/年假余额/事假剩余假期",
-              "设置假期余额/调整假期额度/更新假期余额"
+              "查询指定员工的年假、调休等假期余额"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "调用 MCP 工具 get_leave_balance_records 查询指定员工的假期余额变更记录",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "查询假期余额变更记录",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要调用 MCP 工具 get_leave_balance_records 查询指定员工的假期余额变更记录时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "修改余额时使用 attendance vacation save-balance",
+              "只看当前余额时使用 attendance vacation balance",
+              "查询假期类型时使用 attendance vacation types"
             ],
             "canonical_path": "attendance.vacation_records",
             "cli_name": "records",
@@ -4704,26 +4735,27 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "vacation_records",
             "primary_cli_path": "attendance vacation records",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "查询指定员工假期余额变更记录",
             "use_when": [
-              "假期变更/假期记录/请假扣减",
-              "查看指定员工假期余额变更记录"
+              "查询员工假期余额的增减流水或变更历史"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "调用 MCP 工具 update_leave_balance 设置指定员工的假期余额数量",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "调整员工假期余额",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要调用 MCP 工具 update_leave_balance 设置指定员工的假期余额数量时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "修改假期类型/规则时使用 attendance vacation update-type",
+              "只查询余额时使用 attendance vacation balance",
+              "查询变更流水时使用 attendance vacation records"
             ],
             "canonical_path": "attendance.vacation_save_balance",
             "cli_name": "save-balance",
             "cli_path": "attendance vacation save-balance",
-            "confirmation": "not_required",
+            "confirmation": "user_required",
             "description": "调用 MCP 工具 update_leave_balance 设置指定员工的假期余额数量。\n\n重要说明：这是设置（SET）接口，传入的值会替换当前余额，而不是增加（ADD）。\n\n参数说明：\n  --target       目标员工工号（必填）\n  --leave-code   假期编码（必填）\n  --num          余额数量（必填，如8天传8，7.5天传7.5）\n  --reason       变更原因（必填，最长100字符）\n  --start        有效期开始日期 YYYY-MM-DD\n  --end          有效期结束日期 YYYY-MM-DD\n  --user-say-yes 用户已确认，跳过交互式确认提示（Agent 调用时传 true 前必须完成用户二次确认）\n\n注意：\n  - 余额数量在传递给 MCP 时会自动乘以100（如8天传800，7.5天传750）\n  - 此接口为 SET 操作：传入值会直接设置为新的余额，而非累加到现有余额",
             "effect": "write",
             "idempotency": "unknown",
@@ -4731,23 +4763,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "vacation_save_balance",
             "primary_cli_path": "attendance vacation save-balance",
-            "reviewed": false,
-            "risk": "medium",
+            "reviewed": true,
+            "risk": "high",
             "title": "设置员工假期余额",
             "use_when": [
-              "3. 执行设置（SET操作，会替换当前余额）",
-              "3. 设置新总额度",
-              "设置员工年假余额为8天",
-              "设置带有效期的假期余额"
+              "管理员需要修改指定员工的假期余额数量"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "调用 MCP 工具 get_leave_types 查询当前用户可用的假期规则列表",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "查询可用假期类型",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要调用 MCP 工具 get_leave_types 查询当前用户可用的假期规则列表时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "修改假期余额时使用 attendance vacation save-balance",
+              "修改假期规则时使用 attendance vacation update-type",
+              "查询员工假期余额时使用 attendance vacation balance"
             ],
             "canonical_path": "attendance.vacation_types",
             "cli_name": "types",
@@ -4760,21 +4791,22 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "vacation_types",
             "primary_cli_path": "attendance vacation types",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "查询当前用户假期规则列表",
             "use_when": [
-              "假期/我的假期/假期规则",
-              "查看假期规则列表"
+              "查看当前用户可用的假期规则/假期类型列表"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "调用 MCP 工具 save_leave_type 更新已有假期规则",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "更新假期类型规则",
+            "agent_summary_source": "attendance-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要调用 MCP 工具 save_leave_type 更新已有假期规则时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "只查询假期类型时使用 attendance vacation types",
+              "查询假期报表时使用 attendance report query-leave",
+              "调整员工假期余额时使用 attendance vacation save-balance"
             ],
             "canonical_path": "attendance.vacation_update_type",
             "cli_name": "update-type",
@@ -4787,14 +4819,11 @@
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "vacation_update_type",
             "primary_cli_path": "attendance vacation update-type",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "更新假期规则",
             "use_when": [
-              "更新假期单位",
-              "更新假期规则/修改假期类型/编辑假期规则",
-              "更新假期规则名称",
-              "更新适用范围"
+              "管理员需要修改已有假期规则或假期类型配置"
             ]
           }
         ],
@@ -26019,13 +26048,16 @@
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "调用 MCP 工具 get_adjustment_rule_detail，根据补卡规则主键 ID 查询对应的补卡规则详情",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "查询单个补卡规则详情",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要调用 MCP 工具 get_adjustment_rule_detail，根据补卡规则主键 ID 查询对应的补卡规则详情时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "不知道补卡规则ID时先用 attendance adjustment search",
+        "查询加班规则详情时使用 attendance overtime get",
+        "查询补卡审批单记录时使用 attendance approve list"
       ],
       "canonical_path": "attendance.adjustment_get",
       "cli_name": "get",
@@ -26058,25 +26090,28 @@
       "path": "attendance.adjustment_get",
       "primary_cli_path": "attendance adjustment get",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:attendance",
       "title": "根据补卡规则主键 ID 查询补卡规则详情",
       "use_when": [
-        "查询补卡规则详情"
+        "已取得补卡规则ID，需要查看规则详情"
       ]
     },
     "attendance.adjustment_search": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "根据用户权限查询补卡规则列表，入参封装在 ATRuleQueryParam 对象中",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "查询补卡规则列表",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要根据用户权限查询补卡规则列表，入参封装在 ATRuleQueryParam 对象中时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "已知道补卡规则ID并要看详情时使用 attendance adjustment get",
+        "查询加班规则时使用 attendance overtime search",
+        "查询员工打卡/考勤记录时使用 attendance record get 或 attendance check record"
       ],
       "canonical_path": "attendance.adjustment_search",
       "cli_name": "search",
@@ -26123,14 +26158,12 @@
       "path": "attendance.adjustment_search",
       "primary_cli_path": "attendance adjustment search",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:attendance",
       "title": "查询当前用户可管理的补卡规则列表",
       "use_when": [
-        "查询补卡规则",
-        "补卡规则/补卡设置",
-        "补卡规则详情/某条补卡规则的具体信息"
+        "需要查看有哪些补卡规则或筛选补卡规则"
       ]
     },
     "attendance.approve_list": {
@@ -26138,13 +26171,16 @@
       "agent_source_refs": [
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "查询指定用户的考勤业务审批单记录（补卡 / 加班 / 请假 / 出差外出）",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "查询考勤相关审批单记录",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要查询指定用户的考勤业务审批单记录（补卡 / 加班 / 请假 / 出差外出）时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "查询假期余额时使用 attendance vacation balance",
+        "查询实际打卡记录时使用 attendance record get 或 attendance check record",
+        "需要获取可提交审批的模板/跳转链接时使用 attendance approve templates"
       ],
       "canonical_path": "attendance.approve_list",
       "cli_name": "list",
@@ -26152,7 +26188,7 @@
       "confirmation": "not_required",
       "description": "查询指定用户的考勤业务审批单记录（补卡 / 加班 / 请假 / 出差外出）。\n审批类型 --types 支持以下关键词（多个用英文逗号分隔）：\n  - overtime / 加班                                            → bizType=1\n  - trip / travel / business_trip / business-trip / 出差 / 外出  → bizType=2（出差与外出在查询接口合并为同一类，不再细分）\n  - leave / 请假                                                → bizType=3\n  - patch / repair-check / repair_check / 补卡                 → bizType=4\n说明：\n  - 服务端查询接口 bizType=2 同时覆盖出差与外出，传入 trip / travel / 出差 / 外出 任一别名都会返回这两类合并的记录；\n  - 如需在提交入口区分外出（TRAVEL）与出差（OUT），请改用 dws attendance approve templates --type travel|out；\n  - 返回每条记录含：用户 ID、审批标签、审批子类型、审批类型、生效时间、时长、时长单位、流程实例 ID。",
       "display": "考勤打卡 / 排班 / 统计",
-      "effect": "write",
+      "effect": "read",
       "effect_source": "agent-hint",
       "examples": [
         "dws attendance approve list --users userId1 --types overtime,leave --start 2026-04-01 --end 2026-04-30",
@@ -26195,26 +26231,28 @@
       "path": "attendance.approve_list",
       "primary_cli_path": "attendance approve list",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:attendance",
       "title": "查询用户审批单（补卡/加班/请假/出差外出）",
       "use_when": [
-        "审批单/请假记录/加班记录/出差记录/补卡记录",
-        "查/提交 请假/加班/补卡 审批单；考勤业务审批单"
+        "查询补卡、加班、请假、出差外出等考勤审批记录"
       ]
     },
     "attendance.approve_templates": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "当用户需要提交补卡、请假、加班、外出、出差时，查询对应考勤审批表单模板，返回审批提交跳转链接",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "查询考勤审批模板和提交入口",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要当用户需要提交补卡、请假、加班、外出、出差时，查询对应考勤审批表单模板，返回审批提交跳转链接时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "查看已存在审批单记录时使用 attendance approve list",
+        "查询考勤记录/统计时使用 attendance record get 或 attendance summary",
+        "配置考勤规则时使用 attendance group/globalsetting/class 相关命令"
       ],
       "canonical_path": "attendance.approve_templates",
       "cli_name": "templates",
@@ -26222,7 +26260,7 @@
       "confirmation": "not_required",
       "description": "当用户需要提交补卡、请假、加班、外出、出差时，查询对应考勤审批表单模板，返回审批提交跳转链接。\n审批类型支持：repair-check/patch/补卡、leave/请假、overtime/加班、travel/外出、out/trip/出差，也支持直接传 REPAIR_CHECK、LEAVE、OVERTIME、TRAVEL、OUT。\n向用户展示提交入口时，不要直接裸露 submitUrl，应使用 Markdown 可点击链接格式：[表单名称](submitUrl)。",
       "display": "考勤打卡 / 排班 / 统计",
-      "effect": "write",
+      "effect": "read",
       "effect_source": "agent-hint",
       "examples": [
         "dws attendance approve templates --type leave",
@@ -26247,12 +26285,12 @@
       "path": "attendance.approve_templates",
       "primary_cli_path": "attendance approve templates",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:attendance",
       "title": "查询补卡/请假/加班/外出/出差审批提交链接",
       "use_when": [
-        "当用户需要提交补卡、请假、加班、外出、出差时，查询对应考勤审批表单模板，返回审批提交跳转链接"
+        "用户要发起补卡、请假、加班、外出或出差审批前查询可用模板"
       ]
     },
     "attendance.batch_get_employee_shifts": {
@@ -26260,13 +26298,16 @@
       "agent_source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.attendance.prod.json#attendance.batch_get_employee_shifts",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "批量查询员工班次信息（间隔 ≤ 7 天，最多 50 人）",
-      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+      "agent_summary": "批量查询员工班次信息",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“批量查询员工班次信息（间隔 ≤ 7 天，最多 50 人）”"
+        "查询实际排班记录时使用 attendance schedule get",
+        "查询班次定义/班次ID时使用 attendance class search 或 attendance class get",
+        "查询考勤组与规则时使用 attendance rules"
       ],
       "canonical_path": "attendance.batch_get_employee_shifts",
       "cli_name": "list",
@@ -26275,7 +26316,7 @@
       "description": "批量查询多个员工在指定日期的考勤班次信息，返回每条记录包含：用户 ID（userId）、工作日期（workDate，毫秒时间戳）、打卡类型（checkType，如 OnDuty 表示上班）、计划打卡时间（planCheckTime，毫秒时间戳）以及是否为休息日（isRest，\"Y\"/\"N\"）。结果基于组织考勤配置生成，仅返回调用者有权限查看的员工数据，适用于排班核对、考勤预览等场景。",
       "display": "考勤打卡 / 排班 / 统计",
       "effect": "read",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws attendance shift list --users userId1,userId2 --start 2026-03-03 --end 2026-03-07  # 查询 userId: dws contact user search --keyword \"姓名\""
       ],
@@ -26317,11 +26358,12 @@
       "path": "attendance.batch_get_employee_shifts",
       "primary_cli_path": "attendance shift list",
       "product_id": "attendance",
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:attendance",
       "title": "batch_get_employee_shifts",
       "use_when": [
-        "批量查询员工班次信息（间隔 ≤ 7 天，最多 50 人）"
+        "按员工和日期范围查询班次/排班班次"
       ]
     },
     "attendance.boss_check": {
@@ -26329,27 +26371,30 @@
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
         "skills/mono/schema-hints/attendance-example-normalization.json",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "调用 MCP 工具 boss_check 修改员工打卡记录",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "管理员修正员工打卡结果",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要调用 MCP 工具 boss_check 修改员工打卡记录时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "只查询打卡记录时使用 attendance check record/check result",
+        "未获得用户明确确认时不要修改打卡结果",
+        "查询考勤统计时使用 attendance summary"
       ],
       "canonical_path": "attendance.boss_check",
       "cli_name": "boss-check",
       "cli_path": "attendance boss-check",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "description": "调用 MCP 工具 boss_check 修改员工打卡记录。管理员可修改打卡时间、打卡结果等信息。\n\n参数说明：\n  --plan-id        排班ID（与 --result-id 二选一）\n                   来源：通过 dws attendance schedule get 获取，返回结果的 id 字段\n                   示例：id: 948964045503 表示某天下班打卡的排班记录ID\n\n  --result-id      打卡结果ID（与 --plan-id 二选一，优先使用）\n                   来源：暂不支持（record get 未返回此字段），建议使用 --plan-id\n\n  --time           新打卡时间，格式 yyyy-MM-dd HH:mm（可选）\n  --result         打卡结果：Normal/TimesResultA/TimesResultB/TimesResultC/TimesResultD/TimesResultE/TimesResultF（可选）\n  --absent-min     缺勤时长（分钟），当 result 为异常状态时需传值（可选）\n  --remark         备注，最长500字符（可选）\n  --user-say-yes   用户已确认，跳过交互式确认提示\n\n打卡结果枚举值：\n  Normal         正常\n  TimesResultA   迟到\n  TimesResultB   早退\n  TimesResultC   缺卡\n  TimesResultD   迟到+早退\n  TimesResultE   缺卡+早退\n  TimesResultF   迟到+缺卡\n\n获取 planId 步骤：\n  1. 查询排班记录：dws attendance schedule get --userIdList USER_ID --workDateBegin DATE --workDateEnd DATE\n  2. 从返回结果中找到对应打卡类型（OnDuty=上班，OffDuty=下班）的 id 字段\n  3. 使用该 id 作为 --plan-id 参数",
       "display": "考勤打卡 / 排班 / 统计",
-      "effect": "read",
+      "effect": "write",
       "effect_source": "agent-hint",
       "examples": [
         "dws attendance boss-check --help"
       ],
       "has_parameters": true,
-      "idempotency": "idempotent",
+      "idempotency": "unknown",
       "interface_mode": "local",
       "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "is_alias": false,
@@ -26402,26 +26447,28 @@
       "path": "attendance.boss_check",
       "primary_cli_path": "attendance boss-check",
       "product_id": "attendance",
-      "reviewed": false,
-      "risk": "low",
+      "reviewed": true,
+      "risk": "high",
       "source": "hardcoded:attendance",
       "title": "BOSS 改签打卡记录",
       "use_when": [
-        "假设返回 id: 948964045503 (OffDuty 下班打卡)",
-        "同时修改打卡时间"
+        "管理员确认需要人工修正员工打卡记录或打卡结果"
       ]
     },
     "attendance.check_record": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "查询指定用户的打卡流水记录",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "查询打卡记录",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要查询指定用户的打卡流水记录时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "修改打卡结果时使用 attendance boss-check",
+        "查询考勤统计摘要时使用 attendance summary",
+        "查询考勤详情时使用 attendance record get"
       ],
       "canonical_path": "attendance.check_record",
       "cli_name": "record",
@@ -26465,26 +26512,28 @@
       "path": "attendance.check_record",
       "primary_cli_path": "attendance check record",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:attendance",
       "title": "查询打卡流水",
       "use_when": [
-        "打卡记录/出勤/考勤",
-        "指定用户打卡流水/打卡详情/打卡时间地点/打卡记录详情"
+        "查询员工打卡流水或打卡记录"
       ]
     },
     "attendance.check_result": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "查询指定用户的打卡结果记录",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "查询打卡结果",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要查询指定用户的打卡结果记录时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "修改打卡结果时使用 attendance boss-check",
+        "查询原始打卡流水时使用 attendance check record",
+        "查询统计摘要时使用 attendance summary"
       ],
       "canonical_path": "attendance.check_result",
       "cli_name": "result",
@@ -26541,25 +26590,28 @@
       "path": "attendance.check_result",
       "primary_cli_path": "attendance check result",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:attendance",
       "title": "查询打卡结果",
       "use_when": [
-        "指定用户打卡结果/考勤结果/迟到早退/缺卡异常"
+        "查询员工打卡结果或考勤结果"
       ]
     },
     "attendance.checkin_records": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "查询指定员工在一段时间内的签到记录",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "查询打卡流水记录",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要查询指定员工在一段时间内的签到记录时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "修改打卡记录时使用 attendance boss-check",
+        "查询班次/排班时使用 attendance shift list 或 schedule get",
+        "查询考勤汇总时使用 attendance summary"
       ],
       "canonical_path": "attendance.checkin_records",
       "cli_name": "records",
@@ -26616,26 +26668,28 @@
       "path": "attendance.checkin_records",
       "primary_cli_path": "attendance checkin records",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:attendance",
       "title": "查询指定员工的签到记录",
       "use_when": [
-        "查询签到记录",
-        "签到/签到记录"
+        "查询员工打卡流水、定位或打卡时间记录"
       ]
     },
     "attendance.class_create": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "调用 MCP 工具 create_class_setting，创建一个新的班次",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "创建班次定义",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要调用 MCP 工具 create_class_setting，创建一个新的班次时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "修改已有班次时使用 attendance class update",
+        "导入员工排班时使用 attendance schedule import",
+        "查询已有班次时使用 attendance class search/get"
       ],
       "canonical_path": "attendance.class_create",
       "cli_name": "create",
@@ -26685,25 +26739,28 @@
       "path": "attendance.class_create",
       "primary_cli_path": "attendance class create",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:attendance",
       "title": "创建班次",
       "use_when": [
-        "调用 MCP 工具 create_class_setting，创建一个新的班次"
+        "需要新增一个班次/上下班时间规则"
       ]
     },
     "attendance.class_get": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "调用 MCP 工具 get_class_detail，根据班次 ID 查询该班次的详细信息",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "查询单个班次定义详情",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要调用 MCP 工具 get_class_detail，根据班次 ID 查询该班次的详细信息时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "不知道班次ID时先用 attendance class search",
+        "修改班次定义时使用 attendance class update",
+        "查询员工排班记录时使用 attendance schedule get"
       ],
       "canonical_path": "attendance.class_get",
       "cli_name": "get",
@@ -26736,25 +26793,28 @@
       "path": "attendance.class_get",
       "primary_cli_path": "attendance class get",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:attendance",
       "title": "根据班次 ID 查询班次详情",
       "use_when": [
-        "查询班次详情"
+        "已取得班次ID，需要查看班次配置"
       ]
     },
     "attendance.class_search": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "查询当前用户有权管理的班次列表（班次定义），支持按名称搜索和类型过滤",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "查询班次定义列表",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要查询当前用户有权管理的班次列表（班次定义），支持按名称搜索和类型过滤时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "创建或修改班次定义时使用 attendance class create/update",
+        "已知道班次ID并要看详情时使用 attendance class get",
+        "查询员工排班记录时使用 attendance schedule get"
       ],
       "canonical_path": "attendance.class_search",
       "cli_name": "search",
@@ -26807,27 +26867,28 @@
       "path": "attendance.class_search",
       "primary_cli_path": "attendance class search",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:attendance",
       "title": "查询当前用户可管理的所有班次详情",
       "use_when": [
-        "查询可管理的班次列表",
-        "班次定义/班次列表/有哪些班次/我负责的班次",
-        "班次详情/某个班次的具体信息"
+        "搜索或列出可用班次/班次ID"
       ]
     },
     "attendance.class_update": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "调用 MCP 工具 update_class_setting，更新一个已有的班次",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "更新班次定义",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要调用 MCP 工具 update_class_setting，更新一个已有的班次时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "创建新班次时使用 attendance class create",
+        "查询班次详情时使用 attendance class get",
+        "调整员工排班时使用 attendance schedule import"
       ],
       "canonical_path": "attendance.class_update",
       "cli_name": "update",
@@ -26884,13 +26945,12 @@
       "path": "attendance.class_update",
       "primary_cli_path": "attendance class update",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:attendance",
       "title": "更新班次",
       "use_when": [
-        "更新班次",
-        "更新班次/修改班次/班次改名/修改上下班时间"
+        "需要修改已有班次的名称、上下班时间或规则"
       ]
     },
     "attendance.get_attendance_summary": {
@@ -26899,13 +26959,16 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.attendance.prod.json#attendance.get_attendance_summary",
         "skills/mono/references/products/attendance.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "查询某个人的考勤统计摘要",
-      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+      "agent_summary": "查询个人考勤统计摘要",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询某个人的考勤统计摘要”"
+        "查看单条考勤明细时使用 attendance record get",
+        "查看原始打卡记录时使用 attendance check record",
+        "查看排班时使用 attendance schedule get"
       ],
       "canonical_path": "attendance.get_attendance_summary",
       "cli_name": "summary",
@@ -26914,7 +26977,7 @@
       "description": "获取考勤统计摘要",
       "display": "考勤打卡 / 排班 / 统计",
       "effect": "read",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws attendance summary --user USER_ID --date 2026-03-12 --stats-type week",
         "dws attendance summary --user USER_ID --date \"2026-03-12 15:00:00\" --stats-type month"
@@ -26959,12 +27022,12 @@
       "path": "attendance.get_attendance_summary",
       "primary_cli_path": "attendance summary",
       "product_id": "attendance",
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:attendance",
       "title": "get_attendance_summary",
       "use_when": [
-        "查看考勤统计摘要（--stats-type 必填：week 周统计 / month 月统计）",
-        "考勤汇总/统计"
+        "查看员工考勤统计、出勤/异常/请假等摘要"
       ]
     },
     "attendance.get_user_attendance_record": {
@@ -26973,13 +27036,16 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.attendance.prod.json#attendance.get_user_attendance_record",
         "skills/mono/references/products/attendance.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
       "agent_summary": "查询个人考勤详情",
-      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询个人考勤详情”"
+        "修改打卡结果时使用 attendance boss-check",
+        "查询打卡流水/原始打卡记录时使用 attendance check record 或 checkin records",
+        "查询考勤统计汇总时使用 attendance summary"
       ],
       "canonical_path": "attendance.get_user_attendance_record",
       "cli_name": "get",
@@ -26988,7 +27054,7 @@
       "description": "查询指定用户在某一天的考勤详情，包括实际打卡记录（如上班/下班时间、是否正常打卡）、当日所排班次、所属考勤组信息、是否为休息日、出勤工时（如 \"0Hours\"）、加班时长等。返回数据受组织权限和隐私策略限制，仅当调用者有权限查看该用户考勤信息时才返回有效内容。适用于员工自助查询、HR 核对出勤或审批关联场景。",
       "display": "考勤打卡 / 排班 / 统计",
       "effect": "read",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws attendance record get --user 011769261608 --date 2026-03-08",
         "dws attendance record get --user USER_ID --date 2026-03-08  # 查询 userId: dws contact user search --keyword \"姓名\""
@@ -27022,24 +27088,28 @@
       "path": "attendance.get_user_attendance_record",
       "primary_cli_path": "attendance record get",
       "product_id": "attendance",
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:attendance",
       "title": "查询指定用户某一天的考勤详情",
       "use_when": [
-        "查询个人考勤详情"
+        "查询某个员工某天或时间段的考勤明细"
       ]
     },
     "attendance.globalsetting_get": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "查询全局规则设置，仅管理员可以调用",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "查询企业全局考勤设置",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要查询全局规则设置，仅管理员可以调用时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "修改全局设置时使用 attendance globalsetting save",
+        "查看个人设置时使用 attendance selfsetting get",
+        "查看考勤组规则时使用 attendance group get/rules"
       ],
       "canonical_path": "attendance.globalsetting_get",
       "cli_name": "get",
@@ -27078,12 +27148,12 @@
       "path": "attendance.globalsetting_get",
       "primary_cli_path": "attendance globalsetting get",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:attendance",
       "title": "查询全局规则设置（仅管理员）",
       "use_when": [
-        "查询全局规则设置，仅管理员可以调用"
+        "管理员查看企业级打卡提醒、极速打卡等全局设置"
       ]
     },
     "attendance.globalsetting_save": {
@@ -27091,13 +27161,16 @@
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
         "skills/mono/schema-hints/attendance-example-normalization.json",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "更新保存全局规则设置，仅管理员可以调用",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "更新企业全局考勤设置",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要更新保存全局规则设置，仅管理员可以调用时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "修改个人设置时使用 attendance selfsetting save",
+        "修改考勤组配置时使用 attendance group update",
+        "只查看全局设置时使用 attendance globalsetting get"
       ],
       "canonical_path": "attendance.globalsetting_save",
       "cli_name": "save",
@@ -27213,25 +27286,28 @@
       "path": "attendance.globalsetting_save",
       "primary_cli_path": "attendance globalsetting save",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:attendance",
       "title": "更新保存全局规则设置（仅管理员）",
       "use_when": [
-        "更新保存全局规则设置，仅管理员可以调用"
+        "管理员需要修改企业级打卡提醒、极速打卡等全局设置"
       ]
     },
     "attendance.group_create": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "调用 MCP 工具 create_group_setting，创建一个新的考勤组",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "创建考勤组",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要调用 MCP 工具 create_group_setting，创建一个新的考勤组时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "仅修改成员时使用 attendance group update-members",
+        "修改已有考勤组时使用 attendance group update",
+        "查询已有考勤组时使用 attendance group search/get"
       ],
       "canonical_path": "attendance.group_create",
       "cli_name": "create",
@@ -27294,13 +27370,12 @@
       "path": "attendance.group_create",
       "primary_cli_path": "attendance group create",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:attendance",
       "title": "创建考勤组",
       "use_when": [
-        "创建考勤组",
-        "创建考勤组/新建考勤组/添加考勤组"
+        "需要新建一个考勤组并配置规则"
       ]
     },
     "attendance.group_filtered_get": {
@@ -27308,13 +27383,16 @@
       "agent_source_refs": [
         "skills/mono/references/products/attendance-schedule.md",
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "调用 MCP 工具 get_group_filtered_detail，根据考勤组 ID 仅返回关心的字段子集， 强烈建议在仅需查询成员信息、打卡地址、蓝牙、W",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "查询考勤组指定字段子集",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要调用 MCP 工具 get_group_filtered_detail，根据考勤组 ID 仅返回关心的字段子集， 强烈建议在仅需查询成员信息、打卡地址、蓝牙、W时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "不知道考勤组ID时先用 attendance group search",
+        "需要修改成员时使用 attendance group update-members",
+        "需要完整考勤组配置时使用 attendance group get"
       ],
       "canonical_path": "attendance.group_filtered_get",
       "cli_name": "filtered-get",
@@ -27370,14 +27448,12 @@
       "path": "attendance.group_filtered_get",
       "primary_cli_path": "attendance group filtered-get",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:attendance",
       "title": "根据考勤组 ID 按需查询成员/打卡地址/蓝牙/Wifi 信息",
       "use_when": [
-        "1. 获取考勤组成员",
-        "按需查询考勤组成员/地址/蓝牙/Wifi",
-        "考勤组成员/打卡地址/打卡wifi/打卡蓝牙"
+        "只需要考勤组成员、打卡地址、蓝牙等部分字段，减少返回体积"
       ]
     },
     "attendance.group_get": {
@@ -27385,13 +27461,16 @@
       "agent_source_refs": [
         "skills/mono/references/products/attendance-schedule.md",
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "调用 MCP 工具 get_group_detail，根据考勤组 ID 查询该考勤组的全量信息",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "查询考勤组完整详情",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要调用 MCP 工具 get_group_detail，根据考勤组 ID 查询该考勤组的全量信息时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "不知道考勤组ID时先用 attendance group search",
+        "修改考勤组配置时使用 attendance group update",
+        "只需要成员/地址等子集时使用 attendance group filtered-get"
       ],
       "canonical_path": "attendance.group_get",
       "cli_name": "get",
@@ -27423,14 +27502,12 @@
       "path": "attendance.group_get",
       "primary_cli_path": "attendance group get",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:attendance",
       "title": "根据考勤组 ID 查询考勤组全量信息",
       "use_when": [
-        "查询考勤组全量信息",
-        "考勤组详情/全量考勤组信息",
-        "获取考勤组详情（含绑定的班次列表）"
+        "已取得考勤组ID，需要查看完整配置"
       ]
     },
     "attendance.group_search": {
@@ -27438,13 +27515,16 @@
       "agent_source_refs": [
         "skills/mono/references/products/attendance-schedule.md",
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "根据当前用户的权限和筛选条件获取考勤组简要信息",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "查询考勤组列表",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要根据当前用户的权限和筛选条件获取考勤组简要信息时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "创建/修改考勤组时使用 attendance group create/update",
+        "只需要部分字段时使用 attendance group filtered-get",
+        "已知道考勤组ID并要看详情时使用 attendance group get"
       ],
       "canonical_path": "attendance.group_search",
       "cli_name": "search",
@@ -27509,28 +27589,28 @@
       "path": "attendance.group_search",
       "primary_cli_path": "attendance group search",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:attendance",
       "title": "查询当前用户可管理的考勤组列表",
       "use_when": [
-        "1. 确认考勤组并获取关联班次（先查后排）",
-        "1. 获取考勤组成员",
-        "查询考勤组列表",
-        "考勤组列表/有哪些考勤组"
+        "按权限或条件查看考勤组简要信息"
       ]
     },
     "attendance.group_update": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "调用 MCP 工具 update_group_setting，更新考勤组配置信息",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "更新考勤组配置",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要调用 MCP 工具 update_group_setting，更新考勤组配置信息时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "创建新考勤组时使用 attendance group create",
+        "只调整成员时使用 attendance group update-members",
+        "查询考勤组详情时使用 attendance group get"
       ],
       "canonical_path": "attendance.group_update",
       "cli_name": "update",
@@ -27605,26 +27685,28 @@
       "path": "attendance.group_update",
       "primary_cli_path": "attendance group update",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:attendance",
       "title": "更新考勤组配置（仅修改需要变更的字段）",
       "use_when": [
-        "修改考勤组/更新考勤组配置/考勤组改名/改变考勤组绑定的班次/修改打卡范围/设置考勤组负责人",
-        "更新考勤组配置"
+        "需要修改已有考勤组的规则、班次、位置或范围"
       ]
     },
     "attendance.group_update_members": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "调用 MCP 工具 update_group_member，对指定考勤组的成员进行增删操作",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "增删考勤组成员",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要调用 MCP 工具 update_group_member，对指定考勤组的成员进行增删操作时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "修改考勤组规则配置时使用 attendance group update",
+        "创建新考勤组时使用 attendance group create",
+        "只查询成员信息时使用 attendance group filtered-get 或 group get"
       ],
       "canonical_path": "attendance.group_update_members",
       "cli_name": "update-members",
@@ -27699,26 +27781,28 @@
       "path": "attendance.group_update_members",
       "primary_cli_path": "attendance group update-members",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:attendance",
       "title": "更新考勤组成员（添加/删除考勤人员、部门、无需考勤人员）",
       "use_when": [
-        "更新考勤组成员",
-        "更新考勤组成员/添加考勤人员/删除考勤人员/添加考勤部门/删除考勤部门/加入考勤组/移出考勤组/设置无需考勤/取消无需考勤"
+        "需要向考勤组添加或移除成员"
       ]
     },
     "attendance.overtime_get": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "调用 MCP 工具 get_overtime_rule_detail，根据加班规则主键 ID 查询对应的加班规则详情",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "查询单个加班规则详情",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要调用 MCP 工具 get_overtime_rule_detail，根据加班规则主键 ID 查询对应的加班规则详情时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "不知道加班规则ID时先用 attendance overtime search",
+        "查询员工班次时使用 attendance shift list",
+        "查询补卡规则详情时使用 attendance adjustment get"
       ],
       "canonical_path": "attendance.overtime_get",
       "cli_name": "get",
@@ -27751,25 +27835,28 @@
       "path": "attendance.overtime_get",
       "primary_cli_path": "attendance overtime get",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:attendance",
       "title": "根据加班规则主键 ID 查询加班规则详情",
       "use_when": [
-        "查询加班规则详情"
+        "已取得加班规则ID，需要查看规则详情"
       ]
     },
     "attendance.overtime_search": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "根据用户权限查询加班规则列表，入参封装在 ATRuleQueryParam 对象中",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "查询加班规则列表",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要根据用户权限查询加班规则列表，入参封装在 ATRuleQueryParam 对象中时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "已知道加班规则ID并要看详情时使用 attendance overtime get",
+        "查询加班审批单记录时使用 attendance approve list",
+        "查询补卡规则时使用 attendance adjustment search"
       ],
       "canonical_path": "attendance.overtime_search",
       "cli_name": "search",
@@ -27816,14 +27903,12 @@
       "path": "attendance.overtime_search",
       "primary_cli_path": "attendance overtime search",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:attendance",
       "title": "查询当前用户可管理的加班规则列表",
       "use_when": [
-        "加班规则/加班设置/加班计算",
-        "加班规则详情/某条加班规则的具体信息",
-        "查询加班规则"
+        "需要查看可用加班规则或筛选加班规则"
       ]
     },
     "attendance.query_attendance_group_or_rules": {
@@ -27833,13 +27918,16 @@
         "skills/mono/references/products/attendance-schedule.md",
         "skills/mono/references/products/attendance.md",
         "skills/mono/schema-hints/imported/wukong.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
       "agent_summary": "查询考勤组与考勤规则",
-      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询考勤组与考勤规则”"
+        "需要全局或个人设置时使用 globalsetting/selfsetting get",
+        "需要考勤组完整详情时使用 attendance group get",
+        "需要补卡/加班规则时使用 attendance adjustment/overtime search"
       ],
       "canonical_path": "attendance.query_attendance_group_or_rules",
       "cli_name": "rules",
@@ -27848,7 +27936,7 @@
       "description": "查询考勤组/考勤规则：\"我属于哪个考勤组\"\"我们的打卡范围是什么\"\"弹性工时是怎么算的\"",
       "display": "考勤打卡 / 排班 / 统计",
       "effect": "read",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws attendance rules --date \u003c今天日期\u003e --format json",
         "dws attendance rules --date 2026-03-14"
@@ -27876,29 +27964,28 @@
       "path": "attendance.query_attendance_group_or_rules",
       "primary_cli_path": "attendance rules",
       "product_id": "attendance",
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:attendance",
       "title": "query_attendance_group_or_rules",
       "use_when": [
-        "1. 先查考勤组和关联班次（即使排休也需要确认考勤组）",
-        "1. 先查考勤组并获取关联班次（先查后排）",
-        "查看考勤组和规则",
-        "用户只属于一个考勤组，直接查询即可确定",
-        "考勤组/考勤规则/打卡规则",
-        "自动获取当前用户的考勤组（用户只属于一个考勤组，无需选择）"
+        "需要查看当前可见的考勤组和规则概览"
       ]
     },
     "attendance.report_columns": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "根据操作者的列权限，过滤并返回其有权查看的考勤字段列表",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "查询可查看的考勤报表字段",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要根据操作者的列权限，过滤并返回其有权查看的考勤字段列表时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "查询个人考勤明细时使用 attendance record get",
+        "查询假期数据时使用 attendance report query-leave",
+        "查询报表数据时使用 attendance report query-data"
       ],
       "canonical_path": "attendance.report_columns",
       "cli_name": "columns",
@@ -27923,26 +28010,28 @@
       "path": "attendance.report_columns",
       "primary_cli_path": "attendance report columns",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:attendance",
       "title": "获取企业考勤字段列表",
       "use_when": [
-        "考勤字段/考勤列",
-        "获取考勤字段列表（管理员）"
+        "查看操作者有权限查询的考勤报表字段"
       ]
     },
     "attendance.report_query_data": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "根据字段查询考勤数据，含列权限过滤和用户查看权限校验",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "查询考勤报表数据",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要根据字段查询考勤数据，含列权限过滤和用户查看权限校验时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "查询个人单日明细时使用 attendance record get",
+        "查询假期数据时使用 attendance report query-leave",
+        "查询可用字段时先用 attendance report columns"
       ],
       "canonical_path": "attendance.report_query_data",
       "cli_name": "query-data",
@@ -27993,26 +28082,28 @@
       "path": "attendance.report_query_data",
       "primary_cli_path": "attendance report query-data",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:attendance",
       "title": "根据字段查询考勤数据",
       "use_when": [
-        "根据字段查询考勤数据（管理员）",
-        "考勤数据/查询考勤报表数据"
+        "按字段查询考勤报表数据并进行权限过滤"
       ]
     },
     "attendance.report_query_leave": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "查询用户假期数据，含用户查看权限校验",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "查询假期报表数据",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要查询用户假期数据，含用户查看权限校验时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "查询假期余额变更记录时使用 attendance vacation records",
+        "查询假期余额时使用 attendance vacation balance",
+        "查询通用考勤报表时使用 attendance report query-data"
       ],
       "canonical_path": "attendance.report_query_leave",
       "cli_name": "query-leave",
@@ -28063,26 +28154,28 @@
       "path": "attendance.report_query_leave",
       "primary_cli_path": "attendance report query-leave",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:attendance",
       "title": "查询用户假期数据",
       "use_when": [
-        "假期数据/年假/病假/请假记录",
-        "查询用户假期数据（管理员）"
+        "查询用户假期/请假相关报表数据"
       ]
     },
     "attendance.schedule_get": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "获取指定用户在一段时间内的排班记录",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "查询员工排班记录",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要获取指定用户在一段时间内的排班记录时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "导入或修改排班时使用 attendance schedule import",
+        "批量查询员工班次结果时使用 attendance shift list",
+        "查询班次定义时使用 attendance class get/search"
       ],
       "canonical_path": "attendance.schedule_get",
       "cli_name": "get",
@@ -28126,12 +28219,12 @@
       "path": "attendance.schedule_get",
       "primary_cli_path": "attendance schedule get",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:attendance",
       "title": "获取指定用户的排班记录",
       "use_when": [
-        "步骤1：获取排班记录的 planId"
+        "查询指定员工在日期范围内的排班记录"
       ]
     },
     "attendance.schedule_import": {
@@ -28139,13 +28232,16 @@
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
         "skills/mono/schema-hints/attendance-example-normalization.json",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "为排班制考勤组导入排班记录",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "导入排班制考勤组排班记录",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要为排班制考勤组导入排班记录时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "不确定 groupId/classId/workDate 时先查询考勤组和班次",
+        "仅查看排班时使用 attendance schedule get 或 attendance shift list",
+        "查询班次定义时使用 attendance class search/get"
       ],
       "canonical_path": "attendance.schedule_import",
       "cli_name": "import",
@@ -28189,25 +28285,28 @@
       "path": "attendance.schedule_import",
       "primary_cli_path": "attendance schedule import",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:attendance",
       "title": "导入排班记录到排班制考勤组",
       "use_when": [
-        "导入排班记录"
+        "需要批量导入或覆盖排班记录"
       ]
     },
     "attendance.selfsetting_get": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "查询个人规则设置，包括打卡提醒、极速打卡、打卡结果通知、缺卡提醒、个人考勤统计通知、团队考勤统计通知等设置项",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "查询个人考勤设置",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要查询个人规则设置，包括打卡提醒、极速打卡、打卡结果通知、缺卡提醒、个人考勤统计通知、团队考勤统计通知等设置项时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "修改个人设置时使用 attendance selfsetting save",
+        "查询个人考勤记录时使用 attendance record get",
+        "查询企业全局设置时使用 attendance globalsetting get"
       ],
       "canonical_path": "attendance.selfsetting_get",
       "cli_name": "get",
@@ -28246,14 +28345,12 @@
       "path": "attendance.selfsetting_get",
       "primary_cli_path": "attendance selfsetting get",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:attendance",
       "title": "查询个人规则设置",
       "use_when": [
-        "查看指定用户的打卡提醒设置",
-        "查看指定用户的极速打卡设置",
-        "查询个人规则设置/查看打卡提醒/查看极速打卡/查看缺卡提醒/查看打卡结果通知/查看个人考勤统计通知/查看团队考勤统计通知"
+        "查看某个员工的个人打卡提醒、极速打卡、结果通知等设置"
       ]
     },
     "attendance.selfsetting_save": {
@@ -28261,13 +28358,16 @@
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
         "skills/mono/schema-hints/attendance-example-normalization.json",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "更新保存个人规则设置，包括打卡提醒、极速打卡、打卡结果通知、缺卡提醒、个人考勤统计通知、团队考勤统计通知等设置项",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "更新个人考勤设置",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要更新保存个人规则设置，包括打卡提醒、极速打卡、打卡结果通知、缺卡提醒、个人考勤统计通知、团队考勤统计通知等设置项时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "修改企业全局设置时使用 attendance globalsetting save",
+        "只查看个人设置时使用 attendance selfsetting get",
+        "查询考勤记录时使用 attendance record get"
       ],
       "canonical_path": "attendance.selfsetting_save",
       "cli_name": "save",
@@ -28455,30 +28555,28 @@
       "path": "attendance.selfsetting_save",
       "primary_cli_path": "attendance selfsetting save",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "high",
       "source": "hardcoded:attendance",
       "title": "更新保存个人规则设置",
       "use_when": [
-        "开启打卡结果通知（Agent 调用时，必须先完成 ask_human 二次确认，确认后再追加 --yes 执行）",
-        "开启指定用户的打卡结果通知",
-        "更新个人规则设置/保存打卡提醒/修改极速打卡/关闭缺卡提醒/开启打卡结果通知/设置个人考勤统计通知/设置团队考勤统计通知",
-        "更新打卡提醒设置（Agent 调用时，必须先完成 ask_human 二次确认，确认后再追加 --yes 执行）",
-        "更新指定用户的极速打卡设置",
-        "更新极速打卡设置（Agent 调用时，必须先完成 ask_human 二次确认，确认后再追加 --yes 执行）"
+        "需要修改员工个人打卡提醒、极速打卡或结果通知设置"
       ]
     },
     "attendance.vacation_balance": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "调用 MCP 工具 get_leave_balance_quota 查询指定员工的假期余额",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "查询员工假期余额",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要调用 MCP 工具 get_leave_balance_quota 查询指定员工的假期余额时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "修改余额时使用 attendance vacation save-balance",
+        "查询假期余额变更明细时使用 attendance vacation records",
+        "查询假期类型时使用 attendance vacation types"
       ],
       "canonical_path": "attendance.vacation_balance",
       "cli_name": "balance",
@@ -28517,31 +28615,28 @@
       "path": "attendance.vacation_balance",
       "primary_cli_path": "attendance vacation balance",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:attendance",
       "title": "查询指定员工假期余额",
       "use_when": [
-        "1. 查询当前余额",
-        "1. 查询当前余额（假设返回5天）",
-        "增加假期余额/发放年假/给员工加年假",
-        "查看指定员工假期余额",
-        "查看指定员工某类假期余额",
-        "病假余额/年假余额/事假剩余假期",
-        "设置假期余额/调整假期额度/更新假期余额"
+        "查询指定员工的年假、调休等假期余额"
       ]
     },
     "attendance.vacation_records": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "调用 MCP 工具 get_leave_balance_records 查询指定员工的假期余额变更记录",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "查询假期余额变更记录",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要调用 MCP 工具 get_leave_balance_records 查询指定员工的假期余额变更记录时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "修改余额时使用 attendance vacation save-balance",
+        "只看当前余额时使用 attendance vacation balance",
+        "查询假期类型时使用 attendance vacation types"
       ],
       "canonical_path": "attendance.vacation_records",
       "cli_name": "records",
@@ -28592,31 +28687,33 @@
       "path": "attendance.vacation_records",
       "primary_cli_path": "attendance vacation records",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:attendance",
       "title": "查询指定员工假期余额变更记录",
       "use_when": [
-        "假期变更/假期记录/请假扣减",
-        "查看指定员工假期余额变更记录"
+        "查询员工假期余额的增减流水或变更历史"
       ]
     },
     "attendance.vacation_save_balance": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "调用 MCP 工具 update_leave_balance 设置指定员工的假期余额数量",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "调整员工假期余额",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要调用 MCP 工具 update_leave_balance 设置指定员工的假期余额数量时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "修改假期类型/规则时使用 attendance vacation update-type",
+        "只查询余额时使用 attendance vacation balance",
+        "查询变更流水时使用 attendance vacation records"
       ],
       "canonical_path": "attendance.vacation_save_balance",
       "cli_name": "save-balance",
       "cli_path": "attendance vacation save-balance",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "description": "调用 MCP 工具 update_leave_balance 设置指定员工的假期余额数量。\n\n重要说明：这是设置（SET）接口，传入的值会替换当前余额，而不是增加（ADD）。\n\n参数说明：\n  --target       目标员工工号（必填）\n  --leave-code   假期编码（必填）\n  --num          余额数量（必填，如8天传8，7.5天传7.5）\n  --reason       变更原因（必填，最长100字符）\n  --start        有效期开始日期 YYYY-MM-DD\n  --end          有效期结束日期 YYYY-MM-DD\n  --user-say-yes 用户已确认，跳过交互式确认提示（Agent 调用时传 true 前必须完成用户二次确认）\n\n注意：\n  - 余额数量在传递给 MCP 时会自动乘以100（如8天传800，7.5天传750）\n  - 此接口为 SET 操作：传入值会直接设置为新的余额，而非累加到现有余额",
       "display": "考勤打卡 / 排班 / 统计",
       "effect": "write",
@@ -28680,28 +28777,28 @@
       "path": "attendance.vacation_save_balance",
       "primary_cli_path": "attendance vacation save-balance",
       "product_id": "attendance",
-      "reviewed": false,
-      "risk": "medium",
+      "reviewed": true,
+      "risk": "high",
       "source": "hardcoded:attendance",
       "title": "设置员工假期余额",
       "use_when": [
-        "3. 执行设置（SET操作，会替换当前余额）",
-        "3. 设置新总额度",
-        "设置员工年假余额为8天",
-        "设置带有效期的假期余额"
+        "管理员需要修改指定员工的假期余额数量"
       ]
     },
     "attendance.vacation_types": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "调用 MCP 工具 get_leave_types 查询当前用户可用的假期规则列表",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "查询可用假期类型",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要调用 MCP 工具 get_leave_types 查询当前用户可用的假期规则列表时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "修改假期余额时使用 attendance vacation save-balance",
+        "修改假期规则时使用 attendance vacation update-type",
+        "查询员工假期余额时使用 attendance vacation balance"
       ],
       "canonical_path": "attendance.vacation_types",
       "cli_name": "types",
@@ -28726,26 +28823,28 @@
       "path": "attendance.vacation_types",
       "primary_cli_path": "attendance vacation types",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:attendance",
       "title": "查询当前用户假期规则列表",
       "use_when": [
-        "假期/我的假期/假期规则",
-        "查看假期规则列表"
+        "查看当前用户可用的假期规则/假期类型列表"
       ]
     },
     "attendance.vacation_update_type": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/attendance.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-attendance-review.json"
       ],
-      "agent_summary": "调用 MCP 工具 save_leave_type 更新已有假期规则",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "更新假期类型规则",
+      "agent_summary_source": "attendance-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要调用 MCP 工具 save_leave_type 更新已有假期规则时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "只查询假期类型时使用 attendance vacation types",
+        "查询假期报表时使用 attendance report query-leave",
+        "调整员工假期余额时使用 attendance vacation save-balance"
       ],
       "canonical_path": "attendance.vacation_update_type",
       "cli_name": "update-type",
@@ -28820,15 +28919,12 @@
       "path": "attendance.vacation_update_type",
       "primary_cli_path": "attendance vacation update-type",
       "product_id": "attendance",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:attendance",
       "title": "更新假期规则",
       "use_when": [
-        "更新假期单位",
-        "更新假期规则/修改假期类型/编辑假期规则",
-        "更新假期规则名称",
-        "更新适用范围"
+        "管理员需要修改已有假期规则或假期类型配置"
       ]
     },
     "calendar.add_attachments": {
