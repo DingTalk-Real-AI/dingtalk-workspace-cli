@@ -463,170 +463,170 @@
     },
     "aitable.view_get_aggregate": {
       "avoid_when": [
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get fill-color-rule"
+        "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+        "要“查询视图的各列列宽”请改用 dws aitable view get field-widths",
+        "要“查询视图的条件填色规则”请改用 dws aitable view get fill-color-rule"
       ]
     },
     "aitable.view_get_card": {
       "avoid_when": [
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get fill-color-rule"
+        "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate",
+        "要“查询视图的各列列宽”请改用 dws aitable view get field-widths",
+        "要“查询视图的条件填色规则”请改用 dws aitable view get fill-color-rule"
       ]
     },
     "aitable.view_get_field_widths": {
       "avoid_when": [
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get fill-color-rule"
+        "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate",
+        "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+        "要“查询视图的条件填色规则”请改用 dws aitable view get fill-color-rule"
       ]
     },
     "aitable.view_get_fill_color_rule": {
       "avoid_when": [
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+        "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate",
+        "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+        "要“查询视图的各列列宽”请改用 dws aitable view get field-widths"
       ]
     },
     "aitable.view_get_filter": {
       "avoid_when": [
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+        "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate",
+        "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+        "要“查询视图的各列列宽”请改用 dws aitable view get field-widths"
       ]
     },
     "aitable.view_get_frozen_cols": {
       "avoid_when": [
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+        "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate",
+        "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+        "要“查询视图的各列列宽”请改用 dws aitable view get field-widths"
       ]
     },
     "aitable.view_get_group": {
       "avoid_when": [
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+        "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate",
+        "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+        "要“查询视图的各列列宽”请改用 dws aitable view get field-widths"
       ]
     },
     "aitable.view_get_lock": {
       "avoid_when": [
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+        "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate",
+        "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+        "要“查询视图的各列列宽”请改用 dws aitable view get field-widths"
       ]
     },
     "aitable.view_get_row_height": {
       "avoid_when": [
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+        "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate",
+        "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+        "要“查询视图的各列列宽”请改用 dws aitable view get field-widths"
       ]
     },
     "aitable.view_get_sort": {
       "avoid_when": [
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+        "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate",
+        "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+        "要“查询视图的各列列宽”请改用 dws aitable view get field-widths"
       ]
     },
     "aitable.view_get_timebar": {
       "avoid_when": [
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+        "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate",
+        "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+        "要“查询视图的各列列宽”请改用 dws aitable view get field-widths"
       ]
     },
     "aitable.view_get_visible_fields": {
       "avoid_when": [
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+        "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate",
+        "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+        "要“查询视图的各列列宽”请改用 dws aitable view get field-widths"
       ]
     },
     "aitable.view_update_aggregate": {
       "avoid_when": [
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths",
+        "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+        "要“更新视图的各列列宽”请改用 dws aitable view update field-widths",
         "要“设置指定表格视图（Grid View）的条件填色规则（全量覆盖）”请改用 dws aitable view update fill-color-rule"
       ]
     },
     "aitable.view_update_card": {
       "avoid_when": [
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths",
+        "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate",
+        "要“更新视图的各列列宽”请改用 dws aitable view update field-widths",
         "要“设置指定表格视图（Grid View）的条件填色规则（全量覆盖）”请改用 dws aitable view update fill-color-rule"
       ]
     },
     "aitable.view_update_field_widths": {
       "avoid_when": [
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
+        "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate",
+        "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
         "要“设置指定表格视图（Grid View）的条件填色规则（全量覆盖）”请改用 dws aitable view update fill-color-rule"
       ]
     },
     "aitable.view_update_fill_color_rule": {
       "avoid_when": [
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+        "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate",
+        "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+        "要“更新视图的各列列宽”请改用 dws aitable view update field-widths"
       ]
     },
     "aitable.view_update_filter": {
       "avoid_when": [
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+        "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate",
+        "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+        "要“更新视图的各列列宽”请改用 dws aitable view update field-widths"
       ]
     },
     "aitable.view_update_frozen_cols": {
       "avoid_when": [
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+        "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate",
+        "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+        "要“更新视图的各列列宽”请改用 dws aitable view update field-widths"
       ]
     },
     "aitable.view_update_group": {
       "avoid_when": [
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+        "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate",
+        "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+        "要“更新视图的各列列宽”请改用 dws aitable view update field-widths"
       ]
     },
     "aitable.view_update_name": {
       "avoid_when": [
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+        "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate",
+        "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+        "要“更新视图的各列列宽”请改用 dws aitable view update field-widths"
       ]
     },
     "aitable.view_update_row_height": {
       "avoid_when": [
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+        "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate",
+        "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+        "要“更新视图的各列列宽”请改用 dws aitable view update field-widths"
       ]
     },
     "aitable.view_update_sort": {
       "avoid_when": [
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+        "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate",
+        "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+        "要“更新视图的各列列宽”请改用 dws aitable view update field-widths"
       ]
     },
     "aitable.view_update_timebar": {
       "avoid_when": [
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+        "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate",
+        "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+        "要“更新视图的各列列宽”请改用 dws aitable view update field-widths"
       ]
     },
     "aitable.view_update_visible_fields": {
       "avoid_when": [
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+        "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate",
+        "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+        "要“更新视图的各列列宽”请改用 dws aitable view update field-widths"
       ]
     },
     "aitable.workflow_disable": {

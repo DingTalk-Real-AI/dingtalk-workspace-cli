@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "source_hash": "sha256:883af6634857ecd3212d12bc1017c4d0dd390f0f466b8a52c664380a6c4335ba",
+  "source_hash": "sha256:a03f22029d71aeccc38b841a24191a33834dadef4fd35532b26acef026b0b058",
   "surface_hash": "sha256:c0a9b75b4e38934db73f4ce1d337b4c64aa5e541257dd9e84c4947da9c9ab664",
   "catalog": {
     "agent_metadata": {
       "products_with_metadata": 21,
       "source": "embedded-skill-metadata",
-      "source_hash": "sha256:063767a6a24964d97d64babf6f0607908f5c34171840272108fc296eb4c45d25",
+      "source_hash": "sha256:baf516536a280732546575173592b5ff1576fe4c81a843e26ee6e182c448100c",
       "surface_hash": "sha256:c0a9b75b4e38934db73f4ce1d337b4c64aa5e541257dd9e84c4947da9c9ab664",
       "surface_products": 21,
       "surface_tools": 504,
@@ -2420,13 +2420,13 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "查询视图的聚合统计（汇总行）",
+            "agent_summary_source": "aitable-view-summary-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths",
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get fill-color-rule"
+              "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+              "要“查询视图的各列列宽”请改用 dws aitable view get field-widths",
+              "要“查询视图的条件填色规则”请改用 dws aitable view get fill-color-rule"
             ],
             "canonical_path": "aitable.view_get_aggregate",
             "cli_name": "aggregate",
@@ -2443,7 +2443,7 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "view_get_aggregate",
             "primary_cli_path": "aitable view get aggregate",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "get_views",
             "use_when": [
@@ -2452,13 +2452,13 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "查询视图的卡片视图样式",
+            "agent_summary_source": "aitable-view-summary-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths",
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get fill-color-rule"
+              "要“查询视图的各列列宽”请改用 dws aitable view get field-widths",
+              "要“查询视图的条件填色规则”请改用 dws aitable view get fill-color-rule",
+              "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate"
             ],
             "canonical_path": "aitable.view_get_card",
             "cli_name": "card",
@@ -2475,7 +2475,7 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "view_get_card",
             "primary_cli_path": "aitable view get card",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "get_views",
             "use_when": [
@@ -2484,13 +2484,13 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "查询视图的各列列宽",
+            "agent_summary_source": "aitable-view-summary-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get fill-color-rule"
+              "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+              "要“查询视图的条件填色规则”请改用 dws aitable view get fill-color-rule",
+              "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate"
             ],
             "canonical_path": "aitable.view_get_field_widths",
             "cli_name": "field-widths",
@@ -2507,7 +2507,7 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "view_get_field_widths",
             "primary_cli_path": "aitable view get field-widths",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "get_views",
             "use_when": [
@@ -2516,13 +2516,13 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "查询视图的条件填色规则",
+            "agent_summary_source": "aitable-view-summary-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+              "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+              "要“查询视图的各列列宽”请改用 dws aitable view get field-widths",
+              "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate"
             ],
             "canonical_path": "aitable.view_get_fill_color_rule",
             "cli_name": "fill-color-rule",
@@ -2539,7 +2539,7 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "view_get_fill_color_rule",
             "primary_cli_path": "aitable view get fill-color-rule",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "get_views",
             "use_when": [
@@ -2549,13 +2549,13 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "查询视图的筛选条件",
+            "agent_summary_source": "aitable-view-summary-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+              "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+              "要“查询视图的各列列宽”请改用 dws aitable view get field-widths",
+              "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate"
             ],
             "canonical_path": "aitable.view_get_filter",
             "cli_name": "filter",
@@ -2572,7 +2572,7 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "view_get_filter",
             "primary_cli_path": "aitable view get filter",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "get_views",
             "use_when": [
@@ -2585,9 +2585,9 @@
             "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
             "availability": "available",
             "avoid_when": [
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+              "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+              "要“查询视图的各列列宽”请改用 dws aitable view get field-widths",
+              "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate"
             ],
             "canonical_path": "aitable.view_get_frozen_cols",
             "cli_name": "frozen-cols",
@@ -2613,13 +2613,13 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "查询视图的分组",
+            "agent_summary_source": "aitable-view-summary-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+              "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+              "要“查询视图的各列列宽”请改用 dws aitable view get field-widths",
+              "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate"
             ],
             "canonical_path": "aitable.view_get_group",
             "cli_name": "group",
@@ -2636,7 +2636,7 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "view_get_group",
             "primary_cli_path": "aitable view get group",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "get_views",
             "use_when": [
@@ -2649,9 +2649,9 @@
             "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
             "availability": "available",
             "avoid_when": [
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+              "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+              "要“查询视图的各列列宽”请改用 dws aitable view get field-widths",
+              "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate"
             ],
             "canonical_path": "aitable.view_get_lock",
             "cli_name": "lock",
@@ -2681,9 +2681,9 @@
             "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
             "availability": "available",
             "avoid_when": [
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+              "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+              "要“查询视图的各列列宽”请改用 dws aitable view get field-widths",
+              "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate"
             ],
             "canonical_path": "aitable.view_get_row_height",
             "cli_name": "row-height",
@@ -2709,13 +2709,13 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "查询视图的排序规则",
+            "agent_summary_source": "aitable-view-summary-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+              "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+              "要“查询视图的各列列宽”请改用 dws aitable view get field-widths",
+              "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate"
             ],
             "canonical_path": "aitable.view_get_sort",
             "cli_name": "sort",
@@ -2732,7 +2732,7 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "view_get_sort",
             "primary_cli_path": "aitable view get sort",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "get_views",
             "use_when": [
@@ -2741,13 +2741,13 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "查询视图的时间条（甘特/时间轴）",
+            "agent_summary_source": "aitable-view-summary-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+              "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+              "要“查询视图的各列列宽”请改用 dws aitable view get field-widths",
+              "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate"
             ],
             "canonical_path": "aitable.view_get_timebar",
             "cli_name": "timebar",
@@ -2764,7 +2764,7 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "view_get_timebar",
             "primary_cli_path": "aitable view get timebar",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "get_views",
             "use_when": [
@@ -2773,13 +2773,13 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "查询视图的可见字段及顺序",
+            "agent_summary_source": "aitable-view-summary-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-              "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+              "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+              "要“查询视图的各列列宽”请改用 dws aitable view get field-widths",
+              "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate"
             ],
             "canonical_path": "aitable.view_get_visible_fields",
             "cli_name": "visible-fields",
@@ -2796,7 +2796,7 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "view_get_visible_fields",
             "primary_cli_path": "aitable view get visible-fields",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "get_views",
             "use_when": [
@@ -2871,12 +2871,12 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "更新指定视图（View）的名称、描述或配置。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "更新视图的聚合统计（汇总行）",
+            "agent_summary_source": "aitable-view-summary-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths",
+              "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+              "要“更新视图的各列列宽”请改用 dws aitable view update field-widths",
               "要“设置指定表格视图（Grid View）的条件填色规则（全量覆盖）”请改用 dws aitable view update fill-color-rule"
             ],
             "canonical_path": "aitable.view_update_aggregate",
@@ -2894,7 +2894,7 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "view_update_aggregate",
             "primary_cli_path": "aitable view update aggregate",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "update_view",
             "use_when": [
@@ -2903,12 +2903,12 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "更新指定视图（View）的名称、描述或配置。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "更新视图的卡片视图样式",
+            "agent_summary_source": "aitable-view-summary-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths",
+              "要“更新视图的各列列宽”请改用 dws aitable view update field-widths",
+              "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate",
               "要“设置指定表格视图（Grid View）的条件填色规则（全量覆盖）”请改用 dws aitable view update fill-color-rule"
             ],
             "canonical_path": "aitable.view_update_card",
@@ -2926,7 +2926,7 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "view_update_card",
             "primary_cli_path": "aitable view update card",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "update_view",
             "use_when": [
@@ -2935,12 +2935,12 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "更新指定视图（View）的名称、描述或配置。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "更新视图的各列列宽",
+            "agent_summary_source": "aitable-view-summary-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
+              "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+              "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate",
               "要“设置指定表格视图（Grid View）的条件填色规则（全量覆盖）”请改用 dws aitable view update fill-color-rule"
             ],
             "canonical_path": "aitable.view_update_field_widths",
@@ -2958,7 +2958,7 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "view_update_field_widths",
             "primary_cli_path": "aitable view update field-widths",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "update_view",
             "use_when": [
@@ -2971,9 +2971,9 @@
             "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
             "availability": "available",
             "avoid_when": [
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+              "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+              "要“更新视图的各列列宽”请改用 dws aitable view update field-widths",
+              "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate"
             ],
             "canonical_path": "aitable.view_update_fill_color_rule",
             "cli_name": "fill-color-rule",
@@ -3001,13 +3001,13 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "更新指定视图（View）的名称、描述或配置。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "更新视图的筛选条件",
+            "agent_summary_source": "aitable-view-summary-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+              "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+              "要“更新视图的各列列宽”请改用 dws aitable view update field-widths",
+              "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate"
             ],
             "canonical_path": "aitable.view_update_filter",
             "cli_name": "filter",
@@ -3024,7 +3024,7 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "view_update_filter",
             "primary_cli_path": "aitable view update filter",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "update_view",
             "use_when": [
@@ -3037,9 +3037,9 @@
             "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
             "availability": "available",
             "avoid_when": [
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+              "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+              "要“更新视图的各列列宽”请改用 dws aitable view update field-widths",
+              "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate"
             ],
             "canonical_path": "aitable.view_update_frozen_cols",
             "cli_name": "frozen-cols",
@@ -3067,13 +3067,13 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "更新指定视图（View）的名称、描述或配置。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "更新视图的分组",
+            "agent_summary_source": "aitable-view-summary-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+              "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+              "要“更新视图的各列列宽”请改用 dws aitable view update field-widths",
+              "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate"
             ],
             "canonical_path": "aitable.view_update_group",
             "cli_name": "group",
@@ -3090,7 +3090,7 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "view_update_group",
             "primary_cli_path": "aitable view update group",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "update_view",
             "use_when": [
@@ -3099,13 +3099,13 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "更新指定视图（View）的名称、描述或配置。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "重命名视图（修改视图名称）",
+            "agent_summary_source": "aitable-view-summary-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+              "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+              "要“更新视图的各列列宽”请改用 dws aitable view update field-widths",
+              "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate"
             ],
             "canonical_path": "aitable.view_update_name",
             "cli_name": "name",
@@ -3122,7 +3122,7 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "view_update_name",
             "primary_cli_path": "aitable view update name",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "update_view",
             "use_when": [
@@ -3135,9 +3135,9 @@
             "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
             "availability": "available",
             "avoid_when": [
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+              "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+              "要“更新视图的各列列宽”请改用 dws aitable view update field-widths",
+              "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate"
             ],
             "canonical_path": "aitable.view_update_row_height",
             "cli_name": "row-height",
@@ -3164,13 +3164,13 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "更新指定视图（View）的名称、描述或配置。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "更新视图的排序规则",
+            "agent_summary_source": "aitable-view-summary-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+              "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+              "要“更新视图的各列列宽”请改用 dws aitable view update field-widths",
+              "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate"
             ],
             "canonical_path": "aitable.view_update_sort",
             "cli_name": "sort",
@@ -3187,7 +3187,7 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "view_update_sort",
             "primary_cli_path": "aitable view update sort",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "update_view",
             "use_when": [
@@ -3196,13 +3196,13 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "更新指定视图（View）的名称、描述或配置。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "更新视图的时间条（甘特/时间轴）",
+            "agent_summary_source": "aitable-view-summary-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+              "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+              "要“更新视图的各列列宽”请改用 dws aitable view update field-widths",
+              "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate"
             ],
             "canonical_path": "aitable.view_update_timebar",
             "cli_name": "timebar",
@@ -3219,7 +3219,7 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "view_update_timebar",
             "primary_cli_path": "aitable view update timebar",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "update_view",
             "use_when": [
@@ -3228,13 +3228,13 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "更新指定视图（View）的名称、描述或配置。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "更新视图的可见字段及顺序",
+            "agent_summary_source": "aitable-view-summary-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-              "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+              "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+              "要“更新视图的各列列宽”请改用 dws aitable view update field-widths",
+              "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate"
             ],
             "canonical_path": "aitable.view_update_visible_fields",
             "cli_name": "visible-fields",
@@ -3251,7 +3251,7 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "view_update_visible_fields",
             "primary_cli_path": "aitable view update visible-fields",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "update_view",
             "use_when": [
@@ -21868,19 +21868,19 @@
     "aitable.view_get_aggregate": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_aggregate",
         "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/aitable-view-review.json",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
         "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
-      "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "查询视图的聚合统计（汇总行）",
+      "agent_summary_source": "aitable-view-summary-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get fill-color-rule"
+        "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+        "要“查询视图的各列列宽”请改用 dws aitable view get field-widths",
+        "要“查询视图的条件填色规则”请改用 dws aitable view get fill-color-rule"
       ],
       "canonical_path": "aitable.view_get_aggregate",
       "cli_name": "aggregate",
@@ -21930,7 +21930,7 @@
       "path": "aitable.view_get_aggregate",
       "primary_cli_path": "aitable view get aggregate",
       "product_id": "aitable",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:aitable",
       "title": "get_views",
@@ -21941,19 +21941,19 @@
     "aitable.view_get_card": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_card",
         "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/aitable-view-review.json",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
         "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
-      "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "查询视图的卡片视图样式",
+      "agent_summary_source": "aitable-view-summary-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get fill-color-rule"
+        "要“查询视图的各列列宽”请改用 dws aitable view get field-widths",
+        "要“查询视图的条件填色规则”请改用 dws aitable view get fill-color-rule",
+        "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate"
       ],
       "canonical_path": "aitable.view_get_card",
       "cli_name": "card",
@@ -22004,7 +22004,7 @@
       "path": "aitable.view_get_card",
       "primary_cli_path": "aitable view get card",
       "product_id": "aitable",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:aitable",
       "title": "get_views",
@@ -22015,19 +22015,19 @@
     "aitable.view_get_field_widths": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_field_widths",
         "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/aitable-view-review.json",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
         "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
-      "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "查询视图的各列列宽",
+      "agent_summary_source": "aitable-view-summary-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get fill-color-rule"
+        "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+        "要“查询视图的条件填色规则”请改用 dws aitable view get fill-color-rule",
+        "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate"
       ],
       "canonical_path": "aitable.view_get_field_widths",
       "cli_name": "field-widths",
@@ -22077,7 +22077,7 @@
       "path": "aitable.view_get_field_widths",
       "primary_cli_path": "aitable view get field-widths",
       "product_id": "aitable",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:aitable",
       "title": "get_views",
@@ -22088,19 +22088,19 @@
     "aitable.view_get_fill_color_rule": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_fill_color_rule",
         "skills/mono/references/products/aitable/aitable-view-extras.md",
+        "skills/mono/schema-hints/aitable-view-review.json",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
         "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
-      "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "查询视图的条件填色规则",
+      "agent_summary_source": "aitable-view-summary-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+        "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+        "要“查询视图的各列列宽”请改用 dws aitable view get field-widths",
+        "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate"
       ],
       "canonical_path": "aitable.view_get_fill_color_rule",
       "cli_name": "fill-color-rule",
@@ -22151,7 +22151,7 @@
       "path": "aitable.view_get_fill_color_rule",
       "primary_cli_path": "aitable view get fill-color-rule",
       "product_id": "aitable",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:aitable",
       "title": "get_views",
@@ -22163,19 +22163,19 @@
     "aitable.view_get_filter": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_filter",
         "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/aitable-view-review.json",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
         "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
-      "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "查询视图的筛选条件",
+      "agent_summary_source": "aitable-view-summary-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+        "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+        "要“查询视图的各列列宽”请改用 dws aitable view get field-widths",
+        "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate"
       ],
       "canonical_path": "aitable.view_get_filter",
       "cli_name": "filter",
@@ -22225,7 +22225,7 @@
       "path": "aitable.view_get_filter",
       "primary_cli_path": "aitable view get filter",
       "product_id": "aitable",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:aitable",
       "title": "get_views",
@@ -22246,9 +22246,9 @@
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "availability": "available",
       "avoid_when": [
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+        "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+        "要“查询视图的各列列宽”请改用 dws aitable view get field-widths",
+        "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate"
       ],
       "canonical_path": "aitable.view_get_frozen_cols",
       "cli_name": "frozen-cols",
@@ -22310,19 +22310,19 @@
     "aitable.view_get_group": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_group",
         "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/aitable-view-review.json",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
         "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
-      "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "查询视图的分组",
+      "agent_summary_source": "aitable-view-summary-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+        "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+        "要“查询视图的各列列宽”请改用 dws aitable view get field-widths",
+        "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate"
       ],
       "canonical_path": "aitable.view_get_group",
       "cli_name": "group",
@@ -22372,7 +22372,7 @@
       "path": "aitable.view_get_group",
       "primary_cli_path": "aitable view get group",
       "product_id": "aitable",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:aitable",
       "title": "get_views",
@@ -22393,9 +22393,9 @@
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "availability": "available",
       "avoid_when": [
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+        "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+        "要“查询视图的各列列宽”请改用 dws aitable view get field-widths",
+        "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate"
       ],
       "canonical_path": "aitable.view_get_lock",
       "cli_name": "lock",
@@ -22467,9 +22467,9 @@
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "availability": "available",
       "avoid_when": [
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+        "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+        "要“查询视图的各列列宽”请改用 dws aitable view get field-widths",
+        "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate"
       ],
       "canonical_path": "aitable.view_get_row_height",
       "cli_name": "row-height",
@@ -22531,19 +22531,19 @@
     "aitable.view_get_sort": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_sort",
         "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/aitable-view-review.json",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
         "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
-      "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "查询视图的排序规则",
+      "agent_summary_source": "aitable-view-summary-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+        "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+        "要“查询视图的各列列宽”请改用 dws aitable view get field-widths",
+        "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate"
       ],
       "canonical_path": "aitable.view_get_sort",
       "cli_name": "sort",
@@ -22593,7 +22593,7 @@
       "path": "aitable.view_get_sort",
       "primary_cli_path": "aitable view get sort",
       "product_id": "aitable",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:aitable",
       "title": "get_views",
@@ -22604,19 +22604,19 @@
     "aitable.view_get_timebar": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_timebar",
         "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/aitable-view-review.json",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
         "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
-      "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "查询视图的时间条（甘特/时间轴）",
+      "agent_summary_source": "aitable-view-summary-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+        "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+        "要“查询视图的各列列宽”请改用 dws aitable view get field-widths",
+        "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate"
       ],
       "canonical_path": "aitable.view_get_timebar",
       "cli_name": "timebar",
@@ -22666,7 +22666,7 @@
       "path": "aitable.view_get_timebar",
       "primary_cli_path": "aitable view get timebar",
       "product_id": "aitable",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:aitable",
       "title": "get_views",
@@ -22677,19 +22677,19 @@
     "aitable.view_get_visible_fields": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_visible_fields",
         "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/aitable-view-review.json",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
         "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
-      "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "查询视图的可见字段及顺序",
+      "agent_summary_source": "aitable-view-summary-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get aggregate",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get card",
-        "要“获取指定数据表（Table）中的视图（View）完整信息，包括列”请改用 dws aitable view get field-widths"
+        "要“查询视图的卡片视图样式”请改用 dws aitable view get card",
+        "要“查询视图的各列列宽”请改用 dws aitable view get field-widths",
+        "要“查询视图的聚合统计（汇总行）”请改用 dws aitable view get aggregate"
       ],
       "canonical_path": "aitable.view_get_visible_fields",
       "cli_name": "visible-fields",
@@ -22739,7 +22739,7 @@
       "path": "aitable.view_get_visible_fields",
       "primary_cli_path": "aitable view get visible-fields",
       "product_id": "aitable",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:aitable",
       "title": "get_views",
@@ -22907,18 +22907,18 @@
     "aitable.view_update_aggregate": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_aggregate",
         "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/aitable-view-review.json",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
         "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
-      "agent_summary": "更新指定视图（View）的名称、描述或配置。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "更新视图的聚合统计（汇总行）",
+      "agent_summary_source": "aitable-view-summary-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths",
+        "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+        "要“更新视图的各列列宽”请改用 dws aitable view update field-widths",
         "要“设置指定表格视图（Grid View）的条件填色规则（全量覆盖）”请改用 dws aitable view update fill-color-rule"
       ],
       "canonical_path": "aitable.view_update_aggregate",
@@ -22994,7 +22994,7 @@
       "path": "aitable.view_update_aggregate",
       "primary_cli_path": "aitable view update aggregate",
       "product_id": "aitable",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:aitable",
       "title": "update_view",
@@ -23005,18 +23005,18 @@
     "aitable.view_update_card": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_card",
         "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/aitable-view-review.json",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
         "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
-      "agent_summary": "更新指定视图（View）的名称、描述或配置。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "更新视图的卡片视图样式",
+      "agent_summary_source": "aitable-view-summary-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths",
+        "要“更新视图的各列列宽”请改用 dws aitable view update field-widths",
+        "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate",
         "要“设置指定表格视图（Grid View）的条件填色规则（全量覆盖）”请改用 dws aitable view update fill-color-rule"
       ],
       "canonical_path": "aitable.view_update_card",
@@ -23111,7 +23111,7 @@
       "path": "aitable.view_update_card",
       "primary_cli_path": "aitable view update card",
       "product_id": "aitable",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:aitable",
       "title": "update_view",
@@ -23122,18 +23122,18 @@
     "aitable.view_update_field_widths": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_field_widths",
         "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/aitable-view-review.json",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
         "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
-      "agent_summary": "更新指定视图（View）的名称、描述或配置。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "更新视图的各列列宽",
+      "agent_summary_source": "aitable-view-summary-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
+        "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+        "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate",
         "要“设置指定表格视图（Grid View）的条件填色规则（全量覆盖）”请改用 dws aitable view update fill-color-rule"
       ],
       "canonical_path": "aitable.view_update_field_widths",
@@ -23204,7 +23204,7 @@
       "path": "aitable.view_update_field_widths",
       "primary_cli_path": "aitable view update field-widths",
       "product_id": "aitable",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:aitable",
       "title": "update_view",
@@ -23225,9 +23225,9 @@
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "availability": "available",
       "avoid_when": [
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+        "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+        "要“更新视图的各列列宽”请改用 dws aitable view update field-widths",
+        "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate"
       ],
       "canonical_path": "aitable.view_update_fill_color_rule",
       "cli_name": "fill-color-rule",
@@ -23298,19 +23298,19 @@
     "aitable.view_update_filter": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_filter",
         "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/aitable-view-review.json",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
         "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
-      "agent_summary": "更新指定视图（View）的名称、描述或配置。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "更新视图的筛选条件",
+      "agent_summary_source": "aitable-view-summary-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+        "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+        "要“更新视图的各列列宽”请改用 dws aitable view update field-widths",
+        "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate"
       ],
       "canonical_path": "aitable.view_update_filter",
       "cli_name": "filter",
@@ -23369,7 +23369,7 @@
       "path": "aitable.view_update_filter",
       "primary_cli_path": "aitable view update filter",
       "product_id": "aitable",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:aitable",
       "title": "update_view",
@@ -23390,9 +23390,9 @@
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "availability": "available",
       "avoid_when": [
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+        "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+        "要“更新视图的各列列宽”请改用 dws aitable view update field-widths",
+        "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate"
       ],
       "canonical_path": "aitable.view_update_frozen_cols",
       "cli_name": "frozen-cols",
@@ -23465,19 +23465,19 @@
     "aitable.view_update_group": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_group",
         "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/aitable-view-review.json",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
         "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
-      "agent_summary": "更新指定视图（View）的名称、描述或配置。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "更新视图的分组",
+      "agent_summary_source": "aitable-view-summary-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+        "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+        "要“更新视图的各列列宽”请改用 dws aitable view update field-widths",
+        "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate"
       ],
       "canonical_path": "aitable.view_update_group",
       "cli_name": "group",
@@ -23536,7 +23536,7 @@
       "path": "aitable.view_update_group",
       "primary_cli_path": "aitable view update group",
       "product_id": "aitable",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:aitable",
       "title": "update_view",
@@ -23547,19 +23547,19 @@
     "aitable.view_update_name": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_name",
         "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/aitable-view-review.json",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
         "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
-      "agent_summary": "更新指定视图（View）的名称、描述或配置。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "重命名视图（修改视图名称）",
+      "agent_summary_source": "aitable-view-summary-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+        "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+        "要“更新视图的各列列宽”请改用 dws aitable view update field-widths",
+        "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate"
       ],
       "canonical_path": "aitable.view_update_name",
       "cli_name": "name",
@@ -23616,7 +23616,7 @@
       "path": "aitable.view_update_name",
       "primary_cli_path": "aitable view update name",
       "product_id": "aitable",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:aitable",
       "title": "update_view",
@@ -23637,9 +23637,9 @@
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "availability": "available",
       "avoid_when": [
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+        "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+        "要“更新视图的各列列宽”请改用 dws aitable view update field-widths",
+        "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate"
       ],
       "canonical_path": "aitable.view_update_row_height",
       "cli_name": "row-height",
@@ -23711,19 +23711,19 @@
     "aitable.view_update_sort": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_sort",
         "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/aitable-view-review.json",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
         "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
-      "agent_summary": "更新指定视图（View）的名称、描述或配置。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "更新视图的排序规则",
+      "agent_summary_source": "aitable-view-summary-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+        "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+        "要“更新视图的各列列宽”请改用 dws aitable view update field-widths",
+        "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate"
       ],
       "canonical_path": "aitable.view_update_sort",
       "cli_name": "sort",
@@ -23782,7 +23782,7 @@
       "path": "aitable.view_update_sort",
       "primary_cli_path": "aitable view update sort",
       "product_id": "aitable",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:aitable",
       "title": "update_view",
@@ -23793,19 +23793,19 @@
     "aitable.view_update_timebar": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_timebar",
         "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/aitable-view-review.json",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
         "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
-      "agent_summary": "更新指定视图（View）的名称、描述或配置。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "更新视图的时间条（甘特/时间轴）",
+      "agent_summary_source": "aitable-view-summary-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+        "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+        "要“更新视图的各列列宽”请改用 dws aitable view update field-widths",
+        "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate"
       ],
       "canonical_path": "aitable.view_update_timebar",
       "cli_name": "timebar",
@@ -23899,7 +23899,7 @@
       "path": "aitable.view_update_timebar",
       "primary_cli_path": "aitable view update timebar",
       "product_id": "aitable",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:aitable",
       "title": "update_view",
@@ -23910,19 +23910,19 @@
     "aitable.view_update_visible_fields": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_visible_fields",
         "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/aitable-view-review.json",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
         "skills/mono/schema-hints/sibling-disambiguation.json"
       ],
-      "agent_summary": "更新指定视图（View）的名称、描述或配置。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "更新视图的可见字段及顺序",
+      "agent_summary_source": "aitable-view-summary-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update aggregate",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update card",
-        "要“更新指定视图（View）的名称、描述或配置”请改用 dws aitable view update field-widths"
+        "要“更新视图的卡片视图样式”请改用 dws aitable view update card",
+        "要“更新视图的各列列宽”请改用 dws aitable view update field-widths",
+        "要“更新视图的聚合统计（汇总行）”请改用 dws aitable view update aggregate"
       ],
       "canonical_path": "aitable.view_update_visible_fields",
       "cli_name": "visible-fields",
@@ -23986,7 +23986,7 @@
       "path": "aitable.view_update_visible_fields",
       "primary_cli_path": "aitable view update visible-fields",
       "product_id": "aitable",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:aitable",
       "title": "update_view",

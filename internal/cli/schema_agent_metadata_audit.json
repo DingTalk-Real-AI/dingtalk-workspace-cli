@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "source_hash": "sha256:063767a6a24964d97d64babf6f0607908f5c34171840272108fc296eb4c45d25",
+  "source_hash": "sha256:baf516536a280732546575173592b5ff1576fe4c81a843e26ee6e182c448100c",
   "surface_hash": "sha256:c0a9b75b4e38934db73f4ce1d337b4c64aa5e541257dd9e84c4947da9c9ab664",
-  "source_files": 96,
-  "hint_files": 8,
+  "source_files": 97,
+  "hint_files": 9,
   "hint_products": 21,
-  "hint_tools": 1302,
+  "hint_tools": 1320,
   "interface_metadata": {
     "source": "mcp-tools-list+cli-registry",
     "revision": "4574f7022c32cf4c033e9b7b4156e2fec815fed8",
@@ -13,8 +13,8 @@
     "source_tools": 419,
     "surface_tools": 419,
     "eligible_summaries": 418,
-    "applied_summaries": 271,
-    "preserved_summaries": 147,
+    "applied_summaries": 253,
+    "preserved_summaries": 165,
     "rejected_tools": [
       "chat.unread_message_conversation_list"
     ]
