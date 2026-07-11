@@ -62,7 +62,11 @@ done
 # Generate checksums
 echo "==> Calculating checksums"
 cd "$DIST_DIR"
-shasum -a 256 *.tar.gz *.zip > checksums.txt
+if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum *.tar.gz *.zip > checksums.txt
+else
+    shasum -a 256 *.tar.gz *.zip > checksums.txt
+fi
 cd ..
 
 echo "==> Build complete! Artifacts in $DIST_DIR/"
