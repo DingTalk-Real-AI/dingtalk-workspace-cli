@@ -79,14 +79,29 @@ trap cleanup EXIT HUP INT TERM
 } > "$section"
 
 inserted=0
+in_unreleased=0
 while IFS= read -r line || [ -n "$line" ]; do
+  case "$line" in
+    '## [Unreleased]')
+      in_unreleased=1
+      ;;
+    '## '*)
+      if [ "$in_unreleased" -eq 1 ]; then
+        cat "$section" >> "$output"
+        printf '\n' >> "$output"
+        inserted=1
+        in_unreleased=0
+      fi
+      ;;
+  esac
   printf '%s\n' "$line" >> "$output"
-  if [ "$line" = '## [Unreleased]' ]; then
-    printf '\n' >> "$output"
-    cat "$section" >> "$output"
-    inserted=1
-  fi
 done < "$CHANGELOG"
+
+if [ "$in_unreleased" -eq 1 ]; then
+  printf '\n' >> "$output"
+  cat "$section" >> "$output"
+  inserted=1
+fi
 [ "$inserted" -eq 1 ] || { printf 'CHANGELOG is missing ## [Unreleased]\n' >&2; exit 1; }
 cp "$output" "$CHANGELOG"
 

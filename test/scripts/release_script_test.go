@@ -593,6 +593,42 @@ func TestReleasePrepareChangelogCreatesGuardedTemplate(t *testing.T) {
 	}
 }
 
+func TestReleasePrepareChangelogKeepsUnreleasedContentAboveNewVersion(t *testing.T) {
+	r := newReleaseTestRepo(t)
+	releaseCopyFile(t, r.lib, filepath.Join(r.root, "scripts", "release", "release-lib.sh"), 0o644)
+	releaseCopyFile(t, r.prepare, filepath.Join(r.root, "scripts", "release", "prepare-changelog.sh"), 0o755)
+	mustWriteFile(t, filepath.Join(r.root, "CHANGELOG.md"), []byte("# Changelog\n\n## [Unreleased]\n\n### Changed\n\n- Keep this unreleased note.\n\n## [1.0.0] - 2026-07-01\n\n### Changed\n\n- Initial release.\n"), 0o644)
+	r.commitAndPush(t, "add unreleased changelog note")
+
+	cmd := exec.Command("sh", filepath.Join(r.root, "scripts", "release", "prepare-changelog.sh"), "prerelease", "v1.0.1-beta.1")
+	cmd.Dir = r.root
+	cmd.Env = append(os.Environ(), "DWS_RELEASE_DATE=2026-07-11")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("prepare changelog error = %v\noutput:\n%s", err, output)
+	}
+	data, err := os.ReadFile(filepath.Join(r.root, "CHANGELOG.md"))
+	if err != nil {
+		t.Fatalf("ReadFile(CHANGELOG.md) error = %v", err)
+	}
+	content := string(data)
+	positions := []int{
+		strings.Index(content, "## [Unreleased]"),
+		strings.Index(content, "- Keep this unreleased note."),
+		strings.Index(content, "## [1.0.1-beta.1] - 2026-07-11"),
+		strings.Index(content, "## [1.0.0] - 2026-07-01"),
+	}
+	for index, position := range positions {
+		if position < 0 {
+			t.Fatalf("prepared changelog is missing expected marker %d:\n%s", index, content)
+		}
+	}
+	for index := 1; index < len(positions); index++ {
+		if positions[index-1] >= positions[index] {
+			t.Fatalf("prepared changelog order is invalid: %v\n%s", positions, content)
+		}
+	}
+}
+
 func TestReleaseMirrorUsesChannelSpecificPointer(t *testing.T) {
 	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
