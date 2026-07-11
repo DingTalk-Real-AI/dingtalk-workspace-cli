@@ -47,3 +47,4 @@ test/dev_functional/results.jsonl
 /.qoder/
 .vercel
 .env*
+dwsbin
