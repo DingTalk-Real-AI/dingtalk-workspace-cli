@@ -1,18 +1,13 @@
 # GoReleaser configuration for dws
 # Docs: https://goreleaser.com
 #
-# To release:
-#   git tag -a v0.1.0 -m "Release v0.1.0"
-#   git push origin v0.1.0
+# To release, use scripts/release/release.sh. It seals main, validates the
+# CHANGELOG and packages, then pushes the annotated tag for CI/CD to publish.
 #
 # To test locally (no publish):
 #   goreleaser release --snapshot --clean
 
 version: 2
-
-before:
-  hooks:
-    - go mod tidy
 
 builds:
   - main: ./cmd

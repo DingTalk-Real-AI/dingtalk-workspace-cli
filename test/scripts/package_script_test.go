@@ -39,6 +39,12 @@ func seedDistArtifacts(t *testing.T, distDir string, targets []string) {
 
 	for _, target := range targets {
 		p := filepath.Join(distDir, target)
+		if strings.HasPrefix(target, "dws-darwin-") && strings.HasSuffix(target, ".tar.gz") {
+			stage := t.TempDir()
+			mustWriteFile(t, filepath.Join(stage, "dws"), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+			mustRun(t, stage, "tar", "-czf", p, "dws")
+			continue
+		}
 		if err := os.WriteFile(p, []byte("fake-archive"), 0o644); err != nil {
 			t.Fatalf("WriteFile(%s) error = %v", p, err)
 		}
@@ -53,6 +59,13 @@ func seedDistArtifacts(t *testing.T, distDir string, targets []string) {
 	if err := os.WriteFile(checksums, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(%s) error = %v", checksums, err)
 	}
+}
+
+func fakeCodesignPath(t *testing.T) string {
+	t.Helper()
+	binDir := t.TempDir()
+	mustWriteFile(t, filepath.Join(binDir, "codesign"), []byte("#!/bin/sh\nset -eu\nexit 0\n"), 0o755)
+	return binDir + string(os.PathListSeparator) + os.Getenv("PATH")
 }
 
 func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
@@ -78,8 +91,10 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 
 	cmd := exec.Command("sh", scriptPath)
 	cmd.Env = append(os.Environ(),
+		"DWS_PACKAGE_VERSION=v1.2.3",
 		"DWS_PACKAGE_DIST_DIR="+distDir,
 		"DWS_RELEASE_BASE_URL=https://downloads.example.com/dws/releases/v1.2.3",
+		"PATH="+fakeCodesignPath(t),
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -107,6 +122,8 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 	formulaText := string(formulaData)
 	for _, want := range []string{
 		"class DingtalkWorkspaceCliLocal < Formula",
+		"version \"1.2.3\"",
+		"skill_home_override = \"\"",
 		"resource \"skills\" do",
 		"DingTalk Workspace CLI",
 	} {
@@ -123,6 +140,7 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 	releaseFormulaText := string(releaseFormulaData)
 	for _, want := range []string{
 		"class DingtalkWorkspaceCli < Formula",
+		"version \"1.2.3\"",
 		"https://downloads.example.com/dws/releases/v1.2.3/" + archiveName,
 		"https://downloads.example.com/dws/releases/v1.2.3/dws-skills.zip",
 	} {
@@ -165,13 +183,25 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 		}
 	}
 
-	// Verify checksums.txt was updated to include skills zip
+	// Re-running post packaging must replace, not duplicate, the skills checksum.
+	cmd = exec.Command("sh", scriptPath)
+	cmd.Env = append(os.Environ(),
+		"DWS_PACKAGE_VERSION=v1.2.3",
+		"DWS_PACKAGE_DIST_DIR="+distDir,
+		"DWS_RELEASE_BASE_URL=https://downloads.example.com/dws/releases/v1.2.3",
+		"PATH="+fakeCodesignPath(t),
+	)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("second post-goreleaser.sh error = %v\noutput:\n%s", err, output)
+	}
+
+	// Verify checksums.txt includes exactly one skills zip entry.
 	checksumsData, err := os.ReadFile(filepath.Join(distDir, "checksums.txt"))
 	if err != nil {
 		t.Fatalf("ReadFile(checksums.txt) error = %v", err)
 	}
-	if !strings.Contains(string(checksumsData), "dws-skills.zip") {
-		t.Fatalf("checksums.txt missing dws-skills.zip entry:\n%s", string(checksumsData))
+	if count := strings.Count(string(checksumsData), "dws-skills.zip"); count != 1 {
+		t.Fatalf("checksums.txt dws-skills.zip count = %d, want 1:\n%s", count, checksumsData)
 	}
 }
 
@@ -200,8 +230,10 @@ func TestPostGoreleaserAllPlatformNpmAssets(t *testing.T) {
 
 	cmd := exec.Command("sh", scriptPath)
 	cmd.Env = append(os.Environ(),
+		"DWS_PACKAGE_VERSION=v9.9.9",
 		"DWS_PACKAGE_DIST_DIR="+distDir,
 		"DWS_RELEASE_BASE_URL=https://downloads.example.com/dws/releases/v9.9.9",
+		"PATH="+fakeCodesignPath(t),
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -216,7 +248,7 @@ func TestPostGoreleaserAllPlatformNpmAssets(t *testing.T) {
 	}
 
 	packageAssetsDir := filepath.Join(distDir, "npm", "dingtalk-workspace-cli", "assets")
-	for _, rel := range append(allArchives, "dws-skills.zip") {
+	for _, rel := range append(allArchives, "dws-skills.zip", "checksums.txt") {
 		if _, err := os.Stat(filepath.Join(packageAssetsDir, rel)); err != nil {
 			t.Fatalf("npm asset missing %q: %v", rel, err)
 		}
@@ -280,8 +312,10 @@ func TestPostGoreleaserSkillsZipLayout(t *testing.T) {
 
 	cmd := exec.Command("sh", scriptPath)
 	cmd.Env = append(os.Environ(),
+		"DWS_PACKAGE_VERSION=v0.0.0-test",
 		"DWS_PACKAGE_DIST_DIR="+distDir,
 		"DWS_RELEASE_BASE_URL=https://downloads.example.com/dws/releases/v0.0.0",
+		"PATH="+fakeCodesignPath(t),
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {

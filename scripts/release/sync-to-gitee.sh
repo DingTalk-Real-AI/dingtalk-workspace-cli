@@ -24,8 +24,9 @@
 # Gating: if GITEE_TOKEN / GITEE_USER / GITEE_REPO are unset, exit 0 with a
 # notice so the step can live in release.yml without breaking forks.
 
-set -eu
+set -euo pipefail
 
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 DIST_DIR="${DIST_DIR:-dist}"
 GITEE_API="${GITEE_API:-https://gitee.com/api/v5}"
 GITEE_CURL_CONNECT_TIMEOUT="${GITEE_CURL_CONNECT_TIMEOUT:-15}"
@@ -39,12 +40,17 @@ missing=""
 [ -z "${GITEE_USER:-}" ]  && missing="$missing GITEE_USER"
 [ -z "${GITEE_REPO:-}" ]  && missing="$missing GITEE_REPO"
 if [ -n "$missing" ]; then
+  if [ "${DWS_REQUIRE_GITEE:-0}" = "1" ]; then
+    echo "❌ Gitee mirror sync is enabled but credentials are missing:${missing}" >&2
+    exit 1
+  fi
   echo "ℹ️  Gitee mirror sync skipped — missing:${missing}"
   echo "   Set these as repo secrets to auto-mirror releases to Gitee for China users."
   exit 0
 fi
 
 VERSION="${VERSION:-$(git describe --tags --always 2>/dev/null || echo dev)}"
+DWS_PACKAGE_DIST_DIR="$DIST_DIR" "$SCRIPT_DIR/verify-release-artifacts.sh" "$VERSION"
 OWNER="${GITEE_REPO%%/*}"
 NAME="${GITEE_REPO##*/}"
 base="${GITEE_API}/repos/${OWNER}/${NAME}"
@@ -72,10 +78,18 @@ gitee_tag_commit() {
         }'
 }
 
-echo "   Syncing Gitee tag ${VERSION} -> ${target_commit}"
-git push --force "$git_remote" "refs/tags/${VERSION}:refs/tags/${VERSION}" >/dev/null
+gitee_commit="$(gitee_tag_commit || true)"
+if [ -n "$gitee_commit" ] && [ "$gitee_commit" != "$target_commit" ]; then
+  echo "❌ Existing Gitee tag ${VERSION} points to ${gitee_commit}, expected ${target_commit}; refusing to move it." >&2
+  exit 1
+fi
+if [ -z "$gitee_commit" ]; then
+  echo "   Creating Gitee tag ${VERSION} -> ${target_commit}"
+  git push "$git_remote" "refs/tags/${VERSION}:refs/tags/${VERSION}" >/dev/null
+else
+  echo "   Gitee tag ${VERSION} already points to ${target_commit}."
+fi
 
-gitee_commit=""
 for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
   gitee_commit="$(gitee_tag_commit || true)"
   [ "$gitee_commit" = "$target_commit" ] && break
@@ -124,8 +138,10 @@ echo "   Gitee release id = ${release_id}"
 # detail (/releases/{id}) endpoint: the latter's "assets" array omits the attach
 # id, so DELETE /attach_files/{id} was previously called with an empty id and
 # silently no-op'd — leaving stale + duplicate darwin binaries on Gitee.
-assets_map="$(curl -fsSL --connect-timeout "$GITEE_CURL_CONNECT_TIMEOUT" --max-time "$GITEE_CURL_MAX_TIME" "${base}/releases/${release_id}/attach_files?access_token=${GITEE_TOKEN}" 2>/dev/null \
-  | python3 -c 'import json,sys
+load_assets_map() {
+  curl -fsSL --connect-timeout "$GITEE_CURL_CONNECT_TIMEOUT" --max-time "$GITEE_CURL_MAX_TIME" \
+    "${base}/releases/${release_id}/attach_files?access_token=${GITEE_TOKEN}" \
+    | python3 -c 'import json,sys
 try:
     data=json.load(sys.stdin)
     rows=data if isinstance(data,list) else data.get("attach_files",[])
@@ -134,7 +150,13 @@ try:
         if n and i!="":
             print("%s\t%s\t%s" % (n, i, u))
 except Exception:
-    pass' 2>/dev/null || true)"
+    sys.exit(1)'
+}
+
+assets_map="$(load_assets_map)" || {
+  echo "❌ Could not list Gitee release attachments; refusing a blind upload." >&2
+  exit 1
+}
 
 sha256_of() {  # sha256 of a file ($1) or, with no arg, of stdin
   if command -v sha256sum >/dev/null 2>&1; then sha256sum ${1:+"$1"} | awk '{print $1}';
@@ -163,12 +185,13 @@ gitee_attach() {  # upload file $1; success when the response carries a download
 gitee_delete() {  # delete attachment by id $1
   curl -fsSL --connect-timeout "$GITEE_CURL_CONNECT_TIMEOUT" --max-time "$GITEE_CURL_MAX_TIME" \
     -X DELETE "${base}/releases/${release_id}/attach_files/${1}?access_token=${GITEE_TOKEN}" \
-    >/dev/null 2>&1 || true
+    >/dev/null
 }
 
 uploaded=0
 replaced=0
 skipped=0
+failed=0
 for f in "$DIST_DIR"/dws-*.tar.gz "$DIST_DIR"/dws-*.zip "$DIST_DIR"/checksums.txt; do
   [ -f "$f" ] || continue
   fn="$(basename "$f")"
@@ -180,7 +203,12 @@ for f in "$DIST_DIR"/dws-*.tar.gz "$DIST_DIR"/dws-*.zip "$DIST_DIR"/checksums.tx
 
   if [ "$count" -eq 0 ]; then
     echo "   ⬆ ${fn} (new)"
-    if gitee_attach "$f"; then uploaded=$((uploaded + 1)); else echo "   ⚠ upload may have failed for ${fn}" >&2; fi
+    if gitee_attach "$f"; then
+      uploaded=$((uploaded + 1))
+    else
+      echo "   ❌ upload failed for ${fn}" >&2
+      failed=$((failed + 1))
+    fi
     continue
   fi
 
@@ -197,16 +225,58 @@ for f in "$DIST_DIR"/dws-*.tar.gz "$DIST_DIR"/dws-*.zip "$DIST_DIR"/checksums.tx
   fi
 
   # Delete every copy, then upload exactly one fresh, correct file.
-  printf '%s\n' "$ids" | while read -r aid; do
-    [ -n "$aid" ] && gitee_delete "$aid"
+  delete_failed=0
+  for aid in $ids; do
+    if ! gitee_delete "$aid"; then
+      echo "   ❌ failed to delete stale Gitee attachment ${aid} for ${fn}" >&2
+      delete_failed=1
+    fi
   done
-  if gitee_attach "$f"; then replaced=$((replaced + 1)); else echo "   ⚠ re-upload may have failed for ${fn}" >&2; fi
+  if [ "$delete_failed" -ne 0 ]; then
+    failed=$((failed + 1))
+    continue
+  fi
+  if gitee_attach "$f"; then
+    replaced=$((replaced + 1))
+  else
+    echo "   ❌ re-upload failed for ${fn}" >&2
+    failed=$((failed + 1))
+  fi
 done
 
 if [ "$uploaded" -eq 0 ] && [ "$replaced" -eq 0 ] && [ "$skipped" -eq 0 ]; then
   echo "❌ No artifacts found to mirror. Did the build (goreleaser) run / were assets downloaded into ${DIST_DIR}?" >&2
   exit 1
 fi
+
+# Gitee may accept an upload before the attachment list is consistent. Re-read
+# the release and require every supported asset to be unique and byte-identical.
+verified=0
+for verify_attempt in 1 2 3 4 5; do
+  final_map="$(load_assets_map || true)"
+  verify_failed=0
+  for f in "$DIST_DIR"/dws-*.tar.gz "$DIST_DIR"/dws-*.zip "$DIST_DIR"/checksums.txt; do
+    fn="$(basename "$f")"
+    rows="$(printf '%s\n' "$final_map" | awk -F'\t' -v n="$fn" '$1==n')"
+    count="$(printf '%s\n' "$rows" | grep -c . || true)"
+    if [ "$count" -ne 1 ]; then
+      verify_failed=1
+      continue
+    fi
+    aurl="$(printf '%s\n' "$rows" | awk -F'\t' 'NR==1 {print $3}')"
+    remote_sha="$(curl -fsSL --connect-timeout "$GITEE_CURL_CONNECT_TIMEOUT" --max-time "$GITEE_CURL_MAX_TIME" "$aurl" 2>/dev/null | sha256_of || true)"
+    [ "$remote_sha" = "$(sha256_of "$f")" ] || verify_failed=1
+  done
+  if [ "$verify_failed" -eq 0 ] && [ "$failed" -eq 0 ]; then
+    verified=1
+    break
+  fi
+  [ "$verify_attempt" -lt 5 ] && sleep 5
+done
+[ "$verified" -eq 1 ] || {
+  echo "❌ Gitee release ${VERSION} does not contain one byte-identical copy of every release asset." >&2
+  exit 1
+}
 echo "✅ Gitee release ${VERSION}: uploaded ${uploaded}, replaced ${replaced}, skipped ${skipped} (already correct)."
 echo "   China install:  DWS_GITEE_REPO=${GITEE_REPO} \\"
 echo "     curl -fsSL https://gitee.com/${GITEE_REPO}/raw/main/scripts/install.sh | sh"

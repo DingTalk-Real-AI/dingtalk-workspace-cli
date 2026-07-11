@@ -2,6 +2,7 @@ class __CLASS_NAME__ < Formula
   desc "DingTalk Workspace CLI"
   homepage "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli"
   url "__ARCHIVE_URL__"
+  version "__VERSION__"
   sha256 "__ARCHIVE_SHA256__"
   license "Apache-2.0"
 __KEG_ONLY_LINE__
@@ -39,23 +40,25 @@ __KEG_ONLY_LINE__
     entries = Dir["#{skill_root}/*"]
     return if entries.empty?
 
+    skill_home_override = "__SKILL_HOME_OVERRIDE__"
+    skill_home = skill_home_override.empty? ? Dir.home : skill_home_override
     targets = [
-      Pathname.new(File.join(Dir.home, ".agents/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".claude/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".cursor/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".qoder/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".qoderwork/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".gemini/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".codex/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".github/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".windsurf/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".augment/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".cline/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".amp/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".kiro/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".trae/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".openclaw/skills/dws")),
-      Pathname.new(File.join(Dir.home, ".hermes/skills/dws")),
+      Pathname.new(File.join(skill_home, ".agents/skills/dws")),
+      Pathname.new(File.join(skill_home, ".claude/skills/dws")),
+      Pathname.new(File.join(skill_home, ".cursor/skills/dws")),
+      Pathname.new(File.join(skill_home, ".qoder/skills/dws")),
+      Pathname.new(File.join(skill_home, ".qoderwork/skills/dws")),
+      Pathname.new(File.join(skill_home, ".gemini/skills/dws")),
+      Pathname.new(File.join(skill_home, ".codex/skills/dws")),
+      Pathname.new(File.join(skill_home, ".github/skills/dws")),
+      Pathname.new(File.join(skill_home, ".windsurf/skills/dws")),
+      Pathname.new(File.join(skill_home, ".augment/skills/dws")),
+      Pathname.new(File.join(skill_home, ".cline/skills/dws")),
+      Pathname.new(File.join(skill_home, ".amp/skills/dws")),
+      Pathname.new(File.join(skill_home, ".kiro/skills/dws")),
+      Pathname.new(File.join(skill_home, ".trae/skills/dws")),
+      Pathname.new(File.join(skill_home, ".openclaw/skills/dws")),
+      Pathname.new(File.join(skill_home, ".hermes/skills/dws")),
     ]
 
     targets.each_with_index do |dest, index|

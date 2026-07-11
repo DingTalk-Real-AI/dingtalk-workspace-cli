@@ -14,6 +14,10 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 - **Cross-platform auth regression coverage** — dedicated macOS CI now runs the Darwin-only auth/keychain regression suite with race detection, Windows CI builds and tests the native DPAPI path, and recovery guidance prefers safe migration or per-profile cleanup over destructive global reset.
 
+### Changed
+
+- **Guarded prerelease and stable automation** — adds the guided `dws-release` entry for one-command CHANGELOG preparation, validation-only and annotated-tag publication flows; promotes only an explicitly validated beta; verifies command-tree compatibility and all six packaged binaries; and serializes immutable GitHub Release, npm channel, OSS, and optional Gitee delivery with fail-closed recovery checks.
+
 ## [1.0.51] - 2026-07-10
 
 This release promotes the sealed `v1.0.51-beta.1` contents to stable. It syncs the hardcoded Wukong command surface, prevents `dev connect` conversations from blocking on messages received mid-turn, and makes local credential failures diagnosable without mutating key material.
