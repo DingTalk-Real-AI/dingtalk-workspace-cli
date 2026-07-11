@@ -195,8 +195,14 @@ jobs:
       - name: Build
         run: make build
 
-      - name: Compare CLI interface with baseline
+      - name: Check historical commands and help compatibility
         run: make interface-integrity
+
+      - name: Check schema list compatibility
+        run: make schema-compatibility
+
+      - name: Check skill command references
+        run: make skill-command-integrity
 
   cli-smoke:
     name: CLI Smoke

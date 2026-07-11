@@ -6,24 +6,42 @@ set -eu
 # even when the CLI has hundreds of command nodes.
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
-BASELINE="$ROOT/test/fixtures/cli-interface-baseline.txt"
-CURRENT="$(mktemp)"
+BASELINE="${INTERFACE_BASELINE:-$ROOT/test/fixtures/cli-interface-baseline.txt}"
 SNAPSHOT_HOME="$(mktemp -d)"
 SNAPSHOT_BIN="$(mktemp)"
+CURRENT="$(mktemp)"
 trap 'rm -rf "$CURRENT" "$SNAPSHOT_HOME" "$SNAPSHOT_BIN"' EXIT
 
 cd "$ROOT"
 # Compile with the caller's normal Go cache, then isolate only the execution
 # HOME so user-installed DWS plugins cannot alter the public command tree.
 go build -o "$SNAPSHOT_BIN" ./scripts/policy/interface-baseline
-HOME="$SNAPSHOT_HOME" DWS_LANG=zh "$SNAPSHOT_BIN" >"$CURRENT"
+if [ "${1:-}" = "--reset" ]; then
+  mkdir -p "$(dirname "$BASELINE")"
+  HOME="$SNAPSHOT_HOME" DWS_LANG=zh "$SNAPSHOT_BIN" >"$CURRENT"
+  cp "$CURRENT" "$BASELINE"
+  printf 'WARNING: interface compatibility history replaced: %s (%s command nodes)\n' \
+    "${BASELINE#"$ROOT"/}" "$(grep -c '^\[' "$BASELINE")"
+  exit 0
+fi
 
 if [ "${1:-}" = "--update" ]; then
   mkdir -p "$(dirname "$BASELINE")"
+
+  if [ -f "$BASELINE" ]; then
+    HOME="$SNAPSHOT_HOME" DWS_LANG=zh "$SNAPSHOT_BIN" --merge "$BASELINE" >"$CURRENT"
+  else
+    HOME="$SNAPSHOT_HOME" DWS_LANG=zh "$SNAPSHOT_BIN" >"$CURRENT"
+  fi
   cp "$CURRENT" "$BASELINE"
-  printf 'interface baseline updated: %s (%s command nodes)\n' \
+  printf 'interface baseline extended: %s (%s historical command nodes)\n' \
     "${BASELINE#"$ROOT"/}" "$(grep -c '^\[' "$BASELINE")"
   exit 0
+fi
+
+if [ "$#" -gt 0 ]; then
+  printf 'error: unknown option: %s\n' "$1" >&2
+  exit 2
 fi
 
 if [ ! -f "$BASELINE" ]; then
@@ -32,11 +50,4 @@ if [ ! -f "$BASELINE" ]; then
   exit 1
 fi
 
-if ! diff -u "$BASELINE" "$CURRENT"; then
-  printf '\nerror: CLI interface changed — commands, aliases, or flags differ from baseline.\n' >&2
-  printf 'If intentional, run make update-interface-baseline and commit the reviewed diff.\n' >&2
-  exit 1
-fi
-
-printf 'interface integrity check: ok (%s command nodes)\n' \
-  "$(grep -c '^\[' "$BASELINE")"
+HOME="$SNAPSHOT_HOME" DWS_LANG=zh "$SNAPSHOT_BIN" --check "$BASELINE"

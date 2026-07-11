@@ -2,8 +2,14 @@
 
 The repository defines four focused checks in addition to its existing CI:
 
-- **Interface Integrity** compares every public command, alias, and directly
-  defined flag with `test/fixtures/cli-interface-baseline.txt`.
+- **Interface Integrity** enforces backwards compatibility. Every historical
+  command path and alias must still resolve, every historical command must
+  still render `-h`, and historical flags must keep their type and shorthand.
+  New commands, aliases, and flags are allowed. The same job also checks that
+  `dws schema list` does not lose products/tools/parameters and that executable
+  `dws ...` references in `skills/**/*.md` resolve to real commands.
+  Help compatibility covers command/alias/flag spelling, flag type and
+  shorthand; descriptive prose may evolve without breaking the gate.
 - **CLI Smoke** builds the release binary and renders offline help for the root
   and every public top-level command.
 - **Mock MCP Smoke** runs the existing HTTP and stdio MCP lifecycle tests
@@ -15,19 +21,32 @@ The repository defines four focused checks in addition to its existing CI:
   evaluator writes an `AI Behavior Check` commit status to the PR head SHA so
   GitHub rulesets can require it.
 
-## Updating an intentional CLI interface change
+## Extending the compatibility baselines
 
 Run:
 
 ```sh
 make build
 make update-interface-baseline
+make update-schema-baseline
 make interface-integrity
+make schema-compatibility
+make skill-command-integrity
 make cli-smoke
 ```
 
-Commit the baseline diff with the implementation so reviewers can see the
-exact additions, removals, aliases, and flag type changes.
+Baseline updates are monotonic: they add newly supported contracts but retain
+all historical commands and schema entries. Running an update therefore cannot
+bless a removal. Commit baseline additions with the implementation for review.
+
+For an intentional compatibility reset at a major-version boundary, run
+`make reset-interface-baseline`. This replaces all CLI compatibility history
+with the current command tree and must receive explicit human review.
+
+The current open-source static-endpoint build returns an empty `products` array
+from `dws schema list`, so its initial schema baseline contains zero products.
+To protect schema entries exposed by an older dynamic or private distribution,
+seed this baseline from that distribution's last supported `schema list` output.
 
 ## Required GitHub repository settings
 

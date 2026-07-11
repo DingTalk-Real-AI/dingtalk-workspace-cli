@@ -11,90 +11,75 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Command interface-baseline prints a deterministic snapshot of every public
-// Cobra command, alias, and directly-defined flag in DWS CLI.
+// Command interface-baseline snapshots and checks the backwards-compatible
+// public Cobra surface of DWS CLI.
 package main
 
 import (
+	"flag"
 	"fmt"
-	"sort"
-	"strings"
+	"os"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app"
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 )
 
 func main() {
+	var checkPath string
+	var mergePath string
+	flag.StringVar(&checkPath, "check", "", "check current CLI against a historical baseline")
+	flag.StringVar(&mergePath, "merge", "", "merge current additions into a historical baseline")
+	flag.Parse()
+
+	if checkPath != "" && mergePath != "" {
+		fmt.Fprintln(os.Stderr, "--check and --merge are mutually exclusive")
+		os.Exit(2)
+	}
+
 	root := app.NewRootCommand()
 	root.InitDefaultHelpCmd()
-	emit(root, nil)
-}
+	current := snapshot(root)
 
-func emit(cmd *cobra.Command, parentPath []string) {
-	path := parentPath
-	if cmd.HasParent() {
-		path = append(append([]string(nil), parentPath...), cmd.Name())
-	}
-
-	label := "root"
-	if len(path) > 0 {
-		label = strings.Join(path, ".")
-	}
-	fmt.Printf("[%s]\n", label)
-
-	children := publicChildren(cmd)
-	if len(children) > 0 {
-		names := make([]string, 0, len(children))
-		for _, child := range children {
-			names = append(names, child.Name())
+	switch {
+	case checkPath != "":
+		baseline, err := readContract(checkPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "read interface baseline: %v\n", err)
+			os.Exit(2)
 		}
-		fmt.Printf("  commands: %s\n", strings.Join(names, ", "))
-	}
-
-	if len(cmd.Aliases) > 0 {
-		aliases := append([]string(nil), cmd.Aliases...)
-		sort.Strings(aliases)
-		fmt.Printf("  aliases: %s\n", strings.Join(aliases, ", "))
-	}
-
-	if flags := directFlags(cmd); len(flags) > 0 {
-		fmt.Printf("  flags: %s\n", strings.Join(flags, ", "))
-	}
-
-	for _, child := range children {
-		fmt.Println()
-		emit(child, path)
-	}
-}
-
-func publicChildren(cmd *cobra.Command) []*cobra.Command {
-	var children []*cobra.Command
-	for _, child := range cmd.Commands() {
-		if child.Hidden {
-			continue
+		failures := checkCompatibility(root, baseline)
+		if len(failures) > 0 {
+			fmt.Fprintln(os.Stderr, "CLI backwards-compatibility check failed:")
+			for _, failure := range failures {
+				fmt.Fprintf(os.Stderr, "  - %s\n", failure)
+			}
+			os.Exit(1)
 		}
-		children = append(children, child)
+		fmt.Printf(
+			"interface compatibility check: ok (%d historical command nodes; additions allowed)\n",
+			len(baseline.Commands),
+		)
+	case mergePath != "":
+		baseline, err := readContract(mergePath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "read interface baseline: %v\n", err)
+			os.Exit(2)
+		}
+		merged, failures := mergeContracts(baseline, current)
+		if len(failures) > 0 {
+			fmt.Fprintln(os.Stderr, "cannot merge incompatible interface changes:")
+			for _, failure := range failures {
+				fmt.Fprintf(os.Stderr, "  - %s\n", failure)
+			}
+			os.Exit(1)
+		}
+		if err := renderContract(os.Stdout, merged); err != nil {
+			fmt.Fprintf(os.Stderr, "render merged interface baseline: %v\n", err)
+			os.Exit(2)
+		}
+	default:
+		if err := renderContract(os.Stdout, current); err != nil {
+			fmt.Fprintf(os.Stderr, "render interface baseline: %v\n", err)
+			os.Exit(2)
+		}
 	}
-	sort.Slice(children, func(i, j int) bool {
-		return children[i].Name() < children[j].Name()
-	})
-	return children
-}
-
-func directFlags(cmd *cobra.Command) []string {
-	var flags []string
-	cmd.InitDefaultHelpFlag()
-	cmd.LocalFlags().VisitAll(func(flag *pflag.Flag) {
-		if flag.Hidden {
-			return
-		}
-		name := "--" + flag.Name
-		if flag.Shorthand != "" {
-			name = "-" + flag.Shorthand + "/" + name
-		}
-		flags = append(flags, name+":"+flag.Value.Type())
-	})
-	sort.Strings(flags)
-	return flags
 }
