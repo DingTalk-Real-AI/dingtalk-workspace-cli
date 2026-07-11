@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "source_catalog_hash": "sha256:ae7bbbe03c07a68a4a5fcdaa992428735d298c47a78824c5b33e3b1f12d4a966",
+  "source_catalog_hash": "sha256:ff9f77eaefe20f250124521bebc5feb38ac1e2e25d3cc2a94b4007dd5bcb8514",
   "historical_binding_count": 311,
   "migrations": {
     "contact.get_dept_info_by_dept_id --id": "contact.get_dept_info_by_dept_id --dept",

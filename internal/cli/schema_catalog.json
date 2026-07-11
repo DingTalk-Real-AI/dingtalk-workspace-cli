@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "source_hash": "sha256:ae7bbbe03c07a68a4a5fcdaa992428735d298c47a78824c5b33e3b1f12d4a966",
+  "source_hash": "sha256:ff9f77eaefe20f250124521bebc5feb38ac1e2e25d3cc2a94b4007dd5bcb8514",
   "surface_hash": "sha256:7fb8d999c27622a1a0ea39074d7b375f7686964d77eebeb4be30e616311ab86d",
   "catalog": {
     "agent_metadata": {
       "products_with_metadata": 20,
       "source": "embedded-skill-metadata",
-      "source_hash": "sha256:003c796f92787cab22545cfff4102244ba5623bbd4b4f3f1fbd4d50b21ac48f0",
+      "source_hash": "sha256:e0d748bc18b99053f7986ed913c2742e94559341cf2aeac193dc81aab50cd1fb",
       "surface_hash": "sha256:7fb8d999c27622a1a0ea39074d7b375f7686964d77eebeb4be30e616311ab86d",
       "surface_products": 20,
       "surface_tools": 537,
@@ -14114,13 +14114,13 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "在指定工作表中创建一条条件格式规则。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "创建条件格式规则",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“删除指定工作表中的一条条件格式规则”请改用 dws sheet cond-format delete",
-              "要“更新指定工作表中的一条条件格式规则”请改用 dws sheet cond-format update",
-              "要“获取指定工作表中的所有条件格式规则，或通过 ruleId 获取单”请改用 dws sheet cond-format list"
+              "只设置静态样式用 sheet range set-style",
+              "更新已有条件格式用 sheet cond-format update",
+              "查看条件格式列表用 sheet cond-format list"
             ],
             "canonical_path": "sheet.create_cond_format",
             "cli_name": "create",
@@ -14133,29 +14133,22 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "create_cond_format",
             "primary_cli_path": "sheet cond-format create",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "创建条件格式规则",
             "use_when": [
-              "创建条件格式/设置条件格式/大于某值时标红/包含某文本时高亮/数据条/图标集/色阶/重复值高亮；创建条件格式规则",
-              "基于辅助列值做条件格式（用 formulaCondition 引用辅助列）",
-              "数值条件：大于 80 时标红加粗",
-              "数据条",
-              "文本条件：包含\"延期\"时加删除线",
-              "色阶（三色）",
-              "虽然逻辑等价，但产物里缺辅助列 → 用户打开表格看不到\"是/否\"列",
-              "重复值高亮"
+              "按条件高亮或设置格式规则"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "在钉钉电子表格的指定工作表中创建筛选。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "为工作表创建基础筛选",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“删除钉钉电子表格中指定工作表的筛选”请改用 dws sheet filter delete",
-              "要“清除钉钉电子表格中指定工作表筛选的某一列的筛选条件”请改用 dws sheet filter clear-criteria",
-              "要“获取钉钉电子表格中指定工作表的筛选信息”请改用 dws sheet filter get"
+              "只查看筛选信息用 sheet filter get",
+              "更新筛选条件用 sheet filter update 或 clear-criteria",
+              "管理筛选视图用 sheet filter-view create/update/list"
             ],
             "canonical_path": "sheet.create_filter",
             "cli_name": "create",
@@ -14168,25 +14161,22 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "create_filter",
             "primary_cli_path": "sheet filter create",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "创建筛选",
             "use_when": [
-              "创建筛选并同时设置条件（按值筛选）",
-              "创建筛选并设置条件筛选",
-              "创建筛选框架（不设条件）",
-              "筛选/过滤/只看某些值/只显示满足条件的行/筛选数据/创建筛选/删除筛选/设置筛选条件/清除筛选/排序；创建筛选"
+              "需要在普通筛选范围上开启筛选"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "在钉钉电子表格的指定工作表中创建一个筛选视图。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "创建筛选视图",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“删除钉钉电子表格中指定工作表的筛选视图”请改用 dws sheet filter-view delete",
-              "要“清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件”请改用 dws sheet filter-view delete-criteria",
-              "要“获取单列筛选条件”请改用 dws sheet filter-view get-criteria"
+              "创建普通筛选用 sheet filter create",
+              "更新已有筛选视图用 sheet filter-view update",
+              "查看筛选视图列表用 sheet filter-view list"
             ],
             "canonical_path": "sheet.create_filter_view",
             "cli_name": "create",
@@ -14199,17 +14189,11 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "create_filter_view",
             "primary_cli_path": "sheet filter-view create",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "创建筛选视图",
             "use_when": [
-              "3. 创建筛选视图（不带条件）",
-              "创建不带筛选条件的筛选视图",
-              "创建带按值筛选条件的筛选视图",
-              "创建带按条件筛选的筛选视图（大于等于 200000）",
-              "创建筛选视图/新建筛选视图/添加筛选视图；创建筛选视图",
-              "创建筛选视图时直接指定筛选条件",
-              "查看具体命令的完整参数说明"
+              "需要创建可保存的筛选视图"
             ]
           },
           {
@@ -14303,13 +14287,13 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "删除指定工作表中的一条条件格式规则。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "删除条件格式规则",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“在指定工作表中创建一条条件格式规则”请改用 dws sheet cond-format create",
-              "要“更新指定工作表中的一条条件格式规则”请改用 dws sheet cond-format update",
-              "要“获取指定工作表中的所有条件格式规则，或通过 ruleId 获取单”请改用 dws sheet cond-format list"
+              "删除普通筛选用 sheet filter delete",
+              "删除筛选视图用 sheet filter-view delete",
+              "只修改规则用 sheet cond-format update"
             ],
             "canonical_path": "sheet.delete_cond_format",
             "cli_name": "delete",
@@ -14322,12 +14306,11 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "delete_cond_format",
             "primary_cli_path": "sheet cond-format delete",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "high",
             "title": "删除条件格式规则",
             "use_when": [
-              "删除条件格式/移除条件格式/取消条件格式；删除条件格式规则",
-              "删除条件格式规则（必须加 --yes 确认）"
+              "删除某条条件格式规则"
             ]
           },
           {
@@ -14365,11 +14348,13 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "删除钉钉表格指定单元格范围内的下拉列表配置。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "删除单元格下拉列表配置",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "用户未明确要求“删除钉钉表格指定单元格范围内的下拉列表配置。”、目标不清楚或尚未确认时不要使用"
+              "修改下拉选项用 sheet set-dropdown",
+              "只查询下拉配置用 sheet get-dropdown",
+              "清空单元格内容用 sheet range clear"
             ],
             "canonical_path": "sheet.delete_dropdown_lists",
             "cli_name": "delete-dropdown",
@@ -14382,22 +14367,22 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "delete_dropdown_lists",
             "primary_cli_path": "sheet delete-dropdown",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "high",
             "title": "删除下拉列表",
             "use_when": [
-              "删除下拉列表/移除下拉/取消下拉/清除下拉；删除下拉列表"
+              "移除指定范围的下拉列表配置"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "删除钉钉电子表格中指定工作表的筛选。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "删除工作表基础筛选",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“在钉钉电子表格的指定工作表中创建筛选”请改用 dws sheet filter create",
-              "要“清除钉钉电子表格中指定工作表筛选的某一列的筛选条件”请改用 dws sheet filter clear-criteria",
-              "要“获取钉钉电子表格中指定工作表的筛选信息”请改用 dws sheet filter get"
+              "仅查看筛选信息用 sheet filter get",
+              "删除筛选视图用 sheet filter-view delete",
+              "只清除某列条件用 sheet filter clear-criteria"
             ],
             "canonical_path": "sheet.delete_filter",
             "cli_name": "delete",
@@ -14410,22 +14395,22 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "delete_filter",
             "primary_cli_path": "sheet filter delete",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "high",
             "title": "删除筛选",
             "use_when": [
-              "筛选/过滤/只看某些值/只显示满足条件的行/筛选数据/创建筛选/删除筛选/设置筛选条件/清除筛选/排序；删除筛选"
+              "移除整张表的普通筛选配置"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "删除钉钉电子表格中指定工作表的筛选视图。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "删除筛选视图",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“在钉钉电子表格的指定工作表中创建一个筛选视图”请改用 dws sheet filter-view create",
-              "要“清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件”请改用 dws sheet filter-view delete-criteria",
-              "要“获取单列筛选条件”请改用 dws sheet filter-view get-criteria"
+              "删除基础筛选用 sheet filter delete",
+              "只删除某列条件用 sheet filter-view delete-criteria",
+              "查看筛选视图详情用 sheet filter-view info"
             ],
             "canonical_path": "sheet.delete_filter_view",
             "cli_name": "delete",
@@ -14438,12 +14423,11 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "delete_filter_view",
             "primary_cli_path": "sheet filter-view delete",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "high",
             "title": "删除筛选视图",
             "use_when": [
-              "8. 删除筛选视图",
-              "删除筛选视图/移除筛选视图；删除筛选视图"
+              "删除一个已保存的筛选视图"
             ]
           },
           {
@@ -14528,13 +14512,13 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "清除钉钉电子表格中指定工作表筛选的某一列的筛选条件。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "清除基础筛选中某一列条件",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“删除钉钉电子表格中指定工作表的筛选”请改用 dws sheet filter delete",
-              "要“在钉钉电子表格的指定工作表中创建筛选”请改用 dws sheet filter create",
-              "要“获取钉钉电子表格中指定工作表的筛选信息”请改用 dws sheet filter get"
+              "删除整个基础筛选用 sheet filter delete",
+              "更新筛选条件用 sheet filter update",
+              "筛选视图条件用 sheet filter-view delete-criteria"
             ],
             "canonical_path": "sheet.filter_clear_criteria",
             "cli_name": "clear-criteria",
@@ -14551,24 +14535,22 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "filter_clear_criteria",
             "primary_cli_path": "sheet filter clear-criteria",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "清除筛选条件",
             "use_when": [
-              "清除第 1 列（A 列）的筛选条件",
-              "清除第 2 列（B 列）的筛选条件",
-              "筛选/过滤/只看某些值/只显示满足条件的行/筛选数据/创建筛选/删除筛选/设置筛选条件/清除筛选/排序；清除某一列条件"
+              "仅清除普通筛选的某列筛选条件"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "删除筛选视图单列筛选条件",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“删除钉钉电子表格中指定工作表的筛选视图”请改用 dws sheet filter-view delete",
-              "要“在钉钉电子表格的指定工作表中创建一个筛选视图”请改用 dws sheet filter-view create",
-              "要“获取单列筛选条件”请改用 dws sheet filter-view get-criteria"
+              "删除整个筛选视图用 sheet filter-view delete",
+              "基础筛选清除列条件用 sheet filter clear-criteria",
+              "更新条件用 sheet filter-view update-criteria"
             ],
             "canonical_path": "sheet.filter_view_delete_criteria",
             "cli_name": "delete-criteria",
@@ -14585,14 +14567,11 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "filter_view_delete_criteria",
             "primary_cli_path": "sheet filter-view delete-criteria",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "high",
             "title": "清除筛选视图列条件",
             "use_when": [
-              "7. 清除某列的筛选条件",
-              "删除第 1 列（A 列）的筛选条件",
-              "删除第 3 列（C 列）的筛选条件",
-              "清除筛选条件/移除筛选条件/取消筛选条件；清除筛选视图列条件"
+              "清除筛选视图中某列的筛选条件"
             ]
           },
           {
@@ -14601,9 +14580,9 @@
             "agent_summary_source": "dws-command-surface-review",
             "availability": "available",
             "avoid_when": [
-              "要“删除钉钉电子表格中指定工作表的筛选视图”请改用 dws sheet filter-view delete",
-              "要“在钉钉电子表格的指定工作表中创建一个筛选视图”请改用 dws sheet filter-view create",
-              "要“清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件”请改用 dws sheet filter-view delete-criteria"
+              "列出所有列条件用 sheet filter-view list-criteria",
+              "删除单列条件用 sheet filter-view delete-criteria",
+              "更新单列条件用 sheet filter-view update-criteria"
             ],
             "canonical_path": "sheet.filter_view_get_criteria",
             "cli_name": "get-criteria",
@@ -14624,10 +14603,7 @@
             "risk": "low",
             "title": "获取筛选视图",
             "use_when": [
-              "查看第 1 列（偏移量 0）的筛选条件",
-              "查看第 3 列（偏移量 2）的筛选条件",
-              "查看筛选条件/有哪些筛选条件/筛选视图设了什么条件/列出筛选条件；查看某一列的条件",
-              "获取单列筛选条件"
+              "查看筛选视图某一列的筛选条件"
             ]
           },
           {
@@ -14636,9 +14612,9 @@
             "agent_summary_source": "dws-command-surface-review",
             "availability": "available",
             "avoid_when": [
-              "要“删除钉钉电子表格中指定工作表的筛选视图”请改用 dws sheet filter-view delete",
-              "要“在钉钉电子表格的指定工作表中创建一个筛选视图”请改用 dws sheet filter-view create",
-              "要“清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件”请改用 dws sheet filter-view delete-criteria"
+              "列出所有筛选视图用 sheet filter-view list",
+              "更新筛选视图用 sheet filter-view update",
+              "查看列条件用 sheet filter-view list-criteria"
             ],
             "canonical_path": "sheet.filter_view_info",
             "cli_name": "info",
@@ -14659,9 +14635,7 @@
             "risk": "low",
             "title": "获取筛选视图",
             "use_when": [
-              "查看指定筛选视图的详情",
-              "筛选视图详情/查看某个筛选视图/筛选视图信息/筛选视图配置；获取单个筛选视图详情",
-              "获取单个筛选视图详情"
+              "已知道 filterViewId，需要查看名称、范围和配置"
             ]
           },
           {
@@ -14670,9 +14644,9 @@
             "agent_summary_source": "dws-command-surface-review",
             "availability": "available",
             "avoid_when": [
-              "要“删除钉钉电子表格中指定工作表的筛选视图”请改用 dws sheet filter-view delete",
-              "要“在钉钉电子表格的指定工作表中创建一个筛选视图”请改用 dws sheet filter-view create",
-              "要“清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件”请改用 dws sheet filter-view delete-criteria"
+              "基础筛选条件用 sheet filter get/update",
+              "更新条件用 sheet filter-view update-criteria",
+              "查看单列条件用 sheet filter-view get-criteria"
             ],
             "canonical_path": "sheet.filter_view_list_criteria",
             "cli_name": "list-criteria",
@@ -14693,9 +14667,7 @@
             "risk": "low",
             "title": "获取筛选视图",
             "use_when": [
-              "列出筛选视图所有列条件",
-              "列出筛选视图的所有条件",
-              "查看筛选条件/有哪些筛选条件/筛选视图设了什么条件/列出筛选条件；列出所有列条件"
+              "查看筛选视图下每列筛选条件"
             ]
           },
           {
@@ -14704,9 +14676,9 @@
             "agent_summary_source": "dws-command-surface-review",
             "availability": "available",
             "avoid_when": [
-              "要“删除钉钉电子表格中指定工作表的筛选视图”请改用 dws sheet filter-view delete",
-              "要“在钉钉电子表格的指定工作表中创建一个筛选视图”请改用 dws sheet filter-view create",
-              "要“清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件”请改用 dws sheet filter-view delete-criteria"
+              "删除筛选视图列条件用 sheet filter-view delete-criteria",
+              "更新基础筛选条件用 sheet filter update",
+              "更新视图名称/范围用 sheet filter-view update"
             ],
             "canonical_path": "sheet.filter_view_update_criteria",
             "cli_name": "update-criteria",
@@ -14726,16 +14698,7 @@
             "risk": "medium",
             "title": "更新筛选视图列条件",
             "use_when": [
-              "4. 为筛选视图设置列条件（按值筛选）",
-              "5. 为筛选视图设置列条件（按条件筛选）",
-              "多条件筛选：大于等于 60 且 小于等于 90",
-              "按值筛选：只显示\"销售部\"和\"市场部",
-              "按条件筛选：大于 100",
-              "按条件筛选：大于等于 200000",
-              "按条件筛选：小于 100",
-              "按颜色筛选：背景色为红色",
-              "更新筛选视图列条件",
-              "设置筛选条件/添加筛选条件/配置筛选视图条件/按值筛选/按条件筛选/按颜色筛选；设置筛选视图列条件"
+              "修改筛选视图中某一列的筛选规则"
             ]
           },
           {
@@ -14814,13 +14777,13 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "获取指定工作表中的所有条件格式规则，或通过 ruleId 获取单个规则的详情。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "查看条件格式规则列表或详情",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“删除指定工作表中的一条条件格式规则”请改用 dws sheet cond-format delete",
-              "要“在指定工作表中创建一条条件格式规则”请改用 dws sheet cond-format create",
-              "要“更新指定工作表中的一条条件格式规则”请改用 dws sheet cond-format update"
+              "创建条件格式用 sheet cond-format create",
+              "删除条件格式用 sheet cond-format delete",
+              "更新条件格式用 sheet cond-format update"
             ],
             "canonical_path": "sheet.get_cond_format",
             "cli_name": "list",
@@ -14833,23 +14796,22 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "get_cond_format",
             "primary_cli_path": "sheet cond-format list",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "获取条件格式规则",
             "use_when": [
-              "条件格式/条件样式/自动变色/满足条件时高亮/按条件设样式/条件格式规则；查看已有条件格式",
-              "条件格式/条件样式/自动变色/满足条件时高亮/按条件设样式/条件格式规则；查看指定规则详情",
-              "获取单个规则的详情",
-              "获取所有条件格式规则"
+              "查看工作表已有条件格式规则"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "查询钉钉表格指定范围内的下拉列表配置。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "查询单元格下拉列表配置",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "需要创建、修改或删除数据时不要使用；本命令只用于“查询钉钉表格指定范围内的下拉列表配置。”"
+              "删除下拉列表用 sheet delete-dropdown",
+              "设置下拉列表用 sheet set-dropdown",
+              "读取单元格值用 sheet range read"
             ],
             "canonical_path": "sheet.get_dropdown_lists",
             "cli_name": "get-dropdown",
@@ -14862,22 +14824,22 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "get_dropdown_lists",
             "primary_cli_path": "sheet get-dropdown",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "获取下拉列表",
             "use_when": [
-              "查看下拉列表/获取下拉配置/下拉列表有哪些选项；获取下拉列表配置"
+              "查看某个范围是否配置了下拉列表"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "获取钉钉电子表格中指定工作表的筛选信息。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "查看工作表基础筛选信息",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“删除钉钉电子表格中指定工作表的筛选”请改用 dws sheet filter delete",
-              "要“在钉钉电子表格的指定工作表中创建筛选”请改用 dws sheet filter create",
-              "要“清除钉钉电子表格中指定工作表筛选的某一列的筛选条件”请改用 dws sheet filter clear-criteria"
+              "创建或更新筛选用 sheet filter create/update",
+              "查看筛选视图列表用 sheet filter-view list",
+              "查看筛选视图条件用 sheet filter-view get-criteria"
             ],
             "canonical_path": "sheet.get_filter",
             "cli_name": "get",
@@ -14890,22 +14852,22 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "get_filter",
             "primary_cli_path": "sheet filter get",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "获取筛选",
             "use_when": [
-              "筛选/过滤/只看某些值/只显示满足条件的行/筛选数据/创建筛选/删除筛选/设置筛选条件/清除筛选/排序；查看当前筛选"
+              "查看普通筛选是否存在及范围"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "获取钉钉电子表格中指定工作表的所有筛选视图列表。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "列出工作表筛选视图",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“删除钉钉电子表格中指定工作表的筛选视图”请改用 dws sheet filter-view delete",
-              "要“在钉钉电子表格的指定工作表中创建一个筛选视图”请改用 dws sheet filter-view create",
-              "要“清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件”请改用 dws sheet filter-view delete-criteria"
+              "创建/更新筛选视图用 create/update",
+              "查看列条件用 sheet filter-view list-criteria",
+              "查看单个筛选视图详情用 sheet filter-view info"
             ],
             "canonical_path": "sheet.get_filter_views",
             "cli_name": "list",
@@ -14918,12 +14880,11 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "get_filter_views",
             "primary_cli_path": "sheet filter-view list",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "获取筛选视图",
             "use_when": [
-              "2. 查看已有筛选视图",
-              "筛选视图/查看筛选视图/有哪些筛选视图/筛选视图列表；获取所有筛选视图"
+              "查看有哪些筛选视图"
             ]
           },
           {
@@ -14954,11 +14915,13 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "以 RFC 4180 CSV 格式读取钉钉电子表格中指定工作表的指定范围数据。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "以 CSV 格式读取指定区域数据",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "需要创建、修改或删除数据时不要使用；本命令只用于“以 RFC 4180 CSV 格式读取钉钉电子表格中指定工作表的指定范围数据。”"
+              "写入 CSV 用 sheet csv-put",
+              "写入普通二维数组用 sheet range update",
+              "需要 JSON/结构化值用 sheet range read"
             ],
             "canonical_path": "sheet.get_range_as_csv",
             "cli_name": "csv-get",
@@ -14971,12 +14934,11 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "get_range_as_csv",
             "primary_cli_path": "sheet csv-get",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "low",
             "title": "以 CSV 格式读取工作表数据",
             "use_when": [
-              "2. 查看数据范围确认列对应关系",
-              "读数据/看表格内容；快速查看纯值数据、批量处理、大表分批读"
+              "需要 CSV 文本而非 JSON 二维数组时读取 range"
             ]
           },
           {
@@ -15203,39 +15165,41 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "批量清除多个区域，一次原子请求",
-            "agent_summary_source": "runtime-surface-completeness-v1",
+            "agent_summary": "批量清除多个区域的内容或格式",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "不需要批量清除多个区域，一次原子请求时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+              "写入/更新值用 sheet range update",
+              "删除整张工作表用 sheet delete-sheet",
+              "只清除一个区域用 sheet range clear"
             ],
             "canonical_path": "sheet.range_batch_clear",
             "cli_name": "batch-clear",
             "cli_path": "sheet range batch-clear",
-            "confirmation": "not_required",
+            "confirmation": "user_required",
             "description": "批量清除多个区域，一次原子请求。任一区域清除失败则整批回滚。\n\n每个 --ranges 项必须包含工作表前缀（格式: \"SheetName!A1:B3\"）。\n不同区域可以属于不同工作表。",
-            "effect": "write",
+            "effect": "destructive",
             "idempotency": "unknown",
             "interface_mode": "local",
             "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
             "name": "range_batch_clear",
             "primary_cli_path": "sheet range batch-clear",
-            "reviewed": false,
-            "risk": "medium",
+            "reviewed": true,
+            "risk": "high",
             "title": "批量清除多个区域（原子事务）",
             "use_when": [
-              "批量清除/一次清除多个区域/清空多个 sheet 的数据；批量清除多个区域"
+              "一次清除多个 range 的值、格式或全部内容"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值、超链接、数字格式等内容。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "批量设置多个区域的单元格样式或格式",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“基于源数据范围自动填充到目标范围”请改用 dws sheet range fill",
-              "要“将源范围的数据复制到目标位置”请改用 dws sheet range copy-to",
-              "要“清除钉钉电子表格中指定工作表指定范围的单元格内容、格式或全部”请改用 dws sheet range clear"
+              "写入单元格值用 sheet range update",
+              "只设置一个区域样式用 sheet range set-style",
+              "清空多个区域用 sheet range batch-clear"
             ],
             "canonical_path": "sheet.range_batch_set_style",
             "cli_name": "batch-set-style",
@@ -15252,22 +15216,22 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "range_batch_set_style",
             "primary_cli_path": "sheet range batch-set-style",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "更新表格指定区域内容",
             "use_when": [
-              "设置样式/改颜色/设背景色/加粗/居中/换行/字体颜色/字号；批量设置不同 range 的样式"
+              "一次更新多个 range 的样式或格式"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "将源范围的数据复制到目标位置。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "复制源区域到目标区域",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“基于源数据范围自动填充到目标范围”请改用 dws sheet range fill",
-              "要“对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值”请改用 dws sheet range batch-set-style",
-              "要“清除钉钉电子表格中指定工作表指定范围的单元格内容、格式或全部”请改用 dws sheet range clear"
+              "写入新值用 sheet range update",
+              "只读取源数据用 sheet range read",
+              "移动并清空源区域用 sheet range move-to"
             ],
             "canonical_path": "sheet.range_copy_to",
             "cli_name": "copy-to",
@@ -15284,30 +15248,29 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "range_copy_to",
             "primary_cli_path": "sheet range copy-to",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "区域复制",
             "use_when": [
-              "复制区域/把这块数据复制到/复制到另一个工作表；复制区域",
-              "复制区域/把这块数据复制到/复制到另一个工作表；跨工作表"
+              "把一个 range 的数据复制到另一个位置"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "将源范围的数据移动到目标位置，源区域将被清空。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "移动源区域到目标区域并清空源区域",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“基于源数据范围自动填充到目标范围”请改用 dws sheet range fill",
-              "要“对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值”请改用 dws sheet range batch-set-style",
-              "要“清除钉钉电子表格中指定工作表指定范围的单元格内容、格式或全部”请改用 dws sheet range clear"
+              "只复制不清空源区域用 sheet range copy-to",
+              "只读取数据用 sheet range read",
+              "清空区域用 sheet range clear"
             ],
             "canonical_path": "sheet.range_move_to",
             "cli_name": "move-to",
             "cli_path": "sheet range move-to",
-            "confirmation": "not_required",
+            "confirmation": "user_required",
             "description": "将源范围的数据移动到目标位置，源区域将被清空。支持同 sheet 和跨 sheet 移动。",
-            "effect": "write",
+            "effect": "destructive",
             "idempotency": "unknown",
             "interface_mode": "mcp",
             "interface_ref": {
@@ -15317,23 +15280,22 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "range_move_to",
             "primary_cli_path": "sheet range move-to",
-            "reviewed": false,
-            "risk": "medium",
+            "reviewed": true,
+            "risk": "high",
             "title": "区域移动",
             "use_when": [
-              "移动区域/把数据移到/剪切粘贴/移到另一个工作表；移动区域",
-              "移动区域/把数据移到/剪切粘贴/移到另一个工作表；跨工作表"
+              "把一个 range 移动到目标位置"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "读取工作表数据",
-            "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+            "agent_summary": "读取工作表指定区域的单元格值",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“基于源数据范围自动填充到目标范围”请改用 dws sheet range fill",
-              "要“对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值”请改用 dws sheet range batch-set-style",
-              "要“清除钉钉电子表格中指定工作表指定范围的单元格内容、格式或全部”请改用 dws sheet range clear"
+              "写入值用 sheet range update",
+              "清空内容/格式用 sheet range clear 或 batch-clear",
+              "读取 CSV 格式用 sheet csv-get"
             ],
             "canonical_path": "sheet.range_read",
             "cli_name": "read",
@@ -15350,26 +15312,22 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "range_read",
             "primary_cli_path": "sheet range read",
+            "reviewed": true,
             "risk": "low",
             "title": "读取工作表数据",
             "use_when": [
-              "3. 读取全部数据",
-              "4. 读取指定区域",
-              "导出/下载xlsx/存为Excel/存成表格文件/把表格变成xlsx/导出表格/下载表格/导出为 excel；\"帮我看看这个表格有什么数据",
-              "指定取值模式：原始值 / 公式文本",
-              "读数据/看表格内容；读取数据",
-              "读数据/看表格内容；需要结构化信息（值+样式+数据验证+富文本+单元格级超链接）、查看公式或原始值"
+              "读取某个 range 的数据或值"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值、超链接、数字格式等内容。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "设置单个区域的单元格样式",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“基于源数据范围自动填充到目标范围”请改用 dws sheet range fill",
-              "要“对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值”请改用 dws sheet range batch-set-style",
-              "要“清除钉钉电子表格中指定工作表指定范围的单元格内容、格式或全部”请改用 dws sheet range clear"
+              "写入单元格值用 sheet range update",
+              "批量设置多个区域样式用 sheet range batch-set-style",
+              "条件高亮用 sheet cond-format create/update"
             ],
             "canonical_path": "sheet.range_set_style",
             "cli_name": "set-style",
@@ -15386,32 +15344,22 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "range_set_style",
             "primary_cli_path": "sheet range set-style",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "更新表格指定区域内容",
             "use_when": [
-              "2. 设置数字格式（人民币）",
-              "2. 设置数字格式（人民币）——批量刷整列走 set-style",
-              "3. 商品 ID / 规格 ID 按文本展示，避免科学计数法",
-              "整片 range 启用自动换行",
-              "方式 B: 单独用 set-style 设置（适合只改格式不改值）",
-              "给 A1:B3 打上黄底粗体居中",
-              "给 C1:C5 逐单元格设置不同背景色",
-              "设置数字格式/改成百分比/用人民币显示/按日期显示/文本格式/保留几位小数；批量设置数字格式",
-              "设置数字格式/改成百分比/用人民币显示/按日期显示/文本格式/保留几位小数；设置数字格式",
-              "设置样式/改颜色/设背景色/加粗/居中/换行/字体颜色/字号；仅设样式不改值",
-              "设置样式/改颜色/设背景色/加粗/居中/换行/字体颜色/字号；设置单元格样式"
+              "设置一个 range 的字体、颜色、对齐、数字格式等样式"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "更新工作表指定区域内容（--values 与 --hyperlinks 至少传一项）",
-            "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+            "agent_summary": "写入或更新工作表指定区域的单元格值/超链接",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“基于源数据范围自动填充到目标范围”请改用 dws sheet range fill",
-              "要“对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值”请改用 dws sheet range batch-set-style",
-              "要“清除钉钉电子表格中指定工作表指定范围的单元格内容、格式或全部”请改用 dws sheet range clear"
+              "只改样式用 sheet range set-style 或 batch-set-style",
+              "只读数据用 sheet range read",
+              "清空区域用 sheet range clear"
             ],
             "canonical_path": "sheet.range_update",
             "cli_name": "update",
@@ -15428,31 +15376,11 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "range_update",
             "primary_cli_path": "sheet range update",
+            "reviewed": true,
             "risk": "medium",
             "title": "更新表格指定区域内容",
             "use_when": [
-              "2. 在新工作表中写入汇总公式（公式写在 text，以 = 开头）",
-              "3. 写入表头和数据",
-              "3. 写入表头和数据（每个单元格必须是 object；数字也写成字符串）",
-              "3. 写入超链接（写在 cell 的 hyperlink 字段）",
-              "3. 长数字 ID 写值时同步设置文本格式，避免科学计数法",
-              "4. 写入单元格级超链接",
-              "写入公式",
-              "写入公式（text 以 = 开头识别为公式）",
-              "写入单元格级超链接",
-              "写入单元格级超链接（写在 cell 的 hyperlink 字段，没有 --hyperlinks flag）",
-              "写入文本",
-              "写入文本（每个单元格必须是 object）",
-              "写数据/填表/更新单元格/写入公式；更新数据",
-              "只更新部分单元格：用 {} 空对象占位保留原值",
-              "导出/下载xlsx/存为Excel/存成表格文件/把表格变成xlsx/导出表格/下载表格/导出为 excel；\"往这个表格写入数据",
-              "提取 nodeId 后:",
-              "查看具体命令的完整参数说明",
-              "每个单元格必须是 object，公式写在 text（以 = 开头）；不支持裸字符串",
-              "清理单元格级超链接，保留当前值",
-              "清空单个单元格（text 为空字符串）",
-              "设置数字格式/改成百分比/用人民币显示/按日期显示/文本格式/保留几位小数；写值时顺带设置数字格式",
-              "设置样式/改颜色/设背景色/加粗/居中/换行/字体颜色/字号；写值同时附带样式"
+              "向指定 range 写入二维数组值或超链接"
             ]
           },
           {
@@ -15486,11 +15414,13 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "在钉钉表格的指定单元格范围内设置下拉列表。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "设置单元格下拉列表配置",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "仅需查询状态或预览结果、不应产生“在钉钉表格的指定单元格范围内设置下拉列表。”所述变更时不要使用"
+              "删除下拉配置用 sheet delete-dropdown",
+              "只查询下拉配置用 sheet get-dropdown",
+              "设置条件格式用 sheet cond-format create"
             ],
             "canonical_path": "sheet.set_dropdown_lists",
             "cli_name": "set-dropdown",
@@ -15503,23 +15433,22 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "set_dropdown_lists",
             "primary_cli_path": "sheet set-dropdown",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "设置下拉列表",
             "use_when": [
-              "设置下拉列表/下拉选项/下拉菜单/添加下拉/配置下拉；设置下拉列表",
-              "设置下拉列表/下拉选项/下拉菜单/添加下拉/配置下拉；设置多选下拉",
-              "设置单选下拉列表",
-              "设置带颜色的多选下拉列表"
+              "给指定范围配置下拉选项"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "将 RFC 4180 格式的 CSV 文本写入指定工作表的指定单元格位置。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "将 CSV 文本写入工作表指定起点",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "仅需查询状态或预览结果、不应产生“将 RFC 4180 格式的 CSV 文本写入指定工作表的指定单元格位置。”所述变更时不要使用"
+              "写入 JSON 二维数组用 sheet range update",
+              "只改样式用 sheet range set-style",
+              "读取 CSV 用 sheet csv-get"
             ],
             "canonical_path": "sheet.set_range_from_csv",
             "cli_name": "csv-put",
@@ -15532,43 +15461,39 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "set_range_from_csv",
             "primary_cli_path": "sheet csv-put",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "写入 CSV 数据到指定区域",
             "use_when": [
-              "内联多行 CSV：必须用 $'...' 让 \\n 变成真换行；普通单引号 '...\\n...' 里的 \\n 是字面量，会写成一行含字面 \\n 的错误数据",
-              "多行数据推荐用 @文件，最稳妥",
-              "批量写入CSV/导入CSV/CSV写入表格/把CSV贴到表格里；写入 CSV"
+              "把 CSV 文本导入到 sheet 指定位置"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "对钉钉电子表格中指定工作表的筛选范围内的数据进行排序。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "对基础筛选范围内数据排序",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“删除钉钉电子表格中指定工作表的筛选”请改用 dws sheet filter delete",
-              "要“在钉钉电子表格的指定工作表中创建筛选”请改用 dws sheet filter create",
-              "要“清除钉钉电子表格中指定工作表筛选的某一列的筛选条件”请改用 dws sheet filter clear-criteria"
+              "仅更新筛选条件用 sheet filter update",
+              "筛选视图排序/条件请使用 sheet filter-view update",
+              "读取数据排序结果用 sheet range read"
             ],
             "canonical_path": "sheet.sort_filter",
             "cli_name": "sort",
             "cli_path": "sheet filter sort",
             "confirmation": "not_required",
             "description": "对钉钉电子表格中指定工作表的筛选范围内的数据进行排序。\r\n\r\n通过 nodeId 定位电子表格文档，通过 sheetId 定位工作表。\r\nnodeId 支持传入文档链接 URL 或文档 ID（dentryUuid），系统自动识别。\r\nsheetId 支持传入工作表 ID 或工作表名称，可通过 get_all_sheets 获取。\r\n\r\n排序基于筛选范围内的指定列，支持升序和降序。\r\n排序会实际改变工作表中数据行的物理顺序。\r\n\r\n使用此接口前，工作表必须已创建筛选（通过 create_filter 创建）。\r\n\r\n仅限用户对文档具备\"可编辑\"权限时可操作。不支持跨组织操作。",
-            "effect": "write",
+            "effect": "read",
             "idempotency": "unknown",
             "interface_mode": "mcp",
             "metadata_source": "embedded-mcp-metadata",
             "name": "sort_filter",
             "primary_cli_path": "sheet filter sort",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "筛选排序",
             "use_when": [
-              "按第 1 列（A 列）升序排序",
-              "按第 3 列（C 列）降序排序",
-              "筛选/过滤/只看某些值/只显示满足条件的行/筛选数据/创建筛选/删除筛选/设置筛选条件/清除筛选/排序；按列排序"
+              "在普通筛选范围内设置排序"
             ]
           },
           {
@@ -15766,13 +15691,13 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "更新指定工作表中的一条条件格式规则。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "更新条件格式规则",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“删除指定工作表中的一条条件格式规则”请改用 dws sheet cond-format delete",
-              "要“在指定工作表中创建一条条件格式规则”请改用 dws sheet cond-format create",
-              "要“获取指定工作表中的所有条件格式规则，或通过 ruleId 获取单”请改用 dws sheet cond-format list"
+              "删除规则用 sheet cond-format delete",
+              "新建规则用 sheet cond-format create",
+              "静态设置样式用 sheet range set-style"
             ],
             "canonical_path": "sheet.update_cond_format",
             "cli_name": "update",
@@ -15785,14 +15710,11 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "update_cond_format",
             "primary_cli_path": "sheet cond-format update",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "更新条件格式规则",
             "use_when": [
-              "修改应用范围",
-              "修改条件格式/更新条件格式规则/改条件/改样式/改范围；更新条件格式规则",
-              "修改条件（改为大于 90）",
-              "修改样式"
+              "修改已有条件格式规则"
             ]
           },
           {
@@ -15834,13 +15756,13 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "批量更新钉钉电子表格中指定工作表的筛选条件。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "更新工作表基础筛选条件",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“删除钉钉电子表格中指定工作表的筛选”请改用 dws sheet filter delete",
-              "要“在钉钉电子表格的指定工作表中创建筛选”请改用 dws sheet filter create",
-              "要“清除钉钉电子表格中指定工作表筛选的某一列的筛选条件”请改用 dws sheet filter clear-criteria"
+              "仅排序筛选范围用 sheet filter sort",
+              "清除某列筛选条件用 sheet filter clear-criteria",
+              "管理筛选视图条件用 sheet filter-view update-criteria"
             ],
             "canonical_path": "sheet.update_filter",
             "cli_name": "update",
@@ -15853,24 +15775,22 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "update_filter",
             "primary_cli_path": "sheet filter update",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "更新筛选",
             "use_when": [
-              "同时设置多列的筛选条件",
-              "按颜色筛选",
-              "筛选/过滤/只看某些值/只显示满足条件的行/筛选数据/创建筛选/删除筛选/设置筛选条件/清除筛选/排序；批量设置多列条件"
+              "批量设置普通筛选的筛选条件"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "更新钉钉电子表格中指定工作表的筛选视图属性（名称、范围和/或筛选条件）。",
-            "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+            "agent_summary": "更新筛选视图属性和范围",
+            "agent_summary_source": "sheet-range-filter-agent-review-v1",
             "availability": "available",
             "avoid_when": [
-              "要“删除钉钉电子表格中指定工作表的筛选视图”请改用 dws sheet filter-view delete",
-              "要“在钉钉电子表格的指定工作表中创建一个筛选视图”请改用 dws sheet filter-view create",
-              "要“清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件”请改用 dws sheet filter-view delete-criteria"
+              "创建新筛选视图用 sheet filter-view create",
+              "删除筛选视图用 sheet filter-view delete",
+              "只改某列筛选条件用 sheet filter-view update-criteria"
             ],
             "canonical_path": "sheet.update_filter_view",
             "cli_name": "update",
@@ -15883,15 +15803,11 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "update_filter_view",
             "primary_cli_path": "sheet filter-view update",
-            "reviewed": false,
+            "reviewed": true,
             "risk": "medium",
             "title": "更新筛选视图",
             "use_when": [
-              "6. 更新筛选视图名称和范围",
-              "更新筛选条件",
-              "更新筛选视图/修改筛选视图/改筛选视图名称/改筛选视图范围；更新筛选视图属性",
-              "更新筛选视图名称",
-              "更新筛选视图范围"
+              "修改筛选视图名称、范围或整体配置"
             ]
           },
           {
@@ -51365,18 +51281,18 @@
     "sheet.create_cond_format": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.sheet.create_cond_format",
         "skills/mono/references/products/sheet/sheet-conditional-format.md",
         "skills/mono/schema-hints/selection-review.json",
-        "skills/mono/schema-hints/sibling-disambiguation.json"
+        "skills/mono/schema-hints/sibling-disambiguation.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "在指定工作表中创建一条条件格式规则。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "创建条件格式规则",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“删除指定工作表中的一条条件格式规则”请改用 dws sheet cond-format delete",
-        "要“更新指定工作表中的一条条件格式规则”请改用 dws sheet cond-format update",
-        "要“获取指定工作表中的所有条件格式规则，或通过 ruleId 获取单”请改用 dws sheet cond-format list"
+        "只设置静态样式用 sheet range set-style",
+        "更新已有条件格式用 sheet cond-format update",
+        "查看条件格式列表用 sheet cond-format list"
       ],
       "canonical_path": "sheet.create_cond_format",
       "cli_name": "create",
@@ -51385,7 +51301,7 @@
       "description": "在指定工作表中创建一条条件格式规则。\r\n条件格式规则定义了当单元格满足特定条件时自动应用的样式。\r\n每条规则需要指定：应用范围（ranges）、条件类型及参数、命中时的单元格样式（cellStyle）。",
       "display": "钉钉表格管理",
       "effect": "write",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet cond-format create --node NODE_ID --sheet-id SHEET_ID --ranges '[\"A2:H100\"]' --condition '{\"formulaCondition\":{\"formula\":\"=$H2=\\\"是\\\"\"}}' --cell-style '{\"backgroundColor\":\"#FFECEC\"}'",
         "dws sheet cond-format create --node NODE_ID --sheet-id SHEET_ID --ranges '[\"A2:H100\"]' --condition '{\"formulaCondition\":{\"formula\":\"=$A2\u003e$B2\"}}' --cell-style '{\"backgroundColor\":\"#FFECEC\"}'"
@@ -51457,37 +51373,30 @@
       "path": "sheet.create_cond_format",
       "primary_cli_path": "sheet cond-format create",
       "product_id": "sheet",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:sheet",
       "title": "创建条件格式规则",
       "use_when": [
-        "创建条件格式/设置条件格式/大于某值时标红/包含某文本时高亮/数据条/图标集/色阶/重复值高亮；创建条件格式规则",
-        "基于辅助列值做条件格式（用 formulaCondition 引用辅助列）",
-        "数值条件：大于 80 时标红加粗",
-        "数据条",
-        "文本条件：包含\"延期\"时加删除线",
-        "色阶（三色）",
-        "虽然逻辑等价，但产物里缺辅助列 → 用户打开表格看不到\"是/否\"列",
-        "重复值高亮"
+        "按条件高亮或设置格式规则"
       ]
     },
     "sheet.create_filter": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.sheet.create_filter",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter.md",
         "skills/mono/schema-hints/selection-review.json",
-        "skills/mono/schema-hints/sibling-disambiguation.json"
+        "skills/mono/schema-hints/sibling-disambiguation.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "在钉钉电子表格的指定工作表中创建筛选。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "为工作表创建基础筛选",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“删除钉钉电子表格中指定工作表的筛选”请改用 dws sheet filter delete",
-        "要“清除钉钉电子表格中指定工作表筛选的某一列的筛选条件”请改用 dws sheet filter clear-criteria",
-        "要“获取钉钉电子表格中指定工作表的筛选信息”请改用 dws sheet filter get"
+        "只查看筛选信息用 sheet filter get",
+        "更新筛选条件用 sheet filter update 或 clear-criteria",
+        "管理筛选视图用 sheet filter-view create/update/list"
       ],
       "canonical_path": "sheet.create_filter",
       "cli_name": "create",
@@ -51496,7 +51405,7 @@
       "description": "在钉钉电子表格的指定工作表中创建筛选。\r\n创建筛选后，工作表的指定范围将出现筛选下拉箭头，用户可通过 set_filter_criteria 设置具体的筛选条件。\r\n每个工作表只能有一个筛选，如果已存在筛选则会报错。",
       "display": "钉钉表格管理",
       "effect": "write",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet filter create --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A1:E100\"",
         "dws sheet filter create --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A1:E100\" --criteria '[{\"column\":1,\"filterType\":\"values\",\"visibleValues\":[\"北京\",\"上海\"]}]'"
@@ -51547,33 +51456,30 @@
       "path": "sheet.create_filter",
       "primary_cli_path": "sheet filter create",
       "product_id": "sheet",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:sheet",
       "title": "创建筛选",
       "use_when": [
-        "创建筛选并同时设置条件（按值筛选）",
-        "创建筛选并设置条件筛选",
-        "创建筛选框架（不设条件）",
-        "筛选/过滤/只看某些值/只显示满足条件的行/筛选数据/创建筛选/删除筛选/设置筛选条件/清除筛选/排序；创建筛选"
+        "需要在普通筛选范围上开启筛选"
       ]
     },
     "sheet.create_filter_view": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.sheet.create_filter_view",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter-view.md",
         "skills/mono/schema-hints/selection-review.json",
-        "skills/mono/schema-hints/sibling-disambiguation.json"
+        "skills/mono/schema-hints/sibling-disambiguation.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "在钉钉电子表格的指定工作表中创建一个筛选视图。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "创建筛选视图",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“删除钉钉电子表格中指定工作表的筛选视图”请改用 dws sheet filter-view delete",
-        "要“清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件”请改用 dws sheet filter-view delete-criteria",
-        "要“获取单列筛选条件”请改用 dws sheet filter-view get-criteria"
+        "创建普通筛选用 sheet filter create",
+        "更新已有筛选视图用 sheet filter-view update",
+        "查看筛选视图列表用 sheet filter-view list"
       ],
       "canonical_path": "sheet.create_filter_view",
       "cli_name": "create",
@@ -51582,7 +51488,7 @@
       "description": "在钉钉电子表格的指定工作表中创建一个筛选视图。\r\n\r\n通过 nodeId 定位电子表格文档，通过 sheetId 定位工作表。\r\nnodeId 支持传入文档链接 URL 或文档 ID（dentryUuid），系统自动识别。\r\nsheetId 支持传入工作表 ID 或工作表名称，可通过 get_all_sheets 获取。\r\n\r\n筛选视图是独立于全局筛选的个人化数据过滤方式。创建后可通过 set_filter_view_criteria 设置具体的筛选条件。\r\n同一工作表可以创建多个筛选视图。\r\n\r\n仅限用户对文档具备\"可编辑\"权限时可创建。不支持跨组织操作。",
       "display": "钉钉表格管理",
       "effect": "write",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet filter-view create --help",
         "dws sheet filter-view create --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --name \"我的视图\" --range \"A1:E10\""
@@ -51640,18 +51546,12 @@
       "path": "sheet.create_filter_view",
       "primary_cli_path": "sheet filter-view create",
       "product_id": "sheet",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:sheet",
       "title": "创建筛选视图",
       "use_when": [
-        "3. 创建筛选视图（不带条件）",
-        "创建不带筛选条件的筛选视图",
-        "创建带按值筛选条件的筛选视图",
-        "创建带按条件筛选的筛选视图（大于等于 200000）",
-        "创建筛选视图/新建筛选视图/添加筛选视图；创建筛选视图",
-        "创建筛选视图时直接指定筛选条件",
-        "查看具体命令的完整参数说明"
+        "需要创建可保存的筛选视图"
       ]
     },
     "sheet.create_float_image": {
@@ -51907,19 +51807,19 @@
     "sheet.delete_cond_format": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.sheet.delete_cond_format",
         "skills/mono/references/products/sheet/sheet-conditional-format.md",
         "skills/mono/schema-hints/destructive-safety.json",
         "skills/mono/schema-hints/selection-review.json",
-        "skills/mono/schema-hints/sibling-disambiguation.json"
+        "skills/mono/schema-hints/sibling-disambiguation.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "删除指定工作表中的一条条件格式规则。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "删除条件格式规则",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“在指定工作表中创建一条条件格式规则”请改用 dws sheet cond-format create",
-        "要“更新指定工作表中的一条条件格式规则”请改用 dws sheet cond-format update",
-        "要“获取指定工作表中的所有条件格式规则，或通过 ruleId 获取单”请改用 dws sheet cond-format list"
+        "删除普通筛选用 sheet filter delete",
+        "删除筛选视图用 sheet filter-view delete",
+        "只修改规则用 sheet cond-format update"
       ],
       "canonical_path": "sheet.delete_cond_format",
       "cli_name": "delete",
@@ -51975,13 +51875,12 @@
       "path": "sheet.delete_cond_format",
       "primary_cli_path": "sheet cond-format delete",
       "product_id": "sheet",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "high",
       "source": "hardcoded:sheet",
       "title": "删除条件格式规则",
       "use_when": [
-        "删除条件格式/移除条件格式/取消条件格式；删除条件格式规则",
-        "删除条件格式规则（必须加 --yes 确认）"
+        "删除某条条件格式规则"
       ]
     },
     "sheet.delete_dimension": {
@@ -52087,17 +51986,19 @@
     "sheet.delete_dropdown_lists": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.sheet.delete_dropdown_lists",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-dropdown.md",
         "skills/mono/schema-hints/destructive-safety.json",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "删除钉钉表格指定单元格范围内的下拉列表配置。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "删除单元格下拉列表配置",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "用户未明确要求“删除钉钉表格指定单元格范围内的下拉列表配置。”、目标不清楚或尚未确认时不要使用"
+        "修改下拉选项用 sheet set-dropdown",
+        "只查询下拉配置用 sheet get-dropdown",
+        "清空单元格内容用 sheet range clear"
       ],
       "canonical_path": "sheet.delete_dropdown_lists",
       "cli_name": "delete-dropdown",
@@ -52148,31 +52049,31 @@
       "path": "sheet.delete_dropdown_lists",
       "primary_cli_path": "sheet delete-dropdown",
       "product_id": "sheet",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "high",
       "source": "hardcoded:sheet",
       "title": "删除下拉列表",
       "use_when": [
-        "删除下拉列表/移除下拉/取消下拉/清除下拉；删除下拉列表"
+        "移除指定范围的下拉列表配置"
       ]
     },
     "sheet.delete_filter": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.sheet.delete_filter",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter.md",
         "skills/mono/schema-hints/destructive-safety.json",
         "skills/mono/schema-hints/selection-review.json",
-        "skills/mono/schema-hints/sibling-disambiguation.json"
+        "skills/mono/schema-hints/sibling-disambiguation.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "删除钉钉电子表格中指定工作表的筛选。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "删除工作表基础筛选",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“在钉钉电子表格的指定工作表中创建筛选”请改用 dws sheet filter create",
-        "要“清除钉钉电子表格中指定工作表筛选的某一列的筛选条件”请改用 dws sheet filter clear-criteria",
-        "要“获取钉钉电子表格中指定工作表的筛选信息”请改用 dws sheet filter get"
+        "仅查看筛选信息用 sheet filter get",
+        "删除筛选视图用 sheet filter-view delete",
+        "只清除某列条件用 sheet filter clear-criteria"
       ],
       "canonical_path": "sheet.delete_filter",
       "cli_name": "delete",
@@ -52215,31 +52116,31 @@
       "path": "sheet.delete_filter",
       "primary_cli_path": "sheet filter delete",
       "product_id": "sheet",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "high",
       "source": "hardcoded:sheet",
       "title": "删除筛选",
       "use_when": [
-        "筛选/过滤/只看某些值/只显示满足条件的行/筛选数据/创建筛选/删除筛选/设置筛选条件/清除筛选/排序；删除筛选"
+        "移除整张表的普通筛选配置"
       ]
     },
     "sheet.delete_filter_view": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.sheet.delete_filter_view",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter-view.md",
         "skills/mono/schema-hints/destructive-safety.json",
         "skills/mono/schema-hints/selection-review.json",
-        "skills/mono/schema-hints/sibling-disambiguation.json"
+        "skills/mono/schema-hints/sibling-disambiguation.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "删除钉钉电子表格中指定工作表的筛选视图。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "删除筛选视图",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“在钉钉电子表格的指定工作表中创建一个筛选视图”请改用 dws sheet filter-view create",
-        "要“清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件”请改用 dws sheet filter-view delete-criteria",
-        "要“获取单列筛选条件”请改用 dws sheet filter-view get-criteria"
+        "删除基础筛选用 sheet filter delete",
+        "只删除某列条件用 sheet filter-view delete-criteria",
+        "查看筛选视图详情用 sheet filter-view info"
       ],
       "canonical_path": "sheet.delete_filter_view",
       "cli_name": "delete",
@@ -52290,13 +52191,12 @@
       "path": "sheet.delete_filter_view",
       "primary_cli_path": "sheet filter-view delete",
       "product_id": "sheet",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "high",
       "source": "hardcoded:sheet",
       "title": "删除筛选视图",
       "use_when": [
-        "8. 删除筛选视图",
-        "删除筛选视图/移除筛选视图；删除筛选视图"
+        "删除一个已保存的筛选视图"
       ]
     },
     "sheet.delete_float_image": {
@@ -52522,20 +52422,20 @@
     "sheet.filter_clear_criteria": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.sheet.filter_clear_criteria",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter.md",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
-        "skills/mono/schema-hints/sibling-disambiguation.json"
+        "skills/mono/schema-hints/sibling-disambiguation.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "清除钉钉电子表格中指定工作表筛选的某一列的筛选条件。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "清除基础筛选中某一列条件",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“删除钉钉电子表格中指定工作表的筛选”请改用 dws sheet filter delete",
-        "要“在钉钉电子表格的指定工作表中创建筛选”请改用 dws sheet filter create",
-        "要“获取钉钉电子表格中指定工作表的筛选信息”请改用 dws sheet filter get"
+        "删除整个基础筛选用 sheet filter delete",
+        "更新筛选条件用 sheet filter update",
+        "筛选视图条件用 sheet filter-view delete-criteria"
       ],
       "canonical_path": "sheet.filter_clear_criteria",
       "cli_name": "clear-criteria",
@@ -52544,7 +52444,7 @@
       "description": "清除钉钉电子表格中指定工作表筛选的某一列的筛选条件。\r\n\r\n通过 nodeId 定位电子表格文档，通过 sheetId 定位工作表，通过 column 指定目标列。\r\nnodeId 支持传入文档链接 URL 或文档 ID（dentryUuid），系统自动识别。\r\nsheetId 支持传入工作表 ID 或工作表名称，可通过 get_all_sheets 获取。\r\n\r\n清除指定列的筛选条件后，该列不再参与筛选计算，之前被该列条件隐藏的行将重新显示（前提是其他列的条件也不隐藏该行）。\r\n此操作仅清除指定列的条件，不会删除整个筛选。如需删除整个筛选，请使用 delete_filter。\r\n\r\n如果指定列没有设置筛选条件，调用此接口不会报错。\r\n\r\n仅限用户对文档具备\"可编辑\"权限时可操作。不支持跨组织操作。",
       "display": "钉钉表格管理",
       "effect": "write",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet filter clear-criteria --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --column 1",
         "dws sheet filter clear-criteria --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --column 0"
@@ -52587,34 +52487,32 @@
       "path": "sheet.filter_clear_criteria",
       "primary_cli_path": "sheet filter clear-criteria",
       "product_id": "sheet",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:sheet",
       "title": "清除筛选条件",
       "use_when": [
-        "清除第 1 列（A 列）的筛选条件",
-        "清除第 2 列（B 列）的筛选条件",
-        "筛选/过滤/只看某些值/只显示满足条件的行/筛选数据/创建筛选/删除筛选/设置筛选条件/清除筛选/排序；清除某一列条件"
+        "仅清除普通筛选的某列筛选条件"
       ]
     },
     "sheet.filter_view_delete_criteria": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.sheet.filter_view_delete_criteria",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter-view.md",
         "skills/mono/schema-hints/destructive-safety.json",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
-        "skills/mono/schema-hints/sibling-disambiguation.json"
+        "skills/mono/schema-hints/sibling-disambiguation.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "删除筛选视图单列筛选条件",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“删除钉钉电子表格中指定工作表的筛选视图”请改用 dws sheet filter-view delete",
-        "要“在钉钉电子表格的指定工作表中创建一个筛选视图”请改用 dws sheet filter-view create",
-        "要“获取单列筛选条件”请改用 dws sheet filter-view get-criteria"
+        "删除整个筛选视图用 sheet filter-view delete",
+        "基础筛选清除列条件用 sheet filter clear-criteria",
+        "更新条件用 sheet filter-view update-criteria"
       ],
       "canonical_path": "sheet.filter_view_delete_criteria",
       "cli_name": "delete-criteria",
@@ -52673,15 +52571,12 @@
       "path": "sheet.filter_view_delete_criteria",
       "primary_cli_path": "sheet filter-view delete-criteria",
       "product_id": "sheet",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "high",
       "source": "hardcoded:sheet",
       "title": "清除筛选视图列条件",
       "use_when": [
-        "7. 清除某列的筛选条件",
-        "删除第 1 列（A 列）的筛选条件",
-        "删除第 3 列（C 列）的筛选条件",
-        "清除筛选条件/移除筛选条件/取消筛选条件；清除筛选视图列条件"
+        "清除筛选视图中某列的筛选条件"
       ]
     },
     "sheet.filter_view_get_criteria": {
@@ -52692,15 +52587,16 @@
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
-        "skills/mono/schema-hints/sibling-disambiguation.json"
+        "skills/mono/schema-hints/sibling-disambiguation.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
       "agent_summary": "获取单列筛选条件",
       "agent_summary_source": "dws-command-surface-review",
       "availability": "available",
       "avoid_when": [
-        "要“删除钉钉电子表格中指定工作表的筛选视图”请改用 dws sheet filter-view delete",
-        "要“在钉钉电子表格的指定工作表中创建一个筛选视图”请改用 dws sheet filter-view create",
-        "要“清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件”请改用 dws sheet filter-view delete-criteria"
+        "列出所有列条件用 sheet filter-view list-criteria",
+        "删除单列条件用 sheet filter-view delete-criteria",
+        "更新单列条件用 sheet filter-view update-criteria"
       ],
       "canonical_path": "sheet.filter_view_get_criteria",
       "cli_name": "get-criteria",
@@ -52709,7 +52605,7 @@
       "description": "获取钉钉电子表格中指定工作表的所有筛选视图列表。\r\n\r\n通过 nodeId 定位电子表格文档，通过 sheetId 定位工作表。\r\nnodeId 支持传入文档链接 URL 或文档 ID（dentryUuid），系统自动识别。\r\nsheetId 支持传入工作表 ID 或工作表名称，可通过 get_all_sheets 获取。\r\n\r\n筛选视图是独立于全局筛选的个人化数据过滤方式，不同用户可以创建自己的筛选视图，互不影响。\r\n返回该工作表下所有筛选视图的 ID、名称和范围信息。\r\n\r\n仅限用户对文档具备\"可阅读\"权限时可获取。不支持跨组织查询。",
       "display": "钉钉表格管理",
       "effect": "read",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet filter-view get-criteria --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --filter-view-id \u003cFV_ID\u003e --column 0",
         "dws sheet filter-view get-criteria --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --filter-view-id \u003cFV_ID\u003e --column 2"
@@ -52761,10 +52657,7 @@
       "source": "hardcoded:sheet",
       "title": "获取筛选视图",
       "use_when": [
-        "查看第 1 列（偏移量 0）的筛选条件",
-        "查看第 3 列（偏移量 2）的筛选条件",
-        "查看筛选条件/有哪些筛选条件/筛选视图设了什么条件/列出筛选条件；查看某一列的条件",
-        "获取单列筛选条件"
+        "查看筛选视图某一列的筛选条件"
       ]
     },
     "sheet.filter_view_info": {
@@ -52775,15 +52668,16 @@
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
-        "skills/mono/schema-hints/sibling-disambiguation.json"
+        "skills/mono/schema-hints/sibling-disambiguation.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
       "agent_summary": "获取单个筛选视图详情",
       "agent_summary_source": "dws-command-surface-review",
       "availability": "available",
       "avoid_when": [
-        "要“删除钉钉电子表格中指定工作表的筛选视图”请改用 dws sheet filter-view delete",
-        "要“在钉钉电子表格的指定工作表中创建一个筛选视图”请改用 dws sheet filter-view create",
-        "要“清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件”请改用 dws sheet filter-view delete-criteria"
+        "列出所有筛选视图用 sheet filter-view list",
+        "更新筛选视图用 sheet filter-view update",
+        "查看列条件用 sheet filter-view list-criteria"
       ],
       "canonical_path": "sheet.filter_view_info",
       "cli_name": "info",
@@ -52792,7 +52686,7 @@
       "description": "获取钉钉电子表格中指定工作表的所有筛选视图列表。\r\n\r\n通过 nodeId 定位电子表格文档，通过 sheetId 定位工作表。\r\nnodeId 支持传入文档链接 URL 或文档 ID（dentryUuid），系统自动识别。\r\nsheetId 支持传入工作表 ID 或工作表名称，可通过 get_all_sheets 获取。\r\n\r\n筛选视图是独立于全局筛选的个人化数据过滤方式，不同用户可以创建自己的筛选视图，互不影响。\r\n返回该工作表下所有筛选视图的 ID、名称和范围信息。\r\n\r\n仅限用户对文档具备\"可阅读\"权限时可获取。不支持跨组织查询。",
       "display": "钉钉表格管理",
       "effect": "read",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet filter-view info --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --filter-view-id \u003cFV_ID\u003e"
       ],
@@ -52837,9 +52731,7 @@
       "source": "hardcoded:sheet",
       "title": "获取筛选视图",
       "use_when": [
-        "查看指定筛选视图的详情",
-        "筛选视图详情/查看某个筛选视图/筛选视图信息/筛选视图配置；获取单个筛选视图详情",
-        "获取单个筛选视图详情"
+        "已知道 filterViewId，需要查看名称、范围和配置"
       ]
     },
     "sheet.filter_view_list_criteria": {
@@ -52850,15 +52742,16 @@
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
-        "skills/mono/schema-hints/sibling-disambiguation.json"
+        "skills/mono/schema-hints/sibling-disambiguation.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
       "agent_summary": "列出筛选视图所有列条件",
       "agent_summary_source": "dws-command-surface-review",
       "availability": "available",
       "avoid_when": [
-        "要“删除钉钉电子表格中指定工作表的筛选视图”请改用 dws sheet filter-view delete",
-        "要“在钉钉电子表格的指定工作表中创建一个筛选视图”请改用 dws sheet filter-view create",
-        "要“清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件”请改用 dws sheet filter-view delete-criteria"
+        "基础筛选条件用 sheet filter get/update",
+        "更新条件用 sheet filter-view update-criteria",
+        "查看单列条件用 sheet filter-view get-criteria"
       ],
       "canonical_path": "sheet.filter_view_list_criteria",
       "cli_name": "list-criteria",
@@ -52867,7 +52760,7 @@
       "description": "获取钉钉电子表格中指定工作表的所有筛选视图列表。\r\n\r\n通过 nodeId 定位电子表格文档，通过 sheetId 定位工作表。\r\nnodeId 支持传入文档链接 URL 或文档 ID（dentryUuid），系统自动识别。\r\nsheetId 支持传入工作表 ID 或工作表名称，可通过 get_all_sheets 获取。\r\n\r\n筛选视图是独立于全局筛选的个人化数据过滤方式，不同用户可以创建自己的筛选视图，互不影响。\r\n返回该工作表下所有筛选视图的 ID、名称和范围信息。\r\n\r\n仅限用户对文档具备\"可阅读\"权限时可获取。不支持跨组织查询。",
       "display": "钉钉表格管理",
       "effect": "read",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet filter-view list-criteria --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --filter-view-id \u003cFV_ID\u003e"
       ],
@@ -52912,9 +52805,7 @@
       "source": "hardcoded:sheet",
       "title": "获取筛选视图",
       "use_when": [
-        "列出筛选视图所有列条件",
-        "列出筛选视图的所有条件",
-        "查看筛选条件/有哪些筛选条件/筛选视图设了什么条件/列出筛选条件；列出所有列条件"
+        "查看筛选视图下每列筛选条件"
       ]
     },
     "sheet.filter_view_update_criteria": {
@@ -52925,15 +52816,16 @@
         "skills/mono/schema-hints/catalog-completeness.json",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
-        "skills/mono/schema-hints/sibling-disambiguation.json"
+        "skills/mono/schema-hints/sibling-disambiguation.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
       "agent_summary": "更新筛选视图列条件",
       "agent_summary_source": "dws-command-surface-review",
       "availability": "available",
       "avoid_when": [
-        "要“删除钉钉电子表格中指定工作表的筛选视图”请改用 dws sheet filter-view delete",
-        "要“在钉钉电子表格的指定工作表中创建一个筛选视图”请改用 dws sheet filter-view create",
-        "要“清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件”请改用 dws sheet filter-view delete-criteria"
+        "删除筛选视图列条件用 sheet filter-view delete-criteria",
+        "更新基础筛选条件用 sheet filter update",
+        "更新视图名称/范围用 sheet filter-view update"
       ],
       "canonical_path": "sheet.filter_view_update_criteria",
       "cli_name": "update-criteria",
@@ -52942,7 +52834,7 @@
       "description": "更新钉钉电子表格中指定工作表筛选视图的某一列的筛选条件。\n\n用途：为筛选视图的指定列创建或更新筛选条件，控制该列哪些数据行可见。\n场景：\n  - 只显示某些特定值的行（如\"只看研发部\"）→ 使用 filterType: values\n  - 按数值条件筛选（如\"绩效 ≥ 85\"）→ 使用 filterType: condition + operator: greater-equal\n  - 按文本条件筛选（如\"名称包含关键字\"）→ 使用 filterType: condition + operator: contains\n区分：\n  - update-criteria 精确控制单列条件，适合逐列设置不同的筛选逻辑\n  - filter-view update --criteria 可以批量更新多列条件，适合一次性设置多列\n  - delete-criteria 是 update-criteria 的逆操作，删除指定列的条件\n\n通过 --node 定位电子表格文档，通过 --sheet-id 定位工作表，通过 --filter-view-id 定位筛选视图，通过 --column 指定目标列。\nnodeId 支持传入文档链接 URL 或文档 ID（dentryUuid），系统自动识别。\nsheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获取。\nfilterViewId 可通过 filter-view list 获取。\n\n--column 为列偏移量（从 0 开始），相对于筛选视图范围首列。\n例如筛选视图范围为 B1:E10，则 --column 0 代表 B 列，--column 1 代表 C 列。\n\n--filter-criteria 为该列的筛选条件 JSON 对象，支持三种筛选类型：\n  values    按值筛选，通过 visibleValues 指定允许显示的值列表\n  condition 按条件筛选，通过 conditions 指定条件运算符和比较值（最多 2 个）\n  color     按颜色筛选，通过 backgroundColor 或 fontColor 指定颜色\n\ncondition 类型支持的 operator（必须使用 kebab-case 格式）：\n  equal, not-equal, contains, not-contains,\n  starts-with, not-starts-with, ends-with, not-ends-with,\n  greater, greater-equal, less, less-equal\n\n多条件之间通过 conditionOperator 指定逻辑关系：\"and\"（且，默认）或 \"or\"（或）。\n\n更新条件后会立即在该筛选视图中生效。筛选视图的条件仅影响当前视图，不影响全局筛选或其他筛选视图。",
       "display": "钉钉表格管理",
       "effect": "write",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet filter-view update-criteria --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --filter-view-id \u003cFV_ID\u003e --column 0 --filter-criteria '{\"filterType\":\"values\",\"visibleValues\":[\"销售部\",\"市场部\"]}'",
         "dws sheet filter-view update-criteria --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --filter-view-id \u003cFV_ID\u003e --column 2 --filter-criteria '{\"filterType\":\"condition\",\"conditions\":[{\"operator\":\"greater\",\"value\":\"100\"}]}'"
@@ -52998,16 +52890,7 @@
       "source": "hardcoded:sheet",
       "title": "更新筛选视图列条件",
       "use_when": [
-        "4. 为筛选视图设置列条件（按值筛选）",
-        "5. 为筛选视图设置列条件（按条件筛选）",
-        "多条件筛选：大于等于 60 且 小于等于 90",
-        "按值筛选：只显示\"销售部\"和\"市场部",
-        "按条件筛选：大于 100",
-        "按条件筛选：大于等于 200000",
-        "按条件筛选：小于 100",
-        "按颜色筛选：背景色为红色",
-        "更新筛选视图列条件",
-        "设置筛选条件/添加筛选条件/配置筛选视图条件/按值筛选/按条件筛选/按颜色筛选；设置筛选视图列条件"
+        "修改筛选视图中某一列的筛选规则"
       ]
     },
     "sheet.find_cells": {
@@ -53206,18 +53089,18 @@
     "sheet.get_cond_format": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.sheet.get_cond_format",
         "skills/mono/references/products/sheet/sheet-conditional-format.md",
         "skills/mono/schema-hints/selection-review.json",
-        "skills/mono/schema-hints/sibling-disambiguation.json"
+        "skills/mono/schema-hints/sibling-disambiguation.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "获取指定工作表中的所有条件格式规则，或通过 ruleId 获取单个规则的详情。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "查看条件格式规则列表或详情",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“删除指定工作表中的一条条件格式规则”请改用 dws sheet cond-format delete",
-        "要“在指定工作表中创建一条条件格式规则”请改用 dws sheet cond-format create",
-        "要“更新指定工作表中的一条条件格式规则”请改用 dws sheet cond-format update"
+        "创建条件格式用 sheet cond-format create",
+        "删除条件格式用 sheet cond-format delete",
+        "更新条件格式用 sheet cond-format update"
       ],
       "canonical_path": "sheet.get_cond_format",
       "cli_name": "list",
@@ -53226,7 +53109,7 @@
       "description": "获取指定工作表中的所有条件格式规则，或通过 ruleId 获取单个规则的详情。\r\n条件格式规则定义了当单元格满足特定条件时自动应用的样式（如背景色、字体颜色等）。\r\n返回的每条规则包含：规则 ID、应用范围、条件类型及参数、命中时的单元格样式。\r\n支持的条件类型包括：数值比较、文本包含、空值/非空、错误值、重复/唯一值、自定义公式、排名、高于/低于平均值、标准差、时间段、数据条、图标集、色阶。",
       "display": "钉钉表格管理",
       "effect": "read",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet cond-format list --node NODE_ID --sheet-id SHEET_ID"
       ],
@@ -53267,30 +53150,29 @@
       "path": "sheet.get_cond_format",
       "primary_cli_path": "sheet cond-format list",
       "product_id": "sheet",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:sheet",
       "title": "获取条件格式规则",
       "use_when": [
-        "条件格式/条件样式/自动变色/满足条件时高亮/按条件设样式/条件格式规则；查看已有条件格式",
-        "条件格式/条件样式/自动变色/满足条件时高亮/按条件设样式/条件格式规则；查看指定规则详情",
-        "获取单个规则的详情",
-        "获取所有条件格式规则"
+        "查看工作表已有条件格式规则"
       ]
     },
     "sheet.get_dropdown_lists": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.sheet.get_dropdown_lists",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-dropdown.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "查询钉钉表格指定范围内的下拉列表配置。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "查询单元格下拉列表配置",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“查询钉钉表格指定范围内的下拉列表配置。”"
+        "删除下拉列表用 sheet delete-dropdown",
+        "设置下拉列表用 sheet set-dropdown",
+        "读取单元格值用 sheet range read"
       ],
       "canonical_path": "sheet.get_dropdown_lists",
       "cli_name": "get-dropdown",
@@ -53299,7 +53181,7 @@
       "description": "查询钉钉表格指定范围内的下拉列表配置。",
       "display": "钉钉表格管理",
       "effect": "read",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet get-dropdown --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A2:A100\"",
         "dws sheet get-dropdown --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A1\""
@@ -53341,30 +53223,30 @@
       "path": "sheet.get_dropdown_lists",
       "primary_cli_path": "sheet get-dropdown",
       "product_id": "sheet",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:sheet",
       "title": "获取下拉列表",
       "use_when": [
-        "查看下拉列表/获取下拉配置/下拉列表有哪些选项；获取下拉列表配置"
+        "查看某个范围是否配置了下拉列表"
       ]
     },
     "sheet.get_filter": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.sheet.get_filter",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter.md",
         "skills/mono/schema-hints/selection-review.json",
-        "skills/mono/schema-hints/sibling-disambiguation.json"
+        "skills/mono/schema-hints/sibling-disambiguation.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "获取钉钉电子表格中指定工作表的筛选信息。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "查看工作表基础筛选信息",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“删除钉钉电子表格中指定工作表的筛选”请改用 dws sheet filter delete",
-        "要“在钉钉电子表格的指定工作表中创建筛选”请改用 dws sheet filter create",
-        "要“清除钉钉电子表格中指定工作表筛选的某一列的筛选条件”请改用 dws sheet filter clear-criteria"
+        "创建或更新筛选用 sheet filter create/update",
+        "查看筛选视图列表用 sheet filter-view list",
+        "查看筛选视图条件用 sheet filter-view get-criteria"
       ],
       "canonical_path": "sheet.get_filter",
       "cli_name": "get",
@@ -53373,7 +53255,7 @@
       "description": "获取钉钉电子表格中指定工作表的筛选信息。\r\n\r\n通过 nodeId 定位电子表格文档，通过 sheetId 定位工作表。\r\nnodeId 支持传入文档链接 URL 或文档 ID（dentryUuid），系统自动识别。\r\nsheetId 支持传入工作表 ID 或工作表名称，可通过 get_all_sheets 获取。\r\n\r\n返回当前工作表的筛选范围和各列的筛选条件详情。\r\n筛选条件类型包括：\r\n- 按值筛选（filterType: values）：指定允许显示的值列表\r\n- 按条件筛选（filterType: condition）：指定条件运算符和比较值\r\n- 按颜色筛选（filterType: color）：按单元格背景色或字体颜色筛选\r\n\r\n如果工作表未设置筛选，返回结果中筛选信息为空。\r\n\r\n仅限用户对文档具备\"可阅读\"权限时可获取。不支持跨组织查询。",
       "display": "钉钉表格管理",
       "effect": "read",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet filter get --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e",
         "dws sheet filter get --node \"https://alidocs.dingtalk.com/i/nodes/\u003cDOC_UUID\u003e\" --sheet-id \"Sheet1\""
@@ -53408,30 +53290,30 @@
       "path": "sheet.get_filter",
       "primary_cli_path": "sheet filter get",
       "product_id": "sheet",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:sheet",
       "title": "获取筛选",
       "use_when": [
-        "筛选/过滤/只看某些值/只显示满足条件的行/筛选数据/创建筛选/删除筛选/设置筛选条件/清除筛选/排序；查看当前筛选"
+        "查看普通筛选是否存在及范围"
       ]
     },
     "sheet.get_filter_views": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.sheet.get_filter_views",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter-view.md",
         "skills/mono/schema-hints/selection-review.json",
-        "skills/mono/schema-hints/sibling-disambiguation.json"
+        "skills/mono/schema-hints/sibling-disambiguation.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "获取钉钉电子表格中指定工作表的所有筛选视图列表。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "列出工作表筛选视图",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“删除钉钉电子表格中指定工作表的筛选视图”请改用 dws sheet filter-view delete",
-        "要“在钉钉电子表格的指定工作表中创建一个筛选视图”请改用 dws sheet filter-view create",
-        "要“清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件”请改用 dws sheet filter-view delete-criteria"
+        "创建/更新筛选视图用 create/update",
+        "查看列条件用 sheet filter-view list-criteria",
+        "查看单个筛选视图详情用 sheet filter-view info"
       ],
       "canonical_path": "sheet.get_filter_views",
       "cli_name": "list",
@@ -53440,7 +53322,7 @@
       "description": "获取钉钉电子表格中指定工作表的所有筛选视图列表。\r\n\r\n通过 nodeId 定位电子表格文档，通过 sheetId 定位工作表。\r\nnodeId 支持传入文档链接 URL 或文档 ID（dentryUuid），系统自动识别。\r\nsheetId 支持传入工作表 ID 或工作表名称，可通过 get_all_sheets 获取。\r\n\r\n筛选视图是独立于全局筛选的个人化数据过滤方式，不同用户可以创建自己的筛选视图，互不影响。\r\n返回该工作表下所有筛选视图的 ID、名称和范围信息。\r\n\r\n仅限用户对文档具备\"可阅读\"权限时可获取。不支持跨组织查询。",
       "display": "钉钉表格管理",
       "effect": "read",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet filter-view list --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e",
         "dws sheet filter-view list --node \"https://alidocs.dingtalk.com/i/nodes/\u003cDOC_UUID\u003e\" --sheet-id \"Sheet1\""
@@ -53475,13 +53357,12 @@
       "path": "sheet.get_filter_views",
       "primary_cli_path": "sheet filter-view list",
       "product_id": "sheet",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:sheet",
       "title": "获取筛选视图",
       "use_when": [
-        "2. 查看已有筛选视图",
-        "筛选视图/查看筛选视图/有哪些筛选视图/筛选视图列表；获取所有筛选视图"
+        "查看有哪些筛选视图"
       ]
     },
     "sheet.get_float_image": {
@@ -53556,16 +53437,18 @@
     "sheet.get_range_as_csv": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.sheet.get_range_as_csv",
         "skills/mono/references/products/sheet/sheet-chart.md",
         "skills/mono/references/products/sheet/sheet-read-data.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "以 RFC 4180 CSV 格式读取钉钉电子表格中指定工作表的指定范围数据。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "以 CSV 格式读取指定区域数据",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“以 RFC 4180 CSV 格式读取钉钉电子表格中指定工作表的指定范围数据。”"
+        "写入 CSV 用 sheet csv-put",
+        "写入普通二维数组用 sheet range update",
+        "需要 JSON/结构化值用 sheet range read"
       ],
       "canonical_path": "sheet.get_range_as_csv",
       "cli_name": "csv-get",
@@ -53574,7 +53457,7 @@
       "description": "以 RFC 4180 CSV 格式读取钉钉电子表格中指定工作表的指定范围数据。\r\n\r\n与 get_range 的区别：\r\n- 返回 CSV 文本而非 JSON 二维数组，token 消耗约为 JSON 的 1/3\r\n- 每行前加 [row=N] 前缀标注真实表格行号，防止行号计算错误\r\n- 返回 colIndices 列字母映射数组，防止手数列号\r\n- 内置 maxChars 防爆保护，超限自动截断并设 hasMore=true\r\n- 支持 valueRenderOption 选择返回格式化展示值、原始值或公式文本",
       "display": "钉钉表格管理",
       "effect": "read",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet csv-get --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A1:E5\"",
         "dws sheet csv-get --node \u003cNODE_ID\u003e"
@@ -53631,13 +53514,12 @@
       "path": "sheet.get_range_as_csv",
       "primary_cli_path": "sheet csv-get",
       "product_id": "sheet",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:sheet",
       "title": "以 CSV 格式读取工作表数据",
       "use_when": [
-        "2. 查看数据范围确认列对应关系",
-        "读数据/看表格内容；快速查看纯值数据、批量处理、大表分批读"
+        "需要 CSV 文本而非 JSON 二维数组时读取 range"
       ]
     },
     "sheet.group_dimension": {
@@ -54215,21 +54097,24 @@
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
         "skills/mono/references/products/sheet/sheet-batch-operations.md",
-        "skills/mono/schema-hints/runtime-surface-completeness.json"
+        "skills/mono/schema-hints/runtime-surface-completeness.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "批量清除多个区域，一次原子请求",
-      "agent_summary_source": "runtime-surface-completeness-v1",
+      "agent_summary": "批量清除多个区域的内容或格式",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "不需要批量清除多个区域，一次原子请求时不要使用；如仅查询状态请优先选择对应 list/get/search 命令"
+        "写入/更新值用 sheet range update",
+        "删除整张工作表用 sheet delete-sheet",
+        "只清除一个区域用 sheet range clear"
       ],
       "canonical_path": "sheet.range_batch_clear",
       "cli_name": "batch-clear",
       "cli_path": "sheet range batch-clear",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "description": "批量清除多个区域，一次原子请求。任一区域清除失败则整批回滚。\n\n每个 --ranges 项必须包含工作表前缀（格式: \"SheetName!A1:B3\"）。\n不同区域可以属于不同工作表。",
       "display": "钉钉表格管理",
-      "effect": "write",
+      "effect": "destructive",
       "effect_source": "agent-hint",
       "examples": [
         "dws sheet range batch-clear --node \u003cNODE_ID\u003e --ranges '[\"Sheet1!A1:B3\",\"Sheet2!C1:D5\"]'",
@@ -54267,31 +54152,31 @@
       "path": "sheet.range_batch_clear",
       "primary_cli_path": "sheet range batch-clear",
       "product_id": "sheet",
-      "reviewed": false,
-      "risk": "medium",
+      "reviewed": true,
+      "risk": "high",
       "source": "hardcoded:sheet",
       "title": "批量清除多个区域（原子事务）",
       "use_when": [
-        "批量清除/一次清除多个区域/清空多个 sheet 的数据；批量清除多个区域"
+        "一次清除多个 range 的值、格式或全部内容"
       ]
     },
     "sheet.range_batch_set_style": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.sheet.range_batch_set_style",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-style-format.md",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
-        "skills/mono/schema-hints/sibling-disambiguation.json"
+        "skills/mono/schema-hints/sibling-disambiguation.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值、超链接、数字格式等内容。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "批量设置多个区域的单元格样式或格式",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“基于源数据范围自动填充到目标范围”请改用 dws sheet range fill",
-        "要“将源范围的数据复制到目标位置”请改用 dws sheet range copy-to",
-        "要“清除钉钉电子表格中指定工作表指定范围的单元格内容、格式或全部”请改用 dws sheet range clear"
+        "写入单元格值用 sheet range update",
+        "只设置一个区域样式用 sheet range set-style",
+        "清空多个区域用 sheet range batch-clear"
       ],
       "canonical_path": "sheet.range_batch_set_style",
       "cli_name": "batch-set-style",
@@ -54300,7 +54185,7 @@
       "description": "对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值、超链接、数字格式等内容。",
       "display": "钉钉表格管理",
       "effect": "write",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet range batch-set-style --node \u003cNODE_ID\u003e --batch ./styles.json",
         "dws sheet range batch-set-style --node \u003cNODE_ID\u003e --batch ./styles.json --continue-on-error"
@@ -54340,30 +54225,30 @@
       "path": "sheet.range_batch_set_style",
       "primary_cli_path": "sheet range batch-set-style",
       "product_id": "sheet",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:sheet",
       "title": "更新表格指定区域内容",
       "use_when": [
-        "设置样式/改颜色/设背景色/加粗/居中/换行/字体颜色/字号；批量设置不同 range 的样式"
+        "一次更新多个 range 的样式或格式"
       ]
     },
     "sheet.range_copy_to": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.sheet.range_copy_to",
         "skills/mono/references/products/sheet/sheet-range-operations.md",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
-        "skills/mono/schema-hints/sibling-disambiguation.json"
+        "skills/mono/schema-hints/sibling-disambiguation.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "将源范围的数据复制到目标位置。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "复制源区域到目标区域",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“基于源数据范围自动填充到目标范围”请改用 dws sheet range fill",
-        "要“对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值”请改用 dws sheet range batch-set-style",
-        "要“清除钉钉电子表格中指定工作表指定范围的单元格内容、格式或全部”请改用 dws sheet range clear"
+        "写入新值用 sheet range update",
+        "只读取源数据用 sheet range read",
+        "移动并清空源区域用 sheet range move-to"
       ],
       "canonical_path": "sheet.range_copy_to",
       "cli_name": "copy-to",
@@ -54372,7 +54257,7 @@
       "description": "将源范围的数据复制到目标位置。支持同 sheet 和跨 sheet 复制。",
       "display": "钉钉表格管理",
       "effect": "write",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet range copy-to --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --source-range \"A1:C5\" --target-range \"D1\"",
         "dws sheet range copy-to --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --source-range \"A1:C5\" --target-range \"A1\" --target-sheet-id \"Sheet2\""
@@ -54436,40 +54321,39 @@
       "path": "sheet.range_copy_to",
       "primary_cli_path": "sheet range copy-to",
       "product_id": "sheet",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:sheet",
       "title": "区域复制",
       "use_when": [
-        "复制区域/把这块数据复制到/复制到另一个工作表；复制区域",
-        "复制区域/把这块数据复制到/复制到另一个工作表；跨工作表"
+        "把一个 range 的数据复制到另一个位置"
       ]
     },
     "sheet.range_move_to": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.sheet.range_move_to",
         "skills/mono/references/products/sheet/sheet-range-operations.md",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
-        "skills/mono/schema-hints/sibling-disambiguation.json"
+        "skills/mono/schema-hints/sibling-disambiguation.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "将源范围的数据移动到目标位置，源区域将被清空。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "移动源区域到目标区域并清空源区域",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“基于源数据范围自动填充到目标范围”请改用 dws sheet range fill",
-        "要“对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值”请改用 dws sheet range batch-set-style",
-        "要“清除钉钉电子表格中指定工作表指定范围的单元格内容、格式或全部”请改用 dws sheet range clear"
+        "只复制不清空源区域用 sheet range copy-to",
+        "只读取数据用 sheet range read",
+        "清空区域用 sheet range clear"
       ],
       "canonical_path": "sheet.range_move_to",
       "cli_name": "move-to",
       "cli_path": "sheet range move-to",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "description": "将源范围的数据移动到目标位置，源区域将被清空。支持同 sheet 和跨 sheet 移动。",
       "display": "钉钉表格管理",
-      "effect": "write",
-      "effect_source": "command-verb",
+      "effect": "destructive",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet range move-to --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --source-range \"A1:C5\" --target-range \"D1\"",
         "dws sheet range move-to --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --source-range \"A1:C5\" --target-range \"A1\" --target-sheet-id \"Sheet2\""
@@ -54526,13 +54410,12 @@
       "path": "sheet.range_move_to",
       "primary_cli_path": "sheet range move-to",
       "product_id": "sheet",
-      "reviewed": false,
-      "risk": "medium",
+      "reviewed": true,
+      "risk": "high",
       "source": "hardcoded:sheet",
       "title": "区域移动",
       "use_when": [
-        "移动区域/把数据移到/剪切粘贴/移到另一个工作表；移动区域",
-        "移动区域/把数据移到/剪切粘贴/移到另一个工作表；跨工作表"
+        "把一个 range 移动到目标位置"
       ]
     },
     "sheet.range_read": {
@@ -54545,15 +54428,16 @@
         "skills/mono/references/products/sheet/sheet-workbook.md",
         "skills/mono/schema-hints/imported/wukong.json",
         "skills/mono/schema-hints/selection-review.json",
-        "skills/mono/schema-hints/sibling-disambiguation.json"
+        "skills/mono/schema-hints/sibling-disambiguation.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "读取工作表数据",
-      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+      "agent_summary": "读取工作表指定区域的单元格值",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“基于源数据范围自动填充到目标范围”请改用 dws sheet range fill",
-        "要“对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值”请改用 dws sheet range batch-set-style",
-        "要“清除钉钉电子表格中指定工作表指定范围的单元格内容、格式或全部”请改用 dws sheet range clear"
+        "写入值用 sheet range update",
+        "清空内容/格式用 sheet range clear 或 batch-clear",
+        "读取 CSV 格式用 sheet csv-get"
       ],
       "canonical_path": "sheet.range_read",
       "cli_name": "read",
@@ -54562,7 +54446,7 @@
       "description": "读取钉钉电子表格中指定工作表的指定范围数据。\r\n\r\n通过 nodeId 定位电子表格文档，通过 sheetId 定位工作表，通过 range 指定读取的单元格范围。\r\nnodeId 支持传入文档链接 URL 或文档 ID（dentryUuid），系统自动识别。\r\nsheetId 支持传入工作表 ID 或工作表名称，可通过 get_all_sheets 获取。不传则默认读取第一个工作表。\r\nrange 使用 A1 表示法指定单元格范围，支持带工作表前缀（如 \u003csheetId\u003e!A1:D10）。不传则默认读取该工作表的全部数据。\r\n\r\n返回指定范围内的单元格值、公式、显示值等信息。\r\n其中 values 返回公式计算后的结果值，formulas 返回原始公式，displayValues 返回界面上的显示值。\r\n所有数据均以二维数组形式返回，第一维为行，第二维为列。\r\n\r\n仅限用户对文档具备\"可阅读\"权限时可获取。不支持跨组织查询。\r\n\r\n支持的文档类型：钉钉在线电子表格。\r\n文档链接格式：https://alidocs.dingtalk.com/i/nodes/{dentryUuid}\r\ndentryUuid 为 32 位字母数字字符串。",
       "display": "钉钉表格管理",
       "effect": "read",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet range read --node \u003cNODE_ID\u003e",
         "dws sheet range read --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e"
@@ -54611,36 +54495,32 @@
       "path": "sheet.range_read",
       "primary_cli_path": "sheet range read",
       "product_id": "sheet",
+      "reviewed": true,
       "risk": "low",
       "source": "hardcoded:sheet",
       "title": "读取工作表数据",
       "use_when": [
-        "3. 读取全部数据",
-        "4. 读取指定区域",
-        "导出/下载xlsx/存为Excel/存成表格文件/把表格变成xlsx/导出表格/下载表格/导出为 excel；\"帮我看看这个表格有什么数据",
-        "指定取值模式：原始值 / 公式文本",
-        "读数据/看表格内容；读取数据",
-        "读数据/看表格内容；需要结构化信息（值+样式+数据验证+富文本+单元格级超链接）、查看公式或原始值"
+        "读取某个 range 的数据或值"
       ]
     },
     "sheet.range_set_style": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.sheet.range_set_style",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-style-format.md",
         "skills/mono/references/products/sheet/sheet-write-data.md",
         "skills/mono/schema-hints/interface-refs.json",
         "skills/mono/schema-hints/selection-review.json",
-        "skills/mono/schema-hints/sibling-disambiguation.json"
+        "skills/mono/schema-hints/sibling-disambiguation.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值、超链接、数字格式等内容。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "设置单个区域的单元格样式",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“基于源数据范围自动填充到目标范围”请改用 dws sheet range fill",
-        "要“对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值”请改用 dws sheet range batch-set-style",
-        "要“清除钉钉电子表格中指定工作表指定范围的单元格内容、格式或全部”请改用 dws sheet range clear"
+        "写入单元格值用 sheet range update",
+        "批量设置多个区域样式用 sheet range batch-set-style",
+        "条件高亮用 sheet cond-format create/update"
       ],
       "canonical_path": "sheet.range_set_style",
       "cli_name": "set-style",
@@ -54695,7 +54575,7 @@
       "description": "对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值、超链接、数字格式等内容。",
       "display": "钉钉表格管理",
       "effect": "write",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet range set-style --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A1:B3\" --bg-color \"#FFF2CC\" --font-weight bold --h-align center",
         "dws sheet range set-style --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"C1:C5\" --bg-colors-json '[[\"#FF0000\"],[\"#00FF00\"],[\"#0000FF\"],[\"#FFFF00\"],[\"#FF00FF\"]]'"
@@ -54855,22 +54735,12 @@
       "path": "sheet.range_set_style",
       "primary_cli_path": "sheet range set-style",
       "product_id": "sheet",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:sheet",
       "title": "更新表格指定区域内容",
       "use_when": [
-        "2. 设置数字格式（人民币）",
-        "2. 设置数字格式（人民币）——批量刷整列走 set-style",
-        "3. 商品 ID / 规格 ID 按文本展示，避免科学计数法",
-        "整片 range 启用自动换行",
-        "方式 B: 单独用 set-style 设置（适合只改格式不改值）",
-        "给 A1:B3 打上黄底粗体居中",
-        "给 C1:C5 逐单元格设置不同背景色",
-        "设置数字格式/改成百分比/用人民币显示/按日期显示/文本格式/保留几位小数；批量设置数字格式",
-        "设置数字格式/改成百分比/用人民币显示/按日期显示/文本格式/保留几位小数；设置数字格式",
-        "设置样式/改颜色/设背景色/加粗/居中/换行/字体颜色/字号；仅设样式不改值",
-        "设置样式/改颜色/设背景色/加粗/居中/换行/字体颜色/字号；设置单元格样式"
+        "设置一个 range 的字体、颜色、对齐、数字格式等样式"
       ]
     },
     "sheet.range_update": {
@@ -54885,15 +54755,16 @@
         "skills/mono/references/products/sheet/sheet-write-data.md",
         "skills/mono/schema-hints/imported/wukong.json",
         "skills/mono/schema-hints/selection-review.json",
-        "skills/mono/schema-hints/sibling-disambiguation.json"
+        "skills/mono/schema-hints/sibling-disambiguation.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "更新工作表指定区域内容（--values 与 --hyperlinks 至少传一项）",
-      "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+      "agent_summary": "写入或更新工作表指定区域的单元格值/超链接",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“基于源数据范围自动填充到目标范围”请改用 dws sheet range fill",
-        "要“对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值”请改用 dws sheet range batch-set-style",
-        "要“清除钉钉电子表格中指定工作表指定范围的单元格内容、格式或全部”请改用 dws sheet range clear"
+        "只改样式用 sheet range set-style 或 batch-set-style",
+        "只读数据用 sheet range read",
+        "清空区域用 sheet range clear"
       ],
       "canonical_path": "sheet.range_update",
       "cli_name": "update",
@@ -54902,7 +54773,7 @@
       "description": "对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值、超链接、数字格式等内容。",
       "display": "钉钉表格管理",
       "effect": "write",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet range update --help",
         "dws sheet range update --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A1:B2\" --values '[[{\"type\":\"text\",\"text\":\"姓名\"},{\"type\":\"text\",\"text\":\"分数\"}],[{\"type\":\"text\",\"text\":\"张三\"},{\"type\":\"text\",\"text\":\"90\"}]]'"
@@ -54952,32 +54823,12 @@
       "path": "sheet.range_update",
       "primary_cli_path": "sheet range update",
       "product_id": "sheet",
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:sheet",
       "title": "更新表格指定区域内容",
       "use_when": [
-        "2. 在新工作表中写入汇总公式（公式写在 text，以 = 开头）",
-        "3. 写入表头和数据",
-        "3. 写入表头和数据（每个单元格必须是 object；数字也写成字符串）",
-        "3. 写入超链接（写在 cell 的 hyperlink 字段）",
-        "3. 长数字 ID 写值时同步设置文本格式，避免科学计数法",
-        "4. 写入单元格级超链接",
-        "写入公式",
-        "写入公式（text 以 = 开头识别为公式）",
-        "写入单元格级超链接",
-        "写入单元格级超链接（写在 cell 的 hyperlink 字段，没有 --hyperlinks flag）",
-        "写入文本",
-        "写入文本（每个单元格必须是 object）",
-        "写数据/填表/更新单元格/写入公式；更新数据",
-        "只更新部分单元格：用 {} 空对象占位保留原值",
-        "导出/下载xlsx/存为Excel/存成表格文件/把表格变成xlsx/导出表格/下载表格/导出为 excel；\"往这个表格写入数据",
-        "提取 nodeId 后:",
-        "查看具体命令的完整参数说明",
-        "每个单元格必须是 object，公式写在 text（以 = 开头）；不支持裸字符串",
-        "清理单元格级超链接，保留当前值",
-        "清空单个单元格（text 为空字符串）",
-        "设置数字格式/改成百分比/用人民币显示/按日期显示/文本格式/保留几位小数；写值时顺带设置数字格式",
-        "设置样式/改颜色/设背景色/加粗/居中/换行/字体颜色/字号；写值同时附带样式"
+        "向指定 range 写入二维数组值或超链接"
       ]
     },
     "sheet.replace_all": {
@@ -55096,16 +54947,18 @@
     "sheet.set_dropdown_lists": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.sheet.set_dropdown_lists",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-dropdown.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "在钉钉表格的指定单元格范围内设置下拉列表。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "设置单元格下拉列表配置",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“在钉钉表格的指定单元格范围内设置下拉列表。”所述变更时不要使用"
+        "删除下拉配置用 sheet delete-dropdown",
+        "只查询下拉配置用 sheet get-dropdown",
+        "设置条件格式用 sheet cond-format create"
       ],
       "canonical_path": "sheet.set_dropdown_lists",
       "cli_name": "set-dropdown",
@@ -55114,7 +54967,7 @@
       "description": "在钉钉表格的指定单元格范围内设置下拉列表。",
       "display": "钉钉表格管理",
       "effect": "write",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet set-dropdown --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A2:A100\" --options '[{\"value\":\"选项1\"},{\"value\":\"选项2\"},{\"value\":\"选项3\"}]'",
         "dws sheet set-dropdown --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"B2:B50\" --options '[{\"value\":\"高\",\"color\":\"#ff0000\"},{\"value\":\"中\",\"color\":\"#ffaa00\"},{\"value\":\"低\",\"color\":\"#00ff00\"}]' --multi-select"
@@ -55172,30 +55025,29 @@
       "path": "sheet.set_dropdown_lists",
       "primary_cli_path": "sheet set-dropdown",
       "product_id": "sheet",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:sheet",
       "title": "设置下拉列表",
       "use_when": [
-        "设置下拉列表/下拉选项/下拉菜单/添加下拉/配置下拉；设置下拉列表",
-        "设置下拉列表/下拉选项/下拉菜单/添加下拉/配置下拉；设置多选下拉",
-        "设置单选下拉列表",
-        "设置带颜色的多选下拉列表"
+        "给指定范围配置下拉选项"
       ]
     },
     "sheet.set_range_from_csv": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.sheet.set_range_from_csv",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-write-data.md",
-        "skills/mono/schema-hints/selection-review.json"
+        "skills/mono/schema-hints/selection-review.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "将 RFC 4180 格式的 CSV 文本写入指定工作表的指定单元格位置。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "将 CSV 文本写入工作表指定起点",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "仅需查询状态或预览结果、不应产生“将 RFC 4180 格式的 CSV 文本写入指定工作表的指定单元格位置。”所述变更时不要使用"
+        "写入 JSON 二维数组用 sheet range update",
+        "只改样式用 sheet range set-style",
+        "读取 CSV 用 sheet csv-get"
       ],
       "canonical_path": "sheet.set_range_from_csv",
       "cli_name": "csv-put",
@@ -55204,7 +55056,7 @@
       "description": "将 RFC 4180 格式的 CSV 文本写入指定工作表的指定单元格位置。\r\n\r\n只写纯值，不支持公式/样式/批注。=开头的内容当作文本处理，不会被解析为公式。\r\n自动扩容行列：当 CSV 数据超出当前工作表维度时，自动追加行/列。\r\n目标区域如含合并单元格，合并将被打散，值正常写入。",
       "display": "钉钉表格管理",
       "effect": "write",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet csv-put --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --start-cell A1 --csv $'name,score\\nAlice,95\\nBob,87'",
         "dws sheet csv-put --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --start-cell B2 --csv @data.csv --allow-overwrite"
@@ -55260,32 +55112,30 @@
       "path": "sheet.set_range_from_csv",
       "primary_cli_path": "sheet csv-put",
       "product_id": "sheet",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:sheet",
       "title": "写入 CSV 数据到指定区域",
       "use_when": [
-        "内联多行 CSV：必须用 $'...' 让 \\n 变成真换行；普通单引号 '...\\n...' 里的 \\n 是字面量，会写成一行含字面 \\n 的错误数据",
-        "多行数据推荐用 @文件，最稳妥",
-        "批量写入CSV/导入CSV/CSV写入表格/把CSV贴到表格里；写入 CSV"
+        "把 CSV 文本导入到 sheet 指定位置"
       ]
     },
     "sheet.sort_filter": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.sheet.sort_filter",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter.md",
         "skills/mono/schema-hints/selection-review.json",
-        "skills/mono/schema-hints/sibling-disambiguation.json"
+        "skills/mono/schema-hints/sibling-disambiguation.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "对钉钉电子表格中指定工作表的筛选范围内的数据进行排序。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "对基础筛选范围内数据排序",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“删除钉钉电子表格中指定工作表的筛选”请改用 dws sheet filter delete",
-        "要“在钉钉电子表格的指定工作表中创建筛选”请改用 dws sheet filter create",
-        "要“清除钉钉电子表格中指定工作表筛选的某一列的筛选条件”请改用 dws sheet filter clear-criteria"
+        "仅更新筛选条件用 sheet filter update",
+        "筛选视图排序/条件请使用 sheet filter-view update",
+        "读取数据排序结果用 sheet range read"
       ],
       "canonical_path": "sheet.sort_filter",
       "cli_name": "sort",
@@ -55293,8 +55143,8 @@
       "confirmation": "not_required",
       "description": "对钉钉电子表格中指定工作表的筛选范围内的数据进行排序。\r\n\r\n通过 nodeId 定位电子表格文档，通过 sheetId 定位工作表。\r\nnodeId 支持传入文档链接 URL 或文档 ID（dentryUuid），系统自动识别。\r\nsheetId 支持传入工作表 ID 或工作表名称，可通过 get_all_sheets 获取。\r\n\r\n排序基于筛选范围内的指定列，支持升序和降序。\r\n排序会实际改变工作表中数据行的物理顺序。\r\n\r\n使用此接口前，工作表必须已创建筛选（通过 create_filter 创建）。\r\n\r\n仅限用户对文档具备\"可编辑\"权限时可操作。不支持跨组织操作。",
       "display": "钉钉表格管理",
-      "effect": "write",
-      "effect_source": "command-verb",
+      "effect": "read",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet filter sort --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --column 0 --ascending",
         "dws sheet filter sort --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --column 2 --ascending=false"
@@ -55342,14 +55192,12 @@
       "path": "sheet.sort_filter",
       "primary_cli_path": "sheet filter sort",
       "product_id": "sheet",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:sheet",
       "title": "筛选排序",
       "use_when": [
-        "按第 1 列（A 列）升序排序",
-        "按第 3 列（C 列）降序排序",
-        "筛选/过滤/只看某些值/只显示满足条件的行/筛选数据/创建筛选/删除筛选/设置筛选条件/清除筛选/排序；按列排序"
+        "在普通筛选范围内设置排序"
       ]
     },
     "sheet.sort_range": {
@@ -55843,18 +55691,18 @@
     "sheet.update_cond_format": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.sheet.update_cond_format",
         "skills/mono/references/products/sheet/sheet-conditional-format.md",
         "skills/mono/schema-hints/selection-review.json",
-        "skills/mono/schema-hints/sibling-disambiguation.json"
+        "skills/mono/schema-hints/sibling-disambiguation.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "更新指定工作表中的一条条件格式规则。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "更新条件格式规则",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“删除指定工作表中的一条条件格式规则”请改用 dws sheet cond-format delete",
-        "要“在指定工作表中创建一条条件格式规则”请改用 dws sheet cond-format create",
-        "要“获取指定工作表中的所有条件格式规则，或通过 ruleId 获取单”请改用 dws sheet cond-format list"
+        "删除规则用 sheet cond-format delete",
+        "新建规则用 sheet cond-format create",
+        "静态设置样式用 sheet range set-style"
       ],
       "canonical_path": "sheet.update_cond_format",
       "cli_name": "update",
@@ -55873,7 +55721,7 @@
       "description": "更新指定工作表中的一条条件格式规则。未传入的字段将保持原有值不变。",
       "display": "钉钉表格管理",
       "effect": "write",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet cond-format update --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --rule-id \u003cRULE_ID\u003e --condition '{\"numberCondition\":{\"operator\":\"greater\",\"value1\":\"90\"}}'",
         "dws sheet cond-format update --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --rule-id \u003cRULE_ID\u003e --cell-style '{\"backgroundColor\":\"#C8E6C9\",\"fontColor\":\"#1B5E20\"}'"
@@ -55952,15 +55800,12 @@
       "path": "sheet.update_cond_format",
       "primary_cli_path": "sheet cond-format update",
       "product_id": "sheet",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:sheet",
       "title": "更新条件格式规则",
       "use_when": [
-        "修改应用范围",
-        "修改条件格式/更新条件格式规则/改条件/改样式/改范围；更新条件格式规则",
-        "修改条件（改为大于 90）",
-        "修改样式"
+        "修改已有条件格式规则"
       ]
     },
     "sheet.update_dimension": {
@@ -56092,19 +55937,19 @@
     "sheet.update_filter": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.sheet.update_filter",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter.md",
         "skills/mono/schema-hints/selection-review.json",
-        "skills/mono/schema-hints/sibling-disambiguation.json"
+        "skills/mono/schema-hints/sibling-disambiguation.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "批量更新钉钉电子表格中指定工作表的筛选条件。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "更新工作表基础筛选条件",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“删除钉钉电子表格中指定工作表的筛选”请改用 dws sheet filter delete",
-        "要“在钉钉电子表格的指定工作表中创建筛选”请改用 dws sheet filter create",
-        "要“清除钉钉电子表格中指定工作表筛选的某一列的筛选条件”请改用 dws sheet filter clear-criteria"
+        "仅排序筛选范围用 sheet filter sort",
+        "清除某列筛选条件用 sheet filter clear-criteria",
+        "管理筛选视图条件用 sheet filter-view update-criteria"
       ],
       "canonical_path": "sheet.update_filter",
       "cli_name": "update",
@@ -56113,7 +55958,7 @@
       "description": "批量更新钉钉电子表格中指定工作表的筛选条件。\r\n\r\n通过 nodeId 定位电子表格文档，通过 sheetId 定位工作表。\r\nnodeId 支持传入文档链接 URL 或文档 ID（dentryUuid），系统自动识别。\r\nsheetId 支持传入工作表 ID 或工作表名称，可通过 get_all_sheets 获取。\r\n\r\n可同时更新多列的筛选条件，支持三种筛选类型：\r\n- 按值筛选（filterType: values）：指定允许显示的值列表，未在列表中的值将被隐藏\r\n- 按条件筛选（filterType: condition）：指定条件运算符和比较值\r\n- 按颜色筛选（filterType: color）：按单元格背景色或字体颜色筛选\r\n\r\n使用此接口前，工作表必须已创建筛选（通过 create_filter 创建）。\r\n此接口会替换指定列的现有筛选条件，未指定的列保持不变。\r\n\r\n仅限用户对文档具备\"可编辑\"权限时可操作。不支持跨组织操作。",
       "display": "钉钉表格管理",
       "effect": "write",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet filter update --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --criteria '[{\"column\":0,\"filterType\":\"values\",\"visibleValues\":[\"已完成\",\"进行中\"]},{\"column\":2,\"filterType\":\"condition\",\"conditions\":[{\"operator\":\"greater\",\"value\":\"50\"}]}]'",
         "dws sheet filter update --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --criteria '[{\"column\":1,\"filterType\":\"color\",\"backgroundColor\":\"#FF0000\"}]'"
@@ -56156,32 +56001,30 @@
       "path": "sheet.update_filter",
       "primary_cli_path": "sheet filter update",
       "product_id": "sheet",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:sheet",
       "title": "更新筛选",
       "use_when": [
-        "同时设置多列的筛选条件",
-        "按颜色筛选",
-        "筛选/过滤/只看某些值/只显示满足条件的行/筛选数据/创建筛选/删除筛选/设置筛选条件/清除筛选/排序；批量设置多列条件"
+        "批量设置普通筛选的筛选条件"
       ]
     },
     "sheet.update_filter_view": {
       "agent_metadata_source": "embedded-skill-metadata",
       "agent_source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.sheet.update_filter_view",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter-view.md",
         "skills/mono/schema-hints/selection-review.json",
-        "skills/mono/schema-hints/sibling-disambiguation.json"
+        "skills/mono/schema-hints/sibling-disambiguation.json",
+        "skills/mono/schema-hints/zz-sheet-range-filter-review.json"
       ],
-      "agent_summary": "更新钉钉电子表格中指定工作表的筛选视图属性（名称、范围和/或筛选条件）。",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "更新筛选视图属性和范围",
+      "agent_summary_source": "sheet-range-filter-agent-review-v1",
       "availability": "available",
       "avoid_when": [
-        "要“删除钉钉电子表格中指定工作表的筛选视图”请改用 dws sheet filter-view delete",
-        "要“在钉钉电子表格的指定工作表中创建一个筛选视图”请改用 dws sheet filter-view create",
-        "要“清除钉钉电子表格中指定工作表筛选视图的某一列的筛选条件”请改用 dws sheet filter-view delete-criteria"
+        "创建新筛选视图用 sheet filter-view create",
+        "删除筛选视图用 sheet filter-view delete",
+        "只改某列筛选条件用 sheet filter-view update-criteria"
       ],
       "canonical_path": "sheet.update_filter_view",
       "cli_name": "update",
@@ -56199,7 +56042,7 @@
       "description": "更新钉钉电子表格中指定工作表的筛选视图属性（名称、范围和/或筛选条件）。\r\n\r\n通过 nodeId 定位电子表格文档，通过 sheetId 定位工作表，通过 filterViewId 定位筛选视图。\r\nnodeId 支持传入文档链接 URL 或文档 ID（dentryUuid），系统自动识别。\r\nsheetId 支持传入工作表 ID 或工作表名称，可通过 get_all_sheets 获取。\r\nfilterViewId 可通过 get_filter_views 获取。\r\n\r\n可更新筛选视图的名称、范围和筛选条件，至少需要传入一个更新字段。\r\n通过 criteria 参数可直接批量更新多列的筛选条件，指定列的条件会被替换，未指定的列保持不变。\r\n\r\n仅限用户对文档具备\"可编辑\"权限时可操作。不支持跨组织操作。",
       "display": "钉钉表格管理",
       "effect": "write",
-      "effect_source": "command-verb",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet filter-view update --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --filter-view-id \u003cFV_ID\u003e --name \"新名称\"",
         "dws sheet filter-view update --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --filter-view-id \u003cFV_ID\u003e --range \"A1:F20\""
@@ -56264,16 +56107,12 @@
       "path": "sheet.update_filter_view",
       "primary_cli_path": "sheet filter-view update",
       "product_id": "sheet",
-      "reviewed": false,
+      "reviewed": true,
       "risk": "medium",
       "source": "hardcoded:sheet",
       "title": "更新筛选视图",
       "use_when": [
-        "6. 更新筛选视图名称和范围",
-        "更新筛选条件",
-        "更新筛选视图/修改筛选视图/改筛选视图名称/改筛选视图范围；更新筛选视图属性",
-        "更新筛选视图名称",
-        "更新筛选视图范围"
+        "修改筛选视图名称、范围或整体配置"
       ]
     },
     "sheet.update_float_image": {

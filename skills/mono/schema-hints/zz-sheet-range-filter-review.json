@@ -1,0 +1,511 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "explicit",
+    "name": "sheet-range-filter-agent-review-v1",
+    "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
+    "channel": "open-source"
+  },
+  "coverage": {
+    "source_tools": 31,
+    "matched_tools": 31
+  },
+  "tools": {
+    "sheet.range_read": {
+      "agent_summary": "读取工作表指定区域的单元格值",
+      "use_when": [
+        "读取某个 range 的数据或值"
+      ],
+      "avoid_when": [
+        "写入值用 sheet range update",
+        "清空内容/格式用 sheet range clear 或 batch-clear",
+        "读取 CSV 格式用 sheet csv-get"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "sheet.range_update": {
+      "agent_summary": "写入或更新工作表指定区域的单元格值/超链接",
+      "use_when": [
+        "向指定 range 写入二维数组值或超链接"
+      ],
+      "avoid_when": [
+        "只读数据用 sheet range read",
+        "只改样式用 sheet range set-style 或 batch-set-style",
+        "清空区域用 sheet range clear"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.range_set_style": {
+      "agent_summary": "设置单个区域的单元格样式",
+      "use_when": [
+        "设置一个 range 的字体、颜色、对齐、数字格式等样式"
+      ],
+      "avoid_when": [
+        "写入单元格值用 sheet range update",
+        "批量设置多个区域样式用 sheet range batch-set-style",
+        "条件高亮用 sheet cond-format create/update"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.range_batch_set_style": {
+      "agent_summary": "批量设置多个区域的单元格样式或格式",
+      "use_when": [
+        "一次更新多个 range 的样式或格式"
+      ],
+      "avoid_when": [
+        "只设置一个区域样式用 sheet range set-style",
+        "写入单元格值用 sheet range update",
+        "清空多个区域用 sheet range batch-clear"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.range_batch_clear": {
+      "agent_summary": "批量清除多个区域的内容或格式",
+      "use_when": [
+        "一次清除多个 range 的值、格式或全部内容"
+      ],
+      "avoid_when": [
+        "只清除一个区域用 sheet range clear",
+        "删除整张工作表用 sheet delete-sheet",
+        "写入/更新值用 sheet range update"
+      ],
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.range_copy_to": {
+      "agent_summary": "复制源区域到目标区域",
+      "use_when": [
+        "把一个 range 的数据复制到另一个位置"
+      ],
+      "avoid_when": [
+        "移动并清空源区域用 sheet range move-to",
+        "写入新值用 sheet range update",
+        "只读取源数据用 sheet range read"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.range_move_to": {
+      "agent_summary": "移动源区域到目标区域并清空源区域",
+      "use_when": [
+        "把一个 range 移动到目标位置"
+      ],
+      "avoid_when": [
+        "只复制不清空源区域用 sheet range copy-to",
+        "只读取数据用 sheet range read",
+        "清空区域用 sheet range clear"
+      ],
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.get_range_as_csv": {
+      "agent_summary": "以 CSV 格式读取指定区域数据",
+      "use_when": [
+        "需要 CSV 文本而非 JSON 二维数组时读取 range"
+      ],
+      "avoid_when": [
+        "需要 JSON/结构化值用 sheet range read",
+        "写入 CSV 用 sheet csv-put",
+        "写入普通二维数组用 sheet range update"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "sheet.set_range_from_csv": {
+      "agent_summary": "将 CSV 文本写入工作表指定起点",
+      "use_when": [
+        "把 CSV 文本导入到 sheet 指定位置"
+      ],
+      "avoid_when": [
+        "读取 CSV 用 sheet csv-get",
+        "写入 JSON 二维数组用 sheet range update",
+        "只改样式用 sheet range set-style"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.create_filter": {
+      "agent_summary": "为工作表创建基础筛选",
+      "use_when": [
+        "需要在普通筛选范围上开启筛选"
+      ],
+      "avoid_when": [
+        "管理筛选视图用 sheet filter-view create/update/list",
+        "更新筛选条件用 sheet filter update 或 clear-criteria",
+        "只查看筛选信息用 sheet filter get"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.get_filter": {
+      "agent_summary": "查看工作表基础筛选信息",
+      "use_when": [
+        "查看普通筛选是否存在及范围"
+      ],
+      "avoid_when": [
+        "查看筛选视图列表用 sheet filter-view list",
+        "查看筛选视图条件用 sheet filter-view get-criteria",
+        "创建或更新筛选用 sheet filter create/update"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "sheet.update_filter": {
+      "agent_summary": "更新工作表基础筛选条件",
+      "use_when": [
+        "批量设置普通筛选的筛选条件"
+      ],
+      "avoid_when": [
+        "管理筛选视图条件用 sheet filter-view update-criteria",
+        "仅排序筛选范围用 sheet filter sort",
+        "清除某列筛选条件用 sheet filter clear-criteria"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.filter_clear_criteria": {
+      "agent_summary": "清除基础筛选中某一列条件",
+      "use_when": [
+        "仅清除普通筛选的某列筛选条件"
+      ],
+      "avoid_when": [
+        "删除整个基础筛选用 sheet filter delete",
+        "更新筛选条件用 sheet filter update",
+        "筛选视图条件用 sheet filter-view delete-criteria"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.sort_filter": {
+      "agent_summary": "对基础筛选范围内数据排序",
+      "use_when": [
+        "在普通筛选范围内设置排序"
+      ],
+      "avoid_when": [
+        "筛选视图排序/条件请使用 sheet filter-view update",
+        "仅更新筛选条件用 sheet filter update",
+        "读取数据排序结果用 sheet range read"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "sheet.delete_filter": {
+      "agent_summary": "删除工作表基础筛选",
+      "use_when": [
+        "移除整张表的普通筛选配置"
+      ],
+      "avoid_when": [
+        "只清除某列条件用 sheet filter clear-criteria",
+        "删除筛选视图用 sheet filter-view delete",
+        "仅查看筛选信息用 sheet filter get"
+      ],
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.create_filter_view": {
+      "agent_summary": "创建筛选视图",
+      "use_when": [
+        "需要创建可保存的筛选视图"
+      ],
+      "avoid_when": [
+        "创建普通筛选用 sheet filter create",
+        "更新已有筛选视图用 sheet filter-view update",
+        "查看筛选视图列表用 sheet filter-view list"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.get_filter_views": {
+      "agent_summary": "列出工作表筛选视图",
+      "use_when": [
+        "查看有哪些筛选视图"
+      ],
+      "avoid_when": [
+        "查看单个筛选视图详情用 sheet filter-view info",
+        "查看列条件用 sheet filter-view list-criteria",
+        "创建/更新筛选视图用 create/update"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "sheet.filter_view_info": {
+      "agent_summary": "查看单个筛选视图详情",
+      "use_when": [
+        "已知道 filterViewId，需要查看名称、范围和配置"
+      ],
+      "avoid_when": [
+        "列出所有筛选视图用 sheet filter-view list",
+        "查看列条件用 sheet filter-view list-criteria",
+        "更新筛选视图用 sheet filter-view update"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "sheet.filter_view_list_criteria": {
+      "agent_summary": "列出筛选视图所有列条件",
+      "use_when": [
+        "查看筛选视图下每列筛选条件"
+      ],
+      "avoid_when": [
+        "查看单列条件用 sheet filter-view get-criteria",
+        "更新条件用 sheet filter-view update-criteria",
+        "基础筛选条件用 sheet filter get/update"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "sheet.filter_view_get_criteria": {
+      "agent_summary": "查看筛选视图单列条件",
+      "use_when": [
+        "查看筛选视图某一列的筛选条件"
+      ],
+      "avoid_when": [
+        "列出所有列条件用 sheet filter-view list-criteria",
+        "更新单列条件用 sheet filter-view update-criteria",
+        "删除单列条件用 sheet filter-view delete-criteria"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "sheet.filter_view_update_criteria": {
+      "agent_summary": "更新筛选视图单列条件",
+      "use_when": [
+        "修改筛选视图中某一列的筛选规则"
+      ],
+      "avoid_when": [
+        "更新基础筛选条件用 sheet filter update",
+        "删除筛选视图列条件用 sheet filter-view delete-criteria",
+        "更新视图名称/范围用 sheet filter-view update"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.filter_view_delete_criteria": {
+      "agent_summary": "删除筛选视图单列筛选条件",
+      "use_when": [
+        "清除筛选视图中某列的筛选条件"
+      ],
+      "avoid_when": [
+        "删除整个筛选视图用 sheet filter-view delete",
+        "基础筛选清除列条件用 sheet filter clear-criteria",
+        "更新条件用 sheet filter-view update-criteria"
+      ],
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.update_filter_view": {
+      "agent_summary": "更新筛选视图属性和范围",
+      "use_when": [
+        "修改筛选视图名称、范围或整体配置"
+      ],
+      "avoid_when": [
+        "只改某列筛选条件用 sheet filter-view update-criteria",
+        "创建新筛选视图用 sheet filter-view create",
+        "删除筛选视图用 sheet filter-view delete"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.delete_filter_view": {
+      "agent_summary": "删除筛选视图",
+      "use_when": [
+        "删除一个已保存的筛选视图"
+      ],
+      "avoid_when": [
+        "只删除某列条件用 sheet filter-view delete-criteria",
+        "删除基础筛选用 sheet filter delete",
+        "查看筛选视图详情用 sheet filter-view info"
+      ],
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.create_cond_format": {
+      "agent_summary": "创建条件格式规则",
+      "use_when": [
+        "按条件高亮或设置格式规则"
+      ],
+      "avoid_when": [
+        "只设置静态样式用 sheet range set-style",
+        "更新已有条件格式用 sheet cond-format update",
+        "查看条件格式列表用 sheet cond-format list"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.get_cond_format": {
+      "agent_summary": "查看条件格式规则列表或详情",
+      "use_when": [
+        "查看工作表已有条件格式规则"
+      ],
+      "avoid_when": [
+        "创建条件格式用 sheet cond-format create",
+        "更新条件格式用 sheet cond-format update",
+        "删除条件格式用 sheet cond-format delete"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "sheet.update_cond_format": {
+      "agent_summary": "更新条件格式规则",
+      "use_when": [
+        "修改已有条件格式规则"
+      ],
+      "avoid_when": [
+        "新建规则用 sheet cond-format create",
+        "删除规则用 sheet cond-format delete",
+        "静态设置样式用 sheet range set-style"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.delete_cond_format": {
+      "agent_summary": "删除条件格式规则",
+      "use_when": [
+        "删除某条条件格式规则"
+      ],
+      "avoid_when": [
+        "只修改规则用 sheet cond-format update",
+        "删除普通筛选用 sheet filter delete",
+        "删除筛选视图用 sheet filter-view delete"
+      ],
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.get_dropdown_lists": {
+      "agent_summary": "查询单元格下拉列表配置",
+      "use_when": [
+        "查看某个范围是否配置了下拉列表"
+      ],
+      "avoid_when": [
+        "设置下拉列表用 sheet set-dropdown",
+        "删除下拉列表用 sheet delete-dropdown",
+        "读取单元格值用 sheet range read"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "sheet.set_dropdown_lists": {
+      "agent_summary": "设置单元格下拉列表配置",
+      "use_when": [
+        "给指定范围配置下拉选项"
+      ],
+      "avoid_when": [
+        "只查询下拉配置用 sheet get-dropdown",
+        "删除下拉配置用 sheet delete-dropdown",
+        "设置条件格式用 sheet cond-format create"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.delete_dropdown_lists": {
+      "agent_summary": "删除单元格下拉列表配置",
+      "use_when": [
+        "移除指定范围的下拉列表配置"
+      ],
+      "avoid_when": [
+        "只查询下拉配置用 sheet get-dropdown",
+        "修改下拉选项用 sheet set-dropdown",
+        "清空单元格内容用 sheet range clear"
+      ],
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    }
+  }
+}
