@@ -34,7 +34,7 @@ With `-f json`, error responses include structured payloads: `category`, `reason
 dws contact user search --query "Alice" -f table   # Table (default, human-friendly / 表格，默认)
 dws contact user search --query "Alice" -f json    # JSON (for agents and piping / 适合 agent)
 dws contact user search --query "Alice" -f raw     # Raw API response / 原始响应
-dws schema -f pretty "dev app create"                # Pretty helper-only schema view / helper-only schema 彩色分区展示
+dws schema -f pretty "calendar event create"         # Pretty Agent schema view / Agent Schema 彩色查看
 ```
 
 ## Dry Run / 试运行
@@ -51,40 +51,42 @@ dws contact user search --query "Alice" -o result.json
 
 ## Schema Introspection / Schema 查询
 
-静态端点模式下，产品命令和 flag 以当前二进制的 `--help` 与内置 Skill 为准。`dws schema` 仅保留 helper-only 子树（如 `dev.*`）的 schema 查询。
+静态端点模式下，`--help` 展示当前二进制的人类用法，`dws schema` 查询同版本内嵌的 Agent Command Catalog。Schema 查询不访问 MCP endpoint，也不执行 `tools/list`。
 
 ### 路径写法
 
 ```bash
-dws schema                                  # 静态端点模式提示
-dws schema "dev app create"                 # CLI 空格路径
-dws schema --cli-path "dev app create"      # 显式 flag（脚本友好，免转义）
-dws schema -f pretty "dev app create"       # ANSI 着色分区展示（人肉查看最舒服）
+dws schema                                      # 21 个产品的紧凑概览
+dws schema calendar                             # 展开一个产品
+dws schema "calendar event"                     # 展开一个命令分组
+dws schema "calendar event create"              # 按 CLI 空格路径查询工具
+dws schema calendar.create_calendar_event       # 按 canonical path 查询工具
+dws schema --cli-path "calendar event create"   # 显式 CLI path
+dws schema --all                                # 完整目录，用于审计/CI
 ```
 
-helper-only schema 以 CLI 路径为准；普通产品命令请使用 `dws <path> --help` 查看参数。
+兼容入口 `dws schema list` 等价于根概览。命令拼法和人类说明仍可用 `dws <path> --help` 查看。
 
 ### 单工具输出字段
 
 | 字段 | 说明 |
 |------|------|
-| `name` / `cli_name` / `canonical_path` | MCP RPC 名 / CLI 叶子名 / helper-only canonical path |
-| `group` | CLI 父级 group 路径（dot-separated） |
-| `title` / `description` | 工具名/说明（overlay 优先） |
-| `parameters` / `required` | MCP 输入 JSON Schema 的 properties / required |
-| `output_schema` | MCP 输出 Schema（上游下发时才有） |
-| `sensitive` | 敏感写操作，需 `--yes` 确认 |
-| `auth` | DingTalk 授权元数据，包括 `requiredScopes` / `requiredPermissions` / `recommendedScopes` / `grantProductCodes` / `riskAction` / `confirmationRequired` |
-| `annotations.destructive_hint` | 对齐 MCP 2025+ annotations，目前从 `sensitive` 映射 |
-| `flag_overlay[param]` | CLI 层对 MCP 参数的改写：`alias` / `transform` / `transform_args` / `env_default` / `default` / `hidden` |
+| `canonical_path` / `primary_cli_path` / `aliases` | 稳定工具 ID、主 CLI 路径和兼容路径 |
+| `product_id` / `interface_ref` | CLI 产品与实际 MCP product/RPC binding |
+| `title` / `description` / `agent_summary` | 人类说明、接口说明和 Agent 摘要 |
+| `parameters.<flag>` | CLI flag 的类型、属性名、required、默认值、格式、枚举和条件必填 |
+| `constraints` | one-of、互斥、联动等组合约束 |
+| `effect` / `risk` / `confirmation` / `idempotency` | Agent 执行与安全策略 |
+| `use_when` / `avoid_when` / `examples` | Agent 选择提示和示例 |
+| `reviewed` / `agent_source_refs` | 语义审核状态与来源追踪 |
 
-**调试 `--flag` 行为的第一站**是 `flag_overlay` —— 比如 `--users 0232...` 能不能直接用，看 `receiverUserIdList.transform == "csv_to_array"` 即可判断。
+`parameters.<flag>.required` 表示该 CLI flag 本身无条件必填。条件必填或别名选择通过 `required_when` 和 `constraints.require_one_of` 表达；它不会直接复制 MCP input schema 的 `required`。
 
 ### 筛选输出
 
 ```bash
-dws schema "dev app create" --jq '.tool.parameters'               # 只看参数 schema
-dws schema "dev app create" --jq '.tool.required'                 # 只看必填字段
+dws schema "calendar event create" --jq '.parameters'                              # 只看参数
+dws schema "calendar event create" --jq '[.parameters | to_entries[] | select(.value.required)]'  # 只看必填参数
 ```
 
 ## Shell Completion / 自动补全

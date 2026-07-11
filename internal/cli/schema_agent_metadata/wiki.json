@@ -11,6 +11,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws wiki member add --help",
         "dws wiki member add --workspace \u003cWS_ID\u003e --users uid1 --role READER"
@@ -25,12 +28,15 @@
       "agent_summary": "查询知识库当前的成员权限列表，支持按角色过滤。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
-        "1. 查看当前成员",
+        "1. 查看当前成员（只返回 name/role/type，拿不到 userId）",
         "3. 查看当前成员",
         "知识库有哪些成员/查看知识库成员"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws wiki member list --workspace \u003cWS_ID\u003e",
         "dws wiki member list --workspace \u003cWS_ID\u003e --limit 100"
@@ -45,13 +51,14 @@
       "agent_summary": "从知识库中移除指定的企业用户成员（仅支持 USER 类型）。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
-        "2. 移除成员",
+        "3. 移除成员",
         "移除知识库成员/把某人从知识库移除/删除知识库成员"
       ],
       "effect": "destructive",
       "effect_source": "agent-hint",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws wiki member remove --workspace \u003cWS_ID\u003e --users uid1",
         "dws wiki member remove --workspace \u003cWS_ID\u003e --users uid1,uid2"
@@ -71,6 +78,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws wiki member update --workspace \u003cWS_ID\u003e --users uid1 --role EDITOR",
         "dws wiki member update --workspace \u003cWS_ID\u003e --users uid1,uid2 --role READER"
@@ -88,6 +98,11 @@
         "复制知识库里的文档",
         "复制节点到另一个文件夹"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws wiki node copy --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --format json",
         "dws wiki node copy --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --folder \u003ctargetFolderId\u003e --format json"
@@ -95,8 +110,13 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.wiki.node_copy",
-        "skills/mono/references/products/wiki.md"
-      ]
+        "skills/mono/references/products/wiki.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "copy_document"
+      }
     },
     "wiki node create": {
       "agent_summary": "在指定位置创建一个新的文件（文档、表格、演示、白板、脑图、多维表或文件夹）。",
@@ -105,10 +125,14 @@
         "1. 创建文档节点",
         "2. 创建文件夹",
         "3. 在指定文件夹下创建",
+        "在知识库里创建一个文档；创建空文件实体",
         "在知识库里创建文档/新建文件夹"
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws wiki node create --workspace \u003cworkspaceId\u003e --name \"新文档\" --format json",
         "dws wiki node create --workspace \u003cworkspaceId\u003e --name \"方案目录\" --type folder --format json"
@@ -116,8 +140,14 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.wiki.create_file",
-        "skills/mono/references/products/wiki.md"
-      ]
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/wiki.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "create_file"
+      }
     },
     "wiki node delete": {
       "agent_summary": "将指定节点移入回收站，30 天内可从回收站恢复，超过 30 天将被永久删除。",
@@ -130,6 +160,7 @@
       "effect_source": "agent-hint",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws wiki node delete --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e",
         "dws wiki node delete --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --yes"
@@ -138,8 +169,13 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.wiki.delete_document",
         "skills/mono/references/products/wiki.md",
-        "skills/mono/schema-hints/destructive-safety.json"
-      ]
+        "skills/mono/schema-hints/destructive-safety.json",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "delete_document"
+      }
     },
     "wiki node list": {
       "agent_summary": "列出指定文件夹或知识库下的直接子节点列表（文件夹/文档/文件等），支持分页。",
@@ -147,11 +183,15 @@
       "use_when": [
         "2. 列出根目录节点",
         "3. 进入子目录",
+        "帮我看看知识库里的文件；知识库节点列表",
         "知识库下的文件/知识库里有哪些文档/浏览知识库内容",
         "读某个知识库里的某篇文档"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws wiki node list --workspace \u003cworkspaceId\u003e --format json",
         "dws wiki node list --workspace \u003cworkspaceId\u003e --folder \u003cparentNodeId\u003e --format json"
@@ -159,8 +199,14 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.wiki.list_nodes",
-        "skills/mono/references/products/wiki.md"
-      ]
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/wiki.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "list_nodes"
+      }
     },
     "wiki node move": {
       "agent_summary": "将指定节点移动到目标文件夹。",
@@ -171,6 +217,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws wiki node move --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --folder \u003ctargetFolderId\u003e --format json",
         "dws wiki node move --workspace \u003cworkspaceId\u003e --node \u003cnodeId\u003e --format json"
@@ -178,8 +227,13 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.wiki.node_move",
-        "skills/mono/references/products/wiki.md"
-      ]
+        "skills/mono/references/products/wiki.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "move_document"
+      }
     },
     "wiki node search": {
       "agent_summary": "根据关键词和多种过滤条件搜索当前用户有权限访问的文档列表。",
@@ -187,10 +241,17 @@
       "use_when": [
         "在指定知识库内搜索",
         "在知识库里搜文档/空间内搜索",
+        "在知识库里搜方案；空间内搜索",
         "按文件类型过滤"
+      ],
+      "avoid_when": [
+        "搜一下有没有叫XX的文件；全局搜索"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws wiki node search --workspace \u003cworkspaceId\u003e --query \"方案\" --format json",
         "dws wiki node search --workspace \u003cworkspaceId\u003e --query \"周报\" --limit 10 --format json"
@@ -198,8 +259,14 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.wiki.node_search",
-        "skills/mono/references/products/wiki.md"
-      ]
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/wiki.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "search_documents"
+      }
     },
     "wiki space create": {
       "agent_summary": "创建一个新的钉钉文档知识库（WikiSpace）。",
@@ -210,6 +277,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws wiki space create --name \"产品文档库\" --format json",
         "dws wiki space create --name \"技术方案\" --desc \"团队技术方案归档\" --format json"
@@ -231,6 +301,7 @@
       "effect_source": "agent-hint",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws wiki space delete --workspace \u003cworkspaceId\u003e",
         "dws wiki space delete --workspace \"https://alidocs.dingtalk.com/i/spaces/xxx/overview\""
@@ -253,6 +324,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws wiki space get --help",
         "dws wiki space get --workspace \u003cworkspaceId\u003e --format json"
@@ -271,6 +345,7 @@
         "1. 获取知识库 ID",
         "列出我有权访问的组织知识库",
         "列出钉盘企业空间",
+        "列出钉盘团队空间；列出钉盘空间",
         "列出钉盘空间/钉盘团队空间",
         "我的文档/个人空间",
         "我的知识库/知识库列表/有哪些知识库",
@@ -279,13 +354,17 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
-        "dws wiki space list --format json",
-        "dws wiki space list --type myWikiSpace --format json"
+        "dws wiki space list --format json                       # 组织知识库（默认）",
+        "dws wiki space list --type myWikiSpace --format json    # 我的文档"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.wiki.list_wikiSpaces",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/wiki.md"
       ]
     },
@@ -298,6 +377,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws wiki space search --query \"产品文档\" --format json",
         "dws wiki space search --query \"技术方案\" --limit 20 --format json"

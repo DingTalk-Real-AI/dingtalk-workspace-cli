@@ -7,7 +7,11 @@
 
 package cli
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/spf13/cobra"
+)
 
 func TestEmbeddedSchemaCatalogIntegrity(t *testing.T) {
 	loaded := runtimeEmbeddedSchemaCatalog
@@ -66,5 +70,51 @@ func TestEmbeddedSchemaCatalogProgressiveQueries(t *testing.T) {
 	}
 	if schemaString(alias["canonical_path"]) != "aitable.query_records" {
 		t.Fatalf("alias canonical path = %q", schemaString(alias["canonical_path"]))
+	}
+}
+
+func TestCompatibleSchemaCommandPrefersMatchingAnnotatedAlias(t *testing.T) {
+	root := &cobra.Command{Use: "dws"}
+	chat := &cobra.Command{Use: "chat"}
+	message := &cobra.Command{Use: "message"}
+	send := &cobra.Command{Use: "send", Run: func(*cobra.Command, []string) {}}
+	reply := &cobra.Command{Use: "reply", Run: func(*cobra.Command, []string) {}}
+	AttachRuntimeSchema(send, "chat", "send_personal_message", "hardcoded:chat")
+	AttachRuntimeSchema(reply, "chat", "reply_personal_message", "hardcoded:chat")
+	message.AddCommand(send, reply)
+	chat.AddCommand(message)
+	root.AddCommand(chat)
+
+	definition := CatalogCommandDefinition{
+		ProductID: "chat",
+		ToolName:  "send_personal_message",
+		CLIPath:   "chat message reply",
+		Aliases:   []string{"chat message send"},
+	}
+	if got := compatibleSchemaCommand(root, definition.CLIPath, definition); got != nil {
+		t.Fatalf("conflicting primary matched %s", got.CommandPath())
+	}
+	if got := compatibleSchemaCommand(root, definition.Aliases[0], definition); got != send {
+		t.Fatalf("matching alias = %v, want send", got)
+	}
+}
+
+func TestEmbeddedCatalogBackfillsIdentityWithoutReplayingRealFlags(t *testing.T) {
+	root := &cobra.Command{Use: "dws"}
+	aitable := &cobra.Command{Use: "aitable"}
+	workflow := &cobra.Command{Use: "workflow"}
+	list := &cobra.Command{Use: "list", Run: func(*cobra.Command, []string) {}}
+	list.Flags().Int("limit", 20, "optional page size")
+	workflow.AddCommand(list)
+	aitable.AddCommand(workflow)
+	root.AddCommand(aitable)
+
+	AnnotateEmbeddedSchemaCommands(root)
+	productID, toolName, _ := runtimeSchemaAnnotations(list)
+	if productID != "aitable" || toolName != "workflow_list" {
+		t.Fatalf("identity = %s.%s", productID, toolName)
+	}
+	if _, annotated := runtimeFlagRequiredState(list.Flags().Lookup("limit")); annotated {
+		t.Fatal("embedded Catalog replayed stale required metadata onto a real Cobra flag")
 	}
 }

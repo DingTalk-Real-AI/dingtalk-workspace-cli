@@ -67,10 +67,10 @@ func NewMCPCommand(_ context.Context, _ CatalogLoader, _ executor.Runner, _ *pip
 	return cmd
 }
 
-// NewSchemaCommand serves the versioned embedded Command Catalog (aligned with
-// the prior branch and the GWS-style flat leaf contract). Helper-only subtrees
-// and the live Cobra tree act as fallbacks. Queries never trigger discovery.
-func NewSchemaCommand(_ CatalogLoader, helperTools HelperToolFetcher) *cobra.Command {
+// NewSchemaCommand serves the versioned embedded Command Catalog. The local
+// Cobra tree is used only when an older build has no valid embedded snapshot;
+// schema queries never contact MCP servers.
+func NewSchemaCommand(_ CatalogLoader) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "schema [path]",
 		Short: "渐进查看命令 Schema (产品 / 分组 / 工具参数)",
@@ -104,15 +104,6 @@ func NewSchemaCommand(_ CatalogLoader, helperTools HelperToolFetcher) *cobra.Com
 					payload = compactSchemaOverviewPayload(payload)
 				}
 				return output.WriteFiltered(cmd.OutOrStdout(), output.ResolveFormat(cmd, output.FormatJSON), payload, output.ResolveFields(cmd), output.ResolveJQ(cmd))
-			}
-			if len(args) > 0 && helperTools != nil {
-				payload, ok, err := renderHelperSchema(cmd.Context(), cmd.Root(), args[0], helperTools)
-				if err != nil {
-					return err
-				}
-				if ok {
-					return output.WriteFiltered(cmd.OutOrStdout(), output.ResolveFormat(cmd, output.FormatJSON), payload, output.ResolveFields(cmd), output.ResolveJQ(cmd))
-				}
 			}
 			payload, err := runtimeSchemaPayload(cmd.Root(), args)
 			if err != nil {

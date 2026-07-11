@@ -39,7 +39,6 @@ type ParameterSchemaHint struct {
 	FlagName     string
 	Type         string
 	Description  string
-	Default      string
 	Required     *bool
 	RequiredWhen string
 }

@@ -42,7 +42,6 @@ const (
 	runtimeSchemaFlagPropertyAnnotation = "dws.schema.property"
 	runtimeSchemaFlagTypeAnnotation     = "dws.schema.type"
 	runtimeSchemaFlagRequiredAnnotation = "dws.schema.required"
-	runtimeSchemaFlagDefaultAnnotation  = "dws.schema.default"
 	runtimeSchemaFlagExampleAnnotation  = "dws.schema.example"
 )
 
@@ -108,6 +107,20 @@ type embeddedMCPParamMeta struct {
 }
 
 var runtimeEmbeddedMCPMetadata = loadEmbeddedMCPMetadata()
+
+var runtimeSchemaConstraintsByCanonical = map[string]RuntimeSchemaConstraints{}
+
+// RegisterRuntimeSchemaConstraints records reviewed cross-parameter CLI rules
+// independently from the generated Catalog, preventing stale Catalog data
+// from becoming the source of its own next generation.
+func RegisterRuntimeSchemaConstraints(canonicalPath string, constraints RuntimeSchemaConstraints) {
+	canonicalPath = strings.TrimSpace(canonicalPath)
+	constraints = normalizeRuntimeSchemaConstraints(constraints)
+	if canonicalPath == "" || runtimeSchemaConstraintsEmpty(constraints) {
+		return
+	}
+	runtimeSchemaConstraintsByCanonical[canonicalPath] = constraints
+}
 
 func loadEmbeddedMCPMetadata() embeddedMCPMetadata {
 	var metadata embeddedMCPMetadata
@@ -183,7 +196,7 @@ func AnnotateRuntimeToolMetadata(cmd *cobra.Command, title, description, source 
 // AnnotateRuntimeFlag adds parameter metadata to an already-registered flag.
 // The metadata mirrors the runtime binding that produced the flag, allowing
 // schema rendering to preserve MCP parameter names while displaying CLI flags.
-func AnnotateRuntimeFlag(cmd *cobra.Command, flagName, propertyName, paramType string, required bool, defaultValue string) {
+func AnnotateRuntimeFlag(cmd *cobra.Command, flagName, propertyName, paramType string, required bool, _ string) {
 	if cmd == nil {
 		return
 	}
@@ -198,8 +211,17 @@ func AnnotateRuntimeFlag(cmd *cobra.Command, flagName, propertyName, paramType s
 	setFlagAnnotation(flag, runtimeSchemaFlagPropertyAnnotation, strings.TrimSpace(propertyName))
 	setFlagAnnotation(flag, runtimeSchemaFlagTypeAnnotation, strings.TrimSpace(paramType))
 	setFlagAnnotation(flag, runtimeSchemaFlagRequiredAnnotation, strconv.FormatBool(required))
-	if strings.TrimSpace(defaultValue) != "" {
-		setFlagAnnotation(flag, runtimeSchemaFlagDefaultAnnotation, defaultValue)
+}
+
+// AnnotateRuntimeFlagProperty records only the stable CLI flag to interface
+// property binding. It intentionally does not copy required or constraints
+// from an older Catalog into the current executable contract.
+func AnnotateRuntimeFlagProperty(cmd *cobra.Command, flagName, propertyName string) {
+	if cmd == nil {
+		return
+	}
+	if flag := cmd.Flags().Lookup(strings.TrimSpace(flagName)); flag != nil {
+		setFlagAnnotation(flag, runtimeSchemaFlagPropertyAnnotation, strings.TrimSpace(propertyName))
 	}
 }
 
@@ -383,6 +405,8 @@ func collectRuntimeSchemaEntries(root *cobra.Command) []runtimeSchemaEntry {
 		if productID == "" || toolName == "" {
 			return
 		}
+		applyRuntimeSchemaParameterBindings(leaf, productID+"."+toolName)
+		AnnotateRuntimeConstraints(leaf, runtimeSchemaConstraintsByCanonical[productID+"."+toolName])
 		parts := commandPathParts(leaf)
 		if len(parts) == 0 {
 			return
@@ -446,6 +470,8 @@ func collectRuntimeSchemaEntries(root *cobra.Command) []runtimeSchemaEntry {
 			if toolName == "" {
 				toolName = derivedRuntimeToolName(parts)
 			}
+			applyRuntimeSchemaParameterBindings(leaf, productID+"."+toolName)
+			AnnotateRuntimeConstraints(leaf, runtimeSchemaConstraintsByCanonical[productID+"."+toolName])
 			group := ""
 			if len(parts) > 2 {
 				group = strings.Join(parts[1:len(parts)-1], ".")
@@ -571,6 +597,21 @@ func runtimeSchemaHintForEntry(entry runtimeSchemaEntry) ToolSchemaHint {
 }
 
 func embeddedMCPMetadataForEntry(entry runtimeSchemaEntry) (embeddedMCPToolMetadata, bool) {
+	paths := []string{
+		entry.PrimaryCLIPath,
+		entry.CLIPath,
+		entry.ProductID + "." + entry.ToolName,
+	}
+	paths = append(paths, entry.Aliases...)
+	if agentMetadata, ok := lookupAgentToolMetadata(paths...); ok && agentMetadata.InterfaceRef != nil {
+		productID := strings.TrimSpace(agentMetadata.InterfaceRef.ProductID)
+		rpcName := strings.TrimSpace(agentMetadata.InterfaceRef.RPCName)
+		key := strings.Trim(productID+"."+rpcName, ".")
+		if metadata, exists := runtimeEmbeddedMCPMetadata.Tools[key]; exists {
+			metadata.InterfaceRef = &embeddedMCPInterfaceRef{ProductID: productID, RPCName: rpcName}
+			return metadata, true
+		}
+	}
 	for _, key := range []string{
 		entry.SourceProductID + "." + entry.ToolName,
 		entry.ProductID + "." + entry.ToolName,
@@ -1041,10 +1082,10 @@ func runtimeCommandParameters(cmd *cobra.Command, hints map[string]ParameterSche
 		if hasHint && strings.TrimSpace(hint.Description) != "" {
 			description = strings.TrimSpace(hint.Description)
 		}
-		required, hasCLIRequired := runtimeFlagRequiredState(flag)
-		if !hasCLIRequired && hasEmbeddedParam && embeddedParam.Required != nil {
-			required = *embeddedParam.Required
-		}
+		// Required is a CLI execution contract. MCP required fields describe the
+		// upstream RPC payload and may be synthesized by a helper, conditional,
+		// or optional at the CLI layer, so they must not promote a Cobra flag.
+		required, _ := runtimeFlagRequiredState(flag)
 		if hasHint && hint.Required != nil {
 			required = *hint.Required
 		}
@@ -1073,12 +1114,14 @@ func runtimeCommandParameters(cmd *cobra.Command, hints map[string]ParameterSche
 		if requiredWhen != "" {
 			entry["required_when"] = requiredWhen
 		}
-		if hasHint && strings.TrimSpace(hint.Default) != "" {
-			entry["default"] = strings.TrimSpace(hint.Default)
-		} else if def := runtimeFlagDefault(flag); def != "" {
+		if def := runtimeFlagDefault(flag); def != "" {
 			entry["default"] = def
-		} else if hasEmbeddedParam && strings.TrimSpace(embeddedParam.Default) != "" {
-			entry["default"] = strings.TrimSpace(embeddedParam.Default)
+		}
+		if hasEmbeddedParam {
+			interfaceDefault := strings.TrimSpace(embeddedParam.Default)
+			if interfaceDefault != "" && interfaceDefault != schemaString(entry["default"]) {
+				entry["interface_default"] = interfaceDefault
+			}
 		}
 		if format := firstFlagAnnotation(flag, "x-cli-format"); format != "" {
 			entry["format"] = format
@@ -1306,9 +1349,6 @@ func lowerCamelFlagName(flagName string) string {
 }
 
 func runtimeFlagDefault(flag *pflag.Flag) string {
-	if annotated := firstFlagAnnotation(flag, runtimeSchemaFlagDefaultAnnotation); annotated != "" {
-		return annotated
-	}
 	def := strings.TrimSpace(flag.DefValue)
 	switch flag.Value.Type() {
 	case "bool":

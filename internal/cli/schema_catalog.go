@@ -305,6 +305,105 @@ func EmbeddedSchemaCLIPaths() map[string]bool {
 	return paths
 }
 
+// EmbeddedSchemaAnnotationReport describes how the frozen release contract
+// maps back to the executable Cobra tree. Missing paths indicate a release
+// contract drift and are asserted by catalog quality gates.
+type EmbeddedSchemaAnnotationReport struct {
+	Matched int
+	Missing []string
+}
+
+// AnnotateEmbeddedSchemaCommands attaches the frozen release contract to the
+// executable Cobra leaves. It never creates commands or changes validation;
+// catalog fallback commands are registered separately at low priority.
+func AnnotateEmbeddedSchemaCommands(root *cobra.Command) EmbeddedSchemaAnnotationReport {
+	report := EmbeddedSchemaAnnotationReport{}
+	for _, definition := range EmbeddedSchemaCommandDefinitions() {
+		cmd := compatibleSchemaCommand(root, definition.CLIPath, definition)
+		if cmd == nil {
+			for _, alias := range definition.Aliases {
+				if cmd = compatibleSchemaCommand(root, alias, definition); cmd != nil {
+					break
+				}
+			}
+		}
+		if cmd == nil {
+			report.Missing = append(report.Missing, definition.CanonicalPath)
+			continue
+		}
+		existingProduct, existingTool, existingSource := runtimeSchemaAnnotations(cmd)
+		if existingProduct != "" && existingTool != "" && existingSource != "frozen-catalog" {
+			report.Matched++
+			continue
+		}
+		AttachRuntimeSchema(cmd, definition.ProductID, definition.ToolName, definition.Source)
+		// Real Cobra commands own their current parameter contract. The embedded
+		// Catalog may backfill stable identity only. Parameter bindings come from
+		// their own versioned input; required and constraints come from current
+		// Cobra metadata and strong annotations. Only generated fallback leaves
+		// need the complete frozen contract.
+		if existingSource != "frozen-catalog" {
+			report.Matched++
+			continue
+		}
+		AnnotateRuntimeToolMetadata(cmd, definition.Title, definition.Description, "embedded-command-catalog")
+		AnnotateRuntimeConstraints(cmd, definition.Constraints)
+		AnnotateRuntimePositionals(cmd, definition.Positionals...)
+		for _, parameter := range definition.Parameters {
+			parameterType := firstNonEmptySchemaString(parameter.InterfaceType, parameter.Type, "string")
+			AnnotateRuntimeFlag(cmd, parameter.Name, parameter.Property, parameterType, parameter.Required, parameter.Default)
+			AnnotateRuntimeFlagFormat(cmd, parameter.Name, parameter.Format)
+			AnnotateRuntimeFlagEnum(cmd, parameter.Name, parameter.Enum...)
+		}
+		report.Matched++
+	}
+	sort.Strings(report.Missing)
+	return report
+}
+
+func compatibleSchemaCommand(root *cobra.Command, path string, definition CatalogCommandDefinition) *cobra.Command {
+	cmd := exactSchemaCommand(root, path)
+	if cmd == nil {
+		return nil
+	}
+	productID, toolName, _ := runtimeSchemaAnnotations(cmd)
+	if productID == "" && toolName == "" {
+		return cmd
+	}
+	if productID == definition.ProductID && toolName == definition.ToolName {
+		return cmd
+	}
+	return nil
+}
+
+func exactSchemaCommand(root *cobra.Command, rawPath string) *cobra.Command {
+	if root == nil {
+		return nil
+	}
+	parts := strings.Fields(strings.TrimSpace(rawPath))
+	if len(parts) > 0 && parts[0] == root.Name() {
+		parts = parts[1:]
+	}
+	current := root
+	for _, part := range parts {
+		var next *cobra.Command
+		for _, child := range current.Commands() {
+			if child.Name() == part {
+				next = child
+				break
+			}
+		}
+		if next == nil {
+			return nil
+		}
+		current = next
+	}
+	if current == root {
+		return nil
+	}
+	return current
+}
+
 func embeddedSchemaPayload(args []string) (map[string]any, error) {
 	loaded := runtimeEmbeddedSchemaCatalog
 	if len(args) == 0 {

@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -116,6 +117,24 @@ func TestStdioClientCallBeforeStart(t *testing.T) {
 	_, err := client.CallTool(context.Background(), "test", nil)
 	if err == nil {
 		t.Error("expected error when calling before Start")
+	}
+}
+
+func TestStdioClientEnsureInitializedIsIdempotent(t *testing.T) {
+	client := NewStdioClient(buildTestHelper(t), nil, nil)
+	defer client.Stop()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := client.EnsureInitialized(ctx); err != nil {
+		t.Fatalf("first EnsureInitialized: %v", err)
+	}
+	firstID := atomic.LoadInt64(&client.nextID)
+	if err := client.EnsureInitialized(ctx); err != nil {
+		t.Fatalf("second EnsureInitialized: %v", err)
+	}
+	if secondID := atomic.LoadInt64(&client.nextID); secondID != firstID {
+		t.Fatalf("second EnsureInitialized sent another request: ids %d -> %d", firstID, secondID)
 	}
 }
 

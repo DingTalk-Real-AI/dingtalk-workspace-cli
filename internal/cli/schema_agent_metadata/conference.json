@@ -6,6 +6,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -16,6 +19,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -26,6 +32,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -36,6 +45,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -48,6 +60,7 @@
       "effect_source": "agent-hint",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -58,6 +71,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "read",
       "effect_source": "agent-hint",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -68,6 +84,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -78,6 +97,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -88,6 +110,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -98,6 +123,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -108,6 +136,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -118,6 +149,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -128,6 +162,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -139,6 +176,8 @@
       "effect": "write",
       "effect_source": "agent-hint",
       "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -149,6 +188,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -159,6 +201,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -169,6 +214,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -180,6 +228,8 @@
       "effect": "write",
       "effect_source": "agent-hint",
       "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -191,6 +241,8 @@
       "effect": "write",
       "effect_source": "agent-hint",
       "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -201,6 +253,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -211,6 +266,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -221,6 +279,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -231,6 +292,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -241,6 +305,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -251,6 +318,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -261,6 +331,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "read",
       "effect_source": "agent-hint",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -271,6 +344,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -281,6 +357,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -291,6 +370,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -301,6 +383,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -311,6 +396,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -321,6 +409,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"
@@ -331,6 +422,9 @@
       "agent_summary_source": "conference-schema-review",
       "effect": "write",
       "effect_source": "agent-hint",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": true,
       "source_refs": [
         "skills/mono/schema-hints/conference.json"

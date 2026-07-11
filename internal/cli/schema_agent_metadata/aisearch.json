@@ -5,8 +5,14 @@
       "agent_summary": "业内部行为记录搜索工具。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
+        "我发给某人的消息/邮件/文档/今天我干了什么；搜行为记录",
         "我发过/谁发给我/创建过/分享过/收到过/今天我干了什么"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aisearch behavior --queries \"智能化方案\" --types document --format json",
         "dws aisearch behavior --types mail --behavior-type send --direction \"我-\u003e汐峰\" --format json"
@@ -14,6 +20,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aisearch.search_enterprise_behavior",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/aisearch.md"
       ]
     },
@@ -21,9 +28,15 @@
       "agent_summary": "企业内部知识搜索工具。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
+        "搜一下智能化方案/最近 OKR 相关邮件/最近发版相关消息；搜企业知识内容",
         "搜资料/找方案/查文档/搜企业知识/项目相关内容/工作总结/周报总结",
         "最近/本周/今天 + XX相关消息/文档/邮件有哪些"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aisearch enterprise --queries \"智能化方案\" --types document --format json",
         "dws aisearch enterprise --queries \"搜索问题\" --types im --time-range \"最近\" --format json"
@@ -31,6 +44,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aisearch.search_enterprise",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/aisearch.md"
       ]
     },
@@ -38,8 +52,17 @@
       "agent_summary": "企业内找人搜索工具，支持按姓名、部门、职位、技能、工作职责等多维度搜索企业内人员。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
+        "13800138000是谁/查手机号；按手机号搜人",
+        "222020这个工号是谁/查工号；按工号搜人",
+        "五道的上级是谁/谁负责XX/XX的下属有谁；AI语义搜人",
+        "找一下张三/搜同事/找人；AI搜人(首选)",
         "搜人/找人/谁负责/上级是谁/哪个部门的人"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aisearch person --keyword \"张三\" --dimension name --format json",
         "dws aisearch person --keyword \"产品部\" --dimension department --format json"
@@ -47,6 +70,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aisearch.enterprise_person_search",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/aisearch.md"
       ]
     }

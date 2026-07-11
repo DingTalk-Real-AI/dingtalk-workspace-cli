@@ -318,6 +318,17 @@ func TestMergeCommandTree(t *testing.T) {
 		}
 	})
 
+	t.Run("lower priority source cannot unhide destination", func(t *testing.T) {
+		t.Parallel()
+		dst := &cobra.Command{Use: "root", Hidden: true}
+		src := &cobra.Command{Use: "root", Hidden: false}
+		SetOverridePriority(src, -100)
+		MergeCommandTree(dst, src)
+		if !dst.Hidden {
+			t.Fatal("lower priority fallback must preserve an explicit hidden command")
+		}
+	})
+
 	t.Run("hidden stays false when both false", func(t *testing.T) {
 		t.Parallel()
 		dst := &cobra.Command{Use: "root", Hidden: false}

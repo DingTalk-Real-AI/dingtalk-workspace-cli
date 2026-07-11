@@ -8,6 +8,11 @@
         "4b. 获取音频/视频地址（用于下载或播放原始媒体文件）",
         "音频地址/音频链接/录音文件/下载录音/音频下载/视频文件/媒体地址"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws minutes get audio --id \u003ctaskUuid\u003e --format json"
       ],
@@ -23,6 +28,11 @@
       "use_when": [
         "批量查询/查多个听记"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws minutes get batch --ids uuid1,uuid2,uuid3"
       ],
@@ -30,7 +40,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.batch_get_minutes_details",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "batch_get_minutes_details"
+      }
     },
     "minutes get info": {
       "agent_summary": "获取听记基础信息 (创建人 / 起止时间 / 标题 / 访问链接)",
@@ -40,6 +54,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws minutes get info --id \u003ctaskUuid\u003e"
       ],
@@ -47,7 +64,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.get_minutes_basic_info",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "get_minutes_basic_info"
+      }
     },
     "minutes get keywords": {
       "agent_summary": "获取听记关键字列表",
@@ -55,6 +76,11 @@
       "use_when": [
         "关键字/关键词"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws minutes get keywords --id \u003ctaskUuid\u003e"
       ],
@@ -62,7 +88,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.get_minutes_keywords",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "get_minutes_keywords"
+      }
     },
     "minutes get summary": {
       "agent_summary": "获取听记 AI 摘要 (Markdown 格式)",
@@ -75,6 +105,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws minutes get summary --id \u003ctaskUuid\u003e",
         "dws minutes get summary --id \u003ctaskUuid\u003e --format json"
@@ -83,7 +116,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.get_minutes_ai_summary",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "get_minutes_ai_summary"
+      }
     },
     "minutes get todos": {
       "agent_summary": "获取听记中提取的待办事项",
@@ -93,6 +130,11 @@
         "会议待办/听记待办/待办事项",
         "把 XX 改成 YY；用户想提取待办"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws minutes get todos --id \u003ctaskUuid\u003e",
         "dws minutes get todos --id \u003ctaskUuid\u003e --format json"
@@ -101,7 +143,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.list_minutes_todos",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "list_minutes_todos"
+      }
     },
     "minutes get transcription": {
       "agent_summary": "获取听记语音转写原文 (含发言人 / 时间戳)",
@@ -110,6 +156,11 @@
         "3. 查看完整转写原文（拉完后默认按时间线返回，AI 必须主动追问\"是否按发言人聚类\"）",
         "原文/转写/录音文字/逐字稿"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws minutes get transcription --id \u003ctaskUuid\u003e",
         "dws minutes get transcription --id \u003ctaskUuid\u003e --direction 1"
@@ -118,7 +169,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.get_minutes_transcription",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "get_minutes_transcription"
+      }
     },
     "minutes hot-word add": {
       "agent_summary": "添加个人热词 (优化识别专有名词 / 人名)",
@@ -129,6 +184,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws minutes hot-word add --words \"钉钉\"",
         "dws minutes hot-word add --words \"OKR,钉钉,Copilot\""
@@ -137,7 +195,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.add_personal_hot_word",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "add_personal_hot_word"
+      }
     },
     "minutes hot-word list": {
       "agent_summary": "查询我的热词列表，返回个人的所有听记配置过的热词列表",
@@ -147,6 +209,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws minutes hot-word list"
       ],
@@ -178,6 +243,11 @@
         "按时间范围搜索",
         "某时间段内的听记/按时间查听记/按关键词查听记"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws minutes list all",
         "dws minutes list all --max 20"
@@ -197,6 +267,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws minutes mind-graph create --id \u003ctaskUuid\u003e",
         "dws minutes mind-graph create --id \u003ctaskUuid\u003e --format json"
@@ -205,7 +278,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.create_mind_graph",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "create_mind_graph"
+      }
     },
     "minutes mind-graph status": {
       "agent_summary": "查询思维导图任务状态 (0=进行中 / 1=成功 / 2=失败)",
@@ -216,6 +293,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws minutes mind-graph status --id \u003ctaskUuid\u003e",
         "dws minutes mind-graph status --id \u003ctaskUuid\u003e --format json"
@@ -224,7 +304,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.query_mind_graph_status",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "query_mind_graph_status"
+      }
     },
     "minutes permission add": {
       "agent_summary": "批量给多个听记增加成员，并且设置成员的权限。",
@@ -237,6 +321,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws minutes permission add --ids \u003cuuid1,uuid2\u003e --member-uids 123456,789012 --policy 3",
         "dws minutes permission add --ids \u003cuuid\u003e --member-uids 123456 --policy 2 --cover"
@@ -258,6 +345,7 @@
       "effect_source": "agent-hint",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws minutes permission remove --ids \u003cuuid1,uuid2\u003e --member-uids 123456,789012",
         "dws minutes permission remove --ids \u003cuuid\u003e --member-uids 123456"
@@ -270,59 +358,95 @@
       ]
     },
     "minutes record pause": {
+      "agent_summary": "暂停听记录音",
+      "agent_summary_source": "dws-command-surface-review",
       "use_when": [
         "7. 录音控制（基于 start 返回的 taskUuid）",
-        "暂停一下/暂停录音"
+        "暂停一下/暂停录音",
+        "暂停听记录音"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws minutes record pause --id \u003ctaskUuid\u003e",
         "dws minutes record pause --id \u003ctaskUuid\u003e --session-id \u003csessionId\u003e"
       ],
+      "reviewed": true,
       "source_refs": [
-        "skills/mono/references/products/minutes.md"
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/schema-hints/catalog-completeness.json"
       ]
     },
     "minutes record resume": {
+      "agent_summary": "恢复听记录音",
+      "agent_summary_source": "dws-command-surface-review",
       "use_when": [
         "7. 录音控制（基于 start 返回的 taskUuid）",
+        "恢复听记录音",
         "继续/继续录音"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws minutes record resume --id \u003ctaskUuid\u003e",
         "dws minutes record resume --id \u003ctaskUuid\u003e --session-id \u003csessionId\u003e"
       ],
+      "reviewed": true,
       "source_refs": [
-        "skills/mono/references/products/minutes.md"
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/schema-hints/catalog-completeness.json"
       ]
     },
     "minutes record start": {
+      "agent_summary": "发起听记 (开始录音)",
+      "agent_summary_source": "dws-command-surface-review",
       "use_when": [
         "0. 发起听记（开始录音）",
+        "发起听记 (开始录音)",
         "开始听记/开始录音/发起一个听记/启动听记/开始听记录这次会议/我要开始听记了/录音开始/我要听记"
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws minutes record start",
         "dws minutes record start --session-id \u003csessionId\u003e"
       ],
+      "reviewed": true,
       "source_refs": [
-        "skills/mono/references/products/minutes.md"
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/schema-hints/catalog-completeness.json"
       ]
     },
     "minutes record stop": {
+      "agent_summary": "结束听记录音",
+      "agent_summary_source": "dws-command-surface-review",
       "use_when": [
         "7. 录音控制（基于 start 返回的 taskUuid）",
-        "结束听记/结束录音/停止录音/结束"
+        "结束听记/结束录音/停止录音/结束",
+        "结束听记录音"
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws minutes record stop --id \u003ctaskUuid\u003e",
         "dws minutes record stop --id \u003ctaskUuid\u003e --session-id \u003csessionId\u003e"
       ],
+      "reviewed": true,
       "source_refs": [
-        "skills/mono/references/products/minutes.md"
+        "skills/mono/references/products/minutes.md",
+        "skills/mono/schema-hints/catalog-completeness.json"
       ]
     },
     "minutes replace-text": {
@@ -336,6 +460,7 @@
       "effect_source": "skill-explicit",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws minutes replace-text --id \u003ctaskUuid\u003e --search \"旧文字\" --replace \"新文字\"",
         "dws minutes replace-text --id \u003ctaskUuid\u003e --search \"发言人1\" --replace \"张三\" --format json"
@@ -345,7 +470,11 @@
         "skills/mono/SKILL.md",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "replace_minutes_text"
+      }
     },
     "minutes speaker replace": {
       "agent_summary": "批量替换听记中指定发言人",
@@ -358,6 +487,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws minutes speaker replace --id \u003ctaskUuid\u003e --from \"张三\" --to \"李四\"",
         "dws minutes speaker replace --id \u003ctaskUuid\u003e --from \"张三\" --to \"李四\" --target-uid \u003cuid\u003e"
@@ -366,7 +498,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.replace_speaker",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "replace_speaker"
+      }
     },
     "minutes speaker summary create": {
       "agent_summary": "触发创建发言人的段落总结任务，该任务将听记的发言人的所有撰写内容汇总总结，触发后需要继续调用查询接口去查询总结任务的结果",
@@ -374,8 +510,11 @@
       "use_when": [
         "9b. 发言人段落总结（异步：create 触发 → 延迟 5s → 轮询 get，最多 20 次）"
       ],
-      "effect": "write",
+      "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws minutes speaker summary create --ids \u003cuuid1,uuid2\u003e",
         "dws minutes speaker summary create --task-uuids \u003cuuid1,uuid2\u003e"
@@ -394,6 +533,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws minutes speaker summary get --ids \u003cuuid1,uuid2\u003e",
         "dws minutes speaker summary get --task-uuids \u003cuuid1,uuid2\u003e"
@@ -407,21 +549,44 @@
     "minutes tag list": {
       "agent_summary": "查询我的的听记的标签或者分组列表，标签或者分组在听记页面创建。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "use_when": [
+        "我的听记标签/听记分组/听记有哪些标签/有哪些分组",
+        "按标签查/某个标签下的听记/标签筛选",
+        "标签列表/分组列表/有哪些标签/有哪些分组"
+      ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "examples": [
+        "dws minutes tag list"
+      ],
       "reviewed": false,
       "source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.minutes.query_user_tag_list"
+        "internal/cli/schema_mcp_metadata.json#tools.minutes.query_user_tag_list",
+        "skills/mono/references/products/minutes.md"
       ]
     },
     "minutes tag query": {
       "agent_summary": "根据用户的标签或者分组信息来查询听记列表信息，用户的标签通过听记页面手动创建。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "use_when": [
+        "查看某个标签下的听记/这个标签下有哪些听记/按标签查听记"
+      ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "examples": [
+        "dws minutes tag query --tag-id \u003ctagId\u003e",
+        "dws minutes tag query --tag-id \u003ctagId\u003e --limit 20"
+      ],
       "reviewed": false,
       "source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.minutes.query_minutes_by_tag_id"
+        "internal/cli/schema_mcp_metadata.json#tools.minutes.query_minutes_by_tag_id",
+        "skills/mono/references/products/minutes.md"
       ]
     },
     "minutes update summary": {
@@ -430,8 +595,11 @@
       "use_when": [
         "6. 更新纪要内容"
       ],
-      "effect": "read",
+      "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws minutes update summary --id \u003ctaskUuid\u003e --content \"新的纪要内容\"",
         "dws minutes update summary --id \u003ctaskUuid\u003e --content \"新的纪要内容\" --format json"
@@ -440,7 +608,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.update_minutes_summary",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "update_minutes_summary"
+      }
     },
     "minutes update title": {
       "agent_summary": "修改听记标题",
@@ -449,6 +621,11 @@
         "5. 修改标题",
         "改听记标题/重命名听记/修改标题"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws minutes update title --id \u003ctaskUuid\u003e --title \"Q2 复盘会议\"",
         "dws minutes update title --id \u003ctaskUuid\u003e --title \"新标题\" --format json"
@@ -457,7 +634,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.update_minutes_title",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "update_minutes_title"
+      }
     },
     "minutes upload cancel": {
       "agent_summary": "取消文件上传会话，释放服务端资源",
@@ -466,6 +647,11 @@
         "12d.（可选）取消上传会话",
         "取消上传"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws minutes upload cancel --session-id \u003csessionId\u003e",
         "dws minutes upload cancel --session-id \u003csessionId\u003e --format json"
@@ -474,7 +660,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.cancel_upload_session",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "cancel_upload_session"
+      }
     },
     "minutes upload complete": {
       "agent_summary": "完成文件上传并创建听记（幂等：同一 sessionId 重复调用返回已有任务）",
@@ -482,6 +672,11 @@
       "use_when": [
         "12c. 通知服务端上传完成，创建听记"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws minutes upload complete --session-id \u003csessionId\u003e",
         "dws minutes upload complete --session-id \u003csessionId\u003e --format json"
@@ -490,7 +685,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.complete_upload_session",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "complete_upload_session"
+      }
     },
     "minutes upload create": {
       "agent_summary": "创建文件上传会话（获取预签名 URL，供 HTTP PUT 上传）",
@@ -501,6 +700,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws minutes upload create --file-name \"meeting.mp4\" --file-size 102400",
         "dws minutes upload create --file-name \"meeting.mp4\" --file-size 102400 --title \"周会录音\""
@@ -509,7 +711,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.minutes.prod.json#minutes.create_upload_session",
         "skills/mono/references/products/minutes.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "create_upload_session"
+      }
     }
   }
 }

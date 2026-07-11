@@ -4,23 +4,39 @@
     "drive commit": {
       "agent_summary": "提交文件上传",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
+        "dws drive commit --file-name \"report.pdf\" --file-size 102400 --upload-id \u003cUPLOAD_ID\u003e",
         "dws drive commit --file-name \"报告.pdf\" --file-size 102400 --upload-id \u003cuploadId\u003e"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.drive.prod.json#drive.commit_upload",
+        "skills/mono/references/products/drive.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "drive",
+        "rpc_name": "commit_upload"
+      }
     },
     "drive copy": {
       "agent_summary": "将指定节点复制到目标文件夹。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
-        "── 场景 A: 复制到知识库空间根目录 ──",
-        "── 场景 C: 复制到钉盘子文件夹 ──",
-        "── 场景 默认: 复制/移动到「我的文件」根目录 ──",
+        "── 场景 A: 复制钉盘文件到知识库空间根目录 ──",
+        "── 场景 C: 复制钉盘文件到钉盘 space 下的子文件夹 ──",
+        "── 场景默认: 用户未指定目标位置 → 复制/移动到「我的文件」根目录 ──",
         "复制文件/移动文件/搬到/移到"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws drive copy --node \u003cID\u003e [--folder \u003cTARGET\u003e] [--workspace \u003cWS\u003e]",
         "dws drive copy --node \u003c源文件dentryUuid\u003e --folder \u003c我的文件rootFolderId\u003e --format json"
@@ -28,8 +44,13 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.drive.copy_document",
-        "skills/mono/references/products/drive.md"
-      ]
+        "skills/mono/references/products/drive.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "copy_document"
+      }
     },
     "drive delete": {
       "agent_summary": "将指定节点移入回收站，30 天内可从回收站恢复，超过 30 天将被永久删除。",
@@ -42,6 +63,7 @@
       "effect_source": "agent-hint",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws drive delete --node \u003cdentryUuid\u003e --format json    # 查询 fileId: dws drive list",
         "dws drive delete --node \u003cdentryUuid\u003e --yes --format json"
@@ -50,8 +72,13 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.drive.delete_document",
         "skills/mono/references/products/drive.md",
-        "skills/mono/schema-hints/destructive-safety.json"
-      ]
+        "skills/mono/schema-hints/destructive-safety.json",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "delete_document"
+      }
     },
     "drive download": {
       "agent_summary": "获取文件下载链接",
@@ -59,19 +86,31 @@
       "use_when": [
         "4. 下载文件到本地",
         "下载文件",
-        "查看具体命令的完整参数说明"
+        "查看具体命令的完整参数说明",
+        "读一下这个 xlsx 的数据\" / xlsx 节点链接；下载本地表格文件"
+      ],
+      "avoid_when": [
+        "把这个在线表格导出为 xlsx 文件；在线表格格式转换"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws drive download --help",
         "dws drive download --node \u003cdentryUuid\u003e --output ./report.pdf"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.drive.prod.json#drive.download_file",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/drive.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "drive",
+        "rpc_name": "download_file"
+      }
     },
     "drive info": {
       "agent_summary": "获取文件元数据信息",
@@ -82,6 +121,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws drive info --node \u003cdentryUuid\u003e",
         "dws drive info --node \u003cdentryUuid\u003e --format json"
@@ -90,7 +132,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.drive.prod.json#drive.get_file_info",
         "skills/mono/references/products/drive.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "drive",
+        "rpc_name": "get_file_info"
+      }
     },
     "drive list": {
       "agent_summary": "获取文件/文件夹列表",
@@ -98,40 +144,53 @@
       "use_when": [
         "1. 浏览「我的文件」根目录",
         "2. 进入子目录 — 提取 dentryUuid 作为 folder",
-        "── 场景 C: 复制到钉盘子文件夹 ──",
-        "── 场景 默认: 复制/移动到「我的文件」根目录 ──",
+        "── 场景 C: 复制钉盘文件到钉盘 space 下的子文件夹 ──",
+        "── 场景默认: 用户未指定目标位置 → 复制/移动到「我的文件」根目录 ──",
         "我的文件/钉盘/网盘/云盘",
         "查看具体命令的完整参数说明"
       ],
+      "avoid_when": [
+        "帮我看看知识库里的文件；知识库节点列表"
+      ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws drive list --help",
         "dws drive list --limit 20"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.drive.prod.json#drive.list_files",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/drive.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "drive",
+        "rpc_name": "list_files"
+      }
     },
     "drive list-spaces": {
       "agent_summary": "获取当前用户可访问的空间列表。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
-      "use_when": [
-        "── 场景 B: 移动到另一个钉盘 space 根目录 ──",
-        "── 场景 默认: 复制/移动到「我的文件」根目录 ──",
-        "钉盘空间/团队文件/有哪些空间/空间列表/团队文件列表"
+      "avoid_when": [
+        "列出钉盘团队空间；列出钉盘空间"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
-        "dws drive list-spaces",
-        "dws drive list-spaces --space-type mySpace"
+        "dws drive list-spaces                   # deprecated",
+        "dws drive list-spaces --space-type orgSpace --limit 20 --cursor \u003cTOKEN\u003e"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.drive.list_spaces",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/drive.md"
       ]
     },
@@ -142,6 +201,11 @@
         "5. 创建文件夹",
         "新建文件夹/创建目录"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws drive mkdir --name \"项目资料\"",
         "dws drive mkdir --name \"子目录\" --folder \u003cdentryUuid\u003e"
@@ -150,16 +214,23 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.drive.prod.json#drive.create_folder",
         "skills/mono/references/products/drive.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "drive",
+        "rpc_name": "create_folder"
+      }
     },
     "drive move": {
       "agent_summary": "将指定节点移动到目标文件夹。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
-        "── 场景 B: 移动到另一个钉盘 space 根目录 ──"
+        "── 场景 B: 移动钉盘文件到另一个钉盘 space 根目录 ──"
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws drive move --node \u003cID\u003e [--folder \u003cTARGET\u003e] [--workspace \u003cWS\u003e]",
         "dws drive move --node \u003c源文件dentryUuid\u003e --folder \u003c目标space的rootFolderId\u003e --format json"
@@ -167,8 +238,13 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.drive.move_document",
-        "skills/mono/references/products/drive.md"
-      ]
+        "skills/mono/references/products/drive.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "move_document"
+      }
     },
     "drive permission add": {
       "agent_summary": "为知识库下的节点（文档、文件夹、文件）添加指定角色的企业用户成员（仅支持 USER 类型）。",
@@ -178,28 +254,44 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws drive permission add --node \u003cID\u003e --users uid1,uid2 --role READER"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.drive.add_permission",
-        "skills/mono/references/products/drive.md"
-      ]
+        "skills/mono/references/products/drive.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "add_permission"
+      }
     },
     "drive permission list": {
       "agent_summary": "查询知识库节点当前的成员权限列表。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws drive permission list --node \u003cID\u003e"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.drive.list_permission",
-        "skills/mono/references/products/drive.md"
-      ]
+        "skills/mono/references/products/drive.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "list_permission"
+      }
     },
     "drive permission remove": {
       "agent_summary": "从知识库节点移除指定企业用户的权限（仅支持 USER 类型）。",
@@ -208,6 +300,7 @@
       "effect_source": "agent-hint",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws drive permission remove --node \u003cID\u003e --users uid1"
       ],
@@ -215,22 +308,35 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.drive.permission_remove",
         "skills/mono/references/products/drive.md",
-        "skills/mono/schema-hints/destructive-safety.json"
-      ]
+        "skills/mono/schema-hints/destructive-safety.json",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "remove_permission"
+      }
     },
     "drive permission update": {
       "agent_summary": "修改企业用户在知识库节点上的角色（仅支持 USER 类型）。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws drive permission update --node \u003cID\u003e --users uid1 --role EDITOR"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.drive.permission_update",
-        "skills/mono/references/products/drive.md"
-      ]
+        "skills/mono/references/products/drive.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "update_permission"
+      }
     },
     "drive rename": {
       "agent_summary": "对指定节点进行重命名。",
@@ -240,25 +346,40 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws drive rename --node \u003cID\u003e --name \"新名称\""
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.drive.rename_document",
-        "skills/mono/references/products/drive.md"
-      ]
+        "skills/mono/references/products/drive.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "rename_document"
+      }
     },
     "drive search": {
       "agent_summary": "在钉盘空间中搜索文件、文件夹或空间，支持通过 searchTarget 参数切换搜索目标。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
+        "搜一下有没有叫XX的文件；全局搜索",
         "搜索钉盘文件/钉盘里找个文件/查找某个钉盘文件/钉盘中搜索",
         "查看具体命令的完整参数说明",
         "钉盘/网盘/我的文件里搜"
       ],
+      "avoid_when": [
+        "在知识库里搜方案；空间内搜索"
+      ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws drive search --help",
         "dws drive search --query \"季度汇报\""
@@ -266,36 +387,59 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.drive.search_files",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/drive.md"
       ]
     },
     "drive upload": {
+      "agent_summary": "上传本地文件到钉盘",
+      "agent_summary_source": "dws-command-surface-review",
       "use_when": [
-        "6. 上传文件（必须使用 upload 命令，禁止手动分步操作）",
+        "6. 上传文件（首选 upload 命令，自动完成三步流程）",
+        "上传文件\"（未指定目标）；默认钉盘",
         "上传文件/传文件到钉盘",
+        "上传文件到钉盘/我的文件；钉盘上传",
+        "上传本地文件到钉盘",
+        "帮我把这个文件传到网盘；钉盘上传",
         "查看具体命令的完整参数说明"
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws drive upload --help",
         "dws drive upload --file ./report.pdf"
       ],
+      "reviewed": true,
       "source_refs": [
-        "skills/mono/references/products/drive.md"
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/drive.md",
+        "skills/mono/schema-hints/catalog-completeness.json"
       ]
     },
     "drive upload-info": {
       "agent_summary": "获取文件上传信息",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
-        "dws drive upload-info --file-name \"报告.pdf\" --file-size 102400",
-        "dws drive upload-info --file-name \"readme.txt\" --file-size 1024 --parent-id \u003cdentryUuid\u003e"
+        "dws drive upload-info --file-name \"report.pdf\" --file-size 102400",
+        "dws drive upload-info --file-name \"slides.pptx\" --file-size 512000 --folder \u003cdentryUuid\u003e"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.drive.prod.json#drive.get_upload_info",
+        "skills/mono/references/products/drive.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "drive",
+        "rpc_name": "get_upload_info"
+      }
     }
   }
 }

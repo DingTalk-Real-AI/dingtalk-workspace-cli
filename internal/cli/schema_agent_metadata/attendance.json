@@ -6,62 +6,99 @@
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
+        "dws attendance record get --user 011769261608 --date 2026-03-08",
         "dws attendance record get --user USER_ID --date 2026-03-08  # 查询 userId: dws contact user search --keyword \"姓名\""
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.attendance.prod.json#attendance.get_user_attendance_record",
+        "skills/mono/references/products/attendance.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "attendance",
+        "rpc_name": "get_user_attendance_record"
+      }
     },
     "attendance rules": {
       "agent_summary": "查询考勤组与考勤规则",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
+        "1. 先查考勤组和关联班次（即使排休也需要确认考勤组）",
+        "1. 先查考勤组并获取关联班次（先查后排）",
         "查看考勤组和规则",
-        "考勤组/考勤规则/打卡规则"
+        "用户只属于一个考勤组，直接查询即可确定",
+        "考勤组/考勤规则/打卡规则",
+        "自动获取当前用户的考勤组（用户只属于一个考勤组，无需选择）"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
-        "dws attendance rules --date 2026-03-14",
-        "dws attendance rules --date \"2026-03-14 09:00:00\""
+        "dws attendance rules --date \u003c今天日期\u003e --format json",
+        "dws attendance rules --date 2026-03-14"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.attendance.prod.json#attendance.query_attendance_group_or_rules",
+        "skills/mono/references/products/attendance-schedule.md",
         "skills/mono/references/products/attendance.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "attendance",
+        "rpc_name": "query_attendance_group_or_rules"
+      }
     },
     "attendance shift list": {
       "agent_summary": "批量查询员工班次信息（间隔 ≤ 7 天，最多 50 人）",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws attendance shift list --users userId1,userId2 --start 2026-03-03 --end 2026-03-07  # 查询 userId: dws contact user search --keyword \"姓名\""
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.attendance.prod.json#attendance.batch_get_employee_shifts",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "attendance",
+        "rpc_name": "batch_get_employee_shifts"
+      }
     },
     "attendance summary": {
       "agent_summary": "查询某个人的考勤统计摘要",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
-        "查看考勤统计摘要",
+        "查看考勤统计摘要（--stats-type 必填：week 周统计 / month 月统计）",
         "考勤汇总/统计"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
-        "dws attendance summary --user USER_ID --date \"2026-03-12 15:00:00\"",
-        "dws attendance summary --user \u003cUSER_ID\u003e --date \"2026-03-12 15:00:00\" --format json"
+        "dws attendance summary --user USER_ID --date 2026-03-12 --stats-type week",
+        "dws attendance summary --user USER_ID --date \"2026-03-12 15:00:00\" --stats-type month"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.attendance.prod.json#attendance.get_attendance_summary",
         "skills/mono/references/products/attendance.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "attendance",
+        "rpc_name": "get_attendance_summary"
+      }
     }
   }
 }

@@ -6,8 +6,9 @@
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "effect": "write",
       "effect_source": "agent-hint",
-      "risk": "high",
-      "confirmation": "user_required",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable advperm disable --base-id BASE_ID --yes --format json"
       ],
@@ -15,8 +16,13 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.advperm_disable",
         "skills/mono/references/products/aitable/aitable-advperm.md",
-        "skills/mono/schema-hints/destructive-safety.json"
-      ]
+        "skills/mono/schema-hints/destructive-safety.json",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "set_advanced_permission"
+      }
     },
     "aitable advperm enable": {
       "agent_summary": "开启或关闭指定 Base 的高级权限总开关。",
@@ -26,14 +32,22 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable advperm enable --base-id BASE_ID --format json"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.advperm_enable",
-        "skills/mono/references/products/aitable/aitable-advperm.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-advperm.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "set_advanced_permission"
+      }
     },
     "aitable advperm role-create": {
       "agent_summary": "在指定 Base 下创建自定义角色;",
@@ -43,6 +57,11 @@
         "仅指定 name，子角色由服务端按默认（none）填充",
         "创建时即指定 sub-roles（推荐——避免再走一次 role-update）"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable advperm role-create --base-id BASE_ID --name \"市场可读\" --format json",
         "dws aitable advperm role-create --base-id BASE_ID --name \"市场可读\" --sub-roles '[{\"targetId\":\"\u003csheetId\u003e\",\"targetType\":\"sheet\",\"authLevel\":\"read\"}]' --format json"
@@ -50,8 +69,13 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.advperm_role_create",
-        "skills/mono/references/products/aitable/aitable-advperm.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-advperm.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "create_role"
+      }
     },
     "aitable advperm role-delete": {
       "agent_summary": "删除指定 Base 下的自定义角色;",
@@ -60,6 +84,7 @@
       "effect_source": "agent-hint",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable advperm role-delete --base-id BASE_ID --role-id ROLE_ID --yes --format json"
       ],
@@ -67,32 +92,57 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.advperm_role_delete",
         "skills/mono/references/products/aitable/aitable-advperm.md",
-        "skills/mono/schema-hints/destructive-safety.json"
-      ]
+        "skills/mono/schema-hints/destructive-safety.json",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "delete_role"
+      }
     },
     "aitable advperm role-get": {
       "agent_summary": "获取指定 Base 下单个角色的完整配置,含 subRoles 与字段/行级权限。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable advperm role-get --base-id BASE_ID --role-id ROLE_ID --format json"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.advperm_role_get",
-        "skills/mono/references/products/aitable/aitable-advperm.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-advperm.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "get_role"
+      }
     },
     "aitable advperm role-list": {
       "agent_summary": "列出指定 Base 下的全部角色,含系统角色与自定义角色,并标注 isSystem 与默认角色信息。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable advperm role-list --base-id BASE_ID --format json"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.advperm_role_list",
-        "skills/mono/references/products/aitable/aitable-advperm.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-advperm.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "list_roles"
+      }
     },
     "aitable advperm role-update": {
       "agent_summary": "增量更新自定义角色配置。",
@@ -102,6 +152,11 @@
         "只改 sheet 子角色 authLevel，name 不传保持不变",
         "只改名"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable advperm role-update --base-id BASE_ID --role-id ROLE_ID --name \"新名字\"",
         "dws aitable advperm role-update --base-id BASE_ID --role-id ROLE_ID --sub-roles '[{\"targetId\":\"\u003csheetId\u003e\",\"targetType\":\"sheet\",\"authLevel\":\"edit-own\"}]'"
@@ -109,8 +164,13 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.advperm_role_update",
-        "skills/mono/references/products/aitable/aitable-advperm.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-advperm.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "patch_role"
+      }
     },
     "aitable attachment upload": {
       "agent_summary": "申请 attachment 字段 OSS 直传地址（不直接上传）",
@@ -120,6 +180,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable attachment upload --base-id \u003cBASE_ID\u003e --file-name report.xlsx --size 204800",
         "dws aitable attachment upload --base-id \u003cBASE_ID\u003e --file-name photo.png --size 1024 --mime-type image/png"
@@ -128,15 +191,29 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.prepare_attachment_upload",
         "skills/mono/references/products/aitable/aitable-attachment.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "prepare_attachment_upload"
+      }
     },
     "aitable base copy": {
       "agent_summary": "复制当前AI表格到指定的路径下，支持传入目标地址以及是否需要复制元数据还是只是复制表的结构不复制数据，三个参数都是必填的,如果用户传的是链接的话则需要根据实际去调用文档的DWS去获取dentryuuid信息，并且传入",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": false,
       "source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.base_copy"
-      ]
+        "internal/cli/schema_mcp_metadata.json#tools.aitable.base_copy",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "copy_base"
+      }
     },
     "aitable base create": {
       "agent_summary": "创建 AI 表格 Base",
@@ -146,6 +223,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable base create --name \"项目跟踪\""
       ],
@@ -153,7 +233,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.create_base",
         "skills/mono/references/products/aitable.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "create_base"
+      }
     },
     "aitable base delete": {
       "agent_summary": "删除 Base（高风险、不可逆）",
@@ -165,6 +249,7 @@
       "effect_source": "skill-explicit",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable base delete --base-id BASE_ID --yes  # 查询 baseId: dws aitable base list"
       ],
@@ -173,7 +258,11 @@
         "skills/mono/SKILL.md",
         "skills/mono/references/products/aitable.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "delete_base"
+      }
     },
     "aitable base get": {
       "agent_summary": "获取 Base 资源目录（tables、dashboards summary）",
@@ -184,6 +273,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable base get --base-id \u003cBASE_ID\u003e --format json",
         "dws aitable base get --base-id BASE_ID  # 查询 baseId: dws aitable base list"
@@ -192,23 +284,38 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.get_base",
         "skills/mono/references/products/aitable.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_base"
+      }
     },
     "aitable base get-primary-doc-id": {
       "agent_summary": "根据 baseId、tableId 和 recordId 获取主键文档对应的文档信息，会返回对应的文档的dentryuuid，然后利用该uuid去获取文档的内容以及做其他操作",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "reviewed": false,
       "source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.base_get_primary_doc_id"
-      ]
+        "internal/cli/schema_mcp_metadata.json#tools.aitable.base_get_primary_doc_id",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_base_primary_doc_id"
+      }
     },
     "aitable base list": {
       "agent_summary": "获取 AI 表格列表（最近访问）",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable base list",
         "dws aitable base list --limit 5 --cursor NEXT_CURSOR"
@@ -216,7 +323,11 @@
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.list_bases",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "list_bases"
+      }
     },
     "aitable base search": {
       "agent_summary": "按名称关键词搜索 AI 表格 Base。",
@@ -227,14 +338,22 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable base search --query \"项目\" --format json"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.base_search",
-        "skills/mono/references/products/aitable.md"
-      ]
+        "skills/mono/references/products/aitable.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "search_bases"
+      }
     },
     "aitable base update": {
       "agent_summary": "更新 Base 名称 / 备注",
@@ -244,6 +363,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable base update --base-id BASE_ID --name \"新名称\"  # 查询 baseId: dws aitable base list"
       ],
@@ -251,20 +373,31 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.update_base",
         "skills/mono/references/products/aitable.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_base"
+      }
     },
     "aitable chart create": {
       "agent_summary": "在 dashboard 下创建 chart（需 --config 与 --layout）",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable chart create --base-id BASE_ID --dashboard-id DASHBOARD_ID --config '{\"chartName\":\"销售柱图\",\"chartType\":\"bar\",...}' --layout '{\"x\":0,\"y\":0,\"w\":6,\"h\":4}'"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.create_chart",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "create_chart"
+      }
     },
     "aitable chart delete": {
       "agent_summary": "删除 chart（同步删除其 dashboard 布局项；不可逆）",
@@ -273,6 +406,7 @@
       "effect_source": "skill-explicit",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable chart delete --base-id BASE_ID --dashboard-id DASHBOARD_ID --chart-id CHART_ID --yes"
       ],
@@ -280,7 +414,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.delete_chart",
         "skills/mono/SKILL.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "delete_chart"
+      }
     },
     "aitable chart get": {
       "agent_summary": "获取 chart 详细信息（widget.config + 布局）",
@@ -290,6 +428,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable chart get --base-id \u003cBASE_ID\u003e --dashboard-id \u003cDASHBOARD_ID\u003e --chart-id \u003cCHART_ID\u003e --format json",
         "dws aitable chart get --base-id BASE_ID --dashboard-id DASHBOARD_ID --chart-id CHART_ID"
@@ -299,26 +440,40 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-dashboard-chart.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_chart"
+      }
     },
     "aitable chart share get": {
       "agent_summary": "获取 chart 分享配置",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable chart share get --base-id BASE_ID --dashboard-id DASHBOARD_ID --chart-id CHART_ID"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.get_chart_share",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_chart_share"
+      }
     },
     "aitable chart share update": {
       "agent_summary": "更新 chart 分享开关与类型",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable chart share update --base-id BASE_ID --dashboard-id DASHBOARD_ID --chart-id CHART_ID --enabled true --share-type ORG",
         "dws aitable chart share update --base-id BASE_ID --dashboard-id DASHBOARD_ID --chart-id CHART_ID --enabled false"
@@ -326,13 +481,20 @@
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.update_chart_share",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_chart_share"
+      }
     },
     "aitable chart update": {
       "agent_summary": "更新 chart 配置 / 布局",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable chart update --base-id BASE_ID --dashboard-id DASHBOARD_ID --chart-id CHART_ID --config '{\"chartName\":\"新柱图名\",...}'",
         "dws aitable chart update --base-id BASE_ID --dashboard-id DASHBOARD_ID --chart-id CHART_ID --layout '{\"x\":0,\"y\":4,\"w\":12,\"h\":4}'"
@@ -340,7 +502,11 @@
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.update_chart",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_chart"
+      }
     },
     "aitable chart widgets-example": {
       "agent_summary": "返回所有图表类型的 widget config 示例（JSONC）",
@@ -348,6 +514,11 @@
       "use_when": [
         "1) 先看配置模板（JSONC）"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable chart widgets-example --format json",
         "dws aitable chart widgets-example"
@@ -357,19 +528,45 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-dashboard-chart.md",
         "skills/mono/schema-hints/imported/wukong.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_dashboard_widgets_example"
+      }
+    },
+    "aitable create": {
+      "agent_summary": "创建 AI 表格（dws aitable base create 的别名）",
+      "agent_summary_source": "dws-command-surface-review",
+      "use_when": [
+        "创建 AI 表格（dws aitable base create 的别名）"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": true,
+      "source_refs": [
+        "skills/mono/schema-hints/catalog-completeness.json"
       ]
     },
     "aitable dashboard arrange": {
       "agent_summary": "自动对齐仪表盘中的图表布局，对错乱的图表进行全局重排。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
-      "use_when": [
-        "仪表盘排版乱了/图表对不齐/重新排布/自动布局/美化仪表盘"
-      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.dashboard_arrange",
-        "skills/mono/references/products/aitable.md"
-      ]
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "align_dashboard"
+      }
     },
     "aitable dashboard config-example": {
       "agent_summary": "返回 dashboard config 结构示例（JSONC）",
@@ -377,6 +574,11 @@
       "use_when": [
         "1) 先看配置模板（JSONC）"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable dashboard config-example --format json",
         "dws aitable dashboard config-example"
@@ -386,17 +588,29 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-dashboard-chart.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_dashboard_config_example"
+      }
     },
     "aitable dashboard create": {
       "agent_summary": "在指定 Base 下创建 dashboard。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": false,
       "source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.dashboard_create"
-      ]
+        "internal/cli/schema_mcp_metadata.json#tools.aitable.dashboard_create",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "create_dashboard"
+      }
     },
     "aitable dashboard delete": {
       "agent_summary": "删除 dashboard（级联删除其下 chart；不可逆）",
@@ -405,6 +619,7 @@
       "effect_source": "skill-explicit",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable dashboard delete --base-id BASE_ID --dashboard-id DASHBOARD_ID --yes"
       ],
@@ -412,7 +627,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.delete_dashboard",
         "skills/mono/SKILL.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "delete_dashboard"
+      }
     },
     "aitable dashboard get": {
       "agent_summary": "获取 dashboard 详情（含 charts summary）",
@@ -422,6 +641,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable dashboard get --base-id \u003cBASE_ID\u003e --dashboard-id \u003cDASHBOARD_ID\u003e --format json",
         "dws aitable dashboard get --base-id BASE_ID --dashboard-id DASHBOARD_ID"
@@ -431,26 +653,40 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-dashboard-chart.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_dashboard"
+      }
     },
     "aitable dashboard share get": {
       "agent_summary": "获取 dashboard 分享配置",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable dashboard share get --base-id BASE_ID --dashboard-id DASHBOARD_ID"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.get_dashboard_share",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_dashboard_share"
+      }
     },
     "aitable dashboard share update": {
       "agent_summary": "更新 dashboard 分享开关与类型",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable dashboard share update --base-id BASE_ID --dashboard-id DASHBOARD_ID --enabled true --share-type PUBLIC",
         "dws aitable dashboard share update --base-id BASE_ID --dashboard-id DASHBOARD_ID --enabled false"
@@ -458,17 +694,29 @@
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.update_dashboard_share",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_dashboard_share"
+      }
     },
     "aitable dashboard update": {
       "agent_summary": "更新指定 dashboard 的配置。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": false,
       "source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.dashboard_update"
-      ]
+        "internal/cli/schema_mcp_metadata.json#tools.aitable.dashboard_update",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_dashboard"
+      }
     },
     "aitable export data": {
       "agent_summary": "导出数据（不传 --task-id 创建新任务并等待，传入 --task-id 继续等待）",
@@ -476,8 +724,14 @@
       "use_when": [
         "第一步：创建任务（按 scope 传必要参数）",
         "第一步：创建任务（按 scope 传必要参数）——注意：不要加 --format json！",
-        "第二步：拿 taskId 继续轮询，直到返回 downloadUrl"
+        "第二步：拿 taskId 继续轮询，直到返回 downloadUrl",
+        "续等导出：拿到 downloadUrl 后再 curl 下载（见下方警告）"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable export data --base-id \u003cBASE_ID\u003e --scope table --table-id \u003cTABLE_ID\u003e --format excel --timeout-ms 1000",
         "dws aitable export data --base-id \u003cBASE_ID\u003e --task-id \u003cTASK_ID\u003e --timeout-ms 3000"
@@ -487,7 +741,11 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-export-import.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "export_data"
+      }
     },
     "aitable field create": {
       "agent_summary": "在已有表格中批量新增字段。",
@@ -498,6 +756,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable field create --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --name \"状态\" --type \"singleSelect\" --config '{\"options\":[{\"name\":\"待办\"},{\"name\":\"进行中\"},{\"name\":\"已完成\"}]}'",
         "dws aitable field create --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --fields '[{\"fieldName\":\"状态\",\"type\":\"singleSelect\",\"config\":{\"options\":[{\"name\":\"待办\"}]}}]'"
@@ -506,8 +767,13 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.field_create",
         "skills/mono/references/products/aitable.md",
-        "skills/mono/references/products/aitable/aitable-field.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-field.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "create_fields"
+      }
     },
     "aitable field delete": {
       "agent_summary": "删除字段（不可逆，禁止删除主字段与最后一个字段）",
@@ -519,6 +785,7 @@
       "effect_source": "skill-explicit",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable field delete --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --field-id \u003cFIELD_ID\u003e --yes",
         "dws aitable field delete --base-id BASE_ID --table-id TABLE_ID --field-id FIELD_ID --yes"
@@ -529,7 +796,11 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-field.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "delete_field"
+      }
     },
     "aitable field get": {
       "agent_summary": "批量获取字段详细信息（含完整配置）",
@@ -539,6 +810,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable field get --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e",
         "dws aitable field get --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --field-ids fld1,fld2"
@@ -548,30 +822,47 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-field.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_fields"
+      }
     },
     "aitable field list": {
       "agent_summary": "批量获取指定字段的详细信息，包括 fieldId、名称、类型、description 以及类型相关完整配置（如格式化、选项、AI 配置等）。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "reviewed": false,
       "source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.field_list"
-      ]
+        "internal/cli/schema_mcp_metadata.json#tools.aitable.field_list",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_fields"
+      }
     },
     "aitable field search-options": {
       "agent_summary": "搜索指定单选/多选字段的 options 列表，支持按关键词模糊匹配（大小写不敏感、contains 模式）。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
-      "examples": [
-        "dws aitable field search-options --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --field-id \u003cFIELD_ID\u003e",
-        "dws aitable field search-options --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --field-id \u003cFIELD_ID\u003e --keyword 已完成"
-      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.field_search_options",
-        "skills/mono/references/products/aitable.md"
-      ]
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "search_field_options"
+      }
     },
     "aitable field update": {
       "agent_summary": "更新字段名称 / 配置 / AI 配置（至少传一项）",
@@ -581,6 +872,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable field update --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --field-id \u003cFIELD_ID\u003e --name \"新字段名\"",
         "dws aitable field update --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --field-id \u003cFIELD_ID\u003e --config '{\"options\":[{\"name\":\"A\"},{\"name\":\"B\"}]}'"
@@ -590,15 +884,25 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-field.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_field"
+      }
     },
     "aitable import data": {
       "agent_summary": "触发导入并等待结果；每个 Sheet 新建为独立表",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "第 3 步（替代）：追加到已有表",
-        "第 3 步：触发导入（新建表模式）"
+        "第 3 步：触发导入（新建表模式）",
+        "续等导入"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable import data --import-id \u003cimportId\u003e --format json",
         "dws aitable import data --import-id \u003cimportId\u003e --table-id \u003cTABLE_ID\u003e --format json"
@@ -607,7 +911,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.import_data",
         "skills/mono/references/products/aitable/aitable-export-import.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "import_data"
+      }
     },
     "aitable import upload": {
       "agent_summary": "申请导入文件 OSS 直传地址，返回 uploadUrl 与 importId",
@@ -617,6 +925,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable import upload --base-id \u003cBASE_ID\u003e --file-name data.xlsx --file-size \u003c字节数\u003e --format json",
         "dws aitable import upload --base-id BASE_ID --file-name data.xlsx --file-size 204800"
@@ -625,27 +936,47 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.prepare_import_upload",
         "skills/mono/references/products/aitable/aitable-export-import.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "prepare_import_upload"
+      }
     },
     "aitable info": {
       "agent_summary": "获取指定 Base 的资源目录级信息，返回 baseName、tables、dashboards 的 summary 信息（不含字段与记录详情）。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "reviewed": false,
       "source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.info"
-      ]
+        "internal/cli/schema_mcp_metadata.json#tools.aitable.info",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_base"
+      }
     },
     "aitable list": {
       "agent_summary": "列出当前用户可访问的 AI 表格 Base。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "reviewed": false,
       "source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.list"
-      ]
+        "internal/cli/schema_mcp_metadata.json#tools.aitable.list",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "list_bases"
+      }
     },
     "aitable record create": {
       "agent_summary": "批量新增记录（单次最多 100 条）",
@@ -661,6 +992,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable record create --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --records '[{\"cells\":{\"fldABC\":\"完成设计\",\"fldDEF\":\"进行中\"}}]' --format json",
         "dws aitable record create --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --records '["
@@ -672,7 +1006,11 @@
         "skills/mono/references/products/aitable/aitable-attachment.md",
         "skills/mono/references/products/aitable/aitable-record-create.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "create_records"
+      }
     },
     "aitable record delete": {
       "agent_summary": "批量删除记录（不可逆，单次最多 100 条）",
@@ -684,6 +1022,7 @@
       "effect_source": "skill-explicit",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable record delete --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --record-ids rec001,rec002 --yes --format json",
         "dws aitable record delete --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --record-ids rec1,rec2 --yes"
@@ -695,7 +1034,11 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-record-delete.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "delete_records"
+      }
     },
     "aitable record get": {
       "agent_summary": "查询指定表格中的记录，支持两种模式： 按 ID 取：传入 recordIds（单次最多 100 个），直接获取指定记录。",
@@ -705,20 +1048,32 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.record_get",
-        "skills/mono/references/products/aitable.md"
-      ]
+        "skills/mono/references/products/aitable.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "query_records"
+      }
     },
     "aitable record history-list": {
       "agent_summary": "查询指定行记录的变更历史列表。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "第 1 页（最新 20 条）",
-        "第 2 页",
-        "记录/行/数据/row；查记录的字段变更历史 / 操作审计"
+        "第 2 页"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable record history-list --base-id BASE_ID --table-id TABLE_ID --record-id REC_ID [--offset N] [--limit M]",
         "dws aitable record history-list --base-id BASE --table-id TBL --record-id REC --format json | jq '.data.histories[] | {version, action, operateTime}'"
@@ -726,9 +1081,13 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.record_history_list",
-        "skills/mono/references/products/aitable.md",
-        "skills/mono/references/products/aitable/aitable-record-history.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-record-history.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "query_record_history"
+      }
     },
     "aitable record primary-doc-create": {
       "agent_summary": "为指定记录创建主键文档（幂等：若该记录已有主键文档则直接返回已有文档的 nodeId）。",
@@ -736,26 +1095,46 @@
       "use_when": [
         "2. 为某条记录创建主键文档"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable record primary-doc-create --base-id BASE_ID --table-id TABLE_ID --field-id FIELD_ID --record-id RECORD_ID"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.record_primary_doc_create",
-        "skills/mono/references/products/aitable/aitable-primary-doc.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-primary-doc.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "create_primary_doc"
+      }
     },
     "aitable record primary-doc-get": {
       "agent_summary": "查询指定记录的主键文档信息。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable record primary-doc-get --base-id BASE_ID --table-id TABLE_ID --record-id RECORD_ID"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.record_primary_doc_get",
-        "skills/mono/references/products/aitable/aitable-primary-doc.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-primary-doc.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "get_primary_doc"
+      }
     },
     "aitable record query": {
       "agent_summary": "查询记录（支持按 ID 取或 filters/sort/分页遍历）",
@@ -773,6 +1152,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable record query --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --format json",
         "dws aitable record query --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --filters '{\"operator\":\"and\",\"operands\":[{\"operator\":\"eq\",\"operands\":[\"fld_state\",\"进行中\"]}]}' --format json"
@@ -783,28 +1165,29 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-record-query.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "query_records"
+      }
     },
     "aitable record query-empty": {
       "agent_summary": "查询指定表格中\"完全没填用户字段\"的空行。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
-      "use_when": [
-        "扫一页，看本页有没有空行",
-        "翻页",
-        "记录/行/数据/row；找空行 / 没填东西的行"
-      ],
       "effect": "read",
       "effect_source": "command-verb",
-      "examples": [
-        "dws aitable record query-empty --base-id BASE_ID --table-id TABLE_ID",
-        "dws aitable record query-empty --base-id BASE --table-id TBL"
-      ],
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.record_query_empty",
-        "skills/mono/references/products/aitable.md",
-        "skills/mono/references/products/aitable/aitable-record-query.md"
-      ]
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "query_empty_records"
+      }
     },
     "aitable record share-url": {
       "agent_summary": "获取指定行记录的分享链接，可用于将记录分享给他人。",
@@ -812,9 +1195,13 @@
       "use_when": [
         "一次拿一条记录的链接",
         "带视图上下文（链接打开时落在指定视图）",
-        "批量拿，配合 jq 过滤出 url",
-        "记录/行/数据/row；取记录分享链接 / 把这行发给同事"
+        "批量拿，配合 jq 过滤出 url"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable record share-url --base-id BASE_ID --table-id TABLE_ID --record-ids rec1,rec2,rec3 [--view-id VIEW_ID]",
         "dws aitable record share-url --base-id BASE --table-id TBL --record-ids rec1"
@@ -822,19 +1209,26 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.record_share_url",
-        "skills/mono/references/products/aitable.md",
-        "skills/mono/references/products/aitable/aitable-record-share.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-record-share.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "get_record_share_url"
+      }
     },
     "aitable record update": {
       "agent_summary": "批量更新记录（单次最多 100 条）",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "3. 写入记录",
-        "记录/行/数据/row；修改/更新（每条独立 cells）"
+        "记录/行/数据/row；修改/更新"
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable record update --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --records '[{\"recordId\":\"rec001\",\"cells\":{\"fldDEF\":\"已完成\"}}]' --format json",
         "dws aitable record update --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --records '[{\"recordId\":\"recXXX\",\"cells\":{\"fldAttachId\":[{\"fileToken\":\"ft_xxx\"}]}}]' --format json"
@@ -845,7 +1239,11 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-attachment.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_records"
+      }
     },
     "aitable record upsert": {
       "agent_summary": "批量创建或更新记录（Upsert 语义）。",
@@ -854,9 +1252,13 @@
         "1) 全部新建：所有项都不带 recordId",
         "2) 全部更新：所有项都带 recordId",
         "3) 混合：第 1 条更新（带 recordId），第 2 条创建（不带）",
-        "4) 长 JSON 用文件",
-        "记录/行/数据/row；不知道有没有"
+        "4) 长 JSON 用文件"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable record upsert --base-id BASE_ID --table-id TABLE_ID --records '[{\"recordId\":\"\u003c可选\u003e\",\"cells\":{...}}, ...]'",
         "dws aitable record upsert --base-id BASE --table-id TBL --records '["
@@ -864,25 +1266,40 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.record_upsert",
-        "skills/mono/references/products/aitable.md",
-        "skills/mono/references/products/aitable/aitable-record-upsert.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-record-upsert.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "record_upsert"
+      }
     },
     "aitable search": {
       "agent_summary": "按名称关键词搜索 AI 表格 Base。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "reviewed": false,
       "source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.search"
-      ]
+        "internal/cli/schema_mcp_metadata.json#tools.aitable.search",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "search_bases"
+      }
     },
     "aitable section create": {
       "agent_summary": "在指定 Base 下创建分区(用于在导航树中组织 table / dashboard,类似文件夹)。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable section create --base-id \u003cBASE_ID\u003e --name 我的文件夹",
         "dws aitable section create --base-id \u003cBASE_ID\u003e --name 子文件夹 --parent-section-id \u003cSECTION_ID\u003e --index 0"
@@ -890,8 +1307,13 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.section_create",
-        "skills/mono/references/products/aitable.md"
-      ]
+        "skills/mono/references/products/aitable.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "create_section"
+      }
     },
     "aitable section delete": {
       "agent_summary": "删除指定分区。",
@@ -900,6 +1322,7 @@
       "effect_source": "agent-hint",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable section delete --base-id \u003cBASE_ID\u003e --section-id \u003cSECTION_ID\u003e"
       ],
@@ -907,40 +1330,66 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.section_delete",
         "skills/mono/references/products/aitable.md",
-        "skills/mono/schema-hints/destructive-safety.json"
-      ]
+        "skills/mono/schema-hints/destructive-safety.json",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "delete_section"
+      }
     },
     "aitable section list-empty": {
       "agent_summary": "列出指定 Base 下所有没有任何子节点的分区(空文件夹),用于清理或诊断导航树。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable section list-empty --base-id \u003cBASE_ID\u003e"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.section_list_empty",
-        "skills/mono/references/products/aitable.md"
-      ]
+        "skills/mono/references/products/aitable.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "list_empty_sections"
+      }
     },
     "aitable section list-nodes": {
       "agent_summary": "列出指定 Base 当前版本下的全部 nsheet 节点,包括分区、AI 表格、表单视图、仪表盘、文档、查询视图等。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable section list-nodes --base-id \u003cBASE_ID\u003e"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.section_list_nodes",
-        "skills/mono/references/products/aitable.md"
-      ]
+        "skills/mono/references/products/aitable.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "list_nsheet_nodes"
+      }
     },
     "aitable section move-node": {
       "agent_summary": "把任意 nsheet 节点(分区 / 多维表 / 表单视图 / 仪表盘 / 文档 / 查询视图)移动到目标分区下,可选同时调整全局位置。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable section move-node --base-id \u003cBASE_ID\u003e --node-id \u003cNODE_ID\u003e --new-parent-section-id \u003cSECTION_ID\u003e",
         "dws aitable section move-node --base-id \u003cBASE_ID\u003e --node-id \u003cNODE_ID\u003e --new-parent-section-id \"\" --target-index 0"
@@ -948,34 +1397,57 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.section_move_node",
-        "skills/mono/references/products/aitable.md"
-      ]
+        "skills/mono/references/products/aitable.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "move_nsheet_node"
+      }
     },
     "aitable section rename": {
       "agent_summary": "重命名指定分区。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable section rename --base-id \u003cBASE_ID\u003e --section-id \u003cSECTION_ID\u003e --new-name 新名称"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.section_rename",
-        "skills/mono/references/products/aitable.md"
-      ]
+        "skills/mono/references/products/aitable.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "rename_section"
+      }
     },
     "aitable section reorder": {
       "agent_summary": "在当前父分区下调整分区的展示顺序。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable section reorder --base-id \u003cBASE_ID\u003e --section-id \u003cSECTION_ID\u003e --target-index 0"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.section_reorder",
-        "skills/mono/references/products/aitable.md"
-      ]
+        "skills/mono/references/products/aitable.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "reorder_section"
+      }
     },
     "aitable table create": {
       "agent_summary": "创建数据表并附带初始字段（最多 15 个）",
@@ -985,6 +1457,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable table create --base-id BASE_ID --name \"任务表\" --fields '[{\"fieldName\":\"任务名称\",\"type\":\"text\"},{\"fieldName\":\"优先级\",\"type\":\"singleSelect\",\"config\":{\"options\":[{\"name\":\"高\"},{\"name\":\"中\"},{\"name\":\"低\"}]}}]'"
       ],
@@ -992,23 +1467,36 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.create_table",
         "skills/mono/references/products/aitable.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "create_table"
+      }
     },
     "aitable table delete": {
       "agent_summary": "删除数据表（不可逆，高风险）",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+      "use_when": [
+        "数据表/子表/table；删除"
+      ],
       "effect": "destructive",
       "effect_source": "skill-explicit",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable table delete --base-id BASE_ID --table-id TABLE_ID --yes"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.delete_table",
         "skills/mono/SKILL.md",
+        "skills/mono/references/products/aitable.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "delete_table"
+      }
     },
     "aitable table get": {
       "agent_summary": "批量获取数据表目录与字段、视图 summary",
@@ -1022,6 +1510,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable table get --base-id \u003cBASE_ID\u003e --table-id \u003cTABLE_ID\u003e --format json",
         "dws aitable table get --base-id BASE_ID --format json"
@@ -1033,30 +1524,44 @@
         "skills/mono/references/products/aitable/aitable-primary-doc.md",
         "skills/mono/references/products/aitable/aitable-record-create.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_tables"
+      }
     },
     "aitable table list": {
       "agent_summary": "批量获取指定 Tables（数据表）的表级信息、字段目录与视图目录。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "reviewed": false,
       "source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.aitable.table_list"
-      ]
+        "internal/cli/schema_mcp_metadata.json#tools.aitable.table_list",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_tables"
+      }
     },
     "aitable table update": {
       "agent_summary": "重命名数据表",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
-        "数据表/子表/table；重命名 / 改备注 / 改行命名规则",
+        "数据表/子表/table；重命名",
         "用户说\"恢复成默认（记录）\" → 传 ji_lu",
         "用户说\"把这张表的行叫'任务'吧\" → 传 task",
-        "用户说\"换成项目\" → 传 project",
-        "行命名规则/记录别名/卡片显示成 task/project/event 这种"
+        "用户说\"换成项目\" → 传 project"
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable table update --base-id BASE --table-id TBL --record-name-key task",
         "dws aitable table update --base-id BASE --table-id TBL --record-name-key project"
@@ -1066,7 +1571,11 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-record-name-key.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_table"
+      }
     },
     "aitable template search": {
       "agent_summary": "按关键词搜索 AI 表格模板（不传返回热门模板）",
@@ -1076,6 +1585,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable template search --query \"项目管理\"",
         "dws aitable template search"
@@ -1084,56 +1596,70 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.search_templates",
         "skills/mono/references/products/aitable.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "search_templates"
+      }
     },
     "aitable view create": {
       "agent_summary": "创建视图（Grid/FormDesigner/Gantt/Calendar/Kanban/Gallery）",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
-        "第 1 步：创建 Gantt 视图",
-        "视图/view；创建"
+        "第 1 步：创建 Gantt 视图"
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable view create --base-id BASE_ID --table-id TABLE_ID --view-type Gantt --name \"项目甘特图\" -f json",
         "dws aitable view create --base-id BASE_ID --table-id TABLE_ID --view-type Grid"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.create_view",
-        "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-view-config.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "create_view"
+      }
     },
     "aitable view delete": {
       "agent_summary": "删除视图（不可逆；禁止删除最后一个视图或锁定视图）",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
-      "use_when": [
-        "视图/view；删除"
-      ],
       "effect": "destructive",
       "effect_source": "skill-explicit",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable view delete --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --yes"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json#aitable.delete_view",
         "skills/mono/SKILL.md",
-        "skills/mono/references/products/aitable.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "delete_view"
+      }
     },
     "aitable view duplicate": {
       "agent_summary": "复制指定视图(View),生成一个与源视图结构一致的新视图(包含列顺序、筛选、排序、分组、自定义配置等)。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
-        "复制视图/duplicate view",
         "显式命名",
         "系统自动命名（一般是 \"原视图名 (副本)\"）"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable view duplicate --view-id VIEW_ID --new-name \"副本视图\"",
         "dws aitable view duplicate --view-id VIEW_ID --format json"
@@ -1141,25 +1667,44 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_duplicate",
-        "skills/mono/references/products/aitable.md",
-        "skills/mono/references/products/aitable/aitable-view-extras.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-extras.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "duplicate_view"
+      }
     },
     "aitable view get aggregate": {
       "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable view get aggregate --view-id VIEW_ID --format json       # Grid"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_aggregate",
-        "skills/mono/references/products/aitable/aitable-view-config.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      }
     },
     "aitable view get card": {
       "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable view get card --view-id VIEW_ID --format json            # Kanban / Gallery",
         "dws aitable view get card --view-id KANBAN_ID --format json"
@@ -1167,20 +1712,35 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_card",
-        "skills/mono/references/products/aitable/aitable-view-config.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      }
     },
     "aitable view get field-widths": {
       "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable view get field-widths --view-id VIEW_ID --format json    # Grid"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_field_widths",
-        "skills/mono/references/products/aitable/aitable-view-config.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      }
     },
     "aitable view get fill-color-rule": {
       "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
@@ -1189,6 +1749,11 @@
         "3) 查询当前规则",
         "看实际生效的 conditionalFormats"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable view get fill-color-rule --view-id GRID_ID --format json",
         "dws aitable view get fill-color-rule --view-id VIEW_ID --format json"
@@ -1196,20 +1761,35 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_fill_color_rule",
-        "skills/mono/references/products/aitable/aitable-view-extras.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-extras.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      }
     },
     "aitable view get filter": {
       "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable view get filter --view-id VIEW_ID --format json          # 所有"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_filter",
-        "skills/mono/references/products/aitable/aitable-view-config.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      }
     },
     "aitable view get frozen-cols": {
       "agent_summary": "查询指定视图(View)当前的冻结列数(左侧固定列)。",
@@ -1217,26 +1797,46 @@
       "use_when": [
         "查询当前冻结列数"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable view get frozen-cols --view-id VIEW_ID --format json"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_frozen_cols",
-        "skills/mono/references/products/aitable/aitable-view-extras.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-extras.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "get_frozen_columns_of_view"
+      }
     },
     "aitable view get group": {
       "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable view get group --view-id VIEW_ID --format json"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_group",
-        "skills/mono/references/products/aitable/aitable-view-config.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      }
     },
     "aitable view get lock": {
       "agent_summary": "查询指定视图(View)当前的锁定状态。",
@@ -1244,14 +1844,24 @@
       "use_when": [
         "查询当前是否锁定"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable view get lock --view-id VIEW_ID --format json"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_lock",
-        "skills/mono/references/products/aitable/aitable-view-extras.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-extras.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "get_view_lock_status"
+      }
     },
     "aitable view get row-height": {
       "agent_summary": "查询指定视图(View)当前的单元格行高,单位为像素。",
@@ -1259,64 +1869,108 @@
       "use_when": [
         "查询当前行高"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable view get row-height --view-id VIEW_ID --format json"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_row_height",
-        "skills/mono/references/products/aitable/aitable-view-extras.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-extras.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "get_cell_height_of_view"
+      }
     },
     "aitable view get sort": {
       "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable view get sort --view-id VIEW_ID --format json"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_sort",
-        "skills/mono/references/products/aitable/aitable-view-config.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      }
     },
     "aitable view get timebar": {
       "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable view get timebar --view-id VIEW_ID --format json         # Gantt"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_timebar",
-        "skills/mono/references/products/aitable/aitable-view-config.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      }
     },
     "aitable view get visible-fields": {
       "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable view get visible-fields --view-id VIEW_ID --format json"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_visible_fields",
-        "skills/mono/references/products/aitable/aitable-view-config.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      }
     },
     "aitable view list": {
       "agent_summary": "获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
-      "use_when": [
-        "视图/view；列出/查看全部视图"
-      ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_list",
-        "skills/mono/references/products/aitable.md"
-      ]
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "get_views"
+      }
     },
     "aitable view lock": {
       "agent_summary": "锁定或解锁指定视图(View)。",
@@ -1324,9 +1978,13 @@
       "use_when": [
         "4) 锁定视图，防止他人改坏",
         "解锁",
-        "锁定视图/解锁视图/lock view",
         "锁定（默认）"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable view lock --view-id VIEW_ID",
         "dws aitable view lock --view-id VIEW_ID --off"
@@ -1334,26 +1992,44 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_lock",
-        "skills/mono/references/products/aitable.md",
-        "skills/mono/references/products/aitable/aitable-view-extras.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-extras.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "lock_or_unlock_view"
+      }
     },
     "aitable view update aggregate": {
       "agent_summary": "更新指定视图（View）的名称、描述或配置。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
-        "dws aitable view update aggregate --view-id GRID_ID --field-id fldX --action SUM",
-        "dws aitable view update aggregate --view-id GRID_ID --clear-field-id fldA,fldB"
+        "dws aitable view update aggregate --view-id GRID_ID --field-id fldX --action SUM"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_aggregate",
-        "skills/mono/references/products/aitable/aitable-view-config.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_view"
+      }
     },
     "aitable view update card": {
       "agent_summary": "更新指定视图（View）的名称、描述或配置。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable view update card --view-id KANBAN_ID --cover-field-id fldAttachment --cover-resize-mode contain",
         "dws aitable view update card --view-id KANBAN_ID --no-cover"
@@ -1361,12 +2037,22 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_card",
-        "skills/mono/references/products/aitable/aitable-view-config.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_view"
+      }
     },
     "aitable view update field-widths": {
       "agent_summary": "更新指定视图（View）的名称、描述或配置。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable view update field-widths --view-id GRID_ID --field-id fldX --width 200",
         "dws aitable view update field-widths --view-id GRID_ID --json '{\"fldA\":120,\"fldB\":200}'"
@@ -1374,8 +2060,13 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_field_widths",
-        "skills/mono/references/products/aitable/aitable-view-config.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_view"
+      }
     },
     "aitable view update fill-color-rule": {
       "agent_summary": "设置指定表格视图（Grid View）的条件填色规则（全量覆盖）。",
@@ -1383,9 +2074,13 @@
       "use_when": [
         "1) 给金额字段 \u003e 100 的单元格上 firstLine5 色",
         "2) 清空所有规则",
-        "3) 金额 \u003e 100 的单元格上色",
-        "数据高亮/条件格式/单元格上色/fill color rule"
+        "3) 金额 \u003e 100 的单元格上色"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable view update fill-color-rule --view-id GRID_ID --json '[",
         "dws aitable view update fill-color-rule --view-id GRID_ID --json '[]'"
@@ -1393,21 +2088,35 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_fill_color_rule",
-        "skills/mono/references/products/aitable.md",
-        "skills/mono/references/products/aitable/aitable-view-extras.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-extras.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "set_view_fill_color_rule"
+      }
     },
     "aitable view update filter": {
       "agent_summary": "更新指定视图（View）的名称、描述或配置。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable view update filter --view-id VIEW_ID --json '[{\"operator\":\"and\",\"operands\":[{\"operator\":\"eq\",\"operands\":[\"fldX\",\"value\"]}]}]'"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_filter",
-        "skills/mono/references/products/aitable/aitable-view-config.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_view"
+      }
     },
     "aitable view update frozen-cols": {
       "agent_summary": "设置指定视图(View)的冻结列数(左侧固定列),默认 1。",
@@ -1415,9 +2124,13 @@
       "use_when": [
         "1) 关键字段冻结，避免横向滚动看不到",
         "冻结从首列起 1 列",
-        "冻结列/冻结首列/frozen columns",
         "取消冻结"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable view update frozen-cols --view-id VIEW_ID --count 1",
         "dws aitable view update frozen-cols --view-id VIEW_ID --count 0"
@@ -1425,42 +2138,70 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_frozen_cols",
-        "skills/mono/references/products/aitable.md",
-        "skills/mono/references/products/aitable/aitable-view-extras.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-extras.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "set_frozen_columns_of_view"
+      }
     },
     "aitable view update group": {
       "agent_summary": "更新指定视图（View）的名称、描述或配置。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable view update group  --view-id VIEW_ID --json '[{\"fieldId\":\"fldX\",\"direction\":\"asc\"}]'"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_group",
-        "skills/mono/references/products/aitable/aitable-view-config.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_view"
+      }
     },
     "aitable view update name": {
       "agent_summary": "更新指定视图（View）的名称、描述或配置。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable view update name --view-id VIEW_ID --name \"新视图名\""
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_name",
-        "skills/mono/references/products/aitable/aitable-view-config.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_view"
+      }
     },
     "aitable view update row-height": {
       "agent_summary": "设置指定视图(View)的单元格高度(行高),单位为像素,默认 32。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "2) 加大行高让数据更易读",
-        "行高/单元格高度/紧凑模式/cell height",
         "设置行高 — 推荐档位 32 / 56 / 88 / 128"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable view update row-height --view-id VIEW_ID --cell-height 56",
         "dws aitable view update row-height --base-id $BASE --table-id $TABLE --view-id $VIEW --cell-height 56"
@@ -1468,21 +2209,35 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_row_height",
-        "skills/mono/references/products/aitable.md",
-        "skills/mono/references/products/aitable/aitable-view-extras.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-extras.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "set_cell_height_of_view"
+      }
     },
     "aitable view update sort": {
       "agent_summary": "更新指定视图（View）的名称、描述或配置。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable view update sort   --view-id VIEW_ID --json '[{\"fieldId\":\"fldX\",\"direction\":\"asc\"}]'"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_sort",
-        "skills/mono/references/products/aitable/aitable-view-config.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_view"
+      }
     },
     "aitable view update timebar": {
       "agent_summary": "更新指定视图（View）的名称、描述或配置。",
@@ -1490,6 +2245,11 @@
       "use_when": [
         "第 2 步（必须）：绑定日期字段，否则视图为空"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable view update timebar --view-id GANTT_ID --start-field fldStart --end-field fldEnd --timeline-scale month",
         "dws aitable view update timebar --view-id GANTT_ID --official-holiday=true"
@@ -1497,21 +2257,40 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_timebar",
-        "skills/mono/references/products/aitable/aitable-view-config.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_view"
+      }
     },
     "aitable view update visible-fields": {
       "agent_summary": "更新指定视图（View）的名称、描述或配置。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "use_when": [
+        "传回全量列表解除隐藏",
+        "只保留首列和 fldA，其余字段被隐藏"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
-        "dws aitable view update visible-fields --view-id VIEW_ID --field-ids fldPrimary,fldA,fldB",
+        "dws aitable view update visible-fields --view-id VIEW_ID --field-ids fldPrimary,fldA",
         "dws aitable view update visible-fields --view-id VIEW_ID --json '[\"fldPrimary\",\"fldA\",\"fldB\"]'"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_update_visible_fields",
-        "skills/mono/references/products/aitable/aitable-view-config.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-view-config.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "update_view"
+      }
     },
     "aitable workflow disable": {
       "agent_summary": "禁用指定 Base 中的自动化工作流。",
@@ -1521,8 +2300,9 @@
       ],
       "effect": "write",
       "effect_source": "agent-hint",
-      "risk": "high",
-      "confirmation": "user_required",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable workflow disable --base-id BASE_ID --workflow-id WORKFLOW_ID --yes --format json"
       ],
@@ -1530,8 +2310,13 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.workflow_disable",
         "skills/mono/references/products/aitable/aitable-workflow.md",
-        "skills/mono/schema-hints/destructive-safety.json"
-      ]
+        "skills/mono/schema-hints/destructive-safety.json",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "disable_workflow"
+      }
     },
     "aitable workflow enable": {
       "agent_summary": "启用指定 Base 中的自动化工作流。",
@@ -1541,14 +2326,22 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws aitable workflow enable --base-id BASE_ID --workflow-id WORKFLOW_ID --format json"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.workflow_enable",
-        "skills/mono/references/products/aitable/aitable-workflow.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-workflow.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "enable_workflow"
+      }
     },
     "aitable workflow get": {
       "agent_summary": "获取指定 Base 中某个自动化工作流的详细信息，直接返回下游 getFlowDetail 的详情结构。",
@@ -1558,6 +2351,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable workflow get --base-id BASE_ID --workflow-id WORKFLOW_ID --format json",
         "dws aitable workflow get --base-id BASE_ID --workflow-id WORKFLOW_ID --format json \u003e /tmp/wf-backup.json"
@@ -1565,8 +2361,13 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.workflow_get",
-        "skills/mono/references/products/aitable/aitable-workflow.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-workflow.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "get_workflow"
+      }
     },
     "aitable workflow list": {
       "agent_summary": "列出指定 Base 中的自动化工作流，直接返回下游 searchFlows 的响应结构。",
@@ -1576,6 +2377,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws aitable workflow list --base-id BASE_ID --format json",
         "dws aitable workflow list --base-id BASE_ID --limit 50 --offset 100"
@@ -1583,8 +2387,13 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.aitable.workflow_list",
-        "skills/mono/references/products/aitable/aitable-workflow.md"
-      ]
+        "skills/mono/references/products/aitable/aitable-workflow.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "aitable-helper",
+        "rpc_name": "list_workflows"
+      }
     }
   }
 }

@@ -10,6 +10,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws todo comment add --task-id \u003ctaskId\u003e --content \"评论内容\"",
         "dws todo comment add --task-id \u003ctaskId\u003e --content \"已开始处理\" --format json"
@@ -31,6 +34,7 @@
       "effect_source": "agent-hint",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws todo comment delete --task-id \u003ctaskId\u003e --comment-id \u003ccommentId\u003e",
         "dws todo comment delete --task-id \u003ctaskId\u003e --comment-id \u003ccommentId\u003e --yes"
@@ -51,6 +55,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws todo comment list --task-id \u003ctaskId\u003e",
         "dws todo comment list --task-id \u003ctaskId\u003e --page 1 --size 20"
@@ -64,9 +71,22 @@
     "todo task add-attachment": {
       "agent_summary": "添加待办任务附件",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "use_when": [
+        "18. 上传附件（真实上传，先确认待办存在）— 从返回 result.attachmentIds 取 attachmentId"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "examples": [
+        "dws todo task add-attachment --task-id \u003ctaskId\u003e --file-path /path/to/file.pdf",
+        "dws todo task add-attachment --task-id \u003ctaskId\u003e --file-path /path/to/file.pdf --format json"
+      ],
       "reviewed": false,
       "source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.todo.add_todo_attachment"
+        "internal/cli/schema_mcp_metadata.json#tools.todo.add_todo_attachment",
+        "skills/mono/references/products/todo.md"
       ]
     },
     "todo task add-executor": {
@@ -76,6 +96,11 @@
         "10. 添加待办执行人",
         "加个执行人/添加执行者"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws todo task add-executor --task-id \u003ctaskId\u003e --executors \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
         "dws todo task add-executor --task-id \u003ctaskId\u003e --executors userId1,userId2 --format json"
@@ -93,6 +118,11 @@
         "12. 添加待办参与人",
         "加个参与人/添加参与者"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws todo task add-participant --task-id \u003ctaskId\u003e --participants \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
         "dws todo task add-participant --task-id \u003ctaskId\u003e --participants userId1,userId2 --format json"
@@ -111,6 +141,11 @@
         "15. 添加待办提醒（自定义时间戳）",
         "给待办加个提醒/设置提醒"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time dueTime --due-date-offset -30",
         "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time customTime --reminder-time-stamp \"2026-03-10T18:00:00+08:00\""
@@ -125,13 +160,16 @@
       "agent_summary": "创建待办",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
-        "1. 创建待办 — 提取 todoTaskId",
+        "1. 创建待办 — 从返回 result.taskId 提取任务 ID",
         "1b. 创建按天循环的待办（必须先有 --due；recurrence 与 MCP create_personal_todo 一致）",
         "加个待办/记一下/TODO",
         "每天重复/循环待办/按天重复"
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws todo task create --title \"修复线上Bug\" --executors \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e --priority 40",
         "dws todo task create --title \"每日站会\" --executors \u003cUSER_ID\u003e --due \"2026-03-20T10:00:00+08:00\" --recurrence \"DTSTART:20260320T020000Z\\nRRULE:FREQ=DAILY;INTERVAL=1\""
@@ -140,7 +178,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.todo.prod.json#todo.create_personal_todo",
         "skills/mono/references/products/todo.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "create_personal_todo"
+      }
     },
     "todo task create-sub": {
       "agent_summary": "在当前企业组织内创建一条个人待办的子待办事项（要求父待办必须是操作者本人创建），支持设置标题、执行人列表、截止时间、优先级（如高/中/低）。",
@@ -151,6 +193,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws todo task create-sub --parent-id \u003cPARENT_TASK_ID\u003e --title \"子任务标题\" --executors \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e --priority 40",
         "dws todo task create-sub --parent-id \u003cPARENT_TASK_ID\u003e --title \"子任务标题\" --executors \u003cUSER_ID\u003e --due \"2026-03-20T10:00:00+08:00\""
@@ -172,6 +217,7 @@
       "effect_source": "skill-explicit",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws todo task delete --task-id \u003ctaskId\u003e",
         "dws todo task delete --task-id \u003ctaskId\u003e --yes"
@@ -181,7 +227,11 @@
         "skills/mono/SKILL.md",
         "skills/mono/references/products/todo.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "delete_todo"
+      }
     },
     "todo task done": {
       "agent_summary": "修改执行者的待办完成状态",
@@ -190,6 +240,11 @@
         "5. 标记待办完成",
         "做完了/完成待办/标记完成"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws todo task done --task-id \u003ctaskId\u003e --status true",
         "dws todo task done --task-id \u003ctaskId\u003e --status false"
@@ -198,7 +253,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.todo.prod.json#todo.update_todo_done_status",
         "skills/mono/references/products/todo.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "update_todo_done_status"
+      }
     },
     "todo task get": {
       "agent_summary": "待办详情",
@@ -209,6 +268,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws todo task get --task-id \u003ctaskId\u003e",
         "dws todo task get --task-id \u003ctaskId\u003e --format json"
@@ -217,7 +279,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.todo.prod.json#todo.get_todo_detail",
         "skills/mono/references/products/todo.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "get_todo_detail"
+      }
     },
     "todo task list": {
       "agent_summary": "获取当前用户在所属组织中的个人待办事项列表，返回每项待办的标题、截止日期、优先级（如高/中/低）、完成状态。",
@@ -228,6 +294,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws todo task list --page 1 --size 20 --status false",
         "dws todo task list --page 1 --size 20 --status false --format json"
@@ -249,6 +318,7 @@
       "effect_source": "agent-hint",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws todo task remove-executor --task-id \u003ctaskId\u003e --executors \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
         "dws todo task remove-executor --task-id \u003ctaskId\u003e --executors userId1 --format json"
@@ -271,6 +341,7 @@
       "effect_source": "agent-hint",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws todo task remove-participant --task-id \u003ctaskId\u003e --participants \u003cUSER_ID_1\u003e,\u003cUSER_ID_2\u003e",
         "dws todo task remove-participant --task-id \u003ctaskId\u003e --participants userId1 --format json"
@@ -290,6 +361,11 @@
         "17. 重置待办提醒（指定新规则）",
         "重置提醒/清除提醒/修改提醒规则"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws todo task reset-reminder --task-id \u003ctaskId\u003e",
         "dws todo task reset-reminder --task-id \u003ctaskId\u003e --reminder-rules '[{\"dueDateOffset\":-30,\"baseTime\":\"dueTime\"},{\"reminderTimeStamp\":\"2026-03-10T18:00:00+08:00\",\"baseTime\":\"customTime\"}]'"
@@ -309,6 +385,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws todo task update --task-id \u003ctaskId\u003e --title \"新标题\"",
         "dws todo task update --task-id \u003ctaskId\u003e --priority 40 --due \"2026-03-10T18:00:00+08:00\""
@@ -317,7 +396,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.todo.prod.json#todo.update_todo_task",
         "skills/mono/references/products/todo.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "todo",
+        "rpc_name": "update_todo_task"
+      }
     }
   }
 }

@@ -1,22 +1,25 @@
 {
   "version": 1,
-  "source_hash": "sha256:07abbdaa99a4ed8d7091c048f90d5c9d9330db52369b999bde9fd5868bfad341",
-  "surface_hash": "sha256:850109b2cca4b17666eccc8cd6adbe4326773251ff62f2328a291ade02049673",
+  "source_hash": "sha256:1bb8434348749046bb9d94621f159fae609dd3a17fa9d45b404acb72e07e2914",
+  "surface_hash": "sha256:c0a9b75b4e38934db73f4ce1d337b4c64aa5e541257dd9e84c4947da9c9ab664",
   "coverage": {
     "surface_products": 21,
     "products_with_metadata": 21,
     "surface_tools": 504,
-    "tools_with_metadata": 494,
-    "tools_with_agent_summary": 456,
-    "unmatched_skill_tools": 99
+    "tools_with_metadata": 504,
+    "tools_with_agent_summary": 504,
+    "unmatched_skill_tools": 207
   },
   "products": {
     "aisearch": {
+      "agent_summary": "企业内智能搜人，支持按姓名、部门、职位、技能、职责、手机号或工号定位人员",
+      "agent_summary_source": "dws-command-surface-review",
       "use_when": [
         "找人/搜人/谁负责 XX/某事项的负责人/某项目的人/团队成员/上级/下级/按工号找人/按手机号找人"
       ],
       "source_refs": [
-        "skills/mono/SKILL.md"
+        "skills/mono/SKILL.md",
+        "skills/mono/schema-hints/catalog-completeness.json"
       ]
     },
     "aitable": {
@@ -27,7 +30,10 @@
         "表格/多维表/AI表格/记录/数据/视图/图表/仪表盘"
       ],
       "avoid_when": [
-        "帮我记一下明天要做的事；创建个人待办"
+        "创建一个电子表格；创建表格文档",
+        "帮我写个项目周报；创建钉钉文档",
+        "帮我记一下明天要做的事；创建个人待办",
+        "帮我读一下表格 A1:D10 的数据；读取单元格数据"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.aitable.prod.json",
@@ -55,6 +61,9 @@
         "帮我建一个明天下午的日程；日历日程",
         "日程/日历/会议室/约会/时间建议"
       ],
+      "avoid_when": [
+        "明早 9 点提醒我提交周报；创建个人待办，但需先声明 reminder 边界"
+      ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.calendar.prod.json",
         "skills/mono/SKILL.md",
@@ -68,9 +77,13 @@
       "use_when": [
         "群聊/建群/群成员/群管理/发消息/发图片消息/发文件消息/发 Markdown 消息/截图发钉钉/转发消息/引用回复/@我/特别关注消息/机器人发消息/Webhook/机器人群发/机器人单聊/通知"
       ],
+      "avoid_when": [
+        "我发给某人的消息/邮件/文档/今天我干了什么；搜行为记录"
+      ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json",
         "skills/mono/SKILL.md",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
@@ -86,20 +99,33 @@
       "agent_summary": "通讯录 / 用户 / 部门",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
+        "张三在哪个部门/查一下同事工号；通讯录精确查询",
         "通讯录/同事/部门/组织架构/子部门/部门多少人/离职员工/离职名单/离职花名册/花名册/员工档案/学历/家庭/银行卡/紧急联系人/合同/角色/主管角色/管理员角色/财务/HR/特别关注/星标联系人"
+      ],
+      "avoid_when": [
+        "13800138000是谁/查手机号；按手机号搜人",
+        "222020这个工号是谁/查工号；按工号搜人",
+        "五道的上级是谁/谁负责XX/XX的下属有谁；AI语义搜人"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json",
         "skills/mono/SKILL.md",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "dev": {
+      "agent_summary": "管理钉钉开放平台应用、权限、版本、机器人、事件订阅与连接器",
+      "agent_summary_source": "dws-command-surface-review",
       "use_when": [
-        "创建机器人/新建机器人/建机器人/配置机器人/机器人建号/建联/把机器人连到/接入 agent/opencode/claude/qoder/连接 agent/开放平台应用/开发者应用/app 创建/应用凭证/事件订阅/dws dev"
+        "开发或维护钉钉开放平台应用",
+        "配置应用机器人、权限、成员、事件或发布版本"
+      ],
+      "avoid_when": [
+        "只需要查询开放平台文档时优先使用 devdoc"
       ],
       "source_refs": [
-        "skills/mono/SKILL.md"
+        "skills/mono/schema-hints/catalog-completeness.json"
       ]
     },
     "devdoc": {
@@ -107,8 +133,7 @@
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "开发/API/调用错误 文档",
-        "搜一下 OAuth2 接入文档；搜索开发文档",
-        "查询开放平台 API 错误码/字段说明；搜索开放平台接口文档"
+        "搜一下 OAuth2 接入文档；搜索开发文档"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.devdoc.prod.json",
@@ -133,11 +158,19 @@
       "agent_summary": "钉钉文档管理",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
-        "钉钉文档/云文档/读写文档/知识库里的文档/浏览知识库内容/知识库内搜索文档/块级编辑/文档评论/文档复制移动"
+        "帮我写个项目周报；创建钉钉文档",
+        "钉钉文档/云文档/知识库/读写文档/块级编辑/文档评论/文档复制移动"
+      ],
+      "avoid_when": [
+        "帮我建一个项目跟踪表；创建数据表格",
+        "帮我看看收到的日报；收到的日志",
+        "帮我记一下明天要做的事；创建个人待办",
+        "我发给某人的消息/邮件/文档/今天我干了什么；搜行为记录"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json",
         "skills/mono/SKILL.md",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
@@ -167,9 +200,13 @@
       "use_when": [
         "邮箱/邮件/发邮件/收邮件/搜邮件/查邮件/邮件草稿/转发邮件/回复邮件/邮件附件/抄送"
       ],
+      "avoid_when": [
+        "我发给某人的消息/邮件/文档/今天我干了什么；搜行为记录"
+      ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.mail.prod.json",
         "skills/mono/SKILL.md",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
@@ -189,33 +226,38 @@
       "agent_summary": "OA 审批 / 同意 / 拒绝 / 撤销",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
-        "审批/请假/报销/出差/加班/同意/拒绝/撤销审批",
-        "帮我提交请假审批；发起审批"
+        "审批/请假/报销/出差/加班/同意/拒绝/撤销审批"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json",
         "skills/mono/SKILL.md",
-        "skills/mono/references/intent-guide.md",
         "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
     "pat": {
+      "agent_summary": "管理 DWS 操作所需的行为授权和浏览器授权策略",
+      "agent_summary_source": "dws-command-surface-review",
       "use_when": [
-        "PAT/行为授权/授权 scope/永久授权/会话授权/授权时打开浏览器"
+        "命令提示缺少行为授权",
+        "批量申请产品授权或配置授权浏览器策略"
+      ],
+      "avoid_when": [
+        "普通 OAuth 登录使用 auth，而不是 pat"
       ],
       "source_refs": [
-        "skills/mono/SKILL.md"
+        "skills/mono/schema-hints/catalog-completeness.json"
       ]
     },
     "report": {
       "agent_summary": "日志：模版 / 收件箱 / 发件箱 / 单条详情 / 统计（资源.动词命令树，与 mail 对齐）",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
-        "帮我看看收到的日报；日志收件箱",
+        "帮我看看收到的日报；收到的日志",
         "日志/日报/周报/日志统计/写日报/提交周报/发日志/填日志"
       ],
       "avoid_when": [
-        "帮我创建一个待办提醒；个人待办"
+        "帮我创建一个待办提醒；个人待办",
+        "我发给某人的消息/邮件/文档/今天我干了什么；搜行为记录"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json",
@@ -228,11 +270,18 @@
       "agent_summary": "钉钉表格管理",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
-        "在线电子表格/钉钉表格/axls/工作表/单元格读写/合并单元格/筛选视图/导出 xlsx"
+        "创建一个电子表格；创建表格文档",
+        "在线电子表格/钉钉表格/axls/工作表/单元格读写/合并单元格/筛选视图/导出 xlsx",
+        "帮我读一下表格 A1:D10 的数据；读取单元格数据"
+      ],
+      "avoid_when": [
+        "帮我建一个项目跟踪表；创建数据表格",
+        "这个 alidocs 表格链接帮我看下\"（粘贴原始 URL）；先 probe 节点类型"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.sheet.prod.json",
         "skills/mono/SKILL.md",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/schema-hints/imported/wukong.json"
       ]
     },
@@ -242,11 +291,11 @@
       "use_when": [
         "帮我创建一个待办提醒；个人待办",
         "帮我记一下明天要做的事；创建个人待办",
-        "待办/TODO/任务提醒/循环待办"
+        "待办/TODO/任务提醒/循环待办",
+        "明早 9 点提醒我提交周报；创建个人待办，但需先声明 reminder 边界"
       ],
       "avoid_when": [
-        "帮我建一个项目跟踪表；创建数据表格",
-        "帮我看看收到的日报；日志收件箱"
+        "给自己留一个明天下午的时间块/建个个人日程；创建个人日程"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.todo.prod.json",
@@ -256,11 +305,14 @@
       ]
     },
     "wiki": {
+      "agent_summary": "管理钉钉知识库空间、节点、内容检索和知识库成员权限",
+      "agent_summary_source": "dws-command-surface-review",
       "use_when": [
         "创建知识库/知识库列表/搜索知识库空间/wiki/团队空间/知识库成员管理/我的文档个人空间"
       ],
       "source_refs": [
-        "skills/mono/SKILL.md"
+        "skills/mono/SKILL.md",
+        "skills/mono/schema-hints/catalog-completeness.json"
       ]
     }
   },

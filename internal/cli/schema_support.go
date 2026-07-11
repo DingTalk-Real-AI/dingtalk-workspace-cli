@@ -17,16 +17,34 @@ import "github.com/spf13/cobra"
 
 // walkLeafCommands invokes fn for every runnable leaf command in the tree.
 func walkLeafCommands(cmd *cobra.Command, fn func(*cobra.Command)) {
-	if cmd.Runnable() && !cmd.HasAvailableSubCommands() {
+	if cmd.Runnable() && !cmd.HasSubCommands() {
 		fn(cmd)
 		return
 	}
 	for _, sub := range cmd.Commands() {
-		if !sub.IsAvailableCommand() || sub.Name() == "help" {
+		if sub.Name() == "help" {
+			continue
+		}
+		if !sub.IsAvailableCommand() && !hasRuntimeSchemaCommand(sub) {
 			continue
 		}
 		walkLeafCommands(sub, fn)
 	}
+}
+
+func hasRuntimeSchemaCommand(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+	if _, toolName, _ := runtimeSchemaAnnotations(cmd); toolName != "" && !runtimeSchemaExcluded(cmd) {
+		return true
+	}
+	for _, child := range cmd.Commands() {
+		if hasRuntimeSchemaCommand(child) {
+			return true
+		}
+	}
+	return false
 }
 
 // schemaCatalogToolCount sums tool counts across product summaries.

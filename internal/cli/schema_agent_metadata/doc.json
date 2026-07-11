@@ -5,6 +5,7 @@
       "agent_summary": "删除块元素（不可逆）",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
+        "5. 删除块",
         "删除（无需 format 区分）",
         "删除（用户确认后）",
         "编辑块/改段落/插入标题/删除块；删除"
@@ -13,9 +14,10 @@
       "effect_source": "skill-explicit",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws doc block delete --node \u003cDOC_ID\u003e --block-id \u003cBLOCK_ID\u003e --yes",
-        "dws doc block delete --node DOC_ID --block-id UUID"
+        "dws doc block delete --node DOC_ID --block-id BLOCK_ID --yes    # 查询 nodeId: dws doc search --keyword \"...\" 或 dws doc list  # 查询 blockId: dws doc block list --node \u003cnodeId\u003e"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.delete_document_block",
@@ -23,12 +25,18 @@
         "skills/mono/references/products/doc.md",
         "skills/mono/references/products/doc/doc-block.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "delete_document_block"
+      }
     },
     "doc block insert": {
       "agent_summary": "将一个新的块元素插入指定文档，需要提供文档ID(dentryUuid)与块元素内容(必须包含 blockType 及对应类型的属性对象)。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
+        "2. 在文档末尾插入段落",
+        "3. 在指定块之前插入标题",
         "Callout（element JSON 次选；首选 JSONML container[subType=colorBlocks]）",
         "分栏（2 栏）",
         "单元格内含多段落 + 代码块",
@@ -63,6 +71,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws doc block insert --help",
         "dws doc block insert --node \u003cDOC_ID\u003e --text \"这是一段文字\""
@@ -81,24 +92,25 @@
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "1. 列出所有 block 拿到 uuid",
+        "1. 查看文档块结构 — 获取 blockId",
         "1. 获取当前结构",
         "2. 读单个 block 完整子树",
-        "── 工作流 3: 局部改写（保真，首选 JSONML）──",
-        "── 工作流 7: 评论 + 划词（@人 需 userId）──",
         "划词评论（先 block list 取 blockId + paragraph.text，计算 start/end）",
         "列出 + 取 uuid",
         "列出所有 block，定位 BLOCK_ID",
         "列出顶层 JSONML 节点",
-        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；如 URL 明显是文件夹",
         "编辑块/改段落/插入标题/删除块；查看结构",
         "读单个 block 完整子树",
         "读取指定 uuid 的完整子树"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
-        "dws doc block list --node \u003cDOC_ID\u003e --content-format jsonml             # 1. 取 uuid",
-        "dws doc block list --node \u003cDOC_ID\u003e --content-format jsonml --block-id \u003cUUID\u003e   # 2. 读子树"
+        "dws doc block list --node \u003cDOC_ID\u003e",
+        "dws doc block list --node \u003cDOC_ID\u003e --start-index 0 --end-index 5"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.list_document_blocks",
@@ -108,7 +120,11 @@
         "skills/mono/references/products/doc/format/doc-jsonml-cookbook.md",
         "skills/mono/references/products/doc/style/doc-update-workflow.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "list_document_blocks"
+      }
     },
     "doc block update": {
       "agent_summary": "更新指定文档的指定块元素内容或样式，需要提供文档ID(dentryUuid)、块元素ID(blockId)与块元素内容(必须包含 blockType 及对应类型的属性对象)。",
@@ -116,7 +132,7 @@
       "use_when": [
         "2. 修改后写回（uuid 不变）",
         "3. 改完后写回（uuid 必须 == --block-id）",
-        "── 工作流 3: 局部改写（保真，首选 JSONML）──",
+        "4. 更新某个块的内容",
         "修改某块文本",
         "修改标题",
         "改一个 block 的文本",
@@ -124,13 +140,17 @@
         "整体替换（update 的 uuid 必须等于 --block-id）",
         "更新已有标题",
         "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；\"把正文里的一级标题/章节标题改成 X",
+        "编辑块/改段落/插入标题/删除块；\"编辑这个文档的标题",
         "编辑块/改段落/插入标题/删除块；修改"
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
-        "dws doc block update --node \u003cDOC_ID\u003e --block-id \u003cUUID\u003e --content-format jsonml --element '[...]'                            # 3. 写回（uuid 必须 == --block-id）",
-        "dws doc block update --node \u003cDOC_ID\u003e --block-id \u003cBLOCK_ID\u003e --text \"新内容\""
+        "dws doc block update --node \u003cDOC_ID\u003e --block-id \u003cBLOCK_ID\u003e --text \"新内容\"",
+        "dws doc block update --node \u003cDOC_ID\u003e --block-id \u003cBLOCK_ID\u003e --element '{\"blockType\":\"heading\",\"heading\":{\"text\":\"新标题\",\"level\":1}}'"
       ],
       "reviewed": false,
       "source_refs": [
@@ -145,96 +165,144 @@
       "agent_summary": "创建文档评论",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
-        "── 工作流 7: 评论 + 划词（@人 需 userId）──",
+        "2. 在文档上创建评论",
+        "再将 userId 传入 --mention",
         "创建全文评论",
         "提取 userId 后:"
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
-        "dws doc comment create --node \u003cDOC_ID\u003e --content \"请确认\" --mention \u003cuid\u003e --format json",
-        "dws doc comment create --node \u003cDOC_ID\u003e --content \"这里需要修改\""
+        "dws doc comment create --node \u003cDOC_ID\u003e --content \"这里需要修改\"",
+        "dws doc comment create --node \u003cDOC_ID\u003e --content \"请review\" --mention uid1,uid2"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.create_comment",
         "skills/mono/references/products/doc.md",
         "skills/mono/references/products/doc/doc-comment.md",
-        "skills/mono/schema-hints/imported/wukong.json"
-      ]
+        "skills/mono/schema-hints/imported/wukong.json",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "doc-comment",
+        "rpc_name": "create_comment"
+      }
     },
     "doc comment create-inline": {
       "agent_summary": "在钉钉文档中创建划词评论，评论关联文档内指定块的文本范围，支持 @提及用户。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
-        "── 工作流 7: 评论 + 划词（@人 需 userId）──",
+        "7. 创建划词评论并附带引用原文 + @ 相关人",
         "划词评论 + 引用原文 + @人",
+        "确定选中文本在块内的起始偏移量 (start) 和结束偏移量 (end)",
         "计算偏移后："
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
-        "dws doc comment create-inline --node \u003cDOC_ID\u003e --block-id \u003cBLOCK_ID\u003e --start 0 --end 10 --content \"建议调整\" --selected-text \"原文\" --format json",
-        "dws doc comment create-inline --node \u003cDOC_ID\u003e --block-id \u003cBLOCK_ID\u003e --start 0 --end 10 --content \"这里需要修改\""
+        "dws doc comment create-inline --node \u003cDOC_ID\u003e --block-id \u003cBLOCK_ID\u003e --start 0 --end 10 --content \"这里需要修改\"",
+        "dws doc comment create-inline --node \u003cDOC_ID\u003e --block-id \u003cBLOCK_ID\u003e --start 5 --end 20 --content \"建议调整\" --selected-text \"被选中的原文\""
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.doc.create_inline_comment",
         "skills/mono/references/products/doc.md",
-        "skills/mono/references/products/doc/doc-comment.md"
-      ]
+        "skills/mono/references/products/doc/doc-comment.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "doc-comment",
+        "rpc_name": "create_inline_comment"
+      }
     },
     "doc comment list": {
       "agent_summary": "查询文档评论列表",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
+        "1. 查看文档的所有评论",
         "仅看未解决的划词评论",
         "查看文档全部评论"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws doc comment list --node \u003cDOC_ID\u003e",
         "dws doc comment list --node \u003cDOC_ID\u003e --type inline --resolve-status unresolved"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.list_comments",
+        "skills/mono/references/products/doc.md",
         "skills/mono/references/products/doc/doc-comment.md",
-        "skills/mono/schema-hints/imported/wukong.json"
-      ]
+        "skills/mono/schema-hints/imported/wukong.json",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "doc-comment",
+        "rpc_name": "list_comments"
+      }
     },
     "doc comment reply": {
       "agent_summary": "回复文档评论",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
+        "4. 回复某条评论（commentKey 从 list 或 create 返回中获取）",
+        "5. 用表情回复评论",
         "文字回复",
         "表情回复（--content 填表情名称）"
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws doc comment reply --node \u003cDOC_ID\u003e --comment-key \u003cCOMMENT_KEY\u003e --content \"同意\"",
         "dws doc comment reply --node \u003cDOC_ID\u003e --comment-key \u003cCOMMENT_KEY\u003e --content \"比心\" --emoji"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.reply_comment",
+        "skills/mono/references/products/doc.md",
         "skills/mono/references/products/doc/doc-comment.md",
-        "skills/mono/schema-hints/imported/wukong.json"
-      ]
+        "skills/mono/schema-hints/imported/wukong.json",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "doc-comment",
+        "rpc_name": "reply_comment"
+      }
     },
     "doc copy": {
       "agent_summary": "将指定节点复制到目标文件夹。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "复制到指定文件夹（异步）",
-        "复制到目标知识库根目录"
+        "复制到目标知识库根目录",
+        "复制到目标知识库根目录（不传 --folder 时）",
+        "复制文档/拷贝一份/复制到；复制",
+        "复制文档到指定文件夹（--node 支持 ID 或 URL）"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
-        "dws doc copy --node \u003cDOC_ID\u003e --folder \u003cTARGET_DOC_FOLDER_NODE_ID\u003e",
+        "dws doc copy --node \u003cDOC_ID\u003e --folder \u003cTARGET_FOLDER_ID\u003e",
         "dws doc copy --node \u003cDOC_ID\u003e --workspace \u003cTARGET_WS_ID\u003e"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.doc.copy_document",
+        "skills/mono/references/products/doc.md",
         "skills/mono/references/products/doc/doc-file-ops.md"
       ]
     },
@@ -242,8 +310,11 @@
       "agent_summary": "创建一篇新的在线文档",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
+        "1. 创建空文档拿 nodeId",
+        "2. 一步创建+写入：",
+        "2. 创建文档 — 提取 nodeId",
+        "5. 完整流程: 创建文档 → 写入内容 → 插入附件",
         "JSONML 创建到指定文件夹",
-        "── 工作流 2: 创建文档（含分片自动写入）──",
         "写文档/创建文档；新建文字文档（adoc）",
         "创建到指定文件夹",
         "创建到知识库",
@@ -254,38 +325,53 @@
         "详见 doc-create-workflow.md §JSONML 起稿判定",
         "默认创建到「我的文档」根目录（推荐文件路径）"
       ],
+      "avoid_when": [
+        "在知识库里创建一个文档；创建空文件实体"
+      ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws doc create --help",
-        "dws doc create --name \"项目周报\" --content-file /tmp/x.md --folder \u003cDOC_FOLDER_NODE_ID\u003e --format json                 # 2. 创建 + 写入"
+        "dws doc create --name \"项目周报\""
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.create_document",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/doc.md",
         "skills/mono/references/products/doc/doc-create.md",
         "skills/mono/references/products/doc/doc-media.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "create_document"
+      }
     },
     "doc delete": {
       "agent_summary": "将指定节点移入回收站，30 天内可从回收站恢复，超过 30 天将被永久删除。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
-        "── delete（用户确认后才加 --yes）──"
+        "── delete（用户确认后才加 --yes）──",
+        "删除文档/删掉这个文件/移到回收站/丢掉这篇文档；删除节点",
+        "正确流程：1.向用户展示\"即将删除「文档名」到回收站\" → 2.等用户确认 → 3.执行下面命令"
       ],
       "effect": "destructive",
       "effect_source": "skill-explicit",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
-        "dws doc delete --node \u003cDOC_ID\u003e --format json    # 查询 nodeId: dws doc search --query \"...\" 或 dws doc list",
+        "dws doc delete --node \u003cDOC_ID\u003e --format json    # 查询 nodeId: dws drive search --query \"...\" 或 dws drive list",
         "dws doc delete --node \u003cDOC_ID_OR_URL\u003e --yes --format json"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.doc.delete_document",
         "skills/mono/SKILL.md",
+        "skills/mono/references/products/doc.md",
         "skills/mono/references/products/doc/doc-file-ops.md"
       ]
     },
@@ -298,6 +384,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws doc download --node \u003cNODE_ID\u003e",
         "dws doc download --node \u003cNODE_ID\u003e --output ./report.pdf"
@@ -316,13 +405,16 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
-        "dws doc export get --job-id \u003cJOB_ID\u003e",
-        "dws doc export get --job-id \u003cJOB_ID\u003e --format json"
+        "dws doc export get --job-id \u003cJOB_ID\u003e"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.doc.query_export_job",
+        "skills/mono/references/products/doc.md",
         "skills/mono/references/products/doc/doc-export.md"
       ]
     },
@@ -331,6 +423,9 @@
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws doc file create --name \"项目周报\" --type adoc",
         "dws doc file create --name \"数据统计\" --type axls --folder FOLDER_ID"
@@ -338,7 +433,11 @@
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.create_file",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "create_file"
+      }
     },
     "doc folder create": {
       "agent_summary": "创建文件夹",
@@ -350,6 +449,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws doc folder create --name \"项目资料\"",
         "dws doc folder create --name \"子文件夹\" --folder \u003cPARENT_DOC_FOLDER_NODE_ID\u003e"
@@ -358,67 +460,85 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.create_folder",
         "skills/mono/references/products/doc/doc-file-ops.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "create_folder"
+      }
     },
     "doc info": {
       "agent_summary": "获取文档元信息（标题/类型/创建者/权限等）",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
+        "3. 获取文档元信息 (标题、类型、权限)",
         "alidocs URL 直传（CLI 自动解析）",
         "document/edit URL 直传（必须完整 URL，禁止单独提取 dentryKey）",
         "document/preview URL 直传",
-        "── 工作流 1: 定位并阅读文档 ──",
-        "── 工作流 6: 下载 vs 导出（先 info 判 contentType）──",
         "❌ workspaceId（应作为 --workspace 用）",
         "❌ 单独的 dentryKey（必须带完整 URL）",
         "❌ 纯数字 dentryId（drive 链路）",
         "标准用法（nodeId 直传）",
+        "步骤 1: 查询文件类型",
         "看文档/读内容/文档内容；元信息",
-        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；\"这个文档的信息"
+        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；\"这个文档的信息",
+        "编辑块/改段落/插入标题/删除块；\"这个文档的信息",
+        "这个 alidocs 表格链接帮我看下\"（粘贴原始 URL）；先 probe 节点类型"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
-        "dws doc info --node \u003cDOC_ID\u003e --format json                    # 2. 元信息（含 contentType）",
-        "dws doc info --node \u003cNODE_ID\u003e --format json                    # 必须先查 contentType"
+        "dws doc info --node \u003cDOC_ID\u003e",
+        "dws doc info --node \"https://alidocs.dingtalk.com/i/nodes/\u003cDOC_UUID\u003e\""
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.get_document_info",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/doc.md",
         "skills/mono/references/products/doc/doc-info.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "get_document_info"
+      }
     },
     "doc list": {
       "agent_summary": "遍历文件夹或知识库下的直接子节点",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
-      "use_when": [
-        "浏览\"我的文档\"根目录",
-        "浏览指定文档文件夹（folder nodeId 或 alidocs 文件夹 URL）",
-        "浏览指定知识库根目录（取出 workspaceId 后）",
-        "翻页"
-      ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws doc list",
-        "dws doc list --folder \u003cDOC_FOLDER_NODE_ID\u003e"
+        "dws doc list --folder FOLDER_ID"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.list_nodes",
-        "skills/mono/references/products/doc/doc-list.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "list_nodes"
+      }
     },
     "doc media download": {
       "agent_summary": "获取钉钉文档中指定附件的临时下载 URL。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
+        "下载文件/导出文件/下载到本地；下载",
         "下载文档中的附件（resourceId 从 block list 获取）",
         "下载附件/获取附件/取出文档里的附件；下载附件"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws doc media download --node \u003cDOC_ID\u003e --resource-id \u003cRESOURCE_ID\u003e",
         "dws doc media download --node \"https://alidocs.dingtalk.com/i/nodes/xxx\" --resource-id \u003cRESOURCE_ID\u003e"
@@ -431,8 +551,14 @@
       ]
     },
     "doc media insert": {
+      "agent_summary": "上传本地文件并作为附件插入文档（3 步合一：prepare + PUT + insert）",
+      "agent_summary_source": "dws-command-surface-review",
       "use_when": [
-        "── 工作流 5: 上传独立文件 vs 插入附件到文档正文 ──",
+        "1. 基本用法: 插入本地文件到文档",
+        "2. 指定附件显示名称",
+        "3. 指定 MIME 类型 (文件扩展名无法推断时)",
+        "4. 在指定块之前插入附件",
+        "上传本地文件并作为附件插入文档（3 步合一：prepare + PUT + insert）",
         "在指定块之前插入附件",
         "基本用法：插入本地文件到文档",
         "指定 MIME 类型（扩展名无法推断时）",
@@ -443,13 +569,18 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
-        "dws doc media insert --node \u003cDOC_ID\u003e --file ./report.pdf       # 上传并作为附件块插入正文（内容层）",
-        "dws doc media insert --node \u003cDOC_ID\u003e --file ./report.pdf"
+        "dws doc media insert --node \u003cDOC_ID\u003e --file ./report.pdf",
+        "dws doc media insert --node \u003cDOC_ID\u003e --file ./data.bin --name \"数据文件.dat\" --mime-type application/octet-stream"
       ],
+      "reviewed": true,
       "source_refs": [
         "skills/mono/references/products/doc.md",
-        "skills/mono/references/products/doc/doc-media.md"
+        "skills/mono/references/products/doc/doc-media.md",
+        "skills/mono/schema-hints/catalog-completeness.json"
       ]
     },
     "doc move": {
@@ -457,17 +588,24 @@
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "移动到指定文件夹",
-        "移动到知识库根目录"
+        "移动到目标知识库根目录（不传 --folder 时）",
+        "移动到知识库根目录",
+        "移动文档/搬到/移到/转移文件；移动",
+        "移动文档到指定文件夹"
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
-        "dws doc move --node \u003cDOC_ID\u003e --folder \u003cTARGET_DOC_FOLDER_NODE_ID\u003e",
+        "dws doc move --node \u003cDOC_ID\u003e --folder \u003cTARGET_FOLDER_ID\u003e",
         "dws doc move --node \u003cDOC_ID\u003e --workspace \u003cTARGET_WS_ID\u003e"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.doc.move_document",
+        "skills/mono/references/products/doc.md",
         "skills/mono/references/products/doc/doc-file-ops.md"
       ]
     },
@@ -477,18 +615,24 @@
       "use_when": [
         "给单人开 READER 权限",
         "给多人开 EDITOR 权限（最多 30 个 uid）",
+        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；\u003e - \"把某篇文档授权给某人",
+        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；新增权限",
         "设为管理者",
         "通过 alidocs URL 直接授权"
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
-        "dws doc permission add --node \u003cDOC_ID\u003e --user uid1 --role READER",
-        "dws doc permission add --node \u003cDOC_ID\u003e --user uid1,uid2 --role EDITOR"
+        "dws doc permission add --node \u003cDOC_ID\u003e --users uid1 --role READER",
+        "dws doc permission add --node \u003cDOC_ID\u003e --users uid1,uid2 --role EDITOR"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.doc.add_permission",
+        "skills/mono/references/products/doc.md",
         "skills/mono/references/products/doc/doc-permission.md"
       ]
     },
@@ -498,17 +642,22 @@
       "use_when": [
         "拉取更多结果（默认 50，最大 200）",
         "按角色过滤查看",
-        "查看谁有权限"
+        "查看谁有权限",
+        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；查看谁有权限"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws doc permission list --node \u003cDOC_ID\u003e",
-        "dws doc permission list --node \u003cDOC_ID\u003e --max-results 50"
+        "dws doc permission list --node \u003cDOC_ID\u003e --limit 50"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.doc.list_permission",
+        "skills/mono/references/products/doc.md",
         "skills/mono/references/products/doc/doc-permission.md"
       ]
     },
@@ -519,6 +668,7 @@
       "effect_source": "agent-hint",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.doc.remove_permission",
@@ -529,20 +679,23 @@
       "agent_summary": "修改企业用户在知识库节点上的角色（仅支持 USER 类型）。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
-        "修改某人角色（READER → EDITOR）"
+        "修改某人角色（READER → EDITOR）",
+        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；修改权限"
       ],
       "effect": "write",
       "effect_source": "skill-explicit",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
-        "dws doc permission update --node \u003cDOC_ID\u003e --user uid1 --role EDITOR",
-        "dws doc permission update --node \u003cDOC_ID\u003e --user uid1,uid2 --role READER"
+        "dws doc permission update --node \u003cDOC_ID\u003e --users uid1 --role EDITOR",
+        "dws doc permission update --node \u003cDOC_ID\u003e --users uid1,uid2 --role READER"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.doc.update_permission",
         "skills/mono/SKILL.md",
+        "skills/mono/references/products/doc.md",
         "skills/mono/references/products/doc/doc-permission.md"
       ]
     },
@@ -551,24 +704,25 @@
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "1. 读出完整 JSONML 结构（输出含 revision，普通改写场景下不需要）",
+        "4. 读取文档内容 (Markdown 格式)",
         "JSONML 完整结构 → 文件（无损改写前置）",
         "alidocs URL 直传",
-        "── 工作流 1: 定位并阅读文档 ──",
-        "── 工作流 2: 创建文档（含分片自动写入）──",
-        "── 工作流 3: 局部改写（保真，首选 JSONML）──",
-        "── 工作流 4: 整篇 overwrite（仅在新骨架重写时）──",
-        "修改 /tmp/doc.json 中的 jsonml 数组",
         "查看具体命令的完整参数说明",
         "看文档/读内容/文档内容；读取",
         "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；\"帮我看看这个文档",
         "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；默认",
+        "编辑块/改段落/插入标题/删除块；\"帮我看看这个文档",
+        "编辑块/改段落/插入标题/删除块；默认",
         "默认 Markdown 输出（最常用）"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws doc read --help",
-        "dws doc read --node \u003cDOC_ID\u003e --format json                    # 3. 读 markdown 正文"
+        "dws doc read --node \u003cDOC_ID\u003e"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.get_document_content",
@@ -576,16 +730,26 @@
         "skills/mono/references/products/doc/doc-read.md",
         "skills/mono/references/products/doc/style/doc-update-workflow.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "get_document_content"
+      }
     },
     "doc rename": {
       "agent_summary": "对指定节点进行重命名。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
-        "── rename ──"
+        "── rename ──",
+        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；\"把这个文档标题改成 X\" / \"这个文档改名为 X",
+        "重命名/rename/改名/改文档名/修改文档名称/修改文档标题/把这个文档叫做...；重命名",
+        "重命名文档"
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws doc rename --node \u003cDOC_ID\u003e --name \"新名称\"",
         "dws doc rename --node \"https://alidocs.dingtalk.com/i/nodes/\u003cDOC_UUID\u003e\" --name \"项目周报 v2\""
@@ -593,32 +757,35 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.doc.rename_document",
+        "skills/mono/references/products/doc.md",
         "skills/mono/references/products/doc/doc-file-ops.md"
       ]
     },
     "doc search": {
       "agent_summary": "搜索文档（不传关键词返回最近访问）",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
-      "use_when": [
-        "仅最近访问（不传 --query）",
-        "关键字搜索（最常用）",
-        "按创建时间窗口（毫秒时间戳）",
-        "按创建者过滤（多个 uid 逗号分隔）",
-        "按扩展名过滤（在线文档族 + 常见办公附件）",
-        "按知识库范围过滤（支持知识库 URL）",
-        "翻页"
+      "avoid_when": [
+        "搜一下 OAuth2 接入文档；搜索开发文档",
+        "搜一下智能化方案/最近 OKR 相关邮件/最近发版相关消息；搜企业知识内容"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws doc search --query \"会议纪要\"",
         "dws doc search"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.search_documents",
-        "skills/mono/references/products/doc/doc-search.md",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "search_documents"
+      }
     },
     "doc update": {
       "agent_summary": "更新文档内容（追加 / 覆盖）",
@@ -626,6 +793,8 @@
       "use_when": [
         "2. 一步写入：",
         "2. 逐个追加：",
+        "3. 写入内容 (追加模式)",
+        "3. 逐个追加：",
         "4. 提交修改（默认直接覆盖，不做并发检查）",
         "JSONML 整篇无损 overwrite（默认不做并发检查；并发敏感时加 --revision \u003cN\u003e）",
         "append 到指定 block 前（index 通过 doc block list 获取）",
@@ -633,18 +802,21 @@
         "heredoc（真实换行，含表格）",
         "overwrite 整段（用户已确认）",
         "stdin（heredoc，含表格）",
-        "修改 /tmp/doc.json 中的 jsonml 数组",
-        "写文档/创建文档；覆盖替换",
+        "写文档/创建文档；整篇覆盖替换",
         "写文档/创建文档；追加内容",
         "插入分割线：使用 doc update --mode append 以 Markdown 格式追加",
         "短文本字面量（\u003c2KB 无换行）",
-        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；\"往这个文档追加内容"
+        "给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看；\"往这个文档追加内容",
+        "编辑块/改段落/插入标题/删除块；\"往这个文档追加内容"
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
-        "dws doc update --node \u003cDOC_ID\u003e --content-file /tmp/doc.json --content-format jsonml --mode overwrite                             # 2. 写回（默认不做并发检查）",
-        "dws doc update --node \u003cDOC_ID\u003e --content \"---\" --mode append"
+        "dws doc update --node \u003cDOC_ID\u003e --content \"# 追加内容\" --mode append",
+        "dws doc update --node \u003cDOC_ID\u003e --content \"# 完整替换\" --mode overwrite"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.doc.prod.json#doc.update_document",
@@ -653,22 +825,40 @@
         "skills/mono/references/products/doc/doc-update.md",
         "skills/mono/references/products/doc/style/doc-update-workflow.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "doc",
+        "rpc_name": "update_document"
+      }
     },
     "doc upload": {
+      "agent_summary": "上传文件到钉钉文档或知识库",
+      "agent_summary_source": "dws-command-surface-review",
       "use_when": [
+        "1. 上传到\"我的文档\"根目录",
+        "2. 上传到指定文件夹",
+        "3. 上传到知识库并转换为在线文档",
         "上传到「我的文档」根目录",
         "上传到指定文件夹",
-        "上传到知识库并转换为在线文档"
+        "上传到知识库并转换为在线文档",
+        "上传文件/传文件/上传到文档/上传到知识库；上传",
+        "上传文件/传文件/上传到文档/上传到知识库；上传并转换",
+        "上传文件到钉钉文档或知识库"
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws doc upload --file ./report.pdf",
-        "dws doc upload --file ./slides.pptx --name \"Q1汇报.pptx\" --folder \u003cDOC_FOLDER_NODE_ID\u003e"
+        "dws doc upload --file ./slides.pptx --name \"Q1汇报.pptx\" --folder \u003cFOLDER_ID\u003e"
       ],
+      "reviewed": true,
       "source_refs": [
-        "skills/mono/references/products/doc/doc-file-ops.md"
+        "skills/mono/references/products/doc.md",
+        "skills/mono/references/products/doc/doc-file-ops.md",
+        "skills/mono/schema-hints/catalog-completeness.json"
       ]
     }
   }

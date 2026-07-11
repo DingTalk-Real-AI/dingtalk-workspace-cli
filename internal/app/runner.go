@@ -704,6 +704,13 @@ func (r *runtimeRunner) executeStdioInvocation(ctx context.Context, invocation e
 		callCtx, cancel = context.WithTimeout(ctx, time.Duration(r.globalFlags.Timeout)*time.Second)
 		defer cancel()
 	}
+	if err := client.EnsureInitialized(callCtx); err != nil {
+		return executor.Result{}, apperrors.NewAPI(
+			fmt.Sprintf("stdio initialize failed: %v", err),
+			apperrors.WithOperation("initialize"),
+			apperrors.WithReason("stdio_initialize_error"),
+		)
+	}
 
 	callResult, err := client.CallTool(callCtx, invocation.Tool, invocation.Params)
 	if err != nil {

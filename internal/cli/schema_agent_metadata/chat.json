@@ -7,10 +7,18 @@
       "use_when": [
         "搜索机器人 — 提取 openDingTalkId（必须用 find，search 没有此字段）",
         "搜索机器人/找机器人/查机器人/帮我找XXX机器人",
-        "给机器人发单聊/给机器人发消息/跟机器人聊天"
+        "搜索机器人/找机器人/查机器人/帮我找XXX机器人；搜索全部可用机器人",
+        "给机器人发单聊/给机器人发消息/跟机器人聊天",
+        "给机器人发单聊/给机器人发消息/跟机器人聊天；给机器人发单聊消息"
+      ],
+      "avoid_when": [
+        "我创建的机器人/我的机器人/我自己的机器人/查看我的机器人；搜索我创建的机器人"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat bot find --query \"日报\"",
         "dws chat bot find --query \"日报\" --limit 20"
@@ -18,43 +26,68 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.search_bots",
-        "skills/mono/references/products/chat.md"
-      ]
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/chat.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "bot",
+        "rpc_name": "search_bots"
+      }
     },
     "chat bot search": {
       "agent_summary": "搜索我创建的机器人",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "我创建的机器人/我的机器人/我自己的机器人/查看我的机器人",
+        "我创建的机器人/我的机器人/我自己的机器人/查看我的机器人；搜索我创建的机器人",
         "查我的机器人 — 提取 robot-code",
         "查看我的机器人"
       ],
+      "avoid_when": [
+        "搜索机器人/找机器人/查机器人/帮我找XXX机器人；搜索全部可用机器人",
+        "给机器人发单聊/给机器人发消息/跟机器人聊天；给机器人发单聊消息"
+      ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat bot search --page 1",
         "dws chat bot search --page 1 --size 10 --name \"日报\""
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.search_my_robots",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/imported/wukong.json"
-      ]
+        "skills/mono/schema-hints/imported/wukong.json",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "bot",
+        "rpc_name": "search_my_robots"
+      }
     },
     "chat category list": {
       "agent_summary": "获取用户自定义会话分组",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
-        "查看会话分组/自定义分组"
+        "查看会话分组/自定义分组",
+        "查看会话分组/自定义分组；获取会话分组"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat category list"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.list_user_define_conv_categories",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     },
@@ -62,22 +95,33 @@
       "agent_summary": "拉取用户指定自定义会话分组下的会话",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
+        "某个分组下有哪些会话；分组下会话列表",
         "某个分组下的会话/分组会话列表"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
-        "dws chat category list-conversations --category-id \u003c分组ID\u003e"
+        "dws chat category list-conversations --category-id \u003c分组ID\u003e",
+        "dws chat category list-conversations --category-id \u003c分组ID\u003e --exclude-muted"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.list_conversations_by_category",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     },
     "chat conversation-info": {
       "agent_summary": "获取会话的基础信息",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat conversation-info --group \u003copenConversationId\u003e --format json",
         "dws chat conversation-info --user \u003cuserId\u003e --format json"
@@ -92,16 +136,28 @@
       "agent_summary": "获取群内所有机器人",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
-        "群机器人列表/群里有哪些机器人/查看群机器人"
+        "群机器人列表/群里有哪些机器人/查看群机器人",
+        "群里有哪些机器人/查看群机器人/列出群机器人；查看群内机器人列表"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat group bots --group \u003copenConversationId\u003e"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.list_group_bots",
-        "skills/mono/references/products/chat.md"
-      ]
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/chat.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "bot",
+        "rpc_name": "list_group_bots"
+      }
     },
     "chat group create": {
       "agent_summary": "创建一个群聊，支持指定群名称、初始成员列表等参数。",
@@ -112,6 +168,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat group create --name \"Q1 项目冲刺群\" --users userId1,userId2,userId3"
       ],
@@ -119,21 +178,33 @@
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.create_group_conversation",
         "skills/mono/references/intent-guide.md",
-        "skills/mono/references/products/chat.md"
-      ]
+        "skills/mono/references/products/chat.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "im",
+        "rpc_name": "create_group_conversation"
+      }
     },
     "chat group dismiss": {
       "agent_summary": "解散群聊",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
-        "解散群/解散群聊"
+        "解散群/解散群聊",
+        "解散群/解散群聊；解散群聊"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat group dismiss --group \u003copenConversationId\u003e"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.dismiss_group",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     },
@@ -141,16 +212,21 @@
       "agent_summary": "根据群号获取群聊信息",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
-        "根据群号查群信息/群号查群/群号转openConversationId"
+        "根据群号查群信息/群号查群/群号转openConversationId",
+        "根据群号查群信息/群号转openConversationId；群号查群聊信息"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat group get-by-group-id --group-id 12345678"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.get_conv_info_by_group_id",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     },
@@ -160,6 +236,11 @@
       "use_when": [
         "群邀请链接/入群链接/加群链接"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat group invite-url --group \u003copenConversationId\u003e",
         "dws chat group invite-url --group \u003copenConversationId\u003e --expires-seconds 86400"
@@ -174,10 +255,17 @@
       "agent_summary": "拉取我创建/管理的群",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
-        "我创建的群/我管理的群/我是群主的群/我当管理员的群"
+        "我创建的群/我管理的群/我是群主的群/我当管理员的群",
+        "我创建的群/我管理的群/我是群主的群/我当管理员的群；拉取我创建/管理的群"
+      ],
+      "avoid_when": [
+        "我加入的所有群/拉取全部群列表/我的群；分页拉取所有群"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat group list-my-groups",
         "dws chat group list-my-groups --role OWNER"
@@ -185,6 +273,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.list_owned_or_admin_groups",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     },
@@ -195,8 +284,14 @@
         "把张三拉进群；添加群成员",
         "拉人进群/加群成员"
       ],
+      "avoid_when": [
+        "设管理员/取消管理员；设置群管理员"
+      ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat group members add --id \u003copenconversation_id\u003e --users userId1,userId2"
       ],
@@ -205,7 +300,11 @@
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "add_group_member"
+      }
     },
     "chat group members add-bot": {
       "agent_summary": "将机器人添加到群中",
@@ -214,25 +313,46 @@
         "加机器人到群",
         "邀请机器人进群"
       ],
+      "avoid_when": [
+        "从群里移除机器人/踢机器人；移除群内机器人"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat group members add-bot --robot-code \u003crobot-code\u003e --id \u003copenconversation_id\u003e",
         "dws chat group members add-bot --group \u003copenconversation_id\u003e --robot-code \u003crobot-code\u003e"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.add_robot_to_group",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/imported/wukong.json"
-      ]
+        "skills/mono/schema-hints/imported/wukong.json",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "bot",
+        "rpc_name": "add_robot_to_group"
+      }
     },
     "chat group members list": {
       "agent_summary": "查看群成员列表",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.get_group_members",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "get_group_members"
+      }
     },
     "chat group members remove": {
       "agent_summary": "从群中移除成员",
@@ -240,49 +360,78 @@
       "use_when": [
         "踢人/移除群成员"
       ],
+      "avoid_when": [
+        "退群/退出群聊/离开群；退出群聊"
+      ],
       "effect": "destructive",
       "effect_source": "skill-explicit",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat group members remove --id \u003copenconversation_id\u003e --users userId1,userId2"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.remove_group_member",
         "skills/mono/SKILL.md",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "remove_group_member"
+      }
     },
     "chat group members remove-bot": {
       "agent_summary": "从群内移除机器人",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
-        "从群里移除机器人/踢出机器人"
+        "从群里移除机器人/踢出机器人",
+        "从群里移除机器人/踢机器人；移除群内机器人"
       ],
       "effect": "destructive",
       "effect_source": "agent-hint",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat group members remove-bot --id \u003copenConversationId\u003e --bot-id \u003copenBotId\u003e"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.remove_robot_in_group",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/destructive-safety.json"
-      ]
+        "skills/mono/schema-hints/destructive-safety.json",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "bot",
+        "rpc_name": "remove_robot_in_group"
+      }
     },
     "chat group quit": {
       "agent_summary": "用户退群",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "use_when": [
+        "退群/退出群聊/离开群；退出群聊"
+      ],
+      "avoid_when": [
+        "解散群/解散群聊；解散群聊"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat group quit --group \u003copenConversationId\u003e"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.quit_group",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     },
@@ -292,26 +441,49 @@
       "use_when": [
         "改群名"
       ],
+      "avoid_when": [
+        "改群头像/更新群头像；更新群头像",
+        "改群昵称/设置群昵称/我在群里的名字；设置个人群昵称",
+        "群备注/给群加备注/修改群备注；设置群备注"
+      ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat group rename --id \u003copenconversation_id\u003e --name \"新群名\""
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.update_group_name",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "update_group_name"
+      }
     },
     "chat group set-admin": {
       "agent_summary": "设置/取消群成员为管理员",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
-        "设管理员/取消管理员/设置群管理员"
+        "设管理员/取消管理员/设置群管理员",
+        "设管理员/取消管理员；设置群管理员"
       ],
+      "avoid_when": [
+        "改群设置/群设置开关/群权限/入群许可/禁止私聊；更新群设置"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.update_conv_member_roles",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     },
@@ -319,8 +491,14 @@
       "agent_summary": "设置新成员入群可查看历史消息选项",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
+        "新成员看历史/历史消息可见范围；设置新成员可见历史消息",
         "设置历史消息/新成员看历史/新成员可见消息"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat group set-history --group \u003copenConversationId\u003e --option RECENT_100",
         "dws chat group set-history --group \u003copenConversationId\u003e --option FORBIDDEN"
@@ -328,6 +506,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.update_show_history_msg_option",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     },
@@ -337,6 +516,11 @@
       "use_when": [
         "转让群主/换群主/群主转让"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat group transfer-owner --group \u003copenConversationId\u003e --new-owner \u003copenDingTalkId\u003e",
         "dws chat group transfer-owner --group \u003copenConversationId\u003e --user \u003cuserId\u003e"
@@ -350,22 +534,38 @@
     "chat group update-icon": {
       "agent_summary": "更新群头像",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "use_when": [
+        "改群头像/更新群头像；更新群头像"
+      ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat group update-icon --group \u003copenConversationId\u003e --icon-media-id \u003cmediaId\u003e"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.update_group_icon",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     },
     "chat group update-settings": {
       "agent_summary": "更新群设置",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "use_when": [
+        "改群设置/群设置开关/群权限/入群许可/禁止私聊；更新群设置"
+      ],
+      "avoid_when": [
+        "新成员看历史/历史消息可见范围；设置新成员可见历史消息"
+      ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat group update-settings --group \u003copenConversationId\u003e --setting-key searchable --status 1",
         "dws chat group update-settings --group \u003copenConversationId\u003e --setting-key onlyAdminCanAtAll --status 0"
@@ -373,6 +573,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.update_group_settings",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     },
@@ -380,11 +581,21 @@
       "agent_summary": "设置/取消群全员禁言",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
-        "全员禁言/群禁言/解除禁言"
+        "全员禁言/群禁言/解除禁言",
+        "全员禁言/群禁言；全员禁言或解除"
       ],
+      "avoid_when": [
+        "禁言某人/指定成员禁言；指定成员禁言"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.set_group_mute",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     },
@@ -392,11 +603,21 @@
       "agent_summary": "管理群禁言成员",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
-        "禁言某人/指定成员禁言/解除某人禁言"
+        "禁言某人/指定成员禁言/解除某人禁言",
+        "禁言某人/指定成员禁言；指定成员禁言"
       ],
+      "avoid_when": [
+        "全员禁言/群禁言；全员禁言或解除"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.set_group_member_mute_list",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     },
@@ -408,6 +629,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat group-role add --group \u003copenConversationId\u003e --name \"管理员\""
       ],
@@ -425,6 +649,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat group-role list --group \u003copenConversationId\u003e"
       ],
@@ -442,6 +669,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat group-role query-user --group \u003copenConversationId\u003e --user \u003cuserId\u003e"
       ],
@@ -461,6 +691,7 @@
       "effect_source": "agent-hint",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat group-role remove --group \u003copenConversationId\u003e --role-id \u003copenRoleId\u003e"
       ],
@@ -481,6 +712,7 @@
       "effect_source": "agent-hint",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat group-role remove-user --group \u003copenConversationId\u003e --user \u003cuserId\u003e --role-ids roleId1,roleId2"
       ],
@@ -497,6 +729,11 @@
       "use_when": [
         "给某人设置群身份/设定用户的群身份"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat group-role set-user --group \u003copenConversationId\u003e --user \u003cuserId\u003e --role-ids roleId1,roleId2"
       ],
@@ -514,6 +751,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat group-role update --group \u003copenConversationId\u003e --role-id \u003copenRoleId\u003e --name \"新名称\""
       ],
@@ -530,8 +770,15 @@
         "置顶会话/置顶消息",
         "置顶会话/置顶消息/我的置顶/查看置顶"
       ],
+      "avoid_when": [
+        "所有会话/全部会话列表/我的会话；分页获取全部会话",
+        "置顶会话/取消置顶；设置/取消会话置顶"
+      ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat list-top-conversations --limit 1000",
         "dws chat list-top-conversations --limit 1000 --cursor \u003cnextCursor\u003e"
@@ -539,6 +786,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.list_top_conversations",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     },
@@ -548,6 +796,11 @@
       "use_when": [
         "emoji回应/表情回应/给消息加表情"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat message add-emoji --conversation-id \u003copenConversationId\u003e --msg-id \u003copenMsgId\u003e --emoji \"赞\"",
         "dws chat message add-emoji --conversation-id \u003copenConversationId\u003e --msg-id \u003copenMsgId\u003e --emoji \"鼓掌\""
@@ -564,6 +817,11 @@
       "use_when": [
         "文字表情回应/添加文字表情"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat message add-text-emotion --conversation-id \u003copenConversationId\u003e --msg-id \u003copenMsgId\u003e --emotion-id \u003cemotionId\u003e --emotion-name \"赞\" --text \"nice\" --background-id im_bg_5"
       ],
@@ -577,8 +835,14 @@
       "agent_summary": "合并转发消息",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
-        "合并转发/批量转发/合并转发多条消息"
+        "合并转发/批量转发/合并转发多条消息",
+        "合并转发/批量转发/合并转发多条消息；合并转发多条消息"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat message combine-forward --src-conversation-id \u003csrcOpenCid\u003e --msg-ids \u003cid1\u003e,\u003cid2\u003e,\u003cid3\u003e --dest-conversation-id \u003cdestOpenCid\u003e",
         "dws chat message combine-forward --src-conversation-id \u003csrcOpenCid\u003e --msg-ids \u003cid1\u003e,\u003cid2\u003e --dest-conversation-id \u003cdestOpenCid\u003e --uuid \u003cidempotencyKey\u003e"
@@ -586,6 +850,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.combine_forward_messages",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     },
@@ -597,6 +862,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat message create-text-emotion --emotion-name \"赞\" --text \"nice\"",
         "dws chat message create-text-emotion --emotion-name \"感谢\" --text \"感谢\" --background-id im_bg_5"
@@ -608,32 +876,72 @@
       ]
     },
     "chat message download-media": {
-      "examples": [
-        "dws chat message download-media --type mediaId --resource-id \u003cmediaId\u003e --message-id \u003copenMessageId\u003e --open-conversation-id \u003copenConversationId\u003e --output ./downloads/",
-        "dws chat message download-media --type mediaId --resource-id \u003cmediaId\u003e --message-id \u003copenMessageId\u003e --open-conversation-id \u003copenConversationId\u003e --output ./photo.jpg"
+      "agent_summary": "下载聊天消息中的图片/视频/语音等资源到本地文件",
+      "agent_summary_source": "dws-command-surface-review",
+      "use_when": [
+        "下载聊天消息中的图片/视频/语音等资源到本地文件"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "examples": [
+        "dws chat message download-media --type mediaId --resource-id \u003cmediaId\u003e --message-id \u003copenMessageId\u003e --open-conversation-id \u003copenConversationId\u003e --output ./photo.jpg",
+        "dws chat message download-media --type mediaId --resource-id \u003cmediaId\u003e --message-id \u003copenMessageId\u003e --open-conversation-id \u003copenConversationId\u003e --output ./downloads/photo.jpg"
+      ],
+      "reviewed": true,
       "source_refs": [
-        "skills/mono/references/products/chat.md"
+        "skills/mono/references/products/chat.md",
+        "skills/mono/schema-hints/catalog-completeness.json"
       ]
     },
     "chat message forward": {
       "agent_summary": "单条消息转发",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
+        "转发消息/把消息转到另一个群；转发单条消息",
         "转发消息/转发一条消息/把消息转发到另一个群"
+      ],
+      "avoid_when": [
+        "合并转发/批量转发/合并转发多条消息；合并转发多条消息",
+        "转发话题/转发话题消息/话题转发到另一个群；转发话题消息"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "examples": [
+        "dws chat message forward --src-conversation-id \u003csrcOpenCid\u003e --msg-id \u003copenMessageId\u003e --dest-conversation-id \u003cdestOpenCid\u003e"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.forward_message",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     },
     "chat message forward-topic": {
       "agent_summary": "转发某个话题到其他会话",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "use_when": [
+        "转发话题/转发话题消息",
+        "转发话题/转发话题消息/话题转发到另一个群；转发话题消息"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "examples": [
+        "dws chat message forward-topic --src-conversation-id \u003csrcOpenCid\u003e --src-msg-id \u003copenMessageId\u003e --src-thread-id \u003cconvThreadId\u003e --dest-conversation-id \u003cdestOpenCid\u003e"
+      ],
       "reviewed": false,
       "source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.chat.forward_topic"
+        "internal/cli/schema_mcp_metadata.json#tools.chat.forward_topic",
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/chat.md"
       ]
     },
     "chat message list": {
@@ -641,18 +949,32 @@
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "2. 拉取群消息",
+        "和某人的单聊聊天记录/拉某人单聊历史",
+        "拉取一下上周项目群的聊天记录；拉取会话消息",
+        "拉取和张三的单聊记录；拉取单聊消息",
+        "拉取和某人的单聊记录/单聊消息",
         "某个群的聊天记录",
         "聊天记录/会话消息/拉取会话"
       ],
+      "avoid_when": [
+        "DING消息/查DING/DING历史；查询 DING 消息列表",
+        "查看我今天的所有消息；全量会话消息",
+        "查看钉住的消息/Pin列表/钉住消息列表；拉取钉住消息列表",
+        "看看张三发给我的消息；按发送者查询消息"
+      ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat message list --group \u003copenconversation_id\u003e --time \"2025-03-01 00:00:00\"",
-        "dws chat message list --group \u003copenconversation_id\u003e --time \"2025-03-01 00:00:00\" --limit 50"
+        "dws chat message list --user \u003cuserId\u003e --time \"2025-03-01 00:00:00\" --limit 50"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.list_conversation_message_v2",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     },
@@ -661,19 +983,31 @@
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "我最近所有消息/我今天的消息",
-        "所有消息/全部会话消息/拉取全部消息/时间范围内消息/我的消息/我今天的消息/查我的钉钉消息/最近的消息"
+        "所有消息/全部会话消息/拉取全部消息/时间范围内消息/我的消息/我今天的消息/查我的钉钉消息/最近的消息",
+        "查看我今天的所有消息；全量会话消息"
+      ],
+      "avoid_when": [
+        "谁@了我/查看提及我的消息；查询@我的消息"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat message list-all --start \"2025-03-01 00:00:00\" --end \"2025-03-31 23:59:59\" --limit 50",
         "dws chat message list-all --start \"2025-03-01 00:00:00\" --end \"2025-03-31 23:59:59\" --limit 50 --cursor \"abc123token\""
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.search_messages_by_time_range",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "search_messages_by_time_range"
+      }
     },
     "chat message list-by-ids": {
       "agent_summary": "批量查消息",
@@ -683,6 +1017,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat message list-by-ids --msg-ids msgId1,msgId2,msgId3"
       ],
@@ -697,37 +1034,43 @@
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "某人发给我的消息/指定发送者/某人的消息",
-        "某人发给我的消息/指定发送者的消息/某人最近的消息"
+        "某人发给我的消息/指定发送者的消息/某人最近的消息",
+        "看看张三发给我的消息；按发送者查询消息"
+      ],
+      "avoid_when": [
+        "拉取和张三的单聊记录；拉取单聊消息"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat message list-by-sender --sender-user-id \u003cuserId\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-11T00:00:00+08:00\" --limit 50 --cursor 0",
         "dws chat message list-by-sender --sender-open-dingtalk-id \u003copenDingTalkId\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-11T00:00:00+08:00\" --limit 50 --cursor 0"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.search_messages_by_sender",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "search_messages_by_sender"
+      }
     },
     "chat message list-direct": {
       "agent_summary": "拉取指定用户的单聊会话消息内容",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
-      "use_when": [
-        "和某人的单聊聊天记录/拉某人单聊历史",
-        "拉取和某人的单聊记录/单聊消息"
-      ],
       "effect": "read",
       "effect_source": "command-verb",
-      "examples": [
-        "dws chat message list-direct --user \u003c对方userId\u003e --time \"2025-03-01 00:00:00\" --limit 50",
-        "dws chat message list-direct --user \u003c对方userId\u003e --time \"2025-03-01 00:00:00\" --forward=false"
-      ],
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "reviewed": false,
       "source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.chat.list_individual_chat_message",
-        "skills/mono/references/products/chat.md"
+        "internal/cli/schema_mcp_metadata.json#tools.chat.list_individual_chat_message"
       ]
     },
     "chat message list-focused": {
@@ -739,6 +1082,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat message list-focused --limit 50",
         "dws chat message list-focused --limit 20 --cursor \u003cnextCursor\u003e"
@@ -747,32 +1093,51 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.list_special_focus_messages",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "list_special_focus_messages"
+      }
     },
     "chat message list-mentions": {
       "agent_summary": "拉取 @我 的消息",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "@我的消息/at我的/提及我的",
-        "@我的消息/提及我的"
+        "@我的消息/提及我的",
+        "谁@了我/查看提及我的消息；查询@我的消息"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat message list-mentions --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-11T00:00:00+08:00\" --limit 50 --cursor 0",
         "dws chat message list-mentions --start \"2026-04-01T00:00:00+08:00\" --end \"2026-04-14T00:00:00+08:00\" --limit 20 --cursor 0"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.search_at_me_message",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "search_at_me_message"
+      }
     },
     "chat message list-pin-msg": {
       "agent_summary": "拉取会话中钉住的(pin)消息列表",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "use_when": [
+        "查看钉住的消息/Pin列表/钉住消息列表；拉取钉住消息列表"
+      ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat message list-pin-msg --open-conversation-id \u003copenConversationId\u003e",
         "dws chat message list-pin-msg --open-conversation-id \u003copenConversationId\u003e --size 50"
@@ -780,6 +1145,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.list_pin_messages",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     },
@@ -792,6 +1158,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat message list-topic-replies --group \u003copenconversation_id\u003e --topic-id \u003ctopicId\u003e",
         "dws chat message list-topic-replies --group \u003copenconversation_id\u003e --topic-id \u003ctopicId\u003e --time \"2025-03-01 00:00:00\" --limit 20"
@@ -800,7 +1169,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.list_topic_replies",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "list_topic_replies"
+      }
     },
     "chat message list-unread-conversations": {
       "agent_summary": "获取未读会话列表",
@@ -808,34 +1181,51 @@
       "use_when": [
         "2b. 拉取未读会话列表",
         "未读会话列表",
-        "未读消息会话/未读会话列表/我的未读会话"
+        "未读消息会话/未读会话列表/我的未读会话",
+        "未读消息会话/未读会话列表/我的未读会话；未读会话列表"
+      ],
+      "avoid_when": [
+        "谁看了这条消息/消息已读未读/查读状态；查询消息已读状态"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat message list-unread-conversations",
         "dws chat message list-unread-conversations --count 20"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.unread_message_conversation_list",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "unread_message_conversation_list"
+      }
     },
     "chat message query-send-status": {
       "agent_summary": "查询以当前用户的身份发送的消息的发送状态",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
-        "查询消息发送状态/消息发没发成功/消息状态"
+        "查询消息发送状态/消息发没发成功/消息状态",
+        "消息发没发成功/查询消息发送状态；查询消息发送状态"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat message query-send-status --open-task-id \u003copenTaskId\u003e"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.query_message_send_status",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     },
@@ -843,8 +1233,18 @@
       "agent_summary": "查询消息的已读/未读状态",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
-        "消息已读未读/谁看了消息/查读状态/消息读取状态"
+        "消息已读未读/谁看了消息/查读状态/消息读取状态",
+        "谁看了这条消息/消息已读未读/查读状态；查询消息已读状态"
       ],
+      "avoid_when": [
+        "DING接收状态/谁收到了DING；DING 接收状态",
+        "未读消息会话/未读会话列表/我的未读会话；未读会话列表"
+      ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat message read-status --conversation-id \u003copenConversationId\u003e --message-id \u003copenMessageId\u003e",
         "dws chat message read-status --conversation-id \u003copenConversationId\u003e --message-id \u003copenMessageId\u003e --user userId1,userId2"
@@ -852,6 +1252,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.query_msg_read_status",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     },
@@ -859,38 +1260,54 @@
       "agent_summary": "撤回用户发送的消息",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
-        "撤回我发的消息/撤回消息"
+        "撤回我发的消息/撤回消息",
+        "撤回我发的消息/撤回消息；撤回个人消息"
+      ],
+      "avoid_when": [
+        "撤回DING；撤回 DING 消息"
       ],
       "effect": "destructive",
       "effect_source": "agent-hint",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat message recall --conversation-id \u003copenConversationId\u003e --msg-id \u003copenMessageId\u003e"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.recall_message",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/destructive-safety.json"
       ]
     },
     "chat message recall-by-bot": {
+      "agent_summary": "机器人撤回消息（--group 群聊 / 不传为单聊）",
+      "agent_summary_source": "dws-command-surface-review",
       "use_when": [
         "撤回机器人发的消息/机器人撤回消息",
+        "机器人撤回消息（--group 群聊 / 不传为单聊）",
         "用同一个 robot-code + processQueryKey 撤回"
+      ],
+      "avoid_when": [
+        "撤回我发的消息/撤回消息；撤回个人消息"
       ],
       "effect": "destructive",
       "effect_source": "skill-explicit",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat message recall-by-bot --robot-code \u003crobot-code\u003e --group \u003copenconversation_id\u003e --keys \u003cprocess-query-key\u003e",
         "dws chat message recall-by-bot --robot-code \u003crobot-code\u003e --keys key1,key2"
       ],
+      "reviewed": true,
       "source_refs": [
         "skills/mono/SKILL.md",
-        "skills/mono/references/products/chat.md"
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/chat.md",
+        "skills/mono/schema-hints/catalog-completeness.json"
       ]
     },
     "chat message remove-emoji": {
@@ -899,6 +1316,11 @@
       "use_when": [
         "取消emoji回应/移除表情回应"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat message remove-emoji --conversation-id \u003copenConversationId\u003e --msg-id \u003copenMsgId\u003e --emoji \"赞\""
       ],
@@ -914,6 +1336,11 @@
       "use_when": [
         "取消文字表情回应/移除文字表情"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat message remove-text-emotion --conversation-id \u003copenConversationId\u003e --msg-id \u003copenMsgId\u003e --emotion-id \u003cemotionId\u003e --emotion-name \"赞\" --text \"nice\" --background-id \u003cbackgroundId\u003e"
       ],
@@ -924,57 +1351,84 @@
       ]
     },
     "chat message reply": {
-      "agent_summary": "以用户身份发消息，支持多种消息类型",
-      "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "agent_summary": "以当前用户身份引用一条已有消息并回复",
+      "agent_summary_source": "dws-command-surface-review",
       "use_when": [
-        "3. 以个人身份发送群消息",
-        "4. 以个人身份单聊（通过 userId）",
-        "4b. 以个人身份单聊（通过 openDingTalkId，三方应用等无法获取 userId 时使用）",
-        "再 dws drive info --file-id \u003cfileId\u003e --space-id \u003cspaceId\u003e 获取 dentryId",
-        "发单聊消息(以个人身份)",
-        "发群消息(以个人身份)",
-        "发送图片",
-        "幂等发送（24h 内相同 uuid 不重复投递）",
         "引用回复/回复消息/引用消息回复",
-        "用 Markdown 语法发送",
-        "用 Markdown 语法发送（mediaId 作为图片引用）",
-        "用 openDingTalkId 发单聊消息"
+        "引用消息回复/回复那条消息；引用回复消息",
+        "需要保留被回复消息的引用关系"
+      ],
+      "avoid_when": [
+        "不需要引用上下文的普通发送使用 chat message send"
+      ],
+      "prerequisites": [
+        "已取得会话 ID、原消息 ID 和原消息发送者 openDingTalkId"
+      ],
+      "tips": [
+        "发送前确认引用消息、接收会话和回复内容"
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
-        "dws chat message send --group \u003copenconversation_id\u003e --text \"hello\"",
-        "dws chat message send --user \u003cuserId\u003e --text \"请查收\""
+        "dws chat message reply --conversation-id \u003copenConversationId\u003e --ref-msg-id \u003copenMessageId\u003e --ref-sender \u003copenDingTalkId\u003e --text \"收到，马上处理\""
       ],
-      "reviewed": false,
+      "reviewed": true,
       "source_refs": [
-        "internal/cli/schema_mcp_metadata.json#tools.chat.send_personal_message",
-        "skills/mono/references/products/chat.md"
-      ]
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/chat.md",
+        "skills/mono/schema-hints/catalog-completeness.json",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "send_personal_message"
+      }
     },
     "chat message search": {
       "agent_summary": "按关键词搜索消息",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+      "avoid_when": [
+        "按发送者搜索/指定多个群搜索/多维度搜消息；多维度搜索消息",
+        "搜一下智能化方案/最近 OKR 相关邮件/最近发版相关消息；搜企业知识内容"
+      ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat message search --query \"changefree\" --start \"2026-04-01T00:00:00+08:00\" --end \"2026-04-15T00:00:00+08:00\" --limit 50 --cursor 0",
         "dws chat message search --query \"codereview\" --group \u003copenconversation_id\u003e --start \"2026-04-01T00:00:00+08:00\" --end \"2026-04-15T00:00:00+08:00\" --limit 100 --cursor 0"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.search_messages_by_keyword",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "search_messages_by_keyword"
+      }
     },
     "chat message search-advanced": {
       "agent_summary": "搜索消息，支持多种维度：时间范围、关键词、发送者、at我的、at指定用户、会话",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "多维度搜索/按发送者搜索/按人搜消息/指定多个群搜索/@我的消息搜索",
+        "按发送者搜索/指定多个群搜索/多维度搜消息；多维度搜索消息",
+        "搜一下消息里的changefree链接；消息搜索",
         "搜索消息/查找关键词/搜一下消息里的XX",
         "搜索消息里的关键词/包含XX的消息"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat message search-advanced --query \"周报\" --start \"2026-04-01T00:00:00+08:00\" --end \"2026-04-15T00:00:00+08:00\"",
         "dws chat message search-advanced --user \u003cuserId\u003e --start \"2026-04-01T00:00:00+08:00\" --end \"2026-04-15T00:00:00+08:00\""
@@ -982,10 +1436,69 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.search_messages",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     },
+    "chat message send": {
+      "agent_summary": "以当前用户身份向群聊或单聊发送文本、Markdown、图片或本地文件",
+      "agent_summary_source": "dws-command-surface-review",
+      "use_when": [
+        "3. 以个人身份发送群消息",
+        "4. 以个人身份单聊（通过 userId）",
+        "4b. 以个人身份单聊（通过 openDingTalkId，三方应用等无法获取 userId 时使用）",
+        "使用当前用户身份发送图片或本地文件",
+        "再 dws drive info --file-id \u003cfileId\u003e --space-id \u003cspaceId\u003e 获取 dentryId",
+        "单聊（推荐 --open-dingtalk-id）",
+        "发单聊消息(以个人身份)",
+        "发群消息(以个人身份)",
+        "发送图片",
+        "发送普通群消息或单聊消息",
+        "幂等发送（24h 内相同 uuid 不重复投递）",
+        "用 Markdown 语法发送",
+        "用 Markdown 语法发送（mediaId 作为图片引用）",
+        "用 openDingTalkId 发单聊消息",
+        "给机器人发单聊/给机器人发消息/跟机器人聊天；给机器人发单聊消息",
+        "群聊",
+        "通知群里的人都来开会；个人身份群发"
+      ],
+      "avoid_when": [
+        "使用机器人身份发送时选择 send-by-bot 或 send-by-webhook",
+        "发DING/DING通知；发送 DING 消息",
+        "发卡片消息/推送流式卡片；创建并推送流式卡片",
+        "引用回复已有消息时使用 chat message reply",
+        "引用消息回复/回复那条消息；引用回复消息",
+        "让机器人每天推送日报；机器人定时推送",
+        "转发消息/把消息转到另一个群；转发单条消息"
+      ],
+      "tips": [
+        "发送前确认目标和内容；文件消息使用 --msg-type file --file-path",
+        "需要 24 小时内防重复投递时提供稳定的 --uuid"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "examples": [
+        "dws chat message send --group \u003copenconversation_id\u003e --text \"hello\"",
+        "dws chat message send --user \u003cuserId\u003e --text \"请查收\""
+      ],
+      "reviewed": true,
+      "source_refs": [
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/chat.md",
+        "skills/mono/schema-hints/catalog-completeness.json",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "send_personal_message"
+      }
+    },
     "chat message send-by-bot": {
+      "agent_summary": "机器人发送消息（--group 群聊 / --users 单聊）",
+      "agent_summary_source": "dws-command-surface-review",
       "use_when": [
         "5. 机器人发群消息（Markdown）",
         "6. 机器人单聊发消息",
@@ -993,24 +1506,31 @@
         "尝试发送，若报\"机器人不存在\"则执行 Step 3",
         "或者用 openDingtalkId 发送并 @",
         "机器人发消息/机器人群发",
+        "机器人发送消息（--group 群聊 / --users 单聊）",
         "用 userId 发送并 @（注意 text 中 @userId）",
         "用机器人发消息 — 提取返回中的 processQueryKey",
         "给张三发一条机器人单聊消息；机器人单聊",
-        "让机器人在群里发个通知；机器人群发",
+        "让机器人每天推送日报；机器人定时推送",
         "重新发送"
       ],
       "avoid_when": [
-        "通过 Webhook 发告警到群里；Webhook 告警"
+        "CPU 超过 90% 自动告警；Webhook 告警",
+        "通知群里的人都来开会；个人身份群发"
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat message send-by-bot --robot-code \u003crobot-code\u003e --group \u003copenconversation_id\u003e --title \"日报\" --text \"## 今日完成...\"",
         "dws chat message send-by-bot --robot-code \u003crobot-code\u003e --users userId1,userId2 --title \"提醒\" --text \"请提交周报\""
       ],
+      "reviewed": true,
       "source_refs": [
         "skills/mono/references/intent-guide.md",
-        "skills/mono/references/products/chat.md"
+        "skills/mono/references/products/chat.md",
+        "skills/mono/schema-hints/catalog-completeness.json"
       ]
     },
     "chat message send-by-webhook": {
@@ -1018,14 +1538,14 @@
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "7. Webhook 发告警",
-        "Webhook 发消息/告警消息",
-        "通过 Webhook 发告警到群里；Webhook 告警"
-      ],
-      "avoid_when": [
-        "让机器人在群里发个通知；机器人群发"
+        "CPU 超过 90% 自动告警；Webhook 告警",
+        "Webhook 发消息/告警消息"
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat message send-by-webhook --token \u003cwebhook-token\u003e --title \"告警\" --text \"CPU 超 90% @10\" --at-all",
         "dws chat message send-by-webhook --token \u003cwebhook-token\u003e --title \"test\" --text \"hi @118785\" --at-users 118785"
@@ -1034,14 +1554,28 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.send_message_by_custom_robot",
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
-        "skills/mono/schema-hints/imported/wukong.json"
-      ]
+        "skills/mono/schema-hints/imported/wukong.json",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "bot",
+        "rpc_name": "send_message_by_custom_robot"
+      }
     },
     "chat message send-card": {
       "agent_summary": "创建并推送流式卡片",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "use_when": [
+        "发卡片消息/推送流式卡片；创建并推送流式卡片"
+      ],
+      "avoid_when": [
+        "更新卡片/流式更新卡片；流式更新卡片内容"
+      ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat message send-card --group \u003copenConversationId\u003e",
         "dws chat message send-card --receiver \u003copenDingTalkId\u003e"
@@ -1049,38 +1583,66 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.create_and_send_card",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     },
     "chat message set-pin-msg": {
       "agent_summary": "设置钉住(pin)某条消息",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "use_when": [
+        "钉住消息/Pin消息/置顶消息到会话；钉住消息"
+      ],
+      "avoid_when": [
+        "取消钉住/Unpin消息；取消钉住消息"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat message set-pin-msg --open-conversation-id \u003copenConversationId\u003e --msg-id \u003copenMessageId\u003e"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.set_pin_message",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     },
     "chat message unset-pin-msg": {
       "agent_summary": "取消某条钉住的(pin)消息",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "use_when": [
+        "取消钉住/Unpin消息；取消钉住消息"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat message unset-pin-msg --open-conversation-id \u003copenConversationId\u003e --msg-id \u003copenMessageId\u003e"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.unset_pin_message",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     },
     "chat message update-card": {
       "agent_summary": "流式更新卡片内容",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
+      "use_when": [
+        "更新卡片/流式更新卡片；流式更新卡片内容"
+      ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat message update-card --biz-id \u003cbizId\u003e --content \"更新的卡片内容\" --flow-status 2",
         "dws chat message update-card --biz-id \u003cbizId\u003e --content \"最终内容\" --flow-status 3"
@@ -1088,6 +1650,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.update_streaming_card",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     },
@@ -1097,6 +1660,16 @@
       "use_when": [
         "免打扰/消息免打扰/静音/开启免打扰/关闭免打扰"
       ],
+      "avoid_when": [
+        "关闭@所有人通知/屏蔽@all/不接收@所有人；关闭 @所有人提醒",
+        "关闭红包通知/屏蔽红包/不接收红包提醒；关闭红包提醒",
+        "隐藏会话/隐藏群聊/隐藏对话；隐藏会话"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws chat mute --conversation-id \u003copenConversationId\u003e",
         "dws chat mute --conversation-id \u003copenConversationId\u003e --off"
@@ -1104,6 +1677,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.update_notification_off",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     },
@@ -1114,44 +1688,80 @@
         "1. 搜索群 — 提取 openconversation_id",
         "搜索群/找群"
       ],
+      "avoid_when": [
+        "我创建的群/我管理的群/我是群主的群/我当管理员的群；拉取我创建/管理的群",
+        "我和风雷的共同群/我们都在哪些群；搜索共同群",
+        "搜一下消息里的changefree链接；消息搜索",
+        "根据群号查群信息/群号转openConversationId；群号查群聊信息"
+      ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat search --query \"项目冲刺\"",
         "dws chat search --query \"项目冲刺\" --limit 20 --cursor 0"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.search_groups_by_keyword",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "search_groups_by_keyword"
+      }
     },
     "chat search-common": {
       "agent_summary": "搜索共同群（指定昵称列表，查询共同所在的群聊）",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
         "我和XX的共同群/我们都在哪些群/查共同群",
-        "我和某人的共同群"
+        "我和某人的共同群",
+        "我和风雷的共同群/我们都在哪些群；搜索共同群"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws chat search-common --nicks \"风雷,山乔\" --limit 20 --cursor 0",
         "dws chat search-common --nicks \"天鸡,乐函\" --match-mode OR --limit 20 --cursor 0"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.chat.prod.json#chat.search_common_groups",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "chat",
+        "rpc_name": "search_common_groups"
+      }
     },
     "chat set-top": {
       "agent_summary": "会话置顶/取消置顶",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
-        "置顶会话/取消置顶/会话置顶"
+        "置顶会话/取消置顶/会话置顶",
+        "置顶会话/取消置顶；设置/取消会话置顶"
       ],
+      "avoid_when": [
+        "置顶某条消息/把这条消息置顶；置顶消息",
+        "钉住消息/Pin消息/置顶消息到会话；钉住消息"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.chat.set_top_conversation",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ]
     }

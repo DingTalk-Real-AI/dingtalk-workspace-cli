@@ -1,0 +1,586 @@
+{
+  "version": 1,
+  "bindings": {
+    "aisearch.search_enterprise": {
+      "types": "searchTypes"
+    },
+    "aisearch.search_enterprise_behavior": {
+      "types": "searchTypes"
+    },
+    "calendar.add_attachments": {
+      "event": "eventId",
+      "files": "attachments"
+    },
+    "calendar.add_meeting_room": {
+      "event": "eventId",
+      "rooms": "roomIds"
+    },
+    "calendar.create_calendar_event": {
+      "desc": "description",
+      "end": "endDateTime",
+      "open-dingtalk-ids": "openDingTalkIds",
+      "recurrence-count": "recurrence.range.numberOfOccurrences",
+      "recurrence-day-of-month": "recurrence.pattern.dayOfMonth",
+      "recurrence-days-of-week": "recurrence.pattern.daysOfWeek",
+      "recurrence-end-date": "recurrence.range.endDate",
+      "recurrence-first-day-of-week": "recurrence.pattern.firstDayOfWeek",
+      "recurrence-index": "recurrence.pattern.index",
+      "recurrence-interval": "recurrence.pattern.interval",
+      "recurrence-range-type": "recurrence.range.type",
+      "recurrence-type": "recurrence.pattern.type",
+      "rich-text-desc": "richTextDescription",
+      "rooms": "roomIds",
+      "start": "startDateTime",
+      "timezone": "timeZone",
+      "title": "summary"
+    },
+    "calendar.delete_calendar_event": {
+      "id": "eventId"
+    },
+    "calendar.delete_meeting_room": {
+      "event": "eventId",
+      "rooms": "roomIds"
+    },
+    "calendar.get_calendar": {
+      "id": "calendarId"
+    },
+    "calendar.get_calendar_detail": {
+      "id": "eventId"
+    },
+    "calendar.list_calendar_events": {
+      "end": "endTime",
+      "start": "startTime"
+    },
+    "calendar.list_suggested_event_times": {
+      "duration": "durationMinutes",
+      "timezone": "timeZone",
+      "users": "attendeeUserIds"
+    },
+    "calendar.query_available_meeting_room": {
+      "end": "endTime",
+      "start": "startTime"
+    },
+    "calendar.query_busy_status": {
+      "end": "endTime",
+      "rooms": "roomIds",
+      "start": "startTime",
+      "users": "userIds"
+    },
+    "calendar.respond": {
+      "id": "eventId",
+      "status": "responseStatus"
+    },
+    "calendar.search_calendar": {
+      "query": "calendarName"
+    },
+    "calendar.update_calendar_event": {
+      "desc": "description",
+      "end": "endDateTime",
+      "id": "eventId",
+      "recurrence-count": "recurrence.range.numberOfOccurrences",
+      "recurrence-day-of-month": "recurrence.pattern.dayOfMonth",
+      "recurrence-days-of-week": "recurrence.pattern.daysOfWeek",
+      "recurrence-end-date": "recurrence.range.endDate",
+      "recurrence-first-day-of-week": "recurrence.pattern.firstDayOfWeek",
+      "recurrence-index": "recurrence.pattern.index",
+      "recurrence-interval": "recurrence.pattern.interval",
+      "recurrence-range-type": "recurrence.range.type",
+      "recurrence-type": "recurrence.pattern.type",
+      "rich-text-desc": "richTextDescription",
+      "start": "startDateTime",
+      "timezone": "timeZone",
+      "title": "summary"
+    },
+    "chat.add_custom_group_role": {
+      "group": "openConversationId"
+    },
+    "chat.add_emoji_reaction": {
+      "emoji": "emojiName",
+      "group": "openConversationId",
+      "msg-id": "openMsgId"
+    },
+    "chat.add_group_member": {
+      "id": "openconversation_id",
+      "users": "userId"
+    },
+    "chat.add_text_emotion": {
+      "group": "openConversationId",
+      "msg-id": "openMsgId"
+    },
+    "chat.combine_forward_messages": {
+      "dest-conversation-id": "destOpenCid",
+      "msg-ids": "srcOpenMessageIds",
+      "src-conversation-id": "srcOpenCid"
+    },
+    "chat.create_and_send_card": {
+      "group": "openConversationId",
+      "receiver": "receiverOpenDingTalkId"
+    },
+    "chat.dismiss_group": {
+      "group": "openConversationId"
+    },
+    "chat.forward_message": {
+      "dest-conversation-id": "destOpenCid",
+      "msg-id": "srcOpenMessageId",
+      "src-conversation-id": "srcOpenCid"
+    },
+    "chat.forward_topic": {
+      "dest-conversation-id": "destOpenConversationId",
+      "src-conversation-id": "srcOpenConversationId",
+      "src-msg-id": "srcOpenMessageId",
+      "src-thread-id": "srcOpenConvThreadId"
+    },
+    "chat.get_conversation_info": {
+      "group": "openConversationId",
+      "open-dingtalk-id": "openDingTalkId"
+    },
+    "chat.get_group_invite_url": {
+      "group": "openConversationId"
+    },
+    "chat.get_group_members": {
+      "id": "openconversation_id"
+    },
+    "chat.list_conversation_message_v2": {
+      "group": "openconversation_id"
+    },
+    "chat.list_custom_group_roles": {
+      "group": "openConversationId"
+    },
+    "chat.list_individual_chat_message": {
+      "open-dingtalk-id": "openDingTalkId",
+      "user": "userId"
+    },
+    "chat.list_messages_by_ids": {
+      "msg-ids": "openMsgIds"
+    },
+    "chat.list_owned_or_admin_groups": {
+      "role": "roleFilter"
+    },
+    "chat.list_pin_messages": {
+      "size": "count"
+    },
+    "chat.list_topic_replies": {
+      "group": "openconversationId",
+      "limit": "pageSize",
+      "time": "startTime"
+    },
+    "chat.query_custom_user_roles": {
+      "group": "openConversationId",
+      "user": "openDingTalkId"
+    },
+    "chat.query_msg_read_status": {
+      "conversation-id": "openConversationId",
+      "message-id": "openMessageId",
+      "target-open-dingtalk-ids": "targetOpenDingTalkIds"
+    },
+    "chat.quit_group": {
+      "group": "openConversationId"
+    },
+    "chat.recall_message": {
+      "conversation-id": "openConversationId",
+      "msg-id": "openMessageId"
+    },
+    "chat.remove_custom_group_role": {
+      "group": "openConversationId",
+      "role-id": "openRoleId"
+    },
+    "chat.remove_custom_user_roles": {
+      "group": "openConversationId",
+      "role-ids": "openRoleIds",
+      "user": "openDingTalkId"
+    },
+    "chat.remove_emoji_reaction": {
+      "emoji": "emojiName",
+      "group": "openConversationId",
+      "msg-id": "openMsgId"
+    },
+    "chat.remove_group_member": {
+      "id": "openConversationId",
+      "users": "userIdList"
+    },
+    "chat.remove_text_emotion": {
+      "group": "openConversationId",
+      "msg-id": "openMsgId"
+    },
+    "chat.search_at_me_message": {
+      "end": "endTime",
+      "group": "openConversationId",
+      "start": "startTime"
+    },
+    "chat.search_groups": {
+      "query": "keyword"
+    },
+    "chat.search_messages": {
+      "at-ids": "atOpenDingTakIds",
+      "conversation-ids": "openConversationIds",
+      "end": "endTime",
+      "query": "keyword",
+      "sender-ids": "senderOpenDingTakIds",
+      "start": "startTime"
+    },
+    "chat.search_messages_by_keyword": {
+      "end": "endTime",
+      "group": "openConversationId",
+      "query": "keyword",
+      "start": "startTime"
+    },
+    "chat.search_messages_by_sender": {
+      "end": "endTime",
+      "sender-open-dingtalk-id": "senderOpenDingTalkId",
+      "start": "startTime"
+    },
+    "chat.search_messages_by_time_range": {
+      "end": "endTime",
+      "start": "startTime"
+    },
+    "chat.set_custom_user_roles": {
+      "group": "openConversationId",
+      "role-ids": "openRoleIds",
+      "user": "openDingTalkId"
+    },
+    "chat.set_group_member_mute_list": {
+      "group": "openConversationId",
+      "off": "mute",
+      "users": "openDingTalkIds"
+    },
+    "chat.set_group_mute": {
+      "group": "openConversationId",
+      "off": "mute"
+    },
+    "chat.set_pin_message": {
+      "msg-id": "openMessageId"
+    },
+    "chat.set_top_conversation": {
+      "conversation-id": "openConversationId",
+      "off": "top"
+    },
+    "chat.transfer_group_owner": {
+      "group": "openConversationId",
+      "new-owner": "newOwnerOpenDingTalkId"
+    },
+    "chat.unset_pin_message": {
+      "msg-id": "openMessageId"
+    },
+    "chat.update_conv_member_roles": {
+      "group": "openConversationId",
+      "off": "admin",
+      "users": "openDingTalkIds"
+    },
+    "chat.update_custom_group_role": {
+      "group": "openConversationId",
+      "role-id": "openRoleId"
+    },
+    "chat.update_group_icon": {
+      "group": "openConversationId"
+    },
+    "chat.update_group_name": {
+      "id": "openconversation_id",
+      "name": "group_name"
+    },
+    "chat.update_group_settings": {
+      "group": "openConversationId"
+    },
+    "chat.update_notification_off": {
+      "conversation-id": "openConversationId",
+      "off": "mute"
+    },
+    "chat.update_show_history_msg_option": {
+      "group": "openConversationId"
+    },
+    "chat.update_streaming_card": {
+      "content": "msgContent"
+    },
+    "conference.ai_share_desktop": {
+      "capture-speaker": "capture_speaker"
+    },
+    "contact.get_authorized_emp_rosterInfo": {
+      "fields": "fieldCodeList"
+    },
+    "contact.get_user_info_by_user_ids": {
+      "ids": "user_id_list"
+    },
+    "contact.query_dismission_employee_list": {
+      "depts": "searchVO.depts",
+      "end": "searchVO.endDate",
+      "hide-partner": "searchVO.hidePartner",
+      "hide-retirement": "searchVO.hideRetirement",
+      "limit": "pageSize",
+      "name": "searchVO.empName",
+      "page": "pageNum",
+      "start": "searchVO.startDate"
+    },
+    "contact.search_contact_by_key_word": {
+      "query": "keyword"
+    },
+    "ding.recall_ding_message": {
+      "id": "openDingId"
+    },
+    "ding.send_ding_message": {
+      "type": "remindType",
+      "users": "receiverUserIdList"
+    },
+    "mail.batch_move_message": {
+      "folder": "destinationFolderId"
+    },
+    "mail.create_draft": {
+      "attachment": "attachment_local",
+      "cc": "ccRecipients",
+      "content": "body",
+      "inline-attachment": "inlineAttachment_local",
+      "to": "toRecipients"
+    },
+    "mail.create_forward_draft": {
+      "attachment": "attachment_local",
+      "content": "body",
+      "id": "messageId",
+      "inline-attachment": "inlineAttachment_local",
+      "to": "toRecipients"
+    },
+    "mail.create_reply_draft": {
+      "attachment": "attachment_local",
+      "content": "body",
+      "id": "messageId",
+      "inline-attachment": "inlineAttachment_local"
+    },
+    "mail.create_replyall_draft": {
+      "attachment": "attachment_local",
+      "content": "body",
+      "id": "messageId",
+      "inline-attachment": "inlineAttachment_local",
+      "to": "toRecipients"
+    },
+    "mail.create_user_message_template": {
+      "cc": "ccRecipients",
+      "content": "body",
+      "to": "toRecipients"
+    },
+    "mail.get_email_by_message_id": {
+      "id": "messageId"
+    },
+    "mail.get_thread": {
+      "id": "conversationId"
+    },
+    "mail.list_folders": {
+      "folder": "folderId"
+    },
+    "mail.list_mail_attachments": {
+      "id": "messageId"
+    },
+    "mail.list_user_mail_contacts": {
+      "limit": "size"
+    },
+    "mail.list_user_message_templates": {
+      "limit": "size"
+    },
+    "mail.search_emails": {
+      "limit": "size"
+    },
+    "mail.search_mail_users": {
+      "limit": "size"
+    },
+    "mail.send_draft": {
+      "from": "email",
+      "id": "messageId"
+    },
+    "mail.send_email": {
+      "attachment": "attachment_local",
+      "cc": "ccRecipients",
+      "content": "body",
+      "inline-attachment": "inlineAttachment_local",
+      "to": "toRecipients"
+    },
+    "mail.update_draft": {
+      "attachment": "attachment_local",
+      "cc": "ccRecipients",
+      "content": "body",
+      "inline-attachment": "inlineAttachment_local",
+      "to": "toRecipients"
+    },
+    "mail.update_user_message_template": {
+      "cc": "ccRecipients",
+      "content": "body",
+      "to": "toRecipients"
+    },
+    "minutes.add_member_permission": {
+      "cover": "coverPermission",
+      "ids": "uuids",
+      "policy": "policyId",
+      "sub-resources": "roleSubResourceIds"
+    },
+    "minutes.add_personal_hot_word": {
+      "words": "hotWordList"
+    },
+    "minutes.batch_get_minutes_details": {
+      "ids": "requestBody.taskUuids"
+    },
+    "minutes.create_mind_graph": {
+      "id": "taskUuid"
+    },
+    "minutes.create_speaker_summary": {
+      "ids": "uuids"
+    },
+    "minutes.create_upload_session": {
+      "enable-message-card": "minutesOption.enableMessageCard",
+      "input-language": "minutesOption.inputLanguage",
+      "template-id": "minutesOption.templateId"
+    },
+    "minutes.get_minutes_ai_summary": {
+      "id": "taskUuid"
+    },
+    "minutes.get_minutes_basic_info": {
+      "id": "taskUuid"
+    },
+    "minutes.get_minutes_keywords": {
+      "id": "taskUuid"
+    },
+    "minutes.get_minutes_transcription": {
+      "id": "taskUuid"
+    },
+    "minutes.get_speaker_summary": {
+      "ids": "uuids"
+    },
+    "minutes.list_minutes_todos": {
+      "id": "taskUuid"
+    },
+    "minutes.query_mind_graph_status": {
+      "id": "taskUuid"
+    },
+    "minutes.query_minutes_audio_url": {
+      "id": "taskUuid"
+    },
+    "minutes.query_minutes_by_tag_id": {
+      "limit": "size"
+    },
+    "minutes.record_pause": {
+      "id": "uuid"
+    },
+    "minutes.record_resume": {
+      "id": "uuid"
+    },
+    "minutes.record_stop": {
+      "id": "uuid"
+    },
+    "minutes.remove_member_permission": {
+      "ids": "uuids"
+    },
+    "minutes.replace_minutes_text": {
+      "id": "taskUuid",
+      "replace": "replacedText",
+      "search": "originalText"
+    },
+    "minutes.replace_speaker": {
+      "from": "speakerNick",
+      "id": "taskUuid",
+      "to": "targetNickName"
+    },
+    "minutes.update_minutes_summary": {
+      "content": "summaryText",
+      "id": "taskUuid"
+    },
+    "minutes.update_minutes_title": {
+      "id": "taskUuid"
+    },
+    "oa.approve_processInstance": {
+      "instance-id": "processInstanceId"
+    },
+    "oa.dingflow_comments": {
+      "instance-id": "processInstanceId"
+    },
+    "oa.get_done_tasks": {
+      "limit": "pageSize",
+      "page": "pageNumber"
+    },
+    "oa.get_noticed_instances": {
+      "limit": "pageSize",
+      "page": "pageNumber"
+    },
+    "oa.get_processInstance_detail": {
+      "instance-id": "processInstanceId"
+    },
+    "oa.get_processInstance_records": {
+      "instance-id": "processInstanceId"
+    },
+    "oa.get_submitted_instances": {
+      "limit": "pageSize",
+      "page": "pageNumber"
+    },
+    "oa.list_initiated_instances": {
+      "end": "endTime",
+      "start": "startTime"
+    },
+    "oa.list_pending_approvals": {
+      "end": "endTime",
+      "page": "pageNum",
+      "start": "starTime"
+    },
+    "oa.list_pending_tasks": {
+      "instance-id": "processInstanceId"
+    },
+    "oa.oa_cc_noticer": {
+      "instance-id": "processInstanceId"
+    },
+    "oa.reject_processInstance": {
+      "instance-id": "processInstanceId"
+    },
+    "oa.revoke_processInstance": {
+      "instance-id": "processInstanceId"
+    },
+    "report.get_received_report_list": {
+      "end": "endTime",
+      "start": "startTime"
+    },
+    "report.get_report_entry_details": {
+      "report-id": "report_id"
+    },
+    "report.get_report_statistics_by_id": {
+      "report-id": "report_id"
+    },
+    "report.get_send_report_list": {
+      "end": "endTime",
+      "modified-end": "modifiedEndTime",
+      "modified-start": "modifiedStartTime",
+      "start": "startTime",
+      "template-name": "report_template_name"
+    },
+    "report.get_template_details_by_name": {
+      "name": "report_template_name"
+    },
+    "todo.add_task_executors": {
+      "executors": "todoExecutorsAddRequest.executorIds",
+      "task-id": "todoExecutorsAddRequest.taskId"
+    },
+    "todo.add_task_participants": {
+      "participants": "todoParticipantsAddRequest.participantIds",
+      "task-id": "todoParticipantsAddRequest.taskId"
+    },
+    "todo.add_todo_reminder": {
+      "base-time": "todoReminderAddRequest.baseTime",
+      "due-date-offset": "todoReminderAddRequest.dueDateOffset",
+      "reminder-time-stamp": "todoReminderAddRequest.reminderTimeStamp",
+      "task-id": "todoReminderAddRequest.taskId"
+    },
+    "todo.create_personal_sub_todo": {
+      "due": "PersonalTodoCreateVO.dueTime",
+      "executors": "PersonalTodoCreateVO.executorIds",
+      "parent-id": "PersonalTodoCreateVO.parentId",
+      "priority": "PersonalTodoCreateVO.priority",
+      "recurrence": "PersonalTodoCreateVO.recurrence",
+      "title": "PersonalTodoCreateVO.subject"
+    },
+    "todo.list_todo_comment": {
+      "size": "pageSize"
+    },
+    "todo.remove_task_executors": {
+      "executors": "todoExecutorsRemoveRequest.executorIds",
+      "task-id": "todoExecutorsRemoveRequest.taskId"
+    },
+    "todo.remove_task_participants": {
+      "participants": "todoParticipantsRemoveRequest.participantIds",
+      "task-id": "todoParticipantsRemoveRequest.taskId"
+    },
+    "todo.reset_todo_reminder": {
+      "reminder-rules": "todoReminderUpdateRequest.reminderRules",
+      "task-id": "todoReminderUpdateRequest.taskId"
+    }
+  }
+}

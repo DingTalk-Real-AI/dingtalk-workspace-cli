@@ -6,10 +6,15 @@
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "4. 查看部门详情（部门ID、名称、人数）",
+        "研发部有多少人；查部门人数",
+        "研发部的详细信息/部门信息；查部门详情",
         "部门详情/部门信息/部门多少人"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws contact dept get-info --dept 12345",
         "dws contact dept get-info --dept \u003cdeptId\u003e --format json"
@@ -17,6 +22,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.contact.get_dept_info_by_dept_id",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/contact.md"
       ]
     },
@@ -29,6 +35,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws contact dept list-children --dept 1           # 枚举根部门下的一级部门",
         "dws contact dept list-children --dept 12345       # 枚举指定部门的直属子部门"
@@ -46,17 +55,29 @@
         "6. 查看部门成员",
         "部门有谁/部门成员/人员名单"
       ],
+      "avoid_when": [
+        "研发部有多少人；查部门人数",
+        "研发部的详细信息/部门信息；查部门详情"
+      ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws contact dept list-members --depts 12345,67890",
         "dws contact dept list-members --depts 1              # 根部门"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.get_dept_members_by_deptId",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/contact.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "contact",
+        "rpc_name": "get_dept_members_by_deptId"
+      }
     },
     "contact dept search": {
       "agent_summary": "按关键词搜索部门",
@@ -67,6 +88,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws contact dept search --query \"技术部\"",
         "dws contact dept search --query \"技术部\" --format json"
@@ -75,7 +99,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.search_dept_by_keyword",
         "skills/mono/references/products/contact.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "contact",
+        "rpc_name": "search_dept_by_keyword"
+      }
     },
     "contact relation list-my-followings": {
       "agent_summary": "获取我的特别关注列表",
@@ -85,6 +113,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.contact.list_my_followings",
@@ -101,6 +132,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws contact user dismission search",
         "dws contact user dismission search --name \"张三\""
@@ -119,6 +153,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws contact user get --ids userId1,userId2",
         "dws contact user get --ids userId1,userId2  # 查询 userId: dws contact user search --keyword \"姓名\""
@@ -127,7 +164,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.get_user_info_by_user_ids",
         "skills/mono/references/products/contact.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "contact",
+        "rpc_name": "get_user_info_by_user_ids"
+      }
     },
     "contact user get-self": {
       "agent_summary": "获取当前用户信息",
@@ -138,6 +179,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws contact user get-self",
         "dws contact user get-self --format json"
@@ -146,7 +190,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.get_current_user_profile",
         "skills/mono/references/products/contact.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "contact",
+        "rpc_name": "get_current_user_profile"
+      }
     },
     "contact user profile fields": {
       "agent_summary": "查询花名册有权限的字段列表，根据当前用户查询花名册有权限的字段列表",
@@ -155,6 +203,11 @@
         "10. 查询花名册有权限的字段列表",
         "花名册字段/有哪些字段/字段列表"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws contact user profile fields"
       ],
@@ -174,6 +227,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws contact user profile get --staff-id STAFF_ID",
         "dws contact user profile get --staff-id STAFF_ID --fields fieldCode1,fieldCode2"
@@ -190,21 +246,37 @@
       "use_when": [
         "2. 按名字搜索同事或好友 — 可提取 同事的userId，或好友的openDingTalkId"
       ],
+      "avoid_when": [
+        "找一下张三/搜同事/找人；AI搜人(首选)"
+      ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws contact user search --query \"张三\"",
         "dws contact user search --query \"张三\" --format json"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.search_contact_by_key_word",
+        "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/contact.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "contact",
+        "rpc_name": "search_contact_by_key_word"
+      }
     },
     "contact user search-mobile": {
       "agent_summary": "按手机号搜索用户",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws contact user search-mobile --mobile 13800138000"
       ],
@@ -212,7 +284,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.contact.prod.json#contact.search_user_by_mobile",
         "skills/mono/references/products/contact.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "contact",
+        "rpc_name": "search_user_by_mobile"
+      }
     }
   }
 }

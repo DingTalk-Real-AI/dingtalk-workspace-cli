@@ -15,6 +15,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws report entry get --report-id \u003creportId\u003e --format json",
         "dws report entry get --report-id \u003creportId\u003e"
@@ -23,7 +26,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_report_entry_details",
         "skills/mono/references/products/report.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "get_report_entry_details"
+      }
     },
     "report entry stats": {
       "agent_summary": "读取单份日报的已读统计",
@@ -32,6 +39,11 @@
         "5. 查看日报已读统计",
         "日志统计/已读统计"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws report entry stats --report-id \u003creportId\u003e",
         "dws report entry stats --report-id \u003creportId\u003e --format json"
@@ -40,7 +52,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_report_statistics_by_id",
         "skills/mono/references/products/report.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "get_report_statistics_by_id"
+      }
     },
     "report entry submit": {
       "agent_summary": "提交一份新日报（按模版）",
@@ -52,6 +68,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws report entry submit --template-id \u003ctemplateId\u003e --contents-file ./report.json --format json",
         "dws report entry submit --template-id \u003ctemplateId\u003e --contents '[{\"key\":\"今日完成\",\"sort\":\"0\",\"content\":\"完成了需求评审\",\"contentType\":\"markdown\",\"type\":\"1\"}]' --format json"
@@ -60,7 +79,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.create_report",
         "skills/mono/references/products/report.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "create_report"
+      }
     },
     "report inbox list": {
       "agent_summary": "列出我收到的日报",
@@ -73,6 +96,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws report inbox list --start-date 2026-05-04 --end-date 2026-05-11 --format json",
         "dws report inbox list --date 2026-05-11 --format json"
@@ -81,7 +107,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_received_report_list",
         "skills/mono/references/products/report.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "get_received_report_list"
+      }
     },
     "report outbox list": {
       "agent_summary": "列出我发出的日报",
@@ -93,6 +123,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws report outbox list --cursor 0 --size 20 --format json",
         "dws report outbox list --cursor 0 --size 20"
@@ -101,7 +134,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_send_report_list",
         "skills/mono/references/products/report.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "get_send_report_list"
+      }
     },
     "report template get": {
       "agent_summary": "读取单个日志模版的字段定义",
@@ -111,6 +148,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws report template get --name \u003ctemplateName\u003e",
         "dws report template get --name \"日报\" --format json"
@@ -119,7 +159,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_template_details_by_name",
         "skills/mono/references/products/report.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "get_template_details_by_name"
+      }
     },
     "report template list": {
       "agent_summary": "获取当前用户可用的日志模版列表",
@@ -131,6 +175,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws report template list",
         "dws report template list --format json"
@@ -139,7 +186,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.report.prod.json#report.get_available_report_templates",
         "skills/mono/references/products/report.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "report",
+        "rpc_name": "get_available_report_templates"
+      }
     }
   }
 }

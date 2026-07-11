@@ -55,21 +55,22 @@ type agentProductMetadata struct {
 }
 
 type agentToolMetadata struct {
-	AgentSummary       string   `json:"agent_summary,omitempty"`
-	AgentSummarySource string   `json:"agent_summary_source,omitempty"`
-	UseWhen            []string `json:"use_when,omitempty"`
-	AvoidWhen          []string `json:"avoid_when,omitempty"`
-	Prerequisites      []string `json:"prerequisites,omitempty"`
-	Tips               []string `json:"tips,omitempty"`
-	Effect             string   `json:"effect,omitempty"`
-	EffectSource       string   `json:"effect_source,omitempty"`
-	Risk               string   `json:"risk,omitempty"`
-	Confirmation       string   `json:"confirmation,omitempty"`
-	Idempotency        string   `json:"idempotency,omitempty"`
-	WorkflowRefs       []string `json:"workflow_refs,omitempty"`
-	Examples           []string `json:"examples,omitempty"`
-	Reviewed           *bool    `json:"reviewed,omitempty"`
-	SourceRefs         []string `json:"source_refs,omitempty"`
+	AgentSummary       string                   `json:"agent_summary,omitempty"`
+	AgentSummarySource string                   `json:"agent_summary_source,omitempty"`
+	UseWhen            []string                 `json:"use_when,omitempty"`
+	AvoidWhen          []string                 `json:"avoid_when,omitempty"`
+	Prerequisites      []string                 `json:"prerequisites,omitempty"`
+	Tips               []string                 `json:"tips,omitempty"`
+	Effect             string                   `json:"effect,omitempty"`
+	EffectSource       string                   `json:"effect_source,omitempty"`
+	Risk               string                   `json:"risk,omitempty"`
+	Confirmation       string                   `json:"confirmation,omitempty"`
+	Idempotency        string                   `json:"idempotency,omitempty"`
+	WorkflowRefs       []string                 `json:"workflow_refs,omitempty"`
+	Examples           []string                 `json:"examples,omitempty"`
+	Reviewed           *bool                    `json:"reviewed,omitempty"`
+	SourceRefs         []string                 `json:"source_refs,omitempty"`
+	InterfaceRef       *embeddedMCPInterfaceRef `json:"interface_ref,omitempty"`
 }
 
 type embeddedAgentMetadataDomain struct {
@@ -177,6 +178,16 @@ func applyAgentToolMetadata(target map[string]any, includeExamples bool, paths .
 	setStringSlice(target, "workflow_refs", metadata.WorkflowRefs)
 	if metadata.Reviewed != nil {
 		target["reviewed"] = *metadata.Reviewed
+	}
+	if metadata.InterfaceRef != nil {
+		productID := strings.TrimSpace(metadata.InterfaceRef.ProductID)
+		rpcName := strings.TrimSpace(metadata.InterfaceRef.RPCName)
+		if productID != "" && rpcName != "" {
+			target["interface_ref"] = map[string]any{
+				"product_id": productID,
+				"rpc_name":   rpcName,
+			}
+		}
 	}
 	if includeExamples {
 		setStringSlice(target, "examples", metadata.Examples)

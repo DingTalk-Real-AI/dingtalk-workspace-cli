@@ -7,6 +7,11 @@
       "use_when": [
         "追加空行/追加空列/增加行数/增加列数/扩展表格/在末尾加空行；追加空行/空列"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet add-dimension --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --dimension ROWS --length 5",
         "dws sheet add-dimension --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --dimension COLUMNS --length 3"
@@ -14,6 +19,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.add_dimension",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-dimension-operations.md"
       ]
     },
@@ -26,13 +32,19 @@
         "插入行/插入列/在某行前插入/在某列前插入；在末尾追加",
         "追加数据/添加行/在末尾加数据/新增记录；追加数据"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet append --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --values '[[\"张三\",\"销售部\",50000]]'",
-        "dws sheet append --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --values '[[\"李四\",\"市场部\",38000],[\"王五\",\"销售部\",62000]]'"
+        "dws sheet append --node \u003cNODE_ID\u003e --sheet-id \"Sheet1\" --values '[[\"李四\",\"市场部\",38000],[\"王五\",\"销售部\",62000]]'"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.append_rows",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-dimension-operations.md",
         "skills/mono/references/products/sheet/sheet-write-data.md"
       ]
@@ -52,6 +64,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet cond-format create --node NODE_ID --sheet-id SHEET_ID --ranges '[\"A2:H100\"]' --condition '{\"formulaCondition\":{\"formula\":\"=$H2=\\\"是\\\"\"}}' --cell-style '{\"backgroundColor\":\"#FFECEC\"}'",
         "dws sheet cond-format create --node NODE_ID --sheet-id SHEET_ID --ranges '[\"A2:H100\"]' --condition '{\"formulaCondition\":{\"formula\":\"=$A2\u003e$B2\"}}' --cell-style '{\"backgroundColor\":\"#FFECEC\"}'"
@@ -73,6 +88,7 @@
       "effect_source": "agent-hint",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet cond-format delete --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --rule-id \u003cRULE_ID\u003e --yes"
       ],
@@ -94,6 +110,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws sheet cond-format list --node NODE_ID --sheet-id SHEET_ID"
       ],
@@ -114,6 +133,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet cond-format update --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --rule-id \u003cRULE_ID\u003e --condition '{\"numberCondition\":{\"operator\":\"greater\",\"value1\":\"90\"}}'",
         "dws sheet cond-format update --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --rule-id \u003cRULE_ID\u003e --cell-style '{\"backgroundColor\":\"#C8E6C9\",\"fontColor\":\"#1B5E20\"}'"
@@ -135,13 +157,19 @@
         "指定副本名称和位置",
         "按默认位置复制"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet copy --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e",
-        "dws sheet copy --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --name \"销售副本\" --index 2"
+        "dws sheet copy --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --title \"销售副本\" --index 2"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.copy_sheet",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-workbook.md"
       ]
     },
@@ -156,17 +184,25 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
-        "dws sheet create --name \"项目资料\" -f json",
-        "dws sheet create --name \"产品目录\" -f json"
+        "dws sheet create --name \"销售数据\"",
+        "dws sheet create --name \"Q1 数据\" --folder \u003cFOLDER_ID\u003e"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.sheet.prod.json#sheet.create_workspace_sheet",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-media-image.md",
         "skills/mono/references/products/sheet/sheet-workbook.md",
         "skills/mono/references/products/sheet/sheet-write-data.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "create_workspace_sheet"
+      }
     },
     "sheet create-float-image": {
       "agent_summary": "在钉钉电子表格的指定工作表中插入一张浮动图片。",
@@ -177,6 +213,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet create-float-image --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --src \"/core/api/resources/img/xxxx...\" --range A1 --width 400 --height 300",
         "dws sheet create-float-image --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --src \"/core/api/resources/img/xxxx...\" --range B2 --width 200 --height 150 --offset-x 10 --offset-y 20"
@@ -184,6 +223,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.create_float_image",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-media-image.md"
       ]
     },
@@ -191,15 +231,22 @@
       "agent_summary": "以 RFC 4180 CSV 格式读取钉钉电子表格中指定工作表的指定范围数据。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
+        "2. 查看数据范围确认列对应关系",
         "读数据/看表格内容；快速查看纯值数据、批量处理、大表分批读"
       ],
+      "effect": "read",
+      "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
-        "dws sheet csv-get --node \u003cNODE_ID\u003e",
-        "dws sheet csv-get --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A1:D10\""
+        "dws sheet csv-get --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A1:E5\"",
+        "dws sheet csv-get --node \u003cNODE_ID\u003e"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.get_range_as_csv",
+        "skills/mono/references/products/sheet/sheet-chart.md",
         "skills/mono/references/products/sheet/sheet-read-data.md"
       ]
     },
@@ -207,15 +254,23 @@
       "agent_summary": "将 RFC 4180 格式的 CSV 文本写入指定工作表的指定单元格位置。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
+        "内联多行 CSV：必须用 $'...' 让 \\n 变成真换行；普通单引号 '...\\n...' 里的 \\n 是字面量，会写成一行含字面 \\n 的错误数据",
+        "多行数据推荐用 @文件，最稳妥",
         "批量写入CSV/导入CSV/CSV写入表格/把CSV贴到表格里；写入 CSV"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
-        "dws sheet csv-put --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --start-cell A1 --csv 'name,score\\nAlice,95\\nBob,87'",
+        "dws sheet csv-put --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --start-cell A1 --csv $'name,score\\nAlice,95\\nBob,87'",
         "dws sheet csv-put --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --start-cell B2 --csv @data.csv --allow-overwrite"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.set_range_from_csv",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-write-data.md"
       ]
     },
@@ -236,6 +291,7 @@
       "effect_source": "agent-hint",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet delete-dimension --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --dimension ROWS --position \"3\" --length 2",
         "dws sheet delete-dimension --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --dimension COLUMNS --position \"A\" --length 1"
@@ -243,6 +299,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.delete_dimension",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-dimension-operations.md",
         "skills/mono/schema-hints/destructive-safety.json"
       ]
@@ -257,6 +314,7 @@
       "effect_source": "agent-hint",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet delete-dropdown --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A2:A100\"",
         "dws sheet delete-dropdown --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"B1:D10\""
@@ -264,6 +322,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.delete_dropdown_lists",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-dropdown.md",
         "skills/mono/schema-hints/destructive-safety.json"
       ]
@@ -278,12 +337,14 @@
       "effect_source": "agent-hint",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet delete-float-image --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --float-image-id \u003cFI_ID\u003e"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.delete_float_image",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-media-image.md",
         "skills/mono/schema-hints/destructive-safety.json"
       ]
@@ -298,6 +359,7 @@
       "effect_source": "agent-hint",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet delete-sheet --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e"
       ],
@@ -319,10 +381,14 @@
         "场景 C：下载到目录，自动按链接推断文件名",
         "导出/下载xlsx/存为Excel/存成表格文件/把表格变成xlsx/导出表格/下载表格/导出为 excel；导出表格",
         "导出/下载xlsx/存为Excel/存成表格文件/把表格变成xlsx/导出表格/下载表格/导出为 excel；需要落盘到本地",
-        "导出并自动下载为本地文件"
+        "导出并自动下载为本地文件",
+        "把这个在线表格导出为 xlsx 文件；在线表格格式转换"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws sheet export --node \u003cNODE_ID\u003e",
         "dws sheet export --node \"https://alidocs.dingtalk.com/i/nodes/\u003cDOC_UUID\u003e\""
@@ -330,6 +396,8 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.submit_export_job",
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-export.md"
       ]
     },
@@ -341,6 +409,11 @@
         "清除第 2 列（B 列）的筛选条件",
         "筛选/过滤/只看某些值/只显示满足条件的行/筛选数据/创建筛选/删除筛选/设置筛选条件/清除筛选/排序；清除某一列条件"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet filter clear-criteria --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --column 1",
         "dws sheet filter clear-criteria --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --column 0"
@@ -348,8 +421,14 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.filter_clear_criteria",
-        "skills/mono/references/products/sheet/sheet-filter.md"
-      ]
+        "skills/mono/references/products/sheet.md",
+        "skills/mono/references/products/sheet/sheet-filter.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "clear_filter_criteria"
+      }
     },
     "sheet filter create": {
       "agent_summary": "在钉钉电子表格的指定工作表中创建筛选。",
@@ -362,6 +441,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet filter create --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A1:E100\"",
         "dws sheet filter create --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A1:E100\" --criteria '[{\"column\":1,\"filterType\":\"values\",\"visibleValues\":[\"北京\",\"上海\"]}]'"
@@ -369,6 +451,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.create_filter",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter.md"
       ]
     },
@@ -382,12 +465,14 @@
       "effect_source": "agent-hint",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet filter delete --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --yes"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.delete_filter",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter.md",
         "skills/mono/schema-hints/destructive-safety.json"
       ]
@@ -400,6 +485,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws sheet filter get --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e",
         "dws sheet filter get --node \"https://alidocs.dingtalk.com/i/nodes/\u003cDOC_UUID\u003e\" --sheet-id \"Sheet1\""
@@ -407,6 +495,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.get_filter",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter.md"
       ]
     },
@@ -418,6 +507,11 @@
         "按第 3 列（C 列）降序排序",
         "筛选/过滤/只看某些值/只显示满足条件的行/筛选数据/创建筛选/删除筛选/设置筛选条件/清除筛选/排序；按列排序"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet filter sort --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --column 0 --ascending",
         "dws sheet filter sort --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --column 2 --ascending=false"
@@ -425,6 +519,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.sort_filter",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter.md"
       ]
     },
@@ -438,6 +533,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet filter update --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --criteria '[{\"column\":0,\"filterType\":\"values\",\"visibleValues\":[\"已完成\",\"进行中\"]},{\"column\":2,\"filterType\":\"condition\",\"conditions\":[{\"operator\":\"greater\",\"value\":\"50\"}]}]'",
         "dws sheet filter update --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --criteria '[{\"column\":1,\"filterType\":\"color\",\"backgroundColor\":\"#FF0000\"}]'"
@@ -445,6 +543,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.update_filter",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter.md"
       ]
     },
@@ -457,17 +556,22 @@
         "创建带按值筛选条件的筛选视图",
         "创建带按条件筛选的筛选视图（大于等于 200000）",
         "创建筛选视图/新建筛选视图/添加筛选视图；创建筛选视图",
-        "创建筛选视图时直接指定筛选条件"
+        "创建筛选视图时直接指定筛选条件",
+        "查看具体命令的完整参数说明"
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
-        "dws sheet filter-view create --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --name \"我的视图\" --range \"A1:E10\"",
-        "dws sheet filter-view create --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --name \"销售筛选\" --range \"A1:E10\" --criteria '[{\"column\":0,\"filterType\":\"values\",\"visibleValues\":[\"销售部\"]}]'"
+        "dws sheet filter-view create --help",
+        "dws sheet filter-view create --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --name \"我的视图\" --range \"A1:E10\""
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.create_filter_view",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter-view.md"
       ]
     },
@@ -482,6 +586,7 @@
       "effect_source": "agent-hint",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet filter-view delete --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --filter-view-id \u003cFV_ID\u003e",
         "dws sheet filter-view delete --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --filter-view-id \u003cFV_ID\u003e -f json"
@@ -489,6 +594,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.delete_filter_view",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter-view.md",
         "skills/mono/schema-hints/destructive-safety.json"
       ]
@@ -506,6 +612,7 @@
       "effect_source": "agent-hint",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet filter-view delete-criteria --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --filter-view-id \u003cFV_ID\u003e --column 0",
         "dws sheet filter-view delete-criteria --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --filter-view-id \u003cFV_ID\u003e --column 2"
@@ -513,38 +620,62 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.filter_view_delete_criteria",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter-view.md",
-        "skills/mono/schema-hints/destructive-safety.json"
-      ]
+        "skills/mono/schema-hints/destructive-safety.json",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "clear_filter_view_criteria"
+      }
     },
     "sheet filter-view get-criteria": {
+      "agent_summary": "获取单列筛选条件",
+      "agent_summary_source": "dws-command-surface-review",
       "use_when": [
         "查看第 1 列（偏移量 0）的筛选条件",
         "查看第 3 列（偏移量 2）的筛选条件",
-        "查看筛选条件/有哪些筛选条件/筛选视图设了什么条件/列出筛选条件；查看某一列的条件"
+        "查看筛选条件/有哪些筛选条件/筛选视图设了什么条件/列出筛选条件；查看某一列的条件",
+        "获取单列筛选条件"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws sheet filter-view get-criteria --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --filter-view-id \u003cFV_ID\u003e --column 0",
         "dws sheet filter-view get-criteria --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --filter-view-id \u003cFV_ID\u003e --column 2"
       ],
+      "reviewed": true,
       "source_refs": [
-        "skills/mono/references/products/sheet/sheet-filter-view.md"
+        "skills/mono/references/products/sheet.md",
+        "skills/mono/references/products/sheet/sheet-filter-view.md",
+        "skills/mono/schema-hints/catalog-completeness.json"
       ]
     },
     "sheet filter-view info": {
+      "agent_summary": "获取单个筛选视图详情",
+      "agent_summary_source": "dws-command-surface-review",
       "use_when": [
         "查看指定筛选视图的详情",
-        "筛选视图详情/查看某个筛选视图/筛选视图信息/筛选视图配置；获取单个筛选视图详情"
+        "筛选视图详情/查看某个筛选视图/筛选视图信息/筛选视图配置；获取单个筛选视图详情",
+        "获取单个筛选视图详情"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws sheet filter-view info --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --filter-view-id \u003cFV_ID\u003e"
       ],
+      "reviewed": true,
       "source_refs": [
-        "skills/mono/references/products/sheet/sheet-filter-view.md"
+        "skills/mono/references/products/sheet.md",
+        "skills/mono/references/products/sheet/sheet-filter-view.md",
+        "skills/mono/schema-hints/catalog-completeness.json"
       ]
     },
     "sheet filter-view list": {
@@ -556,6 +687,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws sheet filter-view list --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e",
         "dws sheet filter-view list --node \"https://alidocs.dingtalk.com/i/nodes/\u003cDOC_UUID\u003e\" --sheet-id \"Sheet1\""
@@ -563,21 +697,31 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.get_filter_views",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter-view.md"
       ]
     },
     "sheet filter-view list-criteria": {
+      "agent_summary": "列出筛选视图所有列条件",
+      "agent_summary_source": "dws-command-surface-review",
       "use_when": [
+        "列出筛选视图所有列条件",
         "列出筛选视图的所有条件",
         "查看筛选条件/有哪些筛选条件/筛选视图设了什么条件/列出筛选条件；列出所有列条件"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws sheet filter-view list-criteria --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --filter-view-id \u003cFV_ID\u003e"
       ],
+      "reviewed": true,
       "source_refs": [
-        "skills/mono/references/products/sheet/sheet-filter-view.md"
+        "skills/mono/references/products/sheet.md",
+        "skills/mono/references/products/sheet/sheet-filter-view.md",
+        "skills/mono/schema-hints/catalog-completeness.json"
       ]
     },
     "sheet filter-view update": {
@@ -592,6 +736,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet filter-view update --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --filter-view-id \u003cFV_ID\u003e --name \"新名称\"",
         "dws sheet filter-view update --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --filter-view-id \u003cFV_ID\u003e --range \"A1:F20\""
@@ -599,10 +746,13 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.update_filter_view",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-filter-view.md"
       ]
     },
     "sheet filter-view update-criteria": {
+      "agent_summary": "更新筛选视图列条件",
+      "agent_summary_source": "dws-command-surface-review",
       "use_when": [
         "4. 为筛选视图设置列条件（按值筛选）",
         "5. 为筛选视图设置列条件（按条件筛选）",
@@ -612,16 +762,23 @@
         "按条件筛选：大于等于 200000",
         "按条件筛选：小于 100",
         "按颜色筛选：背景色为红色",
+        "更新筛选视图列条件",
         "设置筛选条件/添加筛选条件/配置筛选视图条件/按值筛选/按条件筛选/按颜色筛选；设置筛选视图列条件"
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet filter-view update-criteria --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --filter-view-id \u003cFV_ID\u003e --column 0 --filter-criteria '{\"filterType\":\"values\",\"visibleValues\":[\"销售部\",\"市场部\"]}'",
         "dws sheet filter-view update-criteria --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --filter-view-id \u003cFV_ID\u003e --column 2 --filter-criteria '{\"filterType\":\"condition\",\"conditions\":[{\"operator\":\"greater\",\"value\":\"100\"}]}'"
       ],
+      "reviewed": true,
       "source_refs": [
-        "skills/mono/references/products/sheet/sheet-filter-view.md"
+        "skills/mono/references/products/sheet.md",
+        "skills/mono/references/products/sheet/sheet-filter-view.md",
+        "skills/mono/schema-hints/catalog-completeness.json"
       ]
     },
     "sheet find": {
@@ -635,6 +792,7 @@
         "6. 搜索公式文本",
         "在指定范围内搜索",
         "基本搜索",
+        "导出/下载xlsx/存为Excel/存成表格文件/把表格变成xlsx/导出表格/下载表格/导出为 excel；\"帮我找一下表格里的XXX",
         "搜索/查找/找单元格/搜内容/精确搜索/精确匹配/完全匹配/全字匹配；搜索公式",
         "搜索/查找/找单元格/搜内容/精确搜索/精确匹配/完全匹配/全字匹配；搜索单元格",
         "搜索/查找/找单元格/搜内容/精确搜索/精确匹配/完全匹配/全字匹配；正则搜索",
@@ -645,6 +803,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws sheet find --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --find \"销售额\"",
         "dws sheet find --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --find \"合计\" --range \"A1:D100\""
@@ -652,6 +813,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.find_cells",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-search-replace.md"
       ]
     },
@@ -663,6 +825,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws sheet get-dropdown --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A2:A100\"",
         "dws sheet get-dropdown --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A1\""
@@ -670,6 +835,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.get_dropdown_lists",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-dropdown.md"
       ]
     },
@@ -681,12 +847,16 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws sheet get-float-image --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --float-image-id \u003cFI_ID\u003e"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.get_float_image",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-media-image.md"
       ]
     },
@@ -702,17 +872,25 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
-        "dws sheet info --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --format json",
-        "dws sheet info --node \u003cNODE_ID\u003e"
+        "dws sheet info --node \u003cNODE_ID\u003e",
+        "dws sheet info --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.sheet.prod.json#sheet.get_sheet",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-read-data.md",
         "skills/mono/references/products/sheet/sheet-workbook.md",
         "skills/mono/references/products/sheet/sheet-write-data.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "get_sheet"
+      }
     },
     "sheet insert-dimension": {
       "agent_summary": "在钉钉表格指定工作表的指定位置之前（before）插入若干空行或空列。",
@@ -725,15 +903,22 @@
         "在 A 列之前插入 1 列",
         "在 AB 列之前插入 3 列",
         "在第 3 行之前插入 2 行",
-        "插入行/插入列/在某行前插入/在某列前插入；插入行或列"
+        "插入行/插入列/在某行前插入/在某列前插入；插入行或列",
+        "查看具体命令的完整参数说明"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
-        "dws sheet insert-dimension --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --dimension ROWS --position \"3\" --length 2",
-        "dws sheet insert-dimension --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --dimension COLUMNS --position \"A\" --length 1"
+        "dws sheet insert-dimension --help",
+        "dws sheet insert-dimension --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --dimension ROWS --position \"3\" --length 2"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.insert_dimension",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-dimension-operations.md"
       ]
     },
@@ -741,18 +926,26 @@
       "agent_summary": "获取全部工作表列表",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
+        "1. 先查 sheetId",
         "1. 获取工作表列表",
         "2. 查看工作表列表 — 提取 sheetId",
+        "导出/下载xlsx/存为Excel/存成表格文件/把表格变成xlsx/导出表格/下载表格/导出为 excel；\"这个表格有哪些工作表",
+        "导出/下载xlsx/存为Excel/存成表格文件/把表格变成xlsx/导出表格/下载表格/导出为 excel；extension=axls",
         "看工作表/有哪些工作表/表格结构；列出工作表"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
-        "dws sheet list --node \u003cNODE_ID\u003e --format json",
-        "dws sheet list --node NODE_ID"
+        "dws sheet list --node \u003cNODE_ID\u003e",
+        "dws sheet list --node \"https://alidocs.dingtalk.com/i/nodes/\u003cDOC_UUID\u003e\""
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.sheet.prod.json#sheet.get_all_sheets",
+        "skills/mono/references/products/sheet.md",
+        "skills/mono/references/products/sheet/sheet-chart.md",
         "skills/mono/references/products/sheet/sheet-dimension-operations.md",
         "skills/mono/references/products/sheet/sheet-filter-view.md",
         "skills/mono/references/products/sheet/sheet-read-data.md",
@@ -761,7 +954,11 @@
         "skills/mono/references/products/sheet/sheet-workbook.md",
         "skills/mono/references/products/sheet/sheet-write-data.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "get_all_sheets"
+      }
     },
     "sheet list-float-images": {
       "agent_summary": "列出钉钉电子表格指定工作表中的所有浮动图片。",
@@ -771,32 +968,47 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws sheet list-float-images --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.list_float_images",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-media-image.md"
       ]
     },
     "sheet media-upload": {
+      "agent_summary": "上传附件到表格",
+      "agent_summary_source": "dws-command-surface-review",
       "use_when": [
         "1. 基本用法: 上传本地文件到表格",
         "2. 自定义附件显示名称 (--name 指定上传后在表格中显示的名称)",
         "3. 指定 MIME 类型 (文件扩展名无法推断时)",
         "上传附件/传文件到表格/上传文件到表格/上传到表格；上传附件",
         "上传附件/传文件到表格/上传文件到表格/上传到表格；用户指定了上传后的名称",
+        "上传附件到表格",
         "先上传图片获取 resourceUrl",
         "提取 nodeId 后:",
         "浮动图片/悬浮图片/在表格上放一张图/加个浮动的图；创建浮动图片"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet media-upload --node \u003cNODE_ID\u003e --file ./report.pdf",
         "dws sheet media-upload --node \u003cNODE_ID\u003e --file ./data.bin --name \"数据文件.dat\" --mime-type application/octet-stream"
       ],
+      "reviewed": true,
       "source_refs": [
-        "skills/mono/references/products/sheet/sheet-media-image.md"
+        "skills/mono/references/products/sheet.md",
+        "skills/mono/references/products/sheet/sheet-media-image.md",
+        "skills/mono/schema-hints/catalog-completeness.json"
       ]
     },
     "sheet merge-cells": {
@@ -814,6 +1026,11 @@
         "按列合并",
         "按行合并"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet merge-cells --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A1:B3\"",
         "dws sheet merge-cells --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A1:C3\" --merge-type mergeRows"
@@ -821,6 +1038,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.merge_cells",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-style-format.md"
       ]
     },
@@ -828,18 +1046,27 @@
       "agent_summary": "在钉钉表格的指定工作表中，将指定范围的行或列移动到目标位置。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
+        "将 B~C 列移动到 E 列的位置",
         "将 B~C 列（共 2 列）移动到 D 列的位置",
         "将第 2 行移动到第 5 行的位置",
+        "将第 2 行移动到第 5 行的位置（索引从 0 开始）",
+        "将第 2~4 行移动到第 1 行之前",
         "将第 2~4 行（共 3 行）移动到第 1 行的位置（最前面）",
         "移动行/移动列/调整行顺序/调整列顺序/行列拖拽/把第N行移到第M行；移动行或列"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
-        "dws sheet move-dimension --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --dimension ROWS --start-index \"2\" --end-index \"2\" --destination-index \"5\"",
-        "dws sheet move-dimension --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --dimension ROWS --start-index \"2\" --end-index \"4\" --destination-index \"1\""
+        "dws sheet move-dimension --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --dimension ROWS --start-index 1 --end-index 1 --destination-index 4",
+        "dws sheet move-dimension --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --dimension ROWS --start-index 1 --end-index 3 --destination-index 0"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.move_dimension",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-dimension-operations.md"
       ]
     },
@@ -850,15 +1077,25 @@
         "1. 新建工作表",
         "加工作表/新增Sheet；新建工作表"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet new --node \u003cNODE_ID\u003e --name \"Sheet2\"",
         "dws sheet new --node \u003cNODE_ID\u003e --name \"数据汇总\""
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.sheet.prod.json#sheet.create_sheet",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-workbook.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "create_sheet"
+      }
     },
     "sheet range batch-set-style": {
       "agent_summary": "对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值、超链接、数字格式等内容。",
@@ -866,6 +1103,11 @@
       "use_when": [
         "设置样式/改颜色/设背景色/加粗/居中/换行/字体颜色/字号；批量设置不同 range 的样式"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet range batch-set-style --node \u003cNODE_ID\u003e --batch ./styles.json",
         "dws sheet range batch-set-style --node \u003cNODE_ID\u003e --batch ./styles.json --continue-on-error"
@@ -873,8 +1115,14 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.range_batch_set_style",
-        "skills/mono/references/products/sheet/sheet-style-format.md"
-      ]
+        "skills/mono/references/products/sheet.md",
+        "skills/mono/references/products/sheet/sheet-style-format.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "update_range"
+      }
     },
     "sheet range clear": {
       "agent_summary": "清除钉钉电子表格中指定工作表指定范围的单元格内容、格式或全部。",
@@ -884,15 +1132,21 @@
         "清空/清除区域/擦除内容/清除格式；仅清除值",
         "清空/清除区域/擦除内容/清除格式；仅清除格式",
         "清空/清除区域/擦除内容/清除格式；全部清除",
-        "清空/清除区域/擦除内容/清除格式；清除区域"
+        "清空/清除区域/擦除内容/清除格式；清除区域",
+        "清空整片区域请改用 range clear"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
-        "dws sheet range clear --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A1:B3\"",
-        "dws sheet range clear --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A1:B3\" --type format"
+        "dws sheet range clear --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A1:B3\""
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.clear_range",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-dimension-operations.md",
         "skills/mono/references/products/sheet/sheet-range-operations.md"
       ]
@@ -904,6 +1158,11 @@
         "复制区域/把这块数据复制到/复制到另一个工作表；复制区域",
         "复制区域/把这块数据复制到/复制到另一个工作表；跨工作表"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet range copy-to --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --source-range \"A1:C5\" --target-range \"D1\"",
         "dws sheet range copy-to --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --source-range \"A1:C5\" --target-range \"A1\" --target-sheet-id \"Sheet2\""
@@ -911,8 +1170,13 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.range_copy_to",
-        "skills/mono/references/products/sheet/sheet-range-operations.md"
-      ]
+        "skills/mono/references/products/sheet/sheet-range-operations.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "copy_range"
+      }
     },
     "sheet range fill": {
       "agent_summary": "基于源数据范围自动填充到目标范围。",
@@ -920,6 +1184,11 @@
       "use_when": [
         "自动填充/填充序列/向下填充/拖拽填充/序列递增；自动填充"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet range fill --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --source-range \"A1:A5\" --target-range \"A6:A20\"",
         "dws sheet range fill --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --source-range \"A1:A5\" --target-range \"A6:A20\" --fill-type copy"
@@ -937,6 +1206,11 @@
         "移动区域/把数据移到/剪切粘贴/移到另一个工作表；移动区域",
         "移动区域/把数据移到/剪切粘贴/移到另一个工作表；跨工作表"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet range move-to --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --source-range \"A1:C5\" --target-range \"D1\"",
         "dws sheet range move-to --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --source-range \"A1:C5\" --target-range \"A1\" --target-sheet-id \"Sheet2\""
@@ -944,8 +1218,13 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.range_move_to",
-        "skills/mono/references/products/sheet/sheet-range-operations.md"
-      ]
+        "skills/mono/references/products/sheet/sheet-range-operations.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "move_range"
+      }
     },
     "sheet range read": {
       "agent_summary": "读取工作表数据",
@@ -953,34 +1232,57 @@
       "use_when": [
         "3. 读取全部数据",
         "4. 读取指定区域",
+        "导出/下载xlsx/存为Excel/存成表格文件/把表格变成xlsx/导出表格/下载表格/导出为 excel；\"帮我看看这个表格有什么数据",
+        "指定取值模式：原始值 / 公式文本",
+        "读数据/看表格内容；读取数据",
         "读数据/看表格内容；需要结构化信息（值+样式+数据验证+富文本+单元格级超链接）、查看公式或原始值"
+      ],
+      "avoid_when": [
+        "读一下这个 xlsx 的数据\" / xlsx 节点链接；下载本地表格文件"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws sheet range read --node \u003cNODE_ID\u003e",
         "dws sheet range read --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.sheet.prod.json#sheet.get_range",
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-read-data.md",
         "skills/mono/references/products/sheet/sheet-workbook.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "get_range"
+      }
     },
     "sheet range set-style": {
       "agent_summary": "对于一个钉钉在线表格，更新指定区域内单元格信息，包括单元格中的值、超链接、数字格式等内容。",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",
       "use_when": [
         "2. 设置数字格式（人民币）",
+        "2. 设置数字格式（人民币）——批量刷整列走 set-style",
         "3. 商品 ID / 规格 ID 按文本展示，避免科学计数法",
         "整片 range 启用自动换行",
         "方式 B: 单独用 set-style 设置（适合只改格式不改值）",
         "给 A1:B3 打上黄底粗体居中",
         "给 C1:C5 逐单元格设置不同背景色",
         "设置数字格式/改成百分比/用人民币显示/按日期显示/文本格式/保留几位小数；批量设置数字格式",
-        "设置样式/改颜色/设背景色/加粗/居中/换行/字体颜色/字号；仅设样式不改值"
+        "设置数字格式/改成百分比/用人民币显示/按日期显示/文本格式/保留几位小数；设置数字格式",
+        "设置样式/改颜色/设背景色/加粗/居中/换行/字体颜色/字号；仅设样式不改值",
+        "设置样式/改颜色/设背景色/加粗/居中/换行/字体颜色/字号；设置单元格样式"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet range set-style --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A1:B3\" --bg-color \"#FFF2CC\" --font-weight bold --h-align center",
         "dws sheet range set-style --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"C1:C5\" --bg-colors-json '[[\"#FF0000\"],[\"#00FF00\"],[\"#0000FF\"],[\"#FFFF00\"],[\"#FF00FF\"]]'"
@@ -988,9 +1290,15 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.range_set_style",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-style-format.md",
-        "skills/mono/references/products/sheet/sheet-write-data.md"
-      ]
+        "skills/mono/references/products/sheet/sheet-write-data.md",
+        "skills/mono/schema-hints/interface-refs.json"
+      ],
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "update_range"
+      }
     },
     "sheet range sort": {
       "agent_summary": "对钉钉电子表格中指定工作表指定范围的数据进行排序。",
@@ -998,6 +1306,11 @@
       "use_when": [
         "排序/给数据排序/按某列排序/升序/降序；区域排序"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet range sort --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A1:D10\" --sort-keys '[{\"column\":\"A\",\"ascending\":true}]'",
         "dws sheet range sort --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A1:D10\" --sort-keys '[{\"column\":\"A\",\"ascending\":true},{\"column\":\"C\",\"ascending\":false}]' --has-header"
@@ -1012,37 +1325,52 @@
       "agent_summary": "更新工作表指定区域内容（--values 与 --hyperlinks 至少传一项）",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
-        "1. 写入数据",
-        "2. 在新工作表中写入汇总公式",
+        "2. 在新工作表中写入汇总公式（公式写在 text，以 = 开头）",
         "3. 写入表头和数据",
+        "3. 写入表头和数据（每个单元格必须是 object；数字也写成字符串）",
+        "3. 写入超链接（写在 cell 的 hyperlink 字段）",
         "3. 长数字 ID 写值时同步设置文本格式，避免科学计数法",
         "4. 写入单元格级超链接",
         "写入公式",
+        "写入公式（text 以 = 开头识别为公式）",
         "写入单元格级超链接",
+        "写入单元格级超链接（写在 cell 的 hyperlink 字段，没有 --hyperlinks flag）",
         "写入文本",
+        "写入文本（每个单元格必须是 object）",
         "写数据/填表/更新单元格/写入公式；更新数据",
+        "只更新部分单元格：用 {} 空对象占位保留原值",
+        "导出/下载xlsx/存为Excel/存成表格文件/把表格变成xlsx/导出表格/下载表格/导出为 excel；\"往这个表格写入数据",
         "提取 nodeId 后:",
+        "查看具体命令的完整参数说明",
+        "每个单元格必须是 object，公式写在 text（以 = 开头）；不支持裸字符串",
         "清理单元格级超链接，保留当前值",
         "清空单个单元格（text 为空字符串）",
-        "用 range update 在新列写判断公式（形成\"是/否\"辅助列）",
         "设置数字格式/改成百分比/用人民币显示/按日期显示/文本格式/保留几位小数；写值时顺带设置数字格式",
         "设置样式/改颜色/设背景色/加粗/居中/换行/字体颜色/字号；写值同时附带样式"
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
-        "dws sheet range update --node NODE_ID --sheet-id SHEET_ID --range \"H2:H100\" --values '[[\"=IF(A2\u003eB2,\\\"是\\\",\\\"否\\\")\"],...]'",
-        "dws sheet range update --node \u003cNODE_ID\u003e --sheet-id Sheet1 --range \"A1:B1\" --values '[[\"产品名称\",\"产品图片\"]]' -f json"
+        "dws sheet range update --help",
+        "dws sheet range update --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A1:B2\" --values '[[{\"type\":\"text\",\"text\":\"姓名\"},{\"type\":\"text\",\"text\":\"分数\"}],[{\"type\":\"text\",\"text\":\"张三\"},{\"type\":\"text\",\"text\":\"90\"}]]'"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.sheet.prod.json#sheet.update_range",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-conditional-format.md",
         "skills/mono/references/products/sheet/sheet-media-image.md",
         "skills/mono/references/products/sheet/sheet-style-format.md",
         "skills/mono/references/products/sheet/sheet-workbook.md",
         "skills/mono/references/products/sheet/sheet-write-data.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "sheet",
+        "rpc_name": "update_range"
+      }
     },
     "sheet replace": {
       "agent_summary": "在钉钉表格的指定工作表中，全局查找并替换文本内容。",
@@ -1055,6 +1383,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet replace --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --find \"旧文本\" --replacement \"新文本\"",
         "dws sheet replace --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --find \"待处理\" --replacement \"已完成\" --match-entire-cell"
@@ -1062,6 +1393,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.replace_all",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-search-replace.md"
       ]
     },
@@ -1074,6 +1406,11 @@
         "设置单选下拉列表",
         "设置带颜色的多选下拉列表"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet set-dropdown --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A2:A100\" --options '[{\"value\":\"选项1\"},{\"value\":\"选项2\"},{\"value\":\"选项3\"}]'",
         "dws sheet set-dropdown --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"B2:B50\" --options '[{\"value\":\"高\",\"color\":\"#ff0000\"},{\"value\":\"中\",\"color\":\"#ffaa00\"},{\"value\":\"低\",\"color\":\"#00ff00\"}]' --multi-select"
@@ -1081,6 +1418,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.set_dropdown_lists",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-dropdown.md"
       ]
     },
@@ -1090,12 +1428,18 @@
       "use_when": [
         "取消合并/拆分单元格/还原合并；取消合并单元格"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet unmerge-cells --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range \"A1:D5\""
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.unmerge_range",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-style-format.md"
       ]
     },
@@ -1118,13 +1462,17 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
-        "dws sheet update --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --name \"汇总表\" --frozen-row-count 2 --frozen-column-count 1",
+        "dws sheet update --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --title \"汇总表\" --frozen-row-count 2 --frozen-column-count 1",
         "dws sheet update --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --hidden=true"
       ],
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.update_sheet",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-workbook.md"
       ]
     },
@@ -1147,6 +1495,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet update-dimension --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --dimension ROWS --start-index \"3\" --length 2 --hidden",
         "dws sheet update-dimension --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --dimension COLUMNS --start-index \"A\" --length 2 --hidden=false"
@@ -1154,6 +1505,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.update_dimension",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-dimension-operations.md"
       ]
     },
@@ -1168,6 +1520,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet update-float-image --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --float-image-id \u003cFI_ID\u003e --range C5",
         "dws sheet update-float-image --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --float-image-id \u003cFI_ID\u003e --width 600 --height 400"
@@ -1175,6 +1530,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.update_float_image",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-media-image.md"
       ]
     },
@@ -1189,6 +1545,11 @@
         "写入图片/插入图片/加图片/放图片到单元格/嵌入图片到表格；用户指定了图片尺寸",
         "提取 nodeId 后:"
       ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws sheet write-image --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range A1:A1 --file ./chart.png",
         "dws sheet write-image --node \u003cNODE_ID\u003e --sheet-id \u003cSHEET_ID\u003e --range B2:B2 --file ./logo.png --width 200 --height 100"
@@ -1196,6 +1557,7 @@
       "reviewed": false,
       "source_refs": [
         "internal/cli/schema_mcp_metadata.json#tools.sheet.write_image",
+        "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-media-image.md"
       ]
     }

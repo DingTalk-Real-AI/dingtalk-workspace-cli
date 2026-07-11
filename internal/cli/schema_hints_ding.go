@@ -36,7 +36,6 @@ func init() {
 				"remindType": {
 					FlagName:    "type",
 					Description: "提醒类型。CLI 默认使用 app，对应应用内提醒。",
-					Default:     "app",
 				},
 			},
 		},

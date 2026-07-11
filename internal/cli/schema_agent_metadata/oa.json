@@ -10,6 +10,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws oa approval approve --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e",
         "dws oa approval approve --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e --remark \"同意\""
@@ -19,7 +22,11 @@
         "skills/mono/references/products/oa.md",
         "skills/mono/references/products/simple.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "approve_processInstance"
+      }
     },
     "oa approval detail": {
       "agent_summary": "获取审批实例详情",
@@ -30,6 +37,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws oa approval detail --instance-id \u003cprocessInstanceId\u003e",
         "dws oa approval detail --instance-id \u003cprocessInstanceId\u003e --format json"
@@ -38,7 +48,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.get_processInstance_detail",
         "skills/mono/references/products/oa.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "get_processInstance_detail"
+      }
     },
     "oa approval list-cc": {
       "agent_summary": "获取抄送用户的列表",
@@ -49,6 +63,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws oa approval list-cc --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词",
         "dws oa approval list-cc --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词 --format json"
@@ -68,6 +85,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws oa approval list-executed --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词",
         "dws oa approval list-executed --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词 --format json"
@@ -87,35 +107,49 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
-        "dws oa approval list-forms --cursor 0 --size 100",
-        "dws oa approval list-forms --cursor 0 --size 100 --format json"
+        "dws oa approval list-forms --cursor 0 --limit 100",
+        "dws oa approval list-forms --cursor 0 --limit 100 --format json"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.list_user_visible_process",
         "skills/mono/references/products/oa.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "list_user_visible_process"
+      }
     },
     "oa approval list-initiated": {
       "agent_summary": "查询已发起的审批实例列表",
       "agent_summary_source": "dws-wukong-envelope@4574f7022c32",
       "use_when": [
-        "8. 查看自己发起的审批列表（--process-code 来自 list-forms 或 detail）",
+        "8. 查看自己发起的审批列表（--process-code 来自 list-forms / search-forms / detail）",
         "我发起的审批"
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
-        "dws oa approval list-initiated --process-code \u003ccode\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --next-token 0 --max-results 20",
-        "dws oa approval list-initiated --process-code \u003ccode\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --next-token 0 --max-results 20 --format json"
+        "dws oa approval list-initiated --process-code \u003ccode\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --limit 20",
+        "dws oa approval list-initiated --process-code \u003ccode\u003e --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --limit 20 --format json"
       ],
       "source_refs": [
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.list_initiated_instances",
         "skills/mono/references/products/oa.md",
         "skills/mono/references/products/simple.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "list_initiated_instances"
+      }
     },
     "oa approval list-pending": {
       "agent_summary": "查询待我处理的审批",
@@ -127,6 +161,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws oa approval list-pending --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\"",
         "dws oa approval list-pending --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --query 关键词"
@@ -136,7 +173,11 @@
         "skills/mono/references/products/oa.md",
         "skills/mono/references/products/simple.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "list_pending_approvals"
+      }
     },
     "oa approval list-submitted": {
       "agent_summary": "获取已提交实例列表",
@@ -147,6 +188,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws oa approval list-submitted --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词",
         "dws oa approval list-submitted --limit \u003cpageSize\u003e --page \u003cpageNumber\u003e --query 关键词 --format json"
@@ -166,9 +210,12 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
-        "dws oa approval oa-cc-noticer --instance-id \u003cprocessInstanceId\u003e --user-list \"68674200835816\"",
-        "dws oa approval oa-cc-noticer --instance-id \u003cprocessInstanceId\u003e --user-list \"userId1,userId2\""
+        "dws oa approval oa-cc-noticer --instance-id \u003cprocessInstanceId\u003e --users \"68674200835816\"",
+        "dws oa approval oa-cc-noticer --instance-id \u003cprocessInstanceId\u003e --users \"userId1,userId2\" --operator-id \"123123\""
       ],
       "reviewed": false,
       "source_refs": [
@@ -185,9 +232,12 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
-        "dws oa approval oa-comments --instance-id \u003cprocessInstanceId\u003e --text \"同意，请尽快处理\"",
-        "dws oa approval oa-comments --instance-id \u003cprocessInstanceId\u003e --text \"同意，请尽快处理\" --format json"
+        "dws oa approval oa-comments --instance-id \u003cprocessInstanceId\u003e --content \"同意，请尽快处理\"",
+        "dws oa approval oa-comments --instance-id \u003cprocessInstanceId\u003e --content \"同意，请尽快处理\" --format json"
       ],
       "reviewed": false,
       "source_refs": [
@@ -204,6 +254,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws oa approval records --instance-id \u003cprocessInstanceId\u003e",
         "dws oa approval records --instance-id \u003cprocessInstanceId\u003e --format json"
@@ -212,7 +265,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.get_processInstance_records",
         "skills/mono/references/products/oa.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "get_processInstance_records"
+      }
     },
     "oa approval redirect-task": {
       "agent_summary": "转交审批任务",
@@ -223,6 +280,9 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
       "examples": [
         "dws oa approval redirect-task --task-id \u003ctaskId\u003e --to-actioner-id \u003cuserId\u003e",
         "dws oa approval redirect-task --task-id \u003ctaskId\u003e --to-actioner-id \u003cuserId\u003e --remark \"请帮忙处理\""
@@ -244,6 +304,7 @@
       "effect_source": "skill-explicit",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws oa approval reject --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e --remark \"不同意\"",
         "dws oa approval reject --instance-id \u003cid\u003e --task-id \u003ctaskId\u003e --remark \"不符合要求\" --format json"
@@ -254,7 +315,11 @@
         "skills/mono/references/products/oa.md",
         "skills/mono/references/products/simple.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "reject_processInstance"
+      }
     },
     "oa approval revoke": {
       "agent_summary": "撤销已发起的审批",
@@ -268,6 +333,7 @@
       "effect_source": "skill-explicit",
       "risk": "high",
       "confirmation": "user_required",
+      "idempotency": "unknown",
       "examples": [
         "dws oa approval revoke --instance-id \u003cid\u003e --yes",
         "dws oa approval revoke --instance-id \u003cid\u003e --remark \"误发起\" --yes"
@@ -278,7 +344,11 @@
         "skills/mono/references/products/oa.md",
         "skills/mono/references/products/simple.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "revoke_processInstance"
+      }
     },
     "oa approval tasks": {
       "agent_summary": "查询待我审批的任务 ID",
@@ -291,6 +361,9 @@
       ],
       "effect": "read",
       "effect_source": "command-verb",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
       "examples": [
         "dws oa approval tasks --instance-id \u003cprocessInstanceId\u003e",
         "dws oa approval tasks --instance-id \u003cprocessInstanceId\u003e --format json"
@@ -299,7 +372,11 @@
         "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.oa.prod.json#oa.list_pending_tasks",
         "skills/mono/references/products/oa.md",
         "skills/mono/schema-hints/imported/wukong.json"
-      ]
+      ],
+      "interface_ref": {
+        "product_id": "oa",
+        "rpc_name": "list_pending_tasks"
+      }
     }
   }
 }
