@@ -48,7 +48,7 @@ git diff --check
 
 1. Keep implementation and tests in sync.
 2. Run `./scripts/dev/ci-local.sh`.
-3. Run `./scripts/policy/check-command-surface.sh --strict` when command paths/flags change.
+3. Run `./scripts/policy/check-command-surface.sh --strict` when command paths/flags change. CI also runs `./scripts/policy/check-command-compatibility.sh --base-ref <main-ref> --stable-ref <latest-GA-tag>` against both the target branch and latest stable release.
 4. Run `./scripts/policy/check-generated-drift.sh` when generated artifacts may change.
 5. Run `./scripts/release/verify-package-managers.sh` when packaging or installer surfaces change (run `make package` first).
 6. Update docs and `CHANGELOG.md` for behavior/interface changes.

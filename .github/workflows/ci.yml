@@ -38,6 +38,38 @@ jobs:
       #     version: v1.64.8
       #     args: ./...
 
+  code-check:
+    name: Code Check
+    needs: [lint, test, policy, edition-tests]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Verify code checks
+        env:
+          LINT_RESULT: ${{ needs.lint.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+          POLICY_RESULT: ${{ needs.policy.result }}
+          EDITION_TESTS_RESULT: ${{ needs.edition-tests.result }}
+        run: |
+          set -eu
+          failed=0
+          for check in \
+            "Lint:$LINT_RESULT" \
+            "Test:$TEST_RESULT" \
+            "Policy Check:$POLICY_RESULT" \
+            "Edition Contract Tests:$EDITION_TESTS_RESULT"
+          do
+            name="${check%%:*}"
+            result="${check#*:}"
+            printf '%s: %s\n' "$name" "$result"
+            if [ "$result" != "success" ]; then
+              failed=1
+            fi
+          done
+          test "$failed" -eq 0
+
   test:
     name: Test
     runs-on: ubuntu-latest
