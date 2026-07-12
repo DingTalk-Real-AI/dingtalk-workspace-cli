@@ -44,6 +44,14 @@ type commandRef struct {
 	Text string
 }
 
+type commandResolution uint8
+
+const (
+	resolutionValid commandResolution = iota
+	resolutionInvalid
+	resolutionSkip
+)
+
 func main() {
 	rootPath, err := os.Getwd()
 	if err != nil {
@@ -66,12 +74,15 @@ func main() {
 		if checked[path] {
 			continue
 		}
-		checked[path] = true
 
-		cmd, remaining, err := root.Find(strings.Fields(strings.TrimPrefix(path, "dws ")))
-		if err != nil || cmd == nil || invalidRemaining(cmd, remaining) {
+		switch resolveCommandReference(root, path) {
+		case resolutionSkip:
+			continue
+		case resolutionInvalid:
 			failures = append(failures, formatFailure(rootPath, ref, "command path does not exist"))
 			continue
+		case resolutionValid:
+			checked[path] = true
 		}
 	}
 
@@ -146,7 +157,7 @@ func isAntiPatternLine(line string) bool {
 }
 
 func parseReference(raw string) (string, []string, bool) {
-	if strings.Contains(raw, "|") || strings.Contains(raw, "$(") || strings.Contains(raw, "&&") {
+	if strings.Contains(raw, "|") || strings.Contains(raw, "$(") || strings.Contains(raw, "&&") || strings.Contains(raw, " & ") {
 		return "", nil, true
 	}
 	if comment := strings.Index(raw, " #"); comment >= 0 {
@@ -192,14 +203,34 @@ func parseReference(raw string) (string, []string, bool) {
 	return "dws " + strings.Join(pathTokens, " "), uniqueSorted(flags), false
 }
 
-func invalidRemaining(cmd *cobra.Command, remaining []string) bool {
+func resolveCommandReference(root *cobra.Command, path string) commandResolution {
+	cmd, remaining, err := root.Find(strings.Fields(strings.TrimPrefix(path, "dws ")))
+	if err != nil || cmd == nil {
+		return resolutionInvalid
+	}
 	if len(remaining) == 0 {
+		return resolutionValid
+	}
+	if !cmd.HasSubCommands() {
+		// Once a leaf command has been found, remaining tokens are positional
+		// arguments. This check intentionally validates command paths only.
+		return resolutionValid
+	}
+	if isPlaceholder(remaining[0]) {
+		// Documentation such as `dws <cmd> --help` or
+		// `dws sheet <command> --help` describes a command shape rather than an
+		// executable command reference.
+		return resolutionSkip
+	}
+	return resolutionInvalid
+}
+
+func isPlaceholder(token string) bool {
+	if len(token) < 2 {
 		return false
 	}
-	// Commands that explicitly advertise positional arguments may validly
-	// consume non-command tokens (for example `dws schema list`).
-	use := cmd.UseLine()
-	return !strings.Contains(use, "[") && !strings.Contains(use, "<")
+	first, last := token[0], token[len(token)-1]
+	return (first == '<' && last == '>') || (first == '[' && last == ']')
 }
 
 func shellFields(input string) []string {
