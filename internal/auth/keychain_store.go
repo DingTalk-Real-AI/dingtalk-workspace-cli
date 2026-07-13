@@ -131,7 +131,10 @@ func preflightTokenPersistence(configDir string) error {
 		seen[corpID] = struct{}{}
 
 		if _, err := LoadTokenDataKeychainForCorpID(corpID); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
-			return fmt.Errorf("profile token slot %q is unreadable: %w", TokenAccountForCorpID(corpID), err)
+			return fmt.Errorf(
+				"profile token slot %q is unreadable; remove only this profile with `dws auth logout --profile %q`, or use `dws auth reset` only when discarding all local profiles: %w",
+				TokenAccountForCorpID(corpID), corpID, err,
+			)
 		}
 	}
 	return nil

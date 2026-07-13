@@ -255,6 +255,8 @@ dws --profile <名称|corpId> contact user search --query "..."   # 单次对指
 
 跨组织读取由 agent 编排，而非内置 `--all-orgs`：先 `dws profile list` 拿到组织，再对每个组织带 `--profile` 各查一遍，然后合并。写操作默认只在当前组织进行——跨组织写之前先确认目标组织。
 
+macOS 下，如果已登记的 token slot 无法解密，为避免把系统 Keychain 和 file-DEK 写成混合状态，新的 OAuth 登录会直接拒绝。报错会给出对应 `corpId`；只清理这个组织可执行 `dws auth logout --profile <名称|corpId>`，再重新登录。只有确认要丢弃全部本地 profile 时才用 `dws auth reset`。
+
 </details>
 
 <details>

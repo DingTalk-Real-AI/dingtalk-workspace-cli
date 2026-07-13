@@ -258,6 +258,8 @@ dws --profile <name|corpId> contact user search --query "..."   # run one comman
 
 Cross-org reads are orchestrated by the agent rather than a built-in `--all-orgs`: list the profiles, run the query per org with `--profile`, then merge. Writes default to the current org only — confirm the target org before writing across orgs.
 
+On macOS, an unreadable registered token slot blocks a new OAuth login rather than risking a mixed Keychain/file-DEK state. The error identifies the affected `corpId`; remove only that profile with `dws auth logout --profile <name|corpId>`, then log in again. Use `dws auth reset` only when you intend to discard every local profile.
+
 </details>
 
 <details>
