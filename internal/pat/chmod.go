@@ -191,9 +191,6 @@ const (
 	// patBatchGrantToolName is the English-first wire name for PAT batch grant.
 	patBatchGrantToolName = "pat.batch_grant"
 
-	// patBatchRevokeToolName is the English-first wire name for PAT batch revoke.
-	patBatchRevokeToolName = "pat.batch_revoke"
-
 	// patBatchPlanToolName is the English-first wire name for PAT batch plan.
 	patBatchPlanToolName = "pat.batch_plan"
 
@@ -208,7 +205,8 @@ const (
 	grantTypePermanent           = "permanent"
 	patCallerAuthLoginRecommend  = "auth_login_recommend"
 	patBatchOperationGrant       = "grant"
-	patBatchOperationRevoke      = "revoke"
+	patScopeRevokeToolName       = "pat.scope_revoke"
+	patScopeRevokeGrantPolicy    = "ONCE"
 )
 
 var patBatchMetadataContractCodes = map[string]bool{
@@ -270,9 +268,10 @@ grantType 规则:
   添加 --yes；未加 --yes 时 CLI 会阻断并提示 agent 先确认。
 
 授权撤回:
-  --revoke 撤回显式 PAT 授权；必须同时指定 scope 或 --all。
-  产品 / 域范围的撤回必须显式添加 --all。撤回始终先生成 batch plan，
-  --dry-run 只预览计划；真正执行撤回必须显式添加 --yes。
+  --revoke 只撤回一个位置 scope 的显式 PAT 授权，不能与 --all、
+  产品 / 域选择器或 --recommend 混用。--dry-run 在本地预览且不调用
+  撤回工具；真正执行撤回必须显式添加 --yes。
+  撤回只移除 ACTIVE 显式 grant；服务端必须拒绝 DENIED 记录。
   撤回不会退出登录，也不会撤销 OAuth token。
 
 非交互确认:
@@ -296,7 +295,7 @@ agentCode 配置:
   dws pat chmod --all --dry-run --format json
   dws pat chmod --product calendar --all --yes
   dws pat chmod calendar.event:read --revoke --dry-run --format json
-  dws pat chmod --revoke --all --yes`,
+  dws pat chmod calendar.event:read --revoke --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			productCodes := collectChmodProductCodes(productFlags, productsFlag, domainFlags, domainsFlag)
 			if err := validateChmodSelectors(cmd, args, productCodes, recommend, allScopes, revoke); err != nil {
@@ -320,36 +319,50 @@ agentCode 配置:
 			if err != nil {
 				return err
 			}
-			scopes := args
-			if revoke && !allScopes {
-				scopes, err = normalizeTargetedRevokeScopes(args)
-				if err != nil {
+			if revoke {
+				scope := strings.TrimSpace(args[0])
+				if c != nil && c.DryRun() {
+					return handleToolResult(cmd, c, newPATScopeRevokeDryRunResult(scope, agentCode))
+				}
+				if err := requireSingleScopeRevokeConfirmation(cmd, scope); err != nil {
 					return err
 				}
+				if c == nil {
+					return fmt.Errorf("internal error: tool runtime not initialized")
+				}
+				result, err := callPATScopeRevoke(cmd.Context(), c, scope, agentCode)
+				if err != nil {
+					if isToolNotRegisteredError(err) {
+						return newPATScopeRevokeUnsupportedError(err.Error())
+					}
+					return fmt.Errorf("pat revoke failed: %w", err)
+				}
+				if err := ensurePATScopeRevokeResponse(result, scope, agentCode); err != nil {
+					return err
+				}
+				return handleToolResult(cmd, c, result)
 			}
-			requestedScopes := append([]string(nil), args...)
-			if revoke && !allScopes {
-				requestedScopes = append([]string(nil), scopes...)
-			}
+
+			scopes := args
 			planScopeDigest := ""
-			usesPlan := recommend || len(productCodes) > 0 || allScopes || revoke
+			usesPlan := recommend || len(productCodes) > 0 || allScopes
 			grantType, _ := cmd.Flags().GetString("grant-type")
 			sessionID, _ := cmd.Flags().GetString("session-id")
-			if !revoke && sessionID == "" {
+			if sessionID == "" {
 				sessionID = resolveSessionIDFromEnv()
 			}
 
-			if !revoke && !validGrantTypes[grantType] {
+			if !validGrantTypes[grantType] {
 				return fmt.Errorf("invalid --grant-type %q, must be one of: once, session, permanent", grantType)
 			}
 
-			if !revoke && grantType == "session" && sessionID == "" {
+			if grantType == "session" && sessionID == "" {
 				return fmt.Errorf("--session-id is required when --grant-type is session\n  hint: dws pat chmod <scope> --grant-type session --session-id <id>")
 			}
 
 			if c != nil && c.DryRun() {
 				if usesPlan {
-					planArgs := buildChmodBatchPlanArgs(scopes, productCodes, recommend, allScopes, revoke, grantType, agentCode, sessionID)
+					planArgs := buildChmodBatchPlanArgs(scopes, productCodes, recommend, allScopes, grantType, agentCode, sessionID)
 					result, err := callPATBatchPlan(cmd.Context(), c, agentCode, sessionID, planArgs)
 					if err != nil {
 						return fmt.Errorf("pat chmod plan failed: %w", err)
@@ -357,18 +370,14 @@ agentCode 配置:
 					if err := ensurePATResultAgentCode(result, agentCode); err != nil {
 						return err
 					}
-					if err := ensurePATBatchPlanMode(result, allScopes, revoke); err != nil {
+					if err := ensurePATBatchPlanMode(result, allScopes); err != nil {
 						return err
 					}
-					if allScopes || revoke {
-						selectedScopes, err := extractStrictPATBatchPlanSelectedScopes(result)
-						if err != nil {
+					if allScopes {
+						if _, err := extractStrictPATBatchPlanSelectedScopes(result); err != nil {
 							return err
 						}
 						if err := ensurePATNewModeAgentCodeAttestation(result, agentCode, "batch plan"); err != nil {
-							return err
-						}
-						if err := ensurePATRevokePlanScopeSubset(selectedScopes, requestedScopes, allScopes, revoke); err != nil {
 							return err
 						}
 					}
@@ -393,7 +402,7 @@ agentCode 配置:
 			}
 
 			if usesPlan {
-				planArgs := buildChmodBatchPlanArgs(scopes, productCodes, recommend, allScopes, revoke, grantType, agentCode, sessionID)
+				planArgs := buildChmodBatchPlanArgs(scopes, productCodes, recommend, allScopes, grantType, agentCode, sessionID)
 				planResult, err := callPATBatchPlan(cmd.Context(), c, agentCode, sessionID, planArgs)
 				if err != nil {
 					return fmt.Errorf("pat chmod plan failed: %w", err)
@@ -401,11 +410,11 @@ agentCode 配置:
 				if err := ensurePATResultAgentCode(planResult, agentCode); err != nil {
 					return err
 				}
-				if err := ensurePATBatchPlanMode(planResult, allScopes, revoke); err != nil {
+				if err := ensurePATBatchPlanMode(planResult, allScopes); err != nil {
 					return err
 				}
 				var selectedScopes []string
-				if allScopes || revoke {
+				if allScopes {
 					selectedScopes, err = extractStrictPATBatchPlanSelectedScopes(planResult)
 					if err != nil {
 						return err
@@ -413,12 +422,9 @@ agentCode 配置:
 					if err := ensurePATNewModeAgentCodeAttestation(planResult, agentCode, "batch plan"); err != nil {
 						return err
 					}
-					if err := ensurePATRevokePlanScopeSubset(selectedScopes, requestedScopes, allScopes, revoke); err != nil {
-						return err
-					}
 				}
 				planScopeDigest = extractPATBatchPlanScopeDigest(planResult)
-				if allScopes || revoke {
+				if allScopes {
 					scopes = selectedScopes
 				} else {
 					scopes, err = extractSelectedScopes(planResult)
@@ -429,38 +435,28 @@ agentCode 配置:
 				if len(scopes) == 0 {
 					return handleToolResult(cmd, c, planResult)
 				}
-				if revoke {
-					if err := requireBatchRevokeConfirmation(cmd); err != nil {
-						return err
-					}
-				} else {
-					if err := requireBatchGrantConfirmation(cmd, true, scopes); err != nil {
-						return err
-					}
+				if err := requireBatchGrantConfirmation(cmd, true, scopes); err != nil {
+					return err
 				}
 			} else if err := requireBatchGrantConfirmation(cmd, false, scopes); err != nil {
 				return err
 			}
 			batchArgs := map[string]any{"scopes": scopes}
 			toolArgs := map[string]any{"scopes": scopes}
-			if !revoke {
-				batchArgs["grantType"] = grantType
-				toolArgs["grantType"] = grantType
-			}
+			batchArgs["grantType"] = grantType
+			toolArgs["grantType"] = grantType
 			if agentCode != "" {
 				batchArgs["agentCode"] = agentCode
 				toolArgs["agentCode"] = agentCode
 			}
-			if !revoke && sessionID != "" {
+			if sessionID != "" {
 				batchArgs["sessionId"] = sessionID
 				toolArgs["sessionId"] = sessionID
 			}
-			if revoke {
-				batchArgs["clientRequestId"] = newBatchClientRequestID("pat-revoke")
-			} else if allScopes {
+			if allScopes {
 				batchArgs["clientRequestId"] = newBatchClientRequestID("pat-chmod-all")
 			}
-			if (revoke || allScopes) && planScopeDigest != "" {
+			if allScopes && planScopeDigest != "" {
 				batchArgs["scopeDigest"] = planScopeDigest
 			}
 			// Legacy server schema accepted singular "scope"; clone the
@@ -477,9 +473,7 @@ agentCode 配置:
 
 			ctx := cmd.Context()
 			var result *edition.ToolResult
-			if revoke {
-				result, err = callPATBatchToolWithIdentityFallback(ctx, c, agentCode, "", patBatchRevokeToolName, batchArgs)
-			} else if allScopes {
+			if allScopes {
 				// All-scope selection is server-owned and cannot be represented by
 				// the legacy single-grant tool. Fail closed if batch grant is absent.
 				result, err = callPATBatchToolWithIdentityFallback(ctx, c, agentCode, sessionID, patBatchGrantToolName, batchArgs)
@@ -495,21 +489,13 @@ agentCode 配置:
 				)
 			}
 			if err != nil {
-				if revoke {
-					return fmt.Errorf("pat revoke failed: %w", err)
-				}
 				return fmt.Errorf("pat chmod failed: %w", err)
 			}
 			if err := ensurePATResultAgentCode(result, agentCode); err != nil {
 				return err
 			}
-			if allScopes || revoke {
+			if allScopes {
 				if err := ensurePATNewModeAgentCodeAttestation(result, agentCode, "batch mutation"); err != nil {
-					return err
-				}
-			}
-			if revoke {
-				if err := ensurePATBatchMutationOperation(result, patBatchOperationRevoke); err != nil {
 					return err
 				}
 			}
@@ -528,12 +514,30 @@ agentCode 配置:
 	chmodCmd.Flags().StringSliceVar(&domainsFlag, "domains", nil, "产品域/产品编码列表，逗号分隔；执行批量授权需 --yes")
 	chmodCmd.Flags().BoolVar(&recommend, "recommend", false, "使用推荐 scope 集合批量授权；执行授权需 --yes")
 	chmodCmd.Flags().BoolVar(&allScopes, "all", false, "使用服务端可操作的全部 scope；可与产品/域过滤器组合；执行授权需 --yes")
-	chmodCmd.Flags().BoolVar(&revoke, "revoke", false, "撤回显式 PAT 授权；需指定 scope 或 --all；执行撤回需 --yes")
+	chmodCmd.Flags().BoolVar(&revoke, "revoke", false, "撤回一个位置 scope 的显式 PAT 授权；执行撤回需 --yes")
 
 	return chmodCmd
 }
 
 func validateChmodSelectors(cmd *cobra.Command, scopes, productCodes []string, recommend, allScopes, revoke bool) error {
+	if revoke {
+		if allScopes {
+			return fmt.Errorf("--revoke cannot be combined with --all")
+		}
+		if recommend {
+			return fmt.Errorf("--revoke cannot be combined with --recommend")
+		}
+		if len(productCodes) > 0 || chmodProductSelectorChanged(cmd) {
+			return fmt.Errorf("--revoke cannot be combined with --product/--products/--domain/--domains")
+		}
+		if len(scopes) != 1 {
+			return fmt.Errorf("--revoke requires exactly one positional scope")
+		}
+		if strings.TrimSpace(scopes[0]) == "" {
+			return fmt.Errorf("--revoke scope must not be blank")
+		}
+		return nil
+	}
 	if len(productCodes) == 0 && chmodProductSelectorChanged(cmd) {
 		return fmt.Errorf("--product/--products/--domain/--domains requires at least one non-empty product code")
 	}
@@ -542,15 +546,6 @@ func validateChmodSelectors(cmd *cobra.Command, scopes, productCodes []string, r
 	}
 	if allScopes && recommend {
 		return fmt.Errorf("--all cannot be combined with --recommend")
-	}
-	if revoke && recommend {
-		return fmt.Errorf("--revoke cannot be combined with --recommend")
-	}
-	if revoke && len(productCodes) > 0 && !allScopes {
-		return fmt.Errorf("product/domain-scoped --revoke requires explicit --all")
-	}
-	if revoke && len(scopes) == 0 && !allScopes {
-		return fmt.Errorf("--revoke requires positional scopes or --all")
 	}
 	if len(scopes) > 0 || recommend || len(productCodes) > 0 || allScopes {
 		return nil
@@ -565,23 +560,6 @@ func chmodProductSelectorChanged(cmd *cobra.Command) bool {
 		}
 	}
 	return false
-}
-
-func normalizeTargetedRevokeScopes(scopes []string) ([]string, error) {
-	seen := make(map[string]bool, len(scopes))
-	normalized := make([]string, 0, len(scopes))
-	for _, raw := range scopes {
-		scope := strings.TrimSpace(raw)
-		if scope == "" {
-			return nil, fmt.Errorf("--revoke scope must not be blank")
-		}
-		if seen[scope] {
-			continue
-		}
-		seen[scope] = true
-		normalized = append(normalized, scope)
-	}
-	return normalized, nil
 }
 
 func requireBatchGrantConfirmation(cmd *cobra.Command, usesPlan bool, scopes []string) error {
@@ -603,18 +581,17 @@ func requireBatchGrantConfirmation(cmd *cobra.Command, usesPlan bool, scopes []s
 	)
 }
 
-func requireBatchRevokeConfirmation(cmd *cobra.Command) error {
+func requireSingleScopeRevokeConfirmation(cmd *cobra.Command, scope string) error {
 	if commandBoolFlag(cmd, "yes") {
 		return nil
 	}
 	return apperrors.NewValidation(
-		"PAT revoke blocked: explicit user confirmation is required; rerun with --yes only after the user approves the revoke plan",
+		"PAT revoke blocked: explicit user confirmation is required; rerun with --yes only after the user approves the single-scope revoke",
 		apperrors.WithReason("pat_revoke_requires_yes"),
-		apperrors.WithHint("先执行 dws pat chmod ... --revoke --dry-run --format json 查看 selected/skipped/pending；用户明确确认后再追加 --yes 执行撤回。"),
+		apperrors.WithHint("先执行同一 scope 的 dws pat chmod <scope> --revoke --dry-run --format json；用户明确确认后再改为 --yes 执行撤回。"),
 		apperrors.WithActions(
-			"dws pat chmod <scope1> <scope2> ... --revoke --yes",
-			"dws pat chmod --product <product> --all --revoke --yes",
-			"dws pat chmod --all --revoke --yes",
+			fmt.Sprintf("dws pat chmod %s --revoke --dry-run --format json", scope),
+			fmt.Sprintf("dws pat chmod %s --revoke --yes --format json", scope),
 		),
 	)
 }
@@ -744,26 +721,20 @@ func buildBatchPlanArgs(scopes []string, productCodes []string, recommend bool, 
 	return args
 }
 
-func buildChmodBatchPlanArgs(scopes, productCodes []string, recommend, allScopes, revoke bool, grantType, agentCode, sessionID string) map[string]any {
+func buildChmodBatchPlanArgs(scopes, productCodes []string, recommend, allScopes bool, grantType, agentCode, sessionID string) map[string]any {
 	args := buildBatchPlanArgs(scopes, productCodes, recommend, grantType, agentCode, sessionID, true)
-	if !allScopes && !revoke {
+	if !allScopes {
 		// Keep existing explicit/product/recommend requests unchanged for
 		// compatibility with servers that predate the new mode fields.
 		return args
 	}
-	args["allScopes"] = allScopes
-	if revoke {
-		args["operation"] = patBatchOperationRevoke
-		delete(args, "grantType")
-		delete(args, "sessionId")
-		return args
-	}
+	args["allScopes"] = true
 	args["operation"] = patBatchOperationGrant
 	return args
 }
 
-func ensurePATBatchPlanMode(result *edition.ToolResult, allScopes, revoke bool) error {
-	if !allScopes && !revoke {
+func ensurePATBatchPlanMode(result *edition.ToolResult, allScopes bool) error {
+	if !allScopes {
 		return nil
 	}
 	if err := classifyToolResultText(result); err != nil {
@@ -783,17 +754,14 @@ func ensurePATBatchPlanMode(result *edition.ToolResult, allScopes, revoke bool) 
 	}
 
 	wantOperation := patBatchOperationGrant
-	if revoke {
-		wantOperation = patBatchOperationRevoke
-	}
 	gotOperation := stringField(data, "operation")
 	if gotOperation != wantOperation {
 		detail := fmt.Sprintf("batch plan did not attest operation %q (got %q)", wantOperation, gotOperation)
 		return newPATBatchModeUnsupportedError(detail)
 	}
 	gotAllScopes, ok := data["allScopes"].(bool)
-	if !ok || gotAllScopes != allScopes {
-		detail := fmt.Sprintf("batch plan did not attest allScopes=%t", allScopes)
+	if !ok || !gotAllScopes {
+		detail := "batch plan did not attest allScopes=true"
 		return newPATBatchModeUnsupportedError(detail)
 	}
 	return nil
@@ -840,26 +808,6 @@ func extractStrictPATBatchPlanSelectedScopes(result *edition.ToolResult) ([]stri
 	return selectedScopes, nil
 }
 
-func ensurePATRevokePlanScopeSubset(selectedScopes, requestedScopes []string, allScopes, revoke bool) error {
-	if !revoke || allScopes {
-		return nil
-	}
-	requested := make(map[string]bool, len(requestedScopes))
-	for _, scope := range requestedScopes {
-		if scope = strings.TrimSpace(scope); scope != "" {
-			requested[scope] = true
-		}
-	}
-	for _, scope := range selectedScopes {
-		normalized := strings.TrimSpace(scope)
-		if !requested[normalized] {
-			detail := fmt.Sprintf("targeted revoke plan expanded scope %q beyond the user request", normalized)
-			return newPATBatchModeUnsupportedError(detail)
-		}
-	}
-	return nil
-}
-
 func ensurePATNewModeAgentCodeAttestation(result *edition.ToolResult, expectedAgentCode, phase string) error {
 	expectedAgentCode = strings.TrimSpace(expectedAgentCode)
 	if expectedAgentCode == "" {
@@ -888,30 +836,6 @@ func ensurePATNewModeAgentCodeAttestation(result *edition.ToolResult, expectedAg
 	return nil
 }
 
-func ensurePATBatchMutationOperation(result *edition.ToolResult, wantOperation string) error {
-	if err := classifyToolResultText(result); err != nil {
-		return err
-	}
-	text := firstToolResultText(result)
-	if text == "" {
-		return newPATBatchModeUnsupportedError("batch mutation response is empty")
-	}
-	var body map[string]any
-	if err := json.Unmarshal([]byte(text), &body); err != nil {
-		return newPATBatchModeUnsupportedError("batch mutation response is not valid JSON")
-	}
-	data, _ := body["data"].(map[string]any)
-	if data == nil {
-		return newPATBatchModeUnsupportedError("batch mutation response is missing data")
-	}
-	gotOperation := stringField(data, "operation")
-	if gotOperation != wantOperation {
-		detail := fmt.Sprintf("batch mutation did not attest operation %q (got %q)", wantOperation, gotOperation)
-		return newPATBatchModeUnsupportedError(detail)
-	}
-	return nil
-}
-
 func extractPATBatchPlanScopeDigest(result *edition.ToolResult) string {
 	text := firstToolResultText(result)
 	if text == "" {
@@ -933,9 +857,92 @@ func newPATBatchModeUnsupportedError(detail string) error {
 	return apperrors.NewAPI(
 		"connected PAT server does not support the requested authorization mode",
 		apperrors.WithReason(patBatchUnsupportedCodeLower),
-		apperrors.WithHint("请先升级 PAT Gateway/Core，再重试 --all 或 --revoke；CLI 不会降级为旧授权操作。"),
+		apperrors.WithHint("请先升级 PAT Gateway/Core，再重试 --all；CLI 不会降级为旧授权操作。"),
 		apperrors.WithServerDiag(apperrors.ServerDiagnostics{
 			ServerErrorCode: patBatchUnsupportedCode,
+			TechnicalDetail: detail,
+		}),
+	)
+}
+
+func newPATScopeRevokeDryRunResult(scope, agentCode string) *edition.ToolResult {
+	data := map[string]any{
+		"operation":      "revoke",
+		"scope":          scope,
+		"grantPolicy":    patScopeRevokeGrantPolicy,
+		"selectedScopes": []string{scope},
+		"dryRun":         true,
+	}
+	if agentCode != "" {
+		data["agentCode"] = agentCode
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"success": true,
+		"code":    "DRY_RUN",
+		"data":    data,
+	})
+	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: string(payload)}}}
+}
+
+func callPATScopeRevoke(ctx context.Context, c edition.ToolCaller, scope, agentCode string) (*edition.ToolResult, error) {
+	if c == nil {
+		return nil, fmt.Errorf("internal error: tool runtime not initialized")
+	}
+	args := map[string]any{"scope": scope}
+	if agentCode != "" {
+		args["agentCode"] = agentCode
+	}
+	return withPATContextEnv(agentCode, "", func() (*edition.ToolResult, error) {
+		return c.CallTool(ctx, "pat", patScopeRevokeToolName, args)
+	})
+}
+
+func ensurePATScopeRevokeResponse(result *edition.ToolResult, expectedScope, expectedAgentCode string) error {
+	if err := classifyToolResultText(result); err != nil {
+		return err
+	}
+	text := firstToolResultText(result)
+	if text == "" {
+		return newPATScopeRevokeUnsupportedError("scope revoke response is empty")
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(text), &body); err != nil {
+		return newPATScopeRevokeUnsupportedError("scope revoke response is not valid JSON")
+	}
+	if success, ok := body["success"].(bool); !ok || !success {
+		return newPATScopeRevokeUnsupportedError("scope revoke response did not attest success=true")
+	}
+	if code := stringField(body, "code"); code != "OK" {
+		return newPATScopeRevokeUnsupportedError(fmt.Sprintf("scope revoke response did not attest code %q (got %q)", "OK", code))
+	}
+	data, _ := body["data"].(map[string]any)
+	if data == nil {
+		return newPATScopeRevokeUnsupportedError("scope revoke response is missing data")
+	}
+	if operation := stringField(data, "operation"); operation != "revoke" {
+		return newPATScopeRevokeUnsupportedError(fmt.Sprintf("scope revoke response did not attest operation %q (got %q)", "revoke", operation))
+	}
+	if scope := stringField(data, "scope"); scope != expectedScope {
+		return newPATScopeRevokeUnsupportedError(fmt.Sprintf("scope revoke response did not attest scope %q exactly (got %q)", expectedScope, scope))
+	}
+	if policy := stringField(data, "grantPolicy"); policy != patScopeRevokeGrantPolicy {
+		return newPATScopeRevokeUnsupportedError(fmt.Sprintf("scope revoke response did not attest grantPolicy %q (got %q)", patScopeRevokeGrantPolicy, policy))
+	}
+	if expectedAgentCode != "" {
+		if agentCode := stringField(data, "agentCode"); agentCode != expectedAgentCode {
+			return newPATScopeRevokeUnsupportedError(fmt.Sprintf("scope revoke response did not attest agentCode %q exactly (got %q)", expectedAgentCode, agentCode))
+		}
+	}
+	return nil
+}
+
+func newPATScopeRevokeUnsupportedError(detail string) error {
+	return apperrors.NewAPI(
+		"connected PAT server does not support safe single-scope revoke",
+		apperrors.WithReason("pat_scope_revoke_unsupported"),
+		apperrors.WithHint("请先升级 PAT Gateway/Core，确认 pat.scope_revoke 只撤回 ACTIVE grant 并拒绝 DENIED，再重试；CLI 不会降级为批量撤回或授权操作。"),
+		apperrors.WithServerDiag(apperrors.ServerDiagnostics{
+			ServerErrorCode: "PAT_SCOPE_REVOKE_UNSUPPORTED",
 			TechnicalDetail: detail,
 		}),
 	)
@@ -1771,6 +1778,12 @@ func formatPATAuthorizationSummary(text string, caller edition.ToolCaller) strin
 	if operation := stringField(data, "operation"); operation != "" {
 		lines = append(lines, "operation: "+operation)
 	}
+	if scope := stringField(data, "scope"); scope != "" {
+		lines = append(lines, "scope: "+scope)
+	}
+	if grantPolicy := stringField(data, "grantPolicy"); grantPolicy != "" {
+		lines = append(lines, "grantPolicy: "+grantPolicy)
+	}
 	if allGranted, ok := data["allGranted"].(bool); ok {
 		lines = append(lines, fmt.Sprintf("allGranted: %v", allGranted))
 	}
@@ -1784,8 +1797,6 @@ func formatPATAuthorizationSummary(text string, caller edition.ToolCaller) strin
 	appendCountLine("selected", "selectedScopes")
 	appendCountLine("granted", "grantedScopes")
 	appendCountLine("alreadyGranted", "alreadyGrantedScopes")
-	appendCountLine("revoked", "revokedScopes")
-	appendCountLine("alreadyRevoked", "alreadyRevokedScopes")
 	appendCountLine("skipped", "skippedScopes")
 	appendCountLine("pending", "pendingScopes")
 
@@ -1795,18 +1806,18 @@ func formatPATAuthorizationSummary(text string, caller edition.ToolCaller) strin
 }
 
 func patAuthorizationSuggestion(data map[string]any, caller edition.ToolCaller) string {
-	if count, ok := countField(data, "revokedScopes"); ok && count > 0 {
-		return "selected scopes were revoked"
-	}
-	if count, ok := countField(data, "alreadyRevokedScopes"); ok && count > 0 {
-		return "no action needed"
+	if stringField(data, "operation") == "revoke" &&
+		stringField(data, "scope") != "" &&
+		stringField(data, "grantPolicy") == patScopeRevokeGrantPolicy &&
+		(caller == nil || !caller.DryRun()) {
+		return "the explicit grant was revoked for this scope"
 	}
 	if allGranted, ok := data["allGranted"].(bool); ok && allGranted {
 		return "no action needed"
 	}
 	if count, ok := countField(data, "selectedScopes"); ok && count > 0 {
 		if caller != nil && caller.DryRun() {
-			if stringField(data, "operation") == patBatchOperationRevoke {
+			if stringField(data, "operation") == "revoke" {
 				return "rerun this command without --dry-run and with --yes to revoke selected scopes"
 			}
 			if allScopes, _ := data["allScopes"].(bool); allScopes {

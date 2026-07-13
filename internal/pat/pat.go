@@ -42,8 +42,9 @@ func RegisterCommands(root *cobra.Command, c edition.ToolCaller) {
   批量计划会返回 selected / skipped / pending 明细；--dry-run 只预览计划，
   不写入授权。真正执行批量授权前必须由用户显式添加 --yes；未加 --yes
   时 CLI 会阻断并提示 agent 先确认。
-  pat chmod --revoke 用于撤回显式 PAT 授权；必须指定 scope 或 --all，
-  产品 / 域范围撤回必须显式添加 --all，执行撤回同样必须添加 --yes。
+  pat chmod --revoke 用于撤回一个 scope 的显式 PAT 授权；必须且只能
+  指定一个位置 scope，不能与 --all、产品 / 域或 --recommend 组合，
+  执行撤回必须添加 --yes。
   PAT 撤回不会退出登录，也不会撤销 OAuth token。
   浏览器是否打开由本地 PAT 策略单独决定，与 json / non-json 独立。
   pat chmod 可传 --agentCode，或设置 DINGTALK_DWS_AGENTCODE；

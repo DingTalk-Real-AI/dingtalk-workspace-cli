@@ -59,16 +59,14 @@ dws pat chmod --all --yes --format json
 dws pat chmod calendar.event:read --revoke --dry-run --format json
 dws pat chmod calendar.event:read --revoke --yes --format json
 
-# 撤回全部显式授权
-dws pat chmod --revoke --all --dry-run --format json
-dws pat chmod --revoke --all --yes --format json
 ```
 
 - `--all` 选择服务端可操作的全部 scope，可与产品 / 域过滤器组合；它不同于只选择推荐集合的 `--recommend`
-- 全量授权和任意撤回写入都必须先让用户确认，再显式传 `--yes`；不得把 `--yes` 当成 Agent 默认参数
+- `--all` 只用于授权；`--revoke` 必须且只能接一个位置 scope，不能与 `--all`、产品 / 域选择器或 `--recommend` 组合
+- 全量授权和单 scope 撤回写入都必须先让用户确认，再显式传 `--yes`；不得把 `--yes` 当成 Agent 默认参数
 - PAT 场景下 `--yes` 表示非交互执行；若授权仍 pending，CLI 保留结构化的 action / flow / URI / trace 信息，但不打开浏览器、不轮询、不自动重试
-- `--revoke` 仅移除显式 PAT grant 并恢复默认策略，不是 `dws auth logout`，也不是永久 deny
-- `--all` / `--revoke` 依赖对应服务端能力；服务端不支持时必须原样报错并停止，不得降级为 `--recommend` 或其它授权方式
+- `--revoke` 仅移除 ACTIVE 的显式 PAT grant 并恢复默认策略；服务端必须拒绝 DENIED，避免撤回 deny 导致提权。它不是 `dws auth logout`，也不是永久 deny
+- `--all` / `--revoke` 依赖对应服务端能力；服务端不支持时必须原样报错并停止，不得降级为 `--recommend`、批量撤回或其它授权方式
 
 ## Recovery
 

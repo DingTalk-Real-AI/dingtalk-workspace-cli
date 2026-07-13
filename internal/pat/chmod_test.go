@@ -378,7 +378,7 @@ func TestPATHelpDocumentsBatchAuthorization(t *testing.T) {
 		"一次传多个 scope",
 		"batch plan",
 		"--all 使用服务端可操作的全部 scope",
-		"--revoke 撤回显式 PAT 授权",
+		"--revoke 只撤回一个位置 scope",
 		"--all 不是 --recommend 的别名",
 		"不主动打开浏览器、不轮询，也不自动重试",
 		"--dry-run 只返回授权计划",
@@ -388,7 +388,7 @@ func TestPATHelpDocumentsBatchAuthorization(t *testing.T) {
 		"dws pat chmod --products calendar,aitable",
 		"dws pat chmod --recommend --yes",
 		"dws pat chmod --all --dry-run",
-		"dws pat chmod --revoke --all --yes",
+		"dws pat chmod calendar.event:read --revoke --yes",
 	} {
 		if !strings.Contains(chmodHelp, want) {
 			t.Fatalf("pat chmod help missing %q\nhelp:\n%s", want, chmodHelp)
@@ -496,46 +496,34 @@ func TestChmod_allWithoutYesStopsAfterAttestedPlan(t *testing.T) {
 	}
 }
 
-func TestChmod_revokeDryRunUsesExplicitServerPlan(t *testing.T) {
-	fake := &sequenceToolCaller{
-		dryRun: true,
-		responses: []string{
-			`{"success":true,"data":{"operation":"revoke","allScopes":false,"selectedScopes":["calendar.event:read"]}}`,
-		},
-	}
+func TestChmod_revokeDryRunIsLocal(t *testing.T) {
+	fake := &sequenceToolCaller{dryRun: true}
 	cmd := newChmodCommand(fake)
 	_ = cmd.Flags().Set("revoke", "true")
 
-	if err := cmd.RunE(cmd, []string{"calendar.event:read"}); err != nil {
+	output, err := captureStdout(t, func() error {
+		return cmd.RunE(cmd, []string{" calendar.event:read "})
+	})
+	if err != nil {
 		t.Fatalf("chmod RunE error = %v", err)
 	}
-	if len(fake.calls) != 1 {
-		t.Fatalf("CallTool count = %d, want plan only", len(fake.calls))
+	if len(fake.calls) != 0 {
+		t.Fatalf("CallTool count = %d, want local-only preview", len(fake.calls))
 	}
-	call := fake.calls[0]
-	if call.tool != patBatchPlanToolName {
-		t.Fatalf("tool = %q, want %q", call.tool, patBatchPlanToolName)
-	}
-	if got := call.args["allScopes"]; got != false {
-		t.Fatalf("allScopes = %#v, want false", got)
-	}
-	if got := call.args["operation"]; got != patBatchOperationRevoke {
-		t.Fatalf("operation = %#v, want revoke", got)
-	}
-	if got := call.args["scopes"]; !stringSliceArgEqual(got, []string{"calendar.event:read"}) {
-		t.Fatalf("scopes = %#v, want target scope", got)
-	}
-	for _, key := range []string{"grantType", "sessionId"} {
-		if _, ok := call.args[key]; ok {
-			t.Fatalf("revoke plan must omit %s: %#v", key, call.args)
+	for _, want := range []string{
+		"operation: revoke",
+		"scope: calendar.event:read",
+		"grantPolicy: ONCE",
+		"rerun this command without --dry-run and with --yes",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("dry-run output missing %q: %s", want, output)
 		}
 	}
 }
 
-func TestChmod_revokeRequiresYesAfterPlan(t *testing.T) {
-	fake := &sequenceToolCaller{responses: []string{
-		`{"success":true,"data":{"operation":"revoke","allScopes":false,"selectedScopes":["calendar.event:read"]}}`,
-	}}
+func TestChmod_revokeRequiresYesWithoutCallingMCP(t *testing.T) {
+	fake := &sequenceToolCaller{}
 	cmd := newChmodCommand(fake)
 	_ = cmd.Flags().Set("revoke", "true")
 
@@ -543,91 +531,41 @@ func TestChmod_revokeRequiresYesAfterPlan(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "PAT revoke blocked") || !strings.Contains(err.Error(), "--yes") {
 		t.Fatalf("error = %v, want explicit revoke --yes blocker", err)
 	}
-	if len(fake.calls) != 1 || fake.calls[0].tool != patBatchPlanToolName {
-		t.Fatalf("calls = %#v, want plan only", fake.calls)
+	if len(fake.calls) != 0 {
+		t.Fatalf("CallTool count = %d, want confirmation before MCP", len(fake.calls))
 	}
 }
 
-func TestChmod_targetedRevokeWithYesCallsBatchRevoke(t *testing.T) {
-	t.Setenv(agentCodeEnv, "qoderwork")
+func TestChmod_singleScopeRevokeWithYesCallsDedicatedTool(t *testing.T) {
+	t.Setenv(agentCodeEnv, "")
 	fake := &sequenceToolCaller{responses: []string{
-		`{"success":true,"data":{"operation":"revoke","allScopes":false,"agentCode":"qoderwork","scopeDigest":"sha256:targeted","selectedScopes":["calendar.event:read"]}}`,
-		`{"success":true,"data":{"operation":"revoke","agentCode":"qoderwork","revokedScopes":["calendar.event:read"]}}`,
+		`{"success":true,"code":"OK","data":{"operation":"revoke","scope":"calendar.event:read","grantPolicy":"ONCE","agentCode":"qoderwork"}}`,
 	}}
 	cmd := newChmodCommand(fake)
 	_ = cmd.Flags().Set("revoke", "true")
+	_ = cmd.Flags().Set("agentCode", "qoderwork")
 	setBatchYesForTest(t, cmd)
 
 	if err := cmd.RunE(cmd, []string{"calendar.event:read"}); err != nil {
 		t.Fatalf("chmod RunE error = %v", err)
 	}
-	if len(fake.calls) != 2 || fake.calls[0].tool != patBatchPlanToolName || fake.calls[1].tool != patBatchRevokeToolName {
-		t.Fatalf("calls = %#v, want plan then batch revoke", fake.calls)
+	if len(fake.calls) != 1 || fake.calls[0].tool != patScopeRevokeToolName {
+		t.Fatalf("calls = %#v, want one dedicated scope revoke", fake.calls)
 	}
-	mutation := fake.calls[1].args
-	if got := mutation["scopes"]; !stringSliceArgEqual(got, []string{"calendar.event:read"}) {
-		t.Fatalf("revoke scopes = %#v, want target scope", got)
+	wantArgs := map[string]any{"scope": "calendar.event:read", "agentCode": "qoderwork"}
+	if len(fake.calls[0].args) != len(wantArgs) {
+		t.Fatalf("args = %#v, want only scope and optional agentCode", fake.calls[0].args)
 	}
-	if got := mutation["agentCode"]; got != "qoderwork" {
-		t.Fatalf("revoke agentCode = %#v, want qoderwork", got)
-	}
-	if got, _ := mutation["clientRequestId"].(string); !strings.HasPrefix(got, "pat-revoke-") {
-		t.Fatalf("clientRequestId = %#v, want pat-revoke prefix", mutation["clientRequestId"])
-	}
-	if got := mutation["scopeDigest"]; got != "sha256:targeted" {
-		t.Fatalf("scopeDigest = %#v, want exact targeted plan digest", got)
-	}
-	for _, key := range []string{"allScopes", "operation", "grantType", "sessionId"} {
-		if _, ok := mutation[key]; ok {
-			t.Fatalf("targeted revoke must omit %s: %#v", key, mutation)
+	for key, want := range wantArgs {
+		if got := fake.calls[0].args[key]; got != want {
+			t.Fatalf("%s = %#v, want %#v", key, got, want)
 		}
 	}
-}
-
-func TestChmod_productAllRevokePlansThenRevokesSelectedScopes(t *testing.T) {
-	t.Setenv(agentCodeEnv, "qoderwork")
-	fake := &sequenceToolCaller{responses: []string{
-		`{"success":true,"data":{"operation":"revoke","allScopes":true,"agentCode":"qoderwork","selectedScopes":["calendar.event:read"]}}`,
-		`{"success":true,"data":{"operation":"revoke","agentCode":"qoderwork","revokedScopes":["calendar.event:read"]}}`,
-	}}
-	cmd := newChmodCommand(fake)
-	_ = cmd.Flags().Set("revoke", "true")
-	_ = cmd.Flags().Set("all", "true")
-	_ = cmd.Flags().Set("product", "calendar")
-	setBatchYesForTest(t, cmd)
-
-	if err := cmd.RunE(cmd, nil); err != nil {
-		t.Fatalf("chmod RunE error = %v", err)
+	if got := fake.calls[0].agentEnv; got != "qoderwork" {
+		t.Fatalf("%s during CallTool = %q, want qoderwork", agentCodeEnv, got)
 	}
-	if len(fake.calls) != 2 {
-		t.Fatalf("CallTool count = %d, want plan then revoke", len(fake.calls))
-	}
-	plan, mutation := fake.calls[0], fake.calls[1]
-	if plan.tool != patBatchPlanToolName || mutation.tool != patBatchRevokeToolName {
-		t.Fatalf("tools = %q, %q; want plan then batch revoke", plan.tool, mutation.tool)
-	}
-	if got := plan.args["allScopes"]; got != true {
-		t.Fatalf("plan allScopes = %#v, want true", got)
-	}
-	if got := plan.args["operation"]; got != patBatchOperationRevoke {
-		t.Fatalf("plan operation = %#v, want revoke", got)
-	}
-	if got := plan.args["productCodes"]; !stringSliceArgEqual(got, []string{"calendar"}) {
-		t.Fatalf("plan productCodes = %#v, want calendar", got)
-	}
-	if got := mutation.args["scopes"]; !stringSliceArgEqual(got, []string{"calendar.event:read"}) {
-		t.Fatalf("revoke scopes = %#v, want selected scope", got)
-	}
-	if got := mutation.args["agentCode"]; got != "qoderwork" {
-		t.Fatalf("revoke agentCode = %#v, want qoderwork", got)
-	}
-	for _, key := range []string{"allScopes", "operation", "grantType", "sessionId"} {
-		if _, ok := mutation.args[key]; ok {
-			t.Fatalf("revoke mutation must omit %s: %#v", key, mutation.args)
-		}
-	}
-	if got, _ := mutation.args["clientRequestId"].(string); !strings.HasPrefix(got, "pat-revoke-") {
-		t.Fatalf("clientRequestId = %#v, want pat-revoke prefix", mutation.args["clientRequestId"])
+	if got := os.Getenv(agentCodeEnv); got != "" {
+		t.Fatalf("%s after CallTool = %q, want restored empty value", agentCodeEnv, got)
 	}
 }
 
@@ -687,15 +625,24 @@ func TestChmod_newModeValidationFailsBeforeMCP(t *testing.T) {
 			setFlags: func(cmd *cobra.Command) {
 				_ = cmd.Flags().Set("revoke", "true")
 			},
-			wantError: "--revoke requires positional scopes or --all",
+			wantError: "--revoke requires exactly one positional scope",
 		},
 		{
-			name: "product revoke without explicit all",
+			name: "revoke with multiple scopes",
+			args: []string{"calendar.event:read", "chat.message:list"},
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("revoke", "true")
+			},
+			wantError: "--revoke requires exactly one positional scope",
+		},
+		{
+			name: "revoke with product selector",
+			args: []string{"calendar.event:read"},
 			setFlags: func(cmd *cobra.Command) {
 				_ = cmd.Flags().Set("revoke", "true")
 				_ = cmd.Flags().Set("product", "calendar")
 			},
-			wantError: "product/domain-scoped --revoke requires explicit --all",
+			wantError: "--revoke cannot be combined with --product/--products/--domain/--domains",
 		},
 		{
 			name: "dry run with yes",
@@ -715,14 +662,13 @@ func TestChmod_newModeValidationFailsBeforeMCP(t *testing.T) {
 			wantError: "requires at least one non-empty product code",
 		},
 		{
-			name: "all revoke rejects blank products selector",
+			name: "revoke with all",
+			args: []string{"calendar.event:read"},
 			setFlags: func(cmd *cobra.Command) {
 				_ = cmd.Flags().Set("revoke", "true")
 				_ = cmd.Flags().Set("all", "true")
-				_ = cmd.Flags().Set("products", ",")
 			},
-			withYes:   true,
-			wantError: "requires at least one non-empty product code",
+			wantError: "--revoke cannot be combined with --all",
 		},
 		{
 			name: "all rejects explicit blank agent code",
@@ -761,56 +707,24 @@ func TestChmod_newModeValidationFailsBeforeMCP(t *testing.T) {
 	}
 }
 
-func TestChmod_newModesNeverFallBackToLegacyGrant(t *testing.T) {
-	cases := []struct {
-		name         string
-		args         []string
-		setFlags     func(*cobra.Command)
-		mutationTool string
-	}{
-		{
-			name: "all grant",
-			setFlags: func(cmd *cobra.Command) {
-				_ = cmd.Flags().Set("all", "true")
-			},
-			mutationTool: patBatchGrantToolName,
-		},
-		{
-			name: "targeted revoke",
-			args: []string{"calendar.event:read"},
-			setFlags: func(cmd *cobra.Command) {
-				_ = cmd.Flags().Set("revoke", "true")
-			},
-			mutationTool: patBatchRevokeToolName,
-		},
+func TestChmod_allNeverFallsBackToLegacyGrant(t *testing.T) {
+	fake := &sequenceToolCaller{
+		responses: []string{`{"success":true,"data":{"operation":"grant","allScopes":true,"selectedScopes":["calendar.event:read"]}}`},
+		errs:      []error{nil, errors.New("tool not found")},
 	}
+	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("all", "true")
+	setBatchYesForTest(t, cmd)
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			fake := &sequenceToolCaller{
-				responses: []string{func() string {
-					if tc.mutationTool == patBatchRevokeToolName {
-						return `{"success":true,"data":{"operation":"revoke","allScopes":false,"selectedScopes":["calendar.event:read"]}}`
-					}
-					return `{"success":true,"data":{"operation":"grant","allScopes":true,"selectedScopes":["calendar.event:read"]}}`
-				}()},
-				errs: []error{nil, errors.New("tool not found")},
-			}
-			cmd := newChmodCommand(fake)
-			tc.setFlags(cmd)
-			setBatchYesForTest(t, cmd)
-
-			err := cmd.RunE(cmd, tc.args)
-			if err == nil || !strings.Contains(err.Error(), "tool not found") {
-				t.Fatalf("error = %v, want unsupported new-mode failure", err)
-			}
-			if len(fake.calls) != 2 {
-				t.Fatalf("CallTool count = %d, want plan and one mutation without fallback", len(fake.calls))
-			}
-			if fake.calls[1].tool != tc.mutationTool {
-				t.Fatalf("mutation tool = %q, want %q", fake.calls[1].tool, tc.mutationTool)
-			}
-		})
+	err := cmd.RunE(cmd, nil)
+	if err == nil || !strings.Contains(err.Error(), "tool not found") {
+		t.Fatalf("error = %v, want unsupported all-scope failure", err)
+	}
+	if len(fake.calls) != 2 {
+		t.Fatalf("CallTool count = %d, want plan and one mutation without fallback", len(fake.calls))
+	}
+	if fake.calls[1].tool != patBatchGrantToolName {
+		t.Fatalf("mutation tool = %q, want %q", fake.calls[1].tool, patBatchGrantToolName)
 	}
 }
 
@@ -823,42 +737,6 @@ func TestChmod_newModesRejectUnattestedPlanBeforeOutputOrMutation(t *testing.T) 
 		args     []string
 		setFlags func(*cobra.Command)
 	}{
-		{
-			name:     "revoke dry-run rejects ordinary grant plan",
-			response: `{"success":true,"data":{"selectedScopes":["calendar.event:read"]}}`,
-			dryRun:   true,
-			args:     []string{"calendar.event:read"},
-			setFlags: func(cmd *cobra.Command) {
-				_ = cmd.Flags().Set("revoke", "true")
-			},
-		},
-		{
-			name:     "revoke write rejects mismatched operation",
-			response: `{"success":true,"data":{"operation":"grant","selectedScopes":["calendar.event:read"]}}`,
-			withYes:  true,
-			args:     []string{"calendar.event:read"},
-			setFlags: func(cmd *cobra.Command) {
-				_ = cmd.Flags().Set("revoke", "true")
-			},
-		},
-		{
-			name:     "targeted revoke rejects missing allScopes attestation",
-			response: `{"success":true,"data":{"operation":"revoke","selectedScopes":["calendar.event:read"]}}`,
-			withYes:  true,
-			args:     []string{"calendar.event:read"},
-			setFlags: func(cmd *cobra.Command) {
-				_ = cmd.Flags().Set("revoke", "true")
-			},
-		},
-		{
-			name:     "targeted revoke rejects allScopes true",
-			response: `{"success":true,"data":{"operation":"revoke","allScopes":true,"selectedScopes":["calendar.event:read"]}}`,
-			withYes:  true,
-			args:     []string{"calendar.event:read"},
-			setFlags: func(cmd *cobra.Command) {
-				_ = cmd.Flags().Set("revoke", "true")
-			},
-		},
 		{
 			name:     "product all rejects plan without all attestation",
 			response: `{"success":true,"data":{"operation":"grant","selectedScopes":["calendar.event:read"]}}`,
@@ -899,31 +777,6 @@ func TestChmod_newModesRejectUnattestedPlanBeforeOutputOrMutation(t *testing.T) 
 }
 
 func TestChmod_newModesRequireStrictSelectedScopesField(t *testing.T) {
-	modes := []struct {
-		name      string
-		args      []string
-		operation string
-		allScopes bool
-		setFlags  func(*cobra.Command)
-	}{
-		{
-			name:      "all grant",
-			operation: patBatchOperationGrant,
-			allScopes: true,
-			setFlags: func(cmd *cobra.Command) {
-				_ = cmd.Flags().Set("all", "true")
-			},
-		},
-		{
-			name:      "targeted revoke",
-			args:      []string{"calendar.event:read"},
-			operation: patBatchOperationRevoke,
-			allScopes: false,
-			setFlags: func(cmd *cobra.Command) {
-				_ = cmd.Flags().Set("revoke", "true")
-			},
-		},
-	}
 	invalidFields := []struct {
 		name  string
 		field string
@@ -934,68 +787,37 @@ func TestChmod_newModesRequireStrictSelectedScopesField(t *testing.T) {
 		{name: "non-string item", field: `,"selectedScopes":[1]`},
 	}
 
-	for _, mode := range modes {
-		for _, invalid := range invalidFields {
-			t.Run(mode.name+"/"+invalid.name, func(t *testing.T) {
-				allLiteral := "false"
-				if mode.allScopes {
-					allLiteral = "true"
-				}
-				response := `{"success":true,"data":{"operation":"` + mode.operation + `","allScopes":` + allLiteral + invalid.field + `}}`
-				fake := &sequenceToolCaller{responses: []string{response}}
-				cmd := newChmodCommand(fake)
-				mode.setFlags(cmd)
-				setBatchYesForTest(t, cmd)
+	for _, invalid := range invalidFields {
+		t.Run(invalid.name, func(t *testing.T) {
+			response := `{"success":true,"data":{"operation":"grant","allScopes":true` + invalid.field + `}}`
+			fake := &sequenceToolCaller{responses: []string{response}}
+			cmd := newChmodCommand(fake)
+			_ = cmd.Flags().Set("all", "true")
+			setBatchYesForTest(t, cmd)
 
-				err := cmd.RunE(cmd, mode.args)
-				if err == nil || !isPATBatchUnsupportedError(err) {
-					t.Fatalf("error = %v, want strict selectedScopes contract failure", err)
-				}
-				if len(fake.calls) != 1 || fake.calls[0].tool != patBatchPlanToolName {
-					t.Fatalf("calls = %#v, want one plan and zero mutation", fake.calls)
-				}
-			})
-		}
+			err := cmd.RunE(cmd, nil)
+			if err == nil || !isPATBatchUnsupportedError(err) {
+				t.Fatalf("error = %v, want strict selectedScopes contract failure", err)
+			}
+			if len(fake.calls) != 1 || fake.calls[0].tool != patBatchPlanToolName {
+				t.Fatalf("calls = %#v, want one plan and zero mutation", fake.calls)
+			}
+		})
 	}
 }
 
 func TestChmod_newModesAllowExplicitEmptySelectedScopes(t *testing.T) {
-	cases := []struct {
-		name     string
-		args     []string
-		response string
-		setFlags func(*cobra.Command)
-	}{
-		{
-			name:     "all grant",
-			response: `{"success":true,"data":{"operation":"grant","allScopes":true,"selectedScopes":[]}}`,
-			setFlags: func(cmd *cobra.Command) {
-				_ = cmd.Flags().Set("all", "true")
-			},
-		},
-		{
-			name:     "targeted revoke",
-			args:     []string{"calendar.event:read"},
-			response: `{"success":true,"data":{"operation":"revoke","allScopes":false,"selectedScopes":[]}}`,
-			setFlags: func(cmd *cobra.Command) {
-				_ = cmd.Flags().Set("revoke", "true")
-			},
-		},
+	fake := &sequenceToolCaller{responses: []string{
+		`{"success":true,"data":{"operation":"grant","allScopes":true,"selectedScopes":[]}}`,
+	}}
+	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("all", "true")
+
+	if err := cmd.RunE(cmd, nil); err != nil {
+		t.Fatalf("chmod RunE error = %v", err)
 	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			fake := &sequenceToolCaller{responses: []string{tc.response}}
-			cmd := newChmodCommand(fake)
-			tc.setFlags(cmd)
-
-			if err := cmd.RunE(cmd, tc.args); err != nil {
-				t.Fatalf("chmod RunE error = %v", err)
-			}
-			if len(fake.calls) != 1 || fake.calls[0].tool != patBatchPlanToolName {
-				t.Fatalf("calls = %#v, want empty plan and zero mutation", fake.calls)
-			}
-		})
+	if len(fake.calls) != 1 || fake.calls[0].tool != patBatchPlanToolName {
+		t.Fatalf("calls = %#v, want empty plan and zero mutation", fake.calls)
 	}
 }
 
@@ -1015,16 +837,6 @@ func TestChmod_newModesRequireExactAgentCodeAttestation(t *testing.T) {
 			mutationWithoutAgent: `{"success":true,"data":{"grantedScopes":["calendar.event:read"]}}`,
 			setFlags: func(cmd *cobra.Command) {
 				_ = cmd.Flags().Set("all", "true")
-			},
-		},
-		{
-			name:                 "targeted revoke",
-			args:                 []string{"calendar.event:read"},
-			planWithoutAgent:     `{"success":true,"data":{"operation":"revoke","allScopes":false,"selectedScopes":["calendar.event:read"]}}`,
-			planWithAgent:        `{"success":true,"data":{"operation":"revoke","allScopes":false,"agentCode":"qoderwork","selectedScopes":["calendar.event:read"]}}`,
-			mutationWithoutAgent: `{"success":true,"data":{"operation":"revoke","revokedScopes":["calendar.event:read"]}}`,
-			setFlags: func(cmd *cobra.Command) {
-				_ = cmd.Flags().Set("revoke", "true")
 			},
 		},
 	}
@@ -1056,52 +868,72 @@ func TestChmod_newModesRequireExactAgentCodeAttestation(t *testing.T) {
 	}
 }
 
-func TestChmod_targetedRevokeRejectsServerScopeExpansion(t *testing.T) {
-	fake := &sequenceToolCaller{responses: []string{
-		`{"success":true,"data":{"operation":"revoke","allScopes":false,"selectedScopes":["calendar.event:read","chat.message:list"]}}`,
-	}}
-	cmd := newChmodCommand(fake)
-	_ = cmd.Flags().Set("revoke", "true")
-	setBatchYesForTest(t, cmd)
-
-	err := cmd.RunE(cmd, []string{"calendar.event:read"})
-	if err == nil || !isPATBatchUnsupportedError(err) || !strings.Contains(err.Error(), "does not support") {
-		t.Fatalf("error = %v, want fail-closed scope expansion error", err)
+func TestChmod_singleScopeRevokeRejectsUnattestedResponse(t *testing.T) {
+	t.Setenv(agentCodeEnv, "")
+	cases := []struct {
+		name     string
+		response string
+	}{
+		{name: "missing code", response: `{"success":true,"data":{"operation":"revoke","scope":"calendar.event:read","grantPolicy":"ONCE"}}`},
+		{name: "wrong code", response: `{"success":true,"code":"CREATED","data":{"operation":"revoke","scope":"calendar.event:read","grantPolicy":"ONCE"}}`},
+		{name: "wrong operation", response: `{"success":true,"code":"OK","data":{"operation":"grant","scope":"calendar.event:read","grantPolicy":"ONCE"}}`},
+		{name: "wrong scope", response: `{"success":true,"code":"OK","data":{"operation":"revoke","scope":"chat.message:list","grantPolicy":"ONCE"}}`},
+		{name: "missing policy", response: `{"success":true,"code":"OK","data":{"operation":"revoke","scope":"calendar.event:read"}}`},
+		{name: "wrong policy", response: `{"success":true,"code":"OK","data":{"operation":"revoke","scope":"calendar.event:read","grantPolicy":"ALWAYS_ALLOW"}}`},
 	}
-	if len(fake.calls) != 1 || fake.calls[0].tool != patBatchPlanToolName {
-		t.Fatalf("calls = %#v, want plan only and no revoke mutation", fake.calls)
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &sequenceToolCaller{responses: []string{tc.response}}
+			cmd := newChmodCommand(fake)
+			_ = cmd.Flags().Set("revoke", "true")
+			setBatchYesForTest(t, cmd)
+
+			output, err := captureStdout(t, func() error {
+				return cmd.RunE(cmd, []string{"calendar.event:read"})
+			})
+			if err == nil || !strings.Contains(err.Error(), "safe single-scope revoke") {
+				t.Fatalf("error = %v, want fail-closed single-scope attestation error", err)
+			}
+			if output != "" {
+				t.Fatalf("unattested revoke must not be presented as success: %q", output)
+			}
+			if len(fake.calls) != 1 || fake.calls[0].tool != patScopeRevokeToolName {
+				t.Fatalf("calls = %#v, want one dedicated scope revoke", fake.calls)
+			}
+		})
 	}
 }
 
-func TestChmod_targetedRevokeRejectsMisroutedMutationResponse(t *testing.T) {
-	fake := &sequenceToolCaller{responses: []string{
-		`{"success":true,"data":{"operation":"revoke","allScopes":false,"selectedScopes":["calendar.event:read"]}}`,
-		`{"success":true,"data":{"operation":"grant","revokedScopes":["calendar.event:read"]}}`,
-	}}
-	cmd := newChmodCommand(fake)
-	_ = cmd.Flags().Set("revoke", "true")
-	setBatchYesForTest(t, cmd)
+func TestChmod_singleScopeRevokeRequiresExactAgentCodeAttestation(t *testing.T) {
+	t.Setenv(agentCodeEnv, "")
+	responses := []string{
+		`{"success":true,"code":"OK","data":{"operation":"revoke","scope":"calendar.event:read","grantPolicy":"ONCE"}}`,
+		`{"success":true,"code":"OK","data":{"operation":"revoke","scope":"calendar.event:read","grantPolicy":"ONCE","agentCode":"other-agent"}}`,
+	}
+	for _, response := range responses {
+		fake := &sequenceToolCaller{responses: []string{response}}
+		cmd := newChmodCommand(fake)
+		_ = cmd.Flags().Set("revoke", "true")
+		_ = cmd.Flags().Set("agentCode", "qoderwork")
+		setBatchYesForTest(t, cmd)
 
-	output, err := captureStdout(t, func() error {
-		return cmd.RunE(cmd, []string{"calendar.event:read"})
-	})
-	if err == nil || !isPATBatchUnsupportedError(err) {
-		t.Fatalf("error = %v, want fail-closed mutation attestation error", err)
-	}
-	if output != "" {
-		t.Fatalf("misrouted mutation must not be presented as success: %q", output)
-	}
-	if len(fake.calls) != 2 || fake.calls[1].tool != patBatchRevokeToolName {
-		t.Fatalf("calls = %#v, want plan then one revoke mutation", fake.calls)
+		err := cmd.RunE(cmd, []string{"calendar.event:read"})
+		var typed *apperrors.Error
+		if err == nil || !errors.As(err, &typed) || typed.Reason != "pat_scope_revoke_unsupported" ||
+			!strings.Contains(typed.ServerDiag.TechnicalDetail, "did not attest agentCode") {
+			t.Fatalf("response = %s, error = %v, want exact agentCode attestation failure", response, err)
+		}
+		if len(fake.calls) != 1 || fake.calls[0].agentEnv != "qoderwork" {
+			t.Fatalf("calls = %#v, want one call with trusted qoderwork env", fake.calls)
+		}
 	}
 }
 
-func TestChmod_revokeIdentityRetryReusesClientRequestIDAndScopeDigest(t *testing.T) {
-	t.Setenv(agentCodeEnv, "qoderwork")
+func TestChmod_singleScopeRevokeOmitsAgentCodeWhenUnset(t *testing.T) {
+	t.Setenv(agentCodeEnv, "")
 	fake := &sequenceToolCaller{responses: []string{
-		`{"success":true,"data":{"operation":"revoke","allScopes":false,"agentCode":"qoderwork","scopeDigest":"sha256:stable-digest","selectedScopes":["calendar.event:read"]}}`,
-		`{"success":false,"code":"PAT_FORGED_IDENTITY_FIELD"}`,
-		`{"success":true,"data":{"operation":"revoke","agentCode":"qoderwork","revokedScopes":["calendar.event:read"]}}`,
+		`{"success":true,"code":"OK","data":{"operation":"revoke","scope":"calendar.event:read","grantPolicy":"ONCE"}}`,
 	}}
 	cmd := newChmodCommand(fake)
 	_ = cmd.Flags().Set("revoke", "true")
@@ -1110,48 +942,11 @@ func TestChmod_revokeIdentityRetryReusesClientRequestIDAndScopeDigest(t *testing
 	if err := cmd.RunE(cmd, []string{"calendar.event:read"}); err != nil {
 		t.Fatalf("chmod RunE error = %v", err)
 	}
-	if len(fake.calls) != 3 {
-		t.Fatalf("CallTool count = %d, want plan plus revoke identity retry", len(fake.calls))
+	if len(fake.calls) != 1 {
+		t.Fatalf("CallTool count = %d, want one", len(fake.calls))
 	}
-	firstMutation, retryMutation := fake.calls[1], fake.calls[2]
-	if firstMutation.tool != patBatchRevokeToolName || retryMutation.tool != patBatchRevokeToolName {
-		t.Fatalf("mutation tools = %q, %q; want batch revoke", firstMutation.tool, retryMutation.tool)
-	}
-	firstID, _ := firstMutation.args["clientRequestId"].(string)
-	retryID, _ := retryMutation.args["clientRequestId"].(string)
-	if firstID == "" || retryID != firstID {
-		t.Fatalf("clientRequestId first=%q retry=%q, want one stable nonempty ID", firstID, retryID)
-	}
-	if firstMutation.args["scopeDigest"] != "sha256:stable-digest" || retryMutation.args["scopeDigest"] != "sha256:stable-digest" {
-		t.Fatalf("scopeDigest not forwarded unchanged: first=%#v retry=%#v", firstMutation.args["scopeDigest"], retryMutation.args["scopeDigest"])
-	}
-	if _, ok := retryMutation.args["agentCode"]; ok {
-		t.Fatalf("identity retry should omit agentCode arg: %#v", retryMutation.args)
-	}
-}
-
-func TestChmod_targetedRevokeNormalizesAndDeduplicatesScopes(t *testing.T) {
-	fake := &sequenceToolCaller{responses: []string{
-		`{"success":true,"data":{"operation":"revoke","allScopes":false,"selectedScopes":["calendar.event:read","Chat.Message:List"]}}`,
-		`{"success":true,"data":{"operation":"revoke","revokedScopes":["calendar.event:read","Chat.Message:List"]}}`,
-	}}
-	cmd := newChmodCommand(fake)
-	_ = cmd.Flags().Set("revoke", "true")
-	setBatchYesForTest(t, cmd)
-
-	args := []string{" calendar.event:read ", "calendar.event:read", "Chat.Message:List", "Chat.Message:List"}
-	if err := cmd.RunE(cmd, args); err != nil {
-		t.Fatalf("chmod RunE error = %v", err)
-	}
-	want := []string{"calendar.event:read", "Chat.Message:List"}
-	if len(fake.calls) != 2 {
-		t.Fatalf("CallTool count = %d, want plan then revoke", len(fake.calls))
-	}
-	if got := fake.calls[0].args["scopes"]; !stringSliceArgEqual(got, want) {
-		t.Fatalf("plan scopes = %#v, want stable normalized scopes %#v", got, want)
-	}
-	if got := fake.calls[1].args["scopes"]; !stringSliceArgEqual(got, want) {
-		t.Fatalf("mutation scopes = %#v, want stable normalized scopes %#v", got, want)
+	if len(fake.calls[0].args) != 1 || fake.calls[0].args["scope"] != "calendar.event:read" {
+		t.Fatalf("args = %#v, want exact scope only", fake.calls[0].args)
 	}
 }
 
@@ -2616,14 +2411,8 @@ func TestHandleToolResult_defaultSummarizesBatchPlan(t *testing.T) {
 	}
 }
 
-func TestHandleToolResult_summarizesRevokePlanAndResult(t *testing.T) {
-	plan := &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{
-		"success": true,
-		"data": {
-			"operation": "revoke",
-			"selectedScopes": ["calendar.event:read"]
-		}
-	}`}}}
+func TestHandleToolResult_summarizesSingleScopeRevokePreviewAndResult(t *testing.T) {
+	plan := newPATScopeRevokeDryRunResult("calendar.event:read", "")
 	planOutput, err := captureStdout(t, func() error {
 		return handleToolResult(&cobra.Command{Use: "chmod"}, &sequenceToolCaller{dryRun: true}, plan)
 	})
@@ -2632,6 +2421,8 @@ func TestHandleToolResult_summarizesRevokePlanAndResult(t *testing.T) {
 	}
 	for _, want := range []string{
 		"operation: revoke",
+		"scope: calendar.event:read",
+		"grantPolicy: ONCE",
 		"selected: 1",
 		"suggestion: rerun this command without --dry-run and with --yes to revoke selected scopes",
 	} {
@@ -2642,9 +2433,11 @@ func TestHandleToolResult_summarizesRevokePlanAndResult(t *testing.T) {
 
 	result := &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{
 		"success": true,
+		"code": "OK",
 		"data": {
-			"revokedScopes": ["calendar.event:read"],
-			"alreadyRevokedScopes": ["chat.message:list"]
+			"operation": "revoke",
+			"scope": "calendar.event:read",
+			"grantPolicy": "ONCE"
 		}
 	}`}}}
 	resultOutput, err := captureStdout(t, func() error {
@@ -2653,7 +2446,12 @@ func TestHandleToolResult_summarizesRevokePlanAndResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("handle revoke result error = %v", err)
 	}
-	for _, want := range []string{"revoked: 1", "alreadyRevoked: 1", "suggestion: selected scopes were revoked"} {
+	for _, want := range []string{
+		"operation: revoke",
+		"scope: calendar.event:read",
+		"grantPolicy: ONCE",
+		"suggestion: the explicit grant was revoked for this scope",
+	} {
 		if !strings.Contains(resultOutput, want) {
 			t.Fatalf("revoke result summary missing %q: %s", want, resultOutput)
 		}

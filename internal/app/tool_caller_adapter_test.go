@@ -97,7 +97,7 @@ func TestToolCallerAdapter_GlobalDryRunAllowsOnlyPATBatchPlanPreview(t *testing.
 		args    map[string]any
 	}{
 		{name: "grant", product: "pat", tool: "pat.batch_grant", args: map[string]any{"dryRun": true}},
-		{name: "revoke", product: "pat", tool: "pat.batch_revoke", args: map[string]any{"dryRun": true}},
+		{name: "revoke", product: "pat", tool: "pat.scope_revoke", args: map[string]any{"dryRun": true}},
 		{name: "plan false", product: "pat", tool: "pat.batch_plan", args: map[string]any{"dryRun": false}},
 		{name: "plan missing", product: "pat", tool: "pat.batch_plan", args: map[string]any{}},
 		{name: "other tool catalog miss", product: "dry-run-test-missing", tool: "read_only_tool", args: map[string]any{"dryRun": true}},
