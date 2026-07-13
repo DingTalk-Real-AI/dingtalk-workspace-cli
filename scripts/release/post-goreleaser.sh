@@ -272,10 +272,9 @@ sign_darwin_archives() {
 }
 
 write_checksums() {
-  checksum_path="$DIST_DIR/checksums.txt"
-  # Append skills zip checksum to goreleaser's checksums file
+  # Keep this idempotent: workflow retries must not leave duplicate entries.
   if [ -f "$DIST_DIR/dws-skills.zip" ]; then
-    printf '%s  %s\n' "$(sha256_file "$DIST_DIR/dws-skills.zip")" "dws-skills.zip" >> "$checksum_path"
+    update_checksum_entry "dws-skills.zip" "$(sha256_file "$DIST_DIR/dws-skills.zip")"
   fi
 }
 

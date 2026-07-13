@@ -64,11 +64,55 @@ jobs:
         env:
           DWS_PACKAGE_VERSION: ${{ github.ref_name }}
 
-      - name: Upload dws-skills.zip to release
+      # GoReleaser publishes the original archives before post-goreleaser.sh
+      # replaces the Darwin binaries with their rcodesign output. Re-upload all
+      # files changed by post-processing so GitHub, npm, and the mirrors expose
+      # the same bytes and checksums.
+      - name: Upload finalized signed assets to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ github.ref_name }}" dist/dws-skills.zip --clobber
+          set -euo pipefail
+
+          assets=(
+            dist/dws-darwin-amd64.tar.gz
+            dist/dws-darwin-arm64.tar.gz
+            dist/checksums.txt
+            dist/dws-skills.zip
+          )
+
+          for asset in "${assets[@]}"; do
+            test -f "$asset"
+          done
+
+          gh release upload "$GITHUB_REF_NAME" "${assets[@]}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
+
+          # Fail the release if GitHub still serves a pre-signing archive. Asset
+          # digests can take a moment to settle after replacement, so retry.
+          for asset in "${assets[@]}"; do
+            name="$(basename "$asset")"
+            local_digest="sha256:$(sha256sum "$asset" | awk '{print $1}')"
+            attempt=1
+            while [ "$attempt" -le 5 ]; do
+              remote_digest="$(
+                gh api "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" \
+                  --jq ".assets[] | select(.name == \"$name\") | .digest"
+              )"
+              if [ "$remote_digest" = "$local_digest" ]; then
+                break
+              fi
+              if [ "$attempt" -eq 5 ]; then
+                echo "release asset digest mismatch for $name" >&2
+                echo "  local:  $local_digest" >&2
+                echo "  remote: ${remote_digest:-missing}" >&2
+                exit 1
+              fi
+              attempt=$((attempt + 1))
+              sleep 2
+            done
+          done
 
       - name: Sync release to China OSS mirror
         # 自动同步到国内镜像，供 install.sh 的 DWS_RELEASE_BASE 开关消费。

@@ -330,3 +330,37 @@ func TestPostGoreleaserSkillsZipLayout(t *testing.T) {
 		t.Fatalf("multi/ does not contain any dingtalk-* skill: %v", multiEntries)
 	}
 }
+
+func TestReleaseWorkflowUploadsPostProcessedDarwinAssets(t *testing.T) {
+	t.Parallel()
+
+	workflowPath, err := filepath.Abs(filepath.Join("..", "..", ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Fatalf("Abs(release.yml) error = %v", err)
+	}
+	data, err := os.ReadFile(workflowPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", workflowPath, err)
+	}
+	workflow := string(data)
+
+	postProcess := strings.Index(workflow, "./scripts/release/post-goreleaser.sh")
+	upload := strings.Index(workflow, "Upload finalized signed assets to release")
+	if postProcess == -1 || upload == -1 || upload < postProcess {
+		t.Fatalf("finalized asset upload must run after post-goreleaser.sh")
+	}
+
+	for _, required := range []string{
+		"dist/dws-darwin-amd64.tar.gz",
+		"dist/dws-darwin-arm64.tar.gz",
+		"dist/checksums.txt",
+		"dist/dws-skills.zip",
+		"gh release upload",
+		"--clobber",
+		"release asset digest mismatch",
+	} {
+		if !strings.Contains(workflow[upload:], required) {
+			t.Errorf("finalized asset upload is missing %q", required)
+		}
+	}
+}
