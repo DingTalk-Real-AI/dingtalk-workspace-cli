@@ -165,7 +165,7 @@ go test ./internal/cli \
 	-run '^(TestEmbeddedSchemaCatalog.*|TestSchemaUsesEmbeddedCatalogWithoutRuntimeLoad|TestWalkLeafCommandsTraversesAnnotatedHiddenSubtree)$' \
 	-count=1
 go test ./internal/app \
-	-run '^(TestEmbeddedSchemaContractMapsToExecutableTree|TestRegisterPluginHTTPServerDoesNotProbeEndpoint|TestRegisterStdioServerFromManifestDoesNotStartProcess)$' \
+	-run '^(TestEmbeddedSchemaContractMapsToExecutableTree|TestRuntimeSchemaCompletenessCoversPublicCommandTree|TestRegisterPluginHTTPServerDoesNotProbeEndpoint|TestRegisterStdioServerFromManifestDoesNotStartProcess)$' \
 	-count=1
 
 printf 'schema catalog check: ok (%s products, %s tools)\n' "$catalog_product_count" "$surface_count"

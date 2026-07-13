@@ -402,8 +402,8 @@
       ],
       "effect": "write",
       "effect_source": "agent-hint",
-      "risk": "medium",
-      "confirmation": "not_required",
+      "risk": "high",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "examples": [
         "dws attendance globalsetting save --help"
@@ -432,8 +432,8 @@
       ],
       "effect": "write",
       "effect_source": "agent-hint",
-      "risk": "medium",
-      "confirmation": "not_required",
+      "risk": "high",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "examples": [
         "dws attendance group create --name \"研发考勤组\" --type FIXED --group-vo '{\"defaultClassId\":1170996821,\"workDayClassList\":[0,1170996821,0,0,0,0,0]}' --timeout 10",
@@ -553,8 +553,8 @@
       ],
       "effect": "write",
       "effect_source": "agent-hint",
-      "risk": "medium",
-      "confirmation": "not_required",
+      "risk": "high",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "examples": [
         "dws attendance group update --group-id 123456 --name \"研发考勤组\" --timeout 10",
@@ -583,8 +583,8 @@
       ],
       "effect": "write",
       "effect_source": "agent-hint",
-      "risk": "medium",
-      "confirmation": "not_required",
+      "risk": "high",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "examples": [
         "dws attendance group update-members --group-id 123456 --add-users userId1,userId2",
@@ -862,8 +862,8 @@
       ],
       "effect": "write",
       "effect_source": "agent-hint",
-      "risk": "medium",
-      "confirmation": "not_required",
+      "risk": "high",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "examples": [
         "dws attendance schedule import --help"
@@ -1139,8 +1139,8 @@
       ],
       "effect": "write",
       "effect_source": "agent-hint",
-      "risk": "medium",
-      "confirmation": "not_required",
+      "risk": "high",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "examples": [
         "dws attendance vacation update-type --leave-code a1b2c3d4-e5f6-7890-abcd-ef1234567890 --name \"事假（修改版）\"",

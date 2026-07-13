@@ -206,6 +206,9 @@
     "chat.add_robot_to_group": {
       "interface_ref": {"product_id": "bot", "rpc_name": "add_robot_to_group"}
     },
+    "chat.create_smart_conv_category": {
+      "interface_ref": {"product_id": "im", "rpc_name": "create_smart_conv_category"}
+    },
     "chat.create_group_conversation": {
       "interface_ref": {"product_id": "im", "rpc_name": "create_group_conversation"}
     },

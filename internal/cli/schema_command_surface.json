@@ -736,6 +736,10 @@
           "cli_path": "chat bot search"
         },
         {
+          "canonical_path": "chat.create_smart_conv_category",
+          "cli_path": "chat category create-smart"
+        },
+        {
           "canonical_path": "chat.list_user_define_conv_categories",
           "cli_path": "chat category list"
         },

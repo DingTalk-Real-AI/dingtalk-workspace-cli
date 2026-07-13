@@ -1917,6 +1917,21 @@
       "interface_mode": "mcp",
       "availability": "available"
     },
+    "chat.create_smart_conv_category": {
+      "agent_summary": "创建按群名称关键词或群成员自动匹配会话的智能分组",
+      "use_when": [
+        "需要按群名称关键词或群成员自动归类会话时创建智能会话分组"
+      ],
+      "avoid_when": [
+        "只需要普通静态会话分组，或不希望根据关键词和成员自动匹配会话时不要使用"
+      ],
+      "examples": [
+        "dws chat category create-smart --name \"重点项目群\" --keywords \"项目,重点\""
+      ],
+      "reviewed": true,
+      "interface_mode": "mcp",
+      "availability": "available"
+    },
     "chat.create_group_conversation": {
       "use_when": [
         "帮我建一个项目群；创建群聊",

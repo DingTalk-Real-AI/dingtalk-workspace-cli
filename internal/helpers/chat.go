@@ -4972,6 +4972,9 @@ status 可选值:
 	_ = chatCategoryCreateSmartCmd.MarkFlagRequired("name")
 	chatCategoryCreateSmartCmd.Flags().String("keywords", "", "群名称关键词列表，逗号分隔（可选）")
 	chatCategoryCreateSmartCmd.Flags().String("members", "", "群内成员 openDingTalkId 列表，逗号分隔（可选）")
+	cli.AnnotateRuntimeFlag(chatCategoryCreateSmartCmd, "name", "categoryName", "string", true, "")
+	cli.AnnotateRuntimeFlag(chatCategoryCreateSmartCmd, "keywords", "groupNameKeywords", "array", false, "")
+	cli.AnnotateRuntimeFlag(chatCategoryCreateSmartCmd, "members", "memberOpenDingTalkIds", "array", false, "")
 
 	chatMessageListEmotionRepliesCmd := &cobra.Command{
 		Use:   "list-emotion-replies",

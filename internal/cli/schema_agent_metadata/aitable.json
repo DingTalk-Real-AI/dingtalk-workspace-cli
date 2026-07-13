@@ -14,8 +14,8 @@
       ],
       "effect": "write",
       "effect_source": "agent-hint",
-      "risk": "medium",
-      "confirmation": "not_required",
+      "risk": "high",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "examples": [
         "dws aitable advperm disable --base-id \u003cbase-id\u003e"
@@ -3679,8 +3679,8 @@
       ],
       "effect": "write",
       "effect_source": "agent-hint",
-      "risk": "medium",
-      "confirmation": "not_required",
+      "risk": "high",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "examples": [
         "dws aitable workflow disable --base-id \u003cbase-id\u003e --workflow-id \u003cworkflow-id\u003e"

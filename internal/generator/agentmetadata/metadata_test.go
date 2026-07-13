@@ -322,6 +322,24 @@ func TestGenerateMergesVersionedHintsByCanonicalPath(t *testing.T) {
 	}
 }
 
+func TestMergeToolMetadataPreservesStricterSafetyAcrossAliases(t *testing.T) {
+	merged := mergeToolMetadata(
+		ToolMetadata{Risk: "medium", Confirmation: "not_required"},
+		ToolMetadata{Risk: "high", Confirmation: "user_required"},
+	)
+	if merged.Risk != "high" || merged.Confirmation != "user_required" {
+		t.Fatalf("merged safety = %s/%s, want high/user_required", merged.Risk, merged.Confirmation)
+	}
+
+	merged = mergeToolMetadata(
+		ToolMetadata{Risk: "high", Confirmation: "user_required"},
+		ToolMetadata{Risk: "low", Confirmation: "not_required"},
+	)
+	if merged.Risk != "high" || merged.Confirmation != "user_required" {
+		t.Fatalf("strict safety was downgraded to %s/%s", merged.Risk, merged.Confirmation)
+	}
+}
+
 func TestGenerateAppliesReviewedSkillReferenceDispositions(t *testing.T) {
 	root := t.TempDir()
 	writeFixture(t, root, "skills/mono/SKILL.md", "# DWS\n")

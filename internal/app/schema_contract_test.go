@@ -19,8 +19,8 @@ func TestEmbeddedSchemaContractMapsToExecutableTree(t *testing.T) {
 	report := cli.AnnotateEmbeddedSchemaCommands(root)
 	definitions := cli.EmbeddedSchemaCommandDefinitions()
 	bindings := cli.EmbeddedSchemaParameterBindings()
-	if len(definitions) != 537 {
-		t.Fatalf("embedded definitions = %d, want 537", len(definitions))
+	if len(definitions) != 538 {
+		t.Fatalf("embedded definitions = %d, want 538", len(definitions))
 	}
 	if report.Matched != len(definitions) || len(report.Missing) != 0 {
 		t.Fatalf("schema annotation report = matched:%d missing:%v", report.Matched, report.Missing)
@@ -198,6 +198,23 @@ func TestChatSchemaSeparatesSendAndReply(t *testing.T) {
 	}
 	if _, exists := definitions["chat.upload_conversation_file"]; exists {
 		t.Fatal("downlined chat file upload must not be advertised in Schema")
+	}
+}
+
+func TestCalendarAttendeeDeleteSchemaRequiresUserConfirmation(t *testing.T) {
+	root := NewRootCommand()
+	snapshot, err := cli.BuildSchemaCatalogSnapshot(root, cli.SchemaCatalogBuildOptions{
+		AllowedCanonicalPaths: map[string]bool{"calendar.remove_calendar_participant": true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tool := snapshot.Tools["calendar.remove_calendar_participant"]
+	if got := tool["risk"]; got != "high" {
+		t.Fatalf("calendar attendee delete risk = %#v, want high", got)
+	}
+	if got := tool["confirmation"]; got != "user_required" {
+		t.Fatalf("calendar attendee delete confirmation = %#v, want user_required", got)
 	}
 }
 

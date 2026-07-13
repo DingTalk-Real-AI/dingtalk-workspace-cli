@@ -76,6 +76,36 @@
       "interface_mode": "mcp",
       "availability": "available"
     },
+    "chat category create-smart": {
+      "agent_summary": "创建按群名称关键词或群成员自动匹配会话的智能分组",
+      "agent_summary_source": "agent-selection-contract-v1",
+      "use_when": [
+        "需要按群名称关键词或群成员自动归类会话时创建智能会话分组"
+      ],
+      "avoid_when": [
+        "只需要普通静态会话分组，或不希望根据关键词和成员自动匹配会话时不要使用"
+      ],
+      "effect": "write",
+      "effect_source": "command-verb",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "examples": [
+        "dws chat category create-smart --name \"重点项目群\" --keywords \"项目,重点\""
+      ],
+      "reviewed": true,
+      "source_refs": [
+        "skills/mono/references/products/chat.md",
+        "skills/mono/schema-hints/interface-refs.json",
+        "skills/mono/schema-hints/selection-review.json"
+      ],
+      "interface_ref": {
+        "product_id": "im",
+        "rpc_name": "create_smart_conv_category"
+      },
+      "interface_mode": "mcp",
+      "availability": "available"
+    },
     "chat category list": {
       "agent_summary": "获取用户自定义会话分组",
       "agent_summary_source": "mcp-tools-list+cli-registry@4574f7022c32",

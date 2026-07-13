@@ -1,18 +1,18 @@
 {
   "version": 1,
-  "source_hash": "sha256:ff9f77eaefe20f250124521bebc5feb38ac1e2e25d3cc2a94b4007dd5bcb8514",
-  "surface_hash": "sha256:7fb8d999c27622a1a0ea39074d7b375f7686964d77eebeb4be30e616311ab86d",
+  "source_hash": "sha256:04a82edee19c649dba24216ac1ea90d6df2d1953307518499614186cf2e819ce",
+  "surface_hash": "sha256:75c63f35d9b15dfb4df09136bfd250906751cfeb7f14bce08cf092097859baad",
   "catalog": {
     "agent_metadata": {
       "products_with_metadata": 20,
       "source": "embedded-skill-metadata",
-      "source_hash": "sha256:e0d748bc18b99053f7986ed913c2742e94559341cf2aeac193dc81aab50cd1fb",
-      "surface_hash": "sha256:7fb8d999c27622a1a0ea39074d7b375f7686964d77eebeb4be30e616311ab86d",
+      "source_hash": "sha256:b9fd6c4de190c413312561049ed2bbb80b272aad127ba2c0a5082364761012ee",
+      "surface_hash": "sha256:75c63f35d9b15dfb4df09136bfd250906751cfeb7f14bce08cf092097859baad",
       "surface_products": 20,
-      "surface_tools": 537,
-      "tools_with_agent_summary": 537,
-      "tools_with_metadata": 537,
-      "unmatched_skill_tools": 163,
+      "surface_tools": 538,
+      "tools_with_agent_summary": 538,
+      "tools_with_metadata": 538,
+      "unmatched_skill_tools": 162,
       "version": 1
     },
     "count": 20,
@@ -177,7 +177,7 @@
             "canonical_path": "aitable.advperm_disable",
             "cli_name": "disable",
             "cli_path": "aitable advperm disable",
-            "confirmation": "not_required",
+            "confirmation": "user_required",
             "description": "开启或关闭指定 Base 的高级权限总开关。必填 baseId、enabled(true=开启,false=关闭)。\r\n返回切换后的状态 {baseId, enabled};只有显式开启后,后续 list_roles / get_role 等角色配置才会真正生效。",
             "effect": "write",
             "idempotency": "unknown",
@@ -190,7 +190,7 @@
             "name": "advperm_disable",
             "primary_cli_path": "aitable advperm disable",
             "reviewed": false,
-            "risk": "medium",
+            "risk": "high",
             "title": "set_advanced_permission",
             "use_when": [
               "开启或关闭指定 Base 的高级权限总开关。"
@@ -3610,7 +3610,7 @@
             "canonical_path": "aitable.workflow_disable",
             "cli_name": "disable",
             "cli_path": "aitable workflow disable",
-            "confirmation": "not_required",
+            "confirmation": "user_required",
             "description": "禁用指定 Base 中的自动化工作流。禁用后工作流将不再自动触发执行。",
             "effect": "write",
             "idempotency": "unknown",
@@ -3623,7 +3623,7 @@
             "name": "workflow_disable",
             "primary_cli_path": "aitable workflow disable",
             "reviewed": false,
-            "risk": "medium",
+            "risk": "high",
             "title": "禁用自动化工作流",
             "use_when": [
               "2. 禁用"
@@ -4219,7 +4219,7 @@
             "canonical_path": "attendance.globalsetting_save",
             "cli_name": "save",
             "cli_path": "attendance globalsetting save",
-            "confirmation": "not_required",
+            "confirmation": "user_required",
             "description": "更新保存全局规则设置，仅管理员可以调用。\n\n入参字段:\n  --setting-scene  必填，枚举值包括 checkRemind、fastCheck、checkResultNotify、lackRemind、personalAttendStatNotify、bossAttendStatNotify\n  --scope          必填，必须明确输入 企业、全公司 或 所有人，用于确认本次更新面向全局范围\n\n按 settingScene 传入对应设置字段，且至少传一个字段：\n  checkRemind:\n    --check-remind-corp\n    --check-remind-pc-corp\n  fastCheck:\n    --fast-check-corp\n  checkResultNotify:\n    --enable-check-cert-push\n  lackRemind:\n    --lack-remind-corp\n  personalAttendStatNotify:\n    --enable-personal-daily-report\n    --enable-personal-weekly-report\n    --enable-personal-weekly-report-card\n    --enable-personal-monthly-report\n  bossAttendStatNotify:\n    --boss-daily-report-type\n    --boss-weekly-report-type\n    --boss-monthly-report-type\n\n说明：corpId 和 opUserId 由当前登录上下文自动补齐，不需要通过 CLI 入参传入。\n返回 ServiceResult，result 为 boolean，表示保存是否成功。",
             "effect": "write",
             "idempotency": "unknown",
@@ -4228,7 +4228,7 @@
             "name": "globalsetting_save",
             "primary_cli_path": "attendance globalsetting save",
             "reviewed": true,
-            "risk": "medium",
+            "risk": "high",
             "title": "更新保存全局规则设置（仅管理员）",
             "use_when": [
               "管理员需要修改企业级打卡提醒、极速打卡等全局设置"
@@ -4247,7 +4247,7 @@
             "canonical_path": "attendance.group_create",
             "cli_name": "create",
             "cli_path": "attendance group create",
-            "confirmation": "not_required",
+            "confirmation": "user_required",
             "description": "调用 MCP 工具 create_group_setting，创建一个新的考勤组。\n--name 和 --type 必填，其余参数可选（未传字段使用默认值）。由于创建考勤组耗时较久，指令需要带上 --timeout 10\n--yes 需要用户二次确认之后才允许带入，参考attendance.md中对于创建考勤组的说明\n\n常用 flag：\n  --name                   考勤组名称（必填）\n  --type                   考勤组类型：FIXED（固定班制）/ TURN（排班制）/ NONE（自由工时）（必填，显式校验）\n  --owner                  考勤组主负责人 userId（可选）\n  --group-vo               完整 groupVO JSON 字符串（可选，用于传入复杂子对象，会与 --name/--type/--owner 合并）\n\n当使用 --group-vo 传入完整 JSON 时，--name、--type、--owner 仍可覆写 JSON 中的同名字段。\n\n【无条件必填字段】\n  name      string  考勤组名称\n  type      string  考勤组类型：FIXED / TURN / NONE\n\n【条件必填字段（type=FIXED 固定班制时）】\n  workDayClassList    []number  工作日班次列表，不能为空。\n                             一共7个值，分别代表周日到周六每天的班次id，为0表示当天休息。\n                             例如 [0,1279240003,0,0,0,0,0] 表示周一的班次id为1279240003，其余日子都是休息\n  defaultClassId      number   默认班次 ID，不能为 null\n\n条件必填字段通过 --group-vo JSON 传入，CLI 在 --type=FIXED 时会显式校验这些字段。\n\n--group-vo 可用字段说明（与更新考勤组一致，均可选，只需包含要设置的字段）：\n\n【基础信息】\n  id            number    考勤组id（创建时禁止传入，由服务端分配）\n  name          string    考勤组名称（必填）\n  type          string    考勤组类型：FIXED（固定班制）/ TURN（排班制）/ NONE（自由工时）（必填）\n  owner         string    考勤组主负责人 userId\n  managerList   []string  考勤组子负责人 userId 列表\n  skipHolidays  bool      节假日自动排休（只有固定班制和自由工时考勤组生效）\n  defaultGroup  bool      是否默认考勤组\n  classIds      []number  所选班次 id 列表(只有固定班制和排班制才有班次，自由工时没有)\n\n【打卡范围与定位】\n  trimDistance                      number    定位允许微调距离（米）\n  enablePositionOfGps               bool      打卡是否允许开启 GPS 定位\n  enablePositionOfWifi              bool      是否开启 wifi 定位\n  enablePositionOfBle               bool      是否启用蓝牙定位\n\n  positions      []object  考勤打卡地址列表（地址定位打卡用），每项字段：\n    - title      string    地址标题\n    - address    string    地址详情（完整地址文本）\n    - latitude   number    纬度\n    - longitude  number    经度\n    - offset     number    该地址允许的打卡范围，单位米\n\n  wifis          []object  打卡方式中的 wifi 详情列表，每项字段：\n    - ssid       string    wifi 的 ssid（wifi名称）\n    - macAddr    string    wifi 的 macAddr（MAC 地址）\n    - groupId    number    考勤组id\n\n  bleDeviceVOList  []object  已选择的蓝牙设备列表，每项字段：\n    - name        string    设备名称\n    - deviceUid   number    设备 uid\n    - sn          string    设备 sn 序列号\n    - productType string    对外的设备类型\n    - devServId   number    内部设备类型\n\n【外勤打卡设置】\n  enableOutsideCheck                bool      是否可以外勤打卡\n  enableOutsideCameraCheck          bool      是否开启外勤打卡必须拍照\n  enableOutsideRemark               bool      是否开启外勤打卡必须填写备注\n  enableOutsideApply                bool      是否开启外勤打卡必须审批\n  forbidHideOutSideAddress          bool      禁止隐藏外勤打卡地址的功能，false表示允许用户隐藏外勤打卡地址\n  enableOutSideUpdateNormalCheck    bool      下班时间：允许外勤卡更新内勤卡\n  enableOnDutyNormalUpdateOutsideCheck bool   上班时间：允许内勤卡更新外勤卡\n  outsideCheckApproveMode           string    外勤打卡需审批执行模式：\n                                                NO_NEED_APPROVE（无需审批）\n                                                APPROVE_FIRST（先审批后打卡）\n                                                CHECK_FIRST（先打卡后审批）\n                                                APPROVE_EVERYTIME（每次打卡都需要审批）\n  outSideCheckApplyType             number    外勤审批范围：1（全天外勤打卡）/ 2（上班外勤打卡）/ 3（下班外勤打卡）\n\n【打卡方式】\n  enableCameraCheck    bool      是否开启拍照打卡\n  openCameraCheck      bool      是否开启拍照打卡（与 enableCameraCheck 含义相同）\n  openFaceCheck        bool      是否开启人脸打卡\n  enableFaceStrictMode bool      是否开启人脸严格模式（强制活体检测）\n  enableFaceBeauty     bool      是否开启美颜\n  onlyMachineCheck     bool      只允许考勤机打卡\n  permitMaxBeaconCount number    允许绑定的智点设备数量\n  disableCheckWhenRest bool      休息日打卡需审批（只在固定班制和排班制生效，true表示打卡需要提交审批单）\n\n\n【固定班制设置（FIXED）】\n  defaultClassId              number    固定班制的默认班次 id（type=FIXED 时必填）\n  workDayClassList            []number  固定班制的工作日班次 id 列表，一共7个值，分别代表周日到周六每天的班次id，为0表示当天休息，例如[0,1279240003,0,0,0,0,0]表示周一的班次id为1279240003，其余日子都是休息\n\n【排班制设置（TURN）】\n  disableCheckWithoutSchedule bool      未排班时员工可打卡（true=未排班时禁止打卡）\n  enableEmpSelectClass        bool      未排班时，员工可选班次打卡\n  enableScheduleAutoMatch     bool      未排班时，系统自动匹配班次\n  ----以下是排班制设置排班周期的，非必要，不是所有排班制考勤组都需要设置，不设置就是按照classIds中的班次由管理员自行排班-----\n  cycleDays           number    排班循环天数，支持大小周（14天）\n  startCycleDate      number    用户设置的大小周开始时间（时间戳，毫秒）\n  cycleScheduleList   []object  循环排班设置列表，每项字段：\n    - cycleName  string    周期名字（如\"第一周\"）\n    - groupId    number    考勤组 id\n    - isValid    string    是否有效：Y（有效）/ N（无效）\n    - itemList   []object  排班设置列表，每项字段：\n        - classId    number  班次 id\n        - className  string  班次名称\n        - isValid    string  是否有效（Y/N）\n\n【自由工时设置（NONE）】\n  workDays                    []number  自由工时的工作日，如 [1,2,3,4,5] 表示周一到周五（1=周一，7=周日）\n  freeCheckDayStartMinOffset  number    自由打卡每日开始时间，距离 0 点的分钟数（如 480 表示 08:00 开始）\n  freeCheckCoreTime           number    自由工时考勤组的打卡最短工作时长（分钟）\n  freeCheckDemandWorkMinutes  number    自由工时考勤组要求的打卡时长（分钟）\n\n  freeCheckSettingVO   object  自由工时打卡设置，包含字段：\n    - freeCheckType                    string  自由工时打卡类型：\n                                                 CYCLE（上下班交替打卡）\n                                                 MAX_TIME_UPDATE（最大时间打卡，第一次为上班，后续均为下班卡）\n    - freeWorkDayLackSwitch            bool    自由工时打卡规则：工作日没打卡记为缺卡（true=记缺卡）\n    - freeOnDutyLackMinOffset          number  自由工时打卡规则：上班缺卡生成时间偏移分钟数\n    - freeOffDutyLackMinOffset         number  自由工时打卡规则：下班缺卡生成时间偏移分钟数\n    - delimitOffsetMinutesBetweenDays  number  自由工时前后两天的分割线（距 0 点分钟数，超过此时间则归属第二天）\n    - freeCheckGapVO                   object  自由工时/休息日打卡间隔设置：\n        - onOffCheckGapMinutes  number  上班打卡后，多久才可以打下班卡（分钟）\n        - offOnCheckGapMinutes  number  下班打卡后，多久才可以打上班卡（分钟）\n\n  freeGroupSpecialDayVO   object  自由工时考勤组特殊日期设置，包含字段：\n    - specialOnDutyDays   []number  特殊需要打卡日期的时间戳列表（毫秒，原本休息日需额外打卡的日期）\n    - specialOffDutyDays  []number  特殊无需打卡日期的时间戳列表（毫秒，原本工作日可免打卡的日期）",
             "effect": "write",
             "idempotency": "unknown",
@@ -4256,7 +4256,7 @@
             "name": "group_create",
             "primary_cli_path": "attendance group create",
             "reviewed": true,
-            "risk": "medium",
+            "risk": "high",
             "title": "创建考勤组",
             "use_when": [
               "需要新建一个考勤组并配置规则"
@@ -4359,7 +4359,7 @@
             "canonical_path": "attendance.group_update",
             "cli_name": "update",
             "cli_path": "attendance group update",
-            "confirmation": "not_required",
+            "confirmation": "user_required",
             "description": "调用 MCP 工具 update_group_setting，更新考勤组配置信息。\n--group-id 必填；其余参数均可选，仅需对要修改的字段进行赋値，未传的字段会自动从已有配置补充。由于保存考勤组耗时较久，指令需要带上--timeout 10\n--yes 需要用户二次确认之后才允许带入，参考attendance.md中对于更新考勤组配置的说明\n\n常用简单字段可直接用 flag 传入；复杂子对象（如打卡地址、wifi、蓝牙设备、循环排班等）请用 --group-vo JSON 字符串传入完整 groupVO 对象覆写。\n\n常用 flag：\n  --name                   考勤组名称\n  --type                   考勤组类型：FIXED（固定班制）/ TURN（排班制）/ NONE（自由工时）\n  --owner                  考勤组主负责人 userId\n  --classIds               []number  所选班次 id 列表\n  --enable-outside-check   是否允许外勤打卡 (true/false)\n  --group-vo               完整 groupVO JSON 字符串（用于修改复杂子对象，会与其他 flag 合并，重复字段以 flag 为准）\n\n--group-vo 可用字段说明（均可选，只需包含要修改的字段）：\n\n【基础信息】\n  id            number    考勤组id，不随更新变化\n  name          string    考勤组名称\n  type          string    考勤组类型：FIXED（固定班制）/ TURN（排班制）/ NONE（自由工时）\n  owner         string    考勤组主负责人 userId\n  managerList   []string  考勤组子负责人 userId 列表\n  skipHolidays  bool      节假日自动排休（只有固定班制和自由工时考勤组生效）\n  defaultGroup  bool      是否默认考勤组\n  classIds      []number  所选班次 id 列表(只有固定班制和排班制才有班次，自由工时没有)\n\n【打卡范围与定位】\n  trimDistance                      number    定位允许微调距离（米）\n  enablePositionOfGps               bool      打卡是否允许开启 GPS 定位\n  enablePositionOfWifi              bool      是否开启 wifi 定位\n  enablePositionOfBle               bool      是否启用蓝牙定位\n\n  positions      []object  考勤打卡地址列表（地址定位打卡用），每项字段：\n    - title      string    地址标题\n    - address    string    地址详情（完整地址文本）\n    - latitude   number    纬度\n    - longitude  number    经度\n    - offset     number    该地址允许的打卡范围，单位米\n\n  wifis          []object  打卡方式中的 wifi 详情列表，每项字段：\n    - ssid       string    wifi 的 ssid（wifi名称）\n    - macAddr    string    wifi 的 macAddr（MAC 地址）\n    - groupId    number    考勤组id\n\n  bleDeviceVOList  []object  已选择的蓝牙设备列表，每项字段：\n    - name        string    设备名称\n    - deviceUid   number    设备 uid\n    - sn          string    设备 sn 序列号\n    - productType string    对外的设备类型\n    - devServId   number    内部设备类型\n\n【外勤打卡设置】\n  enableOutsideCheck                bool      是否可以外勤打卡\n  enableOutsideCameraCheck          bool      是否开启外勤打卡必须拍照\n  enableOutsideRemark               bool      是否开启外勤打卡必须填写备注\n  enableOutsideApply                bool      是否开启外勤打卡必须审批\n  forbidHideOutSideAddress          bool      禁止隐藏外勤打卡地址的功能，false表示允许用户隐藏外勤打卡地址\n  enableOutSideUpdateNormalCheck    bool      下班时间：允许外勤卡更新内勤卡\n  enableOnDutyNormalUpdateOutsideCheck bool   上班时间：允许内勤卡更新外勤卡\n  outsideCheckApproveMode           string    外勤打卡需审批执行模式：\n                                                NO_NEED_APPROVE（无需审批）\n                                                APPROVE_FIRST（先审批后打卡）\n                                                CHECK_FIRST（先打卡后审批）\n                                                APPROVE_EVERYTIME（每次打卡都需要审批）\n  outSideCheckApplyType             number    外勤审批范围：1（全天外勤打卡）/ 2（上班外勤打卡）/ 3（下班外勤打卡）\n\n【打卡方式】\n  enableCameraCheck    bool      是否开启拍照打卡\n  openCameraCheck      bool      是否开启拍照打卡（与 enableCameraCheck 含义相同）\n  openFaceCheck        bool      是否开启人脸打卡\n  enableFaceStrictMode bool      是否开启人脸严格模式（强制活体检测）\n  enableFaceBeauty     bool      是否开启美颜\n  onlyMachineCheck     bool      只允许考勤机打卡\n  permitMaxBeaconCount number    允许绑定的智点设备数量\n  disableCheckWhenRest bool      休息日打卡需审批（只在固定班制和排班制生效，true表示打卡需要提交审批单）\n\n\n【固定班制设置（FIXED）】\n  defaultClassId              number    固定班制的默认班次 id\n  workDayClassList            []number  固定班制的工作日班次 id 列表，一共7个值，分别代表周日到周六每天的班次id，为0表示当天休息，例如[0,1279240003,0,0,0,0,0]表示周一的班次id为1279240003，其余日子都是休息\n\n【排班制设置（TURN）】\n  disableCheckWithoutSchedule bool      未排班时员工可打卡（true=未排班时禁止打卡）\n  enableEmpSelectClass        bool      未排班时，员工可选班次打卡\n  enableScheduleAutoMatch     bool      未排班时，系统自动匹配班次\n  ----以下是排班制设置排班周期的，非必要，不是所有排班制考勤组都需要设置，不设置就是按照classIds中的班次由管理员自行排班-----\n  cycleDays           number    排班循环天数，支持大小周（14天）\n  startCycleDate      number    用户设置的大小周开始时间（时间戳，毫秒）\n  cycleScheduleList   []object  循环排班设置列表，每项字段：\n    - cycleName  string    周期名字（如\"第一周\"）\n    - groupId    number    考勤组 id\n    - isValid    string    是否有效：Y（有效）/ N（无效）\n    - itemList   []object  排班设置列表，每项字段：\n        - classId    number  班次 id\n        - className  string  班次名称\n        - isValid    string  是否有效（Y/N）\n\n【自由工时设置（NONE）】\n  workDays                    []number  自由工时的工作日，如 [1,2,3,4,5] 表示周一到周五（1=周一，7=周日）\n  freeCheckDayStartMinOffset  number    自由打卡每日开始时间，距离 0 点的分钟数（如 480 表示 08:00 开始）\n  freeCheckCoreTime           number    自由工时考勤组的打卡最短工作时长（分钟）\n  freeCheckDemandWorkMinutes  number    自由工时考勤组要求的打卡时长（分钟）\n\n  freeCheckSettingVO   object  自由工时打卡设置，包含字段：\n    - freeCheckType                    string  自由工时打卡类型：\n                                                 CYCLE（上下班交替打卡）\n                                                 MAX_TIME_UPDATE（最大时间打卡，第一次为上班，后续均为下班卡）\n    - freeWorkDayLackSwitch            bool    自由工时打卡规则：工作日没打卡记为缺卡（true=记缺卡）\n    - freeOnDutyLackMinOffset          number  自由工时打卡规则：上班缺卡生成时间偏移分钟数\n    - freeOffDutyLackMinOffset         number  自由工时打卡规则：下班缺卡生成时间偏移分钟数\n    - delimitOffsetMinutesBetweenDays  number  自由工时前后两天的分割线（距 0 点分钟数，超过此时间则归属第二天）\n    - freeCheckGapVO                   object  自由工时/休息日打卡间隔设置：\n        - onOffCheckGapMinutes  number  上班打卡后，多久才可以打下班卡（分钟）\n        - offOnCheckGapMinutes  number  下班打卡后，多久才可以打上班卡（分钟）\n\n  freeGroupSpecialDayVO   object  自由工时考勤组特殊日期设置，包含字段：\n    - specialOnDutyDays   []number  特殊需要打卡日期的时间戳列表（毫秒，原本休息日需额外打卡的日期）\n    - specialOffDutyDays  []number  特殊无需打卡日期的时间戳列表（毫秒，原本工作日可免打卡的日期）",
             "effect": "write",
             "idempotency": "unknown",
@@ -4368,7 +4368,7 @@
             "name": "group_update",
             "primary_cli_path": "attendance group update",
             "reviewed": true,
-            "risk": "medium",
+            "risk": "high",
             "title": "更新考勤组配置（仅修改需要变更的字段）",
             "use_when": [
               "需要修改已有考勤组的规则、班次、位置或范围"
@@ -4387,7 +4387,7 @@
             "canonical_path": "attendance.group_update_members",
             "cli_name": "update-members",
             "cli_path": "attendance group update-members",
-            "confirmation": "not_required",
+            "confirmation": "user_required",
             "description": "调用 MCP 工具 update_group_member，对指定考勤组的成员进行增删操作。\n--group-id 必填；所有成员/部门参数均可选，但至少需要传一个变更项。由于保存考勤组耗时较久，指令需要带上--timeout 10\n每次调用各参数最多传 20 个 ID。\n--yes 需要用户二次确认之后才允许带入，参考attendance.md中对于更新考勤组成员的说明\n  --add-users           添加考勤人员 userId 列表，逗号分隔\n  --remove-users        删除考勤人员 userId 列表，逗号分隔\n  --add-extra-users     添加无需考勤的人员 userId 列表，逗号分隔\n  --remove-extra-users  删除无需考勤的成员 userId 列表，逗号分隔\n  --add-depts           添加考勤部门 ID 列表，逗号分隔，若要添加全公司，根部门id为-1\n  --remove-depts        删除考勤部门 ID 列表，逗号分隔，全公司根部门id为-1",
             "effect": "write",
             "idempotency": "unknown",
@@ -4396,7 +4396,7 @@
             "name": "group_update_members",
             "primary_cli_path": "attendance group update-members",
             "reviewed": true,
-            "risk": "medium",
+            "risk": "high",
             "title": "更新考勤组成员（添加/删除考勤人员、部门、无需考勤人员）",
             "use_when": [
               "需要向考勤组添加或移除成员"
@@ -4615,7 +4615,7 @@
             "canonical_path": "attendance.schedule_import",
             "cli_name": "import",
             "cli_path": "attendance schedule import",
-            "confirmation": "not_required",
+            "confirmation": "user_required",
             "description": "为排班制考勤组导入排班记录。传入 JSON 数组格式排班数据，\n每条记录必填字段：\n  - userId:    用户ID（必填）\n  - workDate:  排班日期，格式 yyyy-MM-dd HH:mm:ss（必填）\n  - classId:   班次ID（必填）\n  - isRest:    是否为排休，取值 Y/N（必填）\n\n示例：\n  dws attendance schedule import --groupId 123456 \\\n    --scheduleVOS '[{\"userId\":\"user001\",\"workDate\":\"2026-04-22 09:00:00\",\"classId\":123,\"isRest\":\"N\"}]' \\\n    --user-say-yes",
             "effect": "write",
             "idempotency": "unknown",
@@ -4624,7 +4624,7 @@
             "name": "schedule_import",
             "primary_cli_path": "attendance schedule import",
             "reviewed": true,
-            "risk": "medium",
+            "risk": "high",
             "title": "导入排班记录到排班制考勤组",
             "use_when": [
               "需要批量导入或覆盖排班记录"
@@ -4811,7 +4811,7 @@
             "canonical_path": "attendance.vacation_update_type",
             "cli_name": "update-type",
             "cli_path": "attendance vacation update-type",
-            "confirmation": "not_required",
+            "confirmation": "user_required",
             "description": "调用 MCP 工具 save_leave_type 更新已有假期规则。\n--leave-code 必填，指定要更新的假期规则编码。\n其他字段均为可选，仅需传入要修改的字段。\n\n参数说明：\n  --leave-code        假期编码（必填）\n  --name              假期名称（可选）\n  --unit              假期单位：day/halfDay/hour（可选）\n  --paid              是否带薪假期（可选）\n  --per-hours         一天折算小时数（可选）\n  --when-can-leave    新员工请假规则：entry/formal（可选）\n  --visibility-rules  适用范围规则 JSON 数组（可选）\n  --user-say-yes      用户已确认，跳过交互式确认提示（Agent 调用时传 true 前必须完成用户二次确认）\n\n--visibility-rules 适用范围语义（HSF 反序列化约定，必读）：\n  - 不传：不修改原有可见范围。\n  - 改为指定范围：传 [{\"type\":\"staff|dept|label|employee_type\",\"visible\":[\"id1\",\"id2\"]}, ...]，\n    每条规则 type 和 visible 都必须非空。\n  - 改为全公司可见（哨兵约定）：必须显式传 [{\"type\":\"dept\",\"visible\":[\"-1\"]}]，\n    服务端识别后会落库为空可见范围（即全公司）。\n  - 反例（CLI 会拦截报错，避免被服务端静默忽略）：\n    * 空数组 []、[{}]、[{\"type\":\"dept\",\"visible\":[]}] 等被视为未传，不会生效为全公司可见；\n    * 若要清空可见范围，必须显式传哨兵值 [\"-1\"]。",
             "effect": "write",
             "idempotency": "unknown",
@@ -4820,7 +4820,7 @@
             "name": "vacation_update_type",
             "primary_cli_path": "attendance vacation update-type",
             "reviewed": true,
-            "risk": "medium",
+            "risk": "high",
             "title": "更新假期规则",
             "use_when": [
               "管理员需要修改已有假期规则或假期类型配置"
@@ -5343,7 +5343,7 @@
             "canonical_path": "calendar.remove_calendar_participant",
             "cli_name": "delete",
             "cli_path": "calendar attendee delete",
-            "confirmation": "not_required",
+            "confirmation": "user_required",
             "description": "从已存在的指定日程中移除参与者，支持批量移除多人",
             "effect": "write",
             "idempotency": "unknown",
@@ -5355,7 +5355,7 @@
             "metadata_source": "embedded-mcp-metadata",
             "name": "remove_calendar_participant",
             "primary_cli_path": "calendar attendee delete",
-            "risk": "medium",
+            "risk": "high",
             "title": "删除日程参与人",
             "use_when": [
               "参会人/与会者；移除"
@@ -5467,7 +5467,7 @@
         "id": "chat",
         "name": "群聊 / 消息 / 机器人",
         "runtime": true,
-        "tool_count": 69,
+        "tool_count": 70,
         "tools": [
           {
             "agent_metadata_source": "embedded-skill-metadata",
@@ -5721,6 +5721,35 @@
             "use_when": [
               "帮我建一个项目群；创建群聊",
               "建群/创建群聊"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "创建按群名称关键词或群成员自动匹配会话的智能分组",
+            "agent_summary_source": "agent-selection-contract-v1",
+            "availability": "available",
+            "avoid_when": [
+              "只需要普通静态会话分组，或不希望根据关键词和成员自动匹配会话时不要使用"
+            ],
+            "canonical_path": "chat.create_smart_conv_category",
+            "cli_name": "create-smart",
+            "cli_path": "chat category create-smart",
+            "confirmation": "not_required",
+            "description": "创建智能会话分组，可指定群名称关键词和群内成员 openDingTalkId 作为匹配规则。",
+            "effect": "write",
+            "idempotency": "unknown",
+            "interface_mode": "mcp",
+            "interface_ref": {
+              "product_id": "im",
+              "rpc_name": "create_smart_conv_category"
+            },
+            "name": "create_smart_conv_category",
+            "primary_cli_path": "chat category create-smart",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "创建智能会话分组",
+            "use_when": [
+              "需要按群名称关键词或群成员自动归类会话时创建智能会话分组"
             ]
           },
           {
@@ -8312,7 +8341,7 @@
             "canonical_path": "dev.disable_dev_app",
             "cli_name": "disable",
             "cli_path": "dev app disable",
-            "confirmation": "not_required",
+            "confirmation": "user_required",
             "description": "停用开放平台企业内部应用",
             "effect": "write",
             "idempotency": "unknown",
@@ -8324,7 +8353,7 @@
             "name": "disable_dev_app",
             "primary_cli_path": "dev app disable",
             "reviewed": true,
-            "risk": "medium",
+            "risk": "high",
             "use_when": [
               "停用/启用应用"
             ]
@@ -8342,7 +8371,7 @@
             "canonical_path": "dev.disable_dev_app_robot",
             "cli_name": "disable",
             "cli_path": "dev app robot disable",
-            "confirmation": "not_required",
+            "confirmation": "user_required",
             "description": "停用现有应用的机器人能力",
             "effect": "write",
             "idempotency": "unknown",
@@ -8354,7 +8383,7 @@
             "name": "disable_dev_app_robot",
             "primary_cli_path": "dev app robot disable",
             "reviewed": true,
-            "risk": "medium",
+            "risk": "high",
             "use_when": [
               "启用/停用机器人"
             ]
@@ -16945,7 +16974,7 @@
       }
     ],
     "source": "embedded-command-catalog",
-    "tool_count": 537
+    "tool_count": 538
   },
   "tools": {
     "aisearch.enterprise_person_search": {
@@ -17221,7 +17250,7 @@
       "canonical_path": "aitable.advperm_disable",
       "cli_name": "disable",
       "cli_path": "aitable advperm disable",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "description": "开启或关闭指定 Base 的高级权限总开关。必填 baseId、enabled(true=开启,false=关闭)。\r\n返回切换后的状态 {baseId, enabled};只有显式开启后,后续 list_roles / get_role 等角色配置才会真正生效。",
       "display": "AI 表格操作",
       "effect": "write",
@@ -17254,7 +17283,7 @@
       "primary_cli_path": "aitable advperm disable",
       "product_id": "aitable",
       "reviewed": false,
-      "risk": "medium",
+      "risk": "high",
       "source": "hardcoded:aitable",
       "title": "set_advanced_permission",
       "use_when": [
@@ -25701,7 +25730,7 @@
       "canonical_path": "aitable.workflow_disable",
       "cli_name": "disable",
       "cli_path": "aitable workflow disable",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "description": "禁用指定 Base 中的自动化工作流。禁用后工作流将不再自动触发执行。",
       "display": "AI 表格操作",
       "effect": "write",
@@ -25741,7 +25770,7 @@
       "primary_cli_path": "aitable workflow disable",
       "product_id": "aitable",
       "reviewed": false,
-      "risk": "medium",
+      "risk": "high",
       "source": "hardcoded:aitable",
       "title": "禁用自动化工作流",
       "use_when": [
@@ -27091,7 +27120,7 @@
       "canonical_path": "attendance.globalsetting_save",
       "cli_name": "save",
       "cli_path": "attendance globalsetting save",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "description": "更新保存全局规则设置，仅管理员可以调用。\n\n入参字段:\n  --setting-scene  必填，枚举值包括 checkRemind、fastCheck、checkResultNotify、lackRemind、personalAttendStatNotify、bossAttendStatNotify\n  --scope          必填，必须明确输入 企业、全公司 或 所有人，用于确认本次更新面向全局范围\n\n按 settingScene 传入对应设置字段，且至少传一个字段：\n  checkRemind:\n    --check-remind-corp\n    --check-remind-pc-corp\n  fastCheck:\n    --fast-check-corp\n  checkResultNotify:\n    --enable-check-cert-push\n  lackRemind:\n    --lack-remind-corp\n  personalAttendStatNotify:\n    --enable-personal-daily-report\n    --enable-personal-weekly-report\n    --enable-personal-weekly-report-card\n    --enable-personal-monthly-report\n  bossAttendStatNotify:\n    --boss-daily-report-type\n    --boss-weekly-report-type\n    --boss-monthly-report-type\n\n说明：corpId 和 opUserId 由当前登录上下文自动补齐，不需要通过 CLI 入参传入。\n返回 ServiceResult，result 为 boolean，表示保存是否成功。",
       "display": "考勤打卡 / 排班 / 统计",
       "effect": "write",
@@ -27203,7 +27232,7 @@
       "primary_cli_path": "attendance globalsetting save",
       "product_id": "attendance",
       "reviewed": true,
-      "risk": "medium",
+      "risk": "high",
       "source": "hardcoded:attendance",
       "title": "更新保存全局规则设置（仅管理员）",
       "use_when": [
@@ -27228,7 +27257,7 @@
       "canonical_path": "attendance.group_create",
       "cli_name": "create",
       "cli_path": "attendance group create",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "description": "调用 MCP 工具 create_group_setting，创建一个新的考勤组。\n--name 和 --type 必填，其余参数可选（未传字段使用默认值）。由于创建考勤组耗时较久，指令需要带上 --timeout 10\n--yes 需要用户二次确认之后才允许带入，参考attendance.md中对于创建考勤组的说明\n\n常用 flag：\n  --name                   考勤组名称（必填）\n  --type                   考勤组类型：FIXED（固定班制）/ TURN（排班制）/ NONE（自由工时）（必填，显式校验）\n  --owner                  考勤组主负责人 userId（可选）\n  --group-vo               完整 groupVO JSON 字符串（可选，用于传入复杂子对象，会与 --name/--type/--owner 合并）\n\n当使用 --group-vo 传入完整 JSON 时，--name、--type、--owner 仍可覆写 JSON 中的同名字段。\n\n【无条件必填字段】\n  name      string  考勤组名称\n  type      string  考勤组类型：FIXED / TURN / NONE\n\n【条件必填字段（type=FIXED 固定班制时）】\n  workDayClassList    []number  工作日班次列表，不能为空。\n                             一共7个值，分别代表周日到周六每天的班次id，为0表示当天休息。\n                             例如 [0,1279240003,0,0,0,0,0] 表示周一的班次id为1279240003，其余日子都是休息\n  defaultClassId      number   默认班次 ID，不能为 null\n\n条件必填字段通过 --group-vo JSON 传入，CLI 在 --type=FIXED 时会显式校验这些字段。\n\n--group-vo 可用字段说明（与更新考勤组一致，均可选，只需包含要设置的字段）：\n\n【基础信息】\n  id            number    考勤组id（创建时禁止传入，由服务端分配）\n  name          string    考勤组名称（必填）\n  type          string    考勤组类型：FIXED（固定班制）/ TURN（排班制）/ NONE（自由工时）（必填）\n  owner         string    考勤组主负责人 userId\n  managerList   []string  考勤组子负责人 userId 列表\n  skipHolidays  bool      节假日自动排休（只有固定班制和自由工时考勤组生效）\n  defaultGroup  bool      是否默认考勤组\n  classIds      []number  所选班次 id 列表(只有固定班制和排班制才有班次，自由工时没有)\n\n【打卡范围与定位】\n  trimDistance                      number    定位允许微调距离（米）\n  enablePositionOfGps               bool      打卡是否允许开启 GPS 定位\n  enablePositionOfWifi              bool      是否开启 wifi 定位\n  enablePositionOfBle               bool      是否启用蓝牙定位\n\n  positions      []object  考勤打卡地址列表（地址定位打卡用），每项字段：\n    - title      string    地址标题\n    - address    string    地址详情（完整地址文本）\n    - latitude   number    纬度\n    - longitude  number    经度\n    - offset     number    该地址允许的打卡范围，单位米\n\n  wifis          []object  打卡方式中的 wifi 详情列表，每项字段：\n    - ssid       string    wifi 的 ssid（wifi名称）\n    - macAddr    string    wifi 的 macAddr（MAC 地址）\n    - groupId    number    考勤组id\n\n  bleDeviceVOList  []object  已选择的蓝牙设备列表，每项字段：\n    - name        string    设备名称\n    - deviceUid   number    设备 uid\n    - sn          string    设备 sn 序列号\n    - productType string    对外的设备类型\n    - devServId   number    内部设备类型\n\n【外勤打卡设置】\n  enableOutsideCheck                bool      是否可以外勤打卡\n  enableOutsideCameraCheck          bool      是否开启外勤打卡必须拍照\n  enableOutsideRemark               bool      是否开启外勤打卡必须填写备注\n  enableOutsideApply                bool      是否开启外勤打卡必须审批\n  forbidHideOutSideAddress          bool      禁止隐藏外勤打卡地址的功能，false表示允许用户隐藏外勤打卡地址\n  enableOutSideUpdateNormalCheck    bool      下班时间：允许外勤卡更新内勤卡\n  enableOnDutyNormalUpdateOutsideCheck bool   上班时间：允许内勤卡更新外勤卡\n  outsideCheckApproveMode           string    外勤打卡需审批执行模式：\n                                                NO_NEED_APPROVE（无需审批）\n                                                APPROVE_FIRST（先审批后打卡）\n                                                CHECK_FIRST（先打卡后审批）\n                                                APPROVE_EVERYTIME（每次打卡都需要审批）\n  outSideCheckApplyType             number    外勤审批范围：1（全天外勤打卡）/ 2（上班外勤打卡）/ 3（下班外勤打卡）\n\n【打卡方式】\n  enableCameraCheck    bool      是否开启拍照打卡\n  openCameraCheck      bool      是否开启拍照打卡（与 enableCameraCheck 含义相同）\n  openFaceCheck        bool      是否开启人脸打卡\n  enableFaceStrictMode bool      是否开启人脸严格模式（强制活体检测）\n  enableFaceBeauty     bool      是否开启美颜\n  onlyMachineCheck     bool      只允许考勤机打卡\n  permitMaxBeaconCount number    允许绑定的智点设备数量\n  disableCheckWhenRest bool      休息日打卡需审批（只在固定班制和排班制生效，true表示打卡需要提交审批单）\n\n\n【固定班制设置（FIXED）】\n  defaultClassId              number    固定班制的默认班次 id（type=FIXED 时必填）\n  workDayClassList            []number  固定班制的工作日班次 id 列表，一共7个值，分别代表周日到周六每天的班次id，为0表示当天休息，例如[0,1279240003,0,0,0,0,0]表示周一的班次id为1279240003，其余日子都是休息\n\n【排班制设置（TURN）】\n  disableCheckWithoutSchedule bool      未排班时员工可打卡（true=未排班时禁止打卡）\n  enableEmpSelectClass        bool      未排班时，员工可选班次打卡\n  enableScheduleAutoMatch     bool      未排班时，系统自动匹配班次\n  ----以下是排班制设置排班周期的，非必要，不是所有排班制考勤组都需要设置，不设置就是按照classIds中的班次由管理员自行排班-----\n  cycleDays           number    排班循环天数，支持大小周（14天）\n  startCycleDate      number    用户设置的大小周开始时间（时间戳，毫秒）\n  cycleScheduleList   []object  循环排班设置列表，每项字段：\n    - cycleName  string    周期名字（如\"第一周\"）\n    - groupId    number    考勤组 id\n    - isValid    string    是否有效：Y（有效）/ N（无效）\n    - itemList   []object  排班设置列表，每项字段：\n        - classId    number  班次 id\n        - className  string  班次名称\n        - isValid    string  是否有效（Y/N）\n\n【自由工时设置（NONE）】\n  workDays                    []number  自由工时的工作日，如 [1,2,3,4,5] 表示周一到周五（1=周一，7=周日）\n  freeCheckDayStartMinOffset  number    自由打卡每日开始时间，距离 0 点的分钟数（如 480 表示 08:00 开始）\n  freeCheckCoreTime           number    自由工时考勤组的打卡最短工作时长（分钟）\n  freeCheckDemandWorkMinutes  number    自由工时考勤组要求的打卡时长（分钟）\n\n  freeCheckSettingVO   object  自由工时打卡设置，包含字段：\n    - freeCheckType                    string  自由工时打卡类型：\n                                                 CYCLE（上下班交替打卡）\n                                                 MAX_TIME_UPDATE（最大时间打卡，第一次为上班，后续均为下班卡）\n    - freeWorkDayLackSwitch            bool    自由工时打卡规则：工作日没打卡记为缺卡（true=记缺卡）\n    - freeOnDutyLackMinOffset          number  自由工时打卡规则：上班缺卡生成时间偏移分钟数\n    - freeOffDutyLackMinOffset         number  自由工时打卡规则：下班缺卡生成时间偏移分钟数\n    - delimitOffsetMinutesBetweenDays  number  自由工时前后两天的分割线（距 0 点分钟数，超过此时间则归属第二天）\n    - freeCheckGapVO                   object  自由工时/休息日打卡间隔设置：\n        - onOffCheckGapMinutes  number  上班打卡后，多久才可以打下班卡（分钟）\n        - offOnCheckGapMinutes  number  下班打卡后，多久才可以打上班卡（分钟）\n\n  freeGroupSpecialDayVO   object  自由工时考勤组特殊日期设置，包含字段：\n    - specialOnDutyDays   []number  特殊需要打卡日期的时间戳列表（毫秒，原本休息日需额外打卡的日期）\n    - specialOffDutyDays  []number  特殊无需打卡日期的时间戳列表（毫秒，原本工作日可免打卡的日期）",
       "display": "考勤打卡 / 排班 / 统计",
       "effect": "write",
@@ -27287,7 +27316,7 @@
       "primary_cli_path": "attendance group create",
       "product_id": "attendance",
       "reviewed": true,
-      "risk": "medium",
+      "risk": "high",
       "source": "hardcoded:attendance",
       "title": "创建考勤组",
       "use_when": [
@@ -27531,7 +27560,7 @@
       "canonical_path": "attendance.group_update",
       "cli_name": "update",
       "cli_path": "attendance group update",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "description": "调用 MCP 工具 update_group_setting，更新考勤组配置信息。\n--group-id 必填；其余参数均可选，仅需对要修改的字段进行赋値，未传的字段会自动从已有配置补充。由于保存考勤组耗时较久，指令需要带上--timeout 10\n--yes 需要用户二次确认之后才允许带入，参考attendance.md中对于更新考勤组配置的说明\n\n常用简单字段可直接用 flag 传入；复杂子对象（如打卡地址、wifi、蓝牙设备、循环排班等）请用 --group-vo JSON 字符串传入完整 groupVO 对象覆写。\n\n常用 flag：\n  --name                   考勤组名称\n  --type                   考勤组类型：FIXED（固定班制）/ TURN（排班制）/ NONE（自由工时）\n  --owner                  考勤组主负责人 userId\n  --classIds               []number  所选班次 id 列表\n  --enable-outside-check   是否允许外勤打卡 (true/false)\n  --group-vo               完整 groupVO JSON 字符串（用于修改复杂子对象，会与其他 flag 合并，重复字段以 flag 为准）\n\n--group-vo 可用字段说明（均可选，只需包含要修改的字段）：\n\n【基础信息】\n  id            number    考勤组id，不随更新变化\n  name          string    考勤组名称\n  type          string    考勤组类型：FIXED（固定班制）/ TURN（排班制）/ NONE（自由工时）\n  owner         string    考勤组主负责人 userId\n  managerList   []string  考勤组子负责人 userId 列表\n  skipHolidays  bool      节假日自动排休（只有固定班制和自由工时考勤组生效）\n  defaultGroup  bool      是否默认考勤组\n  classIds      []number  所选班次 id 列表(只有固定班制和排班制才有班次，自由工时没有)\n\n【打卡范围与定位】\n  trimDistance                      number    定位允许微调距离（米）\n  enablePositionOfGps               bool      打卡是否允许开启 GPS 定位\n  enablePositionOfWifi              bool      是否开启 wifi 定位\n  enablePositionOfBle               bool      是否启用蓝牙定位\n\n  positions      []object  考勤打卡地址列表（地址定位打卡用），每项字段：\n    - title      string    地址标题\n    - address    string    地址详情（完整地址文本）\n    - latitude   number    纬度\n    - longitude  number    经度\n    - offset     number    该地址允许的打卡范围，单位米\n\n  wifis          []object  打卡方式中的 wifi 详情列表，每项字段：\n    - ssid       string    wifi 的 ssid（wifi名称）\n    - macAddr    string    wifi 的 macAddr（MAC 地址）\n    - groupId    number    考勤组id\n\n  bleDeviceVOList  []object  已选择的蓝牙设备列表，每项字段：\n    - name        string    设备名称\n    - deviceUid   number    设备 uid\n    - sn          string    设备 sn 序列号\n    - productType string    对外的设备类型\n    - devServId   number    内部设备类型\n\n【外勤打卡设置】\n  enableOutsideCheck                bool      是否可以外勤打卡\n  enableOutsideCameraCheck          bool      是否开启外勤打卡必须拍照\n  enableOutsideRemark               bool      是否开启外勤打卡必须填写备注\n  enableOutsideApply                bool      是否开启外勤打卡必须审批\n  forbidHideOutSideAddress          bool      禁止隐藏外勤打卡地址的功能，false表示允许用户隐藏外勤打卡地址\n  enableOutSideUpdateNormalCheck    bool      下班时间：允许外勤卡更新内勤卡\n  enableOnDutyNormalUpdateOutsideCheck bool   上班时间：允许内勤卡更新外勤卡\n  outsideCheckApproveMode           string    外勤打卡需审批执行模式：\n                                                NO_NEED_APPROVE（无需审批）\n                                                APPROVE_FIRST（先审批后打卡）\n                                                CHECK_FIRST（先打卡后审批）\n                                                APPROVE_EVERYTIME（每次打卡都需要审批）\n  outSideCheckApplyType             number    外勤审批范围：1（全天外勤打卡）/ 2（上班外勤打卡）/ 3（下班外勤打卡）\n\n【打卡方式】\n  enableCameraCheck    bool      是否开启拍照打卡\n  openCameraCheck      bool      是否开启拍照打卡（与 enableCameraCheck 含义相同）\n  openFaceCheck        bool      是否开启人脸打卡\n  enableFaceStrictMode bool      是否开启人脸严格模式（强制活体检测）\n  enableFaceBeauty     bool      是否开启美颜\n  onlyMachineCheck     bool      只允许考勤机打卡\n  permitMaxBeaconCount number    允许绑定的智点设备数量\n  disableCheckWhenRest bool      休息日打卡需审批（只在固定班制和排班制生效，true表示打卡需要提交审批单）\n\n\n【固定班制设置（FIXED）】\n  defaultClassId              number    固定班制的默认班次 id\n  workDayClassList            []number  固定班制的工作日班次 id 列表，一共7个值，分别代表周日到周六每天的班次id，为0表示当天休息，例如[0,1279240003,0,0,0,0,0]表示周一的班次id为1279240003，其余日子都是休息\n\n【排班制设置（TURN）】\n  disableCheckWithoutSchedule bool      未排班时员工可打卡（true=未排班时禁止打卡）\n  enableEmpSelectClass        bool      未排班时，员工可选班次打卡\n  enableScheduleAutoMatch     bool      未排班时，系统自动匹配班次\n  ----以下是排班制设置排班周期的，非必要，不是所有排班制考勤组都需要设置，不设置就是按照classIds中的班次由管理员自行排班-----\n  cycleDays           number    排班循环天数，支持大小周（14天）\n  startCycleDate      number    用户设置的大小周开始时间（时间戳，毫秒）\n  cycleScheduleList   []object  循环排班设置列表，每项字段：\n    - cycleName  string    周期名字（如\"第一周\"）\n    - groupId    number    考勤组 id\n    - isValid    string    是否有效：Y（有效）/ N（无效）\n    - itemList   []object  排班设置列表，每项字段：\n        - classId    number  班次 id\n        - className  string  班次名称\n        - isValid    string  是否有效（Y/N）\n\n【自由工时设置（NONE）】\n  workDays                    []number  自由工时的工作日，如 [1,2,3,4,5] 表示周一到周五（1=周一，7=周日）\n  freeCheckDayStartMinOffset  number    自由打卡每日开始时间，距离 0 点的分钟数（如 480 表示 08:00 开始）\n  freeCheckCoreTime           number    自由工时考勤组的打卡最短工作时长（分钟）\n  freeCheckDemandWorkMinutes  number    自由工时考勤组要求的打卡时长（分钟）\n\n  freeCheckSettingVO   object  自由工时打卡设置，包含字段：\n    - freeCheckType                    string  自由工时打卡类型：\n                                                 CYCLE（上下班交替打卡）\n                                                 MAX_TIME_UPDATE（最大时间打卡，第一次为上班，后续均为下班卡）\n    - freeWorkDayLackSwitch            bool    自由工时打卡规则：工作日没打卡记为缺卡（true=记缺卡）\n    - freeOnDutyLackMinOffset          number  自由工时打卡规则：上班缺卡生成时间偏移分钟数\n    - freeOffDutyLackMinOffset         number  自由工时打卡规则：下班缺卡生成时间偏移分钟数\n    - delimitOffsetMinutesBetweenDays  number  自由工时前后两天的分割线（距 0 点分钟数，超过此时间则归属第二天）\n    - freeCheckGapVO                   object  自由工时/休息日打卡间隔设置：\n        - onOffCheckGapMinutes  number  上班打卡后，多久才可以打下班卡（分钟）\n        - offOnCheckGapMinutes  number  下班打卡后，多久才可以打上班卡（分钟）\n\n  freeGroupSpecialDayVO   object  自由工时考勤组特殊日期设置，包含字段：\n    - specialOnDutyDays   []number  特殊需要打卡日期的时间戳列表（毫秒，原本休息日需额外打卡的日期）\n    - specialOffDutyDays  []number  特殊无需打卡日期的时间戳列表（毫秒，原本工作日可免打卡的日期）",
       "display": "考勤打卡 / 排班 / 统计",
       "effect": "write",
@@ -27602,7 +27631,7 @@
       "primary_cli_path": "attendance group update",
       "product_id": "attendance",
       "reviewed": true,
-      "risk": "medium",
+      "risk": "high",
       "source": "hardcoded:attendance",
       "title": "更新考勤组配置（仅修改需要变更的字段）",
       "use_when": [
@@ -27627,7 +27656,7 @@
       "canonical_path": "attendance.group_update_members",
       "cli_name": "update-members",
       "cli_path": "attendance group update-members",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "description": "调用 MCP 工具 update_group_member，对指定考勤组的成员进行增删操作。\n--group-id 必填；所有成员/部门参数均可选，但至少需要传一个变更项。由于保存考勤组耗时较久，指令需要带上--timeout 10\n每次调用各参数最多传 20 个 ID。\n--yes 需要用户二次确认之后才允许带入，参考attendance.md中对于更新考勤组成员的说明\n  --add-users           添加考勤人员 userId 列表，逗号分隔\n  --remove-users        删除考勤人员 userId 列表，逗号分隔\n  --add-extra-users     添加无需考勤的人员 userId 列表，逗号分隔\n  --remove-extra-users  删除无需考勤的成员 userId 列表，逗号分隔\n  --add-depts           添加考勤部门 ID 列表，逗号分隔，若要添加全公司，根部门id为-1\n  --remove-depts        删除考勤部门 ID 列表，逗号分隔，全公司根部门id为-1",
       "display": "考勤打卡 / 排班 / 统计",
       "effect": "write",
@@ -27698,7 +27727,7 @@
       "primary_cli_path": "attendance group update-members",
       "product_id": "attendance",
       "reviewed": true,
-      "risk": "medium",
+      "risk": "high",
       "source": "hardcoded:attendance",
       "title": "更新考勤组成员（添加/删除考勤人员、部门、无需考勤人员）",
       "use_when": [
@@ -28162,7 +28191,7 @@
       "canonical_path": "attendance.schedule_import",
       "cli_name": "import",
       "cli_path": "attendance schedule import",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "description": "为排班制考勤组导入排班记录。传入 JSON 数组格式排班数据，\n每条记录必填字段：\n  - userId:    用户ID（必填）\n  - workDate:  排班日期，格式 yyyy-MM-dd HH:mm:ss（必填）\n  - classId:   班次ID（必填）\n  - isRest:    是否为排休，取值 Y/N（必填）\n\n示例：\n  dws attendance schedule import --groupId 123456 \\\n    --scheduleVOS '[{\"userId\":\"user001\",\"workDate\":\"2026-04-22 09:00:00\",\"classId\":123,\"isRest\":\"N\"}]' \\\n    --user-say-yes",
       "display": "考勤打卡 / 排班 / 统计",
       "effect": "write",
@@ -28202,7 +28231,7 @@
       "primary_cli_path": "attendance schedule import",
       "product_id": "attendance",
       "reviewed": true,
-      "risk": "medium",
+      "risk": "high",
       "source": "hardcoded:attendance",
       "title": "导入排班记录到排班制考勤组",
       "use_when": [
@@ -28765,7 +28794,7 @@
       "canonical_path": "attendance.vacation_update_type",
       "cli_name": "update-type",
       "cli_path": "attendance vacation update-type",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "description": "调用 MCP 工具 save_leave_type 更新已有假期规则。\n--leave-code 必填，指定要更新的假期规则编码。\n其他字段均为可选，仅需传入要修改的字段。\n\n参数说明：\n  --leave-code        假期编码（必填）\n  --name              假期名称（可选）\n  --unit              假期单位：day/halfDay/hour（可选）\n  --paid              是否带薪假期（可选）\n  --per-hours         一天折算小时数（可选）\n  --when-can-leave    新员工请假规则：entry/formal（可选）\n  --visibility-rules  适用范围规则 JSON 数组（可选）\n  --user-say-yes      用户已确认，跳过交互式确认提示（Agent 调用时传 true 前必须完成用户二次确认）\n\n--visibility-rules 适用范围语义（HSF 反序列化约定，必读）：\n  - 不传：不修改原有可见范围。\n  - 改为指定范围：传 [{\"type\":\"staff|dept|label|employee_type\",\"visible\":[\"id1\",\"id2\"]}, ...]，\n    每条规则 type 和 visible 都必须非空。\n  - 改为全公司可见（哨兵约定）：必须显式传 [{\"type\":\"dept\",\"visible\":[\"-1\"]}]，\n    服务端识别后会落库为空可见范围（即全公司）。\n  - 反例（CLI 会拦截报错，避免被服务端静默忽略）：\n    * 空数组 []、[{}]、[{\"type\":\"dept\",\"visible\":[]}] 等被视为未传，不会生效为全公司可见；\n    * 若要清空可见范围，必须显式传哨兵值 [\"-1\"]。",
       "display": "考勤打卡 / 排班 / 统计",
       "effect": "write",
@@ -28836,7 +28865,7 @@
       "primary_cli_path": "attendance vacation update-type",
       "product_id": "attendance",
       "reviewed": true,
-      "risk": "medium",
+      "risk": "high",
       "source": "hardcoded:attendance",
       "title": "更新假期规则",
       "use_when": [
@@ -30196,7 +30225,7 @@
       "canonical_path": "calendar.remove_calendar_participant",
       "cli_name": "delete",
       "cli_path": "calendar attendee delete",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "description": "从已存在的指定日程中移除参与者，支持批量移除多人",
       "display": "日历日程 / 会议室 / 闲忙",
       "effect": "write",
@@ -30243,7 +30272,7 @@
       "path": "calendar.remove_calendar_participant",
       "primary_cli_path": "calendar attendee delete",
       "product_id": "calendar",
-      "risk": "medium",
+      "risk": "high",
       "source": "hardcoded:calendar",
       "title": "删除日程参与人",
       "use_when": [
@@ -31238,6 +31267,74 @@
       "use_when": [
         "帮我建一个项目群；创建群聊",
         "建群/创建群聊"
+      ]
+    },
+    "chat.create_smart_conv_category": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "skills/mono/references/products/chat.md",
+        "skills/mono/schema-hints/interface-refs.json",
+        "skills/mono/schema-hints/selection-review.json"
+      ],
+      "agent_summary": "创建按群名称关键词或群成员自动匹配会话的智能分组",
+      "agent_summary_source": "agent-selection-contract-v1",
+      "availability": "available",
+      "avoid_when": [
+        "只需要普通静态会话分组，或不希望根据关键词和成员自动匹配会话时不要使用"
+      ],
+      "canonical_path": "chat.create_smart_conv_category",
+      "cli_name": "create-smart",
+      "cli_path": "chat category create-smart",
+      "confirmation": "not_required",
+      "description": "创建智能会话分组，可指定群名称关键词和群内成员 openDingTalkId 作为匹配规则。",
+      "display": "群聊 / 消息 / 机器人",
+      "effect": "write",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws chat category create-smart --name \"重点项目群\" --keywords \"项目,重点\""
+      ],
+      "group": "category",
+      "has_parameters": true,
+      "idempotency": "unknown",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "im",
+        "rpc_name": "create_smart_conv_category"
+      },
+      "is_alias": false,
+      "name": "create_smart_conv_category",
+      "parameter_count": 3,
+      "parameters": {
+        "keywords": {
+          "description": "群名称关键词列表，逗号分隔（可选）",
+          "interface_type": "array",
+          "property": "groupNameKeywords",
+          "required": false,
+          "type": "string"
+        },
+        "members": {
+          "description": "群内成员 openDingTalkId 列表，逗号分隔（可选）",
+          "interface_type": "array",
+          "property": "memberOpenDingTalkIds",
+          "required": false,
+          "type": "string"
+        },
+        "name": {
+          "description": "分组名称 (必填)",
+          "property": "categoryName",
+          "required": true,
+          "type": "string"
+        }
+      },
+      "path": "chat.create_smart_conv_category",
+      "primary_cli_path": "chat category create-smart",
+      "product_id": "chat",
+      "reviewed": true,
+      "risk": "medium",
+      "source": "hardcoded:chat",
+      "title": "创建智能会话分组",
+      "use_when": [
+        "需要按群名称关键词或群成员自动归类会话时创建智能会话分组"
       ]
     },
     "chat.create_text_emotion": {
@@ -37498,7 +37595,7 @@
       "canonical_path": "dev.disable_dev_app",
       "cli_name": "disable",
       "cli_path": "dev app disable",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "description": "停用开放平台企业内部应用",
       "display": "开放平台开发者能力",
       "effect": "write",
@@ -37529,7 +37626,7 @@
       "primary_cli_path": "dev app disable",
       "product_id": "dev",
       "reviewed": true,
-      "risk": "medium",
+      "risk": "high",
       "source": "hardcoded:dev",
       "title": "停用开放平台企业内部应用",
       "use_when": [
@@ -37556,7 +37653,7 @@
       "canonical_path": "dev.disable_dev_app_robot",
       "cli_name": "disable",
       "cli_path": "dev app robot disable",
-      "confirmation": "not_required",
+      "confirmation": "user_required",
       "description": "停用现有应用的机器人能力",
       "display": "开放平台开发者能力",
       "effect": "write",
@@ -37587,7 +37684,7 @@
       "primary_cli_path": "dev app robot disable",
       "product_id": "dev",
       "reviewed": true,
-      "risk": "medium",
+      "risk": "high",
       "source": "hardcoded:dev",
       "title": "停用现有应用的机器人能力",
       "use_when": [

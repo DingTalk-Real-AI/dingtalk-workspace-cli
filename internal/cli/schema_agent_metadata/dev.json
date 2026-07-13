@@ -117,8 +117,8 @@
       ],
       "effect": "write",
       "effect_source": "agent-hint",
-      "risk": "medium",
-      "confirmation": "not_required",
+      "risk": "high",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "examples": [
         "dws dev app disable --unified-app-id \u003cunified-app-id\u003e"
@@ -586,8 +586,8 @@
       ],
       "effect": "write",
       "effect_source": "agent-hint",
-      "risk": "medium",
-      "confirmation": "not_required",
+      "risk": "high",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "examples": [
         "dws dev app robot disable --unified-app-id \u003cunifiedAppId\u003e --format json"

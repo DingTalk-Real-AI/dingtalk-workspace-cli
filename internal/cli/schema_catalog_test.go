@@ -18,7 +18,7 @@ func TestEmbeddedSchemaCatalogIntegrity(t *testing.T) {
 	if !embeddedSchemaCatalogAvailable() {
 		t.Fatal("embedded schema catalog is unavailable or failed integrity validation")
 	}
-	if got, want := len(loaded.Snapshot.Tools), 537; got != want {
+	if got, want := len(loaded.Snapshot.Tools), 538; got != want {
 		t.Fatalf("embedded tools = %d, want %d", got, want)
 	}
 	if got, want := len(loaded.Products), 20; got != want {

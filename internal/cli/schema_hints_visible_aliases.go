@@ -27,6 +27,7 @@ func init() {
 		map[string]string{
 			"chat bot find":                 "search_bots",
 			"chat bot search":               "search_my_robots",
+			"chat category create-smart":    "create_smart_conv_category",
 			"chat group bots":               "list_group_bots",
 			"chat group create":             "create_group_conversation",
 			"chat group members add-bot":    "add_robot_to_group",

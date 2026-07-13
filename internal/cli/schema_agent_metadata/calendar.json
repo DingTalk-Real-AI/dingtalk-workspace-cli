@@ -101,8 +101,8 @@
       ],
       "effect": "write",
       "effect_source": "command-verb",
-      "risk": "medium",
-      "confirmation": "not_required",
+      "risk": "high",
+      "confirmation": "user_required",
       "idempotency": "unknown",
       "examples": [
         "dws calendar attendee delete --attendees \u003cattendees\u003e --event \u003cevent\u003e"

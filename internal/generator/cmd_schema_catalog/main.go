@@ -57,6 +57,9 @@ func main() {
 		fail(err)
 	}
 	root := app.NewRootCommand()
+	if err := cli.ValidateEmbeddedRuntimeSchemaCompleteness(root); err != nil {
+		fail(fmt.Errorf("validate reverse command-tree completeness: %w", err))
+	}
 	snapshot, err := cli.BuildSchemaCatalogSnapshot(root, cli.SchemaCatalogBuildOptions{
 		AllowedCanonicalPaths: allowed,
 		SurfaceHash:           surfaceHash,

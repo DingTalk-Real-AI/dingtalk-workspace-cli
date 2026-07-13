@@ -438,10 +438,13 @@ func mergeToolMetadata(left, right ToolMetadata) ToolMetadata {
 		left.Effect = right.Effect
 		left.EffectSource = right.EffectSource
 	}
-	if left.Risk == "" {
+	// Multiple Skill/canonical/CLI alias records can reconcile to one live
+	// command. Keep the stricter safety contract so an inferred/default record
+	// cannot downgrade a reviewed or imported high-risk requirement.
+	if safetyRiskRank(right.Risk) > safetyRiskRank(left.Risk) {
 		left.Risk = right.Risk
 	}
-	if left.Confirmation == "" {
+	if confirmationRank(right.Confirmation) > confirmationRank(left.Confirmation) {
 		left.Confirmation = right.Confirmation
 	}
 	if left.Idempotency == "" {
@@ -470,6 +473,30 @@ func mergeToolMetadata(left, right ToolMetadata) ToolMetadata {
 	left.Examples = uniqueStringsInOrder(left.Examples)
 	left.SourceRefs = normalizedStrings(left.SourceRefs)
 	return left
+}
+
+func safetyRiskRank(risk string) int {
+	switch strings.TrimSpace(risk) {
+	case "high":
+		return 3
+	case "medium":
+		return 2
+	case "low":
+		return 1
+	default:
+		return 0
+	}
+}
+
+func confirmationRank(confirmation string) int {
+	switch strings.TrimSpace(confirmation) {
+	case "user_required":
+		return 2
+	case "not_required":
+		return 1
+	default:
+		return 0
+	}
 }
 
 func loadSources(opts Options) ([]sourceFile, error) {
