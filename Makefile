@@ -1,6 +1,6 @@
 GO ?= go
 
-.PHONY: all help build rebuild test lint fmt policy edition-test interface-integrity update-interface-baseline reset-interface-baseline schema-compatibility update-schema-baseline skill-command-integrity cli-smoke mock-mcp-smoke package release publish-homebrew-formula setup-hooks
+.PHONY: all help build rebuild test lint fmt policy edition-test interface-integrity authoritative-interface-integrity update-interface-baseline reset-interface-baseline schema-compatibility update-schema-baseline skill-command-integrity cli-smoke mock-mcp-smoke package release publish-homebrew-formula setup-hooks
 
 all: setup-hooks fmt lint build test rebuild
 
@@ -12,6 +12,7 @@ help:
 	@printf "  make fmt           - Format Go source files\n"
 	@printf "  make policy        - Run open-source asset and command-surface checks\n"
 	@printf "  make interface-integrity - Check historical commands and help contracts still work\n"
+	@printf "  make authoritative-interface-integrity BASE_REF=<ref> - Check the Git-owned PR merge-base\n"
 	@printf "  make update-interface-baseline - Add new CLI contracts without removing history\n"
 	@printf "  make reset-interface-baseline - DANGEROUS: replace all CLI compatibility history\n"
 	@printf "  make schema-compatibility - Check schema list remains backwards compatible\n"
@@ -47,6 +48,9 @@ edition-test:
 
 interface-integrity:
 	@./scripts/policy/check-interface-baseline.sh
+
+authoritative-interface-integrity:
+	@./scripts/policy/check-authoritative-interface-baselines.sh --base-ref "$(BASE_REF)"
 
 update-interface-baseline:
 	@./scripts/policy/check-interface-baseline.sh --update

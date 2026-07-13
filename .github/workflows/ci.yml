@@ -182,10 +182,13 @@ jobs:
   interface-integrity:
     name: Interface Integrity
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -195,8 +198,27 @@ jobs:
       - name: Build
         run: make build
 
+      - name: Resolve authoritative interface merge-base
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -eu
+          base_ref="$PUSH_BEFORE_SHA"
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            base_ref="$(git merge-base "$PR_HEAD_SHA" "$PR_BASE_SHA")"
+          fi
+          if [ -z "$base_ref" ] || [ "$base_ref" = "0000000000000000000000000000000000000000" ]; then
+            base_ref="$(git rev-parse HEAD^)"
+          fi
+          git rev-parse --verify "${base_ref}^{commit}" >/dev/null
+          echo "INTERFACE_BASE_REF=$base_ref" >> "$GITHUB_ENV"
+
       - name: Check historical commands and help compatibility
-        run: make interface-integrity
+        run: |
+          make authoritative-interface-integrity \
+            BASE_REF="$INTERFACE_BASE_REF"
 
       - name: Check schema list compatibility
         run: make schema-compatibility
