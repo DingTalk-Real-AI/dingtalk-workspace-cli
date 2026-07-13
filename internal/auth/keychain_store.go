@@ -137,6 +137,12 @@ func preflightTokenPersistence(configDir string) error {
 			)
 		}
 	}
+	if err := keychain.ValidateAuthTokenEntries(keychain.Service); err != nil {
+		return fmt.Errorf(
+			"auth token ciphertext inventory is unreadable; on macOS first try `env -u DWS_DISABLE_KEYCHAIN dws auth migrate-keychain --to file-dek --dry-run`; if the ciphertext is damaged, use `dws auth reset` only when discarding all local profiles: %w",
+			err,
+		)
+	}
 	return nil
 }
 

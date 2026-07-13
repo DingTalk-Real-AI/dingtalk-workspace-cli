@@ -352,8 +352,11 @@ func decryptWithAvailableDEK(service string, data []byte) (string, []byte, error
 // when a related account is added from a normal macOS process. This prevents
 // profile-scoped token slots from mixing DEK backends without allowing an
 // unrelated file-backed secret to downgrade a system-Keychain-backed login.
-func keyForNewEntry(service string) ([]byte, error) {
+func keyForNewEntry(service, account string) ([]byte, error) {
 	if os.Getenv(DisableKeychainEnv) != "" {
+		return getOrCreateDEK(service)
+	}
+	if account != AccountToken && !strings.HasPrefix(account, AccountToken+":") {
 		return getOrCreateDEK(service)
 	}
 
@@ -398,7 +401,7 @@ func platformSet(service, account, data string) error {
 	case readErr == nil:
 		_, key, err = decryptWithAvailableDEK(service, existing)
 	case os.IsNotExist(readErr):
-		key, err = keyForNewEntry(service)
+		key, err = keyForNewEntry(service, account)
 	default:
 		return readErr
 	}
@@ -424,6 +427,23 @@ func platformSet(service, account, data string) error {
 	// Atomic rename to prevent file corruption during multi-process writes
 	if err := os.Rename(tmpPath, targetPath); err != nil {
 		return err
+	}
+	return nil
+}
+
+func platformValidateAuthTokenEntries(service string) error {
+	paths, err := authTokenCiphertextPaths(service)
+	if err != nil {
+		return err
+	}
+	for _, path := range paths {
+		ciphertext, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("read keychain entry %q: %w", filepath.Base(path), err)
+		}
+		if _, _, err := decryptWithAvailableDEK(service, ciphertext); err != nil {
+			return fmt.Errorf("validate keychain entry %q: %w", filepath.Base(path), err)
+		}
 	}
 	return nil
 }

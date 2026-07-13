@@ -157,6 +157,27 @@ func platformSet(service, account, data string) error {
 	return nil
 }
 
+func platformValidateAuthTokenEntries(service string) error {
+	paths, err := authTokenCiphertextPaths(service)
+	if err != nil || len(paths) == 0 {
+		return err
+	}
+	key, err := getDEKReadOnly(service)
+	if err != nil {
+		return fmt.Errorf("read DEK for auth token validation: %w", err)
+	}
+	for _, path := range paths {
+		ciphertext, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("read keychain entry %q: %w", filepath.Base(path), err)
+		}
+		if _, err := decryptData(ciphertext, key); err != nil {
+			return fmt.Errorf("validate keychain entry %q: %w", filepath.Base(path), err)
+		}
+	}
+	return nil
+}
+
 func platformRemove(service, account string) error {
 	err := os.Remove(filepath.Join(StorageDir(service), safeFileName(account)))
 	if err != nil && !os.IsNotExist(err) {

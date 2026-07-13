@@ -147,6 +147,13 @@ func MigrateToFileDEK(service string, dryRun bool) (int, error) {
 	return platformMigrateToFileDEK(service, dryRun)
 }
 
+// ValidateAuthTokenEntries verifies every persisted auth-token ciphertext,
+// including profile slots not yet registered in profiles.json, without
+// creating or rotating key material.
+func ValidateAuthTokenEntries(service string) error {
+	return platformValidateAuthTokenEntries(service)
+}
+
 // Exists checks if an entry exists in the keychain.
 func Exists(service, account string) bool {
 	val, err := Get(service, account)

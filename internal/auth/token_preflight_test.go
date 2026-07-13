@@ -150,6 +150,44 @@ func TestPreflightTokenPersistenceRejectsUnreadableProfileSlot(t *testing.T) {
 	}
 }
 
+func TestExchangeAuthCodePreflightsOrphanProfileCiphertextBeforeHTTP(t *testing.T) {
+	cleanupKeychain(t)
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	setPreflightTestCredentials(t)
+	configDir := t.TempDir()
+	data := testToken("at_orphan", "corp_orphan", "Orphan Org")
+
+	// Simulate interruption after the profile ciphertext rename but before
+	// profiles.json is updated by saveTokenDataLocked.
+	if err := SaveTokenDataKeychainForCorpID(data.CorpID, data); err != nil {
+		t.Fatalf("SaveTokenDataKeychainForCorpID() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(configDir, profilesJSONFile)); !os.IsNotExist(err) {
+		t.Fatalf("profiles.json stat error = %v, want missing metadata", err)
+	}
+	dekPath := filepath.Join(keychain.StorageDir(keychain.Service), "dek")
+	if err := os.WriteFile(dekPath, bytes.Repeat([]byte{0x6f}, 32), 0o600); err != nil {
+		t.Fatalf("WriteFile(replacement DEK) error = %v", err)
+	}
+
+	var calls atomic.Int32
+	provider := NewOAuthProvider(configDir, nil)
+	provider.httpClient = &http.Client{Transport: preflightRoundTripFunc(func(*http.Request) (*http.Response, error) {
+		calls.Add(1)
+		return nil, errors.New("unexpected HTTP request")
+	})}
+	_, err := provider.ExchangeAuthCode(context.Background(), "auth-code", "")
+	if err == nil || !strings.Contains(err.Error(), "auth token ciphertext inventory") {
+		t.Fatalf("ExchangeAuthCode() error = %v, want orphan ciphertext preflight error", err)
+	}
+	if !keychain.IsCiphertextKeyMismatch(err) {
+		t.Fatalf("ExchangeAuthCode() error = %v, want ciphertext key mismatch in error chain", err)
+	}
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("HTTP calls = %d, want 0", got)
+	}
+}
+
 func TestPortableAuthExportRejectsCiphertextFromAnotherDEK(t *testing.T) {
 	cleanupKeychain(t)
 	t.Setenv(keychain.DisableKeychainEnv, "1")

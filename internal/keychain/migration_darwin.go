@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
 
 	"github.com/google/uuid"
 )
@@ -36,39 +34,23 @@ func platformMigrateToFileDEK(service string, dryRun bool) (int, error) {
 		return 0, fmt.Errorf("file-DEK migration requires system Keychain mode; unset %s and retry", DisableKeychainEnv)
 	}
 
-	dir := StorageDir(service)
-	dirEntries, err := os.ReadDir(dir)
-	if os.IsNotExist(err) {
-		return 0, nil
-	}
+	paths, err := authTokenCiphertextPaths(service)
 	if err != nil {
-		return 0, fmt.Errorf("read keychain storage: %w", err)
+		return 0, err
 	}
 
-	entries := make([]fileDEKMigrationEntry, 0, len(dirEntries))
-	for _, dirEntry := range dirEntries {
-		if !isAuthTokenCiphertextFile(dirEntry.Name()) {
-			continue
-		}
-		info, err := dirEntry.Info()
-		if err != nil {
-			return 0, fmt.Errorf("inspect keychain entry %q: %w", dirEntry.Name(), err)
-		}
-		if !info.Mode().IsRegular() {
-			return 0, fmt.Errorf("keychain entry %q is not a regular file", dirEntry.Name())
-		}
-		path := filepath.Join(dir, dirEntry.Name())
+	entries := make([]fileDEKMigrationEntry, 0, len(paths))
+	for _, path := range paths {
 		ciphertext, err := os.ReadFile(path)
 		if err != nil {
-			return 0, fmt.Errorf("read keychain entry %q: %w", dirEntry.Name(), err)
+			return 0, fmt.Errorf("read keychain entry %q: %w", filepath.Base(path), err)
 		}
 		plaintext, _, err := decryptWithAvailableDEK(service, ciphertext)
 		if err != nil {
-			return 0, fmt.Errorf("validate keychain entry %q before migration: %w", dirEntry.Name(), err)
+			return 0, fmt.Errorf("validate keychain entry %q before migration: %w", filepath.Base(path), err)
 		}
 		entries = append(entries, fileDEKMigrationEntry{path: path, plaintext: plaintext})
 	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].path < entries[j].path })
 	if dryRun || len(entries) == 0 {
 		return len(entries), nil
 	}
@@ -107,10 +89,4 @@ func platformMigrateToFileDEK(service string, dryRun bool) (int, error) {
 		tempPaths[i] = ""
 	}
 	return len(entries), nil
-}
-
-func isAuthTokenCiphertextFile(name string) bool {
-	legacyName := safeFileName(AccountToken)
-	return name == legacyName ||
-		(strings.HasPrefix(name, strings.TrimSuffix(legacyName, ".enc")+"_") && strings.HasSuffix(name, ".enc"))
 }

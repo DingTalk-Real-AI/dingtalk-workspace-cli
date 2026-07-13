@@ -88,6 +88,51 @@ func TestMigrateToFileDEKReencryptsSystemEntries(t *testing.T) {
 	}
 }
 
+func TestMigrateToFileDEKKeepsNewNonAuthSecretsOnSystemKeychain(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(StorageDirEnv, root)
+	t.Setenv(DisableKeychainEnv, "")
+	systemDEK := bytes.Repeat([]byte{0x52}, dekBytes)
+	stubMacOSSystemDEK(t, systemDEK, nil)
+
+	service := "test-migrate-secret-isolation"
+	if err := Set(service, AccountToken, "system-token"); err != nil {
+		t.Fatalf("Set(auth token) error = %v", err)
+	}
+	if _, err := MigrateToFileDEK(service, false); err != nil {
+		t.Fatalf("MigrateToFileDEK() error = %v", err)
+	}
+
+	nonAuthEntries := map[string]string{
+		"client-secret:demo": "client-secret",
+		"app-token:demo":     "app-token",
+		"appsecret:demo":     "stored-secret",
+	}
+	for account, value := range nonAuthEntries {
+		if err := Set(service, account, value); err != nil {
+			t.Fatalf("Set(%q) after migration error = %v", account, err)
+		}
+		ciphertext, err := os.ReadFile(filepath.Join(StorageDir(service), safeFileName(account)))
+		if err != nil {
+			t.Fatalf("ReadFile(%q) error = %v", account, err)
+		}
+		got, err := decryptData(ciphertext, systemDEK)
+		if err != nil || got != value {
+			t.Fatalf("system Keychain DEK decrypt %q = %q, %v; want %q", account, got, err, value)
+		}
+	}
+
+	t.Setenv(DisableKeychainEnv, "1")
+	if got, err := Get(service, AccountToken); err != nil || got != "system-token" {
+		t.Fatalf("file-DEK Get(auth token) = %q, %v; want migrated token", got, err)
+	}
+	for account := range nonAuthEntries {
+		if got, err := Get(service, account); !IsCiphertextKeyMismatch(err) {
+			t.Fatalf("file-DEK Get(%q) = %q, %v; want ciphertext key mismatch", account, got, err)
+		}
+	}
+}
+
 func TestMigrateToFileDEKAbortsBeforeWritingWhenAnyEntryIsUnreadable(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv(StorageDirEnv, root)
