@@ -23,15 +23,23 @@ import (
 )
 
 type Invocation struct {
-	Kind             string         `json:"kind"`
-	Stage            string         `json:"stage"`
-	Implemented      bool           `json:"implemented"`
-	DryRun           bool           `json:"dry_run,omitempty"`
-	CanonicalProduct string         `json:"canonical_product"`
-	Tool             string         `json:"tool"`
-	CanonicalPath    string         `json:"canonical_path"`
-	LegacyPath       string         `json:"legacy_path,omitempty"`
-	Params           map[string]any `json:"params"`
+	Kind                      string         `json:"kind"`
+	Stage                     string         `json:"stage"`
+	Implemented               bool           `json:"implemented"`
+	DryRun                    bool           `json:"dry_run,omitempty"`
+	AllowReadOnlyDuringDryRun bool           `json:"-"`
+	CanonicalProduct          string         `json:"canonical_product"`
+	Tool                      string         `json:"tool"`
+	CanonicalPath             string         `json:"canonical_path"`
+	LegacyPath                string         `json:"legacy_path,omitempty"`
+	Params                    map[string]any `json:"params"`
+}
+
+// SkipExecutionDuringDryRun reports whether this invocation should be echoed
+// instead of executed. AllowReadOnlyDuringDryRun is an in-process capability
+// marker and is deliberately excluded from serialized invocation contracts.
+func (i Invocation) SkipExecutionDuringDryRun() bool {
+	return i.DryRun && !i.AllowReadOnlyDuringDryRun
 }
 
 type Result struct {
@@ -46,7 +54,7 @@ type Runner interface {
 type EchoRunner struct{}
 
 func (EchoRunner) Run(_ context.Context, invocation Invocation) (Result, error) {
-	if invocation.DryRun {
+	if invocation.SkipExecutionDuringDryRun() {
 		return Result{
 			Invocation: invocation,
 			Response: map[string]any{

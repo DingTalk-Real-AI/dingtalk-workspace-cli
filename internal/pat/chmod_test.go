@@ -16,6 +16,7 @@ package pat
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -249,6 +250,27 @@ func stringSliceArgEqual(got any, want []string) bool {
 	return true
 }
 
+func patScopeRevokeResultForTest(t *testing.T, fields map[string]any) *edition.ToolResult {
+	t.Helper()
+	data := map[string]any{
+		"operation":   "revoke",
+		"scope":       "calendar.event:read",
+		"grantPolicy": patScopeRevokeGrantPolicy,
+	}
+	for key, value := range fields {
+		data[key] = value
+	}
+	payload, err := json.Marshal(map[string]any{
+		"success": true,
+		"code":    "OK",
+		"data":    data,
+	})
+	if err != nil {
+		t.Fatalf("marshal PAT scope revoke fixture: %v", err)
+	}
+	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: string(payload)}}}
+}
+
 func captureStdout(t *testing.T, fn func() error) (string, error) {
 	t.Helper()
 	oldStdout := os.Stdout
@@ -327,7 +349,7 @@ func TestRegisterCommands_OnlyExposesChmodForAuthorization(t *testing.T) {
 	if !children["chmod"] {
 		t.Fatal("pat chmod command not registered")
 	}
-	for _, unexpected := range []string{"grant-batch", "grant-recommend", "scopes", "check"} {
+	for _, unexpected := range []string{"grant-batch", "grant-recommend", "revoke", "scopes", "check"} {
 		if children[unexpected] {
 			t.Fatalf("unexpected pat subcommand %q registered; authorization must stay on chmod", unexpected)
 		}
@@ -377,16 +399,756 @@ func TestPATHelpDocumentsBatchAuthorization(t *testing.T) {
 		"批量授权:",
 		"一次传多个 scope",
 		"batch plan",
+		"--all 使用服务端可操作的全部 scope",
+		"--revoke 只撤回一个位置 scope",
+		"--all 不是 --recommend 的别名",
+		"--yes 只表示用户已明确确认写操作",
 		"--dry-run 只返回授权计划",
 		"执行批量授权必须显式",
 		"由服务端默认兜底",
 		"aitable.record:query aitable.record:create --grant-type permanent --yes",
 		"dws pat chmod --products calendar,aitable",
 		"dws pat chmod --recommend --yes",
+		"dws pat chmod --all --dry-run",
+		"dws pat chmod calendar.event:read --revoke --yes",
 	} {
 		if !strings.Contains(chmodHelp, want) {
 			t.Fatalf("pat chmod help missing %q\nhelp:\n%s", want, chmodHelp)
 		}
+	}
+}
+
+func TestChmod_allDryRunUsesExplicitServerPlan(t *testing.T) {
+	t.Setenv(agentCodeEnv, "qoderwork")
+	fake := &sequenceToolCaller{
+		dryRun: true,
+		responses: []string{
+			`{"success":true,"code":"OK","data":{"operation":"grant","allScopes":true,"agentCode":"qoderwork","selectedScopes":["calendar.event:read"]}}`,
+		},
+	}
+	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("all", "true")
+	_ = cmd.Flags().Set("product", "calendar")
+	attachRootPATFlags(t, cmd, false, false)
+
+	output, err := captureStdout(t, func() error {
+		return cmd.RunE(cmd, nil)
+	})
+	if err != nil {
+		t.Fatalf("chmod RunE error = %v", err)
+	}
+	if !strings.Contains(output, "suggestion: rerun this command without --dry-run and with --yes to grant selected scopes") {
+		t.Fatalf("all dry-run summary must require --yes: %s", output)
+	}
+	if len(fake.calls) != 1 {
+		t.Fatalf("CallTool count = %d, want plan only", len(fake.calls))
+	}
+	call := fake.calls[0]
+	if call.tool != patBatchPlanToolName {
+		t.Fatalf("tool = %q, want %q", call.tool, patBatchPlanToolName)
+	}
+	if got := call.args["allScopes"]; got != true {
+		t.Fatalf("allScopes = %#v, want true", got)
+	}
+	if got := call.args["operation"]; got != patBatchOperationGrant {
+		t.Fatalf("operation = %#v, want %q", got, patBatchOperationGrant)
+	}
+	if got := call.args["productCodes"]; !stringSliceArgEqual(got, []string{"calendar"}) {
+		t.Fatalf("productCodes = %#v, want calendar", got)
+	}
+	if got := call.args["scopes"]; !stringSliceArgEqual(got, []string{}) {
+		t.Fatalf("scopes = %#v, want empty", got)
+	}
+}
+
+func TestChmod_allDryRunWithYesStillOnlyPlans(t *testing.T) {
+	fake := &sequenceToolCaller{
+		dryRun: true,
+		responses: []string{
+			`{"success":true,"code":"OK","data":{"operation":"grant","allScopes":true,"selectedScopes":["calendar.event:read"]}}`,
+		},
+	}
+	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("all", "true")
+	setBatchYesForTest(t, cmd)
+
+	if err := cmd.RunE(cmd, nil); err != nil {
+		t.Fatalf("chmod --all --dry-run --yes error = %v", err)
+	}
+	if len(fake.calls) != 1 || fake.calls[0].tool != patBatchPlanToolName {
+		t.Fatalf("calls = %#v, want exactly one read-only plan", fake.calls)
+	}
+}
+
+func TestChmod_allPlansThenGrantsSelectedScopesWithYes(t *testing.T) {
+	fake := &sequenceToolCaller{responses: []string{
+		`{"success":true,"data":{"operation":"grant","allScopes":true,"selectedScopes":["calendar.event:read","chat.message:list"]}}`,
+		`{"success":true,"data":{"grantedScopes":["calendar.event:read","chat.message:list"]}}`,
+	}}
+	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("all", "true")
+	setBatchYesForTest(t, cmd)
+
+	if err := cmd.RunE(cmd, nil); err != nil {
+		t.Fatalf("chmod RunE error = %v", err)
+	}
+	if len(fake.calls) != 2 {
+		t.Fatalf("CallTool count = %d, want plan then grant", len(fake.calls))
+	}
+	if fake.calls[0].tool != patBatchPlanToolName || fake.calls[1].tool != patBatchGrantToolName {
+		t.Fatalf("tools = %q, %q; want plan then batch grant", fake.calls[0].tool, fake.calls[1].tool)
+	}
+	if got := fake.calls[0].args["allScopes"]; got != true {
+		t.Fatalf("plan allScopes = %#v, want true", got)
+	}
+	if got := fake.calls[0].args["operation"]; got != patBatchOperationGrant {
+		t.Fatalf("plan operation = %#v, want grant", got)
+	}
+	if got := fake.calls[1].args["scopes"]; !stringSliceArgEqual(got, []string{"calendar.event:read", "chat.message:list"}) {
+		t.Fatalf("grant scopes = %#v, want selected scopes", got)
+	}
+	if _, ok := fake.calls[1].args["allScopes"]; ok {
+		t.Fatalf("allScopes must be plan-only: %#v", fake.calls[1].args)
+	}
+	if _, ok := fake.calls[1].args["operation"]; ok {
+		t.Fatalf("operation must not leak into batch grant: %#v", fake.calls[1].args)
+	}
+	if got, _ := fake.calls[1].args["clientRequestId"].(string); !strings.HasPrefix(got, "pat-chmod-all-") {
+		t.Fatalf("clientRequestId = %#v, want pat-chmod-all prefix", fake.calls[1].args["clientRequestId"])
+	}
+}
+
+func TestChmod_allWithoutYesStopsAfterAttestedPlan(t *testing.T) {
+	fake := &sequenceToolCaller{responses: []string{
+		`{"success":true,"data":{"operation":"grant","allScopes":true,"selectedScopes":["calendar.event:read"]}}`,
+	}}
+	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("all", "true")
+
+	err := cmd.RunE(cmd, nil)
+	if err == nil || !strings.Contains(err.Error(), "batch PAT authorization blocked") || !strings.Contains(err.Error(), "--yes") {
+		t.Fatalf("error = %v, want all-scope --yes blocker", err)
+	}
+	if len(fake.calls) != 1 || fake.calls[0].tool != patBatchPlanToolName {
+		t.Fatalf("calls = %#v, want attested plan only", fake.calls)
+	}
+}
+
+func TestChmod_revokeDryRunCallsReadOnlyServerTool(t *testing.T) {
+	fake := &sequenceToolCaller{dryRun: true, responses: []string{
+		`{"success":true,"code":"OK","data":{"operation":"revoke","scope":"calendar.event:read","grantPolicy":"ONCE","currentStatus":"ACTIVE","revocable":true,"changed":false,"dryRun":true,"selectedScopes":["calendar.event:read"]}}`,
+	}}
+	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("revoke", "true")
+
+	output, err := captureStdout(t, func() error {
+		return cmd.RunE(cmd, []string{" calendar.event:read "})
+	})
+	if err != nil {
+		t.Fatalf("chmod RunE error = %v", err)
+	}
+	if len(fake.calls) != 1 || fake.calls[0].tool != patScopeRevokeToolName {
+		t.Fatalf("calls = %#v, want one read-only scope revoke", fake.calls)
+	}
+	if got := fake.calls[0].args["scope"]; got != "calendar.event:read" {
+		t.Fatalf("scope = %#v, want trimmed scope", got)
+	}
+	if got := fake.calls[0].args["dryRun"]; got != true {
+		t.Fatalf("dryRun = %#v, want true", got)
+	}
+	for _, want := range []string{
+		"operation: revoke",
+		"scope: calendar.event:read",
+		"grantPolicy: ONCE",
+		"rerun this command without --dry-run and with --yes",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("dry-run output missing %q: %s", want, output)
+		}
+	}
+}
+
+func TestChmod_revokeRequiresYesWithoutCallingMCP(t *testing.T) {
+	fake := &sequenceToolCaller{}
+	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("revoke", "true")
+
+	err := cmd.RunE(cmd, []string{"calendar.event:read"})
+	if err == nil || !strings.Contains(err.Error(), "PAT revoke blocked") || !strings.Contains(err.Error(), "--yes") {
+		t.Fatalf("error = %v, want explicit revoke --yes blocker", err)
+	}
+	if len(fake.calls) != 0 {
+		t.Fatalf("CallTool count = %d, want confirmation before MCP", len(fake.calls))
+	}
+}
+
+func TestChmod_revokeScopeCannotInjectExecutableActions(t *testing.T) {
+	maliciousScope := "calendar.event:read\nrm -rf /"
+	fake := &sequenceToolCaller{}
+	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("revoke", "true")
+
+	err := cmd.RunE(cmd, []string{maliciousScope})
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Category != apperrors.CategoryValidation || typed.Reason != "pat_scope_control_character" {
+		t.Fatalf("error = %#v, want control-character validation", err)
+	}
+	if len(fake.calls) != 0 {
+		t.Fatalf("calls = %#v, want validation before MCP", fake.calls)
+	}
+
+	confirmationErr := requireSingleScopeRevokeConfirmation(&cobra.Command{Use: "chmod"})
+	if !errors.As(confirmationErr, &typed) {
+		t.Fatalf("confirmation error = %T, want structured validation", confirmationErr)
+	}
+	if len(typed.Actions) != 2 {
+		t.Fatalf("actions = %#v, want two placeholder commands", typed.Actions)
+	}
+	for _, action := range typed.Actions {
+		if strings.Contains(action, maliciousScope) || strings.Contains(action, "rm -rf") {
+			t.Fatalf("untrusted scope leaked into executable action %q", action)
+		}
+		if !strings.Contains(action, "<scope>") {
+			t.Fatalf("action = %q, want explicit <scope> placeholder", action)
+		}
+	}
+}
+
+func TestChmod_singleScopeRevokeWithYesCallsDedicatedTool(t *testing.T) {
+	t.Setenv(agentCodeEnv, "")
+	fake := &sequenceToolCaller{responses: []string{
+		`{"success":true,"code":"OK","data":{"operation":"revoke","scope":"calendar.event:read","grantPolicy":"ONCE","agentCode":"qoderwork","currentStatus":"REVOKED","revocable":false,"changed":true,"dryRun":false,"selectedScopes":["calendar.event:read"]}}`,
+	}}
+	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("revoke", "true")
+	_ = cmd.Flags().Set("agentCode", "qoderwork")
+	setBatchYesForTest(t, cmd)
+
+	if err := cmd.RunE(cmd, []string{"calendar.event:read"}); err != nil {
+		t.Fatalf("chmod RunE error = %v", err)
+	}
+	if len(fake.calls) != 1 || fake.calls[0].tool != patScopeRevokeToolName {
+		t.Fatalf("calls = %#v, want one dedicated scope revoke", fake.calls)
+	}
+	wantArgs := map[string]any{"scope": "calendar.event:read", "agentCode": "qoderwork", "dryRun": false}
+	if len(fake.calls[0].args) != len(wantArgs) {
+		t.Fatalf("args = %#v, want only scope and optional agentCode", fake.calls[0].args)
+	}
+	for key, want := range wantArgs {
+		if got := fake.calls[0].args[key]; got != want {
+			t.Fatalf("%s = %#v, want %#v", key, got, want)
+		}
+	}
+	if got := fake.calls[0].agentEnv; got != "qoderwork" {
+		t.Fatalf("%s during CallTool = %q, want qoderwork", agentCodeEnv, got)
+	}
+	if got := os.Getenv(agentCodeEnv); got != "" {
+		t.Fatalf("%s after CallTool = %q, want restored empty value", agentCodeEnv, got)
+	}
+}
+
+func TestChmod_newModeValidationFailsBeforeMCP(t *testing.T) {
+	cases := []struct {
+		name       string
+		args       []string
+		setFlags   func(*cobra.Command)
+		wantError  string
+		wantReason string
+	}{
+		{
+			name:       "missing scope or selector",
+			setFlags:   func(*cobra.Command) {},
+			wantError:  "requires at least one positional scope or authorization selector",
+			wantReason: "pat_scope_or_selector_required",
+		},
+		{
+			name: "invalid grant type",
+			args: []string{"calendar.event:read"},
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("grant-type", "forever")
+			},
+			wantError:  `invalid --grant-type "forever"`,
+			wantReason: "invalid_pat_grant_type",
+		},
+		{
+			name: "session grant without session id",
+			args: []string{"calendar.event:read"},
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("grant-type", "session")
+			},
+			wantError:  "--session-id is required when --grant-type is session",
+			wantReason: "pat_session_id_required",
+		},
+		{
+			name: "all with positional scope",
+			args: []string{"calendar.event:read"},
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("all", "true")
+			},
+			wantError:  "--all cannot be combined with positional scopes",
+			wantReason: "pat_all_positional_scope_conflict",
+		},
+		{
+			name: "all with recommend",
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("all", "true")
+				_ = cmd.Flags().Set("recommend", "true")
+			},
+			wantError:  "--all cannot be combined with --recommend",
+			wantReason: "pat_all_recommend_conflict",
+		},
+		{
+			name: "revoke with recommend",
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("revoke", "true")
+				_ = cmd.Flags().Set("recommend", "true")
+			},
+			wantError:  "--revoke cannot be combined with --recommend",
+			wantReason: "pat_revoke_recommend_conflict",
+		},
+		{
+			name: "revoke with grant type",
+			args: []string{"calendar.event:read"},
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("revoke", "true")
+				_ = cmd.Flags().Set("grant-type", "once")
+			},
+			wantError:  "--revoke cannot be combined with --grant-type",
+			wantReason: "pat_revoke_grant_type_conflict",
+		},
+		{
+			name: "revoke with session id",
+			args: []string{"calendar.event:read"},
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("revoke", "true")
+				_ = cmd.Flags().Set("session-id", "session-1")
+			},
+			wantError:  "--revoke cannot be combined with --session-id",
+			wantReason: "pat_revoke_session_id_conflict",
+		},
+		{
+			name: "revoke without target",
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("revoke", "true")
+			},
+			wantError:  "--revoke requires exactly one positional scope",
+			wantReason: "pat_revoke_scope_count",
+		},
+		{
+			name: "revoke with multiple scopes",
+			args: []string{"calendar.event:read", "chat.message:list"},
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("revoke", "true")
+			},
+			wantError:  "--revoke requires exactly one positional scope",
+			wantReason: "pat_revoke_scope_count",
+		},
+		{
+			name: "revoke with product selector",
+			args: []string{"calendar.event:read"},
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("revoke", "true")
+				_ = cmd.Flags().Set("product", "calendar")
+			},
+			wantError:  "--revoke cannot be combined with --product/--products/--domain/--domains",
+			wantReason: "pat_revoke_selector_conflict",
+		},
+		{
+			name: "all grant rejects blank product selector",
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("all", "true")
+				_ = cmd.Flags().Set("product", "")
+			},
+			wantError:  "requires at least one non-empty product code",
+			wantReason: "pat_product_selector_empty",
+		},
+		{
+			name: "revoke with all",
+			args: []string{"calendar.event:read"},
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("revoke", "true")
+				_ = cmd.Flags().Set("all", "true")
+			},
+			wantError:  "--revoke cannot be combined with --all",
+			wantReason: "pat_revoke_all_conflict",
+		},
+		{
+			name: "all rejects explicit blank agent code",
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("all", "true")
+				_ = cmd.Flags().Set("agentCode", "")
+			},
+			wantError:  "--agentCode requires a non-empty value",
+			wantReason: "pat_agent_code_empty",
+		},
+		{
+			name: "targeted revoke rejects blank scope",
+			args: []string{"   "},
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("revoke", "true")
+			},
+			wantError:  "PAT scope must not be blank",
+			wantReason: "pat_scope_blank",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &sequenceToolCaller{}
+			cmd := newChmodCommand(fake)
+			tc.setFlags(cmd)
+			err := cmd.RunE(cmd, tc.args)
+			if err == nil || !strings.Contains(err.Error(), tc.wantError) {
+				t.Fatalf("error = %v, want %q", err, tc.wantError)
+			}
+			var typed *apperrors.Error
+			if !errors.As(err, &typed) || typed.Category != apperrors.CategoryValidation || typed.Reason != tc.wantReason || typed.ExitCode() != 3 {
+				t.Fatalf("error = %#v, want validation reason %q", err, tc.wantReason)
+			}
+			if len(fake.calls) != 0 {
+				t.Fatalf("CallTool count = %d, want validation before MCP", len(fake.calls))
+			}
+		})
+	}
+}
+
+func TestChmod_allNeverFallsBackToLegacyGrant(t *testing.T) {
+	fake := &sequenceToolCaller{
+		responses: []string{`{"success":true,"data":{"operation":"grant","allScopes":true,"selectedScopes":["calendar.event:read"]}}`},
+		errs:      []error{nil, errors.New("tool not found")},
+	}
+	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("all", "true")
+	setBatchYesForTest(t, cmd)
+
+	err := cmd.RunE(cmd, nil)
+	if err == nil || !strings.Contains(err.Error(), "tool not found") {
+		t.Fatalf("error = %v, want unsupported all-scope failure", err)
+	}
+	if len(fake.calls) != 2 {
+		t.Fatalf("CallTool count = %d, want plan and one mutation without fallback", len(fake.calls))
+	}
+	if fake.calls[1].tool != patBatchGrantToolName {
+		t.Fatalf("mutation tool = %q, want %q", fake.calls[1].tool, patBatchGrantToolName)
+	}
+}
+
+func TestChmod_newModesRejectUnattestedPlanBeforeOutputOrMutation(t *testing.T) {
+	cases := []struct {
+		name     string
+		response string
+		dryRun   bool
+		withYes  bool
+		args     []string
+		setFlags func(*cobra.Command)
+	}{
+		{
+			name:     "product all rejects plan without all attestation",
+			response: `{"success":true,"data":{"operation":"grant","selectedScopes":["calendar.event:read"]}}`,
+			withYes:  true,
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("all", "true")
+				_ = cmd.Flags().Set("product", "calendar")
+			},
+		},
+		{
+			name:     "all rejects mismatched operation",
+			response: `{"success":true,"data":{"operation":"revoke","allScopes":true,"selectedScopes":["calendar.event:read"]}}`,
+			withYes:  true,
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("all", "true")
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &sequenceToolCaller{dryRun: tc.dryRun, responses: []string{tc.response}}
+			cmd := newChmodCommand(fake)
+			tc.setFlags(cmd)
+			if tc.withYes {
+				setBatchYesForTest(t, cmd)
+			}
+
+			err := cmd.RunE(cmd, tc.args)
+			if err == nil || !isPATBatchUnsupportedError(err) {
+				t.Fatalf("error = %v, want %s", err, patBatchUnsupportedCode)
+			}
+			if len(fake.calls) != 1 || fake.calls[0].tool != patBatchPlanToolName {
+				t.Fatalf("calls = %#v, want one plan call and no mutation", fake.calls)
+			}
+		})
+	}
+}
+
+func TestChmod_newModesRequireStrictSelectedScopesField(t *testing.T) {
+	invalidFields := []struct {
+		name  string
+		field string
+	}{
+		{name: "missing", field: ""},
+		{name: "wrong type", field: `,"selectedScopes":"calendar.event:read"`},
+		{name: "blank item", field: `,"selectedScopes":["   "]`},
+		{name: "non-string item", field: `,"selectedScopes":[1]`},
+	}
+
+	for _, invalid := range invalidFields {
+		t.Run(invalid.name, func(t *testing.T) {
+			response := `{"success":true,"data":{"operation":"grant","allScopes":true` + invalid.field + `}}`
+			fake := &sequenceToolCaller{responses: []string{response}}
+			cmd := newChmodCommand(fake)
+			_ = cmd.Flags().Set("all", "true")
+			setBatchYesForTest(t, cmd)
+
+			err := cmd.RunE(cmd, nil)
+			if err == nil || !isPATBatchUnsupportedError(err) {
+				t.Fatalf("error = %v, want strict selectedScopes contract failure", err)
+			}
+			if len(fake.calls) != 1 || fake.calls[0].tool != patBatchPlanToolName {
+				t.Fatalf("calls = %#v, want one plan and zero mutation", fake.calls)
+			}
+		})
+	}
+}
+
+func TestChmod_newModesAllowExplicitEmptySelectedScopes(t *testing.T) {
+	fake := &sequenceToolCaller{responses: []string{
+		`{"success":true,"data":{"operation":"grant","allScopes":true,"selectedScopes":[]}}`,
+	}}
+	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("all", "true")
+
+	if err := cmd.RunE(cmd, nil); err != nil {
+		t.Fatalf("chmod RunE error = %v", err)
+	}
+	if len(fake.calls) != 1 || fake.calls[0].tool != patBatchPlanToolName {
+		t.Fatalf("calls = %#v, want empty plan and zero mutation", fake.calls)
+	}
+}
+
+func TestChmod_newModesRequireExactAgentCodeAttestation(t *testing.T) {
+	modes := []struct {
+		name                 string
+		args                 []string
+		planWithoutAgent     string
+		planWithAgent        string
+		mutationWithoutAgent string
+		setFlags             func(*cobra.Command)
+	}{
+		{
+			name:                 "all grant",
+			planWithoutAgent:     `{"success":true,"data":{"operation":"grant","allScopes":true,"selectedScopes":["calendar.event:read"]}}`,
+			planWithAgent:        `{"success":true,"data":{"operation":"grant","allScopes":true,"agentCode":"qoderwork","selectedScopes":["calendar.event:read"]}}`,
+			mutationWithoutAgent: `{"success":true,"data":{"grantedScopes":["calendar.event:read"]}}`,
+			setFlags: func(cmd *cobra.Command) {
+				_ = cmd.Flags().Set("all", "true")
+			},
+		},
+	}
+
+	for _, mode := range modes {
+		for _, stage := range []string{"plan", "mutation"} {
+			t.Run(mode.name+"/missing agent in "+stage, func(t *testing.T) {
+				t.Setenv(agentCodeEnv, "qoderwork")
+				responses := []string{mode.planWithoutAgent}
+				wantCalls := 1
+				if stage == "mutation" {
+					responses = []string{mode.planWithAgent, mode.mutationWithoutAgent}
+					wantCalls = 2
+				}
+				fake := &sequenceToolCaller{responses: responses}
+				cmd := newChmodCommand(fake)
+				mode.setFlags(cmd)
+				setBatchYesForTest(t, cmd)
+
+				err := cmd.RunE(cmd, mode.args)
+				if err == nil || !isPATBatchUnsupportedError(err) {
+					t.Fatalf("error = %v, want exact agentCode attestation failure", err)
+				}
+				if len(fake.calls) != wantCalls {
+					t.Fatalf("CallTool count = %d, want %d", len(fake.calls), wantCalls)
+				}
+			})
+		}
+	}
+}
+
+func TestChmod_singleScopeRevokeRejectsUnattestedResponse(t *testing.T) {
+	t.Setenv(agentCodeEnv, "")
+	cases := []struct {
+		name     string
+		response string
+	}{
+		{name: "missing code", response: `{"success":true,"data":{"operation":"revoke","scope":"calendar.event:read","grantPolicy":"ONCE","dryRun":false}}`},
+		{name: "wrong code", response: `{"success":true,"code":"CREATED","data":{"operation":"revoke","scope":"calendar.event:read","grantPolicy":"ONCE","dryRun":false}}`},
+		{name: "wrong operation", response: `{"success":true,"code":"OK","data":{"operation":"grant","scope":"calendar.event:read","grantPolicy":"ONCE","dryRun":false}}`},
+		{name: "wrong scope", response: `{"success":true,"code":"OK","data":{"operation":"revoke","scope":"chat.message:list","grantPolicy":"ONCE","dryRun":false}}`},
+		{name: "missing policy", response: `{"success":true,"code":"OK","data":{"operation":"revoke","scope":"calendar.event:read","dryRun":false}}`},
+		{name: "wrong policy", response: `{"success":true,"code":"OK","data":{"operation":"revoke","scope":"calendar.event:read","grantPolicy":"ALWAYS_ALLOW","dryRun":false}}`},
+		{name: "missing dry run", response: `{"success":true,"code":"OK","data":{"operation":"revoke","scope":"calendar.event:read","grantPolicy":"ONCE"}}`},
+		{name: "wrong dry run", response: `{"success":true,"code":"OK","data":{"operation":"revoke","scope":"calendar.event:read","grantPolicy":"ONCE","dryRun":true}}`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &sequenceToolCaller{responses: []string{tc.response}}
+			cmd := newChmodCommand(fake)
+			_ = cmd.Flags().Set("revoke", "true")
+			setBatchYesForTest(t, cmd)
+
+			output, err := captureStdout(t, func() error {
+				return cmd.RunE(cmd, []string{"calendar.event:read"})
+			})
+			if err == nil || !strings.Contains(err.Error(), "safe single-scope revoke") {
+				t.Fatalf("error = %v, want fail-closed single-scope attestation error", err)
+			}
+			if output != "" {
+				t.Fatalf("unattested revoke must not be presented as success: %q", output)
+			}
+			if len(fake.calls) != 1 || fake.calls[0].tool != patScopeRevokeToolName {
+				t.Fatalf("calls = %#v, want one dedicated scope revoke", fake.calls)
+			}
+		})
+	}
+}
+
+func TestEnsurePATScopeRevokeResponse_acceptsCoreStateMatrix(t *testing.T) {
+	const scope = "calendar.event:read"
+	tests := []struct {
+		name   string
+		dryRun bool
+		fields map[string]any
+	}{
+		{
+			name:   "dry run active is revocable",
+			dryRun: true,
+			fields: map[string]any{"currentStatus": "ACTIVE", "revocable": true, "changed": false, "dryRun": true, "selectedScopes": []string{scope}},
+		},
+		{
+			name:   "dry run already revoked is idempotent",
+			dryRun: true,
+			fields: map[string]any{"currentStatus": "REVOKED", "revocable": false, "changed": false, "dryRun": true, "selectedScopes": []string{}},
+		},
+		{
+			name:   "dry run missing is idempotent",
+			dryRun: true,
+			fields: map[string]any{"currentStatus": "MISSING", "revocable": false, "changed": false, "dryRun": true, "selectedScopes": []string{}},
+		},
+		{
+			name:   "execute changed to revoked",
+			dryRun: false,
+			fields: map[string]any{"currentStatus": "REVOKED", "revocable": false, "changed": true, "dryRun": false, "selectedScopes": []string{scope}},
+		},
+		{
+			name:   "execute already revoked is idempotent",
+			dryRun: false,
+			fields: map[string]any{"currentStatus": "REVOKED", "revocable": false, "changed": false, "dryRun": false, "selectedScopes": []string{}},
+		},
+		{
+			name:   "execute missing is idempotent",
+			dryRun: false,
+			fields: map[string]any{"currentStatus": "MISSING", "revocable": false, "changed": false, "dryRun": false, "selectedScopes": []string{}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := patScopeRevokeResultForTest(t, tt.fields)
+			if err := ensurePATScopeRevokeResponse(result, scope, "", tt.dryRun); err != nil {
+				t.Fatalf("ensurePATScopeRevokeResponse() error = %v", err)
+			}
+		})
+	}
+}
+
+func TestEnsurePATScopeRevokeResponse_rejectsUnsafeStateMatrix(t *testing.T) {
+	const scope = "calendar.event:read"
+	tests := []struct {
+		name   string
+		dryRun bool
+		fields map[string]any
+	}{
+		{name: "missing current status", fields: map[string]any{"revocable": false, "changed": false, "dryRun": false, "selectedScopes": []string{}}},
+		{name: "current status wrong type", fields: map[string]any{"currentStatus": true, "revocable": false, "changed": false, "dryRun": false, "selectedScopes": []string{}}},
+		{name: "missing revocable", fields: map[string]any{"currentStatus": "REVOKED", "changed": false, "dryRun": false, "selectedScopes": []string{}}},
+		{name: "revocable wrong type", fields: map[string]any{"currentStatus": "REVOKED", "revocable": "false", "changed": false, "dryRun": false, "selectedScopes": []string{}}},
+		{name: "missing changed", fields: map[string]any{"currentStatus": "REVOKED", "revocable": false, "dryRun": false, "selectedScopes": []string{}}},
+		{name: "changed wrong type", fields: map[string]any{"currentStatus": "REVOKED", "revocable": false, "changed": "false", "dryRun": false, "selectedScopes": []string{}}},
+		{name: "missing selected scopes", fields: map[string]any{"currentStatus": "REVOKED", "revocable": false, "changed": false, "dryRun": false}},
+		{name: "selected scopes wrong type", fields: map[string]any{"currentStatus": "REVOKED", "revocable": false, "changed": false, "dryRun": false, "selectedScopes": scope}},
+		{name: "selected scopes item wrong type", fields: map[string]any{"currentStatus": "REVOKED", "revocable": false, "changed": false, "dryRun": false, "selectedScopes": []any{1}}},
+		{name: "dry run reports changed", dryRun: true, fields: map[string]any{"currentStatus": "ACTIVE", "revocable": true, "changed": true, "dryRun": true, "selectedScopes": []string{scope}}},
+		{name: "dry run active not revocable", dryRun: true, fields: map[string]any{"currentStatus": "ACTIVE", "revocable": false, "changed": false, "dryRun": true, "selectedScopes": []string{scope}}},
+		{name: "dry run active empty selection", dryRun: true, fields: map[string]any{"currentStatus": "ACTIVE", "revocable": true, "changed": false, "dryRun": true, "selectedScopes": []string{}}},
+		{name: "dry run active wrong selection", dryRun: true, fields: map[string]any{"currentStatus": "ACTIVE", "revocable": true, "changed": false, "dryRun": true, "selectedScopes": []string{"chat.message:list"}}},
+		{name: "dry run active duplicate selection", dryRun: true, fields: map[string]any{"currentStatus": "ACTIVE", "revocable": true, "changed": false, "dryRun": true, "selectedScopes": []string{scope, scope}}},
+		{name: "dry run revoked remains revocable", dryRun: true, fields: map[string]any{"currentStatus": "REVOKED", "revocable": true, "changed": false, "dryRun": true, "selectedScopes": []string{}}},
+		{name: "dry run revoked selects scope", dryRun: true, fields: map[string]any{"currentStatus": "REVOKED", "revocable": false, "changed": false, "dryRun": true, "selectedScopes": []string{scope}}},
+		{name: "dry run denied", dryRun: true, fields: map[string]any{"currentStatus": "DENIED", "revocable": false, "changed": false, "dryRun": true, "selectedScopes": []string{}}},
+		{name: "execute changed but active", fields: map[string]any{"currentStatus": "ACTIVE", "revocable": false, "changed": true, "dryRun": false, "selectedScopes": []string{scope}}},
+		{name: "execute changed but missing", fields: map[string]any{"currentStatus": "MISSING", "revocable": false, "changed": true, "dryRun": false, "selectedScopes": []string{scope}}},
+		{name: "execute changed remains revocable", fields: map[string]any{"currentStatus": "REVOKED", "revocable": true, "changed": true, "dryRun": false, "selectedScopes": []string{scope}}},
+		{name: "execute changed empty selection", fields: map[string]any{"currentStatus": "REVOKED", "revocable": false, "changed": true, "dryRun": false, "selectedScopes": []string{}}},
+		{name: "execute unchanged active", fields: map[string]any{"currentStatus": "ACTIVE", "revocable": false, "changed": false, "dryRun": false, "selectedScopes": []string{}}},
+		{name: "execute unchanged selects scope", fields: map[string]any{"currentStatus": "REVOKED", "revocable": false, "changed": false, "dryRun": false, "selectedScopes": []string{scope}}},
+		{name: "execute denied", fields: map[string]any{"currentStatus": "DENIED", "revocable": false, "changed": false, "dryRun": false, "selectedScopes": []string{}}},
+		{name: "execute unknown status", fields: map[string]any{"currentStatus": "UNKNOWN", "revocable": false, "changed": false, "dryRun": false, "selectedScopes": []string{}}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := patScopeRevokeResultForTest(t, tt.fields)
+			err := ensurePATScopeRevokeResponse(result, scope, "", tt.dryRun)
+			var typed *apperrors.Error
+			if err == nil || !errors.As(err, &typed) || typed.Reason != "pat_scope_revoke_unsupported" {
+				t.Fatalf("ensurePATScopeRevokeResponse() error = %#v, want fail-closed revoke contract", err)
+			}
+		})
+	}
+}
+
+func TestChmod_singleScopeRevokeRequiresExactAgentCodeAttestation(t *testing.T) {
+	t.Setenv(agentCodeEnv, "")
+	responses := []string{
+		`{"success":true,"code":"OK","data":{"operation":"revoke","scope":"calendar.event:read","grantPolicy":"ONCE","currentStatus":"REVOKED","revocable":false,"changed":true,"dryRun":false,"selectedScopes":["calendar.event:read"]}}`,
+		`{"success":true,"code":"OK","data":{"operation":"revoke","scope":"calendar.event:read","grantPolicy":"ONCE","agentCode":"other-agent","currentStatus":"REVOKED","revocable":false,"changed":true,"dryRun":false,"selectedScopes":["calendar.event:read"]}}`,
+	}
+	for _, response := range responses {
+		fake := &sequenceToolCaller{responses: []string{response}}
+		cmd := newChmodCommand(fake)
+		_ = cmd.Flags().Set("revoke", "true")
+		_ = cmd.Flags().Set("agentCode", "qoderwork")
+		setBatchYesForTest(t, cmd)
+
+		err := cmd.RunE(cmd, []string{"calendar.event:read"})
+		var typed *apperrors.Error
+		if err == nil || !errors.As(err, &typed) || typed.Reason != "pat_scope_revoke_unsupported" ||
+			!strings.Contains(typed.ServerDiag.TechnicalDetail, "did not attest agentCode") {
+			t.Fatalf("response = %s, error = %v, want exact agentCode attestation failure", response, err)
+		}
+		if len(fake.calls) != 1 || fake.calls[0].agentEnv != "qoderwork" {
+			t.Fatalf("calls = %#v, want one call with trusted qoderwork env", fake.calls)
+		}
+	}
+}
+
+func TestChmod_singleScopeRevokeOmitsAgentCodeWhenUnset(t *testing.T) {
+	t.Setenv(agentCodeEnv, "")
+	fake := &sequenceToolCaller{responses: []string{
+		`{"success":true,"code":"OK","data":{"operation":"revoke","scope":"calendar.event:read","grantPolicy":"ONCE","currentStatus":"MISSING","revocable":false,"changed":false,"dryRun":false,"selectedScopes":[]}}`,
+	}}
+	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("revoke", "true")
+	setBatchYesForTest(t, cmd)
+
+	if err := cmd.RunE(cmd, []string{"calendar.event:read"}); err != nil {
+		t.Fatalf("chmod RunE error = %v", err)
+	}
+	if len(fake.calls) != 1 {
+		t.Fatalf("CallTool count = %d, want one", len(fake.calls))
+	}
+	if len(fake.calls[0].args) != 2 || fake.calls[0].args["scope"] != "calendar.event:read" || fake.calls[0].args["dryRun"] != false {
+		t.Fatalf("args = %#v, want exact scope and dryRun=false", fake.calls[0].args)
 	}
 }
 
@@ -416,6 +1178,11 @@ func TestChmod_productsFlagPlansThenGrantsSelectedScopes(t *testing.T) {
 	}
 	if got := fake.calls[0].args["recommend"]; got != false {
 		t.Fatalf("recommend = %#v, want false", got)
+	}
+	for _, key := range []string{"allScopes", "operation"} {
+		if _, ok := fake.calls[0].args[key]; ok {
+			t.Fatalf("existing product plan must omit %s: %#v", key, fake.calls[0].args)
+		}
 	}
 	if got := fake.calls[0].agentEnv; got != "qoderwork" {
 		t.Fatalf("plan agent env = %q, want qoderwork", got)
@@ -1358,23 +2125,33 @@ func TestChmod_productsAllGrantedStopsAfterPlan(t *testing.T) {
 	}
 }
 
-func TestChmod_explicitScopesDryRunShowsBatchGrantTool(t *testing.T) {
+func TestChmod_explicitScopesDryRunUsesServerBatchPlan(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
-	fake := &fakeToolCaller{dryRun: true}
+	fake := &sequenceToolCaller{dryRun: true, responses: []string{
+		`{"success":true,"code":"OK","data":{"operation":"grant","allScopes":false,"agentCode":"qoderwork","selectedScopes":["aitable.record:read"],"missingScopes":["aitable.record:read"]}}`,
+	}}
 	cmd := newChmodCommand(fake)
 	_ = cmd.Flags().Set("grant-type", "once")
 
-	output, err := captureStdout(t, func() error {
+	_, err := captureStdout(t, func() error {
 		return cmd.RunE(cmd, []string{"aitable.record:read"})
 	})
 	if err != nil {
 		t.Fatalf("chmod RunE error = %v", err)
 	}
-	if !strings.Contains(output, patBatchGrantToolName) {
-		t.Fatalf("dry-run output = %q, want %q", output, patBatchGrantToolName)
+	if len(fake.calls) != 1 || fake.calls[0].tool != patBatchPlanToolName {
+		t.Fatalf("calls = %#v, want one server batch plan", fake.calls)
 	}
-	if strings.Contains(output, patGrantToolName+"\n") {
-		t.Fatalf("dry-run output = %q, must not advertise legacy %q", output, patGrantToolName)
+	if got := fake.calls[0].args["scopes"]; !stringSliceArgEqual(got, []string{"aitable.record:read"}) {
+		t.Fatalf("plan scopes = %#v, want explicit scope", got)
+	}
+	if got := fake.calls[0].args["dryRun"]; got != true {
+		t.Fatalf("plan dryRun = %#v, want true", got)
+	}
+	for _, key := range []string{"allScopes", "operation"} {
+		if _, ok := fake.calls[0].args[key]; ok {
+			t.Fatalf("explicit compatibility plan must omit %s: %#v", key, fake.calls[0].args)
+		}
 	}
 }
 
@@ -1843,6 +2620,125 @@ func TestHandleToolResult_defaultSummarizesBatchPlan(t *testing.T) {
 	}
 	if strings.Contains(output, "calendar.event:create") || strings.Contains(output, `"items"`) {
 		t.Fatalf("summary output leaked raw item details: %s", output)
+	}
+}
+
+func TestHandleToolResult_summarizesSingleScopeRevokePreviewAndResult(t *testing.T) {
+	plan := &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{
+		"success": true,
+		"code": "OK",
+		"data": {
+			"operation": "revoke",
+			"scope": "calendar.event:read",
+			"grantPolicy": "ONCE",
+			"currentStatus": "ACTIVE",
+			"revocable": true,
+			"changed": false,
+			"dryRun": true,
+			"selectedScopes": ["calendar.event:read"]
+		}
+	}`}}}
+	planOutput, err := captureStdout(t, func() error {
+		return handleToolResult(&cobra.Command{Use: "chmod"}, &sequenceToolCaller{dryRun: true}, plan)
+	})
+	if err != nil {
+		t.Fatalf("handle revoke plan error = %v", err)
+	}
+	for _, want := range []string{
+		"operation: revoke",
+		"scope: calendar.event:read",
+		"grantPolicy: ONCE",
+		"currentStatus: ACTIVE",
+		"revocable: true",
+		"changed: false",
+		"selected: 1",
+		"suggestion: rerun this command without --dry-run and with --yes to revoke selected scopes",
+	} {
+		if !strings.Contains(planOutput, want) {
+			t.Fatalf("revoke plan summary missing %q: %s", want, planOutput)
+		}
+	}
+
+	result := &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{
+		"success": true,
+		"code": "OK",
+		"data": {
+				"operation": "revoke",
+				"scope": "calendar.event:read",
+				"grantPolicy": "ONCE",
+				"currentStatus": "REVOKED",
+				"revocable": false,
+				"changed": true,
+				"dryRun": false,
+				"selectedScopes": ["calendar.event:read"]
+		}
+	}`}}}
+	resultOutput, err := captureStdout(t, func() error {
+		return handleToolResult(&cobra.Command{Use: "chmod"}, &sequenceToolCaller{}, result)
+	})
+	if err != nil {
+		t.Fatalf("handle revoke result error = %v", err)
+	}
+	for _, want := range []string{
+		"operation: revoke",
+		"scope: calendar.event:read",
+		"grantPolicy: ONCE",
+		"currentStatus: REVOKED",
+		"revocable: false",
+		"changed: true",
+		"suggestion: the explicit grant was revoked for this scope",
+	} {
+		if !strings.Contains(resultOutput, want) {
+			t.Fatalf("revoke result summary missing %q: %s", want, resultOutput)
+		}
+	}
+}
+
+func TestHandleToolResult_summarizesIdempotentRevokeOutcomes(t *testing.T) {
+	tests := []struct {
+		name       string
+		status     string
+		suggestion string
+	}{
+		{
+			name:       "already revoked",
+			status:     "REVOKED",
+			suggestion: "the explicit grant was already revoked; no change was made",
+		},
+		{
+			name:       "missing explicit grant",
+			status:     "MISSING",
+			suggestion: "no explicit grant exists for this scope; no change was made",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := patScopeRevokeResultForTest(t, map[string]any{
+				"currentStatus":  tt.status,
+				"revocable":      false,
+				"changed":        false,
+				"dryRun":         false,
+				"selectedScopes": []string{},
+			})
+			output, err := captureStdout(t, func() error {
+				return handleToolResult(&cobra.Command{Use: "chmod"}, &sequenceToolCaller{}, result)
+			})
+			if err != nil {
+				t.Fatalf("handleToolResult() error = %v", err)
+			}
+			for _, want := range []string{
+				"currentStatus: " + tt.status,
+				"revocable: false",
+				"changed: false",
+				"selected: 0",
+				"suggestion: " + tt.suggestion,
+			} {
+				if !strings.Contains(output, want) {
+					t.Fatalf("revoke summary missing %q: %s", want, output)
+				}
+			}
+		})
 	}
 }
 

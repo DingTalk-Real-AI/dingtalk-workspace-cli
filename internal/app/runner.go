@@ -177,6 +177,7 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 }
 
 func (r *runtimeRunner) runSingle(ctx context.Context, invocation executor.Invocation, prefetchToken bool) (executor.Result, error) {
+	r.stampGlobalDryRun(&invocation)
 	if r.loader == nil || r.transport == nil {
 		return r.fallback.Run(ctx, invocation)
 	}
@@ -225,17 +226,10 @@ func (r *runtimeRunner) runSingle(ctx context.Context, invocation executor.Invoc
 		// for the tool. If that also misses, fall through to handleCatalogMiss
 		// so stderr still carries the explicit not-resolved signal.
 		if endpoint, ok := directRuntimeEndpoint(invocation.CanonicalProduct, invocation.Tool); ok {
-			if r.globalFlags != nil && r.globalFlags.DryRun {
-				invocation.DryRun = true
-			}
 			return r.executeInvocation(ctx, endpoint, invocation)
 		}
 		return r.handleCatalogMiss(ctx, invocation, fmt.Sprintf("tool %q not declared by product %q in discovery catalog", invocation.Tool, invocation.CanonicalProduct))
 	}
-	if r.globalFlags != nil && r.globalFlags.DryRun {
-		invocation.DryRun = true
-	}
-
 	endpoint := product.Endpoint
 	if override, ok := productEndpointOverride(invocation.CanonicalProduct); ok {
 		endpoint = override
@@ -254,6 +248,12 @@ func (r *runtimeRunner) runSingle(ctx context.Context, invocation executor.Invoc
 		endpoint = toolEndpoint
 	}
 	return r.executeInvocation(ctx, endpoint, invocation)
+}
+
+func (r *runtimeRunner) stampGlobalDryRun(invocation *executor.Invocation) {
+	if invocation != nil && r != nil && r.globalFlags != nil && r.globalFlags.DryRun {
+		invocation.DryRun = true
+	}
 }
 
 type multiProfileSelection struct {
@@ -405,14 +405,14 @@ func multiProfileErrorPayload(err error) map[string]any {
 //
 // New contract:
 //   - Dry-run (invocation.DryRun or globalFlags.DryRun): keep EchoRunner so
-//     `--dry-run` still prints the planned payload without real execution.
+//     `--dry-run` still prints the planned payload without real execution,
+//     unless the invocation carries the explicit read-only execution marker.
 //   - Otherwise: return an explicit apperrors.NewAPI("endpoint_not_resolved")
 //     with the offending product/tool attached. This fails fast to stderr and
 //     makes missing envelopes / supplement gaps immediately visible.
 func (r *runtimeRunner) handleCatalogMiss(ctx context.Context, invocation executor.Invocation, detail string) (executor.Result, error) {
-	dryRun := invocation.DryRun || (r.globalFlags != nil && r.globalFlags.DryRun)
-	if dryRun {
-		invocation.DryRun = true
+	r.stampGlobalDryRun(&invocation)
+	if invocation.SkipExecutionDuringDryRun() {
 		return r.fallback.Run(ctx, invocation)
 	}
 	hint := "当前命令已注册，但静态端点目录中缺少对应 product/server endpoint。这通常是服务发现下线后的同步产物缺口，不是参数错误；请不要通过反复调整 flag 重试。"
@@ -439,6 +439,7 @@ func (r *runtimeRunner) handleCatalogMiss(ctx context.Context, invocation execut
 }
 
 func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, invocation executor.Invocation) (result executor.Result, retErr error) {
+	r.stampGlobalDryRun(&invocation)
 	// Route stdio:// endpoints to the local StdioClient — no HTTP, no auth.
 	if IsStdioEndpoint(endpoint) {
 		return r.executeStdioInvocation(ctx, invocation)
@@ -493,7 +494,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	logging.LogCommandStart(fl, execID,
 		invocation.CanonicalProduct, invocation.Tool, endpoint, version, authToken != "", timeoutSec)
 
-	if invocation.DryRun {
+	if invocation.SkipExecutionDuringDryRun() {
 		// Emit a wukong-aligned human-readable preview on stderr so the dry-run
 		// surface advertises the resolved MCP arguments without polluting the
 		// stdout payload (which stays valid JSON in --format json mode). Mirrors
@@ -684,7 +685,8 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 // subprocess instead of the HTTP transport. This is used for plugin stdio
 // servers whose endpoints use the stdio:// scheme.
 func (r *runtimeRunner) executeStdioInvocation(ctx context.Context, invocation executor.Invocation) (executor.Result, error) {
-	if invocation.DryRun {
+	r.stampGlobalDryRun(&invocation)
+	if invocation.SkipExecutionDuringDryRun() {
 		return executor.Result{
 			Invocation: invocation,
 			Response: map[string]any{

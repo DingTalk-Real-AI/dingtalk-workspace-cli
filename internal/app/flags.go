@@ -52,5 +52,5 @@ func bindPersistentFlags(cmd *cobra.Command, flags *GlobalFlags) {
 	cmd.PersistentFlags().StringVar(&flags.Token, "token", "", "Override the configured API token")
 	_ = cmd.PersistentFlags().MarkHidden("token")
 	cmd.PersistentFlags().BoolVarP(&flags.Verbose, "verbose", "v", false, "显示详细日志")
-	cmd.PersistentFlags().BoolVarP(&flags.Yes, "yes", "y", false, "跳过确认提示 (AI Agent 模式)")
+	cmd.PersistentFlags().BoolVarP(&flags.Yes, "yes", "y", false, "确认操作并跳过确认提示")
 }
