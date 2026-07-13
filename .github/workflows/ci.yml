@@ -70,6 +70,9 @@ jobs:
       - name: Test engineering scripts
         run: go test -v -count=1 -timeout=5m ./test/scripts/...
 
+      - name: Test release scripts
+        run: go test -v -count=1 -timeout=5m ./test/scripts
+
   test-darwin:
     name: Test (macOS auth/keychain)
     runs-on: macos-latest

@@ -198,13 +198,13 @@ jobs:
             --stable-ref "$PREVIOUS_STABLE"
 
   release:
-    name: Build immutable GitHub Release
+    name: Build signed release artifacts
     if: ${{ github.event_name == 'push' }}
     needs: [release-contract]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
-      contents: write
+      contents: read
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -246,17 +246,49 @@ jobs:
       - name: Multi Profile E2E
         run: bash scripts/dev/test-multi-profile-e2e.sh
 
-      - name: Install rcodesign (ad-hoc sign darwin binaries from Linux)
+      - name: Install rcodesign (sign darwin binaries from Linux)
         run: |
-          set -eu
-          RCS_VERSION="0.27.0"
+          set -euo pipefail
+          RCS_VERSION="0.29.0"
+          RCS_ARCHIVE_SHA256="dbe85cedd8ee4217b64e9a0e4c2aef92ab8bcaaa41f20bde99781ff02e600002"
           curl -fsSL -o /tmp/rcodesign.tar.gz \
             "https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F${RCS_VERSION}/apple-codesign-${RCS_VERSION}-x86_64-unknown-linux-musl.tar.gz"
-          echo "a0e0c548b313026abf4f40a6e06554d352c6f4e1add6a87d626c94134a4ee564  /tmp/rcodesign.tar.gz" | sha256sum --check -
+          printf '%s  %s\n' "$RCS_ARCHIVE_SHA256" /tmp/rcodesign.tar.gz \
+            | sha256sum --check --strict -
           mkdir -p /tmp/rcodesign
           tar -xzf /tmp/rcodesign.tar.gz -C /tmp/rcodesign --strip-components=1
           sudo install -m 0755 /tmp/rcodesign/rcodesign /usr/local/bin/rcodesign
           rcodesign --version
+
+      - name: Prepare Apple Developer ID certificate
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${APPLE_CERTIFICATE_P12_BASE64:-}" ] || [ -z "${APPLE_CERTIFICATE_PASSWORD:-}" ]; then
+            if [ "$GITHUB_REPOSITORY_OWNER" = "DingTalk-Real-AI" ]; then
+              echo "APPLE_CERTIFICATE_P12_BASE64 and APPLE_CERTIFICATE_PASSWORD are required for official releases" >&2
+              exit 1
+            fi
+            echo "Developer ID secrets are unavailable; fork release will use ad-hoc signing."
+            exit 0
+          fi
+
+          umask 077
+          certificate_path="$RUNNER_TEMP/dws-developer-id.p12"
+          password_path="$RUNNER_TEMP/dws-developer-id-password"
+          printf '%s' "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$certificate_path"
+          printf '%s' "$APPLE_CERTIFICATE_PASSWORD" > "$password_path"
+
+          # Fail before packaging if the secret is corrupt or the password is wrong.
+          # The exported P12 may use legacy PKCS#12 ciphers; OpenSSL 3 requires
+          # -legacy to validate those containers even though rcodesign can read them.
+          openssl pkcs12 -legacy -in "$certificate_path" -passin "file:$password_path" -noout
+
+          echo "DWS_APPLE_CERTIFICATE_P12=$certificate_path" >> "$GITHUB_ENV"
+          echo "DWS_APPLE_CERTIFICATE_PASSWORD_FILE=$password_path" >> "$GITHUB_ENV"
 
       - name: Build release artifacts without publishing
         uses: goreleaser/goreleaser-action@v6
@@ -271,8 +303,109 @@ jobs:
         env:
           DWS_PACKAGE_VERSION: ${{ github.ref_name }}
           DWS_RELEASE_BASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
+          DWS_REQUIRE_DEVELOPER_ID_SIGNING: ${{ github.repository_owner == 'DingTalk-Real-AI' }}
+
+      - name: Remove Apple Developer ID certificate
+        if: ${{ always() }}
+        run: |
+          rm -f "$RUNNER_TEMP/dws-developer-id.p12"
+          rm -f "$RUNNER_TEMP/dws-developer-id-password"
 
       - name: Verify final release artifacts
+        run: ./scripts/release/verify-release-artifacts.sh "$GITHUB_REF_NAME"
+
+      - name: Verify npm package before sealing GitHub Release
+        run: ./scripts/release/verify-package-managers.sh --npm-only --expected-version "$GITHUB_REF_NAME"
+
+      - name: Reverify remote tag before sealing GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/release/verify-github-tag-authority.sh "$GITHUB_REF_NAME" "$GITHUB_SHA"
+
+      - name: Preserve finalized distribution files
+        uses: actions/upload-artifact@v4
+        with:
+          name: finalized-release-dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 1
+
+  verify-darwin-signatures:
+    name: Verify Apple Developer ID signatures
+    if: ${{ github.event_name == 'push' }}
+    needs: release
+    runs-on: macos-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Restore finalized distribution files
+        uses: actions/download-artifact@v4
+        with:
+          name: finalized-release-dist
+          path: dist
+
+      - name: Verify finalized Darwin signatures with Apple codesign
+        run: |
+          set -euo pipefail
+          for arch in amd64 arm64; do
+            archive="dist/dws-darwin-${arch}.tar.gz"
+            stage="$RUNNER_TEMP/verify-darwin-${arch}"
+            mkdir -p "$stage"
+            tar -xzf "$archive" -C "$stage"
+            test -f "$stage/dws"
+            codesign --verify --strict --verbose=4 "$stage/dws"
+            codesign -dvvv "$stage/dws"
+          done
+
+  publish-release:
+    name: Publish immutable GitHub Release
+    if: ${{ github.event_name == 'push' }}
+    needs: [release-contract, release, verify-darwin-signatures]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - name: Check out sealed release source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch release branch and official tags
+        run: |
+          git fetch --force origin \
+            '+refs/heads/main:refs/remotes/origin/main'
+          git fetch --force --no-tags \
+            https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git \
+            '+refs/tags/v*:refs/tags/v*'
+
+      - name: Revalidate contract and render release notes
+        run: |
+          ./scripts/release/release-contract.sh \
+            --channel "${{ needs.release-contract.outputs.channel }}" \
+            --version "$GITHUB_REF_NAME" \
+            --context ci \
+            --remote origin \
+            --branch main \
+            --notes-output "$RUNNER_TEMP/release-notes.md"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install archive tooling
+        run: sudo apt-get update && sudo apt-get install -y zip unzip
+
+      - name: Restore finalized distribution files
+        uses: actions/download-artifact@v4
+        with:
+          name: finalized-release-dist
+          path: dist
+
+      - name: Verify finalized release artifacts before publication
         run: ./scripts/release/verify-release-artifacts.sh "$GITHUB_REF_NAME"
 
       - name: Verify npm package before sealing GitHub Release
@@ -398,7 +531,7 @@ jobs:
   publish-channels:
     name: Publish npm and mirrors
     if: ${{ github.event_name == 'push' }}
-    needs: [release-contract, release]
+    needs: [release-contract, publish-release]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -737,7 +870,7 @@ jobs:
               if (
                 jobs.some(
                   (job) =>
-                    job.name === "Build immutable GitHub Release" &&
+                    job.name === "Publish immutable GitHub Release" &&
                     job.conclusion === "success",
                 )
               ) {
