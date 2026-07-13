@@ -4,6 +4,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -17,6 +18,24 @@ func TestCompatibilityAllowsAdditions(t *testing.T) {
 	}
 	if failures := checkCompatibility(root, baseline); len(failures) != 0 {
 		t.Fatalf("additions should be compatible: %v", failures)
+	}
+}
+
+func TestCompatibilityTreatsLegacyMetadataAsUnknown(t *testing.T) {
+	root := &cobra.Command{Use: "dws"}
+	old := &cobra.Command{Use: "old", Run: func(*cobra.Command, []string) {}}
+	old.Flags().String("required", "", "required")
+	if err := old.MarkFlagRequired("required"); err != nil {
+		t.Fatal(err)
+	}
+	root.AddCommand(old)
+	root.InitDefaultHelpCmd()
+	baseline, err := parseContract([]byte("[root]\n  commands: old\n\n[old]\n  flags: --required:string\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failures := checkCompatibility(root, baseline); len(failures) != 0 {
+		t.Fatalf("legacy metadata should be unknown: %v", failures)
 	}
 }
 
@@ -43,6 +62,125 @@ func TestCompatibilityAllowsNewShorthandButRejectsRemovedShorthand(t *testing.T)
 	if failures := checkCompatibility(root, baseline); len(failures) != 1 {
 		t.Fatalf("removed shorthand should fail: %v", failures)
 	}
+}
+
+func TestCompatibilityRejectsCommandContractRegressions(t *testing.T) {
+	baselineRoot := &cobra.Command{Use: "dws"}
+	baselineRoot.AddCommand(&cobra.Command{Use: "old", Run: func(*cobra.Command, []string) {}})
+	baselineRoot.InitDefaultHelpCmd()
+	baseline := snapshot(baselineRoot)
+
+	tests := []struct {
+		name   string
+		mutate func(*cobra.Command)
+		want   string
+	}{
+		{
+			name: "runnable to non-runnable",
+			mutate: func(command *cobra.Command) {
+				command.Run = nil
+			},
+			want: "became non-runnable",
+		},
+		{
+			name: "visible to hidden",
+			mutate: func(command *cobra.Command) {
+				command.Hidden = true
+			},
+			want: "became hidden",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			currentRoot := &cobra.Command{Use: "dws"}
+			current := &cobra.Command{Use: "old", Run: func(*cobra.Command, []string) {}}
+			test.mutate(current)
+			currentRoot.AddCommand(current)
+			currentRoot.InitDefaultHelpCmd()
+			assertFailureContains(t, checkCompatibility(currentRoot, baseline), test.want)
+		})
+	}
+}
+
+func TestCompatibilityRejectsFlagContractRegressions(t *testing.T) {
+	newRoot := func(persistent bool) (*cobra.Command, *cobra.Command) {
+		root := &cobra.Command{Use: "dws"}
+		old := &cobra.Command{Use: "old"}
+		if persistent {
+			old.PersistentFlags().Bool("toggle", false, "toggle")
+		} else {
+			old.Flags().Bool("toggle", false, "toggle")
+		}
+		root.AddCommand(old)
+		root.InitDefaultHelpCmd()
+		return root, old
+	}
+
+	baselineRoot, _ := newRoot(true)
+	baseline := snapshot(baselineRoot)
+	tests := []struct {
+		name   string
+		mutate func(*cobra.Command)
+		want   string
+	}{
+		{
+			name: "optional to required",
+			mutate: func(command *cobra.Command) {
+				_ = command.MarkPersistentFlagRequired("toggle")
+			},
+			want: "became required",
+		},
+		{
+			name: "visible to hidden",
+			mutate: func(command *cobra.Command) {
+				_ = command.PersistentFlags().MarkHidden("toggle")
+			},
+			want: "became hidden",
+		},
+		{
+			name: "no-opt changed",
+			mutate: func(command *cobra.Command) {
+				command.PersistentFlags().Lookup("toggle").NoOptDefVal = "false"
+			},
+			want: "changed no-opt value",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			currentRoot, current := newRoot(true)
+			test.mutate(current)
+			assertFailureContains(t, checkCompatibility(currentRoot, baseline), test.want)
+		})
+	}
+
+	currentRoot, _ := newRoot(false)
+	assertFailureContains(t, checkCompatibility(currentRoot, baseline), "narrowed persistent scope")
+}
+
+func TestCompatibilityRejectsNewRequiredFlag(t *testing.T) {
+	baselineRoot := testRoot()
+	baseline := snapshot(baselineRoot)
+	currentRoot := testRoot()
+	old, _, err := currentRoot.Find([]string{"old"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	old.Flags().String("required-new", "", "required")
+	if err := old.MarkFlagRequired("required-new"); err != nil {
+		t.Fatal(err)
+	}
+	assertFailureContains(t, checkCompatibility(currentRoot, baseline), "added required flag")
+}
+
+func assertFailureContains(t *testing.T, failures []string, want string) {
+	t.Helper()
+	for _, failure := range failures {
+		if strings.Contains(failure, want) {
+			return
+		}
+	}
+	t.Fatalf("failures %v do not contain %q", failures, want)
 }
 
 func testRoot() *cobra.Command {

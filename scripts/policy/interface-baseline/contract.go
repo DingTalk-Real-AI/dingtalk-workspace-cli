@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -17,16 +18,28 @@ import (
 )
 
 type flagContract struct {
-	Name      string
-	Shorthand string
-	Type      string
+	Name        string
+	Shorthand   string
+	Type        string
+	Required    bool
+	RequiredSet bool
+	Hidden      bool
+	HiddenSet   bool
+	NoOpt       string
+	NoOptSet    bool
+	Scope       string
+	ScopeSet    bool
 }
 
 type commandContract struct {
-	Path     string
-	Children map[string]struct{}
-	Aliases  map[string]struct{}
-	Flags    map[string]flagContract
+	Path        string
+	Runnable    bool
+	RunnableSet bool
+	Hidden      bool
+	HiddenSet   bool
+	Children    map[string]struct{}
+	Aliases     map[string]struct{}
+	Flags       map[string]flagContract
 }
 
 type interfaceContract struct {
@@ -64,15 +77,17 @@ func snapshot(root *cobra.Command) interfaceContract {
 			path = strings.Join(pathParts, ".")
 		}
 		entry := contract.command(path)
+		entry.Runnable = cmd.Runnable()
+		entry.RunnableSet = true
+		entry.Hidden = cmd.Hidden
+		entry.HiddenSet = true
 		for _, alias := range cmd.Aliases {
 			entry.Aliases[alias] = struct{}{}
 		}
 		cmd.InitDefaultHelpFlag()
-		cmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
-			if !f.Hidden {
-				entry.Flags[f.Name] = flagContract{Name: f.Name, Shorthand: f.Shorthand, Type: f.Value.Type()}
-			}
-		})
+		captureFlagSet(entry.Flags, cmd.InheritedFlags(), "inherited")
+		captureFlagSet(entry.Flags, cmd.PersistentFlags(), "persistent")
+		captureFlagSet(entry.Flags, cmd.LocalNonPersistentFlags(), "local")
 		for _, child := range publicChildren(cmd) {
 			entry.Children[child.Name()] = struct{}{}
 			walk(child, pathParts)
@@ -80,6 +95,36 @@ func snapshot(root *cobra.Command) interfaceContract {
 	}
 	walk(root, nil)
 	return contract
+}
+
+func captureFlagSet(target map[string]flagContract, set *pflag.FlagSet, scope string) {
+	if set == nil {
+		return
+	}
+	set.VisitAll(func(f *pflag.Flag) {
+		target[f.Name] = flagContract{
+			Name:        f.Name,
+			Shorthand:   f.Shorthand,
+			Type:        f.Value.Type(),
+			Required:    isRequiredFlag(f),
+			RequiredSet: true,
+			Hidden:      f.Hidden,
+			HiddenSet:   true,
+			NoOpt:       f.NoOptDefVal,
+			NoOptSet:    true,
+			Scope:       scope,
+			ScopeSet:    true,
+		}
+	})
+}
+
+func isRequiredFlag(flag *pflag.Flag) bool {
+	for _, value := range flag.Annotations[cobra.BashCompOneRequiredFlag] {
+		if value == "true" {
+			return true
+		}
+	}
+	return false
 }
 
 func publicChildren(cmd *cobra.Command) []*cobra.Command {
@@ -127,6 +172,20 @@ func parseContract(data []byte) (interfaceContract, error) {
 		}
 		items := splitList(value)
 		switch key {
+		case "runnable":
+			parsed, err := strconv.ParseBool(strings.TrimSpace(value))
+			if err != nil {
+				return interfaceContract{}, fmt.Errorf("%s: invalid runnable value %q", current.Path, value)
+			}
+			current.Runnable = parsed
+			current.RunnableSet = true
+		case "hidden":
+			parsed, err := strconv.ParseBool(strings.TrimSpace(value))
+			if err != nil {
+				return interfaceContract{}, fmt.Errorf("%s: invalid hidden value %q", current.Path, value)
+			}
+			current.Hidden = parsed
+			current.HiddenSet = true
 		case "commands":
 			for _, item := range items {
 				current.Children[item] = struct{}{}
@@ -167,7 +226,8 @@ func splitList(value string) []string {
 }
 
 func parseFlag(raw string) (flagContract, error) {
-	spelling, flagType, ok := strings.Cut(raw, ":")
+	parts := strings.Split(raw, "|")
+	spelling, flagType, ok := strings.Cut(parts[0], ":")
 	if !ok || flagType == "" {
 		return flagContract{}, fmt.Errorf("invalid flag contract %q", raw)
 	}
@@ -181,7 +241,40 @@ func parseFlag(raw string) (flagContract, error) {
 	if longName == "" {
 		return flagContract{}, fmt.Errorf("invalid flag contract %q", raw)
 	}
-	return flagContract{Name: longName, Shorthand: shorthand, Type: flagType}, nil
+	contract := flagContract{Name: longName, Shorthand: shorthand, Type: flagType, Scope: "local"}
+	for _, attribute := range parts[1:] {
+		key, value, found := strings.Cut(attribute, "=")
+		if !found {
+			return flagContract{}, fmt.Errorf("invalid flag attribute %q", attribute)
+		}
+		switch key {
+		case "required":
+			contract.Required, found = parseBoolAttribute(value)
+			contract.RequiredSet = found
+		case "hidden":
+			contract.Hidden, found = parseBoolAttribute(value)
+			contract.HiddenSet = found
+		case "no-opt":
+			contract.NoOpt, _ = strconv.Unquote(value)
+			found = value == strconv.Quote(contract.NoOpt)
+			contract.NoOptSet = found
+		case "scope":
+			contract.Scope = value
+			found = value == "local" || value == "persistent" || value == "inherited"
+			contract.ScopeSet = found
+		default:
+			return flagContract{}, fmt.Errorf("unknown flag attribute %q", key)
+		}
+		if !found {
+			return flagContract{}, fmt.Errorf("invalid flag attribute %q", attribute)
+		}
+	}
+	return contract, nil
+}
+
+func parseBoolAttribute(value string) (bool, bool) {
+	parsed, err := strconv.ParseBool(value)
+	return parsed, err == nil
 }
 
 func checkCompatibility(root *cobra.Command, baseline interfaceContract) []string {
@@ -199,6 +292,12 @@ func checkCompatibility(root *cobra.Command, baseline interfaceContract) []strin
 		if err := cmd.Help(); err != nil {
 			failures = append(failures, fmt.Sprintf("%q -h cannot render: %v", displayPath(path), err))
 		}
+		if expected.RunnableSet && expected.Runnable && !cmd.Runnable() {
+			failures = append(failures, fmt.Sprintf("historical command %q became non-runnable", displayPath(path)))
+		}
+		if expected.HiddenSet && !expected.Hidden && cmd.Hidden {
+			failures = append(failures, fmt.Sprintf("historical command %q became hidden", displayPath(path)))
+		}
 		for _, alias := range sortedSet(expected.Aliases) {
 			aliasPath := aliasCommandPath(path, alias)
 			resolved, found := resolveCommand(root, aliasPath)
@@ -207,7 +306,7 @@ func checkCompatibility(root *cobra.Command, baseline interfaceContract) []strin
 			}
 		}
 		for _, expectedFlag := range sortedFlags(expected.Flags) {
-			actual := lookupFlag(cmd, expectedFlag.Name)
+			actual, actualScope := lookupFlag(cmd, expectedFlag.Name)
 			if actual == nil {
 				failures = append(failures, fmt.Sprintf("%q lost flag --%s", displayPath(path), expectedFlag.Name))
 				continue
@@ -224,6 +323,35 @@ func checkCompatibility(root *cobra.Command, baseline interfaceContract) []strin
 					displayPath(path), expectedFlag.Name, expectedFlag.Shorthand,
 				))
 			}
+			if expectedFlag.RequiredSet && !expectedFlag.Required && isRequiredFlag(actual) {
+				failures = append(failures, fmt.Sprintf(
+					"%q flag --%s became required", displayPath(path), expectedFlag.Name,
+				))
+			}
+			if expectedFlag.HiddenSet && !expectedFlag.Hidden && actual.Hidden {
+				failures = append(failures, fmt.Sprintf(
+					"%q flag --%s became hidden", displayPath(path), expectedFlag.Name,
+				))
+			}
+			if expectedFlag.NoOptSet && actual.NoOptDefVal != expectedFlag.NoOpt {
+				failures = append(failures, fmt.Sprintf(
+					"%q flag --%s changed no-opt value from %q to %q",
+					displayPath(path), expectedFlag.Name, expectedFlag.NoOpt, actual.NoOptDefVal,
+				))
+			}
+			if expectedFlag.ScopeSet && expectedFlag.Scope == "persistent" && actualScope == "local" {
+				failures = append(failures, fmt.Sprintf(
+					"%q flag --%s narrowed persistent scope to local", displayPath(path), expectedFlag.Name,
+				))
+			}
+		}
+		for _, actualFlag := range effectiveFlags(cmd) {
+			if _, existed := expected.Flags[actualFlag.Name]; existed || !actualFlag.Required {
+				continue
+			}
+			failures = append(failures, fmt.Sprintf(
+				"%q added required flag --%s", displayPath(path), actualFlag.Name,
+			))
 		}
 	}
 	return failures
@@ -237,17 +365,27 @@ func resolveCommand(root *cobra.Command, path string) (*cobra.Command, bool) {
 	return cmd, err == nil && len(remaining) == 0
 }
 
-func lookupFlag(cmd *cobra.Command, name string) *pflag.Flag {
-	for current := cmd; current != nil; current = current.Parent() {
-		current.InitDefaultHelpFlag()
-		if f := current.LocalNonPersistentFlags().Lookup(name); f != nil {
-			return f
-		}
-		if f := current.PersistentFlags().Lookup(name); f != nil {
-			return f
-		}
+func lookupFlag(cmd *cobra.Command, name string) (*pflag.Flag, string) {
+	cmd.InitDefaultHelpFlag()
+	if flag := cmd.LocalNonPersistentFlags().Lookup(name); flag != nil {
+		return flag, "local"
 	}
-	return nil
+	if flag := cmd.PersistentFlags().Lookup(name); flag != nil {
+		return flag, "persistent"
+	}
+	if flag := cmd.InheritedFlags().Lookup(name); flag != nil {
+		return flag, "inherited"
+	}
+	return nil, ""
+}
+
+func effectiveFlags(cmd *cobra.Command) []flagContract {
+	flags := map[string]flagContract{}
+	cmd.InitDefaultHelpFlag()
+	captureFlagSet(flags, cmd.InheritedFlags(), "inherited")
+	captureFlagSet(flags, cmd.PersistentFlags(), "persistent")
+	captureFlagSet(flags, cmd.LocalNonPersistentFlags(), "local")
+	return sortedFlags(flags)
 }
 
 func aliasCommandPath(path, alias string) string {
@@ -266,7 +404,28 @@ func mergeContracts(historical, current interfaceContract) (interfaceContract, [
 	merged := cloneContract(historical)
 	var failures []string
 	for path, addition := range current.Commands {
-		target := merged.command(path)
+		target, existed := merged.Commands[path]
+		if !existed {
+			target = merged.command(path)
+			target.Runnable = addition.Runnable
+			target.RunnableSet = addition.RunnableSet
+			target.Hidden = addition.Hidden
+			target.HiddenSet = addition.HiddenSet
+		}
+		if target.RunnableSet && target.Runnable && !addition.Runnable {
+			failures = append(failures, fmt.Sprintf("historical command %q became non-runnable", displayPath(path)))
+		}
+		if target.HiddenSet && !target.Hidden && addition.Hidden {
+			failures = append(failures, fmt.Sprintf("historical command %q became hidden", displayPath(path)))
+		}
+		if !target.RunnableSet {
+			target.Runnable = addition.Runnable
+			target.RunnableSet = addition.RunnableSet
+		}
+		if !target.HiddenSet {
+			target.Hidden = addition.Hidden
+			target.HiddenSet = addition.HiddenSet
+		}
 		for child := range addition.Children {
 			target.Children[child] = struct{}{}
 		}
@@ -276,6 +435,10 @@ func mergeContracts(historical, current interfaceContract) (interfaceContract, [
 		for name, newFlag := range addition.Flags {
 			oldFlag, exists := target.Flags[name]
 			if !exists {
+				if existed && newFlag.Required {
+					failures = append(failures, fmt.Sprintf("%q added required flag --%s", displayPath(path), name))
+					continue
+				}
 				target.Flags[name] = newFlag
 				continue
 			}
@@ -294,8 +457,41 @@ func mergeContracts(historical, current interfaceContract) (interfaceContract, [
 				continue
 			}
 			if oldFlag.Shorthand == "" && newFlag.Shorthand != "" {
-				target.Flags[name] = newFlag
+				oldFlag.Shorthand = newFlag.Shorthand
 			}
+			if oldFlag.RequiredSet && !oldFlag.Required && newFlag.Required {
+				failures = append(failures, fmt.Sprintf("%q flag --%s became required", displayPath(path), name))
+				continue
+			}
+			if oldFlag.HiddenSet && !oldFlag.Hidden && newFlag.Hidden {
+				failures = append(failures, fmt.Sprintf("%q flag --%s became hidden", displayPath(path), name))
+				continue
+			}
+			if oldFlag.NoOptSet && newFlag.NoOptSet && oldFlag.NoOpt != newFlag.NoOpt {
+				failures = append(failures, fmt.Sprintf("%q flag --%s changed no-opt value", displayPath(path), name))
+				continue
+			}
+			if oldFlag.ScopeSet && oldFlag.Scope == "persistent" && newFlag.Scope == "local" {
+				failures = append(failures, fmt.Sprintf("%q flag --%s narrowed persistent scope to local", displayPath(path), name))
+				continue
+			}
+			if !oldFlag.RequiredSet {
+				oldFlag.Required = newFlag.Required
+				oldFlag.RequiredSet = newFlag.RequiredSet
+			}
+			if !oldFlag.HiddenSet {
+				oldFlag.Hidden = newFlag.Hidden
+				oldFlag.HiddenSet = newFlag.HiddenSet
+			}
+			if !oldFlag.NoOptSet {
+				oldFlag.NoOpt = newFlag.NoOpt
+				oldFlag.NoOptSet = newFlag.NoOptSet
+			}
+			if !oldFlag.ScopeSet {
+				oldFlag.Scope = newFlag.Scope
+				oldFlag.ScopeSet = newFlag.ScopeSet
+			}
+			target.Flags[name] = oldFlag
 		}
 	}
 	return merged, failures
@@ -305,6 +501,10 @@ func cloneContract(source interfaceContract) interfaceContract {
 	cloned := newInterfaceContract()
 	for path, command := range source.Commands {
 		target := cloned.command(path)
+		target.Runnable = command.Runnable
+		target.RunnableSet = command.RunnableSet
+		target.Hidden = command.Hidden
+		target.HiddenSet = command.HiddenSet
 		for child := range command.Children {
 			target.Children[child] = struct{}{}
 		}
@@ -329,6 +529,8 @@ func renderContract(w io.Writer, contract interfaceContract) error {
 		if _, err := fmt.Fprintf(w, "[%s]\n", path); err != nil {
 			return err
 		}
+		fmt.Fprintf(w, "  runnable: %t\n", command.Runnable)
+		fmt.Fprintf(w, "  hidden: %t\n", command.Hidden)
 		if values := sortedSet(command.Children); len(values) > 0 {
 			fmt.Fprintf(w, "  commands: %s\n", strings.Join(values, ", "))
 		}
@@ -342,7 +544,10 @@ func renderContract(w io.Writer, contract interfaceContract) error {
 				if flag.Shorthand != "" {
 					name = "-" + flag.Shorthand + "/" + name
 				}
-				rendered = append(rendered, name+":"+flag.Type)
+				rendered = append(rendered, fmt.Sprintf(
+					"%s:%s|required=%t|hidden=%t|no-opt=%s|scope=%s",
+					name, flag.Type, flag.Required, flag.Hidden, strconv.Quote(flag.NoOpt), flag.Scope,
+				))
 			}
 			fmt.Fprintf(w, "  flags: %s\n", strings.Join(rendered, ", "))
 		}
