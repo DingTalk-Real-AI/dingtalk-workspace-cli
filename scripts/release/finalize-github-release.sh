@@ -61,7 +61,7 @@ for asset in "$@"; do
   attempt=1
   while [ "$attempt" -le "$DIGEST_ATTEMPTS" ]; do
     remote_digest="$(
-      gh api "repos/$REPOSITORY/releases/tags/$TAG" \
+      gh release view "$TAG" --repo "$REPOSITORY" --json assets \
         --jq ".assets[] | select(.name == \"$name\") | .digest"
     )"
     if [ "$remote_digest" = "$local_digest" ]; then

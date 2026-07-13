@@ -370,6 +370,7 @@ func TestReleaseWorkflowUploadsPostProcessedDarwinAssets(t *testing.T) {
 		"checksums.txt",
 		"dws-skills.zip",
 		"gh release upload",
+		"gh release view",
 		"--clobber",
 		"release asset digest mismatch",
 	} {
