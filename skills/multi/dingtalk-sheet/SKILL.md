@@ -35,6 +35,11 @@ metadata:
 | "新建工作表" | `dws sheet new --node <nodeId或URL> --name "<sheet名>"` |
 | "读取单元格" | `dws sheet range read --node <nodeId或URL> --sheet-id <sheetId> --range A1:B2` |
 | "写入单元格" | `dws sheet range update --node <nodeId或URL> --sheet-id <sheetId> --range A1:B2 --values '[[..]]'` |
+| "结构化读取 / DataFrame 读取" | `dws sheet table-get --node <nodeId或URL> [--sheet-id <sheetId>]` |
+| "结构化写入 / DataFrame 写入" | `dws sheet table-put --node <nodeId或URL> --sheets '<JSON>'` |
+| "创建透视表 / 数据透视" | `dws sheet pivot-table create --node <nodeId或URL> --source "'Sheet1'!A1:D100" --properties '<JSON>'` |
+| "查看透视表" | `dws sheet pivot-table list --node <nodeId或URL> --sheet-id <sheetId>` |
+| "显示 / 隐藏网格线" | `dws sheet show-gridline|hide-gridline --node <nodeId或URL> --sheet-id <sheetId>` |
 | "追加一行" | `dws sheet append --node <nodeId或URL> --sheet-id <sheetId> --values '[[..]]'` |
 | "查找 / 替换" | `dws sheet find --node <nodeId或URL> --sheet-id <sheetId> --find "<关键词>"` / `dws sheet replace --node <nodeId或URL> --sheet-id <sheetId> --find "<旧值>" --replacement "<新值>"` |
 | "插入图片到单元格" | `dws sheet write-image --node <nodeId或URL> --sheet-id <sheetId> --range A1:A1 --file <本地图片路径>`（CLI 自动上传本地图片并写入单元格；没有 --resource-id/--resource-url 这两个 flag） |

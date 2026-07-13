@@ -1,6 +1,6 @@
 ---
 name: dingtalk-chat
-description: 钉钉群聊与消息。Use when 用户提到 发消息/单聊/群聊/建群/拉人进群/改群名/搜索群/群成员管理/@消息/撤回消息/机器人群发/Webhook通知/发图片或文件到群。Distinct from dingtalk-ding(紧急DING消息/短信/电话)、dingtalk-mail(邮件)、dingtalk-edu-group(班级群)。命令前缀：dws chat。
+description: 钉钉群聊与消息。Use when 用户提到 发消息/单聊/群聊/建群/拉人进群/改群名/搜索群/群成员管理/@消息/收藏消息/撤回消息/机器人群发/Webhook通知/发图片或文件到群。Distinct from dingtalk-ding(紧急DING消息/短信/电话)、dingtalk-mail(邮件)、dingtalk-edu-group(班级群)。命令前缀：dws chat。
 cli_version: ">=0.2.14"
 metadata:
   category: product
@@ -33,6 +33,8 @@ metadata:
 | "改群名" / "踢人" | `dws chat group rename` / `dws chat group members remove --yes`（踢人不可逆，确认目标后加 --yes；踢群主会被 CLI 拦截，需先 `transfer-owner`）|
 | "@我消息" | `dws chat message list-mentions` |
 | "查群聊记录" | `dws chat message list` |
+| "收藏/取消收藏这条消息" | `dws chat message add-favorite` / `dws chat message remove-favorite`（均需 `openMessageId` 和 `openConversationId`）|
+| "查看我收藏的消息" | `dws chat message list-favorites`（默认 `--cursor 0 --size 20`）|
 | "用机器人发消息" | `dws chat message send-by-bot --robot-code <code> --group <id> --title "<标题>" --text "<内容>"` |
 | "Webhook 推一条" | `dws chat message send-by-webhook --token <token> --title "<标题>" --text "<内容>"` |
 | "撤回我发的消息" | `dws chat message recall`（撤回当前用户发送的消息）|

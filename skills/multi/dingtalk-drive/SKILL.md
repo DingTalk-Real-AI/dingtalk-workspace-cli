@@ -33,6 +33,8 @@ metadata:
 | "最近访问 / 最近编辑的文档" | `dws drive recent` |
 | "钉盘目录树" | `python scripts/drive_tree_list.py --depth 2` |
 | "查文件元数据" | `dws drive info --node <fileId>` |
+| "查阅读/编辑/评论/下载等节点统计" | `dws drive stats --node <fileId>` |
+| "创建文件快捷方式" | `dws drive shortcut --node <fileId> [--folder <targetFolderId>] [--workspace <workspaceId>]` |
 | "下载文件" | `dws drive download --node <fileId> --output <path>` |
 | "上传本地文件" | `dws drive upload --file ./report.pdf [--folder <fileId>]` |
 | "建文件夹" | `dws drive mkdir --name "<名称>" [--folder <fileId>]` |
@@ -49,6 +51,7 @@ metadata:
 - `rename` 的 `--name` **只传主名，不带扩展名**；服务端会按原扩展名自动补后缀，带了扩展名会变成双扩展名（如 `报告.txt` → `报告.txt.txt`）。
 - `drive download` 需要 `--output` 指定本地保存路径或目录；不要省略必填输出位置。
 - 删除、覆盖、移动、公开（publish set/unset）等破坏性操作必须先确认；上传、创建文件夹、下载后要读回或列目录验证。
+- `shortcut` 会创建新节点，执行后必须用 `drive list` 回读目标位置；`stats` 是只读操作。
 - 所有 `dws drive` 命令加 `--format json`。
 
 ## 跨产品协作

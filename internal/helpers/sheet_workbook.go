@@ -261,5 +261,29 @@ name 不能包含 / \ ? * [ ] : 等特殊字符，最长 100 字符。`,
 	deleteSheetCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	deleteSheetCmd.Flags().String("sheet-id", "", "要删除的工作表 ID 或名称 (必填)")
 
-	return []*cobra.Command{createCmd, listCmd, infoCmd, newCmd, updateSheetCmd, copySheetCmd, deleteSheetCmd}
+	showGridlineCmd := newGridlineVisibilityCmd("show-gridline", "显示工作表网格线", "visible")
+	hideGridlineCmd := newGridlineVisibilityCmd("hide-gridline", "隐藏工作表网格线", "hidden")
+
+	return []*cobra.Command{createCmd, listCmd, infoCmd, newCmd, updateSheetCmd, copySheetCmd, deleteSheetCmd, showGridlineCmd, hideGridlineCmd}
+}
+
+func newGridlineVisibilityCmd(use, short, visibility string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     use,
+		Short:   short,
+		Example: fmt.Sprintf("  dws sheet %s --node NODE_ID --sheet-id SHEET_ID", use),
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateRequiredFlags(cmd, "node", "sheet-id"); err != nil {
+				return err
+			}
+			return callMCPTool("set_gridline_visibility", map[string]any{
+				"nodeId":     mustGetFlag(cmd, "node"),
+				"sheetId":    mustGetFlag(cmd, "sheet-id"),
+				"visibility": visibility,
+			})
+		},
+	}
+	cmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
+	cmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
+	return cmd
 }

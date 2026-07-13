@@ -1317,6 +1317,45 @@ Flags:
   - 分页: hasMore=true 时，用返回的 nextCursor 作为下次 --cursor 继续翻页
 ```
 
+#### 收藏消息 — 为当前用户收藏指定会话中的一条消息
+```
+Usage:
+  dws chat message add-favorite [flags]
+Example:
+  dws chat message add-favorite --open-message-id <openMessageId> --open-conversation-id <openConversationId>
+Flags:
+      --open-message-id string        消息 openMessageId (必填)
+      --open-conversation-id string   消息所在会话 openConversationId (必填)
+```
+
+#### 取消收藏消息 — 移除当前用户的收藏标记，不删除原消息
+```
+Usage:
+  dws chat message remove-favorite [flags]
+Example:
+  dws chat message remove-favorite --open-message-id <openMessageId> --open-conversation-id <openConversationId>
+Flags:
+      --open-message-id string        消息 openMessageId (必填)
+      --open-conversation-id string   消息所在会话 openConversationId (必填)
+```
+
+#### 查询收藏消息 — 分页查询当前用户收藏的消息
+```
+Usage:
+  dws chat message list-favorites [flags]
+Example:
+  dws chat message list-favorites
+  dws chat message list-favorites --size 50
+  dws chat message list-favorites --cursor 20 --size 20
+Flags:
+      --cursor int   数字分页游标，默认 0；翻页时传上次返回的 nextCursor
+      --size int     一次拉取的收藏数量，默认 20，范围 1-100
+
+注意:
+  - 首次请求可省略分页参数，CLI 会自动向 Open 服务传入 cursor=0、size="20"
+  - hasMore=true 时，将 nextCursor 作为下一次的 --cursor
+```
+
 ### bot (机器人管理)
 
 #### 搜索【我创建的】机器人 — 仅返回当前用户自己创建的机器人
