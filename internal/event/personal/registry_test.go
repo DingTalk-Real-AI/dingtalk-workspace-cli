@@ -33,6 +33,12 @@ func TestCatalogEnabledEvents(t *testing.T) {
 		EventMention,
 		EventSingleChat,
 		EventInChat,
+		EventReadO2O,
+		EventReadGroup,
+		EventRecallO2O,
+		EventRecallGroup,
+		EventEmotionO2O,
+		EventEmotionGroup,
 	}
 	if !reflect.DeepEqual(keys, want) {
 		t.Fatalf("keys = %#v, want %#v", keys, want)
@@ -54,6 +60,12 @@ func TestLegacyEventKeysAreUnknown(t *testing.T) {
 		"im_message_receive_o2o",
 		"im_message_receive_group",
 		"im_message_receive_user",
+		"im_message_read_o2o",
+		"im_message_read_group",
+		"im_message_recall_o2o",
+		"im_message_recall_group",
+		"im_message_emotion_o2o",
+		"im_message_emotion_group",
 	}
 	for _, key := range legacyKeys {
 		if _, ok := Lookup(key); ok {
@@ -157,6 +169,52 @@ func TestSchemaDocumentsUseSingleJSONSchema(t *testing.T) {
 	}
 }
 
+func TestActionSchemaDocumentsAreConservative(t *testing.T) {
+	wantProperties := map[string]bool{
+		"type":         true,
+		"event_id":     true,
+		"timestamp":    true,
+		"subscribe_id": true,
+		"payload":      true,
+	}
+	for _, eventKey := range actionEventKeysForTest() {
+		t.Run(eventKey, func(t *testing.T) {
+			def, ok := Lookup(eventKey)
+			if !ok {
+				t.Fatalf("Lookup(%q) failed", eventKey)
+			}
+			doc := BuildSchemaDocument(def)
+			if doc.JQRootPath != ".data | fromjson" {
+				t.Fatalf("jq_root_path = %q", doc.JQRootPath)
+			}
+			props, ok := doc.Schema["properties"].(map[string]any)
+			if !ok {
+				t.Fatalf("schema.properties = %#v", doc.Schema["properties"])
+			}
+			if len(props) != len(wantProperties) {
+				t.Fatalf("schema properties = %#v, want only conservative fields", props)
+			}
+			for name := range wantProperties {
+				if _, ok := props[name]; !ok {
+					t.Fatalf("schema missing property %q: %#v", name, props)
+				}
+			}
+			payloadSchema, ok := props["payload"].(map[string]any)
+			if !ok || payloadSchema["additionalProperties"] != true {
+				t.Fatalf("payload schema = %#v, want open object", props["payload"])
+			}
+			for _, unconfirmed := range []string{
+				"message_id", "conversation_id", "sender", "content",
+				"reader", "recaller", "emotion", "reaction",
+			} {
+				if _, ok := props[unconfirmed]; ok {
+					t.Fatalf("schema exposed unconfirmed property %q", unconfirmed)
+				}
+			}
+		})
+	}
+}
+
 func TestBuildRuleParamMention(t *testing.T) {
 	rule, param, err := BuildRuleParam(EventMention, RuleOptions{})
 	if err != nil {
@@ -226,15 +284,64 @@ func TestBuildRuleParamGroup(t *testing.T) {
 	}
 }
 
+func TestBuildRuleParamActionEvents(t *testing.T) {
+	for _, eventKey := range []string{EventReadO2O, EventRecallO2O, EventEmotionO2O} {
+		t.Run(eventKey, func(t *testing.T) {
+			if _, _, err := BuildRuleParam(eventKey, RuleOptions{}); err == nil || !strings.Contains(err.Error(), "--user is required for "+eventKey) {
+				t.Fatalf("missing user error = %v", err)
+			}
+			if _, _, err := BuildRuleParam(eventKey, RuleOptions{GroupID: "cid-1"}); err == nil || !strings.Contains(err.Error(), "--group is not supported for "+eventKey) {
+				t.Fatalf("wrong group error = %v", err)
+			}
+			rule, param, err := BuildRuleParam(eventKey, RuleOptions{UserID: "staff-1"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rule != "singleChat" || param["targetUid"] != "staff-1" || param["targetUidType"] != "staffId" {
+				t.Fatalf("rule = %q, param = %#v", rule, param)
+			}
+		})
+	}
+
+	for _, eventKey := range []string{EventReadGroup, EventRecallGroup, EventEmotionGroup} {
+		t.Run(eventKey, func(t *testing.T) {
+			if _, _, err := BuildRuleParam(eventKey, RuleOptions{}); err == nil || !strings.Contains(err.Error(), "--group is required for "+eventKey) {
+				t.Fatalf("missing group error = %v", err)
+			}
+			if _, _, err := BuildRuleParam(eventKey, RuleOptions{UserID: "staff-1"}); err == nil || !strings.Contains(err.Error(), "--user is not supported for "+eventKey) {
+				t.Fatalf("wrong user error = %v", err)
+			}
+			rule, param, err := BuildRuleParam(eventKey, RuleOptions{GroupID: "cid-1"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rule != "group" || param["openConversationId"] != "cid-1" {
+				t.Fatalf("rule = %q, param = %#v", rule, param)
+			}
+		})
+	}
+}
+
 func TestBuildRuleParamRejectsWrongScopedFlags(t *testing.T) {
-	if _, _, err := BuildRuleParam(EventMention, RuleOptions{UserID: "staff-1"}); err == nil || !strings.Contains(err.Error(), "--user is only supported") {
+	if _, _, err := BuildRuleParam(EventMention, RuleOptions{UserID: "staff-1"}); err == nil || !strings.Contains(err.Error(), "--user is not supported for "+EventMention) {
 		t.Fatalf("mention with user error = %v, want unsupported user", err)
 	}
-	if _, _, err := BuildRuleParam(EventSingleChat, RuleOptions{UserID: "staff-1", GroupID: "cid-1"}); err == nil || !strings.Contains(err.Error(), "--group is only supported") {
+	if _, _, err := BuildRuleParam(EventSingleChat, RuleOptions{UserID: "staff-1", GroupID: "cid-1"}); err == nil || !strings.Contains(err.Error(), "--group is not supported for "+EventSingleChat) {
 		t.Fatalf("singleChat with group error = %v, want unsupported group", err)
 	}
-	if _, _, err := BuildRuleParam(EventInChat, RuleOptions{UserID: "staff-1", GroupID: "cid-1"}); err == nil || !strings.Contains(err.Error(), "--user is only supported") {
+	if _, _, err := BuildRuleParam(EventInChat, RuleOptions{UserID: "staff-1", GroupID: "cid-1"}); err == nil || !strings.Contains(err.Error(), "--user is not supported for "+EventInChat) {
 		t.Fatalf("group with user error = %v, want unsupported user", err)
+	}
+}
+
+func actionEventKeysForTest() []string {
+	return []string{
+		EventReadO2O,
+		EventReadGroup,
+		EventRecallO2O,
+		EventRecallGroup,
+		EventEmotionO2O,
+		EventEmotionGroup,
 	}
 }
 

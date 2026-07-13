@@ -21,6 +21,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -104,6 +105,64 @@ func TestClientCreateSubscriptionDWSRequestAndArrayResponse(t *testing.T) {
 	}
 	if sub.EventKey != EventSingleChat || sub.RuleType != "singleChat" || sub.Status != "active" || sub.SourceID != "open" {
 		t.Fatalf("subscription = %#v", sub)
+	}
+}
+
+func TestClientCreateActionSubscriptionsUsesDocumentedRuleParam(t *testing.T) {
+	tests := []struct {
+		eventKey string
+		opts     RuleOptions
+		wantRule map[string]any
+	}{
+		{EventReadO2O, RuleOptions{UserID: "staff-1"}, map[string]any{"targetUid": "staff-1", "targetUidType": "staffId"}},
+		{EventRecallO2O, RuleOptions{UserID: "staff-1"}, map[string]any{"targetUid": "staff-1", "targetUidType": "staffId"}},
+		{EventEmotionO2O, RuleOptions{UserID: "staff-1"}, map[string]any{"targetUid": "staff-1", "targetUidType": "staffId"}},
+		{EventReadGroup, RuleOptions{GroupID: "cid-1"}, map[string]any{"openConversationId": "cid-1"}},
+		{EventRecallGroup, RuleOptions{GroupID: "cid-1"}, map[string]any{"openConversationId": "cid-1"}},
+		{EventEmotionGroup, RuleOptions{GroupID: "cid-1"}, map[string]any{"openConversationId": "cid-1"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.eventKey, func(t *testing.T) {
+			var gotPath string
+			var gotReq dwsCreateSubscriptionRequest
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotPath = r.URL.Path
+				if err := json.NewDecoder(r.Body).Decode(&gotReq); err != nil {
+					t.Errorf("decode request: %v", err)
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "result": []string{"sub-action"}})
+			}))
+			defer srv.Close()
+
+			ruleType, ruleParam, err := BuildRuleParam(tt.eventKey, tt.opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			client := NewClient(srv.URL, Identity{AccessToken: "token", ClientID: "client", SourceID: "open"})
+			if _, err := client.CreateSubscription(t.Context(), CreateSubscriptionRequest{
+				EventKey:  tt.eventKey,
+				RuleType:  ruleType,
+				RuleParam: ruleParam,
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			if gotPath != "/subscription/user" || gotReq.EventKey != tt.eventKey {
+				t.Fatalf("path = %q, eventKey = %q", gotPath, gotReq.EventKey)
+			}
+			var gotRule map[string]any
+			if err := json.Unmarshal([]byte(gotReq.FilterRule), &gotRule); err != nil {
+				t.Fatalf("filterRule = %q: %v", gotReq.FilterRule, err)
+			}
+			if !reflect.DeepEqual(gotRule, tt.wantRule) {
+				t.Fatalf("filterRule = %#v, want %#v", gotRule, tt.wantRule)
+			}
+			if gotReq.Ext["ruleType"] != ruleType {
+				t.Fatalf("ext.ruleType = %#v, want %q", gotReq.Ext["ruleType"], ruleType)
+			}
+		})
 	}
 }
 

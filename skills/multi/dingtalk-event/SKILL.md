@@ -1,9 +1,9 @@
 ---
 name: dingtalk-event
-description: 钉钉个人消息事件长连接监听、订阅与消费，输出 NDJSON 到 stdout。Use when 用户提到 监听个人消息事件、被@消息、监听我和某人的单聊消息、监听某个群消息、实时接收钉钉消息事件、dws event consume user_im_message_receive_at/user_im_message_receive_o2o/user_im_message_receive_group、用事件驱动 Agent 处理钉钉消息、监听并自动回复消息。命令前缀：dws event。
+description: 钉钉个人 IM 事件长连接监听、订阅与消费，覆盖消息接收、已读、撤回和表情回应，输出 NDJSON 到 stdout。Use when 用户提到 监听个人消息事件、被@消息、监听单聊或群消息、监听消息已读、监听消息撤回、监听消息贴表情或表情回应、实时接收钉钉事件、用事件驱动 Agent。命令前缀：dws event。
 ---
 
-# 钉钉个人消息事件
+# 钉钉个人 IM 事件
 
 只使用 `dws event consume` 建立个人消息事件长连接。用户要求实时监听、订阅、自动回复或驱动 Agent 时，不要写轮询脚本，不要用消息历史查询模拟事件。
 
@@ -25,8 +25,14 @@ description: 钉钉个人消息事件长连接监听、订阅与消费，输出 
 | `user_im_message_receive_at` | 当前用户被 @ 的消息 | 无 |
 | `user_im_message_receive_o2o` | 当前用户与指定用户的单聊消息 | `--user` |
 | `user_im_message_receive_group` | 当前用户所在指定群聊/会话的消息 | `--group` |
+| `user_im_message_read_o2o` | 指定单聊中当前用户发送的消息被已读 | `--user` |
+| `user_im_message_read_group` | 指定群聊中当前用户发送的消息被已读 | `--group` |
+| `user_im_message_recall_o2o` | 指定单聊中的消息被撤回 | `--user` |
+| `user_im_message_recall_group` | 指定群聊中的消息被撤回 | `--group` |
+| `user_im_message_emotion_o2o` | 指定单聊中的消息收到表情回应 | `--user` |
+| `user_im_message_emotion_group` | 指定群聊中的消息收到表情回应 | `--group` |
 
-只承认上表 3 个事件码。其它身份模式、应用凭证模式、非个人消息事件不在本 skill 范围内。
+只承认上表 9 个事件码。其它身份模式、应用凭证模式、非个人 IM 事件不在本 skill 范围内。
 
 ## Command rules
 
@@ -36,6 +42,8 @@ description: 钉钉个人消息事件长连接监听、订阅与消费，输出 
 - 缺少必填 ID 时先解析或追问，不要猜测 ID。
 - 用户只给单聊对端人名时，先运行 `dws aisearch person --keyword "<name>" --dimension name --format json` 解析 userId；多候选必须让用户确认。
 - 用户只给群名时，先运行 `dws chat search --query "<group>" --format json` 解析 openConversationId；多候选必须让用户确认。
+- 用户要求执行“撤回消息”时使用 `dws chat`；只有“监听/订阅消息撤回”才使用 `dws event consume user_im_message_recall_*`。
+- 用户说“贴标签”且语义是给消息贴表情时，按消息表情回应事件处理，event key 使用 `emotion`。
 - 正常 Agent 消费使用 `-f ndjson`。抓一条样本可用 `--max-events 1 -f json`。
 - `--debug-raw-events` 只用于联调确认服务端推送是否到达本地连接；正常任务不要使用。
 
@@ -73,6 +81,21 @@ dws event consume user_im_message_receive_group \
   --group cidxxxxxxxx \
   -f ndjson
 
+# 指定单聊消息已读
+dws event consume user_im_message_read_o2o \
+  --user 507971 \
+  -f ndjson
+
+# 指定群聊消息撤回
+dws event consume user_im_message_recall_group \
+  --group cidxxxxxxxx \
+  -f ndjson
+
+# 指定单聊消息收到表情回应
+dws event consume user_im_message_emotion_o2o \
+  --user 507971 \
+  -f ndjson
+
 # 有界自测
 dws event consume user_im_message_receive_at \
   --duration 10m \
@@ -91,9 +114,10 @@ dws event consume user_im_message_receive_o2o \
 - 顶层 `jq_root_path` 说明业务字段起点；当前值是 `.data | fromjson`。
 - `schema.properties` 是业务字段列表，例如 `content`、`sender`、`conversation_id`、`message_id`、`event_time`。
 - 不要假设 `data` 已经展开。读取消息正文时先解析 `data`，再读 `payload.body.content` 或 schema 中对应字段。
+- 已读、撤回、表情回应事件尚无稳定业务样本；其 schema 只保证 `type/event_id/timestamp/subscribe_id/payload`，处理时保留未知 `payload` 字段，不要猜测已读人、撤回人或表情类型。
 
 ## Topic index
 
 | Topic | Reference | Coverage |
 |---|---|---|
-| IM | [references/event-im.md](references/event-im.md) | 三类个人消息事件命令、参数、生命周期、输出解析、自测、过滤和排障 |
+| IM | [references/event-im.md](references/event-im.md) | 九类个人 IM 事件命令、参数、生命周期、输出解析、自测和排障 |

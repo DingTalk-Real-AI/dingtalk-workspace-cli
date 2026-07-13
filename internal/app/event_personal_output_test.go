@@ -46,6 +46,18 @@ func TestPersonalEventListHidesSchemaIDs(t *testing.T) {
 			if strings.Contains(got, personal.EventFromUser) {
 				t.Fatalf("list output exposed hidden event %s: %s", personal.EventFromUser, got)
 			}
+			for _, eventKey := range []string{
+				personal.EventReadO2O,
+				personal.EventReadGroup,
+				personal.EventRecallO2O,
+				personal.EventRecallGroup,
+				personal.EventEmotionO2O,
+				personal.EventEmotionGroup,
+			} {
+				if !strings.Contains(got, eventKey) {
+					t.Fatalf("list output missing %s: %s", eventKey, got)
+				}
+			}
 		})
 	}
 }
@@ -259,6 +271,49 @@ func TestPersonalEventSchemaUsesSingleJSONSchema(t *testing.T) {
 			}
 			if _, ok := props["content"].(map[string]any); !ok {
 				t.Fatalf("schema.properties.content = %#v, want object", props["content"])
+			}
+		})
+	}
+}
+
+func TestPersonalActionEventSchemaUsesConservativeJSONSchema(t *testing.T) {
+	for _, eventKey := range []string{
+		personal.EventReadO2O,
+		personal.EventReadGroup,
+		personal.EventRecallO2O,
+		personal.EventRecallGroup,
+		personal.EventEmotionO2O,
+		personal.EventEmotionGroup,
+	} {
+		t.Run(eventKey, func(t *testing.T) {
+			cmd := newEventSchemaCommand()
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetArgs([]string{eventKey})
+			if err := cmd.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			var doc map[string]any
+			if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+				t.Fatalf("schema output is not JSON: %v\n%s", err, out.String())
+			}
+			if doc["event_key"] != eventKey || doc["jq_root_path"] != ".data | fromjson" {
+				t.Fatalf("schema metadata = %#v", doc)
+			}
+			schema, ok := doc["schema"].(map[string]any)
+			if !ok {
+				t.Fatalf("schema = %#v", doc["schema"])
+			}
+			properties, ok := schema["properties"].(map[string]any)
+			if !ok || len(properties) != 5 {
+				t.Fatalf("schema.properties = %#v, want five conservative fields", schema["properties"])
+			}
+			for _, field := range []string{"type", "event_id", "timestamp", "subscribe_id", "payload"} {
+				if _, ok := properties[field]; !ok {
+					t.Fatalf("schema missing %q: %#v", field, properties)
+				}
 			}
 		})
 	}

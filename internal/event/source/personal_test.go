@@ -611,6 +611,44 @@ func TestPersonalSourceParsedHeadersPassNormalBusFilter(t *testing.T) {
 	}
 }
 
+func TestPersonalSourceActionEventPassesNormalBusFilter(t *testing.T) {
+	const (
+		eventKey    = "user_im_message_emotion_group"
+		subscribeID = "sub-emotion-group"
+	)
+	src := personalSourceForRawEventTests()
+	raw := src.rawEventFromDataFrame(&payload.DataFrame{
+		Headers: payload.DataFrameHeader{
+			"EVENT_TYPE": eventKey,
+			"SUB_ID":     subscribeID,
+		},
+		Data: `{"eventKey":"user_im_message_emotion_group","subId":"sub-emotion-group","payload":{}}`,
+	})
+	h := bus.NewHub(10)
+	consumer, err := h.Register(transport.Hello{
+		EventTypes:  []string{eventKey},
+		SubscribeID: subscribeID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h.Deliver(raw)
+
+	select {
+	case frame := <-consumer.SendCh:
+		eventFrame, ok := frame.(transport.Event)
+		if !ok {
+			t.Fatalf("frame = %T, want transport.Event", frame)
+		}
+		if eventFrame.EventType != eventKey || eventFrame.SubscribeID != subscribeID {
+			t.Fatalf("event = %#v", eventFrame)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for action event")
+	}
+}
+
 func personalSourceForRawEventTests() *PersonalSource {
 	return &PersonalSource{cfg: PersonalConfig{
 		SourceID: "fallback_source",

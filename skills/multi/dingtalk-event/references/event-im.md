@@ -1,6 +1,6 @@
-# IM 个人消息事件
+# IM 个人事件
 
-先读上层 [SKILL.md](../SKILL.md) 的命令规则、调用流和子进程契约。本参考覆盖当前公开的 IM 个人消息事件：被 @、指定单聊、指定群聊。
+先读上层 [SKILL.md](../SKILL.md) 的命令规则、调用流和子进程契约。本参考覆盖当前公开的 IM 个人事件：消息接收、已读、撤回和表情回应。
 
 实时监听、自动回复、订阅事件都必须使用 `dws event consume` 长连接，不要写轮询脚本。
 
@@ -18,6 +18,12 @@ dws auth login
 dws event schema user_im_message_receive_at
 dws event schema user_im_message_receive_o2o
 dws event schema user_im_message_receive_group
+dws event schema user_im_message_read_o2o
+dws event schema user_im_message_read_group
+dws event schema user_im_message_recall_o2o
+dws event schema user_im_message_recall_group
+dws event schema user_im_message_emotion_o2o
+dws event schema user_im_message_emotion_group
 ```
 
 schema 默认 JSON。业务字段说明在 `schema.properties`，当前业务 payload 解析起点看 `jq_root_path`。
@@ -29,6 +35,12 @@ schema 默认 JSON。业务字段说明在 `schema.properties`，当前业务 pa
 | `user_im_message_receive_at` | `at` | 当前用户被 @ 的消息 | 无 |
 | `user_im_message_receive_o2o` | `singleChat` | 当前用户与指定用户的单聊消息 | `--user` |
 | `user_im_message_receive_group` | `group` | 当前用户所在指定群聊/会话的消息 | `--group` |
+| `user_im_message_read_o2o` | `singleChat` | 指定单聊中当前用户发送的消息被已读 | `--user` |
+| `user_im_message_read_group` | `group` | 指定群聊中当前用户发送的消息被已读 | `--group` |
+| `user_im_message_recall_o2o` | `singleChat` | 指定单聊中的消息被撤回 | `--user` |
+| `user_im_message_recall_group` | `group` | 指定群聊中的消息被撤回 | `--group` |
+| `user_im_message_emotion_o2o` | `singleChat` | 指定单聊中的消息收到表情回应 | `--user` |
+| `user_im_message_emotion_group` | `group` | 指定群聊中的消息收到表情回应 | `--group` |
 
 默认身份就是当前用户。不要额外加身份切换 flag，不要使用应用凭证模式，不要使用本表以外的事件码。
 
@@ -38,6 +50,8 @@ schema 默认 JSON。业务字段说明在 `schema.properties`，当前业务 pa
 - 群名 → `dws chat search --query "<group>" --format json`，确认后取 `openConversationId`。
 - 多候选 → 展示候选并让用户确认。
 - 仍缺必填 ID → 先追问，不要编造。
+- “撤回消息”表示执行操作时走 `dws chat`；“监听/订阅消息撤回”才走本事件能力。
+- “贴标签”表示给消息贴表情时，对应 `emotion` 表情回应事件。
 
 ## Consume commands
 
@@ -54,6 +68,36 @@ dws event consume user_im_message_receive_o2o \
 dws event consume user_im_message_receive_group \
   --group cidxxxxxxxx \
   -f ndjson
+
+# 指定单聊已读事件
+dws event consume user_im_message_read_o2o \
+  --user 507971 \
+  -f ndjson
+
+# 指定群聊已读事件
+dws event consume user_im_message_read_group \
+  --group cidxxxxxxxx \
+  -f ndjson
+
+# 指定单聊撤回事件
+dws event consume user_im_message_recall_o2o \
+  --user 507971 \
+  -f ndjson
+
+# 指定群聊撤回事件
+dws event consume user_im_message_recall_group \
+  --group cidxxxxxxxx \
+  -f ndjson
+
+# 指定单聊表情回应事件
+dws event consume user_im_message_emotion_o2o \
+  --user 507971 \
+  -f ndjson
+
+# 指定群聊表情回应事件
+dws event consume user_im_message_emotion_group \
+  --group cidxxxxxxxx \
+  -f ndjson
 ```
 
 ## Self-test triggers
@@ -63,6 +107,12 @@ dws event consume user_im_message_receive_group \
 | `user_im_message_receive_at` | `--duration 10m -f ndjson` | 让任意可触达用户在群里 @ 当前登录用户 |
 | `user_im_message_receive_o2o` | `--user <userId> --duration 10m -f ndjson` | 让对端用户给当前登录用户发送单聊消息 |
 | `user_im_message_receive_group` | `--group <openConversationId> --duration 10m -f ndjson` | 让任意用户在该群发送消息 |
+| `user_im_message_read_o2o` | `--user <userId> --duration 10m -f ndjson` | 当前用户给对端发送单聊消息，再让对端打开并阅读 |
+| `user_im_message_read_group` | `--group <openConversationId> --duration 10m -f ndjson` | 当前用户在群内发送消息，再让群成员打开并阅读 |
+| `user_im_message_recall_o2o` | `--user <userId> --duration 10m -f ndjson` | 在指定单聊中发送并撤回一条消息 |
+| `user_im_message_recall_group` | `--group <openConversationId> --duration 10m -f ndjson` | 在指定群聊中发送并撤回一条消息 |
+| `user_im_message_emotion_o2o` | `--user <userId> --duration 10m -f ndjson` | 在指定单聊中给消息添加表情回应 |
+| `user_im_message_emotion_group` | `--group <openConversationId> --duration 10m -f ndjson` | 在指定群聊中给消息添加表情回应 |
 
 stderr 出现 `connected bus pid=...` 表示本地 consume 已连接到事件 bus。stdout 每行是一个事件 JSON。
 
@@ -110,6 +160,8 @@ stderr 出现 `connected bus pid=...` 表示本地 consume 已连接到事件 bu
 | `create_time` | `payload.body.createTime` | 消息创建时间 |
 | `event_time` | `payload.event_time` | 消息事件时间戳 |
 
+上表业务字段只适用于 `user_im_message_receive_*`。已读、撤回、表情回应事件当前只保证解析后的 `type`、`event_id`、`timestamp`、`subscribe_id` 和开放对象 `payload`；不要提前假设 `payload` 中存在已读人、撤回人、表情类型或消息 ID。
+
 ## Filtering
 
 优先用订阅规则参数缩小服务端推送范围：
@@ -117,7 +169,7 @@ stderr 出现 `connected bus pid=...` 表示本地 consume 已连接到事件 bu
 - 单聊用 `--user`。
 - 群消息用 `--group`。
 
-额外文本过滤再用 `--query` 或 `--filter-json`：
+收消息事件需要额外文本过滤时再用 `--query` 或 `--filter-json`：
 
 ```bash
 dws event consume user_im_message_receive_group \
@@ -128,12 +180,17 @@ dws event consume user_im_message_receive_group \
 
 `--filter-json` 可以使用业务别名，也可以使用真实路径。优先使用 schema 字段名表达意图；需要和服务端联调时再使用真实路径。
 
+已读、撤回、表情回应事件暂无稳定 payload schema，不推荐使用 `--query` 或 `--filter-json`。
+
 ## Status and stop
 
 ```bash
 dws event status --event user_im_message_receive_at
 dws event status --event user_im_message_receive_o2o
 dws event status --event user_im_message_receive_group
+dws event status --event user_im_message_read_o2o
+dws event status --event user_im_message_recall_group
+dws event status --event user_im_message_emotion_o2o
 ```
 
 `status` 同时展示服务端 `Subscriptions` 和本地 `Consumers`。`Consumers` 表里的 PID、事件码、`subscribe_id`、received/dropped 计数用于确认当前前台 consume 是否还挂在 personal bus 上。
@@ -155,7 +212,7 @@ dws event stop --all
 ## Troubleshooting
 
 - 没有输出：先确认 stderr 已出现 `connected bus pid=...`。
-- 参数缺失：单聊必须有对端 ID，群消息必须有 openConversationId。
+- 参数缺失：所有 o2o 事件必须有对端 ID，所有 group 事件必须有 openConversationId。
 - 收到非预期消息：检查 stdout 的 `subscribe_id` 是否等于当前命令创建/复用的订阅 ID。
 - 需要判断服务端是否推到当前连接：临时加 `--debug --debug-raw-events`，排查后去掉。
 - 需要长期运行：交给外部进程管理；不要把消息历史查询写成轮询脚本。

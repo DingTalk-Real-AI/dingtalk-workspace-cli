@@ -23,10 +23,16 @@ import (
 )
 
 const (
-	EventMention    = "user_im_message_receive_at"
-	EventSingleChat = "user_im_message_receive_o2o"
-	EventInChat     = "user_im_message_receive_group"
-	EventFromUser   = "user_im_message_receive_user"
+	EventMention      = "user_im_message_receive_at"
+	EventSingleChat   = "user_im_message_receive_o2o"
+	EventInChat       = "user_im_message_receive_group"
+	EventFromUser     = "user_im_message_receive_user"
+	EventReadO2O      = "user_im_message_read_o2o"
+	EventReadGroup    = "user_im_message_read_group"
+	EventRecallO2O    = "user_im_message_recall_o2o"
+	EventRecallGroup  = "user_im_message_recall_group"
+	EventEmotionO2O   = "user_im_message_emotion_o2o"
+	EventEmotionGroup = "user_im_message_emotion_group"
 )
 
 const (
@@ -106,6 +112,72 @@ var definitions = []Definition{
 		Public:         true,
 	},
 	{
+		EventKey:       EventReadO2O,
+		DisplayName:    "指定单聊消息已读",
+		Description:    "当前用户在指定单聊中发送的消息被对方已读",
+		Category:       "im",
+		RuleType:       "singleChat",
+		Status:         StatusEnabled,
+		RequiredParams: []string{"user"},
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventReadGroup,
+		DisplayName:    "指定群消息已读",
+		Description:    "当前用户在指定群聊中发送的消息被已读",
+		Category:       "im",
+		RuleType:       "group",
+		Status:         StatusEnabled,
+		RequiredParams: []string{"group"},
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventRecallO2O,
+		DisplayName:    "指定单聊消息撤回",
+		Description:    "指定单聊中的消息被撤回",
+		Category:       "im",
+		RuleType:       "singleChat",
+		Status:         StatusEnabled,
+		RequiredParams: []string{"user"},
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventRecallGroup,
+		DisplayName:    "指定群消息撤回",
+		Description:    "指定群聊中的消息被撤回",
+		Category:       "im",
+		RuleType:       "group",
+		Status:         StatusEnabled,
+		RequiredParams: []string{"group"},
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventEmotionO2O,
+		DisplayName:    "指定单聊消息表情回应",
+		Description:    "指定单聊中的消息收到表情回应（贴表情）",
+		Category:       "im",
+		RuleType:       "singleChat",
+		Status:         StatusEnabled,
+		RequiredParams: []string{"user"},
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventEmotionGroup,
+		DisplayName:    "指定群消息表情回应",
+		Description:    "指定群聊中的消息收到表情回应（贴表情）",
+		Category:       "im",
+		RuleType:       "group",
+		Status:         StatusEnabled,
+		RequiredParams: []string{"group"},
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
 		EventKey:       EventFromUser,
 		DisplayName:    "指定发送人消息",
 		Description:    "当前用户收到的特别关注用户的消息",
@@ -165,6 +237,10 @@ func Catalog(category string, enabledOnly, includePending bool) []Definition {
 func BuildSchemaDocument(def Definition) SchemaDocument {
 	requiredParams := make([]string, 0, len(def.RequiredParams))
 	requiredParams = append(requiredParams, def.RequiredParams...)
+	schema := personalActionSchema(def.EventKey)
+	if isMessageReceiveEvent(def.EventKey) {
+		schema = personalMessageSchema(def.EventKey)
+	}
 	return SchemaDocument{
 		EventKey:       def.EventKey,
 		DisplayName:    def.DisplayName,
@@ -173,7 +249,7 @@ func BuildSchemaDocument(def Definition) SchemaDocument {
 		RuleType:       def.RuleType,
 		RequiredParams: requiredParams,
 		JQRootPath:     ".data | fromjson",
-		Schema:         personalMessageSchema(def.EventKey),
+		Schema:         schema,
 	}
 }
 
@@ -193,18 +269,18 @@ func BuildRuleParam(eventKey string, opts RuleOptions) (ruleType string, rulePar
 	switch def.RuleType {
 	case "at":
 		if userID != "" {
-			return "", nil, fmt.Errorf("--user is only supported for %s", EventSingleChat)
+			return "", nil, fmt.Errorf("--user is not supported for %s", eventKey)
 		}
 		if groupID != "" {
-			return "", nil, fmt.Errorf("--group is only supported for %s", EventInChat)
+			return "", nil, fmt.Errorf("--group is not supported for %s", eventKey)
 		}
 		return def.RuleType, map[string]any{}, nil
 	case "singleChat":
 		if groupID != "" {
-			return "", nil, fmt.Errorf("--group is only supported for %s", EventInChat)
+			return "", nil, fmt.Errorf("--group is not supported for %s; use --user", eventKey)
 		}
 		if userID == "" {
-			return "", nil, fmt.Errorf("--user is required")
+			return "", nil, fmt.Errorf("--user is required for %s", eventKey)
 		}
 		return def.RuleType, map[string]any{
 			"targetUid":     userID,
@@ -212,10 +288,10 @@ func BuildRuleParam(eventKey string, opts RuleOptions) (ruleType string, rulePar
 		}, nil
 	case "sender":
 		if groupID != "" {
-			return "", nil, fmt.Errorf("--group is only supported for %s", EventInChat)
+			return "", nil, fmt.Errorf("--group is not supported for %s; use --user", eventKey)
 		}
 		if userID == "" {
-			return "", nil, fmt.Errorf("--user is required")
+			return "", nil, fmt.Errorf("--user is required for %s", eventKey)
 		}
 		return def.RuleType, map[string]any{
 			"targetUid":     userID,
@@ -223,10 +299,10 @@ func BuildRuleParam(eventKey string, opts RuleOptions) (ruleType string, rulePar
 		}, nil
 	case "group":
 		if userID != "" {
-			return "", nil, fmt.Errorf("--user is only supported for %s", EventSingleChat)
+			return "", nil, fmt.Errorf("--user is not supported for %s; use --group", eventKey)
 		}
 		if groupID == "" {
-			return "", nil, fmt.Errorf("--group is required")
+			return "", nil, fmt.Errorf("--group is required for %s", eventKey)
 		}
 		return def.RuleType, map[string]any{
 			"openConversationId": groupID,
@@ -392,6 +468,46 @@ func personalMessageSchema(eventKey string) map[string]any {
 				"format":      "timestamp_ms",
 			},
 		},
+	}
+}
+
+func personalActionSchema(eventKey string) map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"type": map[string]any{
+				"type":        "string",
+				"description": "事件类型，对应 eventKey，固定为当前 event_key",
+				"enum":        []string{eventKey},
+			},
+			"event_id": map[string]any{
+				"type":        "string",
+				"description": "事件 ID，对应 eventId，可用于去重",
+			},
+			"timestamp": map[string]any{
+				"type":        "integer",
+				"description": "事件发生时间戳，对应 occurredAtMs",
+				"format":      "timestamp_ms",
+			},
+			"subscribe_id": map[string]any{
+				"type":        "string",
+				"description": "订阅 ID，对应 subId",
+			},
+			"payload": map[string]any{
+				"type":                 "object",
+				"description":          "事件业务负载；具体字段等待真实推送样本确认",
+				"additionalProperties": true,
+			},
+		},
+	}
+}
+
+func isMessageReceiveEvent(eventKey string) bool {
+	switch eventKey {
+	case EventMention, EventSingleChat, EventInChat, EventFromUser:
+		return true
+	default:
+		return false
 	}
 }
 
