@@ -46,7 +46,9 @@ func init() {
 	registerRequireOneOf("doc.update_document_block", "text", "heading", "element")
 	registerRequireOneOf("pat.batch_grant", "scope", "product", "products", "domain", "domains", "recommend")
 	registerRequireOneOf("mail.search_mail_users", "keyword", "employee-no")
-	registerRequireOneOf("mail.update_user_message_template", "from", "subject", "content", "body", "name", "to", "cc")
+	// --body is a hidden compatibility alias for the public --content flag.
+	// Schema constraints describe the reviewed public surface only.
+	registerRequireOneOf("mail.update_user_message_template", "from", "subject", "content", "name", "to", "cc")
 	registerRequireOneOf("report.create_report", "contents", "contents-file")
 	RegisterRuntimeSchemaConstraints("sheet.range_set_style", RuntimeSchemaConstraints{
 		MutuallyExclusive: [][]string{

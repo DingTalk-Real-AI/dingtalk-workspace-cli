@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -167,41 +166,96 @@ func TestRuntimeSchemaParameterMetadataMapsToGeneratedCatalog(t *testing.T) {
 			parameter(flagName)
 		}
 		for _, flagName := range metadata.Required {
-			if value := parameter(flagName); value != nil && value["required"] != true {
-				t.Errorf("%s --%s required = %#v", canonicalPath, flagName, value["required"])
+			if value := parameter(flagName); value != nil {
+				assertRuntimeSchemaMetadataCandidate(t, canonicalPath, flagName, value, "required", true)
 			}
 		}
 		for flagName, want := range metadata.RequiredWhen {
-			if value := parameter(flagName); value != nil && value["required_when"] != want {
-				t.Errorf("%s --%s required_when = %#v, want %q", canonicalPath, flagName, value["required_when"], want)
+			if value := parameter(flagName); value != nil {
+				assertRuntimeSchemaMetadataCandidate(t, canonicalPath, flagName, value, "required_when", want)
 			}
 		}
 		for flagName, want := range metadata.Formats {
-			if value := parameter(flagName); value != nil && value["format"] != want {
-				t.Errorf("%s --%s format = %#v, want %q", canonicalPath, flagName, value["format"], want)
+			if value := parameter(flagName); value != nil {
+				assertRuntimeSchemaMetadataCandidate(t, canonicalPath, flagName, value, "format", want)
 			}
 		}
 		for flagName, want := range metadata.Examples {
-			if value := parameter(flagName); value != nil && value["example"] != want {
-				t.Errorf("%s --%s example = %#v, want %q", canonicalPath, flagName, value["example"], want)
+			if value := parameter(flagName); value != nil {
+				assertRuntimeSchemaMetadataCandidate(t, canonicalPath, flagName, value, "example", want)
 			}
 		}
 		for flagName, want := range metadata.Enums {
 			if value := parameter(flagName); value != nil {
-				var gotStrings []string
-				switch got := value["enum"].(type) {
-				case []string:
-					gotStrings = append([]string(nil), got...)
-				case []any:
-					for _, item := range got {
-						gotStrings = append(gotStrings, item.(string))
-					}
-				}
-				if !reflect.DeepEqual(gotStrings, want) {
-					t.Errorf("%s --%s enum = %#v, want %#v", canonicalPath, flagName, gotStrings, want)
-				}
+				assertRuntimeSchemaMetadataCandidate(t, canonicalPath, flagName, value, "enum", want)
 			}
 		}
+	}
+}
+
+// assertRuntimeSchemaMetadataCandidate verifies the field-level resolver
+// contract without assuming which source wins. Typed runtime metadata must
+// remain visible as a candidate, resolution must select exactly one candidate,
+// and the final payload/envelope must agree with that selected candidate.
+func assertRuntimeSchemaMetadataCandidate(t testing.TB, canonicalPath, flagName string, parameter map[string]any, field string, typedValue any) {
+	t.Helper()
+	fieldProvenance, _ := parameter["field_provenance"].(map[string]any)
+	provenance, _ := fieldProvenance[field].(map[string]any)
+	if provenance == nil {
+		t.Errorf("%s --%s %s has no final resolver provenance", canonicalPath, flagName, field)
+		return
+	}
+
+	foundTypedCandidate := false
+	var selected map[string]any
+	selectedCount := 0
+	for _, candidate := range schemaContractObjectSlice(provenance["candidates"]) {
+		if candidate["source"] == "typed_parameter_metadata" && schemaContractJSONEqual(candidate["value"], typedValue) {
+			foundTypedCandidate = true
+		}
+		if isSelected, _ := candidate["selected"].(bool); isSelected {
+			selected = candidate
+			selectedCount++
+		}
+	}
+	if !foundTypedCandidate {
+		t.Errorf("%s --%s %s provenance has no typed_parameter_metadata candidate with value %#v", canonicalPath, flagName, field, typedValue)
+	}
+	if selectedCount != 1 {
+		t.Errorf("%s --%s %s provenance selected candidates = %d, want 1", canonicalPath, flagName, field, selectedCount)
+		return
+	}
+	if got, want := parameter[field], selected["value"]; !schemaContractJSONEqual(got, want) {
+		t.Errorf("%s --%s final %s = %#v, selected provenance value = %#v", canonicalPath, flagName, field, got, want)
+	}
+	if got, want := provenance["value"], selected["value"]; !schemaContractJSONEqual(got, want) {
+		t.Errorf("%s --%s %s provenance value = %#v, selected candidate value = %#v", canonicalPath, flagName, field, got, want)
+	}
+	if got, want := provenance["precedence"], selected["precedence"]; got != want {
+		t.Errorf("%s --%s %s provenance precedence = %#v, selected candidate precedence = %#v", canonicalPath, flagName, field, got, want)
+	}
+}
+
+func schemaContractJSONEqual(left, right any) bool {
+	leftJSON, leftErr := json.Marshal(left)
+	rightJSON, rightErr := json.Marshal(right)
+	return leftErr == nil && rightErr == nil && bytes.Equal(leftJSON, rightJSON)
+}
+
+func schemaContractObjectSlice(value any) []map[string]any {
+	switch typed := value.(type) {
+	case []map[string]any:
+		return typed
+	case []any:
+		out := make([]map[string]any, 0, len(typed))
+		for _, item := range typed {
+			if object, ok := item.(map[string]any); ok {
+				out = append(out, object)
+			}
+		}
+		return out
+	default:
+		return nil
 	}
 }
 

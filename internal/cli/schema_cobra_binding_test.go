@@ -4,6 +4,7 @@
 package cli
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -266,7 +267,9 @@ func TestBindEffectiveCommandRegistryCompatibilityGateIsOrderIndependentOfCanoni
 	})
 	runtimeSchemaParameterMetadataByCanonical[canonical] = RuntimeSchemaParameterMetadata{
 		RequiredWhen: map[string]string{"query": "item-id is present"},
+		Formats:      map[string]string{"query": "typed-format"},
 		Examples:     map[string]string{"query": "open"},
+		Enums:        map[string][]string{"query": {"open", "closed"}},
 	}
 	runtimeSchemaConstraintsByCanonical[canonical] = RuntimeSchemaConstraints{
 		RequireTogether: [][]string{{"item-id", "query"}},
@@ -277,11 +280,49 @@ func TestBindEffectiveCommandRegistryCompatibilityGateIsOrderIndependentOfCanoni
 	alias := exactSchemaCommand(root, "item legacy")
 	primary.Flags().String("query", "", "query")
 	alias.Flags().String("query", "", "query")
+	AnnotateRuntimeFlagFormat(primary, "query", "native-format")
+	AnnotateRuntimeFlagFormat(alias, "query", "native-format")
+	AnnotateRuntimeFlagExample(primary, "query", "native-example")
+	AnnotateRuntimeFlagExample(alias, "query", "native-example")
+	AnnotateRuntimeFlagEnum(primary, "query", "native-a", "native-b")
+	AnnotateRuntimeFlagEnum(alias, "query", "native-a", "native-b")
 	// Simulate a previous Schema collection pass, which materializes canonical
 	// metadata only on the primary leaf. Binding must model the same canonical
 	// facts on both paths and remain deterministic on the next pass.
 	applyRuntimeSchemaParameterMetadata(primary, canonical)
 	AnnotateRuntimeConstraints(primary, runtimeSchemaConstraintsByCanonical[canonical])
+	primaryFlag := primary.Flags().Lookup("query")
+	if got := firstFlagAnnotation(primaryFlag, "x-cli-format"); got != "native-format" {
+		t.Fatalf("typed metadata overwrote native format annotation: %q", got)
+	}
+	if got := firstFlagAnnotation(primaryFlag, runtimeSchemaFlagMetadataFormatAnnotation); got != "typed-format" {
+		t.Fatalf("typed format annotation = %q", got)
+	}
+	if got := firstFlagAnnotation(primaryFlag, runtimeSchemaFlagExampleAnnotation); got != "native-example" {
+		t.Fatalf("typed metadata overwrote native example annotation: %q", got)
+	}
+	if got := firstFlagAnnotation(primaryFlag, runtimeSchemaFlagMetadataExampleAnnotation); got != "open" {
+		t.Fatalf("typed example annotation = %q", got)
+	}
+	if got := runtimeFlagEnum(primaryFlag); !reflect.DeepEqual(got, []string{"native-a", "native-b"}) {
+		t.Fatalf("typed metadata overwrote native enum annotation: %#v", got)
+	}
+	if got := runtimeFlagEnumAnnotation(primaryFlag, runtimeSchemaFlagMetadataEnumAnnotation); !reflect.DeepEqual(got, []string{"open", "closed"}) {
+		t.Fatalf("typed enum annotation = %#v", got)
+	}
+	aliasAnnotations := effectiveCompatibilityFlagAnnotations(alias.Flags().Lookup("query"), nil, runtimeSchemaParameterMetadataByCanonical[canonical])
+	if got := firstCompatibilityAnnotation(aliasAnnotations, "x-cli-format"); got != "native-format" {
+		t.Fatalf("compatibility overlay dropped native format annotation: %q", got)
+	}
+	if got := firstCompatibilityAnnotation(aliasAnnotations, runtimeSchemaFlagMetadataFormatAnnotation); got != "typed-format" {
+		t.Fatalf("compatibility overlay dropped typed format annotation: %q", got)
+	}
+	if got := aliasAnnotations["x-cli-enum"]; !reflect.DeepEqual(got, []string{"native-a", "native-b"}) {
+		t.Fatalf("compatibility overlay dropped native enum annotation: %#v", got)
+	}
+	if got := aliasAnnotations[runtimeSchemaFlagMetadataEnumAnnotation]; !reflect.DeepEqual(got, []string{"open", "closed"}) {
+		t.Fatalf("compatibility overlay dropped typed enum annotation: %#v", got)
+	}
 
 	effective := mustEffectiveCommandRegistry(t, []CommandSpec{{
 		CanonicalPath:  canonical,

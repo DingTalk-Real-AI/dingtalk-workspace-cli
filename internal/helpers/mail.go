@@ -1861,6 +1861,9 @@ user 对象字段：
 			if v, _ := cmd.Flags().GetString("cc"); v != "" {
 				toolArgs["ccRecipients"] = parseRecipients(v)
 			}
+			if !hasNonEmptyMailTemplateUpdate(toolArgs) {
+				return fmt.Errorf("至少需要指定一个更新字段：--from / --subject / --content（或 --body）/ --name / --to / --cc")
+			}
 			err := callMCPTool("update_user_message_template", toolArgs)
 			if cliErr, ok := err.(*CLIError); ok && strings.Contains(cliErr.Message, "Invalid parameter") {
 				cliErr.Suggestion = "邮箱服务端仅支持更新草稿模板 (创建时带 --is-draft)；非草稿模板不可修改，请先 dws mail template delete 后用 --is-draft 重建"
@@ -2825,6 +2828,23 @@ func parseRecipients(raw string) []string {
 		}
 	}
 	return recipients
+}
+
+// hasNonEmptyMailTemplateUpdate validates the actual RPC payload rather than
+// flag Changed state. That keeps the CLI runtime contract aligned with the
+// Schema require_one_of rule and rejects blank recipient lists as no-ops.
+func hasNonEmptyMailTemplateUpdate(toolArgs map[string]any) bool {
+	for _, name := range []string{"from", "subject", "body", "name"} {
+		if value, ok := toolArgs[name].(string); ok && strings.TrimSpace(value) != "" {
+			return true
+		}
+	}
+	for _, name := range []string{"toRecipients", "ccRecipients"} {
+		if value, ok := toolArgs[name].([]string); ok && len(value) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func validateMailboxThreadLimit(cmd *cobra.Command) (int, error) {

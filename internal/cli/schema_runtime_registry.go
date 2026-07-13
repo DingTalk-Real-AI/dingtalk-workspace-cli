@@ -466,6 +466,15 @@ func validateFinalSchemaProvenanceCoverage(registry SchemaRegistry) error {
 				if parameter.InterfaceType != "" {
 					require(owner, "interface_type", parameter.FieldProvenance)
 				}
+				if parameter.Format != "" {
+					require(owner, "format", parameter.FieldProvenance)
+				}
+				if len(parameter.Example) > 0 {
+					require(owner, "example", parameter.FieldProvenance)
+				}
+				if len(parameter.Enum) > 0 {
+					require(owner, "enum", parameter.FieldProvenance)
+				}
 			}
 		}
 	}

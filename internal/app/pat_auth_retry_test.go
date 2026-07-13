@@ -129,6 +129,10 @@ func TestPrintPatAuthError_HumanReadable(t *testing.T) {
 
 func TestPrintPatAuthJSON_MachineReadable(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
+	// PAT browser policy is user-configurable. Isolate the config directory so
+	// this serializer test exercises the built-in CLI-owned default instead of
+	// inheriting the developer's ~/.dws/pat_policy.json.
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	var buf strings.Builder
 	scopeErr := &PatScopeError{
 		Identity:     "user",

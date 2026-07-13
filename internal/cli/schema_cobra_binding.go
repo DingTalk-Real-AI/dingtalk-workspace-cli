@@ -379,13 +379,13 @@ func effectiveCompatibilityFlagAnnotations(flag *pflag.Flag, bindings map[string
 		}
 	}
 	set(runtimeSchemaFlagMetadataRequiredWhenAnnotation, metadata.RequiredWhen[flag.Name])
-	set("x-cli-format", metadata.Formats[flag.Name])
-	set(runtimeSchemaFlagExampleAnnotation, metadata.Examples[flag.Name])
+	set(runtimeSchemaFlagMetadataFormatAnnotation, metadata.Formats[flag.Name])
+	set(runtimeSchemaFlagMetadataExampleAnnotation, metadata.Examples[flag.Name])
 	if values := metadata.Enums[flag.Name]; len(values) > 0 {
 		if annotations == nil {
 			annotations = map[string][]string{}
 		}
-		annotations["x-cli-enum"] = append([]string(nil), values...)
+		annotations[runtimeSchemaFlagMetadataEnumAnnotation] = append([]string(nil), values...)
 	}
 	return annotations
 }

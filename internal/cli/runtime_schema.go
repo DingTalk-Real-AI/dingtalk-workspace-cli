@@ -297,19 +297,7 @@ func AnnotateRuntimeFlagEnum(cmd *cobra.Command, flagName string, values ...stri
 	if flag == nil {
 		return
 	}
-	clean := make([]string, 0, len(values))
-	for _, value := range values {
-		if value = strings.TrimSpace(value); value != "" {
-			clean = append(clean, value)
-		}
-	}
-	if len(clean) == 0 {
-		return
-	}
-	if flag.Annotations == nil {
-		flag.Annotations = map[string][]string{}
-	}
-	flag.Annotations["x-cli-enum"] = clean
+	setFlagAnnotationValues(flag, "x-cli-enum", values...)
 }
 
 // AnnotateRuntimeFlagExample records a valid representative CLI value.
@@ -391,6 +379,25 @@ func setFlagAnnotation(flag *pflag.Flag, key, value string) {
 		flag.Annotations = map[string][]string{}
 	}
 	flag.Annotations[key] = []string{value}
+}
+
+func setFlagAnnotationValues(flag *pflag.Flag, key string, values ...string) {
+	if flag == nil {
+		return
+	}
+	clean := make([]string, 0, len(values))
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			clean = append(clean, value)
+		}
+	}
+	if len(clean) == 0 {
+		return
+	}
+	if flag.Annotations == nil {
+		flag.Annotations = map[string][]string{}
+	}
+	flag.Annotations[key] = clean
 }
 
 func runtimeSchemaPayload(root *cobra.Command, args []string) (map[string]any, error) {
@@ -893,7 +900,7 @@ func runtimeSchemaSourcePriority(source string) (int, string) {
 		return runtimeSchemaRankToolHint, runtimeSchemaPrecedenceToolHint
 	case "mcp_metadata", "pinned_mcp_metadata":
 		return runtimeSchemaRankMCP, runtimeSchemaPrecedenceMCP
-	case "flag_name_inference", "usage_required_inference", "cobra_help":
+	case "flag_name_inference", "usage_required_inference", "usage_format_inference", "cobra_help":
 		return runtimeSchemaRankInference, runtimeSchemaPrecedenceInference
 	case "metadata_source_resolution":
 		return runtimeSchemaRankDerived, runtimeSchemaPrecedenceDerived
@@ -1114,20 +1121,49 @@ func runtimeCommandParameterSpecs(cmd *cobra.Command, canonicalPath string, hint
 				parameter.InterfaceDefault = runtimeSchemaJSONString(interfaceDefault)
 			}
 		}
-		if format := firstFlagAnnotation(flag, "x-cli-format"); format != "" {
-			parameter.Format = format
-		} else if format := inferredRuntimeFlagFormat(flag); format != "" {
-			parameter.Format = format
-		} else if hasEmbeddedParam && strings.TrimSpace(embeddedParam.Format) != "" {
-			parameter.Format = strings.TrimSpace(embeddedParam.Format)
+		formatWinner, err := resolveRuntimeSchemaCandidate("format",
+			runtimeSchemaStringCandidate(firstFlagAnnotation(flag, runtimeSchemaFlagMetadataFormatAnnotation), "typed_parameter_metadata"),
+			runtimeSchemaStringCandidate(firstFlagAnnotation(flag, "x-cli-format"), "native_annotation"),
+			runtimeSchemaStringCandidate(embeddedParam.Format, "mcp_metadata"),
+			runtimeSchemaStringCandidate(inferredRuntimeFlagFormat(flag), "usage_format_inference"),
+			runtimeSchemaCandidate("", true, "default"),
+		)
+		if err != nil {
+			resolveErr = fmt.Errorf("flag --%s: %w", flag.Name, err)
+			return
 		}
-		if enum := runtimeFlagEnum(flag); len(enum) > 0 {
-			parameter.Enum = enum
-		} else if hasEmbeddedParam && len(embeddedParam.Enum) > 0 {
-			parameter.Enum = append([]string(nil), embeddedParam.Enum...)
+		if format, _ := formatWinner.Value.(string); format != "" {
+			parameter.Format = format
+			fieldProvenance["format"] = runtimeSchemaFieldProvenance(formatWinner)
 		}
-		if example := firstFlagAnnotation(flag, runtimeSchemaFlagExampleAnnotation); example != "" {
+
+		enumWinner, err := resolveRuntimeSchemaCandidate("enum",
+			runtimeSchemaEnumCandidate(runtimeFlagEnumAnnotation(flag, runtimeSchemaFlagMetadataEnumAnnotation), "typed_parameter_metadata"),
+			runtimeSchemaEnumCandidate(runtimeFlagEnum(flag), "native_annotation"),
+			runtimeSchemaEnumCandidate(embeddedParam.Enum, "mcp_metadata"),
+			runtimeSchemaCandidate([]string{}, true, "default"),
+		)
+		if err != nil {
+			resolveErr = fmt.Errorf("flag --%s: %w", flag.Name, err)
+			return
+		}
+		if enum, _ := enumWinner.Value.([]string); len(enum) > 0 {
+			parameter.Enum = append([]string(nil), enum...)
+			fieldProvenance["enum"] = runtimeSchemaFieldProvenance(enumWinner)
+		}
+
+		exampleWinner, err := resolveRuntimeSchemaCandidate("example",
+			runtimeSchemaStringCandidate(firstFlagAnnotation(flag, runtimeSchemaFlagMetadataExampleAnnotation), "typed_parameter_metadata"),
+			runtimeSchemaStringCandidate(firstFlagAnnotation(flag, runtimeSchemaFlagExampleAnnotation), "native_annotation"),
+			runtimeSchemaCandidate("", true, "default"),
+		)
+		if err != nil {
+			resolveErr = fmt.Errorf("flag --%s: %w", flag.Name, err)
+			return
+		}
+		if example, _ := exampleWinner.Value.(string); example != "" {
 			parameter.Example = runtimeSchemaJSONString(example)
+			fieldProvenance["example"] = runtimeSchemaFieldProvenance(exampleWinner)
 		}
 		if seenParameterNames[parameter.Name] {
 			resolveErr = fmt.Errorf("multiple CLI flags resolve to Schema parameter %q", parameter.Name)
@@ -1470,10 +1506,14 @@ func firstFlagAnnotation(flag *pflag.Flag, key string) string {
 }
 
 func runtimeFlagEnum(flag *pflag.Flag) []string {
+	return runtimeFlagEnumAnnotation(flag, "x-cli-enum")
+}
+
+func runtimeFlagEnumAnnotation(flag *pflag.Flag, annotation string) []string {
 	if flag == nil || flag.Annotations == nil {
 		return nil
 	}
-	values := flag.Annotations["x-cli-enum"]
+	values := flag.Annotations[annotation]
 	if len(values) == 0 {
 		return nil
 	}
@@ -1484,6 +1524,14 @@ func runtimeFlagEnum(flag *pflag.Flag) []string {
 		}
 	}
 	return out
+}
+
+func runtimeSchemaEnumCandidate(values []string, source string) runtimeSchemaFieldCandidate {
+	// Normalize at the candidate boundary exactly as ParameterSpec does. This
+	// keeps the selected provenance value byte-for-byte aligned with the final
+	// delivery even when an authored enum repeats a value.
+	clean := stableUniqueStrings(values)
+	return runtimeSchemaCandidate(clean, len(clean) > 0, source)
 }
 
 func inferredRuntimeFlagFormat(flag *pflag.Flag) string {

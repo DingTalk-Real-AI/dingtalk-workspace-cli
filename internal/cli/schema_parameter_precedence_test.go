@@ -432,7 +432,7 @@ func schemaParameterFieldHasCandidate(t *testing.T, parameter map[string]any, fi
 		if raw, rawOK := schemaParameterFieldProvenance(t, parameter, field)["candidates"].([]any); rawOK {
 			for _, candidate := range raw {
 				item, _ := candidate.(map[string]any)
-				if schemaString(item["source"]) == source && item["value"] == value {
+				if schemaString(item["source"]) == source && schemaParameterJSONEqual(item["value"], value) {
 					return true
 				}
 			}
@@ -440,20 +440,33 @@ func schemaParameterFieldHasCandidate(t *testing.T, parameter map[string]any, fi
 		return false
 	}
 	for _, item := range items {
-		if schemaString(item["source"]) == source && item["value"] == value {
+		if schemaString(item["source"]) == source && schemaParameterJSONEqual(item["value"], value) {
 			return true
 		}
 	}
 	return false
 }
 
+func schemaParameterJSONEqual(left, right any) bool {
+	leftJSON, leftErr := json.Marshal(left)
+	rightJSON, rightErr := json.Marshal(right)
+	return leftErr == nil && rightErr == nil && string(leftJSON) == string(rightJSON)
+}
+
 func TestRuntimeSchemaParameterPrecedenceTypedMetadataBeatsToolHint(t *testing.T) {
 	_, leaf := manualSchemaHintTestTree()
 	canonical := "sample.search_items"
+	flag := leaf.Flags().Lookup("query")
+	setFlagAnnotation(flag, "x-cli-format", "native-format")
+	setFlagAnnotation(flag, runtimeSchemaFlagExampleAnnotation, "native-example")
+	setFlagAnnotationValues(flag, "x-cli-enum", "native-a", "native-b")
 	previous, existed := runtimeSchemaParameterMetadataByCanonical[canonical]
 	runtimeSchemaParameterMetadataByCanonical[canonical] = RuntimeSchemaParameterMetadata{
 		Required:     []string{"query"},
 		RequiredWhen: map[string]string{"query": "typed condition"},
+		Formats:      map[string]string{"query": "typed-format"},
+		Examples:     map[string]string{"query": "typed-example"},
+		Enums:        map[string][]string{"query": {"typed-a", "typed-b"}},
 	}
 	t.Cleanup(func() {
 		if existed {
@@ -466,19 +479,163 @@ func TestRuntimeSchemaParameterPrecedenceTypedMetadataBeatsToolHint(t *testing.T
 
 	parameters, err := runtimeCommandParameters(leaf, canonical, map[string]ParameterSchemaHint{
 		"query": {Required: boolPointer(false), RequiredWhen: "tool hint condition"},
-	}, nil, RuntimeSchemaConstraints{})
+	}, map[string]embeddedMCPParamMeta{
+		"query": {Format: "mcp-format", Enum: []string{"mcp-a", "mcp-b"}},
+	}, RuntimeSchemaConstraints{})
 	if err != nil {
 		t.Fatalf("runtimeCommandParameters() error = %v", err)
 	}
 	query := schemaParameterEntry(t, parameters, "query")
-	if query["required"] != true || query["required_when"] != "typed condition" {
+	if query["required"] != true || query["required_when"] != "typed condition" ||
+		query["format"] != "typed-format" || query["example"] != "typed-example" ||
+		!schemaParameterJSONEqual(query["enum"], []string{"typed-a", "typed-b"}) {
 		t.Fatalf("resolved query = %#v", query)
 	}
-	if source := schemaParameterFieldSource(t, query, "required"); source != "typed_parameter_metadata" {
-		t.Fatalf("required source = %q", source)
+	for _, test := range []struct {
+		field string
+		value any
+	}{
+		{field: "required", value: true},
+		{field: "required_when", value: "typed condition"},
+		{field: "format", value: "typed-format"},
+		{field: "example", value: "typed-example"},
+		{field: "enum", value: []string{"typed-a", "typed-b"}},
+	} {
+		t.Run(test.field, func(t *testing.T) {
+			if source := schemaParameterFieldSource(t, query, test.field); source != "typed_parameter_metadata" {
+				t.Fatalf("%s source = %q", test.field, source)
+			}
+			if !schemaParameterFieldHasCandidate(t, query, test.field, "typed_parameter_metadata", test.value) {
+				t.Fatalf("%s provenance omitted typed candidate %#v: %#v", test.field, test.value, schemaParameterFieldProvenance(t, query, test.field))
+			}
+		})
 	}
-	if source := schemaParameterFieldSource(t, query, "required_when"); source != "typed_parameter_metadata" {
-		t.Fatalf("required_when source = %q", source)
+	for _, candidate := range []struct {
+		field  string
+		source string
+		value  any
+	}{
+		{field: "format", source: "native_annotation", value: "native-format"},
+		{field: "format", source: "mcp_metadata", value: "mcp-format"},
+		{field: "example", source: "native_annotation", value: "native-example"},
+		{field: "enum", source: "native_annotation", value: []string{"native-a", "native-b"}},
+		{field: "enum", source: "mcp_metadata", value: []string{"mcp-a", "mcp-b"}},
+	} {
+		if !schemaParameterFieldHasCandidate(t, query, candidate.field, candidate.source, candidate.value) {
+			t.Errorf("%s provenance omitted %s=%#v: %#v", candidate.field, candidate.source, candidate.value, schemaParameterFieldProvenance(t, query, candidate.field))
+		}
+	}
+}
+
+func TestRuntimeSchemaFormatPrecedenceMatrix(t *testing.T) {
+	tests := []struct {
+		name        string
+		native      string
+		mcp         string
+		usage       string
+		want        string
+		wantSource  string
+		wantSources []string
+	}{
+		{
+			name:        "native beats mcp and inference",
+			native:      "native-format",
+			mcp:         "mcp-format",
+			usage:       "RFC3339 timestamp",
+			want:        "native-format",
+			wantSource:  "native_annotation",
+			wantSources: []string{"native_annotation", "mcp_metadata", "usage_format_inference", "default"},
+		},
+		{
+			name:        "mcp beats inference",
+			mcp:         "mcp-format",
+			usage:       "RFC3339 timestamp",
+			want:        "mcp-format",
+			wantSource:  "mcp_metadata",
+			wantSources: []string{"mcp_metadata", "usage_format_inference", "default"},
+		},
+		{
+			name:        "inference beats default",
+			usage:       "RFC3339 timestamp",
+			want:        "date-time",
+			wantSource:  "usage_format_inference",
+			wantSources: []string{"usage_format_inference", "default"},
+		},
+		{name: "empty default stays omitted"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, leaf := manualSchemaHintTestTree()
+			flag := leaf.Flags().Lookup("query")
+			if test.native != "" {
+				setFlagAnnotation(flag, "x-cli-format", test.native)
+			}
+			if test.usage != "" {
+				flag.Usage = test.usage
+			}
+			parameters, err := runtimeCommandParameters(leaf, "sample.search_items", nil, map[string]embeddedMCPParamMeta{
+				"query": {Format: test.mcp},
+			}, RuntimeSchemaConstraints{})
+			if err != nil {
+				t.Fatalf("runtimeCommandParameters() error = %v", err)
+			}
+			query := schemaParameterEntry(t, parameters, "query")
+			if test.want == "" {
+				if _, ok := query["format"]; ok {
+					t.Fatalf("empty format must stay omitted: %#v", query)
+				}
+				provenance, _ := query["field_provenance"].(map[string]any)
+				if _, ok := provenance["format"]; ok {
+					t.Fatalf("default-only omitted format must not publish provenance: %#v", provenance["format"])
+				}
+				return
+			}
+			if query["format"] != test.want {
+				t.Fatalf("format = %#v, want %q", query["format"], test.want)
+			}
+			if source := schemaParameterFieldSource(t, query, "format"); source != test.wantSource {
+				t.Fatalf("format source = %q, want %q", source, test.wantSource)
+			}
+			for _, source := range test.wantSources {
+				value := any("")
+				switch source {
+				case "native_annotation":
+					value = test.native
+				case "mcp_metadata":
+					value = test.mcp
+				case "usage_format_inference":
+					value = "date-time"
+				}
+				if !schemaParameterFieldHasCandidate(t, query, "format", source, value) {
+					t.Errorf("format provenance omitted %s=%#v: %#v", source, value, schemaParameterFieldProvenance(t, query, "format"))
+				}
+			}
+		})
+	}
+}
+
+func TestRuntimeSchemaEnumCandidatesUseUnifiedConflictGate(t *testing.T) {
+	winner, err := resolveRuntimeSchemaCandidate("enum",
+		runtimeSchemaEnumCandidate([]string{" a ", "a", "b", "b"}, "typed_parameter_metadata"),
+	)
+	if err != nil {
+		t.Fatalf("duplicate enum normalization error = %v", err)
+	}
+	if !schemaParameterJSONEqual(winner.Value, []string{"a", "b"}) {
+		t.Fatalf("normalized enum winner = %#v, want [a b]", winner.Value)
+	}
+
+	if _, err := resolveRuntimeSchemaCandidate("enum",
+		runtimeSchemaEnumCandidate([]string{"a", "b"}, "typed_parameter_metadata"),
+		runtimeSchemaEnumCandidate([]string{"a", "b"}, "typed_parameter_metadata"),
+	); err != nil {
+		t.Fatalf("equal enum candidates must coalesce: %v", err)
+	}
+	if _, err := resolveRuntimeSchemaCandidate("enum",
+		runtimeSchemaEnumCandidate([]string{"a", "b"}, "typed_parameter_metadata"),
+		runtimeSchemaEnumCandidate([]string{"a", "c"}, "typed_parameter_metadata"),
+	); err == nil || !strings.Contains(err.Error(), "conflicting equal-precedence") {
+		t.Fatalf("conflicting enum candidates error = %v", err)
 	}
 }
 

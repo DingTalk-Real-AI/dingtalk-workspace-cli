@@ -59,9 +59,13 @@ func newDevdocArticleSearchCommand() *cobra.Command {
 	cmd.Flags().String("page", "1", "页码，默认 1")
 	cmd.Flags().String("size", "10", "每页数量，默认 10")
 	cli.AnnotateRuntimePositionals(cmd, cli.RuntimeSchemaPositional{
-		Name:        "query",
+		// Keep the positional identity aligned with Cobra's authoritative
+		// `search [keyword]` contract. The public --query flag is the other
+		// member of the Schema require-one-of group; the hidden --keyword
+		// compatibility flag is deliberately not published as a parameter.
+		Name:        "keyword",
 		Type:        "string",
-		Description: "搜索关键词；也可通过 --query 或 --keyword 传入",
+		Description: "搜索关键词；也可通过 --query 传入",
 		Required:    false,
 		Index:       0,
 	})

@@ -13,6 +13,9 @@ import (
 const (
 	runtimeSchemaFlagMetadataRequiredAnnotation     = "dws.schema.metadata.required"
 	runtimeSchemaFlagMetadataRequiredWhenAnnotation = "dws.schema.metadata.required_when"
+	runtimeSchemaFlagMetadataFormatAnnotation       = "dws.schema.metadata.format"
+	runtimeSchemaFlagMetadataEnumAnnotation         = "dws.schema.metadata.enum"
+	runtimeSchemaFlagMetadataExampleAnnotation      = "dws.schema.metadata.example"
 )
 
 // RuntimeSchemaParameterMetadata contains reviewed CLI parameter semantics
@@ -58,13 +61,19 @@ func applyRuntimeSchemaParameterMetadata(cmd *cobra.Command, canonicalPath strin
 		}
 	}
 	for flagName, format := range metadata.Formats {
-		AnnotateRuntimeFlagFormat(cmd, flagName, format)
+		if flag := runtimeCommandFlag(cmd, flagName); flag != nil {
+			setFlagAnnotation(flag, runtimeSchemaFlagMetadataFormatAnnotation, strings.TrimSpace(format))
+		}
 	}
 	for flagName, values := range metadata.Enums {
-		AnnotateRuntimeFlagEnum(cmd, flagName, values...)
+		if flag := runtimeCommandFlag(cmd, flagName); flag != nil {
+			setFlagAnnotationValues(flag, runtimeSchemaFlagMetadataEnumAnnotation, values...)
+		}
 	}
 	for flagName, example := range metadata.Examples {
-		AnnotateRuntimeFlagExample(cmd, flagName, example)
+		if flag := runtimeCommandFlag(cmd, flagName); flag != nil {
+			setFlagAnnotation(flag, runtimeSchemaFlagMetadataExampleAnnotation, strings.TrimSpace(example))
+		}
 	}
 }
 
