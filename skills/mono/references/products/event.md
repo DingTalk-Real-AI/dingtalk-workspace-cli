@@ -19,6 +19,7 @@
 | `user_im_message_receive_at` | 当前用户被 @ 的消息 | 无 |
 | `user_im_message_receive_o2o` | 当前用户与指定用户的单聊消息 | `--user` |
 | `user_im_message_receive_group` | 当前用户所在指定群聊/会话的消息 | `--group` |
+| `user_im_message_receive_user` | 当前用户收到的指定用户发送的消息（单聊和群聊） | `--user` |
 | `user_im_message_read_o2o` | 指定单聊中当前用户发送的消息被已读 | `--user` |
 | `user_im_message_read_group` | 指定群聊中当前用户发送的消息被已读 | `--group` |
 | `user_im_message_recall_o2o` | 指定单聊中的消息被撤回 | `--user` |
@@ -26,7 +27,7 @@
 | `user_im_message_reaction_o2o` | 指定单聊中的消息收到表情回应 | `--user` |
 | `user_im_message_reaction_group` | 指定群聊中的消息收到表情回应 | `--group` |
 
-只承认上表 9 个事件码。默认身份就是当前用户，不要额外加身份切换 flag。
+只承认上表 10 个事件码。默认身份就是当前用户，不要额外加身份切换 flag。
 
 ## Intent mapping
 
@@ -35,6 +36,7 @@
 | "监听有人 @ 我的消息" | `event consume`，事件码 `user_im_message_receive_at`，参数 `-f ndjson` |
 | "监听我和 userId 507971 的单聊消息" | `event consume`，事件码 `user_im_message_receive_o2o`，参数 `--user 507971 -f ndjson` |
 | "监听 XX 群消息" | 先 `dws chat search --query "XX" --format json`，确认后 consume group |
+| "监听 userId 507971 发给我的消息" | `event consume`，事件码 `user_im_message_receive_user`，参数 `--user 507971 -f ndjson` |
 | "监听我发给 userId 507971 的消息是否已读" | `event consume`，事件码 `user_im_message_read_o2o`，参数 `--user 507971 -f ndjson` |
 | "监听 XX 群消息已读" | 先解析群 ID，再 consume `user_im_message_read_group --group <id>` |
 | "监听我和 userId 507971 的消息撤回" | `event consume`，事件码 `user_im_message_recall_o2o`，参数 `--user 507971 -f ndjson` |
@@ -48,7 +50,7 @@
 
 多候选必须让用户确认。缺少必填 ID 且无法解析时先追问，不要猜测。
 
-用户要求执行“撤回消息”时走 `dws chat`；只有“监听/订阅消息撤回”才走 `dws event`。“贴标签”表示给消息贴表情时，对应 `emotion` 表情回应事件。
+“我和某人的单聊”使用 `receive_o2o`；“某人发给我的消息/某人发送的消息”使用 `receive_user`，后者覆盖该发送人的单聊和群聊消息。用户要求执行“撤回消息”时走 `dws chat`；只有“监听/订阅消息撤回”才走 `dws event`。“贴标签”表示给消息贴表情时，对应 `reaction` 表情回应事件。
 
 ## Call flow
 
@@ -65,6 +67,7 @@
 dws event schema user_im_message_receive_at
 dws event schema user_im_message_receive_o2o
 dws event schema user_im_message_receive_group
+dws event schema user_im_message_receive_user
 dws event schema user_im_message_read_o2o
 dws event schema user_im_message_read_group
 dws event schema user_im_message_recall_o2o
@@ -90,6 +93,12 @@ dws event consume user_im_message_receive_group \
 ```
 
 ```bash
+dws event consume user_im_message_receive_user \
+  --user 507971 \
+  -f ndjson
+```
+
+```bash
 dws event consume user_im_message_read_o2o --user 507971 -f ndjson
 dws event consume user_im_message_read_group --group <openConversationId> -f ndjson
 dws event consume user_im_message_recall_o2o --user 507971 -f ndjson
@@ -102,6 +111,7 @@ dws event consume user_im_message_reaction_group --group <openConversationId> -f
 dws event status --event user_im_message_receive_at
 dws event status --event user_im_message_receive_o2o
 dws event status --event user_im_message_receive_group
+dws event status --event user_im_message_receive_user
 dws event stop <subscribe_id>
 ```
 

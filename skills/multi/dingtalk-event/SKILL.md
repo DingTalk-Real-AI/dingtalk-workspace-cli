@@ -1,6 +1,6 @@
 ---
 name: dingtalk-event
-description: 钉钉个人 IM 事件长连接监听、订阅与消费，覆盖消息接收、已读、撤回和表情回应，输出 NDJSON 到 stdout。Use when 用户提到 监听个人消息事件、被@消息、监听单聊或群消息、监听消息已读、监听消息撤回、监听消息贴表情或表情回应、实时接收钉钉事件、用事件驱动 Agent。命令前缀：dws event。
+description: 钉钉个人 IM 事件长连接监听、订阅与消费，覆盖消息接收、指定发送人、已读、撤回和表情回应，输出 NDJSON 到 stdout。Use when 用户提到 监听个人消息事件、被@消息、监听单聊或群消息、监听某人发送的消息、监听消息已读、监听消息撤回、监听消息贴表情或表情回应、实时接收钉钉事件、用事件驱动 Agent。命令前缀：dws event。
 ---
 
 # 钉钉个人 IM 事件
@@ -25,6 +25,7 @@ description: 钉钉个人 IM 事件长连接监听、订阅与消费，覆盖消
 | `user_im_message_receive_at` | 当前用户被 @ 的消息 | 无 |
 | `user_im_message_receive_o2o` | 当前用户与指定用户的单聊消息 | `--user` |
 | `user_im_message_receive_group` | 当前用户所在指定群聊/会话的消息 | `--group` |
+| `user_im_message_receive_user` | 当前用户收到的指定用户发送的消息（单聊和群聊） | `--user` |
 | `user_im_message_read_o2o` | 指定单聊中当前用户发送的消息被已读 | `--user` |
 | `user_im_message_read_group` | 指定群聊中当前用户发送的消息被已读 | `--group` |
 | `user_im_message_recall_o2o` | 指定单聊中的消息被撤回 | `--user` |
@@ -32,7 +33,7 @@ description: 钉钉个人 IM 事件长连接监听、订阅与消费，覆盖消
 | `user_im_message_reaction_o2o` | 指定单聊中的消息收到表情回应 | `--user` |
 | `user_im_message_reaction_group` | 指定群聊中的消息收到表情回应 | `--group` |
 
-只承认上表 9 个事件码。其它身份模式、应用凭证模式、非个人 IM 事件不在本 skill 范围内。
+只承认上表 10 个事件码。其它身份模式、应用凭证模式、非个人 IM 事件不在本 skill 范围内。
 
 ## Command rules
 
@@ -41,9 +42,10 @@ description: 钉钉个人 IM 事件长连接监听、订阅与消费，覆盖消
 - 不主动运行 `dws event list` 作为能力菜单；按用户意图直接选择上表事件。
 - 缺少必填 ID 时先解析或追问，不要猜测 ID。
 - 用户只给单聊对端人名时，先运行 `dws aisearch person --keyword "<name>" --dimension name --format json` 解析 userId；多候选必须让用户确认。
+- “监听我和某人的单聊”使用 `user_im_message_receive_o2o`；“监听某人发给我的消息/监听某人发送的消息”使用 `user_im_message_receive_user`，后者覆盖该发送人的单聊和群聊消息。
 - 用户只给群名时，先运行 `dws chat search --query "<group>" --format json` 解析 openConversationId；多候选必须让用户确认。
 - 用户要求执行“撤回消息”时使用 `dws chat`；只有“监听/订阅消息撤回”才使用 `dws event consume user_im_message_recall_*`。
-- 用户说“贴标签”且语义是给消息贴表情时，按消息表情回应事件处理，event key 使用 `emotion`。
+- 用户说“贴标签”且语义是给消息贴表情时，按消息表情回应事件处理，event key 使用 `reaction`。
 - 正常 Agent 消费使用 `-f ndjson`。抓一条样本可用 `--max-events 1 -f json`。
 - `--debug-raw-events` 只用于联调确认服务端推送是否到达本地连接；正常任务不要使用。
 
@@ -79,6 +81,11 @@ dws event consume user_im_message_receive_o2o \
 # 指定群聊/会话消息
 dws event consume user_im_message_receive_group \
   --group cidxxxxxxxx \
+  -f ndjson
+
+# 指定发送人的消息（单聊和群聊）
+dws event consume user_im_message_receive_user \
+  --user 507971 \
   -f ndjson
 
 # 指定单聊消息已读
@@ -120,4 +127,4 @@ dws event consume user_im_message_receive_o2o \
 
 | Topic | Reference | Coverage |
 |---|---|---|
-| IM | [references/event-im.md](references/event-im.md) | 九类个人 IM 事件命令、参数、生命周期、输出解析、自测和排障 |
+| IM | [references/event-im.md](references/event-im.md) | 十类个人 IM 事件命令、参数、生命周期、输出解析、自测和排障 |

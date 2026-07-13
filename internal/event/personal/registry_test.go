@@ -33,6 +33,7 @@ func TestCatalogEnabledEvents(t *testing.T) {
 		EventMention,
 		EventSingleChat,
 		EventInChat,
+		EventFromUser,
 		EventReadO2O,
 		EventReadGroup,
 		EventRecallO2O,
@@ -45,12 +46,12 @@ func TestCatalogEnabledEvents(t *testing.T) {
 	}
 }
 
-func TestEventFromUserRemainsInternalButNotPublic(t *testing.T) {
+func TestEventFromUserIsPublic(t *testing.T) {
 	if _, ok := Lookup(EventFromUser); !ok {
-		t.Fatalf("Lookup(%q) failed, want internal definition retained", EventFromUser)
+		t.Fatalf("Lookup(%q) failed", EventFromUser)
 	}
-	if IsPublic(EventFromUser) {
-		t.Fatalf("IsPublic(%q) = true, want hidden", EventFromUser)
+	if !IsPublic(EventFromUser) {
+		t.Fatalf("IsPublic(%q) = false, want public", EventFromUser)
 	}
 }
 

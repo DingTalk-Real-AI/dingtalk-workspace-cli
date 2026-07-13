@@ -108,7 +108,7 @@ func TestClientCreateSubscriptionDWSRequestAndArrayResponse(t *testing.T) {
 	}
 }
 
-func TestClientCreateActionSubscriptionsUsesDocumentedRuleParam(t *testing.T) {
+func TestClientCreateRuleBasedSubscriptionsUsesDocumentedRuleParam(t *testing.T) {
 	tests := []struct {
 		eventKey string
 		opts     RuleOptions
@@ -117,6 +117,7 @@ func TestClientCreateActionSubscriptionsUsesDocumentedRuleParam(t *testing.T) {
 		{EventReadO2O, RuleOptions{UserID: "staff-1"}, map[string]any{"targetUid": "staff-1", "targetUidType": "staffId"}},
 		{EventRecallO2O, RuleOptions{UserID: "staff-1"}, map[string]any{"targetUid": "staff-1", "targetUidType": "staffId"}},
 		{EventReactionO2O, RuleOptions{UserID: "staff-1"}, map[string]any{"targetUid": "staff-1", "targetUidType": "staffId"}},
+		{EventFromUser, RuleOptions{UserID: "staff-1"}, map[string]any{"targetUid": "staff-1", "targetUidType": "staffId"}},
 		{EventReadGroup, RuleOptions{GroupID: "cid-1"}, map[string]any{"openConversationId": "cid-1"}},
 		{EventRecallGroup, RuleOptions{GroupID: "cid-1"}, map[string]any{"openConversationId": "cid-1"}},
 		{EventReactionGroup, RuleOptions{GroupID: "cid-1"}, map[string]any{"openConversationId": "cid-1"}},
@@ -132,7 +133,7 @@ func TestClientCreateActionSubscriptionsUsesDocumentedRuleParam(t *testing.T) {
 					w.WriteHeader(http.StatusBadRequest)
 					return
 				}
-				_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "result": []string{"sub-action"}})
+				_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "result": []string{"sub-rule"}})
 			}))
 			defer srv.Close()
 

@@ -18,6 +18,7 @@ dws auth login
 dws event schema user_im_message_receive_at
 dws event schema user_im_message_receive_o2o
 dws event schema user_im_message_receive_group
+dws event schema user_im_message_receive_user
 dws event schema user_im_message_read_o2o
 dws event schema user_im_message_read_group
 dws event schema user_im_message_recall_o2o
@@ -35,6 +36,7 @@ schema 默认 JSON。业务字段说明在 `schema.properties`，当前业务 pa
 | `user_im_message_receive_at` | `at` | 当前用户被 @ 的消息 | 无 |
 | `user_im_message_receive_o2o` | `singleChat` | 当前用户与指定用户的单聊消息 | `--user` |
 | `user_im_message_receive_group` | `group` | 当前用户所在指定群聊/会话的消息 | `--group` |
+| `user_im_message_receive_user` | `sender` | 当前用户收到的指定用户发送的消息（单聊和群聊） | `--user` |
 | `user_im_message_read_o2o` | `singleChat` | 指定单聊中当前用户发送的消息被已读 | `--user` |
 | `user_im_message_read_group` | `group` | 指定群聊中当前用户发送的消息被已读 | `--group` |
 | `user_im_message_recall_o2o` | `singleChat` | 指定单聊中的消息被撤回 | `--user` |
@@ -47,11 +49,12 @@ schema 默认 JSON。业务字段说明在 `schema.properties`，当前业务 pa
 ## ID resolution
 
 - 人名 → `dws aisearch person --keyword "<name>" --dimension name --format json`，确认后取 `userId`。
+- “我和某人的单聊”选择 `user_im_message_receive_o2o`；“某人发给我的消息/某人发送的消息”选择 `user_im_message_receive_user`。
 - 群名 → `dws chat search --query "<group>" --format json`，确认后取 `openConversationId`。
 - 多候选 → 展示候选并让用户确认。
 - 仍缺必填 ID → 先追问，不要编造。
 - “撤回消息”表示执行操作时走 `dws chat`；“监听/订阅消息撤回”才走本事件能力。
-- “贴标签”表示给消息贴表情时，对应 `emotion` 表情回应事件。
+- “贴标签”表示给消息贴表情时，对应 `reaction` 表情回应事件。
 
 ## Consume commands
 
@@ -67,6 +70,11 @@ dws event consume user_im_message_receive_o2o \
 # 指定群消息
 dws event consume user_im_message_receive_group \
   --group cidxxxxxxxx \
+  -f ndjson
+
+# 指定发送人的消息（单聊和群聊）
+dws event consume user_im_message_receive_user \
+  --user 507971 \
   -f ndjson
 
 # 指定单聊已读事件
@@ -107,6 +115,7 @@ dws event consume user_im_message_reaction_group \
 | `user_im_message_receive_at` | `--duration 10m -f ndjson` | 让任意可触达用户在群里 @ 当前登录用户 |
 | `user_im_message_receive_o2o` | `--user <userId> --duration 10m -f ndjson` | 让对端用户给当前登录用户发送单聊消息 |
 | `user_im_message_receive_group` | `--group <openConversationId> --duration 10m -f ndjson` | 让任意用户在该群发送消息 |
+| `user_im_message_receive_user` | `--user <userId> --duration 10m -f ndjson` | 让指定用户分别在单聊或共同群聊中发送消息 |
 | `user_im_message_read_o2o` | `--user <userId> --duration 10m -f ndjson` | 当前用户给对端发送单聊消息，再让对端打开并阅读 |
 | `user_im_message_read_group` | `--group <openConversationId> --duration 10m -f ndjson` | 当前用户在群内发送消息，再让群成员打开并阅读 |
 | `user_im_message_recall_o2o` | `--user <userId> --duration 10m -f ndjson` | 在指定单聊中发送并撤回一条消息 |
@@ -188,6 +197,7 @@ dws event consume user_im_message_receive_group \
 dws event status --event user_im_message_receive_at
 dws event status --event user_im_message_receive_o2o
 dws event status --event user_im_message_receive_group
+dws event status --event user_im_message_receive_user
 dws event status --event user_im_message_read_o2o
 dws event status --event user_im_message_recall_group
 dws event status --event user_im_message_reaction_o2o

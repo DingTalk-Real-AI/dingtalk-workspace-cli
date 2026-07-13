@@ -18,7 +18,9 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
+	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
 	"github.com/spf13/cobra"
 )
@@ -43,10 +45,8 @@ func TestPersonalEventListHidesSchemaIDs(t *testing.T) {
 			}
 			got := out.String()
 			assertPersonalOutputHidesSchemaIDs(t, got)
-			if strings.Contains(got, personal.EventFromUser) {
-				t.Fatalf("list output exposed hidden event %s: %s", personal.EventFromUser, got)
-			}
 			for _, eventKey := range []string{
+				personal.EventFromUser,
 				personal.EventReadO2O,
 				personal.EventReadGroup,
 				personal.EventRecallO2O,
@@ -76,8 +76,8 @@ func TestEventListDefaultsToUser(t *testing.T) {
 	if !strings.Contains(got, personal.EventSingleChat) || !strings.Contains(got, "EVENT_KEY") {
 		t.Fatalf("list output = %s, want personal event catalog", got)
 	}
-	if strings.Contains(got, personal.EventFromUser) {
-		t.Fatalf("list output exposed hidden event %s: %s", personal.EventFromUser, got)
+	if !strings.Contains(got, personal.EventFromUser) {
+		t.Fatalf("list output missing public event %s: %s", personal.EventFromUser, got)
 	}
 	if strings.Contains(got, "CLIENT_ID") || strings.Contains(got, "ClientSecret") {
 		t.Fatalf("list default appears to use legacy application output: %s", got)
@@ -338,37 +338,54 @@ func TestEventSchemaDefaultsToUser(t *testing.T) {
 	}
 }
 
-func TestPersonalEventFromUserIsNotPubliclyAvailable(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		cmd  *cobra.Command
-		args []string
-	}{
-		{
-			name: "schema",
-			cmd:  newEventSchemaCommand(),
-			args: []string{personal.EventFromUser},
-		},
-		{
-			name: "consume",
-			cmd:  newEventConsumeCommand(),
-			args: []string{personal.EventFromUser, "--user", "507971", "--dry-run"},
-		},
-		{
-			name: "status",
-			cmd:  newEventStatusCommand(),
-			args: []string{"--event", personal.EventFromUser},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			tc.cmd.SilenceUsage = true
-			tc.cmd.SilenceErrors = true
-			tc.cmd.SetArgs(tc.args)
-			err := tc.cmd.Execute()
-			if err == nil || !strings.Contains(err.Error(), "event "+personal.EventFromUser+" is not publicly available yet") {
-				t.Fatalf("Execute() error = %v, want not publicly available", err)
-			}
-		})
+func TestPersonalEventFromUserIsPubliclyAvailable(t *testing.T) {
+	if err := ensurePublicPersonalEvent(personal.EventFromUser); err != nil {
+		t.Fatalf("ensurePublicPersonalEvent() error = %v", err)
+	}
+
+	schemaCmd := newEventSchemaCommand()
+	schemaCmd.SilenceUsage = true
+	schemaCmd.SilenceErrors = true
+	var schemaOut bytes.Buffer
+	schemaCmd.SetOut(&schemaOut)
+	schemaCmd.SetArgs([]string{personal.EventFromUser})
+	if err := schemaCmd.Execute(); err != nil {
+		t.Fatalf("schema Execute() error = %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(schemaOut.Bytes(), &doc); err != nil {
+		t.Fatalf("schema output is not JSON: %v\n%s", err, schemaOut.String())
+	}
+	if doc["event_key"] != personal.EventFromUser || doc["rule_type"] != "sender" {
+		t.Fatalf("schema document = %#v", doc)
+	}
+
+	configDir := setupPersonalIdentityToken(t, &authpkg.TokenData{
+		AccessToken:  "access-1",
+		RefreshToken: "refresh-1",
+		ExpiresAt:    time.Now().Add(time.Hour),
+		RefreshExpAt: time.Now().Add(24 * time.Hour),
+		CorpID:       "corp-1",
+		UserID:       "user-1",
+		ClientID:     "client-1",
+	})
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+
+	consumeCmd := newEventConsumeCommand()
+	consumeCmd.SilenceUsage = true
+	consumeCmd.SilenceErrors = true
+	consumeCmd.SetArgs([]string{personal.EventFromUser, "--user", "507971", "--dry-run"})
+	if err := consumeCmd.Execute(); err != nil {
+		t.Fatalf("consume dry-run Execute() error = %v", err)
+	}
+
+	missingUserCmd := newEventConsumeCommand()
+	missingUserCmd.SilenceUsage = true
+	missingUserCmd.SilenceErrors = true
+	missingUserCmd.SetArgs([]string{personal.EventFromUser})
+	err := missingUserCmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "--user is required for "+personal.EventFromUser) {
+		t.Fatalf("missing --user error = %v", err)
 	}
 }
 

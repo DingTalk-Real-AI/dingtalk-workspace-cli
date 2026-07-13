@@ -112,6 +112,17 @@ var definitions = []Definition{
 		Public:         true,
 	},
 	{
+		EventKey:       EventFromUser,
+		DisplayName:    "指定发送人消息",
+		Description:    "当前用户收到的指定用户发送的消息",
+		Category:       "im",
+		RuleType:       "sender",
+		Status:         StatusEnabled,
+		RequiredParams: []string{"user"},
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
 		EventKey:       EventReadO2O,
 		DisplayName:    "指定单聊消息已读",
 		Description:    "当前用户在指定单聊中发送的消息被对方已读",
@@ -176,17 +187,6 @@ var definitions = []Definition{
 		RequiredParams: []string{"group"},
 		Auth:           map[string]any{"identity": "user"},
 		Public:         true,
-	},
-	{
-		EventKey:       EventFromUser,
-		DisplayName:    "指定发送人消息",
-		Description:    "当前用户收到的特别关注用户的消息",
-		Category:       "im",
-		RuleType:       "sender",
-		Status:         StatusEnabled,
-		RequiredParams: []string{"user"},
-		Auth:           map[string]any{"identity": "user"},
-		Public:         false,
 	},
 }
 
