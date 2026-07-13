@@ -9,10 +9,14 @@ dws auth login
 # 查看状态
 dws auth status
 
+# macOS: 将系统 Keychain 登录态迁移为沙箱可读的 file-DEK（先预检）
+env -u DWS_DISABLE_KEYCHAIN dws auth migrate-keychain --to file-dek --dry-run --format json
+env -u DWS_DISABLE_KEYCHAIN dws auth migrate-keychain --to file-dek --yes --format json
+
 # 退出
 dws auth logout
 
-# 重置本地凭证 (Token 解密失败时使用)
+# 重置全部本地凭证（仅在迁移/按 profile 恢复均失败且确认可丢弃全部登录时使用）
 dws auth reset
 ```
 
@@ -27,6 +31,7 @@ dws auth reset
 
 ### 认证失败处理
 - 命令返回 `AUTH_TOKEN_EXPIRED` / `USER_TOKEN_ILLEGAL` / "Token验证失败" → 执行 `dws auth login` 重新登录
+- macOS 返回 `ciphertext_key_mismatch`，且普通终端仍能登录 → 先用系统 Keychain 模式执行 `auth migrate-keychain --to file-dek --dry-run`，通过后加 `--yes`；禁止直接 `auth reset`
 
 ### Headless 环境 (CI/CD)
 

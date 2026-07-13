@@ -145,7 +145,7 @@ func TestPreflightTokenPersistenceRejectsUnreadableProfileSlot(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "profile token slot") {
 		t.Fatalf("preflightTokenPersistence() error = %v, want unreadable profile slot", err)
 	}
-	if !strings.Contains(err.Error(), "dws auth logout --profile "+data.CorpID) {
+	if !strings.Contains(err.Error(), "dws auth logout --profile \""+data.CorpID+"\"") {
 		t.Fatalf("preflightTokenPersistence() error = %v, want per-profile recovery hint", err)
 	}
 }

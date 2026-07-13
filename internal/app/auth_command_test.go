@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -348,6 +349,91 @@ func TestAuthStatusProfileOverrideDoesNotSwitchCurrentProfile(t *testing.T) {
 	}
 	if cfg.CurrentProfile != "corp_secondary" {
 		t.Fatalf("currentProfile = %q, want unchanged corp_secondary", cfg.CurrentProfile)
+	}
+}
+
+func TestAuthMigrateKeychainDryRunAndConfirmedExecution(t *testing.T) {
+	t.Setenv(keychain.DisableKeychainEnv, "")
+	oldMigrate := migrateKeychainToFileDEK
+	t.Cleanup(func() { migrateKeychainToFileDEK = oldMigrate })
+
+	calls := 0
+	migrateKeychainToFileDEK = func(_ string, dryRun bool) (int, error) {
+		calls++
+		if calls == 1 && !dryRun {
+			t.Fatal("first migration call should be dry-run")
+		}
+		if calls == 2 && dryRun {
+			t.Fatal("second migration call should execute")
+		}
+		return 4, nil
+	}
+
+	newRoot := func() (*cobra.Command, *bytes.Buffer) {
+		root := &cobra.Command{Use: "dws"}
+		root.PersistentFlags().Bool("dry-run", false, "")
+		root.PersistentFlags().Bool("yes", false, "")
+		root.PersistentFlags().String("format", "json", "")
+		root.AddCommand(newAuthMigrateKeychainCommand())
+		var out bytes.Buffer
+		root.SetOut(&out)
+		root.SetErr(&out)
+		return root, &out
+	}
+
+	root, out := newRoot()
+	root.SetArgs([]string{"migrate-keychain", "--dry-run"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("migrate-keychain --dry-run error = %v\noutput:\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), `"dry_run":true`) || !strings.Contains(out.String(), `"entries":4`) {
+		t.Fatalf("dry-run output = %q", out.String())
+	}
+
+	root, out = newRoot()
+	root.SetArgs([]string{"migrate-keychain", "--yes"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("migrate-keychain --yes error = %v\noutput:\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), `"dry_run":false`) || !strings.Contains(out.String(), `"entries":4`) {
+		t.Fatalf("migration output = %q", out.String())
+	}
+	if calls != 2 {
+		t.Fatalf("migration calls = %d, want 2", calls)
+	}
+}
+
+func TestAuthMigrateKeychainRequiresConfirmationAndSystemMode(t *testing.T) {
+	oldMigrate := migrateKeychainToFileDEK
+	t.Cleanup(func() { migrateKeychainToFileDEK = oldMigrate })
+	migrateKeychainToFileDEK = func(_ string, _ bool) (int, error) {
+		t.Fatal("migration backend should not be called")
+		return 0, nil
+	}
+
+	newRoot := func() *cobra.Command {
+		root := &cobra.Command{Use: "dws"}
+		root.PersistentFlags().Bool("dry-run", false, "")
+		root.PersistentFlags().Bool("yes", false, "")
+		root.PersistentFlags().String("format", "json", "")
+		root.AddCommand(newAuthMigrateKeychainCommand())
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+		return root
+	}
+
+	t.Setenv(keychain.DisableKeychainEnv, "")
+	root := newRoot()
+	root.SetArgs([]string{"migrate-keychain"})
+	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "--yes") {
+		t.Fatalf("unconfirmed migration error = %v, want --yes guidance", err)
+	}
+
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	root = newRoot()
+	root.SetArgs([]string{"migrate-keychain", "--dry-run"})
+	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "env -u") {
+		t.Fatalf("file-DEK mode migration error = %v, want system-mode guidance", err)
 	}
 }
 

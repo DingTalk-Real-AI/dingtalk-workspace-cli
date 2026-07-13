@@ -6,6 +6,14 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Added
+
+- **Safe macOS Keychain → file-DEK migration** — `dws auth migrate-keychain --to file-dek` preflights every legacy/profile auth entry before rewriting, ignores unrelated application secrets, supports side-effect-free `--dry-run`, requires explicit `--yes`, and lets sandboxed and normal processes share an existing login without exposing tokens.
+
+### Fixed
+
+- **macOS Keychain mode collision coverage** — dedicated macOS CI now runs the Darwin-only auth/keychain regression suite with race detection, and recovery guidance prefers safe migration or per-profile cleanup over destructive global reset.
+
 ## [1.0.51] - 2026-07-10
 
 This release promotes the sealed `v1.0.51-beta.1` contents to stable. It syncs the hardcoded Wukong command surface, prevents `dev connect` conversations from blocking on messages received mid-turn, and makes local credential failures diagnosable without mutating key material.

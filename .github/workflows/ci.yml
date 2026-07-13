@@ -61,6 +61,22 @@ jobs:
       - name: Test with Race Detection
         run: go test -v -race -count=1 -timeout=5m ./cmd/... ./internal/...
 
+  test-darwin:
+    name: Test (macOS auth/keychain)
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test macOS auth and Keychain paths with Race Detection
+        run: go test -v -race -count=1 -timeout=10m ./internal/keychain ./internal/auth ./internal/app
+
   coverage:
     name: Coverage
     runs-on: ubuntu-latest

@@ -139,6 +139,14 @@ func Remove(service, account string) error {
 	return platformRemove(service, account)
 }
 
+// MigrateToFileDEK re-encrypts the legacy and profile-scoped auth token entries
+// for service with the macOS file DEK. It is supported only on macOS and must
+// be invoked from a process that can still access the system Keychain. When
+// dryRun is true, all selected entries are validated without modifying data.
+func MigrateToFileDEK(service string, dryRun bool) (int, error) {
+	return platformMigrateToFileDEK(service, dryRun)
+}
+
 // Exists checks if an entry exists in the keychain.
 func Exists(service, account string) bool {
 	val, err := Get(service, account)

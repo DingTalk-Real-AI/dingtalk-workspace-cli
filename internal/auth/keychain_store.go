@@ -132,7 +132,7 @@ func preflightTokenPersistence(configDir string) error {
 
 		if _, err := LoadTokenDataKeychainForCorpID(corpID); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
 			return fmt.Errorf(
-				"profile token slot %q is unreadable; remove only this profile with `dws auth logout --profile %q`, or use `dws auth reset` only when discarding all local profiles: %w",
+				"profile token slot %q is unreadable; on macOS first try `env -u DWS_DISABLE_KEYCHAIN dws auth migrate-keychain --to file-dek --dry-run`; if the ciphertext is damaged, remove only this profile with `dws auth logout --profile %q`, or use `dws auth reset` only when discarding all local profiles: %w",
 				TokenAccountForCorpID(corpID), corpID, err,
 			)
 		}
