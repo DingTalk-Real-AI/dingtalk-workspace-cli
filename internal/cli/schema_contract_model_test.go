@@ -686,6 +686,28 @@ func TestFinalFieldProvenanceIgnoresFormattingWhitespaceOnly(t *testing.T) {
 	}
 }
 
+func TestEqualJSONValuesFastPathPreservesSemanticComparison(t *testing.T) {
+	tests := []struct {
+		name  string
+		left  string
+		right string
+		want  bool
+	}{
+		{name: "identical valid", left: `{"value":false}`, right: `{"value":false}`, want: true},
+		{name: "identical invalid", left: `{`, right: `{`, want: false},
+		{name: "formatting and key order", left: `{"first":1,"second":[true]}`, right: "{\n  \"second\": [true],\n  \"first\": 1\n}", want: true},
+		{name: "equivalent escape", left: `"<none>"`, right: `"\u003cnone\u003e"`, want: true},
+		{name: "numeric lexical drift", left: `[1]`, right: `[1.0]`, want: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := equalJSONValues([]byte(test.left), []byte(test.right)); got != test.want {
+				t.Fatalf("equalJSONValues(%q, %q) = %v, want %v", test.left, test.right, got, test.want)
+			}
+		})
+	}
+}
+
 func TestToolSpecFromRuntimeDoesNotRepairResolvedProvenance(t *testing.T) {
 	selected := true
 	base := func() RuntimeToolSpecInput {

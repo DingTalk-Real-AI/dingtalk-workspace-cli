@@ -10,12 +10,35 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
+
+var (
+	fullSchemaSnapshotOnce sync.Once
+	fullSchemaSnapshot     cli.SchemaCatalogSnapshot
+	fullSchemaSnapshotErr  error
+)
+
+// fullSchemaSnapshotForTest runs the complete source-to-delivery invariant
+// once per test binary. The returned snapshot is a shared read-only fixture;
+// callers still build their own Cobra root when they need executable command
+// pointers. This preserves every full-Catalog assertion without paying the
+// multi-gigabyte generation/validation cost three times under -race.
+func fullSchemaSnapshotForTest(t testing.TB) cli.SchemaCatalogSnapshot {
+	t.Helper()
+	fullSchemaSnapshotOnce.Do(func() {
+		fullSchemaSnapshot, fullSchemaSnapshotErr = cli.BuildSchemaCatalogSnapshot(NewRootCommand(), cli.SchemaCatalogBuildOptions{})
+	})
+	if fullSchemaSnapshotErr != nil {
+		t.Fatalf("build shared final Schema snapshot: %v", fullSchemaSnapshotErr)
+	}
+	return fullSchemaSnapshot
+}
 
 func TestEmbeddedSchemaContractMapsToExecutableTree(t *testing.T) {
 	root := NewRootCommand()
@@ -86,10 +109,7 @@ func TestEmbeddedSchemaContractMapsToExecutableTree(t *testing.T) {
 
 func TestGeneratedSchemaContractMapsToExecutableTree(t *testing.T) {
 	root := NewRootCommand()
-	snapshot, err := cli.BuildSchemaCatalogSnapshot(root, cli.SchemaCatalogBuildOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	snapshot := fullSchemaSnapshotForTest(t)
 	bindings := cli.EmbeddedSchemaParameterBindings()
 	if len(snapshot.Tools) == 0 {
 		t.Fatal("generated Schema Catalog contains no tools")
@@ -142,11 +162,7 @@ func TestGeneratedSchemaContractMapsToExecutableTree(t *testing.T) {
 }
 
 func TestRuntimeSchemaParameterMetadataMapsToGeneratedCatalog(t *testing.T) {
-	root := NewRootCommand()
-	snapshot, err := cli.BuildSchemaCatalogSnapshot(root, cli.SchemaCatalogBuildOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	snapshot := fullSchemaSnapshotForTest(t)
 
 	for canonicalPath, metadata := range cli.RuntimeSchemaParameterMetadataDefinitions() {
 		tool := snapshot.Tools[canonicalPath]

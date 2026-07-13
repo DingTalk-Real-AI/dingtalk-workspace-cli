@@ -309,5 +309,11 @@ func validateSnapshotTypedRoundTrip(snapshot SchemaCatalogSnapshot, registry Sch
 func schemaJSONEqual(left, right any) bool {
 	leftJSON, leftErr := json.Marshal(left)
 	rightJSON, rightErr := json.Marshal(right)
-	return leftErr == nil && rightErr == nil && equalJSONValues(leftJSON, rightJSON)
+	if leftErr != nil || rightErr != nil {
+		return false
+	}
+	// json.Marshal guarantees valid JSON. Equal canonical bytes therefore need
+	// no second validation/decode pass; unequal encodings still use the semantic
+	// fallback so equivalent RawMessage formatting remains accepted.
+	return bytes.Equal(leftJSON, rightJSON) || equalJSONValues(leftJSON, rightJSON)
 }

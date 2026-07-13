@@ -798,6 +798,14 @@ func validateFinalFieldProvenance(owner, field string, provenance FieldProvenanc
 // equivalent string escapes are intentionally ignored; 1 and 1.0 remain
 // distinct provenance values.
 func equalJSONValues(left, right []byte) bool {
+	// Generated Schema values are already canonical JSON in the common path.
+	// Avoid allocating two decoded object graphs for identical bytes; keep the
+	// semantic decoder fallback for whitespace, escape, and representation
+	// differences. json.Valid preserves the previous behavior for equal but
+	// malformed input.
+	if bytes.Equal(left, right) {
+		return json.Valid(left)
+	}
 	decode := func(raw []byte) (any, bool) {
 		if !json.Valid(raw) {
 			return nil, false

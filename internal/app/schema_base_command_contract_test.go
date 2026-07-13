@@ -22,10 +22,7 @@ import (
 // used to discover or synthesize a command identity.
 func TestFinalSchemaToolsHaveExecutableBaseCommands(t *testing.T) {
 	root := NewRootCommand()
-	snapshot, err := cli.BuildSchemaCatalogSnapshot(root, cli.SchemaCatalogBuildOptions{})
-	if err != nil {
-		t.Fatalf("build final Schema snapshot: %v", err)
-	}
+	snapshot := fullSchemaSnapshotForTest(t)
 	effective, err := cli.BuildEffectiveCommandRegistry(root)
 	if err != nil {
 		t.Fatalf("build EffectiveCommandRegistry: %v", err)
