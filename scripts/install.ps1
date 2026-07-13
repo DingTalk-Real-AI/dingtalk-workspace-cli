@@ -152,6 +152,24 @@ function Get-GiteeAssetUrl {
     return ""
 }
 
+function Test-GiteeReleaseAssets {
+    param(
+        [string]$Candidate,
+        [string[]]$RequiredAssets
+    )
+    try {
+        $release = Invoke-GiteeApi "https://gitee.com/api/v5/repos/$GiteeRepo/releases/tags/$Candidate"
+    } catch {
+        return $false
+    }
+    if (-not $release -or -not $release.assets) { return $false }
+    $assetNames = @($release.assets | ForEach-Object { $_.name })
+    foreach ($required in $RequiredAssets) {
+        if ($assetNames -notcontains $required) { return $false }
+    }
+    return $true
+}
+
 function Resolve-Source {
     # Explicit DWS_GITEE_REPO wins; else probe GitHub and fall back to Gitee when unreachable.
     if ($GiteeRepo -ne "") { return }
@@ -167,18 +185,26 @@ function Resolve-Source {
 }
 
 function Resolve-LatestVersion {
+    param([string[]]$RequiredAssets = @())
     if ($Version -eq "latest") {
         if ($GiteeRepo -ne "") {
             try {
-                # Gitee's /releases/latest and /releases endpoints are unreliable
-                # (404 / empty even when releases exist), so resolve the newest
-                # vN.N.N tag from the git tags endpoint instead.
+                # Tags can be mirrored before release attachments. Select the
+                # newest stable tag with all assets required by this install.
                 $tags = Invoke-GiteeApi "https://gitee.com/api/v5/repos/$GiteeRepo/tags"
-                $latest = $tags.name |
+                $candidates = @($tags.name |
                     Where-Object { $_ -match '^v\d+\.\d+\.\d+$' } |
-                    ForEach-Object { [version]($_.TrimStart('v')) } |
-                    Sort-Object | Select-Object -Last 1
-                if ($latest) { $script:Version = "v$latest"; return }
+                    Sort-Object { [version]($_.TrimStart('v')) } -Descending)
+                $newest = $candidates | Select-Object -First 1
+                foreach ($candidate in $candidates) {
+                    if (Test-GiteeReleaseAssets $candidate $RequiredAssets) {
+                        $script:Version = $candidate
+                        if ($candidate -ne $newest) {
+                            Write-Say "⚠ Gitee tag $newest has no complete release assets; using $candidate."
+                        }
+                        return
+                    }
+                }
             } catch {}
             Write-Err "Could not determine the latest Gitee version. Set `$env:DWS_VERSION explicitly."
             return
@@ -349,9 +375,12 @@ function Write-MultiModeNotice {
 
 function Install-Binary {
     $arch = Get-Arch
-    Resolve-LatestVersion
-
     $archiveName = "${BinName}-windows-${arch}.zip"
+    $requiredAssets = @($archiveName, "checksums.txt")
+    if (!$NoSkills -and $SkillMode -ne "multi") {
+        $requiredAssets += "dws-skills.zip"
+    }
+    Resolve-LatestVersion $requiredAssets
     if ($GiteeRepo -ne "") { $downloadUrl = Get-GiteeAssetUrl $archiveName } else { $downloadUrl = "https://github.com/$Repo/releases/download/$Version/$archiveName" }
     if (-not $downloadUrl) { Write-Err "Could not resolve download URL for $archiveName (version $Version)." }
 
@@ -545,7 +574,7 @@ function Install-BinaryFromSource {
 function Install-Skills {
     Write-Say ""
     Write-Say "📦 Installing agent skills from GitHub Releases..."
-    Resolve-LatestVersion
+    Resolve-LatestVersion @("dws-skills.zip")
 
     if ($GiteeRepo -ne "") { $zipUrl = Get-GiteeAssetUrl "dws-skills.zip" } else { $zipUrl = "https://github.com/$Repo/releases/download/$Version/dws-skills.zip" }
     if (-not $zipUrl) { Write-Err "Could not resolve download URL for dws-skills.zip (version $Version)." }

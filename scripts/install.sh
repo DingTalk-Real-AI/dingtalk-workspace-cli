@@ -105,6 +105,40 @@ gitee_api() {
   return 1
 }
 
+gitee_release_has_assets() {
+  _version="$1"
+  shift
+  _release="$(gitee_api "https://gitee.com/api/v5/repos/${GITEE_REPO}/releases/tags/${_version}" 2>/dev/null || true)"
+  [ -n "$_release" ] && [ "$_release" != "null" ] || return 1
+  _compact="$(printf '%s' "$_release" | tr -d '[:space:]')"
+  for _asset in "$@"; do
+    printf '%s' "$_compact" | grep -Fq "\"name\":\"${_asset}\"" || return 1
+  done
+  return 0
+}
+
+resolve_gitee_latest_version() {
+  _tags="$(gitee_api "https://gitee.com/api/v5/repos/${GITEE_REPO}/tags" 2>/dev/null || true)"
+  _candidates="$(printf '%s' "$_tags" \
+    | grep -o '"name":[ ]*"v[0-9][0-9.]*"' \
+    | sed 's/.*"name":[ ]*"//;s/"$//' \
+    | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+    | sort -Vr)"
+  _newest="$(printf '%s\n' "$_candidates" | head -1)"
+  [ -n "$_newest" ] || return 1
+
+  for _candidate in $_candidates; do
+    if gitee_release_has_assets "$_candidate" "$@"; then
+      VERSION="$_candidate"
+      if [ "$_candidate" != "$_newest" ]; then
+        say "⚠ Gitee tag ${_newest} has no complete release assets; using ${_candidate}."
+      fi
+      return 0
+    fi
+  done
+  return 1
+}
+
 # Resolve the download URL of a release asset by file name.
 #   GitHub: deterministic template <repo>/releases/download/<version>/<file>.
 #   Gitee : query the release API and pick the asset whose name matches
@@ -173,19 +207,13 @@ pick_source() {
   say "⚠ GitHub 不可达，自动切换国内 Gitee 镜像: ${GITEE_REPO}"
 }
 
-# Resolve the latest version tag from GitHub
+# Resolve the latest installable release from the selected source.
 resolve_version() {
   if [ "$VERSION" = "latest" ]; then
     if [ -n "$GITEE_REPO" ]; then
-      # Gitee's /releases/latest and /releases endpoints are unreliable — they
-      # return 404 / an empty list even when releases exist — so resolve the
-      # newest version from the git tags endpoint instead: keep only vN.N.N
-      # tags and pick the highest by version order.
-      VERSION="$(gitee_api "https://gitee.com/api/v5/repos/${GITEE_REPO}/tags" \
-        | grep -o '"name":[ ]*"v[0-9][0-9.]*"' \
-        | sed 's/.*"name":[ ]*"//;s/"$//' \
-        | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
-        | sort -V | tail -1)"
+      # Tags can be mirrored before release attachments. Select the newest
+      # stable tag whose release contains every asset needed by this install.
+      resolve_gitee_latest_version "$@" || VERSION=""
     elif need_cmd curl; then
       # Follow the redirect from /releases/latest to get the tag
       VERSION="$(curl -fsSI "https://github.com/${REPO}/releases/latest" 2>/dev/null \
@@ -472,9 +500,12 @@ _copy_skill() {
 install_binary() {
   os="$(detect_os)"
   arch="$(detect_arch)"
-  resolve_version
-
   archive_name="${BIN_NAME}-${os}-${arch}.tar.gz"
+  if [ "$NO_SKILLS" != "1" ] && [ "$SKILL_MODE" != "multi" ]; then
+    resolve_version "$archive_name" checksums.txt dws-skills.zip
+  else
+    resolve_version "$archive_name" checksums.txt
+  fi
   download_url="$(asset_url "$archive_name")"
   [ -n "$download_url" ] || err "Could not resolve download URL for ${archive_name} (version ${VERSION})."
 
@@ -555,8 +586,8 @@ install_skills() {
   say ""
   say "📦 Installing agent skills from GitHub Releases..."
 
-  resolve_version
   skills_archive="dws-skills.zip"
+  resolve_version "$skills_archive"
   download_url="$(asset_url "$skills_archive")"
   [ -n "$download_url" ] || err "Could not resolve download URL for ${skills_archive} (version ${VERSION})."
 

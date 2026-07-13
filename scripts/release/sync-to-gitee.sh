@@ -208,5 +208,8 @@ if [ "$uploaded" -eq 0 ] && [ "$replaced" -eq 0 ] && [ "$skipped" -eq 0 ]; then
   exit 1
 fi
 echo "✅ Gitee release ${VERSION}: uploaded ${uploaded}, replaced ${replaced}, skipped ${skipped} (already correct)."
+VERSION="$VERSION" GITEE_REPO="$GITEE_REPO" GITEE_API="$GITEE_API" \
+  GITEE_TOKEN="$GITEE_TOKEN" DIST_DIR="$DIST_DIR" \
+  ./scripts/release/verify-gitee-release.sh
 echo "   China install:  DWS_GITEE_REPO=${GITEE_REPO} \\"
 echo "     curl -fsSL https://gitee.com/${GITEE_REPO}/raw/main/scripts/install.sh | sh"

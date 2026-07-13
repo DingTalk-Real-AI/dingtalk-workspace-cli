@@ -50,6 +50,40 @@ gitee_api() {
   return 1
 }
 
+gitee_release_has_assets() {
+  _version="$1"
+  shift
+  _release="$(gitee_api "https://gitee.com/api/v5/repos/${GITEE_REPO}/releases/tags/${_version}" 2>/dev/null || true)"
+  [ -n "$_release" ] && [ "$_release" != "null" ] || return 1
+  _compact="$(printf '%s' "$_release" | tr -d '[:space:]')"
+  for _asset in "$@"; do
+    printf '%s' "$_compact" | grep -Fq "\"name\":\"${_asset}\"" || return 1
+  done
+  return 0
+}
+
+resolve_gitee_latest_version() {
+  _tags="$(gitee_api "https://gitee.com/api/v5/repos/${GITEE_REPO}/tags" 2>/dev/null || true)"
+  _candidates="$(printf '%s' "$_tags" \
+    | grep -o '"name":[ ]*"v[0-9][0-9.]*"' \
+    | sed 's/.*"name":[ ]*"//;s/"$//' \
+    | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+    | sort -Vr)"
+  _newest="$(printf '%s\n' "$_candidates" | head -1)"
+  [ -n "$_newest" ] || return 1
+
+  for _candidate in $_candidates; do
+    if gitee_release_has_assets "$_candidate" "$@"; then
+      VERSION="$_candidate"
+      if [ "$_candidate" != "$_newest" ]; then
+        printf '  ⚠ Gitee tag %s has no complete release assets; using %s.\n' "$_newest" "$_candidate"
+      fi
+      return 0
+    fi
+  done
+  return 1
+}
+
 pick_source() {
   [ -n "$GITEE_REPO" ] && return 0
   [ "${DWS_NO_FALLBACK:-0}" = "1" ] && return 0
@@ -61,13 +95,7 @@ pick_source() {
 resolve_version() {
   if [ "$VERSION" = "latest" ]; then
     if [ -n "$GITEE_REPO" ]; then
-      # Gitee's /releases/latest and /releases endpoints are unreliable, so
-      # resolve the newest vN.N.N tag from the git tags endpoint instead.
-      VERSION="$(gitee_api "https://gitee.com/api/v5/repos/${GITEE_REPO}/tags" \
-        | grep -o '"name":[ ]*"v[0-9][0-9.]*"' \
-        | sed 's/.*"name":[ ]*"//;s/"$//' \
-        | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
-        | sort -V | tail -1)"
+      resolve_gitee_latest_version "$@" || VERSION=""
     else
       VERSION="$(curl -fsSI "https://github.com/${REPO}/releases/latest" 2>/dev/null \
         | grep -i '^location:' | sed 's|.*/tag/||;s/[[:space:]]*$//')"
@@ -210,7 +238,7 @@ install_skills_to_root() {
 main() {
   need_cmd curl
   pick_source
-  resolve_version
+  resolve_version dws-skills.zip
 
   printf '\n'
   printf '  ┌──────────────────────────────────────┐\n'
