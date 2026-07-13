@@ -46,6 +46,30 @@ dws auth login --device
 ```
 refresh_token 单设备独占，远程刷新后源设备凭证失效。
 
+## PAT 授权控制
+
+PAT 权限继续使用唯一入口 `dws pat chmod`，不新增撤回子命令。flag 与约束以当前二进制的 `dws pat chmod --help` 为准。
+
+```bash
+# 全部授权：先预览，用户确认后执行
+dws pat chmod --all --dry-run --format json
+dws pat chmod --all --yes --format json
+
+# 撤回指定显式授权：先预览，用户确认后执行
+dws pat chmod calendar.event:read --revoke --dry-run --format json
+dws pat chmod calendar.event:read --revoke --yes --format json
+
+# 撤回全部显式授权
+dws pat chmod --revoke --all --dry-run --format json
+dws pat chmod --revoke --all --yes --format json
+```
+
+- `--all` 选择服务端可操作的全部 scope，可与产品 / 域过滤器组合；它不同于只选择推荐集合的 `--recommend`
+- 全量授权和任意撤回写入都必须先让用户确认，再显式传 `--yes`；不得把 `--yes` 当成 Agent 默认参数
+- PAT 场景下 `--yes` 表示非交互执行；若授权仍 pending，CLI 保留结构化的 action / flow / URI / trace 信息，但不打开浏览器、不轮询、不自动重试
+- `--revoke` 仅移除显式 PAT grant 并恢复默认策略，不是 `dws auth logout`，也不是永久 deny
+- `--all` / `--revoke` 依赖对应服务端能力；服务端不支持时必须原样报错并停止，不得降级为 `--recommend` 或其它授权方式
+
 ## Recovery
 
 当 runtime/MCP 命令失败且 stderr 额外输出 `RECOVERY_EVENT_ID=<event_id>` 时，说明 CLI 已经持久化了失败快照，可进入 recovery 闭环：
@@ -73,7 +97,7 @@ dws recovery finalize --event-id <event_id> --outcome recovered|failed|handoff -
 | `--fields` | | 筛选输出字段（逗号分隔）。按**顶层信封键**（data/result/success/status…）或**列表元素字段**投影；取 data 内的嵌套字段（如 baseName）请改用 `--jq '.data.baseName'`，`--fields baseName` 会因顶层无此键返回 `{}`。同 `--jq`：产品命令已生效，个别工具命令暂不生效 | 无 |
 | `--verbose` | `-v` | 详细日志 | false |
 | `--debug` | | 调试日志 | false |
-| `--yes` | `-y` | 跳过确认提示 | false |
+| `--yes` | `-y` | 确认操作并跳过确认提示 | false |
 | `--dry-run` | | 预览操作不执行 | false |
 | `--timeout` | | HTTP 超时 (秒) | 30 |
 | `--mock` | | Mock 数据 (开发用) | false |

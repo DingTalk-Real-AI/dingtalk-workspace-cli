@@ -26,6 +26,13 @@ metadata:
 - 全局 `--profile <名称|corpId>`：单次指定本命令用哪个组织，一次性、不改默认组织
 - 危险 / 写 / 删操作执行前先向用户确认
 
+## PAT 授权控制
+- 只使用现有 `dws pat chmod`：`--all` 选择服务端可操作的全部 scope，`--revoke` 撤回显式 PAT grant；不新增或猜测撤回子命令
+- 全量授权或任意撤回先执行同参数的 `--dry-run --format json`；用户明确确认后才改为 `--yes --format json`。`--all` 不等于仅选择推荐集合的 `--recommend`
+- PAT 下 `--yes` 表示非交互执行；pending 时保留 action / flow / URI / trace 信息，但不打开浏览器、不轮询、不自动重试
+- 撤回只恢复 PAT 默认策略，不是 OAuth `auth logout`，也不是永久 deny
+- flag 以当前二进制的 `dws pat chmod --help` 为准；服务端不支持对应 all / revoke 能力时必须报错停止，禁止静默降级
+
 ## 多组织 / --profile（关键规则）
 dws 可同时登录多个钉钉组织，一个 profile = 一个已登录组织（corp）。当前 profile 决定本次命令用哪个组织的身份（corpId / userId 自动注入）。
 

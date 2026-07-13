@@ -36,11 +36,20 @@ func newToolCallerAdapter(runner executor.Runner, flags *GlobalFlags) edition.To
 
 func (a *toolCallerAdapter) CallTool(ctx context.Context, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
 	inv := executor.NewHelperInvocation("overlay."+productID+"."+toolName, productID, toolName, args)
+	inv.AllowReadOnlyDuringDryRun = a.flags != nil && a.flags.DryRun && isPATBatchPlanDryRun(productID, toolName, args)
 	result, err := a.runner.Run(ctx, inv)
 	if err != nil {
 		return nil, err
 	}
 	return convertResult(result), nil
+}
+
+func isPATBatchPlanDryRun(productID, toolName string, args map[string]any) bool {
+	if productID != defaultPATProductID || toolName != "pat.batch_plan" {
+		return false
+	}
+	dryRun, ok := args["dryRun"].(bool)
+	return ok && dryRun
 }
 
 func (a *toolCallerAdapter) Format() string {

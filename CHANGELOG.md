@@ -13,10 +13,12 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 ### Added
 
 - **`dws schema` for registered local commands** — `dws schema "event consume"` (or `event.consume`) now returns a machine-readable input schema synthesized from the command's cobra flags, in the same flat shape helper subtrees emit: `{description, path, source, parameters{<flag>:{type, required, description, default?}}}` plus an `arguments` array for positional inputs, with `source: "cobra"` distinguishing flag-synthesized schema from MCP-fetched (`mcp:<server>`). Intermediate nodes (`dws schema event`) list their subcommands. The mechanism is a reusable registry (`cobraSchemaRoots`); `event` is the first consumer and more command trees can opt in without further wiring. Inherited global flags and hidden internal flags are excluded so the schema describes just that command.
+- **PAT all-scope grant and revoke controls** — `dws pat chmod` adds `--all` and boolean `--revoke` flags without adding another authorization subcommand. All-scope and revoke flows are plan-first, require explicit user-confirmed `--yes` for writes, and fail closed when the required server capability is unavailable; revoke removes an explicit PAT grant and restores the default policy rather than logging out OAuth or creating a permanent deny.
 - **Safe macOS Keychain → file-DEK migration** — `dws auth migrate-keychain --to file-dek` preflights every legacy/profile auth entry before rewriting, ignores unrelated application secrets, supports side-effect-free `--dry-run`, requires explicit `--yes`, and lets sandboxed and normal processes share an existing login without exposing tokens.
 
 ### Fixed
 
+- **PAT `--yes` is fully non-interactive** — pending PAT authorization no longer opens a browser, polls, or retries automatically when `--yes` is present; the structured pending response preserves the action, flow, URI, and trace details for the caller to handle.
 - **Cross-platform auth regression coverage** — dedicated macOS CI now runs the Darwin-only auth/keychain regression suite with race detection, Windows CI builds and tests the native DPAPI path, and recovery guidance prefers safe migration or per-profile cleanup over destructive global reset.
 
 ## [1.0.51] - 2026-07-10

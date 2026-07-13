@@ -311,7 +311,7 @@ dws is designed as an AI-native CLI. Complete [Installation](#installation) and 
 ### Agent Invocation Patterns
 
 ```bash
-# Use --yes to skip confirmation prompts (required for agents)
+# After explicit user confirmation, use --yes to skip supported confirmation prompts
 dws todo task create --title "Review PR" --executors "<your-userId>" --yes
 
 # Use --dry-run to preview operations (safe execution)
@@ -320,6 +320,17 @@ dws contact user search --query "engineering" --dry-run
 # Use --jq to extract precisely (save tokens)
 dws contact user get-self --jq '.result[0].orgEmployeeModel | {name: .orgUserName, dept: .depts[0].deptName, userId}'
 ```
+
+For PAT scope changes, keep the existing `dws pat chmod` entry point: use `--all` for every server-operable scope and boolean `--revoke` to remove explicit grants. Preview all-scope or revoke plans first, then add `--yes` only after the user approves:
+
+```bash
+dws pat chmod --all --dry-run --format json
+dws pat chmod --all --yes --format json
+dws pat chmod calendar.event:read --revoke --dry-run --format json
+dws pat chmod calendar.event:read --revoke --yes --format json
+```
+
+`--all` is not `--recommend`: the latter selects a curated subset. PAT revoke restores the default PAT policy; it is neither OAuth logout nor a permanent deny. With `--yes`, PAT handling is non-interactive: a pending response returns its action, flow, URI, and trace details without opening a browser, polling, or retrying. These flows require matching server capabilities and fail closed when unsupported; use the current binary's `dws pat chmod --help` output as the command contract.
 
 ### Command Help and Schema
 

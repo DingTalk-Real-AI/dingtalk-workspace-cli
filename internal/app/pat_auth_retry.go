@@ -206,6 +206,11 @@ func wantsStructuredPATOutputFromRunner(runner executor.Runner) bool {
 	return wantsStructuredPATOutput(rr)
 }
 
+func wantsNonInteractivePATFromRunner(runner executor.Runner) bool {
+	rr, ok := runner.(*runtimeRunner)
+	return ok && rr.globalFlags != nil && rr.globalFlags.Yes
+}
+
 func currentPATOpenBrowser(ctx context.Context, configDir string) bool {
 	if suppressed, _ := ctx.Value(patSuppressBrowserOpenKey).(bool); suppressed {
 		return false
@@ -312,6 +317,10 @@ func retryWithPatAuthRetry(ctx context.Context, runner executor.Runner, invocati
 		"hostOwned", hostOwnedPAT,
 		"agentCodeEnvSet", os.Getenv(authpkg.AgentCodeEnv) != "",
 	)
+	if wantsNonInteractivePATFromRunner(runner) {
+		raw := buildPATScopeJSON(scopeErr, hostOwnedPAT)
+		return executor.Result{}, &apperrors.PATError{RawJSON: enrichPATErrorWithOpenBrowser(raw, false)}
+	}
 	if hostOwnedPAT {
 		return executor.Result{}, &apperrors.PATError{RawJSON: buildPATScopeJSON(scopeErr, true)}
 	}
@@ -465,10 +474,10 @@ func runDirectPATAuthCheckWithMode(
 }
 
 // handlePatAuthCheck is called by runner.executeInvocation when a PAT
-// authorization error is detected.  It injects the server-assigned clientId
-// as x-robot-uid header, prints authorization details, opens the browser,
-// polls the device flow endpoint until the user authorizes, and retries the
-// original invocation on success.
+// authorization error is detected. It injects the server-assigned clientId
+// as x-robot-uid header. Interactive mode can print authorization details,
+// open the browser, poll the device flow endpoint, and retry after approval;
+// --yes mode returns the pending contract without those side effects.
 func handlePatAuthCheck(
 	ctx context.Context,
 	r *runtimeRunner,
@@ -508,6 +517,13 @@ func handlePatAuthCheck(
 	)
 	hostOwnedPAT := authpkg.HostOwnsPATFlow()
 	openBrowser := currentPATOpenBrowser(ctx, configDir)
+	nonInteractive := r != nil && r.globalFlags != nil && r.globalFlags.Yes
+	if nonInteractive {
+		// --yes means the caller has already confirmed the operation and expects
+		// a fully non-interactive execution. Override the effective browser policy
+		// for this response only; do not persist a browser-policy change.
+		openBrowser = false
+	}
 	slog.Debug("pat.host_owned_decision",
 		"site", "handlePatAuthCheck",
 		"hostOwned", hostOwnedPAT,
@@ -545,9 +561,20 @@ func handlePatAuthCheck(
 	// edition.MergeHeaders and surfaced in hostControl for traceability.
 	if hostOwnedPAT || patData.Data.FlowID == "" {
 		if hostOwnedPAT {
-			return executor.Result{}, &apperrors.PATError{RawJSON: enrichPATErrorForHostControl(patErr.RawJSON)}
+			raw := enrichPATErrorForHostControl(patErr.RawJSON)
+			if nonInteractive {
+				raw = enrichPATErrorWithOpenBrowser(raw, false)
+			}
+			return executor.Result{}, &apperrors.PATError{RawJSON: raw}
 		}
 		return executor.Result{}, &apperrors.PATError{RawJSON: enrichPATErrorWithOpenBrowser(patErr.RawJSON, openBrowser)}
+	}
+
+	// In --yes mode, return the pending authorization contract immediately.
+	// The caller can decide how to surface or complete the manual action; the
+	// CLI must not open a browser, poll, or automatically retry.
+	if nonInteractive {
+		return executor.Result{}, &apperrors.PATError{RawJSON: enrichPATErrorWithOpenBrowser(patErr.RawJSON, false)}
 	}
 
 	if wantsStructuredPATOutput(r) {

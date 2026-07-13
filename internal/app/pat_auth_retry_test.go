@@ -1198,6 +1198,103 @@ func TestHandlePatAuthCheck_JSONModeCanOpenBrowserWithoutTextOutput(t *testing.T
 	}
 }
 
+func TestHandlePatAuthCheck_YesReturnsStructuredPendingWithoutSideEffects(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "")
+	configDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+	if _, err := pat.SetBrowserPolicy(configDir, "", true); err != nil {
+		t.Fatalf("SetBrowserPolicy(default) error = %v", err)
+	}
+
+	var pollCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pollCount.Add(1)
+		http.Error(w, "polling is forbidden in --yes mode", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	if err := os.WriteFile(filepath.Join(configDir, "mcp_url"), []byte(server.URL), 0644); err != nil {
+		t.Fatalf("write mcp_url: %v", err)
+	}
+
+	var opened atomic.Bool
+	origOpenBrowser := openBrowserFunc
+	openBrowserFunc = func(string) error {
+		opened.Store(true)
+		return nil
+	}
+	t.Cleanup(func() { openBrowserFunc = origOpenBrowser })
+
+	var retryCount atomic.Int32
+	runner := &runtimeRunner{
+		fallback: &mockRunner{runFunc: func(context.Context, executor.Invocation) (executor.Result, error) {
+			retryCount.Add(1)
+			return executor.Result{}, nil
+		}},
+		globalFlags: &GlobalFlags{Format: "table", Yes: true},
+	}
+	rawURI := "https://example.com/personalAuthorization?flowId=flow-yes&userCode=ABCD-EFGH"
+	raw := `{"success":false,"code":"PAT_BATCH_AUTH_PENDING","traceId":"trace-yes","data":{"flowId":"flow-yes","uri":"` + rawURI + `","action":{"type":"open_uri","label":"Authorize"},"clientId":"test-client-id"}}`
+
+	var out bytes.Buffer
+	_, err := handlePatAuthCheck(context.Background(), runner, executor.Invocation{
+		CanonicalProduct: "test",
+		Tool:             "test_tool",
+	}, &apperrors.PATError{RawJSON: raw}, configDir, &out)
+	if err == nil {
+		t.Fatal("expected structured PATError in --yes mode")
+	}
+	if got := strings.TrimSpace(out.String()); got != "" {
+		t.Fatalf("--yes mode must not print interactive output, got %q", got)
+	}
+	if opened.Load() {
+		t.Fatal("--yes mode must not open the browser")
+	}
+	if got := pollCount.Load(); got != 0 {
+		t.Fatalf("PAT poll count = %d, want 0", got)
+	}
+	if got := retryCount.Load(); got != 0 {
+		t.Fatalf("PAT retry count = %d, want 0", got)
+	}
+	if !pat.EffectiveOpenBrowser(configDir) {
+		t.Fatal("--yes mode must not mutate the persisted browser policy")
+	}
+	if _, err := os.Stat(authpkg.GetAppConfigPath(configDir)); !os.IsNotExist(err) {
+		t.Fatalf("--yes pending flow must not persist shared app.json, stat error = %v", err)
+	}
+
+	patOut, ok := err.(*apperrors.PATError)
+	if !ok {
+		t.Fatalf("expected *PATError, got %T: %v", err, err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(patOut.RawJSON), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(--yes PAT payload) error = %v\nraw=%s", err, patOut.RawJSON)
+	}
+	if got, _ := payload["code"].(string); got != "PAT_BATCH_AUTH_PENDING" {
+		t.Fatalf("code = %q, want PAT_BATCH_AUTH_PENDING", got)
+	}
+	if got, _ := payload["traceId"].(string); got != "trace-yes" {
+		t.Fatalf("traceId = %q, want trace-yes", got)
+	}
+	data, _ := payload["data"].(map[string]any)
+	if got, _ := data["flowId"].(string); got != "flow-yes" {
+		t.Fatalf("data.flowId = %q, want flow-yes", got)
+	}
+	if got, _ := data["uri"].(string); got != rawURI {
+		t.Fatalf("data.uri = %q, want %q", got, rawURI)
+	}
+	if got, ok := data["openBrowser"].(bool); !ok || got {
+		t.Fatalf("data.openBrowser = %#v, want false", data["openBrowser"])
+	}
+	action, _ := data["action"].(map[string]any)
+	if got, _ := action["type"].(string); got != "open_uri" {
+		t.Fatalf("data.action.type = %q, want open_uri", got)
+	}
+	if got, _ := action["label"].(string); got != "Authorize" {
+		t.Fatalf("data.action.label = %q, want Authorize", got)
+	}
+}
+
 func TestHandlePatAuthCheck_NonJSONModeRespectsBrowserPolicy(t *testing.T) {
 	t.Setenv(authpkg.AgentCodeEnv, "")
 	server, configDir := setupHandlePATServer(t, "APPROVED", "test-auth-code")
@@ -1305,6 +1402,82 @@ func TestRetryWithPatAuthRetry_JSONModeReturnsStructuredPATError(t *testing.T) {
 	}
 	if _, ok := data["hostControl"]; ok {
 		t.Fatalf("unexpected data.hostControl in CLI-owned json scope mode: %s", patOut.RawJSON)
+	}
+}
+
+func TestRetryWithPatAuthRetry_YesReturnsStructuredPATErrorWithoutSideEffects(t *testing.T) {
+	t.Setenv(authpkg.AgentCodeEnv, "")
+	configDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+	if _, err := pat.SetBrowserPolicy(configDir, "", true); err != nil {
+		t.Fatalf("SetBrowserPolicy(default) error = %v", err)
+	}
+
+	var opened atomic.Bool
+	origOpenBrowser := openBrowserFunc
+	openBrowserFunc = func(string) error {
+		opened.Store(true)
+		return nil
+	}
+	t.Cleanup(func() { openBrowserFunc = origOpenBrowser })
+
+	var retryCount atomic.Int32
+	runner := &runtimeRunner{
+		fallback: &mockRunner{runFunc: func(context.Context, executor.Invocation) (executor.Result, error) {
+			retryCount.Add(1)
+			return executor.Result{}, nil
+		}},
+		globalFlags: &GlobalFlags{Format: "table", Yes: true},
+	}
+	scopeErr := &PatScopeError{
+		OriginalError: "missing required scope(s): mail:send",
+		Identity:      "user",
+		ErrorType:     "missing_scope",
+		Message:       "missing required scope(s): mail:send",
+		Hint:          "run `dws auth login --scope \"mail:send\"` to authorize the missing scope",
+		MissingScope:  "mail:send",
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	var out bytes.Buffer
+	_, err := retryWithPatAuthRetry(ctx, runner, executor.Invocation{}, scopeErr, configDir, &out)
+	if err == nil {
+		t.Fatal("expected structured PATError")
+	}
+	if got := strings.TrimSpace(out.String()); got != "" {
+		t.Fatalf("--yes legacy PAT path must not print or poll, got %q", got)
+	}
+	if opened.Load() {
+		t.Fatal("--yes legacy PAT path must not open the browser")
+	}
+	if got := retryCount.Load(); got != 0 {
+		t.Fatalf("legacy PAT retry count = %d, want 0", got)
+	}
+	if !pat.EffectiveOpenBrowser(configDir) {
+		t.Fatal("--yes legacy PAT path must not mutate the persisted browser policy")
+	}
+
+	patOut, ok := err.(*apperrors.PATError)
+	if !ok {
+		t.Fatalf("expected *PATError, got %T: %v", err, err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(patOut.RawJSON), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(legacy --yes PAT payload) error = %v\nraw=%s", err, patOut.RawJSON)
+	}
+	if got, _ := payload["code"].(string); got != patScopeAuthRequiredCode {
+		t.Fatalf("code = %q, want %s", got, patScopeAuthRequiredCode)
+	}
+	data, _ := payload["data"].(map[string]any)
+	if got, _ := data["missingScope"].(string); got != "mail:send" {
+		t.Fatalf("data.missingScope = %q, want mail:send", got)
+	}
+	if got, ok := data["openBrowser"].(bool); !ok || got {
+		t.Fatalf("data.openBrowser = %#v, want false", data["openBrowser"])
+	}
+	if _, ok := data["hostControl"]; ok {
+		t.Fatalf("unexpected data.hostControl in CLI-owned --yes PAT payload: %s", patOut.RawJSON)
 	}
 }
 
