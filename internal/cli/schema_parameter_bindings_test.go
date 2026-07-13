@@ -6,9 +6,10 @@ package cli
 import "testing"
 
 func TestSchemaParameterBindingsMatchEmbeddedCatalog(t *testing.T) {
+	loaded := embeddedSchemaCatalog()
 	count := 0
 	for canonical, bindings := range runtimeSchemaParameterBindings {
-		detail, ok := runtimeEmbeddedSchemaCatalog.Snapshot.Tools[canonical]
+		detail, ok := loaded.Snapshot.Tools[canonical]
 		if !ok {
 			t.Errorf("binding references unknown canonical path %q", canonical)
 			continue
@@ -34,8 +35,8 @@ func TestSchemaParameterBindingsMatchEmbeddedCatalog(t *testing.T) {
 		t.Fatalf("binding seed audit = historical:%d migrations:%d excluded:%d added:%d",
 			snapshot.HistoricalBindingCount, len(snapshot.Migrations), len(snapshot.Excluded), len(snapshot.Added))
 	}
-	if snapshot.SourceCatalogHash != runtimeEmbeddedSchemaCatalog.Snapshot.SourceHash {
-		t.Fatalf("binding source catalog hash = %q, want %q", snapshot.SourceCatalogHash, runtimeEmbeddedSchemaCatalog.Snapshot.SourceHash)
+	if snapshot.SourceCatalogHash != loaded.Snapshot.SourceHash {
+		t.Fatalf("binding source catalog hash = %q, want %q", snapshot.SourceCatalogHash, loaded.Snapshot.SourceHash)
 	}
 	if got := runtimeSchemaParameterBindings["calendar.get_calendar"]["id"]; got != "calendarId" {
 		t.Fatalf("calendar.get_calendar --id property = %q, want calendarId", got)

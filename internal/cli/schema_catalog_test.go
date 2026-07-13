@@ -14,7 +14,7 @@ import (
 )
 
 func TestEmbeddedSchemaCatalogIntegrity(t *testing.T) {
-	loaded := runtimeEmbeddedSchemaCatalog
+	loaded := embeddedSchemaCatalog()
 	if !embeddedSchemaCatalogAvailable() {
 		t.Fatal("embedded schema catalog is unavailable or failed integrity validation")
 	}

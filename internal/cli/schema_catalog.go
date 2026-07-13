@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/spf13/cobra"
@@ -90,7 +91,17 @@ type loadedSchemaCatalog struct {
 	Products map[string]map[string]any
 }
 
-var runtimeEmbeddedSchemaCatalog = loadEmbeddedSchemaCatalog()
+var (
+	runtimeEmbeddedSchemaCatalogOnce sync.Once
+	runtimeEmbeddedSchemaCatalog     loadedSchemaCatalog
+)
+
+func embeddedSchemaCatalog() loadedSchemaCatalog {
+	runtimeEmbeddedSchemaCatalogOnce.Do(func() {
+		runtimeEmbeddedSchemaCatalog = loadEmbeddedSchemaCatalog()
+	})
+	return runtimeEmbeddedSchemaCatalog
+}
 
 // BuildSchemaCatalogSnapshot renders a deterministic catalog from the
 // executable release command tree after all build-time metadata is embedded.
@@ -217,13 +228,13 @@ func loadEmbeddedSchemaCatalog() loadedSchemaCatalog {
 }
 
 func embeddedSchemaCatalogAvailable() bool {
-	return len(runtimeEmbeddedSchemaCatalog.Snapshot.Tools) > 0
+	return len(embeddedSchemaCatalog().Snapshot.Tools) > 0
 }
 
 // EmbeddedSchemaCommandDefinitions returns a detached, deterministic view of
 // the frozen CLI contract. It never exposes endpoints or Agent-only fields.
 func EmbeddedSchemaCommandDefinitions() []CatalogCommandDefinition {
-	loaded := runtimeEmbeddedSchemaCatalog
+	loaded := embeddedSchemaCatalog()
 	if len(loaded.Snapshot.Tools) == 0 {
 		return nil
 	}
@@ -406,7 +417,7 @@ func exactSchemaCommand(root *cobra.Command, rawPath string) *cobra.Command {
 }
 
 func embeddedSchemaPayload(args []string) (map[string]any, error) {
-	loaded := runtimeEmbeddedSchemaCatalog
+	loaded := embeddedSchemaCatalog()
 	if len(args) == 0 {
 		payload := cloneSchemaMap(loaded.Snapshot.Catalog)
 		payload["catalog_hash"] = loaded.Snapshot.SourceHash
