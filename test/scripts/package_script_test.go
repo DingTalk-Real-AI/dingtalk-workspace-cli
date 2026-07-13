@@ -350,17 +350,133 @@ func TestReleaseWorkflowUploadsPostProcessedDarwinAssets(t *testing.T) {
 		t.Fatalf("finalized asset upload must run after post-goreleaser.sh")
 	}
 
+	if !strings.Contains(workflow[upload:], "./scripts/release/finalize-github-release.sh") {
+		t.Fatal("release workflow must delegate atomic finalization to finalize-github-release.sh")
+	}
+
+	finalizePath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "finalize-github-release.sh"))
+	if err != nil {
+		t.Fatalf("Abs(finalize-github-release.sh) error = %v", err)
+	}
+	finalizeData, err := os.ReadFile(finalizePath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", finalizePath, err)
+	}
+	finalize := string(finalizeData)
+
 	for _, required := range []string{
-		"dist/dws-darwin-amd64.tar.gz",
-		"dist/dws-darwin-arm64.tar.gz",
-		"dist/checksums.txt",
-		"dist/dws-skills.zip",
+		"dws-darwin-amd64.tar.gz",
+		"dws-darwin-arm64.tar.gz",
+		"checksums.txt",
+		"dws-skills.zip",
 		"gh release upload",
 		"--clobber",
 		"release asset digest mismatch",
 	} {
-		if !strings.Contains(workflow[upload:], required) {
+		if !strings.Contains(finalize, required) {
 			t.Errorf("finalized asset upload is missing %q", required)
 		}
+	}
+}
+
+func TestReleaseStaysDraftUntilFinalizedAssetDigestsMatch(t *testing.T) {
+	t.Parallel()
+
+	goreleaserPath, err := filepath.Abs(filepath.Join("..", "..", ".goreleaser.yaml"))
+	if err != nil {
+		t.Fatalf("Abs(.goreleaser.yaml) error = %v", err)
+	}
+	goreleaserData, err := os.ReadFile(goreleaserPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", goreleaserPath, err)
+	}
+	if !strings.Contains(string(goreleaserData), "draft: true") {
+		t.Fatal("GoReleaser must keep the release as Draft during post-processing")
+	}
+
+	finalizePath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "finalize-github-release.sh"))
+	if err != nil {
+		t.Fatalf("Abs(finalize-github-release.sh) error = %v", err)
+	}
+	finalizeData, err := os.ReadFile(finalizePath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", finalizePath, err)
+	}
+	finalize := string(finalizeData)
+
+	upload := strings.Index(finalize, "gh release upload")
+	digestFailure := strings.Index(finalize, "release asset digest mismatch")
+	publish := strings.Index(finalize, "gh release edit")
+	if upload == -1 || digestFailure == -1 || publish == -1 || !(upload < digestFailure && digestFailure < publish) {
+		t.Fatal("Draft publication must happen after finalized asset upload and digest verification")
+	}
+}
+
+func TestFinalizeGitHubReleaseDoesNotPublishAfterUploadFailure(t *testing.T) {
+	t.Parallel()
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "finalize-github-release.sh"))
+	if err != nil {
+		t.Fatalf("Abs(finalize-github-release.sh) error = %v", err)
+	}
+
+	root := t.TempDir()
+	distDir := filepath.Join(root, "dist")
+	if err := os.MkdirAll(distDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", distDir, err)
+	}
+	for _, name := range []string{
+		"dws-darwin-amd64.tar.gz",
+		"dws-darwin-arm64.tar.gz",
+		"checksums.txt",
+		"dws-skills.zip",
+	} {
+		if err := os.WriteFile(filepath.Join(distDir, name), []byte("finalized"), 0o644); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", name, err)
+		}
+	}
+
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", binDir, err)
+	}
+	logPath := filepath.Join(root, "gh.log")
+	fakeGH := `#!/bin/sh
+printf '%s\n' "$*" >> "$FAKE_GH_LOG"
+if [ "$1" = "release" ] && [ "$2" = "upload" ]; then
+  exit 42
+fi
+if [ "$1" = "release" ] && [ "$2" = "edit" ]; then
+  exit 0
+fi
+exit 1
+`
+	if err := os.WriteFile(filepath.Join(binDir, "gh"), []byte(fakeGH), 0o755); err != nil {
+		t.Fatalf("WriteFile(fake gh) error = %v", err)
+	}
+
+	cmd := exec.Command("sh", scriptPath)
+	cmd.Env = append(os.Environ(),
+		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"FAKE_GH_LOG="+logPath,
+		"GITHUB_REF_NAME=v-test",
+		"GITHUB_REPOSITORY=example/dws",
+		"DWS_PACKAGE_DIST_DIR="+distDir,
+	)
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("finalize-github-release.sh unexpectedly succeeded after upload failure:\n%s", output)
+	}
+
+	logData, readErr := os.ReadFile(logPath)
+	if readErr != nil {
+		t.Fatalf("ReadFile(%s) error = %v", logPath, readErr)
+	}
+	logText := string(logData)
+	if !strings.Contains(logText, "release upload") {
+		t.Fatalf("fake gh did not observe release upload:\n%s", logText)
+	}
+	if strings.Contains(logText, "release edit") {
+		t.Fatalf("Draft release was published after upload failure:\n%s", logText)
 	}
 }
