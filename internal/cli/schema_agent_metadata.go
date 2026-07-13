@@ -149,14 +149,10 @@ func emptyEmbeddedAgentMetadata() embeddedAgentMetadata {
 	}
 }
 
-// agentToolContractForPaths is the sole typed adapter from generated Agent
+// agentToolContractForPathsFromMetadata is the sole typed adapter from generated Agent
 // metadata to runtime contract assembly. Path resolution happens once; all
 // consumers receive the same resolved safety, interface, selection and
 // provenance values without performing downstream map merges.
-func agentToolContractForPaths(paths ...string) (SafetySpec, InterfaceSpec, SelectionSpec, map[string]FieldProvenance, bool) {
-	return agentToolContractForPathsFromMetadata(runtimeAgentMetadata(), paths...)
-}
-
 func agentToolContractForPathsFromMetadata(source embeddedAgentMetadata, paths ...string) (SafetySpec, InterfaceSpec, SelectionSpec, map[string]FieldProvenance, bool) {
 	metadata, ok := lookupAgentToolMetadataFrom(source, paths...)
 	if !ok {
@@ -248,12 +244,8 @@ func resolvedFieldProvenance(value any, source, sourceRef, precedence, resolutio
 	}
 }
 
-// agentProductSelectionForIDs exposes generated product routing through the
-// same typed SelectionSpec used by ToolSpec.
-func agentProductSelectionForIDs(ids ...string) (SelectionSpec, bool) {
-	return agentProductSelectionForIDsFromMetadata(runtimeAgentMetadata(), ids...)
-}
-
+// agentProductSelectionForIDsFromMetadata exposes generated product routing
+// through the same typed SelectionSpec used by ToolSpec.
 func agentProductSelectionForIDsFromMetadata(source embeddedAgentMetadata, ids ...string) (SelectionSpec, bool) {
 	selection, _, ok := agentProductContractForIDsFromMetadata(source, ids...)
 	return selection, ok
@@ -329,10 +321,6 @@ func cloneFieldCandidates(source []FieldCandidateProvenance) []FieldCandidatePro
 	return out
 }
 
-func lookupAgentToolMetadata(paths ...string) (agentToolMetadata, bool) {
-	return lookupAgentToolMetadataFrom(runtimeAgentMetadata(), paths...)
-}
-
 func lookupAgentToolMetadataFrom(source embeddedAgentMetadata, paths ...string) (agentToolMetadata, bool) {
 	seen := map[string]bool{}
 	for _, path := range paths {
@@ -350,10 +338,6 @@ func lookupAgentToolMetadataFrom(source embeddedAgentMetadata, paths ...string) 
 		}
 	}
 	return agentToolMetadata{}, false
-}
-
-func agentMetadataSummary() map[string]any {
-	return agentMetadataSummaryFrom(runtimeAgentMetadata())
 }
 
 func agentMetadataSummaryFrom(metadata embeddedAgentMetadata) map[string]any {

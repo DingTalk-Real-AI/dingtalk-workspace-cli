@@ -156,10 +156,6 @@ func runtimeMCPMetadata() embeddedMCPMetadata {
 	return runtimeEmbeddedMCPMetadataLazy.metadata
 }
 
-func interfaceMetadataSummary() map[string]any {
-	return interfaceMetadataSummaryFrom(runtimeMCPMetadata())
-}
-
 func interfaceMetadataSummaryFrom(metadata embeddedMCPMetadata) map[string]any {
 	summary := map[string]any{
 		"source":      strings.TrimSpace(metadata.Source),
@@ -400,24 +396,6 @@ func setFlagAnnotationValues(flag *pflag.Flag, key string, values ...string) {
 	flag.Annotations[key] = clean
 }
 
-func runtimeSchemaPayload(root *cobra.Command, args []string) (map[string]any, error) {
-	registry, err := buildRuntimeSchemaRegistry(root)
-	if err != nil {
-		return nil, err
-	}
-	return runtimeSchemaPayloadFromRegistry(registry, args)
-}
-
-// runtimeSchemaAllPayload expands the progressive runtime catalog into a
-// complete, deterministic leaf contract for audit and compatibility checks.
-func runtimeSchemaAllPayload(root *cobra.Command) (map[string]any, error) {
-	registry, err := buildRuntimeSchemaRegistry(root)
-	if err != nil {
-		return nil, err
-	}
-	return runtimeSchemaAllPayloadFromRegistry(registry)
-}
-
 type runtimeSchemaEntry struct {
 	ProductID       string
 	SourceProductID string
@@ -515,10 +493,6 @@ func runtimeSchemaHintForEntry(entry runtimeSchemaEntry) ToolSchemaHint {
 		return schemaHintForCanonicalPath(entry.SourceProductID + "." + entry.ToolName)
 	}
 	return ToolSchemaHint{}
-}
-
-func embeddedMCPMetadataForEntry(entry runtimeSchemaEntry) (embeddedMCPToolMetadata, bool) {
-	return embeddedMCPMetadataForEntryFrom(entry, runtimeAgentMetadata(), runtimeMCPMetadata())
 }
 
 func embeddedMCPMetadataForEntryFrom(entry runtimeSchemaEntry, agentMetadata embeddedAgentMetadata, mcpMetadata embeddedMCPMetadata) (embeddedMCPToolMetadata, bool) {
@@ -642,10 +616,6 @@ func schemaProductToolCount(product map[string]any) int {
 		return len(tools)
 	}
 	return 0
-}
-
-func runtimeToolTextMetadata(entry runtimeSchemaEntry) (title, description, metadataSource string, provenance map[string]FieldProvenance, err error) {
-	return runtimeToolTextMetadataFromMetadata(entry, embeddedRuntimeSchemaMetadataSources())
 }
 
 func runtimeToolTextMetadataFromMetadata(entry runtimeSchemaEntry, metadata runtimeSchemaMetadataSources) (title, description, metadataSource string, provenance map[string]FieldProvenance, err error) {
@@ -1398,13 +1368,15 @@ func isGenericPayloadFlag(flag *pflag.Flag) bool {
 
 func runtimeFlagCLIType(flag *pflag.Flag) string {
 	switch flag.Value.Type() {
-	case "int", "int8", "int16", "int32", "int64":
+	case "int", "int8", "int16", "int32", "int64",
+		"uint", "uint8", "uint16", "uint32", "uint64", "count":
 		return "integer"
 	case "float32", "float64":
 		return "number"
 	case "bool":
 		return "boolean"
-	case "stringSlice", "stringArray":
+	case "stringSlice", "stringArray", "intSlice", "int32Slice", "int64Slice",
+		"uintSlice", "float32Slice", "float64Slice", "boolSlice", "durationSlice":
 		return "array"
 	default:
 		return "string"
@@ -1477,16 +1449,22 @@ func lowerCamelFlagName(flagName string) string {
 
 func runtimeFlagDefault(flag *pflag.Flag) string {
 	def := strings.TrimSpace(flag.DefValue)
+	if def == "" || def == "0s" || def == "[]" || def == "{}" {
+		return ""
+	}
 	switch flag.Value.Type() {
 	case "bool":
 		if def == "false" {
 			return ""
 		}
-	case "int", "int8", "int16", "int32", "int64", "float32", "float64":
+	case "int", "int8", "int16", "int32", "int64",
+		"uint", "uint8", "uint16", "uint32", "uint64", "count",
+		"float32", "float64":
 		if def == "0" {
 			return ""
 		}
-	case "stringSlice", "stringArray":
+	case "stringSlice", "stringArray", "intSlice", "int32Slice", "int64Slice",
+		"uintSlice", "float32Slice", "float64Slice", "boolSlice", "durationSlice":
 		if def == "[]" {
 			return ""
 		}

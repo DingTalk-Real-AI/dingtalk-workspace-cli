@@ -108,10 +108,6 @@ func buildRuntimeSchemaRegistry(root *cobra.Command) (SchemaRegistry, error) {
 	return AssembleSchemaRegistry(root)
 }
 
-func runtimeToolSpec(entry runtimeSchemaEntry) (ToolSpec, error) {
-	return runtimeToolSpecFromMetadata(entry, embeddedRuntimeSchemaMetadataSources())
-}
-
 func runtimeToolSpecFromMetadata(entry runtimeSchemaEntry, metadata runtimeSchemaMetadataSources) (ToolSpec, error) {
 	canonicalPath := entry.ProductID + "." + entry.ToolName
 	dryRun, err := reviewedDryRunCapability(canonicalPath)
@@ -316,13 +312,13 @@ func validateSchemaRegistryAgainstCommandRegistry(registry SchemaRegistry, comma
 			return err
 		}
 		if actual := normalizeSchemaCLIPath(tool.Identity.PrimaryCLIPath); actual != expected.PrimaryCLIPath {
-			return fmt.Errorf("Schema tool %s primary path %q disagrees with reviewed CommandRegistry %q", canonical, actual, expected.PrimaryCLIPath)
+			return fmt.Errorf("schema tool %s primary path %q disagrees with reviewed CommandRegistry %q", canonical, actual, expected.PrimaryCLIPath)
 		}
 		if actual := normalizeSchemaCLIPath(tool.Identity.CLIPath); actual != expected.PrimaryCLIPath {
-			return fmt.Errorf("Schema tool %s canonical cli path %q disagrees with reviewed CommandRegistry primary path %q", canonical, actual, expected.PrimaryCLIPath)
+			return fmt.Errorf("schema tool %s canonical cli path %q disagrees with reviewed CommandRegistry primary path %q", canonical, actual, expected.PrimaryCLIPath)
 		}
 		if tool.Identity.IsAlias {
-			return fmt.Errorf("Schema tool %s canonical identity must have is_alias=false", canonical)
+			return fmt.Errorf("schema tool %s canonical identity must have is_alias=false", canonical)
 		}
 		actualSourceProduct := strings.TrimSpace(tool.Identity.SourceProductID)
 		if actualSourceProduct == "" {
@@ -333,15 +329,15 @@ func validateSchemaRegistryAgainstCommandRegistry(registry SchemaRegistry, comma
 			expectedSourceProduct = tool.Identity.ProductID
 		}
 		if actualSourceProduct != expectedSourceProduct {
-			return fmt.Errorf("Schema tool %s source product %q disagrees with reviewed CommandRegistry %q", canonical, actualSourceProduct, expectedSourceProduct)
+			return fmt.Errorf("schema tool %s source product %q disagrees with reviewed CommandRegistry %q", canonical, actualSourceProduct, expectedSourceProduct)
 		}
 		if actualSource := strings.TrimSpace(tool.Identity.Source); actualSource != strings.TrimSpace(expected.Source) {
-			return fmt.Errorf("Schema tool %s identity source %q disagrees with effective CommandRegistry %q", canonical, actualSource, expected.Source)
+			return fmt.Errorf("schema tool %s identity source %q disagrees with effective CommandRegistry %q", canonical, actualSource, expected.Source)
 		}
 		actualAliases := sortedUniqueStrings(tool.Identity.Aliases)
 		expectedAliases := sortedUniqueStrings(expected.Aliases)
 		if strings.Join(actualAliases, "\x00") != strings.Join(expectedAliases, "\x00") {
-			return fmt.Errorf("Schema tool %s aliases %q disagree with reviewed CommandRegistry %q", canonical, actualAliases, expectedAliases)
+			return fmt.Errorf("schema tool %s aliases %q disagree with reviewed CommandRegistry %q", canonical, actualAliases, expectedAliases)
 		}
 	}
 	return nil

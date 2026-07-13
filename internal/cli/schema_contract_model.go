@@ -110,9 +110,9 @@ func (d DryRunSpec) Validate(canonical string) error {
 	case DryRunPreviewInvocation, DryRunPreviewRequest, DryRunPreviewPlan, DryRunPreviewDiff:
 		return nil
 	case "":
-		return fmt.Errorf("Schema tool %s dry_run has no preview_kind", canonical)
+		return fmt.Errorf("schema tool %s dry_run has no preview_kind", canonical)
 	default:
-		return fmt.Errorf("Schema tool %s dry_run has unknown preview_kind %q", canonical, d.PreviewKind)
+		return fmt.Errorf("schema tool %s dry_run has unknown preview_kind %q", canonical, d.PreviewKind)
 	}
 }
 
@@ -204,46 +204,46 @@ func (i InterfaceSpec) Validate(canonical string) error {
 	reason := strings.TrimSpace(i.Reason)
 
 	if mode == InterfaceUnavailable {
-		return fmt.Errorf("Schema tool %s uses legacy interface_mode=unavailable; migrate to interface_mode=mcp, local, or composite with availability=unavailable", canonical)
+		return fmt.Errorf("schema tool %s uses legacy interface_mode=unavailable; migrate to interface_mode=mcp, local, or composite with availability=unavailable", canonical)
 	}
 	switch mode {
 	case InterfaceModeMCP, InterfaceModeLocal, InterfaceModeComposite:
 	case "":
-		return fmt.Errorf("Schema tool %s has no interface mode", canonical)
+		return fmt.Errorf("schema tool %s has no interface mode", canonical)
 	default:
-		return fmt.Errorf("Schema tool %s has unknown interface mode %q", canonical, mode)
+		return fmt.Errorf("schema tool %s has unknown interface mode %q", canonical, mode)
 	}
 	switch availability {
 	case InterfaceAvailable:
 	case InterfaceUnavailable:
 		if i.Ref != nil {
-			return fmt.Errorf("Schema tool %s with unavailable interface must not declare interface_ref", canonical)
+			return fmt.Errorf("schema tool %s with unavailable interface must not declare interface_ref", canonical)
 		}
 		if reason == "" {
-			return fmt.Errorf("Schema tool %s with unavailable interface must declare interface_reason", canonical)
+			return fmt.Errorf("schema tool %s with unavailable interface must declare interface_reason", canonical)
 		}
 		return nil
 	case "":
-		return fmt.Errorf("Schema tool %s has no interface availability", canonical)
+		return fmt.Errorf("schema tool %s has no interface availability", canonical)
 	default:
-		return fmt.Errorf("Schema tool %s has unknown interface availability %q", canonical, availability)
+		return fmt.Errorf("schema tool %s has unknown interface availability %q", canonical, availability)
 	}
 
 	switch mode {
 	case InterfaceModeMCP:
 		if i.Ref == nil {
-			return fmt.Errorf("Schema tool %s with interface mode mcp has no interface_ref", canonical)
+			return fmt.Errorf("schema tool %s with interface mode mcp has no interface_ref", canonical)
 		}
 	case InterfaceModeLocal:
 		if i.Ref != nil {
-			return fmt.Errorf("Schema tool %s with interface mode local must not declare interface_ref", canonical)
+			return fmt.Errorf("schema tool %s with interface mode local must not declare interface_ref", canonical)
 		}
 	case InterfaceModeComposite:
 		if i.Ref != nil {
-			return fmt.Errorf("Schema tool %s with interface mode composite must not declare a single interface_ref", canonical)
+			return fmt.Errorf("schema tool %s with interface mode composite must not declare a single interface_ref", canonical)
 		}
 		if reason == "" {
-			return fmt.Errorf("Schema tool %s with interface mode composite must declare interface_reason", canonical)
+			return fmt.Errorf("schema tool %s with interface mode composite must declare interface_reason", canonical)
 		}
 	}
 	return nil
@@ -395,22 +395,7 @@ func toolSpecFromSnapshot(input RuntimeToolSpecInput) (ToolSpec, error) {
 }
 
 func toolSpecFromResolvedInput(input RuntimeToolSpecInput) (ToolSpec, error) {
-	spec := ToolSpec{
-		Identity:        input.Identity,
-		Display:         input.Display,
-		Title:           input.Title,
-		Description:     input.Description,
-		MetadataSource:  input.MetadataSource,
-		Parameters:      input.Parameters,
-		Constraints:     input.Constraints,
-		Positionals:     input.Positionals,
-		DryRun:          input.DryRun,
-		Safety:          input.Safety,
-		Interface:       input.Interface,
-		Selection:       input.Selection,
-		FieldProvenance: input.FieldProvenance,
-		Extensions:      input.Extensions,
-	}.normalized()
+	spec := ToolSpec(input).normalized()
 	if err := spec.Validate(); err != nil {
 		return ToolSpec{}, err
 	}

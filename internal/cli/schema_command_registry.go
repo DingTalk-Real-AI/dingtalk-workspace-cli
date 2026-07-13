@@ -190,10 +190,10 @@ func decodeCommandRegistry(data []byte) (CommandRegistry, error) {
 		return CommandRegistry{}, fmt.Errorf("unsupported Schema command registry version %d", snapshot.Version)
 	}
 	if strings.TrimSpace(snapshot.Schema) != commandRegistrySchemaRef {
-		return CommandRegistry{}, fmt.Errorf("Schema command registry must declare $schema=%q", commandRegistrySchemaRef)
+		return CommandRegistry{}, fmt.Errorf("schema command registry must declare $schema=%q", commandRegistrySchemaRef)
 	}
 	if len(snapshot.Products) == 0 {
-		return CommandRegistry{}, fmt.Errorf("Schema command registry contains no products")
+		return CommandRegistry{}, fmt.Errorf("schema command registry contains no products")
 	}
 
 	products := append([]schemaCommandRegistryProduct(nil), snapshot.Products...)
@@ -203,45 +203,45 @@ func decodeCommandRegistry(data []byte) (CommandRegistry, error) {
 	for _, product := range products {
 		productID := strings.TrimSpace(product.ID)
 		if productID != product.ID || !validCommandRegistryProductID(productID) {
-			return CommandRegistry{}, fmt.Errorf("Schema command registry contains invalid product id %q", product.ID)
+			return CommandRegistry{}, fmt.Errorf("schema command registry contains invalid product id %q", product.ID)
 		}
 		if seenProducts[productID] {
-			return CommandRegistry{}, fmt.Errorf("Schema command registry contains duplicate product id %q", productID)
+			return CommandRegistry{}, fmt.Errorf("schema command registry contains duplicate product id %q", productID)
 		}
 		seenProducts[productID] = true
 		if len(product.Tools) == 0 {
-			return CommandRegistry{}, fmt.Errorf("Schema command registry product %s contains no commands", productID)
+			return CommandRegistry{}, fmt.Errorf("schema command registry product %s contains no commands", productID)
 		}
 		for _, tool := range product.Tools {
 			canonical := strings.TrimSpace(tool.CanonicalPath)
 			canonicalProduct, _, ok := splitManualSchemaCanonicalPath(canonical)
 			if canonical != tool.CanonicalPath || !ok || !commandRegistryCanonicalPattern.MatchString(canonical) || canonicalProduct != productID {
-				return CommandRegistry{}, fmt.Errorf("Schema command registry product %s contains invalid canonical path %q", productID, canonical)
+				return CommandRegistry{}, fmt.Errorf("schema command registry product %s contains invalid canonical path %q", productID, canonical)
 			}
 			sourceProductID := productID
 			if tool.SourceProductID != nil {
 				rawSourceProductID := *tool.SourceProductID
 				sourceProductID = strings.TrimSpace(rawSourceProductID)
 				if sourceProductID != rawSourceProductID || !validCommandRegistryProductID(sourceProductID) {
-					return CommandRegistry{}, fmt.Errorf("Schema command registry tool %s has invalid source_product_id %q", canonical, rawSourceProductID)
+					return CommandRegistry{}, fmt.Errorf("schema command registry tool %s has invalid source_product_id %q", canonical, rawSourceProductID)
 				}
 			}
 			if sourceProductID == "" {
 				sourceProductID = productID
 			}
 			if !validReviewedCommandRegistryCLIPath(tool.CLIPath) {
-				return CommandRegistry{}, fmt.Errorf("Schema command registry tool %s has invalid primary cli path %q", canonical, tool.CLIPath)
+				return CommandRegistry{}, fmt.Errorf("schema command registry tool %s has invalid primary cli path %q", canonical, tool.CLIPath)
 			}
 			seenAliases := make(map[string]bool, len(tool.Aliases))
 			for _, alias := range tool.Aliases {
 				if !validReviewedCommandRegistryCLIPath(alias) {
-					return CommandRegistry{}, fmt.Errorf("Schema command registry tool %s has invalid alias path %q", canonical, alias)
+					return CommandRegistry{}, fmt.Errorf("schema command registry tool %s has invalid alias path %q", canonical, alias)
 				}
 				if alias == tool.CLIPath {
-					return CommandRegistry{}, fmt.Errorf("Schema command registry tool %s alias %q duplicates its primary cli path", canonical, alias)
+					return CommandRegistry{}, fmt.Errorf("schema command registry tool %s alias %q duplicates its primary cli path", canonical, alias)
 				}
 				if seenAliases[alias] {
-					return CommandRegistry{}, fmt.Errorf("Schema command registry tool %s contains duplicate alias %q", canonical, alias)
+					return CommandRegistry{}, fmt.Errorf("schema command registry tool %s contains duplicate alias %q", canonical, alias)
 				}
 				seenAliases[alias] = true
 			}
@@ -251,7 +251,7 @@ func decodeCommandRegistry(data []byte) (CommandRegistry, error) {
 				switch visibility {
 				case SchemaVisibilityPublic, SchemaVisibilityCompat, SchemaVisibilityInternal:
 				default:
-					return CommandRegistry{}, fmt.Errorf("Schema command registry tool %s has invalid visibility %q", canonical, visibility)
+					return CommandRegistry{}, fmt.Errorf("schema command registry tool %s has invalid visibility %q", canonical, visibility)
 				}
 			}
 			commands = append(commands, CommandSpec{
@@ -292,31 +292,31 @@ func indexCommandSpecs(commands []CommandSpec) ([]CommandSpec, map[string]Comman
 		spec.CanonicalPath = strings.TrimSpace(spec.CanonicalPath)
 		productID, _, ok := splitManualSchemaCanonicalPath(spec.CanonicalPath)
 		if !ok || !commandRegistryCanonicalPattern.MatchString(spec.CanonicalPath) {
-			return nil, nil, nil, fmt.Errorf("Schema command registry contains invalid canonical path %q", raw.CanonicalPath)
+			return nil, nil, nil, fmt.Errorf("schema command registry contains invalid canonical path %q", raw.CanonicalPath)
 		}
 		spec.SourceProductID = strings.TrimSpace(spec.SourceProductID)
 		if spec.SourceProductID == "" {
 			spec.SourceProductID = productID
 		}
 		if !validCommandRegistryProductID(spec.SourceProductID) {
-			return nil, nil, nil, fmt.Errorf("Schema command registry tool %s has invalid source_product_id %q", spec.CanonicalPath, raw.SourceProductID)
+			return nil, nil, nil, fmt.Errorf("schema command registry tool %s has invalid source_product_id %q", spec.CanonicalPath, raw.SourceProductID)
 		}
 		spec.PrimaryCLIPath = normalizeSchemaCLIPath(spec.PrimaryCLIPath)
 		if !validReviewedCommandRegistryCLIPath(spec.PrimaryCLIPath) {
-			return nil, nil, nil, fmt.Errorf("Schema command registry tool %s has invalid primary cli path %q", spec.CanonicalPath, raw.PrimaryCLIPath)
+			return nil, nil, nil, fmt.Errorf("schema command registry tool %s has invalid primary cli path %q", spec.CanonicalPath, raw.PrimaryCLIPath)
 		}
 		aliases := make([]string, 0, len(spec.Aliases))
 		seenAliases := make(map[string]bool, len(spec.Aliases))
 		for _, rawAlias := range spec.Aliases {
 			alias := normalizeSchemaCLIPath(rawAlias)
 			if !validReviewedCommandRegistryCLIPath(alias) {
-				return nil, nil, nil, fmt.Errorf("Schema command registry tool %s has invalid alias path %q", spec.CanonicalPath, alias)
+				return nil, nil, nil, fmt.Errorf("schema command registry tool %s has invalid alias path %q", spec.CanonicalPath, alias)
 			}
 			if alias == spec.PrimaryCLIPath {
-				return nil, nil, nil, fmt.Errorf("Schema command registry tool %s alias %q duplicates its primary path", spec.CanonicalPath, alias)
+				return nil, nil, nil, fmt.Errorf("schema command registry tool %s alias %q duplicates its primary path", spec.CanonicalPath, alias)
 			}
 			if seenAliases[alias] {
-				return nil, nil, nil, fmt.Errorf("Schema command registry tool %s has duplicate alias path %q", spec.CanonicalPath, alias)
+				return nil, nil, nil, fmt.Errorf("schema command registry tool %s has duplicate alias path %q", spec.CanonicalPath, alias)
 			}
 			seenAliases[alias] = true
 			aliases = append(aliases, alias)
@@ -328,7 +328,7 @@ func indexCommandSpecs(commands []CommandSpec) ([]CommandSpec, map[string]Comman
 		switch spec.Visibility {
 		case SchemaVisibilityPublic, SchemaVisibilityCompat, SchemaVisibilityInternal:
 		default:
-			return nil, nil, nil, fmt.Errorf("Schema command registry tool %s has invalid visibility %q", spec.CanonicalPath, spec.Visibility)
+			return nil, nil, nil, fmt.Errorf("schema command registry tool %s has invalid visibility %q", spec.CanonicalPath, spec.Visibility)
 		}
 		spec.Source = strings.TrimSpace(spec.Source)
 		if spec.Source == "" {
@@ -341,7 +341,7 @@ func indexCommandSpecs(commands []CommandSpec) ([]CommandSpec, map[string]Comman
 		byCanonical[spec.CanonicalPath] = spec
 		for _, path := range append([]string{spec.PrimaryCLIPath}, spec.Aliases...) {
 			if previous, exists := byPath[path]; exists {
-				return nil, nil, nil, fmt.Errorf("Schema command registry path %q belongs to both %s and %s", path, previous.CanonicalPath, spec.CanonicalPath)
+				return nil, nil, nil, fmt.Errorf("schema command registry path %q belongs to both %s and %s", path, previous.CanonicalPath, spec.CanonicalPath)
 			}
 			byPath[path] = spec
 		}
@@ -350,7 +350,7 @@ func indexCommandSpecs(commands []CommandSpec) ([]CommandSpec, map[string]Comman
 	for path, owner := range byPath {
 		if canonicalOwner, exists := byCanonical[path]; exists {
 			return nil, nil, nil, fmt.Errorf(
-				"Schema command registry CLI path %q for %s conflicts with canonical identity %s",
+				"schema command registry CLI path %q for %s conflicts with canonical identity %s",
 				path,
 				owner.CanonicalPath,
 				canonicalOwner.CanonicalPath,

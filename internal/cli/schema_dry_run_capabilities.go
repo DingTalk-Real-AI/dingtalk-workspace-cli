@@ -495,6 +495,7 @@ var reviewedDryRunCapabilityGroups = []dryRunCapabilityGroup{
 		"dev.unsubscribe_dev_app_events",
 		"dev.update_dev_app",
 		"dev.update_dev_app_security_config",
+		"event.stop",
 		"pat.batch_grant",
 	}},
 	{PreviewKind: DryRunPreviewPlan, CanonicalPaths: []string{

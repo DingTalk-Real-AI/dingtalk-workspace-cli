@@ -116,13 +116,13 @@ func bindCommandRegistryAlias(root *cobra.Command, spec CommandSpec, primary *co
 	path := normalizeSchemaCLIPath(rawPath)
 	match, err := resolveExactCobraPath(root, path)
 	if err != nil {
-		return BoundAlias{}, fmt.Errorf("Schema command registry %s alias %q: %w", spec.CanonicalPath, path, err)
+		return BoundAlias{}, fmt.Errorf("schema command registry %s alias %q: %w", spec.CanonicalPath, path, err)
 	}
 	if match.Command == nil {
-		return BoundAlias{}, fmt.Errorf("Schema command registry %s has stale alias path %q: command does not exist", spec.CanonicalPath, path)
+		return BoundAlias{}, fmt.Errorf("schema command registry %s has stale alias path %q: command does not exist", spec.CanonicalPath, path)
 	}
 	if !runnableSchemaLeaf(match.Command) {
-		return BoundAlias{}, fmt.Errorf("Schema command registry %s alias %q is not a runnable Cobra leaf", spec.CanonicalPath, path)
+		return BoundAlias{}, fmt.Errorf("schema command registry %s alias %q is not a runnable Cobra leaf", spec.CanonicalPath, path)
 	}
 
 	// A Cobra alias is the same runnable command reached through one or more
@@ -132,11 +132,11 @@ func bindCommandRegistryAlias(root *cobra.Command, spec CommandSpec, primary *co
 	kind := AliasKindCompatibilityLeaf
 	if match.UsedAlias {
 		if match.Command != primary {
-			return BoundAlias{}, fmt.Errorf("Schema command registry %s Cobra alias %q resolves to a different command than primary path %q", spec.CanonicalPath, path, spec.PrimaryCLIPath)
+			return BoundAlias{}, fmt.Errorf("schema command registry %s Cobra alias %q resolves to a different command than primary path %q", spec.CanonicalPath, path, spec.PrimaryCLIPath)
 		}
 		kind = AliasKindCobraAlias
 	} else if match.Command == primary {
-		return BoundAlias{}, fmt.Errorf("Schema command registry %s alias %q duplicates primary path %q", spec.CanonicalPath, path, spec.PrimaryCLIPath)
+		return BoundAlias{}, fmt.Errorf("schema command registry %s alias %q duplicates primary path %q", spec.CanonicalPath, path, spec.PrimaryCLIPath)
 	}
 	if err := validateCommandRegistryAnnotation(match.Command, path, spec); err != nil {
 		return BoundAlias{}, err
@@ -222,7 +222,7 @@ func validateCompatibilityLeafContract(spec CommandSpec, primary, alias *cobra.C
 		return nil
 	}
 	return fmt.Errorf(
-		"Schema command registry %s compatibility leaf alias %q is not executable-contract equivalent to primary path %q:\n - %s",
+		"schema command registry %s compatibility leaf alias %q is not executable-contract equivalent to primary path %q:\n - %s",
 		spec.CanonicalPath,
 		aliasPath,
 		spec.PrimaryCLIPath,
@@ -608,7 +608,7 @@ func resolveExactCobraPath(root *cobra.Command, rawPath string) (exactCobraPathM
 			}
 		}
 		if len(exactMatches) > 1 {
-			return exactCobraPathMatch{}, fmt.Errorf("Cobra command segment %q is ambiguous", part)
+			return exactCobraPathMatch{}, fmt.Errorf("cobra command segment %q is ambiguous", part)
 		}
 		if len(exactMatches) == 1 {
 			current = exactMatches[0]
@@ -625,7 +625,7 @@ func resolveExactCobraPath(root *cobra.Command, rawPath string) (exactCobraPathM
 			}
 		}
 		if len(aliasMatches) > 1 {
-			return exactCobraPathMatch{}, fmt.Errorf("Cobra alias segment %q is ambiguous", part)
+			return exactCobraPathMatch{}, fmt.Errorf("cobra alias segment %q is ambiguous", part)
 		}
 		if len(aliasMatches) == 0 {
 			return exactCobraPathMatch{}, nil
@@ -649,16 +649,16 @@ func bindCommandRegistryPath(root *cobra.Command, spec CommandSpec, path string)
 	path = normalizeSchemaCLIPath(path)
 	match, err := resolveExactCobraPath(root, path)
 	if err != nil {
-		return nil, fmt.Errorf("Schema command registry %s primary path %q: %w", spec.CanonicalPath, path, err)
+		return nil, fmt.Errorf("schema command registry %s primary path %q: %w", spec.CanonicalPath, path, err)
 	}
 	if match.Command == nil {
-		return nil, fmt.Errorf("Schema command registry %s has stale cli path %q: command does not exist", spec.CanonicalPath, path)
+		return nil, fmt.Errorf("schema command registry %s has stale cli path %q: command does not exist", spec.CanonicalPath, path)
 	}
 	if match.UsedAlias {
-		return nil, fmt.Errorf("Schema command registry %s primary path %q must use real Cobra command names, not Aliases", spec.CanonicalPath, path)
+		return nil, fmt.Errorf("schema command registry %s primary path %q must use real Cobra command names, not Aliases", spec.CanonicalPath, path)
 	}
 	if !runnableSchemaLeaf(match.Command) {
-		return nil, fmt.Errorf("Schema command registry %s path %q is not a runnable Cobra leaf", spec.CanonicalPath, path)
+		return nil, fmt.Errorf("schema command registry %s path %q is not a runnable Cobra leaf", spec.CanonicalPath, path)
 	}
 	if err := validateCommandRegistryAnnotation(match.Command, path, spec); err != nil {
 		return nil, err
@@ -674,17 +674,17 @@ func validateCommandRegistryAnnotation(command *cobra.Command, path string, spec
 	nativeProduct, nativeTool, _ := runtimeSchemaAnnotations(command)
 	if nativeProduct != "" || nativeTool != "" {
 		if nativeProduct == "" || nativeTool == "" {
-			return fmt.Errorf("Schema command registry %s path %q has incomplete native annotation %q.%q", spec.CanonicalPath, path, nativeProduct, nativeTool)
+			return fmt.Errorf("schema command registry %s path %q has incomplete native annotation %q.%q", spec.CanonicalPath, path, nativeProduct, nativeTool)
 		}
 		nativeCanonical := nativeProduct + "." + nativeTool
 		if nativeCanonical != spec.CanonicalPath {
-			return fmt.Errorf("Schema command registry %s path %q conflicts with native annotation %s", spec.CanonicalPath, path, nativeCanonical)
+			return fmt.Errorf("schema command registry %s path %q conflicts with native annotation %s", spec.CanonicalPath, path, nativeCanonical)
 		}
 	}
 	if manualProduct, manualTool, _, ok := runtimeManualSchemaIdentity(command); ok {
 		manualCanonical := strings.TrimSpace(manualProduct + "." + manualTool)
 		if manualCanonical != spec.CanonicalPath {
-			return fmt.Errorf("Schema command registry %s path %q conflicts with reviewed manual identity %s", spec.CanonicalPath, path, manualCanonical)
+			return fmt.Errorf("schema command registry %s path %q conflicts with reviewed manual identity %s", spec.CanonicalPath, path, manualCanonical)
 		}
 	}
 	return nil

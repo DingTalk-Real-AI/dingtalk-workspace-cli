@@ -699,14 +699,14 @@ func validateEffectiveToolProjection(file File, opts Options) error {
 	sort.Strings(unexpected)
 	if len(missing) > 0 || len(unexpected) > 0 {
 		return fmt.Errorf(
-			"Agent metadata does not exactly project the effective CommandRegistry: missing=%v unexpected=%v",
+			"agent metadata does not exactly project the effective CommandRegistry: missing=%v unexpected=%v",
 			missing,
 			unexpected,
 		)
 	}
 	if opts.SurfaceToolCount > 0 && opts.SurfaceToolCount != len(expected) {
 		return fmt.Errorf(
-			"Agent metadata effective CommandRegistry count %d disagrees with unique projected tools %d",
+			"agent metadata effective CommandRegistry count %d disagrees with unique projected tools %d",
 			opts.SurfaceToolCount,
 			len(expected),
 		)
@@ -915,7 +915,7 @@ func mergeRankedStringValue(target *string, targetPresent *bool, targetRank *int
 		return nil
 	}
 	if current != incoming {
-		return fmt.Errorf("Agent metadata conflict for %s field %s at precedence %d: %q from %s conflicts with %q from %s",
+		return fmt.Errorf("agent metadata conflict for %s field %s at precedence %d: %q from %s conflicts with %q from %s",
 			path, field, incomingRank, *target, firstNonEmpty(*targetOrigin, "<unknown>"), incoming, firstNonEmpty(incomingOrigin, "<unknown>"))
 	}
 	if targetPresent != nil {
@@ -950,7 +950,7 @@ func mergeRankedStringList(target *[]string, targetPresent *bool, targetRank *in
 		return nil
 	}
 	if !fieldValueEqual(current, incoming) {
-		return fmt.Errorf("Agent metadata conflict for %s field %s at precedence %d: %s from %s conflicts with %s from %s",
+		return fmt.Errorf("agent metadata conflict for %s field %s at precedence %d: %s from %s conflicts with %s from %s",
 			path, field, incomingRank,
 			fieldValueDisplay(current), firstNonEmpty(*targetOrigin, "<unknown>"),
 			fieldValueDisplay(incoming), firstNonEmpty(incomingOrigin, "<unknown>"))
@@ -1007,7 +1007,7 @@ func mergeRankedInterfaceRef(left *ToolMetadata, right ToolMetadata, path string
 	}
 	leftValue := interfaceRefCandidateValue(left.InterfaceRef)
 	if !fieldValueEqual(leftValue, rightValue) {
-		return fmt.Errorf("Agent metadata conflict for %s field interface_ref at precedence %d: %s from %s conflicts with %s from %s",
+		return fmt.Errorf("agent metadata conflict for %s field interface_ref at precedence %d: %s from %s conflicts with %s from %s",
 			path, rank,
 			fieldValueDisplay(leftValue), firstNonEmpty(left.interfaceRefOrigin, "<unknown>"),
 			fieldValueDisplay(rightValue), firstNonEmpty(right.interfaceRefOrigin, "<unknown>"))
@@ -1100,19 +1100,6 @@ func cloneFieldValue(value any) any {
 		return cloneStringList(typed)
 	default:
 		return typed
-	}
-}
-
-func fieldValueEmpty(value any) bool {
-	switch typed := value.(type) {
-	case nil:
-		return true
-	case string:
-		return strings.TrimSpace(typed) == ""
-	case []string:
-		return len(normalizeAuthoredStrings(typed)) == 0
-	default:
-		return false
 	}
 }
 
@@ -1426,7 +1413,7 @@ func validateFieldCandidateConflicts(path string, history map[string][]FieldCand
 			for _, candidate := range candidates[start+1 : end] {
 				if !fieldValueEqual(candidate.Value, reference.Value) {
 					return fmt.Errorf(
-						"Agent metadata conflict for %s field %s at precedence %d: %s from %s conflicts with %s from %s",
+						"agent metadata conflict for %s field %s at precedence %d: %s from %s conflicts with %s from %s",
 						path, field, rank,
 						fieldValueDisplay(reference.Value), firstNonEmpty(reference.Source, "<unknown>"),
 						fieldValueDisplay(candidate.Value), firstNonEmpty(candidate.Source, "<unknown>"),

@@ -32,12 +32,17 @@ func TestSchemaParameterBindingsMatchEmbeddedCatalog(t *testing.T) {
 	if count == 0 {
 		t.Fatal("active parameter binding count is zero")
 	}
-	if snapshot.HistoricalBindingCount != 311 || len(snapshot.Migrations) != 5 || len(snapshot.Excluded) != 3 || len(snapshot.Added) != 23 {
+	if snapshot.HistoricalBindingCount != 311 || len(snapshot.Migrations) != 5 || len(snapshot.Excluded) != 3 || len(snapshot.Added) != 25 {
 		t.Fatalf("binding seed audit = historical:%d migrations:%d excluded:%d added:%d",
 			snapshot.HistoricalBindingCount, len(snapshot.Migrations), len(snapshot.Excluded), len(snapshot.Added))
 	}
 	if got := bindingsSnapshot["calendar.get_calendar"]["id"]; got != "calendarId" {
 		t.Fatalf("calendar.get_calendar --id property = %q, want calendarId", got)
+	}
+	for _, canonical := range []string{"dev.search_open_platform_docs_rag", "devdoc.search_open_platform_docs_rag"} {
+		if got := bindingsSnapshot[canonical]["query"]; got != "keyword" {
+			t.Errorf("%s --query property = %q, want keyword", canonical, got)
+		}
 	}
 	for canonical, flagName := range map[string]string{
 		"calendar.add_calendar_participant":    "event",

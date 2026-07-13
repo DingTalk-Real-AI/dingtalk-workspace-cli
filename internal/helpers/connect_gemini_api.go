@@ -122,14 +122,14 @@ func (f *geminiAPIForwarder) forward(ctx context.Context, _, text string) (strin
 	defer resp.Body.Close()
 	respRaw, _ := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("Gemini API HTTP %d: %s", resp.StatusCode, truncateRunes(strings.TrimSpace(string(respRaw)), 300))
+		return "", fmt.Errorf("gemini API HTTP %d: %s", resp.StatusCode, truncateRunes(strings.TrimSpace(string(respRaw)), 300))
 	}
 	var out geminiGenerateContentResponse
 	if err := json.Unmarshal(respRaw, &out); err != nil {
 		return "", err
 	}
 	if out.Error.Message != "" {
-		return "", fmt.Errorf("Gemini API error %s: %s", out.Error.Status, truncateRunes(out.Error.Message, 300))
+		return "", fmt.Errorf("gemini API error %s: %s", out.Error.Status, truncateRunes(out.Error.Message, 300))
 	}
 	var chunks []string
 	for _, cand := range out.Candidates {
@@ -141,7 +141,7 @@ func (f *geminiAPIForwarder) forward(ctx context.Context, _, text string) (strin
 	}
 	if len(chunks) == 0 {
 		if out.PromptFeedback.BlockReason != "" {
-			return "", fmt.Errorf("Gemini API blocked prompt: %s", out.PromptFeedback.BlockReason)
+			return "", fmt.Errorf("gemini API blocked prompt: %s", out.PromptFeedback.BlockReason)
 		}
 		return "（Gemini API 无文本输出）", nil
 	}

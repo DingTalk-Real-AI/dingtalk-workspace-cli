@@ -169,7 +169,7 @@ if ! jq -e --slurpfile bindings internal/cli/schema_parameter_bindings.json '
   $bindings[0].historical_binding_count == 311 and
   ($bindings[0].migrations | length) == 5 and
   ($bindings[0].excluded | length) == 3 and
-  ($bindings[0].added | length) == 23 and
+  ($bindings[0].added | length) == 25 and
   ([$bindings[0].bindings | to_entries[] |
     .key as $tool | .value | to_entries[] |
     {tool: $tool, flag: .key, property: .value}

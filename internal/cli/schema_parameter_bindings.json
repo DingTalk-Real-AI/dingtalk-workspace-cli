@@ -22,6 +22,8 @@
     "calendar.remove_calendar_participant --attendees": "attendeesToRemove (current inherited flag and MCP interface)",
     "calendar.remove_calendar_participant --calendar-id": "calendarId (current inherited flag and MCP interface)",
     "calendar.remove_calendar_participant --event": "eventId (current inherited flag and MCP interface)",
+    "dev.search_open_platform_docs_rag --query": "keyword (public flag mapped to the helper's positional/MCP property)",
+    "devdoc.search_open_platform_docs_rag --query": "keyword (public flag mapped to the helper's positional/MCP property)",
     "doc.delete_comment --node": "nodeId (new reviewed doc-comment helper payload)",
     "doc.update_comment --mention": "mentionedUserIds (new reviewed doc-comment helper payload)",
     "doc.update_comment --node": "nodeId (new reviewed doc-comment helper payload)",
@@ -404,6 +406,12 @@
       "start": "searchVO.startDate"
     },
     "contact.search_contact_by_key_word": {
+      "query": "keyword"
+    },
+    "dev.search_open_platform_docs_rag": {
+      "query": "keyword"
+    },
+    "devdoc.search_open_platform_docs_rag": {
       "query": "keyword"
     },
     "ding.recall_ding_message": {

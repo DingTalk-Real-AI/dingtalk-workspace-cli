@@ -511,7 +511,7 @@ func TestBindEffectiveCommandRegistryRejectsAmbiguousCobraAlias(t *testing.T) {
 	}})
 
 	_, err := BindEffectiveCommandRegistry(root, effective)
-	if err == nil || !strings.Contains(err.Error(), `Cobra alias segment "fetch" is ambiguous`) {
+	if err == nil || !strings.Contains(err.Error(), `cobra alias segment "fetch" is ambiguous`) {
 		t.Fatalf("error = %v", err)
 	}
 }
@@ -634,7 +634,7 @@ func TestBuildEffectiveCommandRegistryRejectsAmbiguousManualAlias(t *testing.T) 
 	}
 
 	_, err := buildEffectiveCommandRegistry(root, reviewed, manual)
-	if err == nil || !strings.Contains(err.Error(), `Cobra alias segment "fetch" is ambiguous`) {
+	if err == nil || !strings.Contains(err.Error(), `cobra alias segment "fetch" is ambiguous`) {
 		t.Fatalf("error = %v", err)
 	}
 }

@@ -1,18 +1,18 @@
 {
   "version": 1,
-  "source_hash": "sha256:839c40d56f5f9ce5b2b01e4a2171c5207d200cae1d00012f6d0b67023785a604",
-  "surface_hash": "sha256:be28fa5be59b27f5cd141a64487710f29e2e7361b1555a3a64818942e4327d37",
+  "source_hash": "sha256:254cd3116b6f945f47a190844f79795121a3b947c2444086091a337b377bd01a",
+  "surface_hash": "sha256:aa9f26facd9fa58ec8e7998d22f765352075fd36cc1b6080289c72db3af3427b",
   "coverage": {
-    "surface_products": 20,
-    "products_with_metadata": 20,
-    "surface_tools": 554,
-    "tools_with_metadata": 554,
-    "tools_with_agent_summary": 554,
-    "tools_with_use_when": 554,
-    "tools_with_avoid_when": 554,
-    "tools_with_examples": 554,
-    "tools_with_interface_mode": 554,
-    "unmatched_skill_tools": 162,
+    "surface_products": 21,
+    "products_with_metadata": 21,
+    "surface_tools": 559,
+    "tools_with_metadata": 559,
+    "tools_with_agent_summary": 559,
+    "tools_with_use_when": 559,
+    "tools_with_avoid_when": 559,
+    "tools_with_examples": 559,
+    "tools_with_interface_mode": 559,
+    "unmatched_skill_tools": 154,
     "unreviewed_skill_tools": 40
   },
   "products": {
@@ -791,6 +791,75 @@
         "浏览、搜索、上传、下载或整理钉盘和文档空间文件时"
       ]
     },
+    "event": {
+      "agent_summary": "订阅和消费当前用户的个人消息事件，并查询事件目录、payload Schema、运行状态或停止订阅。",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+      "avoid_when": [
+        "需要查询历史聊天记录或主动发送消息时不要使用；分别选择 chat 的查询或发送命令。"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "订阅和消费当前用户的个人消息事件，并查询事件目录、payload Schema、运行状态或停止订阅。",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "precedence": "reviewed_manual",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "订阅和消费当前用户的个人消息事件，并查询事件目录、payload Schema、运行状态或停止订阅。",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "precedence": "reviewed_manual",
+              "selected": true
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "需要查询历史聊天记录或主动发送消息时不要使用；分别选择 chat 的查询或发送命令。"
+          ],
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "precedence": "reviewed_manual",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": [
+                "需要查询历史聊天记录或主动发送消息时不要使用；分别选择 chat 的查询或发送命令。"
+              ],
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "precedence": "reviewed_manual",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要实时监听个人消息事件、查看支持的事件类型或 Schema、检查事件消费状态，或停止个人事件订阅时。"
+          ],
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+          "precedence": "reviewed_manual",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": [
+                "需要实时监听个人消息事件、查看支持的事件类型或 Schema、检查事件消费状态，或停止个人事件订阅时。"
+              ],
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v2",
+              "precedence": "reviewed_manual",
+              "selected": true
+            }
+          ]
+        }
+      },
+      "source_refs": [
+        "cobra-help:dws event --help",
+        "internal/cli/schema_command_registry.json#event",
+        "internal/cli/schema_manual_hints.json",
+        "skills/mono/SKILL.md",
+        "skills/mono/references/products/event.md"
+      ],
+      "use_when": [
+        "需要实时监听个人消息事件、查看支持的事件类型或 Schema、检查事件消费状态，或停止个人事件订阅时。"
+      ]
+    },
     "live": {
       "agent_summary": "查询当前用户的直播列表",
       "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
@@ -1438,6 +1507,7 @@
     "ding",
     "doc",
     "drive",
+    "event",
     "live",
     "mail",
     "minutes",

@@ -264,6 +264,9 @@ func schemaContractFlagDefault(flag *pflag.Flag) string {
 		return ""
 	}
 	value := strings.TrimSpace(flag.DefValue)
+	if value == "" || value == "0s" || value == "[]" || value == "{}" {
+		return ""
+	}
 	switch flag.Value.Type() {
 	case "bool":
 		if value == "false" {
@@ -271,10 +274,6 @@ func schemaContractFlagDefault(flag *pflag.Flag) string {
 		}
 	case "int", "int8", "int16", "int32", "int64", "float32", "float64":
 		if value == "0" {
-			return ""
-		}
-	case "stringSlice", "stringArray":
-		if value == "[]" {
 			return ""
 		}
 	}

@@ -1021,17 +1021,6 @@ func firstStringField(data map[string]any, keys ...string) string {
 	return ""
 }
 
-func printMCPText(text string) error {
-	if deps.Caller.Format() == "json" {
-		var parsed any
-		if err := json.Unmarshal([]byte(text), &parsed); err == nil {
-			return deps.Out.PrintJSONUnescaped(parsed)
-		}
-	}
-	deps.Out.PrintRaw(text)
-	return nil
-}
-
 // ──────────────────────────────────────────────────────────
 // dws chat — 会话 / 群聊 / 消息
 // ──────────────────────────────────────────────────────────

@@ -179,6 +179,24 @@
           "浏览、搜索、上传、下载或整理钉盘和文档空间文件时"
         ]
       },
+      "event": {
+        "agent_summary": "订阅和消费当前用户的个人消息事件，并查询事件目录、payload Schema、运行状态或停止订阅。",
+        "avoid_when": [
+          "需要查询历史聊天记录或主动发送消息时不要使用；分别选择 chat 的查询或发送命令。"
+        ],
+        "evidence": [
+          "internal/cli/schema_command_registry.json#event",
+          "cobra-help:dws event --help",
+          "skills/mono/SKILL.md",
+          "skills/mono/references/products/event.md"
+        ],
+        "reason": "依据新增的 reviewed CommandRegistry、真实 Cobra help、个人事件实现和 event 产品参考，补齐 event 产品的 Agent 选择边界。",
+        "reviewed": true,
+        "revision": "ai-agent-contract-2026-07-13-v2",
+        "use_when": [
+          "需要实时监听个人消息事件、查看支持的事件类型或 Schema、检查事件消费状态，或停止个人事件订阅时。"
+        ]
+      },
       "live": {
         "agent_summary": "查询当前用户的直播列表",
         "avoid_when": [
@@ -11757,6 +11775,111 @@
           "已知节点 ID 或 URL，需要分析该节点的访问和协作统计时。"
         ]
       },
+      "event.consume": {
+        "agent_summary": "订阅并持续消费指定个人事件，将事件流以 NDJSON 等格式输出。",
+        "avoid_when": [
+          "只需查看支持的事件类型或 payload 字段时分别使用 event list 或 event schema；只查历史聊天记录时使用 chat 查询命令。"
+        ],
+        "evidence": [
+          "internal/cli/schema_command_registry.json#event.consume",
+          "cobra-help:dws event consume --help",
+          "skills/mono/SKILL.md",
+          "skills/mono/references/products/event.md"
+        ],
+        "examples": [
+          "dws event consume user_im_message_receive_at --max-events 1 --format ndjson"
+        ],
+        "reason": "依据真实 Cobra leaf、个人事件订阅与消费实现和 event 产品参考，补齐 reviewed Agent 选择语义与有界消费示例。",
+        "reviewed": true,
+        "revision": "ai-agent-contract-2026-07-13-v2",
+        "use_when": [
+          "需要实时接收一个已知个人事件码的后续事件，并将结果交给 Agent 或管道处理时。"
+        ]
+      },
+      "event.list": {
+        "agent_summary": "列出当前支持的个人事件目录及其规则、状态和说明。",
+        "avoid_when": [
+          "需要查看某个事件的 payload 字段时使用 event schema；需要开始监听事件时使用 event consume。"
+        ],
+        "evidence": [
+          "internal/cli/schema_command_registry.json#event.list",
+          "cobra-help:dws event list --help",
+          "skills/mono/SKILL.md",
+          "skills/mono/references/products/event.md"
+        ],
+        "examples": [
+          "dws event list --format json"
+        ],
+        "reason": "依据真实 Cobra leaf、个人事件目录实现和 event 产品参考，补齐 reviewed Agent 选择语义与只读示例。",
+        "reviewed": true,
+        "revision": "ai-agent-contract-2026-07-13-v2",
+        "use_when": [
+          "尚不知道可用 event_key，或需要按分类和启用状态盘点个人事件时。"
+        ]
+      },
+      "event.schema": {
+        "agent_summary": "查询指定个人事件码的 payload 字段 Schema。",
+        "avoid_when": [
+          "需要查询 CLI 命令参数契约时使用顶层 dws schema；需要实际接收事件时使用 event consume。"
+        ],
+        "evidence": [
+          "internal/cli/schema_command_registry.json#event.schema",
+          "cobra-help:dws event schema --help",
+          "skills/mono/SKILL.md",
+          "skills/mono/references/products/event.md"
+        ],
+        "examples": [
+          "dws event schema user_im_message_receive_at --format json"
+        ],
+        "reason": "依据真实 Cobra leaf、个人事件 payload Schema 实现和 event 产品参考，补齐 reviewed Agent 选择语义并明确其与顶层命令 Schema 的边界。",
+        "reviewed": true,
+        "revision": "ai-agent-contract-2026-07-13-v2",
+        "use_when": [
+          "已知 event_key，需要在消费前理解该事件 payload 的字段结构时。"
+        ]
+      },
+      "event.status": {
+        "agent_summary": "查看当前用户的个人事件订阅、本地 event bus 和消费进程状态。",
+        "avoid_when": [
+          "需要列出支持的事件类型时使用 event list；需要取消订阅或停止消费时使用 event stop。"
+        ],
+        "evidence": [
+          "internal/cli/schema_command_registry.json#event.status",
+          "cobra-help:dws event status --help",
+          "skills/mono/SKILL.md",
+          "skills/mono/references/products/event.md"
+        ],
+        "examples": [
+          "dws event status --format json"
+        ],
+        "reason": "依据真实 Cobra leaf、订阅与本地消费状态实现和 event 产品参考，补齐 reviewed Agent 选择语义与只读示例。",
+        "reviewed": true,
+        "revision": "ai-agent-contract-2026-07-13-v2",
+        "use_when": [
+          "需要检查个人事件订阅是否活跃、bus 是否运行或 consume 进程是否仍在消费时。"
+        ]
+      },
+      "event.stop": {
+        "agent_summary": "取消指定或全部个人事件订阅，停止对应本地消费，并在无剩余订阅时停止 personal bus。",
+        "avoid_when": [
+          "只需检查运行状态时使用 event status；目标订阅不明确或用户尚未确认取消订阅时不要使用。"
+        ],
+        "evidence": [
+          "internal/cli/schema_command_registry.json#event.stop",
+          "cobra-help:dws event stop --help",
+          "skills/mono/SKILL.md",
+          "skills/mono/references/products/event.md"
+        ],
+        "examples": [
+          "dws event stop SUBSCRIBE_ID"
+        ],
+        "reason": "依据真实 Cobra leaf、取消订阅与停止消费实现和 fail-closed 确认语义，补齐 reviewed Agent 选择边界；示例不绕过用户确认。",
+        "reviewed": true,
+        "revision": "ai-agent-contract-2026-07-13-v2",
+        "use_when": [
+          "用户明确要求取消一个已知个人事件订阅并停止对应消费时。"
+        ]
+      },
       "sheet.hide_gridline": {
         "agent_summary": "隐藏指定在线表格工作表的网格线。",
         "avoid_when": [
@@ -12174,11 +12297,10 @@
       "cli_path": "devdoc article search",
       "parameters": {
         "query": {
-          "property": "query",
           "required": false
         }
       },
-      "reason": "Search text may be supplied as positional argument 0, --query, or --keyword; the reviewed positional and require-one-of contracts express the alternatives.",
+      "reason": "Search text may be supplied as positional keyword or public --query; hidden --keyword remains a runtime compatibility alias and is intentionally not published as a parameter. The versioned binding owns query -> keyword.",
       "reviewed": true
     },
     {

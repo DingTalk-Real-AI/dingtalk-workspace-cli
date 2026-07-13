@@ -76,7 +76,7 @@ func NewSchemaCommand(_ CatalogLoader) *cobra.Command {
 		Short: "渐进查看命令 Schema (产品 / 分组 / 工具参数)",
 		Long: `查看当前可运行命令的 Schema 元数据。
 
-不带参数时列出产品和工具数量；传产品或分组路径逐层展开；传具体工具路径输出扁平参数 Schema（对齐 GWS：parameters 内联 required，键为 CLI flag）。--all 输出全部工具的完整 leaf Schema（包括参数和约束，用于审计/CI）。--compact 去除 provenance / debug 字段，仅保留 Agent 选参所需信息（适合 Agent 上下文）。查询不执行服务发现。`,
+不带参数时列出产品和工具数量；传产品或分组路径逐层展开；传具体工具路径输出扁平参数 Schema（对齐 GWS：parameters 内联 required，键为 CLI flag）。--all 输出全部工具的完整 leaf Schema（包括参数和约束，用于审计/CI）。--compact 去除 provenance / debug 字段，仅保留 Agent 选参所需信息（适合 Agent 上下文）。helper、MCP 与本地 Cobra 命令均须先进入 reviewed Registry，并从同一内嵌 ToolSpec 投影；查询不执行服务发现或临时合成第二份 Schema。`,
 		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {

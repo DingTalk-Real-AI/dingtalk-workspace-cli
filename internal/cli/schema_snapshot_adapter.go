@@ -135,14 +135,14 @@ func schemaRegistryFromSnapshot(snapshot SchemaCatalogSnapshot) (SchemaRegistry,
 			canonical := strings.TrimSpace(summary.CanonicalPath)
 			detail, ok := snapshot.Tools[canonical]
 			if !ok {
-				return SchemaRegistry{}, SchemaIndex{}, fmt.Errorf("Schema Catalog summary %s has no full ToolSpec", canonical)
+				return SchemaRegistry{}, SchemaIndex{}, fmt.Errorf("schema Catalog summary %s has no full ToolSpec", canonical)
 			}
 			tool, err := schemaToolSpecFromPayload(detail)
 			if err != nil {
 				return SchemaRegistry{}, SchemaIndex{}, fmt.Errorf("decode Schema ToolSpec %s: %w", canonical, err)
 			}
 			if tool.Identity.ProductID != product.ID {
-				return SchemaRegistry{}, SchemaIndex{}, fmt.Errorf("Schema ToolSpec %s belongs to product %s, not %s", canonical, tool.Identity.ProductID, product.ID)
+				return SchemaRegistry{}, SchemaIndex{}, fmt.Errorf("schema ToolSpec %s belongs to product %s, not %s", canonical, tool.Identity.ProductID, product.ID)
 			}
 			product.Tools = append(product.Tools, tool)
 			seen[canonical] = true
@@ -157,7 +157,7 @@ func schemaRegistryFromSnapshot(snapshot SchemaCatalogSnapshot) (SchemaRegistry,
 			}
 		}
 		sort.Strings(missing)
-		return SchemaRegistry{}, SchemaIndex{}, fmt.Errorf("Schema Catalog full tools absent from typed products: %s", strings.Join(missing, ", "))
+		return SchemaRegistry{}, SchemaIndex{}, fmt.Errorf("schema Catalog full tools absent from typed products: %s", strings.Join(missing, ", "))
 	}
 	registry := SchemaRegistry{
 		Kind:              catalog.Kind,

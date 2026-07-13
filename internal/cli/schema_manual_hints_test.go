@@ -150,7 +150,7 @@ func TestManualSchemaHintsRejectAmbiguousCobraAlias(t *testing.T) {
 			Reviewed:      true,
 		}},
 	})
-	if err == nil || !strings.Contains(err.Error(), `Cobra alias segment "find" is ambiguous`) {
+	if err == nil || !strings.Contains(err.Error(), `cobra alias segment "find" is ambiguous`) {
 		t.Fatalf("error = %v", err)
 	}
 }

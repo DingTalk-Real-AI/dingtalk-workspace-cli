@@ -55,6 +55,11 @@ type Config struct {
 	// MaxEvents: stop after receiving this many events. 0 = no limit.
 	MaxEvents int
 
+	// EventKey is the single event key being consumed. Used only for the
+	// AI-subprocess contract stderr lines (`[event] ready event_key=...`).
+	// Empty → the key is omitted from the marker.
+	EventKey string
+
 	// Duration: wall-clock budget for the consume run. After this elapses,
 	// Run returns nil (clean exit, exit code 0). Zero = no limit.
 	//
@@ -90,6 +95,18 @@ type Config struct {
 	OutputDir string
 	// Routes are pre-parsed --route specs. Empty = no routing.
 	Routes []Route
+
+	// Stdin, when non-nil, is watched for EOF: closing stdin triggers a
+	// graceful shutdown (reason: signal). This wires the AI-subprocess
+	// contract — a parent closes stdin to stop the consumer. The cobra
+	// layer passes os.Stdin; tests inject a controllable reader. nil →
+	// stdin is not watched (backward-compatible default for callers that
+	// do not opt in).
+	//
+	// Note: `< /dev/null` EOFs immediately and exits at once. To stay
+	// resident feed a never-EOF stdin (`< <(tail -f /dev/null)`) or run
+	// bounded (--max-events / --duration).
+	Stdin io.Reader
 
 	// Stdout sink; nil → os.Stdout. Injected for tests.
 	Stdout io.Writer
@@ -132,14 +149,29 @@ func Run(ctx context.Context, cfg Config) error {
 		return nil
 	}
 
+	// Distinguish the exit cause for the contract's `exited` line:
+	//   duration deadline    → timeout
+	//   parentCtx cancelled  → signal (SIGTERM/SIGINT)
+	//   runCtx-only cancelled → signal (stdin EOF)
+	parentCtx := ctx
+
 	// --duration: layer a deadline on top of caller-provided ctx. Run
 	// returns nil on deadline (clean exit) rather than surfacing the
 	// context.DeadlineExceeded as an error to the user.
+	var timeoutCtx context.Context
 	if cfg.Duration > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, cfg.Duration)
+		timeoutCtx, cancel = context.WithTimeout(ctx, cfg.Duration)
 		defer cancel()
+		ctx = timeoutCtx
 	}
+
+	// runCtx lets the stdin watcher and the read loop share one cancel
+	// without disturbing the timeout/parent contexts (so we can still tell
+	// stdin-EOF from a real signal from a duration deadline).
+	runCtx, cancelRun := context.WithCancel(ctx)
+	defer cancelRun()
+	ctx = runCtx
 
 	pipeline, err := BuildPipeline(cfg.Format, cfg.OutputDir, cfg.Routes, cfg.Stdout)
 	if err != nil {
@@ -184,19 +216,57 @@ func Run(ctx context.Context, cfg Config) error {
 		return fmt.Errorf("consume: unexpected first frame type %q", ack.Type)
 	}
 	if !cfg.Quiet {
-		fmt.Fprintf(cfg.Stderr,
-			"connected bus pid=%d source=%s state=%s idle_timeout=%ds\n",
-			ack.BusPID, ack.StateSource, ack.SourceState, ack.IdleTimeoutSecs)
+		// Contract: a fixed ready line on stderr BEFORE any stdout event.
+		// Parents block on stderr until this appears, then read stdout.
+		if cfg.EventKey != "" {
+			fmt.Fprintf(cfg.Stderr, "[event] ready event_key=%s bus_pid=%d\n", cfg.EventKey, ack.BusPID)
+		} else {
+			fmt.Fprintf(cfg.Stderr, "[event] ready bus_pid=%d\n", ack.BusPID)
+		}
+		// Secondary diagnostic line (source/state/idle); not part of the
+		// ready contract.
+		fmt.Fprintf(cfg.Stderr, "[event] bus source=%s state=%s idle_timeout=%ds\n",
+			ack.StateSource, ack.SourceState, ack.IdleTimeoutSecs)
 	}
 
+	// Watch stdin for EOF → graceful shutdown (AI-subprocess contract).
+	// The cobra layer only sets Stdin when the watcher should arm (a
+	// pipe-style, unbounded run); tests inject it directly.
+	if cfg.Stdin != nil {
+		go watchStdinEOF(runCtx, cfg.Stdin, cfg.Stderr, cancelRun)
+	}
+
+	// Exit-reason contract: on a graceful exit emit a final stderr line
+	//   [event] exited — received N event(s) in Xs (reason: <r>)
+	// Error returns leave reason empty → no `exited` line (an `Error:` line
+	// is printed by the cobra layer instead).
 	received := 0
+	start := time.Now()
+	reason := ""
+	defer func() {
+		if !cfg.Quiet && reason != "" {
+			fmt.Fprintf(cfg.Stderr, "[event] exited — received %d event(s) in %s (reason: %s)\n",
+				received, time.Since(start).Round(time.Millisecond), reason)
+		}
+	}()
+
+	// classifyCancel maps a context-cancelled exit to a contract reason.
+	classifyCancel := func() string {
+		if timeoutCtx != nil && errors.Is(timeoutCtx.Err(), context.DeadlineExceeded) && parentCtx.Err() == nil {
+			return "timeout"
+		}
+		return "signal"
+	}
+
 	for {
 		raw, err := r.Read()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				return nil // peer closed cleanly
+				reason = "bus_shutdown" // peer closed cleanly
+				return nil
 			}
 			if isCtxCancelled(ctx) {
+				reason = classifyCancel()
 				return nil
 			}
 			return fmt.Errorf("consume: read frame: %w", err)
@@ -219,6 +289,7 @@ func Run(ctx context.Context, cfg Config) error {
 						Type:   transport.FrameTypeBye,
 						Reason: "client_done",
 					})
+					reason = "signal"
 					return nil
 				}
 				return fmt.Errorf("consume: deliver event: %w", err)
@@ -229,14 +300,16 @@ func Run(ctx context.Context, cfg Config) error {
 					Type:   transport.FrameTypeBye,
 					Reason: "client_done",
 				})
+				reason = "limit"
 				return nil
 			}
 		case transport.FrameTypeBye:
 			var bye transport.Bye
 			_ = json.Unmarshal(raw, &bye)
 			if !cfg.Quiet {
-				fmt.Fprintf(cfg.Stderr, "bus closing: %s\n", bye.Reason)
+				fmt.Fprintf(cfg.Stderr, "[event] bus closing: %s\n", bye.Reason)
 			}
+			reason = "bus_shutdown"
 			return nil
 		case transport.FrameTypeSourceState:
 			if !cfg.Quiet {
@@ -267,5 +340,37 @@ func isCtxCancelled(ctx context.Context) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// watchStdinEOF reads and discards stdin until EOF (or any read error),
+// then prints a self-explaining diagnostic and calls onEOF to trigger a
+// graceful shutdown. This implements the AI-subprocess contract: a parent
+// closes the child's stdin to stop it. It returns early if ctx is
+// cancelled first (the run ended for another reason), so it does not fire
+// a spurious shutdown. errOut is io.Discard under --quiet.
+func watchStdinEOF(ctx context.Context, r io.Reader, errOut io.Writer, onEOF func()) {
+	buf := make([]byte, 512)
+	for {
+		if _, err := r.Read(buf); err != nil {
+			select {
+			case <-ctx.Done():
+				// Run already ending; do not attribute this to stdin.
+			default:
+				fmt.Fprintln(errOut, "[event] stdin closed — shutting down. "+
+					"consume treats stdin EOF as an exit signal (wired for AI subprocess callers). "+
+					"To keep running: pass --max-events/--duration for a bounded run, "+
+					"keep stdin open (`< <(tail -f /dev/null)` in a script), "+
+					"or stop via SIGTERM instead of closing stdin.")
+				onEOF()
+			}
+			return
+		}
+		// Discard any data and keep reading until EOF.
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
 	}
 }

@@ -42,6 +42,44 @@ func TestPictureDownloadCode(t *testing.T) {
 	}
 }
 
+func TestRichTextPictureDownloadCodes(t *testing.T) {
+	content := map[string]interface{}{"richText": []interface{}{
+		map[string]interface{}{"text": "这个问题示例图如下："},
+		map[string]interface{}{
+			"pictureDownloadCode": "picture-fallback",
+			"downloadCode":        "image-1",
+			"type":                "picture",
+		},
+		map[string]interface{}{"text": "中间文字"},
+		map[string]interface{}{"pictureDownloadCode": "image-2", "type": "picture"},
+		map[string]interface{}{"downloadCode": "not-a-picture", "type": "file"},
+	}}
+
+	got := richTextPictureDownloadCodes(content)
+	want := []string{"image-1", "image-2"}
+	if len(got) != len(want) {
+		t.Fatalf("codes = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("codes = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestRichTextPictureDownloadCodesUnknownShape(t *testing.T) {
+	for _, content := range []interface{}{
+		nil,
+		"plain text",
+		map[string]interface{}{"richText": "not-an-array"},
+		map[string]interface{}{"richText": []interface{}{map[string]interface{}{"text": "only text"}}},
+	} {
+		if got := richTextPictureDownloadCodes(content); len(got) != 0 {
+			t.Fatalf("content %v: codes = %v, want none", content, got)
+		}
+	}
+}
+
 // TestExtractCallbackText covers the markdown / richText fallback path used
 // when SDK data.Text.Content is empty. This is the recovery path for
 // `dws chat message send --group ... --text ...` (defaults to msgType=markdown)

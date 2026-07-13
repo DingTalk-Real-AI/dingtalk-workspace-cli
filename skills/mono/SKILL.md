@@ -208,6 +208,14 @@ Schema 与 Help 冲突是**契约漂移**，不得静默猜测或把两边字段
 
 `dws schema` 只查询命令契约，不搜索钉钉文档或业务数据。完成命令发现后，必须继续执行真实命令，例如 `dws doc read`、`dws drive search`；不要把 Schema 查询结果当成业务查询结果。
 
+### Helper-only 与本地 Cobra 命令
+
+`dev.*` 包含 helper-only 执行面，`event.*` 是无固定 MCP backing 的本地 Cobra 命令；实现来源不同，不改变统一查询边界：进入全局 `dws schema` 的命令必须先进入 reviewed CommandRegistry，并由同一 `ToolSpec` 投影到 leaf、产品/分组、`--all` 与 Catalog。不得在查询时重新调用 MCP `tools/list`，也不得把 Cobra 临时合成结果作为第二条 Schema 数据路径。
+
+事件需要区分两种 Schema：`dws event schema <event_key>` 查询事件 payload 字段；`dws schema "event consume"` 查询 CLI 命令参数。前者是真实业务命令，后者只读取最终内嵌 SchemaRegistry；不能相互替代。
+
+`source` 表示最终命令 identity 的来源，不表示运行时 backing；helper/local/MCP 实现机制读取 `interface_mode`、`availability` 和 provenance，不要假定 `dev.*` 必然是 `source=mcp:<server>`，也不要假定本地命令必然是 `source=cobra`。
+
 ## 错误处理
 1. 遇到错误，加 `--verbose` 重试一次
 2. 若 stderr 出现 `RECOVERY_EVENT_ID=<event_id>`，优先按 [recovery-guide.md](./references/recovery-guide.md) 执行 recovery 闭环

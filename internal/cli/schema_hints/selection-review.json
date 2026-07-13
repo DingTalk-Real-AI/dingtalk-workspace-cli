@@ -8,7 +8,7 @@
     "channel": "open-source"
   },
   "coverage": {
-    "source_tools": 506
+    "source_tools": 511
   },
   "tools": {
     "aisearch.enterprise_person_search": {
@@ -4855,6 +4855,106 @@
       "interface_mode": "composite",
       "availability": "available",
       "interface_reason": "命令包含多个 RPC、条件分派或本地 HTTP/文件步骤，不能绑定为单一 interface_ref"
+    },
+    "event.consume": {
+      "agent_summary": "订阅并持续消费指定个人事件，将事件流输出给 Agent 或本地管道。",
+      "use_when": [
+        "需要实时接收一个已知个人事件码的后续事件时"
+      ],
+      "avoid_when": [
+        "只需查看事件目录或 payload 字段时分别使用 event list 或 event schema；只查历史聊天记录时使用 chat 查询命令"
+      ],
+      "examples": [
+        "dws event consume user_im_message_receive_at --max-events 1 --format ndjson"
+      ],
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "non_idempotent",
+      "reviewed": true,
+      "interface_mode": "local",
+      "availability": "available",
+      "interface_reason": "命令由 CLI 编排个人事件订阅、本地 event bus 和 Stream 消费，不绑定为单一 pinned MCP RPC"
+    },
+    "event.list": {
+      "agent_summary": "列出当前支持的个人事件目录及其规则、状态和说明。",
+      "use_when": [
+        "尚不知道可用 event_key，或需要盘点当前个人事件目录时"
+      ],
+      "avoid_when": [
+        "需要查看某个事件的 payload 字段时使用 event schema；需要开始监听事件时使用 event consume"
+      ],
+      "examples": [
+        "dws event list --format json"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true,
+      "interface_mode": "local",
+      "availability": "available",
+      "interface_reason": "命令读取 CLI 内置的个人事件目录，不绑定 pinned MCP RPC"
+    },
+    "event.schema": {
+      "agent_summary": "查询指定个人事件码的 payload 字段 Schema。",
+      "use_when": [
+        "已知 event_key，需要在消费前理解事件 payload 字段结构时"
+      ],
+      "avoid_when": [
+        "需要查询 CLI 命令参数契约时使用顶层 dws schema；需要实际接收事件时使用 event consume"
+      ],
+      "examples": [
+        "dws event schema user_im_message_receive_at --format json"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true,
+      "interface_mode": "local",
+      "availability": "available",
+      "interface_reason": "命令读取 CLI 内置的个人事件 payload 定义，不绑定 pinned MCP RPC"
+    },
+    "event.status": {
+      "agent_summary": "查看个人事件订阅、本地 event bus 和消费进程状态。",
+      "use_when": [
+        "需要检查个人事件订阅是否活跃、bus 是否运行或 consume 进程是否仍在消费时"
+      ],
+      "avoid_when": [
+        "需要列出支持的事件类型时使用 event list；需要取消订阅时使用 event stop"
+      ],
+      "examples": [
+        "dws event status --format json"
+      ],
+      "effect": "read",
+      "risk": "low",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true,
+      "interface_mode": "local",
+      "availability": "available",
+      "interface_reason": "命令聚合个人订阅控制面与本地 event bus/consume 状态，不绑定为单一 pinned MCP RPC"
+    },
+    "event.stop": {
+      "agent_summary": "取消个人事件订阅并停止对应本地消费。",
+      "use_when": [
+        "用户明确要求取消一个已知个人事件订阅并停止对应消费时"
+      ],
+      "avoid_when": [
+        "只需检查运行状态时使用 event status；目标订阅不明确或用户尚未确认取消订阅时不要使用"
+      ],
+      "examples": [
+        "dws event stop SUBSCRIBE_ID"
+      ],
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true,
+      "interface_mode": "local",
+      "availability": "available",
+      "interface_reason": "命令编排取消个人订阅、停止本地 consume 和按需停止 event bus，不绑定为单一 pinned MCP RPC"
     },
     "live.get_my_lives": {
       "use_when": [

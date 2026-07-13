@@ -15,7 +15,6 @@ package cli
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 )
 
@@ -125,13 +124,4 @@ func lookupParameterSchemaHint(hints map[string]ParameterSchemaHint, paramName, 
 		return hint, flagName, true
 	}
 	return ParameterSchemaHint{}, "", false
-}
-
-func sortedParameterHintKeys(hints map[string]ParameterSchemaHint) []string {
-	keys := make([]string, 0, len(hints))
-	for key := range hints {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys
 }

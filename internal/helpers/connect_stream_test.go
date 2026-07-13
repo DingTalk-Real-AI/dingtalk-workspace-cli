@@ -179,6 +179,27 @@ func TestMergeConnectQueuedTurnsBuildsSinglePrompt(t *testing.T) {
 	}
 }
 
+func TestMergeConnectQueuedTurnsPreservesAllPictures(t *testing.T) {
+	merged := mergeConnectQueuedTurns([]connectQueuedTurn{
+		{convID: "conv-1", text: "第一张", picCodes: []string{"pic-1"}, msgID: "m1"},
+		{convID: "conv-1", text: "再补两张", picCodes: []string{"pic-2", "pic-3"}, msgID: "m2"},
+	})
+	want := []string{"pic-1", "pic-2", "pic-3"}
+	if len(merged.picCodes) != len(want) {
+		t.Fatalf("merged picCodes = %v, want %v", merged.picCodes, want)
+	}
+	for i := range want {
+		if merged.picCodes[i] != want[i] {
+			t.Fatalf("merged picCodes = %v, want %v", merged.picCodes, want)
+		}
+	}
+	for _, text := range []string{"第一张 [同时附有图片]", "再补两张 [同时附有图片]"} {
+		if !strings.Contains(merged.text, text) {
+			t.Fatalf("merged prompt missing %q:\n%s", text, merged.text)
+		}
+	}
+}
+
 func TestMergeConnectQueuedTurnsKeepsControlMessagesStandalone(t *testing.T) {
 	for _, text := range []string{"/clear", "同意", "拒绝", "重试"} {
 		merged := mergeConnectQueuedTurns([]connectQueuedTurn{

@@ -86,11 +86,8 @@ func buildInterfaceRegistry(tools map[string]embeddedMCPToolMetadata) (Interface
 
 		entry := InterfaceRegistryEntry{
 			CanonicalPath: canonical,
-			Ref: InterfaceRefSpec{
-				ProductID: key.ProductID,
-				RPCName:   key.RPCName,
-			},
-			Metadata: metadata,
+			Ref:           InterfaceRefSpec(key),
+			Metadata:      metadata,
 		}
 		registry.ByCanonical[canonical] = entry
 		registry.ByInterfaceRef[key] = append(registry.ByInterfaceRef[key], canonical)
@@ -146,18 +143,18 @@ func validateSchemaRegistryInterfacesWithMetadata(schema SchemaRegistry, metadat
 
 func validateToolInterfaceRef(canonical, mode string, ref *InterfaceRefSpec, interfaces InterfaceRegistry) error {
 	if ref == nil {
-		return fmt.Errorf("Schema tool %s with interface mode %s has no interface_ref", canonical, mode)
+		return fmt.Errorf("schema tool %s with interface mode %s has no interface_ref", canonical, mode)
 	}
 	key := InterfaceRefKey{
 		ProductID: strings.TrimSpace(ref.ProductID),
 		RPCName:   strings.TrimSpace(ref.RPCName),
 	}
 	if key.ProductID == "" || key.RPCName == "" {
-		return fmt.Errorf("Schema tool %s with interface mode %s has incomplete interface_ref", canonical, mode)
+		return fmt.Errorf("schema tool %s with interface mode %s has incomplete interface_ref", canonical, mode)
 	}
 	if _, exists := interfaces.ByInterfaceRef[key]; !exists {
 		return fmt.Errorf(
-			"Schema tool %s references unknown MCP interface %s.%s",
+			"schema tool %s references unknown MCP interface %s.%s",
 			canonical,
 			key.ProductID,
 			key.RPCName,

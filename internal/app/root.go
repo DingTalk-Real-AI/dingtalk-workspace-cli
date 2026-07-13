@@ -561,6 +561,7 @@ func hideNonDirectRuntimeCommands(root *cobra.Command) {
 		"config":     true,
 		"dev":        true,
 		"doctor":     true,
+		"event":      true,
 		"completion": true,
 		"skill":      true,
 		"plugin":     true,
@@ -593,7 +594,7 @@ func hideNonDirectRuntimeCommands(root *cobra.Command) {
 var reservedCommands = map[string]bool{
 	"auth": true, "api": true, "login": true, "logout": true,
 	"plugin": true, "profile": true, "skill": true, "cache": true,
-	"config": true, "doctor": true, "completion": true,
+	"config": true, "doctor": true, "event": true, "completion": true,
 	"recovery": true, "upgrade": true, "version": true,
 	"schema": true, "mcp": true, "help": true,
 }

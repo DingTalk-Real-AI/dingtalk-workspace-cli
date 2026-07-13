@@ -155,10 +155,10 @@ func loadSchemaCatalogSnapshot(snapshot SchemaCatalogSnapshot) (loadedSchemaCata
 		return loadedSchemaCatalog{}, fmt.Errorf("unsupported Schema Catalog snapshot version %d", snapshot.Version)
 	}
 	if len(snapshot.Catalog) == 0 || len(snapshot.Tools) == 0 {
-		return loadedSchemaCatalog{}, fmt.Errorf("Schema Catalog snapshot is empty")
+		return loadedSchemaCatalog{}, fmt.Errorf("schema Catalog snapshot is empty")
 	}
 	if snapshot.SourceHash == "" || snapshot.SourceHash != schemaCatalogSnapshotHash(snapshot) {
-		return loadedSchemaCatalog{}, fmt.Errorf("Schema Catalog snapshot source_hash does not match its content")
+		return loadedSchemaCatalog{}, fmt.Errorf("schema Catalog snapshot source_hash does not match its content")
 	}
 	registry, index, err := schemaRegistryFromSnapshot(snapshot)
 	if err != nil {
