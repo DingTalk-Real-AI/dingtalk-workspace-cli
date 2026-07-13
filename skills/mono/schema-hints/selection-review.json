@@ -7,9 +7,9 @@
     "channel": "open-source"
   },
   "coverage": {
-    "source_tools": 504,
-    "eligible_tools": 504,
-    "matched_tools": 504,
+    "source_tools": 505,
+    "eligible_tools": 505,
+    "matched_tools": 505,
     "unmatched_tools": 0
   },
   "tools": {

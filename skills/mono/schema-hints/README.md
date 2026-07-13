@@ -52,6 +52,16 @@ The missing `notify` MCP service is separately dispositioned in
 `internal/cli/schema_mcp_service_review.json`; it is outside the public command
 surface and must not trigger runtime discovery.
 
+`internal/cli/schema_mcp_metadata.json.coverage.surface_tools` describes only
+the immutable MCP import at its declared `source_revision`; it is not the
+current CLI/Catalog tool count. Its `coverage.surface_scope` must remain
+`source_revision`, and policy verifies the snapshot's internal matched and
+unmatched arithmetic. Current Catalog interface coverage is instead proved for
+every generated tool: each tool must have one valid `interface_mode` /
+availability disposition and retain provenance to `selection-review.json` or
+`runtime-surface-completeness.json`. This makes newly added CLI tools explicit
+without rewriting historical MCP evidence.
+
 Interface metadata may enrich type and description, but MCP `required` never promotes an optional Cobra flag. CLI required/one-of/conditional rules must be represented by current Cobra markers, typed runtime constraints, or reviewed parameter hints.
 
 ```json

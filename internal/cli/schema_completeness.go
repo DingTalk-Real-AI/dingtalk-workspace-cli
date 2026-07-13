@@ -37,7 +37,8 @@ type runtimeSchemaExclusionGroup struct {
 var embeddedRuntimeSchemaExclusionsJSON []byte
 
 // RuntimeSchemaCompletenessReport compares the public executable Cobra leaves
-// with the commands represented by runtime Schema annotations.
+// with a reviewed Schema command set, such as runtime annotations or the final
+// generated Catalog.
 type RuntimeSchemaCompletenessReport struct {
 	Covered           []string
 	Excluded          []string
@@ -100,10 +101,70 @@ func ValidateEmbeddedRuntimeSchemaCompleteness(root *cobra.Command) error {
 	return nil
 }
 
+// ValidateSchemaCatalogDeliveryCompleteness enforces that every public Cobra
+// leaf is queryable from the newly built Catalog snapshot (or has an exact,
+// reviewed exclusion). It deliberately validates the in-memory build result,
+// never the previously embedded Catalog, so stale generated data cannot prove
+// its own completeness.
+func ValidateSchemaCatalogDeliveryCompleteness(root *cobra.Command, snapshot SchemaCatalogSnapshot) error {
+	if _, err := ApplyEmbeddedManualSchemaHints(root); err != nil {
+		return err
+	}
+	exclusions, err := EmbeddedRuntimeSchemaExclusions()
+	if err != nil {
+		return err
+	}
+	report := SchemaCatalogDeliveryCompleteness(root, snapshot, exclusions)
+	if len(report.Missing) > 0 {
+		return fmt.Errorf("public Cobra leaves missing from final Schema Catalog or reviewed exclusions: %s", strings.Join(report.Missing, ", "))
+	}
+	if len(report.InvalidExclusions) > 0 {
+		return fmt.Errorf("invalid runtime schema exclusions: %s", strings.Join(report.InvalidExclusions, ", "))
+	}
+	if len(report.StaleExclusions) > 0 {
+		return fmt.Errorf("stale runtime schema exclusions: %s", strings.Join(report.StaleExclusions, ", "))
+	}
+	return nil
+}
+
 // RuntimeSchemaCompleteness scans the real command tree in the reverse
 // direction: every public executable leaf must either carry a Schema identity
 // or have a reviewed exclusion with a non-empty reason.
 func RuntimeSchemaCompleteness(root *cobra.Command, exclusions []RuntimeSchemaExclusion) RuntimeSchemaCompletenessReport {
+	coveredPaths := map[string]bool{}
+	for _, entry := range collectRuntimeSchemaEntries(root) {
+		addSchemaCoveredPath(coveredPaths, entry.CLIPath)
+		addSchemaCoveredPath(coveredPaths, entry.PrimaryCLIPath)
+		for _, alias := range entry.Aliases {
+			addSchemaCoveredPath(coveredPaths, alias)
+		}
+	}
+	return runtimeSchemaCompletenessAgainstPaths(root, exclusions, coveredPaths)
+}
+
+// SchemaCatalogDeliveryCompleteness scans the real command tree against paths
+// present in the final generated snapshot. A runtime annotation alone is not
+// sufficient: the command must survive the reviewed surface filter and be
+// addressable through its primary CLI path or an alias.
+func SchemaCatalogDeliveryCompleteness(root *cobra.Command, snapshot SchemaCatalogSnapshot, exclusions []RuntimeSchemaExclusion) RuntimeSchemaCompletenessReport {
+	coveredPaths := map[string]bool{}
+	for _, detail := range snapshot.Tools {
+		addSchemaCoveredPath(coveredPaths, schemaString(detail["cli_path"]))
+		addSchemaCoveredPath(coveredPaths, schemaString(detail["primary_cli_path"]))
+		for _, alias := range schemaStringSlice(detail["aliases"]) {
+			addSchemaCoveredPath(coveredPaths, alias)
+		}
+	}
+	return runtimeSchemaCompletenessAgainstPaths(root, exclusions, coveredPaths)
+}
+
+func addSchemaCoveredPath(coveredPaths map[string]bool, rawPath string) {
+	if path := normalizeSchemaCLIPath(rawPath); path != "" {
+		coveredPaths[path] = true
+	}
+}
+
+func runtimeSchemaCompletenessAgainstPaths(root *cobra.Command, exclusions []RuntimeSchemaExclusion, coveredPaths map[string]bool) RuntimeSchemaCompletenessReport {
 	report := RuntimeSchemaCompletenessReport{}
 	exclusionByPath := make(map[string]RuntimeSchemaExclusion, len(exclusions))
 	for _, exclusion := range exclusions {
@@ -118,14 +179,6 @@ func RuntimeSchemaCompleteness(root *cobra.Command, exclusions []RuntimeSchemaEx
 
 	seenPublic := map[string]bool{}
 	usedExclusions := map[string]bool{}
-	coveredPaths := map[string]bool{}
-	for _, entry := range collectRuntimeSchemaEntries(root) {
-		coveredPaths[normalizeSchemaCLIPath(entry.CLIPath)] = true
-		coveredPaths[normalizeSchemaCLIPath(entry.PrimaryCLIPath)] = true
-		for _, alias := range entry.Aliases {
-			coveredPaths[normalizeSchemaCLIPath(alias)] = true
-		}
-	}
 	walkPublicRunnableLeaves(root, func(leaf *cobra.Command) {
 		path := normalizeSchemaCLIPath(strings.Join(commandPathParts(leaf), " "))
 		if path == "" {

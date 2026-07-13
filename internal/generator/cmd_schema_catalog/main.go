@@ -67,6 +67,9 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
+	if err := cli.ValidateSchemaCatalogDeliveryCompleteness(root, snapshot); err != nil {
+		fail(fmt.Errorf("validate final Catalog delivery completeness: %w", err))
+	}
 	encoded, err := json.MarshalIndent(snapshot, "", "  ")
 	if err != nil {
 		fail(fmt.Errorf("encode catalog: %w", err))

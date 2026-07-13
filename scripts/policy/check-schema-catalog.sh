@@ -18,7 +18,7 @@ fi
 surface_count="$(wc -l <"$tmp/surface" | tr -d ' ')"
 catalog_count="$(jq -r '.tools | length' internal/cli/schema_catalog.json)"
 catalog_product_count="$(jq -r '.catalog.count' internal/cli/schema_catalog.json)"
-interface_surface_count="$(jq -r '.coverage.surface_tools' internal/cli/schema_mcp_metadata.json)"
+mcp_snapshot_surface_count="$(jq -r '.coverage.surface_tools' internal/cli/schema_mcp_metadata.json)"
 agent_surface_count="$(jq -r '.coverage.surface_tools' internal/cli/schema_agent_metadata/index.json)"
 agent_product_count="$(jq -r '.coverage.products_with_metadata' internal/cli/schema_agent_metadata/index.json)"
 agent_selection_count="$(jq -r '[.coverage.tools_with_use_when, .coverage.tools_with_avoid_when, .coverage.tools_with_examples, .coverage.tools_with_interface_mode] | min' internal/cli/schema_agent_metadata/index.json)"
@@ -26,9 +26,43 @@ if [ "$catalog_count" != "$surface_count" ] ||
 	[ "$agent_surface_count" != "$surface_count" ] ||
 	[ "$agent_product_count" != "$catalog_product_count" ] ||
 	[ "$agent_selection_count" != "$surface_count" ]; then
-	printf 'schema counts disagree: surface=%s catalog=%s products=%s interface=%s agent=%s/%s\n' \
+	printf 'current schema counts disagree: surface=%s catalog=%s products=%s agent=%s/%s\n' \
 		"$surface_count" "$catalog_count" "$catalog_product_count" \
-		"$interface_surface_count" "$agent_product_count" "$agent_surface_count" >&2
+		"$agent_product_count" "$agent_surface_count" >&2
+	exit 1
+fi
+
+if ! jq -e '
+  .version == 1 and
+  ((.source_revision // "") | length) > 0 and
+  .coverage.surface_scope == "source_revision" and
+  .coverage.source_services == (.coverage.snapshot_services + (.coverage.missing_services | length)) and
+  .coverage.surface_tools == (.coverage.matched_tools + .coverage.unmatched_tools) and
+  .coverage.source_tools >= .coverage.surface_tools and
+  .coverage.matched_tools == (.tools | length) and
+  .coverage.aliased_tools <= .coverage.matched_tools
+' internal/cli/schema_mcp_metadata.json >/dev/null; then
+	printf 'MCP source-revision snapshot coverage is inconsistent: snapshot_surface=%s\n' \
+		"$mcp_snapshot_surface_count" >&2
+	exit 1
+fi
+
+if ! jq -e '
+  .coverage.source_tools == (.tools | length) and
+  .coverage.eligible_tools == (.tools | length) and
+  .coverage.matched_tools == (.tools | length) and
+  .coverage.unmatched_tools == 0
+' skills/mono/schema-hints/selection-review.json >/dev/null; then
+	printf '%s\n' 'reviewed Agent selection coverage is stale' >&2
+	exit 1
+fi
+
+if ! jq -e --arg surface_count "$surface_count" '
+  .coverage.source_tools == ($surface_count | tonumber) and
+  .coverage.matched_tools == (.tools | length) and
+  all(.tools[]; ((.interface_mode // "") | length) > 0)
+' skills/mono/schema-hints/runtime-surface-completeness.json >/dev/null; then
+	printf '%s\n' 'runtime-surface interface disposition coverage is stale' >&2
 	exit 1
 fi
 
@@ -61,6 +95,8 @@ if ! jq -e --arg surface_count "$surface_count" '
 	(if .interface_mode == "mcp" then .interface_ref != null and .availability == "available" else true end) and
 	(if .interface_mode == "composite" or .interface_mode == "local" then .interface_ref == null and .availability == "available" and ((.interface_reason // "") | length) > 0 else true end) and
 	(if .interface_mode == "unavailable" then .interface_ref == null and .availability == "unavailable" and ((.interface_reason // "") | length) > 0 else true end) and
+	((((.agent_source_refs // []) | index("skills/mono/schema-hints/selection-review.json")) != null) or
+	 (((.agent_source_refs // []) | index("skills/mono/schema-hints/runtime-surface-completeness.json")) != null)) and
     (if .effect == "destructive" then .risk == "high" and .confirmation == "user_required" else true end) and
     (if .risk == "high" then .confirmation == "user_required" else true end)
   )
@@ -162,7 +198,7 @@ if rg -n '\.ListTools\(' internal/app internal/cli --glob '*.go'; then
 fi
 
 go test ./internal/cli \
-	-run '^(TestEmbeddedSchemaCatalog.*|TestSchemaUsesEmbeddedCatalogWithoutRuntimeLoad|TestWalkLeafCommandsTraversesAnnotatedHiddenSubtree)$' \
+	-run '^(TestEmbeddedSchemaCatalog.*|TestSchemaCatalogDeliveryCompleteness.*|TestSchemaUsesEmbeddedCatalogWithoutRuntimeLoad|TestWalkLeafCommandsTraversesAnnotatedHiddenSubtree)$' \
 	-count=1
 go test ./internal/app \
 	-run '^(TestEmbeddedSchemaContractMapsToExecutableTree|TestRuntimeSchemaCompletenessCoversPublicCommandTree|TestRegisterPluginHTTPServerDoesNotProbeEndpoint|TestRegisterStdioServerFromManifestDoesNotStartProcess)$' \

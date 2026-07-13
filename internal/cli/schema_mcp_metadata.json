@@ -4,6 +4,7 @@
   "source_revision": "4574f7022c32cf4c033e9b7b4156e2fec815fed8",
   "source_hash": "sha256:17251f74a4f76142457cc0e87251ecb86c1e3bda0cdf2edc02f351589716ecbc",
   "coverage": {
+    "surface_scope": "source_revision",
     "source_services": 54,
     "snapshot_services": 53,
     "missing_services": [

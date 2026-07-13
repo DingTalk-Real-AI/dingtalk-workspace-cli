@@ -140,6 +140,7 @@ func TestRuntimeSchemaReportsEmbeddedInterfaceMetadata(t *testing.T) {
 		SourceRevision: "revision-test",
 		SourceHash:     "sha256:interface-test",
 		Coverage: embeddedMCPMetadataCoverage{
+			SurfaceScope:   "source_revision",
 			SourceTools:    10,
 			SurfaceTools:   2,
 			MatchedTools:   1,
@@ -159,7 +160,8 @@ func TestRuntimeSchemaReportsEmbeddedInterfaceMetadata(t *testing.T) {
 	if summary["source"] != "cli-registry" || summary["source_hash"] != "sha256:interface-test" || summary["tool_count"] != 1 {
 		t.Fatalf("interface metadata summary = %#v", summary)
 	}
-	if summary["source_revision"] != "revision-test" || summary["coverage"] == nil {
+	coverage, _ := summary["coverage"].(embeddedMCPMetadataCoverage)
+	if summary["source_revision"] != "revision-test" || coverage.SurfaceScope != "source_revision" {
 		t.Fatalf("interface metadata provenance = %#v", summary)
 	}
 

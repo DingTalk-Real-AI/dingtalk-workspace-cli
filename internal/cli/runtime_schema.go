@@ -76,6 +76,7 @@ type embeddedMCPMetadata struct {
 }
 
 type embeddedMCPMetadataCoverage struct {
+	SurfaceScope     string   `json:"surface_scope,omitempty"`
 	SourceServices   int      `json:"source_services,omitempty"`
 	SnapshotServices int      `json:"snapshot_services,omitempty"`
 	MissingServices  []string `json:"missing_services,omitempty"`
