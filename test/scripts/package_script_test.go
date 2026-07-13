@@ -1,6 +1,10 @@
 package scripts_test
 
 import (
+	"archive/tar"
+	"compress/gzip"
+	"crypto/sha256"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,9 +32,41 @@ var expectedPackagedSkillTargets = []string{
 	".hermes/skills/dws",
 }
 
-// seedDistArtifacts creates fake goreleaser output archives (empty tar.gz/zip
-// files) and a checksums.txt stub so that post-goreleaser.sh can run without
-// an actual goreleaser build.
+func writeDarwinArchive(t *testing.T, path string) {
+	t.Helper()
+
+	archive, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("Create(%s) error = %v", path, err)
+	}
+	gzipWriter := gzip.NewWriter(archive)
+	tarWriter := tar.NewWriter(gzipWriter)
+	binary := []byte("#!/bin/sh\nexit 0\n")
+	if err := tarWriter.WriteHeader(&tar.Header{
+		Name: "dws",
+		Mode: 0o755,
+		Size: int64(len(binary)),
+	}); err != nil {
+		t.Fatalf("WriteHeader(%s) error = %v", path, err)
+	}
+	if _, err := tarWriter.Write(binary); err != nil {
+		t.Fatalf("Write(%s) error = %v", path, err)
+	}
+	if err := tarWriter.Close(); err != nil {
+		t.Fatalf("tar Close(%s) error = %v", path, err)
+	}
+	if err := gzipWriter.Close(); err != nil {
+		t.Fatalf("gzip Close(%s) error = %v", path, err)
+	}
+	if err := archive.Close(); err != nil {
+		t.Fatalf("Close(%s) error = %v", path, err)
+	}
+}
+
+// seedDistArtifacts creates minimal goreleaser output archives and a
+// checksums.txt stub so post-goreleaser.sh can run without a real build.
+// Darwin archives must be valid tar.gz files because the packaging script
+// extracts and signs their dws binaries.
 func seedDistArtifacts(t *testing.T, distDir string, targets []string) {
 	t.Helper()
 	if err := os.MkdirAll(distDir, 0o755); err != nil {
@@ -39,6 +75,10 @@ func seedDistArtifacts(t *testing.T, distDir string, targets []string) {
 
 	for _, target := range targets {
 		p := filepath.Join(distDir, target)
+		if strings.HasPrefix(target, "dws-darwin-") && strings.HasSuffix(target, ".tar.gz") {
+			writeDarwinArchive(t, p)
+			continue
+		}
 		if err := os.WriteFile(p, []byte("fake-archive"), 0o644); err != nil {
 			t.Fatalf("WriteFile(%s) error = %v", p, err)
 		}
@@ -53,6 +93,23 @@ func seedDistArtifacts(t *testing.T, distDir string, targets []string) {
 	if err := os.WriteFile(checksums, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(%s) error = %v", checksums, err)
 	}
+}
+
+func postGoreleaserEnv(t *testing.T, distDir, releaseBaseURL string) []string {
+	t.Helper()
+
+	binDir := t.TempDir()
+	fakeCodesign := filepath.Join(binDir, "codesign")
+	if err := os.WriteFile(fakeCodesign, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile(fake codesign) error = %v", err)
+	}
+
+	return append(os.Environ(),
+		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"DWS_PACKAGE_VERSION=v0.0.0-test",
+		"DWS_PACKAGE_DIST_DIR="+distDir,
+		"DWS_RELEASE_BASE_URL="+releaseBaseURL,
+	)
 }
 
 func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
@@ -77,10 +134,7 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 	seedDistArtifacts(t, distDir, []string{archiveName})
 
 	cmd := exec.Command("sh", scriptPath)
-	cmd.Env = append(os.Environ(),
-		"DWS_PACKAGE_DIST_DIR="+distDir,
-		"DWS_RELEASE_BASE_URL=https://downloads.example.com/dws/releases/v1.2.3",
-	)
+	cmd.Env = postGoreleaserEnv(t, distDir, "https://downloads.example.com/dws/releases/v1.2.3")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("post-goreleaser.sh error = %v\noutput:\n%s", err, string(output))
@@ -199,10 +253,7 @@ func TestPostGoreleaserAllPlatformNpmAssets(t *testing.T) {
 	seedDistArtifacts(t, distDir, allArchives)
 
 	cmd := exec.Command("sh", scriptPath)
-	cmd.Env = append(os.Environ(),
-		"DWS_PACKAGE_DIST_DIR="+distDir,
-		"DWS_RELEASE_BASE_URL=https://downloads.example.com/dws/releases/v9.9.9",
-	)
+	cmd.Env = postGoreleaserEnv(t, distDir, "https://downloads.example.com/dws/releases/v9.9.9")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("post-goreleaser.sh error = %v\noutput:\n%s", err, string(output))
@@ -279,10 +330,7 @@ func TestPostGoreleaserSkillsZipLayout(t *testing.T) {
 	seedDistArtifacts(t, distDir, []string{archiveName})
 
 	cmd := exec.Command("sh", scriptPath)
-	cmd.Env = append(os.Environ(),
-		"DWS_PACKAGE_DIST_DIR="+distDir,
-		"DWS_RELEASE_BASE_URL=https://downloads.example.com/dws/releases/v0.0.0",
-	)
+	cmd.Env = postGoreleaserEnv(t, distDir, "https://downloads.example.com/dws/releases/v0.0.0")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("post-goreleaser.sh error = %v\noutput:\n%s", err, string(output))
@@ -328,5 +376,394 @@ func TestPostGoreleaserSkillsZipLayout(t *testing.T) {
 	}
 	if !foundDingtalk {
 		t.Fatalf("multi/ does not contain any dingtalk-* skill: %v", multiEntries)
+	}
+}
+
+func TestReleaseWorkflowUploadsPostProcessedDarwinAssets(t *testing.T) {
+	t.Parallel()
+
+	workflowPath, err := filepath.Abs(filepath.Join("..", "..", ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Fatalf("Abs(release.yml) error = %v", err)
+	}
+	data, err := os.ReadFile(workflowPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", workflowPath, err)
+	}
+	workflow := string(data)
+
+	postProcess := strings.Index(workflow, "./scripts/release/post-goreleaser.sh")
+	upload := strings.Index(workflow, "Upload finalized signed assets to release")
+	if postProcess == -1 || upload == -1 || upload < postProcess {
+		t.Fatalf("finalized asset upload must run after post-goreleaser.sh")
+	}
+
+	if !strings.Contains(workflow[upload:], "./scripts/release/finalize-github-release.sh") {
+		t.Fatal("release workflow must delegate atomic finalization to finalize-github-release.sh")
+	}
+
+	finalizePath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "finalize-github-release.sh"))
+	if err != nil {
+		t.Fatalf("Abs(finalize-github-release.sh) error = %v", err)
+	}
+	finalizeData, err := os.ReadFile(finalizePath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", finalizePath, err)
+	}
+	finalize := string(finalizeData)
+
+	for _, required := range []string{
+		"dws-darwin-amd64.tar.gz",
+		"dws-darwin-arm64.tar.gz",
+		"checksums.txt",
+		"dws-skills.zip",
+		"gh release upload",
+		"gh release view",
+		"--clobber",
+		"release asset digest mismatch",
+	} {
+		if !strings.Contains(finalize, required) {
+			t.Errorf("finalized asset upload is missing %q", required)
+		}
+	}
+}
+
+func TestReleaseWorkflowConfiguresDeveloperIDSigning(t *testing.T) {
+	t.Parallel()
+
+	workflowPath, err := filepath.Abs(filepath.Join("..", "..", ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Fatalf("Abs(release.yml) error = %v", err)
+	}
+	data, err := os.ReadFile(workflowPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", workflowPath, err)
+	}
+	workflow := string(data)
+
+	prepare := strings.Index(workflow, "Prepare Apple Developer ID certificate")
+	goReleaser := strings.Index(workflow, "Run GoReleaser")
+	postProcess := strings.Index(workflow, "./scripts/release/post-goreleaser.sh")
+	cleanup := strings.Index(workflow, "Remove Apple Developer ID certificate")
+	if prepare == -1 || goReleaser == -1 || postProcess == -1 || cleanup == -1 ||
+		prepare > goReleaser || goReleaser > postProcess || cleanup < postProcess {
+		t.Fatalf("Developer ID material must be validated before GoReleaser and removed after post-processing")
+	}
+
+	for _, required := range []string{
+		`RCS_VERSION="0.29.0"`,
+		"secrets.APPLE_CERTIFICATE_P12_BASE64",
+		"secrets.APPLE_CERTIFICATE_PASSWORD",
+		"base64 --decode",
+		"openssl pkcs12 -legacy",
+		"DWS_APPLE_CERTIFICATE_P12",
+		"DWS_APPLE_CERTIFICATE_PASSWORD_FILE",
+		"DWS_REQUIRE_DEVELOPER_ID_SIGNING",
+		`GITHUB_REPOSITORY_OWNER" = "DingTalk-Real-AI`,
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Errorf("release workflow is missing Developer ID configuration %q", required)
+		}
+	}
+}
+
+func TestPostGoreleaserSupportsDeveloperIDSigning(t *testing.T) {
+	t.Parallel()
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "post-goreleaser.sh"))
+	if err != nil {
+		t.Fatalf("Abs(post-goreleaser.sh) error = %v", err)
+	}
+	data, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", scriptPath, err)
+	}
+	script := string(data)
+
+	for _, required := range []string{
+		`APPLE_CERTIFICATE_P12="${DWS_APPLE_CERTIFICATE_P12:-}"`,
+		`APPLE_CERTIFICATE_PASSWORD_FILE="${DWS_APPLE_CERTIFICATE_PASSWORD_FILE:-}"`,
+		`REQUIRE_DEVELOPER_ID_SIGNING="${DWS_REQUIRE_DEVELOPER_ID_SIGNING:-false}"`,
+		`--p12-file "$APPLE_CERTIFICATE_P12"`,
+		`--p12-password-file "$APPLE_CERTIFICATE_PASSWORD_FILE"`,
+		"--for-notarization",
+	} {
+		if !strings.Contains(script, required) {
+			t.Errorf("post-goreleaser.sh is missing Developer ID signing behavior %q", required)
+		}
+	}
+	if strings.Contains(script, `rcodesign verify "$bin"`) {
+		t.Fatal("rcodesign verify must not be treated as authoritative Apple signature validation")
+	}
+}
+
+func TestReleaseWorkflowVerifiesRcodesignArchiveChecksum(t *testing.T) {
+	t.Parallel()
+
+	workflowPath, err := filepath.Abs(filepath.Join("..", "..", ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Fatalf("Abs(release.yml) error = %v", err)
+	}
+	data, err := os.ReadFile(workflowPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", workflowPath, err)
+	}
+	workflow := string(data)
+
+	hash := strings.Index(workflow, `RCS_ARCHIVE_SHA256="dbe85cedd8ee4217b64e9a0e4c2aef92ab8bcaaa41f20bde99781ff02e600002"`)
+	checksum := strings.Index(workflow, "sha256sum --check --strict")
+	extract := strings.Index(workflow, "tar -xzf /tmp/rcodesign.tar.gz")
+	execute := strings.Index(workflow, "rcodesign --version")
+	if hash == -1 || checksum == -1 || extract == -1 || execute == -1 ||
+		!(hash < checksum && checksum < extract && extract < execute) {
+		t.Fatal("rcodesign archive must match the pinned SHA-256 before extraction or execution")
+	}
+}
+
+func TestReleaseWorkflowUsesAppleCodesignBeforePublication(t *testing.T) {
+	t.Parallel()
+
+	workflowPath, err := filepath.Abs(filepath.Join("..", "..", ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Fatalf("Abs(release.yml) error = %v", err)
+	}
+	data, err := os.ReadFile(workflowPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", workflowPath, err)
+	}
+	workflow := string(data)
+
+	upload := strings.Index(workflow, "Upload finalized signed assets to release")
+	verifyJob := strings.Index(workflow, "verify-darwin-signatures:")
+	publishJob := strings.Index(workflow, "publish-release:")
+	if upload == -1 || verifyJob == -1 || publishJob == -1 || !(upload < verifyJob && verifyJob < publishJob) {
+		t.Fatal("finalized Draft assets must be uploaded, Apple-verified, and only then published")
+	}
+
+	codesign := strings.Index(workflow[verifyJob:publishJob], "codesign --verify --strict --verbose=4")
+	publish := strings.Index(workflow[publishJob:], `gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false`)
+	if codesign == -1 || publish == -1 {
+		t.Fatal("macOS codesign verification and explicit Draft publication are required")
+	}
+
+	buildSection := workflow[upload:verifyJob]
+	for _, required := range []string{
+		`DWS_PUBLISH_RELEASE: "false"`,
+		"actions/upload-artifact@v4",
+		"finalized-release-dist",
+	} {
+		if !strings.Contains(buildSection, required) {
+			t.Errorf("Draft build stage is missing %q", required)
+		}
+	}
+
+	verifySection := workflow[verifyJob:publishJob]
+	for _, required := range []string{
+		"runs-on: macos-latest",
+		"gh release download",
+		"dws-darwin-amd64.tar.gz",
+		"dws-darwin-arm64.tar.gz",
+		"codesign --verify --strict --verbose=4",
+	} {
+		if !strings.Contains(verifySection, required) {
+			t.Errorf("Apple verification stage is missing %q", required)
+		}
+	}
+
+	publishSection := workflow[publishJob:]
+	for _, required := range []string{
+		"verify-darwin-signatures",
+		"actions/download-artifact@v4",
+		"Publish verified Draft release",
+		"Publish stable to npm",
+		"Publish prerelease to npm beta",
+	} {
+		if !strings.Contains(publishSection, required) {
+			t.Errorf("post-verification publication stage is missing %q", required)
+		}
+	}
+}
+
+func TestReleaseStaysDraftUntilFinalizedAssetDigestsMatch(t *testing.T) {
+	t.Parallel()
+
+	goreleaserPath, err := filepath.Abs(filepath.Join("..", "..", ".goreleaser.yaml"))
+	if err != nil {
+		t.Fatalf("Abs(.goreleaser.yaml) error = %v", err)
+	}
+	goreleaserData, err := os.ReadFile(goreleaserPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", goreleaserPath, err)
+	}
+	if !strings.Contains(string(goreleaserData), "draft: true") {
+		t.Fatal("GoReleaser must keep the release as Draft during post-processing")
+	}
+
+	finalizePath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "finalize-github-release.sh"))
+	if err != nil {
+		t.Fatalf("Abs(finalize-github-release.sh) error = %v", err)
+	}
+	finalizeData, err := os.ReadFile(finalizePath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", finalizePath, err)
+	}
+	finalize := string(finalizeData)
+
+	upload := strings.Index(finalize, "gh release upload")
+	digestFailure := strings.Index(finalize, "release asset digest mismatch")
+	publish := strings.Index(finalize, "gh release edit")
+	if upload == -1 || digestFailure == -1 || publish == -1 || !(upload < digestFailure && digestFailure < publish) {
+		t.Fatal("Draft publication must happen after finalized asset upload and digest verification")
+	}
+}
+
+func TestFinalizeGitHubReleaseDoesNotPublishAfterUploadFailure(t *testing.T) {
+	t.Parallel()
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "finalize-github-release.sh"))
+	if err != nil {
+		t.Fatalf("Abs(finalize-github-release.sh) error = %v", err)
+	}
+
+	root := t.TempDir()
+	distDir := filepath.Join(root, "dist")
+	if err := os.MkdirAll(distDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", distDir, err)
+	}
+	for _, name := range []string{
+		"dws-darwin-amd64.tar.gz",
+		"dws-darwin-arm64.tar.gz",
+		"checksums.txt",
+		"dws-skills.zip",
+	} {
+		if err := os.WriteFile(filepath.Join(distDir, name), []byte("finalized"), 0o644); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", name, err)
+		}
+	}
+
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", binDir, err)
+	}
+	logPath := filepath.Join(root, "gh.log")
+	fakeGH := `#!/bin/sh
+printf '%s\n' "$*" >> "$FAKE_GH_LOG"
+if [ "$1" = "release" ] && [ "$2" = "upload" ]; then
+  exit 42
+fi
+if [ "$1" = "release" ] && [ "$2" = "edit" ]; then
+  exit 0
+fi
+exit 1
+`
+	if err := os.WriteFile(filepath.Join(binDir, "gh"), []byte(fakeGH), 0o755); err != nil {
+		t.Fatalf("WriteFile(fake gh) error = %v", err)
+	}
+
+	cmd := exec.Command("sh", scriptPath)
+	cmd.Env = append(os.Environ(),
+		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"FAKE_GH_LOG="+logPath,
+		"GITHUB_REF_NAME=v-test",
+		"GITHUB_REPOSITORY=example/dws",
+		"DWS_PACKAGE_DIST_DIR="+distDir,
+	)
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("finalize-github-release.sh unexpectedly succeeded after upload failure:\n%s", output)
+	}
+
+	logData, readErr := os.ReadFile(logPath)
+	if readErr != nil {
+		t.Fatalf("ReadFile(%s) error = %v", logPath, readErr)
+	}
+	logText := string(logData)
+	if !strings.Contains(logText, "release upload") {
+		t.Fatalf("fake gh did not observe release upload:\n%s", logText)
+	}
+	if strings.Contains(logText, "release edit") {
+		t.Fatalf("Draft release was published after upload failure:\n%s", logText)
+	}
+}
+
+func TestFinalizeGitHubReleaseCanVerifyWithoutPublishing(t *testing.T) {
+	t.Parallel()
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "finalize-github-release.sh"))
+	if err != nil {
+		t.Fatalf("Abs(finalize-github-release.sh) error = %v", err)
+	}
+
+	root := t.TempDir()
+	distDir := filepath.Join(root, "dist")
+	if err := os.MkdirAll(distDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", distDir, err)
+	}
+	assetContent := []byte("finalized")
+	for _, name := range []string{
+		"dws-darwin-amd64.tar.gz",
+		"dws-darwin-arm64.tar.gz",
+		"checksums.txt",
+		"dws-skills.zip",
+	} {
+		if err := os.WriteFile(filepath.Join(distDir, name), assetContent, 0o644); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", name, err)
+		}
+	}
+
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", binDir, err)
+	}
+	logPath := filepath.Join(root, "gh.log")
+	fakeGH := `#!/bin/sh
+printf '%s\n' "$*" >> "$FAKE_GH_LOG"
+if [ "$1" = "release" ] && [ "$2" = "upload" ]; then
+  exit 0
+fi
+if [ "$1" = "release" ] && [ "$2" = "view" ]; then
+  printf '%s\n' "$FAKE_REMOTE_DIGEST"
+  exit 0
+fi
+if [ "$1" = "release" ] && [ "$2" = "edit" ]; then
+  exit 0
+fi
+exit 1
+`
+	if err := os.WriteFile(filepath.Join(binDir, "gh"), []byte(fakeGH), 0o755); err != nil {
+		t.Fatalf("WriteFile(fake gh) error = %v", err)
+	}
+
+	digest := sha256.Sum256(assetContent)
+	cmd := exec.Command("sh", scriptPath)
+	cmd.Env = append(os.Environ(),
+		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"FAKE_GH_LOG="+logPath,
+		"FAKE_REMOTE_DIGEST="+fmt.Sprintf("sha256:%x", digest),
+		"GITHUB_REF_NAME=v-test",
+		"GITHUB_REPOSITORY=example/dws",
+		"DWS_PACKAGE_DIST_DIR="+distDir,
+		"DWS_PUBLISH_RELEASE=false",
+		"DWS_RELEASE_DIGEST_ATTEMPTS=1",
+		"DWS_RELEASE_DIGEST_RETRY_DELAY=0",
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("finalize-github-release.sh error = %v\noutput:\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "keeping release v-test as Draft") {
+		t.Fatalf("finalizer did not report preserved Draft:\n%s", output)
+	}
+
+	logData, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", logPath, err)
+	}
+	logText := string(logData)
+	if !strings.Contains(logText, "release upload") || !strings.Contains(logText, "release view") {
+		t.Fatalf("finalizer did not upload and verify assets:\n%s", logText)
+	}
+	if strings.Contains(logText, "release edit") {
+		t.Fatalf("finalizer published a release configured to remain Draft:\n%s", logText)
 	}
 }

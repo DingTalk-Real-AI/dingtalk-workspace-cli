@@ -18,10 +18,7 @@ jobs:
   release:
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.repair_npm_version == '' }}
     runs-on: ubuntu-latest
-    # 60 (not 30): mirroring every release asset to Gitee is slow; 30 min cut the
-    # Gitee step off mid-upload on the v1.0.42 release. The Gitee step is now also
-    # idempotent (re-runs only upload missing assets).
-    timeout-minutes: 60
+    timeout-minutes: 30
 
     steps:
       - name: Check out repository
@@ -40,16 +37,49 @@ jobs:
       - name: Multi Profile E2E
         run: bash scripts/dev/test-multi-profile-e2e.sh
 
-      - name: Install rcodesign (ad-hoc sign darwin binaries from Linux)
+      - name: Install rcodesign (sign darwin binaries from Linux)
         run: |
-          set -eu
-          RCS_VERSION="0.27.0"
+          set -euo pipefail
+          RCS_VERSION="0.29.0"
+          RCS_ARCHIVE_SHA256="dbe85cedd8ee4217b64e9a0e4c2aef92ab8bcaaa41f20bde99781ff02e600002"
           curl -fsSL -o /tmp/rcodesign.tar.gz \
             "https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F${RCS_VERSION}/apple-codesign-${RCS_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+          printf '%s  %s\n' "$RCS_ARCHIVE_SHA256" /tmp/rcodesign.tar.gz \
+            | sha256sum --check --strict -
           mkdir -p /tmp/rcodesign
           tar -xzf /tmp/rcodesign.tar.gz -C /tmp/rcodesign --strip-components=1
           sudo install -m 0755 /tmp/rcodesign/rcodesign /usr/local/bin/rcodesign
           rcodesign --version
+
+      - name: Prepare Apple Developer ID certificate
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${APPLE_CERTIFICATE_P12_BASE64:-}" ] || [ -z "${APPLE_CERTIFICATE_PASSWORD:-}" ]; then
+            if [ "$GITHUB_REPOSITORY_OWNER" = "DingTalk-Real-AI" ]; then
+              echo "APPLE_CERTIFICATE_P12_BASE64 and APPLE_CERTIFICATE_PASSWORD are required for official releases" >&2
+              exit 1
+            fi
+            echo "Developer ID secrets are unavailable; fork release will use ad-hoc signing."
+            exit 0
+          fi
+
+          umask 077
+          certificate_path="$RUNNER_TEMP/dws-developer-id.p12"
+          password_path="$RUNNER_TEMP/dws-developer-id-password"
+          printf '%s' "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$certificate_path"
+          printf '%s' "$APPLE_CERTIFICATE_PASSWORD" > "$password_path"
+
+          # Fail before packaging if the secret is corrupt or the password is wrong.
+          # The exported P12 may use legacy PKCS#12 ciphers; OpenSSL 3 requires
+          # -legacy to validate those containers even though rcodesign can read them.
+          openssl pkcs12 -legacy -in "$certificate_path" -passin "file:$password_path" -noout
+
+          echo "DWS_APPLE_CERTIFICATE_P12=$certificate_path" >> "$GITHUB_ENV"
+          echo "DWS_APPLE_CERTIFICATE_PASSWORD_FILE=$password_path" >> "$GITHUB_ENV"
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
@@ -63,12 +93,88 @@ jobs:
         run: ./scripts/release/post-goreleaser.sh
         env:
           DWS_PACKAGE_VERSION: ${{ github.ref_name }}
+          DWS_REQUIRE_DEVELOPER_ID_SIGNING: ${{ github.repository_owner == 'DingTalk-Real-AI' }}
 
-      - name: Upload dws-skills.zip to release
+      - name: Remove Apple Developer ID certificate
+        if: ${{ always() }}
+        run: |
+          rm -f "$RUNNER_TEMP/dws-developer-id.p12"
+          rm -f "$RUNNER_TEMP/dws-developer-id-password"
+
+      # GoReleaser uploads the original archives to a Draft before
+      # post-goreleaser.sh replaces the Darwin binaries. Re-upload every changed
+      # file, verify the Draft digests, and keep it private for Apple validation.
+      - name: Upload finalized signed assets to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DWS_PUBLISH_RELEASE: "false"
+        run: ./scripts/release/finalize-github-release.sh
+
+      - name: Preserve finalized distribution files
+        uses: actions/upload-artifact@v4
+        with:
+          name: finalized-release-dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 1
+
+  verify-darwin-signatures:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.repair_npm_version == '' }}
+    needs: release
+    runs-on: macos-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Download finalized Darwin assets from Draft release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ github.ref_name }}" dist/dws-skills.zip --clobber
+          set -euo pipefail
+          mkdir -p dist
+          gh release download "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir dist \
+            --pattern 'dws-darwin-amd64.tar.gz' \
+            --pattern 'dws-darwin-arm64.tar.gz' \
+            --clobber
+
+      - name: Verify finalized Darwin signatures with Apple codesign
+        run: |
+          set -euo pipefail
+          for arch in amd64 arm64; do
+            archive="dist/dws-darwin-${arch}.tar.gz"
+            stage="$RUNNER_TEMP/verify-darwin-${arch}"
+            mkdir -p "$stage"
+            tar -xzf "$archive" -C "$stage"
+            test -f "$stage/dws"
+            codesign --verify --strict --verbose=4 "$stage/dws"
+            codesign -dvvv "$stage/dws"
+          done
+
+  publish-release:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.repair_npm_version == '' }}
+    needs:
+      - release
+      - verify-darwin-signatures
+    runs-on: ubuntu-latest
+    # Mirroring every release asset to Gitee can be slow; 30 minutes previously
+    # cut the fallback upload off mid-run.
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Restore finalized distribution files
+        uses: actions/download-artifact@v4
+        with:
+          name: finalized-release-dist
+          path: dist
+
+      - name: Publish verified Draft release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
 
       - name: Sync release to China OSS mirror
         # 自动同步到国内镜像，供 install.sh 的 DWS_RELEASE_BASE 开关消费。
