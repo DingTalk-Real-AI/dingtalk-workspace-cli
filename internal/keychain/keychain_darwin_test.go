@@ -16,10 +16,127 @@
 package keychain
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	keyringpkg "github.com/zalando/go-keyring"
 )
+
+func TestDefaultKeychainPathFromSecurityOutput(t *testing.T) {
+	got := defaultKeychainPathFromSecurityOutput([]byte("\"/Users/me/Library/Keychains/login.keychain-db\"\n"))
+	if got != "/Users/me/Library/Keychains/login.keychain-db" {
+		t.Fatalf("path = %q", got)
+	}
+}
+
+func TestCheckDefaultKeychainAvailableReportsMissingPath(t *testing.T) {
+	missingPath := filepath.Join(t.TempDir(), "missing.keychain-db")
+	prev := readDefaultKeychain
+	readDefaultKeychain = func() ([]byte, error) {
+		return []byte("\"" + missingPath + "\"\n"), nil
+	}
+	t.Cleanup(func() {
+		readDefaultKeychain = prev
+	})
+
+	err := checkDefaultKeychainAvailable()
+	if !IsUnavailable(err) {
+		t.Fatalf("error = %v, want unavailable", err)
+	}
+	if !strings.Contains(err.Error(), missingPath) {
+		t.Fatalf("error = %v, want missing keychain path", err)
+	}
+}
+
+func TestGetMissingAccountDoesNotReadMacOSDEK(t *testing.T) {
+	t.Setenv(DisableKeychainEnv, "")
+
+	keychainPath := filepath.Join(t.TempDir(), "login.keychain-db")
+	if err := os.WriteFile(keychainPath, nil, 0600); err != nil {
+		t.Fatalf("WriteFile(default keychain) error = %v", err)
+	}
+
+	prevReadDefault := readDefaultKeychain
+	prevGet := keyringGet
+	prevSet := keyringSet
+	readDefaultKeychain = func() ([]byte, error) {
+		return []byte("\"" + keychainPath + "\"\n"), nil
+	}
+	keyringGet = func(service, account string) (string, error) {
+		t.Fatalf("keyring.Get(%q, %q) called for missing account", service, account)
+		return "", nil
+	}
+	keyringSet = func(service, account, value string) error {
+		t.Fatalf("keyring.Set(%q, %q) called for missing account", service, account)
+		return nil
+	}
+	t.Cleanup(func() {
+		readDefaultKeychain = prevReadDefault
+		keyringGet = prevGet
+		keyringSet = prevSet
+	})
+
+	got, err := Get("test-missing-account", "auth-token")
+	if err != nil {
+		t.Fatalf("Get() error = %v, want nil", err)
+	}
+	if got != "" {
+		t.Fatalf("Get() = %q, want empty string", got)
+	}
+}
+
+func TestGetWithMissingMacOSDEKDoesNotCreateDEK(t *testing.T) {
+	t.Setenv(DisableKeychainEnv, "")
+
+	keychainPath := filepath.Join(t.TempDir(), "login.keychain-db")
+	if err := os.WriteFile(keychainPath, nil, 0600); err != nil {
+		t.Fatalf("WriteFile(default keychain) error = %v", err)
+	}
+
+	prevReadDefault := readDefaultKeychain
+	prevGet := keyringGet
+	prevSet := keyringSet
+	readDefaultKeychain = func() ([]byte, error) {
+		return []byte("\"" + keychainPath + "\"\n"), nil
+	}
+	keyringGet = func(service, account string) (string, error) {
+		if account != "dek" {
+			t.Fatalf("keyring.Get account = %q, want dek", account)
+		}
+		return "", keyringpkg.ErrNotFound
+	}
+	setCalls := 0
+	keyringSet = func(service, account, value string) error {
+		setCalls++
+		return errors.New("keyring.Set should not be called by Get")
+	}
+	t.Cleanup(func() {
+		readDefaultKeychain = prevReadDefault
+		keyringGet = prevGet
+		keyringSet = prevSet
+	})
+
+	service := "test-missing-dek"
+	account := "auth-token"
+	dir := StorageDir(service)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, safeFileName(account)), []byte("ciphertext"), 0600); err != nil {
+		t.Fatalf("WriteFile(ciphertext) error = %v", err)
+	}
+
+	_, err := Get(service, account)
+	if !IsDEKMissing(err) {
+		t.Fatalf("Get() error = %v, want dek missing", err)
+	}
+	if setCalls != 0 {
+		t.Fatalf("keyring.Set calls = %d, want 0", setCalls)
+	}
+}
 
 // TestDisableKeychainFallback verifies that setting DWS_DISABLE_KEYCHAIN
 // routes the DEK to a local file (same scheme as Linux) and the full

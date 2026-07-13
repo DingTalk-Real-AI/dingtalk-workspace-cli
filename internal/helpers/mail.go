@@ -104,7 +104,7 @@ func newMailCommand() *cobra.Command {
 		Long: `查询当前用户绑定的所有邮箱地址。
 
 返回字段：
-  mailboxes  邮箱列表，每条包含邮箱地址、账号类型、所属企业
+  emailAccounts  邮箱列表，每条包含邮箱地址(email)、账号类型(type)、所属企业(orgName)
 
 错误说明：
   domain.notFound  该用户的邮箱不是由钉钉邮箱托管，无法完成操作`,
@@ -114,7 +114,38 @@ func newMailCommand() *cobra.Command {
 		},
 	}
 
-	mailboxCmd.AddCommand(mailboxListCmd)
+	mailboxProfileCmd := &cobra.Command{
+		Use:   "profile",
+		Short: "获取用户邮箱信息",
+		Long: `根据邮箱地址获取用户的邮箱详细信息，包含容量、别名等。
+
+返回字段：
+  email          邮箱地址
+  emailAliases   邮件地址别名列表
+  name           用户名
+  nickname       用户昵称
+  displayName    用户显示名
+  mboxSize       邮箱容量（字节）
+  mboxSizeUsed   已使用的邮箱容量（字节）
+  createdTime    创建时间
+  modifiedTime   修改时间
+
+错误说明：
+  domain.notFound  该用户的邮箱不是由钉钉邮箱托管，无法完成操作`,
+		Example: `  dws mail mailbox profile --email user@company.com`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "email"); err != nil {
+				return err
+			}
+			return callMCPTool("get_mailbox_profile", map[string]any{
+				"email": mustGetFlag(cmd, "email"),
+			})
+		},
+	}
+
+	mailboxProfileCmd.Flags().String("email", "", "用户的邮箱地址 (必填)")
+
+	mailboxCmd.AddCommand(mailboxListCmd, mailboxProfileCmd)
 
 	messageCmd := &cobra.Command{Use: "message", Short: "邮件管理", RunE: groupRunE}
 
@@ -1138,6 +1169,64 @@ internetMessageId 来源：message send / draft send / message reply / message r
 		},
 	}
 
+	messageBatchGetCmd := &cobra.Command{
+		Use:   "batch-get",
+		Short: "批量获取邮件详情",
+		Long: `根据邮件 ID 列表批量获取邮件完整内容，包含正文。
+
+限制说明：
+  - 单次最多 20 个邮件 ID
+  - CLI 会逐个调用 get_email_by_message_id 并返回聚合结果
+
+错误说明：
+  domain.notFound  该用户的邮箱不是由钉钉邮箱托管，无法完成操作`,
+		Example: `  dws mail message batch-get --email user@company.com --ids <id1>,<id2>
+  dws mail message batch-get --email user@company.com --ids <id1>,<id2>,<id3>`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "email", "ids"); err != nil {
+				return err
+			}
+			email := mustGetFlag(cmd, "email")
+			ids := parseRecipients(mustGetFlag(cmd, "ids"))
+			if len(ids) == 0 {
+				return fmt.Errorf("--ids 至少需要 1 个邮件 ID")
+			}
+			if len(ids) > 20 {
+				return fmt.Errorf("--ids 单次最多支持 20 个邮件 ID，当前: %d", len(ids))
+			}
+			if deps.Caller.DryRun() {
+				fmt.Printf("[DRY-RUN] Preview only, not executed:\n")
+				fmt.Printf("Operation:    batch-get (loop get_email_by_message_id x%d)\n", len(ids))
+				fmt.Printf("Arguments:\n")
+				fmt.Printf("  email:      %s\n", email)
+				fmt.Printf("  ids:        %v\n", ids)
+				return nil
+			}
+			items := make([]map[string]any, 0, len(ids))
+			for _, id := range ids {
+				text, err := callMCPToolReturnText(context.Background(), "get_email_by_message_id", map[string]any{
+					"email":     email,
+					"messageId": id,
+				})
+				if err != nil {
+					return fmt.Errorf("获取邮件详情失败 id=%s: %w", id, err)
+				}
+				var payload any
+				if err := json.Unmarshal([]byte(text), &payload); err != nil {
+					payload = text
+				}
+				items = append(items, map[string]any{
+					"id":     id,
+					"result": payload,
+				})
+			}
+			return deps.Out.PrintJSON(map[string]any{
+				"email":    email,
+				"messages": items,
+			})
+		},
+	}
+
 	draftCreateCmd := &cobra.Command{
 		Use:   "create",
 		Short: "创建草稿",
@@ -1407,12 +1496,88 @@ internetMessageId 来源：message send / draft send / message reply / message r
 	messageBatchModifyCmd.Flags().String("action", "", "操作类型: markRead/markUnread/addTags/removeTags (必填)")
 	messageBatchModifyCmd.Flags().String("tags", "", "标签 ID 列表，逗号分隔 (action 为 addTags/removeTags 时必填)")
 
+	messageBatchGetCmd.Flags().String("email", "", "邮件所属邮箱地址 (必填)")
+	messageBatchGetCmd.Flags().String("ids", "", "要获取的邮件 ID 列表，逗号分隔，最多 20 个 (必填)")
+
 	messageVerifyCmd.Flags().String("email", "", "邮件所属邮箱地址 (必填)")
 	messageVerifyCmd.Flags().String("internet-message-id", "", "邮件的 internetMessageId (必填)，取自发送类命令返回值")
 
 	messageCmd.AddCommand(messageListCmd, messageSearchCmd, messageGetCmd, messageSendCmd,
 		messageReplyCmd, messageReplyAllCmd, messageForwardCmd,
-		messageBatchMoveCmd, messageBatchDeleteCmd, messageBatchModifyCmd, messageVerifyCmd)
+		messageBatchMoveCmd, messageBatchDeleteCmd, messageBatchModifyCmd, messageBatchGetCmd, messageVerifyCmd)
+
+	sentMessageCmd := &cobra.Command{Use: "sent-message", Short: "已发送邮件管理", RunE: groupRunE}
+
+	sentMessageRecallCmd := &cobra.Command{
+		Use:   "recall",
+		Short: "[危险] 撤回已发送的邮件",
+		Long: `撤回已发送的邮件。仅支持撤回同组织内未读邮件。
+
+返回字段：
+  id        撤回任务 ID（可用于 recall-detail 查询进度）
+  success   接口调用是否成功
+  errorCode 错误码（仅失败时存在）
+  errorMsg  错误信息（仅失败时存在）
+
+错误说明：
+  domain.notFound  该用户的邮箱不是由钉钉邮箱托管，无法完成操作`,
+		Example: `  dws mail sent-message recall --email user@company.com --id <mailId> --subject "邮件主题" --yes`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "email", "id", "subject"); err != nil {
+				return err
+			}
+			yes, _ := cmd.Flags().GetBool("yes")
+			if !yes && !deps.Caller.DryRun() {
+				return fmt.Errorf("此操作为危险操作，需要传入 --yes 确认执行")
+			}
+			return callMCPTool("recall_sent_message", map[string]any{
+				"email":   mustGetFlag(cmd, "email"),
+				"id":      mustGetFlag(cmd, "id"),
+				"subject": mustGetFlag(cmd, "subject"),
+			})
+		},
+	}
+
+	sentMessageRecallDetailCmd := &cobra.Command{
+		Use:   "recall-detail",
+		Short: "查询邮件撤回进度",
+		Long: `根据撤回任务 ID 查询邮件撤回的详细进度。
+
+撤回任务 ID 来源：sent-message recall 命令返回值中的 id 字段。
+
+返回字段：
+  id             撤回任务 ID
+  status         任务状态: UNINITED/SUBMITTED/RUNNING/FINISHED/CANCELED/FAILED
+  createdTime    创建时间
+  updatedTime    更新时间
+  totalCount     总邮件数
+  succeededCount 成功撤回数
+  failedCount    撤回失败数
+  details        每封邮件的撤回结果
+
+错误说明：
+  domain.notFound  该用户的邮箱不是由钉钉邮箱托管，无法完成操作`,
+		Example: `  dws mail sent-message recall-detail --email user@company.com --id <recallTaskId>`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "email", "id"); err != nil {
+				return err
+			}
+			return callMCPTool("get_recall_detail", map[string]any{
+				"email": mustGetFlag(cmd, "email"),
+				"id":    mustGetFlag(cmd, "id"),
+			})
+		},
+	}
+
+	sentMessageRecallCmd.Flags().String("email", "", "发件人邮箱地址 (必填)")
+	sentMessageRecallCmd.Flags().String("id", "", "要撤回的邮件 ID (必填)")
+	sentMessageRecallCmd.Flags().String("subject", "", "邮件主题 (必填)")
+	sentMessageRecallCmd.Flags().Bool("yes", false, "跳过确认提示，直接执行")
+
+	sentMessageRecallDetailCmd.Flags().String("email", "", "用户的邮箱地址 (必填)")
+	sentMessageRecallDetailCmd.Flags().String("id", "", "撤回任务 ID (必填)，由 recall 命令返回")
+
+	sentMessageCmd.AddCommand(sentMessageRecallCmd, sentMessageRecallDetailCmd)
 
 	draftCreateCmd.Flags().String("from", "", "发件人邮箱 (必填)")
 	draftCreateCmd.Flags().String("sender", "", "--from 的别名")
@@ -1913,52 +2078,55 @@ user 对象字段：
 		},
 	}
 
-	// TODO: auto-reply update 暂时注释，待服务端修复后恢复
-	// autoReplyUpdateCmd := &cobra.Command{
-	// 	Use:   "update",
-	// 	Short: "更新/设置用户的自动回复配置",
-	// 	Long: `更新或设置用户的邮件自动回复配置。所有参数均为必填。
-	//
-	// 建议工作流：先通过 auto-reply get 获取当前配置，再传入需要修改的字段值。
-	//
-	// 时间格式示例：2026/06/25 16:30:00 +0800
-	//
-	// 参数说明（全部必填）：
-	//   --enabled    是否启用自动回复 (true/false)
-	//   --startTime  自动回复开始时间
-	//   --endTime    自动回复结束时间
-	//   --scope      回复范围: "contact"(仅联系人) 或 "all"(所有人)
-	//   --content    自动回复内容
-	//
-	// 错误说明：
-	//   domain.notFound  该用户的邮箱不是由钉钉邮箱托管，无法完成操作`,
-	// 	Example: `  dws mail auto-reply update --email user@company.com --enabled true --startTime "2026/07/01 09:00:00 +0800" --endTime "2026/07/07 18:00:00 +0800" --scope all --content "出差中，请稍后联系"
-	//   dws mail auto-reply update --email user@company.com --enabled false --startTime "" --endTime "" --scope all --content ""`,
-	// 	RunE: func(cmd *cobra.Command, args []string) error {
-	// 		if err := validateRequiredFlags(cmd, "email", "enabled", "startTime", "endTime", "scope", "content"); err != nil {
-	// 			return err
-	// 		}
-	// 		toolArgs := map[string]any{
-	// 			"email":     mustGetFlag(cmd, "email"),
-	// 			"enabled":   mustGetFlag(cmd, "enabled") == "true",
-	// 			"startTime": mustGetFlag(cmd, "startTime"),
-	// 			"endTime":   mustGetFlag(cmd, "endTime"),
-	// 			"scope":     mustGetFlag(cmd, "scope"),
-	// 			"content":   mustGetFlag(cmd, "content"),
-	// 		}
-	// 		return callMCPTool("update_auto_reply", toolArgs)
-	// 	},
-	// }
+	autoReplyUpdateCmd := &cobra.Command{
+		Use:   "update",
+		Short: "更新/设置用户的自动回复配置",
+		Long: `更新或设置用户的邮件自动回复配置。所有参数均为必填。
+
+建议工作流：先通过 auto-reply get 获取当前配置，再传入需要修改的字段值。
+
+时间格式示例：2026/06/25 16:00:00 +0800
+
+参数说明（全部必填）：
+  --enabled  是否启用自动回复 (true/false)
+  --start    自动回复开始时间
+  --end      自动回复结束时间
+  --scope    回复范围: "contact"(仅联系人) 或 "all"(所有人)
+  --content  自动回复内容
+
+错误说明：
+  domain.notFound  该用户的邮箱不是由钉钉邮箱托管，无法完成操作`,
+		Example: `  dws mail auto-reply update --email user@company.com --enabled true --start "2026/07/01 09:00:00 +0800" --end "2026/07/07 18:00:00 +0800" --scope all --content "出差中，请稍后联系"
+  dws mail auto-reply update --email user@company.com --enabled false --start "2026/07/01 09:00:00 +0800" --end "2026/07/07 18:00:00 +0800" --scope all --content "已关闭自动回复"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "email", "enabled", "start", "end", "scope", "content"); err != nil {
+				return err
+			}
+			enabledRaw := strings.ToLower(strings.TrimSpace(mustGetFlag(cmd, "enabled")))
+			if enabledRaw != "true" && enabledRaw != "false" {
+				return fmt.Errorf("--enabled 必须为 true 或 false")
+			}
+			toolArgs := map[string]any{
+				"email":     mustGetFlag(cmd, "email"),
+				"enabled":   enabledRaw == "true",
+				"startTime": mustGetFlag(cmd, "start"),
+				"endTime":   mustGetFlag(cmd, "end"),
+				"scope":     mustGetFlag(cmd, "scope"),
+				"content":   mustGetFlag(cmd, "content"),
+			}
+			return callMCPTool("update_auto_reply", toolArgs)
+		},
+	}
 
 	autoReplyGetCmd.Flags().String("email", "", "用户的邮箱地址 (必填)")
-	// autoReplyUpdateCmd.Flags().String("email", "", "用户的邮箱地址 (必填)")
-	// autoReplyUpdateCmd.Flags().String("enabled", "", "是否启用自动回复: true/false (必填)")
-	// autoReplyUpdateCmd.Flags().String("startTime", "", "自动回复开始时间 (必填)，格式: 2026/06/25 16:30:00 +0800")
-	// autoReplyUpdateCmd.Flags().String("endTime", "", "自动回复结束时间 (必填)，格式: 2026/06/25 16:30:00 +0800")
-	// autoReplyUpdateCmd.Flags().String("scope", "", "回复范围: contact(仅联系人)/all(所有人) (必填)")
-	// autoReplyUpdateCmd.Flags().String("content", "", "自动回复内容 (必填)")
+	autoReplyUpdateCmd.Flags().String("email", "", "用户的邮箱地址 (必填)")
+	autoReplyUpdateCmd.Flags().String("enabled", "", "是否启用自动回复: true/false (必填)")
+	autoReplyUpdateCmd.Flags().String("start", "", "自动回复开始时间，格式: YYYY/MM/DD HH:MM:SS +ZZZZ (必填)")
+	autoReplyUpdateCmd.Flags().String("end", "", "自动回复结束时间，格式: YYYY/MM/DD HH:MM:SS +ZZZZ (必填)")
+	autoReplyUpdateCmd.Flags().String("scope", "", "回复范围: contact(仅联系人)/all(所有人) (必填)")
+	autoReplyUpdateCmd.Flags().String("content", "", "自动回复内容 (必填)")
 
-	autoReplyCmd.AddCommand(autoReplyGetCmd) // , autoReplyUpdateCmd)
+	autoReplyCmd.AddCommand(autoReplyGetCmd, autoReplyUpdateCmd)
 
 	// ── rule 收信规则 ────────────────────────────────────
 	ruleCmd := &cobra.Command{Use: "rule", Short: "收信规则管理", RunE: groupRunE}
@@ -2145,7 +2313,143 @@ object 与 operation 合法组合：
 
 	ruleCmd.AddCommand(ruleListCmd, ruleCreateCmd, ruleUpdateCmd, ruleDeleteCmd, ruleAdjustCmd)
 
-	root.AddCommand(mailboxCmd, messageCmd, draftCmd, threadCmd, folderCmd, tagCmd, userCmd, attachmentCmd, templateCmd, contactCmd, autoReplyCmd, ruleCmd)
+	// ── allow-list 个人收信白名单 ────────────────────────────────
+	allowListCmd := &cobra.Command{Use: "allow-list", Short: "个人收信白名单管理", RunE: groupRunE}
+
+	allowListListCmd := &cobra.Command{
+		Use:   "list",
+		Short: "列出个人收信白名单",
+		Long: `列出当前用户的个人收信白名单地址列表。
+
+返回字段：
+  entries   白名单地址列表
+  success   接口调用是否成功
+  errorCode 错误码（仅失败时存在）
+  errorMsg  错误信息（仅失败时存在）`,
+		Example: `  dws mail allow-list list --email user@company.com`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "email"); err != nil {
+				return err
+			}
+			return callMCPTool("list_mailbox_allowlist", map[string]any{
+				"email": mustGetFlag(cmd, "email"),
+			})
+		},
+	}
+	allowListAddCmd := &cobra.Command{
+		Use:   "add",
+		Short: "添加个人收信白名单",
+		Long: `向个人收信白名单中添加邮件地址或域名。
+
+条目格式：
+  - 邮件地址：123@domain.com
+  - 域名：@domain.com（域名前需加 @ 符号）`,
+		Example: `  dws mail allow-list add --email user@company.com --entries a@b.com,@spam.com`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "email", "entries"); err != nil {
+				return err
+			}
+			return callMCPTool("add_mailbox_allowlist", map[string]any{
+				"email":   mustGetFlag(cmd, "email"),
+				"entries": parseRecipients(mustGetFlag(cmd, "entries")),
+			})
+		},
+	}
+	allowListRemoveCmd := &cobra.Command{
+		Use:   "remove",
+		Short: "移除个人收信白名单",
+		Long: `从个人收信白名单中移除邮件地址或域名。
+
+条目格式：
+  - 邮件地址：123@domain.com
+  - 域名：@domain.com（域名前需加 @ 符号）`,
+		Example: `  dws mail allow-list remove --email user@company.com --entries a@b.com,@spam.com`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "email", "entries"); err != nil {
+				return err
+			}
+			return callMCPTool("remove_mailbox_allowlist", map[string]any{
+				"email":   mustGetFlag(cmd, "email"),
+				"entries": parseRecipients(mustGetFlag(cmd, "entries")),
+			})
+		},
+	}
+	allowListListCmd.Flags().String("email", "", "用户的邮箱地址 (必填)")
+	allowListAddCmd.Flags().String("email", "", "用户的邮箱地址 (必填)")
+	allowListAddCmd.Flags().String("entries", "", "逗号分隔的地址列表，支持邮件地址(如123@domain.com)或域名(如@domain.com)")
+	allowListRemoveCmd.Flags().String("email", "", "用户的邮箱地址 (必填)")
+	allowListRemoveCmd.Flags().String("entries", "", "逗号分隔的地址列表，支持邮件地址(如123@domain.com)或域名(如@domain.com)")
+	allowListCmd.AddCommand(allowListListCmd, allowListAddCmd, allowListRemoveCmd)
+
+	// ── block-list 个人收信黑名单 ────────────────────────────────
+	blockListCmd := &cobra.Command{Use: "block-list", Short: "个人收信黑名单管理", RunE: groupRunE}
+
+	blockListListCmd := &cobra.Command{
+		Use:   "list",
+		Short: "列出个人收信黑名单",
+		Long: `列出当前用户的个人收信黑名单地址列表。
+
+返回字段：
+  entries   黑名单地址列表
+  success   接口调用是否成功
+  errorCode 错误码（仅失败时存在）
+  errorMsg  错误信息（仅失败时存在）`,
+		Example: `  dws mail block-list list --email user@company.com`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "email"); err != nil {
+				return err
+			}
+			return callMCPTool("list_mailbox_blocklist", map[string]any{
+				"email": mustGetFlag(cmd, "email"),
+			})
+		},
+	}
+	blockListAddCmd := &cobra.Command{
+		Use:   "add",
+		Short: "添加个人收信黑名单",
+		Long: `向个人收信黑名单中添加邮件地址或域名。
+
+条目格式：
+  - 邮件地址：123@domain.com
+  - 域名：@domain.com（域名前需加 @ 符号）`,
+		Example: `  dws mail block-list add --email user@company.com --entries spam@bad.com,@junk.com`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "email", "entries"); err != nil {
+				return err
+			}
+			return callMCPTool("add_mailbox_blocklist", map[string]any{
+				"email":   mustGetFlag(cmd, "email"),
+				"entries": parseRecipients(mustGetFlag(cmd, "entries")),
+			})
+		},
+	}
+	blockListRemoveCmd := &cobra.Command{
+		Use:   "remove",
+		Short: "移除个人收信黑名单",
+		Long: `从个人收信黑名单中移除邮件地址或域名。
+
+条目格式：
+  - 邮件地址：123@domain.com
+  - 域名：@domain.com（域名前需加 @ 符号）`,
+		Example: `  dws mail block-list remove --email user@company.com --entries spam@bad.com,@junk.com`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "email", "entries"); err != nil {
+				return err
+			}
+			return callMCPTool("remove_mailbox_blocklist", map[string]any{
+				"email":   mustGetFlag(cmd, "email"),
+				"entries": parseRecipients(mustGetFlag(cmd, "entries")),
+			})
+		},
+	}
+	blockListListCmd.Flags().String("email", "", "用户的邮箱地址 (必填)")
+	blockListAddCmd.Flags().String("email", "", "用户的邮箱地址 (必填)")
+	blockListAddCmd.Flags().String("entries", "", "逗号分隔的地址列表，支持邮件地址(如123@domain.com)或域名(如@domain.com)")
+	blockListRemoveCmd.Flags().String("email", "", "用户的邮箱地址 (必填)")
+	blockListRemoveCmd.Flags().String("entries", "", "逗号分隔的地址列表，支持邮件地址(如123@domain.com)或域名(如@domain.com)")
+	blockListCmd.AddCommand(blockListListCmd, blockListAddCmd, blockListRemoveCmd)
+
+	root.AddCommand(mailboxCmd, messageCmd, sentMessageCmd, draftCmd, threadCmd, folderCmd, tagCmd, userCmd, attachmentCmd, templateCmd, contactCmd, autoReplyCmd, ruleCmd, allowListCmd, blockListCmd)
 
 	return root
 }

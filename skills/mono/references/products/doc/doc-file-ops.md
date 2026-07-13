@@ -3,7 +3,7 @@
 > **前置条件（MUST READ）：** 执行本命令前，必须先用 Read 工具读取以下文件：
 > 1. [`../doc.md`](../doc.md) — 命令路由 + 场景索引 + 意图判断 + 工作流
 
-> **弃用提示（文件管理命令正在迁移到 drive / wiki）**：本文所列 `doc` 文件管理命令在真机上虽仍能跑，但执行时会打印弃用警告，请优先改用 `drive` / `wiki` 对应命令：
+> **弃用提示（文件管理命令正在迁移到 drive / wiki）**：本文所列 `doc` 文件管理命令虽仍能跑，但执行时会打印弃用警告，请优先改用 `drive` / `wiki` 对应命令：
 > - `doc download` → **`dws drive download`**（下载已有文件；在线文档导出 docx 仍走 `doc export`）
 > - `doc folder create` → **`dws drive mkdir`**（个人空间/钉盘）或 **`dws wiki node create --workspace <id> --type folder`**（知识库内）
 > - `doc upload` / `doc copy` / `doc move` / `doc rename` / `doc delete` 也在同一迁移方向（→ `drive`），命令用法以 `drive` 为准。

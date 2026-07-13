@@ -35,6 +35,11 @@ import (
 // Setting keychain.StorageDirEnv here forces every keychain read/write in
 // this binary into a per-process tempdir, eliminating that contamination
 // without touching production code.
+//
+// PAT authorization tests also exercise code paths that normally open the
+// system browser. Keep the package-wide default opener inert so running the
+// test binary never launches a page on the developer's machine; tests that
+// need to assert the URL can still replace openBrowserFunc locally.
 func TestMain(m *testing.M) {
 	tmpDir, err := os.MkdirTemp("", "dws-app-test-keychain-")
 	if err != nil {
@@ -44,6 +49,7 @@ func TestMain(m *testing.M) {
 		_ = os.RemoveAll(tmpDir)
 		panic("set " + keychain.StorageDirEnv + ": " + err.Error())
 	}
+	openBrowserFunc = func(string) error { return nil }
 	code := m.Run()
 	_ = os.RemoveAll(tmpDir)
 	os.Exit(code)

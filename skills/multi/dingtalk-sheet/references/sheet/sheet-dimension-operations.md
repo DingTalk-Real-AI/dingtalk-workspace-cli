@@ -26,6 +26,12 @@
 - 注意与 `append`（追加数据行）区分：`add-dimension` 追加的是空行/空列，`append` 追加的是带数据的行
 - 请勿用 `range update` 写空数据来模拟追加，`add-dimension` 直接扩展表格维度
 
+用户说"创建行分组/创建列分组/折叠几行/折叠几列/展开行列分组/取消行列分组":
+- 创建分组 → `group-dimension --range <整行或整列范围>`
+- 创建并折叠 → `group-dimension --group-state fold`
+- 取消分组 → `ungroup-dimension --range <整行或整列范围>`
+- `--range` 只能传整行或整列范围，如 `3:7`、`C:F`、`Sheet1!3:7`
+
 **结构预检**：插入、删除、移动行列前，必须先执行 `dws sheet info --node <NODE_ID> --sheet-id <SHEET_ID> --format json` 查看 `mergedRanges`。合并区域跨过操作位置时，行列变更可能导致表头/分组标题断裂、空白或错位；需要先向用户说明影响，必要时取消合并后操作，再按原模式重新 `merge-cells`。
 
 ## 命令详细参考
@@ -172,6 +178,38 @@ Flags:
 
 在工作表末尾追加指定数量的空行或空列。
 
+### 创建行或列分组
+```
+Usage:
+  dws sheet group-dimension [flags]
+Example:
+  dws sheet group-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --range "3:7"
+  dws sheet group-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --range "C:F" --group-state fold
+  dws sheet group-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --range "Sheet1!3:7"
+Flags:
+      --node string          表格文档 ID 或 URL (必填)
+      --sheet-id string      工作表 ID 或名称 (必填)
+      --range string         整行/整列范围，如 "3:7" 或 "C:F" (必填)
+      --group-state string   创建后的分组状态: expand 或 fold，默认 expand
+```
+
+为连续行或连续列创建分组。`--range` 必须是整行或整列范围，不支持 `A1:C5` 这类普通单元格矩形范围。
+
+### 取消行或列分组
+```
+Usage:
+  dws sheet ungroup-dimension [flags]
+Example:
+  dws sheet ungroup-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --range "3:7"
+  dws sheet ungroup-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --range "C:F"
+Flags:
+      --node string       表格文档 ID 或 URL (必填)
+      --sheet-id string   工作表 ID 或名称 (必填)
+      --range string      整行/整列范围，如 "3:7" 或 "C:F" (必填)
+```
+
+取消指定连续行或连续列的分组。
+
 ## 核心工作流
 
 ```bash
@@ -244,6 +282,8 @@ dws sheet update-dimension --node <NODE_ID> --sheet-id <SHEET_ID> \
 | `update-dimension` | `a1Notation` 被更新区域范围、`hidden` 生效的显隐状态、`pixelSize` 生效的尺寸 | 确认更新结果 |
 | `move-dimension` | `sheetId` 工作表 ID | 确认操作完成 |
 | `add-dimension` | `sheetId` 工作表 ID | 确认操作完成 |
+| `group-dimension` | `range` / `level` / `groupState` | 确认行列分组层级和展开状态 |
+| `ungroup-dimension` | `range` / `level` | 确认行列分组已取消 |
 | `list` | 工作表的 `sheetId` | info / range read / range update / find 的 --sheet-id |
 
 ## 注意事项
@@ -273,3 +313,7 @@ dws sheet update-dimension --node <NODE_ID> --sheet-id <SHEET_ID> \
 - `add-dimension` vs `range update`：需要在末尾追加空行/空列时，必须使用 `add-dimension` 命令，禁止用 `range update` 写空数据来模拟追加效果
 - `add-dimension` 追加的是空行/空列，与 `append`（追加带数据的行）不同
 - `add-dimension` 的 `--length` 必须为正整数（>= 1），行列均不超过 5000
+- `group-dimension` / `ungroup-dimension` 的 `--range` 只接受整行或整列范围，如 `3:7`、`C:F`、`Sheet1!3:7`，不支持 `A1:C5`
+- `group-dimension` 的 `--group-state` 只接受 `expand` 或 `fold`，默认 `expand`
+- 分组操作返回 `level` 表示当前分组层级；不要把它误认为固定深度参数
+- `batch-update` 支持 `group-dimension` / `ungroup-dimension`；需要创建后立即折叠时，优先使用独立 `group-dimension --group-state fold`

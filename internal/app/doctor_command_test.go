@@ -15,9 +15,16 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
 func TestCountResults(t *testing.T) {
@@ -124,6 +131,108 @@ func TestDoctorCheckCacheEmptyJSON(t *testing.T) {
 	}
 	if buf.Len() != 0 {
 		t.Error("expected no output in JSON mode")
+	}
+}
+
+func TestDoctorCheckAuthReportsKeychainUnavailable(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", filepath.Join(t.TempDir(), "config"))
+
+	prev := edition.Get()
+	edition.Override(&edition.Hooks{
+		LoadToken: func(configDir string) ([]byte, error) {
+			return nil, keychain.NewUnavailableError("read DEK from macOS Keychain", errors.New("default keychain missing"))
+		},
+	})
+	t.Cleanup(func() {
+		edition.Override(prev)
+	})
+
+	var buf bytes.Buffer
+	r := doctorCheckAuth(context.Background(), &buf, false)
+
+	if r.Name != "auth" {
+		t.Fatalf("name = %q, want auth", r.Name)
+	}
+	if r.Status != statusFail {
+		t.Fatalf("status = %q, want fail", r.Status)
+	}
+	if !strings.Contains(r.Message, "Keychain") && !strings.Contains(r.Message, "钥匙串") {
+		t.Fatalf("message should mention Keychain/钥匙串; result=%+v", r)
+	}
+	if !strings.Contains(r.Hint, keychain.DisableKeychainEnv) {
+		t.Fatalf("hint should mention %s; result=%+v", keychain.DisableKeychainEnv, r)
+	}
+}
+
+func TestDoctorCheckAuthReportsDEKMissing(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", filepath.Join(t.TempDir(), "config"))
+
+	prev := edition.Get()
+	edition.Override(&edition.Hooks{
+		LoadToken: func(configDir string) ([]byte, error) {
+			return nil, fmt.Errorf("load from keychain: %w", keychain.ErrDEKMissing)
+		},
+	})
+	t.Cleanup(func() {
+		edition.Override(prev)
+	})
+
+	var buf bytes.Buffer
+	r := doctorCheckAuth(context.Background(), &buf, false)
+
+	if r.Name != "auth" {
+		t.Fatalf("name = %q, want auth", r.Name)
+	}
+	if r.Status != statusFail {
+		t.Fatalf("status = %q, want fail", r.Status)
+	}
+	if !strings.Contains(r.Message, "登录密钥") {
+		t.Fatalf("message should mention 登录密钥; result=%+v", r)
+	}
+	if !strings.Contains(r.Hint, "重新登录") {
+		t.Fatalf("hint should mention 重新登录; result=%+v", r)
+	}
+	detail, ok := r.Detail.(map[string]string)
+	if !ok || detail["reason"] != "dek_missing" {
+		t.Fatalf("detail = %#v, want reason=dek_missing", r.Detail)
+	}
+}
+
+func TestDoctorCheckKeychainReportsUnavailable(t *testing.T) {
+	prev := doctorKeychainDiagnose
+	doctorKeychainDiagnose = func() keychain.Diagnostic {
+		return keychain.Diagnostic{
+			OK:      false,
+			Reason:  "keychain_unavailable",
+			Message: "macOS 默认钥匙串不存在",
+			Hint:    "恢复默认钥匙串后重试",
+			Detail: map[string]string{
+				"default_keychain": "/tmp/missing.keychain-db",
+			},
+		}
+	}
+	t.Cleanup(func() {
+		doctorKeychainDiagnose = prev
+	})
+
+	var buf bytes.Buffer
+	r := doctorCheckKeychain(&buf, false)
+
+	if r.Name != "keychain" {
+		t.Fatalf("name = %q, want keychain", r.Name)
+	}
+	if r.Status != statusFail {
+		t.Fatalf("status = %q, want fail", r.Status)
+	}
+	if r.Message != "macOS 默认钥匙串不存在" {
+		t.Fatalf("message = %q", r.Message)
+	}
+	if r.Hint == "" {
+		t.Fatalf("hint is empty; result=%+v", r)
+	}
+	detail, ok := r.Detail.(map[string]string)
+	if !ok || detail["default_keychain"] == "" {
+		t.Fatalf("detail = %#v, want default_keychain", r.Detail)
 	}
 }
 

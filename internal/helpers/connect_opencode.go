@@ -40,6 +40,8 @@ const (
 	opencodeNoTextReply        = "（本地 agent 无文本输出）"
 	opencodeServerStartupWait  = 20 * time.Second
 	opencodeServerPollInterval = 150 * time.Millisecond
+	opencodeConfigContentEnv   = "OPENCODE_CONFIG_CONTENT"
+	opencodePermissionEnv      = "OPENCODE_PERMISSION"
 	// opencodeHealthProbeTimeout bounds a single /global/health probe so startup
 	// detection stays snappy even though the shared http.Client has no overall
 	// deadline (message turns rely on the per-turn ctx instead).
@@ -240,14 +242,7 @@ func (s *opencodeServer) ensure(ctx context.Context) (*opencodeHTTPClient, error
 	if s.workDir != "" {
 		cmd.Dir = s.workDir
 	}
-	cmd.Env = append(os.Environ(), s.env...)
-	cmd.Env = append(cmd.Env,
-		"OPENCODE_SERVER_USERNAME="+opencodeServerUsername,
-		"OPENCODE_SERVER_PASSWORD="+password,
-	)
-	if !s.yolo {
-		cmd.Env = append(cmd.Env, `OPENCODE_PERMISSION={"bash":"ask","edit":"ask","write":"ask"}`)
-	}
+	cmd.Env = s.commandEnv(password)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
@@ -267,6 +262,97 @@ func (s *opencodeServer) ensure(ctx context.Context) (*opencodeHTTPClient, error
 		return nil, err
 	}
 	return client, nil
+}
+
+func (s *opencodeServer) commandEnv(password string) []string {
+	env := append([]string{}, os.Environ()...)
+	env = append(env, s.env...)
+	env = upsertEnv(env, "OPENCODE_SERVER_USERNAME", opencodeServerUsername)
+	env = upsertEnv(env, "OPENCODE_SERVER_PASSWORD", password)
+	config := opencodeNonInteractiveConfig(envValue(env, opencodeConfigContentEnv))
+	env = upsertEnv(env, opencodeConfigContentEnv, config)
+	env = upsertEnv(env, opencodePermissionEnv, opencodeNonInteractivePermission())
+	return env
+}
+
+func opencodeNonInteractiveConfig(existing string) string {
+	cfg := map[string]any{}
+	if strings.TrimSpace(existing) != "" {
+		_ = json.Unmarshal([]byte(existing), &cfg)
+	}
+	tools, _ := cfg["tools"].(map[string]any)
+	if tools == nil {
+		tools = map[string]any{}
+	}
+	tools["question"] = false
+	cfg["tools"] = tools
+
+	permission, _ := cfg["permission"].(map[string]any)
+	if permission == nil {
+		permission = map[string]any{}
+	}
+	for k, v := range opencodeNonInteractivePermissionMap() {
+		permission[k] = v
+	}
+	cfg["permission"] = permission
+
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		return `{"tools":{"question":false},"permission":{"*":"allow","read":"allow","edit":"allow","write":"allow","patch":"allow","apply_patch":"allow","glob":"allow","grep":"allow","bash":"allow","task":"allow","skill":"allow","lsp":"allow","webfetch":"allow","websearch":"allow","question":"deny","external_directory":"allow","doom_loop":"allow"}}`
+	}
+	return string(data)
+}
+
+func opencodeNonInteractivePermission() string {
+	data, err := json.Marshal(opencodeNonInteractivePermissionMap())
+	if err != nil {
+		return `{"*":"allow","read":"allow","edit":"allow","write":"allow","patch":"allow","apply_patch":"allow","glob":"allow","grep":"allow","bash":"allow","task":"allow","skill":"allow","lsp":"allow","webfetch":"allow","websearch":"allow","question":"deny","external_directory":"allow","doom_loop":"allow"}`
+	}
+	return string(data)
+}
+
+func opencodeNonInteractivePermissionMap() map[string]string {
+	return map[string]string{
+		"*":                  "allow",
+		"read":               "allow",
+		"edit":               "allow",
+		"write":              "allow",
+		"patch":              "allow",
+		"apply_patch":        "allow",
+		"glob":               "allow",
+		"grep":               "allow",
+		"bash":               "allow",
+		"task":               "allow",
+		"skill":              "allow",
+		"lsp":                "allow",
+		"webfetch":           "allow",
+		"websearch":          "allow",
+		"question":           "deny",
+		"external_directory": "allow",
+		"doom_loop":          "allow",
+	}
+}
+
+func envValue(env []string, key string) string {
+	prefix := key + "="
+	for i := len(env) - 1; i >= 0; i-- {
+		if strings.HasPrefix(env[i], prefix) {
+			return strings.TrimPrefix(env[i], prefix)
+		}
+	}
+	return ""
+}
+
+func upsertEnv(env []string, key, value string) []string {
+	prefix := key + "="
+	out := make([]string, 0, len(env)+1)
+	for _, item := range env {
+		if strings.HasPrefix(item, prefix) {
+			continue
+		}
+		out = append(out, item)
+	}
+	return append(out, prefix+value)
 }
 
 func (s *opencodeServer) waitHealthy(ctx context.Context, client *opencodeHTTPClient) error {

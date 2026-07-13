@@ -57,8 +57,8 @@ func TestConvSessions(t *testing.T) {
 }
 
 // TestApplyModelArg covers both shapes: replacing an existing model pin
-// (claudecode's built-in haiku) and inserting before the tail (gemini-style
-// tails that end with -p and need the prompt to stay trailing).
+// (claudecode's built-in haiku) and inserting before a prompt tail that must
+// stay trailing.
 func TestApplyModelArg(t *testing.T) {
 	replaced := applyModelArg(
 		[]string{"claude", "-p", "--model", "claude-haiku-4-5-20251001", "--strict-mcp-config"},
@@ -145,6 +145,128 @@ func TestForwarderSessionAndModelWiring(t *testing.T) {
 	if off.(*execForwarder).sessions != nil {
 		t.Fatal("Memory=false must disable sessions")
 	}
+}
+
+func TestBuiltInAgentForwardersDefaultToPureChannelPermissions(t *testing.T) {
+	clearChannelEnv(t)
+	t.Setenv("DWS_CONNECT_NO_INSTALL", "1")
+	t.Setenv("DWS_AGENT_CMD", "")
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	stub := t.TempDir()
+	for _, name := range []string{"claude", "codebuddy", "codex", "opencode", "qodercli"} {
+		if err := writeExecStub(stub, name); err != nil {
+			t.Fatalf("stub %s: %v", name, err)
+		}
+	}
+	t.Setenv("PATH", stub)
+
+	cases := []struct {
+		channel string
+		want    []string
+	}{
+		{"claudecode", []string{"--permission-mode", "bypassPermissions", "--dangerously-skip-permissions"}},
+		{"codebuddy", []string{"--permission-mode", "bypassPermissions", "--dangerously-skip-permissions"}},
+		{"workbuddy", []string{"--permission-mode", "bypassPermissions", "--dangerously-skip-permissions"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.channel, func(t *testing.T) {
+			fwd, err := forwarderForChannel(tc.channel, "", connectAgentOptions{Memory: true, Yolo: true})
+			if err != nil {
+				t.Fatalf("forwarderForChannel(%q): %v", tc.channel, err)
+			}
+			ef, ok := fwd.(*execForwarder)
+			if !ok {
+				t.Fatalf("%s forwarder = %T, want *execForwarder", tc.channel, fwd)
+			}
+			got := strings.Join(ef.argv, " ")
+			for _, want := range tc.want {
+				if !strings.Contains(got, want) {
+					t.Fatalf("%s argv missing %q: %s", tc.channel, want, got)
+				}
+			}
+			if len(ef.streamArgv) > 0 {
+				streamGot := strings.Join(ef.streamArgv, " ")
+				for _, want := range tc.want {
+					if !strings.Contains(streamGot, want) {
+						t.Fatalf("%s stream argv missing %q: %s", tc.channel, want, streamGot)
+					}
+				}
+			}
+		})
+	}
+
+	t.Run("gemini", func(t *testing.T) {
+		t.Setenv("GEMINI_API_KEY", "test-key")
+		fwd, err := forwarderForChannel("gemini", "gemini-client", connectAgentOptions{Memory: true, Yolo: true, Model: "gemini-test"})
+		if err != nil {
+			t.Fatalf("forwarderForChannel(gemini): %v", err)
+		}
+		gf, ok := fwd.(*geminiAPIForwarder)
+		if !ok {
+			t.Fatalf("gemini forwarder = %T, want *geminiAPIForwarder", fwd)
+		}
+		if gf.model != "gemini-test" {
+			t.Fatalf("gemini model = %q, want gemini-test", gf.model)
+		}
+	})
+
+	for _, ch := range []string{"qoder", "qoderwork"} {
+		t.Run(ch, func(t *testing.T) {
+			fwd, err := forwarderForChannel(ch, "client-"+ch, connectAgentOptions{Memory: true, Yolo: true})
+			if err != nil {
+				t.Fatalf("forwarderForChannel(%q): %v", ch, err)
+			}
+			qf, ok := fwd.(*qoderStreamForwarder)
+			if !ok {
+				t.Fatalf("%s forwarder = %T, want *qoderStreamForwarder", ch, fwd)
+			}
+			got := strings.Join(qf.commandArgs(), " ")
+			for _, want := range []string{"--permission-mode", "bypass_permissions", "--dangerously-skip-permissions"} {
+				if !strings.Contains(got, want) {
+					t.Fatalf("%s command args missing %q: %s", ch, want, got)
+				}
+			}
+		})
+	}
+
+	t.Run("codex", func(t *testing.T) {
+		fwd, err := forwarderForChannel("codex", "codex-client", connectAgentOptions{Memory: true, Yolo: true})
+		if err != nil {
+			t.Fatalf("forwarderForChannel(codex): %v", err)
+		}
+		cf, ok := fwd.(*codexAppServerForwarder)
+		if !ok {
+			t.Fatalf("codex forwarder = %T, want *codexAppServerForwarder", fwd)
+		}
+		params := cf.threadParams("")
+		if got := params["approvalPolicy"]; got != "never" {
+			t.Fatalf("codex approvalPolicy = %v, want never", got)
+		}
+		if got := params["sandbox"]; got != "workspace-write" {
+			t.Fatalf("codex yolo sandbox = %v, want workspace-write", got)
+		}
+	})
+
+	t.Run("opencode", func(t *testing.T) {
+		fwd, err := forwarderForChannel("opencode", "opencode-client", connectAgentOptions{Memory: true, Yolo: true})
+		if err != nil {
+			t.Fatalf("forwarderForChannel(opencode): %v", err)
+		}
+		of, ok := fwd.(*opencodeForwarder)
+		if !ok {
+			t.Fatalf("opencode forwarder = %T, want *opencodeForwarder", fwd)
+		}
+		env := of.server.commandEnv("pw")
+		if !strings.Contains(envValue(env, opencodeConfigContentEnv), `"question":false`) {
+			t.Fatalf("opencode config should disable question tool: %s", envValue(env, opencodeConfigContentEnv))
+		}
+		if !strings.Contains(envValue(env, opencodePermissionEnv), `"question":"deny"`) {
+			t.Fatalf("opencode permission should deny question: %s", envValue(env, opencodePermissionEnv))
+		}
+		if !strings.Contains(envValue(env, opencodePermissionEnv), `"bash":"allow"`) {
+			t.Fatalf("opencode permission should allow gated tools: %s", envValue(env, opencodePermissionEnv))
+		}
+	})
 }
 
 // TestRobotConnectAgentFlagsInDryRun checks the new flags surface in the

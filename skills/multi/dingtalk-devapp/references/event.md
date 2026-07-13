@@ -90,5 +90,5 @@ event subscribe/unsubscribe   订阅变更写入版本元数据
 |------|------|
 | `--event-codes` 缺失 | CLI 直接报错，先 `event list` 取事件码 |
 | 订阅后 `subscribed` 仍为 false | 灰度应用需先 `version publish` 发布版本 |
-| `errorCode=STREAM_NOT_CONNECTED` / `reason=STREAM_NOT_CONNECTED` | 先执行 `dev connect` 建联，再重试订阅 |
+| 返回提示「长链接未在线」（泛化错误 `reason=business_error`、`server_error_code=-1`，无 STREAM_NOT_CONNECTED 码） | 先执行 `dev connect` 建联，再重试订阅 |
 | `ServiceResult.success=false` | 透传 `errorCode/errorMsg` |

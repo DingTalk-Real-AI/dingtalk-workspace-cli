@@ -12,7 +12,7 @@ metadata:
 
 # 悟空技能管理 Skill
 
-> 🧪 **EXPERIMENTAL · 试验版 / Preview** — multi 模式当前未达 stable 标准。20 个 dingtalk-* skill 全部通过 dispatch verifier，但接口、命名、跨 skill 引用后续可能调整；生产 / 共享环境请优先使用 mono 模式（`dws skill setup --mode mono`）。问题请提 issue 反馈。
+> 🧪 **EXPERIMENTAL · 试验版 / Preview** — multi 模式当前未达 stable 标准。22 个 dingtalk-* skill 全部通过 dispatch verifier，但接口、命名、跨 skill 引用后续可能调整；生产 / 共享环境请优先使用 mono 模式（`dws skill setup --mode mono`）。问题请提 issue 反馈。
 
 > **PREREQUISITE:** Read the `dws-shared` skill first for auth, global flags, product routing, URL preflight, error codes, and safety rules. The `dws` binary must be on PATH.
 
@@ -33,10 +33,10 @@ metadata:
 
 ## 环境
 
-- `DWS_SKILL_API_HOST` 覆盖技能 API 地址（默认 `https://aihub.dingtalk.com`）
+- `DWS_SKILL_API_HOST` 覆盖技能 API 地址（默认 `https://mcp.dingtalk.com`）
 
 ## 兼容提示
 
 - `dws skill find` → 用 `dws skill search --query <关键词>`
-- `--scopes` 已废弃（真机打 `Flag --scopes has been deprecated, 请使用 --source 替代` 警告）→ 用 `--source`
-- 前置：`skill search` 依赖企业开通技能市场；未开通时真机报「当前企业暂未开放此功能」，属企业级开关，非命令写法问题
+- `--scopes` 已废弃（会打印 `Flag --scopes has been deprecated, 请使用 --source 替代` 警告）→ 用 `--source`
+- 前置：`skill search` 依赖企业开通技能市场；未开通时报「当前企业暂未开放此功能」，属企业级开关，非命令写法问题

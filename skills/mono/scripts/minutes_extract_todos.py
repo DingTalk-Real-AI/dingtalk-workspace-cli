@@ -44,6 +44,58 @@ def run_dws(
         return None
 
 
+def todos_from_payload(payload: Any) -> List[dict]:
+    """解析 `minutes get todos` 返回为待办列表。
+
+    返回结构: result.dingtalkTodoList(对象数组, 含 title 等)与
+    result.actions(JSON 字符串数组, 每条形如
+    {"mark":[],"value":"..."}). 二者无 todos 键。
+    优先取 dingtalkTodoList; 为空时回退解析 actions。
+    """
+    if isinstance(payload, dict):
+        inner = payload.get('result', payload)
+    else:
+        inner = payload
+    out: List[dict] = []
+    if isinstance(inner, dict):
+        ding_list = inner.get('dingtalkTodoList')
+        if isinstance(ding_list, list) and ding_list:
+            for t in ding_list:
+                if isinstance(t, dict):
+                    content = t.get('title') or t.get('content') or ''
+                    if content:
+                        out.append({'content': str(content), '_raw': t})
+            if out:
+                return out
+        actions = inner.get('actions')
+        if isinstance(actions, list):
+            for a in actions:
+                content = ''
+                if isinstance(a, str):
+                    text = a.strip()
+                    if text.startswith('{'):
+                        try:
+                            parsed = json.loads(text)
+                            content = parsed.get('value') or ''
+                        except json.JSONDecodeError:
+                            content = text
+                    else:
+                        content = text
+                elif isinstance(a, dict):
+                    content = (a.get('value') or a.get('content')
+                               or a.get('title') or '')
+                if content:
+                    out.append({'content': str(content)})
+    elif isinstance(inner, list):
+        for t in inner:
+            if isinstance(t, dict):
+                content = (t.get('content') or t.get('text')
+                           or t.get('title') or t.get('value') or '')
+                if content:
+                    out.append({'content': str(content), '_raw': t})
+    return out
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='从听记中提取待办事项'
@@ -82,21 +134,9 @@ def main():
         ])
         if not todos_data:
             continue
-        if isinstance(todos_data, list):
-            items = todos_data
-        elif isinstance(todos_data, dict):
-            inner = todos_data.get('result', todos_data)
-            if isinstance(inner, dict):
-                items = inner.get('todos', [])
-            elif isinstance(inner, list):
-                items = inner
-            else:
-                items = []
-        else:
-            items = []
+        items = todos_from_payload(todos_data)
         for t in items:
-            if isinstance(t, dict):
-                t['_source'] = title
+            t['_source'] = title
         all_todos.extend(items)
 
     print(f"\n📋 听记待办汇总")

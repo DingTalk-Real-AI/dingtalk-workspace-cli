@@ -5,6 +5,7 @@
 | 命令 | 功能简述 |
 |------|----------|
 | `dws mail mailbox list` | 查询**当前用户自己**的可用邮箱列表 |
+| `dws mail mailbox profile` | 获取用户邮箱详细信息（容量、别名等） |
 | `dws mail message list` | 列出指定文件夹中的邮件（默认收件箱） |
 | `dws mail message search` | 搜索邮件（KQL 语法，按主题/发件人/日期等） |
 | `dws mail message get` | 查看邮件完整内容（含正文） |
@@ -15,7 +16,10 @@
 | `dws mail message batch-move` | 批量移动邮件到指定文件夹 |
 | `dws mail message batch-delete` | 批量删除邮件 |
 | `dws mail message batch-update` | 批量修改邮件状态（标记已读/未读/添加标签/移除标签） |
+| `dws mail message batch-get` | 批量获取邮件详情（最多 20 封） |
 | `dws mail message verify` | 根据 internetMessageId 查询邮件发送状态 |
+| `dws mail sent-message recall` | 撤回已发送的邮件（仅支持同组织内未读邮件） |
+| `dws mail sent-message recall-detail` | 查询邮件撤回进度 |
 | `dws mail draft create` | 创建草稿（保留在草稿箱，不发送） |
 | `dws mail draft update` | 更新草稿内容（保留在草稿箱，不发送） |
 | `dws mail draft send` | 发送草稿箱中已有的草稿 |
@@ -46,6 +50,13 @@
 | `dws mail contact update` | 更新个人邮件联系人信息 |
 | `dws mail contact batch-delete` | 批量删除个人邮件联系人 |
 | `dws mail auto-reply get` | 获取用户的自动回复配置 |
+| `dws mail auto-reply update` | 更新/设置用户的自动回复配置 |
+| `dws mail allow-list list` | 列出个人收信白名单 |
+| `dws mail allow-list add` | 添加个人收信白名单 |
+| `dws mail allow-list remove` | 移除个人收信白名单 |
+| `dws mail block-list list` | 列出个人收信黑名单 |
+| `dws mail block-list add` | 添加个人收信黑名单 |
+| `dws mail block-list remove` | 移除个人收信黑名单 |
 | `dws mail rule list` | 列出个人收信规则 |
 | `dws mail rule create` | 创建个人收信规则 |
 | `dws mail rule update` | 更新个人收信规则 |
@@ -92,6 +103,27 @@ Example:
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `emailAccounts` | `List[]` | 邮箱列表，每条包含 `email`（邮箱地址）、`orgName`（所属企业，个人邮箱为 null）、`type`（`ORG`=企业邮箱 / `PERSONAL`=个人邮箱） |
+
+### 获取用户邮箱信息
+
+```
+Usage:
+  dws mail mailbox profile [flags]
+Example:
+  dws mail mailbox profile --email user@company.com
+Flags:
+      --email string   用户的邮箱地址 (必填)
+```
+
+**返回字段：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `email` | string | 邮箱地址 |
+| `emailAliases` | List[] | 邮件地址别名列表 |
+| `name` / `nickname` / `displayName` | string | 用户名、昵称、显示名 |
+| `mboxSize` / `mboxSizeUsed` | int64 | 邮箱容量与已用容量（字节） |
+| `createdTime` / `modifiedTime` | string | 创建时间与更新时间 |
 
 ### 查找他人邮箱地址（通讯录查人）
 
@@ -214,7 +246,24 @@ Flags:
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `message` | `object` | 邮件完整信息，包含主题、发件人、收件人、正文、附件等 |
+| `message` | `object` | 邮件信息，含 subject/from/toRecipients/ccRecipients/markdownBody/conversationId/receivedDateTime/size 等 |
+
+> **注意：** 即使邮件确有附件，`message get` 返回的 `message` 对象也**不含** `attachments`/`isRead`/`tags` 字段（实测 keys 仅上表所列这些）。要取附件请另用 `dws mail attachment list`。
+
+### 批量获取邮件详情
+
+```
+Usage:
+  dws mail message batch-get [flags]
+Example:
+  dws mail message batch-get --email user@company.com --ids <id1>,<id2>
+  dws mail message batch-get --email user@company.com --ids <id1>,<id2>,<id3>
+Flags:
+      --email string   邮件所属邮箱地址 (必填)
+      --ids string     要获取的邮件 ID 列表，逗号分隔，最多 20 个 (必填)
+```
+
+单次最多获取 20 封邮件。CLI 会逐个调用 `get_email_by_message_id`，并以 `messages` 数组聚合返回。
 
 ### 发送邮件
 ```
@@ -933,6 +982,53 @@ Flags:
 | `failed` | 发送失败 |
 | `unknown` | 未知状态 |
 
+### [危险] 撤回已发送的邮件
+
+```
+Usage:
+  dws mail sent-message recall [flags]
+Example:
+  dws mail sent-message recall --email user@company.com --id <mailId> --subject "邮件主题" --yes
+Flags:
+      --email string    发件人邮箱地址 (必填)
+      --id string       要撤回的邮件 ID (必填)
+      --subject string  邮件主题 (必填)
+      --yes             跳过确认提示，直接执行 (可选)
+```
+
+> CAUTION: 此命令会撤回已发送邮件。仅支持撤回同组织内未读邮件，执行前必须确认目标邮件、主题和影响范围。
+
+**返回字段：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | string | 撤回任务 ID，可用于 `recall-detail` 查询进度 |
+| `success` | boolean | 接口调用是否成功 |
+| `errorCode` / `errorMsg` | string | 错误码和错误信息（仅失败时存在） |
+
+### 查询邮件撤回进度
+
+```
+Usage:
+  dws mail sent-message recall-detail [flags]
+Example:
+  dws mail sent-message recall-detail --email user@company.com --id <recallTaskId>
+Flags:
+      --email string   用户的邮箱地址 (必填)
+      --id string      撤回任务 ID (必填)，由 recall 命令返回
+```
+
+根据撤回任务 ID 查询邮件撤回进度。任务状态包括 `UNINITED` / `SUBMITTED` / `RUNNING` / `FINISHED` / `CANCELED` / `FAILED`。
+
+**返回字段：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | string | 撤回任务 ID |
+| `status` | string | 任务状态 |
+| `totalCount` / `succeededCount` / `failedCount` | int | 总数、成功数、失败数 |
+| `details` | List[] | 每封邮件的撤回结果 |
+
 ### 创建草稿
 ```
 Usage:
@@ -1218,6 +1314,61 @@ Flags:
 | `scope` | string | 回复范围: "contact"(仅联系人) 或 "all"(所有人) |
 | `content` | string | 自动回复内容 |
 
+### 更新自动回复配置
+
+更新或设置用户的邮件自动回复配置。建议先通过 `auto-reply get` 获取当前配置，再传入需要修改的字段值。
+
+```
+Usage:
+  dws mail auto-reply update [flags]
+Example:
+  dws mail auto-reply update --email user@company.com --enabled true \
+    --start "2026/07/01 09:00:00 +0800" --end "2026/07/07 18:00:00 +0800" \
+    --scope all --content "出差中，请稍后联系"
+  dws mail auto-reply update --email user@company.com --enabled false \
+    --start "2026/07/01 09:00:00 +0800" --end "2026/07/07 18:00:00 +0800" \
+    --scope all --content "已关闭自动回复"
+Flags:
+      --email string       用户的邮箱地址 (必填)
+      --enabled string     是否启用自动回复: true/false (必填)
+      --start string       自动回复开始时间，格式: YYYY/MM/DD HH:MM:SS +ZZZZ (必填)
+      --end string         自动回复结束时间，格式: YYYY/MM/DD HH:MM:SS +ZZZZ (必填)
+      --scope string       回复范围: contact(仅联系人)/all(所有人) (必填)
+      --content string     自动回复内容 (必填)
+```
+
+### 个人收信白名单管理
+
+```
+Usage:
+  dws mail allow-list list [flags]
+  dws mail allow-list add [flags]
+  dws mail allow-list remove [flags]
+Examples:
+  dws mail allow-list list --email user@company.com
+  dws mail allow-list add --email user@company.com --entries a@b.com,@example.com
+  dws mail allow-list remove --email user@company.com --entries a@b.com,@example.com
+Flags:
+      --email string    用户的邮箱地址 (必填)
+      --entries string  逗号分隔的地址列表，支持邮件地址或 @domain.com 域名（add/remove 必填）
+```
+
+### 个人收信黑名单管理
+
+```
+Usage:
+  dws mail block-list list [flags]
+  dws mail block-list add [flags]
+  dws mail block-list remove [flags]
+Examples:
+  dws mail block-list list --email user@company.com
+  dws mail block-list add --email user@company.com --entries spam@bad.com,@junk.com
+  dws mail block-list remove --email user@company.com --entries spam@bad.com,@junk.com
+Flags:
+      --email string    用户的邮箱地址 (必填)
+      --entries string  逗号分隔的地址列表，支持邮件地址或 @domain.com 域名（add/remove 必填）
+```
+
 ### 收信规则管理
 
 #### 列出收信规则
@@ -1364,6 +1515,8 @@ Flags:
       --actions string     规则动作 JSON 数组 (必填)
 ```
 
+> **⚠️ 实测：** 尽管 `--help` 把 `--conditions` 标为(可选)，服务端实际要求它**非空**——省略或传空会返回 `209 SYS_UNKNOWN_ERROR(1001)` 失败，帮助文本承诺的"命中所有邮件"无条件匹配**不可用**。create 请始终传入有效条件。
+
 **返回字段：**
 
 | 字段 | 类型 | 说明 |
@@ -1375,11 +1528,11 @@ Flags:
 
 #### 更新收信规则
 
-更新已有的收信规则。**除 `--conditions` 外所有参数均为必填**。
+更新已有的收信规则。**所有参数（含 `--conditions`）均须传入有效值**——见下方警告。
 
 > **建议工作流：** 先通过 `dws mail rule list` 获取当前规则的完整配置，再传入需要修改的字段值。
 >
-> `--conditions` 为空或不传表示命中所有邮件（无条件匹配）。`--actions` 格式同 create 命令。
+> **⚠️ 实测：** `--help` 称 `--conditions` 为空即命中所有邮件，但该无条件匹配**不可用**——省略或传空会返回 `209 SYS_UNKNOWN_ERROR(1001)` 失败。update 请始终传入有效条件。`--actions` 格式同 create 命令。
 
 ```
 Usage:
@@ -1398,6 +1551,8 @@ Flags:
       --conditions string  规则条件 JSON 数组 (可选，为空表示命中所有邮件)
       --actions string     规则动作 JSON 数组 (必填)
 ```
+
+> **⚠️ 实测：** 上方 `--conditions` 的"(可选，为空表示命中所有邮件)"是 `--help` 原文，但服务端实际要求它**非空**——省略或传空会返回 `209 SYS_UNKNOWN_ERROR(1001)` 失败。update 须传入有效条件。
 
 **返回字段：**
 
@@ -1467,9 +1622,11 @@ Flags:
 ## 意图判断
 
 用户说"我的邮箱/邮箱地址" → `mailbox list`（**仅限查询自己的邮箱，不能查他人**）
+用户说"邮箱详情/邮箱容量/邮箱别名/邮箱 profile" → `mailbox profile --email <邮箱>`
 用户说"获取/查找/得到 某人的邮箱地址" → **不是 `mailbox list`**，走三路并发查询流程（见「查找他人邮箱地址」章节）
 用户说"找邮件/搜邮件/查邮件" → `message search`
 用户说"看邮件/打开邮件/邮件内容" → 先 `message search` 获取 messageId，再 `message get`
+用户说"批量查看邮件详情/批量打开这些邮件/按多个邮件ID取详情" → `message batch-get --ids <id1,id2,...>`（单次最多 20 个）
 用户说"发邮件/写邮件" → 先 `mailbox list` 获取发件地址，再 `message send`
 用户说“给(某人名字)发邮件” / “查询某人发给我的邮件” / “查询发给某人的邮件” / 任何涉及按人名查找邮箱的场景 →
   **第一步**：并发同时发起以下三路查询，取最先返回有效邮箱的结果；若三路均无有效邮箱，ask_human 请用户提供，禁止臆测：
@@ -1496,6 +1653,11 @@ Flags:
 用户说"删除会话/把会话放入已删除/批量删除会话" → 单条用 `thread trash`，多条用 `thread batch-trash`；传入的是会话 ID，不是邮件 ID
 用户说"批量标记邮件已读/未读/给邮件加标签/移除邮件标签" → `message batch-update --action markRead/markUnread/addTags/removeTags`（操作对象是邮件 ID；会话级操作用 `thread update/batch-update`）
 用户说"邮件发出去了吗/查邮件发送状态/确认邮件是否发送成功/邮件投递结果" → 用发送类命令返回的 `internetMessageId`，调用 `message verify` 查询 `sendStatus`
+用户说"撤回邮件/撤回已发送邮件" → `sent-message recall --email <邮箱> --id <mailId> --subject "<主题>" --yes`（危险操作，先确认）
+用户说"查询邮件撤回进度/撤回任务状态" → `sent-message recall-detail --email <邮箱> --id <recallTaskId>`
+用户说"设置/更新/关闭自动回复" → `auto-reply update`（所有字段必填，先 `auto-reply get` 获取当前配置）
+用户说"收信白名单/添加白名单/移除白名单" → `allow-list list/add/remove`
+用户说"收信黑名单/添加黑名单/移除黑名单" → `block-list list/add/remove`
 用户说"查看会话/获取会话/看这封邮件的会话" → 先 `message search` 或 `message get` 获取邮件中的 `conversationId`，再 `thread get`
 用户说"搜索/查找/联系 邮箱用户/联系人/某人的邮箱地址" → `user search`（搜索通讯录人员，不是搜邮件内容）
 用户说"发送草稿/把草稿发出去/发这封草稿" → 先 `message search --query "folderId:5"` 找到草稿 messageId，再 `draft send`
@@ -1612,7 +1774,9 @@ dws mail thread get --email user@company.com --id <conversationId> --select mess
 | 操作 | 从返回中提取 | 用于 |
 |------|-------------|------|
 | `mailbox list` | 邮箱地址 | message search/get/send/thread get 的 --email/--from |
+| `mailbox profile` | `emailAliases` / `mboxSize` / `mboxSizeUsed` | 展示邮箱别名与容量信息 |
 | `message search` | `messageId` | message get 的 --id |
+| `message search` | `messageId` | message batch-get 的 --ids |
 | `message search` | `conversationId` | thread get 的 --id |
 | `message search` | `messageId` | attachment list 的 --id |
 | `attachment list` | `attachments[].id` / `attachments[].name` | attachment download 的 --attachment-id / --name |
@@ -1627,6 +1791,8 @@ dws mail thread get --email user@company.com --id <conversationId> --select mess
 | `aisearch person` → `contact user get` / `contact user search` / `mail user search` | 用户邮箱 (orgAuthEmail / email) | message send 的 --to/--cc（三路并发，取先到结果） |
 | `user search` | 用户邮箱 (email) | message send 的 --to/--cc |
 | `message send` / `draft send` / `message reply` / `message reply-all` / `message forward` | `internetMessageId` | `message verify` 的 --internet-message-id |
+| `sent-message recall` | `id` | sent-message recall-detail 的 --id |
+| `auto-reply get` | `enabled` / `startTime` / `endTime` / `scope` / `content` | auto-reply update 的当前配置基线 |
 
 ## 注意事项
 

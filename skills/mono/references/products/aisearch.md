@@ -98,7 +98,7 @@ Flags:
 
 | 操作 | 从返回中提取 | 用于 |
 |------|-------------|------|
-| `aisearch person` | `userId`（用户ID）、`title`（姓名） | 展示搜索结果、后续操作（发消息/建待办等） |
+| `aisearch person` | `userId`（用户ID，= `meta.staffId`/`meta.jobNumber`）、`author`（真实姓名，= `meta.name`）；`title` 是花名/显示名，不一定等于姓名 | 展示搜索结果、后续操作（发消息/建待办等） |
 
 ## 重名消歧
 

@@ -68,6 +68,36 @@ func TestDaemonDirKey(t *testing.T) {
 	}
 }
 
+func TestStageDaemonExecutable(t *testing.T) {
+	dir := t.TempDir()
+	src := dir + "/source"
+	if err := os.WriteFile(src, []byte("test-binary"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	dst, err := stageDaemonExecutable(src, dir)
+	if err != nil {
+		t.Fatalf("stageDaemonExecutable: %v", err)
+	}
+	if dst != daemonExecutablePath(dir) {
+		t.Fatalf("path = %q, want %q", dst, daemonExecutablePath(dir))
+	}
+	got, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "test-binary" {
+		t.Fatalf("content = %q, want test-binary", got)
+	}
+	info, err := os.Stat(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != daemonExecutablePerm {
+		t.Fatalf("mode = %o, want %o", info.Mode().Perm(), daemonExecutablePerm)
+	}
+}
+
 func TestBuildWorkerArgs(t *testing.T) {
 	in := []string{"devapp", "robot", "connect", "--daemon", "--robot-client-id", "abc", "--channel=claudecode"}
 	got := buildWorkerArgs(in)

@@ -244,12 +244,12 @@ func newChmodCommand(c edition.ToolCaller) *cobra.Command {
 		Long: `授予指定 scope 的操作权限。
 
 scope 格式: <product>.<entity>:<permission>
-  例: aitable.record:read  chat.group:write  calendar.event:read
+  例: aitable.record:query  chat.message:list  calendar.event:get
 
 grantType 规则:
   once       一次性，执行一次后自动失效
-  session    当前会话有效（默认），需要 --session-id
-  permanent  永久有效
+  session    当前会话有效，需要 --session-id
+  permanent  永久有效（默认）
 
 批量授权:
   dws pat chmod 支持一次传多个 scope 直接批量授予。
@@ -271,13 +271,13 @@ agentCode 配置:
 			}
 			return cobra.MinimumNArgs(1)(cmd, args)
 		},
-		Example: `  dws pat chmod aitable.record:read --grant-type session --session-id session-xxx
+		Example: `  dws pat chmod aitable.record:query --grant-type session --session-id session-xxx
   dws pat chmod chat.message:list --grant-type once
-  dws pat chmod aitable.record:read aitable.record:write --grant-type permanent --yes
+  dws pat chmod aitable.record:query aitable.record:create --grant-type permanent --yes
   dws pat chmod --product calendar --product aitable --grant-type once --dry-run --format json
-  dws pat chmod --products calendar,aitable --grant-type session --session-id session-xxx --yes
+  dws pat chmod --products calendar,aitable --grant-type permanent --yes
   dws pat chmod --domain calendar --domain chat --grant-type once --yes
-  dws pat chmod --recommend --grant-type session --session-id session-xxx --yes`,
+  dws pat chmod --recommend --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			flagVal, _ := cmd.Flags().GetString("agentCode")
 			agentCode, err := resolveAgentCode(flagVal)
@@ -404,7 +404,7 @@ agentCode 配置:
 
 	chmodCmd.Flags().String("agentCode", "",
 		"Agent 唯一标识（可选；也可通过 env DINGTALK_DWS_AGENTCODE 注入，flag 优先；未传则由服务端默认兜底）")
-	chmodCmd.Flags().String("grant-type", "session", "授权策略: once|session|permanent")
+	chmodCmd.Flags().String("grant-type", grantTypePermanent, "授权策略: once|session|permanent")
 	chmodCmd.Flags().String("session-id", "", "会话标识（session 模式下必填）")
 	chmodCmd.Flags().StringArrayVar(&productFlags, "product", nil, "产品编码，可重复；与 --products 等价；执行批量授权需 --yes")
 	chmodCmd.Flags().StringSliceVar(&productsFlag, "products", nil, "产品编码列表，逗号分隔；执行批量授权需 --yes")

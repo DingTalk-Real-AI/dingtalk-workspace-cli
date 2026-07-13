@@ -67,6 +67,8 @@ func (f *fakeToolCaller) CallTool(_ context.Context, _ string, toolName string, 
 
 func (f *fakeToolCaller) Format() string { return "json" }
 func (f *fakeToolCaller) DryRun() bool   { return f.dryRun }
+func (f *fakeToolCaller) Fields() string { return "" }
+func (f *fakeToolCaller) JQ() string     { return "" }
 
 type recordedToolCall struct {
 	tool           string
@@ -94,6 +96,8 @@ func (f *fallbackToolCaller) CallTool(_ context.Context, _ string, toolName stri
 
 func (f *fallbackToolCaller) Format() string { return "json" }
 func (f *fallbackToolCaller) DryRun() bool   { return false }
+func (f *fallbackToolCaller) Fields() string { return "" }
+func (f *fallbackToolCaller) JQ() string     { return "" }
 
 type fallbackErrorToolCaller struct {
 	calls []recordedToolCall
@@ -198,6 +202,8 @@ func (f *fallbackPATContractErrorToolCaller) CallTool(_ context.Context, _ strin
 
 func (f *fallbackPATContractErrorToolCaller) Format() string { return "json" }
 func (f *fallbackPATContractErrorToolCaller) DryRun() bool   { return false }
+func (f *fallbackPATContractErrorToolCaller) Fields() string { return "" }
+func (f *fallbackPATContractErrorToolCaller) JQ() string     { return "" }
 
 type sequenceToolCaller struct {
 	calls     []recordedToolCall
@@ -227,6 +233,8 @@ func (s *sequenceToolCaller) CallTool(_ context.Context, _ string, toolName stri
 
 func (s *sequenceToolCaller) Format() string { return "json" }
 func (s *sequenceToolCaller) DryRun() bool   { return s.dryRun }
+func (s *sequenceToolCaller) Fields() string { return "" }
+func (s *sequenceToolCaller) JQ() string     { return "" }
 
 func stringSliceArgEqual(got any, want []string) bool {
 	gotSlice, ok := got.([]string)
@@ -372,9 +380,9 @@ func TestPATHelpDocumentsBatchAuthorization(t *testing.T) {
 		"--dry-run 只返回授权计划",
 		"执行批量授权必须显式",
 		"由服务端默认兜底",
-		"aitable.record:read aitable.record:write --grant-type permanent --yes",
+		"aitable.record:query aitable.record:create --grant-type permanent --yes",
 		"dws pat chmod --products calendar,aitable",
-		"dws pat chmod --recommend --grant-type session",
+		"dws pat chmod --recommend --yes",
 	} {
 		if !strings.Contains(chmodHelp, want) {
 			t.Fatalf("pat chmod help missing %q\nhelp:\n%s", want, chmodHelp)
@@ -478,6 +486,7 @@ func TestChmod_productsSessionModePassesIdentityArgsAndCompatEnv(t *testing.T) {
 		`{"success":true,"data":{"grantedScopes":["calendar.event:read"]}}`,
 	}}
 	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("grant-type", "session")
 	_ = cmd.Flags().Set("products", "calendar")
 	_ = cmd.Flags().Set("session-id", "session-123")
 	setBatchYesForTest(t, cmd)
@@ -843,7 +852,7 @@ func TestChmod_grantTypeAndSessionParameterMatrix(t *testing.T) {
 	}
 }
 
-func TestChmod_productsDryRunUsesSessionIDFromEnv(t *testing.T) {
+func TestChmod_productsSessionDryRunUsesSessionIDFromEnv(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 	t.Setenv(sessionIDEnvDWS, "env-session-123")
 	fake := &sequenceToolCaller{
@@ -853,6 +862,7 @@ func TestChmod_productsDryRunUsesSessionIDFromEnv(t *testing.T) {
 		},
 	}
 	cmd := newChmodCommand(fake)
+	_ = cmd.Flags().Set("grant-type", "session")
 	_ = cmd.Flags().Set("products", "calendar")
 
 	if err := cmd.RunE(cmd, nil); err != nil {
@@ -1056,6 +1066,7 @@ func TestChmod_sessionModeUsesDingtalkSessionEnv(t *testing.T) {
 
 	fake := &fakeToolCaller{resultOK: true}
 	cmd := buildChmod(t, fake)
+	_ = cmd.Flags().Set("grant-type", "session")
 
 	if err := cmd.RunE(cmd, []string{"aitable.record:read"}); err != nil {
 		t.Fatalf("chmod RunE error = %v", err)
@@ -1081,6 +1092,7 @@ func TestChmod_explicitSessionIDOverridesStaleDingtalkSessionEnv(t *testing.T) {
 
 	fake := &fakeToolCaller{resultOK: true}
 	cmd := buildChmod(t, fake)
+	_ = cmd.Flags().Set("grant-type", "session")
 	_ = cmd.Flags().Set("session-id", "flag-session")
 
 	if err := cmd.RunE(cmd, []string{"aitable.record:read"}); err != nil {
@@ -1108,7 +1120,6 @@ func TestChmod_recommendFlagPlansThenGrantsWithoutPositionalScopes(t *testing.T)
 		`{"success":true,"data":{"grantedScopes":["recommended.scope:read"]}}`,
 	}}
 	cmd := newChmodCommand(fake)
-	_ = cmd.Flags().Set("grant-type", "once")
 	_ = cmd.Flags().Set("recommend", "true")
 	setBatchYesForTest(t, cmd)
 
@@ -1125,8 +1136,14 @@ func TestChmod_recommendFlagPlansThenGrantsWithoutPositionalScopes(t *testing.T)
 	if got := fake.calls[0].args["recommend"]; got != true {
 		t.Fatalf("recommend = %#v, want true", got)
 	}
+	if got := fake.calls[0].args["grantType"]; got != grantTypePermanent {
+		t.Fatalf("plan grantType = %#v, want %q", got, grantTypePermanent)
+	}
 	if fake.calls[1].tool != patBatchGrantToolName {
 		t.Fatalf("second tool = %q, want %q", fake.calls[1].tool, patBatchGrantToolName)
+	}
+	if got := fake.calls[1].args["grantType"]; got != grantTypePermanent {
+		t.Fatalf("grant grantType = %#v, want %q", got, grantTypePermanent)
 	}
 }
 
@@ -2020,3 +2037,12 @@ func TestResolveAgentCodeFromEnv(t *testing.T) {
 			code, src)
 	}
 }
+
+func (f *fallbackErrorToolCaller) Fields() string            { return "" }
+func (f *fallbackErrorToolCaller) JQ() string                { return "" }
+func (f *fallbackSchemaMismatchToolCaller) Fields() string   { return "" }
+func (f *fallbackSchemaMismatchToolCaller) JQ() string       { return "" }
+func (f *fallbackPermissionDeniedToolCaller) Fields() string { return "" }
+func (f *fallbackPermissionDeniedToolCaller) JQ() string     { return "" }
+func (f *fallbackPATErrorToolCaller) Fields() string         { return "" }
+func (f *fallbackPATErrorToolCaller) JQ() string             { return "" }

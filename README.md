@@ -71,9 +71,9 @@ The installer ships skills in one of two layouts. CLI commands (`dws aitable ...
 | Mode | What gets installed | Best for |
 |------|----------------------|----------|
 | **mono** (stable, default) | One `dws` skill covering all products | Cross-product workflows; single entry point |
-| **multi** 🧪 **EXPERIMENTAL** | 18 per-product skills (`dingtalk-aitable`, `dingtalk-calendar`, `dingtalk-chat`, ...) | Single-product tasks; smaller context per call |
+| **multi** 🧪 **EXPERIMENTAL** | 22 per-product skills (`dingtalk-aitable`, `dingtalk-calendar`, `dingtalk-chat`, ...) | Single-product tasks; smaller context per call |
 
-> 🧪 **`multi` is currently EXPERIMENTAL / preview.** 18 product-scoped skills all pass the dispatch verifier, but interface, naming and cross-skill references may change in future releases. For production / shared environments, prefer `mono`. File issues if you hit problems.
+> 🧪 **`multi` is currently EXPERIMENTAL / preview.** 22 product-scoped skills all pass the dispatch verifier, but interface, naming and cross-skill references may change in future releases. For production / shared environments, prefer `mono`. File issues if you hit problems.
 
 How to pick:
 
@@ -331,7 +331,7 @@ dws aitable record query --base-id BASE_ID --table-id TABLE_ID --limit 10
 The repo ships a complete Agent Skill system under `skills/`, now organized into two layouts:
 
 - `skills/mono/` — single-skill layout (one `SKILL.md` + `references/products/`), recommended default.
-- `skills/multi/` — per-product skills (`dingtalk-aitable/`, `dingtalk-calendar/`, `dingtalk-chat/`, ... 20 products in total), each with its own `SKILL.md`. 🧪 **EXPERIMENTAL / preview — see banner in each multi `SKILL.md` for caveats.**
+- `skills/multi/` — per-product skills (`dingtalk-aitable/`, `dingtalk-calendar/`, `dingtalk-chat/`, ... 22 products in total), each with its own `SKILL.md`. 🧪 **EXPERIMENTAL / preview — see banner in each multi `SKILL.md` for caveats.**
 
 After installing, AI tools like Claude Code / Cursor can operate DingTalk directly through natural language:
 
@@ -405,6 +405,51 @@ Env vars: `DWS_SKILL_MODE=mono|multi` (also honored by `install.sh` / `install.p
 **ISV Integration**: Author your own Agent Skills and orchestrate them with dws skills for cross-product workflows: **ISV Skill → dws Skill → DingTalk Open Platform API (enforced auth + full audit)**.
 
 ## Features
+
+<details>
+<summary><strong>Personal Event Subscription</strong> — real-time DingTalk messages for event-driven agents</summary>
+
+`dws event consume` subscribes as the currently logged-in user over a managed Stream WebSocket and emits each event as one NDJSON line on stdout. The public catalog currently covers messages that mention the current user, one-to-one messages with a specified user, and messages in a specified group.
+
+> **Prerequisite**: run `dws auth login`. Personal identity is resolved from the OAuth token and cannot be supplied through command-line identity flags.
+
+For an event-focused installation, use the official convenience installer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install-event.sh | sh
+```
+
+```bash
+# Inspect the public personal event catalog and schema
+dws event list
+dws event schema user_im_message_receive_o2o
+
+# Listen for messages that mention the current user
+dws event consume user_im_message_receive_at -f ndjson
+
+# Listen for one-to-one messages with a specified user
+dws event consume user_im_message_receive_o2o --user <userId> -f ndjson
+
+# Listen for messages in a specified group
+dws event consume user_im_message_receive_group --group <openConversationId> -f ndjson
+
+# Inspect local consumers and cancel a subscription
+dws event status
+dws event stop <subscribe_id>
+```
+
+| Feature | Details |
+|---------|---------|
+| Managed lifecycle | `consume` creates or reuses the personal subscription; `stop` cancels it and cleans local state |
+| Shared connection | Consumers for the same user share one local bus and cloud connection |
+| Subscription isolation | Normal consumers match both event type and `subscribe_id` |
+| Agent-friendly output | Stream events are written to stdout as NDJSON; status and diagnostics use stderr |
+| Observability | `status` shows remote subscriptions, the personal bus, and local consumers |
+| Cross-platform | Unix Socket on macOS/Linux, Windows Named Pipe on Windows |
+
+See `skills/multi/dingtalk-event/SKILL.md` for the Agent workflow and supported event parameters.
+
+</details>
 
 <details>
 <summary><strong>Raw API Access</strong> — call any DingTalk OpenAPI directly</summary>

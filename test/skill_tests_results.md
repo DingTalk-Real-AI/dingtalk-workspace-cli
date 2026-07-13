@@ -2,8 +2,8 @@
 
 ## Summary
 
-- **Total Test Cases**: 232
-- **Passed**: 232
+- **Total Test Cases**: 244
+- **Passed**: 244
 - **Failed**: 0
 - **Pass Rate**: 100.0%
 
@@ -16,9 +16,10 @@
 | calendar | 30 | 30 | 0 | 100.0% |
 | chat | 31 | 31 | 0 | 100.0% |
 | contact | 14 | 14 | 0 | 100.0% |
-| devapp | 22 | 22 | 0 | 100.0% |
-| devdoc | 8 | 8 | 0 | 100.0% |
+| dev | 25 | 25 | 0 | 100.0% |
+| devdoc | 9 | 9 | 0 | 100.0% |
 | ding | 5 | 5 | 0 | 100.0% |
+| event | 8 | 8 | 0 | 100.0% |
 | report | 26 | 26 | 0 | 100.0% |
 | routing | 3 | 3 | 0 | 100.0% |
 | todo | 30 | 30 | 0 | 100.0% |
@@ -1093,182 +1094,206 @@
 - Command path: PASS (contact user search-mobile)
 - Flags: PASS (1 flags validated)
 
-### devapp
+### dev
 
-**devapp_devapp_list_001** ✅ PASS
+**dev_app_list_001** ✅ PASS
 
 - Prompt: 搜索开放平台应用，应用名是 DemoApp
-- Expected: `dws devapp list --name DemoApp --format json`
-- Skill Reference: references/products/devapp.md
-- Command path: PASS (devapp list)
+- Expected: `dws dev app list --name DemoApp --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Command path: PASS (dev app list)
 - Flags: PASS (1 flags validated)
 
-**devapp_devapp_list_002** ✅ PASS
+**dev_app_list_002** ✅ PASS
 
-- Prompt: 分页查询开放平台应用，使用上一页返回的 cursor，每页 10 条
-- Expected: `dws devapp list --cursor NEXT_CURSOR --page-size 10 --format json`
-- Skill Reference: references/products/devapp.md
-- Command path: PASS (devapp list)
-- Flags: PASS (2 flags validated)
-
-**devapp_devapp_list_003** ✅ PASS
-
-- Prompt: 在开发者后台搜索企业内部应用 DemoApp
-- Expected: `dws devapp list --name DemoApp --format json`
-- Skill Reference: references/products/devapp.md
-- Command path: PASS (devapp list)
-- Flags: PASS (1 flags validated)
-
-**devapp_devapp_get_001** ✅ PASS
-
-- Prompt: 查看统一应用 UNIFIED_APP_ID 的应用详情
-- Expected: `dws devapp get --unified-app-id UNIFIED_APP_ID --format json`
-- Skill Reference: references/products/devapp.md
-- Command path: PASS (devapp get)
-- Flags: PASS (1 flags validated)
-
-**devapp_devapp_create_001** ✅ PASS
-
-- Prompt: 创建一个企业内部应用，名称 DemoApp，描述是内部应用
-- Expected: `dws devapp create --name DemoApp --desc "内部应用" --type internal --dry-run --format json`
-- Skill Reference: references/products/devapp.md
-- Command path: PASS (devapp create)
-- Flags: PASS (3 flags validated)
-
-**devapp_devapp_create_002** ✅ PASS
-
-- Prompt: 已确认创建企业内部应用 DemoApp
-- Expected: `dws devapp create --name DemoApp --type internal --yes --format json`
-- Skill Reference: references/products/devapp.md
-- Command path: PASS (devapp create)
-- Flags: PASS (2 flags validated)
-
-**devapp_devapp_update_001** ✅ PASS
-
-- Prompt: 把应用 UNIFIED_APP_ID 的描述改成 新描述
-- Expected: `dws devapp update --unified-app-id UNIFIED_APP_ID --desc "新描述" --dry-run --format json`
-- Skill Reference: references/products/devapp.md
-- Command path: PASS (devapp update)
-- Flags: PASS (2 flags validated)
-
-**devapp_devapp_delete_001** ✅ PASS
-
-- Prompt: 删除开放平台应用 UNIFIED_APP_ID，先给我预览
-- Expected: `dws devapp delete --unified-app-id UNIFIED_APP_ID --dry-run --format json`
-- Skill Reference: references/products/devapp.md
-- Command path: PASS (devapp delete)
-- Flags: PASS (1 flags validated)
-
-**devapp_devapp_credentials_get_001** ✅ PASS
-
-- Prompt: 查询应用 UNIFIED_APP_ID 的开放平台凭证
-- Expected: `dws devapp credentials get --unified-app-id UNIFIED_APP_ID --format json`
-- Skill Reference: references/products/devapp.md
-- Command path: PASS (devapp credentials get)
-- Flags: PASS (1 flags validated)
-
-**devapp_devapp_member_list_001** ✅ PASS
-
-- Prompt: 查看开放平台应用 UNIFIED_APP_ID 的成员
-- Expected: `dws devapp member list --unified-app-id UNIFIED_APP_ID --format json`
-- Skill Reference: references/products/devapp.md
-- Command path: PASS (devapp member list)
-- Flags: PASS (1 flags validated)
-
-**devapp_devapp_member_add_001** ✅ PASS
-
-- Prompt: 给开放平台应用 UNIFIED_APP_ID 添加开发者成员 userId1,userId2，先预览
-- Expected: `dws devapp member add --unified-app-id UNIFIED_APP_ID --users userId1,userId2 --member-type DEVELOPER --dry-run --format json`
-- Skill Reference: references/products/devapp.md
-- Command path: PASS (devapp member add)
-- Flags: PASS (3 flags validated)
-
-**devapp_devapp_member_remove_001** ✅ PASS
-
-- Prompt: 已确认，从开放平台应用 UNIFIED_APP_ID 移除开发者成员 userId1
-- Expected: `dws devapp member remove --unified-app-id UNIFIED_APP_ID --users userId1 --member-type DEVELOPER --yes --format json`
-- Skill Reference: references/products/devapp.md
-- Command path: PASS (devapp member remove)
+- Prompt: 分页查询开放平台应用，第 2 页，每页 10 条，按修改时间倒序
+- Expected: `dws dev app list --page 2 --page-size 10 --sort gmt_modified --order desc --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Command path: PASS (dev app list)
 - Flags: PASS (4 flags validated)
 
-**devapp_devapp_security_config_001** ✅ PASS
+**dev_app_list_003** ✅ PASS
 
-- Prompt: 给开放平台应用 UNIFIED_APP_ID 配置 IP 白名单 192.0.2.10，先预览
-- Expected: `dws devapp security config --unified-app-id UNIFIED_APP_ID --ip-whitelist 192.0.2.10 --dry-run --format json`
-- Skill Reference: references/products/devapp.md
-- Command path: PASS (devapp security config)
-- Flags: PASS (2 flags validated)
-
-**devapp_devapp_permission_list_001** ✅ PASS
-
-- Prompt: 查询应用 UNIFIED_APP_ID 已开通和未开通的全部 APP、SNS 权限
-- Expected: `dws devapp permission list --unified-app-id UNIFIED_APP_ID --status all --format json`
-- Skill Reference: references/products/devapp.md
-- Command path: PASS (devapp permission list)
-- Flags: PASS (2 flags validated)
-
-**devapp_devapp_permission_list_002** ✅ PASS
-
-- Prompt: 搜索应用 UNIFIED_APP_ID 里机器人发送消息相关的未开通权限
-- Expected: `dws devapp permission list --unified-app-id UNIFIED_APP_ID --keyword "机器人发送消息" --status unauthed --format json`
-- Skill Reference: references/products/devapp.md
-- Command path: PASS (devapp permission list)
-- Flags: PASS (3 flags validated)
-
-**devapp_devapp_permission_list_003** ✅ PASS
-
-- Prompt: 看一下权限 qyapi_robot_sendmsg 覆盖哪些 API
-- Expected: `dws devapp permission list --unified-app-id UNIFIED_APP_ID --scope qyapi_robot_sendmsg --format json`
-- Skill Reference: references/products/devapp.md
-- Command path: PASS (devapp permission list)
-- Flags: PASS (2 flags validated)
-
-**devapp_devapp_permission_list_004** ✅ PASS
-
-- Prompt: 给开放平台应用 UNIFIED_APP_ID 搜索手机号权限，应用权限和个人权限都要展示
-- Expected: `dws devapp permission list --unified-app-id UNIFIED_APP_ID --keyword "手机号" --status all --format json`
-- Skill Reference: references/products/devapp.md
-- Command path: PASS (devapp permission list)
-- Flags: PASS (3 flags validated)
-
-**devapp_devapp_permission_add_001** ✅ PASS
-
-- Prompt: 给应用 UNIFIED_APP_ID 申请 qyapi_robot_sendmsg 权限，先预览
-- Expected: `dws devapp permission add --unified-app-id UNIFIED_APP_ID --permissions qyapi_robot_sendmsg --dry-run --format json`
-- Skill Reference: references/products/devapp.md
-- Command path: PASS (devapp permission add)
-- Flags: PASS (2 flags validated)
-
-**devapp_devapp_permission_add_002** ✅ PASS
-
-- Prompt: 已确认，给应用 UNIFIED_APP_ID 申请 Contact.User.mobile 权限
-- Expected: `dws devapp permission add --unified-app-id UNIFIED_APP_ID --permissions Contact.User.mobile --yes --format json`
-- Skill Reference: references/products/devapp.md
-- Command path: PASS (devapp permission add)
-- Flags: PASS (2 flags validated)
-
-**devapp_devapp_permission_remove_001** ✅ PASS
-
-- Prompt: 从应用 UNIFIED_APP_ID 移除 qyapi_robot_sendmsg 权限，先预览
-- Expected: `dws devapp permission remove --unified-app-id UNIFIED_APP_ID --permissions qyapi_robot_sendmsg --dry-run --format json`
-- Skill Reference: references/products/devapp.md
-- Command path: PASS (devapp permission remove)
-- Flags: PASS (2 flags validated)
-
-**devapp_devapp_event_list_001** ✅ PASS
-
-- Prompt: 查询应用 UNIFIED_APP_ID 的事件订阅配置
-- Expected: `dws devapp event list --unified-app-id UNIFIED_APP_ID --format json`
-- Skill Reference: references/products/devapp.md
-- Command path: PASS (devapp event list)
+- Prompt: 在开发者后台搜索企业内部应用 DemoApp
+- Expected: `dws dev app list --name DemoApp --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Command path: PASS (dev app list)
 - Flags: PASS (1 flags validated)
 
-**devapp_devapp_version_publish_001** ✅ PASS
+**dev_app_get_001** ✅ PASS
+
+- Prompt: 查看统一应用 UNIFIED_APP_ID 的应用详情
+- Expected: `dws dev app get --unified-app-id UNIFIED_APP_ID --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Command path: PASS (dev app get)
+- Flags: PASS (1 flags validated)
+
+**dev_app_get_002** ✅ PASS
+
+- Prompt: agentId 为 123456 的开放平台应用是哪个
+- Expected: `dws dev app get --agent-id 123456 --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Command path: PASS (dev app get)
+- Flags: PASS (1 flags validated)
+
+**dev_app_get_003** ✅ PASS
+
+- Prompt: 查开放平台应用 DemoApp 的 appKey、clientId 和 agentId
+- Expected: `dws dev app get --name DemoApp --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Command path: PASS (dev app get)
+- Flags: PASS (1 flags validated)
+
+**dev_app_create_001** ✅ PASS
+
+- Prompt: 创建一个企业内部应用，名称 DemoApp，描述是内部应用
+- Expected: `dws dev app create --name DemoApp --desc "内部应用" --type internal --dry-run --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Command path: PASS (dev app create)
+- Flags: PASS (3 flags validated)
+
+**dev_app_create_002** ✅ PASS
+
+- Prompt: 已确认创建企业内部应用 DemoApp
+- Expected: `dws dev app create --name DemoApp --type internal --yes --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Command path: PASS (dev app create)
+- Flags: PASS (2 flags validated)
+
+**dev_app_update_001** ✅ PASS
+
+- Prompt: 把应用 UNIFIED_APP_ID 的描述改成 新描述
+- Expected: `dws dev app update --unified-app-id UNIFIED_APP_ID --desc "新描述" --dry-run --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Command path: PASS (dev app update)
+- Flags: PASS (2 flags validated)
+
+**dev_app_delete_001** ✅ PASS
+
+- Prompt: 删除开放平台应用 UNIFIED_APP_ID，先给我预览
+- Expected: `dws dev app delete --unified-app-id UNIFIED_APP_ID --dry-run --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Command path: PASS (dev app delete)
+- Flags: PASS (1 flags validated)
+
+**dev_app_credentials_get_001** ✅ PASS
+
+- Prompt: 查询应用 UNIFIED_APP_ID 的开放平台凭证
+- Expected: `dws dev app credentials get --unified-app-id UNIFIED_APP_ID --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Command path: PASS (dev app credentials get)
+- Flags: PASS (1 flags validated)
+
+**dev_app_credentials_get_002** ✅ PASS
+
+- Prompt: 查询 AgentId AGENT_ID 对应应用的开放平台凭证
+- Expected: `dws dev app credentials get --agent-id AGENT_ID --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Command path: PASS (dev app credentials get)
+- Flags: PASS (1 flags validated)
+
+**dev_app_member_list_001** ✅ PASS
+
+- Prompt: 查看开放平台应用 UNIFIED_APP_ID 的成员
+- Expected: `dws dev app member list --unified-app-id UNIFIED_APP_ID --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Command path: PASS (dev app member list)
+- Flags: PASS (1 flags validated)
+
+**dev_app_member_add_001** ✅ PASS
+
+- Prompt: 给开放平台应用 UNIFIED_APP_ID 添加开发者成员 userId1,userId2，先预览
+- Expected: `dws dev app member add --unified-app-id UNIFIED_APP_ID --user-ids userId1,userId2 --member-type DEVELOPER --dry-run --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Command path: PASS (dev app member add)
+- Flags: PASS (3 flags validated)
+
+**dev_app_member_remove_001** ✅ PASS
+
+- Prompt: 已确认，从开放平台应用 UNIFIED_APP_ID 移除开发者成员 userId1
+- Expected: `dws dev app member remove --unified-app-id UNIFIED_APP_ID --user-ids userId1 --member-type DEVELOPER --yes --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Command path: PASS (dev app member remove)
+- Flags: PASS (4 flags validated)
+
+**dev_app_security_config_001** ✅ PASS
+
+- Prompt: 给开放平台应用 UNIFIED_APP_ID 配置 IP 白名单 192.0.2.10，先预览
+- Expected: `dws dev app security config --unified-app-id UNIFIED_APP_ID --ip-whitelist 192.0.2.10 --dry-run --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Command path: PASS (dev app security config)
+- Flags: PASS (2 flags validated)
+
+**dev_app_permission_list_001** ✅ PASS
+
+- Prompt: 查询应用 UNIFIED_APP_ID 已开通和未开通的全部 APP、SNS 权限
+- Expected: `dws dev app permission list --unified-app-id UNIFIED_APP_ID --status all --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Command path: PASS (dev app permission list)
+- Flags: PASS (2 flags validated)
+
+**dev_app_permission_list_002** ✅ PASS
+
+- Prompt: 搜索应用 UNIFIED_APP_ID 里机器人发送消息相关的未开通权限
+- Expected: `dws dev app permission list --unified-app-id UNIFIED_APP_ID --keyword "机器人发送消息" --status unauthed --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Command path: PASS (dev app permission list)
+- Flags: PASS (3 flags validated)
+
+**dev_app_permission_list_003** ✅ PASS
+
+- Prompt: 看一下权限 qyapi_robot_sendmsg 覆盖哪些 API
+- Expected: `dws dev app permission list --unified-app-id UNIFIED_APP_ID --scope qyapi_robot_sendmsg --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Command path: PASS (dev app permission list)
+- Flags: PASS (2 flags validated)
+
+**dev_app_permission_list_004** ✅ PASS
+
+- Prompt: 给开放平台应用 UNIFIED_APP_ID 搜索手机号权限，应用权限和个人权限都要展示
+- Expected: `dws dev app permission list --unified-app-id UNIFIED_APP_ID --keyword "手机号" --status all --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Command path: PASS (dev app permission list)
+- Flags: PASS (3 flags validated)
+
+**dev_app_permission_add_001** ✅ PASS
+
+- Prompt: 给应用 UNIFIED_APP_ID 申请 qyapi_robot_sendmsg 权限，先预览
+- Expected: `dws dev app permission add --unified-app-id UNIFIED_APP_ID --permissions qyapi_robot_sendmsg --dry-run --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Command path: PASS (dev app permission add)
+- Flags: PASS (2 flags validated)
+
+**dev_app_permission_add_002** ✅ PASS
+
+- Prompt: 已确认，给应用 UNIFIED_APP_ID 申请 Contact.User.mobile 权限
+- Expected: `dws dev app permission add --unified-app-id UNIFIED_APP_ID --permissions Contact.User.mobile --yes --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Command path: PASS (dev app permission add)
+- Flags: PASS (2 flags validated)
+
+**dev_app_permission_remove_001** ✅ PASS
+
+- Prompt: 从应用 UNIFIED_APP_ID 移除 qyapi_robot_sendmsg 权限，先预览
+- Expected: `dws dev app permission remove --unified-app-id UNIFIED_APP_ID --permission qyapi_robot_sendmsg --dry-run --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Command path: PASS (dev app permission remove)
+- Flags: PASS (2 flags validated)
+
+**dev_app_event_list_001** ✅ PASS
+
+- Prompt: 查询应用 UNIFIED_APP_ID 的事件订阅配置
+- Expected: `dws dev app event list --unified-app-id UNIFIED_APP_ID --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Command path: PASS (dev app event list)
+- Flags: PASS (1 flags validated)
+
+**dev_app_version_publish_001** ✅ PASS
 
 - Prompt: 已确认，发布应用 UNIFIED_APP_ID 的版本 VERSION_ID，审批人是 USERID
-- Expected: `dws devapp version publish --unified-app-id UNIFIED_APP_ID --version-id VERSION_ID --approver USERID --yes --format json`
-- Skill Reference: references/products/devapp.md
-- Command path: PASS (devapp version publish)
+- Expected: `dws dev app version publish --unified-app-id UNIFIED_APP_ID --version-id VERSION_ID --approver USERID --yes --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Command path: PASS (dev app version publish)
 - Flags: PASS (3 flags validated)
 
 ### devdoc
@@ -1345,14 +1370,6 @@
 - Command path: PASS (devdoc article search)
 - Flags: PASS (1 flags validated)
 
-**devdoc_devdoc_article_search_008** ✅ PASS
-
-- Prompt: 继续搜索开放平台文档中关于消息卡片的下一页，游标 NEXT_CURSOR
-- Expected: `dws devdoc article search --keyword 消息卡片 --cursor NEXT_CURSOR --format json`
-- Skill Reference: references/products/devdoc.md
-- Command path: PASS (devdoc article search)
-- Flags: PASS (2 flags validated)
-
 ### ding
 
 **ding_ding_message_recall_001** ✅ PASS
@@ -1394,6 +1411,57 @@
 - Skill Reference: references/products/ding.md
 - Command path: PASS (ding message send)
 - Flags: PASS (3 flags validated)
+
+### event
+
+**event_event_consume_at_001** ✅ PASS
+
+- Prompt: 监听有人 @ 我的消息
+- Expected: `dws event consume user_im_message_receive_at -f ndjson`
+- Skill Reference: references/products/event.md
+- Command path: PASS (event consume user_im_message_receive_at -f ndjson)
+- Flags: N/A (no flags specified)
+
+**event_event_consume_o2o_001** ✅ PASS
+
+- Prompt: 监听我和 userId 507971 的单聊消息
+- Expected: `dws event consume user_im_message_receive_o2o --user 507971 -f ndjson`
+- Skill Reference: references/products/event.md
+- Command path: PASS (event consume user_im_message_receive_o2o)
+- Flags: PASS (1 flags validated)
+
+**event_event_consume_o2o_003** ✅ PASS
+
+- Prompt: 监听我的个人单聊消息
+- Expected: `dws event consume user_im_message_receive_o2o -f ndjson`
+- Skill Reference: references/products/event.md
+- Command path: PASS (event consume user_im_message_receive_o2o -f ndjson)
+- Flags: N/A (no flags specified)
+- Note: [ASK_USER] case - only command path validated
+
+**event_event_consume_group_001** ✅ PASS
+
+- Prompt: 监听 openConversationId cid123 的群消息
+- Expected: `dws event consume user_im_message_receive_group --group cid123 -f ndjson`
+- Skill Reference: references/products/event.md
+- Command path: PASS (event consume user_im_message_receive_group)
+- Flags: PASS (1 flags validated)
+
+**event_lookup_group_001** ✅ PASS
+
+- Prompt: 监听项目群的消息
+- Expected: `dws chat search --query "项目群" --format json`
+- Skill Reference: references/products/event.md
+- Command path: PASS (chat search)
+- Flags: PASS (1 flags validated)
+
+**event_lookup_sender_001** ✅ PASS
+
+- Prompt: 监听张三发给我的消息
+- Expected: `dws aisearch person --keyword "张三" --dimension name --format json`
+- Skill Reference: references/products/event.md
+- Command path: PASS (aisearch person)
+- Flags: PASS (2 flags validated)
 
 ### report
 

@@ -19,6 +19,18 @@ import (
 	"testing"
 )
 
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "dws-keychain-test-*")
+	if err != nil {
+		panic(err)
+	}
+	_ = os.Setenv(StorageDirEnv, dir)
+	_ = os.Setenv(DisableKeychainEnv, "1")
+	code := m.Run()
+	_ = os.RemoveAll(dir)
+	os.Exit(code)
+}
+
 func TestKeychainBasicOperations(t *testing.T) {
 	t.Parallel()
 
@@ -84,6 +96,23 @@ func TestKeychainNonExistentAccount(t *testing.T) {
 	// Remove should not error for non-existent
 	if err := Remove(service, account); err != nil {
 		t.Fatalf("Remove() error = %v for non-existent", err)
+	}
+}
+
+func TestGetNonExistentAccountDoesNotCreateFileDEK(t *testing.T) {
+	service := "test-service-readonly-" + t.Name()
+	account := "nonexistent-account"
+	dekPath := filepath.Join(StorageDir(service), "dek")
+
+	got, err := Get(service, account)
+	if err != nil {
+		t.Fatalf("Get() error = %v, want nil", err)
+	}
+	if got != "" {
+		t.Fatalf("Get() = %q, want empty string", got)
+	}
+	if _, err := os.Stat(dekPath); !os.IsNotExist(err) {
+		t.Fatalf("Get() created DEK at %s; stat error = %v", dekPath, err)
 	}
 }
 

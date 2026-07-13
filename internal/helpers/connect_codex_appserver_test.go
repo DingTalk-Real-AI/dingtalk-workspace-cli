@@ -107,14 +107,13 @@ while IFS= read -r line; do
     *\"method\":\"initialize\"*) printf '%s\n' '{"id":1,"result":{}}' ;;
     *\"method\":\"thread/start\"*) printf '%s\n' '{"id":2,"result":{"thread":{"id":"thr_stub"}}}' ;;
     *\"method\":\"thread/resume\"*) printf '%s\n' '{"id":2,"result":{"thread":{"id":"thr_stub"}}}' ;;
-    *\"method\":\"turn/start\"*)
-      printf '%s\n' '{"method":"item/agentMessage/delta","params":{"threadId":"thr_stub","turnId":"turn_stub","itemId":"item_1","delta":"你"}}'
-      printf '%s\n' '{"method":"item/agentMessage/delta","params":{"threadId":"thr_stub","turnId":"turn_stub","itemId":"item_1","delta":"好"}}'
-      printf '%s\n' '{"method":"turn/completed","params":{"threadId":"thr_stub","turn":{"id":"turn_stub","status":"completed","items":[{"id":"item_1","type":"agentMessage","text":"你好"}]}}}'
-      exit 0
-      ;;
-  esac
-done
+	    *\"method\":\"turn/start\"*)
+	      printf '%s\n' '{"method":"item/agentMessage/delta","params":{"threadId":"thr_stub","turnId":"turn_stub","itemId":"item_1","delta":"你"}}'
+	      printf '%s\n' '{"method":"item/agentMessage/delta","params":{"threadId":"thr_stub","turnId":"turn_stub","itemId":"item_1","delta":"好"}}'
+	      printf '%s\n' '{"method":"turn/completed","params":{"threadId":"thr_stub","turn":{"id":"turn_stub","status":"completed","items":[{"id":"item_1","type":"agentMessage","text":"你好"}]}}}'
+	      ;;
+	  esac
+	done
 `)
 	fwd := &codexAppServerForwarder{
 		bin:      codex,

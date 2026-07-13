@@ -6,7 +6,30 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 )
+
+// applyGlobalFilter applies the global --jq / --fields output filters to data
+// when either is set. Returns handled=true when it wrote the (filtered) output,
+// so callers skip their default JSON encoding. The filter helpers live in
+// internal/output (the same ones used by `dws api`); the helper Formatter used
+// by product commands previously ignored these flags, making them no-ops.
+func (f *Formatter) applyGlobalFilter(data any) (handled bool, err error) {
+	if deps == nil || deps.Caller == nil {
+		return false, nil
+	}
+	jq := strings.TrimSpace(deps.Caller.JQ())
+	fields := strings.TrimSpace(deps.Caller.Fields())
+	if jq == "" && fields == "" {
+		return false, nil
+	}
+	format := output.Format(strings.TrimSpace(deps.Caller.Format()))
+	if format == "" {
+		format = output.FormatJSON
+	}
+	return true, output.WriteFiltered(f.w, format, data, fields, jq)
+}
 
 // Formatter provides output formatting compatible with the old Wukong CLI.
 type Formatter struct {
@@ -23,6 +46,9 @@ func NewFormatter() *Formatter {
 // 转义为 \u0026、\u003c、\u003e。对于大多数 CLI 输出场景这是安全的默认行为。
 // 如果返回值中包含 URL 等不应被转义的内容，请使用 PrintJSONUnescaped。
 func (f *Formatter) PrintJSON(data any) error {
+	if handled, err := f.applyGlobalFilter(data); handled {
+		return err
+	}
 	enc := json.NewEncoder(f.w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(data)
@@ -38,6 +64,9 @@ func (f *Formatter) PrintJSON(data any) error {
 //
 // 影响范围：仅在调用方显式选择时生效，不影响全局 PrintJSON 的行为。
 func (f *Formatter) PrintJSONUnescaped(data any) error {
+	if handled, err := f.applyGlobalFilter(data); handled {
+		return err
+	}
 	enc := json.NewEncoder(f.w)
 	enc.SetIndent("", "  ")
 	enc.SetEscapeHTML(false)

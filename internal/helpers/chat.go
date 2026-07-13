@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -3069,7 +3070,7 @@ func newChatCommand() *cobra.Command {
 	chatMessageCreateTextEmotionCmd := &cobra.Command{
 		Use:   "create-text-emotion",
 		Short: "创建文字表情（获取 emotionId）",
-		Long:  `创建一个新的文字表情模板。当 list-emotions 中没有所需表情时，使用此命令创建并获取 emotionId，随后可用于 add-text-emotion。`,
+		Long:  `创建一个新的文字表情模板。当内置表情（见 chat-emoji-list.md）中没有所需表情时，使用此命令创建并获取 emotionId，随后可用于 add-text-emotion。`,
 		Example: `  dws chat message create-text-emotion --emotion-name "赞" --text "nice"
   dws chat message create-text-emotion --emotion-name "感谢" --text "感谢" --background-id im_bg_5`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -3228,11 +3229,20 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				return err
 			}
 
-			// 解析输出路径：如果是目录，从 URL 推断文件名
+			// 解析输出路径：目录（已存在的目录，或以分隔符结尾的意图目录）→ 追加推断文件名。
 			fi, statErr := os.Stat(outputPath)
-			if statErr == nil && fi.IsDir() {
+			isDir := (statErr == nil && fi.IsDir()) ||
+				strings.HasSuffix(outputPath, string(os.PathSeparator)) ||
+				strings.HasSuffix(outputPath, "/")
+			if isDir {
 				filename := inferFilename(resourceURL)
 				outputPath = filepath.Join(outputPath, filename)
+			}
+			// 确保目标父目录存在，否则 httpGetFile 打开文件会因目录缺失失败。
+			if dir := filepath.Dir(outputPath); dir != "" && dir != "." {
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					return fmt.Errorf("创建输出目录失败: %w", err)
+				}
 			}
 
 			// Step 2: HTTP GET 下载文件
@@ -4316,16 +4326,16 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatGroupAuditJoinValidationCmd := &cobra.Command{
 		Use:   "audit-join-validation",
 		Short: "审批入群验证（通过、拒绝、删除）",
-		Long: `审批入群验证。支持通过、拒绝、删除、忽略、拒绝并拉黑等操作。
+		Long: `审批入群验证。真机实测服务端仅接受 AuditApprove / AuditDelete，其余状态会被拒绝（unsupported audit status）。
 
 status 可选值:
-  AuditApprove — 通过
-  AuditDelete  — 删除
-  AuditIgnore  — 忽略
-  AuditRefuse  — 拒绝
-  AuditBlock   — 拒绝且不再接受该用户的申请`,
+  AuditApprove — 通过（可用）
+  AuditDelete  — 删除（可用）
+  AuditIgnore  — 忽略（服务端拒绝，不可用）
+  AuditRefuse  — 拒绝（服务端拒绝，不可用）
+  AuditBlock   — 拒绝且不再接受该用户的申请（服务端拒绝，不可用）`,
 		Example: `  dws chat group audit-join-validation --group <openConversationId> --record-id 123456 --applicant <openDingTalkId> --inviter <openDingTalkId> --status AuditApprove
-  dws chat group audit-join-validation --group <openConversationId> --record-id 123456 --applicant <openDingTalkId> --inviter <openDingTalkId> --status AuditRefuse --description "不符合入群条件"
+  dws chat group audit-join-validation --group <openConversationId> --record-id 123456 --applicant <openDingTalkId> --inviter <openDingTalkId> --status AuditDelete --description "不符合入群条件"
   # 查询入群验证记录: dws chat group list-join-validations`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "group", "record-id", "applicant", "inviter", "status"); err != nil {
@@ -4352,7 +4362,7 @@ status 可选值:
 	_ = chatGroupAuditJoinValidationCmd.MarkFlagRequired("group")
 	chatGroupAuditJoinValidationCmd.Flags().String("record-id", "", "申请记录 ID (必填)")
 	_ = chatGroupAuditJoinValidationCmd.MarkFlagRequired("record-id")
-	chatGroupAuditJoinValidationCmd.Flags().String("status", "", "审批动作: AuditApprove/AuditDelete/AuditIgnore/AuditRefuse/AuditBlock (必填)")
+	chatGroupAuditJoinValidationCmd.Flags().String("status", "", "审批动作，真机仅 AuditApprove/AuditDelete 可用；AuditIgnore/AuditRefuse/AuditBlock 服务端拒绝 (必填)")
 	_ = chatGroupAuditJoinValidationCmd.MarkFlagRequired("status")
 	chatGroupAuditJoinValidationCmd.Flags().String("applicant", "", "申请人 openDingTalkId (必填)")
 	_ = chatGroupAuditJoinValidationCmd.MarkFlagRequired("applicant")
@@ -4732,12 +4742,286 @@ status 可选值:
 	chatGroupMembersListByIdsCmd.Flags().String("users", "", "成员 openDingTalkId 列表，逗号分隔 (必填)")
 	_ = chatGroupMembersListByIdsCmd.MarkFlagRequired("users")
 
-	chatGroupCmd.AddCommand(chatGroupBotsCmd, chatGroupDismissCmd, chatGroupSetHistoryCmd, chatGroupListMyGroupsCmd, chatGroupUpdateNickCmd, chatGroupUpdateAliasCmd, chatGroupListAllCmd, chatGroupListJoinValidationsCmd, chatGroupAuditJoinValidationCmd)
+	// ── group notice: 群公告管理 ────────────────────────────────
+	chatGroupNoticeCmd := &cobra.Command{Use: "notice", Short: "群公告管理", RunE: groupRunE}
+
+	chatGroupNoticeCreateCmd := &cobra.Command{
+		Use:   "create",
+		Short: "发布群公告",
+		Long: `在指定群聊中发布群公告，正文为 Markdown 格式。
+支持标题、加粗、斜体、删除线、行内代码、链接、代码块、有序/无序/任务列表、表格、引用、分割线、图片、段落、换行。
+定时发布：传 --run-at 指定执行时间点，ISO-8601 格式（建议带时区偏移，不带时按北京时区处理）。`,
+		Example: `  dws chat group notice create --group <openConversationId> --content "今晚 22 点系统维护，请提前保存工作内容"
+  dws chat group notice create --group <openConversationId> --content "# 重要通知\n请大家查收" --sticky --send-ding
+  dws chat group notice create --group <openConversationId> --content "明早九点例会" --run-at "2026-07-03T09:00:00+08:00"
+  # 查询群 ID: dws chat search --query "群名"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "group", "content"); err != nil {
+				return err
+			}
+			toolArgs := map[string]any{
+				"openConversationId": mustGetFlag(cmd, "group"),
+				"content":            mustGetFlag(cmd, "content"),
+			}
+			if v, _ := cmd.Flags().GetBool("sticky"); v {
+				toolArgs["sticky"] = true
+			}
+			if v, _ := cmd.Flags().GetBool("send-ding"); v {
+				toolArgs["sendDing"] = true
+			}
+			if v, _ := cmd.Flags().GetString("run-at"); v != "" {
+				toolArgs["scheduled"] = true
+				toolArgs["runAtText"] = v
+			}
+			return callMCPToolOnServer("im", "create_group_notice", toolArgs)
+		},
+	}
+	chatGroupNoticeCreateCmd.Flags().String("group", "", "群聊 openConversationId (必填)")
+	_ = chatGroupNoticeCreateCmd.MarkFlagRequired("group")
+	chatGroupNoticeCreateCmd.Flags().String("content", "", "公告正文，Markdown 格式 (必填)")
+	_ = chatGroupNoticeCreateCmd.MarkFlagRequired("content")
+	chatGroupNoticeCreateCmd.Flags().Bool("sticky", false, "是否吊顶置顶（默认 false）")
+	chatGroupNoticeCreateCmd.Flags().Bool("send-ding", false, "是否发 DING 提醒（默认 false）")
+	chatGroupNoticeCreateCmd.Flags().String("run-at", "", "定时发布时间 ISO-8601（如 2026-07-03T09:00:00+08:00，传入则定时发布）")
+
+	chatGroupNoticeEditCmd := &cobra.Command{
+		Use:   "edit",
+		Short: "修改群公告",
+		Long:  `修改指定群聊中的群公告，正文为 Markdown 格式，会整体替换原公告内容。`,
+		Example: `  dws chat group notice edit --group <openConversationId> --notice-id <dataId> --content "更新后的公告内容"
+  dws chat group notice edit --group <openConversationId> --notice-id <dataId> --content "更新后的公告内容" --sticky --send-ding
+  # 查询公告 ID: dws chat group notice list --group <openConversationId>`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "group", "notice-id", "content"); err != nil {
+				return err
+			}
+			toolArgs := map[string]any{
+				"openConversationId": mustGetFlag(cmd, "group"),
+				"dataId":             mustGetFlag(cmd, "notice-id"),
+				"content":            mustGetFlag(cmd, "content"),
+			}
+			if v, _ := cmd.Flags().GetBool("sticky"); v {
+				toolArgs["sticky"] = true
+			}
+			if v, _ := cmd.Flags().GetBool("send-ding"); v {
+				toolArgs["sendDing"] = true
+			}
+			return callMCPToolOnServer("im", "edit_group_notice", toolArgs)
+		},
+	}
+	chatGroupNoticeEditCmd.Flags().String("group", "", "群聊 openConversationId (必填)")
+	_ = chatGroupNoticeEditCmd.MarkFlagRequired("group")
+	chatGroupNoticeEditCmd.Flags().String("notice-id", "", "群公告 dataId (必填)")
+	_ = chatGroupNoticeEditCmd.MarkFlagRequired("notice-id")
+	chatGroupNoticeEditCmd.Flags().String("content", "", "公告新正文，Markdown 格式 (必填)")
+	_ = chatGroupNoticeEditCmd.MarkFlagRequired("content")
+	chatGroupNoticeEditCmd.Flags().Bool("sticky", false, "是否吊顶置顶（不传按 false 处理）")
+	chatGroupNoticeEditCmd.Flags().Bool("send-ding", false, "是否发 DING 提醒（默认 false）")
+
+	chatGroupNoticeGetCmd := &cobra.Command{
+		Use:   "get",
+		Short: "查看群公告详情",
+		Long:  `查看指定群公告的详情，包含正文摘要、吊顶状态、发布者、已读人数、点赞/评论数等信息。`,
+		Example: `  dws chat group notice get --group <openConversationId> --notice-id <dataId>
+  # 查询公告 ID: dws chat group notice list --group <openConversationId>`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "group", "notice-id"); err != nil {
+				return err
+			}
+			return callMCPToolOnServer("im", "get_group_notice", map[string]any{
+				"openConversationId": mustGetFlag(cmd, "group"),
+				"dataId":             mustGetFlag(cmd, "notice-id"),
+			})
+		},
+	}
+	chatGroupNoticeGetCmd.Flags().String("group", "", "群聊 openConversationId (必填)")
+	_ = chatGroupNoticeGetCmd.MarkFlagRequired("group")
+	chatGroupNoticeGetCmd.Flags().String("notice-id", "", "群公告 dataId (必填)")
+	_ = chatGroupNoticeGetCmd.MarkFlagRequired("notice-id")
+
+	chatGroupNoticeListCmd := &cobra.Command{
+		Use:   "list",
+		Short: "查看群公告列表",
+		Long: `分页查看指定群聊的群公告列表。默认查询已发布公告，传 --scheduled 查询定时公告列表。
+支持游标分页，hasMore=true 时用返回的 nextPageCursor 作为下次 --cursor。`,
+		Example: `  dws chat group notice list --group <openConversationId>
+  dws chat group notice list --group <openConversationId> --limit 20 --cursor <nextPageCursor>
+  dws chat group notice list --group <openConversationId> --scheduled
+  # 查询群 ID: dws chat search --query "群名"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "group"); err != nil {
+				return err
+			}
+			toolArgs := map[string]any{
+				"openConversationId": mustGetFlag(cmd, "group"),
+			}
+			if v, _ := cmd.Flags().GetInt("limit"); v > 0 {
+				toolArgs["limit"] = v
+			}
+			if v, _ := cmd.Flags().GetString("cursor"); v != "" {
+				toolArgs["cursor"] = v
+			}
+			if v, _ := cmd.Flags().GetBool("scheduled"); v {
+				toolArgs["scheduled"] = true
+			}
+			return callMCPToolOnServer("im", "list_group_notices", toolArgs)
+		},
+	}
+	chatGroupNoticeListCmd.Flags().String("group", "", "群聊 openConversationId (必填)")
+	_ = chatGroupNoticeListCmd.MarkFlagRequired("group")
+	chatGroupNoticeListCmd.Flags().Int("limit", 10, "每页返回数量（默认 10，最大 100）")
+	chatGroupNoticeListCmd.Flags().String("cursor", "", "分页游标（首次不传，翻页传返回的 nextPageCursor）")
+	chatGroupNoticeListCmd.Flags().Bool("scheduled", false, "是否查询定时公告列表（默认 false，查询已发布公告）")
+	chatGroupNoticeCmd.AddCommand(chatGroupNoticeCreateCmd, chatGroupNoticeEditCmd, chatGroupNoticeGetCmd, chatGroupNoticeListCmd)
+
+	chatGroupShareInviteCmd := &cobra.Command{
+		Use:   "share-invite",
+		Short: "分享群聊链接到会话",
+		Long:  `将指定群的邀请链接分享到另一个会话或单聊用户。--target 和 --receiver 二选一：--target 指定目标会话，--receiver 指定单聊用户。`,
+		Example: `  dws chat group share-invite --source <被分享群openConversationId> --target <目标会话openConversationId>
+  dws chat group share-invite --source <被分享群openConversationId> --receiver <接收者openDingTalkId>
+  dws chat group share-invite --source <openConversationId> --target <openConversationId> --expires-seconds 86400
+  # 查询群 ID: dws chat search --query "群名"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "source"); err != nil {
+				return err
+			}
+			target, _ := cmd.Flags().GetString("target")
+			receiver, _ := cmd.Flags().GetString("receiver")
+			if target == "" && receiver == "" {
+				return fmt.Errorf("--target or --receiver is required")
+			}
+			if target != "" && receiver != "" {
+				return fmt.Errorf("--target and --receiver are mutually exclusive")
+			}
+			toolArgs := map[string]any{
+				"sourceOpenConversationId": mustGetFlag(cmd, "source"),
+			}
+			if target != "" {
+				toolArgs["targetOpenConversationId"] = target
+			}
+			if receiver != "" {
+				toolArgs["receiverOpenDingTalkId"] = receiver
+			}
+			if v, _ := cmd.Flags().GetInt64("expires-seconds"); v > 0 || cmd.Flags().Changed("expires-seconds") {
+				toolArgs["expiresSeconds"] = v
+			}
+			if v, _ := cmd.Flags().GetString("uuid"); v != "" {
+				toolArgs["uuid"] = v
+			}
+			return callMCPToolOnServer("im", "share_group_invite_url", toolArgs)
+		},
+	}
+	chatGroupShareInviteCmd.Flags().String("source", "", "被分享群的 openConversationId (必填)")
+	_ = chatGroupShareInviteCmd.MarkFlagRequired("source")
+	chatGroupShareInviteCmd.Flags().String("target", "", "接收分享消息的会话 openConversationId（与 --receiver 二选一）")
+	chatGroupShareInviteCmd.Flags().String("receiver", "", "接收分享消息的单聊用户 openDingTalkId（与 --target 二选一）")
+	chatGroupShareInviteCmd.Flags().Int64("expires-seconds", 0, "链接有效期（秒），0 表示永久有效，不传使用服务端默认值")
+	chatGroupShareInviteCmd.Flags().String("uuid", "", "消息幂等键（可选）")
+
+	chatCategoryCreateSmartCmd := &cobra.Command{
+		Use:   "create-smart",
+		Short: "创建智能会话分组",
+		Long:  `创建智能会话分组，可指定群名称关键词和群内成员 openDingTalkId 作为匹配规则。`,
+		Example: `  dws chat category create-smart --name "工作群"
+  dws chat category create-smart --name "项目组" --keywords "项目,开发"
+  dws chat category create-smart --name "团队群" --members openDingTalkId1,openDingTalkId2
+  dws chat category create-smart --name "重点群" --keywords "重点" --members openDingTalkId1`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := strings.TrimSpace(mustGetFlag(cmd, "name"))
+			if name == "" {
+				return apperrors.NewValidation("--name must not be blank")
+			}
+			toolArgs := map[string]any{
+				"categoryName": name,
+			}
+			if cmd.Flags().Changed("keywords") {
+				values := parseCSVValues(mustGetFlag(cmd, "keywords"))
+				if len(values) == 0 {
+					return apperrors.NewValidation("--keywords must contain at least one non-empty value")
+				}
+				toolArgs["groupNameKeywords"] = values
+			}
+			if cmd.Flags().Changed("members") {
+				values := parseCSVValues(mustGetFlag(cmd, "members"))
+				if len(values) == 0 {
+					return apperrors.NewValidation("--members must contain at least one non-empty value")
+				}
+				toolArgs["memberOpenDingTalkIds"] = values
+			}
+			return callMCPToolOnServer("im", "create_smart_conv_category", toolArgs)
+		},
+	}
+	chatCategoryCreateSmartCmd.Flags().String("name", "", "分组名称 (必填)")
+	_ = chatCategoryCreateSmartCmd.MarkFlagRequired("name")
+	chatCategoryCreateSmartCmd.Flags().String("keywords", "", "群名称关键词列表，逗号分隔（可选）")
+	chatCategoryCreateSmartCmd.Flags().String("members", "", "群内成员 openDingTalkId 列表，逗号分隔（可选）")
+
+	chatMessageListEmotionRepliesCmd := &cobra.Command{
+		Use:   "list-emotion-replies",
+		Short: "批量拉取消息的表情回复和文字回复",
+		Example: `  dws chat message list-emotion-replies --msg-ids msgId1,msgId2,msgId3
+  # 消息 ID 可通过 dws chat message list 获取`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "msg-ids"); err != nil {
+				return err
+			}
+			msgIds := parseCSVValues(mustGetFlag(cmd, "msg-ids"))
+			return callMCPToolOnServer("im", "list_message_emotion_replies", map[string]any{
+				"openMessageIds": msgIds,
+			})
+		},
+	}
+	chatMessageListEmotionRepliesCmd.Flags().String("msg-ids", "", "消息 ID 列表，逗号分隔 (必填)")
+	_ = chatMessageListEmotionRepliesCmd.MarkFlagRequired("msg-ids")
+
+	supportedTranslateLanguages := map[string]bool{
+		"en_US": true, "zh_CN": true, "zh_TW": true, "zh_HK": true,
+		"ja_JP": true, "ko_KR": true, "vi_VN": true, "th_TH": true,
+		"id_ID": true, "ms_MY": true, "es_419": true, "fr_FR": true,
+		"pt_BR": true, "tr_TR": true, "ru_RU": true, "de_DE": true,
+		"hi_IN": true, "hu_HU": true, "pl_PL": true, "sv_SE": true,
+		"fi_FI": true, "cs_CZ": true, "ar_SA": true, "tl_PH": true,
+		"he_IL": true, "nl_NL": true, "lo_LA": true, "it_IT": true,
+	}
+	chatTextCmd := &cobra.Command{Use: "text", Short: "文本内容处理", RunE: groupRunE}
+	chatTextTranslateCmd := &cobra.Command{
+		Use:   "translate",
+		Short: "翻译文本内容",
+		Long: `将指定文本翻译成目标语言。
+支持的目标语言代码: en_US, zh_CN, zh_TW, zh_HK, ja_JP, ko_KR, vi_VN, th_TH,
+id_ID, ms_MY, es_419, fr_FR, pt_BR, tr_TR, ru_RU, de_DE, hi_IN, hu_HU,
+pl_PL, sv_SE, fi_FI, cs_CZ, ar_SA, tl_PH, he_IL, nl_NL, lo_LA, it_IT`,
+		Example: `  dws chat text translate --query "你好世界" --to en_US
+  dws chat text translate --query "Hello World" --to zh_CN
+  dws chat text translate --query "Bonjour" --to ja_JP`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "query", "to"); err != nil {
+				return err
+			}
+			toLang := mustGetFlag(cmd, "to")
+			if !supportedTranslateLanguages[toLang] {
+				return fmt.Errorf("unsupported target language: %s", toLang)
+			}
+			return callMCPToolOnServer("im", "translate", map[string]any{
+				"query": mustGetFlag(cmd, "query"),
+				"to":    toLang,
+			})
+		},
+	}
+	chatTextTranslateCmd.Flags().String("query", "", "待翻译的文本内容 (必填)")
+	_ = chatTextTranslateCmd.MarkFlagRequired("query")
+	chatTextTranslateCmd.Flags().String("to", "en_US", "目标语言代码 (必填，默认 en_US)")
+	_ = chatTextTranslateCmd.MarkFlagRequired("to")
+	chatTextCmd.AddCommand(chatTextTranslateCmd)
+
+	chatGroupCmd.AddCommand(chatGroupBotsCmd, chatGroupDismissCmd, chatGroupSetHistoryCmd, chatGroupListMyGroupsCmd, chatGroupUpdateNickCmd, chatGroupUpdateAliasCmd, chatGroupListAllCmd, chatGroupListJoinValidationsCmd, chatGroupAuditJoinValidationCmd, chatGroupNoticeCmd, chatGroupShareInviteCmd)
 	chatGroupMembersCmd.AddCommand(chatGroupMembersRemoveBotCmd, chatGroupMembersListByIdsCmd)
 	chatBotCmd.AddCommand(chatBotFindCmd)
-	chatMessageCmd.AddCommand(chatMessageListDirectCmd, chatMessageSearchCommonCmd, chatMessageCombineForwardCmd, chatMessageForwardTopicCmd, chatMessageSetPinCmd, chatMessageUnsetPinCmd, chatMessageListPinCmd, chatMessageSetTopMsgCmd, chatMessageUnsetTopMsgCmd)
+	chatCategoryCmd.AddCommand(chatCategoryCreateSmartCmd)
+	chatMessageCmd.AddCommand(chatMessageListDirectCmd, chatMessageSearchCommonCmd, chatMessageCombineForwardCmd, chatMessageForwardTopicCmd, chatMessageSetPinCmd, chatMessageUnsetPinCmd, chatMessageListPinCmd, chatMessageSetTopMsgCmd, chatMessageUnsetTopMsgCmd, chatMessageListEmotionRepliesCmd)
 
-	root.AddCommand(chatChmodCmd, chatDataAuthCmd, chatGroupCmd, chatSearchCmd, chatSearchCommonCmd, chatMessageCmd, chatFileCmd, newChatMediaGroup(), chatBotCmd, chatMessageListTopConversationsCmd, chatConversationInfoCmd, chatCategoryCmd, chatGroupRoleCmd, chatMuteCmd, chatSetTopCmd, chatGroupMuteCmd, chatGroupMuteMemberCmd, chatHideCmd, chatMuteAtAllCmd, chatMuteRedEnvelopeCmd, chatMarkUnreadCmd, chatClearRedPointCmd, chatClearAllRedPointCmd, chatListAllConversationsCmd, chatClearMessagesCmd, chatMarkReadCmd)
+	root.AddCommand(chatChmodCmd, chatDataAuthCmd, chatGroupCmd, chatSearchCmd, chatSearchCommonCmd, chatMessageCmd, chatFileCmd, newChatMediaGroup(), chatBotCmd, chatMessageListTopConversationsCmd, chatConversationInfoCmd, chatCategoryCmd, chatGroupRoleCmd, chatMuteCmd, chatSetTopCmd, chatGroupMuteCmd, chatGroupMuteMemberCmd, chatHideCmd, chatMuteAtAllCmd, chatMuteRedEnvelopeCmd, chatMarkUnreadCmd, chatClearRedPointCmd, chatClearAllRedPointCmd, chatListAllConversationsCmd, chatClearMessagesCmd, chatMarkReadCmd, chatTextCmd)
 
 	// hint: dws chat send → dws chat message send
 	root.AddCommand(hintSubCmd("send", "use: dws chat message send"))

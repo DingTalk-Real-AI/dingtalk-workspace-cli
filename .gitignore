@@ -42,5 +42,8 @@ dws.zip
 # 功能测试运行产物
 results.jsonl
 test/dev_functional/results.jsonl
+/auto-test/
+/eval-runs/
+/.qoder/
 .vercel
 .env*

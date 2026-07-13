@@ -445,8 +445,7 @@ func TestFilterMultiSkillNames(t *testing.T) {
 
 // TestSkillSetupMultiAdditivePreservesSiblings verifies the key UX promise of
 // `dws skill setup --mode multi -s aitable`: installing a subset must NOT
-// touch already-installed dingtalk-* siblings (additive semantics, matches
-// lark-cli `npx skills add -s lark-calendar`).
+// touch already-installed dingtalk-* siblings (additive semantics).
 func TestSkillSetupMultiAdditivePreservesSiblings(t *testing.T) {
 	src := writeMultiSkillSource(t, []string{
 		"dingtalk-aitable", "dingtalk-calendar", "dingtalk-doc",

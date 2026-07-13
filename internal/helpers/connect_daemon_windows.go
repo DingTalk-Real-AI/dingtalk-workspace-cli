@@ -25,3 +25,7 @@ const daemonDetachSupported = false
 
 // applyDetach is a no-op on Windows; daemon mode is rejected earlier.
 func applyDetach(_ *exec.Cmd) {}
+
+func configureWorkerProcessGroup(_ *exec.Cmd) {}
+
+func cleanupWorkerProcessGroup(_ int) {}

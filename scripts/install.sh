@@ -260,7 +260,7 @@ resolve_skill_mode() {
 print_multi_mode_notice() {
   say ""
   say "🧪 Skill mode: multi (EXPERIMENTAL / preview) — automatic skill install skipped."
-  say "   ⚠ multi is not yet stable. 20 product-scoped skills pass dispatch verifier,"
+  say "   ⚠ multi is not yet stable. 22 product-scoped skills pass dispatch verifier,"
   say "     but interface, naming and cross-skill references may change in future releases."
   say "     For production / shared environments, use mono mode (--mode mono)."
   say ""

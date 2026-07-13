@@ -29,6 +29,8 @@ func clearChannelEnv(t *testing.T) {
 		"DWS_CONNECT_CMD", "DWS_AGENT_CMD",
 		"WORKBUDDY_CONFIG_DIR", "WORKBUDDY_APP_NAME", "CLAUDECODE",
 		"DWS_AGENT_PERMISSION_MODE", "DWS_AGENT_APPROVAL_MODE",
+		"GEMINI_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_BASE_URL",
+		"GOOGLE_GEMINI_API_BASE_URL", "GEMINI_MODEL",
 	} {
 		t.Setenv(k, "")
 	}
@@ -264,7 +266,7 @@ func TestAgentSpecsCoverMainstreamAgents(t *testing.T) {
 			t.Errorf("agentSpecs missing channel %q", ch)
 			continue
 		}
-		if len(spec.bins) == 0 {
+		if ch != "gemini" && len(spec.bins) == 0 {
 			t.Errorf("channel %q has no bins", ch)
 		}
 		if spec.hint == "" {

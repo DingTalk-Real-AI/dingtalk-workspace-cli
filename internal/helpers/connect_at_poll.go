@@ -144,11 +144,27 @@ func (p *atMentionPoller) handleMessage(ctx context.Context, msg atMentionMessag
 		convID = msg.SenderStaffID
 	}
 
-	p.queue.run(convID, func() {
+	turn := connectQueuedTurn{
+		convID:           convID,
+		text:             text,
+		msgID:            msg.MsgID,
+		senderStaffID:    strings.TrimSpace(msg.SenderStaffID),
+		conversationID:   strings.TrimSpace(msg.OpenConversationID),
+		conversationType: strings.TrimSpace(msg.ConversationType),
+	}
+	p.queue.submit(turn, func(turns []connectQueuedTurn) {
+		turn := mergeConnectQueuedTurns(turns)
+		if len(turns) > 1 {
+			fmt.Fprintf(os.Stderr, "[connect][at-poll] 合并 %d 条待处理 @消息 (convId=%s, latestMsgId=%s)\n", len(turns), turn.convID, turn.msgID)
+		}
+		text := turn.text
+		convID := turn.convID
+		senderStaffID := turn.senderStaffID
+		openConversationID := turn.conversationID
 		if p.extras.gate.enabled() {
-			if ok, reason := p.extras.gate.allow(msg.SenderStaffID, "2", msg.OpenConversationID); !ok {
+			if ok, reason := p.extras.gate.allow(senderStaffID, "2", openConversationID); !ok {
 				fmt.Fprintf(os.Stderr, "[connect][at-poll] 已拦截消息（%s）: staffId=%s convId=%s\n",
-					reason, msg.SenderStaffID, msg.OpenConversationID)
+					reason, senderStaffID, openConversationID)
 				return
 			}
 		}
@@ -180,8 +196,8 @@ func (p *atMentionPoller) handleMessage(ctx context.Context, msg atMentionMessag
 			p.health.onReply()
 		}
 
-		if reply != "" && msg.OpenConversationID != "" {
-			if serr := p.sendGroupReply(ctx, msg.OpenConversationID, reply); serr != nil {
+		if reply != "" && openConversationID != "" {
+			if serr := p.sendGroupReply(ctx, openConversationID, reply); serr != nil {
 				fmt.Fprintf(os.Stderr, "[connect][at-poll] 群回复发送失败: %v\n", serr)
 			}
 		}

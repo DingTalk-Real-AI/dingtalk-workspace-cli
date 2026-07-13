@@ -53,6 +53,10 @@ type ToolCaller interface {
 	Format() string
 	// DryRun returns true when --dry-run is active.
 	DryRun() bool
+	// Fields returns the global --fields output projection ("" if unset).
+	Fields() string
+	// JQ returns the global --jq output filter expression ("" if unset).
+	JQ() string
 }
 
 // RuntimeDefaultFn resolves a single runtimeDefault placeholder (e.g.
@@ -73,6 +77,12 @@ type Hooks struct {
 	// "Send from AI" indicator on delivered messages. Empty → falls back
 	// to DefaultOSSClawType; overlays set their own value (e.g. "wukong").
 	ClawTypeValue string
+
+	// PersonalEventSourceID identifies the personal-event source channel
+	// used by dws event --as user. Empty → "open". Overlays set their own
+	// value through Override; open-source core never infers custom sources
+	// from environment/user input.
+	PersonalEventSourceID string
 
 	// --- runtime mode ---
 	IsEmbedded     bool // true when running inside a host application
@@ -184,4 +194,12 @@ func ClawType() string {
 		return v
 	}
 	return DefaultOSSClawType
+}
+
+// PersonalEventSourceID returns the source channel for user-level events.
+func PersonalEventSourceID() string {
+	if v := Get().PersonalEventSourceID; v != "" {
+		return v
+	}
+	return "open"
 }

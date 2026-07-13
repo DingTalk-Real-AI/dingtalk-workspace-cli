@@ -108,6 +108,8 @@ dws sheet filter-view --help
 | `sheet update-dimension` | 更新行/列属性（显隐/行高/列宽） |
 | `sheet move-dimension` | 移动行或列到指定位置 |
 | `sheet add-dimension` | 在末尾追加空行或空列 |
+| `sheet group-dimension` | 创建行/列分组 |
+| `sheet ungroup-dimension` | 取消行/列分组 |
 | `sheet media-upload` | 上传附件到表格 |
 | `sheet write-image` | 上传图片并写入单元格 |
 | `sheet create-float-image` | 创建浮动图片 |
@@ -156,7 +158,7 @@ dws sheet filter-view --help
 | 读取数据 | [sheet/sheet-read-data.md](./sheet/sheet-read-data.md) | range read / csv-get |
 | 区域操作 | [sheet/sheet-range-operations.md](./sheet/sheet-range-operations.md) | range clear / sort / fill / copy-to / move-to |
 | 批量操作 | [sheet/sheet-batch-operations.md](./sheet/sheet-batch-operations.md) | range batch-clear / batch-update |
-| 行列操作 | [sheet/sheet-dimension-operations.md](./sheet/sheet-dimension-operations.md) | insert / delete / update / move / add-dimension |
+| 行列操作 | [sheet/sheet-dimension-operations.md](./sheet/sheet-dimension-operations.md) | insert / delete / update / move / add-dimension / group-dimension / ungroup-dimension |
 | 样式与合并 | [sheet/sheet-style-format.md](./sheet/sheet-style-format.md) | range set-style / batch-set-style / merge-cells / unmerge-cells |
 | 条件格式 | [sheet/sheet-conditional-format.md](./sheet/sheet-conditional-format.md) | cond-format list / create / update / delete |
 | 浮动图表 | [sheet/sheet-chart.md](./sheet/sheet-chart.md) | chart list / create / update / delete |
@@ -253,6 +255,11 @@ dws sheet filter-view --help
 - 追加空行/空列 → `add-dimension`
 - 注意与 `append`（追加数据行）区分：`add-dimension` 追加的是空行/空列，`append` 追加的是带数据的行
 - 请勿用 `range update` 写空数据来模拟追加，`add-dimension` 直接扩展表格维度
+
+用户说"创建行分组/创建列分组/折叠几行/折叠几列/取消行列分组":
+- 创建分组 → `group-dimension --range <整行或整列范围>`
+- 取消分组 → `ungroup-dimension --range <整行或整列范围>`
+- `--range` 只能传整行或整列范围，如 `3:7`、`C:F`、`Sheet1!3:7`，不要传 `A1:C5`
 
 ### 单元格格式
 
@@ -1099,6 +1106,38 @@ Flags:
 
 在工作表末尾追加指定数量的空行或空列。
 
+### 创建行或列分组
+```
+Usage:
+  dws sheet group-dimension [flags]
+Example:
+  dws sheet group-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --range "3:7"
+  dws sheet group-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --range "C:F" --group-state fold
+  dws sheet group-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --range "Sheet1!3:7"
+Flags:
+      --node string          表格文档 ID 或 URL (必填)
+      --sheet-id string      工作表 ID 或名称 (必填)
+      --range string         整行/整列范围，如 "3:7" 或 "C:F" (必填)
+      --group-state string   创建后的分组状态: expand 或 fold，默认 expand
+```
+
+在工作表中为连续行或连续列创建分组。`--range` 必须是整行或整列范围，不支持普通单元格矩形范围。
+
+### 取消行或列分组
+```
+Usage:
+  dws sheet ungroup-dimension [flags]
+Example:
+  dws sheet ungroup-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --range "3:7"
+  dws sheet ungroup-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --range "C:F"
+Flags:
+      --node string       表格文档 ID 或 URL (必填)
+      --sheet-id string   工作表 ID 或名称 (必填)
+      --range string      整行/整列范围，如 "3:7" 或 "C:F" (必填)
+```
+
+取消指定连续行或连续列的分组。
+
 ### 取消合并单元格
 ```
 Usage:
@@ -1581,7 +1620,7 @@ Flags:
 - MCP 返回 `FAILED`：命令立即返回错误并附带失败原因，**禁止自动重试 `dws sheet export`**，告知用户稍后再试
 - 轮询 30 次仍 `PROCESSING`：命令返回超时错误，告知用户稍后再试
 
-**限制**：仅支持钉钉在线电子表格（alxs）→ xlsx。导出钉钉文字文档请使用 `doc` 产品对应的导出工具。
+**限制**：仅支持钉钉在线电子表格（axls）→ xlsx。导出钉钉文字文档请使用 `doc` 产品对应的导出工具。
 
 ### 表格模板（list / search / apply）
 ```
@@ -1903,6 +1942,8 @@ dws sheet export --node <NODE_ID> --output ./
 | `replace` | `replaceCount` 被替换的单元格数量 | 确认替换结果 |
 | `move-dimension` | `sheetId` 工作表 ID | 确认操作完成 |
 | `add-dimension` | `sheetId` 工作表 ID | 确认操作完成 |
+| `group-dimension` | `range` / `level` / `groupState` | 确认行列分组层级和展开状态 |
+| `ungroup-dimension` | `range` / `level` | 确认行列分组已取消 |
 | `unmerge-cells` | `sheetId` 工作表 ID | 确认操作完成 |
 | `set-dropdown` | `range` 实际设置范围、`optionCount` 选项数量、`enableMultiSelect` 是否多选 | 确认下拉列表设置成功 |
 | `get-dropdown` | `hasDropdown` 是否存在下拉、`dataValidations` 下拉配置列表（含 `conditionValues`、`ranges`、`options`） | 查看已有下拉配置 |
@@ -2032,6 +2073,9 @@ dws sheet export --node <NODE_ID> --output ./
 - `add-dimension` vs `range update`：需要在末尾追加空行/空列时，必须使用 `add-dimension` 命令，禁止用 `range update` 写空数据来模拟追加效果
 - `add-dimension` 追加的是空行/空列，与 `append`（追加带数据的行）不同
 - `add-dimension` 的 `--length` 必须为正整数（>= 1），行列均不超过 5000
+- `group-dimension` / `ungroup-dimension` 的 `--range` 只接受整行或整列范围，如 `3:7`、`C:F`、`Sheet1!3:7`，不支持 `A1:C5`
+- `group-dimension` 的 `--group-state` 只接受 `expand` 或 `fold`，默认 `expand`
+- `batch-update` 支持 `group-dimension` / `ungroup-dimension`；需要创建后立即折叠时，优先使用独立 `group-dimension --group-state fold`
 - `unmerge-cells` 取消指定范围内所有合并单元格，使用 A1 表示法指定范围
 - `set-dropdown` 在指定范围内设置下拉列表，`--options` 为 JSON 数组，每个元素包含 `value`（必填）和 `color`（可选，`#RRGGBB` 格式）。选项值不能包含英文逗号。`--multi-select` 启用多选模式。如果目标范围已存在下拉列表，会被新配置覆盖
 - `get-dropdown` 查询指定范围内的下拉列表配置，返回 `dataValidations` 数组，相同选项的单元格聚合为一组。无下拉列表时 `hasDropdown` 为 false
@@ -2067,7 +2111,7 @@ dws sheet export --node <NODE_ID> --output ./
 - `filter-view delete-criteria` 仅清除指定列的条件，不会删除整个筛选视图。如需删除整个筛选视图，请使用 `filter-view delete`
 - `filter-view delete-criteria` 如果指定列没有设置筛选条件，调用不会报错
 - 筛选视图相关操作需要"可阅读"权限（list / info / list-criteria / get-criteria）或"可编辑"权限（create / update / delete / update-criteria / delete-criteria），不支持跨组织操作
-- ★ `export` 仅支持钉钉在线电子表格（alxs）→ xlsx；传入钉钉文字文档会报 `invalidRequest.document.typeIllegal`
+- ★ `export` 仅支持钉钉在线电子表格（axls）→ xlsx；传入钉钉文字文档会报 `invalidRequest.document.typeIllegal`
 - ★ `export` 为单命令一站式，CLI 内部已自动完成「提交 → 渐进式退避轮询 → 可选下载」，**Agent 不得在外部实现轮询或重试**；命令返回成功后不再调用其他 export 相关命令
 - `export` 内置轮询策略：1~5 次间隔 2s、6~10 次间隔 5s、11~20 次间隔 10s、21~30 次间隔 15s，硬上限 30 次（约 5 分钟）；超时后命令返回错误，告知用户稍后再试即可
 - ★ `export` 命令返回失败或超时时，**禁止自动重调 `dws sheet export`**；直接告知用户导出失败并建议稍后再试

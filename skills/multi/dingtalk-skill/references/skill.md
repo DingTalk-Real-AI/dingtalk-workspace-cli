@@ -48,8 +48,8 @@ Flags:
       --source string    查询范围，空格分隔。备选值：DingtalkMarket（钉钉市场）、OrgInternal（企业内部）。为空默认查市场技能
 ```
 
-> `--scopes` 已废弃（真机会打 `Flag --scopes has been deprecated, 请使用 --source 替代` 警告），一律用 `--source`。
-> 前置：`skill search` 依赖企业开通技能市场；未开通时真机报「当前企业暂未开放此功能」，这是企业级开关，非命令写法问题。
+> `--scopes` 已废弃（会打印 `Flag --scopes has been deprecated, 请使用 --source 替代` 警告），一律用 `--source`。
+> 前置：`skill search` 依赖企业开通技能市场；未开通时报「当前企业暂未开放此功能」，这是企业级开关，非命令写法问题。
 
 返回字段:
 - `skillId` — 技能 ID（后续 `install` 需要）
