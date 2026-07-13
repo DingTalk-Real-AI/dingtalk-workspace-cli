@@ -47,6 +47,8 @@ metadata:
 | "读文档内容" | `dws doc read --node <nodeId>` |
 | "更新文档内容 / 分块追加" | `dws doc update --node <nodeId> --content "<分块>" --mode append` |
 | "删除块" | `dws doc block delete`（需用户确认） |
+| "更新文档评论" | `dws doc comment update --node <nodeId> --comment-key <key> --content "<内容>"` |
+| "删除文档评论" | `dws doc comment delete --node <nodeId> --comment-key <key> --yes`（需用户确认） |
 
 ## 评测/多步文档短路径
 
@@ -60,7 +62,7 @@ metadata:
 
 ## 危险操作
 
-`block delete` 不可逆，必须确认再加 `--yes`。
+`block delete` 和 `comment delete` 不可逆，必须确认再加 `--yes`。
 
 ## 跨产品协作
 

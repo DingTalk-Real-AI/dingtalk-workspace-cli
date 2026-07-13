@@ -1,4 +1,4 @@
-# doc comment（文档评论：list / create / reply / create-inline）
+# doc comment（文档评论：list / create / reply / update / delete / create-inline）
 
 > **前置条件（MUST READ）：** 执行本命令前，必须先用 Read 工具读取以下文件：
 > 1. [`../doc.md`](../doc.md) — 命令路由 + 场景索引 + 意图判断 + 工作流
@@ -61,6 +61,39 @@ Flags:
 
 ---
 
+## doc comment update（更新评论）
+
+```text
+Usage:
+  dws doc comment update [flags]
+Example:
+  dws doc comment update --node <DOC_ID> --comment-key <COMMENT_KEY> --content "已按最新数据修正"
+  dws doc comment update --node <DOC_ID> --comment-key <COMMENT_KEY> --content "请确认" --mention uid1,uid2
+Flags:
+      --node string         目标文档 ID 或 URL (必填)
+      --comment-key string  待更新评论的 commentKey (必填)
+      --content string      更新后的评论内容 (必填)
+      --mention string      被 @ 的用户 uid 列表，逗号分隔
+```
+
+---
+
+## doc comment delete（删除评论）
+
+```text
+Usage:
+  dws doc comment delete [flags]
+Example:
+  dws doc comment delete --node <DOC_ID> --comment-key <COMMENT_KEY> --yes
+Flags:
+      --node string         目标文档 ID 或 URL (必填)
+      --comment-key string  待删除评论的 commentKey (必填)
+```
+
+删除不可恢复，必须先获得用户明确确认，再传全局 `--yes`。
+
+---
+
 ## doc comment create-inline（创建划词评论）
 
 ```
@@ -83,7 +116,7 @@ Flags:
 ## 关键说明
 
 - `--mention` 接受 `userId` 列表（逗号分隔），需要先用 `dws contact user search --query "<姓名>"` 拿到 userId。
-- `--comment-key` 是 13 位毫秒时间戳 + 32 位 UUID 的拼接字符串，从 `list` / `create` / `create-inline` 返回中提取。
+- `--comment-key` 是评论唯一标识，从 `list` / `create` / `create-inline` 返回中提取，可用于 `reply` / `update` / `delete`。
 - 划词评论的 `--start` / `--end` 是块内文本字符偏移量，从 0 开始；通过 [`./doc-block.md`](./doc-block.md) `block list` 取 `paragraph.text` 后人工或脚本计算。
 - `reply` 加 `--emoji` 时 `--content` 填表情名称（如 `比心`、`赞`），不是文字内容。
 
@@ -91,9 +124,9 @@ Flags:
 
 | 从返回中提取 | 用于 |
 |-------------|------|
-| `commentList[].commentKey` | `comment reply` 的 `--comment-key` |
-| `comment create` `commentKey` | `comment reply` 的 `--comment-key` |
-| `comment create-inline` `commentKey` | `comment reply` 的 `--comment-key` |
+| `commentList[].commentKey` | `comment reply/update/delete` 的 `--comment-key` |
+| `comment create` `commentKey` | `comment reply/update/delete` 的 `--comment-key` |
+| `comment create-inline` `commentKey` | `comment reply/update/delete` 的 `--comment-key` |
 | [`./doc-block.md`](./doc-block.md) `block list` 的 `blocks[].element.id` | `comment create-inline` 的 `--block-id` |
 | [`./doc-block.md`](./doc-block.md) `block list` 的 `blocks[].element.paragraph.text` | 计算 `create-inline` 的 `--start` / `--end` 偏移量 |
 | `dws contact user search` 的 `userId` | `comment create/reply/create-inline` 的 `--mention` |
@@ -120,6 +153,12 @@ dws doc comment reply --node <DOC_ID> --comment-key <COMMENT_KEY> --content "已
 
 # 表情回复（--content 填表情名称）
 dws doc comment reply --node <DOC_ID> --comment-key <COMMENT_KEY> --content "比心" --emoji --format json
+
+# 更新评论（可选 --mention）
+dws doc comment update --node <DOC_ID> --comment-key <COMMENT_KEY> --content "已修正" --format json
+
+# 删除评论（危险操作，需用户先明确确认）
+dws doc comment delete --node <DOC_ID> --comment-key <COMMENT_KEY> --yes --format json
 
 # 划词评论（先 block list 取 blockId + paragraph.text，计算 start/end）
 dws doc block list --node <DOC_ID> --format json

@@ -44,6 +44,11 @@ func newSheetCommand() *cobra.Command {
   dws sheet find                                在工作表中搜索单元格内容
   dws sheet append                              在工作表末尾追加数据
   dws sheet csv-put                             将 CSV 数据写入表格指定位置
+  dws sheet table-get                          读取结构化 table 数据
+  dws sheet table-put                          写入结构化 table 数据
+  dws sheet pivot-table [list|create|update|delete]  透视表管理
+  dws sheet show-gridline                      显示工作表网格线
+  dws sheet hide-gridline                      隐藏工作表网格线
   dws sheet merge-cells                         合并单元格
   dws sheet insert-dimension                    在指定位置插入行或列
   dws sheet delete-dimension                    删除指定位置的行或列
@@ -106,6 +111,8 @@ func newSheetCommand() *cobra.Command {
 	chartCmd := newChartCmd()
 	exportCmd := newExportCmd()
 	templateCmd := newSheetTemplateCmd()
+	tableCmds := newTableCmds()
+	pivotTableCmd := newPivotTableCmd()
 
 	batchUpdateCmd := newBatchUpdateCmd()
 	rangeBatchClearCmd := newRangeBatchClearCmd()
@@ -126,6 +133,7 @@ func newSheetCommand() *cobra.Command {
 	standaloneCmds = append(standaloneCmds, dimensionCmds...)
 	standaloneCmds = append(standaloneCmds, mediaCmds...)
 	standaloneCmds = append(standaloneCmds, floatImageCmds...)
+	standaloneCmds = append(standaloneCmds, tableCmds...)
 	standaloneCmds = append(standaloneCmds, exportCmd, batchUpdateCmd)
 
 	// Register cross-product aliases
@@ -140,7 +148,7 @@ func newSheetCommand() *cobra.Command {
 
 	// Add all to root
 	root.AddCommand(standaloneCmds...)
-	root.AddCommand(rangeCmd, filterCmd, filterViewCmd, condFormatCmd, chartCmd, templateCmd)
+	root.AddCommand(rangeCmd, filterCmd, filterViewCmd, condFormatCmd, chartCmd, templateCmd, pivotTableCmd)
 
 	// Guards for grouped parent commands
 	attachUnknownSubcommandGuard(root)
@@ -149,6 +157,7 @@ func newSheetCommand() *cobra.Command {
 	attachUnknownSubcommandGuard(filterViewCmd)
 	attachUnknownSubcommandGuard(condFormatCmd)
 	attachUnknownSubcommandGuard(chartCmd)
+	attachUnknownSubcommandGuard(pivotTableCmd)
 
 	return root
 }

@@ -98,6 +98,11 @@ func TestWukongSyncDocCommands(t *testing.T) {
 
 func TestWukongSyncSheetCommands(t *testing.T) {
 	root := newSheetCommand()
+	tableGetCmd := requireWukongSyncCommand(t, root, "table-get")
+	requireWukongSyncFlags(t, tableGetCmd, "node", "sheet-id", "range", "no-header")
+
+	tablePutCmd := requireWukongSyncCommand(t, root, "table-put")
+	requireWukongSyncFlags(t, tablePutCmd, "node", "sheets")
 
 	groupCmd := requireWukongSyncCommand(t, root, "group-dimension")
 	requireWukongSyncFlags(t, groupCmd, "node", "sheet-id", "range", "group-state")
