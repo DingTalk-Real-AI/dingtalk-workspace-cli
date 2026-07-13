@@ -26,7 +26,7 @@ jobs:
 
       - name: Format Check
         run: |
-          unformatted="$(find cmd internal test -name '*.go' -print0 | xargs -0r gofmt -l)"
+          unformatted="$(find cmd internal test scripts/policy -name '*.go' -print0 | xargs -0r gofmt -l)"
           test -z "$unformatted" || (printf '%s\n' "$unformatted" && exit 1)
 
       - name: Go Vet
@@ -101,10 +101,13 @@ jobs:
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -117,10 +120,50 @@ jobs:
       - name: Build
         run: make build
 
-      - name: Run tests with coverage
+      - name: Resolve authoritative coverage base
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
         run: |
-          go test -coverprofile=coverage.txt -covermode=atomic ./cmd/... ./internal/...
+          set -eu
+          base_ref="$PUSH_BEFORE_SHA"
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            base_ref="$(git merge-base "$PR_HEAD_SHA" "$PR_BASE_SHA")"
+          fi
+          if [ -z "$base_ref" ] || [ "$base_ref" = "0000000000000000000000000000000000000000" ]; then
+            base_ref="$(git rev-parse HEAD^)"
+          fi
+          git rev-parse --verify "${base_ref}^{commit}" >/dev/null
+          echo "COVERAGE_BASE_REF=$base_ref" >> "$GITHUB_ENV"
+
+      - name: Run current and baseline unit tests with coverage
+        run: |
+          set -eu
+          go test -count=1 -coverprofile=coverage.txt -covermode=atomic ./cmd/... ./internal/...
+          go test -count=1 -coverprofile=coverage-policy.txt -covermode=atomic ./pkg/... ./scripts/policy/...
+
+          base_worktree="$(mktemp -d "${RUNNER_TEMP}/dws-coverage-base.XXXXXX")"
+          rmdir "$base_worktree"
+          cleanup() {
+            git worktree remove --force "$base_worktree" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          git worktree add --detach "$base_worktree" "$COVERAGE_BASE_REF"
+          (
+            cd "$base_worktree"
+            go test -count=1 \
+              -coverprofile="$GITHUB_WORKSPACE/coverage-base.txt" \
+              -covermode=atomic \
+              ./cmd/... ./internal/...
+          )
           go tool cover -func=coverage.txt
+
+      - name: Enforce coverage gate
+        env:
+          COVERAGE_TARGET: "80"
+          COVERAGE_ENFORCE_OVERALL: "false"
+        run: make coverage-gate BASE_REF="$COVERAGE_BASE_REF"
 
       - name: Generate coverage report
         run: go tool cover -html=coverage.txt -o coverage.html
@@ -131,6 +174,8 @@ jobs:
           name: coverage-report
           path: |
             coverage.txt
+            coverage-base.txt
+            coverage-policy.txt
             coverage.html
 
       - name: Update coverage badge

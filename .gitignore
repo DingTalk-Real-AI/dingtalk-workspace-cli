@@ -48,3 +48,8 @@ test/dev_functional/results.jsonl
 /.qoder/
 .vercel
 .env*
+# Local Go coverage output
+/coverage.txt
+/coverage-base.txt
+/coverage-policy.txt
+/coverage.html

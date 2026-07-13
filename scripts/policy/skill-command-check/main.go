@@ -8,6 +8,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -55,14 +56,19 @@ const (
 func main() {
 	rootPath, err := os.Getwd()
 	if err != nil {
-		fatal(err)
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
 	}
+	os.Exit(run(rootPath, app.NewRootCommand(), os.Stdout, os.Stderr))
+}
+
+func run(rootPath string, root *cobra.Command, stdout, stderr io.Writer) int {
 	refs, err := extractReferences(filepath.Join(rootPath, "skills"))
 	if err != nil {
-		fatal(err)
+		fmt.Fprintln(stderr, err)
+		return 2
 	}
 
-	root := app.NewRootCommand()
 	root.InitDefaultHelpCmd()
 	var failures []string
 	checked := map[string]bool{}
@@ -88,13 +94,14 @@ func main() {
 
 	sort.Strings(failures)
 	if len(failures) > 0 {
-		fmt.Fprintf(os.Stderr, "skill command integrity check failed (%d references):\n", len(failures))
+		fmt.Fprintf(stderr, "skill command integrity check failed (%d references):\n", len(failures))
 		for _, failure := range failures {
-			fmt.Fprintf(os.Stderr, "  - %s\n", failure)
+			fmt.Fprintf(stderr, "  - %s\n", failure)
 		}
-		os.Exit(1)
+		return 1
 	}
-	fmt.Printf("skill command integrity check: ok (%d executable command paths)\n", len(checked))
+	fmt.Fprintf(stdout, "skill command integrity check: ok (%d executable command paths)\n", len(checked))
+	return 0
 }
 
 func extractReferences(root string) ([]commandRef, error) {
@@ -292,9 +299,4 @@ func uniqueSorted(values []string) []string {
 func formatFailure(root string, ref commandRef, reason string) string {
 	relative, _ := filepath.Rel(root, ref.File)
 	return fmt.Sprintf("%s:%d: `%s`: %s", relative, ref.Line, ref.Text, reason)
-}
-
-func fatal(err error) {
-	fmt.Fprintln(os.Stderr, err)
-	os.Exit(2)
 }

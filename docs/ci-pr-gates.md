@@ -10,6 +10,14 @@ The repository defines four focused checks in addition to its existing CI:
   `dws ...` references in `skills/**/*.md` resolve to real commands.
   Help compatibility covers command/alias/flag spelling, flag type and
   shorthand; descriptive prose may evolve without breaking the gate.
+- **Coverage** runs unit tests on every pull request and prints both overall and
+  changed-code statement coverage. During the migration to the 80% repository
+  target, overall coverage may not regress from a profile generated from the
+  merge-base with the same test command, while changed production Go
+  statements must meet 80%. Overall non-regression allows 0.1 percentage point
+  of measurement variance to avoid failing unchanged code on test-path noise. Set
+  `COVERAGE_ENFORCE_OVERALL=true` once repository coverage reaches 80% to make
+  the overall target fail closed as well.
 - **CLI Smoke** builds the release binary and renders offline help for the root
   and every public top-level command.
 - **Mock MCP Smoke** runs the existing HTTP and stdio MCP lifecycle tests
@@ -33,6 +41,7 @@ make interface-integrity
 make schema-compatibility
 make skill-command-integrity
 make cli-smoke
+make coverage-gate BASE_REF=<merge-base>
 ```
 
 Baseline updates are monotonic: they add newly supported contracts but retain

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -29,12 +30,20 @@ type toolSchema struct {
 }
 
 func main() {
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+}
+
+func run(args []string, stdout, stderr io.Writer) int {
 	var normalizePath, checkPath, mergePath, currentPath string
-	flag.StringVar(&normalizePath, "normalize", "", "normalize a raw schema-list response")
-	flag.StringVar(&checkPath, "check", "", "check against a normalized historical baseline")
-	flag.StringVar(&mergePath, "merge", "", "merge additions into a normalized historical baseline")
-	flag.StringVar(&currentPath, "current", "", "raw current schema-list response")
-	flag.Parse()
+	flags := flag.NewFlagSet("schema-compat", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	flags.StringVar(&normalizePath, "normalize", "", "normalize a raw schema-list response")
+	flags.StringVar(&checkPath, "check", "", "check against a normalized historical baseline")
+	flags.StringVar(&mergePath, "merge", "", "merge additions into a normalized historical baseline")
+	flags.StringVar(&currentPath, "current", "", "raw current schema-list response")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
 
 	modes := 0
 	for _, value := range []string{normalizePath, checkPath, mergePath} {
@@ -43,57 +52,64 @@ func main() {
 		}
 	}
 	if modes != 1 {
-		fmt.Fprintln(os.Stderr, "exactly one of --normalize, --check, or --merge is required")
-		os.Exit(2)
+		fmt.Fprintln(stderr, "exactly one of --normalize, --check, or --merge is required")
+		return 2
 	}
 
 	if normalizePath != "" {
 		currentPath = normalizePath
 	}
 	if currentPath == "" {
-		fmt.Fprintln(os.Stderr, "--current is required with --check or --merge")
-		os.Exit(2)
+		fmt.Fprintln(stderr, "--current is required with --check or --merge")
+		return 2
 	}
 	current, err := normalizeRawFile(currentPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "normalize current schema list: %v\n", err)
-		os.Exit(2)
+		fmt.Fprintf(stderr, "normalize current schema list: %v\n", err)
+		return 2
 	}
 
 	switch {
 	case normalizePath != "":
-		writeContract(current)
+		if err := writeContract(stdout, current); err != nil {
+			fmt.Fprintf(stderr, "write schema contract: %v\n", err)
+			return 2
+		}
 	case checkPath != "":
 		baseline, err := readContract(checkPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "read schema baseline: %v\n", err)
-			os.Exit(2)
+			fmt.Fprintf(stderr, "read schema baseline: %v\n", err)
+			return 2
 		}
 		failures := checkCompatibility(baseline, current)
 		if len(failures) > 0 {
-			fmt.Fprintln(os.Stderr, "schema list backwards-compatibility check failed:")
+			fmt.Fprintln(stderr, "schema list backwards-compatibility check failed:")
 			for _, failure := range failures {
-				fmt.Fprintf(os.Stderr, "  - %s\n", failure)
+				fmt.Fprintf(stderr, "  - %s\n", failure)
 			}
-			os.Exit(1)
+			return 1
 		}
-		fmt.Printf("schema list compatibility check: ok (%d historical products; additions allowed)\n", len(baseline.Products))
+		fmt.Fprintf(stdout, "schema list compatibility check: ok (%d historical products; additions allowed)\n", len(baseline.Products))
 	case mergePath != "":
 		baseline, err := readContract(mergePath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "read schema baseline: %v\n", err)
-			os.Exit(2)
+			fmt.Fprintf(stderr, "read schema baseline: %v\n", err)
+			return 2
 		}
 		merged, failures := mergeContracts(baseline, current)
 		if len(failures) > 0 {
-			fmt.Fprintln(os.Stderr, "cannot merge incompatible schema changes:")
+			fmt.Fprintln(stderr, "cannot merge incompatible schema changes:")
 			for _, failure := range failures {
-				fmt.Fprintf(os.Stderr, "  - %s\n", failure)
+				fmt.Fprintf(stderr, "  - %s\n", failure)
 			}
-			os.Exit(1)
+			return 1
 		}
-		writeContract(merged)
+		if err := writeContract(stdout, merged); err != nil {
+			fmt.Fprintf(stderr, "write schema contract: %v\n", err)
+			return 2
+		}
 	}
+	return 0
 }
 
 func normalizeRawFile(path string) (schemaContract, error) {
@@ -287,17 +303,14 @@ func cloneContract(source schemaContract) schemaContract {
 	return cloned
 }
 
-func writeContract(contract schemaContract) {
+func writeContract(w io.Writer, contract schemaContract) error {
 	contract.Version = 1
 	if contract.Products == nil {
 		contract.Products = map[string]productSchema{}
 	}
-	encoder := json.NewEncoder(os.Stdout)
+	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(contract); err != nil {
-		fmt.Fprintf(os.Stderr, "write schema contract: %v\n", err)
-		os.Exit(2)
-	}
+	return encoder.Encode(contract)
 }
 
 func firstNonEmpty(values ...string) string {

@@ -18,24 +18,33 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app"
+	"github.com/spf13/cobra"
 )
 
 func main() {
+	os.Exit(run(os.Args[1:], app.NewRootCommand(), os.Stdout, os.Stderr))
+}
+
+func run(args []string, root *cobra.Command, stdout, stderr io.Writer) int {
 	var checkPath string
 	var mergePath string
-	flag.StringVar(&checkPath, "check", "", "check current CLI against a historical baseline")
-	flag.StringVar(&mergePath, "merge", "", "merge current additions into a historical baseline")
-	flag.Parse()
-
-	if checkPath != "" && mergePath != "" {
-		fmt.Fprintln(os.Stderr, "--check and --merge are mutually exclusive")
-		os.Exit(2)
+	flags := flag.NewFlagSet("interface-baseline", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	flags.StringVar(&checkPath, "check", "", "check current CLI against a historical baseline")
+	flags.StringVar(&mergePath, "merge", "", "merge current additions into a historical baseline")
+	if err := flags.Parse(args); err != nil {
+		return 2
 	}
 
-	root := app.NewRootCommand()
+	if checkPath != "" && mergePath != "" {
+		fmt.Fprintln(stderr, "--check and --merge are mutually exclusive")
+		return 2
+	}
+
 	root.InitDefaultHelpCmd()
 	current := snapshot(root)
 
@@ -43,43 +52,44 @@ func main() {
 	case checkPath != "":
 		baseline, err := readContract(checkPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "read interface baseline: %v\n", err)
-			os.Exit(2)
+			fmt.Fprintf(stderr, "read interface baseline: %v\n", err)
+			return 2
 		}
 		failures := checkCompatibility(root, baseline)
 		if len(failures) > 0 {
-			fmt.Fprintln(os.Stderr, "CLI backwards-compatibility check failed:")
+			fmt.Fprintln(stderr, "CLI backwards-compatibility check failed:")
 			for _, failure := range failures {
-				fmt.Fprintf(os.Stderr, "  - %s\n", failure)
+				fmt.Fprintf(stderr, "  - %s\n", failure)
 			}
-			os.Exit(1)
+			return 1
 		}
-		fmt.Printf(
+		fmt.Fprintf(stdout,
 			"interface compatibility check: ok (%d historical command nodes; additions allowed)\n",
 			len(baseline.Commands),
 		)
 	case mergePath != "":
 		baseline, err := readContract(mergePath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "read interface baseline: %v\n", err)
-			os.Exit(2)
+			fmt.Fprintf(stderr, "read interface baseline: %v\n", err)
+			return 2
 		}
 		merged, failures := mergeContracts(baseline, current)
 		if len(failures) > 0 {
-			fmt.Fprintln(os.Stderr, "cannot merge incompatible interface changes:")
+			fmt.Fprintln(stderr, "cannot merge incompatible interface changes:")
 			for _, failure := range failures {
-				fmt.Fprintf(os.Stderr, "  - %s\n", failure)
+				fmt.Fprintf(stderr, "  - %s\n", failure)
 			}
-			os.Exit(1)
+			return 1
 		}
-		if err := renderContract(os.Stdout, merged); err != nil {
-			fmt.Fprintf(os.Stderr, "render merged interface baseline: %v\n", err)
-			os.Exit(2)
+		if err := renderContract(stdout, merged); err != nil {
+			fmt.Fprintf(stderr, "render merged interface baseline: %v\n", err)
+			return 2
 		}
 	default:
-		if err := renderContract(os.Stdout, current); err != nil {
-			fmt.Fprintf(os.Stderr, "render interface baseline: %v\n", err)
-			os.Exit(2)
+		if err := renderContract(stdout, current); err != nil {
+			fmt.Fprintf(stderr, "render interface baseline: %v\n", err)
+			return 2
 		}
 	}
+	return 0
 }

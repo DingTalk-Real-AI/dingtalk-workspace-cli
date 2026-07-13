@@ -4,11 +4,67 @@
 package main
 
 import (
+	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 )
+
+func TestRunModes(t *testing.T) {
+	var generated, stderr bytes.Buffer
+	if code := run(nil, testRoot(), &generated, &stderr); code != 0 {
+		t.Fatalf("generate code=%d stderr=%s", code, stderr.String())
+	}
+	baseline := filepath.Join(t.TempDir(), "baseline.txt")
+	if err := os.WriteFile(baseline, generated.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	stderr.Reset()
+	if code := run([]string{"--check", baseline}, testRoot(), &stdout, &stderr); code != 0 {
+		t.Fatalf("check code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "compatibility check: ok") {
+		t.Fatalf("unexpected check output %q", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"--merge", baseline}, testRoot(), &stdout, &stderr); code != 0 {
+		t.Fatalf("merge code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "[old]") {
+		t.Fatalf("unexpected merge output %q", stdout.String())
+	}
+
+	stderr.Reset()
+	if code := run([]string{"--check", baseline, "--merge", baseline}, testRoot(), &stdout, &stderr); code != 2 {
+		t.Fatalf("conflicting modes code=%d, want 2", code)
+	}
+
+	stderr.Reset()
+	missingRoot := &cobra.Command{Use: "dws"}
+	missingRoot.InitDefaultHelpCmd()
+	if code := run([]string{"--check", baseline}, missingRoot, &stdout, &stderr); code != 1 {
+		t.Fatalf("incompatible check code=%d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "historical command") {
+		t.Fatalf("unexpected incompatible output %q", stderr.String())
+	}
+
+	stderr.Reset()
+	if code := run([]string{"--check", filepath.Join(t.TempDir(), "missing")}, testRoot(), &stdout, &stderr); code != 2 {
+		t.Fatalf("missing baseline code=%d, want 2", code)
+	}
+	stderr.Reset()
+	if code := run([]string{"--unknown"}, testRoot(), &stdout, &stderr); code != 2 {
+		t.Fatalf("unknown flag code=%d, want 2", code)
+	}
+}
 
 func TestCompatibilityAllowsAdditions(t *testing.T) {
 	root := testRoot()
