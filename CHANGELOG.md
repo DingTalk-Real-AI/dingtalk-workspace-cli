@@ -12,7 +12,7 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ### Fixed
 
-- **macOS Keychain mode collision coverage** — dedicated macOS CI now runs the Darwin-only auth/keychain regression suite with race detection, and recovery guidance prefers safe migration or per-profile cleanup over destructive global reset.
+- **Cross-platform auth regression coverage** — dedicated macOS CI now runs the Darwin-only auth/keychain regression suite with race detection, Windows CI builds and tests the native DPAPI path, and recovery guidance prefers safe migration or per-profile cleanup over destructive global reset.
 
 ## [1.0.51] - 2026-07-10
 

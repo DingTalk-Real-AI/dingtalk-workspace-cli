@@ -77,6 +77,25 @@ jobs:
       - name: Test macOS auth and Keychain paths with Race Detection
         run: go test -v -race -count=1 -timeout=10m ./internal/keychain ./internal/auth ./internal/app
 
+  test-windows:
+    name: Test (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build Windows CLI
+        run: go build -o dws.exe ./cmd
+
+      - name: Test Windows command and internal packages
+        run: go test -v -count=1 -timeout=10m ./cmd/... ./internal/...
+
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
