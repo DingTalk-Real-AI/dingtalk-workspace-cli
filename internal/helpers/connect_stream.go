@@ -1008,7 +1008,7 @@ type connectExtras struct {
 type connectQueuedTurn struct {
 	convID           string
 	text             string
-	picCode          string
+	picCodes         []string
 	fileInfo         fileInboundInfo
 	webhook          string
 	msgID            string
@@ -1038,12 +1038,12 @@ func mergeConnectQueuedTurns(turns []connectQueuedTurn) connectQueuedTurn {
 		lines = append(lines, fmt.Sprintf("%d. %s", i+1, connectTurnSummary(turn)))
 	}
 	merged.text = strings.Join(lines, "\n")
-	if merged.picCode == "" && !merged.fileInfo.hasActionable() {
+	merged.picCodes = nil
+	for i := range turns {
+		merged.picCodes = append(merged.picCodes, turns[i].picCodes...)
+	}
+	if !merged.fileInfo.hasActionable() {
 		for i := len(turns) - 1; i >= 0; i-- {
-			if turns[i].picCode != "" {
-				merged.picCode = turns[i].picCode
-				break
-			}
 			if turns[i].fileInfo.hasActionable() {
 				merged.fileInfo = turns[i].fileInfo
 				break
@@ -1065,9 +1065,12 @@ func connectTurnShouldStayStandalone(turn connectQueuedTurn) bool {
 
 func connectTurnSummary(turn connectQueuedTurn) string {
 	if text := strings.TrimSpace(turn.text); text != "" {
+		if len(turn.picCodes) > 0 {
+			return text + " [同时附有图片]"
+		}
 		return text
 	}
-	if turn.picCode != "" {
+	if len(turn.picCodes) > 0 {
 		return "[图片]"
 	}
 	if turn.fileInfo.hasActionable() {
@@ -1129,9 +1132,17 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		msgtype := strings.TrimSpace(data.Msgtype)
 		// Picture messages carry no text — their payload is a downloadCode
 		// resolved to a local file in the forward goroutine below.
-		picCode := ""
+		var picCodes []string
 		if strings.EqualFold(msgtype, "picture") {
-			picCode = pictureDownloadCode(data.Content)
+			if code := pictureDownloadCode(data.Content); code != "" {
+				picCodes = append(picCodes, code)
+			}
+		}
+		// A richText callback can mix text and inline picture nodes. Scan its
+		// content even when data.Text.Content is already populated; otherwise
+		// the text survives while every embedded picture silently disappears.
+		if strings.EqualFold(msgtype, "richText") {
+			picCodes = append(picCodes, richTextPictureDownloadCodes(data.Content)...)
 		}
 		// File callbacks come in two shapes: client-sent files carry a
 		// downloadCode; API-sent files (`dws chat message send --msg-type file
@@ -1147,7 +1158,7 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		// this, `dws chat message send --group ... --text ...` — which defaults
 		// to msgType=markdown — hits the drop branch below and the bot looks
 		// dead to the sender.
-		if text == "" && picCode == "" {
+		if text == "" && len(picCodes) == 0 {
 			// interactiveCard (a bot @-mentioning this bot) nests the body in
 			// content.cardContent and carries the mention as its own leading
 			// leaf; the leaf-aware extractor drops it so the agent gets the
@@ -1162,7 +1173,7 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 				}
 			}
 		}
-		if (text == "" && picCode == "" && !fileInfo.hasActionable()) || data.SessionWebhook == "" {
+		if (text == "" && len(picCodes) == 0 && !fileInfo.hasActionable()) || data.SessionWebhook == "" {
 			// Observability: silent drops are the #1 reason a working connector
 			// looks dead. Log msgtype + a payload summary so an unhandled shape
 			// (e.g. new-style file callback without downloadCode) shows up in
@@ -1198,7 +1209,7 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 			sender = strings.TrimSpace(data.SenderStaffId)
 		}
 		shown := text
-		if shown == "" && picCode != "" {
+		if shown == "" && len(picCodes) > 0 {
 			shown = "[图片]"
 		} else if shown == "" && fileInfo.hasActionable() {
 			shown = "[文件: " + fileInfo.FileName + "]"
@@ -1220,7 +1231,7 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		turn := connectQueuedTurn{
 			convID:           convID,
 			text:             text,
-			picCode:          picCode,
+			picCodes:         picCodes,
 			fileInfo:         fileInfo,
 			webhook:          webhook,
 			msgID:            msgID,
@@ -1239,7 +1250,7 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 				fmt.Fprintf(os.Stderr, "[connect] 合并 %d 条待处理消息 (convId=%s, latestMsgId=%s)\n", len(turns), turn.convID, turn.msgID)
 			}
 			text := turn.text
-			picCode := turn.picCode
+			picCodes := turn.picCodes
 			fileInfo := turn.fileInfo
 			webhook := turn.webhook
 			convID := turn.convID
@@ -1293,16 +1304,21 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 			// Assemble the forwarded prompt: resolve an attached picture (the
 			// top Q&A inbound is an error screenshot), then knowledge-augment.
 			prompt := text
-			if picCode != "" {
-				if localPath, derr := mediaCli.downloadMessageFile(context.Background(), clientID, picCode); derr != nil {
-					fmt.Fprintf(os.Stderr, "[connect][media] 图片下载失败: %v\n", derr)
+			for i, picCode := range picCodes {
+				localPath, derr := mediaCli.downloadMessageFile(context.Background(), clientID, picCode)
+				if derr != nil {
+					fmt.Fprintf(os.Stderr, "[connect][media] 第 %d 张图片下载失败: %v\n", i+1, derr)
 					if prompt == "" {
-						prompt = "（用户发来一张图片，但图片下载失败了。请告知用户图片没收到，建议补充文字描述。）"
+						prompt = "（用户发来图片，但图片下载失败了。请告知用户图片没收到，建议补充文字描述。）"
+					} else {
+						prompt += "\n（用户同时附了一张图片，但图片下载失败，请基于现有文字回答并说明未能读取图片。）"
 					}
-				} else if prompt == "" {
+					continue
+				}
+				if prompt == "" {
 					prompt = "用户发来一张图片（本地路径 " + localPath + "），请查看图片内容并回答其中的问题。"
 				} else {
-					prompt = prompt + "\n（用户同时附了一张图片，本地路径 " + localPath + "，请结合图片内容回答。）"
+					prompt += "\n（用户同时附了一张图片，本地路径 " + localPath + "，请结合图片内容回答。）"
 				}
 			}
 			if fileInfo.hasActionable() {

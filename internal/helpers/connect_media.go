@@ -48,6 +48,44 @@ func pictureDownloadCode(content interface{}) string {
 	return ""
 }
 
+// richTextPictureDownloadCodes returns the media download codes embedded in a
+// msgtype="richText" callback, preserving the node order. DingTalk represents
+// an inline picture as a richText node instead of a top-level picture message:
+//
+//	{"type":"picture","downloadCode":"...","pictureDownloadCode":"..."}
+//
+// The two code fields identify the same picture; pictureDownloadCode handles
+// their precedence and returns only one code per node.
+func richTextPictureDownloadCodes(content interface{}) []string {
+	m, ok := content.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	items, ok := m["richText"].([]interface{})
+	if !ok {
+		return nil
+	}
+	codes := make([]string, 0)
+	for _, item := range items {
+		node, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		code := pictureDownloadCode(node)
+		if code == "" {
+			continue
+		}
+		// A richText node with a picture download code is actionable even if an
+		// older callback omitted type. When type is present, reject unrelated
+		// node kinds so future payload fields are not mistaken for pictures.
+		if typ, exists := node["type"].(string); exists && strings.TrimSpace(typ) != "" && !strings.EqualFold(strings.TrimSpace(typ), "picture") {
+			continue
+		}
+		codes = append(codes, code)
+	}
+	return codes
+}
+
 // fileInboundInfo carries everything a msgtype="file" callback might expose.
 // Client-sent files (a user attaching a file in the DingTalk client) surface
 // DownloadCode + FileName; API-sent files (`dws chat message send --msg-type
