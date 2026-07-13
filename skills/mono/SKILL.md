@@ -132,18 +132,22 @@ Step 3 → 加 --yes 执行命令
 dws <command-path> --help
 # 例：dws calendar event list --help
 
-# helper-only schema 查询（如 dev.*），普通产品命令不要依赖 schema 推断参数
+# 结构化 schema 查询：helper-only 子树（dev.*，source=mcp:<server>）
 dws schema "dev app create"
+# 登记的本地命令子树（event.*，source=cobra，从二进制 flag 合成）
+dws schema "event consume"     # 叶子：parameters{<flag>:{type,required,description,default?}} + arguments[位置参数]
+dws schema event               # 中间节点：列子命令
+# 其余普通产品命令不走 schema，直接看 --help。
 # 注：--jq 对 schema 输出无效（不过滤，仍返回完整对象）；schema 结构里必填标在
 # .parameters.<字段>.required，没有 .tool 键。要看必填字段自行读 .parameters 即可。
 ```
 
 **何时用哪条路径：**
 - 只需看某个命令怎么调用 → `dws <cmd> --help`
-- 构造 `--params` / `--json` 时不确定字段类型、必填、别名 → 先看 `dws <cmd> --help`，helper-only 命令再看 `dws schema`
+- 构造 `--params` / `--json` 时不确定字段类型、必填、别名 → 先看 `dws <cmd> --help`，helper-only（dev.*）和登记的本地命令（event.*）可看 `dws schema` 取机读结构
 - 参考文档和 `--help` 冲突时 → **以 `--help` 为准**，文档视为过期
 
-`dws schema` 在静态端点模式下只保留 helper-only 子树；普通产品命令和 flag 不再通过远程 schema 动态发现。写/删操作须先向用户确认再加 `--yes`。
+`dws schema` 覆盖两类命令：helper-only 子树（dev，CONTENT 从 MCP 实时取）和登记的本地命令（event，从 cobra flag 合成、source=cobra）；其余普通产品命令和 flag 以 `--help` 为准。写/删操作须先向用户确认再加 `--yes`。
 
 ## 错误处理
 1. 遇到错误，加 `--verbose` 重试一次

@@ -75,7 +75,10 @@ func NewSchemaCommand(_ CatalogLoader, helperTools HelperToolFetcher) *cobra.Com
 		Short: "查看有限的本地 Schema（静态端点模式）",
 		Long: `查看有限的本地 Schema 元数据。
 
-服务发现和动态 schema 已下线。静态端点模式下，仅支持 helper-only 子树的 schema 查询；普通产品命令和 flag 以当前二进制的 --help 为准。`,
+服务发现和动态 schema 已下线。静态端点模式下，schema 覆盖两类命令：
+  1. helper-only 子树（如 dev）：CONTENT 从其绑定的 MCP 服务实时取，source 为 mcp:<server>；
+  2. 登记的本地命令（如 event）：从二进制注册的 cobra flag 合成，source 为 cobra。
+其余普通产品命令和 flag 仍以当前二进制的 --help 为准。`,
 		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -88,9 +91,22 @@ func NewSchemaCommand(_ CatalogLoader, helperTools HelperToolFetcher) *cobra.Com
 				args = []string{cliPath}
 			}
 
-			// Helper-only subtrees support.
+			// Helper-only subtrees: schema CONTENT fetched live from the MCP server.
 			if len(args) > 0 && helperTools != nil {
 				payload, ok, err := renderHelperSchema(cmd.Context(), cmd.Root(), args[0], helperTools)
+				if err != nil {
+					return err
+				}
+				if ok {
+					data, _ := json.MarshalIndent(payload, "", "  ")
+					fmt.Fprintln(cmd.OutOrStdout(), string(data))
+					return nil
+				}
+			}
+
+			// Registered local subtrees (event, …): schema synthesized from cobra flags.
+			if len(args) > 0 {
+				payload, ok, err := renderCobraSchema(cmd.Root(), args[0])
 				if err != nil {
 					return err
 				}

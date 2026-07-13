@@ -64,7 +64,7 @@ dws event consume user_im_message_receive_group \
 | `user_im_message_receive_o2o` | `--user <userId> --duration 10m -f ndjson` | 让对端用户给当前登录用户发送单聊消息 |
 | `user_im_message_receive_group` | `--group <openConversationId> --duration 10m -f ndjson` | 让任意用户在该群发送消息 |
 
-stderr 出现 `connected bus pid=...` 表示本地 consume 已连接到事件 bus。stdout 每行是一个事件 JSON。
+stderr 出现固定就绪行 `[event] ready event_key=<key> bus_pid=<pid>` 表示本地 consume 已连接到事件 bus；父进程等这行再读 stdout。stdout 每行是一个事件 JSON。
 
 ## Runtime flags
 
@@ -154,7 +154,7 @@ dws event stop --all
 
 ## Troubleshooting
 
-- 没有输出：先确认 stderr 已出现 `connected bus pid=...`。
+- 没有输出：先确认 stderr 已出现 `[event] ready event_key=...`。
 - 参数缺失：单聊必须有对端 ID，群消息必须有 openConversationId。
 - 收到非预期消息：检查 stdout 的 `subscribe_id` 是否等于当前命令创建/复用的订阅 ID。
 - 需要判断服务端是否推到当前连接：临时加 `--debug --debug-raw-events`，排查后去掉。

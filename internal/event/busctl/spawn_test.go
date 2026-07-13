@@ -15,9 +15,11 @@ package busctl
 
 import (
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -244,5 +246,47 @@ func TestReadyFDFromEnv_LowFDRejected(t *testing.T) {
 	t.Setenv(ReadyFDEnv, "1")
 	if f := ReadyFDFromEnv(); f != nil {
 		t.Errorf("ReadyFDFromEnv should reject stdio fds, got %v", f)
+	}
+}
+
+// waitReady must surface the child's real startup error (written after the
+// 'E' byte) so consume shows WHY the bus failed, not an opaque message.
+func TestWaitReady_FailureSurfacesChildError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses Unix pipe")
+	}
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pr.Close()
+	const reason = "newPersonalStreamSource: token expired for corp dinga626"
+	go func() {
+		_, _ = pw.Write([]byte{'E'})
+		_, _ = io.WriteString(pw, reason)
+		_ = pw.Close()
+	}()
+	err = waitReady(pr)
+	if !errors.Is(err, ErrSpawnFailed) {
+		t.Fatalf("want ErrSpawnFailed, got %v", err)
+	}
+	if !strings.Contains(err.Error(), reason) {
+		t.Errorf("error must surface the child's real reason; got: %v", err)
+	}
+}
+
+// A bare 'E' (no trailing text) still reports ErrSpawnFailed.
+func TestWaitReady_BareFailureByte(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses Unix pipe")
+	}
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pr.Close()
+	go func() { _, _ = pw.Write([]byte{'E'}); _ = pw.Close() }()
+	if err := waitReady(pr); !errors.Is(err, ErrSpawnFailed) {
+		t.Fatalf("want ErrSpawnFailed, got %v", err)
 	}
 }

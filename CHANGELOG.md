@@ -6,8 +6,13 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Changed
+
+- **`event consume` AI-subprocess contract** — aligns personal event streaming with the contract an orchestrator can drive without guessing: a fixed stderr ready line `[event] ready event_key=<key> bus_pid=<pid>` (block on it, don't `sleep`); a final `[event] exited — received N event(s) in Xs (reason: limit|timeout|signal|bus_shutdown)` line with exit code 0 on controlled exit and non-zero (no `exited` line) on failure; stdin-EOF as a graceful shutdown signal, armed only for a parent-controlled pipe stdin on an unbounded run (an interactive TTY and `< /dev/null` never trigger it), with a self-explaining diagnostic when it fires; and ownership-based subscription cleanup — a subscription this run created is unsubscribed on any clean exit while a `--subscribe-id`-reused one is left intact (`--ephemeral` still forces cleanup), so `kill -9` is the only way to leak a server-side subscription. Skill docs (mono + `dingtalk-event`) document the contract; design notes in `docs/event-subprocess-contract.md`.
+
 ### Added
 
+- **`dws schema` for registered local commands** — `dws schema "event consume"` (or `event.consume`) now returns a machine-readable input schema synthesized from the command's cobra flags, in the same flat shape helper subtrees emit: `{description, path, source, parameters{<flag>:{type, required, description, default?}}}` plus an `arguments` array for positional inputs, with `source: "cobra"` distinguishing flag-synthesized schema from MCP-fetched (`mcp:<server>`). Intermediate nodes (`dws schema event`) list their subcommands. The mechanism is a reusable registry (`cobraSchemaRoots`); `event` is the first consumer and more command trees can opt in without further wiring. Inherited global flags and hidden internal flags are excluded so the schema describes just that command.
 - **Safe macOS Keychain → file-DEK migration** — `dws auth migrate-keychain --to file-dek` preflights every legacy/profile auth entry before rewriting, ignores unrelated application secrets, supports side-effect-free `--dry-run`, requires explicit `--yes`, and lets sandboxed and normal processes share an existing login without exposing tokens.
 
 ### Fixed

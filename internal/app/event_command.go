@@ -101,7 +101,9 @@ func newEventConsumeCommand() *cobra.Command {
   raw             仅 SDK 原始 payload，无外层封装
   compact         扁平化 + 解析嵌套 + 抽取语义字段（Agent 友好）
 
-默认使用当前 OAuth 登录态自动创建/复用个人订阅并建立个人长连接。
+默认使用当前 OAuth 登录态自动创建/复用个人订阅并建立个人长连接；非默认组织加
+--profile。连上后 stderr 打就绪行 [event] ready，等它出现再读 stdout；停机用
+SIGTERM、关 stdin，或 dws event stop <subscribe_id>，不要 kill -9。
 --event-types/--filter 只影响本地 bus → consume 这一段投递；普通个人事件消费
 通常不需要设置。`,
 		Args:              cobra.MaximumNArgs(1),
@@ -214,6 +216,11 @@ func newEventConsumeCommand() *cobra.Command {
 				DryRun:         dryRun,
 				SpawnExtraArgs: streamOpts.spawnArgs(),
 			}
+			// Arm the stdin-EOF shutdown watcher only for a pipe-style,
+			// unbounded run (see shouldWatchStdinEOF).
+			if shouldWatchStdinEOF(maxEvents, duration) {
+				cfg.Stdin = c.InOrStdin()
+			}
 
 			// Step 5: validation (flag-only rules).
 			if err := consume.ValidateConfig(cfg); err != nil {
@@ -260,7 +267,7 @@ func newEventConsumeCommand() *cobra.Command {
 	f.BoolVar(&dryRun, "dry-run", false,
 		"仅打印解析后的配置，不连接 bus / 云端")
 	f.BoolVar(&foreground, "foreground", false,
-		"不 fork daemon，当前进程跑 bus (systemd/k8s/launchd 友好)")
+		"当前进程直接跑 bus 服务、不 fork、不打印事件（给 systemd/k8s 托管用）；读事件不要用它")
 	f.StringVar(&personalOpts.SubscribeID, "subscribe-id", "",
 		"个人事件订阅 ID；传入后复用已有订阅")
 	f.StringVar(&personalOpts.Rule, "rule", "",
@@ -274,7 +281,10 @@ func newEventConsumeCommand() *cobra.Command {
 	f.DurationVar(&personalOpts.TTL, "ttl", 0,
 		"个人订阅 TTL (Go duration，如 24h；0 表示不过期)")
 	f.BoolVar(&personalOpts.Ephemeral, "ephemeral", false,
-		"consume 退出时自动取消个人订阅")
+		"强制退出时取消个人订阅。默认已按归属清理：本次新建的订阅退出即取消，"+
+			"用 --subscribe-id 复用的订阅保留。优雅停可用 SIGTERM、关闭 stdin，"+
+			"或从外部 dws event stop <subscribe_id>（会一并退订）；"+
+			"请勿 kill -9（会跳过退订、泄漏服务端订阅）")
 	f.StringVar(&personalOpts.UserID, "user", "",
 		"个人单聊对端 userId")
 	f.StringVar(&personalOpts.GroupID, "group", "",
@@ -457,7 +467,13 @@ func newEventBusCommand() *cobra.Command {
 			readyPipe := busctl.ReadyFDFromEnv()
 			failEarly := func(err error) error {
 				if readyPipe != nil {
+					// 'E' signals failure; the trailing text lets the parent
+					// (busctl.waitReady) surface the real startup error to the
+					// user instead of an opaque "startup failure on ready pipe".
 					_, _ = readyPipe.Write([]byte{'E'})
+					if err != nil {
+						_, _ = io.WriteString(readyPipe, err.Error())
+					}
 					_ = readyPipe.Close()
 				}
 				return err
@@ -1091,6 +1107,26 @@ func firstArg(args []string) string {
 		return ""
 	}
 	return args[0]
+}
+
+// shouldWatchStdinEOF gates the stdin-EOF shutdown watcher (AI-subprocess
+// contract). It arms only for a parent-controlled, pipe-style stdin on an
+// unbounded run:
+//   - bounded runs (--max-events / --duration) already have their own
+//     lifecycle, so stdin is irrelevant;
+//   - char devices (an interactive TTY, or /dev/null) are excluded, so a
+//     terminal Ctrl-D and the common `< /dev/null` launch do NOT trigger a
+//     surprise shutdown. Only a pipe / regular file — an stdin a parent
+//     holds and can close to stop us — arms the watcher.
+func shouldWatchStdinEOF(maxEvents int, duration time.Duration) bool {
+	if maxEvents > 0 || duration > 0 {
+		return false
+	}
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice == 0
 }
 
 // eventTypesWithDefault picks the catch-all list from registry when the
