@@ -32,6 +32,10 @@ When adding or changing an Agent-visible command, review all relevant inputs:
 
 - `internal/cli/schema_command_surface.json` for the stable public surface.
 - Runtime Schema annotations/root hints for the canonical command identity.
+- `internal/cli/schema_manual_hints.json` for reviewed inclusion of an
+  existing Cobra leaf and reviewed Schema-only flag projection overrides.
+- `internal/cli/schema_manual_hints.schema.json` is the machine-readable
+  editing contract for Manual Schema hints; read it before changing the JSON.
 - Flag-to-interface property mappings and required/default semantics.
 - `skills/mono/schema-hints/` for selection, interface, and safety metadata.
 - Generated files under `internal/cli/schema_agent_metadata/` and
@@ -41,6 +45,22 @@ Run the reverse-completeness tests whenever the Cobra tree changes. A command
 that works through `dws <path>` but cannot be found through the matching
 `dws schema` lookup is a contract failure unless it has a reviewed exact
 exclusion.
+
+Manual Schema hints must reference an exact public runnable Cobra leaf and
+real flags. They may override Schema description, interface-property/type
+mapping, `required`, and `required_when`; they must not create commands or
+flags, define an interface, or advertise an unknown RPC. Every entry requires
+`reviewed: true` and a non-empty reason.
+
+For Agent-authored Manual Schema hints:
+
+1. Preserve the `$schema` field and version.
+2. Confirm the exact command and flag names in the current Cobra tree.
+3. Add the smallest possible entry; do not copy generated Catalog fields into
+   the input.
+4. Describe user-visible semantics in `reason` and parameter descriptions.
+5. Run generation, drift, Schema policy, and the focused CLI tests before
+   proposing the change.
 
 ## Safety metadata
 

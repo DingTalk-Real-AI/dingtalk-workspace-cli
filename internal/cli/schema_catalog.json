@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "source_hash": "sha256:04a82edee19c649dba24216ac1ea90d6df2d1953307518499614186cf2e819ce",
+  "source_hash": "sha256:3e93a6610ff04533eff6758bdc71c758ed052f873a8206ccfaf35912706d581f",
   "surface_hash": "sha256:75c63f35d9b15dfb4df09136bfd250906751cfeb7f14bce08cf092097859baad",
   "catalog": {
     "agent_metadata": {
@@ -31331,7 +31331,7 @@
       "product_id": "chat",
       "reviewed": true,
       "risk": "medium",
-      "source": "hardcoded:chat",
+      "source": "manual-schema-hint",
       "title": "创建智能会话分组",
       "use_when": [
         "需要按群名称关键词或群成员自动归类会话时创建智能会话分组"

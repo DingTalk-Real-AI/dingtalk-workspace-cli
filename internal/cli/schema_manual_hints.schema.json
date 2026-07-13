@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/blob/main/internal/cli/schema_manual_hints.schema.json",
+  "title": "DWS Manual Schema Hints",
+  "description": "Agent-editable, human-reviewed inputs that expose an existing public Cobra leaf through DWS Schema and optionally correct the Schema projection of its existing flags. This file never creates commands, flags, or interfaces.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "version",
+    "commands"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "./schema_manual_hints.schema.json",
+      "description": "Keep this relative reference so editors and coding agents can discover this contract without network access."
+    },
+    "version": {
+      "const": 1,
+      "description": "Manual Schema Hint format version."
+    },
+    "commands": {
+      "type": "array",
+      "description": "Exact, reviewed Cobra leaves to expose or refine. Go validation rejects duplicate cli_path values and stale command or flag references.",
+      "items": {
+        "$ref": "#/$defs/commandHint"
+      },
+      "default": []
+    }
+  },
+  "$defs": {
+    "commandHint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cli_path",
+        "canonical_path",
+        "reason",
+        "reviewed"
+      ],
+      "properties": {
+        "cli_path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?:dws\\s+)?[^*?\\[\\]\\s]+(?:\\s+[^*?\\[\\]\\s]+)*$",
+          "description": "Exact path of an existing public runnable Cobra leaf, without flags or wildcard characters. Prefer omitting the leading 'dws'.",
+          "examples": [
+            "chat category create-smart"
+          ]
+        },
+        "canonical_path": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_.-]+$",
+          "description": "Stable product.tool identity exposed by dws schema. It must not conflict with an identity already attached to the Cobra command.",
+          "examples": [
+            "chat.create_smart_conv_category"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Reviewable explanation of why this command or parameter projection belongs in the stable Agent Schema. Describe intent, not implementation mechanics."
+        },
+        "reviewed": {
+          "const": true,
+          "description": "Must be true. Unreviewed entries fail generation."
+        },
+        "parameters": {
+          "type": "object",
+          "minProperties": 1,
+          "description": "Optional Schema-only corrections keyed by an existing Cobra flag name without '--'. These values do not change Cobra help, flag types, or execution validation.",
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/parameterHint"
+          }
+        }
+      }
+    },
+    "parameterHint": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Agent-facing CLI parameter description. State accepted input and conditions concisely; do not copy secrets or runtime-discovered content."
+        },
+        "property": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Interface payload property populated by this existing CLI flag."
+        },
+        "interface_type": {
+          "type": "string",
+          "enum": [
+            "string",
+            "array",
+            "object",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "description": "Type after CLI-to-interface conversion. This does not change the real Cobra flag type."
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Whether the flag is unconditionally required in the Agent-facing CLI contract. This does not add or remove Cobra execution validation."
+        },
+        "required_when": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Concise condition under which the flag is required. Use this instead of required=true for conditional requirements."
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "$schema": "./schema_manual_hints.schema.json",
+      "version": 1,
+      "commands": [
+        {
+          "cli_path": "chat category create-smart",
+          "canonical_path": "chat.create_smart_conv_category",
+          "reason": "Expose the existing smart-category helper and preserve its reviewed CLI-to-interface parameter projection.",
+          "reviewed": true,
+          "parameters": {
+            "name": {
+              "description": "分组名称 (必填)",
+              "property": "categoryName",
+              "required": true
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -78,3 +78,49 @@ Interface metadata may enrich type and description, but MCP `required` never pro
 ```
 
 Run `make generate-schema` after changing Hint or Skill sources. External Wukong metadata must be refreshed by the controlled offline import pipeline with an immutable revision, then committed together with its audit before regenerating the Catalog; runtime refresh is forbidden.
+
+## Manual Schema hints
+
+Agent semantic hints in this directory do not change the executable CLI
+contract. When an existing public Cobra leaf needs to enter Schema or its
+CLI-facing parameter projection needs a reviewed correction, edit
+`internal/cli/schema_manual_hints.json` instead. Each entry must use one exact
+`cli_path`, one canonical path, `reviewed: true`, and a non-empty reason.
+The file declares `internal/cli/schema_manual_hints.schema.json` through its
+top-level `$schema` field. Agents and editors should use that schema as the
+field-level source of truth instead of inferring the format from generated
+Catalog JSON.
+
+Manual hints may override Schema description, interface-property/type mapping,
+`required`, and `required_when` for flags that already exist on that command.
+They cannot create a command or flag, target a hidden/group command, define an
+interface, or mark an unknown RPC available. Missing commands and flags,
+wildcards, canonical conflicts, duplicate paths, and unreviewed entries fail
+generation.
+
+Commands intentionally kept outside Schema remain in the separate exact
+reviewed exclusion file `internal/cli/schema_command_exclusions.json`. An
+included command cannot also remain excluded: completeness validation treats
+that exclusion as stale.
+
+### Agent editing workflow
+
+1. Locate the real Cobra leaf and verify its exact path and current flags.
+2. Read `internal/cli/schema_manual_hints.schema.json`; preserve `$schema` and
+   `version` in the data file.
+3. Add only fields that need review. Do not repeat generated Agent metadata,
+   interface availability, examples, risk, or confirmation here.
+4. Use `property` and `interface_type` only for a real CLI-to-interface
+   conversion. `required` and `required_when` describe the Schema projection;
+   they do not modify Cobra execution validation.
+5. Run:
+
+   ```bash
+   make generate-schema
+   ./scripts/policy/check-generated-drift.sh
+   ./scripts/policy/check-schema-catalog.sh
+   go test ./internal/cli ./internal/app
+   ```
+
+6. Review the generated Catalog diff. A typical Manual Schema Hint change
+   should affect the intended tool and hashes, not unrelated commands.

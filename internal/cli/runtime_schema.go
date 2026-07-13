@@ -41,6 +41,7 @@ const (
 
 	runtimeSchemaFlagPropertyAnnotation     = "dws.schema.property"
 	runtimeSchemaFlagTypeAnnotation         = "dws.schema.type"
+	runtimeSchemaFlagDescriptionAnnotation  = "dws.schema.description"
 	runtimeSchemaFlagRequiredAnnotation     = "dws.schema.required"
 	runtimeSchemaFlagRequiredWhenAnnotation = "dws.schema.required_when"
 	runtimeSchemaFlagExampleAnnotation      = "dws.schema.example"
@@ -1091,7 +1092,10 @@ func runtimeCommandParameters(cmd *cobra.Command, canonicalPath string, hints ma
 		if hasHint && strings.TrimSpace(hint.Type) != "" {
 			interfaceType = strings.TrimSpace(hint.Type)
 		}
-		description := strings.TrimSpace(flag.Usage)
+		description := firstFlagAnnotation(flag, runtimeSchemaFlagDescriptionAnnotation)
+		if description == "" {
+			description = strings.TrimSpace(flag.Usage)
+		}
 		interfaceDescription := ""
 		if hasEmbeddedParam {
 			interfaceDescription = strings.TrimSpace(embeddedParam.Description)

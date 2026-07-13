@@ -1,0 +1,31 @@
+{
+  "$schema": "./schema_manual_hints.schema.json",
+  "version": 1,
+  "commands": [
+    {
+      "cli_path": "chat category create-smart",
+      "canonical_path": "chat.create_smart_conv_category",
+      "reason": "Expose the existing smart-category helper through the reviewed Agent Schema and preserve its CLI-to-interface parameter contract.",
+      "reviewed": true,
+      "parameters": {
+        "keywords": {
+          "description": "群名称关键词列表，逗号分隔（可选）",
+          "property": "groupNameKeywords",
+          "interface_type": "array",
+          "required": false
+        },
+        "members": {
+          "description": "群内成员 openDingTalkId 列表，逗号分隔（可选）",
+          "property": "memberOpenDingTalkIds",
+          "interface_type": "array",
+          "required": false
+        },
+        "name": {
+          "description": "分组名称 (必填)",
+          "property": "categoryName",
+          "required": true
+        }
+      }
+    }
+  ]
+}

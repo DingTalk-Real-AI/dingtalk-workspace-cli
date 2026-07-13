@@ -320,8 +320,9 @@ func EmbeddedSchemaCLIPaths() map[string]bool {
 // maps back to the executable Cobra tree. Missing paths indicate a release
 // contract drift and are asserted by catalog quality gates.
 type EmbeddedSchemaAnnotationReport struct {
-	Matched int
-	Missing []string
+	Matched         int
+	Missing         []string
+	ManualHintError string
 }
 
 // AnnotateEmbeddedSchemaCommands attaches the frozen release contract to the
@@ -329,6 +330,9 @@ type EmbeddedSchemaAnnotationReport struct {
 // catalog fallback commands are registered separately at low priority.
 func AnnotateEmbeddedSchemaCommands(root *cobra.Command) EmbeddedSchemaAnnotationReport {
 	report := EmbeddedSchemaAnnotationReport{}
+	if _, err := ApplyEmbeddedManualSchemaHints(root); err != nil {
+		report.ManualHintError = err.Error()
+	}
 	for _, definition := range EmbeddedSchemaCommandDefinitions() {
 		cmd := compatibleSchemaCommand(root, definition.CLIPath, definition)
 		if cmd == nil {

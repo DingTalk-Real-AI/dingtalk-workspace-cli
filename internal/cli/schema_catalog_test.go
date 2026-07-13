@@ -73,6 +73,30 @@ func TestEmbeddedSchemaCatalogProgressiveQueries(t *testing.T) {
 	}
 }
 
+func TestEmbeddedCatalogPreservesManualSchemaHintContract(t *testing.T) {
+	leaf, err := embeddedSchemaPayload([]string{"chat category create-smart"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := schemaString(leaf["source"]); got != "manual-schema-hint" {
+		t.Fatalf("source = %q, want manual-schema-hint", got)
+	}
+	parameters := schemaMap(leaf["parameters"])
+	name := parameters["name"]
+	if name["property"] != "categoryName" || name["required"] != true {
+		t.Fatalf("name parameter = %#v", name)
+	}
+	for flagName, property := range map[string]string{
+		"keywords": "groupNameKeywords",
+		"members":  "memberOpenDingTalkIds",
+	} {
+		parameter := parameters[flagName]
+		if parameter["property"] != property || parameter["interface_type"] != "array" || parameter["required"] != false {
+			t.Fatalf("%s parameter = %#v", flagName, parameter)
+		}
+	}
+}
+
 func TestCompatibleSchemaCommandPrefersMatchingAnnotatedAlias(t *testing.T) {
 	root := &cobra.Command{Use: "dws"}
 	chat := &cobra.Command{Use: "chat"}
