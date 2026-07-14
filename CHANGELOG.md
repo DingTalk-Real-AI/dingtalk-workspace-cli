@@ -6,11 +6,9 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
-### Added
+### Changed
 
-- **Declarative shortcut commands** (#592) — adds 366 `dws <service> +<command>` shortcuts across 16 services, including one-to-one MCP wrappers and multi-step smart workflows. Shortcuts publish stable Agent-visible contracts with named flags, validation and confirmation metadata, dry-run protection for writes, catalog/help routing, and optional local YAML extensions and usage recording.
-- **Sheet imports and Aitable workflow writes** (#624) — adds `dws sheet import` / `sheet import create` for converting local xlsx/xls files into new online sheets, `sheet import get` for polling import tasks, and `dws aitable workflow create/update` for applying validated `workflow-dsl/v1` definitions, with matching reviewed Agent Schema and bundled Skill guidance.
-- **Official multi-platform Homebrew channel** — stable `Formula/dingtalk-workspace-cli.rb` and keg-only `Formula/dingtalk-workspace-cli-beta.rb` live in this repository and select signed macOS Intel/Apple Silicon or Linux amd64/arm64 artifacts at install time. Stable and beta releases open isolated Formula update PRs after final artifact signing, so beta never replaces the stable Formula. Agent Skills stay under `pkgshare` without mutating the user's home directory, and both tracks are covered by the six-channel post-release verifier.
+- **Guarded prerelease and stable automation** — adds the guided `dws-release` entry for one-command CHANGELOG preparation, validation-only and annotated-tag publication flows; promotes only an explicitly validated beta; verifies command-tree compatibility and all six packaged binaries; and serializes immutable GitHub Release, npm channel, OSS, and optional Gitee delivery with fail-closed recovery checks.
 
 ### Fixed
 
@@ -41,10 +39,6 @@ This release seals the `v1.0.52` line with personal event subscriptions, a deter
 - **Connect daemon restart lifecycle** (#599) — pins the Stream SDK reconnect-race fix, snapshots the running executable before detaching, uses a real 30-second keepalive, and manages each worker as its own Unix process group so launcher cleanup or worker panics no longer cause restart loops or orphan local-agent processes.
 - **Complex Connect messages and attachments** (#606, #612) — rich-text messages retain all embedded pictures in order, queued turns keep every pending attachment, and unknown or future callback shapes reach each Agent backend with their message type and raw JSON instead of being discarded. Attachment recovery is locator-based, nested `chatRecord` pictures/audio/video/files can be recovered from message APIs after Stream ACK, and OpenCode uses a full-duration storyboard for large videos to avoid base64 OOMs while preserving the original download for the turn.
 - **macOS auth survives Keychain mode changes** (#597) — credential reads try existing compatible DEKs without creating key material, updates preserve the DEK that decrypted existing ciphertext, unreadable slots fail closed before token exchange, profile slots use the canonical auth backend, and `auth status` reports ciphertext/key mismatches instead of treating them as ordinary logout. Dedicated macOS race and Windows DPAPI coverage protect the cross-platform paths.
-
-### Changed
-
-- **Guarded prerelease and stable automation** — adds the guided `dws-release` entry for one-command CHANGELOG preparation, validation-only and annotated-tag publication flows; promotes only an explicitly validated beta; verifies command-tree compatibility and all six packaged binaries; and serializes immutable GitHub Release, npm channel, OSS, and optional Gitee delivery with fail-closed recovery checks.
 
 ## [1.0.51] - 2026-07-10
 

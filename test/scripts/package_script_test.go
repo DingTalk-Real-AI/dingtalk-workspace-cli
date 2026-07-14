@@ -33,32 +33,6 @@ var expectedPackagedSkillTargets = []string{
 	".hermes/skills/dws",
 }
 
-// seedDistArtifacts creates minimal goreleaser output archives and a
-// checksums.txt stub so post-goreleaser.sh can run without a real build.
-// Every archive is valid so the packaging tests exercise extraction for all
-// platforms; Darwin archives are additionally processed by the signing path.
-func seedDistArtifacts(t *testing.T, distDir string, targets []string) {
-	t.Helper()
-	if err := os.MkdirAll(distDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(%s) error = %v", distDir, err)
-	}
-
-	for _, target := range targets {
-		p := filepath.Join(distDir, target)
-		seedDistArchive(t, p)
-	}
-
-	// Create empty checksums.txt (goreleaser creates this)
-	checksums := filepath.Join(distDir, "checksums.txt")
-	var lines []string
-	for _, target := range targets {
-		lines = append(lines, "deadbeef00000000000000000000000000000000000000000000000000000000  "+target)
-	}
-	if err := os.WriteFile(checksums, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile(%s) error = %v", checksums, err)
-	}
-}
-
 func seedDistArchive(t *testing.T, path string) {
 	t.Helper()
 	file, err := os.Create(path)
@@ -103,10 +77,34 @@ func seedDistArchive(t *testing.T, path string) {
 	}
 }
 
-func postGoreleaserEnv(t *testing.T, distDir, releaseBaseURL string) []string {
+// seedDistArtifacts creates minimal goreleaser output archives and a
+// checksums.txt stub so post-goreleaser.sh can run without a real build.
+// Every archive is valid so the packaging tests exercise extraction for all
+// platforms; Darwin archives are additionally processed by the signing path.
+func seedDistArtifacts(t *testing.T, distDir string, targets []string) {
 	t.Helper()
-	trimmedBaseURL := strings.TrimRight(releaseBaseURL, "/")
-	version := trimmedBaseURL[strings.LastIndex(trimmedBaseURL, "/")+1:]
+	if err := os.MkdirAll(distDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", distDir, err)
+	}
+
+	for _, target := range targets {
+		p := filepath.Join(distDir, target)
+		seedDistArchive(t, p)
+	}
+
+	// Create empty checksums.txt (goreleaser creates this)
+	checksums := filepath.Join(distDir, "checksums.txt")
+	var lines []string
+	for _, target := range targets {
+		lines = append(lines, "deadbeef00000000000000000000000000000000000000000000000000000000  "+target)
+	}
+	if err := os.WriteFile(checksums, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", checksums, err)
+	}
+}
+
+func postGoreleaserEnv(t *testing.T, distDir, version, releaseBaseURL string) []string {
+	t.Helper()
 
 	binDir := t.TempDir()
 	fakeCodesign := filepath.Join(binDir, "codesign")
@@ -161,7 +159,7 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 	seedDistArtifacts(t, distDir, targets)
 
 	cmd := exec.Command("sh", scriptPath)
-	cmd.Env = postGoreleaserEnv(t, distDir, "https://downloads.example.com/dws/releases/v1.2.3")
+	cmd.Env = postGoreleaserEnv(t, distDir, "v1.2.3", "https://downloads.example.com/dws/releases/v1.2.3")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("post-goreleaser.sh error = %v\noutput:\n%s", err, string(output))
@@ -259,7 +257,7 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 
 	// Re-running post packaging must replace, not duplicate, the skills checksum.
 	cmd = exec.Command("sh", scriptPath)
-	cmd.Env = postGoreleaserEnv(t, distDir, "https://downloads.example.com/dws/releases/v1.2.3")
+	cmd.Env = postGoreleaserEnv(t, distDir, "v1.2.3", "https://downloads.example.com/dws/releases/v1.2.3")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("second post-goreleaser.sh error = %v\noutput:\n%s", err, output)
 	}
@@ -440,7 +438,7 @@ func TestPostGoreleaserAllPlatformNpmAssets(t *testing.T) {
 	seedDistArtifacts(t, distDir, allArchives)
 
 	cmd := exec.Command("sh", scriptPath)
-	cmd.Env = postGoreleaserEnv(t, distDir, "https://downloads.example.com/dws/releases/v9.9.9")
+	cmd.Env = postGoreleaserEnv(t, distDir, "v9.9.9", "https://downloads.example.com/dws/releases/v9.9.9")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("post-goreleaser.sh error = %v\noutput:\n%s", err, string(output))
@@ -533,7 +531,7 @@ func TestPostGoreleaserSkillsZipLayout(t *testing.T) {
 	seedDistArtifacts(t, distDir, targets)
 
 	cmd := exec.Command("sh", scriptPath)
-	cmd.Env = postGoreleaserEnv(t, distDir, "https://downloads.example.com/dws/releases/v0.0.0")
+	cmd.Env = postGoreleaserEnv(t, distDir, "v0.0.0-test", "https://downloads.example.com/dws/releases/v0.0.0")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("post-goreleaser.sh error = %v\noutput:\n%s", err, string(output))
@@ -608,38 +606,40 @@ func TestReleaseWorkflowUploadsPostProcessedDarwinAssets(t *testing.T) {
 	}
 	workflow := string(data)
 
+	build := strings.Index(workflow, "Build release artifacts without publishing")
 	postProcess := strings.Index(workflow, "./scripts/release/post-goreleaser.sh")
-	upload := strings.Index(workflow, "Upload finalized signed assets to release")
-	if postProcess == -1 || upload == -1 || upload < postProcess {
-		t.Fatalf("finalized asset upload must run after post-goreleaser.sh")
+	preserve := strings.Index(workflow, "Preserve finalized distribution files")
+	verifyJob := strings.Index(workflow, "verify-darwin-signatures:")
+	publishJob := strings.Index(workflow, "publish-release:")
+	if build == -1 || postProcess == -1 || preserve == -1 || verifyJob == -1 || publishJob == -1 ||
+		!(build < postProcess && postProcess < preserve && preserve < verifyJob && verifyJob < publishJob) {
+		t.Fatalf("post-processed assets must be preserved, Apple-verified, and only then published")
 	}
 
-	if !strings.Contains(workflow[upload:], "./scripts/release/finalize-github-release.sh") {
-		t.Fatal("release workflow must delegate atomic finalization to finalize-github-release.sh")
-	}
-
-	finalizePath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "finalize-github-release.sh"))
-	if err != nil {
-		t.Fatalf("Abs(finalize-github-release.sh) error = %v", err)
-	}
-	finalizeData, err := os.ReadFile(finalizePath)
-	if err != nil {
-		t.Fatalf("ReadFile(%s) error = %v", finalizePath, err)
-	}
-	finalize := string(finalizeData)
-
+	buildSection := workflow[build:verifyJob]
 	for _, required := range []string{
-		"dws-darwin-amd64.tar.gz",
-		"dws-darwin-arm64.tar.gz",
+		"--skip=publish",
+		"actions/upload-artifact@v4",
+		"finalized-release-dist",
+	} {
+		if !strings.Contains(buildSection, required) {
+			t.Errorf("signed build stage is missing %q", required)
+		}
+	}
+
+	publishSection := workflow[publishJob:]
+	for _, required := range []string{
+		"actions/download-artifact@v4",
+		"dist/dws-*.tar.gz",
+		"dist/dws-windows-*.zip",
 		"checksums.txt",
 		"dws-skills.zip",
 		"gh release upload",
-		"gh release view",
 		"--clobber",
-		"release asset digest mismatch",
+		"verify-release-artifacts.sh",
 	} {
-		if !strings.Contains(finalize, required) {
-			t.Errorf("finalized asset upload is missing %q", required)
+		if !strings.Contains(publishSection, required) {
+			t.Errorf("immutable publication stage is missing %q", required)
 		}
 	}
 }
@@ -658,7 +658,7 @@ func TestReleaseWorkflowConfiguresDeveloperIDSigning(t *testing.T) {
 	workflow := string(data)
 
 	prepare := strings.Index(workflow, "Prepare Apple Developer ID certificate")
-	goReleaser := strings.Index(workflow, "Run GoReleaser")
+	goReleaser := strings.Index(workflow, "Build release artifacts without publishing")
 	postProcess := strings.Index(workflow, "./scripts/release/post-goreleaser.sh")
 	cleanup := strings.Index(workflow, "Remove Apple Developer ID certificate")
 	if prepare == -1 || goReleaser == -1 || postProcess == -1 || cleanup == -1 ||
@@ -749,36 +749,35 @@ func TestReleaseWorkflowUsesAppleCodesignBeforePublication(t *testing.T) {
 	}
 	workflow := string(data)
 
-	upload := strings.Index(workflow, "Upload finalized signed assets to release")
+	preserve := strings.Index(workflow, "Preserve finalized distribution files")
 	verifyJob := strings.Index(workflow, "verify-darwin-signatures:")
 	publishJob := strings.Index(workflow, "publish-release:")
-	if upload == -1 || verifyJob == -1 || publishJob == -1 || !(upload < verifyJob && verifyJob < publishJob) {
-		t.Fatal("finalized Draft assets must be uploaded, Apple-verified, and only then published")
+	if preserve == -1 || verifyJob == -1 || publishJob == -1 || !(preserve < verifyJob && verifyJob < publishJob) {
+		t.Fatal("finalized artifacts must be preserved, Apple-verified, and only then published")
 	}
 
 	codesign := strings.Index(workflow[verifyJob:publishJob], "codesign --verify --strict --verbose=4")
-	publish := strings.Index(workflow[publishJob:], `gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false`)
+	publish := strings.Index(workflow[publishJob:], `gh release edit "$GITHUB_REF_NAME" --draft=false`)
 	if codesign == -1 || publish == -1 {
 		t.Fatal("macOS codesign verification and explicit Draft publication are required")
 	}
 
-	buildSection := workflow[upload:verifyJob]
+	buildSection := workflow[preserve:verifyJob]
 	for _, required := range []string{
-		`DWS_PUBLISH_RELEASE: "false"`,
 		"actions/upload-artifact@v4",
 		"finalized-release-dist",
 	} {
 		if !strings.Contains(buildSection, required) {
-			t.Errorf("Draft build stage is missing %q", required)
+			t.Errorf("signed build stage is missing %q", required)
 		}
 	}
 
 	verifySection := workflow[verifyJob:publishJob]
 	for _, required := range []string{
 		"runs-on: macos-latest",
-		"gh release download",
-		"dws-darwin-amd64.tar.gz",
-		"dws-darwin-arm64.tar.gz",
+		"actions/download-artifact@v4",
+		"finalized-release-dist",
+		`dws-darwin-${arch}.tar.gz`,
 		"codesign --verify --strict --verbose=4",
 	} {
 		if !strings.Contains(verifySection, required) {
@@ -790,13 +789,9 @@ func TestReleaseWorkflowUsesAppleCodesignBeforePublication(t *testing.T) {
 	for _, required := range []string{
 		"verify-darwin-signatures",
 		"actions/download-artifact@v4",
-		"Publish verified Draft release",
-		"Publish stable to npm",
-		"Publish prerelease to npm beta",
-		"Open stable Homebrew formula PR",
-		"Open beta Homebrew formula PR",
-		"DingTalk-Real-AI/dingtalk-workspace-cli.git",
-		"secrets.GITHUB_TOKEN",
+		"Publish or reuse immutable GitHub Release",
+		"gh release upload",
+		"Publish missing version to npm channel",
 	} {
 		if !strings.Contains(publishSection, required) {
 			t.Errorf("post-verification publication stage is missing %q", required)
