@@ -79,7 +79,7 @@ var Broadcast = shortcut.Shortcut{
 				sent = append(sent, user.name)
 				continue
 			}
-			if _, err := rt.CallMCPData("chat", "send_personal_message", map[string]any{
+			if _, err := rt.CallMCPWriteData("chat", "send_personal_message", map[string]any{
 				"receiverUserId": user.userID,
 				"msgType":        "markdown",
 				"content":        string(content),

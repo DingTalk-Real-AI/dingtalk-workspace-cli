@@ -87,9 +87,7 @@ var Book = shortcut.Shortcut{
 		}
 
 		// Under --dry-run we resolved names (reads) to validate them, but must not
-		// create the event or send invites: the create/invite/rollback steps below
-		// go through CallMCPData (which, unlike CallMCP, does not honour --dry-run).
-		// Preview what would happen and return.
+		// create the event or send invites. Preview what would happen and return.
 		if rt.DryRun() {
 			return rt.Output(map[string]any{
 				"dryRun":      true,
@@ -99,7 +97,7 @@ var Book = shortcut.Shortcut{
 		}
 
 		// Step 2 — create the event and pull the eventId from the response.
-		created, err := rt.CallMCPData("calendar", "create_calendar_event", createArgs)
+		created, err := rt.CallMCPWriteData("calendar", "create_calendar_event", createArgs)
 		if err != nil {
 			return err
 		}
@@ -110,13 +108,13 @@ var Book = shortcut.Shortcut{
 
 		// Step 3 — add all participants in one batch. attendeesToAdd copied
 		// verbatim from the helper's `attendee add` call site.
-		if _, err := rt.CallMCPData("calendar", "add_calendar_participant", map[string]any{
+		if _, err := rt.CallMCPWriteData("calendar", "add_calendar_participant", map[string]any{
 			"eventId":        eventID,
 			"attendeesToAdd": userIDs,
 		}); err != nil {
 			// Rollback: delete the just-created event so we never leave a
 			// half-built event without its intended attendees.
-			_, delErr := rt.CallMCPData("calendar", "delete_calendar_event", map[string]any{
+			_, delErr := rt.CallMCPWriteData("calendar", "delete_calendar_event", map[string]any{
 				"eventId": eventID,
 			})
 			if delErr != nil {

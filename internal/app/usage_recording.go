@@ -32,8 +32,9 @@ func newRecordingToolCaller(inner edition.ToolCaller) edition.ToolCaller {
 }
 
 func (r recordingToolCaller) CallTool(ctx context.Context, product, tool string, args map[string]any) (*edition.ToolResult, error) {
+	recordedArgs := cloneToolArgs(args)
 	res, err := r.inner.CallTool(ctx, product, tool, args)
-	usage.Append(product, tool, args, err == nil, r.inner.DryRun())
+	usage.Append(product, tool, recordedArgs, err == nil, r.inner.DryRun())
 	return res, err
 }
 
@@ -41,3 +42,14 @@ func (r recordingToolCaller) Format() string { return r.inner.Format() }
 func (r recordingToolCaller) DryRun() bool   { return r.inner.DryRun() }
 func (r recordingToolCaller) Fields() string { return r.inner.Fields() }
 func (r recordingToolCaller) JQ() string     { return r.inner.JQ() }
+
+func cloneToolArgs(args map[string]any) map[string]any {
+	if len(args) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(args))
+	for k, v := range args {
+		out[k] = v
+	}
+	return out
+}

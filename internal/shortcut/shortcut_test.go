@@ -14,6 +14,7 @@
 package shortcut
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -122,6 +123,44 @@ func TestBuildGroupsByService(t *testing.T) {
 }
 
 func noop(_ *RuntimeContext) error { return nil }
+
+func TestCallMCPWriteDataRejectsDryRun(t *testing.T) {
+	root := &cobra.Command{Use: "dws"}
+	root.PersistentFlags().Bool("dry-run", false, "")
+	cmd := &cobra.Command{Use: "x"}
+	root.AddCommand(cmd)
+	if err := root.PersistentFlags().Set("dry-run", "true"); err != nil {
+		t.Fatalf("set dry-run: %v", err)
+	}
+
+	rt := &RuntimeContext{cmd: cmd, shortcut: Shortcut{Service: "calendar"}}
+	_, err := rt.CallMCPWriteData("calendar", "create_calendar_event", map[string]any{"summary": "x"})
+	if err == nil {
+		t.Fatal("expected dry-run write guard error")
+	}
+	if !strings.Contains(err.Error(), "calendar/create_calendar_event") {
+		t.Fatalf("error = %q, want tool name", err.Error())
+	}
+}
+
+func TestCallMCPDataRejectsLikelyWriteUnderDryRun(t *testing.T) {
+	root := &cobra.Command{Use: "dws"}
+	root.PersistentFlags().Bool("dry-run", false, "")
+	cmd := &cobra.Command{Use: "x"}
+	root.AddCommand(cmd)
+	if err := root.PersistentFlags().Set("dry-run", "true"); err != nil {
+		t.Fatalf("set dry-run: %v", err)
+	}
+
+	rt := &RuntimeContext{cmd: cmd, shortcut: Shortcut{Service: "chat"}}
+	_, err := rt.CallMCPData("chat", "send_personal_message", map[string]any{"receiverUserId": "u"})
+	if err == nil {
+		t.Fatal("expected likely write guard error")
+	}
+	if !strings.Contains(err.Error(), "chat/send_personal_message") {
+		t.Fatalf("error = %q, want tool name", err.Error())
+	}
+}
 
 func TestValidationHelpers(t *testing.T) {
 	s := Shortcut{

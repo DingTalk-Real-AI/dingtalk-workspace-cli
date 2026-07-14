@@ -14,6 +14,7 @@
 package app
 
 import (
+	"log/slog"
 	"sort"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
@@ -33,7 +34,9 @@ func newLegacyPublicCommands(runner executor.Runner, caller edition.ToolCaller) 
 	// Load user-defined shortcuts (~/.dws/shortcuts/*.yaml) BEFORE compiling the
 	// command tree, so distilled high-frequency operations mount alongside the
 	// built-ins. Conflicts with built-ins are skipped inside Load.
-	_, _ = userdef.Load()
+	if _, err := userdef.Load(); err != nil {
+		slog.Warn("shortcut: failed to load user-defined shortcuts", "error", err)
+	}
 	// Built-in + user shortcuts (`dws <service> +<command>`) share the same
 	// command tree; mergeTopLevelCommands folds each shortcut's service parent
 	// into the matching helper command so the `+leaf` sits alongside existing

@@ -85,7 +85,7 @@ var ReplaceBatch = shortcut.Shortcut{
 		for _, p := range pairs {
 			// Params mirror helpers replace_minutes_text call site: taskUuid /
 			// originalText / replacedText.
-			_, callErr := rt.CallMCPData("minutes", "replace_minutes_text", map[string]any{
+			_, callErr := rt.CallMCPWriteData("minutes", "replace_minutes_text", map[string]any{
 				"taskUuid":     taskUUID,
 				"originalText": p.orig,
 				"replacedText": p.repl,

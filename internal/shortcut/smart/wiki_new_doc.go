@@ -78,9 +78,8 @@ var WikiNewDoc = shortcut.Shortcut{
 		// Step 3 — create the document node under the space root. workspaceId /
 		// name / type params copied verbatim from the helper's `wiki node create`
 		// call site (create_file lives on the doc MCP server, so route there
-		// explicitly via CallMCPData rather than this shortcut's own product;
-		// adoc = 在线文档). CallMCPData does not honour --dry-run, so guard the
-		// create explicitly: the search above is a read and already ran.
+		// explicitly rather than this shortcut's own product; adoc = 在线文档).
+		// Guard the create explicitly: the search above is a read and already ran.
 		if rt.DryRun() {
 			return rt.Output(map[string]any{
 				"dryRun":        true,
@@ -89,7 +88,7 @@ var WikiNewDoc = shortcut.Shortcut{
 				"wouldCreateIn": workspaceID,
 			})
 		}
-		created, err := rt.CallMCPData("doc", "create_file", map[string]any{
+		created, err := rt.CallMCPWriteData("doc", "create_file", map[string]any{
 			"workspaceId": workspaceID,
 			"name":        title,
 			"type":        "adoc",

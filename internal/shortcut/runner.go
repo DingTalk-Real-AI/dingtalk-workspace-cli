@@ -88,16 +88,55 @@ func (rt *RuntimeContext) CallMCP(tool string, params map[string]any) error {
 	return helpers.CallMCPToolOnServer(rt.shortcut.product(), tool, params)
 }
 
-// CallMCPData dispatches a tool call to an explicit MCP product and returns the
-// PARSED response as data WITHOUT printing. This is the building block for
-// multi-step ("smart") shortcuts: call a tool, read its output, feed it into the
-// next call. Errors carry DWS's auth/PAT/business classification.
+// CallMCPData dispatches a read-only tool call to an explicit MCP product and
+// returns the PARSED response as data WITHOUT printing. This is the building
+// block for multi-step ("smart") shortcuts: call a tool, read its output, feed
+// it into the next call. Errors carry DWS's auth/PAT/business classification.
 //
 // The product is explicit (not the shortcut's own) because smart shortcuts
 // routinely cross services — e.g. resolve a name via `contact` then act via
-// `chat`. Reads run even under --dry-run so a preview can still resolve inputs;
-// the terminal write via CallMCP still honours --dry-run.
+// `chat`. Reads run even under --dry-run so a preview can still resolve inputs.
+// Write tools that need parsed responses must use CallMCPWriteData instead; as
+// a backstop, obvious write-like tool names are rejected here under --dry-run.
 func (rt *RuntimeContext) CallMCPData(product, tool string, params map[string]any) (map[string]any, error) {
+	if rt.DryRun() && looksWriteTool(tool) {
+		return nil, dryRunWriteError(product, tool)
+	}
+	return rt.callMCPData(product, tool, params)
+}
+
+// CallMCPWriteData dispatches a write tool call and returns its parsed response.
+// Unlike CallMCPData, it refuses to run under --dry-run so smart shortcuts cannot
+// accidentally perform writes while rendering a preview.
+func (rt *RuntimeContext) CallMCPWriteData(product, tool string, params map[string]any) (map[string]any, error) {
+	if rt.DryRun() {
+		return nil, dryRunWriteError(product, tool)
+	}
+	return rt.callMCPData(product, tool, params)
+}
+
+func dryRunWriteError(product, tool string) error {
+	return apperrors.NewValidation(fmt.Sprintf(
+		"--dry-run 下禁止执行写操作 %s/%s；请在 shortcut 中输出 preview 后返回", product, tool))
+}
+
+func looksWriteTool(tool string) bool {
+	tool = strings.TrimSpace(strings.ToLower(tool))
+	for _, prefix := range []string{
+		"add_", "append_", "approve_", "archive_", "cancel_", "create_",
+		"delete_", "disable_", "enable_", "grant_", "import_", "insert_",
+		"invite_", "move_", "publish_", "reject_", "remove_", "replace_",
+		"respond", "revoke_", "send_", "set_", "submit_", "update_",
+		"upload_", "write_",
+	} {
+		if strings.HasPrefix(tool, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func (rt *RuntimeContext) callMCPData(product, tool string, params map[string]any) (map[string]any, error) {
 	if params == nil {
 		params = map[string]any{}
 	}
