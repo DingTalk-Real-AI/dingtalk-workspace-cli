@@ -25,16 +25,19 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
 
-// mediaMaxDownloadBytes caps a single inbound attachment download. Forwarded
-// videos are routinely larger than the old 20 MiB image-oriented limit, so the
-// connector allows up to 100 MiB but rejects larger payloads explicitly. It
+// mediaMaxDownloadBytes caps a single inbound attachment download. Real merged
+// forwards can contain high-resolution screen recordings above 250 MiB, so the
+// connector allows up to 512 MiB but rejects larger payloads explicitly. It
 // must never silently truncate a file and then tell an agent it has the
 // original content.
-const mediaMaxDownloadBytes = 100 << 20
+const mediaMaxDownloadBytes = 512 << 20
+
+const mediaDownloadTimeout = 5 * time.Minute
 
 // connectAttachmentMIME returns the best MIME type available for a downloaded
 // attachment. DingTalk's download API returns an opaque URL, so the connector
@@ -42,7 +45,12 @@ const mediaMaxDownloadBytes = 100 << 20
 // actual bytes before handing it to a multimodal backend.
 func connectAttachmentMIME(path string) string {
 	if typ := mime.TypeByExtension(strings.ToLower(filepath.Ext(path))); typ != "" {
-		return strings.TrimSpace(strings.SplitN(typ, ";", 2)[0])
+		typ = strings.TrimSpace(strings.SplitN(typ, ";", 2)[0])
+		// Generic .bin paths are common for DingTalk voice messages. Sniff their
+		// bytes instead of telling a multimodal backend they are opaque binary.
+		if typ != "application/octet-stream" {
+			return typ
+		}
 	}
 	f, err := os.Open(path)
 	if err != nil {
@@ -119,17 +127,29 @@ func richTextPictureDownloadCodes(content interface{}) []string {
 // recognisable or the connector silently drops legitimate file messages.
 type fileInboundInfo struct {
 	DownloadCode string
-	FileName     string
-	FileType     string
-	FilePath     string
-	MediaType    string
-	DentryID     int64
-	SpaceID      int64
-	FileSize     int64
+	// MediaID + message/conversation IDs identify media embedded in a
+	// forwarded chat record. DingTalk's Stream callback can erase these into
+	// unknownMsgType, while the user-state message API still preserves them.
+	MediaID            string
+	OpenMessageID      string
+	OpenConversationID string
+	// FileID is the dentryUuid returned by the user-state conversation API for
+	// forwarded files. It is resolved through drive.download_file.
+	FileID    string
+	FileName  string
+	FileType  string
+	FilePath  string
+	MediaType string
+	DentryID  int64
+	SpaceID   int64
+	FileSize  int64
 }
 
 func (f fileInboundInfo) hasActionable() bool {
-	return strings.TrimSpace(f.DownloadCode) != "" || (f.DentryID != 0 && f.SpaceID != 0)
+	return strings.TrimSpace(f.DownloadCode) != "" ||
+		(strings.TrimSpace(f.MediaID) != "" && strings.TrimSpace(f.OpenMessageID) != "" && strings.TrimSpace(f.OpenConversationID) != "") ||
+		strings.TrimSpace(f.FileID) != "" ||
+		(f.DentryID != 0 && f.SpaceID != 0)
 }
 
 // parseFileInbound reads every relevant field out of a file callback's
@@ -173,6 +193,8 @@ func parseFileInbound(content interface{}) fileInboundInfo {
 // or dentryId+spaceId.
 func inboundMediaType(msgtype string) string {
 	switch strings.ToLower(strings.TrimSpace(msgtype)) {
+	case "image", "picture":
+		return "image"
 	case "audio", "voice":
 		return "audio"
 	case "video":
@@ -478,7 +500,7 @@ func (c *aiCardClient) downloadMessageFileNamed(ctx context.Context, robotCode, 
 	if err != nil {
 		return "", err
 	}
-	resp, err := c.httpClient.Do(req)
+	resp, err := connectMediaDownloadClient(c.httpClient).Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -547,7 +569,7 @@ func (c *aiCardClient) downloadDentryFile(ctx context.Context, spaceID, dentryID
 	for k, v := range parsed.HeadersMap {
 		req.Header.Set(k, v)
 	}
-	resp, err := c.httpClient.Do(req)
+	resp, err := connectMediaDownloadClient(c.httpClient).Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -598,6 +620,28 @@ func writeCompleteMediaFile(dest string, src io.Reader) error {
 		return fmt.Errorf("媒体文件超过最大允许大小 %d 字节，未保存截断文件", mediaMaxDownloadBytes)
 	}
 	return nil
+}
+
+func connectMediaDownloadClient(base *http.Client) *http.Client {
+	if base == nil {
+		return &http.Client{Timeout: mediaDownloadTimeout}
+	}
+	clone := *base
+	if clone.Timeout <= 0 || clone.Timeout < mediaDownloadTimeout {
+		clone.Timeout = mediaDownloadTimeout
+	}
+	return &clone
+}
+
+func cleanupConnectMediaAttachments(attachments []connectMediaAttachment) {
+	root := filepath.Join(os.TempDir(), "dws-connect-media")
+	for _, attachment := range attachments {
+		path := filepath.Clean(strings.TrimSpace(attachment.LocalPath))
+		if path == "." || filepath.Dir(path) != root {
+			continue
+		}
+		_ = os.Remove(path)
+	}
 }
 
 // mediaExt picks a file extension from the response content type, falling

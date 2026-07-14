@@ -1082,17 +1082,18 @@ type connectExtras struct {
 }
 
 type connectQueuedTurn struct {
-	convID           string
-	text             string
-	picCodes         []string
-	fileInfos        []fileInboundInfo
-	webhook          string
-	msgID            string
-	msgType          string
-	senderStaffID    string
-	conversationID   string
-	conversationType string
-	callbackData     chatbot.BotCallbackDataModel
+	convID            string
+	text              string
+	picCodes          []string
+	fileInfos         []fileInboundInfo
+	chatRecordLookups []chatRecordLookup
+	webhook           string
+	msgID             string
+	msgType           string
+	senderStaffID     string
+	conversationID    string
+	conversationType  string
+	callbackData      chatbot.BotCallbackDataModel
 }
 
 func mergeConnectQueuedTurns(turns []connectQueuedTurn) connectQueuedTurn {
@@ -1116,9 +1117,11 @@ func mergeConnectQueuedTurns(turns []connectQueuedTurn) connectQueuedTurn {
 	merged.text = strings.Join(lines, "\n")
 	merged.picCodes = nil
 	merged.fileInfos = nil
+	merged.chatRecordLookups = nil
 	for i := range turns {
 		merged.picCodes = append(merged.picCodes, turns[i].picCodes...)
 		merged.fileInfos = append(merged.fileInfos, turns[i].fileInfos...)
+		merged.chatRecordLookups = append(merged.chatRecordLookups, turns[i].chatRecordLookups...)
 	}
 	return merged
 }
@@ -1222,6 +1225,7 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		// NO downloadCode. Both have to be recognisable or legit file messages
 		// get silently dropped below.
 		var fileInfos []fileInboundInfo
+		var chatRecordLookups []chatRecordLookup
 		switch strings.ToLower(msgtype) {
 		case "file", "audio", "voice", "video":
 			if info := parseTypedFileInbound(msgtype, data.Content); info.hasActionable() {
@@ -1232,7 +1236,16 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 			picCodes = append(picCodes, nestedPictures...)
 			fileInfos = append(fileInfos, nestedFiles...)
 			if unrecoverableCount > 0 {
-				fmt.Fprintf(os.Stderr, "[connect][media] chatRecord 中有 %d 条 unknownMsgType；回调未提供下载凭证，无法恢复原始内容 (msgId=%s)\n", unrecoverableCount, data.MsgId)
+				indexes := chatRecordUnknownIndexes(data.Content)
+				if strings.TrimSpace(data.MsgId) != "" && len(indexes) > 0 {
+					chatRecordLookups = append(chatRecordLookups, chatRecordLookup{
+						MsgID:          strings.TrimSpace(data.MsgId),
+						UnknownIndexes: indexes,
+					})
+					fmt.Fprintf(os.Stderr, "[connect][media] chatRecord 中有 %d 条 unknownMsgType，将在 ACK 后补拉原始内容 (msgId=%s)\n", unrecoverableCount, data.MsgId)
+				} else {
+					fmt.Fprintf(os.Stderr, "[connect][media] chatRecord 中有 %d 条 unknownMsgType，但缺少外层消息 ID，保留原始 JSON 降级处理\n", unrecoverableCount)
+				}
 			}
 		}
 		// Structured-text fallback: DingTalk leaves data.Text.Content blank on
@@ -1317,17 +1330,18 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		}
 		msgID := strings.TrimSpace(data.MsgId)
 		turn := connectQueuedTurn{
-			convID:           convID,
-			text:             text,
-			picCodes:         picCodes,
-			fileInfos:        fileInfos,
-			webhook:          webhook,
-			msgID:            msgID,
-			msgType:          msgtype,
-			senderStaffID:    strings.TrimSpace(data.SenderStaffId),
-			conversationID:   strings.TrimSpace(data.ConversationId),
-			conversationType: strings.TrimSpace(data.ConversationType),
-			callbackData:     *data,
+			convID:            convID,
+			text:              text,
+			picCodes:          picCodes,
+			fileInfos:         fileInfos,
+			chatRecordLookups: chatRecordLookups,
+			webhook:           webhook,
+			msgID:             msgID,
+			msgType:           msgtype,
+			senderStaffID:     strings.TrimSpace(data.SenderStaffId),
+			conversationID:    strings.TrimSpace(data.ConversationId),
+			conversationType:  strings.TrimSpace(data.ConversationType),
+			callbackData:      *data,
 		}
 		// Same-conversation agent calls never run in parallel; messages received
 		// while a turn is running are merged into one pending follow-up instead
@@ -1340,6 +1354,7 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 			text := turn.text
 			picCodes := turn.picCodes
 			fileInfos := turn.fileInfos
+			chatRecordLookups := turn.chatRecordLookups
 			webhook := turn.webhook
 			convID := turn.convID
 			msgID := turn.msgID
@@ -1392,6 +1407,27 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 			// Assemble the forwarded prompt: resolve an attached picture (the
 			// top Q&A inbound is an error screenshot), then knowledge-augment.
 			prompt := text
+			for _, lookup := range chatRecordLookups {
+				lookupCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+				enrichment, lookupErr := recoverChatRecordUnknowns(lookupCtx, lookup, callMCPToolReturnTextOnServer)
+				cancel()
+				if lookupErr != nil {
+					fmt.Fprintf(os.Stderr, "[connect][media] unknownMsgType 补拉失败，保留原始 JSON (msgId=%s): %v\n", lookup.MsgID, lookupErr)
+					continue
+				}
+				if strings.TrimSpace(enrichment.Prompt) != "" {
+					if strings.TrimSpace(prompt) == "" {
+						prompt = enrichment.Prompt
+					} else {
+						prompt += "\n\n" + enrichment.Prompt
+					}
+				}
+				fileInfos = append(fileInfos, enrichment.Files...)
+				fmt.Fprintf(os.Stderr, "[connect][media] unknownMsgType 补拉完成: 原始附件=%d 未定位=%d (msgId=%s)\n", len(enrichment.Files), enrichment.MissingCount, lookup.MsgID)
+				if enrichment.MissingCount > 0 {
+					prompt += fmt.Sprintf("\n（其中 %d 个转发附件仍未能定位原始文件，请明确告知用户未读取到这些附件。）", enrichment.MissingCount)
+				}
+			}
 			var attachments []connectMediaAttachment
 			for i, picCode := range picCodes {
 				localPath, derr := mediaCli.downloadMessageFile(context.Background(), clientID, picCode)
@@ -1424,6 +1460,9 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 				mediaLabel := "文件"
 				successPrompt := "请读取文件内容并回答"
 				switch mediaType {
+				case "image":
+					mediaLabel = "图片"
+					successPrompt = "请查看图片内容并回答"
 				case "audio":
 					mediaLabel = "语音"
 					successPrompt = "请听取或转写语音内容并回答"
@@ -1437,6 +1476,13 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 					localPath, derr = mediaCli.downloadMessageFileNamed(context.Background(), clientID, fileInfo.DownloadCode, fileName)
 					if derr != nil {
 						fmt.Fprintf(os.Stderr, "[connect][media] 第 %d 个%s下载失败: %v\n", i+1, mediaLabel, derr)
+					}
+				} else if fileInfo.MediaID != "" || fileInfo.FileID != "" {
+					downloadCtx, cancel := context.WithTimeout(context.Background(), mediaDownloadTimeout)
+					localPath, derr = mediaCli.downloadRecoveredChatRecordFile(downloadCtx, fileInfo)
+					cancel()
+					if derr != nil {
+						fmt.Fprintf(os.Stderr, "[connect][media] 第 %d 个转发%s原始内容下载失败: %v\n", i+1, mediaLabel, derr)
 					}
 				}
 				switch {
@@ -1499,6 +1545,14 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 					}
 				}
 			}
+			originalAttachments := append([]connectMediaAttachment(nil), attachments...)
+			defer cleanupConnectMediaAttachments(originalAttachments)
+			if _, isOpenCode := fwd.(*opencodeForwarder); isOpenCode {
+				prepareCtx, cancel := context.WithTimeout(context.Background(), mediaDownloadTimeout)
+				prompt, attachments = prepareOpenCodeAttachments(prepareCtx, prompt, attachments)
+				cancel()
+			}
+			defer cleanupConnectMediaAttachments(attachments)
 			if extras.kb != nil {
 				prompt = extras.kb.augment(prompt)
 			}

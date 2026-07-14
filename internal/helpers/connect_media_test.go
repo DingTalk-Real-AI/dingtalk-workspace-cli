@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -388,6 +389,18 @@ func TestMediaExt(t *testing.T) {
 		if got := mediaExt(tc.url, tc.ct); got != tc.want {
 			t.Fatalf("mediaExt(%q, %q) = %q, want %q", tc.url, tc.ct, got, tc.want)
 		}
+	}
+}
+
+func TestConnectAttachmentMIMESniffsGenericVoiceFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "voice.bin")
+	// Ogg capture pattern plus a minimal header is sufficient for
+	// http.DetectContentType to identify the real container.
+	if err := os.WriteFile(path, append([]byte("OggS\x00\x02"), make([]byte, 506)...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := connectAttachmentMIME(path); got != "application/ogg" {
+		t.Fatalf("connectAttachmentMIME() = %q, want application/ogg", got)
 	}
 }
 

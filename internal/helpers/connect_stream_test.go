@@ -8,6 +8,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -308,6 +309,20 @@ func TestMergeConnectQueuedTurnsPreservesAllAttachments(t *testing.T) {
 		if merged.fileInfos[i].DownloadCode != want {
 			t.Fatalf("merged fileInfos[%d] = %#v, want code %q", i, merged.fileInfos[i], want)
 		}
+	}
+}
+
+func TestMergeConnectQueuedTurnsKeepsEveryChatRecordLookup(t *testing.T) {
+	merged := mergeConnectQueuedTurns([]connectQueuedTurn{
+		{convID: "conv-1", text: "first", chatRecordLookups: []chatRecordLookup{{MsgID: "outer-1", UnknownIndexes: []int{1}}}},
+		{convID: "conv-1", text: "second", chatRecordLookups: []chatRecordLookup{{MsgID: "outer-2", UnknownIndexes: []int{0, 2}}}},
+	})
+	want := []chatRecordLookup{
+		{MsgID: "outer-1", UnknownIndexes: []int{1}},
+		{MsgID: "outer-2", UnknownIndexes: []int{0, 2}},
+	}
+	if !reflect.DeepEqual(merged.chatRecordLookups, want) {
+		t.Fatalf("chatRecordLookups = %#v, want %#v", merged.chatRecordLookups, want)
 	}
 }
 
