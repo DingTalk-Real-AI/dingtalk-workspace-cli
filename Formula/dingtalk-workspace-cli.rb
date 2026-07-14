@@ -1,5 +1,5 @@
 class DingtalkWorkspaceCli < Formula
-  desc "DingTalk Workspace CLI"
+  desc "Automate DingTalk workspace tasks from the terminal"
   homepage "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli"
   version "1.0.51"
   license "Apache-2.0"
@@ -30,8 +30,6 @@ class DingtalkWorkspaceCli < Formula
   end
 
   def install
-    require "fileutils"
-
     root = Dir["dws-*"].find { |entry| File.directory?(entry) } || "."
     binary = File.join(root, "dws")
     raise "binary not found: #{binary}" unless File.exist?(binary)
@@ -46,7 +44,7 @@ class DingtalkWorkspaceCli < Formula
     skill_dest = pkgshare/"skills/dws"
     skill_dest.mkpath
     resource("skills").stage do
-      FileUtils.cp_r(Dir["*"], skill_dest)
+      cp_r(Dir["*"], skill_dest)
     end
   end
 
