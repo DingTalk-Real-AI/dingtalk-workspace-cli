@@ -5,12 +5,96 @@
 package helpers
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 )
+
+type attachmentRecordingForwarder struct {
+	attachments []connectMediaAttachment
+}
+
+func (f *attachmentRecordingForwarder) label() string { return "recording" }
+func (f *attachmentRecordingForwarder) forward(context.Context, string, string) (string, error) {
+	return "text-only", nil
+}
+func (f *attachmentRecordingForwarder) forwardWithAttachments(_ context.Context, _ string, _ string, attachments []connectMediaAttachment) (string, error) {
+	f.attachments = append([]connectMediaAttachment(nil), attachments...)
+	return "with-attachments", nil
+}
+
+func TestForwardConnectTurnPreservesAttachmentsForCapableAgent(t *testing.T) {
+	fwd := &attachmentRecordingForwarder{}
+	want := []connectMediaAttachment{{LocalPath: "/tmp/original.mov", FileName: "original.mov", MediaType: "video"}}
+	reply, err := forwardConnectTurn(context.Background(), fwd, "conv", "prompt", want, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reply != "with-attachments" || len(fwd.attachments) != 1 || fwd.attachments[0] != want[0] {
+		t.Fatalf("reply=%q attachments=%#v", reply, fwd.attachments)
+	}
+}
+
+func TestExecForwarderAllowsOnlyAttachmentDirectory(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "args.log")
+	stub := filepath.Join(dir, "agent")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$DWS_ARGS_LOG\"\nprintf 'ok\\n'\n"
+	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	attachmentDir := t.TempDir()
+	attachmentPath := filepath.Join(attachmentDir, "report.md")
+	if err := os.WriteFile(attachmentPath, []byte("body"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f := &execForwarder{name: "workbuddy", argv: []string{stub, "-p"}, env: []string{"DWS_ARGS_LOG=" + logPath}, timeout: time.Second}
+	reply, err := f.forwardWithAttachments(context.Background(), "conv", "read it", []connectMediaAttachment{{LocalPath: attachmentPath, FileName: "report.md", MediaType: "file"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reply != "ok" {
+		t.Fatalf("reply = %q", reply)
+	}
+	raw, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := string(raw)
+	for _, want := range []string{"--allowedTools", "Read", "--add-dir", attachmentDir, "-p", "read it"} {
+		if !strings.Contains(args, want+"\n") {
+			t.Fatalf("args missing %q:\n%s", want, args)
+		}
+	}
+}
+
+func TestEveryStreamBridgeAgentHasAttachmentDeliveryPath(t *testing.T) {
+	implementations := map[string]any{
+		"claudecode": (*execForwarder)(nil),
+		"codebuddy":  (*execForwarder)(nil),
+		"workbuddy":  (*execForwarder)(nil),
+		"custom":     (*execForwarder)(nil),
+		"qoder":      (*qoderStreamForwarder)(nil),
+		"qoderwork":  (*qoderStreamForwarder)(nil),
+		"codex":      (*codexAppServerForwarder)(nil),
+		"opencode":   (*opencodeForwarder)(nil),
+		"gemini":     (*geminiAPIForwarder)(nil),
+	}
+	for channel := range agentSpecs {
+		impl, ok := implementations[channel]
+		if !ok {
+			t.Errorf("agent channel %q has no declared attachment delivery path", channel)
+			continue
+		}
+		if _, ok := impl.(attachmentForwarder); !ok {
+			t.Errorf("agent channel %q implementation %T is not attachment-aware", channel, impl)
+		}
+	}
+}
 
 // TestBrandReply covers the qoderwork identity rewrite using the exact replies
 // captured from a real qodercli (QoderWork.app) headless run.
@@ -197,6 +281,48 @@ func TestMergeConnectQueuedTurnsPreservesAllPictures(t *testing.T) {
 		if !strings.Contains(merged.text, text) {
 			t.Fatalf("merged prompt missing %q:\n%s", text, merged.text)
 		}
+	}
+}
+
+func TestMergeConnectQueuedTurnsPreservesAllAttachments(t *testing.T) {
+	merged := mergeConnectQueuedTurns([]connectQueuedTurn{
+		{
+			convID:    "conv-1",
+			text:      "第一批",
+			fileInfos: []fileInboundInfo{{DownloadCode: "audio-1", FileName: "语音消息", MediaType: "audio"}},
+			msgID:     "m1",
+		},
+		{
+			convID: "conv-1",
+			text:   "第二批",
+			fileInfos: []fileInboundInfo{
+				{DownloadCode: "video-1", FileName: "demo.mov", MediaType: "video"},
+				{DownloadCode: "file-1", FileName: "report.md", MediaType: "file"},
+			},
+			msgID: "m2",
+		},
+	})
+	if len(merged.fileInfos) != 3 {
+		t.Fatalf("merged fileInfos = %#v, want all three attachments", merged.fileInfos)
+	}
+	for i, want := range []string{"audio-1", "video-1", "file-1"} {
+		if merged.fileInfos[i].DownloadCode != want {
+			t.Fatalf("merged fileInfos[%d] = %#v, want code %q", i, merged.fileInfos[i], want)
+		}
+	}
+}
+
+func TestMergeConnectQueuedTurnsKeepsEveryChatRecordLookup(t *testing.T) {
+	merged := mergeConnectQueuedTurns([]connectQueuedTurn{
+		{convID: "conv-1", text: "first", chatRecordLookups: []chatRecordLookup{{MsgID: "outer-1", UnknownIndexes: []int{1}}}},
+		{convID: "conv-1", text: "second", chatRecordLookups: []chatRecordLookup{{MsgID: "outer-2", UnknownIndexes: []int{0, 2}}}},
+	})
+	want := []chatRecordLookup{
+		{MsgID: "outer-1", UnknownIndexes: []int{1}},
+		{MsgID: "outer-2", UnknownIndexes: []int{0, 2}},
+	}
+	if !reflect.DeepEqual(merged.chatRecordLookups, want) {
+		t.Fatalf("chatRecordLookups = %#v, want %#v", merged.chatRecordLookups, want)
 	}
 }
 
