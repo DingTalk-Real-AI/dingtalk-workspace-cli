@@ -66,6 +66,9 @@ func TestEmbeddedCatalogDoesNotProjectHardRequiredFlagsAsOptional(t *testing.T) 
 
 func TestEmbeddedCatalogLocalInterfacesAreExactAndReviewed(t *testing.T) {
 	wantReasons := map[string]string{
+		"audit.export":       "命令读取并导出本地审计日志文件，不绑定 pinned MCP RPC",
+		"audit.tail":         "命令读取本地审计日志尾部，不绑定 pinned MCP RPC",
+		"audit.verify":       "命令校验本地审计日志哈希链，不绑定 pinned MCP RPC",
 		"dev.connect_status": "命令仅操作本地进程或策略文件，不调用 MCP 接口",
 		"dev.connect_stop":   "命令仅操作本地进程或策略文件，不调用 MCP 接口",
 		"event.list":         "命令读取 CLI 内置的个人事件目录，不绑定 pinned MCP RPC",

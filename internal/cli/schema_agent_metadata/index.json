@@ -1,17 +1,17 @@
 {
   "version": 1,
-  "source_hash": "sha256:120232b606027b914cb2f0c6e1f451fc2ea5c02b99c535e9af4a9867c1c0c3ac",
-  "surface_hash": "sha256:efb97fcad7968fe1375d729a232df9978adcb1ec71eeaca1e18326d047906a99",
+  "source_hash": "sha256:01044ad3498433e4e27b26f5cfc38759a9504bc4c663ef15c491e33ec4053c72",
+  "surface_hash": "sha256:e858be68701d256818eccd085a6f7f97655835b9c7cbbce6275ed930c2436dc3",
   "coverage": {
-    "surface_products": 21,
-    "products_with_metadata": 21,
-    "surface_tools": 561,
-    "tools_with_metadata": 561,
-    "tools_with_agent_summary": 561,
-    "tools_with_use_when": 561,
-    "tools_with_avoid_when": 561,
-    "tools_with_examples": 561,
-    "tools_with_interface_mode": 561,
+    "surface_products": 22,
+    "products_with_metadata": 22,
+    "surface_tools": 564,
+    "tools_with_metadata": 564,
+    "tools_with_agent_summary": 564,
+    "tools_with_use_when": 564,
+    "tools_with_avoid_when": 564,
+    "tools_with_examples": 564,
+    "tools_with_interface_mode": 564,
     "unmatched_skill_tools": 125,
     "unreviewed_skill_tools": 7
   },
@@ -228,6 +228,74 @@
       ],
       "use_when": [
         "用户要查询或管理钉钉考勤数据、规则、排班、考勤组、审批表单或假期余额。"
+      ]
+    },
+    "audit": {
+      "agent_summary": "查看、导出和校验本地操作审计日志",
+      "agent_summary_source": "dws-agent-selection/audit",
+      "avoid_when": [
+        "查钉钉业务数据或发消息请用对应产品命令，不要用 audit"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "查看、导出和校验本地操作审计日志",
+          "source": "internal/cli/schema_hints/selection/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "查看、导出和校验本地操作审计日志",
+              "source": "internal/cli/schema_hints/selection/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "查钉钉业务数据或发消息请用对应产品命令，不要用 audit"
+          ],
+          "source": "internal/cli/schema_hints/selection/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": [
+                "查钉钉业务数据或发消息请用对应产品命令，不要用 audit"
+              ],
+              "source": "internal/cli/schema_hints/selection/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "需要排查本机 CLI 操作审计记录，或验证审计文件完整性"
+          ],
+          "source": "internal/cli/schema_hints/selection/audit.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": [
+                "需要排查本机 CLI 操作审计记录，或验证审计文件完整性"
+              ],
+              "source": "internal/cli/schema_hints/selection/audit.json",
+              "precedence": "reviewed_explicit",
+              "selected": true
+            }
+          ]
+        }
+      },
+      "source_refs": [
+        "CommandRegistry:product=audit",
+        "cobra-help:dws audit --help",
+        "internal/cli/schema_command_registry.json#audit",
+        "internal/cli/schema_hints/selection/audit.json"
+      ],
+      "use_when": [
+        "需要排查本机 CLI 操作审计记录，或验证审计文件完整性"
       ]
     },
     "calendar": {
@@ -1519,6 +1587,7 @@
     "aisearch",
     "aitable",
     "attendance",
+    "audit",
     "calendar",
     "chat",
     "contact",
