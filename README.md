@@ -289,6 +289,8 @@ Until an isolated instance is explicitly created, DWS performs no registry write
 
 After explicit opt-in, `auth reset` is scoped to the current instance—including `default`—so it never removes another instance's login state or shared application configuration.
 
+Auth-state changes are protected by operating-system file locks. Operations on the same Auth Instance are serialized across DWS processes, while different instances use different lock files and can proceed in parallel. Registry updates use a separate short-lived lock; OAuth authorization and instance token/profile I/O never run under the global Registry lock.
+
 </details>
 
 <details>

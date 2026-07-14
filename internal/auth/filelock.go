@@ -37,7 +37,7 @@ var processLocks sync.Map // map[string]chan struct{}
 
 // processLockKey generates a unique key for process-level locking.
 func processLockKey(configDir string) string {
-	return "refresh:" + configDir
+	return "refresh:" + authStoreRuntimeKey(configDir)
 }
 
 // acquireProcessLock attempts to acquire the process-level lock.
@@ -93,6 +93,17 @@ type tokenFileLock struct {
 // It blocks (with timeout) if another process holds the lock.
 // The caller MUST call release() when done.
 func acquireTokenLock(configDir string) (*tokenFileLock, error) {
+	return acquireTokenLockContext(context.Background(), configDir)
+}
+
+// acquireTokenLockContext is the context-aware form used by higher-level auth
+// instance operations. The operating-system lock is always attempted in
+// non-blocking mode so cancellation and the DWS lock timeout remain effective
+// on every supported platform.
+func acquireTokenLockContext(ctx context.Context, configDir string) (*tokenFileLock, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if err := os.MkdirAll(configDir, config.DirPerm); err != nil {
 		return nil, fmt.Errorf("creating config dir for lock: %w", err)
 	}
@@ -105,16 +116,35 @@ func acquireTokenLock(configDir string) (*tokenFileLock, error) {
 
 	deadline := time.Now().Add(config.LockTimeout)
 	for {
+		select {
+		case <-ctx.Done():
+			_ = f.Close()
+			return nil, ctx.Err()
+		default:
+		}
 		if err := lockFile(f); err == nil {
 			return &tokenFileLock{path: lockPath, file: f}, nil
 		}
 
-		if time.Now().After(deadline) {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
 			_ = f.Close()
 			return nil, fmt.Errorf("timeout acquiring token lock after %v (another dws process may be running)", config.LockTimeout)
 		}
-
-		time.Sleep(lockRetryDelay)
+		wait := lockRetryDelay
+		if remaining < wait {
+			wait = remaining
+		}
+		timer := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			_ = f.Close()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
 	}
 }
 
@@ -134,6 +164,7 @@ func (l *tokenFileLock) release() {
 type DualLock struct {
 	processRelease func()
 	fileLock       *tokenFileLock
+	selectionMu    *sync.RWMutex
 	Waited         bool // true if we waited for another goroutine/process
 }
 
@@ -144,9 +175,26 @@ type DualLock struct {
 //
 // The caller MUST call Release() when done.
 func AcquireDualLock(ctx context.Context, configDir string) (*DualLock, error) {
-	// Only user login state is auth-instance-scoped. Callers continue passing the
-	// stable base config directory; the runtime selection chooses its lock root.
-	authDir := ResolveAuthStore(configDir).ConfigDir
+	// Pin the process-local selection for the complete critical section. Helpers
+	// called after this function returns may resolve the store again; the read
+	// lock guarantees they keep seeing the same ConfigDir and Keychain service.
+	selectionMu := authStoreSelectionMutex(configDir)
+	selectionMu.RLock()
+	store := ResolveAuthStore(configDir)
+	lock, err := acquireDualLockAt(ctx, store.ConfigDir)
+	if err != nil {
+		selectionMu.RUnlock()
+		return nil, err
+	}
+	lock.selectionMu = selectionMu
+	return lock, nil
+}
+
+// acquireDualLockAt locks one already-resolved auth store directory. It does
+// not consult or pin the global current-instance pointer, which lets callers
+// safely operate on an explicit instance while another instance proceeds in
+// parallel.
+func acquireDualLockAt(ctx context.Context, authDir string) (*DualLock, error) {
 	// 1. Acquire process-level lock first (fast, in-memory)
 	processRelease, waited, err := acquireProcessLock(ctx, authDir)
 	if err != nil {
@@ -154,7 +202,7 @@ func AcquireDualLock(ctx context.Context, configDir string) (*DualLock, error) {
 	}
 
 	// 2. Acquire file-level lock (cross-process)
-	fileLock, err := acquireTokenLock(authDir)
+	fileLock, err := acquireTokenLockContext(ctx, authDir)
 	if err != nil {
 		processRelease() // Release process lock on failure
 		return nil, fmt.Errorf("acquiring file lock: %w", err)
@@ -176,5 +224,9 @@ func (d *DualLock) Release() {
 	if d.processRelease != nil {
 		d.processRelease()
 		d.processRelease = nil
+	}
+	if d.selectionMu != nil {
+		d.selectionMu.RUnlock()
+		d.selectionMu = nil
 	}
 }

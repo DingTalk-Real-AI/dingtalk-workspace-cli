@@ -14,11 +14,13 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -98,9 +100,10 @@ type authRegistry struct {
 }
 
 var (
-	runtimeAuthStores sync.Map // normalized base config dir -> AuthStore
-	registryLocks     sync.Map // normalized base config dir -> *sync.Mutex
-	pendingAuthTxs    sync.Map // isolated keychain service -> *NewInstanceTransaction
+	runtimeAuthStores     sync.Map // normalized base config dir -> AuthStore
+	runtimeAuthStoreLocks sync.Map // normalized base config dir -> *sync.RWMutex
+	registryLocks         sync.Map // normalized base config dir -> *sync.Mutex
+	pendingAuthTxs        sync.Map // isolated keychain service -> *NewInstanceTransaction
 )
 
 // ResolveAuthStore is deliberately side-effect free. Unless an instance was
@@ -118,7 +121,10 @@ func ResolveAuthStore(baseConfigDir string) AuthStore {
 // DeactivateAuthStore clears only the process-local selection. It never
 // changes registry.json or deletes credentials.
 func DeactivateAuthStore(baseConfigDir string) {
-	runtimeAuthStores.Delete(authStoreRuntimeKey(baseConfigDir))
+	mu := authStoreSelectionMutex(baseConfigDir)
+	mu.Lock()
+	deactivateAuthStoreLocked(baseConfigDir)
+	mu.Unlock()
 }
 
 // AuthRegistryPath returns the fixed registry location for one DWS config
@@ -132,29 +138,33 @@ func AuthRegistryPath(baseConfigDir string) string {
 // keeps the historical configDir + dws-cli coordinate. A malformed registry
 // fails closed instead of falling back to unrelated legacy credentials.
 func ActivateCurrentInstance(baseConfigDir string) (AuthStore, error) {
+	mu := authStoreSelectionMutex(baseConfigDir)
+	mu.Lock()
+	defer mu.Unlock()
+
 	registry, exists, err := readAuthRegistry(baseConfigDir)
 	if err != nil {
-		DeactivateAuthStore(baseConfigDir)
+		deactivateAuthStoreLocked(baseConfigDir)
 		return AuthStore{}, err
 	}
 	if !exists {
-		DeactivateAuthStore(baseConfigDir)
+		deactivateAuthStoreLocked(baseConfigDir)
 		return ResolveAuthStore(baseConfigDir), nil
 	}
 	instance := findAuthInstanceByID(&registry, registry.CurrentInstanceID)
 	if instance == nil {
-		DeactivateAuthStore(baseConfigDir)
+		deactivateAuthStoreLocked(baseConfigDir)
 		return AuthStore{}, fmt.Errorf("invalid auth registry: current instance %q not found", registry.CurrentInstanceID)
 	}
 	if authHooksOwnTokenStorage() && instance.Kind == AuthInstanceKindIsolated {
-		DeactivateAuthStore(baseConfigDir)
+		deactivateAuthStoreLocked(baseConfigDir)
 		return AuthStore{}, fmt.Errorf(
 			"%w: selected instance %q is isolated; switch it with an edition that uses the standard DWS auth store, or use a separate DWS_CONFIG_DIR",
 			ErrAuthInstanceIsolationUnsupported, instance.Alias,
 		)
 	}
 	store := authStoreForInstance(baseConfigDir, *instance)
-	setRuntimeAuthStore(baseConfigDir, store)
+	setRuntimeAuthStoreLocked(baseConfigDir, store)
 	return store, nil
 }
 
@@ -181,6 +191,9 @@ func UseAuthInstance(baseConfigDir, selector string) (AuthInstance, error) {
 
 	var selected AuthInstance
 	var selectedStore AuthStore
+	selectionMu := authStoreSelectionMutex(baseConfigDir)
+	selectionMu.Lock()
+	defer selectionMu.Unlock()
 	err := withAuthRegistryLock(baseConfigDir, func() error {
 		registry, exists, err := readAuthRegistry(baseConfigDir)
 		if err != nil {
@@ -206,7 +219,6 @@ func UseAuthInstance(baseConfigDir, selector string) (AuthInstance, error) {
 		selected = *instance
 		selectedStore = authStoreForInstance(baseConfigDir, selected)
 		if selected.ID == registry.CurrentInstanceID {
-			setRuntimeAuthStore(baseConfigDir, selectedStore)
 			return nil
 		}
 		registry.PreviousInstanceID = registry.CurrentInstanceID
@@ -215,12 +227,12 @@ func UseAuthInstance(baseConfigDir, selector string) (AuthInstance, error) {
 		if err := writeAuthRegistry(baseConfigDir, registry); err != nil {
 			return err
 		}
-		setRuntimeAuthStore(baseConfigDir, selectedStore)
 		return nil
 	})
 	if err != nil {
 		return AuthInstance{}, err
 	}
+	setRuntimeAuthStoreLocked(baseConfigDir, selectedStore)
 	return selected, nil
 }
 
@@ -238,6 +250,7 @@ type NewInstanceTransaction struct {
 	previousWasExplicit     bool
 	writtenKeychainAccounts map[string]struct{}
 	done                    bool
+	closing                 bool
 }
 
 // BeginNewInstance process-activates a fresh isolated store without copying
@@ -254,6 +267,9 @@ func BeginNewInstance(baseConfigDir, alias string) (*NewInstanceTransaction, err
 	if err != nil {
 		return nil, err
 	}
+	selectionMu := authStoreSelectionMutex(baseConfigDir)
+	selectionMu.Lock()
+	defer selectionMu.Unlock()
 
 	registry, exists, err := readAuthRegistry(baseConfigDir)
 	if err != nil {
@@ -310,7 +326,7 @@ func BeginNewInstance(baseConfigDir, alias string) (*NewInstanceTransaction, err
 		writtenKeychainAccounts: make(map[string]struct{}),
 	}
 	pendingAuthTxs.Store(store.KeychainService, tx)
-	setRuntimeAuthStore(baseConfigDir, store)
+	setRuntimeAuthStoreLocked(baseConfigDir, store)
 	return tx, nil
 }
 
@@ -337,12 +353,52 @@ func (tx *NewInstanceTransaction) Commit() error {
 		return fmt.Errorf("nil auth instance transaction")
 	}
 	tx.mu.Lock()
-	defer tx.mu.Unlock()
 	if tx.done {
+		tx.mu.Unlock()
 		return fmt.Errorf("auth instance transaction is already closed")
 	}
+	if tx.closing {
+		tx.mu.Unlock()
+		return fmt.Errorf("auth instance transaction is already being closed")
+	}
+	tx.closing = true
+	tx.mu.Unlock()
+	completed := false
+	defer func() {
+		if completed {
+			return
+		}
+		tx.mu.Lock()
+		tx.closing = false
+		tx.mu.Unlock()
+	}()
 
-	err := withAuthRegistryLock(tx.baseConfigDir, func() error {
+	// Lock order is selection -> instance store(s) -> Registry. OAuth/network
+	// work has already completed before Commit, so these locks cover only the
+	// local publication boundary. Sorting instance paths prevents two first-time
+	// commits from acquiring the legacy and pending stores in opposite orders.
+	selectionMu := authStoreSelectionMutex(tx.baseConfigDir)
+	selectionMu.Lock()
+	defer selectionMu.Unlock()
+	stores := []AuthStore{tx.store}
+	if !tx.expectedRegistryExists {
+		// The first opt-in is also the boundary where legacy full-reset semantics
+		// stop applying. Share the stable default-instance lock so Registry cannot
+		// appear midway through a legacy reset's shared-config cleanup.
+		stores = append(stores, legacyAuthStore(tx.baseConfigDir, AuthInstance{}))
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), config.LockTimeout)
+	defer cancel()
+	locks, err := acquireAuthStoreLocks(ctx, stores...)
+	if err != nil {
+		return err
+	}
+	defer releaseAuthStoreLocks(locks)
+	if err := ensurePrivateAuthStoreDirs(tx.store); err != nil {
+		return err
+	}
+
+	err = withAuthRegistryLock(tx.baseConfigDir, func() error {
 		current, exists, err := readAuthRegistry(tx.baseConfigDir)
 		if err != nil {
 			return err
@@ -353,17 +409,18 @@ func (tx *NewInstanceTransaction) Commit() error {
 		if exists && current.Revision != tx.expectedRevision {
 			return ErrAuthRegistryConflict
 		}
-		if err := ensurePrivateAuthStoreDirs(tx.store); err != nil {
-			return err
-		}
 		return writeAuthRegistry(tx.baseConfigDir, tx.pending)
 	})
 	if err != nil {
 		return err
 	}
+	tx.mu.Lock()
 	tx.done = true
+	tx.closing = false
+	tx.mu.Unlock()
 	pendingAuthTxs.Delete(tx.store.KeychainService)
-	setRuntimeAuthStore(tx.baseConfigDir, tx.store)
+	setRuntimeAuthStoreLocked(tx.baseConfigDir, tx.store)
+	completed = true
 	return nil
 }
 
@@ -375,18 +432,63 @@ func (tx *NewInstanceTransaction) Rollback() error {
 		return nil
 	}
 	tx.mu.Lock()
-	defer tx.mu.Unlock()
 	if tx.done {
+		tx.mu.Unlock()
 		return nil
 	}
-	tx.done = true
-	pendingAuthTxs.Delete(tx.store.KeychainService)
-	cleanupErr := cleanupUncommittedAuthStore(tx.store, tx.writtenKeychainAccounts)
-	if tx.previousWasExplicit {
-		setRuntimeAuthStore(tx.baseConfigDir, tx.previousStore)
-	} else {
-		DeactivateAuthStore(tx.baseConfigDir)
+	if tx.closing {
+		tx.mu.Unlock()
+		return fmt.Errorf("auth instance transaction is already being closed")
 	}
+	tx.closing = true
+	tx.mu.Unlock()
+	completed := false
+	defer func() {
+		if completed {
+			return
+		}
+		tx.mu.Lock()
+		tx.closing = false
+		tx.mu.Unlock()
+	}()
+
+	selectionMu := authStoreSelectionMutex(tx.baseConfigDir)
+	selectionMu.Lock()
+	defer selectionMu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), config.LockTimeout)
+	defer cancel()
+	locks, err := acquireAuthStoreLocks(ctx, tx.store)
+	if err != nil {
+		return err
+	}
+
+	// No current-store writer can begin while the selection write lock is held,
+	// and acquiring the pending store lock waits for any writer already in flight.
+	tx.mu.Lock()
+	writtenAccounts := make(map[string]struct{}, len(tx.writtenKeychainAccounts))
+	for account := range tx.writtenKeychainAccounts {
+		writtenAccounts[account] = struct{}{}
+	}
+	tx.mu.Unlock()
+	cleanupErr := cleanupUncommittedAuthStoreData(tx.store, writtenAccounts)
+	releaseAuthStoreLocks(locks)
+	// Windows cannot remove a directory containing an open LockFileEx handle;
+	// remove the now-unpublished directory only after releasing its data lock.
+	if err := removeUncommittedAuthStoreDir(tx.store); cleanupErr == nil {
+		cleanupErr = err
+	}
+
+	tx.mu.Lock()
+	tx.done = true
+	tx.closing = false
+	tx.mu.Unlock()
+	pendingAuthTxs.Delete(tx.store.KeychainService)
+	if tx.previousWasExplicit {
+		setRuntimeAuthStoreLocked(tx.baseConfigDir, tx.previousStore)
+	} else {
+		deactivateAuthStoreLocked(tx.baseConfigDir)
+	}
+	completed = true
 	return cleanupErr
 }
 
@@ -416,7 +518,24 @@ func authStoreForInstance(baseConfigDir string, instance AuthInstance) AuthStore
 }
 
 func setRuntimeAuthStore(baseConfigDir string, store AuthStore) {
+	mu := authStoreSelectionMutex(baseConfigDir)
+	mu.Lock()
+	setRuntimeAuthStoreLocked(baseConfigDir, store)
+	mu.Unlock()
+}
+
+func setRuntimeAuthStoreLocked(baseConfigDir string, store AuthStore) {
 	runtimeAuthStores.Store(authStoreRuntimeKey(baseConfigDir), store)
+}
+
+func deactivateAuthStoreLocked(baseConfigDir string) {
+	runtimeAuthStores.Delete(authStoreRuntimeKey(baseConfigDir))
+}
+
+func authStoreSelectionMutex(baseConfigDir string) *sync.RWMutex {
+	key := authStoreRuntimeKey(baseConfigDir)
+	value, _ := runtimeAuthStoreLocks.LoadOrStore(key, &sync.RWMutex{})
+	return value.(*sync.RWMutex)
 }
 
 func authStoreRuntimeKey(baseConfigDir string) string {
@@ -425,6 +544,39 @@ func authStoreRuntimeKey(baseConfigDir string) string {
 		clean = absolute
 	}
 	return clean
+}
+
+func acquireAuthStoreLocks(ctx context.Context, stores ...AuthStore) ([]*DualLock, error) {
+	dirsByKey := make(map[string]string, len(stores))
+	keys := make([]string, 0, len(stores))
+	for _, store := range stores {
+		if strings.TrimSpace(store.ConfigDir) == "" {
+			continue
+		}
+		key := authStoreRuntimeKey(store.ConfigDir)
+		if _, exists := dirsByKey[key]; exists {
+			continue
+		}
+		dirsByKey[key] = store.ConfigDir
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	locks := make([]*DualLock, 0, len(keys))
+	for _, key := range keys {
+		lock, err := acquireDualLockAt(ctx, dirsByKey[key])
+		if err != nil {
+			releaseAuthStoreLocks(locks)
+			return nil, err
+		}
+		locks = append(locks, lock)
+	}
+	return locks, nil
+}
+
+func releaseAuthStoreLocks(locks []*DualLock) {
+	for i := len(locks) - 1; i >= 0; i-- {
+		locks[i].Release()
+	}
 }
 
 func authRegistryRoot(baseConfigDir string) string {
@@ -451,6 +603,84 @@ func readAuthRegistry(baseConfigDir string) (authRegistry, bool, error) {
 		return authRegistry{}, true, err
 	}
 	return registry, true, nil
+}
+
+type currentAuthStoreSnapshot struct {
+	store          AuthStore
+	registryExists bool
+	revision       int64
+	currentID      string
+}
+
+func readCurrentAuthStoreSnapshot(baseConfigDir string) (currentAuthStoreSnapshot, error) {
+	registry, exists, err := readAuthRegistry(baseConfigDir)
+	if err != nil {
+		return currentAuthStoreSnapshot{}, err
+	}
+	if !exists {
+		return currentAuthStoreSnapshot{store: legacyAuthStore(baseConfigDir, AuthInstance{})}, nil
+	}
+	instance := findAuthInstanceByID(&registry, registry.CurrentInstanceID)
+	if instance == nil {
+		return currentAuthStoreSnapshot{}, fmt.Errorf("invalid auth registry: current instance %q not found", registry.CurrentInstanceID)
+	}
+	return currentAuthStoreSnapshot{
+		store:          authStoreForInstance(baseConfigDir, *instance),
+		registryExists: true,
+		revision:       registry.Revision,
+		currentID:      registry.CurrentInstanceID,
+	}, nil
+}
+
+func (s currentAuthStoreSnapshot) sameSelection(other currentAuthStoreSnapshot) bool {
+	return s.registryExists == other.registryExists &&
+		s.revision == other.revision &&
+		s.currentID == other.currentID &&
+		authStoreRuntimeKey(s.store.ConfigDir) == authStoreRuntimeKey(other.store.ConfigDir) &&
+		s.store.KeychainService == other.store.KeychainService
+}
+
+// withLockedCurrentAuthStore linearizes a current-instance mutation without
+// holding the global Registry lock across instance data I/O:
+//
+//  1. snapshot the Registry using its atomic file contract;
+//  2. acquire only that instance's process + operating-system file lock;
+//  3. re-read and validate revision/current ID while the instance lock is held;
+//  4. retry if auth use/new-instance won the race, otherwise mutate the fixed
+//     ConfigDir + KeychainService passed to fn.
+//
+// A Registry change after step 3 is ordered after this mutation. It may change
+// which instance is current, but it cannot redirect fn to another store.
+func withLockedCurrentAuthStore(
+	ctx context.Context,
+	baseConfigDir string,
+	fn func(store AuthStore, registryExists bool) error,
+) (bool, error) {
+	for {
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
+		before, err := readCurrentAuthStoreSnapshot(baseConfigDir)
+		if err != nil {
+			return false, err
+		}
+		lock, err := acquireDualLockAt(ctx, before.store.ConfigDir)
+		if err != nil {
+			return false, err
+		}
+		after, err := readCurrentAuthStoreSnapshot(baseConfigDir)
+		if err != nil {
+			lock.Release()
+			return false, err
+		}
+		if !before.sameSelection(after) {
+			lock.Release()
+			continue
+		}
+		err = fn(before.store, before.registryExists)
+		lock.Release()
+		return before.registryExists, err
+	}
 }
 
 func writeAuthRegistry(baseConfigDir string, registry authRegistry) error {
@@ -662,7 +892,7 @@ func recordPendingAuthKeychainWrite(service, account string) {
 	tx.writtenKeychainAccounts[account] = struct{}{}
 }
 
-func cleanupUncommittedAuthStore(store AuthStore, writtenAccounts map[string]struct{}) error {
+func cleanupUncommittedAuthStoreData(store AuthStore, writtenAccounts map[string]struct{}) error {
 	if !store.Isolated() {
 		return nil
 	}
@@ -691,11 +921,18 @@ func cleanupUncommittedAuthStore(store AuthStore, writtenAccounts map[string]str
 	if err := os.RemoveAll(keychain.StorageDir(store.KeychainService)); err != nil && firstErr == nil {
 		firstErr = err
 	}
-	if err := os.RemoveAll(store.ConfigDir); err != nil && firstErr == nil {
-		firstErr = err
+	return firstErr
+}
+
+func removeUncommittedAuthStoreDir(store AuthStore) error {
+	if !store.Isolated() {
+		return nil
+	}
+	if err := os.RemoveAll(store.ConfigDir); err != nil {
+		return err
 	}
 	pruneEmptyAuthParents(store)
-	return firstErr
+	return nil
 }
 
 func pruneEmptyAuthParents(store AuthStore) {

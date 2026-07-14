@@ -183,6 +183,50 @@ func TestAuthInstanceCLIUseAndPreviousClearRuntimeTokenCache(t *testing.T) {
 	}
 }
 
+func TestRootFailsClosedWhenAuthInstanceChangesAfterPluginConstruction(t *testing.T) {
+	configDir := setupAuthInstanceCommandTest(t)
+	createAuthInstanceFixture(t, configDir, "personal",
+		[]*authpkg.TokenData{authAccountTestToken("corp-default", "user-default", "token-default")},
+		[]*authpkg.TokenData{authAccountTestToken("corp-personal", "user-personal", "token-personal")},
+	)
+
+	for _, tc := range []struct {
+		name      string
+		args      []string
+		wantError bool
+	}{
+		{name: "token-reading-command", args: []string{"auth", "status"}, wantError: true},
+		{name: "token-free-auth-list", args: []string{"auth", "list"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := authpkg.UseAuthInstance(configDir, "default"); err != nil {
+				t.Fatal(err)
+			}
+			authpkg.DeactivateAuthStore(configDir)
+			cmd := NewRootCommand()
+			// Simulate another process changing registry.json after plugin
+			// construction but before Cobra PersistentPreRunE.
+			if _, err := authpkg.UseAuthInstance(configDir, "personal"); err != nil {
+				t.Fatal(err)
+			}
+			var output bytes.Buffer
+			cmd.SetOut(&output)
+			cmd.SetErr(&output)
+			cmd.SetArgs(tc.args)
+			err := cmd.Execute()
+			if tc.wantError {
+				if err == nil || !strings.Contains(err.Error(), "登录态实例在命令初始化期间发生变化") {
+					t.Fatalf("Execute() error = %v, output=%q; want fail-closed instance-change error", err, output.String())
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("token-free recovery command error = %v, output=%q", err, output.String())
+			}
+		})
+	}
+}
+
 func TestAuthInstanceLogoutByUserIDOnlyTouchesCurrentInstance(t *testing.T) {
 	configDir := setupAuthInstanceCommandTest(t)
 	createAuthInstanceFixture(t, configDir, "personal",

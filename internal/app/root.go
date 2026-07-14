@@ -301,7 +301,7 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 	// context, so auth instance activation must happen before loadPlugins—not only in
 	// PersistentPreRunE. Keep the error for pre-run while suppressing every
 	// construction-time token read on a corrupt/unsupported registry.
-	_, initialAuthActivationErr := authpkg.ActivateCurrentInstance(defaultConfigDir())
+	initialAuthStore, initialAuthActivationErr := authpkg.ActivateCurrentInstance(defaultConfigDir())
 	loader := cli.EnvironmentLoader{
 		LookupEnv: os.LookupEnv,
 	}
@@ -324,12 +324,23 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 			// DWS config directory unchanged so logs, skills, recovery data and
 			// application credentials retain their historical locations.
 			recoveryCommand := authInstanceHookRecoveryCommand(cmd, initialAuthActivationErr)
+			selectionCommand := authInstanceSelectionCommand(cmd)
 			if initialAuthActivationErr != nil && !recoveryCommand {
 				return apperrors.NewInternal(fmt.Sprintf("failed to activate login state: %v", initialAuthActivationErr))
 			}
 			if !recoveryCommand {
-				if _, err := authpkg.ActivateCurrentInstance(defaultConfigDir()); err != nil {
+				preRunStore, err := authpkg.ActivateCurrentInstance(defaultConfigDir())
+				if err != nil {
 					return apperrors.NewInternal(fmt.Sprintf("failed to activate login state: %v", err))
+				}
+				// Plugin construction may already have read token/user context from
+				// initialAuthStore. If another process changes the persisted current
+				// instance before execution, fail closed instead of combining plugin
+				// context from A with command credentials from B. Registry inspection
+				// and selection commands are token-free recovery operations.
+				if initialAuthActivationErr == nil && !selectionCommand &&
+					!sameAuthStoreCoordinate(initialAuthStore, preRunStore) {
+					return apperrors.NewValidation("登录态实例在命令初始化期间发生变化，请重试当前命令")
 				}
 			}
 			authpkg.SetRuntimeProfile(flags.Profile)
@@ -424,11 +435,21 @@ func authInstanceHookRecoveryCommand(cmd *cobra.Command, activationErr error) bo
 	if cmd == nil || !stderrors.Is(activationErr, authpkg.ErrAuthInstanceIsolationUnsupported) {
 		return false
 	}
-	parent := cmd.Parent()
-	if parent == nil || parent.Name() != "auth" {
+	return authInstanceSelectionCommand(cmd)
+}
+
+func authInstanceSelectionCommand(cmd *cobra.Command) bool {
+	if cmd == nil {
 		return false
 	}
-	return cmd.Name() == "list" || cmd.Name() == "use"
+	parent := cmd.Parent()
+	return parent != nil && parent.Name() == "auth" && (cmd.Name() == "list" || cmd.Name() == "use")
+}
+
+func sameAuthStoreCoordinate(a, b authpkg.AuthStore) bool {
+	return filepath.Clean(a.ConfigDir) == filepath.Clean(b.ConfigDir) &&
+		a.KeychainService == b.KeychainService &&
+		a.InstanceID == b.InstanceID
 }
 
 func preparseProfileFlag(args []string) string {

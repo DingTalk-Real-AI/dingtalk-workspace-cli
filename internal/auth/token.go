@@ -28,6 +28,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -312,6 +314,85 @@ func DeleteAllTokenData(configDir string) error {
 		}
 		return firstErr
 	})
+}
+
+// ResetCurrentAuthData resets exactly one linearized current Auth Instance.
+// Registry selection is snapshotted, its per-instance operating-system lock is
+// acquired, then the Registry revision/current pointer is revalidated before
+// any fixed ConfigDir or KeychainService is changed. A concurrent auth use or
+// new-instance commit therefore either happens before this reset (and its new
+// current instance is reset) or after it (and the previously current instance
+// is reset); the operation can never lock one instance and delete another.
+//
+// Before Auth Instance opt-in, the callback also preserves the historical
+// online reset contract by removing shared auth application configuration.
+// The first Registry Commit shares the legacy instance lock, so it cannot make
+// opt-in visible halfway through that cleanup.
+func ResetCurrentAuthData(configDir string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), config.LockTimeout)
+	defer cancel()
+	_, err := withLockedCurrentAuthStore(ctx, configDir, func(store AuthStore, registryExists bool) error {
+		if h := edition.Get(); h.DeleteToken != nil {
+			if err := h.DeleteToken(configDir); err != nil {
+				return err
+			}
+		} else if err := deleteAllTokenDataFromStoreLocked(store); err != nil {
+			return err
+		}
+		if !registryExists {
+			// Preserve the pre-opt-in reset behavior exactly. These removals were
+			// historically best-effort and remain so.
+			_ = os.Remove(filepath.Join(configDir, "mcp_url"))
+			_ = os.Remove(filepath.Join(configDir, "token"))
+			_ = DeleteAppConfig(configDir)
+		}
+		return nil
+	})
+	return err
+}
+
+// deleteAllTokenDataFromStoreLocked uses only the already-resolved storage
+// coordinate. The caller must hold that store's data lock.
+func deleteAllTokenDataFromStoreLocked(store AuthStore) error {
+	var firstErr error
+	profilesPath := filepath.Join(store.ConfigDir, profilesJSONFile)
+	if data, err := os.ReadFile(profilesPath); err == nil {
+		var profiles ProfilesConfig
+		if json.Unmarshal(data, &profiles) == nil {
+			for _, profile := range profiles.Profiles {
+				corpID := strings.TrimSpace(profile.CorpID)
+				if corpID == "" {
+					continue
+				}
+				if err := keychain.Remove(store.KeychainService, TokenAccountForCorpID(corpID)); err != nil && firstErr == nil {
+					firstErr = err
+				}
+			}
+		}
+	}
+	if err := os.Remove(profilesPath); err != nil && !os.IsNotExist(err) && firstErr == nil {
+		firstErr = err
+	}
+	if matches, _ := filepath.Glob(profilesPath + ".corrupt-*"); len(matches) > 0 {
+		for _, match := range matches {
+			if err := os.Remove(match); err != nil && !os.IsNotExist(err) && firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
+	if err := keychain.Remove(store.KeychainService, keychain.AccountToken); err != nil && firstErr == nil {
+		firstErr = err
+	}
+	for _, path := range []string{
+		filepath.Join(store.ConfigDir, secureDataFile),
+		filepath.Join(store.ConfigDir, secureDataFile+".tmp"),
+		filepath.Join(store.ConfigDir, tokenJSONFile),
+	} {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
 
 // RevokeTokenRemote calls the appropriate logout/revoke endpoint to invalidate the access token.

@@ -14,12 +14,17 @@
 package auth
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"errors"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -276,6 +281,232 @@ func TestDeleteAllTokenDataOnlyClearsActiveInstance(t *testing.T) {
 	}
 }
 
+func TestAuthInstanceSystemLocksSerializeSameStoreAndParallelizeDifferentStores(t *testing.T) {
+	base := t.TempDir()
+	DeactivateAuthStore(base)
+	t.Cleanup(func() { DeactivateAuthStore(base) })
+
+	txA, err := BeginNewInstance(base, "lock-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := txA.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	txB, err := BeginNewInstance(base, "lock-b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := txB.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	held := startCrossProcessAuthStoreLock(t, txA.Store().ConfigDir)
+
+	// B owns a different lock file and must remain available while another
+	// process holds A.
+	bResult := make(chan error, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		lock, err := acquireDualLockAt(ctx, txB.Store().ConfigDir)
+		if err == nil {
+			lock.Release()
+		}
+		bResult <- err
+	}()
+	select {
+	case err := <-bResult:
+		if err != nil {
+			t.Fatalf("instance B lock was blocked by instance A: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("instance B lock was blocked by instance A")
+	}
+
+	// A is protected by the same cross-process operating-system lock and must
+	// not be acquired before the helper releases it.
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	_, err = acquireDualLockAt(ctx, txA.Store().ConfigDir)
+	cancel()
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("same-instance lock error = %v, want context deadline", err)
+	}
+	held.Release()
+	lock, err := acquireDualLockAt(context.Background(), txA.Store().ConfigDir)
+	if err != nil {
+		t.Fatalf("reacquire instance A after process release: %v", err)
+	}
+	lock.Release()
+}
+
+func TestResetRetriesFixedStoreWhenConcurrentUseWins(t *testing.T) {
+	base := t.TempDir()
+	DeactivateAuthStore(base)
+	t.Cleanup(func() { DeactivateAuthStore(base) })
+
+	txA, err := BeginNewInstance(base, "reset-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanupAuthServiceForTest(t, txA.Store().KeychainService)
+	if err := SaveTokenData(base, testAccountToken("corp-a", "user-a", "access-a")); err != nil {
+		t.Fatal(err)
+	}
+	if err := txA.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	txB, err := BeginNewInstance(base, "reset-b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanupAuthServiceForTest(t, txB.Store().KeychainService)
+	if err := SaveTokenData(base, testAccountToken("corp-b", "user-b", "access-b")); err != nil {
+		t.Fatal(err)
+	}
+	if err := txB.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := UseAuthInstance(base, txA.Instance().ID); err != nil {
+		t.Fatal(err)
+	}
+
+	held := startCrossProcessAuthStoreLock(t, txA.Store().ConfigDir)
+	resetDone := make(chan error, 1)
+	go func() { resetDone <- ResetCurrentAuthData(base) }()
+	waitForProcessAuthStoreLock(t, txA.Store().ConfigDir)
+	if _, err := UseAuthInstance(base, txB.Instance().ID); err != nil {
+		t.Fatalf("concurrent UseAuthInstance(B): %v", err)
+	}
+	held.Release()
+	select {
+	case err := <-resetDone:
+		if err != nil {
+			t.Fatalf("ResetCurrentAuthData() error = %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("reset did not finish after instance A lock release")
+	}
+
+	if !keychain.Exists(txA.Store().KeychainService, TokenAccountForCorpID("corp-a")) {
+		t.Fatal("reset/use race deleted the previously selected instance A")
+	}
+	if keychain.Exists(txB.Store().KeychainService, TokenAccountForCorpID("corp-b")) {
+		t.Fatal("reset/use race retained instance B after B won current selection")
+	}
+}
+
+func TestLegacyResetAndFirstCommitShareBoundaryLock(t *testing.T) {
+	base := t.TempDir()
+	DeactivateAuthStore(base)
+	t.Cleanup(func() { DeactivateAuthStore(base) })
+	cleanupAuthServiceForTest(t, keychain.Service)
+
+	if err := SaveTokenData(base, testAccountToken("legacy-corp", "legacy-user", "legacy-access")); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveAppConfig(base, &AppConfig{ClientID: "legacy-client"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"mcp_url", "token"} {
+		if err := os.WriteFile(filepath.Join(base, name), []byte("legacy"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	tx, err := BeginNewInstance(base, "first-isolated")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanupAuthServiceForTest(t, tx.Store().KeychainService)
+	if err := SaveTokenData(base, testAccountToken("isolated-corp", "isolated-user", "isolated-access")); err != nil {
+		t.Fatal(err)
+	}
+
+	held := startCrossProcessAuthStoreLock(t, base)
+	resetDone := make(chan error, 1)
+	go func() { resetDone <- ResetCurrentAuthData(base) }()
+	waitForProcessAuthStoreLock(t, base)
+	commitDone := make(chan error, 1)
+	go func() { commitDone <- tx.Commit() }()
+	held.Release()
+
+	select {
+	case err := <-resetDone:
+		if err != nil {
+			t.Fatalf("legacy reset error = %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("legacy reset did not complete")
+	}
+	select {
+	case err := <-commitDone:
+		if err != nil {
+			t.Fatalf("first Commit() error = %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("first Commit() did not complete after legacy reset")
+	}
+
+	if _, err := os.Stat(AuthRegistryPath(base)); err != nil {
+		t.Fatalf("first commit did not publish Registry: %v", err)
+	}
+	if !keychain.Exists(tx.Store().KeychainService, TokenAccountForCorpID("isolated-corp")) {
+		t.Fatal("legacy reset changed the pending isolated instance")
+	}
+	if cfg, err := LoadAppConfig(base); err != nil || cfg != nil {
+		t.Fatalf("legacy reset did not preserve historical app-config cleanup: cfg=%#v err=%v", cfg, err)
+	}
+	for _, name := range []string{"mcp_url", "token"} {
+		if _, err := os.Stat(filepath.Join(base, name)); !os.IsNotExist(err) {
+			t.Fatalf("legacy reset retained %s: %v", name, err)
+		}
+	}
+}
+
+func TestCommitAndRollbackWaitForPendingInstanceWriter(t *testing.T) {
+	for _, operation := range []string{"commit", "rollback"} {
+		t.Run(operation, func(t *testing.T) {
+			base := t.TempDir()
+			DeactivateAuthStore(base)
+			t.Cleanup(func() { DeactivateAuthStore(base) })
+			tx, err := BeginNewInstance(base, operation+"-pending")
+			if err != nil {
+				t.Fatal(err)
+			}
+			cleanupAuthServiceForTest(t, tx.Store().KeychainService)
+
+			writerLock, err := AcquireDualLock(context.Background(), base)
+			if err != nil {
+				t.Fatal(err)
+			}
+			done := make(chan error, 1)
+			go func() {
+				if operation == "commit" {
+					done <- tx.Commit()
+				} else {
+					done <- tx.Rollback()
+				}
+			}()
+			select {
+			case err := <-done:
+				writerLock.Release()
+				t.Fatalf("%s completed before pending writer released: %v", operation, err)
+			case <-time.After(100 * time.Millisecond):
+			}
+			writerLock.Release()
+			select {
+			case err := <-done:
+				if err != nil {
+					t.Fatalf("%s after writer release: %v", operation, err)
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatalf("%s did not finish after pending writer released", operation)
+			}
+		})
+	}
+}
+
 func TestRollbackDoesNotPublishFailedLogin(t *testing.T) {
 	base := t.TempDir()
 	DeactivateAuthStore(base)
@@ -514,6 +745,113 @@ func permissionOf(info os.FileInfo) os.FileMode {
 		return 0
 	}
 	return info.Mode().Perm()
+}
+
+const (
+	authStoreLockHelperEnv = "DWS_AUTH_STORE_LOCK_HELPER"
+	authStoreLockDirEnv    = "DWS_AUTH_STORE_LOCK_DIR"
+)
+
+// TestAuthStoreCrossProcessLockHelper is re-executed in a separate test
+// process. A stdout handshake proves that the OS lock is held; closing stdin
+// releases it without timing-based sleeps.
+func TestAuthStoreCrossProcessLockHelper(t *testing.T) {
+	if os.Getenv(authStoreLockHelperEnv) != "1" {
+		return
+	}
+	dir := os.Getenv(authStoreLockDirEnv)
+	if dir == "" {
+		t.Fatal("missing auth store lock directory")
+	}
+	lock, err := acquireDualLockAt(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Release()
+	if _, err := os.Stdout.WriteString("locked\n"); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.Copy(io.Discard, os.Stdin)
+}
+
+type crossProcessAuthStoreLock struct {
+	t      *testing.T
+	cmd    *exec.Cmd
+	stdin  io.WriteCloser
+	stderr bytes.Buffer
+	once   sync.Once
+}
+
+func startCrossProcessAuthStoreLock(t *testing.T, authDir string) *crossProcessAuthStoreLock {
+	t.Helper()
+	cmd := exec.Command(os.Args[0], "-test.run=^TestAuthStoreCrossProcessLockHelper$")
+	cmd.Env = append(os.Environ(), authStoreLockHelperEnv+"=1", authStoreLockDirEnv+"="+authDir)
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	held := &crossProcessAuthStoreLock{t: t, cmd: cmd, stdin: stdin}
+	cmd.Stderr = &held.stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	ready := make(chan error, 1)
+	go func() {
+		line, err := bufio.NewReader(stdout).ReadString('\n')
+		if err == nil && strings.TrimSpace(line) != "locked" {
+			err = errors.New("unexpected auth lock helper handshake: " + strings.TrimSpace(line))
+		}
+		ready <- err
+	}()
+	select {
+	case err := <-ready:
+		if err != nil {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+			t.Fatalf("start auth lock helper: %v; stderr=%s", err, held.stderr.String())
+		}
+	case <-time.After(5 * time.Second):
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		t.Fatalf("auth lock helper handshake timed out; stderr=%s", held.stderr.String())
+	}
+	t.Cleanup(held.Release)
+	return held
+}
+
+func (h *crossProcessAuthStoreLock) Release() {
+	if h == nil {
+		return
+	}
+	h.once.Do(func() {
+		_ = h.stdin.Close()
+		if err := h.cmd.Wait(); err != nil {
+			h.t.Errorf("auth lock helper exit: %v; stderr=%s", err, h.stderr.String())
+		}
+	})
+}
+
+func waitForProcessAuthStoreLock(t *testing.T, authDir string) {
+	t.Helper()
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	timeout := time.NewTimer(2 * time.Second)
+	defer timeout.Stop()
+	key := processLockKey(authDir)
+	for {
+		if _, ok := processLocks.Load(key); ok {
+			return
+		}
+		select {
+		case <-ticker.C:
+		case <-timeout.C:
+			t.Fatalf("process auth store lock %q was not acquired", key)
+		}
+	}
 }
 
 func cleanupAuthServiceForTest(t *testing.T, service string) {
