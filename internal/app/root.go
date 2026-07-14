@@ -66,6 +66,8 @@ func Execute() (exitCode int) {
 	timing := NewTimingCollector()
 	defer func() {
 		StopAllStdioClients() // Ensure child processes are terminated on exit
+		CloseAuditSink()      // Drain async audit forwards on all exit paths,
+		// including command errors where Cobra skips PersistentPostRunE.
 		timing.PrintIfEnabled()
 		timing.WriteReportIfEnabled(RawVersion(), SanitizeCommand(os.Args))
 	}()

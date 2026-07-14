@@ -69,3 +69,38 @@ func TestExportCSVWritesHeaderAndRows(t *testing.T) {
 		t.Fatalf("missing CSV row data, got: %q", out)
 	}
 }
+
+// TestExportCSVFailsOnMalformedJSON guards the reviewer's V9 finding: a corrupt
+// JSONL line must surface an error with file/line evidence instead of being
+// silently skipped while the command exits 0.
+func TestExportCSVFailsOnMalformedJSON(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "audit-20260101.jsonl")
+	good := `{"timestamp":"2026-01-01T00:00:00Z","execution_id":"e1","actor":{"user_id":"u1"},"product":"calendar","command":"event_list","result":"success","duration_ms":1,"hash":"h","prev_hash":""}`
+	if err := os.WriteFile(path, []byte(good+"\nnot-json\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	exportErr := exportCSV([]string{path})
+	w.Close()
+	os.Stdout = stdout
+	// Drain the pipe so the writer never blocks.
+	buf := make([]byte, 4096)
+	_, _ = r.Read(buf)
+
+	if exportErr == nil {
+		t.Fatal("expected error on malformed JSONL, got nil")
+	}
+	if !strings.Contains(exportErr.Error(), "解析审计记录失败") {
+		t.Fatalf("error missing parse context: %v", exportErr)
+	}
+	if !strings.Contains(exportErr.Error(), ":2") {
+		t.Fatalf("error missing line evidence: %v", exportErr)
+	}
+}

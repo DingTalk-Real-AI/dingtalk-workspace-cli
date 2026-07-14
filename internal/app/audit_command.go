@@ -2,6 +2,7 @@ package app
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -189,10 +190,17 @@ func exportCSV(files []string) error {
 		}
 		scanner := bufio.NewScanner(f)
 		scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+		lineNum := 0
 		for scanner.Scan() {
-			var evt audit.Event
-			if err := json.Unmarshal(scanner.Bytes(), &evt); err != nil {
+			lineNum++
+			line := scanner.Bytes()
+			if len(bytes.TrimSpace(line)) == 0 {
 				continue
+			}
+			var evt audit.Event
+			if err := json.Unmarshal(line, &evt); err != nil {
+				f.Close()
+				return fmt.Errorf("解析审计记录失败 %s:%d: %w", file, lineNum, err)
 			}
 			row := []string{
 				evt.Timestamp.Format(time.RFC3339),

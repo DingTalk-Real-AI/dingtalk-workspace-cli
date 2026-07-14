@@ -18,6 +18,7 @@ import (
 
 var (
 	auditSinkOnce   sync.Once
+	auditCloseOnce  sync.Once
 	sharedAuditSink audit.Sink
 
 	auditIDMu      sync.Mutex
@@ -25,6 +26,11 @@ var (
 	cachedAgentID  string
 	cachedProfile  string
 	identityLoaded bool
+
+	// loadTokenForProfile is the profile-scoped token loader. It is a package
+	// variable so profile-switch Actor attribution can be tested deterministically
+	// without touching the OS keychain.
+	loadTokenForProfile = auth.LoadTokenDataForProfile
 )
 
 // setupAuditSink builds the process-wide audit sink once and caches it so the
@@ -43,15 +49,18 @@ func setupAuditSink() audit.Sink {
 }
 
 // CloseAuditSink flushes in-flight remote forwards and closes the audit writer.
-// Called from PersistentPostRunE so the process does not exit before async
-// forwards are delivered.
+// It is invoked from an unconditional defer in Execute so the drain happens for
+// both successful and failed commands (Cobra skips PersistentPostRunE when RunE
+// returns an error). The sync.Once makes repeated calls safe.
 func CloseAuditSink() {
-	if sharedAuditSink == nil {
-		return
-	}
-	if err := sharedAuditSink.Close(); err != nil {
-		auditReport("close failed: %v", err)
-	}
+	auditCloseOnce.Do(func() {
+		if sharedAuditSink == nil {
+			return
+		}
+		if err := sharedAuditSink.Close(); err != nil {
+			auditReport("close failed: %v", err)
+		}
+	})
 }
 
 // auditReport routes non-fatal audit-subsystem diagnostics to the structured
@@ -81,7 +90,7 @@ func auditIdentity() (audit.Actor, string) {
 
 	configDir := defaultConfigDir()
 	var actor audit.Actor
-	if td, err := auth.LoadTokenDataForProfile(configDir, profile); err == nil && td != nil {
+	if td, err := loadTokenForProfile(configDir, profile); err == nil && td != nil {
 		actor = audit.Actor{
 			UserID:   td.UserID,
 			Name:     td.UserName,
