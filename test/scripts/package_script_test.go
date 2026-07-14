@@ -306,7 +306,7 @@ func TestCheckedInHomebrewFormulaIsStableAndSideEffectFree(t *testing.T) {
 	}
 }
 
-func TestCheckedInHomebrewBetaFormulaIsVersionedAndKegOnly(t *testing.T) {
+func TestCheckedInHomebrewBetaFormulaIsSeparateAndKegOnly(t *testing.T) {
 	t.Parallel()
 
 	formulaPath := filepath.Join("..", "..", "Formula", "dingtalk-workspace-cli-beta.rb")
@@ -318,7 +318,7 @@ func TestCheckedInHomebrewBetaFormulaIsVersionedAndKegOnly(t *testing.T) {
 	for _, required := range []string{
 		"class DingtalkWorkspaceCliBeta < Formula",
 		`version "1.0.52-beta.4"`,
-		"keg_only :versioned_formula",
+		`keg_only "it is the beta channel and conflicts with dingtalk-workspace-cli"`,
 		"releases/download/v1.0.52-beta.4/dws-darwin-amd64.tar.gz",
 		"releases/download/v1.0.52-beta.4/dws-darwin-arm64.tar.gz",
 		"releases/download/v1.0.52-beta.4/dws-linux-amd64.tar.gz",
@@ -372,7 +372,7 @@ func TestPostGoreleaserBuildsVersionedBetaFormula(t *testing.T) {
 	for _, required := range []string{
 		"class DingtalkWorkspaceCliBeta < Formula",
 		`version "1.2.3-beta.4"`,
-		"keg_only :versioned_formula",
+		`keg_only "it is the beta channel and conflicts with dingtalk-workspace-cli"`,
 		"This beta is keg-only",
 	} {
 		if !strings.Contains(formula, required) {

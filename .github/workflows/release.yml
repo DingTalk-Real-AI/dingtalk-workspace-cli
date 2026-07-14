@@ -191,7 +191,7 @@ jobs:
           DWS_TAP_COMMIT_MESSAGE: "chore: update formula for ${{ github.ref_name }}"
 
       - name: Open beta Homebrew formula PR
-        # Keep beta in a versioned, keg-only Formula so it cannot replace the
+        # Keep beta in a separately named, keg-only Formula so it cannot replace the
         # stable dws link for ordinary Homebrew users.
         if: ${{ github.repository_owner == 'DingTalk-Real-AI' && contains(github.ref_name, '-') }}
         run: ./scripts/release/publish-homebrew-formula.sh

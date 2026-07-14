@@ -203,7 +203,7 @@ stage_homebrew_formula() {
     *-*)
       formula_class="DingtalkWorkspaceCliBeta"
       formula_path="$formula_dir/dingtalk-workspace-cli-beta.rb"
-      keg_only_line="  keg_only :versioned_formula"
+      keg_only_line='  keg_only "it is the beta channel and conflicts with dingtalk-workspace-cli"'
       channel_caveat='      This beta is keg-only. Add #{opt_bin} to PATH to use its `dws` binary.'
       ;;
   esac

@@ -3,7 +3,7 @@ class DingtalkWorkspaceCliBeta < Formula
   homepage "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli"
   version "1.0.52-beta.4"
   license "Apache-2.0"
-  keg_only :versioned_formula
+  keg_only "it is the beta channel and conflicts with dingtalk-workspace-cli"
 
   on_macos do
     if Hardware::CPU.arm?
