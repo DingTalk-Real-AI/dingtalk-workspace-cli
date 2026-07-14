@@ -27,6 +27,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/audit"
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -142,6 +143,7 @@ func newCommandRunnerWithFlags(loader cli.CatalogLoader, flags *GlobalFlags) exe
 		scanner:            newRuntimeContentScanner(),
 		enforceContentScan: runtimeFlagEnabled(os.Getenv(runtimeContentScanEnforceEnv), false),
 		includeScanReport:  runtimeFlagEnabled(os.Getenv(runtimeContentScanReportOutputEnv), false),
+		auditSink:          setupAuditSink(),
 	}
 }
 
@@ -153,6 +155,7 @@ type runtimeRunner struct {
 	scanner            safety.Scanner
 	enforceContentScan bool
 	includeScanReport  bool
+	auditSink          audit.Sink
 }
 
 func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation) (executor.Result, error) {
@@ -468,6 +471,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		logging.LogCommandEnd(fl, execID,
 			invocation.CanonicalProduct, invocation.Tool,
 			retErr == nil, time.Since(invokeStart), errCat, errReason)
+		emitAudit(r.auditSink, execID, invokeStart, invocation, endpoint, retErr, version)
 	}()
 
 	// Check if this product has plugin-level auth credentials registered.

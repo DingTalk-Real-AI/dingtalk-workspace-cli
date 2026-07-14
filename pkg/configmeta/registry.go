@@ -32,6 +32,7 @@ const (
 	CategoryAuth     Category = "auth"
 	CategoryNetwork  Category = "network"
 	CategorySecurity Category = "security"
+	CategoryAudit    Category = "audit"
 	CategoryRuntime  Category = "runtime"
 	CategoryDebug    Category = "debug"
 	CategoryExternal Category = "external"
@@ -43,9 +44,10 @@ var categoryOrder = map[Category]int{
 	CategoryAuth:     1,
 	CategoryNetwork:  2,
 	CategorySecurity: 3,
-	CategoryRuntime:  4,
-	CategoryDebug:    5,
-	CategoryExternal: 6,
+	CategoryAudit:    4,
+	CategoryRuntime:  5,
+	CategoryDebug:    6,
+	CategoryExternal: 7,
 }
 
 // ConfigItem describes a single environment-variable configuration item.

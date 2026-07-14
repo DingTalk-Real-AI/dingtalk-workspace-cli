@@ -66,6 +66,8 @@ func Execute() (exitCode int) {
 	timing := NewTimingCollector()
 	defer func() {
 		StopAllStdioClients() // Ensure child processes are terminated on exit
+		CloseAuditSink()      // Drain async audit forwards on all exit paths,
+		// including command errors where Cobra skips PersistentPostRunE.
 		timing.PrintIfEnabled()
 		timing.WriteReportIfEnabled(RawVersion(), SanitizeCommand(os.Args))
 	}()
@@ -352,6 +354,7 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 		},
 		PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
 			StopAllStdioClients()
+			CloseAuditSink()
 			CloseFileLogger()
 			return closeOutputSink(cmd)
 		},
@@ -374,6 +377,7 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 		newConfigCommand(),
 		newDoctorCommand(),
 		newEventCommand(),
+		newAuditCommand(),
 		newCompletionCommand(root),
 		newRecoveryCommand(rootCtx, loader, flags),
 		newUpgradeCommand(),
@@ -592,6 +596,7 @@ func hideNonDirectRuntimeCommands(root *cobra.Command) {
 	staticCommands := map[string]bool{
 		"auth":       true,
 		"api":        true,
+		"audit":      true,
 		"cache":      true,
 		"config":     true,
 		"dev":        true,
@@ -626,7 +631,7 @@ func hideNonDirectRuntimeCommands(root *cobra.Command) {
 // not override. This protects core CLI functionality from being hijacked
 // by a malicious or misconfigured plugin.
 var reservedCommands = map[string]bool{
-	"auth": true, "api": true, "login": true, "logout": true,
+	"auth": true, "api": true, "audit": true, "login": true, "logout": true,
 	"plugin": true, "profile": true, "skill": true, "cache": true,
 	"config": true, "doctor": true, "completion": true,
 	"recovery": true, "upgrade": true, "version": true,
