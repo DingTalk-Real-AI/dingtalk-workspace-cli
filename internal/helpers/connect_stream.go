@@ -1205,47 +1205,20 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 	cli.RegisterChatBotCallbackRouter(func(_ context.Context, data *chatbot.BotCallbackDataModel) ([]byte, error) {
 		text := strings.TrimSpace(data.Text.Content)
 		msgtype := strings.TrimSpace(data.Msgtype)
-		// Picture messages carry no text — their payload is a downloadCode
-		// resolved to a local file in the forward goroutine below.
-		var picCodes []string
-		if strings.EqualFold(msgtype, "picture") {
-			if code := pictureDownloadCode(data.Content); code != "" {
-				picCodes = append(picCodes, code)
-			}
-		}
-		// A richText callback can mix text and inline picture nodes. Scan its
-		// content even when data.Text.Content is already populated; otherwise
-		// the text survives while every embedded picture silently disappears.
-		if strings.EqualFold(msgtype, "richText") {
-			picCodes = append(picCodes, richTextPictureDownloadCodes(data.Content)...)
-		}
-		// File/audio/video callbacks come in two shapes: client-sent files carry a
-		// downloadCode; API-sent files (`dws chat message send --msg-type file
-		// --dentry-id --space-id`) carry dentryId + spaceId instead and have
-		// NO downloadCode. Both have to be recognisable or legit file messages
-		// get silently dropped below.
-		var fileInfos []fileInboundInfo
+		// Discover attachments by their locator fields, never by a msgtype
+		// allowlist. msgtype is only a classification hint for the agent prompt.
+		picCodes, fileInfos, unrecoverableCount := callbackInboundMedia(msgtype, data.Content)
 		var chatRecordLookups []chatRecordLookup
-		switch strings.ToLower(msgtype) {
-		case "file", "audio", "voice", "video":
-			if info := parseTypedFileInbound(msgtype, data.Content); info.hasActionable() {
-				fileInfos = append(fileInfos, info)
-			}
-		case "chatrecord":
-			nestedPictures, nestedFiles, unrecoverableCount := chatRecordInboundMedia(data.Content)
-			picCodes = append(picCodes, nestedPictures...)
-			fileInfos = append(fileInfos, nestedFiles...)
-			if unrecoverableCount > 0 {
-				indexes := chatRecordUnknownIndexes(data.Content)
-				if strings.TrimSpace(data.MsgId) != "" && len(indexes) > 0 {
-					chatRecordLookups = append(chatRecordLookups, chatRecordLookup{
-						MsgID:          strings.TrimSpace(data.MsgId),
-						UnknownIndexes: indexes,
-					})
-					fmt.Fprintf(os.Stderr, "[connect][media] chatRecord 中有 %d 条 unknownMsgType，将在 ACK 后补拉原始内容 (msgId=%s)\n", unrecoverableCount, data.MsgId)
-				} else {
-					fmt.Fprintf(os.Stderr, "[connect][media] chatRecord 中有 %d 条 unknownMsgType，但缺少外层消息 ID，保留原始 JSON 降级处理\n", unrecoverableCount)
-				}
+		if unrecoverableCount > 0 {
+			indexes := chatRecordUnknownIndexes(data.Content)
+			if strings.TrimSpace(data.MsgId) != "" && len(indexes) > 0 {
+				chatRecordLookups = append(chatRecordLookups, chatRecordLookup{
+					MsgID:          strings.TrimSpace(data.MsgId),
+					UnknownIndexes: indexes,
+				})
+				fmt.Fprintf(os.Stderr, "[connect][media] 转发记录中有 %d 条 unknownMsgType，将在 ACK 后补拉原始内容 (msgId=%s)\n", unrecoverableCount, data.MsgId)
+			} else {
+				fmt.Fprintf(os.Stderr, "[connect][media] 转发记录中有 %d 条 unknownMsgType，但缺少外层消息 ID，保留原始 JSON 降级处理\n", unrecoverableCount)
 			}
 		}
 		// Structured-text fallback: DingTalk leaves data.Text.Content blank on
@@ -1253,17 +1226,19 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		// this, `dws chat message send --group ... --text ...` — which defaults
 		// to msgType=markdown — hits the drop branch below and the bot looks
 		// dead to the sender.
-		if text == "" && strings.EqualFold(msgtype, "chatRecord") {
-			// Keep the complete record JSON as the primary prompt while separately
-			// downloading every nested attachment that still has a locator.
-			text = rawCallbackPrompt(msgtype, data.Content)
-		} else if text == "" && len(picCodes) == 0 {
+		if text == "" {
+			// Forwarded records must keep their complete JSON, even if the outer
+			// msgtype is renamed or a title-like field could be extracted as text.
+			// Detect the record by payload shape rather than message type.
+			if hasChatRecordPayload(data.Content) {
+				text = rawCallbackPrompt(msgtype, data.Content)
+			}
 			// interactiveCard (a bot @-mentioning this bot) nests the body in
 			// content.cardContent and carries the mention as its own leading
 			// leaf; the leaf-aware extractor drops it so the agent gets the
-			// clean instruction. Other structured-text shapes use the generic
-			// extractor.
-			if strings.EqualFold(msgtype, "interactiveCard") {
+			// clean instruction. Detection is based on the payload shape so a
+			// renamed/new type is handled identically.
+			if text == "" {
 				text = extractInteractiveCardText(data.Content)
 			}
 			if text == "" {
@@ -1271,7 +1246,7 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 					text = fallback
 				}
 			}
-			if text == "" && len(fileInfos) == 0 {
+			if text == "" {
 				text = rawCallbackPrompt(msgtype, data.Content)
 			}
 		}

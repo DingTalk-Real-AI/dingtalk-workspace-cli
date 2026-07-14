@@ -81,6 +81,26 @@ func pictureDownloadCode(content interface{}) string {
 	return ""
 }
 
+func stringField(m map[string]interface{}, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := m[key].(string); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+// explicitPictureDownloadCode only accepts the picture-specific field. A
+// generic downloadCode can represent any kind of attachment and must not be
+// classified as an image merely because it is downloadable.
+func explicitPictureDownloadCode(content interface{}) string {
+	m, ok := content.(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	return stringField(m, "pictureDownloadCode")
+}
+
 // richTextPictureDownloadCodes returns the media download codes embedded in a
 // msgtype="richText" callback, preserving the node order. DingTalk represents
 // an inline picture as a richText node instead of a top-level picture message:
@@ -90,33 +110,55 @@ func pictureDownloadCode(content interface{}) string {
 // The two code fields identify the same picture; pictureDownloadCode handles
 // their precedence and returns only one code per node.
 func richTextPictureDownloadCodes(content interface{}) []string {
+	pictures, _ := richTextInboundMedia(content)
+	return pictures
+}
+
+// richTextInboundMedia applies the same capability-based discovery to every
+// inline node. A non-picture node with a locator is preserved as an
+// attachment instead of being discarded because its type is new or unknown.
+func richTextInboundMedia(content interface{}) (pictureCodes []string, files []fileInboundInfo) {
 	m, ok := content.(map[string]interface{})
 	if !ok {
-		return nil
+		return nil, nil
 	}
 	items, ok := m["richText"].([]interface{})
 	if !ok {
-		return nil
+		return nil, nil
 	}
-	codes := make([]string, 0)
+	seenPictures := make(map[string]struct{})
+	seenFiles := make(map[string]struct{})
 	for _, item := range items {
 		node, ok := item.(map[string]interface{})
 		if !ok {
 			continue
 		}
-		code := pictureDownloadCode(node)
-		if code == "" {
+		typeHint := strings.ToLower(stringField(node, "type", "msgType", "msgtype"))
+		code := ""
+		if explicitPictureDownloadCode(node) != "" {
+			code = pictureDownloadCode(node)
+		}
+		if code == "" && (typeHint == "" || typeHint == "picture" || typeHint == "image") {
+			code = pictureDownloadCode(node)
+		}
+		if code != "" {
+			if _, exists := seenPictures[code]; !exists {
+				seenPictures[code] = struct{}{}
+				pictureCodes = append(pictureCodes, code)
+			}
 			continue
 		}
-		// A richText node with a picture download code is actionable even if an
-		// older callback omitted type. When type is present, reject unrelated
-		// node kinds so future payload fields are not mistaken for pictures.
-		if typ, exists := node["type"].(string); exists && strings.TrimSpace(typ) != "" && !strings.EqualFold(strings.TrimSpace(typ), "picture") {
+		info := parseTypedFileInbound(typeHint, node)
+		if !info.hasActionable() {
 			continue
 		}
-		codes = append(codes, code)
+		key := fileInboundKey(info)
+		if _, exists := seenFiles[key]; !exists {
+			seenFiles[key] = struct{}{}
+			files = append(files, info)
+		}
 	}
-	return codes
+	return pictureCodes, files
 }
 
 // fileInboundInfo carries everything a msgtype="file" callback might expose.
@@ -163,21 +205,15 @@ func parseFileInbound(content interface{}) fileInboundInfo {
 	if !ok {
 		return info
 	}
-	for _, key := range []string{"downloadCode", "fileDownloadCode"} {
-		if v, ok := m[key].(string); ok && strings.TrimSpace(v) != "" {
-			info.DownloadCode = strings.TrimSpace(v)
-			break
-		}
-	}
-	if v, ok := m["fileName"].(string); ok {
-		info.FileName = strings.TrimSpace(v)
-	}
-	if v, ok := m["fileType"].(string); ok {
-		info.FileType = strings.TrimSpace(v)
-	}
-	if v, ok := m["filePath"].(string); ok {
-		info.FilePath = strings.TrimSpace(v)
-	}
+	info.DownloadCode = stringField(m, "downloadCode", "fileDownloadCode")
+	info.MediaID = stringField(m, "mediaId", "mediaID")
+	info.OpenMessageID = stringField(m, "openMessageId", "openMessageID")
+	info.OpenConversationID = stringField(m, "openConversationId", "openConversationID")
+	info.FileID = stringField(m, "fileId", "fileID", "dentryUuid", "dentryUUID")
+	info.FileName = stringField(m, "fileName", "name")
+	info.FileType = stringField(m, "fileType")
+	info.FilePath = stringField(m, "filePath")
+	info.MediaType = stringField(m, "mediaType")
 	info.DentryID = readInt64Field(m, "dentryId", "dentryID")
 	info.SpaceID = readInt64Field(m, "spaceId", "spaceID")
 	info.FileSize = readInt64Field(m, "fileSize", "size")
@@ -206,7 +242,12 @@ func inboundMediaType(msgtype string) string {
 
 func parseTypedFileInbound(msgtype string, content interface{}) fileInboundInfo {
 	info := parseFileInbound(content)
-	info.MediaType = inboundMediaType(msgtype)
+	if mediaType := strings.TrimSpace(msgtype); mediaType != "" {
+		info.MediaType = inboundMediaType(mediaType)
+	}
+	if info.MediaType == "" || info.MediaType == "file" {
+		info.MediaType = mediaTypeFromFileName(info.FileName)
+	}
 	if info.FileName == "未知文件" {
 		switch info.MediaType {
 		case "audio":
@@ -216,6 +257,21 @@ func parseTypedFileInbound(msgtype string, content interface{}) fileInboundInfo 
 		}
 	}
 	return info
+}
+
+func fileInboundKey(info fileInboundInfo) string {
+	switch {
+	case strings.TrimSpace(info.DownloadCode) != "":
+		return "download:" + strings.TrimSpace(info.DownloadCode)
+	case strings.TrimSpace(info.MediaID) != "":
+		return "media:" + strings.TrimSpace(info.MediaID) + ":" + strings.TrimSpace(info.OpenMessageID) + ":" + strings.TrimSpace(info.OpenConversationID)
+	case strings.TrimSpace(info.FileID) != "":
+		return "file:" + strings.TrimSpace(info.FileID)
+	case info.DentryID != 0 && info.SpaceID != 0:
+		return fmt.Sprintf("dentry:%d:%d", info.SpaceID, info.DentryID)
+	default:
+		return ""
+	}
 }
 
 // chatRecordInboundMedia extracts every actionable attachment that DingTalk
@@ -262,49 +318,116 @@ func chatRecordInboundMedia(content interface{}) (pictureCodes []string, files [
 				break
 			}
 		}
-		switch msgtype {
-		case "picture", "image":
-			if code := pictureDownloadCode(node); code != "" {
-				if _, exists := seenPictures[code]; !exists {
-					seenPictures[code] = struct{}{}
-					pictureCodes = append(pictureCodes, code)
-				}
+		// Attachment discovery is capability-based. The nested msgType is a
+		// classification hint only; a future/unknown type with a valid locator
+		// must still reach the backend with its original bytes.
+		pictureCode := ""
+		if explicitPictureDownloadCode(node) != "" {
+			pictureCode = pictureDownloadCode(node)
+		}
+		if pictureCode == "" && (msgtype == "picture" || msgtype == "image") {
+			pictureCode = pictureDownloadCode(node)
+		}
+		if pictureCode != "" {
+			if _, exists := seenPictures[pictureCode]; !exists {
+				seenPictures[pictureCode] = struct{}{}
+				pictureCodes = append(pictureCodes, pictureCode)
 			}
-		case "file", "audio", "voice", "video":
-			info := parseTypedFileInbound(msgtype, node)
-			if !info.hasActionable() {
-				continue
+			continue
+		}
+
+		info := parseTypedFileInbound(msgtype, node)
+		if info.hasActionable() {
+			key := fileInboundKey(info)
+			if _, exists := seenFiles[key]; !exists {
+				seenFiles[key] = struct{}{}
+				files = append(files, info)
 			}
-			key := info.DownloadCode
-			if key == "" {
-				key = fmt.Sprintf("%d:%d", info.SpaceID, info.DentryID)
-			}
-			if _, exists := seenFiles[key]; exists {
-				continue
-			}
-			seenFiles[key] = struct{}{}
-			files = append(files, info)
-		case "unknownmsgtype":
-			// Some platform versions keep a download locator even though they
-			// erase the original type. Preserve the bytes as a generic file in
-			// that case; the observed locator-free shape still degrades honestly.
-			info := parseTypedFileInbound("file", node)
-			if !info.hasActionable() {
-				unrecoverableCount++
-				continue
-			}
-			key := info.DownloadCode
-			if key == "" {
-				key = fmt.Sprintf("%d:%d", info.SpaceID, info.DentryID)
-			}
-			if _, exists := seenFiles[key]; exists {
-				continue
-			}
-			seenFiles[key] = struct{}{}
-			files = append(files, info)
+			continue
+		}
+		if msgtype == "unknownmsgtype" {
+			unrecoverableCount++
 		}
 	}
 	return pictureCodes, files, unrecoverableCount
+}
+
+func hasChatRecordPayload(content interface{}) bool {
+	m, ok := content.(map[string]interface{})
+	if !ok {
+		return false
+	}
+	switch raw := m["chatRecord"].(type) {
+	case string:
+		return strings.TrimSpace(raw) != ""
+	case []interface{}:
+		return true
+	}
+	_, hasDecodedContents := m["contents"].([]interface{})
+	return hasDecodedContents
+}
+
+// callbackInboundMedia discovers downloadable payloads from their locator
+// fields instead of an allowlist of msgtype values. msgtype is retained only
+// as a media classification hint, so newly introduced message types are
+// forwarded immediately without requiring a connector release.
+func callbackInboundMedia(msgtype string, content interface{}) (pictureCodes []string, files []fileInboundInfo, unrecoverableCount int) {
+	seenPictures := make(map[string]struct{})
+	seenFiles := make(map[string]struct{})
+	addPicture := func(code string) {
+		code = strings.TrimSpace(code)
+		if code == "" {
+			return
+		}
+		if _, exists := seenPictures[code]; exists {
+			return
+		}
+		seenPictures[code] = struct{}{}
+		pictureCodes = append(pictureCodes, code)
+	}
+	addFile := func(info fileInboundInfo) {
+		if !info.hasActionable() {
+			return
+		}
+		key := fileInboundKey(info)
+		if key == "" {
+			return
+		}
+		if _, picture := seenPictures[info.DownloadCode]; picture {
+			return
+		}
+		if _, exists := seenFiles[key]; exists {
+			return
+		}
+		seenFiles[key] = struct{}{}
+		files = append(files, info)
+	}
+
+	richPictures, richFiles := richTextInboundMedia(content)
+	for _, code := range richPictures {
+		addPicture(code)
+	}
+	for _, info := range richFiles {
+		addFile(info)
+	}
+	pictureCode := ""
+	if explicitPictureDownloadCode(content) != "" {
+		pictureCode = pictureDownloadCode(content)
+	}
+	if pictureCode == "" && (strings.EqualFold(msgtype, "picture") || strings.EqualFold(msgtype, "image")) {
+		pictureCode = pictureDownloadCode(content)
+	}
+	addPicture(pictureCode)
+	addFile(parseTypedFileInbound(msgtype, content))
+
+	nestedPictures, nestedFiles, nestedUnknown := chatRecordInboundMedia(content)
+	for _, code := range nestedPictures {
+		addPicture(code)
+	}
+	for _, info := range nestedFiles {
+		addFile(info)
+	}
+	return pictureCodes, files, nestedUnknown
 }
 
 // readInt64Field pulls an int64 out of the loose content map under any of the

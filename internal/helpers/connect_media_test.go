@@ -82,6 +82,18 @@ func TestRichTextPictureDownloadCodesUnknownShape(t *testing.T) {
 	}
 }
 
+func TestCallbackInboundMediaPreservesFutureRichTextAttachment(t *testing.T) {
+	pictures, files, unknown := callbackInboundMedia("renamedRichEnvelope", map[string]interface{}{
+		"richText": []interface{}{
+			map[string]interface{}{"type": "text", "text": "附件如下"},
+			map[string]interface{}{"type": "futureInlineBinary", "downloadCode": "inline-1", "fileName": "demo.mp4"},
+		},
+	})
+	if len(pictures) != 0 || len(files) != 1 || files[0].DownloadCode != "inline-1" || files[0].MediaType != "video" || unknown != 0 {
+		t.Fatalf("pictures=%v files=%#v unknown=%d", pictures, files, unknown)
+	}
+}
+
 // TestExtractCallbackText covers the markdown / richText fallback path used
 // when SDK data.Text.Content is empty. This is the recovery path for
 // `dws chat message send --group ... --text ...` (defaults to msgType=markdown)
@@ -213,6 +225,52 @@ func TestChatRecordInboundMediaRecoversUnknownTypeWhenLocatorSurvives(t *testing
 	pictures, files, unknown := chatRecordInboundMedia(map[string]interface{}{"chatRecord": record})
 	if len(pictures) != 0 || len(files) != 1 || files[0].DownloadCode != "opaque-1" || files[0].FileName != "payload.bin" || unknown != 0 {
 		t.Fatalf("pictures=%v files=%#v unknown=%d", pictures, files, unknown)
+	}
+}
+
+func TestChatRecordInboundMediaPreservesFutureTypeWithLocator(t *testing.T) {
+	record := `[{"msgType":"futureBinaryEnvelope","downloadCode":"future-1","fileName":"clip.webm"}]`
+	pictures, files, unknown := chatRecordInboundMedia(map[string]interface{}{"chatRecord": record})
+	if len(pictures) != 0 || len(files) != 1 || files[0].DownloadCode != "future-1" || files[0].MediaType != "video" || unknown != 0 {
+		t.Fatalf("pictures=%v files=%#v unknown=%d", pictures, files, unknown)
+	}
+}
+
+func TestCallbackInboundMediaDoesNotGateOnOuterMessageType(t *testing.T) {
+	pictures, files, unknown := callbackInboundMedia("futureAttachmentV2", map[string]interface{}{
+		"downloadCode": "future-2",
+		"fileName":     "voice.ogg",
+	})
+	if len(pictures) != 0 || len(files) != 1 || files[0].DownloadCode != "future-2" || files[0].MediaType != "audio" || unknown != 0 {
+		t.Fatalf("pictures=%v files=%#v unknown=%d", pictures, files, unknown)
+	}
+}
+
+func TestCallbackInboundMediaFindsChatRecordByShape(t *testing.T) {
+	content := map[string]interface{}{
+		"chatRecord": `[{"msgType":"picture","downloadCode":"nested-picture"},{"msgType":"futureFile","downloadCode":"nested-file","fileName":"notes.md"},{"msgType":"unknownMsgType"}]`,
+	}
+	pictures, files, unknown := callbackInboundMedia("renamedForwardEnvelope", content)
+	if len(pictures) != 1 || pictures[0] != "nested-picture" {
+		t.Fatalf("pictures=%v, want [nested-picture]", pictures)
+	}
+	if len(files) != 1 || files[0].DownloadCode != "nested-file" || files[0].FileName != "notes.md" {
+		t.Fatalf("files=%#v, want nested-file", files)
+	}
+	if unknown != 1 {
+		t.Fatalf("unknown=%d, want 1", unknown)
+	}
+}
+
+func TestHasChatRecordPayloadUsesShapeNotMessageType(t *testing.T) {
+	if !hasChatRecordPayload(map[string]interface{}{
+		"title":      "转发记录",
+		"chatRecord": `[{"msgType":"text","content":"hello"}]`,
+	}) {
+		t.Fatal("chatRecord JSON string should be detected by payload shape")
+	}
+	if hasChatRecordPayload(map[string]interface{}{"title": "普通卡片"}) {
+		t.Fatal("ordinary title payload must not be detected as a chat record")
 	}
 }
 
@@ -431,6 +489,17 @@ func TestParseFileInbound(t *testing.T) {
 			content:        map[string]interface{}{"fileDownloadCode": "dc-2", "fileName": "log.txt"},
 			wantCode:       "dc-2",
 			wantName:       "log.txt",
+			wantActionable: true,
+		},
+		{
+			name: "media locator fields",
+			content: map[string]interface{}{
+				"mediaId":            "media-1",
+				"openMessageId":      "message-1",
+				"openConversationId": "conversation-1",
+				"fileName":           "recording.m4a",
+			},
+			wantName:       "recording.m4a",
 			wantActionable: true,
 		},
 		{
