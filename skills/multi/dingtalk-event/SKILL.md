@@ -25,21 +25,21 @@ description: 钉钉个人 IM 事件长连接监听、订阅与消费，覆盖消
 | `dws event stop <subscribe_id>` | 取消个人订阅并停止对应本地消费 |
 | `dws event stop --all` | 清理当前身份下本地记录的全部个人订阅 |
 
-区分两个 schema：`dws event schema <event_key>` 查事件输出字段；`dws schema "event consume"` 查 consume 命令入参（机读结构，source=cobra，含 parameters + 位置参数）。
+区分两个 schema：`dws event schema <event_key>` 查事件输出字段；`dws schema event.consume` 查 consume 命令入参（机读结构，source=cobra，含 parameters + 位置参数）。
 
 ## Event catalog
 
 | 事件码 | 场景 | 必填参数 |
 |---|---|---|
 | `user_im_message_receive_at` | 当前用户被 @ 的消息 | 无 |
-| `user_im_message_receive_o2o` | 当前用户与指定用户的单聊消息 | `--user` |
+| `user_im_message_receive_o2o` | 当前用户与指定用户的单聊消息 | `--user` 或 `--open-dingtalk-id` |
 | `user_im_message_receive_group` | 当前用户所在指定群聊/会话的消息 | `--group` |
-| `user_im_message_receive_user` | 当前用户收到的指定用户发送的消息（单聊和群聊） | `--user` |
-| `user_im_message_read_o2o` | 指定单聊中当前用户发送的消息被已读 | `--user` |
+| `user_im_message_receive_user` | 当前用户收到的指定用户发送的消息（单聊和群聊） | `--user` 或 `--open-dingtalk-id` |
+| `user_im_message_read_o2o` | 指定单聊中当前用户发送的消息被已读 | `--user` 或 `--open-dingtalk-id` |
 | `user_im_message_read_group` | 指定群聊中当前用户发送的消息被已读 | `--group` |
-| `user_im_message_recall_o2o` | 指定单聊中的消息被撤回 | `--user` |
+| `user_im_message_recall_o2o` | 指定单聊中的消息被撤回 | `--user` 或 `--open-dingtalk-id` |
 | `user_im_message_recall_group` | 指定群聊中的消息被撤回 | `--group` |
-| `user_im_message_reaction_o2o` | 指定单聊中的消息收到表情回应 | `--user` |
+| `user_im_message_reaction_o2o` | 指定单聊中的消息收到表情回应 | `--user` 或 `--open-dingtalk-id` |
 | `user_im_message_reaction_group` | 指定群聊中的消息收到表情回应 | `--group` |
 
 只承认上表 10 个事件码。其它身份模式、应用凭证模式、非个人 IM 事件不在本 skill 范围内。
@@ -51,6 +51,8 @@ description: 钉钉个人 IM 事件长连接监听、订阅与消费，覆盖消
 - 不主动运行 `dws event list` 作为能力菜单；按用户意图直接选择上表事件。
 - 缺少必填 ID 时先解析或追问，不要猜测 ID。
 - 用户只给单聊对端人名时，先运行 `dws aisearch person --keyword "<name>" --dimension name --format json` 解析 userId；多候选必须让用户确认。
+- 企业内部 userId 使用 `--user`；用户明确提供 openDingtalkId，或目标是外部联系人、机器人、跨组织身份时，使用 `--open-dingtalk-id`。
+- `--user` 与 `--open-dingtalk-id` 严格二选一。不要把 openDingtalkId 填入 `--user`，不要自动猜测或转换身份类型；缺少外部目标的 openDingtalkId 时先追问。
 - “监听我和某人的单聊”使用 `user_im_message_receive_o2o`；“监听某人发给我的消息/监听某人发送的消息”使用 `user_im_message_receive_user`，后者覆盖该发送人的单聊和群聊消息。
 - 用户只给群名时，先运行 `dws chat search --query "<group>" --format json` 解析 openConversationId；多候选必须让用户确认。
 - 用户要求执行“撤回消息”时使用 `dws chat`；只有“监听/订阅消息撤回”才使用 `dws event consume user_im_message_recall_*`。
@@ -93,6 +95,11 @@ dws event consume user_im_message_receive_o2o \
   --user 507971 \
   -f ndjson
 
+# 使用 openDingtalkId 监听外部联系人、机器人或跨组织身份的单聊消息
+dws event consume user_im_message_receive_o2o \
+  --open-dingtalk-id open-user-1 \
+  -f ndjson
+
 # 指定群聊/会话消息
 dws event consume user_im_message_receive_group \
   --group cidxxxxxxxx \
@@ -101,6 +108,11 @@ dws event consume user_im_message_receive_group \
 # 指定发送人的消息（单聊和群聊）
 dws event consume user_im_message_receive_user \
   --user 507971 \
+  -f ndjson
+
+# 使用 openDingtalkId 监听指定发送人的消息
+dws event consume user_im_message_receive_user \
+  --open-dingtalk-id open-user-1 \
   -f ndjson
 
 # 指定单聊消息已读
@@ -129,6 +141,8 @@ dws event consume user_im_message_receive_o2o \
   --max-events 1 \
   -f json
 ```
+
+所有 `*_o2o` 命令和 `user_im_message_receive_user` 都可将 `--user <userId>` 替换为 `--open-dingtalk-id <openDingtalkId>`，但两个参数不能同时使用。
 
 ## 输出处理
 

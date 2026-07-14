@@ -64,9 +64,10 @@ type SchemaDocument struct {
 }
 
 type RuleOptions struct {
-	RuleType string
-	UserID   string
-	GroupID  string
+	RuleType       string
+	UserID         string
+	OpenDingTalkID string
+	GroupID        string
 }
 
 type SchemaPendingError struct {
@@ -96,7 +97,7 @@ var definitions = []Definition{
 		Category:       "im",
 		RuleType:       "singleChat",
 		Status:         StatusEnabled,
-		RequiredParams: []string{"user"},
+		RequiredParams: []string{"user or open-dingtalk-id"},
 		Auth:           map[string]any{"identity": "user"},
 		Public:         true,
 	},
@@ -118,7 +119,7 @@ var definitions = []Definition{
 		Category:       "im",
 		RuleType:       "sender",
 		Status:         StatusEnabled,
-		RequiredParams: []string{"user"},
+		RequiredParams: []string{"user or open-dingtalk-id"},
 		Auth:           map[string]any{"identity": "user"},
 		Public:         true,
 	},
@@ -129,7 +130,7 @@ var definitions = []Definition{
 		Category:       "im",
 		RuleType:       "singleChat",
 		Status:         StatusEnabled,
-		RequiredParams: []string{"user"},
+		RequiredParams: []string{"user or open-dingtalk-id"},
 		Auth:           map[string]any{"identity": "user"},
 		Public:         true,
 	},
@@ -151,7 +152,7 @@ var definitions = []Definition{
 		Category:       "im",
 		RuleType:       "singleChat",
 		Status:         StatusEnabled,
-		RequiredParams: []string{"user"},
+		RequiredParams: []string{"user or open-dingtalk-id"},
 		Auth:           map[string]any{"identity": "user"},
 		Public:         true,
 	},
@@ -173,7 +174,7 @@ var definitions = []Definition{
 		Category:       "im",
 		RuleType:       "singleChat",
 		Status:         StatusEnabled,
-		RequiredParams: []string{"user"},
+		RequiredParams: []string{"user or open-dingtalk-id"},
 		Auth:           map[string]any{"identity": "user"},
 		Public:         true,
 	},
@@ -261,41 +262,30 @@ func BuildRuleParam(eventKey string, opts RuleOptions) (ruleType string, rulePar
 		return "", nil, &SchemaPendingError{EventKey: eventKey}
 	}
 	userID := strings.TrimSpace(opts.UserID)
+	openDingTalkID := strings.TrimSpace(opts.OpenDingTalkID)
 	groupID := strings.TrimSpace(opts.GroupID)
 	switch def.RuleType {
 	case "at":
 		if userID != "" {
 			return "", nil, fmt.Errorf("--user is not supported for %s", eventKey)
 		}
+		if openDingTalkID != "" {
+			return "", nil, fmt.Errorf("--open-dingtalk-id is not supported for %s", eventKey)
+		}
 		if groupID != "" {
 			return "", nil, fmt.Errorf("--group is not supported for %s", eventKey)
 		}
 		return def.RuleType, map[string]any{}, nil
 	case "singleChat":
-		if groupID != "" {
-			return "", nil, fmt.Errorf("--group is not supported for %s; use --user", eventKey)
-		}
-		if userID == "" {
-			return "", nil, fmt.Errorf("--user is required for %s", eventKey)
-		}
-		return def.RuleType, map[string]any{
-			"targetUid":     userID,
-			"targetUidType": "staffId",
-		}, nil
+		return buildTargetUIDRuleParam(def.RuleType, eventKey, userID, openDingTalkID, groupID)
 	case "sender":
-		if groupID != "" {
-			return "", nil, fmt.Errorf("--group is not supported for %s; use --user", eventKey)
-		}
-		if userID == "" {
-			return "", nil, fmt.Errorf("--user is required for %s", eventKey)
-		}
-		return def.RuleType, map[string]any{
-			"targetUid":     userID,
-			"targetUidType": "staffId",
-		}, nil
+		return buildTargetUIDRuleParam(def.RuleType, eventKey, userID, openDingTalkID, groupID)
 	case "group":
 		if userID != "" {
 			return "", nil, fmt.Errorf("--user is not supported for %s; use --group", eventKey)
+		}
+		if openDingTalkID != "" {
+			return "", nil, fmt.Errorf("--open-dingtalk-id is not supported for %s; use --group", eventKey)
 		}
 		if groupID == "" {
 			return "", nil, fmt.Errorf("--group is required for %s", eventKey)
@@ -306,6 +296,28 @@ func BuildRuleParam(eventKey string, opts RuleOptions) (ruleType string, rulePar
 	default:
 		return "", nil, &SchemaPendingError{EventKey: eventKey}
 	}
+}
+
+func buildTargetUIDRuleParam(ruleType, eventKey, userID, openDingTalkID, groupID string) (string, map[string]any, error) {
+	if groupID != "" {
+		return "", nil, fmt.Errorf("--group is not supported for %s; use --user or --open-dingtalk-id", eventKey)
+	}
+	if userID != "" && openDingTalkID != "" {
+		return "", nil, fmt.Errorf("--user and --open-dingtalk-id are mutually exclusive for %s", eventKey)
+	}
+	if userID == "" && openDingTalkID == "" {
+		return "", nil, fmt.Errorf("one of --user or --open-dingtalk-id is required for %s", eventKey)
+	}
+	if openDingTalkID != "" {
+		return ruleType, map[string]any{
+			"targetUid":     openDingTalkID,
+			"targetUidType": "openDingtalkId",
+		}, nil
+	}
+	return ruleType, map[string]any{
+		"targetUid":     userID,
+		"targetUidType": "staffId",
+	}, nil
 }
 
 func BuildFilter(filterJSON string, queryCSV string) (any, string, error) {

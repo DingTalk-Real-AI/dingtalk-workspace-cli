@@ -409,14 +409,65 @@ func TestPersonalEventFromUserIsPubliclyAvailable(t *testing.T) {
 	if err := consumeCmd.Execute(); err != nil {
 		t.Fatalf("consume dry-run Execute() error = %v", err)
 	}
+	openIDConsumeCmd := newEventConsumeCommand()
+	openIDConsumeCmd.SilenceUsage = true
+	openIDConsumeCmd.SilenceErrors = true
+	openIDConsumeCmd.SetArgs([]string{personal.EventFromUser, "--open-dingtalk-id", "open-user-1", "--dry-run"})
+	if err := openIDConsumeCmd.Execute(); err != nil {
+		t.Fatalf("consume openDingtalkId dry-run Execute() error = %v", err)
+	}
+
+	conflictingTargetCmd := newEventConsumeCommand()
+	conflictingTargetCmd.SilenceUsage = true
+	conflictingTargetCmd.SilenceErrors = true
+	conflictingTargetCmd.SetArgs([]string{personal.EventFromUser, "--user", "507971", "--open-dingtalk-id", "open-user-1", "--dry-run"})
+	err := conflictingTargetCmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "--user and --open-dingtalk-id are mutually exclusive for "+personal.EventFromUser) {
+		t.Fatalf("conflicting target identity error = %v", err)
+	}
+
+	groupOpenIDCmd := newEventConsumeCommand()
+	groupOpenIDCmd.SilenceUsage = true
+	groupOpenIDCmd.SilenceErrors = true
+	groupOpenIDCmd.SetArgs([]string{personal.EventInChat, "--group", "cid-1", "--open-dingtalk-id", "open-user-1", "--dry-run"})
+	err = groupOpenIDCmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "--open-dingtalk-id is not supported for "+personal.EventInChat+"; use --group") {
+		t.Fatalf("group openDingtalkId error = %v", err)
+	}
 
 	missingUserCmd := newEventConsumeCommand()
 	missingUserCmd.SilenceUsage = true
 	missingUserCmd.SilenceErrors = true
 	missingUserCmd.SetArgs([]string{personal.EventFromUser})
-	err := missingUserCmd.Execute()
-	if err == nil || !strings.Contains(err.Error(), "--user is required for "+personal.EventFromUser) {
-		t.Fatalf("missing --user error = %v", err)
+	err = missingUserCmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "one of --user or --open-dingtalk-id is required for "+personal.EventFromUser) {
+		t.Fatalf("missing target identity error = %v", err)
+	}
+}
+
+func TestEventConsumeCobraSchemaIncludesOpenDingTalkID(t *testing.T) {
+	root := NewRootCommand()
+	root.SilenceUsage = true
+	root.SilenceErrors = true
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetArgs([]string{"schema", "event consume"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("schema event consume Execute() error = %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+		t.Fatalf("schema output is not JSON: %v\n%s", err, out.String())
+	}
+	params, ok := doc["parameters"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema parameters = %#v", doc["parameters"])
+	}
+	if _, ok := params["open-dingtalk-id"]; !ok {
+		t.Fatalf("schema parameters missing open-dingtalk-id: %#v", params)
+	}
+	if _, ok := params["odid"]; ok {
+		t.Fatalf("schema parameters unexpectedly include odid alias: %#v", params)
 	}
 }
 

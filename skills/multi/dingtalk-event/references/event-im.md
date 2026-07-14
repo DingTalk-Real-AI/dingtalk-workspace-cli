@@ -34,14 +34,14 @@ schema 默认 JSON。业务字段说明在 `schema.properties`，`jq_root_path` 
 | 事件码 | 规则 | 用途 | 必填参数 |
 |---|---|---|---|
 | `user_im_message_receive_at` | `at` | 当前用户被 @ 的消息 | 无 |
-| `user_im_message_receive_o2o` | `singleChat` | 当前用户与指定用户的单聊消息 | `--user` |
+| `user_im_message_receive_o2o` | `singleChat` | 当前用户与指定用户的单聊消息 | `--user` 或 `--open-dingtalk-id` |
 | `user_im_message_receive_group` | `group` | 当前用户所在指定群聊/会话的消息 | `--group` |
-| `user_im_message_receive_user` | `sender` | 当前用户收到的指定用户发送的消息（单聊和群聊） | `--user` |
-| `user_im_message_read_o2o` | `singleChat` | 指定单聊中当前用户发送的消息被已读 | `--user` |
+| `user_im_message_receive_user` | `sender` | 当前用户收到的指定用户发送的消息（单聊和群聊） | `--user` 或 `--open-dingtalk-id` |
+| `user_im_message_read_o2o` | `singleChat` | 指定单聊中当前用户发送的消息被已读 | `--user` 或 `--open-dingtalk-id` |
 | `user_im_message_read_group` | `group` | 指定群聊中当前用户发送的消息被已读 | `--group` |
-| `user_im_message_recall_o2o` | `singleChat` | 指定单聊中的消息被撤回 | `--user` |
+| `user_im_message_recall_o2o` | `singleChat` | 指定单聊中的消息被撤回 | `--user` 或 `--open-dingtalk-id` |
 | `user_im_message_recall_group` | `group` | 指定群聊中的消息被撤回 | `--group` |
-| `user_im_message_reaction_o2o` | `singleChat` | 指定单聊中的消息收到表情回应 | `--user` |
+| `user_im_message_reaction_o2o` | `singleChat` | 指定单聊中的消息收到表情回应 | `--user` 或 `--open-dingtalk-id` |
 | `user_im_message_reaction_group` | `group` | 指定群聊中的消息收到表情回应 | `--group` |
 
 默认身份就是当前用户。不要额外加身份切换 flag，不要使用应用凭证模式，不要使用本表以外的事件码。
@@ -49,6 +49,8 @@ schema 默认 JSON。业务字段说明在 `schema.properties`，`jq_root_path` 
 ## ID resolution
 
 - 人名 → `dws aisearch person --keyword "<name>" --dimension name --format json`，确认后取 `userId`。
+- 企业内部 userId → `--user`；明确给出 openDingtalkId，或目标是外部联系人、机器人、跨组织身份 → `--open-dingtalk-id`。
+- 两个身份参数严格二选一，不得把 openDingtalkId 放进 `--user`，也不要自动猜测或转换；缺少外部目标的 openDingtalkId 时先追问。
 - “我和某人的单聊”选择 `user_im_message_receive_o2o`；“某人发给我的消息/某人发送的消息”选择 `user_im_message_receive_user`。
 - 群名 → `dws chat search --query "<group>" --format json`，确认后取 `openConversationId`。
 - 多候选 → 展示候选并让用户确认。
@@ -67,6 +69,11 @@ dws event consume user_im_message_receive_o2o \
   --user 507971 \
   -f ndjson
 
+# 通过 openDingtalkId 指定单聊对端
+dws event consume user_im_message_receive_o2o \
+  --open-dingtalk-id open-user-1 \
+  -f ndjson
+
 # 指定群消息
 dws event consume user_im_message_receive_group \
   --group cidxxxxxxxx \
@@ -75,6 +82,11 @@ dws event consume user_im_message_receive_group \
 # 指定发送人的消息（单聊和群聊）
 dws event consume user_im_message_receive_user \
   --user 507971 \
+  -f ndjson
+
+# 通过 openDingtalkId 指定发送人
+dws event consume user_im_message_receive_user \
+  --open-dingtalk-id open-user-1 \
   -f ndjson
 
 # 指定单聊已读事件
@@ -113,14 +125,14 @@ dws event consume user_im_message_reaction_group \
 | 事件码 | 自测参数 | 触发方式 |
 |---|---|---|
 | `user_im_message_receive_at` | `--duration 10m -f ndjson` | 让任意可触达用户在群里 @ 当前登录用户 |
-| `user_im_message_receive_o2o` | `--user <userId> --duration 10m -f ndjson` | 让对端用户给当前登录用户发送单聊消息 |
+| `user_im_message_receive_o2o` | `--user <userId>` 或 `--open-dingtalk-id <id>`，加 `--duration 10m -f ndjson` | 让对端用户给当前登录用户发送单聊消息 |
 | `user_im_message_receive_group` | `--group <openConversationId> --duration 10m -f ndjson` | 让任意用户在该群发送消息 |
-| `user_im_message_receive_user` | `--user <userId> --duration 10m -f ndjson` | 让指定用户分别在单聊或共同群聊中发送消息 |
-| `user_im_message_read_o2o` | `--user <userId> --duration 10m -f ndjson` | 当前用户给对端发送单聊消息，再让对端打开并阅读 |
+| `user_im_message_receive_user` | `--user <userId>` 或 `--open-dingtalk-id <id>`，加 `--duration 10m -f ndjson` | 让指定用户分别在单聊或共同群聊中发送消息 |
+| `user_im_message_read_o2o` | `--user <userId>` 或 `--open-dingtalk-id <id>`，加 `--duration 10m -f ndjson` | 当前用户给对端发送单聊消息，再让对端打开并阅读 |
 | `user_im_message_read_group` | `--group <openConversationId> --duration 10m -f ndjson` | 当前用户在群内发送消息，再让群成员打开并阅读 |
-| `user_im_message_recall_o2o` | `--user <userId> --duration 10m -f ndjson` | 在指定单聊中发送并撤回一条消息 |
+| `user_im_message_recall_o2o` | `--user <userId>` 或 `--open-dingtalk-id <id>`，加 `--duration 10m -f ndjson` | 在指定单聊中发送并撤回一条消息 |
 | `user_im_message_recall_group` | `--group <openConversationId> --duration 10m -f ndjson` | 在指定群聊中发送并撤回一条消息 |
-| `user_im_message_reaction_o2o` | `--user <userId> --duration 10m -f ndjson` | 在指定单聊中给消息添加表情回应 |
+| `user_im_message_reaction_o2o` | `--user <userId>` 或 `--open-dingtalk-id <id>`，加 `--duration 10m -f ndjson` | 在指定单聊中给消息添加表情回应 |
 | `user_im_message_reaction_group` | `--group <openConversationId> --duration 10m -f ndjson` | 在指定群聊中给消息添加表情回应 |
 
 stderr 出现固定就绪行 `[event] ready event_key=<key> bus_pid=<pid> subscribe_id=<id>` 表示本地 consume 已连接到事件 bus；父进程等这行再读 stdout。stdout 每行是一个扁平事件 JSON。

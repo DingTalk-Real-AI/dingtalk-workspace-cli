@@ -70,6 +70,7 @@ type personalConsumeOptions struct {
 	TTL              time.Duration
 	Ephemeral        bool
 	UserID           string
+	OpenDingTalkID   string
 	GroupID          string
 	ControlBaseURL   string
 	StreamTicketMode string
@@ -199,6 +200,11 @@ func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) erro
 	projector := personalEventProjector(opts.DebugRawEvents)
 
 	if opts.Common.DryRun {
+		if strings.TrimSpace(opts.SubscribeID) == "" {
+			if err := validatePersonalSubscriptionOptions(opts); err != nil {
+				return fmt.Errorf("event consume --as user: %w", err)
+			}
+		}
 		cfg := consume.Config{
 			WorkDir:        workDir,
 			IPCEndpoint:    ipcEndpoint,
@@ -352,6 +358,19 @@ func applyPersonalConsumeFilters(cfg *consume.Config, opts personalConsumeOption
 	cfg.SubscribeID = strings.TrimSpace(subscribeID)
 }
 
+func validatePersonalSubscriptionOptions(opts personalConsumeOptions) error {
+	if _, _, err := personal.BuildRuleParam(opts.EventKey, personal.RuleOptions{
+		RuleType:       opts.Rule,
+		UserID:         opts.UserID,
+		OpenDingTalkID: opts.OpenDingTalkID,
+		GroupID:        opts.GroupID,
+	}); err != nil {
+		return err
+	}
+	_, _, err := personal.BuildFilter(opts.FilterJSON, opts.QueryCSV)
+	return err
+}
+
 func ensurePersonalSubscription(ctx context.Context, client *personal.Client, identity personal.Identity, opts personalConsumeOptions) (*personal.Subscription, string, string, error) {
 	if strings.TrimSpace(opts.SubscribeID) != "" {
 		sub, err := client.GetSubscription(ctx, opts.SubscribeID)
@@ -381,9 +400,10 @@ func ensurePersonalSubscription(ctx context.Context, client *personal.Client, id
 		return nil, "", "", err
 	}
 	ruleType, ruleParam, err := personal.BuildRuleParam(opts.EventKey, personal.RuleOptions{
-		RuleType: opts.Rule,
-		UserID:   opts.UserID,
-		GroupID:  opts.GroupID,
+		RuleType:       opts.Rule,
+		UserID:         opts.UserID,
+		OpenDingTalkID: opts.OpenDingTalkID,
+		GroupID:        opts.GroupID,
 	})
 	if err != nil {
 		return nil, "", "", err

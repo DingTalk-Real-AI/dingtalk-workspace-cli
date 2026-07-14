@@ -19,21 +19,21 @@
 | `dws event stop <subscribe_id>` | 取消订阅并停止对应本地消费 |
 | `dws event stop --all` | 清理当前身份下全部个人订阅 |
 
-注意区分两个 schema：`dws event schema <event_key>` 查事件的输出字段；`dws schema "event consume"` 查 consume 命令自身的入参（机读结构，source=cobra，含 parameters + 位置参数）。
+注意区分两个 schema：`dws event schema <event_key>` 查事件的输出字段；`dws schema event.consume` 查 consume 命令自身的入参（机读结构，source=cobra，含 parameters + 位置参数）。
 
 ## Event catalog
 
 | 事件码 | 场景 | 必填参数 |
 |---|---|---|
 | `user_im_message_receive_at` | 当前用户被 @ 的消息 | 无 |
-| `user_im_message_receive_o2o` | 当前用户与指定用户的单聊消息 | `--user` |
+| `user_im_message_receive_o2o` | 当前用户与指定用户的单聊消息 | `--user` 或 `--open-dingtalk-id` |
 | `user_im_message_receive_group` | 当前用户所在指定群聊/会话的消息 | `--group` |
-| `user_im_message_receive_user` | 当前用户收到的指定用户发送的消息（单聊和群聊） | `--user` |
-| `user_im_message_read_o2o` | 指定单聊中当前用户发送的消息被已读 | `--user` |
+| `user_im_message_receive_user` | 当前用户收到的指定用户发送的消息（单聊和群聊） | `--user` 或 `--open-dingtalk-id` |
+| `user_im_message_read_o2o` | 指定单聊中当前用户发送的消息被已读 | `--user` 或 `--open-dingtalk-id` |
 | `user_im_message_read_group` | 指定群聊中当前用户发送的消息被已读 | `--group` |
-| `user_im_message_recall_o2o` | 指定单聊中的消息被撤回 | `--user` |
+| `user_im_message_recall_o2o` | 指定单聊中的消息被撤回 | `--user` 或 `--open-dingtalk-id` |
 | `user_im_message_recall_group` | 指定群聊中的消息被撤回 | `--group` |
-| `user_im_message_reaction_o2o` | 指定单聊中的消息收到表情回应 | `--user` |
+| `user_im_message_reaction_o2o` | 指定单聊中的消息收到表情回应 | `--user` 或 `--open-dingtalk-id` |
 | `user_im_message_reaction_group` | 指定群聊中的消息收到表情回应 | `--group` |
 
 只承认上表 10 个事件码。默认身份就是当前用户，不要额外加身份切换 flag。
@@ -44,8 +44,10 @@
 |---|---|
 | "监听有人 @ 我的消息" | `event consume`，事件码 `user_im_message_receive_at`，参数 `-f ndjson` |
 | "监听我和 userId 507971 的单聊消息" | `event consume`，事件码 `user_im_message_receive_o2o`，参数 `--user 507971 -f ndjson` |
+| "监听我和 openDingtalkId abc 的单聊消息" | `event consume`，事件码 `user_im_message_receive_o2o`，参数 `--open-dingtalk-id abc -f ndjson` |
 | "监听 XX 群消息" | 先 `dws chat search --query "XX" --format json`，确认后 consume group |
 | "监听 userId 507971 发给我的消息" | `event consume`，事件码 `user_im_message_receive_user`，参数 `--user 507971 -f ndjson` |
+| "监听 openDingtalkId abc 发给我的消息" | `event consume`，事件码 `user_im_message_receive_user`，参数 `--open-dingtalk-id abc -f ndjson` |
 | "监听我发给 userId 507971 的消息是否已读" | `event consume`，事件码 `user_im_message_read_o2o`，参数 `--user 507971 -f ndjson` |
 | "监听 XX 群消息已读" | 先解析群 ID，再 consume `user_im_message_read_group --group <id>` |
 | "监听我和 userId 507971 的消息撤回" | `event consume`，事件码 `user_im_message_recall_o2o`，参数 `--user 507971 -f ndjson` |
@@ -57,7 +59,7 @@
 | "看个人事件订阅状态" | `dws event status --event <event_key>` |
 | "停止这个个人事件订阅" | `dws event stop <subscribe_id>` |
 
-多候选让用户确认。缺必填 ID 且解析不出先追问，不要猜。
+多候选让用户确认。缺必填 ID 且解析不出先追问，不要猜。企业内部 userId 使用 `--user`；明确给出 openDingtalkId，或目标是外部联系人、机器人、跨组织身份时使用 `--open-dingtalk-id`。两者严格二选一，不得混填、猜测或自动转换身份类型。
 
 “我和某人的单聊”使用 `receive_o2o`；“某人发给我的消息/某人发送的消息”使用 `receive_user`，后者覆盖该发送人的单聊和群聊消息。用户要求执行“撤回消息”时走 `dws chat`；只有“监听/订阅消息撤回”才走 `dws event`。“贴标签”表示给消息贴表情时，对应 `reaction` 表情回应事件。
 
@@ -88,8 +90,10 @@ dws event schema user_im_message_reaction_group
 ```bash
 dws event consume user_im_message_receive_at -f ndjson
 dws event consume user_im_message_receive_o2o --user 507971 -f ndjson
+dws event consume user_im_message_receive_o2o --open-dingtalk-id abc -f ndjson
 dws event consume user_im_message_receive_group --group <openConversationId> -f ndjson
 dws event consume user_im_message_receive_user --user 507971 -f ndjson
+dws event consume user_im_message_receive_user --open-dingtalk-id abc -f ndjson
 dws event consume user_im_message_read_o2o --user 507971 -f ndjson
 dws event consume user_im_message_read_group --group <openConversationId> -f ndjson
 dws event consume user_im_message_recall_o2o --user 507971 -f ndjson
@@ -97,6 +101,8 @@ dws event consume user_im_message_recall_group --group <openConversationId> -f n
 dws event consume user_im_message_reaction_o2o --user 507971 -f ndjson
 dws event consume user_im_message_reaction_group --group <openConversationId> -f ndjson
 ```
+
+上述所有 `*_o2o` 命令和 `user_im_message_receive_user` 都可将 `--user <userId>` 替换为 `--open-dingtalk-id <openDingtalkId>`，但两个参数不能同时使用。
 
 ```bash
 dws event status --event user_im_message_receive_at

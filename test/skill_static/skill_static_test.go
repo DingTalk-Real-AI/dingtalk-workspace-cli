@@ -50,6 +50,12 @@ var (
 		"dws skill find":            true, // backward-compat stub
 	}
 
+	// Commands in this set are runnable leaves whose following token is a
+	// positional argument rather than another Cobra subcommand.
+	positionalLeafCommands = map[string]bool{
+		"dws schema": true,
+	}
+
 	// Argument-like tokens the parser should not mistake for sub-commands.
 	dateLikeRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}`)
 )
@@ -212,6 +218,9 @@ func parseSubPath(cmd string) (subPath, leaf string, flags []string) {
 		if len(subTokens) == 0 && t != "dws" {
 			break // doesn't start with dws → not a real cmd
 		}
+		if positionalLeafCommands[strings.Join(subTokens, " ")] {
+			break
+		}
 		// Stop sub-path on noise tokens
 		if dateLikeRe.MatchString(t) || strings.Contains(t, "/") || strings.Contains(t, "*") {
 			break
@@ -224,6 +233,13 @@ func parseSubPath(cmd string) (subPath, leaf string, flags []string) {
 	subPath = strings.Join(subTokens, " ")
 	leaf = subTokens[len(subTokens)-1]
 	return subPath, leaf, flags
+}
+
+func TestParseSubPathStopsAtSchemaPathArgument(t *testing.T) {
+	subPath, leaf, _ := parseSubPath("dws schema event.consume")
+	if subPath != "dws schema" || leaf != "schema" {
+		t.Fatalf("parseSubPath() = (%q, %q), want (%q, %q)", subPath, leaf, "dws schema", "schema")
+	}
 }
 
 // helpCache memoizes `dws <sub> --help` outputs.

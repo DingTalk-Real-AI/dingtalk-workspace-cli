@@ -146,6 +146,7 @@ SIGTERM、关 stdin，或 dws event stop <subscribe_id>，不要 kill -9。
 				"ttl",
 				"ephemeral",
 				"user",
+				"open-dingtalk-id",
 				"group",
 				"personal-event-base-url",
 			); err != nil {
@@ -286,7 +287,9 @@ SIGTERM、关 stdin，或 dws event stop <subscribe_id>，不要 kill -9。
 			"或从外部 dws event stop <subscribe_id>（会一并退订）；"+
 			"请勿 kill -9（会跳过退订、泄漏服务端订阅）")
 	f.StringVar(&personalOpts.UserID, "user", "",
-		"个人单聊对端 userId")
+		"单聊对端或指定发送人的 userId（与 --open-dingtalk-id 二选一）")
+	f.StringVar(&personalOpts.OpenDingTalkID, "open-dingtalk-id", "",
+		"单聊对端或指定发送人的 openDingtalkId（与 --user 二选一）")
 	f.StringVar(&personalOpts.GroupID, "group", "",
 		"group 规则：openConversationId")
 	f.StringVar(&personalOpts.ControlBaseURL, "personal-event-base-url", "",

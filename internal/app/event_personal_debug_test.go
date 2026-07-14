@@ -98,7 +98,7 @@ func TestEventConsumeAsAppRejectedBeforeEventKeyValidation(t *testing.T) {
 
 func TestEventConsumePersonalParamSpecFlags(t *testing.T) {
 	cmd := newEventConsumeCommand()
-	for _, name := range []string{"user", "group", "query"} {
+	for _, name := range []string{"user", "open-dingtalk-id", "group", "query"} {
 		if cmd.Flags().Lookup(name) == nil {
 			t.Fatalf("flag --%s is not registered", name)
 		}
@@ -110,6 +110,7 @@ func TestEventConsumePersonalParamSpecFlags(t *testing.T) {
 		"sender-union-id",
 		"open-conversation-id",
 		"keyword",
+		"odid",
 	} {
 		if cmd.Flags().Lookup(name) != nil {
 			t.Fatalf("retired flag --%s is still registered", name)
@@ -125,6 +126,7 @@ func TestEventConsumeRetiredPersonalFlagsAreUnknown(t *testing.T) {
 		"sender-union-id",
 		"open-conversation-id",
 		"keyword",
+		"odid",
 	} {
 		t.Run(name, func(t *testing.T) {
 			cmd := newEventConsumeCommand()
@@ -142,6 +144,7 @@ func TestEventConsumeRetiredPersonalFlagsAreUnknown(t *testing.T) {
 func TestEventConsumeAsAppRejectedBeforePersonalParamSpecFlags(t *testing.T) {
 	for _, args := range [][]string{
 		{"--as", "app", "--user", "507971"},
+		{"--as", "app", "--open-dingtalk-id", "open-user-1"},
 		{"--as", "app", "--group", "cid"},
 		{"--as", "app", "--query", "报警"},
 	} {

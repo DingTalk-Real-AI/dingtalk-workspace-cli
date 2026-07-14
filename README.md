@@ -440,6 +440,9 @@ dws event consume user_im_message_receive_at -f ndjson
 # Listen for one-to-one messages with a specified user
 dws event consume user_im_message_receive_o2o --user <userId> -f ndjson
 
+# Listen by openDingtalkId (external contact, bot, or cross-organization identity)
+dws event consume user_im_message_receive_o2o --open-dingtalk-id <openDingtalkId> -f ndjson
+
 # Listen for messages in a specified group
 dws event consume user_im_message_receive_group --group <openConversationId> -f ndjson
 
@@ -447,6 +450,8 @@ dws event consume user_im_message_receive_group --group <openConversationId> -f 
 dws event status
 dws event stop <subscribe_id>
 ```
+
+For one-to-one and specified-sender events, use exactly one target identity: `--user` for an internal `userId`, or `--open-dingtalk-id` for an `openDingtalkId`. The CLI does not infer or convert between these identity types.
 
 | Feature | Details |
 |---------|---------|

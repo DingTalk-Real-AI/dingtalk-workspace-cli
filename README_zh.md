@@ -437,6 +437,9 @@ dws event consume user_im_message_receive_at -f ndjson
 # 监听与指定用户的单聊消息
 dws event consume user_im_message_receive_o2o --user <userId> -f ndjson
 
+# 使用 openDingtalkId 监听外部联系人、机器人或跨组织身份
+dws event consume user_im_message_receive_o2o --open-dingtalk-id <openDingtalkId> -f ndjson
+
 # 监听指定群的消息
 dws event consume user_im_message_receive_group --group <openConversationId> -f ndjson
 
@@ -444,6 +447,8 @@ dws event consume user_im_message_receive_group --group <openConversationId> -f 
 dws event status
 dws event stop <subscribe_id>
 ```
+
+单聊和指定发送人事件必须且只能选择一种目标身份：企业内部 `userId` 使用 `--user`，`openDingtalkId` 使用 `--open-dingtalk-id`。CLI 不会自动猜测或转换身份类型。
 
 | 特性 | 说明 |
 |------|------|

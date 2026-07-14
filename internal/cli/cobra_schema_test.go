@@ -38,6 +38,7 @@ func buildEventTestTree() *cobra.Command {
 	f := consume.Flags()
 	f.StringP("format", "f", "ndjson", "输出格式")
 	f.String("user", "", "单聊对端 userId")
+	f.String("open-dingtalk-id", "", "单聊对端 openDingtalkId")
 	f.String("group", "", "群 openConversationId")
 	f.Int("max-events", 0, "收到 N 条后退出")
 	f.Duration("duration", 0, "运行时长上限")
@@ -103,6 +104,9 @@ func TestRenderCobraSchema_LeafFlatShape(t *testing.T) {
 	// Type mapping.
 	if got := paramField(t, params, "user", "type"); got != "string" {
 		t.Errorf("user type = %v, want string", got)
+	}
+	if got := paramField(t, params, "open-dingtalk-id", "type"); got != "string" {
+		t.Errorf("open-dingtalk-id type = %v, want string", got)
 	}
 	if got := paramField(t, params, "max-events", "type"); got != "integer" {
 		t.Errorf("max-events type = %v, want integer", got)
