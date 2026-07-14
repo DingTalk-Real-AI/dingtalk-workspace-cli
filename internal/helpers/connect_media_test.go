@@ -122,6 +122,35 @@ func TestExtractCallbackText(t *testing.T) {
 	}
 }
 
+func TestRawCallbackPromptPreservesChatRecordPayload(t *testing.T) {
+	content := map[string]interface{}{
+		"title": "转发的聊天记录",
+		"contents": []interface{}{
+			map[string]interface{}{"senderName": "张三", "text": "请汇总本周风险"},
+			map[string]interface{}{"senderName": "李四", "text": "发布窗口需要延期"},
+		},
+	}
+
+	got := rawCallbackPrompt(" chatRecord ", content)
+	for _, want := range []string{
+		`msgtype="chatRecord"`,
+		`"senderName":"张三"`,
+		`"text":"请汇总本周风险"`,
+		`"text":"发布窗口需要延期"`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("rawCallbackPrompt() missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestRawCallbackPromptForUnknownEmptyPayload(t *testing.T) {
+	got := rawCallbackPrompt("futureMessageType", nil)
+	if !strings.Contains(got, `msgtype="futureMessageType"`) || !strings.HasSuffix(got, "\nnull") {
+		t.Fatalf("rawCallbackPrompt() = %q, want message type and null JSON payload", got)
+	}
+}
+
 // TestExtractInteractiveCardText covers the bot→bot @ card: the leading
 // mention leaf (whose display name may contain spaces) is dropped by leaf
 // boundary, leaving the clean instruction.

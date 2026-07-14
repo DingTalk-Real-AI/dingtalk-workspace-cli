@@ -196,6 +196,19 @@ func summarizeContent(content interface{}) string {
 	return s
 }
 
+// rawCallbackPrompt preserves message types whose payload is meaningful but
+// has no locally recognised text/media shape (for example msgtype=chatRecord).
+// The connector should not decide that such messages are empty: forwarding
+// the type and JSON payload lets the backend model interpret new and complex
+// DingTalk message formats without waiting for a CLI-side parser update.
+func rawCallbackPrompt(msgtype string, content interface{}) string {
+	b, err := json.Marshal(content)
+	if err != nil {
+		b = []byte(fmt.Sprintf("%v", content))
+	}
+	return fmt.Sprintf("用户发送了一条钉钉消息，msgtype=%q。请解析以下原始消息 JSON，提取有用信息并处理用户意图：\n%s", strings.TrimSpace(msgtype), b)
+}
+
 // extractCallbackText pulls the visible text out of a structured-text callback
 // payload (msgtype=richText / markdown / etc.) for the case where the SDK's
 // data.Text.Content is empty. This matters because `dws chat message send

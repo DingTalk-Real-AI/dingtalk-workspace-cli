@@ -1172,13 +1172,15 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 					text = fallback
 				}
 			}
+			if text == "" && !fileInfo.hasActionable() {
+				text = rawCallbackPrompt(msgtype, data.Content)
+			}
 		}
-		if (text == "" && len(picCodes) == 0 && !fileInfo.hasActionable()) || data.SessionWebhook == "" {
-			// Observability: silent drops are the #1 reason a working connector
-			// looks dead. Log msgtype + a payload summary so an unhandled shape
-			// (e.g. new-style file callback without downloadCode) shows up in
-			// stderr instead of being invisible.
-			fmt.Fprintf(os.Stderr, "[connect] 丢弃消息 msgtype=%q staffId=%s convId=%s msgId=%s content=%s (无正文/图片/可下载文件或 sessionWebhook 为空)\n",
+		if data.SessionWebhook == "" {
+			// A session webhook is required for the fallback reply path. Message
+			// payload shape is deliberately not filtered here: unknown and complex
+			// types are forwarded as raw JSON for the backend model to interpret.
+			fmt.Fprintf(os.Stderr, "[connect] 丢弃消息 msgtype=%q staffId=%s convId=%s msgId=%s content=%s (sessionWebhook 为空，无法回复)\n",
 				msgtype, data.SenderStaffId, data.ConversationId, data.MsgId, summarizeContent(data.Content))
 			return []byte(""), nil
 		}
