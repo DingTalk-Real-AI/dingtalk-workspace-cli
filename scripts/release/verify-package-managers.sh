@@ -146,7 +146,7 @@ verify_brew() {
   cp "$FORMULA_PATH" "$tap_repo/Formula/dingtalk-workspace-cli-local.rb"
 
   HOME="$brew_home" HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
-    brew install "$BREW_TAP_NAME/dingtalk-workspace-cli-local" >/dev/null
+    brew install -y "$BREW_TAP_NAME/dingtalk-workspace-cli-local" >/dev/null
 
   prefix="$(
     HOME="$brew_home" HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
@@ -154,7 +154,7 @@ verify_brew() {
   )"
   [ -x "$prefix/bin/dws" ] || err "brew install did not create $prefix/bin/dws"
   "$prefix/bin/dws" --help >/dev/null
-  verify_skill_targets "$brew_home"
+  need_file "$prefix/share/dingtalk-workspace-cli-local/skills/dws/SKILL.md"
 }
 
 need_file "$DIST_DIR/dws-skills.zip"
