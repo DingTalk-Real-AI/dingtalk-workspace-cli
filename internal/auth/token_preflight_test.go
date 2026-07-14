@@ -343,6 +343,48 @@ func TestLockedRefreshPreflightsLegacyMirrorBeforeHTTP(t *testing.T) {
 	}
 }
 
+func TestLockedRefreshPreflightsSelectedIsolatedInstance(t *testing.T) {
+	cleanupKeychain(t)
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	setPreflightTestCredentials(t)
+	configDir := t.TempDir()
+	DeactivateAuthStore(configDir)
+	t.Cleanup(func() { DeactivateAuthStore(configDir) })
+
+	tx, err := BeginNewInstance(configDir, "personal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := tx.Store()
+	t.Cleanup(func() { _ = os.RemoveAll(keychain.StorageDir(store.KeychainService)) })
+	data := testToken("at_isolated_refresh", "corp_isolated_refresh", "Isolated Refresh Org")
+	data.ExpiresAt = time.Now().Add(-time.Hour)
+	if err := SaveTokenData(configDir, data); err != nil {
+		t.Fatalf("SaveTokenData() error = %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	legacyPath := filepath.Join(keychain.StorageDir(store.KeychainService), keychain.AccountToken+".enc")
+	if err := os.WriteFile(legacyPath, []byte("corrupt isolated legacy ciphertext"), 0o600); err != nil {
+		t.Fatalf("WriteFile(isolated legacy ciphertext) error = %v", err)
+	}
+
+	var calls atomic.Int32
+	provider := NewOAuthProvider(configDir, nil)
+	provider.httpClient = &http.Client{Transport: preflightRoundTripFunc(func(*http.Request) (*http.Response, error) {
+		calls.Add(1)
+		return nil, errors.New("unexpected refresh request")
+	})}
+	_, err = provider.lockedRefresh(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "legacy token slot") {
+		t.Fatalf("lockedRefresh() error = %v, want isolated token persistence preflight error", err)
+	}
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("refresh HTTP calls = %d, want 0", got)
+	}
+}
+
 func TestExchangeAuthCodeAllowsFirstLogin(t *testing.T) {
 	cleanupKeychain(t)
 	t.Setenv(keychain.DisableKeychainEnv, "1")

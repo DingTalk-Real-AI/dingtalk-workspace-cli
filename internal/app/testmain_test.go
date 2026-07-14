@@ -15,6 +15,7 @@ package app
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
@@ -48,6 +49,27 @@ func TestMain(m *testing.M) {
 	if err := os.Setenv(keychain.StorageDirEnv, tmpDir); err != nil {
 		_ = os.RemoveAll(tmpDir)
 		panic("set " + keychain.StorageDirEnv + ": " + err.Error())
+	}
+	if err := os.Setenv(keychain.DisableKeychainEnv, "1"); err != nil {
+		_ = os.RemoveAll(tmpDir)
+		panic("set " + keychain.DisableKeychainEnv + ": " + err.Error())
+	}
+	testHome := filepath.Join(tmpDir, "home")
+	if err := os.MkdirAll(testHome, 0o700); err != nil {
+		_ = os.RemoveAll(tmpDir)
+		panic("create test home: " + err.Error())
+	}
+	if err := os.Setenv("HOME", testHome); err != nil {
+		_ = os.RemoveAll(tmpDir)
+		panic("set HOME: " + err.Error())
+	}
+	if err := os.Setenv("USERPROFILE", testHome); err != nil {
+		_ = os.RemoveAll(tmpDir)
+		panic("set USERPROFILE: " + err.Error())
+	}
+	if err := os.Setenv("DWS_CONFIG_DIR", filepath.Join(tmpDir, "config")); err != nil {
+		_ = os.RemoveAll(tmpDir)
+		panic("set DWS_CONFIG_DIR: " + err.Error())
 	}
 	openBrowserFunc = func(string) error { return nil }
 	code := m.Run()

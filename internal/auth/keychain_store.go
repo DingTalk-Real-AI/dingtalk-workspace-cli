@@ -36,7 +36,13 @@ var ErrTokenDataNotFound = errors.New("token data not found")
 // SaveTokenDataKeychain saves TokenData to the platform keychain.
 // This is the new secure storage method using random master key.
 func SaveTokenDataKeychain(data *TokenData) error {
-	return saveTokenDataKeychainAccount(keychain.AccountToken, data)
+	return SaveTokenDataKeychainAt(getDefaultConfigDir(), data)
+}
+
+// SaveTokenDataKeychainAt saves TokenData in the auth store selected for
+// configDir.
+func SaveTokenDataKeychainAt(configDir string, data *TokenData) error {
+	return saveTokenDataKeychainAccountAt(configDir, keychain.AccountToken, data)
 }
 
 // TokenAccountForCorpID returns the keychain account used for a corp-bound token.
@@ -46,14 +52,20 @@ func TokenAccountForCorpID(corpID string) string {
 
 // SaveTokenDataKeychainForCorpID saves TokenData to a corp-scoped keychain slot.
 func SaveTokenDataKeychainForCorpID(corpID string, data *TokenData) error {
+	return SaveTokenDataKeychainForCorpIDAt(getDefaultConfigDir(), corpID, data)
+}
+
+// SaveTokenDataKeychainForCorpIDAt saves corp-scoped TokenData in the auth
+// store selected for configDir.
+func SaveTokenDataKeychainForCorpIDAt(configDir, corpID string, data *TokenData) error {
 	corpID = strings.TrimSpace(corpID)
 	if corpID == "" {
 		return fmt.Errorf("corpId is required for profile token storage")
 	}
-	return saveTokenDataKeychainAccount(TokenAccountForCorpID(corpID), data)
+	return saveTokenDataKeychainAccountAt(configDir, TokenAccountForCorpID(corpID), data)
 }
 
-func saveTokenDataKeychainAccount(account string, data *TokenData) error {
+func saveTokenDataKeychainAccountAt(configDir, account string, data *TokenData) error {
 	jsonData, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal token data: %w", err)
@@ -65,28 +77,42 @@ func saveTokenDataKeychainAccount(account string, data *TokenData) error {
 		}
 	}()
 
-	if err := keychain.Set(keychain.Service, account, string(jsonData)); err != nil {
+	service := ResolveAuthStore(configDir).KeychainService
+	if err := keychain.Set(service, account, string(jsonData)); err != nil {
 		return fmt.Errorf("save to keychain: %w", err)
 	}
+	recordPendingAuthKeychainWrite(service, account)
 	return nil
 }
 
 // LoadTokenDataKeychain loads TokenData from the platform keychain.
 func LoadTokenDataKeychain() (*TokenData, error) {
-	return loadTokenDataKeychainAccount(keychain.AccountToken)
+	return LoadTokenDataKeychainAt(getDefaultConfigDir())
+}
+
+// LoadTokenDataKeychainAt loads TokenData from the auth store selected for
+// configDir.
+func LoadTokenDataKeychainAt(configDir string) (*TokenData, error) {
+	return loadTokenDataKeychainAccountAt(configDir, keychain.AccountToken)
 }
 
 // LoadTokenDataKeychainForCorpID loads TokenData from a corp-scoped keychain slot.
 func LoadTokenDataKeychainForCorpID(corpID string) (*TokenData, error) {
+	return LoadTokenDataKeychainForCorpIDAt(getDefaultConfigDir(), corpID)
+}
+
+// LoadTokenDataKeychainForCorpIDAt loads corp-scoped TokenData from the auth
+// store selected for configDir.
+func LoadTokenDataKeychainForCorpIDAt(configDir, corpID string) (*TokenData, error) {
 	corpID = strings.TrimSpace(corpID)
 	if corpID == "" {
 		return nil, fmt.Errorf("corpId is required for profile token storage")
 	}
-	return loadTokenDataKeychainAccount(TokenAccountForCorpID(corpID))
+	return loadTokenDataKeychainAccountAt(configDir, TokenAccountForCorpID(corpID))
 }
 
-func loadTokenDataKeychainAccount(account string) (*TokenData, error) {
-	jsonStr, err := keychain.Get(keychain.Service, account)
+func loadTokenDataKeychainAccountAt(configDir, account string) (*TokenData, error) {
+	jsonStr, err := keychain.Get(ResolveAuthStore(configDir).KeychainService, account)
 	if err != nil {
 		return nil, fmt.Errorf("load from keychain: %w", err)
 	}
@@ -111,7 +137,7 @@ func preflightTokenPersistence(configDir string) error {
 		return nil
 	}
 
-	if _, err := LoadTokenDataKeychain(); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
+	if _, err := LoadTokenDataKeychainAt(configDir); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
 		return fmt.Errorf("legacy token slot %q is unreadable: %w", keychain.AccountToken, err)
 	}
 
@@ -130,14 +156,14 @@ func preflightTokenPersistence(configDir string) error {
 		}
 		seen[corpID] = struct{}{}
 
-		if _, err := LoadTokenDataKeychainForCorpID(corpID); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
+		if _, err := LoadTokenDataKeychainForCorpIDAt(configDir, corpID); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
 			return fmt.Errorf(
 				"profile token slot %q is unreadable; on macOS first try `env -u DWS_DISABLE_KEYCHAIN dws auth migrate-keychain --to file-dek --dry-run`; if the ciphertext is damaged, remove only this profile with `dws auth logout --profile %q`, or use `dws auth reset` only when discarding all local profiles: %w",
 				TokenAccountForCorpID(corpID), corpID, err,
 			)
 		}
 	}
-	if err := keychain.ValidateAuthTokenEntries(keychain.Service); err != nil {
+	if err := keychain.ValidateAuthTokenEntries(ResolveAuthStore(configDir).KeychainService); err != nil {
 		return fmt.Errorf(
 			"auth token ciphertext inventory is unreadable; on macOS first try `env -u DWS_DISABLE_KEYCHAIN dws auth migrate-keychain --to file-dek --dry-run`; if the ciphertext is damaged, use `dws auth reset` only when discarding all local profiles: %w",
 			err,
@@ -150,18 +176,22 @@ func preflightTokenPersistence(configDir string) error {
 // An unrelated broken profile must not prevent the current profile from using
 // its still-valid credentials.
 func preflightTokenRefreshPersistence(data *TokenData) error {
+	return preflightTokenRefreshPersistenceAt(getDefaultConfigDir(), data)
+}
+
+func preflightTokenRefreshPersistenceAt(configDir string, data *TokenData) error {
 	if h := edition.Get(); h.SaveToken != nil {
 		return nil
 	}
 
-	if _, err := LoadTokenDataKeychain(); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
+	if _, err := LoadTokenDataKeychainAt(configDir); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
 		return fmt.Errorf("legacy token slot %q is unreadable: %w", keychain.AccountToken, err)
 	}
 	if data == nil || strings.TrimSpace(data.CorpID) == "" {
 		return nil
 	}
 	corpID := strings.TrimSpace(data.CorpID)
-	if _, err := LoadTokenDataKeychainForCorpID(corpID); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
+	if _, err := LoadTokenDataKeychainForCorpIDAt(configDir, corpID); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
 		return fmt.Errorf("profile token slot %q is unreadable: %w", TokenAccountForCorpID(corpID), err)
 	}
 	return nil
@@ -169,30 +199,54 @@ func preflightTokenRefreshPersistence(data *TokenData) error {
 
 // DeleteTokenDataKeychain removes TokenData from the platform keychain.
 func DeleteTokenDataKeychain() error {
-	return keychain.Remove(keychain.Service, keychain.AccountToken)
+	return DeleteTokenDataKeychainAt(getDefaultConfigDir())
+}
+
+// DeleteTokenDataKeychainAt removes TokenData from the auth store selected for
+// configDir.
+func DeleteTokenDataKeychainAt(configDir string) error {
+	return keychain.Remove(ResolveAuthStore(configDir).KeychainService, keychain.AccountToken)
 }
 
 // DeleteTokenDataKeychainForCorpID removes TokenData from a corp-scoped keychain slot.
 func DeleteTokenDataKeychainForCorpID(corpID string) error {
+	return DeleteTokenDataKeychainForCorpIDAt(getDefaultConfigDir(), corpID)
+}
+
+// DeleteTokenDataKeychainForCorpIDAt removes corp-scoped TokenData from the
+// auth store selected for configDir.
+func DeleteTokenDataKeychainForCorpIDAt(configDir, corpID string) error {
 	corpID = strings.TrimSpace(corpID)
 	if corpID == "" {
 		return fmt.Errorf("corpId is required for profile token storage")
 	}
-	return keychain.Remove(keychain.Service, TokenAccountForCorpID(corpID))
+	return keychain.Remove(ResolveAuthStore(configDir).KeychainService, TokenAccountForCorpID(corpID))
 }
 
 // TokenDataExistsKeychain checks if token data exists in keychain.
 func TokenDataExistsKeychain() bool {
-	return keychain.Exists(keychain.Service, keychain.AccountToken)
+	return TokenDataExistsKeychainAt(getDefaultConfigDir())
+}
+
+// TokenDataExistsKeychainAt reports whether TokenData exists in the auth store
+// selected for configDir.
+func TokenDataExistsKeychainAt(configDir string) bool {
+	return keychain.Exists(ResolveAuthStore(configDir).KeychainService, keychain.AccountToken)
 }
 
 // TokenDataExistsKeychainForCorpID checks if a corp-scoped token exists.
 func TokenDataExistsKeychainForCorpID(corpID string) bool {
+	return TokenDataExistsKeychainForCorpIDAt(getDefaultConfigDir(), corpID)
+}
+
+// TokenDataExistsKeychainForCorpIDAt reports whether corp-scoped TokenData
+// exists in the auth store selected for configDir.
+func TokenDataExistsKeychainForCorpIDAt(configDir, corpID string) bool {
 	corpID = strings.TrimSpace(corpID)
 	if corpID == "" {
 		return false
 	}
-	return keychain.Exists(keychain.Service, TokenAccountForCorpID(corpID))
+	return keychain.Exists(ResolveAuthStore(configDir).KeychainService, TokenAccountForCorpID(corpID))
 }
 
 // EnsureMigration performs one-time migration from legacy .data to keychain.
@@ -200,7 +254,7 @@ func TokenDataExistsKeychainForCorpID(corpID string) bool {
 // The migration is idempotent and thread-safe.
 func EnsureMigration(configDir string, logger *slog.Logger) {
 	migrationOnce.Do(func() {
-		result := keychain.MigrateFromLegacy(configDir)
+		result := keychain.MigrateFromLegacy(ResolveAuthStore(configDir).ConfigDir)
 		migrationDone = true
 
 		if result.Migrated {

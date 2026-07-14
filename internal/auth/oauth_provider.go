@@ -626,7 +626,7 @@ func (p *OAuthProvider) lockedRefresh(ctx context.Context) (*TokenData, error) {
 	if !data.IsRefreshTokenValid() {
 		return nil, fmt.Errorf("refresh_token 已过期")
 	}
-	if err := preflightTokenRefreshPersistence(data); err != nil {
+	if err := preflightTokenRefreshPersistenceAt(p.configDir, data); err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
 	}
 

@@ -66,19 +66,20 @@ func resolvePassword() ([]byte, error) {
 // file lock (via acquireTokenLock) to prevent two processes from refreshing
 // simultaneously. See OAuthProvider.lockedRefresh().
 func SaveSecureTokenData(configDir string, data *TokenData) error {
+	authDir := ResolveAuthStore(configDir).ConfigDir
 	password, err := resolvePassword()
 	if err != nil {
 		return err
 	}
 
-	if err := os.MkdirAll(configDir, config.DirPerm); err != nil {
-		return fmt.Errorf("creating config dir %s: %w", configDir, err)
+	if err := os.MkdirAll(authDir, config.DirPerm); err != nil {
+		return fmt.Errorf("creating config dir %s: %w", authDir, err)
 	}
 	// Verify the directory permissions are strict even if it already existed.
-	if info, statErr := os.Stat(configDir); statErr == nil {
+	if info, statErr := os.Stat(authDir); statErr == nil {
 		if perm := info.Mode().Perm(); perm&0o077 != 0 {
-			if chErr := os.Chmod(configDir, config.DirPerm); chErr != nil {
-				return fmt.Errorf("config dir %s has unsafe permissions %o and chmod failed: %w", configDir, perm, chErr)
+			if chErr := os.Chmod(authDir, config.DirPerm); chErr != nil {
+				return fmt.Errorf("config dir %s has unsafe permissions %o and chmod failed: %w", authDir, perm, chErr)
 			}
 		}
 	}
@@ -98,7 +99,7 @@ func SaveSecureTokenData(configDir string, data *TokenData) error {
 		return fmt.Errorf("encrypting token data: %w", err)
 	}
 
-	finalPath := filepath.Join(configDir, secureDataFile)
+	finalPath := filepath.Join(authDir, secureDataFile)
 	tmpPath := finalPath + ".tmp"
 
 	// Atomic write with fsync to ensure data durability
@@ -141,7 +142,7 @@ func LoadSecureTokenData(configDir string) (*TokenData, error) {
 		return nil, err
 	}
 
-	path := filepath.Join(configDir, secureDataFile)
+	path := filepath.Join(ResolveAuthStore(configDir).ConfigDir, secureDataFile)
 	ciphertext, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading secure data file: %w", err)
@@ -168,7 +169,7 @@ func LoadSecureTokenData(configDir string) (*TokenData, error) {
 
 // DeleteSecureData removes .data file from configDir.
 func DeleteSecureData(configDir string) error {
-	path := filepath.Join(configDir, secureDataFile)
+	path := filepath.Join(ResolveAuthStore(configDir).ConfigDir, secureDataFile)
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("deleting secure data file: %w", err)
 	}
@@ -178,7 +179,7 @@ func DeleteSecureData(configDir string) error {
 
 // SecureDataExists checks if the secure .data file exists in the given directory.
 func SecureDataExists(configDir string) bool {
-	path := filepath.Join(configDir, secureDataFile)
+	path := filepath.Join(ResolveAuthStore(configDir).ConfigDir, secureDataFile)
 	_, err := os.Stat(path)
 	return err == nil
 }

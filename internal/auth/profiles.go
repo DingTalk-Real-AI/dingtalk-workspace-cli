@@ -100,7 +100,7 @@ func RuntimeProfile() string {
 
 // ProfilesPath returns the profile metadata path for a config dir.
 func ProfilesPath(configDir string) string {
-	return filepath.Join(configDir, profilesJSONFile)
+	return filepath.Join(ResolveAuthStore(configDir).ConfigDir, profilesJSONFile)
 }
 
 // LoadProfiles reads profiles.json. A missing file returns an empty config.
@@ -132,7 +132,8 @@ func SaveProfiles(configDir string, cfg *ProfilesConfig) error {
 		cfg = &ProfilesConfig{}
 	}
 	normalizeProfilesConfig(cfg)
-	if err := os.MkdirAll(configDir, config.DirPerm); err != nil {
+	authDir := ResolveAuthStore(configDir).ConfigDir
+	if err := os.MkdirAll(authDir, config.DirPerm); err != nil {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
@@ -173,14 +174,14 @@ func ensureProfilesMigrationLocked(configDir string) error {
 	if len(cfg.Profiles) > 0 {
 		return nil
 	}
-	if !TokenDataExistsKeychain() {
+	if !TokenDataExistsKeychainAt(configDir) {
 		return nil
 	}
-	data, err := LoadTokenDataKeychain()
+	data, err := LoadTokenDataKeychainAt(configDir)
 	if err != nil || data == nil || strings.TrimSpace(data.CorpID) == "" {
 		return nil
 	}
-	if err := SaveTokenDataKeychainForCorpID(data.CorpID, data); err != nil {
+	if err := SaveTokenDataKeychainForCorpIDAt(configDir, data.CorpID, data); err != nil {
 		return err
 	}
 	return upsertProfileFromToken(configDir, cfg, data, false)
@@ -299,6 +300,38 @@ func ResolveProfile(configDir, selector string) (*Profile, error) {
 	return nil, nil
 }
 
+// ResolveProfileByUserID resolves one organization identity inside the active
+// auth instance. userId is not global across organizations, so zero and multiple
+// matches both fail instead of silently selecting a corporation.
+func ResolveProfileByUserID(configDir, userID string) (*Profile, error) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil, fmt.Errorf("userId is required")
+	}
+	if err := EnsureProfilesMigration(configDir); err != nil {
+		return nil, err
+	}
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		return nil, err
+	}
+	var match *Profile
+	for i := range cfg.Profiles {
+		if strings.TrimSpace(cfg.Profiles[i].UserID) != userID {
+			continue
+		}
+		if match != nil {
+			return nil, fmt.Errorf("userId %q matches multiple organizations in the current auth instance; use --profile <corpId> to select one", userID)
+		}
+		copy := cfg.Profiles[i]
+		match = &copy
+	}
+	if match == nil {
+		return nil, fmt.Errorf("userId %q not found in the current auth instance", userID)
+	}
+	return match, nil
+}
+
 func resolveProfileForLoad(configDir, selector string) (*Profile, error) {
 	if err := ensureProfilesMigrationLocked(configDir); err != nil {
 		return nil, err
@@ -316,7 +349,7 @@ func resolveProfileForLoad(configDir, selector string) (*Profile, error) {
 		return p, nil
 	}
 	for _, candidate := range []string{cfg.CurrentProfile, cfg.PrimaryProfile} {
-		if p := findProfile(cfg, candidate); p != nil && TokenDataExistsKeychainForCorpID(p.CorpID) {
+		if p := findProfile(cfg, candidate); p != nil && TokenDataExistsKeychainForCorpIDAt(configDir, p.CorpID) {
 			return p, nil
 		}
 	}
@@ -499,14 +532,14 @@ func syncLegacyTokenMirrorLocked(configDir string) error {
 		if p == nil {
 			continue
 		}
-		data, loadErr := LoadTokenDataKeychainForCorpID(p.CorpID)
+		data, loadErr := LoadTokenDataKeychainForCorpIDAt(configDir, p.CorpID)
 		if loadErr != nil {
 			// Transient keychain read failure: do NOT touch the existing mirror.
 			hadReadError = true
 			continue
 		}
 		if data != nil {
-			if err := SaveTokenDataKeychain(data); err != nil {
+			if err := SaveTokenDataKeychainAt(configDir, data); err != nil {
 				return err
 			}
 			return WriteTokenMarker(configDir)
@@ -518,7 +551,7 @@ func syncLegacyTokenMirrorLocked(configDir string) error {
 		return nil
 	}
 	// All candidate profiles confirmed absent (no token): clear the mirror.
-	_ = DeleteTokenDataKeychain()
+	_ = DeleteTokenDataKeychainAt(configDir)
 	_ = DeleteTokenMarker(configDir)
 	return nil
 }

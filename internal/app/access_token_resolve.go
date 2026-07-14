@@ -40,6 +40,15 @@ func resolveAccessTokenFromDir(ctx context.Context, configDir string) (string, e
 	if tokenErr != nil && errors.Is(tokenErr, authpkg.ErrTokenDecryption) {
 		return "", tokenErr
 	}
+	// An explicitly isolated auth instance must never fall back to the historical
+	// base-home token. Missing or invalid instance credentials fail closed so a
+	// command cannot silently run as the legacy user.
+	if authpkg.ResolveAuthStore(configDir).Isolated() {
+		if tokenErr != nil {
+			return "", tokenErr
+		}
+		return "", nil
+	}
 	manager := authpkg.NewManager(configDir, nil)
 	configureLegacyAuthManagerCompatibility(manager)
 	if leg, _, err := manager.GetToken(); err == nil && strings.TrimSpace(leg) != "" {

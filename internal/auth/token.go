@@ -81,21 +81,22 @@ type TokenMarker struct {
 // timestamp. The host application uses this file's presence and mtime to
 // decide whether it needs to trigger a new auth exchange.
 func WriteTokenMarker(configDir string) error {
+	authDir := ResolveAuthStore(configDir).ConfigDir
 	marker := TokenMarker{UpdatedAt: time.Now().Format(time.RFC3339)}
 	data, _ := json.MarshalIndent(marker, "", "  ")
-	if err := os.MkdirAll(configDir, 0o700); err != nil {
+	if err := os.MkdirAll(authDir, 0o700); err != nil {
 		return err
 	}
-	tmp := filepath.Join(configDir, tokenJSONFile+"."+uuid.New().String()+".tmp")
+	tmp := filepath.Join(authDir, tokenJSONFile+"."+uuid.New().String()+".tmp")
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return err
 	}
-	return os.Rename(tmp, filepath.Join(configDir, tokenJSONFile))
+	return os.Rename(tmp, filepath.Join(authDir, tokenJSONFile))
 }
 
 // DeleteTokenMarker removes the token.json marker file.
 func DeleteTokenMarker(configDir string) error {
-	if err := os.Remove(filepath.Join(configDir, tokenJSONFile)); err != nil && !os.IsNotExist(err) {
+	if err := os.Remove(filepath.Join(ResolveAuthStore(configDir).ConfigDir, tokenJSONFile)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	return nil
@@ -123,7 +124,7 @@ func saveTokenDataLocked(configDir string, data *TokenData) error {
 		return saveTokenViaHook(h, configDir, data)
 	}
 	if data != nil && strings.TrimSpace(data.CorpID) != "" {
-		if err := SaveTokenDataKeychainForCorpID(data.CorpID, data); err != nil {
+		if err := SaveTokenDataKeychainForCorpIDAt(configDir, data.CorpID, data); err != nil {
 			return err
 		}
 		makeCurrent := strings.TrimSpace(RuntimeProfile()) == ""
@@ -131,7 +132,7 @@ func saveTokenDataLocked(configDir string, data *TokenData) error {
 			return err
 		}
 		if makeCurrent {
-			if err := SaveTokenDataKeychain(data); err != nil {
+			if err := SaveTokenDataKeychainAt(configDir, data); err != nil {
 				return err
 			}
 		} else if err := syncLegacyTokenMirrorLocked(configDir); err != nil {
@@ -139,7 +140,7 @@ func saveTokenDataLocked(configDir string, data *TokenData) error {
 		}
 		return WriteTokenMarker(configDir)
 	}
-	if err := SaveTokenDataKeychain(data); err != nil {
+	if err := SaveTokenDataKeychainAt(configDir, data); err != nil {
 		return err
 	}
 	return WriteTokenMarker(configDir)
@@ -184,7 +185,7 @@ func LoadTokenDataForProfile(configDir, profile string) (*TokenData, error) {
 		return nil, err
 	}
 	if selected != nil {
-		data, err := LoadTokenDataKeychainForCorpID(selected.CorpID)
+		data, err := LoadTokenDataKeychainForCorpIDAt(configDir, selected.CorpID)
 		if err == nil {
 			return data, nil
 		}
@@ -195,7 +196,7 @@ func LoadTokenDataForProfile(configDir, profile string) (*TokenData, error) {
 		// profile. Only fall back to the legacy single slot when it belongs to
 		// the SAME org; otherwise surface the error instead of silently acting
 		// as a different organization (the legacy mirror may have drifted).
-		if legacy, lerr := LoadTokenDataKeychain(); lerr == nil && legacy != nil &&
+		if legacy, lerr := LoadTokenDataKeychainAt(configDir); lerr == nil && legacy != nil &&
 			strings.TrimSpace(legacy.CorpID) == strings.TrimSpace(selected.CorpID) {
 			return legacy, nil
 		} else if lerr != nil && !errors.Is(lerr, ErrTokenDataNotFound) {
@@ -203,8 +204,8 @@ func LoadTokenDataForProfile(configDir, profile string) (*TokenData, error) {
 		}
 		return nil, err
 	}
-	if TokenDataExistsKeychain() {
-		return LoadTokenDataKeychain()
+	if TokenDataExistsKeychainAt(configDir) {
+		return LoadTokenDataKeychainAt(configDir)
 	}
 	data, err := LoadSecureTokenData(configDir)
 	if err != nil {
@@ -245,7 +246,7 @@ func deleteTokenDataForProfileLocked(configDir, profile string) error {
 		return err
 	}
 	if selected != nil {
-		keychainErr := DeleteTokenDataKeychainForCorpID(selected.CorpID)
+		keychainErr := DeleteTokenDataKeychainForCorpIDAt(configDir, selected.CorpID)
 		_, removeErr := removeProfileLocked(configDir, selected.CorpID)
 		legacyErr := syncLegacyTokenMirrorLocked(configDir)
 		secureErr := DeleteSecureData(configDir)
@@ -261,7 +262,7 @@ func deleteTokenDataForProfileLocked(configDir, profile string) error {
 		return secureErr
 	}
 
-	keychainErr := DeleteTokenDataKeychain()
+	keychainErr := DeleteTokenDataKeychainAt(configDir)
 	legacyErr := DeleteSecureData(configDir)
 	markerErr := DeleteTokenMarker(configDir)
 	if keychainErr != nil {
@@ -284,7 +285,7 @@ func DeleteAllTokenData(configDir string) error {
 		// other slot so the user can always self-heal via auth reset / logout.
 		if cfg, err := LoadProfiles(configDir); err == nil {
 			for _, profile := range cfg.Profiles {
-				if e := DeleteTokenDataKeychainForCorpID(profile.CorpID); e != nil && firstErr == nil {
+				if e := DeleteTokenDataKeychainForCorpIDAt(configDir, profile.CorpID); e != nil && firstErr == nil {
 					firstErr = e
 				}
 			}
@@ -300,7 +301,7 @@ func DeleteAllTokenData(configDir string) error {
 				}
 			}
 		}
-		if e := DeleteTokenDataKeychain(); e != nil && firstErr == nil {
+		if e := DeleteTokenDataKeychainAt(configDir); e != nil && firstErr == nil {
 			firstErr = e
 		}
 		if e := DeleteSecureData(configDir); e != nil && firstErr == nil {
@@ -318,9 +319,16 @@ func DeleteAllTokenData(configDir string) error {
 // This should be called before deleting local token data.
 // The function is best-effort: errors are returned but callers may choose to ignore them.
 func RevokeTokenRemote(ctx context.Context) error {
+	return RevokeTokenRemoteAt(ctx, getDefaultConfigDir())
+}
+
+// RevokeTokenRemoteAt revokes the token selected for configDir. The explicit
+// form prevents custom DWS homes and isolated auth instances from accidentally
+// loading the process-default login state during logout.
+func RevokeTokenRemoteAt(ctx context.Context, configDir string) error {
 	// Use MCP revoke endpoint when clientID is from MCP
 	if IsClientIDFromMCP() {
-		return revokeTokenViaMCP(ctx)
+		return revokeTokenViaMCPAt(ctx, configDir)
 	}
 	// Direct mode: use DingTalk logout endpoint
 	logoutURL, err := url.Parse(LogoutURL)
@@ -362,13 +370,17 @@ func RevokeTokenRemote(ctx context.Context) error {
 
 // revokeTokenViaMCP revokes token via MCP endpoint.
 func revokeTokenViaMCP(ctx context.Context) error {
+	return revokeTokenViaMCPAt(ctx, getDefaultConfigDir())
+}
+
+func revokeTokenViaMCPAt(ctx context.Context, configDir string) error {
 	revokeURL := GetRevokeTokenURL()
 	if revokeURL == "" {
 		return nil // No revoke endpoint available
 	}
 
 	// Load current token to get accessToken
-	tokenData, err := LoadTokenData(getDefaultConfigDir())
+	tokenData, err := LoadTokenData(configDir)
 	if err != nil || tokenData == nil {
 		return nil // No token to revoke
 	}

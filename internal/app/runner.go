@@ -767,10 +767,14 @@ var (
 // getCachedRuntimeToken returns a cached access token, loading it only once per process.
 // This avoids repeated Keychain access which takes ~70ms each time.
 func getCachedRuntimeToken(ctx context.Context) string {
-	cacheKey := strings.TrimSpace(authpkg.RuntimeProfile())
-	if cacheKey == "" {
-		cacheKey = "__default__"
+	profileKey := strings.TrimSpace(authpkg.RuntimeProfile())
+	if profileKey == "" {
+		profileKey = "__default__"
 	}
+	// Auth instance and organization are independent selection axes. Include the
+	// auth-store namespace so equal corp/profile names in two instances can
+	// never share a process-cached token.
+	cacheKey := authpkg.ResolveAuthStore(defaultConfigDir()).KeychainService + "\x00" + profileKey
 	cachedRuntimeTokenMu.Lock()
 	if token := cachedRuntimeTokens[cacheKey]; token != "" {
 		cachedRuntimeTokenMu.Unlock()

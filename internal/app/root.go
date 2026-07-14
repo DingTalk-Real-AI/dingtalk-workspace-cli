@@ -295,6 +295,11 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 	}
 	flags := &GlobalFlags{}
 	authpkg.SetRuntimeProfile(preparseProfileFlag(os.Args[1:]))
+	// Plugin construction reads the current user token to populate stdio
+	// context, so auth instance activation must happen before loadPlugins—not only in
+	// PersistentPreRunE. Keep the error for pre-run while suppressing every
+	// construction-time token read on a corrupt/unsupported registry.
+	_, initialAuthActivationErr := authpkg.ActivateCurrentInstance(defaultConfigDir())
 	loader := cli.EnvironmentLoader{
 		LookupEnv: os.LookupEnv,
 	}
@@ -313,6 +318,18 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 			return cmd.Help()
 		},
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Auth instance selection is an auth-only routing decision. Keep the global
+			// DWS config directory unchanged so logs, skills, recovery data and
+			// application credentials retain their historical locations.
+			recoveryCommand := authInstanceHookRecoveryCommand(cmd, initialAuthActivationErr)
+			if initialAuthActivationErr != nil && !recoveryCommand {
+				return apperrors.NewInternal(fmt.Sprintf("failed to activate login state: %v", initialAuthActivationErr))
+			}
+			if !recoveryCommand {
+				if _, err := authpkg.ActivateCurrentInstance(defaultConfigDir()); err != nil {
+					return apperrors.NewInternal(fmt.Sprintf("failed to activate login state: %v", err))
+				}
+			}
 			authpkg.SetRuntimeProfile(flags.Profile)
 			// Apply OAuth credential overrides from CLI flags (highest priority).
 			if flags.ClientID != "" {
@@ -372,7 +389,7 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 
 	// --- Plugin loading: runs AFTER legacy commands so plugin endpoints can
 	// be appended on top of the static endpoint registry.
-	pluginCmds := loadPlugins(engine, runner)
+	pluginCmds := loadPlugins(engine, runner, initialAuthActivationErr == nil)
 	if len(pluginCmds) > 0 {
 		addPluginCommandsSafe(root, pluginCmds)
 	}
@@ -393,6 +410,21 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 	root.SetContext(rootCtx)
 
 	return root
+}
+
+// A hook-backed edition cannot activate an isolated standard DWS store. Keep a
+// narrow recovery path for registry inspection and switching to default. The
+// edition's normal AfterPersistentPreRun contract still runs for both commands;
+// every token-reading command remains fail-closed.
+func authInstanceHookRecoveryCommand(cmd *cobra.Command, activationErr error) bool {
+	if cmd == nil || !stderrors.Is(activationErr, authpkg.ErrAuthInstanceIsolationUnsupported) {
+		return false
+	}
+	parent := cmd.Parent()
+	if parent == nil || parent.Name() != "auth" {
+		return false
+	}
+	return cmd.Name() == "list" || cmd.Name() == "use"
 }
 
 func preparseProfileFlag(args []string) string {
@@ -803,7 +835,7 @@ func CloseFileLogger() {
 // the dynamic server registry, and registers their pipeline hooks.
 // This runs before legacy command construction so that plugin servers
 // are available for EnvironmentLoader.Load().
-func loadPlugins(engine *pipeline.Engine, runner executor.Runner) []*cobra.Command {
+func loadPlugins(engine *pipeline.Engine, runner executor.Runner, authAvailable bool) []*cobra.Command {
 	pluginLoader := plugin.NewLoader(RawVersion())
 
 	// 0a. Inject plugin config values from settings.json as environment
@@ -812,8 +844,12 @@ func loadPlugins(engine *pipeline.Engine, runner executor.Runner) []*cobra.Comma
 	// precedence (InjectPluginConfigEnv skips already-set keys).
 	pluginLoader.InjectPluginConfigEnv()
 
-	// Load TokenData once; reused for stdio injection below.
-	tokenData, _ := authpkg.LoadTokenData(defaultConfigDir())
+	// Load TokenData once; reused for stdio injection below. A malformed auth
+	// registry must fail closed instead of injecting the legacy user's identity.
+	var tokenData *authpkg.TokenData
+	if authAvailable {
+		tokenData, _ = authpkg.LoadTokenData(defaultConfigDir())
+	}
 	var userCtx *plugin.UserContext
 	if tokenData != nil {
 		// Inject user context if either UserID or CorpID is present.

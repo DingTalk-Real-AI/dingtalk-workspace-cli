@@ -271,6 +271,25 @@ The migration validates every selected auth ciphertext before writing, ignores u
 </details>
 
 <details>
+<summary><strong>Multiple isolated auth instances</strong></summary>
+
+Existing installations keep using the original login state without migration. Isolation is enabled only when you explicitly create an auth instance:
+
+```bash
+dws auth login --new-instance personal      # create an isolated auth instance and log in there
+dws auth list                               # list auth instances
+dws auth use personal                       # persistently switch the current auth instance
+dws auth use -                              # toggle back to the previous auth instance
+dws auth logout --user-id <userId>          # log out one organization in the current instance
+```
+
+An auth instance is only an isolated login-state storage location, not an account or permanent person identity. The same instance may be re-logged as the same or a different user and may contain several organization profiles. Use `dws auth use` to switch instances; use `dws profile switch` to switch organizations inside the current instance. The optional alias is a display selector; persisted credentials are isolated by a generated instance ID.
+
+Until an isolated instance is explicitly created, DWS performs no registry write or migration: the config directory, Keychain service, login behavior, and reset behavior remain unchanged. Portable `auth export`, `auth import`, and `auth migrate-keychain` currently require switching back to the `default` compatibility instance.
+
+</details>
+
+<details>
 <summary><strong>Migrate auth between Linux sandboxes</strong></summary>
 
 Copying only `~/.dws/app.json` does not carry the refresh token; access tokens expire after ~2 hours. Use the official export/import flow:

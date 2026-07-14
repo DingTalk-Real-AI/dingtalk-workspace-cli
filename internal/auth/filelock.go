@@ -144,14 +144,17 @@ type DualLock struct {
 //
 // The caller MUST call Release() when done.
 func AcquireDualLock(ctx context.Context, configDir string) (*DualLock, error) {
+	// Only user login state is auth-instance-scoped. Callers continue passing the
+	// stable base config directory; the runtime selection chooses its lock root.
+	authDir := ResolveAuthStore(configDir).ConfigDir
 	// 1. Acquire process-level lock first (fast, in-memory)
-	processRelease, waited, err := acquireProcessLock(ctx, configDir)
+	processRelease, waited, err := acquireProcessLock(ctx, authDir)
 	if err != nil {
 		return nil, fmt.Errorf("acquiring process lock: %w", err)
 	}
 
 	// 2. Acquire file-level lock (cross-process)
-	fileLock, err := acquireTokenLock(configDir)
+	fileLock, err := acquireTokenLock(authDir)
 	if err != nil {
 		processRelease() // Release process lock on failure
 		return nil, fmt.Errorf("acquiring file lock: %w", err)

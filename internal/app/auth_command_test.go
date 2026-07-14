@@ -635,6 +635,7 @@ func TestResolveAuthLoginConfigReadsInheritedYes(t *testing.T) {
 	login.Flags().Bool("device", false, "")
 	login.Flags().Bool("force", false, "")
 	login.Flags().Bool("recommend", false, "")
+	login.Flags().String("new-instance", "", "")
 	root.AddCommand(login)
 
 	if err := root.PersistentFlags().Set("yes", "true"); err != nil {

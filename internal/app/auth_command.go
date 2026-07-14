@@ -45,6 +45,7 @@ type authLoginConfig struct {
 	Recommend    bool
 	Yes          bool
 	TargetCorpID string
+	NewInstance  string
 }
 
 type authLoginGuideAction string
@@ -80,6 +81,8 @@ func buildAuthCommand(patCaller edition.ToolCaller) *cobra.Command {
 		cmd.AddCommand(newAuthLoginCommand(patCaller))
 	}
 	cmd.AddCommand(
+		newAuthListCommand(),
+		newAuthUseCommand(),
 		newAuthLogoutCommand(),
 		newAuthStatusCommand(),
 		newAuthMigrateKeychainCommand(),
@@ -89,6 +92,90 @@ func buildAuthCommand(patCaller edition.ToolCaller) *cobra.Command {
 		newAuthResetCommand(),
 	)
 	return cmd
+}
+
+type authInstanceListItem struct {
+	ID      string                   `json:"id,omitempty"`
+	Alias   string                   `json:"alias"`
+	Kind    authpkg.AuthInstanceKind `json:"kind"`
+	Current bool                     `json:"current"`
+}
+
+func newAuthListCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:               "list",
+		Aliases:           []string{"ls"},
+		Short:             "列出登录态实例",
+		Args:              cobra.NoArgs,
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			instances, currentID, err := authpkg.ListAuthInstances(defaultConfigDir())
+			if err != nil {
+				return apperrors.NewInternal(fmt.Sprintf("failed to list auth instances: %v", err))
+			}
+			items := make([]authInstanceListItem, 0, len(instances))
+			for _, instance := range instances {
+				current := instance.ID != "" && instance.ID == currentID
+				if currentID == "" && instance.Kind == authpkg.AuthInstanceKindLegacy {
+					current = true
+				}
+				items = append(items, authInstanceListItem{
+					ID: instance.ID, Alias: instance.Alias, Kind: instance.Kind, Current: current,
+				})
+			}
+
+			format, _ := cmd.Root().PersistentFlags().GetString("format")
+			if strings.EqualFold(strings.TrimSpace(format), "json") {
+				return json.NewEncoder(cmd.OutOrStdout()).Encode(struct {
+					CurrentInstanceID string                 `json:"currentInstanceId,omitempty"`
+					Instances         []authInstanceListItem `json:"instances"`
+				}{CurrentInstanceID: currentID, Instances: items})
+			}
+
+			w := cmd.OutOrStdout()
+			fmt.Fprintln(w, "当前\t登录态实例\t类型\t实例 ID")
+			for _, item := range items {
+				marker := ""
+				if item.Current {
+					marker = "*"
+				}
+				id := item.ID
+				if id == "" {
+					id = "-"
+				}
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", marker, item.Alias, item.Kind, id)
+			}
+			return nil
+		},
+	}
+}
+
+func newAuthUseCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:               "use <alias|instanceId|->",
+		Short:             "切换当前登录态实例（使用 - 切回上一个实例）",
+		Example:           "  dws auth use personal\n  dws auth use -",
+		Args:              cobra.ExactArgs(1),
+		DisableAutoGenTag: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			instance, err := authpkg.UseAuthInstance(defaultConfigDir(), args[0])
+			if err != nil {
+				return apperrors.NewValidation(err.Error())
+			}
+			ResetRuntimeTokenCache()
+			clearCompatCache()
+
+			format, _ := cmd.Root().PersistentFlags().GetString("format")
+			if strings.EqualFold(strings.TrimSpace(format), "json") {
+				return json.NewEncoder(cmd.OutOrStdout()).Encode(struct {
+					OK       bool                 `json:"ok"`
+					Instance authInstanceListItem `json:"instance"`
+				}{OK: true, Instance: authInstanceListItem{ID: instance.ID, Alias: instance.Alias, Kind: instance.Kind, Current: true}})
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "[OK] 已切换到登录态实例 %s\n", instance.Alias)
+			return nil
+		},
+	}
 }
 
 func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
@@ -112,6 +199,7 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 
 示例:
   dws auth login              # 本机登录并新增/刷新一个组织 profile
+  dws auth login --new-instance personal # 显式创建一个独立登录态实例并在其中登录
   dws auth login --profile <corpId>  # 指定本次授权目标组织，不持久切换当前组织
   dws auth login --recommend  # 无交互批量授权服务端推荐权限
   dws auth login --device     # SSH 远程 / 无头环境登录 (设备流)
@@ -124,6 +212,20 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 				return err
 			}
 			configDir := defaultConfigDir()
+			var newInstanceTx *authpkg.NewInstanceTransaction
+			if cfg.NewInstance != "" {
+				newInstanceTx, err = authpkg.BeginNewInstance(configDir, cfg.NewInstance)
+				if err != nil {
+					return apperrors.NewValidation(fmt.Sprintf("failed to create auth instance: %v", err))
+				}
+				// A failed login must not register a half-created instance. Rollback is
+				// a no-op after Commit succeeds.
+				defer func() {
+					if rollbackErr := newInstanceTx.Rollback(); rollbackErr != nil {
+						fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to clean unpublished auth instance: %v\n", rollbackErr)
+					}
+				}()
+			}
 			var tokenData *authpkg.TokenData
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			postLoginTUIMode := !cfg.Yes && authLoginShouldUsePostLoginTUIMode(cmd, format, cfg.Recommend)
@@ -171,6 +273,11 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 				_ = enrichAuthLoginProfileFromContact(cmd.Context(), configDir, patCaller, tokenData)
 				ResetRuntimeTokenCache()
 				clearCompatCache()
+			}
+			if newInstanceTx != nil {
+				if err := newInstanceTx.Commit(); err != nil {
+					return apperrors.NewInternal(fmt.Sprintf("failed to activate new auth instance: %v", err))
+				}
 			}
 
 			w := cmd.OutOrStdout()
@@ -261,6 +368,7 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 	cmd.Flags().Bool("device", false, "Use device authorization flow")
 	cmd.Flags().Bool("force", false, "兼容保留；login 默认已忽略缓存并进入授权流程")
 	cmd.Flags().Bool("recommend", false, "登录成功后无交互批量授权服务端推荐权限")
+	cmd.Flags().String("new-instance", "", "显式创建独立登录态实例并登录（例如 personal）")
 	// Hidden compatibility flags
 	cmd.Flags().String("redirect-url", "", "Loopback redirect URL")
 	cmd.Flags().String("scopes", "", "Space-separated DingTalk OAuth scopes")
@@ -385,12 +493,14 @@ func selectLoginRecommendScopeMode() (pat.LoginRecommendScopeMode, error) {
 func newAuthLogoutCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "logout",
-		Short: "清除认证信息（默认退出所有组织）",
+		Short: "清除当前登录态实例的认证信息（默认退出全部组织）",
 		Long: `清除本机钉钉登录态。
 
-默认退出所有已登录组织 profile；指定 --profile 时只退出该组织，不影响其他组织。`,
+默认退出当前登录态实例内所有已登录组织；指定 --profile 时只退出该组织，
+指定 --user-id 时按当前实例内的 userId 精确退出对应组织，不影响其他登录态实例。`,
 		Example: `  dws auth logout
   dws auth logout --profile <corpId>
+  dws auth logout --user-id <userId>
   dws auth logout --profile "钉钉"`,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -399,9 +509,26 @@ func newAuthLogoutCommand() *cobra.Command {
 			if err != nil {
 				return apperrors.NewInternal("failed to read --profile")
 			}
+			userID, err := cmd.Flags().GetString("user-id")
+			if err != nil {
+				return apperrors.NewInternal("failed to read --user-id")
+			}
+			profileSelector = strings.TrimSpace(profileSelector)
+			userID = strings.TrimSpace(userID)
+			if profileSelector != "" && userID != "" {
+				return apperrors.NewValidation("--profile 与 --user-id 只能指定一个")
+			}
 			revokeCtx, cancel := context.WithTimeout(cmd.Context(), 15*time.Second)
 			defer cancel()
-			if strings.TrimSpace(profileSelector) != "" {
+			if userID != "" {
+				profile, err := authpkg.ResolveProfileByUserID(configDir, userID)
+				if err != nil {
+					return apperrors.NewValidation(err.Error())
+				}
+				if err := logoutOneProfile(cmd, revokeCtx, configDir, profile.CorpID); err != nil {
+					return err
+				}
+			} else if profileSelector != "" {
 				if err := logoutOneProfile(cmd, revokeCtx, configDir, profileSelector); err != nil {
 					return err
 				}
@@ -421,6 +548,7 @@ func newAuthLogoutCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().String("profile", "", "指定要退出的 profile 名或 corpId")
+	cmd.Flags().String("user-id", "", "按当前登录态实例内的 userId 退出对应组织")
 	return cmd
 }
 
@@ -536,6 +664,10 @@ func newAuthMigrateKeychainCommand() *cobra.Command {
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			configDir := defaultConfigDir()
+			if err := rejectIsolatedAuthOperation(configDir, "migrate-keychain"); err != nil {
+				return err
+			}
 			target, err := cmd.Flags().GetString("to")
 			if err != nil {
 				return apperrors.NewInternal("failed to read --to")
@@ -555,7 +687,7 @@ func newAuthMigrateKeychainCommand() *cobra.Command {
 			if !dryRun && !yes {
 				return apperrors.NewValidation("迁移会重加密全部本地登录 token；请先使用 --dry-run 预检，确认后加 --yes 执行")
 			}
-			count, err := migrateKeychainToFileDEK(defaultConfigDir(), dryRun)
+			count, err := migrateKeychainToFileDEK(configDir, dryRun)
 			if err != nil {
 				return apperrors.NewInternal(fmt.Sprintf("keychain migration failed: %v", err))
 			}
@@ -588,7 +720,7 @@ func logoutOneProfile(_ *cobra.Command, ctx context.Context, configDir, selector
 	}
 	restoreProfile := pushRuntimeProfile(selector)
 	defer restoreProfile()
-	_ = authpkg.RevokeTokenRemote(ctx)
+	_ = authpkg.RevokeTokenRemoteAt(ctx, configDir)
 	if err := authpkg.DeleteTokenDataForProfile(configDir, selector); err != nil {
 		return apperrors.NewInternal(fmt.Sprintf("failed to clear token data: %v", err))
 	}
@@ -604,11 +736,11 @@ func logoutAllProfiles(_ *cobra.Command, ctx context.Context, configDir string) 
 		return apperrors.NewInternal(fmt.Sprintf("failed to load profiles: %v", err))
 	}
 	if cfg == nil || len(cfg.Profiles) == 0 {
-		_ = authpkg.RevokeTokenRemote(ctx)
+		_ = authpkg.RevokeTokenRemoteAt(ctx, configDir)
 	} else {
 		for _, profile := range cfg.Profiles {
 			restoreProfile := pushRuntimeProfile(profile.CorpID)
-			_ = authpkg.RevokeTokenRemote(ctx)
+			_ = authpkg.RevokeTokenRemoteAt(ctx, configDir)
 			restoreProfile()
 		}
 	}
@@ -643,6 +775,10 @@ func newAuthExportCommand() *cobra.Command {
   dws auth export --base64 > dws-auth.b64`,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			configDir := defaultConfigDir()
+			if err := rejectIsolatedAuthOperation(configDir, "export"); err != nil {
+				return err
+			}
 			output, err := cmd.Flags().GetString("output")
 			if err != nil {
 				return apperrors.NewInternal("failed to read --output")
@@ -666,7 +802,7 @@ func newAuthExportCommand() *cobra.Command {
 			}
 
 			var bundle bytes.Buffer
-			if err := authpkg.ExportPortableAuthBundle(defaultConfigDir(), &bundle); err != nil {
+			if err := authpkg.ExportPortableAuthBundle(configDir, &bundle); err != nil {
 				return apperrors.NewInternal(fmt.Sprintf("failed to export auth bundle: %v", err))
 			}
 
@@ -728,6 +864,9 @@ func newAuthImportCommand() *cobra.Command {
 			}
 
 			configDir := defaultConfigDir()
+			if err := rejectIsolatedAuthOperation(configDir, "import"); err != nil {
+				return err
+			}
 			if !force && authpkg.PortableAuthTargetPopulated(configDir) {
 				return apperrors.NewValidation("检测到已有登录态，请使用 --force 确认覆盖")
 			}
@@ -826,12 +965,17 @@ func newAuthResetCommand() *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			configDir := defaultConfigDir()
+			isolated := authpkg.ResolveAuthStore(configDir).Isolated()
 			if err := authpkg.DeleteAllTokenData(configDir); err != nil {
 				return apperrors.NewInternal(fmt.Sprintf("failed to reset token data: %v", err))
 			}
-			_ = os.Remove(filepath.Join(configDir, "mcp_url"))
-			_ = os.Remove(filepath.Join(configDir, "token"))
-			_ = authpkg.DeleteAppConfig(configDir)
+			// The legacy-backed default keeps the online reset contract. Isolated
+			// instances clear only their own auth data and preserve shared app config.
+			if !isolated {
+				_ = os.Remove(filepath.Join(configDir, "mcp_url"))
+				_ = os.Remove(filepath.Join(configDir, "token"))
+				_ = authpkg.DeleteAppConfig(configDir)
+			}
 			ResetRuntimeTokenCache()
 			clearCompatCache()
 			w := cmd.OutOrStdout()
@@ -842,6 +986,16 @@ func newAuthResetCommand() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func rejectIsolatedAuthOperation(configDir, operation string) error {
+	if !authpkg.ResolveAuthStore(configDir).Isolated() {
+		return nil
+	}
+	return apperrors.NewValidation(fmt.Sprintf(
+		"auth %s 暂不支持隔离登录态；请先运行 `dws auth use default` 切回兼容登录态",
+		operation,
+	))
 }
 
 func timeOrEmpty(t time.Time) string {
@@ -1094,6 +1248,14 @@ func resolveAuthLoginConfig(cmd *cobra.Command) (authLoginConfig, error) {
 	if err != nil {
 		return authLoginConfig{}, apperrors.NewInternal("failed to read --recommend")
 	}
+	newInstance, err := cmd.Flags().GetString("new-instance")
+	if err != nil {
+		return authLoginConfig{}, apperrors.NewInternal("failed to read --new-instance")
+	}
+	newInstance = strings.TrimSpace(newInstance)
+	if cmd.Flags().Changed("new-instance") && newInstance == "" {
+		return authLoginConfig{}, apperrors.NewValidation("--new-instance 不能为空")
+	}
 	yes := false
 	profileSelector := ""
 	if cmd.Root() != nil {
@@ -1111,6 +1273,7 @@ func resolveAuthLoginConfig(cmd *cobra.Command) (authLoginConfig, error) {
 		Recommend:    recommend,
 		Yes:          yes,
 		TargetCorpID: targetCorpID,
+		NewInstance:  newInstance,
 	}, nil
 }
 
