@@ -13,7 +13,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   release:
@@ -29,6 +28,9 @@ jobs:
 
       - name: Check Homebrew PR automation token
         if: ${{ github.repository_owner == 'DingTalk-Real-AI' }}
+        # Organization policy intentionally prevents the broad, built-in
+        # GITHUB_TOKEN from creating PRs. Keep Formula automation on a
+        # repository-scoped token instead of weakening that policy.
         env:
           HOMEBREW_PR_TOKEN: ${{ secrets.HOMEBREW_PR_TOKEN }}
         run: |

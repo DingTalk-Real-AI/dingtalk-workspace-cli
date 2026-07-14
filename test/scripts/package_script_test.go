@@ -784,8 +784,8 @@ func TestReleaseWorkflowOpensHomebrewPROnlyForOfficialStableTags(t *testing.T) {
 		t.Fatalf("ReadFile(%s) error = %v", workflowPath, err)
 	}
 	workflow := string(data)
-	if !strings.Contains(workflow, "pull-requests: write") {
-		t.Fatal("release workflow must grant pull-request write permission for Formula updates")
+	if strings.Contains(workflow, "pull-requests: write") {
+		t.Fatal("the built-in GITHUB_TOKEN must not receive pull-request write permission")
 	}
 	for _, required := range []string{
 		"Check Homebrew PR automation token",
