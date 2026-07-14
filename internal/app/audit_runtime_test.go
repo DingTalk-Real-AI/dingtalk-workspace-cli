@@ -71,8 +71,60 @@ func resetAuditIdentityCache() {
 	defer auditIDMu.Unlock()
 	cachedActor = audit.Actor{}
 	cachedAgentID = ""
-	cachedProfile = ""
+	cachedAuthKey = ""
 	identityLoaded = false
+}
+
+// TestAuditIdentityReresolvesOnAuthInstanceSwitch prevents two instances with
+// the same runtime profile (commonly empty) from sharing audit Actor metadata.
+func TestAuditIdentityReresolvesOnAuthInstanceSwitch(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+	auth.DeactivateAuthStore(configDir)
+	prevLoader := loadTokenForProfile
+	prevProfile := auth.RuntimeProfile()
+	t.Cleanup(func() {
+		loadTokenForProfile = prevLoader
+		auth.SetRuntimeProfile(prevProfile)
+		auth.DeactivateAuthStore(configDir)
+		resetAuditIdentityCache()
+	})
+	resetAuditIdentityCache()
+	auth.SetRuntimeProfile("")
+	legacyService := auth.ResolveAuthStore(configDir).KeychainService
+
+	var mu sync.Mutex
+	calls := map[string]int{}
+	loadTokenForProfile = func(configDir, _ string) (*auth.TokenData, error) {
+		service := auth.ResolveAuthStore(configDir).KeychainService
+		mu.Lock()
+		calls[service]++
+		mu.Unlock()
+		if service == legacyService {
+			return &auth.TokenData{UserID: "legacy-user", CorpID: "legacy-corp"}, nil
+		}
+		return &auth.TokenData{UserID: "isolated-user", CorpID: "isolated-corp"}, nil
+	}
+
+	if actor, _ := auditIdentity(); actor.UserID != "legacy-user" {
+		t.Fatalf("legacy actor = %+v", actor)
+	}
+	tx, err := auth.BeginNewInstance(configDir, "personal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if actor, _ := auditIdentity(); actor.UserID != "isolated-user" || actor.CorpID != "isolated-corp" {
+		t.Fatalf("isolated actor = %+v, want isolated identity", actor)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if calls[legacyService] != 1 || calls[tx.Store().KeychainService] != 1 {
+		t.Fatalf("actor loads by service = %#v, want one per auth instance", calls)
+	}
 }
 
 // TestCloseAuditSinkDrainsOnErrorPath guards the reviewer's V5 finding: when a

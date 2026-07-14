@@ -24,7 +24,7 @@ var (
 	auditIDMu      sync.Mutex
 	cachedActor    audit.Actor
 	cachedAgentID  string
-	cachedProfile  string
+	cachedAuthKey  string
 	identityLoaded bool
 
 	// loadTokenForProfile is the profile-scoped token loader. It is a package
@@ -76,19 +76,20 @@ func auditReport(format string, args ...any) {
 	}
 }
 
-// auditIdentity resolves the Actor for the active runtime profile. The result
-// is cached per-profile so a profile switch within a long-running process (e.g.
-// serve mode) re-resolves rather than reusing a stale identity.
+// auditIdentity resolves the Actor for the active auth instance and runtime
+// profile. Both are part of the cache key so a long-running process never
+// attributes an event to a stale identity after either selection changes.
 func auditIdentity() (audit.Actor, string) {
 	profile := auth.RuntimeProfile()
+	configDir := defaultConfigDir()
+	authKey := auth.ResolveAuthStore(configDir).KeychainService + "\x00" + profile
 
 	auditIDMu.Lock()
 	defer auditIDMu.Unlock()
-	if identityLoaded && profile == cachedProfile {
+	if identityLoaded && authKey == cachedAuthKey {
 		return cachedActor, cachedAgentID
 	}
 
-	configDir := defaultConfigDir()
 	var actor audit.Actor
 	if td, err := loadTokenForProfile(configDir, profile); err == nil && td != nil {
 		actor = audit.Actor{
@@ -106,7 +107,7 @@ func auditIdentity() (audit.Actor, string) {
 		agentID = id.AgentID
 	}
 
-	cachedActor, cachedAgentID, cachedProfile, identityLoaded = actor, agentID, profile, true
+	cachedActor, cachedAgentID, cachedAuthKey, identityLoaded = actor, agentID, authKey, true
 	return actor, agentID
 }
 
