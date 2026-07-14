@@ -78,28 +78,33 @@ func embeddedSchemaCatalogError() error {
 	return runtimeEmbeddedSchemaCatalogErr
 }
 
-// BuildSchemaCatalogSnapshot renders a deterministic catalog from the
-// executable release command tree after all build-time metadata is embedded.
-func BuildSchemaCatalogSnapshot(root *cobra.Command, options SchemaCatalogBuildOptions) (SchemaCatalogSnapshot, error) {
-	if root == nil {
-		return SchemaCatalogSnapshot{}, fmt.Errorf("schema source root is nil")
+// BuildSchemaCatalogSnapshot renders a deterministic Catalog from one
+// resolved source-to-delivery hand-off. It deliberately accepts no Cobra root:
+// reapplying manual hints or rebuilding SchemaRegistry at this boundary would
+// allow generation gates to validate one candidate while publishing another.
+func BuildSchemaCatalogSnapshot(resolved ResolvedSchemaBuild, options SchemaCatalogBuildOptions) (SchemaCatalogSnapshot, error) {
+	if resolved.root == nil {
+		return SchemaCatalogSnapshot{}, fmt.Errorf("schema Catalog source was not created by ResolveSchemaBuild")
 	}
-	if _, err := ApplyEmbeddedManualSchemaHints(root); err != nil {
-		return SchemaCatalogSnapshot{}, fmt.Errorf("apply reviewed manual Schema hints: %w", err)
-	}
-	registry, err := buildRuntimeSchemaRegistry(root)
-	if err != nil {
-		return SchemaCatalogSnapshot{}, err
-	}
-	effectiveCommands, err := BuildEffectiveCommandRegistry(root)
-	if err != nil {
-		return SchemaCatalogSnapshot{}, fmt.Errorf("build effective Schema CommandRegistry: %w", err)
-	}
+	registry := resolved.registry
+	effectiveCommands := resolved.effective
 	registryHash := strings.TrimSpace(options.RegistryHash)
 	if registryHash == "" {
 		registryHash = effectiveCommands.SourceHash()
 	} else if registryHash != effectiveCommands.SourceHash() {
 		return SchemaCatalogSnapshot{}, fmt.Errorf("provided Registry hash %q disagrees with effective CommandRegistry %q", registryHash, effectiveCommands.SourceHash())
+	}
+	if err := ValidateSchemaParameterBindingDelivery(resolved.bound, registry); err != nil {
+		return SchemaCatalogSnapshot{}, fmt.Errorf("validate final Schema parameter binding delivery: %w", err)
+	}
+	if err := ValidateReviewedDryRunCapabilityDelivery(registry); err != nil {
+		return SchemaCatalogSnapshot{}, fmt.Errorf("validate reviewed dry-run capability delivery: %w", err)
+	}
+	if _, err := ValidateEmbeddedManualAgentExampleDelivery(resolved.bound, registry); err != nil {
+		return SchemaCatalogSnapshot{}, fmt.Errorf("validate final Manual Agent example delivery: %w", err)
+	}
+	if err := validateResolvedRuntimeSchemaCompleteness(resolved.root, resolved.bound); err != nil {
+		return SchemaCatalogSnapshot{}, fmt.Errorf("validate reverse command-tree completeness: %w", err)
 	}
 	if err := validateSchemaRegistryAgainstCommandRegistry(registry, effectiveCommands); err != nil {
 		return SchemaCatalogSnapshot{}, fmt.Errorf("validate typed Schema registry against reviewed CommandRegistry: %w", err)
@@ -132,6 +137,9 @@ func BuildSchemaCatalogSnapshot(root *cobra.Command, options SchemaCatalogBuildO
 	snapshot.SourceHash = schemaCatalogSnapshotHash(snapshot)
 	if err := ValidateSchemaDeliveryInvariants(registry, snapshot); err != nil {
 		return SchemaCatalogSnapshot{}, fmt.Errorf("validate final Schema delivery invariants: %w", err)
+	}
+	if err := validateResolvedSchemaCatalogDeliveryCompleteness(resolved.root, resolved.bound, snapshot); err != nil {
+		return SchemaCatalogSnapshot{}, fmt.Errorf("validate final Catalog delivery completeness: %w", err)
 	}
 	return snapshot, nil
 }

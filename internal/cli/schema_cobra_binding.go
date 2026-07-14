@@ -4,8 +4,10 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"reflect"
 	"sort"
 	"strings"
@@ -22,9 +24,52 @@ import (
 type AliasKind string
 
 const (
-	AliasKindCobraAlias        AliasKind = "cobra_alias"
-	AliasKindCompatibilityLeaf AliasKind = "compatibility_leaf"
+	AliasKindCobraAlias                       AliasKind = "cobra_alias"
+	AliasKindCompatibilityLeaf                AliasKind = "compatibility_leaf"
+	runtimeCompatibilityEquivalenceAnnotation           = "dws.schema.compatibility_equivalence"
 )
+
+// RuntimeCompatibilityEquivalence is an implementation-side review record
+// for two separately registered Cobra leaves that intentionally share one
+// Schema identity despite using different execution handlers. Registry alias
+// review alone is not enough: different handlers may inject fixed arguments or
+// route to different business operations while exposing identical flags.
+type RuntimeCompatibilityEquivalence struct {
+	ID       string `json:"id"`
+	Reason   string `json:"reason"`
+	Reviewed bool   `json:"reviewed"`
+}
+
+// AnnotateRuntimeCompatibilityEquivalence records the same typed review on
+// both sides of one independently executable compatibility pair. Invalid
+// review data panics during command construction so production cannot silently
+// accept an unreviewed handler mismatch.
+func AnnotateRuntimeCompatibilityEquivalence(primary, compatibility *cobra.Command, review RuntimeCompatibilityEquivalence) {
+	if primary == nil || compatibility == nil {
+		panic("runtime compatibility equivalence requires two commands")
+	}
+	review.ID = strings.TrimSpace(review.ID)
+	review.Reason = strings.TrimSpace(review.Reason)
+	if review.ID == "" || review.Reason == "" || !review.Reviewed {
+		panic("runtime compatibility equivalence requires a reviewed id and reason")
+	}
+	encoded, err := json.Marshal(review)
+	if err != nil {
+		panic(fmt.Sprintf("encode runtime compatibility equivalence: %v", err))
+	}
+	commands := []*cobra.Command{primary, compatibility}
+	for _, command := range commands {
+		if existing, exists := command.Annotations[runtimeCompatibilityEquivalenceAnnotation]; exists && existing != string(encoded) {
+			panic(fmt.Sprintf("runtime compatibility equivalence for %q conflicts with an existing reviewed marker", command.CommandPath()))
+		}
+	}
+	for _, command := range commands {
+		if command.Annotations == nil {
+			command.Annotations = map[string]string{}
+		}
+		command.Annotations[runtimeCompatibilityEquivalenceAnnotation] = string(encoded)
+	}
+}
 
 // BoundAlias is one reviewed alias path resolved against the live Cobra tree.
 type BoundAlias struct {
@@ -69,6 +114,9 @@ type BoundCommandRegistry struct {
 func BindEffectiveCommandRegistry(root *cobra.Command, effective EffectiveCommandRegistry) (BoundCommandRegistry, error) {
 	if root == nil {
 		return BoundCommandRegistry{}, fmt.Errorf("bind effective Schema command registry: root is nil")
+	}
+	if err := ValidateEmbeddedSchemaParameterBindings(); err != nil {
+		return BoundCommandRegistry{}, fmt.Errorf("validate reviewed Schema parameter bindings: %w", err)
 	}
 	validated, err := newEffectiveCommandRegistry(effective.Commands)
 	if err != nil {
@@ -189,7 +237,12 @@ type compatibilityFlagRequiredContract struct {
 // even while both paths still resolve to the same canonical identity.
 func validateCompatibilityLeafContract(spec CommandSpec, primary, alias *cobra.Command, aliasPath string) error {
 	problems := make([]string, 0)
-	problems = append(problems, compatibilityFlagContractProblems(spec.CanonicalPath, primary, alias)...)
+	problems = append(problems, compatibilityHandlerContractProblems(primary, alias)...)
+	flagProblems, err := compatibilityFlagContractProblems(spec.CanonicalPath, primary, alias)
+	if err != nil {
+		return fmt.Errorf("validate reviewed Schema parameter bindings for compatibility leaf %q: %w", aliasPath, err)
+	}
+	problems = append(problems, flagProblems...)
 	problems = append(problems, compatibilityArgsContractProblems(primary, alias)...)
 
 	primaryConstraints, err := strictCompatibilityConstraints(primary, spec.CanonicalPath)
@@ -230,9 +283,107 @@ func validateCompatibilityLeafContract(spec CommandSpec, primary, alias *cobra.C
 	)
 }
 
-func compatibilityFlagContractProblems(canonicalPath string, primary, alias *cobra.Command) []string {
-	primaryFlags := effectiveCompatibilityFlagContracts(primary, canonicalPath)
-	aliasFlags := effectiveCompatibilityFlagContracts(alias, canonicalPath)
+func compatibilityHandlerContractProblems(primary, alias *cobra.Command) []string {
+	if primary == nil || alias == nil {
+		return []string{"execution handlers cannot be compared for a nil command"}
+	}
+
+	differences := make([]string, 0)
+	for _, handler := range []struct {
+		name    string
+		primary any
+		alias   any
+	}{
+		{name: "PersistentPreRun", primary: primary.PersistentPreRun, alias: alias.PersistentPreRun},
+		{name: "PersistentPreRunE", primary: primary.PersistentPreRunE, alias: alias.PersistentPreRunE},
+		{name: "PreRun", primary: primary.PreRun, alias: alias.PreRun},
+		{name: "PreRunE", primary: primary.PreRunE, alias: alias.PreRunE},
+		{name: "Run", primary: primary.Run, alias: alias.Run},
+		{name: "RunE", primary: primary.RunE, alias: alias.RunE},
+		{name: "PostRun", primary: primary.PostRun, alias: alias.PostRun},
+		{name: "PostRunE", primary: primary.PostRunE, alias: alias.PostRunE},
+		{name: "PersistentPostRun", primary: primary.PersistentPostRun, alias: alias.PersistentPostRun},
+		{name: "PersistentPostRunE", primary: primary.PersistentPostRunE, alias: alias.PersistentPostRunE},
+	} {
+		if compatibilityHandlerPointer(handler.primary) != compatibilityHandlerPointer(handler.alias) {
+			differences = append(differences, handler.name)
+		}
+	}
+
+	primaryReview, primaryPresent, primaryErr := runtimeCompatibilityEquivalence(primary)
+	aliasReview, aliasPresent, aliasErr := runtimeCompatibilityEquivalence(alias)
+	problems := make([]string, 0)
+	if primaryErr != nil {
+		problems = append(problems, "primary compatibility equivalence is invalid: "+primaryErr.Error())
+	}
+	if aliasErr != nil {
+		problems = append(problems, "compatibility equivalence is invalid: "+aliasErr.Error())
+	}
+	reviewMatches := primaryPresent && aliasPresent && primaryErr == nil && aliasErr == nil && reflect.DeepEqual(primaryReview, aliasReview)
+	if !primaryPresent && !aliasPresent {
+		problems = append(problems, "independent compatibility leaves require the same reviewed typed compatibility equivalence on both commands")
+	} else if primaryPresent != aliasPresent {
+		problems = append(problems, "reviewed compatibility equivalence must be present on both commands")
+	} else if primaryPresent && aliasPresent && primaryErr == nil && aliasErr == nil && !reflect.DeepEqual(primaryReview, aliasReview) {
+		problems = append(problems, fmt.Sprintf("reviewed compatibility equivalence differs: primary=%s compatibility=%s",
+			compatibilityJSON(primaryReview), compatibilityJSON(aliasReview)))
+	}
+	if len(differences) > 0 && !reviewMatches {
+		problems = append(problems, fmt.Sprintf("execution handler implementation differs for %s; add the same reviewed typed compatibility equivalence to both commands or model them as distinct canonical tools", strings.Join(differences, ", ")))
+	}
+	return problems
+}
+
+func compatibilityHandlerPointer(handler any) uintptr {
+	if handler == nil {
+		return 0
+	}
+	value := reflect.ValueOf(handler)
+	if value.Kind() != reflect.Func || value.IsNil() {
+		return 0
+	}
+	return value.Pointer()
+}
+
+func runtimeCompatibilityEquivalence(command *cobra.Command) (RuntimeCompatibilityEquivalence, bool, error) {
+	if command == nil || command.Annotations == nil {
+		return RuntimeCompatibilityEquivalence{}, false, nil
+	}
+	raw, present := command.Annotations[runtimeCompatibilityEquivalenceAnnotation]
+	if !present {
+		return RuntimeCompatibilityEquivalence{}, false, nil
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return RuntimeCompatibilityEquivalence{}, true, fmt.Errorf("annotation is empty")
+	}
+	var review RuntimeCompatibilityEquivalence
+	decoder := json.NewDecoder(bytes.NewBufferString(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&review); err != nil {
+		return RuntimeCompatibilityEquivalence{}, true, err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			err = fmt.Errorf("multiple JSON values")
+		}
+		return RuntimeCompatibilityEquivalence{}, true, err
+	}
+	if review.ID == "" || review.ID != strings.TrimSpace(review.ID) || review.Reason == "" || review.Reason != strings.TrimSpace(review.Reason) || !review.Reviewed {
+		return RuntimeCompatibilityEquivalence{}, true, fmt.Errorf("annotation requires an exact reviewed id and reason")
+	}
+	return review, true, nil
+}
+
+func compatibilityFlagContractProblems(canonicalPath string, primary, alias *cobra.Command) ([]string, error) {
+	primaryFlags, err := effectiveCompatibilityFlagContracts(primary, canonicalPath)
+	if err != nil {
+		return nil, err
+	}
+	aliasFlags, err := effectiveCompatibilityFlagContracts(alias, canonicalPath)
+	if err != nil {
+		return nil, err
+	}
 	names := make([]string, 0, len(primaryFlags)+len(aliasFlags))
 	seen := map[string]bool{}
 	for name := range primaryFlags {
@@ -291,16 +442,20 @@ func compatibilityFlagContractProblems(canonicalPath string, primary, alias *cob
 				name, compatibilityJSON(primaryFlag.Annotations), compatibilityJSON(aliasFlag.Annotations)))
 		}
 	}
-	return problems
+	return problems, nil
 }
 
-func effectiveCompatibilityFlagContracts(command *cobra.Command, canonicalPath string) map[string]compatibilityFlagContract {
+func effectiveCompatibilityFlagContracts(command *cobra.Command, canonicalPath string) (map[string]compatibilityFlagContract, error) {
 	contracts := map[string]compatibilityFlagContract{}
 	if command == nil {
-		return contracts
+		return contracts, nil
 	}
 	canonicalPath = strings.TrimSpace(canonicalPath)
-	bindings := runtimeSchemaParameterBindingData().Bindings[canonicalPath]
+	snapshot, err := runtimeSchemaParameterBindingData()
+	if err != nil {
+		return nil, err
+	}
+	bindings := snapshot.Bindings[canonicalPath]
 	metadata := runtimeSchemaParameterMetadataByCanonical[canonicalPath]
 	// Ask Cobra to materialize inherited flags, then visit every contributing
 	// set explicitly. In particular, a newly-added persistent flag on a leaf is
@@ -343,7 +498,7 @@ func effectiveCompatibilityFlagContracts(command *cobra.Command, canonicalPath s
 	command.Flags().VisitAll(visit)
 	command.PersistentFlags().VisitAll(visit)
 	command.InheritedFlags().VisitAll(visit)
-	return contracts
+	return contracts, nil
 }
 
 // effectiveCompatibilityFlagAnnotations overlays canonical, code-owned

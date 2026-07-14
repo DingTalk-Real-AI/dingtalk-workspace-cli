@@ -18,6 +18,34 @@ type runtimeSchemaMetadataSources struct {
 	MCP   embeddedMCPMetadata
 }
 
+// ResolvedSchemaBuild is the single source-to-delivery hand-off used by the
+// Catalog generator. Effective, Bound, and Registry are three views of one
+// resolution pass: reviewed identity, executable Cobra binding, and the final
+// typed Agent contract. Downstream gates and serializers must consume this
+// value instead of rebuilding any view from the command tree.
+//
+// The command root is intentionally private. It lets delivery completeness
+// inspect the same executable tree without allowing callers to construct a
+// seemingly resolved build by assembling the exported fields themselves.
+type ResolvedSchemaBuild struct {
+	effective EffectiveCommandRegistry
+	bound     BoundCommandRegistry
+	registry  SchemaRegistry
+	root      *cobra.Command
+}
+
+// RegistryHash returns the semantic identity/navigation hash attached to this
+// resolved build. It is an envelope value, not a second registry input.
+func (resolved ResolvedSchemaBuild) RegistryHash() string {
+	return resolved.effective.SourceHash()
+}
+
+// CommandCount reports the reviewed effective command count for generator
+// diagnostics without exposing a mutable registry view.
+func (resolved ResolvedSchemaBuild) CommandCount() int {
+	return len(resolved.effective.Commands)
+}
+
 func embeddedRuntimeSchemaMetadataSources() runtimeSchemaMetadataSources {
 	return runtimeSchemaMetadataSources{
 		Agent: runtimeAgentMetadata(),
@@ -25,31 +53,59 @@ func embeddedRuntimeSchemaMetadataSources() runtimeSchemaMetadataSources {
 	}
 }
 
-// buildRuntimeSchemaRegistry is the only assembly path from executable Cobra
-// commands and reviewed metadata into the typed Agent contract. Every runtime
-// view and the generated release snapshot consumes the returned registry; no
-// serializer below this boundary reads annotations or merges source records.
-// AssembleSchemaRegistry resolves all command-contract sources once and
-// returns the immutable typed registry consumed by every downstream view.
-func AssembleSchemaRegistry(root *cobra.Command) (SchemaRegistry, error) {
+// ResolveSchemaBuild is the only assembly path from executable Cobra commands
+// and reviewed metadata into the typed Agent contract. It applies reviewed
+// manual annotations once, resolves identity once, binds Cobra once, and
+// assembles one SchemaRegistry. Catalog gates and serialization consume the
+// returned value directly; they never re-read annotations or merge sources.
+func ResolveSchemaBuild(root *cobra.Command) (ResolvedSchemaBuild, error) {
+	if root == nil {
+		return ResolvedSchemaBuild{}, fmt.Errorf("resolve Schema build: root is nil")
+	}
 	if _, err := ApplyEmbeddedManualSchemaHints(root); err != nil {
-		return SchemaRegistry{}, fmt.Errorf("apply reviewed manual Schema hints: %w", err)
+		return ResolvedSchemaBuild{}, fmt.Errorf("apply reviewed manual Schema hints: %w", err)
 	}
 	effective, err := BuildEffectiveCommandRegistry(root)
 	if err != nil {
-		return SchemaRegistry{}, fmt.Errorf("build effective Schema command registry: %w", err)
+		return ResolvedSchemaBuild{}, fmt.Errorf("build effective Schema command registry: %w", err)
 	}
 	bound, err := BindEffectiveCommandRegistry(root, effective)
 	if err != nil {
-		return SchemaRegistry{}, fmt.Errorf("bind effective Schema command registry: %w", err)
+		return ResolvedSchemaBuild{}, fmt.Errorf("bind effective Schema command registry: %w", err)
 	}
-	return AssembleSchemaRegistryFromBound(bound)
+	registry, err := AssembleSchemaRegistryFromBound(bound)
+	if err != nil {
+		return ResolvedSchemaBuild{}, err
+	}
+	return ResolvedSchemaBuild{
+		effective: effective,
+		bound:     bound,
+		registry:  registry,
+		root:      root,
+	}, nil
+}
+
+// AssembleSchemaRegistry is retained for non-Catalog callers that only need
+// the typed registry. Catalog production must use ResolveSchemaBuild so the
+// bound/effective views remain attached to the exact same resolution pass.
+func AssembleSchemaRegistry(root *cobra.Command) (SchemaRegistry, error) {
+	resolved, err := ResolveSchemaBuild(root)
+	if err != nil {
+		return SchemaRegistry{}, err
+	}
+	if err := ValidateSchemaParameterBindingDelivery(resolved.bound, resolved.registry); err != nil {
+		return SchemaRegistry{}, fmt.Errorf("validate final Schema parameter binding delivery: %w", err)
+	}
+	return resolved.registry, nil
 }
 
 // AssembleSchemaRegistryFromBound resolves non-identity sources into the
 // single typed ToolSpec model. Command discovery is intentionally impossible
 // below this boundary: callers must first provide a fail-closed bound registry.
 func AssembleSchemaRegistryFromBound(bound BoundCommandRegistry) (SchemaRegistry, error) {
+	if err := ValidateEmbeddedSchemaParameterBindings(); err != nil {
+		return SchemaRegistry{}, fmt.Errorf("validate reviewed Schema parameter bindings: %w", err)
+	}
 	return assembleSchemaRegistryFromBound(bound, embeddedRuntimeSchemaMetadataSources())
 }
 
@@ -104,10 +160,6 @@ func assembleSchemaRegistryFromBound(bound BoundCommandRegistry, metadata runtim
 	return registry, nil
 }
 
-func buildRuntimeSchemaRegistry(root *cobra.Command) (SchemaRegistry, error) {
-	return AssembleSchemaRegistry(root)
-}
-
 func runtimeToolSpecFromMetadata(entry runtimeSchemaEntry, metadata runtimeSchemaMetadataSources) (ToolSpec, error) {
 	canonicalPath := entry.ProductID + "." + entry.ToolName
 	dryRun, err := reviewedDryRunCapability(canonicalPath)
@@ -131,6 +183,9 @@ func runtimeToolSpecFromMetadata(entry runtimeSchemaEntry, metadata runtimeSchem
 	safety, interfaceSpec, selection, provenance, _ := agentToolContractForPathsFromMetadata(metadata.Agent, paths...)
 	if metadataSource == "" && hasEmbeddedMeta {
 		metadataSource = "embedded-mcp-metadata"
+		textProvenance["metadata_source"] = runtimeSchemaFieldProvenance(
+			runtimeSchemaStringCandidate(metadataSource, "metadata_source_resolution"),
+		)
 	}
 	if provenance == nil {
 		provenance = map[string]FieldProvenance{}

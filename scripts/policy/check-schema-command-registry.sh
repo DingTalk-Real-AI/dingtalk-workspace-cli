@@ -80,7 +80,7 @@ check_schema_loader_references \
 	'^internal/cli/runtime_schema\.go:[0-9]+:(func loadEmbeddedMCPMetadata\(\) embeddedMCPMetadata \{|[[:space:]]*runtimeEmbeddedMCPMetadataLazy\.metadata = loadEmbeddedMCPMetadata\(\))$'
 check_schema_loader_references \
 	'loadSchemaParameterBindings' \
-	'^internal/cli/schema_parameter_bindings\.go:[0-9]+:(func loadSchemaParameterBindings\(\) schemaParameterBindingSnapshot \{|[[:space:]]*runtimeSchemaParameterBindingsLazy\.snapshot = loadSchemaParameterBindings\(\))$'
+	'^internal/cli/schema_parameter_bindings\.go:[0-9]+:(func loadSchemaParameterBindings\(\) \(schemaParameterBindingSnapshot, error\) \{|[[:space:]]*runtimeSchemaParameterBindingsLazy\.snapshot, runtimeSchemaParameterBindingsLazy\.err = loadSchemaParameterBindings\(\))$'
 
 # Catch the common direct eager form statically; the fresh-process tests below
 # additionally catch indirect or multi-line package initializers.

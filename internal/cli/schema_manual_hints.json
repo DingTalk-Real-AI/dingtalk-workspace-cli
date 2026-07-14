@@ -1070,7 +1070,7 @@
           "skills/mono/references/products/aitable.md"
         ],
         "examples": [
-          "dws aitable export data --base-id BASE_ID --scope all --format excel"
+          "dws aitable export data --base-id BASE_ID --scope all --export-format excel --format json"
         ],
         "reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AITable 参考文档明确命令选择边界并校验示例。",
         "reviewed": true,
@@ -4372,7 +4372,7 @@
           "skills/mono/references/products/chat.md"
         ],
         "examples": [
-          "dws chat group list-my-groups --role owner --limit 100"
+          "dws chat group list-my-groups --role OWNER --limit 100"
         ],
         "reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
         "reviewed": true,
@@ -8625,10 +8625,31 @@
           "当用户需要查询发言人段落总结任务的结果，返回每位发言人的发言汇总，并能提供命令所需的查询条件时使用。"
         ]
       },
-      "minutes.list_by_keyword_and_time_range": {
-        "agent_summary": "查询我创建的听记列表，支持分页，支持按关键字和时间范围筛选。",
+      "minutes.list_accessible_minutes": {
+        "agent_summary": "查询当前用户有权限访问的全部听记，包括自己创建和他人共享的听记，并支持分页、关键字和时间范围筛选。",
         "avoid_when": [
-          "用户需要修改数据而不是查询当前状态时不要使用。"
+          "用户明确只查询自己创建的听记时改用 dws minutes list mine；明确只查询他人共享的听记时改用 dws minutes list shared；修改数据时不要使用。"
+        ],
+        "evidence": [
+          "internal/cli/schema_command_registry.json",
+          "cobra-help:dws minutes list all --help",
+          "skills/mono/references/products/minutes.md",
+          "skills/mono/references/best_practices/07-minutes.md"
+        ],
+        "examples": [
+          "dws minutes list all --format json"
+        ],
+        "reason": "依据 reviewed CommandRegistry、dws minutes list all --help 与 mono 产品参考，审阅 noLimit 范围的 Agent 选择语义和示例。",
+        "reviewed": true,
+        "revision": "ai-agent-contract-2026-07-13-v1",
+        "use_when": [
+          "当用户需要查询自己有权限访问的全部听记，或未限定仅自己创建/仅他人共享，并需要按关键字或时间范围筛选时使用。"
+        ]
+      },
+      "minutes.list_by_keyword_and_time_range": {
+        "agent_summary": "查询当前用户自己创建的听记列表，支持分页、关键字和时间范围筛选。",
+        "avoid_when": [
+          "用户要查询他人共享的听记时改用 dws minutes list shared；要覆盖全部可访问听记时改用 dws minutes list all；修改数据时不要使用。"
         ],
         "evidence": [
           "internal/cli/schema_command_registry.json",
@@ -8639,11 +8660,32 @@
         "examples": [
           "dws minutes list mine --format json"
         ],
-        "reason": "依据 reviewed CommandRegistry、dws minutes list mine --help 与 mono 产品参考，审阅该工具的 Agent 选择语义和示例。",
+        "reason": "依据 reviewed CommandRegistry、dws minutes list mine --help 与 mono 产品参考，审阅 created 范围的 Agent 选择语义和示例。",
         "reviewed": true,
         "revision": "ai-agent-contract-2026-07-13-v1",
         "use_when": [
-          "当用户需要查询我创建的听记列表，支持分页，支持按关键字和时间范围筛选，并能提供命令所需的查询条件时使用。"
+          "当用户明确查询自己创建、自己发起或自己录制的听记，并需要分页、关键字或时间范围筛选时使用。"
+        ]
+      },
+      "minutes.list_shared_minutes": {
+        "agent_summary": "查询他人共享给当前用户的听记列表，支持分页、关键字和时间范围筛选。",
+        "avoid_when": [
+          "用户只查询自己创建的听记时改用 dws minutes list mine；要覆盖全部可访问听记时改用 dws minutes list all；修改数据时不要使用。"
+        ],
+        "evidence": [
+          "internal/cli/schema_command_registry.json",
+          "cobra-help:dws minutes list shared --help",
+          "skills/mono/references/products/minutes.md",
+          "skills/mono/references/best_practices/07-minutes.md"
+        ],
+        "examples": [
+          "dws minutes list shared --format json"
+        ],
+        "reason": "依据 reviewed CommandRegistry、dws minutes list shared --help 与 mono 产品参考，审阅 shared 范围的 Agent 选择语义和示例。",
+        "reviewed": true,
+        "revision": "ai-agent-contract-2026-07-13-v1",
+        "use_when": [
+          "当用户明确查询别人共享给自己的听记，并需要分页、关键字或时间范围筛选时使用。"
         ]
       },
       "minutes.list_minutes_todos": {
@@ -11033,8 +11075,8 @@
           "structured-hint:internal/cli/schema_hints/selection-review.json#todo.add_todo_reminder"
         ],
         "examples": [
-          "dws todo task add-reminder --task-id <taskId> --base-time <baseTime> --due-date-offset <dueDateOffset> --format json",
-          "dws todo task add-reminder --task-id <taskId> --base-time <baseTime> --reminder-time-stamp <reminderTimeStamp> --format json"
+          "dws todo task add-reminder --task-id <taskId> --base-time dueTime --due-date-offset -30 --format json",
+          "dws todo task add-reminder --task-id <taskId> --base-time customTime --reminder-time-stamp 2026-03-10T18:00:00+08:00 --format json"
         ],
         "reason": "依据真实 Cobra leaf、对应产品 Skill 与现有 structured hints 审阅选择语义和示例；不改变命令身份、参数、安全或接口事实。",
         "reviewed": true,
@@ -12113,6 +12155,20 @@
       "reviewed": true
     },
     {
+      "canonical_path": "attendance.adjustment_search",
+      "cli_path": "attendance adjustment search",
+      "parameters": {
+        "limit": {
+          "required": false
+        },
+        "page": {
+          "required": false
+        }
+      },
+      "reason": "Cobra supplies reviewed page=1 and limit=20 defaults and RunE sends those defaults when omitted, so callers need not pass either pagination flag.",
+      "reviewed": true
+    },
+    {
       "canonical_path": "attendance.group_search",
       "cli_path": "attendance group search",
       "parameters": {
@@ -12124,6 +12180,20 @@
         }
       },
       "reason": "Cobra supplies reviewed page=1 and limit=20 defaults and RunE materializes both PageQuery fields when omitted, so callers need not pass either flag.",
+      "reviewed": true
+    },
+    {
+      "canonical_path": "attendance.overtime_search",
+      "cli_path": "attendance overtime search",
+      "parameters": {
+        "limit": {
+          "required": false
+        },
+        "page": {
+          "required": false
+        }
+      },
+      "reason": "Cobra supplies reviewed page=1 and limit=20 defaults and RunE sends those defaults when omitted, so callers need not pass either pagination flag.",
       "reviewed": true
     },
     {
@@ -12172,6 +12242,20 @@
         }
       },
       "reason": "The four reviewed conversation locator flags are aliases for one openConversationId property; the typed require-one-of constraint owns their conditional requirement.",
+      "reviewed": true
+    },
+    {
+      "canonical_path": "chat.list_owned_or_admin_groups",
+      "cli_path": "chat group list-my-groups",
+      "parameters": {
+        "limit": {
+          "required": false
+        },
+        "role": {
+          "required": false
+        }
+      },
+      "reason": "The reviewed CLI lists all owned or administered groups when --role and --limit are omitted; both flags are optional filters despite stricter imported interface metadata.",
       "reviewed": true
     },
     {

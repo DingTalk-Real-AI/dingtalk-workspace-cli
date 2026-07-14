@@ -551,7 +551,6 @@ Example:
 Flags:
       --date string        查询日期, 格式 YYYY-MM-DD 或 YYYY-MM-DD HH:mm:ss (必填)
       --stats-type string  统计类型: week 周统计 / month 月统计 (必填)
-      --tag-name string    标签名称 (可选)
       --user string        钉钉用户 ID (必填)
 ```
 
@@ -1213,7 +1212,7 @@ dws attendance checkin records --operator-corp-id corp001 --operator-staff-id op
 - `group update` 的 --group-id 必填，其余均可选，至少需指定一个修改项；仅需对要修改的字段赋値，未传字段会从已有配置自动补充；修改打卡地址/wifi/蓝牙等复杂子对象时用 `--group-vo` 传入完整 JSON；`--group-vo` 与单字段 flag 同时传入时单字段 flag 优先级更高
 - `group create` 的 `--name` 和 `--type` 必填，`--type` 必须为 FIXED/TURN/NONE 之一；type=FIXED 时 `--group-vo` 必须包含 `workDayClassList`（非空）和 `defaultClassId`（非 null）；由于保存考勤组耗时较久，建议加 `--timeout 10`
 - `group filtered-get` 的 `--group-id` 必填，`--member/--position/--wifi/--bles` 均可选，默认 false。**返回结果中如含成员 userId 列表，必须调用 `dws contact user get --ids <userId1>,<userId2>,...`（支持逗号分隔传多个 ID），将 userId 转换为员工姓名后再输出；不得直接输出裸 userId。**
-- `summary` 必须同时传 `--user`、`--date`、`--stats-type`（week 周统计 / month 月统计），三者缺一即报错；`--date` 支持 `YYYY-MM-DD` 或 `yyyy-MM-dd HH:mm:ss`；`--tag-name` 可选
+- `summary` 必须同时传 `--user`、`--date`、`--stats-type`（week 周统计 / month 月统计），三者缺一即报错；`--date` 支持 `YYYY-MM-DD` 或 `yyyy-MM-dd HH:mm:ss`
 - `rules` 的 `--date` 支持 YYYY-MM-DD 或 yyyy-MM-dd HH:mm:ss 两种格式
 - `selfsetting get/save` 的 `--setting-scene` 必须是 `checkRemind`、`fastCheck`、`checkResultNotify`、`lackRemind`、`personalAttendStatNotify`、`bossAttendStatNotify` 之一
 - `selfsetting get/save` 的 MCP 入参 `userId` 为必填；CLI 的 `--user` 也必填，必须显式传入目标用户 ID

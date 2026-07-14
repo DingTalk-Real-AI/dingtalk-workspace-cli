@@ -493,8 +493,8 @@
       "avoid_when": [
         "当用户实际需要更新钉钉在线电子表格指定区域内的单元格内容时，改用 dws sheet range update。"
       ],
-      "confirmation": "not_required",
-      "effect": "write",
+      "confirmation": "user_required",
+      "effect": "destructive",
       "effect_source": "agent-hint",
       "examples": [
         "dws sheet batch-update --node NODE_ID --operations '[\n{\"toolName\":\"range clear\",\"input\":{\"sheet-id\":\"Sheet1\",\"range\":\"A1:B3\",\"type\":\"content\"}},\n{\"toolName\":\"range update\",\"input\":{\"sheet-id\":\"Sheet1\",\"range\":\"A1\",\"values\":[[{\"type\":\"text\",\"text\":\"hello\"}]]}},\n{\"toolName\":\"merge-cells\",\"input\":{\"sheet-id\":\"Sheet1\",\"range\":\"A1:B1\",\"merge-type\":\"mergeAll\"}}\n]'"
@@ -518,15 +518,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -551,16 +553,24 @@
           ]
         },
         "confirmation": {
-          "value": "not_required",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "user_required",
+          "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
             {
-              "value": "not_required",
+              "value": "user_required",
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
+            {
+              "value": "user_required",
               "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
               "precedence": "unreviewed_explicit",
-              "selected": true
+              "selected": false
             },
             {
               "value": "not_required",
@@ -571,16 +581,24 @@
           ]
         },
         "effect": {
-          "value": "write",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "destructive",
+          "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
             {
-              "value": "write",
+              "value": "destructive",
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
+            {
+              "value": "destructive",
               "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
               "precedence": "unreviewed_explicit",
-              "selected": true
+              "selected": false
             },
             {
               "value": "write",
@@ -612,15 +630,23 @@
         },
         "idempotency": {
           "value": "unknown",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
+            {
+              "value": "unknown",
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
             {
               "value": "unknown",
               "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
               "precedence": "unreviewed_explicit",
-              "selected": true
+              "selected": false
             },
             {
               "value": "unknown",
@@ -631,46 +657,50 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -689,6 +719,13 @@
               "review_reason": "依据 reviewed CommandRegistry、dws sheet batch-update --help 与 mono 产品参考，审阅该工具的 Agent 选择语义和示例。"
             },
             {
+              "value": true,
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
+            {
               "value": false,
               "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
               "precedence": "unreviewed_explicit",
@@ -697,16 +734,24 @@
           ]
         },
         "risk": {
-          "value": "medium",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "high",
+          "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
             {
-              "value": "medium",
+              "value": "high",
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
+            {
+              "value": "high",
               "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
               "precedence": "unreviewed_explicit",
-              "selected": true
+              "selected": false
             },
             {
               "value": "medium",
@@ -738,14 +783,16 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
-      "risk": "medium",
+      "risk": "high",
       "source_refs": [
         "cobra-help:dws sheet batch-update --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/runtime-surface-completeness.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
+        "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-batch-operations.md"
@@ -786,15 +833,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -899,46 +948,50 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -1006,14 +1059,15 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
         "cobra-help:dws sheet chart create --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/runtime-surface-completeness.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-chart.md"
@@ -1054,15 +1108,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -1091,14 +1147,14 @@
           "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
             {
               "value": "user_required",
               "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed"
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             },
             {
               "value": "not_required",
@@ -1119,14 +1175,14 @@
           "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
             {
               "value": "write",
               "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed"
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             },
             {
               "value": "write",
@@ -1167,14 +1223,14 @@
           "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
             {
               "value": "unknown",
               "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed"
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             },
             {
               "value": "unknown",
@@ -1191,46 +1247,50 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -1253,7 +1313,7 @@
               "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
               "precedence": "reviewed_explicit",
               "selected": false,
-              "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed"
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             },
             {
               "value": false,
@@ -1268,14 +1328,14 @@
           "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
             {
               "value": "high",
               "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed"
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             },
             {
               "value": "medium",
@@ -1313,14 +1373,15 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "high",
       "source_refs": [
         "cobra-help:dws sheet chart delete --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/runtime-surface-completeness.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/references/products/sheet.md",
@@ -1362,15 +1423,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -1475,46 +1538,50 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -1582,14 +1649,15 @@
         }
       },
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "low",
       "source_refs": [
         "cobra-help:dws sheet chart list --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/runtime-surface-completeness.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-chart.md"
@@ -1630,15 +1698,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -1743,46 +1813,50 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -1850,14 +1924,15 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
         "cobra-help:dws sheet chart update --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/runtime-surface-completeness.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-chart.md"
@@ -6841,7 +6916,7 @@
         "当用户实际需要在工作表中创建全局筛选时，改用 dws sheet filter create。"
       ],
       "confirmation": "not_required",
-      "effect": "read",
+      "effect": "write",
       "effect_source": "agent-hint",
       "examples": [
         "dws sheet filter sort --node NODE_ID --sheet-id SHEET_ID --column 0 --ascending"
@@ -6928,14 +7003,14 @@
           ]
         },
         "effect": {
-          "value": "read",
+          "value": "write",
           "source": "internal/cli/schema_hints/zz-sheet-range-filter-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "sheet-range-filter-agent-review-v1 marks this tool as reviewed",
           "candidates": [
             {
-              "value": "read",
+              "value": "write",
               "source": "internal/cli/schema_hints/zz-sheet-range-filter-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
@@ -6970,14 +7045,14 @@
           ]
         },
         "idempotency": {
-          "value": "idempotent",
+          "value": "unknown",
           "source": "internal/cli/schema_hints/zz-sheet-range-filter-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "sheet-range-filter-agent-review-v1 marks this tool as reviewed",
           "candidates": [
             {
-              "value": "idempotent",
+              "value": "unknown",
               "source": "internal/cli/schema_hints/zz-sheet-range-filter-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
@@ -7051,14 +7126,14 @@
           ]
         },
         "risk": {
-          "value": "low",
+          "value": "medium",
           "source": "internal/cli/schema_hints/zz-sheet-range-filter-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "sheet-range-filter-agent-review-v1 marks this tool as reviewed",
           "candidates": [
             {
-              "value": "low",
+              "value": "medium",
               "source": "internal/cli/schema_hints/zz-sheet-range-filter-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
@@ -7093,14 +7168,14 @@
           ]
         }
       },
-      "idempotency": "idempotent",
+      "idempotency": "unknown",
       "interface_mode": "mcp",
       "interface_ref": {
         "product_id": "sheet",
         "rpc_name": "sort_filter"
       },
       "reviewed": true,
-      "risk": "low",
+      "risk": "medium",
       "source_refs": [
         "cobra-help:dws sheet filter sort --help",
         "internal/cli/schema_command_registry.json",
@@ -9766,14 +9841,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -9891,34 +9966,34 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
+          "value": "composite",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
+              "value": "composite",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "CLI helper is executable, but its backing RPC is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "CLI helper is executable, but its backing RPC is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -9927,14 +10002,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ],
           "overridden_candidates": [
@@ -9967,13 +10042,6 @@
               "precedence": "reviewed_explicit",
               "selected": false,
               "review_reason": "dws-command-surface-review marks this tool as reviewed"
-            },
-            {
-              "value": true,
-              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
-              "precedence": "reviewed_explicit",
-              "selected": false,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
             },
             {
               "value": true,
@@ -10028,8 +10096,8 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "interface_reason": "CLI helper is executable, but its backing RPC is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
@@ -10823,7 +10891,7 @@
         "当用户实际需要取消钉钉表格指定工作表中的连续整行或整列分组时，改用 dws sheet ungroup-dimension。"
       ],
       "confirmation": "not_required",
-      "effect": "read",
+      "effect": "write",
       "effect_source": "agent-hint",
       "examples": [
         "dws sheet group-dimension --node NODE_ID --sheet-id SHEET_ID --range 3:7"
@@ -10847,15 +10915,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -10881,29 +10951,45 @@
         },
         "confirmation": {
           "value": "not_required",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
             {
               "value": "not_required",
               "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
               "precedence": "unreviewed_explicit",
-              "selected": true
+              "selected": false
             }
           ]
         },
         "effect": {
-          "value": "read",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "write",
+          "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
             {
               "value": "read",
               "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
               "precedence": "unreviewed_explicit",
-              "selected": true
+              "selected": false
             }
           ]
         },
@@ -10928,60 +11014,72 @@
           ]
         },
         "idempotency": {
-          "value": "idempotent",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "unknown",
+          "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
+            {
+              "value": "unknown",
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
             {
               "value": "idempotent",
               "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
               "precedence": "unreviewed_explicit",
-              "selected": true
+              "selected": false
             }
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -11000,6 +11098,13 @@
               "review_reason": "依据 reviewed CommandRegistry、dws sheet group-dimension --help 与 mono 产品参考，审阅该工具的 Agent 选择语义和示例。"
             },
             {
+              "value": true,
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
+            {
               "value": false,
               "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
               "precedence": "unreviewed_explicit",
@@ -11008,16 +11113,24 @@
           ]
         },
         "risk": {
-          "value": "low",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "medium",
+          "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
             {
               "value": "low",
               "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
               "precedence": "unreviewed_explicit",
-              "selected": true
+              "selected": false
             }
           ]
         },
@@ -11042,15 +11155,17 @@
           ]
         }
       },
-      "idempotency": "idempotent",
-      "interface_mode": "local",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
-      "risk": "low",
+      "risk": "medium",
       "source_refs": [
         "cobra-help:dws sheet group-dimension --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/runtime-surface-completeness.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
+        "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-dimension-operations.md"
@@ -11094,14 +11209,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -11130,14 +11245,14 @@
           "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
             {
               "value": "not_required",
               "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed"
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             }
           ]
         },
@@ -11146,14 +11261,14 @@
           "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
             {
               "value": "write",
               "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed"
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             }
           ]
         },
@@ -11182,46 +11297,46 @@
           "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
             {
               "value": "idempotent",
               "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed"
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             }
           ]
         },
         "interface_mode": {
-          "value": "local",
+          "value": "composite",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
+              "value": "composite",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "The reviewed CLI wrapper fixes visibility=hidden, but sheet/set_gridline_visibility is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "The reviewed CLI wrapper fixes visibility=hidden, but sheet/set_gridline_visibility is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -11230,14 +11345,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -11257,17 +11372,10 @@
             },
             {
               "value": true,
-              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
-              "precedence": "reviewed_explicit",
-              "selected": false,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
-            },
-            {
-              "value": true,
               "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
               "precedence": "reviewed_explicit",
               "selected": false,
-              "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed"
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             }
           ]
         },
@@ -11276,14 +11384,14 @@
           "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
             {
               "value": "medium",
               "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed"
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             }
           ]
         },
@@ -11309,8 +11417,8 @@
         }
       },
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "interface_reason": "The reviewed CLI wrapper fixes visibility=hidden, but sheet/set_gridline_visibility is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
@@ -13340,14 +13448,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -13376,14 +13484,14 @@
           "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
             {
               "value": "not_required",
               "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed"
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             },
             {
               "value": "not_required",
@@ -13398,14 +13506,14 @@
           "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
             {
               "value": "write",
               "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed"
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             },
             {
               "value": "write",
@@ -13440,14 +13548,14 @@
           "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
             {
               "value": "non_idempotent",
               "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed"
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             },
             {
               "value": "unknown",
@@ -13458,34 +13566,34 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
+          "value": "composite",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
+              "value": "composite",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "The reviewed CLI wrapper is executable, but sheet/create_pivot_table is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "The reviewed CLI wrapper is executable, but sheet/create_pivot_table is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -13494,14 +13602,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -13521,17 +13629,10 @@
             },
             {
               "value": true,
-              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
-              "precedence": "reviewed_explicit",
-              "selected": false,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
-            },
-            {
-              "value": true,
               "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
               "precedence": "reviewed_explicit",
               "selected": false,
-              "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed"
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             }
           ]
         },
@@ -13540,14 +13641,14 @@
           "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
             {
               "value": "medium",
               "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed"
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             },
             {
               "value": "medium",
@@ -13579,8 +13680,8 @@
         }
       },
       "idempotency": "non_idempotent",
-      "interface_mode": "local",
-      "interface_reason": "The reviewed CLI wrapper is executable, but sheet/create_pivot_table is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
@@ -13630,14 +13731,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -13666,14 +13767,14 @@
           "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
             {
               "value": "user_required",
               "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed"
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             },
             {
               "value": "not_required",
@@ -13688,14 +13789,14 @@
           "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
             {
               "value": "destructive",
               "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed"
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             },
             {
               "value": "write",
@@ -13730,14 +13831,14 @@
           "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
             {
               "value": "unknown",
               "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed"
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             },
             {
               "value": "unknown",
@@ -13748,34 +13849,34 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
+          "value": "composite",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
+              "value": "composite",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "The reviewed CLI wrapper is executable, but sheet/delete_pivot_table is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "The reviewed CLI wrapper is executable, but sheet/delete_pivot_table is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -13784,14 +13885,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -13811,17 +13912,10 @@
             },
             {
               "value": true,
-              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
-              "precedence": "reviewed_explicit",
-              "selected": false,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
-            },
-            {
-              "value": true,
               "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
               "precedence": "reviewed_explicit",
               "selected": false,
-              "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed"
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             }
           ]
         },
@@ -13830,14 +13924,14 @@
           "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
             {
               "value": "high",
               "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed"
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             },
             {
               "value": "medium",
@@ -13869,8 +13963,8 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "interface_reason": "The reviewed CLI wrapper is executable, but sheet/delete_pivot_table is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "high",
       "source_refs": [
@@ -13920,14 +14014,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -14014,34 +14108,34 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
+          "value": "composite",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
+              "value": "composite",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "The reviewed CLI wrapper is executable, but sheet/list_pivot_tables is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "The reviewed CLI wrapper is executable, but sheet/list_pivot_tables is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -14050,14 +14144,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -14074,13 +14168,6 @@
               "precedence": "reviewed_manual",
               "selected": true,
               "review_reason": "依据新增的真实 Cobra leaf、列表/详情双用途参数和 sheet pivot-table 参考补齐 reviewed Agent 选择语义与示例。"
-            },
-            {
-              "value": true,
-              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
-              "precedence": "reviewed_explicit",
-              "selected": false,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
             }
           ]
         },
@@ -14120,8 +14207,8 @@
         }
       },
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "interface_reason": "The reviewed CLI wrapper is executable, but sheet/list_pivot_tables is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "low",
       "source_refs": [
@@ -14170,14 +14257,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -14264,34 +14351,34 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
+          "value": "composite",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
+              "value": "composite",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "The reviewed CLI wrapper is executable, but sheet/update_pivot_table is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "The reviewed CLI wrapper is executable, but sheet/update_pivot_table is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -14300,14 +14387,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -14324,13 +14411,6 @@
               "precedence": "reviewed_manual",
               "selected": true,
               "review_reason": "依据新增的真实 Cobra leaf、增量属性配置和 sheet pivot-table 参考补齐 reviewed Agent 选择语义与示例。"
-            },
-            {
-              "value": true,
-              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
-              "precedence": "reviewed_explicit",
-              "selected": false,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
             }
           ]
         },
@@ -14370,8 +14450,8 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "interface_reason": "The reviewed CLI wrapper is executable, but sheet/update_pivot_table is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
@@ -14417,15 +14497,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -14464,7 +14546,7 @@
               "review_reason": "sheet-range-filter-agent-review-v1 marks this tool as reviewed"
             },
             {
-              "value": "not_required",
+              "value": "user_required",
               "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
               "precedence": "unreviewed_explicit",
               "selected": false
@@ -14492,7 +14574,7 @@
               "review_reason": "sheet-range-filter-agent-review-v1 marks this tool as reviewed"
             },
             {
-              "value": "write",
+              "value": "destructive",
               "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
               "precedence": "unreviewed_explicit",
               "selected": false
@@ -14554,46 +14636,50 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -14641,7 +14727,7 @@
               "review_reason": "sheet-range-filter-agent-review-v1 marks this tool as reviewed"
             },
             {
-              "value": "medium",
+              "value": "high",
               "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
               "precedence": "unreviewed_explicit",
               "selected": false
@@ -14676,14 +14762,15 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "high",
       "source_refs": [
         "cobra-help:dws sheet range batch-clear --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/runtime-surface-completeness.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_hints/zz-sheet-range-filter-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/references/products/sheet.md",
@@ -14852,14 +14939,14 @@
           ]
         },
         "interface_mode": {
-          "value": "mcp",
+          "value": "composite",
           "source": "internal/cli/schema_hints/selection-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "mcp",
+              "value": "composite",
               "source": "internal/cli/schema_hints/selection-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
@@ -14873,18 +14960,43 @@
             }
           ]
         },
-        "interface_ref": {
-          "value": "sheet.update_range",
-          "source": "internal/cli/schema_hints/interface-refs.json",
-          "precedence": "explicit",
+        "interface_reason": {
+          "value": "The CLI reads a local batch file and performs multiple sheet/update_range calls with local continue-on-error control; the workflow has no single direct MCP interface.",
+          "source": "internal/cli/schema_hints/selection-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source",
+          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
           "candidates": [
+            {
+              "value": "The CLI reads a local batch file and performs multiple sheet/update_range calls with local continue-on-error control; the workflow has no single direct MCP interface.",
+              "source": "internal/cli/schema_hints/selection-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/selection-review.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/selection-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ],
+          "overridden_candidates": [
             {
               "value": "sheet.update_range",
               "source": "internal/cli/schema_hints/interface-refs.json",
               "precedence": "explicit",
-              "selected": true,
+              "selected": false,
               "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source"
             },
             {
@@ -14962,11 +15074,8 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "mcp",
-      "interface_ref": {
-        "product_id": "sheet",
-        "rpc_name": "update_range"
-      },
+      "interface_mode": "composite",
+      "interface_reason": "The CLI reads a local batch file and performs multiple sheet/update_range calls with local continue-on-error control; the workflow has no single direct MCP interface.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
@@ -14992,9 +15101,9 @@
       "avoid_when": [
         "当用户实际需要基于源数据范围自动填充到目标范围时，改用 dws sheet range fill。"
       ],
-      "confirmation": "not_required",
-      "effect": "write",
-      "effect_source": "command-verb",
+      "confirmation": "user_required",
+      "effect": "destructive",
+      "effect_source": "agent-hint",
       "examples": [
         "dws sheet range clear --node NODE_ID --sheet-id SHEET_ID --range A1:B3"
       ],
@@ -15058,30 +15167,46 @@
           ]
         },
         "confirmation": {
-          "value": "not_required",
-          "source": "risk-default",
-          "precedence": "inference_or_default",
+          "value": "user_required",
+          "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
+            {
+              "value": "user_required",
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
             {
               "value": "not_required",
               "source": "risk-default",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
         "effect": {
-          "value": "write",
-          "source": "command-verb",
-          "precedence": "inference_or_default",
+          "value": "destructive",
+          "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
+            {
+              "value": "destructive",
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
             {
               "value": "write",
               "source": "command-verb",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
@@ -15107,15 +15232,23 @@
         },
         "idempotency": {
           "value": "unknown",
-          "source": "effect-default",
-          "precedence": "inference_or_default",
+          "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
+            {
+              "value": "unknown",
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
             {
               "value": "unknown",
               "source": "effect-default",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
@@ -15168,20 +15301,35 @@
               "precedence": "reviewed_manual",
               "selected": true,
               "review_reason": "依据 reviewed CommandRegistry、dws sheet range clear --help 与 mono 产品参考，审阅该工具的 Agent 选择语义和示例。"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             }
           ]
         },
         "risk": {
-          "value": "medium",
-          "source": "effect-default",
-          "precedence": "inference_or_default",
+          "value": "high",
+          "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
+            {
+              "value": "high",
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
             {
               "value": "medium",
               "source": "effect-default",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
@@ -15213,12 +15361,13 @@
         "rpc_name": "clear_range"
       },
       "reviewed": true,
-      "risk": "medium",
+      "risk": "high",
       "source_refs": [
         "cobra-help:dws sheet range clear --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/selection-review.json",
         "internal/cli/schema_hints/sibling-disambiguation.json",
+        "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.sheet.clear_range",
         "skills/mono/references/products/sheet.md",
@@ -16088,17 +16237,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             },
             {
               "value": "available",
@@ -16215,18 +16364,18 @@
           ]
         },
         "interface_mode": {
-          "value": "mcp",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "mcp",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             },
             {
               "value": "mcp",
@@ -16236,17 +16385,43 @@
             }
           ]
         },
-        "interface_ref": {
-          "value": "sheet.get_range",
-          "source": "internal/cli/schema_hints/imported/wukong.json",
-          "precedence": "imported",
+        "interface_reason": {
+          "value": "Reviewed unpinned remote adapter: the CLI calls sheet/get_cell_infos, which is absent from the pinned MCP metadata snapshot; the incompatible sheet/get_range contract must not be advertised.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
+            {
+              "value": "Reviewed unpinned remote adapter: the CLI calls sheet/get_cell_infos, which is absent from the pinned MCP metadata snapshot; the incompatible sheet/get_range contract must not be advertised.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ],
+          "overridden_candidates": [
             {
               "value": "sheet.get_range",
               "source": "internal/cli/schema_hints/imported/wukong.json",
               "precedence": "imported",
-              "selected": true
+              "selected": false
             },
             {
               "value": "sheet.get_range",
@@ -16323,11 +16498,8 @@
         }
       },
       "idempotency": "idempotent",
-      "interface_mode": "mcp",
-      "interface_ref": {
-        "product_id": "sheet",
-        "rpc_name": "get_range"
-      },
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: the CLI calls sheet/get_cell_infos, which is absent from the pinned MCP metadata snapshot; the incompatible sheet/get_range contract must not be advertised.",
       "reviewed": true,
       "risk": "low",
       "source_refs": [
@@ -16337,6 +16509,7 @@
         "internal/cli/schema_hints/imported/wukong.json",
         "internal/cli/schema_hints/selection-review.json",
         "internal/cli/schema_hints/sibling-disambiguation.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_hints/zz-sheet-range-filter-review.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.sheet.range_read",
@@ -17739,14 +17912,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -17775,14 +17948,14 @@
           "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
             {
               "value": "not_required",
               "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed"
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             }
           ]
         },
@@ -17791,14 +17964,14 @@
           "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
             {
               "value": "write",
               "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed"
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             }
           ]
         },
@@ -17827,46 +18000,46 @@
           "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
             {
               "value": "idempotent",
               "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed"
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             }
           ]
         },
         "interface_mode": {
-          "value": "local",
+          "value": "composite",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
+              "value": "composite",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "The reviewed CLI wrapper fixes visibility=visible, but sheet/set_gridline_visibility is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "The reviewed CLI wrapper fixes visibility=visible, but sheet/set_gridline_visibility is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -17875,14 +18048,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -17902,17 +18075,10 @@
             },
             {
               "value": true,
-              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
-              "precedence": "reviewed_explicit",
-              "selected": false,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
-            },
-            {
-              "value": true,
               "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
               "precedence": "reviewed_explicit",
               "selected": false,
-              "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed"
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             }
           ]
         },
@@ -17921,14 +18087,14 @@
           "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
             {
               "value": "medium",
               "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "runtime-confirmation-review-v1 marks this tool as reviewed"
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             }
           ]
         },
@@ -17954,8 +18120,8 @@
         }
       },
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "interface_reason": "The reviewed CLI wrapper fixes visibility=visible, but sheet/set_gridline_visibility is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
@@ -18005,14 +18171,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -18099,34 +18265,34 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
+          "value": "composite",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
+              "value": "composite",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "The reviewed CLI wrapper is executable, but sheet/table_get is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "The reviewed CLI wrapper is executable, but sheet/table_get is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -18135,14 +18301,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -18159,13 +18325,6 @@
               "precedence": "reviewed_manual",
               "selected": true,
               "review_reason": "依据新增的真实 Cobra leaf、table-read 兼容 alias、结构化返回契约和 sheet read 参考补齐 reviewed Agent 选择语义。"
-            },
-            {
-              "value": true,
-              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
-              "precedence": "reviewed_explicit",
-              "selected": false,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
             }
           ]
         },
@@ -18205,8 +18364,8 @@
         }
       },
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "interface_reason": "The reviewed CLI wrapper is executable, but sheet/table_get is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "low",
       "source_refs": [
@@ -18255,14 +18414,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -18349,34 +18508,34 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
+          "value": "composite",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
+              "value": "composite",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "The reviewed CLI wrapper is executable, but sheet/table_put is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "The reviewed CLI wrapper is executable, but sheet/table_put is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -18385,14 +18544,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -18409,13 +18568,6 @@
               "precedence": "reviewed_manual",
               "selected": true,
               "review_reason": "依据新增的真实 Cobra leaf、table-write 兼容 alias、JSON 输入解析和 sheet write 参考补齐 reviewed Agent 选择语义与示例。"
-            },
-            {
-              "value": true,
-              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
-              "precedence": "reviewed_explicit",
-              "selected": false,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
             }
           ]
         },
@@ -18455,8 +18607,8 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "interface_reason": "The reviewed CLI wrapper is executable, but sheet/table_put is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
@@ -18502,15 +18654,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -18597,46 +18751,50 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -18698,14 +18856,15 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
         "cobra-help:dws sheet template apply --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/runtime-surface-completeness.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-workbook.md"
@@ -18746,15 +18905,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -18841,46 +19002,50 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -18942,14 +19107,15 @@
         }
       },
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "low",
       "source_refs": [
         "cobra-help:dws sheet template list --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/runtime-surface-completeness.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-workbook.md"
@@ -18990,15 +19156,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -19085,46 +19253,50 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -19186,14 +19358,15 @@
         }
       },
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "low",
       "source_refs": [
         "cobra-help:dws sheet template search --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/runtime-surface-completeness.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-workbook.md"
@@ -19210,7 +19383,7 @@
         "当用户实际需要对钉钉表格指定工作表中的连续整行或整列创建分组时，改用 dws sheet group-dimension。"
       ],
       "confirmation": "not_required",
-      "effect": "read",
+      "effect": "write",
       "effect_source": "agent-hint",
       "examples": [
         "dws sheet ungroup-dimension --node NODE_ID --sheet-id SHEET_ID --range 3:7"
@@ -19234,15 +19407,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -19268,29 +19443,45 @@
         },
         "confirmation": {
           "value": "not_required",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
             {
               "value": "not_required",
               "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
               "precedence": "unreviewed_explicit",
-              "selected": true
+              "selected": false
             }
           ]
         },
         "effect": {
-          "value": "read",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "write",
+          "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
             {
               "value": "read",
               "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
               "precedence": "unreviewed_explicit",
-              "selected": true
+              "selected": false
             }
           ]
         },
@@ -19315,60 +19506,72 @@
           ]
         },
         "idempotency": {
-          "value": "idempotent",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "unknown",
+          "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
+            {
+              "value": "unknown",
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
             {
               "value": "idempotent",
               "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
               "precedence": "unreviewed_explicit",
-              "selected": true
+              "selected": false
             }
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -19387,6 +19590,13 @@
               "review_reason": "依据 reviewed CommandRegistry、dws sheet ungroup-dimension --help 与 mono 产品参考，审阅该工具的 Agent 选择语义和示例。"
             },
             {
+              "value": true,
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
+            {
               "value": false,
               "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
               "precedence": "unreviewed_explicit",
@@ -19395,16 +19605,24 @@
           ]
         },
         "risk": {
-          "value": "low",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "medium",
+          "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
             {
               "value": "low",
               "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
               "precedence": "unreviewed_explicit",
-              "selected": true
+              "selected": false
             }
           ]
         },
@@ -19429,15 +19647,17 @@
           ]
         }
       },
-      "idempotency": "idempotent",
-      "interface_mode": "local",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
+      "idempotency": "unknown",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
-      "risk": "low",
+      "risk": "medium",
       "source_refs": [
         "cobra-help:dws sheet ungroup-dimension --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/runtime-surface-completeness.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
+        "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/references/products/sheet.md",
         "skills/mono/references/products/sheet/sheet-dimension-operations.md"

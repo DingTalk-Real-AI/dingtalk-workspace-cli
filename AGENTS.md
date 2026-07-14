@@ -192,23 +192,25 @@ all pass before execution eligibility is considered. A missing required value,
 constraint failure, runtime error, or MCP resolution error is a contract bug;
 none is a valid reason to skip an example.
 
-Example execution defaults to `dry_run`. Final typed safety with `risk=high`
-or `confirmation=user_required` automatically selects `contract_only`, because
-a test must never inject `--yes`. A narrow runtime precondition that cannot be
-derived from the typed contract may use an exact zero-based
-`example_dispositions` entry with `mode=contract_only`, `reviewed=true`, one of
-the schema-enumerated reason codes, and a concrete non-empty reason. Manual
-confirmation dispositions are forbidden because confirmation comes from typed
-safety. Duplicate, missing, and out-of-range indexes fail validation. Never
-catch a dry-run failure and dynamically downgrade it to `contract_only`.
+Example execution defaults to contract validation only. Runtime execution is
+opt-in: an example enters `dry_run` only when its final `ToolSpec` publishes an
+explicit reviewed dry-run capability. The test never injects `--yes`, and
+`risk`/`confirmation` values do not manufacture preview support. A narrow
+runtime precondition that cannot be derived from the typed contract may use an
+exact zero-based `example_dispositions` entry with `mode=contract_only`,
+`reviewed=true`, one of the schema-enumerated reason codes, and a concrete
+non-empty reason. Such a disposition may only narrow an explicit dry-run
+capability; it cannot turn an ordinary contract-only example into a skip.
+Duplicate, missing, and out-of-range indexes fail validation. Never catch a
+dry-run failure and dynamically downgrade it to `contract_only`.
 
 Normal Go tests run the exhaustive contract gate. Run
 `make test-schema-agent-examples` to additionally execute the eligible subset
 through the real Cobra `--dry-run` path with isolated HOME and blocked proxies.
-The test reports stable `total`, `dry_run`, `contract_only`, `typed_safety`,
+The test reports stable `total`, `contract`, `dry_run`, `contract_only`,
 `reviewed_manual`, and per-reason counts; changing those counts requires a
-review of the corresponding manual hint or typed safety change. This target is
-also part of `make policy`.
+review of the corresponding typed dry-run capability or manual disposition.
+This target is also part of `make policy`.
 
 Treat every tool `use_when` entry as a reviewed positive selection scenario
 whose expected result is that tool's canonical path, and every `avoid_when`
@@ -244,6 +246,11 @@ reviewed manual/explicit source may intentionally raise or lower `required`,
 the selected source in provenance, and fail same-precedence conflicts rather
 than silently merging them. Cobra's hard-required marker remains an executable
 fact even when the Agent projection is deliberately different.
+
+For command text, reviewed `ToolSchemaHint` wins first, then command-specific
+Cobra Help, then MCP metadata. Generic RPC prose may remain an unselected
+provenance candidate (and parameter-level `interface_description`); it must not
+overwrite a specialized leaf's title or description.
 
 For every delivered `ToolSpec` and `ParameterSpec` field, the provenance
 winner value must exactly equal the delivered value. Checking only source,

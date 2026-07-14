@@ -111,8 +111,17 @@ func cloneRuntimeSchemaStringMap(source map[string]string) map[string]string {
 
 func init() {
 	RegisterRuntimeSchemaParameterMetadata("aisearch.enterprise_person_search", RuntimeSchemaParameterMetadata{
-		Inherited: []string{"keyword", "dimension"},
-		Required:  []string{"keyword"},
+		Required: []string{"keyword"},
+	})
+	RegisterRuntimeSchemaParameterMetadata("aitable.export_data", RuntimeSchemaParameterMetadata{
+		RequiredWhen: map[string]string{
+			"table-id": "scope is table or view",
+			"view-id":  "scope is view",
+		},
+		Enums: map[string][]string{
+			"scope":         {"all", "table", "view"},
+			"export-format": {"excel", "attachment", "excel_and_attachment", "excel_with_inline_images"},
+		},
 	})
 	RegisterRuntimeSchemaParameterMetadata("aitable.record_get", RuntimeSchemaParameterMetadata{
 		Required: []string{"record-ids"},
@@ -135,6 +144,18 @@ func init() {
 	RegisterRuntimeSchemaParameterMetadata("attendance.batch_get_employee_shifts", RuntimeSchemaParameterMetadata{
 		Formats: map[string]string{"start": "date", "end": "date"},
 	})
+	RegisterRuntimeSchemaParameterMetadata("attendance.approve_list", RuntimeSchemaParameterMetadata{
+		Formats:  map[string]string{"start": "date", "end": "date"},
+		Examples: map[string]string{"types": "overtime,leave"},
+	})
+	RegisterRuntimeSchemaParameterMetadata("attendance.selfsetting_get", RuntimeSchemaParameterMetadata{
+		Enums: map[string][]string{
+			"setting-scene": {
+				"checkRemind", "fastCheck", "checkResultNotify", "lackRemind",
+				"personalAttendStatNotify", "bossAttendStatNotify",
+			},
+		},
+	})
 	RegisterRuntimeSchemaParameterMetadata("calendar.add_attachments", RuntimeSchemaParameterMetadata{
 		Formats:  map[string]string{"files": "file-id-name-list"},
 		Examples: map[string]string{"files": "file-smoke:report.pdf"},
@@ -153,6 +174,9 @@ func init() {
 	})
 	RegisterRuntimeSchemaParameterMetadata("chat.download_media", RuntimeSchemaParameterMetadata{
 		Enums: map[string][]string{"type": {"mediaId"}},
+	})
+	RegisterRuntimeSchemaParameterMetadata("chat.list_owned_or_admin_groups", RuntimeSchemaParameterMetadata{
+		Enums: map[string][]string{"role": {"OWNER", "ADMIN"}},
 	})
 	RegisterRuntimeSchemaParameterMetadata("chat.send_personal_message", RuntimeSchemaParameterMetadata{
 		RequiredWhen: map[string]string{
@@ -204,6 +228,47 @@ func init() {
 		Examples: map[string]string{
 			"contents": `[{"content":"schema smoke","sort":"0","key":"work","contentType":"markdown","type":"1"}]`,
 		},
+	})
+	RegisterRuntimeSchemaParameterMetadata("sheet.batch_update", RuntimeSchemaParameterMetadata{
+		Formats: map[string]string{"operations": "json"},
+		Examples: map[string]string{
+			"operations": `[{"toolName":"range clear","input":{"sheet-id":"Sheet1","range":"A1:B2","type":"content"}}]`,
+		},
+	})
+	chartPropertiesExample := `{"position":{"row":0,"col":"A"},"dimensions":{"width":600,"height":400},"chart":{"type":"column","series":[{"value":["B2:B10"]}],"category":["A2:A10"]}}`
+	for _, canonicalPath := range []string{"sheet.chart_create", "sheet.chart_update"} {
+		RegisterRuntimeSchemaParameterMetadata(canonicalPath, RuntimeSchemaParameterMetadata{
+			Formats:  map[string]string{"properties": "json"},
+			Examples: map[string]string{"properties": chartPropertiesExample},
+		})
+	}
+	RegisterRuntimeSchemaParameterMetadata("sheet.create_pivot_table", RuntimeSchemaParameterMetadata{
+		Formats: map[string]string{"properties": "json"},
+		Examples: map[string]string{
+			"properties": `{"values":[{"field":"Amount","summarize_by":"sum"}]}`,
+		},
+	})
+	RegisterRuntimeSchemaParameterMetadata("sheet.update_pivot_table", RuntimeSchemaParameterMetadata{
+		Formats:  map[string]string{"properties": "json"},
+		Examples: map[string]string{"properties": `{"show_subtotals":false}`},
+	})
+	RegisterRuntimeSchemaParameterMetadata("sheet.range_batch_clear", RuntimeSchemaParameterMetadata{
+		Formats:  map[string]string{"ranges": "json"},
+		Examples: map[string]string{"ranges": `["Sheet1!A1:B2"]`},
+	})
+	RegisterRuntimeSchemaParameterMetadata("todo.add_todo_reminder", RuntimeSchemaParameterMetadata{
+		RequiredWhen: map[string]string{
+			"due-date-offset":     "base-time is dueTime",
+			"reminder-time-stamp": "base-time is customTime",
+		},
+		Enums: map[string][]string{"base-time": {"dueTime", "customTime"}},
+		Examples: map[string]string{
+			"due-date-offset":     "-30",
+			"reminder-time-stamp": "2026-03-10T18:00:00+08:00",
+		},
+	})
+	RegisterRuntimeSchemaParameterMetadata("todo.get_user_todos_in_current_org", RuntimeSchemaParameterMetadata{
+		Examples: map[string]string{"role-types": "creator,executor"},
 	})
 
 	for _, canonicalPath := range []string{

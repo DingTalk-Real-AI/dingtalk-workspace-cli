@@ -2244,12 +2244,244 @@
         "当用户需要查询当前用户配置的所有听记热词列表，并能提供命令所需的查询条件时使用。"
       ]
     },
-    "minutes list mine": {
-      "agent_summary": "查询我创建的听记列表，支持分页，支持按关键字和时间范围筛选。",
+    "minutes list all": {
+      "agent_summary": "查询当前用户有权限访问的全部听记，包括自己创建和他人共享的听记，并支持分页、关键字和时间范围筛选。",
       "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
       "availability": "available",
       "avoid_when": [
-        "用户需要修改数据而不是查询当前状态时不要使用。"
+        "用户明确只查询自己创建的听记时改用 dws minutes list mine；明确只查询他人共享的听记时改用 dws minutes list shared；修改数据时不要使用。"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws minutes list all --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "查询当前用户有权限访问的全部听记，包括自己创建和他人共享的听记，并支持分页、关键字和时间范围筛选。",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "precedence": "reviewed_manual",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、dws minutes list all --help 与 mono 产品参考，审阅 noLimit 范围的 Agent 选择语义和示例。",
+          "candidates": [
+            {
+              "value": "查询当前用户有权限访问的全部听记，包括自己创建和他人共享的听记，并支持分页、关键字和时间范围筛选。",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "precedence": "reviewed_manual",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、dws minutes list all --help 与 mono 产品参考，审阅 noLimit 范围的 Agent 选择语义和示例。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "用户明确只查询自己创建的听记时改用 dws minutes list mine；明确只查询他人共享的听记时改用 dws minutes list shared；修改数据时不要使用。"
+          ],
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "precedence": "reviewed_manual",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、dws minutes list all --help 与 mono 产品参考，审阅 noLimit 范围的 Agent 选择语义和示例。",
+          "candidates": [
+            {
+              "value": [
+                "用户明确只查询自己创建的听记时改用 dws minutes list mine；明确只查询他人共享的听记时改用 dws minutes list shared；修改数据时不要使用。"
+              ],
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "precedence": "reviewed_manual",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、dws minutes list all --help 与 mono 产品参考，审阅 noLimit 范围的 Agent 选择语义和示例。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws minutes list all --format json"
+          ],
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "precedence": "reviewed_manual",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、dws minutes list all --help 与 mono 产品参考，审阅 noLimit 范围的 Agent 选择语义和示例。",
+          "candidates": [
+            {
+              "value": [
+                "dws minutes list all --format json"
+              ],
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "precedence": "reviewed_manual",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、dws minutes list all --help 与 mono 产品参考，审阅 noLimit 范围的 Agent 选择语义和示例。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "minutes.list_by_keyword_and_time_range",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
+          "candidates": [
+            {
+              "value": "minutes.list_by_keyword_and_time_range",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "precedence": "reviewed_manual",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、dws minutes list all --help 与 mono 产品参考，审阅 noLimit 范围的 Agent 选择语义和示例。",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "precedence": "reviewed_manual",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、dws minutes list all --help 与 mono 产品参考，审阅 noLimit 范围的 Agent 选择语义和示例。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "当用户需要查询自己有权限访问的全部听记，或未限定仅自己创建/仅他人共享，并需要按关键字或时间范围筛选时使用。"
+          ],
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "precedence": "reviewed_manual",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、dws minutes list all --help 与 mono 产品参考，审阅 noLimit 范围的 Agent 选择语义和示例。",
+          "candidates": [
+            {
+              "value": [
+                "当用户需要查询自己有权限访问的全部听记，或未限定仅自己创建/仅他人共享，并需要按关键字或时间范围筛选时使用。"
+              ],
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "precedence": "reviewed_manual",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、dws minutes list all --help 与 mono 产品参考，审阅 noLimit 范围的 Agent 选择语义和示例。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "list_by_keyword_and_time_range"
+      },
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "cobra-help:dws minutes list all --help",
+        "internal/cli/schema_command_registry.json",
+        "internal/cli/schema_hints/selection-review.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
+        "internal/cli/schema_manual_hints.json",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "skills/mono/references/products/minutes.md"
+      ],
+      "use_when": [
+        "当用户需要查询自己有权限访问的全部听记，或未限定仅自己创建/仅他人共享，并需要按关键字或时间范围筛选时使用。"
+      ]
+    },
+    "minutes list mine": {
+      "agent_summary": "查询当前用户自己创建的听记列表，支持分页、关键字和时间范围筛选。",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "availability": "available",
+      "avoid_when": [
+        "用户要查询他人共享的听记时改用 dws minutes list shared；要覆盖全部可访问听记时改用 dws minutes list all；修改数据时不要使用。"
       ],
       "confirmation": "not_required",
       "effect": "read",
@@ -2259,34 +2491,34 @@
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "查询我创建的听记列表，支持分页，支持按关键字和时间范围筛选。",
+          "value": "查询当前用户自己创建的听记列表，支持分页、关键字和时间范围筛选。",
           "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据 reviewed CommandRegistry、dws minutes list mine --help 与 mono 产品参考，审阅该工具的 Agent 选择语义和示例。",
+          "review_reason": "依据 reviewed CommandRegistry、dws minutes list mine --help 与 mono 产品参考，审阅 created 范围的 Agent 选择语义和示例。",
           "candidates": [
             {
-              "value": "查询我创建的听记列表，支持分页，支持按关键字和时间范围筛选。",
+              "value": "查询当前用户自己创建的听记列表，支持分页、关键字和时间范围筛选。",
               "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据 reviewed CommandRegistry、dws minutes list mine --help 与 mono 产品参考，审阅该工具的 Agent 选择语义和示例。"
+              "review_reason": "依据 reviewed CommandRegistry、dws minutes list mine --help 与 mono 产品参考，审阅 created 范围的 Agent 选择语义和示例。"
             }
           ]
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             },
             {
               "value": "available",
@@ -2298,21 +2530,21 @@
         },
         "avoid_when": {
           "value": [
-            "用户需要修改数据而不是查询当前状态时不要使用。"
+            "用户要查询他人共享的听记时改用 dws minutes list shared；要覆盖全部可访问听记时改用 dws minutes list all；修改数据时不要使用。"
           ],
           "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据 reviewed CommandRegistry、dws minutes list mine --help 与 mono 产品参考，审阅该工具的 Agent 选择语义和示例。",
+          "review_reason": "依据 reviewed CommandRegistry、dws minutes list mine --help 与 mono 产品参考，审阅 created 范围的 Agent 选择语义和示例。",
           "candidates": [
             {
               "value": [
-                "用户需要修改数据而不是查询当前状态时不要使用。"
+                "用户要查询他人共享的听记时改用 dws minutes list shared；要覆盖全部可访问听记时改用 dws minutes list all；修改数据时不要使用。"
               ],
               "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据 reviewed CommandRegistry、dws minutes list mine --help 与 mono 产品参考，审阅该工具的 Agent 选择语义和示例。"
+              "review_reason": "依据 reviewed CommandRegistry、dws minutes list mine --help 与 mono 产品参考，审阅 created 范围的 Agent 选择语义和示例。"
             }
           ]
         },
@@ -2351,7 +2583,7 @@
           "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据 reviewed CommandRegistry、dws minutes list mine --help 与 mono 产品参考，审阅该工具的 Agent 选择语义和示例。",
+          "review_reason": "依据 reviewed CommandRegistry、dws minutes list mine --help 与 mono 产品参考，审阅 created 范围的 Agent 选择语义和示例。",
           "candidates": [
             {
               "value": [
@@ -2360,7 +2592,7 @@
               "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据 reviewed CommandRegistry、dws minutes list mine --help 与 mono 产品参考，审阅该工具的 Agent 选择语义和示例。"
+              "review_reason": "依据 reviewed CommandRegistry、dws minutes list mine --help 与 mono 产品参考，审阅 created 范围的 Agent 选择语义和示例。"
             }
           ]
         },
@@ -2380,17 +2612,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             },
             {
               "value": "mcp",
@@ -2402,15 +2634,23 @@
         },
         "interface_ref": {
           "value": "minutes.list_by_keyword_and_time_range",
-          "source": "internal/cli/schema_mcp_metadata.json#tools.minutes.list_by_keyword_and_time_range.interface_ref",
-          "precedence": "mcp_fallback",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
+            {
+              "value": "minutes.list_by_keyword_and_time_range",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
+            },
             {
               "value": "minutes.list_by_keyword_and_time_range",
               "source": "internal/cli/schema_mcp_metadata.json#tools.minutes.list_by_keyword_and_time_range.interface_ref",
               "precedence": "mcp_fallback",
-              "selected": true
+              "selected": false
             }
           ]
         },
@@ -2419,14 +2659,14 @@
           "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据 reviewed CommandRegistry、dws minutes list mine --help 与 mono 产品参考，审阅该工具的 Agent 选择语义和示例。",
+          "review_reason": "依据 reviewed CommandRegistry、dws minutes list mine --help 与 mono 产品参考，审阅 created 范围的 Agent 选择语义和示例。",
           "candidates": [
             {
               "value": true,
               "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据 reviewed CommandRegistry、dws minutes list mine --help 与 mono 产品参考，审阅该工具的 Agent 选择语义和示例。"
+              "review_reason": "依据 reviewed CommandRegistry、dws minutes list mine --help 与 mono 产品参考，审阅 created 范围的 Agent 选择语义和示例。"
             }
           ]
         },
@@ -2446,21 +2686,21 @@
         },
         "use_when": {
           "value": [
-            "当用户需要查询我创建的听记列表，支持分页，支持按关键字和时间范围筛选，并能提供命令所需的查询条件时使用。"
+            "当用户明确查询自己创建、自己发起或自己录制的听记，并需要分页、关键字或时间范围筛选时使用。"
           ],
           "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
           "precedence": "reviewed_manual",
           "resolution": "highest_precedence",
-          "review_reason": "依据 reviewed CommandRegistry、dws minutes list mine --help 与 mono 产品参考，审阅该工具的 Agent 选择语义和示例。",
+          "review_reason": "依据 reviewed CommandRegistry、dws minutes list mine --help 与 mono 产品参考，审阅 created 范围的 Agent 选择语义和示例。",
           "candidates": [
             {
               "value": [
-                "当用户需要查询我创建的听记列表，支持分页，支持按关键字和时间范围筛选，并能提供命令所需的查询条件时使用。"
+                "当用户明确查询自己创建、自己发起或自己录制的听记，并需要分页、关键字或时间范围筛选时使用。"
               ],
               "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
               "precedence": "reviewed_manual",
               "selected": true,
-              "review_reason": "依据 reviewed CommandRegistry、dws minutes list mine --help 与 mono 产品参考，审阅该工具的 Agent 选择语义和示例。"
+              "review_reason": "依据 reviewed CommandRegistry、dws minutes list mine --help 与 mono 产品参考，审阅 created 范围的 Agent 选择语义和示例。"
             }
           ]
         }
@@ -2477,13 +2717,246 @@
         "cobra-help:dws minutes list mine --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/selection-review.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.minutes.list_by_keyword_and_time_range",
         "skills/mono/references/best_practices/07-minutes.md",
         "skills/mono/references/products/minutes.md"
       ],
       "use_when": [
-        "当用户需要查询我创建的听记列表，支持分页，支持按关键字和时间范围筛选，并能提供命令所需的查询条件时使用。"
+        "当用户明确查询自己创建、自己发起或自己录制的听记，并需要分页、关键字或时间范围筛选时使用。"
+      ]
+    },
+    "minutes list shared": {
+      "agent_summary": "查询他人共享给当前用户的听记列表，支持分页、关键字和时间范围筛选。",
+      "agent_summary_source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+      "availability": "available",
+      "avoid_when": [
+        "用户只查询自己创建的听记时改用 dws minutes list mine；要覆盖全部可访问听记时改用 dws minutes list all；修改数据时不要使用。"
+      ],
+      "confirmation": "not_required",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws minutes list shared --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "查询他人共享给当前用户的听记列表，支持分页、关键字和时间范围筛选。",
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "precedence": "reviewed_manual",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、dws minutes list shared --help 与 mono 产品参考，审阅 shared 范围的 Agent 选择语义和示例。",
+          "candidates": [
+            {
+              "value": "查询他人共享给当前用户的听记列表，支持分页、关键字和时间范围筛选。",
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "precedence": "reviewed_manual",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、dws minutes list shared --help 与 mono 产品参考，审阅 shared 范围的 Agent 选择语义和示例。"
+            }
+          ]
+        },
+        "availability": {
+          "value": "available",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
+          "candidates": [
+            {
+              "value": "available",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "用户只查询自己创建的听记时改用 dws minutes list mine；要覆盖全部可访问听记时改用 dws minutes list all；修改数据时不要使用。"
+          ],
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "precedence": "reviewed_manual",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、dws minutes list shared --help 与 mono 产品参考，审阅 shared 范围的 Agent 选择语义和示例。",
+          "candidates": [
+            {
+              "value": [
+                "用户只查询自己创建的听记时改用 dws minutes list mine；要覆盖全部可访问听记时改用 dws minutes list all；修改数据时不要使用。"
+              ],
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "precedence": "reviewed_manual",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、dws minutes list shared --help 与 mono 产品参考，审阅 shared 范围的 Agent 选择语义和示例。"
+            }
+          ]
+        },
+        "confirmation": {
+          "value": "not_required",
+          "source": "risk-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "not_required",
+              "source": "risk-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "effect": {
+          "value": "read",
+          "source": "command-verb",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "read",
+              "source": "command-verb",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "examples": {
+          "value": [
+            "dws minutes list shared --format json"
+          ],
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "precedence": "reviewed_manual",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、dws minutes list shared --help 与 mono 产品参考，审阅 shared 范围的 Agent 选择语义和示例。",
+          "candidates": [
+            {
+              "value": [
+                "dws minutes list shared --format json"
+              ],
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "precedence": "reviewed_manual",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、dws minutes list shared --help 与 mono 产品参考，审阅 shared 范围的 Agent 选择语义和示例。"
+            }
+          ]
+        },
+        "idempotency": {
+          "value": "idempotent",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "idempotent",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "interface_mode": {
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
+          "candidates": [
+            {
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": "minutes.list_by_keyword_and_time_range",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
+          "candidates": [
+            {
+              "value": "minutes.list_by_keyword_and_time_range",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
+            }
+          ]
+        },
+        "reviewed": {
+          "value": true,
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "precedence": "reviewed_manual",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、dws minutes list shared --help 与 mono 产品参考，审阅 shared 范围的 Agent 选择语义和示例。",
+          "candidates": [
+            {
+              "value": true,
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "precedence": "reviewed_manual",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、dws minutes list shared --help 与 mono 产品参考，审阅 shared 范围的 Agent 选择语义和示例。"
+            }
+          ]
+        },
+        "risk": {
+          "value": "low",
+          "source": "effect-default",
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "low",
+              "source": "effect-default",
+              "precedence": "inference_or_default",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "当用户明确查询别人共享给自己的听记，并需要分页、关键字或时间范围筛选时使用。"
+          ],
+          "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+          "precedence": "reviewed_manual",
+          "resolution": "highest_precedence",
+          "review_reason": "依据 reviewed CommandRegistry、dws minutes list shared --help 与 mono 产品参考，审阅 shared 范围的 Agent 选择语义和示例。",
+          "candidates": [
+            {
+              "value": [
+                "当用户明确查询别人共享给自己的听记，并需要分页、关键字或时间范围筛选时使用。"
+              ],
+              "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
+              "precedence": "reviewed_manual",
+              "selected": true,
+              "review_reason": "依据 reviewed CommandRegistry、dws minutes list shared --help 与 mono 产品参考，审阅 shared 范围的 Agent 选择语义和示例。"
+            }
+          ]
+        }
+      },
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "minutes",
+        "rpc_name": "list_by_keyword_and_time_range"
+      },
+      "reviewed": true,
+      "risk": "low",
+      "source_refs": [
+        "cobra-help:dws minutes list shared --help",
+        "internal/cli/schema_command_registry.json",
+        "internal/cli/schema_hints/selection-review.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
+        "internal/cli/schema_manual_hints.json",
+        "skills/mono/references/best_practices/07-minutes.md",
+        "skills/mono/references/products/minutes.md"
+      ],
+      "use_when": [
+        "当用户明确查询别人共享给自己的听记，并需要分页、关键字或时间范围筛选时使用。"
       ]
     },
     "minutes mind-graph create": {
@@ -3534,14 +4007,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -3628,34 +4101,34 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
+          "value": "composite",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
+              "value": "composite",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "CLI helper is executable, but its backing RPC is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "CLI helper is executable, but its backing RPC is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -3664,14 +4137,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ],
           "overridden_candidates": [
@@ -3704,13 +4177,6 @@
               "precedence": "reviewed_explicit",
               "selected": false,
               "review_reason": "dws-command-surface-review marks this tool as reviewed"
-            },
-            {
-              "value": true,
-              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
-              "precedence": "reviewed_explicit",
-              "selected": false,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
             }
           ]
         },
@@ -3750,8 +4216,8 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "interface_reason": "CLI helper is executable, but its backing RPC is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
@@ -3805,14 +4271,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -3899,34 +4365,34 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
+          "value": "composite",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
+              "value": "composite",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "CLI helper is executable, but its backing RPC is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "CLI helper is executable, but its backing RPC is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -3935,14 +4401,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ],
           "overridden_candidates": [
@@ -3975,13 +4441,6 @@
               "precedence": "reviewed_explicit",
               "selected": false,
               "review_reason": "dws-command-surface-review marks this tool as reviewed"
-            },
-            {
-              "value": true,
-              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
-              "precedence": "reviewed_explicit",
-              "selected": false,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
             }
           ]
         },
@@ -4021,8 +4480,8 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "interface_reason": "CLI helper is executable, but its backing RPC is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
@@ -4076,14 +4535,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -4178,34 +4637,34 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
+          "value": "composite",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
+              "value": "composite",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "CLI helper is executable, but its backing RPC is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "CLI helper is executable, but its backing RPC is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -4214,14 +4673,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ],
           "overridden_candidates": [
@@ -4254,13 +4713,6 @@
               "precedence": "reviewed_explicit",
               "selected": false,
               "review_reason": "dws-command-surface-review marks this tool as reviewed"
-            },
-            {
-              "value": true,
-              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
-              "precedence": "reviewed_explicit",
-              "selected": false,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
             }
           ]
         },
@@ -4300,8 +4752,8 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "interface_reason": "CLI helper is executable, but its backing RPC is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
@@ -4355,14 +4807,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -4457,34 +4909,34 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
+          "value": "composite",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
+              "value": "composite",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "CLI helper is executable, but its backing RPC is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "CLI helper is executable, but its backing RPC is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -4493,14 +4945,14 @@
           "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
               "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ],
           "overridden_candidates": [
@@ -4533,13 +4985,6 @@
               "precedence": "reviewed_explicit",
               "selected": false,
               "review_reason": "dws-command-surface-review marks this tool as reviewed"
-            },
-            {
-              "value": true,
-              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
-              "precedence": "reviewed_explicit",
-              "selected": false,
-              "review_reason": "unverified-direct-interface-review-v1 marks this tool as reviewed"
             }
           ]
         },
@@ -4579,8 +5024,8 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "interface_reason": "CLI helper is executable, but its backing RPC is absent from the pinned MCP metadata snapshot; do not advertise a direct MCP interface.",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
@@ -5114,8 +5559,8 @@
         "当用户实际需要查询发言人段落总结任务的结果，返回每位发言人的发言汇总时，改用 dws minutes speaker summary get。"
       ],
       "confirmation": "not_required",
-      "effect": "read",
-      "effect_source": "command-verb",
+      "effect": "write",
+      "effect_source": "agent-hint",
       "examples": [
         "dws minutes speaker summary create --ids '\u003cuuid1,uuid2\u003e'"
       ],
@@ -5180,29 +5625,45 @@
         },
         "confirmation": {
           "value": "not_required",
-          "source": "risk-default",
-          "precedence": "inference_or_default",
+          "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
             {
               "value": "not_required",
               "source": "risk-default",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
         "effect": {
-          "value": "read",
-          "source": "command-verb",
-          "precedence": "inference_or_default",
+          "value": "write",
+          "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
             {
               "value": "read",
               "source": "command-verb",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
@@ -5227,16 +5688,24 @@
           ]
         },
         "idempotency": {
-          "value": "idempotent",
-          "source": "effect-default",
-          "precedence": "inference_or_default",
+          "value": "unknown",
+          "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
+            {
+              "value": "unknown",
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
             {
               "value": "idempotent",
               "source": "effect-default",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
@@ -5289,20 +5758,35 @@
               "precedence": "reviewed_manual",
               "selected": true,
               "review_reason": "依据 reviewed CommandRegistry、dws minutes speaker summary create --help 与 mono 产品参考，审阅该工具的 Agent 选择语义和示例。"
+            },
+            {
+              "value": true,
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
             }
           ]
         },
         "risk": {
-          "value": "low",
-          "source": "effect-default",
-          "precedence": "inference_or_default",
+          "value": "medium",
+          "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
             {
               "value": "low",
               "source": "effect-default",
               "precedence": "inference_or_default",
-              "selected": true
+              "selected": false
             }
           ]
         },
@@ -5327,19 +5811,20 @@
           ]
         }
       },
-      "idempotency": "idempotent",
+      "idempotency": "unknown",
       "interface_mode": "mcp",
       "interface_ref": {
         "product_id": "minutes",
         "rpc_name": "create_speaker_summary"
       },
       "reviewed": true,
-      "risk": "low",
+      "risk": "medium",
       "source_refs": [
         "cobra-help:dws minutes speaker summary create --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/selection-review.json",
         "internal/cli/schema_hints/sibling-disambiguation.json",
+        "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.minutes.create_speaker_summary",
         "skills/mono/references/best_practices/10-minutes-speaker-match.md",

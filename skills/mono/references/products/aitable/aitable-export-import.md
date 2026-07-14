@@ -4,21 +4,23 @@
 
 `export data` 为异步任务：首次调用可能只返回 `taskId`，需要继续轮询。
 
-> ⚠️ **`--format` 冲突警告**：`export data` 的 `--format` 是**导出格式**（excel/attachment 等），不是全局输出格式。**此命令禁止追加全局 `--format json`**，否则会覆盖导出格式导致 `INVALID_EXPORT_FORMAT` 错误。输出默认就是 JSON，无需额外指定。
+> ⚠️ **两种 format 严格分工**：业务导出格式只用 `--export-format`（excel/attachment 等）；全局 `--format` 只控制 CLI 输出格式，推荐保持 `--format json`。旧写法 `--format excel` 仅用于兼容历史脚本，新调用不要使用。
 
 ```bash
-# 第一步：创建任务（按 scope 传必要参数）——注意：不要加 --format json！
-dws aitable export data --base-id <BASE_ID> --scope table --table-id <TABLE_ID> --format excel --timeout-ms 1000
+# 第一步：创建任务；--export-format 是业务导出格式，--format json 是结构化输出格式
+dws aitable export data --base-id <BASE_ID> --scope table --table-id <TABLE_ID> --export-format excel --timeout-ms 1000 --format json
 
 # 第二步：拿 taskId 继续轮询，直到返回 downloadUrl
-dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 3000
+dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 3000 --format json
 ```
 
 ### 参数约束
 
-| scope | 必传参数 |
+创建导出任务时统一必传 `--base-id`、`--scope` 和 `--export-format`；下表是不同 scope 的额外必传参数。使用 `--task-id` 轮询时不再传 scope/导出格式。
+
+| scope | 额外必传参数 |
 |-------|----------|
-| `all` | 只需 `--base-id` |
+| `all` | 无 |
 | `table` | 必须 `--table-id` |
 | `view` | 必须 `--table-id` + `--view-id` |
 

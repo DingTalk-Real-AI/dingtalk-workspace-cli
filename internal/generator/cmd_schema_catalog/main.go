@@ -85,42 +85,38 @@ func validateCatalogOutputIsolation(rootPath, outputPath, surfacePath string) er
 // --surface flag is validated against the embedded registry and can never
 // replace it as an input source.
 func generateSchemaCatalog(root *cobra.Command, surfacePath, outputPath string) error {
+	return generateSchemaCatalogWithResolver(root, surfacePath, outputPath, cli.ResolveSchemaBuild)
+}
+
+type schemaBuildResolver func(*cobra.Command) (cli.ResolvedSchemaBuild, error)
+
+// generateSchemaCatalogWithResolver exists to make the single-resolution
+// contract observable in tests. Production passes cli.ResolveSchemaBuild; the
+// returned Effective/Bound/SchemaRegistry views then travel together through
+// every gate and the final serializer.
+func generateSchemaCatalogWithResolver(root *cobra.Command, surfacePath, outputPath string, resolve schemaBuildResolver) error {
 	if root == nil {
 		return fmt.Errorf("schema source root is nil")
+	}
+	if resolve == nil {
+		return fmt.Errorf("schema build resolver is nil")
 	}
 	if err := validateDeprecatedSurface(surfacePath); err != nil {
 		return err
 	}
+	if err := cli.ValidateEmbeddedSchemaParameterBindings(); err != nil {
+		return fmt.Errorf("validate reviewed parameter binding input: %w", err)
+	}
 
-	effective, err := cli.BuildEffectiveCommandRegistry(root)
+	resolved, err := resolve(root)
 	if err != nil {
-		return fmt.Errorf("build effective CommandRegistry: %w", err)
+		return fmt.Errorf("resolve final Schema build: %w", err)
 	}
-	bound, err := cli.BindEffectiveCommandRegistry(root, effective)
-	if err != nil {
-		return fmt.Errorf("bind effective CommandRegistry: %w", err)
-	}
-	registry, err := cli.AssembleSchemaRegistryFromBound(bound)
-	if err != nil {
-		return fmt.Errorf("assemble final typed SchemaRegistry: %w", err)
-	}
-	if err := cli.ValidateReviewedDryRunCapabilityDelivery(registry); err != nil {
-		return fmt.Errorf("validate reviewed dry-run capability delivery: %w", err)
-	}
-	if _, err := cli.ValidateEmbeddedManualAgentExampleDelivery(bound, registry); err != nil {
-		return fmt.Errorf("validate final Manual Agent example delivery: %w", err)
-	}
-	if err := cli.ValidateEmbeddedRuntimeSchemaCompleteness(root); err != nil {
-		return fmt.Errorf("validate reverse command-tree completeness: %w", err)
-	}
-	snapshot, err := cli.BuildSchemaCatalogSnapshot(root, cli.SchemaCatalogBuildOptions{
-		RegistryHash: effective.SourceHash(),
+	snapshot, err := cli.BuildSchemaCatalogSnapshot(resolved, cli.SchemaCatalogBuildOptions{
+		RegistryHash: resolved.RegistryHash(),
 	})
 	if err != nil {
 		return err
-	}
-	if err := cli.ValidateSchemaCatalogDeliveryCompleteness(root, snapshot); err != nil {
-		return fmt.Errorf("validate final Catalog delivery completeness: %w", err)
 	}
 	encoded, err := json.MarshalIndent(snapshot, "", "  ")
 	if err != nil {
@@ -133,7 +129,7 @@ func generateSchemaCatalog(root *cobra.Command, surfacePath, outputPath string) 
 		return fmt.Errorf("write catalog: %w", err)
 	}
 	_, _ = fmt.Fprintf(os.Stderr, "generated schema catalog: output=%s registry_commands=%d tools=%d registry_hash=%s source_hash=%s\n",
-		outputPath, len(effective.Commands), len(snapshot.Tools), snapshot.SurfaceHash, snapshot.SourceHash)
+		outputPath, resolved.CommandCount(), len(snapshot.Tools), snapshot.SurfaceHash, snapshot.SourceHash)
 	return nil
 }
 

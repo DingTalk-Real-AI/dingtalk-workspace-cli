@@ -17,6 +17,13 @@ func TestEventRegistryDeliversOneTypedSchemaPath(t *testing.T) {
 		"event.status":  "event status",
 		"event.stop":    "event stop",
 	}
+	wantModes := map[string]string{
+		"event.consume": "composite",
+		"event.list":    "local",
+		"event.schema":  "local",
+		"event.status":  "composite",
+		"event.stop":    "composite",
+	}
 	canonicals := make([]string, 0, len(paths))
 	for canonical := range paths {
 		canonicals = append(canonicals, canonical)
@@ -38,11 +45,11 @@ func TestEventRegistryDeliversOneTypedSchemaPath(t *testing.T) {
 		if got := schemaContractString(tool["primary_cli_path"]); got != primary {
 			t.Errorf("%s primary path = %q, want %q", canonical, got, primary)
 		}
-		if tool["interface_mode"] != "local" || tool["availability"] != "available" {
-			t.Errorf("%s interface disposition = %v/%v, want local/available", canonical, tool["interface_mode"], tool["availability"])
+		if tool["interface_mode"] != wantModes[canonical] || tool["availability"] != "available" {
+			t.Errorf("%s interface disposition = %v/%v, want %s/available", canonical, tool["interface_mode"], tool["availability"], wantModes[canonical])
 		}
 		if schemaContractString(tool["interface_reason"]) == "" {
-			t.Errorf("%s has no reviewed local interface reason", canonical)
+			t.Errorf("%s has no reviewed interface reason", canonical)
 		}
 	}
 

@@ -68,6 +68,7 @@ func TestRuntimeSchemaParameterSourcePrecedenceMatrix(t *testing.T) {
 		{"native_annotation", runtimeSchemaRankNativeAnnotation, runtimeSchemaPrecedenceNativeAnnotation},
 		{"cobra_hard_required", runtimeSchemaRankCobraContract, runtimeSchemaPrecedenceCobra},
 		{"tool_schema_hint", runtimeSchemaRankToolHint, runtimeSchemaPrecedenceToolHint},
+		{"cobra_help", runtimeSchemaRankCobraHelp, runtimeSchemaPrecedenceCobraHelp},
 		{"mcp_metadata", runtimeSchemaRankMCP, runtimeSchemaPrecedenceMCP},
 		{"flag_name_inference", runtimeSchemaRankInference, runtimeSchemaPrecedenceInference},
 		{"default", runtimeSchemaRankDefault, runtimeSchemaPrecedenceDefault},

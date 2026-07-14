@@ -270,10 +270,6 @@ ruleId 可通过 cond-format list 获取。`,
 		Example: `  # 删除条件格式规则（必须加 --yes 确认）
   dws sheet cond-format delete --node NODE_ID --sheet-id SHEET_ID --rule-id RULE_ID --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			yes, _ := cmd.Flags().GetBool("yes")
-			if !yes {
-				return fmt.Errorf("删除条件格式规则是不可恢复的危险操作，请先向用户确认后加 --yes 执行")
-			}
 			return callMCPTool("delete_cond_format", map[string]any{
 				"nodeId":  mustGetFlag(cmd, "node"),
 				"sheetId": mustGetFlag(cmd, "sheet-id"),

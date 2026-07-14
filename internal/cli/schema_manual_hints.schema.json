@@ -151,7 +151,7 @@
               "items": {
                 "$ref": "#/$defs/agentExampleDisposition"
               },
-              "description": "Exact reviewed exceptions by zero-based example index. An omitted index always defaults to dry_run; runtime failures must never create an implicit exception."
+              "description": "Exact reviewed narrowing by zero-based example index for tools whose final ToolSpec explicitly declares dry_run. Without that capability, examples receive contract validation only and a disposition is invalid; runtime failures must never create an implicit exception."
             }
           }
         }
@@ -176,14 +176,14 @@
         },
         "mode": {
           "const": "contract_only",
-          "description": "The only explicit override. dry_run is the default and is never stored as a disposition."
+          "description": "The only explicit override: narrow an example from an explicit ToolSpec dry_run capability to contract-only validation. It can never invent dry-run support."
         },
         "reason_code": {
           "enum": [
             "local_state",
             "stateful_preflight"
           ],
-          "description": "Narrow manual exception taxonomy for genuinely unavoidable local-state or stateful-preflight requirements. High-risk/user-confirmed operations still require fail-closed runtime dry-run without --yes; runtime errors, MCP resolution errors, and missing required arguments are never valid exceptions."
+          "description": "Narrow manual exception taxonomy for genuinely unavoidable local-state or stateful-preflight requirements on an explicitly declared dry-run capability. Runtime errors, MCP resolution errors, and missing required arguments are never valid exceptions."
         },
         "reason": {
           "type": "string",

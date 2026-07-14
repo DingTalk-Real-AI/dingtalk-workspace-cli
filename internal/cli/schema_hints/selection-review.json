@@ -8,7 +8,7 @@
     "channel": "open-source"
   },
   "coverage": {
-    "source_tools": 511
+    "source_tools": 513
   },
   "tools": {
     "aisearch.enterprise_person_search": {
@@ -497,7 +497,7 @@
     "aitable.export_data": {
       "use_when": [
         "第一步：创建任务（按 scope 传必要参数）",
-        "第一步：创建任务（按 scope 传必要参数）——注意：不要加 --format json！",
+        "第一步：创建任务时使用 --export-format 指定导出格式，并保持 --format json 作为结构化输出",
         "第二步：拿 taskId 继续轮询，直到返回 downloadUrl",
         "续等导出：拿到 downloadUrl 后再 curl 下载（见下方警告）"
       ],
@@ -505,8 +505,8 @@
         "需要创建、修改或删除数据时不要使用；本命令只用于“导出数据（不传 --task-id 创建新任务并等待，传入 --task-id 继续等待）”"
       ],
       "examples": [
-        "dws aitable export data --base-id <BASE_ID> --scope table --table-id <TABLE_ID> --format excel --timeout-ms 1000",
-        "dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 3000"
+        "dws aitable export data --base-id <BASE_ID> --scope table --table-id <TABLE_ID> --export-format excel --timeout-ms 1000 --format json",
+        "dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 3000 --format json"
       ],
       "interface_mode": "mcp",
       "availability": "available"
@@ -1064,9 +1064,7 @@
       ],
       "examples": [
         "dws aitable view get aggregate --view-id VIEW_ID --format json       # Grid"
-      ],
-      "interface_mode": "mcp",
-      "availability": "available"
+      ]
     },
     "aitable.view_get_card": {
       "use_when": [
@@ -1078,9 +1076,7 @@
       "examples": [
         "dws aitable view get card --view-id VIEW_ID --format json            # Kanban / Gallery",
         "dws aitable view get card --view-id KANBAN_ID --format json"
-      ],
-      "interface_mode": "mcp",
-      "availability": "available"
+      ]
     },
     "aitable.view_get_field_widths": {
       "use_when": [
@@ -1091,9 +1087,7 @@
       ],
       "examples": [
         "dws aitable view get field-widths --view-id VIEW_ID --format json    # Grid"
-      ],
-      "interface_mode": "mcp",
-      "availability": "available"
+      ]
     },
     "aitable.view_get_fill_color_rule": {
       "use_when": [
@@ -1106,9 +1100,7 @@
       "examples": [
         "dws aitable view get fill-color-rule --view-id GRID_ID --format json",
         "dws aitable view get fill-color-rule --view-id VIEW_ID --format json"
-      ],
-      "interface_mode": "mcp",
-      "availability": "available"
+      ]
     },
     "aitable.view_get_filter": {
       "use_when": [
@@ -1119,9 +1111,7 @@
       ],
       "examples": [
         "dws aitable view get filter --view-id VIEW_ID --format json          # 所有"
-      ],
-      "interface_mode": "mcp",
-      "availability": "available"
+      ]
     },
     "aitable.view_get_frozen_cols": {
       "use_when": [
@@ -1145,9 +1135,7 @@
       ],
       "examples": [
         "dws aitable view get group --view-id VIEW_ID --format json"
-      ],
-      "interface_mode": "mcp",
-      "availability": "available"
+      ]
     },
     "aitable.view_get_lock": {
       "use_when": [
@@ -1184,9 +1172,7 @@
       ],
       "examples": [
         "dws aitable view get sort --view-id VIEW_ID --format json"
-      ],
-      "interface_mode": "mcp",
-      "availability": "available"
+      ]
     },
     "aitable.view_get_timebar": {
       "use_when": [
@@ -1197,9 +1183,7 @@
       ],
       "examples": [
         "dws aitable view get timebar --view-id VIEW_ID --format json         # Gantt"
-      ],
-      "interface_mode": "mcp",
-      "availability": "available"
+      ]
     },
     "aitable.view_get_visible_fields": {
       "use_when": [
@@ -1210,9 +1194,7 @@
       ],
       "examples": [
         "dws aitable view get visible-fields --view-id VIEW_ID --format json"
-      ],
-      "interface_mode": "mcp",
-      "availability": "available"
+      ]
     },
     "aitable.view_list": {
       "use_when": [
@@ -1253,8 +1235,10 @@
       "examples": [
         "dws aitable view update aggregate --view-id GRID_ID --field-id fldX --action SUM"
       ],
-      "interface_mode": "mcp",
-      "availability": "available"
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "The CLI performs an aitable/get_views preflight, locally transforms the requested configuration, and then calls aitable/update_view; the two-call workflow has no single direct MCP interface."
     },
     "aitable.view_update_card": {
       "use_when": [
@@ -1267,8 +1251,10 @@
         "dws aitable view update card --view-id KANBAN_ID --cover-field-id fldAttachment --cover-resize-mode contain",
         "dws aitable view update card --view-id KANBAN_ID --no-cover"
       ],
-      "interface_mode": "mcp",
-      "availability": "available"
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "The CLI performs an aitable/get_views preflight, locally transforms the requested configuration, and then calls aitable/update_view; the two-call workflow has no single direct MCP interface."
     },
     "aitable.view_update_field_widths": {
       "use_when": [
@@ -1281,8 +1267,10 @@
         "dws aitable view update field-widths --view-id GRID_ID --field-id fldX --width 200",
         "dws aitable view update field-widths --view-id GRID_ID --json '{\"fldA\":120,\"fldB\":200}'"
       ],
-      "interface_mode": "mcp",
-      "availability": "available"
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "The CLI performs an aitable/get_views preflight, locally transforms the requested configuration, and then calls aitable/update_view; the two-call workflow has no single direct MCP interface."
     },
     "aitable.view_update_fill_color_rule": {
       "use_when": [
@@ -1394,8 +1382,10 @@
         "dws aitable view update timebar --view-id GANTT_ID --start-field fldStart --end-field fldEnd --timeline-scale month",
         "dws aitable view update timebar --view-id GANTT_ID --official-holiday=true"
       ],
-      "interface_mode": "mcp",
-      "availability": "available"
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "The CLI performs an aitable/get_views preflight, locally transforms the requested configuration, and then calls aitable/update_view; the two-call workflow has no single direct MCP interface."
     },
     "aitable.view_update_visible_fields": {
       "use_when": [
@@ -1490,9 +1480,7 @@
       "examples": [
         "dws attendance summary --user USER_ID --date 2026-03-12 --stats-type week",
         "dws attendance summary --user USER_ID --date \"2026-03-12 15:00:00\" --stats-type month"
-      ],
-      "interface_mode": "mcp",
-      "availability": "available"
+      ]
     },
     "attendance.get_user_attendance_record": {
       "use_when": [
@@ -2494,9 +2482,7 @@
       "examples": [
         "dws chat search --query \"项目冲刺\"",
         "dws chat search --query \"项目冲刺\" --limit 20 --cursor 0"
-      ],
-      "interface_mode": "mcp",
-      "availability": "available"
+      ]
     },
     "chat.search_messages": {
       "use_when": [
@@ -4735,8 +4721,10 @@
         "dws drive list --help",
         "dws drive list --limit 20"
       ],
-      "interface_mode": "mcp",
-      "availability": "available"
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "The CLI command routes by --workspace between drive/list_files and doc/list_nodes, so the reviewed executable wrapper has no single direct MCP interface."
     },
     "drive.list_permission": {
       "use_when": [
@@ -4871,10 +4859,7 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "non_idempotent",
-      "reviewed": true,
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "命令由 CLI 编排个人事件订阅、本地 event bus 和 Stream 消费，不绑定为单一 pinned MCP RPC"
+      "reviewed": true
     },
     "event.list": {
       "agent_summary": "列出当前支持的个人事件目录及其规则、状态和说明。",
@@ -4931,10 +4916,7 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "reviewed": true,
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "命令聚合个人订阅控制面与本地 event bus/consume 状态，不绑定为单一 pinned MCP RPC"
+      "reviewed": true
     },
     "event.stop": {
       "agent_summary": "取消个人事件订阅并停止对应本地消费。",
@@ -4951,10 +4933,7 @@
       "risk": "high",
       "confirmation": "user_required",
       "idempotency": "unknown",
-      "reviewed": true,
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "命令编排取消个人订阅、停止本地 consume 和按需停止 event bus，不绑定为单一 pinned MCP RPC"
+      "reviewed": true
     },
     "live.get_my_lives": {
       "use_when": [
@@ -5628,34 +5607,42 @@
       "interface_mode": "mcp",
       "availability": "available"
     },
-    "minutes.list_by_keyword_and_time_range": {
+    "minutes.list_accessible_minutes": {
       "use_when": [
-        "1. 查看我的听记列表 — 提取 taskUuid",
-        "1b. 查看共享给我的听记",
-        "1c. 查看我有权限访问的所有听记（支持关键字和时间范围筛选）",
-        "从我创建的/我发起的听记里找XX",
-        "从我的听记里仅按关键词搜索（\"从我的听记里搜技术方案\"）",
-        "从我的听记里按关键词 + 上月时间范围搜索（\"上月听记里有没有提到OKR\"）",
-        "从我的听记里按关键词 + 今日时间范围搜索（\"帮我从今天听记里找需求评审\"）",
-        "关键词 + 时间范围组合",
-        "别人给我的听记/共享听记/共享给我的",
-        "我创建的听记/我发起的听记/我自己录的听记",
-        "我可访问的听记/我能看到的听记/我有权限的听记/所有听记/全部听记",
-        "我的听记",
-        "我的听记里找XX",
-        "按关键词搜索",
-        "按关键词搜索共享听记",
-        "按时间范围搜索",
-        "某时间段内的听记/按时间查听记/按关键词查听记"
+        "查看当前用户有权限访问的全部听记",
+        "未限定创建来源时按关键词和时间范围搜索听记",
+        "我可访问的听记/我能看到的听记/所有听记/全部听记"
       ],
       "avoid_when": [
-        "需要创建、修改或删除数据时不要使用；本命令只用于“新版：查询我的听记列表，支持输入关键词或者时间范围查询，返回听记列表。”"
+        "明确只查询自己创建的听记时使用 dws minutes list mine；明确只查询别人共享的听记时使用 dws minutes list shared；修改数据时不要使用"
       ],
       "examples": [
-        "dws minutes list mine"
+        "dws minutes list all --format json"
+      ]
+    },
+    "minutes.list_by_keyword_and_time_range": {
+      "use_when": [
+        "查看我自己创建的听记列表并提取 taskUuid",
+        "从我创建、我发起或我自己录制的听记中按关键词和时间范围搜索"
       ],
-      "interface_mode": "mcp",
-      "availability": "available"
+      "avoid_when": [
+        "查询别人共享的听记时使用 dws minutes list shared；覆盖全部可访问听记时使用 dws minutes list all；修改数据时不要使用"
+      ],
+      "examples": [
+        "dws minutes list mine --format json"
+      ]
+    },
+    "minutes.list_shared_minutes": {
+      "use_when": [
+        "查看别人共享给我的听记列表",
+        "在共享听记中按关键词和时间范围搜索"
+      ],
+      "avoid_when": [
+        "查询自己创建的听记时使用 dws minutes list mine；覆盖全部可访问听记时使用 dws minutes list all；修改数据时不要使用"
+      ],
+      "examples": [
+        "dws minutes list shared --format json"
+      ]
     },
     "minutes.list_minutes_todos": {
       "use_when": [
@@ -6906,8 +6893,10 @@
         "dws sheet range batch-set-style --node <NODE_ID> --batch ./styles.json",
         "dws sheet range batch-set-style --node <NODE_ID> --batch ./styles.json --continue-on-error"
       ],
-      "interface_mode": "mcp",
-      "availability": "available"
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "The CLI reads a local batch file and performs multiple sheet/update_range calls with local continue-on-error control; the workflow has no single direct MCP interface."
     },
     "sheet.range_copy_to": {
       "use_when": [
@@ -6954,9 +6943,7 @@
       "examples": [
         "dws sheet range read --node <NODE_ID>",
         "dws sheet range read --node <NODE_ID> --sheet-id <SHEET_ID>"
-      ],
-      "interface_mode": "mcp",
-      "availability": "available"
+      ]
     },
     "sheet.range_set_style": {
       "use_when": [
@@ -7674,8 +7661,10 @@
         "dws wiki space list --format json                       # 组织知识库（默认）",
         "dws wiki space list --type myWikiSpace --format json    # 我的文档"
       ],
-      "interface_mode": "mcp",
-      "availability": "available"
+      "interface_mode": "composite",
+      "availability": "available",
+      "interface_ref": null,
+      "interface_reason": "The CLI command routes by --type between wiki/list_wikiSpaces and drive/list_spaces, so the reviewed executable wrapper has no single direct MCP interface."
     },
     "wiki.node_copy": {
       "use_when": [

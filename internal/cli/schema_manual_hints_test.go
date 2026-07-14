@@ -76,6 +76,65 @@ func TestManualSchemaHintsIncludeExistingLeafAndOverrideParameters(t *testing.T)
 	}
 }
 
+func TestManualSchemaParameterHintsDoNotLeakAcrossSharedFlags(t *testing.T) {
+	root, query := manualSchemaHintTestTree()
+	get := &cobra.Command{Use: "get", RunE: func(*cobra.Command, []string) error { return nil }}
+	get.Flags().AddFlag(query.Flags().Lookup("query"))
+	query.Parent().AddCommand(get)
+
+	required := false
+	_, err := applyManualSchemaHints(root, ManualSchemaHintSnapshot{
+		Schema:  manualSchemaHintSchemaRef,
+		Version: manualSchemaHintVersion,
+		Commands: []ManualSchemaCommandHint{{
+			CLIPath:       "sample item search",
+			CanonicalPath: "sample.search_items",
+			Reason:        "Only the broad search command allows an omitted query.",
+			Reviewed:      true,
+			Parameters: map[string]ManualSchemaParameterHint{
+				"query": {Required: &required},
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("applyManualSchemaHints() error = %v", err)
+	}
+
+	canonical := "sample.get_item"
+	previous, existed := runtimeSchemaParameterMetadataByCanonical[canonical]
+	runtimeSchemaParameterMetadataByCanonical[canonical] = RuntimeSchemaParameterMetadata{Required: []string{"query"}}
+	t.Cleanup(func() {
+		if existed {
+			runtimeSchemaParameterMetadataByCanonical[canonical] = previous
+		} else {
+			delete(runtimeSchemaParameterMetadataByCanonical, canonical)
+		}
+	})
+
+	queryParameters, err := runtimeCommandParameters(query, "sample.search_items", nil, nil, RuntimeSchemaConstraints{})
+	if err != nil {
+		t.Fatalf("query parameters: %v", err)
+	}
+	if got := schemaParameterEntry(t, queryParameters, "query")["required"]; got != false {
+		t.Fatalf("query required = %#v, want false", got)
+	}
+
+	getParameters, err := runtimeCommandParameters(get, canonical, nil, nil, RuntimeSchemaConstraints{})
+	if err != nil {
+		t.Fatalf("get parameters: %v", err)
+	}
+	getQuery := schemaParameterEntry(t, getParameters, "query")
+	if getQuery["required"] != true {
+		t.Fatalf("get required = %#v, want true", getQuery["required"])
+	}
+	if source := schemaParameterFieldSource(t, getQuery, "required"); source != "typed_parameter_metadata" {
+		t.Fatalf("get required source = %q, want typed_parameter_metadata", source)
+	}
+	if _, _, present, err := runtimeManualSchemaParameter(get, "query"); err != nil || present {
+		t.Fatalf("manual parameter leaked to sibling command: present=%t err=%v", present, err)
+	}
+}
+
 func TestManualSchemaHintsRejectInvalidOrStaleInputs(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -431,12 +490,26 @@ func TestBuildManualAgentExampleExecutionPlanUsesExplicitReviewedDispositions(t 
 	if err != nil {
 		t.Fatalf("BuildManualAgentExampleExecutionPlan() error = %v", err)
 	}
-	if plan.Total != 2 || plan.DryRun != 2 || plan.ContractOnly != 0 {
-		t.Fatalf("default plan counts = total:%d dry_run:%d contract_only:%d", plan.Total, plan.DryRun, plan.ContractOnly)
+	if plan.Total != 2 || plan.Contract != 2 || plan.DryRun != 0 || plan.ContractOnly != 0 {
+		t.Fatalf("default plan counts = total:%d contract:%d dry_run:%d contract_only:%d", plan.Total, plan.Contract, plan.DryRun, plan.ContractOnly)
 	}
 	for _, execution := range plan.Examples {
-		if execution.Mode != ManualAgentExampleModeDryRun {
-			t.Fatalf("default example mode = %q, want %q", execution.Mode, ManualAgentExampleModeDryRun)
+		if execution.Mode != ManualAgentExampleModeContract || execution.DryRun != nil {
+			t.Fatalf("example without an explicit capability = %#v, want contract-only validation", execution)
+		}
+	}
+
+	registry.Products[0].Tools[0].DryRun = &DryRunSpec{PreviewKind: DryRunPreviewPlan}
+	plan, err = BuildManualAgentExampleExecutionPlan(bound, registry, hints)
+	if err != nil {
+		t.Fatalf("BuildManualAgentExampleExecutionPlan() with explicit dry_run error = %v", err)
+	}
+	if plan.Total != 2 || plan.Contract != 0 || plan.DryRun != 2 || plan.ContractOnly != 0 {
+		t.Fatalf("explicit capability plan = %#v", plan)
+	}
+	for _, execution := range plan.Examples {
+		if execution.Mode != ManualAgentExampleModeDryRun || execution.DryRun == nil {
+			t.Fatalf("explicit capability execution = %#v, want dry_run", execution)
 		}
 	}
 
@@ -463,6 +536,7 @@ func TestBuildManualAgentExampleExecutionPlanUsesExplicitReviewedDispositions(t 
 	tool.ExampleDispositions = nil
 	hints.Tools["sample.search_items"] = tool
 	registry = manualAgentExampleSchemaRegistry("sample.search_items", SafetySpec{Risk: "high", Confirmation: "user_required"})
+	registry.Products[0].Tools[0].DryRun = &DryRunSpec{PreviewKind: DryRunPreviewPlan}
 	plan, err = BuildManualAgentExampleExecutionPlan(bound, registry, hints)
 	if err != nil {
 		t.Fatalf("BuildManualAgentExampleExecutionPlan() with typed safety error = %v", err)

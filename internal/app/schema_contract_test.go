@@ -32,7 +32,12 @@ var (
 func fullSchemaSnapshotForTest(t testing.TB) cli.SchemaCatalogSnapshot {
 	t.Helper()
 	fullSchemaSnapshotOnce.Do(func() {
-		fullSchemaSnapshot, fullSchemaSnapshotErr = cli.BuildSchemaCatalogSnapshot(NewRootCommand(), cli.SchemaCatalogBuildOptions{})
+		resolved, err := cli.ResolveSchemaBuild(NewRootCommand())
+		if err != nil {
+			fullSchemaSnapshotErr = err
+			return
+		}
+		fullSchemaSnapshot, fullSchemaSnapshotErr = cli.BuildSchemaCatalogSnapshot(resolved, cli.SchemaCatalogBuildOptions{})
 	})
 	if fullSchemaSnapshotErr != nil {
 		t.Fatalf("build shared final Schema snapshot: %v", fullSchemaSnapshotErr)
@@ -110,7 +115,10 @@ func TestEmbeddedSchemaContractMapsToExecutableTree(t *testing.T) {
 func TestGeneratedSchemaContractMapsToExecutableTree(t *testing.T) {
 	root := NewRootCommand()
 	snapshot := fullSchemaSnapshotForTest(t)
-	bindings := cli.EmbeddedSchemaParameterBindings()
+	bindings, err := cli.EmbeddedSchemaParameterBindings()
+	if err != nil {
+		t.Fatalf("EmbeddedSchemaParameterBindings() error = %v", err)
+	}
 	if len(snapshot.Tools) == 0 {
 		t.Fatal("generated Schema Catalog contains no tools")
 	}

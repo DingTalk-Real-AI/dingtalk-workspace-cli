@@ -33,17 +33,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -136,50 +136,50 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "命令由 CLI 编排个人事件订阅、本地 event bus 和 Stream 消费，不绑定为单一 pinned MCP RPC",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "value": "Reviewed composite workflow: the command creates or reuses a remote personal-event subscription and coordinates the local event bus and Stream consumer; no single pinned RPC represents the workflow.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "命令由 CLI 编排个人事件订阅、本地 event bus 和 Stream 消费，不绑定为单一 pinned MCP RPC",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "value": "Reviewed composite workflow: the command creates or reuses a remote personal-event subscription and coordinates the local event bus and Stream consumer; no single pinned RPC represents the workflow.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -244,14 +244,15 @@
         }
       },
       "idempotency": "non_idempotent",
-      "interface_mode": "local",
-      "interface_reason": "命令由 CLI 编排个人事件订阅、本地 event bus 和 Stream 消费，不绑定为单一 pinned MCP RPC",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed composite workflow: the command creates or reuses a remote personal-event subscription and coordinates the local event bus and Stream consumer; no single pinned RPC represents the workflow.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
         "cobra-help:dws event consume --help",
         "internal/cli/schema_command_registry.json#event.consume",
         "internal/cli/schema_hints/selection-review.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/SKILL.md",
         "skills/mono/references/products/event.md"
@@ -810,17 +811,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -931,50 +932,50 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "命令聚合个人订阅控制面与本地 event bus/consume 状态，不绑定为单一 pinned MCP RPC",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "value": "Reviewed composite workflow: the command reads the remote personal-event subscription control plane and combines it with local bus and consumer state; no single pinned RPC represents the result.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "命令聚合个人订阅控制面与本地 event bus/consume 状态，不绑定为单一 pinned MCP RPC",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "value": "Reviewed composite workflow: the command reads the remote personal-event subscription control plane and combines it with local bus and consumer state; no single pinned RPC represents the result.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -1045,14 +1046,15 @@
         }
       },
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "interface_reason": "命令聚合个人订阅控制面与本地 event bus/consume 状态，不绑定为单一 pinned MCP RPC",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed composite workflow: the command reads the remote personal-event subscription control plane and combines it with local bus and consumer state; no single pinned RPC represents the result.",
       "reviewed": true,
       "risk": "low",
       "source_refs": [
         "cobra-help:dws event status --help",
         "internal/cli/schema_command_registry.json#event.status",
         "internal/cli/schema_hints/selection-review.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/SKILL.md",
         "skills/mono/references/products/event.md"
@@ -1093,17 +1095,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -1214,50 +1216,50 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "命令编排取消个人订阅、停止本地 consume 和按需停止 event bus，不绑定为单一 pinned MCP RPC",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "value": "Reviewed composite workflow: the command deletes remote personal-event subscriptions, interrupts local consumers, updates local state, and may stop the local bus; no single pinned RPC represents the workflow.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 marks this tool as reviewed",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "命令编排取消个人订阅、停止本地 consume 和按需停止 event bus，不绑定为单一 pinned MCP RPC",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "value": "Reviewed composite workflow: the command deletes remote personal-event subscriptions, interrupts local consumers, updates local state, and may stop the local bus; no single pinned RPC represents the workflow.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 marks this tool as reviewed"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -1328,14 +1330,15 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "interface_reason": "命令编排取消个人订阅、停止本地 consume 和按需停止 event bus，不绑定为单一 pinned MCP RPC",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed composite workflow: the command deletes remote personal-event subscriptions, interrupts local consumers, updates local state, and may stop the local bus; no single pinned RPC represents the workflow.",
       "reviewed": true,
       "risk": "high",
       "source_refs": [
         "cobra-help:dws event stop --help",
         "internal/cli/schema_command_registry.json#event.stop",
         "internal/cli/schema_hints/selection-review.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/SKILL.md",
         "skills/mono/references/products/event.md"

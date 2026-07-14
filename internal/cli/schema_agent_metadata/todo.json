@@ -1504,8 +1504,8 @@
       "effect": "write",
       "effect_source": "command-verb",
       "examples": [
-        "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time \u003cbaseTime\u003e --due-date-offset \u003cdueDateOffset\u003e --format json",
-        "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time \u003cbaseTime\u003e --reminder-time-stamp \u003creminderTimeStamp\u003e --format json"
+        "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time dueTime --due-date-offset -30 --format json",
+        "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time customTime --reminder-time-stamp 2026-03-10T18:00:00+08:00 --format json"
       ],
       "field_provenance": {
         "agent_summary": {
@@ -1596,8 +1596,8 @@
         },
         "examples": {
           "value": [
-            "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time \u003cbaseTime\u003e --due-date-offset \u003cdueDateOffset\u003e --format json",
-            "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time \u003cbaseTime\u003e --reminder-time-stamp \u003creminderTimeStamp\u003e --format json"
+            "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time dueTime --due-date-offset -30 --format json",
+            "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time customTime --reminder-time-stamp 2026-03-10T18:00:00+08:00 --format json"
           ],
           "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
           "precedence": "reviewed_manual",
@@ -1606,8 +1606,8 @@
           "candidates": [
             {
               "value": [
-                "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time \u003cbaseTime\u003e --due-date-offset \u003cdueDateOffset\u003e --format json",
-                "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time \u003cbaseTime\u003e --reminder-time-stamp \u003creminderTimeStamp\u003e --format json"
+                "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time dueTime --due-date-offset -30 --format json",
+                "dws todo task add-reminder --task-id \u003ctaskId\u003e --base-time customTime --reminder-time-stamp 2026-03-10T18:00:00+08:00 --format json"
               ],
               "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
               "precedence": "reviewed_manual",

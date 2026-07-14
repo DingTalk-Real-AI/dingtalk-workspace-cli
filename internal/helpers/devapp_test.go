@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"reflect"
 	"strings"
 	"testing"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/spf13/cobra"
 )
@@ -930,6 +932,62 @@ func TestDevAppMemberAndSecurityRequireWriteGuard(t *testing.T) {
 			}
 			if runner.last.Tool != "" {
 				t.Fatalf("tool = %q, want no invocation", runner.last.Tool)
+			}
+		})
+	}
+}
+
+func TestEveryDevAppWriteCommandRequiresGuard(t *testing.T) {
+	paths := [][]string{
+		{"event", "subscribe"},
+		{"event", "unsubscribe"},
+		{"create"},
+		{"update"},
+		{"delete"},
+		{"disable"},
+		{"enable"},
+		{"webapp", "config"},
+		{"permission", "add"},
+		{"permission", "remove"},
+		{"member", "add"},
+		{"member", "remove"},
+		{"security", "config"},
+		{"robot", "submit"},
+		{"robot", "config"},
+		{"robot", "enable"},
+		{"robot", "disable"},
+		{"version", "create"},
+		{"version", "publish"},
+	}
+
+	for _, path := range paths {
+		path := path
+		t.Run(strings.Join(path, "/"), func(t *testing.T) {
+			runner := &captureRunner{}
+			root := newDevAppTestRoot(runner)
+			var out bytes.Buffer
+			root.SetOut(&out)
+			root.SetErr(&out)
+			root.SetArgs(append([]string{"dev", "app"}, path...))
+
+			err := root.Execute()
+			if err == nil {
+				t.Fatal("Execute() error = nil, want write guard")
+			}
+			var appErr *apperrors.Error
+			if !stderrors.As(err, &appErr) {
+				t.Fatalf("error type = %T, want *errors.Error", err)
+			}
+			if appErr.Reason != "confirmation_required" {
+				t.Fatalf("error reason = %q, want confirmation_required", appErr.Reason)
+			}
+			for _, marker := range []string{"写操作", "--dry-run", "--yes"} {
+				if !strings.Contains(err.Error(), marker) {
+					t.Fatalf("error = %q, want %q write-guard marker", err.Error(), marker)
+				}
+			}
+			if runner.last.Tool != "" {
+				t.Fatalf("tool = %q, want no invocation before confirmation", runner.last.Tool)
 			}
 		})
 	}

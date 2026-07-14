@@ -45,19 +45,18 @@ func TestManualAgentExamplesContract(t *testing.T) {
 	if plan.Total == 0 {
 		t.Fatal("no reviewed Agent examples were contract validated")
 	}
-	t.Logf("Agent example contract: total=%d dry_run=%d contract_only=%d", plan.Total, plan.DryRun, plan.ContractOnly)
+	t.Logf("Agent example contract: total=%d contract=%d dry_run=%d contract_only=%d", plan.Total, plan.Contract, plan.DryRun, plan.ContractOnly)
 }
 
 // TestManualAgentExamplesDryRun first validates every reviewed example against
 // its real BoundCommand, Cobra required arguments, and final typed constraints.
-// It then executes the deterministic dry_run subset, including every
-// high-risk/user-confirmed operation without injecting --yes. Only exact
-// reviewed local-state/stateful-preflight dispositions account for the stable
-// contract_only subset; runtime failures never create implicit skips. No shell
-// is involved and HOME is isolated.
+// It then executes only the deterministic, explicitly declared dry_run subset
+// without injecting --yes. Global flag inheritance is not treated as capability
+// evidence. Runtime failures never create implicit skips. No shell is involved
+// and HOME is isolated.
 func TestManualAgentExamplesDryRun(t *testing.T) {
 	if os.Getenv("DWS_AGENT_EXAMPLES_DRY_RUN") != "1" {
-		t.Skip("set DWS_AGENT_EXAMPLES_DRY_RUN=1 to execute every reviewed Agent example through Cobra --dry-run")
+		t.Skip("set DWS_AGENT_EXAMPLES_DRY_RUN=1 to execute the explicitly reviewed Agent dry-run subset")
 	}
 
 	sandboxRoot := t.TempDir()
@@ -78,27 +77,16 @@ func TestManualAgentExamplesDryRun(t *testing.T) {
 	if plan.Total == 0 {
 		t.Fatal("no reviewed Agent examples were contract validated")
 	}
-	declaredTools := make(map[string]cli.DryRunSpec)
-	for _, execution := range plan.Examples {
-		if execution.DryRun != nil {
-			declaredTools[execution.CanonicalPath] = *execution.DryRun
-		}
-	}
-	if len(declaredTools) == 0 {
-		t.Fatal("final Schema declares no dry_run capabilities")
-	}
 	t.Chdir(sandboxRoot)
 	files := newManualAgentExampleFiles(t, sandboxRoot)
 
 	selected := 0
 	executed := 0
-	selectedTools := make(map[string]bool)
 	for _, execution := range plan.Examples {
 		if !manualAgentExampleShouldExerciseDryRun(execution) {
 			continue
 		}
 		selected++
-		selectedTools[execution.CanonicalPath] = true
 		execution := execution
 		t.Run(fmt.Sprintf("%s/%d", strings.ReplaceAll(execution.CanonicalPath, ".", "/"), execution.Index), func(t *testing.T) {
 			argv, err := cli.ParseManualAgentExampleArgv(execution.Example)
@@ -137,17 +125,7 @@ func TestManualAgentExamplesDryRun(t *testing.T) {
 	if executed != selected {
 		t.Fatalf("executed dry_run examples = %d, selected capability set requires %d", executed, selected)
 	}
-	if len(selectedTools) != len(declaredTools) {
-		missing := make([]string, 0)
-		for canonical := range declaredTools {
-			if !selectedTools[canonical] {
-				missing = append(missing, canonical)
-			}
-		}
-		sort.Strings(missing)
-		t.Fatalf("selected dry_run tools = %d, Schema declares %d; tools without an executable example: %s", len(selectedTools), len(declaredTools), strings.Join(missing, ", "))
-	}
-	t.Logf("Agent examples: total=%d dry_run_selected=%d planned_dry_run=%d contract_only=%d reviewed_manual=%d", plan.Total, selected, plan.DryRun, plan.ContractOnly, plan.ReviewedContractOnly)
+	t.Logf("Agent examples: total=%d contract=%d dry_run_selected=%d planned_dry_run=%d contract_only=%d reviewed_manual=%d", plan.Total, plan.Contract, selected, plan.DryRun, plan.ContractOnly, plan.ReviewedContractOnly)
 	reasonCodes := make([]string, 0, len(plan.ContractOnlyByReason))
 	for reasonCode := range plan.ContractOnlyByReason {
 		reasonCodes = append(reasonCodes, string(reasonCode))
@@ -162,7 +140,7 @@ func TestManualAgentExamplesDryRun(t *testing.T) {
 // the runtime gate. Capability comes only from the final typed ToolSpec; the
 // example disposition may narrow that set but can never invent support.
 func manualAgentExampleShouldExerciseDryRun(execution cli.ManualAgentExampleExecution) bool {
-	return execution.DryRun != nil && execution.Mode != cli.ManualAgentExampleModeContractOnly
+	return execution.DryRun != nil && execution.Mode == cli.ManualAgentExampleModeDryRun
 }
 
 func manualAgentExampleExecutionPlan(t testing.TB) cli.ManualAgentExampleExecutionPlan {

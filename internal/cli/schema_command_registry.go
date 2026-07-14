@@ -405,6 +405,9 @@ func BuildEffectiveCommandRegistry(root *cobra.Command) (EffectiveCommandRegistr
 	if root == nil {
 		return EffectiveCommandRegistry{}, fmt.Errorf("build effective Schema command registry: root is nil")
 	}
+	if err := ValidateEmbeddedSchemaParameterBindings(); err != nil {
+		return EffectiveCommandRegistry{}, fmt.Errorf("validate reviewed Schema parameter bindings: %w", err)
+	}
 	reviewed, err := loadEmbeddedCommandRegistry()
 	if err != nil {
 		return EffectiveCommandRegistry{}, err

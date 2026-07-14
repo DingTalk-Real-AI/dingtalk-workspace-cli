@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -315,6 +316,62 @@ func resolveCsvContent(csvVal string) string {
 
 // ── batch-update / batch-clear 命令定义 ──────────────────────────────────────────
 
+func requireSheetMutationConfirmation(cmd *cobra.Command, operation, targetHint string) error {
+	// Let dry-run reach callMCPTool so it emits the exact translated preview.
+	// The ToolCaller is the authoritative execution boundary and mirrors the
+	// root --dry-run flag; do not bypass confirmation on a flag-only mismatch.
+	if deps != nil && deps.Caller != nil && deps.Caller.DryRun() {
+		return nil
+	}
+	if commandBoolFlag(cmd, "yes") {
+		return nil
+	}
+	return apperrors.NewValidation(
+		fmt.Sprintf("%s可能删除工作表内容或结构；获得用户确认后加 --yes 执行", operation),
+		apperrors.WithReason("confirmation_required"),
+		apperrors.WithHint(fmt.Sprintf("先确认%s；用户明确同意后以相同参数追加 --yes", targetHint)),
+		apperrors.WithActions(fmt.Sprintf("确认%s", targetHint), "获得用户确认后使用 --yes 执行"),
+	)
+}
+
+const sheetMutationConfirmationGuardAnnotation = "dws.sheet.confirmation-guard"
+
+// protectSheetMutationCommand installs the command-local execution guard used
+// by Sheet leaves whose final Schema contract declares
+// confirmation=user_required. Keeping the annotation and the wrapper in the
+// same function makes the Schema-to-runtime coverage gate structural: a
+// command cannot advertise the marker without also running the guard.
+func protectSheetMutationCommand(cmd *cobra.Command, operation, targetHint string) {
+	if cmd == nil {
+		panic("protect sheet mutation command: nil command")
+	}
+	if cmd.Annotations != nil && cmd.Annotations[sheetMutationConfirmationGuardAnnotation] == "true" {
+		panic(fmt.Sprintf("protect sheet mutation command: duplicate guard on %q", cmd.CommandPath()))
+	}
+	originalRunE := cmd.RunE
+	if originalRunE == nil {
+		panic(fmt.Sprintf("protect sheet mutation command: %q has no RunE", cmd.CommandPath()))
+	}
+	if cmd.Annotations == nil {
+		cmd.Annotations = make(map[string]string)
+	}
+	cmd.Annotations[sheetMutationConfirmationGuardAnnotation] = "true"
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if err := requireSheetMutationConfirmation(cmd, operation, targetHint); err != nil {
+			return err
+		}
+		return originalRunE(cmd, args)
+	}
+}
+
+// HasSheetMutationConfirmationGuard reports whether a Sheet command is
+// protected by protectSheetMutationCommand. It is exported for the app-level
+// final Schema-to-runtime delivery gate; callers must not set the annotation
+// directly.
+func HasSheetMutationConfirmationGuard(cmd *cobra.Command) bool {
+	return cmd != nil && cmd.Annotations != nil && cmd.Annotations[sheetMutationConfirmationGuardAnnotation] == "true"
+}
+
 func newBatchUpdateCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "batch-update",
@@ -323,6 +380,8 @@ func newBatchUpdateCmd() *cobra.Command {
 
 默认严格事务模式：任一子操作失败则整批回滚。
 传 --continue-on-error 切换为宽松模式（遇失败继续执行）。
+由于子操作可包含清除、删除等破坏性操作，真实执行必须获得用户确认后加 --yes。
+使用 --dry-run 可预览翻译后的完整请求，不需要 --yes，也不会调用远程接口。
 
 toolName 使用 CLI 命令名（与原子命令一致），input 的键用 CLI flag 名去掉 --。
 CLI 层自动翻译为 MCP toolName + 参数名，无需记忆 MCP 参数名。
@@ -342,15 +401,15 @@ dws sheet group-dimension 命令。
 
 完整映射表见:
   dingtalk-workspace/references/products/sheet/sheet-batch-operations.md`,
-		Example: `  # 批量清除 + 写入 + 合并
+		Example: `  # 批量清除 + 写入 + 合并（获得用户确认后加 --yes）
   dws sheet batch-update --node NODE_ID --operations '[
     {"toolName":"range clear","input":{"sheet-id":"Sheet1","range":"A1:B3","type":"content"}},
     {"toolName":"range update","input":{"sheet-id":"Sheet1","range":"A1","values":[[{"type":"text","text":"hello"}]]}},
     {"toolName":"merge-cells","input":{"sheet-id":"Sheet1","range":"A1:B1","merge-type":"mergeAll"}}
-  ]'
+  ]' --yes
 
   # 宽松模式
-  dws sheet batch-update --node NODE_ID --continue-on-error --operations '[...]'`,
+  dws sheet batch-update --node NODE_ID --continue-on-error --operations '[...]' --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "node", "operations"); err != nil {
 				return err
@@ -401,9 +460,10 @@ func newRangeBatchClearCmd() *cobra.Command {
 		Long: `批量清除多个区域，一次原子请求。任一区域清除失败则整批回滚。
 
 每个 --ranges 项必须包含工作表前缀（格式: "SheetName!A1:B3"）。
-不同区域可以属于不同工作表。`,
-		Example: `  dws sheet range batch-clear --node NODE_ID --ranges '["Sheet1!A1:B3","Sheet2!C1:D5"]'
-  dws sheet range batch-clear --node NODE_ID --ranges '["Sheet1!A1:Z1000"]' --type all`,
+不同区域可以属于不同工作表。
+真实执行必须获得用户确认后加 --yes；--dry-run 仅预览且不调用远程接口。`,
+		Example: `  dws sheet range batch-clear --node NODE_ID --ranges '["Sheet1!A1:B3","Sheet2!C1:D5"]' --yes
+  dws sheet range batch-clear --node NODE_ID --ranges '["Sheet1!A1:Z1000"]' --type all --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "node", "ranges"); err != nil {
 				return err

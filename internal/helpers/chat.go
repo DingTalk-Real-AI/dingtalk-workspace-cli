@@ -4057,12 +4057,20 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatGroupDismissCmd := &cobra.Command{
 		Use:   "dismiss",
 		Short: "解散群聊",
-		Long:  `解散指定群聊。该操作不可逆，需要群主权限。`,
-		Example: `  dws chat group dismiss --group <openConversationId>
+		Long:  `解散指定群聊。该操作不可逆，需要群主权限；必须先获得用户确认，再追加 --yes 执行。`,
+		Example: `  dws chat group dismiss --group <openConversationId> --yes
   # 查询群 ID: dws chat search --query "群名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "group"); err != nil {
 				return err
+			}
+			if !commandBoolFlag(cmd, "yes") {
+				return apperrors.NewValidation(
+					"解散群聊不可逆；获得用户确认后加 --yes 执行",
+					apperrors.WithReason("confirmation_required"),
+					apperrors.WithHint("先确认目标群聊及影响范围；用户明确同意后以相同参数追加 --yes"),
+					apperrors.WithActions("确认目标群聊", "获得用户确认后使用 --yes 执行"),
+				)
 			}
 			return callMCPToolOnServer("im", "dismiss_group", map[string]any{
 				"openConversationId": mustGetFlag(cmd, "group"),
@@ -4344,6 +4352,9 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 		RunE: func(cmd *cobra.Command, args []string) error {
 			toolArgs := map[string]any{}
 			if v, _ := cmd.Flags().GetString("role"); v != "" {
+				if v != "OWNER" && v != "ADMIN" {
+					return apperrors.NewValidation("--role must be one of OWNER or ADMIN")
+				}
 				toolArgs["roleFilter"] = v
 			}
 			if v, _ := cmd.Flags().GetInt("limit"); v > 0 {

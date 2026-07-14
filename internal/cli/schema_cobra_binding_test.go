@@ -13,6 +13,7 @@ import (
 
 func TestBuildEffectiveCommandRegistryMergesReviewedManualCommands(t *testing.T) {
 	root := commandRegistryTestRoot("item get", "item legacy", "helper add")
+	annotateTestCompatibilityPair(exactSchemaCommand(root, "item get"), exactSchemaCommand(root, "item legacy"))
 	reviewed := mustCommandRegistry(t, []CommandSpec{{
 		CanonicalPath:  "item.get_item",
 		PrimaryCLIPath: "item get",
@@ -155,6 +156,7 @@ func TestBindEffectiveCommandRegistryResolvesCompatibilityAliasLeaf(t *testing.T
 	primary := exactSchemaCommand(root, "item get")
 	alias := exactSchemaCommand(root, "item legacy")
 	alias.Hidden = true
+	annotateTestCompatibilityPair(primary, alias)
 	hidden := exactSchemaCommand(root, "compat hidden")
 	hidden.Hidden = true
 	AttachRuntimeSchema(primary, "item", "get_item", "test")
@@ -192,6 +194,7 @@ func TestBindEffectiveCommandRegistryAcceptsEquivalentCompatibilityLeafContract(
 	primary := exactSchemaCommand(root, "item get")
 	alias := exactSchemaCommand(root, "item legacy")
 	alias.Hidden = true
+	annotateTestCompatibilityPair(primary, alias)
 	primary.Use = "get <item-id>"
 	alias.Use = "legacy <item-id>"
 	argsValidator := cobra.ExactArgs(1)
@@ -229,11 +232,101 @@ func TestBindEffectiveCommandRegistryAcceptsEquivalentCompatibilityLeafContract(
 	}
 }
 
+func TestBindEffectiveCommandRegistryRejectsDifferentCompatibilityHandlersWithoutTypedReview(t *testing.T) {
+	root := commandRegistryTestRoot("item get", "item legacy")
+	primary := exactSchemaCommand(root, "item get")
+	alias := exactSchemaCommand(root, "item legacy")
+	alias.Hidden = true
+	primary.Run = nil
+	alias.Run = nil
+	primary.RunE = compatibilityPrimaryRunE
+	alias.RunE = compatibilityAliasRunE
+
+	effective := mustEffectiveCommandRegistry(t, []CommandSpec{{
+		CanonicalPath:  "item.get_item",
+		PrimaryCLIPath: "item get",
+		Aliases:        []string{"item legacy"},
+	}})
+	_, err := BindEffectiveCommandRegistry(root, effective)
+	if err == nil || !strings.Contains(err.Error(), "execution handler implementation differs for RunE") {
+		t.Fatalf("handler mismatch error = %v", err)
+	}
+	if !strings.Contains(err.Error(), "distinct canonical tools") {
+		t.Fatalf("handler mismatch error is not actionable: %v", err)
+	}
+}
+
+func TestBindEffectiveCommandRegistryRejectsIndependentLeafWithoutTypedReviewEvenWithSameHandler(t *testing.T) {
+	root := commandRegistryTestRoot("item get", "item legacy")
+	exactSchemaCommand(root, "item get")
+	alias := exactSchemaCommand(root, "item legacy")
+	alias.Hidden = true
+
+	effective := mustEffectiveCommandRegistry(t, []CommandSpec{{
+		CanonicalPath:  "item.get_item",
+		PrimaryCLIPath: "item get",
+		Aliases:        []string{"item legacy"},
+	}})
+	_, err := BindEffectiveCommandRegistry(root, effective)
+	if err == nil || !strings.Contains(err.Error(), "independent compatibility leaves require the same reviewed typed compatibility equivalence") {
+		t.Fatalf("missing compatibility review error = %v", err)
+	}
+}
+
+func TestBindEffectiveCommandRegistryAcceptsDifferentHandlersWithMatchingTypedReview(t *testing.T) {
+	root := commandRegistryTestRoot("item get", "item legacy")
+	primary := exactSchemaCommand(root, "item get")
+	alias := exactSchemaCommand(root, "item legacy")
+	alias.Hidden = true
+	primary.Run = nil
+	alias.Run = nil
+	primary.RunE = compatibilityPrimaryRunE
+	alias.RunE = compatibilityAliasRunE
+	AnnotateRuntimeCompatibilityEquivalence(primary, alias, RuntimeCompatibilityEquivalence{
+		ID:       "item-get-legacy-v1",
+		Reason:   "The compatibility wrapper adds presentation-only behavior before invoking the exact primary operation.",
+		Reviewed: true,
+	})
+
+	effective := mustEffectiveCommandRegistry(t, []CommandSpec{{
+		CanonicalPath:  "item.get_item",
+		PrimaryCLIPath: "item get",
+		Aliases:        []string{"item legacy"},
+	}})
+	if _, err := BindEffectiveCommandRegistry(root, effective); err != nil {
+		t.Fatalf("reviewed handler equivalence was rejected: %v", err)
+	}
+}
+
+func TestAnnotateRuntimeCompatibilityEquivalenceRejectsConflictingExistingReview(t *testing.T) {
+	root := commandRegistryTestRoot("item get", "item legacy", "item older")
+	primary := exactSchemaCommand(root, "item get")
+	legacy := exactSchemaCommand(root, "item legacy")
+	older := exactSchemaCommand(root, "item older")
+	AnnotateRuntimeCompatibilityEquivalence(primary, legacy, RuntimeCompatibilityEquivalence{
+		ID: "item-get-legacy-v1", Reason: "Reviewed first compatibility contract.", Reviewed: true,
+	})
+
+	defer func() {
+		if recovered := recover(); recovered == nil {
+			t.Fatal("conflicting compatibility review silently overwrote the existing marker")
+		}
+	}()
+	AnnotateRuntimeCompatibilityEquivalence(primary, older, RuntimeCompatibilityEquivalence{
+		ID: "item-get-older-v1", Reason: "Conflicting compatibility contract.", Reviewed: true,
+	})
+}
+
+func compatibilityPrimaryRunE(*cobra.Command, []string) error { return nil }
+
+func compatibilityAliasRunE(*cobra.Command, []string) error { return nil }
+
 func TestBindEffectiveCommandRegistryIgnoresLazilyMaterializedHelpFlag(t *testing.T) {
 	root := commandRegistryTestRoot("item get", "item legacy")
 	primary := exactSchemaCommand(root, "item get")
 	alias := exactSchemaCommand(root, "item legacy")
 	alias.Hidden = true
+	annotateTestCompatibilityPair(primary, alias)
 	// Cobra does this only for the command selected by Execute. Binding after
 	// parsing must remain independent of whether the primary or compatibility
 	// path was selected first.
@@ -278,6 +371,7 @@ func TestBindEffectiveCommandRegistryCompatibilityGateIsOrderIndependentOfCanoni
 	root := commandRegistryTestRoot("item get", "item legacy")
 	primary := exactSchemaCommand(root, "item get")
 	alias := exactSchemaCommand(root, "item legacy")
+	annotateTestCompatibilityPair(primary, alias)
 	primary.Flags().String("query", "", "query")
 	alias.Flags().String("query", "", "query")
 	AnnotateRuntimeFlagFormat(primary, "query", "native-format")
@@ -339,12 +433,14 @@ func TestBindEffectiveCommandRegistryTreatsManualParameterHintsAsCanonicalProjec
 	primary := exactSchemaCommand(root, "item get")
 	alias := exactSchemaCommand(root, "item legacy")
 	alias.Hidden = true
+	annotateTestCompatibilityPair(primary, alias)
 	primary.Flags().Bool("include-archived", false, "include archived items")
 	alias.Flags().Bool("include-archived", false, "include archived items")
 
 	required := false
 	if err := annotateManualSchemaParameter(
-		primary.Flags().Lookup("include-archived"),
+		primary,
+		"include-archived",
 		ManualSchemaParameterHint{Required: &required},
 		"Reviewed canonical projection may lower the Agent-facing required value.",
 	); err != nil {
@@ -359,7 +455,7 @@ func TestBindEffectiveCommandRegistryTreatsManualParameterHintsAsCanonicalProjec
 	if _, err := BindEffectiveCommandRegistry(root, effective); err != nil {
 		t.Fatalf("manual canonical projection must not create compatibility-leaf executable drift: %v", err)
 	}
-	if _, _, ok, err := runtimeManualSchemaParameter(alias.Flags().Lookup("include-archived")); err != nil || ok {
+	if _, _, ok, err := runtimeManualSchemaParameter(alias, "include-archived"); err != nil || ok {
 		t.Fatalf("manual projection was copied to compatibility leaf: present=%t err=%v", ok, err)
 	}
 }
@@ -522,6 +618,7 @@ func TestBindEffectiveCommandRegistryPrefersExactNameOverCobraAlias(t *testing.T
 	compatibility := exactSchemaCommand(root, "item fetch")
 	primary.Aliases = []string{"fetch"}
 	compatibility.Hidden = true
+	annotateTestCompatibilityPair(primary, compatibility)
 	effective := mustEffectiveCommandRegistry(t, []CommandSpec{{
 		CanonicalPath:  "item.get_item",
 		PrimaryCLIPath: "item get",
@@ -825,4 +922,12 @@ func mustEffectiveCommandRegistry(t *testing.T, commands []CommandSpec) Effectiv
 		t.Fatalf("newEffectiveCommandRegistry() error = %v", err)
 	}
 	return registry
+}
+
+func annotateTestCompatibilityPair(primary, alias *cobra.Command) {
+	AnnotateRuntimeCompatibilityEquivalence(primary, alias, RuntimeCompatibilityEquivalence{
+		ID:       "test-compatibility-pair-v1",
+		Reason:   "The focused test explicitly reviews these independently registered leaves as semantically equivalent.",
+		Reviewed: true,
+	})
 }

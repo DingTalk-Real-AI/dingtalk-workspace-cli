@@ -36,7 +36,7 @@ func TestRuntimeSchemaMetadataLoadsOnlyOnDemand(t *testing.T) {
 				defer wait.Done()
 				_ = runtimeAgentMetadata()
 				_ = runtimeMCPMetadata()
-				_ = runtimeSchemaParameterBindingData()
+				_, _ = runtimeSchemaParameterBindingData()
 			}()
 		}
 		wait.Wait()

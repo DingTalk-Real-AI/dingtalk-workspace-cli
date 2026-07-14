@@ -3481,14 +3481,14 @@
           ]
         },
         "interface_mode": {
-          "value": "mcp",
+          "value": "composite",
           "source": "internal/cli/schema_hints/selection-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "mcp",
+              "value": "composite",
               "source": "internal/cli/schema_hints/selection-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
@@ -3502,17 +3502,43 @@
             }
           ]
         },
-        "interface_ref": {
-          "value": "wiki.list_wikiSpaces",
-          "source": "internal/cli/schema_mcp_metadata.json#tools.wiki.list_wikiSpaces.interface_ref",
-          "precedence": "mcp_fallback",
+        "interface_reason": {
+          "value": "The CLI command routes by --type between wiki/list_wikiSpaces and drive/list_spaces, so the reviewed executable wrapper has no single direct MCP interface.",
+          "source": "internal/cli/schema_hints/selection-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
           "candidates": [
+            {
+              "value": "The CLI command routes by --type between wiki/list_wikiSpaces and drive/list_spaces, so the reviewed executable wrapper has no single direct MCP interface.",
+              "source": "internal/cli/schema_hints/selection-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/selection-review.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/selection-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ],
+          "overridden_candidates": [
             {
               "value": "wiki.list_wikiSpaces",
               "source": "internal/cli/schema_mcp_metadata.json#tools.wiki.list_wikiSpaces.interface_ref",
               "precedence": "mcp_fallback",
-              "selected": true
+              "selected": false
             }
           ]
         },
@@ -3568,11 +3594,8 @@
         }
       },
       "idempotency": "idempotent",
-      "interface_mode": "mcp",
-      "interface_ref": {
-        "product_id": "wiki",
-        "rpc_name": "list_wikiSpaces"
-      },
+      "interface_mode": "composite",
+      "interface_reason": "The CLI command routes by --type between wiki/list_wikiSpaces and drive/list_spaces, so the reviewed executable wrapper has no single direct MCP interface.",
       "reviewed": true,
       "risk": "low",
       "source_refs": [

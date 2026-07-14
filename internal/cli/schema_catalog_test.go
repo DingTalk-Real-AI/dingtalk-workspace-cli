@@ -9,8 +9,16 @@ package cli
 
 import (
 	"sort"
+	"strings"
 	"testing"
 )
+
+func TestBuildSchemaCatalogSnapshotRejectsUnresolvedSource(t *testing.T) {
+	_, err := BuildSchemaCatalogSnapshot(ResolvedSchemaBuild{}, SchemaCatalogBuildOptions{})
+	if err == nil || !strings.Contains(err.Error(), "ResolveSchemaBuild") {
+		t.Fatalf("BuildSchemaCatalogSnapshot() error = %v, want resolved-source requirement", err)
+	}
+}
 
 func TestEmbeddedSchemaCatalogIntegrity(t *testing.T) {
 	loaded := embeddedSchemaCatalog()
@@ -141,6 +149,87 @@ func TestEmbeddedCatalogPreservesRegistryIdentityAndManualParameterContract(t *t
 			assertReviewedManual(flagName, field)
 		}
 	}
+}
+
+func TestEmbeddedCatalogModelsAitableExportBranches(t *testing.T) {
+	leaf, err := embeddedSchemaPayload([]string{"aitable export data"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parameters := schemaMap(leaf["parameters"])
+	if _, exists := parameters["format"]; exists {
+		t.Fatal("business export format still shadows the global --format output flag")
+	}
+	exportFormat := parameters["export-format"]
+	if exportFormat["property"] != "format" || exportFormat["required"] != false {
+		t.Fatalf("export-format parameter = %#v", exportFormat)
+	}
+	if got, want := schemaStringSlice(exportFormat["enum"]), []string{"excel", "attachment", "excel_and_attachment", "excel_with_inline_images"}; !equalStringSlices(got, want) {
+		t.Fatalf("export-format enum = %v, want %v", got, want)
+	}
+	if parameters["scope"]["required"] != false {
+		t.Fatalf("scope must be conditional, got %#v", parameters["scope"])
+	}
+	if got := parameters["table-id"]["required_when"]; got != "scope is table or view" {
+		t.Fatalf("table-id required_when = %#v", got)
+	}
+	if got := parameters["view-id"]["required_when"]; got != "scope is view" {
+		t.Fatalf("view-id required_when = %#v", got)
+	}
+
+	constraints, ok := leaf["constraints"].(map[string]any)
+	if !ok {
+		t.Fatalf("constraints = %#v", leaf["constraints"])
+	}
+	hasGroup := func(field string, want ...string) bool {
+		groups, _ := constraints[field].([]any)
+		for _, raw := range groups {
+			if equalStringSlices(schemaStringSlice(raw), want) {
+				return true
+			}
+		}
+		return false
+	}
+	if !hasGroup("require_one_of", "scope", "task-id") ||
+		!hasGroup("require_one_of", "export-format", "task-id") ||
+		!hasGroup("require_together", "scope", "export-format") {
+		t.Fatalf("branch constraints = %#v", constraints)
+	}
+}
+
+func TestEmbeddedCatalogKeepsSharedFlagSemanticsCommandScoped(t *testing.T) {
+	queryLeaf, err := embeddedSchemaPayload([]string{"aitable record query"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	getLeaf, err := embeddedSchemaPayload([]string{"aitable record get"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	queryRecordIDs := schemaMap(queryLeaf["parameters"])["record-ids"]
+	getRecordIDs := schemaMap(getLeaf["parameters"])["record-ids"]
+	if queryRecordIDs["required"] != false {
+		t.Fatalf("record query --record-ids = %#v, want optional", queryRecordIDs)
+	}
+	if getRecordIDs["required"] != true {
+		t.Fatalf("record get --record-ids = %#v, want required", getRecordIDs)
+	}
+	getProvenance := schemaMap(getRecordIDs["field_provenance"])["required"]
+	if getProvenance["source"] != "typed_parameter_metadata" {
+		t.Fatalf("record get required provenance = %#v", getProvenance)
+	}
+}
+
+func equalStringSlices(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestStripSchemaPayloadCompactLeaf(t *testing.T) {

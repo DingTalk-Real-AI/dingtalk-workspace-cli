@@ -83,6 +83,29 @@ func TestChatFavoritesCommandsRegistered(t *testing.T) {
 	}
 }
 
+func TestChatListMyGroupsValidatesReviewedRoleEnum(t *testing.T) {
+	caller := &chatFavoritesCaller{}
+	err := executeChatFavoritesCommand(t, caller, "group", "list-my-groups", "--role", "owner")
+	if err == nil || !strings.Contains(err.Error(), "OWNER or ADMIN") {
+		t.Fatalf("error = %v, want reviewed role validation", err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("tool call count = %d, want 0", len(caller.calls))
+	}
+
+	caller = &chatFavoritesCaller{}
+	if err := executeChatFavoritesCommand(t, caller, "group", "list-my-groups", "--role", "OWNER", "--limit", "10"); err != nil {
+		t.Fatalf("list-my-groups returned error: %v", err)
+	}
+	if len(caller.calls) != 1 || caller.calls[0].toolName != "list_owned_or_admin_groups" {
+		t.Fatalf("tool calls = %#v, want one list_owned_or_admin_groups call", caller.calls)
+	}
+	want := map[string]any{"roleFilter": "OWNER", "limit": 10}
+	if !reflect.DeepEqual(caller.calls[0].args, want) {
+		t.Fatalf("tool args = %#v, want %#v", caller.calls[0].args, want)
+	}
+}
+
 func TestChatFavoriteMutationMappings(t *testing.T) {
 	tests := []struct {
 		name     string

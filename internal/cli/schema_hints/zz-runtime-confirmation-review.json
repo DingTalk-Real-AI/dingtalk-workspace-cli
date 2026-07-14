@@ -2,13 +2,13 @@
   "version": 1,
   "source": {
     "kind": "explicit",
-    "name": "runtime-confirmation-review-v1",
+    "name": "runtime-confirmation-review-v2",
     "repository": "DingTalk-Real-AI/dingtalk-workspace-cli",
     "channel": "open-source"
   },
   "coverage": {
-    "source_tools": 10,
-    "matched_tools": 10
+    "source_tools": 37,
+    "matched_tools": 37
   },
   "tools": {
     "doc.delete_comment": {
@@ -121,6 +121,202 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "aitable.form_field_hide": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "idempotent",
+      "reviewed": true
+    },
+    "chat.dismiss_group": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "drive.recycle_restore": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "minutes.create_speaker_summary": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.clear_range": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.batch_update": {
+      "agent_summary": "批量执行多个工作表写操作，其中可包含清除、删除等不可恢复子操作。",
+      "use_when": [
+        "用户明确要求将多个已审查的工作表写操作作为一个批次执行时。"
+      ],
+      "avoid_when": [
+        "只需读取或预览、子操作未完整审查，或用户尚未确认可能的清除/删除影响时不要实际执行。"
+      ],
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.group_dimension": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "sheet.ungroup_dimension": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "not_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.add_dev_app_members": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.apply_dev_app_permissions": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.create_dev_app": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.create_dev_app_version": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.delete_dev_app": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.disable_dev_app": {
+      "effect": "write",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.disable_dev_app_robot": {
+      "effect": "write",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.enable_dev_app": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.enable_dev_app_robot": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.publish_dev_app_version": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.remove_dev_app_members": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.remove_dev_app_permissions": {
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.set_extension_robot_config": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.set_extension_webapp_config": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.submit_robot_create_task": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.subscribe_dev_app_events": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.unsubscribe_dev_app_events": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.update_dev_app": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
+      "reviewed": true
+    },
+    "dev.update_dev_app_security_config": {
+      "effect": "write",
+      "risk": "medium",
+      "confirmation": "user_required",
+      "idempotency": "unknown",
       "reviewed": true
     }
   }

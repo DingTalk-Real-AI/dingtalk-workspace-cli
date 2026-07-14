@@ -100,21 +100,24 @@ type ManualAgentToolHint struct {
 }
 
 // ManualAgentExampleMode controls only how an already contract-validated
-// example is exercised. Every example defaults to dry_run. contract_only is a
-// precise reviewed exception for examples whose runtime preconditions cannot
-// be exercised safely and deterministically in the isolated test process.
+// example is exercised. Contract validation is the default. dry_run is used
+// only when the final ToolSpec publishes an explicit reviewed capability;
+// contract_only remains a precise reviewed exception for such a capability
+// whose runtime preconditions cannot be exercised safely and deterministically
+// in the isolated test process.
 type ManualAgentExampleMode string
 
 const (
+	ManualAgentExampleModeContract     ManualAgentExampleMode = "contract"
 	ManualAgentExampleModeDryRun       ManualAgentExampleMode = "dry_run"
 	ManualAgentExampleModeContractOnly ManualAgentExampleMode = "contract_only"
 )
 
 // ManualAgentExampleReasonCode is a closed taxonomy for reviewed
-// contract-only exceptions. High-risk/user-confirmed operations are not an
-// exception: they must still prove their fail-closed --dry-run path without
-// injecting --yes. There is deliberately no generic "skip" or "unsupported"
-// value: a reviewer must identify the concrete precondition.
+// contract-only exceptions to an explicit dry-run capability. Safety and
+// confirmation remain independently enforced and cannot be weakened through
+// an example disposition. There is deliberately no generic "skip" value: a
+// reviewer must identify the concrete precondition.
 type ManualAgentExampleReasonCode string
 
 const (
@@ -122,9 +125,9 @@ const (
 	ManualAgentExampleReasonStatefulPreflight ManualAgentExampleReasonCode = "stateful_preflight"
 )
 
-// ManualAgentExampleDisposition changes one exact example index from the
-// default dry-run mode to contract-only. Index is a pointer so a missing JSON
-// field cannot silently select example zero.
+// ManualAgentExampleDisposition narrows one exact example with an explicit
+// typed dry-run capability to contract-only. Index is a pointer so a missing
+// JSON field cannot silently select example zero.
 type ManualAgentExampleDisposition struct {
 	Index      *int                         `json:"index"`
 	Mode       ManualAgentExampleMode       `json:"mode"`
@@ -146,8 +149,8 @@ type ManualAgentExampleExecution struct {
 	Source        ManualAgentExampleDispositionSource
 }
 
-// ManualAgentExampleDispositionSource makes automatic typed-safety
-// classification distinguishable from narrow reviewed manual exceptions.
+// ManualAgentExampleDispositionSource distinguishes the normal typed-contract
+// classification from narrow reviewed manual exceptions.
 type ManualAgentExampleDispositionSource string
 
 const (
@@ -156,11 +159,13 @@ const (
 )
 
 // ManualAgentExampleExecutionPlan is a stable, typed report used by the
-// exhaustive real-Cobra dry-run test. Counts are derived only from committed
-// reviewed dispositions; runtime failures can never add implicit skips.
+// exhaustive real-Cobra dry-run test. Counts are derived only from the final
+// typed dry-run capability and committed reviewed dispositions; runtime
+// failures can never add implicit skips.
 type ManualAgentExampleExecutionPlan struct {
 	Examples             []ManualAgentExampleExecution
 	Total                int
+	Contract             int
 	DryRun               int
 	ContractOnly         int
 	ReviewedContractOnly int
@@ -347,7 +352,7 @@ func validateManualAgentExampleDispositions(canonical string, examples []string,
 			return fmt.Errorf("agent_hints tool %s example disposition index %d must be reviewed", canonical, index)
 		}
 		if disposition.Mode != ManualAgentExampleModeContractOnly {
-			return fmt.Errorf("agent_hints tool %s example disposition index %d has invalid mode %q; only %q overrides the default %q mode", canonical, index, disposition.Mode, ManualAgentExampleModeContractOnly, ManualAgentExampleModeDryRun)
+			return fmt.Errorf("agent_hints tool %s example disposition index %d has invalid mode %q; only %q may narrow an explicit dry_run capability", canonical, index, disposition.Mode, ManualAgentExampleModeContractOnly)
 		}
 		if !validManualAgentExampleReasonCode(disposition.ReasonCode) {
 			return fmt.Errorf("agent_hints tool %s example disposition index %d has invalid reason_code %q", canonical, index, disposition.ReasonCode)
@@ -458,9 +463,9 @@ func mapKeysManualAgentTools(values map[string]ManualAgentToolHint) map[string]b
 // ValidateManualAgentHintExamples is the pre-generation validation layer. It
 // binds every authored example to the exact reviewed primary/alias path and
 // rejects flags and required arguments not accepted by the live Cobra command.
-// Final typed constraints, safety, and exact delivery coverage are validated
-// later by BuildManualAgentExampleExecutionPlan after generated Agent metadata
-// exists. It never executes an example.
+// Final typed constraints, dry-run capability, and exact delivery coverage are
+// validated later by BuildManualAgentExampleExecutionPlan after generated
+// Agent metadata exists. It never executes an example.
 func ValidateManualAgentHintExamples(bound BoundCommandRegistry, hints ManualAgentHintSet) error {
 	_, err := buildManualAgentExampleExecutionPlan(bound, nil, hints)
 	return err
@@ -479,11 +484,12 @@ func ValidateEmbeddedManualAgentExampleDelivery(bound BoundCommandRegistry, regi
 }
 
 // BuildManualAgentExampleExecutionPlan validates every example against its
-// real BoundCommand/Cobra contract. High-risk or user-confirmed operations
-// remain dry_run and must demonstrate a fail-closed preview without --yes.
-// Only unavoidable local-state or stateful-preflight requirements may use an
-// exact reviewed manual disposition. Missing dispositions always remain
-// dry_run, and callers must never turn a runtime failure into an implicit skip.
+// real BoundCommand/Cobra contract. Runtime dry-run execution is opt-in and
+// comes only from the final typed ToolSpec; a globally accepted --dry-run flag
+// is not capability evidence. Only unavoidable local-state or stateful-
+// preflight requirements may narrow an explicit capability through an exact
+// reviewed manual disposition. Callers must never turn a runtime failure into
+// an implicit skip.
 func BuildManualAgentExampleExecutionPlan(bound BoundCommandRegistry, registry SchemaRegistry, hints ManualAgentHintSet) (ManualAgentExampleExecutionPlan, error) {
 	tools := make(map[string]ToolSpec, len(bound.Commands))
 	for _, product := range registry.Products {
@@ -578,15 +584,19 @@ func buildManualAgentExampleExecutionPlan(bound BoundCommandRegistry, typedTools
 				CanonicalPath: canonical,
 				Index:         index,
 				Example:       example,
-				Mode:          ManualAgentExampleModeDryRun,
+				Mode:          ManualAgentExampleModeContract,
 				Source:        ManualAgentExampleDispositionDefault,
 			}
 			if typedTool.DryRun != nil {
 				dryRun := *typedTool.DryRun
 				execution.DryRun = &dryRun
+				execution.Mode = ManualAgentExampleModeDryRun
 			}
 			disposition, hasManualDisposition := dispositions[index]
 			if hasManualDisposition {
+				if typedTools != nil && execution.DryRun == nil {
+					return ManualAgentExampleExecutionPlan{}, fmt.Errorf("agent_hints tool %s example disposition index %d narrows no explicit dry_run capability", canonical, index)
+				}
 				execution.Mode = disposition.Mode
 				execution.ReasonCode = disposition.ReasonCode
 				execution.Reason = strings.TrimSpace(disposition.Reason)
@@ -594,8 +604,10 @@ func buildManualAgentExampleExecutionPlan(bound BoundCommandRegistry, typedTools
 				plan.ContractOnly++
 				plan.ReviewedContractOnly++
 				plan.ContractOnlyByReason[disposition.ReasonCode]++
-			} else {
+			} else if execution.DryRun != nil {
 				plan.DryRun++
+			} else {
+				plan.Contract++
 			}
 			plan.Examples = append(plan.Examples, execution)
 			plan.Total++
@@ -1076,8 +1088,7 @@ func applyManualSchemaHints(root *cobra.Command, snapshot ManualSchemaHintSnapsh
 		sort.Strings(flagNames)
 		for _, flagName := range flagNames {
 			parameter := item.hint.Parameters[flagName]
-			flag := runtimeCommandFlag(item.command, flagName)
-			if err := annotateManualSchemaParameter(flag, parameter, item.hint.Reason); err != nil {
+			if err := annotateManualSchemaParameter(item.command, flagName, parameter, item.hint.Reason); err != nil {
 				return ManualSchemaHintReport{}, fmt.Errorf("manual Schema hint %q flag --%s: %w", item.hint.CLIPath, flagName, err)
 			}
 			report.Parameters = append(report.Parameters, item.hint.CLIPath+" --"+flagName)
@@ -1117,22 +1128,30 @@ func runtimeManualSchemaIdentity(cmd *cobra.Command) (productID, toolName, reaso
 // annotation instead of overwriting the annotations used by bindings, Cobra
 // adapters, and code-owned runtime metadata. The renderer resolves these
 // independent candidates field by field and can therefore retain provenance.
-func annotateManualSchemaParameter(flag *pflag.Flag, hint ManualSchemaParameterHint, reason string) error {
-	if flag == nil {
-		return fmt.Errorf("flag is nil")
+func annotateManualSchemaParameter(command *cobra.Command, flagName string, hint ManualSchemaParameterHint, reason string) error {
+	flagName = strings.TrimSpace(flagName)
+	if command == nil {
+		return fmt.Errorf("command is nil")
+	}
+	if flagName == "" || runtimeCommandFlag(command, flagName) == nil {
+		return fmt.Errorf("flag --%s is missing", flagName)
 	}
 	hint = normalizeManualSchemaParameterHint(hint)
 	encoded, err := json.Marshal(hint)
 	if err != nil {
 		return fmt.Errorf("encode reviewed parameter: %w", err)
 	}
-	setFlagAnnotation(flag, runtimeSchemaManualParameterAnnotation, string(encoded))
-	setFlagAnnotation(flag, runtimeSchemaManualReasonAnnotation, strings.TrimSpace(reason))
+	setRuntimeCommandAnnotation(command, runtimeManualSchemaParameterKey(runtimeSchemaManualParameterAnnotation, flagName), string(encoded))
+	setRuntimeCommandAnnotation(command, runtimeManualSchemaParameterKey(runtimeSchemaManualReasonAnnotation, flagName), strings.TrimSpace(reason))
 	return nil
 }
 
-func runtimeManualSchemaParameter(flag *pflag.Flag) (ManualSchemaParameterHint, string, bool, error) {
-	raw := firstFlagAnnotation(flag, runtimeSchemaManualParameterAnnotation)
+func runtimeManualSchemaParameter(command *cobra.Command, flagName string) (ManualSchemaParameterHint, string, bool, error) {
+	if command == nil || command.Annotations == nil {
+		return ManualSchemaParameterHint{}, "", false, nil
+	}
+	flagName = strings.TrimSpace(flagName)
+	raw := strings.TrimSpace(command.Annotations[runtimeManualSchemaParameterKey(runtimeSchemaManualParameterAnnotation, flagName)])
 	if raw == "" {
 		return ManualSchemaParameterHint{}, "", false, nil
 	}
@@ -1140,7 +1159,12 @@ func runtimeManualSchemaParameter(flag *pflag.Flag) (ManualSchemaParameterHint, 
 	if err := json.Unmarshal([]byte(raw), &hint); err != nil {
 		return ManualSchemaParameterHint{}, "", false, fmt.Errorf("decode reviewed manual parameter hint: %w", err)
 	}
-	return normalizeManualSchemaParameterHint(hint), firstFlagAnnotation(flag, runtimeSchemaManualReasonAnnotation), true, nil
+	reason := strings.TrimSpace(command.Annotations[runtimeManualSchemaParameterKey(runtimeSchemaManualReasonAnnotation, flagName)])
+	return normalizeManualSchemaParameterHint(hint), reason, true, nil
+}
+
+func runtimeManualSchemaParameterKey(prefix, flagName string) string {
+	return strings.TrimSpace(prefix) + "." + strings.TrimSpace(flagName)
 }
 
 func normalizeManualSchemaParameterHint(hint ManualSchemaParameterHint) ManualSchemaParameterHint {

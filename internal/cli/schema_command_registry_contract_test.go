@@ -152,3 +152,33 @@ func TestNewCommandRegistryRejectsAliasAndCanonicalCollisions(t *testing.T) {
 		})
 	}
 }
+
+func TestMinutesFixedScopeLeavesRemainDistinctRegistryIdentities(t *testing.T) {
+	registry, err := loadEmbeddedCommandRegistry()
+	if err != nil {
+		t.Fatalf("load embedded command registry: %v", err)
+	}
+	want := map[string]string{
+		"minutes list all":    "minutes.list_accessible_minutes",
+		"minutes list mine":   "minutes.list_by_keyword_and_time_range",
+		"minutes list shared": "minutes.list_shared_minutes",
+	}
+	seen := map[string]bool{}
+	for path, canonical := range want {
+		spec, ok := registry.ByCLIPath[path]
+		if !ok {
+			t.Errorf("registry path %q is missing", path)
+			continue
+		}
+		if spec.CanonicalPath != canonical {
+			t.Errorf("registry path %q canonical = %q, want %q", path, spec.CanonicalPath, canonical)
+		}
+		if len(spec.Aliases) != 0 {
+			t.Errorf("registry path %q aliases = %v, want none for fixed request scope", path, spec.Aliases)
+		}
+		seen[spec.CanonicalPath] = true
+	}
+	if len(seen) != len(want) {
+		t.Fatalf("minutes fixed-scope leaves collapsed to %d canonical identities, want %d", len(seen), len(want))
+	}
+}

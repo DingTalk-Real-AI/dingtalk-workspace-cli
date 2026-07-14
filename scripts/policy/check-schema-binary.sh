@@ -101,7 +101,7 @@ if ! cmp -s "$tmp/expected-list.json" "$tmp/actual-list.json"; then
 	exit 1
 fi
 
-# The full 539-tool set and every alias mapping were compared above using the
+# The exact public EffectiveCommandRegistry set and every alias mapping were compared above using the
 # release binary's --all payload. Exercise representative canonical/primary
 # query routes here; exhaustive per-path resolution runs in the in-process Go
 # delivery gate, avoiding more than one thousand cold binary startups in CI.

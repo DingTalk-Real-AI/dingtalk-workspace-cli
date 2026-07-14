@@ -7,7 +7,7 @@
     "channel": "open-source"
   },
   "coverage": {
-    "source_tools": 559,
+    "source_tools": 561,
     "matched_tools": 71
   },
   "tools": {
@@ -26,9 +26,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "aitable.form_delete": {
@@ -46,9 +43,6 @@
       "risk": "high",
       "confirmation": "user_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "aitable.form_field_hide": {
@@ -66,9 +60,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "aitable.form_field_list": {
@@ -86,9 +77,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "aitable.form_field_update": {
@@ -106,9 +94,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "aitable.form_get": {
@@ -126,9 +111,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "aitable.form_list": {
@@ -146,9 +128,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "aitable.form_questions_create": {
@@ -166,9 +145,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "aitable.form_questions_delete": {
@@ -186,9 +162,6 @@
       "risk": "high",
       "confirmation": "user_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "aitable.form_share_get": {
@@ -206,9 +179,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "aitable.form_share_update": {
@@ -226,9 +196,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "aitable.form_update": {
@@ -246,9 +213,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "aitable.record_batch_update": {
@@ -266,9 +230,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.adjustment_get": {
@@ -287,9 +248,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.adjustment_search": {
@@ -310,9 +268,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.approve_list": {
@@ -332,9 +287,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.approve_templates": {
@@ -353,9 +305,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.boss_check": {
@@ -374,9 +323,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.check_record": {
@@ -395,9 +341,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.check_result": {
@@ -415,9 +358,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.checkin_records": {
@@ -437,9 +377,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.class_create": {
@@ -457,9 +394,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.class_get": {
@@ -478,9 +412,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.class_search": {
@@ -501,9 +432,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.class_update": {
@@ -523,9 +451,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.globalsetting_get": {
@@ -544,9 +469,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.globalsetting_save": {
@@ -564,9 +486,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.group_create": {
@@ -586,9 +505,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.group_filtered_get": {
@@ -608,9 +524,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.group_get": {
@@ -630,9 +543,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.group_search": {
@@ -654,9 +564,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.group_update": {
@@ -676,9 +583,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.group_update_members": {
@@ -698,9 +602,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.overtime_get": {
@@ -719,9 +620,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.overtime_search": {
@@ -742,9 +640,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.report_columns": {
@@ -763,9 +658,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.report_query_data": {
@@ -785,9 +677,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.report_query_leave": {
@@ -807,9 +696,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.schedule_get": {
@@ -827,9 +713,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.schedule_import": {
@@ -847,9 +730,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.selfsetting_get": {
@@ -870,9 +750,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.selfsetting_save": {
@@ -895,9 +772,6 @@
       "risk": "high",
       "confirmation": "user_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.vacation_balance": {
@@ -922,9 +796,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.vacation_records": {
@@ -944,9 +815,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.vacation_save_balance": {
@@ -968,9 +836,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.vacation_types": {
@@ -989,9 +854,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "attendance.vacation_update_type": {
@@ -1013,9 +875,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "doc.import_get": {
@@ -1034,9 +893,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "doc.template_apply": {
@@ -1054,9 +910,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "doc.template_list": {
@@ -1074,9 +927,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "doc.template_search": {
@@ -1094,9 +944,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "doc.version_list": {
@@ -1114,9 +961,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "doc.version_revert": {
@@ -1134,9 +978,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "doc.version_save": {
@@ -1154,9 +995,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "drive.publish_get": {
@@ -1175,9 +1013,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "drive.publish_set": {
@@ -1196,9 +1031,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "drive.publish_unset": {
@@ -1217,9 +1049,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "drive.recent": {
@@ -1238,9 +1067,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "drive.recycle_list": {
@@ -1260,9 +1086,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "drive.recycle_restore": {
@@ -1282,9 +1105,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "sheet.batch_update": {
@@ -1299,13 +1119,10 @@
         "dws sheet batch-update --node <NODE_ID> --operations '[",
         "dws sheet batch-update --node <NODE_ID> --continue-on-error --operations '[...]'"
       ],
-      "effect": "write",
-      "risk": "medium",
-      "confirmation": "not_required",
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "sheet.chart_create": {
@@ -1326,9 +1143,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "sheet.chart_delete": {
@@ -1346,9 +1160,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "sheet.chart_list": {
@@ -1370,9 +1181,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "sheet.chart_update": {
@@ -1391,9 +1199,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "sheet.group_dimension": {
@@ -1414,9 +1219,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "sheet.range_batch_clear": {
@@ -1431,13 +1233,10 @@
         "dws sheet range batch-clear --node <NODE_ID> --ranges '[\"Sheet1!A1:B3\",\"Sheet2!C1:D5\"]'",
         "dws sheet range batch-clear --node <NODE_ID> --ranges '[\"Sheet1!A1:Z1000\"]' --type all"
       ],
-      "effect": "write",
-      "risk": "medium",
-      "confirmation": "not_required",
+      "effect": "destructive",
+      "risk": "high",
+      "confirmation": "user_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "sheet.template_apply": {
@@ -1455,9 +1254,6 @@
       "risk": "medium",
       "confirmation": "not_required",
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "sheet.template_list": {
@@ -1475,9 +1271,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "sheet.template_search": {
@@ -1495,9 +1288,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     },
     "sheet.ungroup_dimension": {
@@ -1517,9 +1307,6 @@
       "risk": "low",
       "confirmation": "not_required",
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "availability": "available",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
       "reviewed": false
     }
   }

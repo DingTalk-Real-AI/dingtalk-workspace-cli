@@ -10,7 +10,7 @@
 4. `internal/executor` and `internal/transport` execute MCP JSON-RPC calls; `internal/output` formats responses.
 5. `internal/auth` manages login state, PAT tokens, and agent-code detection.
 6. Schema generation starts from the reviewed `CommandRegistry`, binds each identity to the exact current Cobra leaf, and then resolves typed constraints, sanitized MCP snapshots, Agent hints, and Skills into one `SchemaRegistry`. Startup and Schema queries do not call MCP `tools/list`.
-7. The embedded Catalog is a downstream release artifact and never backfills identity or participates in regeneration. Stable flag-to-RPC property bindings come from the versioned `schema_parameter_bindings.json` (314 active bindings: a 311-row historical seed, minus 3 exclusions, plus 8 current inherited-flag additions); CLI `required` and constraints come from Cobra/typed annotations. MCP `required` remains interface-only metadata.
+7. The embedded Catalog is a downstream release artifact and never backfills identity or participates in regeneration. Stable flag-to-interface property bindings come from the reviewed, content-addressed v3 manifest in `schema_parameter_bindings.json`; its exact active tuples, corrections, removals, and mapping exclusions are validated against the final bound `SchemaRegistry`. CLI `required` and constraints come from the resolved typed contract, while MCP `required` remains interface-only metadata.
 8. Agent selection results are fixed in versioned review inputs. Every public tool has explicit use/avoid/example and interface disposition metadata; Skill references that are not current leaves require an explicit alias/group/stale/out-of-surface review instead of fuzzy runtime matching.
 
 ## Repository Structure

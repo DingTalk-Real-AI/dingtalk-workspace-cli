@@ -5,6 +5,20 @@
 package cli
 
 func init() {
+	RegisterRuntimeSchemaConstraints("aitable.export_data", RuntimeSchemaConstraints{
+		MutuallyExclusive: [][]string{
+			{"task-id", "scope"},
+			{"task-id", "export-format"},
+			{"task-id", "table-id"},
+			{"task-id", "view-id"},
+		},
+		RequireOneOf: [][]string{
+			{"scope", "task-id"},
+			{"export-format", "task-id"},
+		},
+		RequireTogether: [][]string{{"scope", "export-format"}},
+	})
+	registerRequireOneOf("aitable.field_update", "name", "config", "ai-config")
 	registerRequireOneOf("aitable.view_update_aggregate", "json", "field-id", "clear-field-id")
 	registerRequireTogether("aitable.view_update_aggregate", "field-id", "action")
 	RegisterRuntimeSchemaConstraints("aitable.view_update_card", RuntimeSchemaConstraints{
@@ -18,6 +32,7 @@ func init() {
 	registerRequireTogether("aitable.view_update_field_widths", "field-id", "width")
 	registerRequireOneOf("aitable.view_update_timebar", "json", "start-field", "end-field", "display-field-id", "timeline-scale", "official-holiday", "color-configs")
 	registerRequireOneOf("aitable.table_update", "name", "description", "record-name-key")
+	registerRequireOneOf("attendance.vacation_update_type", "name", "unit", "paid", "per-hours", "when-can-leave", "visibility-rules")
 	registerRequireTogether("calendar.create_calendar_event", "recurrence-type", "recurrence-interval", "recurrence-range-type")
 	registerRequireOneOf("calendar.query_busy_status", "users", "rooms")
 	registerRequireTogether("calendar.update_calendar_event", "recurrence-type", "recurrence-interval", "recurrence-range-type")

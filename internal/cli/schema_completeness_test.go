@@ -149,6 +149,7 @@ func TestSchemaCatalogDeliveryCompletenessAcceptsDeliveredAlias(t *testing.T) {
 	product := &cobra.Command{Use: "sample"}
 	current := &cobra.Command{Use: "current", Hidden: true, Run: func(*cobra.Command, []string) {}}
 	legacy := &cobra.Command{Use: "legacy", Run: func(*cobra.Command, []string) {}}
+	annotateTestCompatibilityPair(current, legacy)
 	AttachRuntimeSchema(current, "sample", "current", "test")
 	AttachRuntimeSchema(legacy, "sample", "current", "test")
 	product.AddCommand(current, legacy)

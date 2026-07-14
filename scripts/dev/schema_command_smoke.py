@@ -1,10 +1,22 @@
 #!/usr/bin/env python3
-"""Run every executable `dws schema --all` leaf in dry-run mode.
+"""Validate every full Schema leaf against Cobra Help and smoke runtime wiring.
 
-The script treats `dws schema --all --format json` as the command inventory, expands
-each leaf schema, synthesizes flag values from parameter metadata, and executes
-the runnable CLI path with `--dry-run --yes --format json`. Every available
-combination of `require_one_of` branches is exercised independently.
+The script loads ``dws schema --all --format json`` exactly once and uses those
+full leaf payloads directly. Every leaf receives a bidirectional Schema/Help
+flag contract check that excludes root execution controls and reviewed generic
+payload escape hatches, but retains effective product/group flags. Runtime
+execution is opt-in: only a leaf that publishes a valid ``dry_run`` object is
+invoked with ``--dry-run``. Merely inheriting the global flag is never treated
+as capability evidence, and ``--yes`` is never injected.
+
+The subprocess result is only a final-binary exit-health check. It deliberately
+does not infer preview evidence from human-readable text. The Go Agent-example
+gate is the sole proof of preview kind, absence of real ToolCaller invocations,
+and non-interactive safety.
+
+Run the fast, binary-free self-tests with::
+
+    python3 -m unittest scripts/dev/schema_command_smoke_test.py
 """
 
 from __future__ import annotations
@@ -13,7 +25,6 @@ import argparse
 import concurrent.futures
 import itertools
 import json
-import os
 import re
 import shlex
 import subprocess
@@ -23,6 +34,35 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+
+GLOBAL_EXECUTION_CONTROL_FLAGS = frozenset(
+    {
+        "client-id",
+        "client-secret",
+        "debug",
+        "dry-run",
+        "fields",
+        "format",
+        "jq",
+        "mock",
+        "output",
+        "profile",
+        "timeout",
+        "token",
+        "verbose",
+        "yes",
+    }
+)
+COBRA_FRAMEWORK_FLAGS = frozenset({"help"})
+DRY_RUN_PREVIEW_KINDS = frozenset({"invocation", "request", "plan", "diff"})
+GENERIC_PAYLOAD_FLAG_USAGES = {
+    "json": "Base JSON object payload for this tool invocation",
+    "params": "Additional JSON object payload merged after --json",
+}
+HELP_FLAG_PATTERN = re.compile(
+    r"^\s*(?:-[a-zA-Z0-9],\s*)?--([a-zA-Z0-9][a-zA-Z0-9_.-]*)(?:[ =]|$)"
+)
 
 
 @dataclass
@@ -189,15 +229,18 @@ def scalar_value(flag: str, param: dict[str, Any], canonical_path: str) -> str:
 
 
 def value_for(flag: str, param: dict[str, Any], canonical_path: str) -> str | None:
-    if canonical_path == "pat.batch_grant" and flag == "scope":
-        return "aitable.record:read"
+    # Reviewed examples and declared enums are contract data. They must win
+    # before type/name heuristics (notably integer enums such as mute-time).
+    if param.get("example") not in (None, ""):
+        return str(param["example"])
+    enum = param.get("enum") or []
+    if enum:
+        return str(enum[0])
+
     if canonical_path == "sheet.range_batch_set_style" and flag == "batch":
         return str(Path(tempfile.gettempdir()) / "dws-schema-smoke-style.json")
     if canonical_path == "report.create_report" and flag == "contents-file":
         return "tmp/dws-schema-smoke-report.json"
-
-    if param.get("example") not in (None, ""):
-        return str(param["example"])
 
     typ = str(param.get("type", "string")).lower()
     prop = str(param.get("property", ""))
@@ -383,6 +426,8 @@ def build_command(
     include_optional: bool,
     one_of_choices: tuple[str, ...] = (),
 ) -> list[str]:
+    if not declared_dry_run(leaf):
+        raise ValueError("runtime smoke requires an explicit leaf dry_run capability")
     cli_path = str(leaf["cli_path"])
     canonical_path = str(leaf.get("canonical_path", ""))
     extra_flags = smoke_extra_flags(canonical_path)
@@ -405,6 +450,9 @@ def build_command(
 
     for flag in sorted(params):
         param = params[flag] or {}
+        if flag == "yes":
+            # A preview must prove that confirmation cannot be bypassed.
+            continue
         if flag not in selected_params and flag not in extra_flags:
             continue
         if str(param.get("type", "")).lower() == "boolean":
@@ -412,11 +460,65 @@ def build_command(
             continue
         value = value_for(flag, param, canonical_path)
         argv.extend([f"--{flag}", "" if value is None else value])
-    argv.extend(["--dry-run", "--yes", "--format", "json"])
+    # A positive leaf dry_run declaration is the only caller-side admission
+    # condition. Confirmation must never be bypassed by injecting --yes, and
+    # no output flag is appended because commands may own a same-named flag.
+    argv.append("--dry-run")
     return argv
 
 
-def help_flags(binary: str, cwd: Path, cli_path: str, timeout: int) -> set[str]:
+def effective_schema_flags_from_help(output: str) -> set[str]:
+    """Return executable non-root flags from Cobra's rendered Help.
+
+    Cobra renders a leaf's own flags under ``Flags`` and all persistent
+    ancestors under ``Global Flags``. Schema intentionally excludes only the
+    root execution controls; product/group persistent flags remain part of the
+    leaf contract. Keeping section origin prevents a local business ``--format``
+    flag from being confused with the root output-format control.
+    """
+    local_flags: set[str] = set()
+    inherited_flags: set[str] = set()
+    section = ""
+    saw_flags_section = False
+    for line in output.splitlines():
+        heading = line.strip()
+        if heading in {"Flags:", "Local Flags:"}:
+            section = "local"
+            saw_flags_section = True
+            continue
+        if heading in {"Global Flags:", "Inherited Flags:"}:
+            section = "inherited"
+            saw_flags_section = True
+            continue
+        if re.fullmatch(r"[A-Za-z][A-Za-z ]*:", heading):
+            section = ""
+            continue
+        if not section:
+            continue
+        match = HELP_FLAG_PATTERN.match(line)
+        if not match:
+            continue
+        name = match.group(1)
+        generic_usage = GENERIC_PAYLOAD_FLAG_USAGES.get(name)
+        if generic_usage and generic_usage in line:
+            # These two generic transport escape hatches are intentionally not
+            # projected as typed Schema parameters. Match their reviewed usage
+            # text rather than excluding every business flag named json/params.
+            continue
+        if section == "local":
+            local_flags.add(name)
+        else:
+            inherited_flags.add(name)
+
+    if not saw_flags_section:
+        raise RuntimeError("command help has no recognizable Flags section")
+    return (
+        local_flags
+        | (inherited_flags - GLOBAL_EXECUTION_CONTROL_FLAGS)
+    ) - COBRA_FRAMEWORK_FLAGS
+
+
+def help_schema_flags(binary: str, cwd: Path, cli_path: str, timeout: int) -> set[str]:
     proc = subprocess.run(
         [binary, *shlex.split(cli_path), "--help"],
         cwd=cwd,
@@ -430,47 +532,7 @@ def help_flags(binary: str, cwd: Path, cli_path: str, timeout: int) -> set[str]:
             f"{binary} {cli_path} --help exited {proc.returncode}: "
             f"{(proc.stderr or proc.stdout).strip()}"
         )
-    return set(
-        re.findall(
-            r"(?m)^\s*(?:-[a-zA-Z0-9],\s*)?--([a-zA-Z0-9][a-zA-Z0-9_.-]*)(?:[ =]|$)",
-            proc.stdout,
-        )
-    )
-
-
-def is_auth_required(output: str) -> bool:
-    lowered = output.lower()
-    return any(
-        token in lowered
-        for token in [
-            '"category": "auth"',
-            '"reason": "not_authenticated"',
-            "dws auth login",
-            "未登录",
-        ]
-    )
-
-
-def is_external_required(output: str) -> bool:
-    """Identify failures that require real tenant resources or backend state.
-
-    Dry-run support is not uniform across legacy helpers: some resolve users or
-    fetch an existing object before rendering their request. These failures are
-    external coverage blockers, not local command-contract failures.
-    """
-    lowered = output.lower()
-    return any(
-        token in lowered
-        for token in [
-            '"category": "api"',
-            '"server_error_code"',
-            '"trace_id"',
-            "mcp_tool_error",
-            "cannot resolve userid",
-            "response missing downloadurl",
-            "requested resource not found",
-        ]
-    )
+    return effective_schema_flags_from_help(proc.stdout)
 
 
 def run_smoke_case(
@@ -482,7 +544,11 @@ def run_smoke_case(
     include_optional: bool,
     choices: tuple[str, ...],
 ) -> SmokeResult:
-    case_name = "default" if not choices else "one_of:" + "+".join(choices)
+    case_name = (
+        "dry_run/default"
+        if not choices
+        else "dry_run/one_of:" + "+".join(choices)
+    )
     try:
         command = build_command(binary, leaf, include_optional, choices)
         proc = subprocess.run(
@@ -493,15 +559,14 @@ def run_smoke_case(
             stderr=subprocess.PIPE,
             timeout=timeout,
         )
-        combined = (proc.stderr or "") + "\n" + (proc.stdout or "")
-        if proc.returncode == 0:
-            status = "pass"
-        elif is_auth_required(combined):
-            status = "auth_required"
-        elif is_external_required(combined):
-            status = "external_required"
-        else:
-            status = "fail"
+        # Exit zero proves only that the built command accepted and completed
+        # the reviewed dry-run invocation. Preview/safety evidence belongs to
+        # the fail-closed Go Agent-example gate, not text scraping here.
+        status = (
+            "runtime_exit_pass"
+            if proc.returncode == 0
+            else "runtime_exit_fail"
+        )
         return SmokeResult(
             canonical_path=path,
             case_name=case_name,
@@ -538,51 +603,118 @@ def run_smoke_case(
         )
 
 
+def dry_run_capability_error(leaf: dict[str, Any]) -> str:
+    """Return a closed-shape error for a leaf-local dry_run declaration."""
+    if "dry_run" not in leaf:
+        return ""
+    capability = leaf["dry_run"]
+    if not isinstance(capability, dict):
+        return "dry_run must be an object"
+    unknown_fields = sorted(set(capability) - {"preview_kind", "remote_reads"})
+    if unknown_fields:
+        return "dry_run has unsupported fields: " + ", ".join(unknown_fields)
+    preview_kind = capability.get("preview_kind")
+    if not isinstance(preview_kind, str) or preview_kind not in DRY_RUN_PREVIEW_KINDS:
+        allowed = ", ".join(sorted(DRY_RUN_PREVIEW_KINDS))
+        return f"dry_run.preview_kind must be one of: {allowed}"
+    if "remote_reads" in capability and not isinstance(capability["remote_reads"], bool):
+        return "dry_run.remote_reads must be a boolean"
+    return ""
+
+
+def declared_dry_run(leaf: dict[str, Any]) -> bool:
+    """Return true only for a valid, positive leaf-local declaration."""
+    problem = dry_run_capability_error(leaf)
+    if problem:
+        raise ValueError(problem)
+    return "dry_run" in leaf
+
+
 def run_one(
     binary: str,
     cwd: Path,
-    path: str,
+    leaf: dict[str, Any],
     timeout: int,
     include_optional: bool,
 ) -> list[SmokeResult]:
+    path = str(leaf.get("canonical_path", ""))
+    cli_path = str(leaf.get("cli_path", ""))
+    help_command = [binary, *shlex.split(cli_path), "--help"]
     try:
-        leaf = run_json([binary, "schema", path, "--format", "json"], cwd, timeout)
-        cli_path = str(leaf.get("cli_path", ""))
-        declared = set((leaf.get("parameters") or {}).keys())
-        missing = sorted(declared - help_flags(binary, cwd, cli_path, timeout))
-        if missing:
+        if not path or not cli_path:
+            raise ValueError("full Schema leaf requires canonical_path and cli_path")
+        parameters = leaf.get("parameters")
+        if not isinstance(parameters, dict):
+            raise ValueError("full Schema leaf parameters must be an object")
+        declared = set(parameters)
+        executable = help_schema_flags(binary, cwd, cli_path, timeout)
+        schema_only = sorted(declared - executable)
+        help_only = sorted(executable - declared)
+        if schema_only or help_only:
+            problems = []
+            if schema_only:
+                problems.append(
+                    "Schema-only/non-effective flags: " + ", ".join(schema_only)
+                )
+            if help_only:
+                problems.append(
+                    "effective non-global Help flags missing from Schema: "
+                    + ", ".join(help_only)
+                )
             return [
                 SmokeResult(
                     canonical_path=path,
-                    case_name="schema",
+                    case_name="contract",
                     cli_path=cli_path,
-                    command=[binary, *shlex.split(cli_path), "--help"],
+                    command=help_command,
                     status="schema_flag_mismatch",
                     exit_code=3,
                     stdout="",
                     stderr="",
-                    error="schema parameters missing from command help: "
-                    + ", ".join(missing),
+                    error="; ".join(problems),
                 )
             ]
+
+        contract = SmokeResult(
+            canonical_path=path,
+            case_name="contract",
+            cli_path=cli_path,
+            command=help_command,
+            status="contract_pass",
+            exit_code=0,
+            stdout="",
+            stderr="",
+        )
+        capability_problem = dry_run_capability_error(leaf)
+        if capability_problem:
+            contract.status = "invalid_dry_run_capability"
+            contract.exit_code = 3
+            contract.error = capability_problem
+            return [contract]
+        if not declared_dry_run(leaf):
+            return [contract]
+
         return [
-            run_smoke_case(
-                binary,
-                cwd,
-                path,
-                leaf,
-                timeout,
-                include_optional,
-                choices,
-            )
-            for choices in one_of_cases(leaf)
+            contract,
+            *[
+                run_smoke_case(
+                    binary,
+                    cwd,
+                    path,
+                    leaf,
+                    timeout,
+                    include_optional,
+                    choices,
+                )
+                for choices in one_of_cases(leaf)
+            ],
         ]
     except subprocess.TimeoutExpired as exc:
         return [
             SmokeResult(
                 canonical_path=path,
-                case_name="schema",
-                cli_path="",
+                case_name="contract",
+                cli_path=cli_path,
                 command=exc.cmd if isinstance(exc.cmd, list) else [str(exc.cmd)],
                 status="timeout",
                 exit_code=124,
@@ -595,9 +727,9 @@ def run_one(
         return [
             SmokeResult(
                 canonical_path=path,
-                case_name="schema",
-                cli_path="",
-                command=[],
+                case_name="contract",
+                cli_path=cli_path,
+                command=help_command,
                 status="error",
                 exit_code=1,
                 stdout="",
@@ -611,6 +743,11 @@ def result_to_dict(result: SmokeResult) -> dict[str, Any]:
     return {
         "canonical_path": result.canonical_path,
         "case": result.case_name,
+        "phase": (
+            "contract"
+            if result.case_name == "contract"
+            else "runtime_exit_health"
+        ),
         "cli_path": result.cli_path,
         "command": result.command,
         "status": result.status,
@@ -621,7 +758,91 @@ def result_to_dict(result: SmokeResult) -> dict[str, Any]:
     }
 
 
-def write_markdown(results: list[SmokeResult], output: Path, tool_count: int) -> None:
+def load_schema_leaves(
+    binary: str,
+    cwd: Path,
+    timeout: int,
+    requested_paths: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Load the full inventory once and optionally select canonical paths."""
+    listing = run_json(
+        [binary, "schema", "--all", "--format", "json"],
+        cwd,
+        timeout,
+        attempts=1,
+    )
+    if not isinstance(listing, dict):
+        raise RuntimeError("schema --all payload must be an object")
+    products = listing.get("products")
+    if not isinstance(products, list):
+        raise RuntimeError("schema --all products must be an array")
+    by_path: dict[str, dict[str, Any]] = {}
+    for product_index, product in enumerate(products):
+        if not isinstance(product, dict):
+            raise RuntimeError(
+                f"schema --all product {product_index} must be an object"
+            )
+        tools = product.get("tools")
+        if not isinstance(tools, list):
+            raise RuntimeError(
+                f"schema --all product {product_index} tools must be an array"
+            )
+        for raw_leaf in tools:
+            if not isinstance(raw_leaf, dict):
+                raise RuntimeError("schema --all returned a non-object tool")
+            raw_path = raw_leaf.get("canonical_path")
+            if not isinstance(raw_path, str) or not raw_path.strip():
+                raise RuntimeError("schema --all returned a tool without canonical_path")
+            path = raw_path.strip()
+            if path in by_path:
+                raise RuntimeError(f"schema --all returned duplicate tool {path}")
+            cli_path = raw_leaf.get("cli_path")
+            if not isinstance(cli_path, str) or not cli_path.strip():
+                raise RuntimeError(
+                    f"schema --all tool {path} has no non-empty cli_path"
+                )
+            if "parameters" not in raw_leaf:
+                raise RuntimeError(
+                    f"schema --all tool {path} is a summary, not a full leaf"
+                )
+            if not isinstance(raw_leaf["parameters"], dict):
+                raise RuntimeError(
+                    f"schema --all full tool {path} parameters must be an object"
+                )
+            for parameter_name, parameter in raw_leaf["parameters"].items():
+                if not isinstance(parameter, dict):
+                    raise RuntimeError(
+                        "schema --all full tool "
+                        f"{path} parameter {parameter_name!r} must be an object"
+                    )
+            capability_problem = dry_run_capability_error(raw_leaf)
+            if capability_problem:
+                raise RuntimeError(
+                    f"schema --all tool {path} has invalid dry_run: "
+                    f"{capability_problem}"
+                )
+            by_path[path] = raw_leaf
+
+    if not by_path:
+        raise RuntimeError("schema --all returned no full tools")
+    if not requested_paths:
+        return [by_path[path] for path in sorted(by_path)]
+
+    selected_paths = list(dict.fromkeys(requested_paths))
+    missing = sorted(set(selected_paths) - set(by_path))
+    if missing:
+        raise RuntimeError(
+            "requested canonical path missing from schema --all: " + ", ".join(missing)
+        )
+    return [by_path[path] for path in selected_paths]
+
+
+def write_markdown(
+    results: list[SmokeResult],
+    output: Path,
+    tool_count: int,
+    runtime_tool_count: int,
+) -> None:
     counts: dict[str, int] = {}
     for result in results:
         counts[result.status] = counts.get(result.status, 0) + 1
@@ -631,13 +852,21 @@ def write_markdown(results: list[SmokeResult], output: Path, tool_count: int) ->
         "",
         f"- Generated: {datetime.now(timezone.utc).isoformat()}",
         f"- Tools: {tool_count}",
-        f"- Cases: {len(results)}",
+        f"- Contract checks: {sum(r.case_name == 'contract' for r in results)}",
+        f"- Runtime exit-health tools: {runtime_tool_count}",
+        f"- Runtime exit-health cases: {sum(r.case_name.startswith('dry_run/') for r in results)}",
+        f"- Result rows: {len(results)}",
+        "- Safety proof: Go Agent-example dry-run gate (not inferred here)",
     ]
     for status in sorted(counts):
         lines.append(f"- {status}: {counts[status]}")
     lines.extend(["", "## Non-passing cases", ""])
 
-    failures = [r for r in results if r.status != "pass"]
+    failures = [
+        r
+        for r in results
+        if r.status not in {"contract_pass", "runtime_exit_pass"}
+    ]
     if not failures:
         lines.append("No failures.")
     else:
@@ -667,48 +896,62 @@ def write_markdown(results: list[SmokeResult], output: Path, tool_count: int) ->
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--binary", default="./dws")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Load full schema --all once, check every selected leaf against "
+            "Cobra Help, and exit-health-check only explicit dry_run capabilities."
+        )
+    )
+    parser.add_argument("--binary", default="./dws", help="dws binary to inspect")
     parser.add_argument("--output-jsonl", default="tmp/schema-command-smoke.jsonl")
     parser.add_argument("--output-md", default="tmp/schema-command-smoke.md")
-    parser.add_argument("--jobs", type=int, default=8)
-    parser.add_argument("--timeout", type=int, default=20)
-    parser.add_argument("--include-optional", action="store_true")
     parser.add_argument(
-        "--strict-external",
-        action="store_true",
-        help="treat auth/backend-dependent dry-runs as failures",
+        "--jobs", type=int, default=8, help="parallel Help/runtime-health workers"
     )
-    parser.add_argument("--path", action="append", help="canonical schema path to run; repeatable")
+    parser.add_argument("--timeout", type=int, default=20, help="seconds per subprocess")
+    parser.add_argument(
+        "--include-optional",
+        action="store_true",
+        help="include optional parameters in explicit runtime exit-health cases",
+    )
+    parser.add_argument(
+        "--path",
+        action="append",
+        help=(
+            "canonical path selected from the single schema --all payload; "
+            "repeatable"
+        ),
+    )
     args = parser.parse_args()
 
     cwd = Path.cwd()
-    fixture = Path(tempfile.gettempdir()) / "dws-schema-smoke-fixture.txt"
-    fixture.write_text("schema smoke fixture\n", encoding="utf-8")
-    style_fixture = Path(tempfile.gettempdir()) / "dws-schema-smoke-style.json"
-    style_fixture.write_text(
-        '[{"sheetId":"sheet-smoke","range":"A1","fontSize":12}]\n',
-        encoding="utf-8",
+    leaves = load_schema_leaves(
+        args.binary, cwd, args.timeout, requested_paths=args.path
     )
-    report_fixture = cwd / "tmp" / "dws-schema-smoke-report.json"
-    report_fixture.parent.mkdir(parents=True, exist_ok=True)
-    report_fixture.write_text(
-        '[{"content":"schema smoke","sort":"0","key":"work",'
-        '"contentType":"markdown","type":"1"}]\n',
-        encoding="utf-8",
-    )
-
-    if args.path:
-        paths = args.path
-    else:
-        listing = run_json([args.binary, "schema", "--all", "--format", "json"], cwd, args.timeout)
-        paths = [tool["canonical_path"] for product in listing["products"] for tool in product["tools"]]
+    runtime_tool_count = sum(declared_dry_run(leaf) for leaf in leaves)
+    if runtime_tool_count:
+        fixture = Path(tempfile.gettempdir()) / "dws-schema-smoke-fixture.txt"
+        fixture.write_text("schema smoke fixture\n", encoding="utf-8")
+        style_fixture = Path(tempfile.gettempdir()) / "dws-schema-smoke-style.json"
+        style_fixture.write_text(
+            '[{"sheetId":"sheet-smoke","range":"A1","fontSize":12}]\n',
+            encoding="utf-8",
+        )
+        report_fixture = cwd / "tmp" / "dws-schema-smoke-report.json"
+        report_fixture.parent.mkdir(parents=True, exist_ok=True)
+        report_fixture.write_text(
+            '[{"content":"schema smoke","sort":"0","key":"work",'
+            '"contentType":"markdown","type":"1"}]\n',
+            encoding="utf-8",
+        )
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as executor:
         result_groups = list(
             executor.map(
-                lambda p: run_one(args.binary, cwd, p, args.timeout, args.include_optional),
-                paths,
+                lambda leaf: run_one(
+                    args.binary, cwd, leaf, args.timeout, args.include_optional
+                ),
+                leaves,
             )
         )
     results = [result for group in result_groups for result in group]
@@ -723,13 +966,29 @@ def main() -> int:
 
     md_path = Path(args.output_md)
     md_path.parent.mkdir(parents=True, exist_ok=True)
-    write_markdown(results, md_path, len(paths))
+    write_markdown(results, md_path, len(leaves), runtime_tool_count)
 
-    accepted = {"pass"}
-    if not args.strict_external:
-        accepted.update({"auth_required", "external_required"})
+    accepted = {"contract_pass", "runtime_exit_pass"}
     failures = [result for result in results if result.status not in accepted]
-    print(f"tools={len(paths)}")
+    contract_results = [result for result in results if result.case_name == "contract"]
+    runtime_results = [
+        result for result in results if result.case_name.startswith("dry_run/")
+    ]
+    print(f"tools={len(leaves)}")
+    print(
+        "contract_pass="
+        f"{sum(result.status == 'contract_pass' for result in contract_results)}"
+    )
+    print(
+        "contract_failures="
+        f"{sum(result.status != 'contract_pass' for result in contract_results)}"
+    )
+    print(f"runtime_exit_tools={runtime_tool_count}")
+    print(f"runtime_exit_cases={len(runtime_results)}")
+    print(
+        "runtime_exit_failures="
+        f"{sum(result.status != 'runtime_exit_pass' for result in runtime_results)}"
+    )
     print(f"total={len(results)}")
     print(f"failures={len(failures)}")
     print(f"jsonl={jsonl_path}")

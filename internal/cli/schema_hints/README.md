@@ -23,11 +23,13 @@ The Agent metadata generator also reads the committed `internal/cli/schema_mcp_m
 
 Tool keys should use stable `canonical_path` values from `internal/cli/schema_command_registry.json`. CLI paths and aliases are also accepted and are reconciled to the canonical public tool during generation.
 
-`selection-review.json` fixes the reviewed selection contract for every public
-tool: `use_when`, `avoid_when`, safe examples, `interface_mode`, availability,
-and the reason for local, composite, or unavailable implementations. These
-values are build inputs; the generator must not derive them from the previous
-Catalog.
+`selection-review.json` fixes the reviewed command-selection contract for every
+public tool: `use_when`, `avoid_when`, safe examples, and the ordinary direct
+interface disposition. Exceptional or formerly unmatched wrappers are owned by
+the interface-only reviewed source `zz-interface-disposition-review.json`.
+`runtime-surface-completeness.json` remains unreviewed selection evidence and
+must not promote its other fields merely to classify an interface. These values
+are build inputs; the generator must not derive them from the previous Catalog.
 
 `reference-review.json` classifies every Skill command reference that is not a
 current public leaf. `alias` entries bind an old or cross-product path to an
@@ -56,9 +58,9 @@ An entry containing only `interface_ref` participates in interface projection bu
 `interface_mode` and `availability` are orthogonal reviewed fields.
 `interface_mode` has exactly three values:
 
-- `mcp`: exactly one fixed `interface_ref` implements the command.
-- `composite`: multiple RPC/local steps implement the command; a singular ref would be misleading.
-- `local`: the command only changes local process or policy state.
+- `mcp`: exactly one pinned `interface_ref` implements the command, with an auditable parameter mapping and semantically equivalent execution contract.
+- `composite`: multiple RPCs, conditional routing, local projection, or a reviewed remote adapter absent from pinned metadata implements the command; a singular ref would be misleading.
+- `local`: the command is fully implemented by the local process, static data, or local policy. An unpinned remote RPC is never `local`.
 
 `availability` is `available` or `unavailable`. An unavailable command keeps
 its real implementation mode, must not carry `interface_ref`, and must include
@@ -74,9 +76,10 @@ current CLI/Catalog tool count. Its `coverage.surface_scope` must remain
 `source_revision`, and policy verifies the snapshot's internal matched and
 unmatched arithmetic. Current Catalog interface coverage is instead proved for
 every generated tool: each tool must have one valid `interface_mode` /
-availability disposition and retain provenance to `selection-review.json` or
-`runtime-surface-completeness.json`. This makes newly added CLI tools explicit
-without rewriting historical MCP evidence.
+availability disposition and retain reviewed provenance to
+`selection-review.json`, `zz-interface-disposition-review.json`, or another
+reviewed interface source. This makes newly added CLI tools explicit without
+rewriting historical MCP evidence or promoting an unreviewed selection hint.
 
 Interface metadata contributes lower-priority typed candidates, including
 `required`; source precedence is value-neutral, so a candidate may raise or

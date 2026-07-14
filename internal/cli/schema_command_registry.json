@@ -1703,12 +1703,16 @@
           "cli_path": "minutes hot-word list"
         },
         {
+          "canonical_path": "minutes.list_accessible_minutes",
+          "cli_path": "minutes list all"
+        },
+        {
           "canonical_path": "minutes.list_by_keyword_and_time_range",
-          "cli_path": "minutes list mine",
-          "aliases": [
-            "minutes list all",
-            "minutes list shared"
-          ]
+          "cli_path": "minutes list mine"
+        },
+        {
+          "canonical_path": "minutes.list_shared_minutes",
+          "cli_path": "minutes list shared"
         },
         {
           "canonical_path": "minutes.create_mind_graph",

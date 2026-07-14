@@ -4,11 +4,51 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/spf13/cobra"
 )
+
+func TestGenerateSchemaCatalogResolvesBuildExactlyOnce(t *testing.T) {
+	root := app.NewRootCommand()
+	resolveCalls := 0
+	resolvedRegistryHash := ""
+	resolver := func(candidate *cobra.Command) (cli.ResolvedSchemaBuild, error) {
+		resolveCalls++
+		if candidate != root {
+			t.Fatalf("resolver root = %p, want generator root %p", candidate, root)
+		}
+		resolved, err := cli.ResolveSchemaBuild(candidate)
+		if err == nil {
+			resolvedRegistryHash = resolved.RegistryHash()
+		}
+		return resolved, err
+	}
+	outputPath := filepath.Join(t.TempDir(), "schema_catalog.json")
+	if err := generateSchemaCatalogWithResolver(root, "", outputPath, resolver); err != nil {
+		t.Fatalf("generateSchemaCatalogWithResolver() error = %v", err)
+	}
+	if resolveCalls != 1 {
+		t.Fatalf("Schema build resolver calls = %d, want exactly 1", resolveCalls)
+	}
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read generated temporary Catalog: %v", err)
+	}
+	var snapshot cli.SchemaCatalogSnapshot
+	if err := json.Unmarshal(data, &snapshot); err != nil {
+		t.Fatalf("decode generated temporary Catalog: %v", err)
+	}
+	if snapshot.SurfaceHash != resolvedRegistryHash {
+		t.Fatalf("snapshot Registry hash = %q, want once-resolved hash %q", snapshot.SurfaceHash, resolvedRegistryHash)
+	}
+}
 
 func TestValidateDeprecatedSurfaceAcceptsEmbeddedRegistrySource(t *testing.T) {
 	path := filepath.Join("..", "..", "cli", "schema_command_registry.json")

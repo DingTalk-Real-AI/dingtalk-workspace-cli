@@ -85,11 +85,27 @@ func ValidateEmbeddedRuntimeSchemaCompleteness(root *cobra.Command) error {
 	if _, err := ApplyEmbeddedManualSchemaHints(root); err != nil {
 		return err
 	}
+	effective, err := BuildEffectiveCommandRegistry(root)
+	if err != nil {
+		return err
+	}
+	bound, err := BindEffectiveCommandRegistry(root, effective)
+	if err != nil {
+		return err
+	}
+	return validateResolvedRuntimeSchemaCompleteness(root, bound)
+}
+
+// validateResolvedRuntimeSchemaCompleteness checks the executable tree against
+// the exact BoundCommandRegistry produced by the active resolution pass. It
+// must not discover or bind commands again: Catalog generation uses this gate
+// to ensure every pre-delivery check observes the same identity candidate.
+func validateResolvedRuntimeSchemaCompleteness(root *cobra.Command, bound BoundCommandRegistry) error {
 	exclusions, err := EmbeddedRuntimeSchemaExclusions()
 	if err != nil {
 		return err
 	}
-	report := RuntimeSchemaCompleteness(root, exclusions)
+	report := runtimeSchemaCompletenessFromBound(root, exclusions, bound)
 	if len(report.DeliveryErrors) > 0 {
 		return fmt.Errorf("invalid effective Schema command registry: %s", strings.Join(report.DeliveryErrors, "; "))
 	}
@@ -105,23 +121,19 @@ func ValidateEmbeddedRuntimeSchemaCompleteness(root *cobra.Command) error {
 	return nil
 }
 
-// ValidateSchemaCatalogDeliveryCompleteness enforces that every public Cobra
-// leaf is queryable from the newly built Catalog snapshot (or has an exact,
-// reviewed exclusion). It deliberately validates the in-memory build result,
-// never the previously embedded Catalog, so stale generated data cannot prove
-// its own completeness.
-func ValidateSchemaCatalogDeliveryCompleteness(root *cobra.Command, snapshot SchemaCatalogSnapshot) error {
-	if _, err := ApplyEmbeddedManualSchemaHints(root); err != nil {
-		return err
-	}
+// validateResolvedSchemaCatalogDeliveryCompleteness compares the serialized
+// delivery with the exact bound registry that produced its SchemaRegistry.
+// This closes the final path where completeness used to rebuild identity from
+// Cobra after the source registry had already passed generation gates.
+func validateResolvedSchemaCatalogDeliveryCompleteness(root *cobra.Command, bound BoundCommandRegistry, snapshot SchemaCatalogSnapshot) error {
 	exclusions, err := EmbeddedRuntimeSchemaExclusions()
 	if err != nil {
 		return err
 	}
-	return validateSchemaCatalogDeliveryCompleteness(root, snapshot, exclusions)
+	return validateSchemaCatalogDeliveryCompletenessFromBound(root, bound, snapshot, exclusions)
 }
 
-func validateSchemaCatalogDeliveryCompleteness(root *cobra.Command, snapshot SchemaCatalogSnapshot, exclusions []RuntimeSchemaExclusion) error {
+func validateSchemaCatalogDeliveryCompletenessFromBound(root *cobra.Command, bound BoundCommandRegistry, snapshot SchemaCatalogSnapshot, exclusions []RuntimeSchemaExclusion) error {
 	encoded, err := json.Marshal(snapshot)
 	if err != nil {
 		return fmt.Errorf("encode final Schema Catalog for delivery validation: %w", err)
@@ -130,7 +142,7 @@ func validateSchemaCatalogDeliveryCompleteness(root *cobra.Command, snapshot Sch
 	if err != nil {
 		return fmt.Errorf("load final Schema Catalog through production loader: %w", err)
 	}
-	report := schemaCatalogDeliveryCompletenessAgainstLoaded(root, loaded, exclusions)
+	report := schemaCatalogDeliveryCompletenessAgainstLoadedAndBound(root, loaded, exclusions, bound)
 	if len(report.DeliveryErrors) > 0 {
 		return fmt.Errorf("invalid final Schema Catalog delivery: %s", strings.Join(report.DeliveryErrors, "; "))
 	}
@@ -151,11 +163,11 @@ func validateSchemaCatalogDeliveryCompleteness(root *cobra.Command, snapshot Sch
 // reviewed CommandRegistry or have a reviewed exclusion with a non-empty
 // reason.
 func RuntimeSchemaCompleteness(root *cobra.Command, exclusions []RuntimeSchemaExclusion) RuntimeSchemaCompletenessReport {
-	coveredPaths := map[string]bool{}
 	entries, err := collectRuntimeSchemaEntries(root)
 	if err != nil {
 		return RuntimeSchemaCompletenessReport{DeliveryErrors: []string{err.Error()}}
 	}
+	coveredPaths := map[string]bool{}
 	for _, entry := range entries {
 		addSchemaCoveredPath(coveredPaths, entry.CLIPath)
 		addSchemaCoveredPath(coveredPaths, entry.PrimaryCLIPath)
@@ -166,20 +178,22 @@ func RuntimeSchemaCompleteness(root *cobra.Command, exclusions []RuntimeSchemaEx
 	return runtimeSchemaCompletenessAgainstPaths(root, exclusions, coveredPaths)
 }
 
-// SchemaCatalogDeliveryCompleteness scans the real command tree against paths
-// present in the final generated snapshot. A runtime annotation alone is not
-// sufficient: the command must belong to the EffectiveCommandRegistry and be
-// addressable through its primary CLI path or an alias.
-func SchemaCatalogDeliveryCompleteness(root *cobra.Command, snapshot SchemaCatalogSnapshot, exclusions []RuntimeSchemaExclusion) RuntimeSchemaCompletenessReport {
-	loaded, err := loadSchemaCatalogSnapshot(snapshot)
-	if err != nil {
-		return RuntimeSchemaCompletenessReport{DeliveryErrors: []string{err.Error()}}
+func runtimeSchemaCompletenessFromBound(root *cobra.Command, exclusions []RuntimeSchemaExclusion, bound BoundCommandRegistry) RuntimeSchemaCompletenessReport {
+	coveredPaths := map[string]bool{}
+	for _, command := range bound.Commands {
+		if command.Visibility != SchemaVisibilityPublic {
+			continue
+		}
+		addSchemaCoveredPath(coveredPaths, command.PrimaryCLIPath)
+		for _, alias := range command.Aliases {
+			addSchemaCoveredPath(coveredPaths, alias)
+		}
 	}
-	return schemaCatalogDeliveryCompletenessAgainstLoaded(root, loaded, exclusions)
+	return runtimeSchemaCompletenessAgainstPaths(root, exclusions, coveredPaths)
 }
 
-func schemaCatalogDeliveryCompletenessAgainstLoaded(root *cobra.Command, loaded loadedSchemaCatalog, exclusions []RuntimeSchemaExclusion) RuntimeSchemaCompletenessReport {
-	expectedByPath, mappingErrors := runtimeSchemaIdentityByCLIPath(root)
+func schemaCatalogDeliveryCompletenessAgainstLoadedAndBound(root *cobra.Command, loaded loadedSchemaCatalog, exclusions []RuntimeSchemaExclusion, bound BoundCommandRegistry) RuntimeSchemaCompletenessReport {
+	expectedByPath, mappingErrors := runtimeSchemaIdentityByBound(bound)
 	return schemaCatalogDeliveryCompletenessAgainstLoadedAndIdentity(root, loaded, exclusions, expectedByPath, mappingErrors)
 }
 
@@ -376,28 +390,27 @@ type runtimeSchemaResolvedIdentity struct {
 	Source        string
 }
 
-func runtimeSchemaIdentityByCLIPath(root *cobra.Command) (map[string]runtimeSchemaResolvedIdentity, []string) {
+func runtimeSchemaIdentityByBound(bound BoundCommandRegistry) (map[string]runtimeSchemaResolvedIdentity, []string) {
 	identityByPath := map[string]runtimeSchemaResolvedIdentity{}
 	var conflicts []string
-	entries, err := collectRuntimeSchemaEntries(root)
-	if err != nil {
-		return identityByPath, []string{err.Error()}
-	}
-	for _, entry := range entries {
-		canonical := strings.TrimSpace(entry.ProductID + "." + entry.ToolName)
-		paths := append([]string{entry.PrimaryCLIPath, entry.CLIPath}, entry.Aliases...)
+	for _, command := range bound.Commands {
+		if command.Visibility != SchemaVisibilityPublic {
+			continue
+		}
+		canonical := strings.TrimSpace(command.CanonicalPath)
+		paths := append([]string{command.PrimaryCLIPath}, command.Aliases...)
 		for _, rawPath := range paths {
 			path := normalizeSchemaCLIPath(rawPath)
-			if path == "" || canonical == "." {
+			if path == "" || canonical == "" {
 				continue
 			}
 			if existing := identityByPath[path]; existing.CanonicalPath != "" && existing.CanonicalPath != canonical {
-				conflicts = append(conflicts, fmt.Sprintf("runtime Schema path %q belongs to both %s and %s", path, existing.CanonicalPath, canonical))
+				conflicts = append(conflicts, fmt.Sprintf("bound Schema path %q belongs to both %s and %s", path, existing.CanonicalPath, canonical))
 				continue
 			}
 			identityByPath[path] = runtimeSchemaResolvedIdentity{
 				CanonicalPath: canonical,
-				Source:        strings.TrimSpace(entry.Source),
+				Source:        strings.TrimSpace(command.Source),
 			}
 		}
 	}

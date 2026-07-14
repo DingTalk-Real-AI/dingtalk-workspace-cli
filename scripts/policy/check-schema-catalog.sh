@@ -64,9 +64,38 @@ fi
 if ! jq -e --arg registry_count "$registry_count" '
   .coverage.source_tools == ($registry_count | tonumber) and
   .coverage.matched_tools == (.tools | length) and
-  all(.tools[]; ((.interface_mode // "") | length) > 0)
+  all(.tools[];
+    .reviewed == false and
+    (has("interface_mode") | not) and
+    (has("availability") | not) and
+    (has("interface_ref") | not) and
+    (has("interface_reason") | not)
+  )
 ' internal/cli/schema_hints/runtime-surface-completeness.json >/dev/null; then
-	printf '%s\n' 'runtime-surface interface disposition coverage is stale' >&2
+	printf '%s\n' 'runtime-surface completeness source must remain unreviewed and interface-free' >&2
+	exit 1
+fi
+
+if ! jq -e '
+  .source.name == "reviewed-interface-disposition-v2" and
+  .source.reviewed == true and
+  (.tools | length) > 0 and
+  all(.tools[];
+    ((keys - ["availability", "interface_mode", "interface_reason", "interface_ref"]) | length) == 0 and
+    .availability == "available" and
+    (if .interface_mode == "mcp" then
+      ((.interface_ref.product_id // "") | length) > 0 and
+      ((.interface_ref.rpc_name // "") | length) > 0 and
+      ((.interface_reason // "") | length) == 0
+    elif .interface_mode == "composite" then
+      .interface_ref == null and
+      ((.interface_reason // "") | length) > 0
+    else
+      false
+    end)
+  )
+' internal/cli/schema_hints/zz-interface-disposition-review.json >/dev/null; then
+	printf '%s\n' 'reviewed interface-only disposition source is invalid' >&2
 	exit 1
 fi
 
@@ -165,11 +194,28 @@ fi
 binding_count="$(jq '[.bindings[] | length] | add' internal/cli/schema_parameter_bindings.json)"
 if ! jq -e --slurpfile bindings internal/cli/schema_parameter_bindings.json '
   . as $catalog |
-  $bindings[0].version == 2 and
-  $bindings[0].historical_binding_count == 311 and
-  ($bindings[0].migrations | length) == 5 and
-  ($bindings[0].excluded | length) == 3 and
-  ($bindings[0].added | length) == 25 and
+  $bindings[0].version == 3 and
+  $bindings[0].baseline.manifest == "schema-parameter-bindings-v3" and
+  ($bindings[0].baseline.sha256 | test("^sha256:[0-9a-f]{64}$")) and
+  ($bindings[0].baseline.reason | length) > 0 and
+  $bindings[0].baseline.reviewed == true and
+  all(($bindings[0].removals // {} | to_entries)[];
+    (.key | length) > 0 and
+    (.value.reason | length) > 0 and
+    .value.reviewed == true and
+    ((.value.replaced_by // "") | type) == "string"
+  ) and
+  all(($bindings[0].corrections // {} | to_entries)[];
+    (.key | length) > 0 and
+    (.value.old_property | length) > 0 and
+    (.value.new_property | length) > 0 and
+    .value.old_property != .value.new_property and
+    (.value.reason | length) > 0 and
+    .value.reviewed == true
+  ) and
+  all(($bindings[0].mapping_exclusions // {} | to_entries)[];
+    (.key | length) > 0 and (.value | length) > 0
+  ) and
   ([$bindings[0].bindings | to_entries[] |
     .key as $tool | .value | to_entries[] |
     {tool: $tool, flag: .key, property: .value}
@@ -209,11 +255,17 @@ if policy_search_go '\.ListTools\(' internal/app internal/cli; then
 	exit 1
 fi
 
+# Run the typed content gates as policy, rather than treating non-empty
+# correction/exclusion maps as proof that their exact keys and winners are
+# valid against the shipped Catalog and pinned MCP metadata.
 go test ./internal/cli \
-	-run '^(TestEmbeddedSchemaCatalog.*|TestEmbeddedSchemaAllPayload.*|TestRuntimeSchemaAllPayload.*|TestSchemaAllReturnsCompleteEmbeddedLeafSchemas|TestSchemaCatalogDeliveryCompleteness.*|TestValidateSchemaDeliveryInvariants.*|TestSchemaAliasViewProblem.*|TestSchemaDeliveryToolsByCanonical.*|TestSchemaUsesEmbeddedCatalogWithoutRuntimeLoad|TestWalkLeafCommandsTraversesAnnotatedHiddenSubtree)$' \
+	-run '^(TestEmbeddedSchemaCatalog.*|TestEmbeddedSchemaAllPayload.*|TestRuntimeSchemaAllPayload.*|TestSchemaAllReturnsCompleteEmbeddedLeafSchemas|TestSchemaCatalogDeliveryCompleteness.*|TestValidateSchemaDeliveryInvariants.*|TestSchemaAliasViewProblem.*|TestSchemaDeliveryToolsByCanonical.*|TestSchemaUsesEmbeddedCatalogWithoutRuntimeLoad|TestWalkLeafCommandsTraversesAnnotatedHiddenSubtree|TestSchemaParameterBindingsMatchReviewedBaselineAndEmbeddedCatalog|TestDecodeSchemaParameterBindingsFailsClosed|TestSchemaParameterBindingManifestHashIsExactContentNotCount|TestBuildEffectiveCommandRegistryFailsClosedOnInvalidParameterBindingSource|TestValidateSchemaParameterBindingDeliveryRejectsStaleReviewedKeys|TestEmbeddedCatalogMCPParameterMappingsAreComplete|TestSchemaParameterMappingAuditExclusionRules|TestRuntimeSchemaReviewedMappingExclusionSelectsEmptyProperty|TestRuntimeCommandParameterSpecsPreserveReviewedEmptyPropertyProvenance|TestSchemaParameterBindingCorrectionsAreReviewed)$' \
+	-count=1
+go test ./internal/helpers \
+	-run '^TestSheetConfirmationGuardCoversEveryProtectedLeaf$' \
 	-count=1
 go test ./internal/app \
-	-run '^(TestEmbeddedSchemaContractMapsToExecutableTree|TestRuntimeSchemaCompletenessCoversPublicCommandTree|TestRegisterPluginHTTPServerDoesNotProbeEndpoint|TestRegisterStdioServerFromManifestDoesNotStartProcess)$' \
+	-run '^(TestEmbeddedSchemaContractMapsToExecutableTree|TestFinalSchemaParametersMatchExecutableHelpFlags|TestEmbeddedSchemaParametersMatchExecutableHelpFlags|TestSchemaHelpFlagCompletenessRejects.*|TestRuntimeSchemaCompletenessCoversPublicCommandTree|TestReviewedRoutedInterfacesReachFinalSchema|TestViewGetWrappersUsePinnedGetViewsInterface|TestReviewedInterfaceDispositionSourceOwnsRuntimeSurface|TestSheetFinalSchemaConfirmationMatchesRuntimeGuards|TestRegisterPluginHTTPServerDoesNotProbeEndpoint|TestRegisterStdioServerFromManifestDoesNotStartProcess)$' \
 	-count=1
 
 printf 'schema catalog check: ok (%s products, %s tools)\n' "$catalog_product_count" "$registry_count"

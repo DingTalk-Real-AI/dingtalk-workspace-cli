@@ -35,11 +35,6 @@ func init() {
 				"name": {Required: boolPtr(true)},
 			},
 		},
-		"export_data": {
-			Parameters: map[string]ParameterSchemaHint{
-				"scope": {Required: boolPtr(true)},
-			},
-		},
 		"field_create": {
 			Parameters: map[string]ParameterSchemaHint{
 				"fields": {Required: boolPtr(true)},

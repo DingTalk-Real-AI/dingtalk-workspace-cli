@@ -8127,7 +8127,7 @@
       "effect": "read",
       "effect_source": "command-verb",
       "examples": [
-        "dws aitable export data --base-id BASE_ID --scope all --format excel"
+        "dws aitable export data --base-id BASE_ID --scope all --export-format excel --format json"
       ],
       "field_provenance": {
         "agent_summary": {
@@ -8218,7 +8218,7 @@
         },
         "examples": {
           "value": [
-            "dws aitable export data --base-id BASE_ID --scope all --format excel"
+            "dws aitable export data --base-id BASE_ID --scope all --export-format excel --format json"
           ],
           "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
           "precedence": "reviewed_manual",
@@ -8227,7 +8227,7 @@
           "candidates": [
             {
               "value": [
-                "dws aitable export data --base-id BASE_ID --scope all --format excel"
+                "dws aitable export data --base-id BASE_ID --scope all --export-format excel --format json"
               ],
               "source": "internal/cli/schema_manual_hints.json#agent_hints@ai-agent-contract-2026-07-13-v1",
               "precedence": "reviewed_manual",
@@ -9922,15 +9922,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -10035,46 +10037,50 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "Reviewed composite wrapper: the CLI constrains pinned aitable/create_view to FormDesigner and applies form-specific argument semantics, so it is not a direct parameter-equivalent RPC projection.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "Reviewed composite wrapper: the CLI constrains pinned aitable/create_view to FormDesigner and applies form-specific argument semantics, so it is not a direct parameter-equivalent RPC projection.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -10142,14 +10148,15 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed composite wrapper: the CLI constrains pinned aitable/create_view to FormDesigner and applies form-specific argument semantics, so it is not a direct parameter-equivalent RPC projection.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
         "Cobra help: dws aitable form create --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/runtime-surface-completeness.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-form.md"
@@ -10190,15 +10197,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -10285,46 +10294,50 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -10386,14 +10399,15 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "high",
       "source_refs": [
         "Cobra help: dws aitable form delete --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/runtime-surface-completeness.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/references/products/aitable.md"
       ],
@@ -10409,7 +10423,7 @@
         "目标命令或资源范围不明确时不要使用；应先读取相应列表或详情确认标识。"
       ],
       "confirmation": "not_required",
-      "effect": "read",
+      "effect": "write",
       "effect_source": "agent-hint",
       "examples": [
         "dws aitable form field hide --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --field-id FIELD_ID --hidden true"
@@ -10433,15 +10447,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -10467,29 +10483,45 @@
         },
         "confirmation": {
           "value": "not_required",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
+            {
+              "value": "not_required",
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
             {
               "value": "not_required",
               "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
               "precedence": "unreviewed_explicit",
-              "selected": true
+              "selected": false
             }
           ]
         },
         "effect": {
-          "value": "read",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "write",
+          "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
+            {
+              "value": "write",
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
             {
               "value": "read",
               "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
               "precedence": "unreviewed_explicit",
-              "selected": true
+              "selected": false
             }
           ]
         },
@@ -10515,59 +10547,71 @@
         },
         "idempotency": {
           "value": "idempotent",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
+            {
+              "value": "idempotent",
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
             {
               "value": "idempotent",
               "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
               "precedence": "unreviewed_explicit",
-              "selected": true
+              "selected": false
             }
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -10586,6 +10630,13 @@
               "review_reason": "AI 语义审阅：依据 Registry 主路径、Cobra help 与 AITable 参考文档明确命令选择边界并校验示例。"
             },
             {
+              "value": true,
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": false,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
+            {
               "value": false,
               "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
               "precedence": "unreviewed_explicit",
@@ -10594,16 +10645,24 @@
           ]
         },
         "risk": {
-          "value": "low",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "medium",
+          "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed",
           "candidates": [
+            {
+              "value": "medium",
+              "source": "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "runtime-confirmation-review-v2 marks this tool as reviewed"
+            },
             {
               "value": "low",
               "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
               "precedence": "unreviewed_explicit",
-              "selected": true
+              "selected": false
             }
           ]
         },
@@ -10629,14 +10688,16 @@
         }
       },
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
-      "risk": "low",
+      "risk": "medium",
       "source_refs": [
         "Cobra help: dws aitable form field hide --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/runtime-surface-completeness.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
+        "internal/cli/schema_hints/zz-runtime-confirmation-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-form.md"
@@ -10677,15 +10738,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -10790,46 +10853,50 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -10897,14 +10964,15 @@
         }
       },
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "low",
       "source_refs": [
         "Cobra help: dws aitable form field list --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/runtime-surface-completeness.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-form.md"
@@ -10945,15 +11013,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -11058,46 +11128,50 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -11165,14 +11239,15 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
         "Cobra help: dws aitable form field update --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/runtime-surface-completeness.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-form.md"
@@ -11213,15 +11288,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -11326,46 +11403,50 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -11433,14 +11514,15 @@
         }
       },
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "low",
       "source_refs": [
         "Cobra help: dws aitable form get --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/runtime-surface-completeness.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-form.md"
@@ -11481,15 +11563,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -11594,46 +11678,50 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -11701,14 +11789,15 @@
         }
       },
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "low",
       "source_refs": [
         "Cobra help: dws aitable form list --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/runtime-surface-completeness.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-form.md"
@@ -11749,15 +11838,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -11862,46 +11953,50 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "Reviewed composite wrapper: the CLI converts single-question flags or batch JSON into the pinned aitable/create_fields request, so it is not a direct parameter-equivalent RPC projection.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "Reviewed composite wrapper: the CLI converts single-question flags or batch JSON into the pinned aitable/create_fields request, so it is not a direct parameter-equivalent RPC projection.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -11969,14 +12064,15 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed composite wrapper: the CLI converts single-question flags or batch JSON into the pinned aitable/create_fields request, so it is not a direct parameter-equivalent RPC projection.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
         "Cobra help: dws aitable form questions create --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/runtime-surface-completeness.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-form.md"
@@ -12017,15 +12113,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -12112,46 +12210,34 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "mcp",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
-            }
-          ]
-        },
-        "interface_reason": {
-          "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
-          "resolution": "highest_precedence",
-          "candidates": [
-            {
-              "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "mcp",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
-          "value": null,
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
-          "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "value": "aitable.delete_field",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": null,
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
+              "value": "aitable.delete_field",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -12213,14 +12299,18 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "aitable",
+        "rpc_name": "delete_field"
+      },
       "reviewed": true,
       "risk": "high",
       "source_refs": [
         "Cobra help: dws aitable form questions delete --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/runtime-surface-completeness.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/references/products/aitable.md"
       ],
@@ -12260,15 +12350,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -12373,46 +12465,50 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -12480,14 +12576,15 @@
         }
       },
       "idempotency": "idempotent",
-      "interface_mode": "local",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "low",
       "source_refs": [
         "Cobra help: dws aitable form share get --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/runtime-surface-completeness.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-form.md"
@@ -12528,15 +12625,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -12641,46 +12740,50 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -12748,14 +12851,15 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
         "Cobra help: dws aitable form share update --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/runtime-surface-completeness.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-form.md"
@@ -12796,15 +12900,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -12909,46 +13015,50 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -13016,14 +13126,15 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
         "Cobra help: dws aitable form update --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/runtime-surface-completeness.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-form.md"
@@ -14066,15 +14177,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
@@ -14161,46 +14274,50 @@
           ]
         },
         "interface_mode": {
-          "value": "local",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "composite",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "local",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "composite",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_reason": {
-          "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "value": "Reviewed composite wrapper: the CLI expands record IDs and shared cells into the pinned aitable/update_records request, so it is not a direct parameter-equivalent RPC projection.",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
-              "selected": true
+              "value": "Reviewed composite wrapper: the CLI expands record IDs and shared cells into the pinned aitable/update_records request, so it is not a direct parameter-equivalent RPC projection.",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             }
           ]
         },
         "interface_ref": {
           "value": null,
-          "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-          "precedence": "unreviewed_explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "interface_disposition_matrix",
-          "review_reason": "final interface mode local forbids a direct MCP interface_ref",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
           "candidates": [
             {
               "value": null,
-              "source": "internal/cli/schema_hints/runtime-surface-completeness.json",
-              "precedence": "unreviewed_explicit",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "final interface mode local forbids a direct MCP interface_ref"
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
             }
           ]
         },
@@ -14262,14 +14379,15 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "local",
-      "interface_reason": "当前命令来自本地 Cobra 命令树或复合 helper，无固定 MCP interface_ref",
+      "interface_mode": "composite",
+      "interface_reason": "Reviewed composite wrapper: the CLI expands record IDs and shared cells into the pinned aitable/update_records request, so it is not a direct parameter-equivalent RPC projection.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
         "Cobra help: dws aitable record batch-update --help",
         "internal/cli/schema_command_registry.json",
         "internal/cli/schema_hints/runtime-surface-completeness.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "skills/mono/references/products/aitable.md"
       ],
@@ -21420,17 +21538,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             },
             {
               "value": "available",
@@ -21524,17 +21642,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             },
             {
               "value": "mcp",
@@ -21546,16 +21664,23 @@
         },
         "interface_ref": {
           "value": "aitable.get_views",
-          "source": "internal/cli/schema_hints/interface-refs.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
+            {
+              "value": "aitable.get_views",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
+            },
             {
               "value": "aitable.get_views",
               "source": "internal/cli/schema_hints/interface-refs.json",
               "precedence": "explicit",
-              "selected": true,
+              "selected": false,
               "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source"
             },
             {
@@ -21639,6 +21764,7 @@
         "internal/cli/schema_hints/interface-refs.json",
         "internal/cli/schema_hints/selection-review.json",
         "internal/cli/schema_hints/sibling-disambiguation.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_aggregate",
         "skills/mono/references/products/aitable.md",
@@ -21680,17 +21806,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             },
             {
               "value": "available",
@@ -21784,17 +21910,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             },
             {
               "value": "mcp",
@@ -21806,16 +21932,23 @@
         },
         "interface_ref": {
           "value": "aitable.get_views",
-          "source": "internal/cli/schema_hints/interface-refs.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
+            {
+              "value": "aitable.get_views",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
+            },
             {
               "value": "aitable.get_views",
               "source": "internal/cli/schema_hints/interface-refs.json",
               "precedence": "explicit",
-              "selected": true,
+              "selected": false,
               "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source"
             },
             {
@@ -21899,6 +22032,7 @@
         "internal/cli/schema_hints/interface-refs.json",
         "internal/cli/schema_hints/selection-review.json",
         "internal/cli/schema_hints/sibling-disambiguation.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_card",
         "skills/mono/references/products/aitable.md",
@@ -21940,17 +22074,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             },
             {
               "value": "available",
@@ -22044,17 +22178,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             },
             {
               "value": "mcp",
@@ -22066,16 +22200,23 @@
         },
         "interface_ref": {
           "value": "aitable.get_views",
-          "source": "internal/cli/schema_hints/interface-refs.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
+            {
+              "value": "aitable.get_views",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
+            },
             {
               "value": "aitable.get_views",
               "source": "internal/cli/schema_hints/interface-refs.json",
               "precedence": "explicit",
-              "selected": true,
+              "selected": false,
               "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source"
             },
             {
@@ -22159,6 +22300,7 @@
         "internal/cli/schema_hints/interface-refs.json",
         "internal/cli/schema_hints/selection-review.json",
         "internal/cli/schema_hints/sibling-disambiguation.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_field_widths",
         "skills/mono/references/products/aitable.md",
@@ -22200,17 +22342,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             },
             {
               "value": "available",
@@ -22304,17 +22446,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             },
             {
               "value": "mcp",
@@ -22326,16 +22468,23 @@
         },
         "interface_ref": {
           "value": "aitable.get_views",
-          "source": "internal/cli/schema_hints/interface-refs.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
+            {
+              "value": "aitable.get_views",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
+            },
             {
               "value": "aitable.get_views",
               "source": "internal/cli/schema_hints/interface-refs.json",
               "precedence": "explicit",
-              "selected": true,
+              "selected": false,
               "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source"
             },
             {
@@ -22419,6 +22568,7 @@
         "internal/cli/schema_hints/interface-refs.json",
         "internal/cli/schema_hints/selection-review.json",
         "internal/cli/schema_hints/sibling-disambiguation.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_fill_color_rule",
         "skills/mono/references/products/aitable.md",
@@ -22460,17 +22610,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             },
             {
               "value": "available",
@@ -22564,17 +22714,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             },
             {
               "value": "mcp",
@@ -22586,16 +22736,23 @@
         },
         "interface_ref": {
           "value": "aitable.get_views",
-          "source": "internal/cli/schema_hints/interface-refs.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
+            {
+              "value": "aitable.get_views",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
+            },
             {
               "value": "aitable.get_views",
               "source": "internal/cli/schema_hints/interface-refs.json",
               "precedence": "explicit",
-              "selected": true,
+              "selected": false,
               "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source"
             },
             {
@@ -22679,6 +22836,7 @@
         "internal/cli/schema_hints/interface-refs.json",
         "internal/cli/schema_hints/selection-review.json",
         "internal/cli/schema_hints/sibling-disambiguation.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_filter",
         "skills/mono/references/products/aitable.md",
@@ -22972,17 +23130,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             },
             {
               "value": "available",
@@ -23076,17 +23234,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             },
             {
               "value": "mcp",
@@ -23098,16 +23256,23 @@
         },
         "interface_ref": {
           "value": "aitable.get_views",
-          "source": "internal/cli/schema_hints/interface-refs.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
+            {
+              "value": "aitable.get_views",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
+            },
             {
               "value": "aitable.get_views",
               "source": "internal/cli/schema_hints/interface-refs.json",
               "precedence": "explicit",
-              "selected": true,
+              "selected": false,
               "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source"
             },
             {
@@ -23191,6 +23356,7 @@
         "internal/cli/schema_hints/interface-refs.json",
         "internal/cli/schema_hints/selection-review.json",
         "internal/cli/schema_hints/sibling-disambiguation.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_group",
         "skills/mono/references/products/aitable.md",
@@ -23736,17 +23902,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             },
             {
               "value": "available",
@@ -23840,17 +24006,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             },
             {
               "value": "mcp",
@@ -23862,16 +24028,23 @@
         },
         "interface_ref": {
           "value": "aitable.get_views",
-          "source": "internal/cli/schema_hints/interface-refs.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
+            {
+              "value": "aitable.get_views",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
+            },
             {
               "value": "aitable.get_views",
               "source": "internal/cli/schema_hints/interface-refs.json",
               "precedence": "explicit",
-              "selected": true,
+              "selected": false,
               "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source"
             },
             {
@@ -23955,6 +24128,7 @@
         "internal/cli/schema_hints/interface-refs.json",
         "internal/cli/schema_hints/selection-review.json",
         "internal/cli/schema_hints/sibling-disambiguation.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_sort",
         "skills/mono/references/products/aitable.md",
@@ -23996,17 +24170,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             },
             {
               "value": "available",
@@ -24100,17 +24274,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             },
             {
               "value": "mcp",
@@ -24122,16 +24296,23 @@
         },
         "interface_ref": {
           "value": "aitable.get_views",
-          "source": "internal/cli/schema_hints/interface-refs.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
+            {
+              "value": "aitable.get_views",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
+            },
             {
               "value": "aitable.get_views",
               "source": "internal/cli/schema_hints/interface-refs.json",
               "precedence": "explicit",
-              "selected": true,
+              "selected": false,
               "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source"
             },
             {
@@ -24215,6 +24396,7 @@
         "internal/cli/schema_hints/interface-refs.json",
         "internal/cli/schema_hints/selection-review.json",
         "internal/cli/schema_hints/sibling-disambiguation.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_timebar",
         "skills/mono/references/products/aitable.md",
@@ -24256,17 +24438,17 @@
         },
         "availability": {
           "value": "available",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "available",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             },
             {
               "value": "available",
@@ -24360,17 +24542,17 @@
         },
         "interface_mode": {
           "value": "mcp",
-          "source": "internal/cli/schema_hints/selection-review.json",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
             {
               "value": "mcp",
-              "source": "internal/cli/schema_hints/selection-review.json",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
             },
             {
               "value": "mcp",
@@ -24382,16 +24564,23 @@
         },
         "interface_ref": {
           "value": "aitable.get_views",
-          "source": "internal/cli/schema_hints/interface-refs.json",
-          "precedence": "explicit",
+          "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source",
+          "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source",
           "candidates": [
+            {
+              "value": "aitable.get_views",
+              "source": "internal/cli/schema_hints/zz-interface-disposition-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "reviewed-interface-disposition-v2 is a reviewed Agent hint source"
+            },
             {
               "value": "aitable.get_views",
               "source": "internal/cli/schema_hints/interface-refs.json",
               "precedence": "explicit",
-              "selected": true,
+              "selected": false,
               "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source"
             },
             {
@@ -24475,6 +24664,7 @@
         "internal/cli/schema_hints/interface-refs.json",
         "internal/cli/schema_hints/selection-review.json",
         "internal/cli/schema_hints/sibling-disambiguation.json",
+        "internal/cli/schema_hints/zz-interface-disposition-review.json",
         "internal/cli/schema_manual_hints.json",
         "internal/cli/schema_mcp_metadata.json#tools.aitable.view_get_visible_fields",
         "skills/mono/references/products/aitable.md",
@@ -25122,14 +25312,14 @@
           ]
         },
         "interface_mode": {
-          "value": "mcp",
+          "value": "composite",
           "source": "internal/cli/schema_hints/selection-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "mcp",
+              "value": "composite",
               "source": "internal/cli/schema_hints/selection-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
@@ -25143,18 +25333,43 @@
             }
           ]
         },
-        "interface_ref": {
-          "value": "aitable.update_view",
-          "source": "internal/cli/schema_hints/interface-refs.json",
-          "precedence": "explicit",
+        "interface_reason": {
+          "value": "The CLI performs an aitable/get_views preflight, locally transforms the requested configuration, and then calls aitable/update_view; the two-call workflow has no single direct MCP interface.",
+          "source": "internal/cli/schema_hints/selection-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source",
+          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
           "candidates": [
+            {
+              "value": "The CLI performs an aitable/get_views preflight, locally transforms the requested configuration, and then calls aitable/update_view; the two-call workflow has no single direct MCP interface.",
+              "source": "internal/cli/schema_hints/selection-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/selection-review.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/selection-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ],
+          "overridden_candidates": [
             {
               "value": "aitable.update_view",
               "source": "internal/cli/schema_hints/interface-refs.json",
               "precedence": "explicit",
-              "selected": true,
+              "selected": false,
               "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source"
             },
             {
@@ -25224,11 +25439,8 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "mcp",
-      "interface_ref": {
-        "product_id": "aitable",
-        "rpc_name": "update_view"
-      },
+      "interface_mode": "composite",
+      "interface_reason": "The CLI performs an aitable/get_views preflight, locally transforms the requested configuration, and then calls aitable/update_view; the two-call workflow has no single direct MCP interface.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
@@ -25382,14 +25594,14 @@
           ]
         },
         "interface_mode": {
-          "value": "mcp",
+          "value": "composite",
           "source": "internal/cli/schema_hints/selection-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "mcp",
+              "value": "composite",
               "source": "internal/cli/schema_hints/selection-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
@@ -25403,18 +25615,43 @@
             }
           ]
         },
-        "interface_ref": {
-          "value": "aitable.update_view",
-          "source": "internal/cli/schema_hints/interface-refs.json",
-          "precedence": "explicit",
+        "interface_reason": {
+          "value": "The CLI performs an aitable/get_views preflight, locally transforms the requested configuration, and then calls aitable/update_view; the two-call workflow has no single direct MCP interface.",
+          "source": "internal/cli/schema_hints/selection-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source",
+          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
           "candidates": [
+            {
+              "value": "The CLI performs an aitable/get_views preflight, locally transforms the requested configuration, and then calls aitable/update_view; the two-call workflow has no single direct MCP interface.",
+              "source": "internal/cli/schema_hints/selection-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/selection-review.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/selection-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ],
+          "overridden_candidates": [
             {
               "value": "aitable.update_view",
               "source": "internal/cli/schema_hints/interface-refs.json",
               "precedence": "explicit",
-              "selected": true,
+              "selected": false,
               "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source"
             },
             {
@@ -25484,11 +25721,8 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "mcp",
-      "interface_ref": {
-        "product_id": "aitable",
-        "rpc_name": "update_view"
-      },
+      "interface_mode": "composite",
+      "interface_reason": "The CLI performs an aitable/get_views preflight, locally transforms the requested configuration, and then calls aitable/update_view; the two-call workflow has no single direct MCP interface.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
@@ -25642,14 +25876,14 @@
           ]
         },
         "interface_mode": {
-          "value": "mcp",
+          "value": "composite",
           "source": "internal/cli/schema_hints/selection-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "mcp",
+              "value": "composite",
               "source": "internal/cli/schema_hints/selection-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
@@ -25663,18 +25897,43 @@
             }
           ]
         },
-        "interface_ref": {
-          "value": "aitable.update_view",
-          "source": "internal/cli/schema_hints/interface-refs.json",
-          "precedence": "explicit",
+        "interface_reason": {
+          "value": "The CLI performs an aitable/get_views preflight, locally transforms the requested configuration, and then calls aitable/update_view; the two-call workflow has no single direct MCP interface.",
+          "source": "internal/cli/schema_hints/selection-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source",
+          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
           "candidates": [
+            {
+              "value": "The CLI performs an aitable/get_views preflight, locally transforms the requested configuration, and then calls aitable/update_view; the two-call workflow has no single direct MCP interface.",
+              "source": "internal/cli/schema_hints/selection-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/selection-review.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/selection-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ],
+          "overridden_candidates": [
             {
               "value": "aitable.update_view",
               "source": "internal/cli/schema_hints/interface-refs.json",
               "precedence": "explicit",
-              "selected": true,
+              "selected": false,
               "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source"
             },
             {
@@ -25744,11 +26003,8 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "mcp",
-      "interface_ref": {
-        "product_id": "aitable",
-        "rpc_name": "update_view"
-      },
+      "interface_mode": "composite",
+      "interface_reason": "The CLI performs an aitable/get_views preflight, locally transforms the requested configuration, and then calls aitable/update_view; the two-call workflow has no single direct MCP interface.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
@@ -27698,14 +27954,14 @@
           ]
         },
         "interface_mode": {
-          "value": "mcp",
+          "value": "composite",
           "source": "internal/cli/schema_hints/selection-review.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
           "candidates": [
             {
-              "value": "mcp",
+              "value": "composite",
               "source": "internal/cli/schema_hints/selection-review.json",
               "precedence": "reviewed_explicit",
               "selected": true,
@@ -27719,18 +27975,43 @@
             }
           ]
         },
-        "interface_ref": {
-          "value": "aitable.update_view",
-          "source": "internal/cli/schema_hints/interface-refs.json",
-          "precedence": "explicit",
+        "interface_reason": {
+          "value": "The CLI performs an aitable/get_views preflight, locally transforms the requested configuration, and then calls aitable/update_view; the two-call workflow has no single direct MCP interface.",
+          "source": "internal/cli/schema_hints/selection-review.json",
+          "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source",
+          "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source",
           "candidates": [
+            {
+              "value": "The CLI performs an aitable/get_views preflight, locally transforms the requested configuration, and then calls aitable/update_view; the two-call workflow has no single direct MCP interface.",
+              "source": "internal/cli/schema_hints/selection-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "agent-selection-contract-v1 is a reviewed Agent hint source"
+            }
+          ]
+        },
+        "interface_ref": {
+          "value": null,
+          "source": "internal/cli/schema_hints/selection-review.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "interface_disposition_matrix",
+          "review_reason": "final interface mode composite forbids a direct MCP interface_ref",
+          "candidates": [
+            {
+              "value": null,
+              "source": "internal/cli/schema_hints/selection-review.json",
+              "precedence": "reviewed_explicit",
+              "selected": true,
+              "review_reason": "final interface mode composite forbids a direct MCP interface_ref"
+            }
+          ],
+          "overridden_candidates": [
             {
               "value": "aitable.update_view",
               "source": "internal/cli/schema_hints/interface-refs.json",
               "precedence": "explicit",
-              "selected": true,
+              "selected": false,
               "review_reason": "open-source-helper-interface-refs is an explicit Agent hint source"
             },
             {
@@ -27800,11 +28081,8 @@
         }
       },
       "idempotency": "unknown",
-      "interface_mode": "mcp",
-      "interface_ref": {
-        "product_id": "aitable",
-        "rpc_name": "update_view"
-      },
+      "interface_mode": "composite",
+      "interface_reason": "The CLI performs an aitable/get_views preflight, locally transforms the requested configuration, and then calls aitable/update_view; the two-call workflow has no single direct MCP interface.",
       "reviewed": true,
       "risk": "medium",
       "source_refs": [
