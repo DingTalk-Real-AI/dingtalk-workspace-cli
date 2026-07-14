@@ -1,6 +1,6 @@
 GO ?= go
 
-.PHONY: all help build rebuild test lint fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate update-interface-baseline reset-interface-baseline schema-compatibility update-schema-baseline skill-command-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema generate-schema-agent-metadata generate-schema-catalog package release publish-homebrew-formula setup-hooks
+.PHONY: all help build rebuild test lint fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema generate-schema-agent-metadata generate-schema-catalog package release publish-homebrew-formula setup-hooks
 
 all: setup-hooks fmt lint build test rebuild
 
@@ -16,8 +16,7 @@ help:
 	@printf "  make coverage-gate BASE_REF=<ref> - Enforce overall non-regression and changed-code coverage\n"
 	@printf "  make update-interface-baseline - Add new CLI contracts without removing history\n"
 	@printf "  make reset-interface-baseline - DANGEROUS: replace all CLI compatibility history\n"
-	@printf "  make schema-compatibility - Check the complete Schema contract remains backwards compatible\n"
-	@printf "  make update-schema-baseline - Add new schema contracts without removing history\n"
+	@printf "  make schema-compatibility BASE_REF=<ref> - Check the complete Schema contract against the PR merge-base\n"
 	@printf "  make skill-command-integrity - Check dws commands referenced by skills exist\n"
 	@printf "  make cli-smoke     - Verify help for every public top-level command\n"
 	@printf "  make mock-mcp-smoke - Verify HTTP and stdio MCP request/response transport\n"
@@ -72,10 +71,7 @@ reset-interface-baseline:
 	@./scripts/policy/check-interface-baseline.sh --reset
 
 schema-compatibility:
-	@./scripts/policy/check-schema-list-compat.sh
-
-update-schema-baseline:
-	@./scripts/policy/check-schema-list-compat.sh --update
+	@./scripts/policy/check-authoritative-schema-compatibility.sh --base-ref "$(BASE_REF)"
 
 skill-command-integrity:
 	@./scripts/policy/check-skill-commands.sh

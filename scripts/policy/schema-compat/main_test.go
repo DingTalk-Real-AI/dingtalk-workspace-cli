@@ -19,7 +19,7 @@ func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("write fa
 func TestRunSchemaModes(t *testing.T) {
 	directory := t.TempDir()
 	raw := filepath.Join(directory, "raw.json")
-	writeTestFile(t, raw, `{"kind":"schema","products":[{"id":"doc","tools":[{"canonical_path":"doc.create","parameters":{"title":{"type":"string"}},"required":["title"]}]}]}`)
+	writeTestFile(t, raw, `{"kind":"schema","level":"catalog","products":[{"id":"doc","tools":[{"canonical_path":"doc.create","parameters":{"title":{"type":"string","required":true}}}]}]}`)
 
 	var normalized, stderr bytes.Buffer
 	if code := run([]string{"--normalize", raw}, &normalized, &stderr); code != 0 {
@@ -86,6 +86,7 @@ func TestNormalizeRawFileValidation(t *testing.T) {
 		{name: "missing tool id", body: `{"kind":"schema","products":[{"id":"doc","tools":[{}]}]}`, want: "tool without"},
 		{name: "duplicate tool", body: `{"kind":"schema","products":[{"id":"doc","tools":[{"name":"read"},{"cli_name":"read"}]}]}`, want: "duplicate tool"},
 		{name: "invalid parameter", body: `{"kind":"schema","products":[{"id":"doc","tools":[{"name":"read","parameters":{"id":1}}]}]}`, want: "parameter id"},
+		{name: "invalid required", body: `{"kind":"schema","products":[{"id":"doc","tools":[{"name":"read","parameters":{"id":{"type":"string","required":"yes"}}}]}]}`, want: "required must be a boolean"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -96,6 +97,53 @@ func TestNormalizeRawFileValidation(t *testing.T) {
 				t.Fatalf("normalizeRawFile() error=%v, want %q", err, test.want)
 			}
 		})
+	}
+}
+
+func TestNormalizeCurrentSchemaPayload(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "schema.json")
+	writeTestFile(t, path, `{
+		"kind":"schema",
+		"level":"catalog",
+		"products":[{
+			"id":"doc",
+			"tools":[{
+				"canonical_path":"doc.create",
+				"cli_path":"doc create",
+				"parameters":{
+					"title":{"type":"string","required":true},
+					"format":{"type":["string","null"],"required":false}
+				}
+			}]
+		}]
+	}`)
+
+	contract, err := normalizeRawFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tool := contract.Products["doc"].Tools["doc.create"]
+	if got := strings.Join(tool.Required, ","); got != "title" {
+		t.Fatalf("required parameters = %q, want title", got)
+	}
+	if got := tool.Parameters["title"]; got != `"string"` {
+		t.Fatalf("title type = %q", got)
+	}
+	if got := tool.Parameters["format"]; got != `["string","null"]` {
+		t.Fatalf("format type = %q", got)
+	}
+}
+
+func TestNormalizeLegacyToolRequiredList(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "schema.json")
+	writeTestFile(t, path, `{"kind":"schema","products":[{"id":"doc","tools":[{"canonical_path":"doc.create","parameters":{"title":{"type":"string"}},"required":["title"]}]}]}`)
+
+	contract, err := normalizeRawFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(contract.Products["doc"].Tools["doc.create"].Required, ","); got != "title" {
+		t.Fatalf("legacy required parameters = %q, want title", got)
 	}
 }
 

@@ -1,13 +1,15 @@
 # Pull request quality gates
 
-The repository defines four focused checks in addition to its existing CI:
+The repository defines five focused checks in addition to its existing CI:
 
 - **Interface Integrity** enforces backwards compatibility. Every historical
   command path and alias must still resolve, every historical command must
   still render `-h`, and historical flags must keep their type and shorthand.
-  New commands, aliases, and flags are allowed. The same job also checks that
-  `dws schema list` does not lose products/tools/parameters and that executable
-  `dws ...` references in `skills/**/*.md` resolve to real commands.
+  New commands, aliases, and flags are allowed. The same job compares the full
+  `dws schema --all --compact` contract with the PR merge-base, blocking removed
+  products/tools/parameters, changed parameter types, and newly required
+  parameters. It also checks that executable `dws ...` references in
+  `skills/**/*.md` resolve to real commands.
   Help compatibility covers command/alias/flag spelling, flag type and
   shorthand; descriptive prose may evolve without breaking the gate.
 - **Coverage** runs unit tests on every pull request and prints both overall and
@@ -29,49 +31,46 @@ The repository defines four focused checks in addition to its existing CI:
   evaluator writes an `AI Behavior Check` commit status to the PR head SHA so
   GitHub rulesets can require it.
 
-## Extending the compatibility baselines
+## Running the compatibility gates
 
 Run:
 
 ```sh
 make build
-make update-interface-baseline
-make update-schema-baseline
 make interface-integrity
-make schema-compatibility
+make authoritative-interface-integrity BASE_REF=<merge-base>
+make schema-compatibility BASE_REF=<merge-base>
 make skill-command-integrity
 make cli-smoke
 make coverage-gate BASE_REF=<merge-base>
 ```
 
-Baseline updates are monotonic: they add newly supported contracts but retain
-all historical commands and schema entries. Running an update therefore cannot
-bless a removal. Commit baseline additions with the implementation for review.
+CI derives the authoritative Interface and Schema snapshots from the PR
+merge-base. The candidate branch cannot bless a breaking change by editing a
+fixture. Schema additions are allowed; historical products, tools, parameters,
+parameter types, and optionality remain protected.
+
+`make update-interface-baseline` still extends the local checked-in Interface
+fixture used by `make interface-integrity`. Updates are monotonic: they add new
+commands and flags without removing history.
 
 For an intentional compatibility reset at a major-version boundary, run
 `make reset-interface-baseline`. This replaces all CLI compatibility history
 with the current command tree and must receive explicit human review.
 
-The current open-source static-endpoint build returns an empty `products` array
-from `dws schema list`, so its initial schema baseline contains zero products.
-To protect schema entries exposed by an older dynamic or private distribution,
-seed this baseline from that distribution's last supported `schema list` output.
-
 ## Required GitHub repository settings
 
 Create a ruleset for `main` that requires pull requests and code-owner review,
-then mark these status checks as required:
+then mark these aggregate status checks as required:
 
-- `Lint`
-- `Test`
-- `Coverage`
-- `Policy Check`
-- `Edition Contract Tests`
+- `CI Gate`
 - `Multi Profile E2E`
-- `Interface Integrity`
-- `CLI Smoke`
-- `Mock MCP Smoke`
 - `AI Behavior Check`
+
+`CI Gate` fails closed unless every first-layer CI job succeeds, including
+lint, tests, coverage, policy, Interface/Schema/Skill integrity, and smoke
+tests. Requiring the aggregate check keeps repository rules stable when an
+internal job is renamed or split.
 
 The `ai-generated` label must be applied by the PR-creation automation or by a
 maintainer; GitHub cannot infer reliably whether a human-authored PR contains

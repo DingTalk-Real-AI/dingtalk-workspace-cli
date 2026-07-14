@@ -226,7 +226,7 @@ jobs:
       - name: Build
         run: make build
 
-      - name: Resolve authoritative interface merge-base
+      - name: Resolve authoritative compatibility merge-base
         env:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -241,15 +241,15 @@ jobs:
             base_ref="$(git rev-parse HEAD^)"
           fi
           git rev-parse --verify "${base_ref}^{commit}" >/dev/null
-          echo "INTERFACE_BASE_REF=$base_ref" >> "$GITHUB_ENV"
+          echo "COMPATIBILITY_BASE_REF=$base_ref" >> "$GITHUB_ENV"
 
       - name: Check historical commands and help compatibility
         run: |
           make authoritative-interface-integrity \
-            BASE_REF="$INTERFACE_BASE_REF"
+            BASE_REF="$COMPATIBILITY_BASE_REF"
 
-      - name: Check schema list compatibility
-        run: make schema-compatibility
+      - name: Check complete Schema compatibility
+        run: make schema-compatibility BASE_REF="$COMPATIBILITY_BASE_REF"
 
       - name: Check skill command references
         run: make skill-command-integrity

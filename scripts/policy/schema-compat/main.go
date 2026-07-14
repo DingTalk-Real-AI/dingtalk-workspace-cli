@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 
 // Command schema-compat normalizes and checks the backwards-compatible
-// product/tool surface returned by `dws schema list --format json`.
+// product/tool surface returned by `dws schema --all --compact --format json`.
 package main
 
 import (
@@ -37,10 +37,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 	var normalizePath, checkPath, mergePath, currentPath string
 	flags := flag.NewFlagSet("schema-compat", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	flags.StringVar(&normalizePath, "normalize", "", "normalize a raw schema-list response")
+	flags.StringVar(&normalizePath, "normalize", "", "normalize a raw complete Schema response")
 	flags.StringVar(&checkPath, "check", "", "check against a normalized historical baseline")
 	flags.StringVar(&mergePath, "merge", "", "merge additions into a normalized historical baseline")
-	flags.StringVar(&currentPath, "current", "", "raw current schema-list response")
+	flags.StringVar(&currentPath, "current", "", "raw current complete Schema response")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
@@ -65,7 +65,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	current, err := normalizeRawFile(currentPath)
 	if err != nil {
-		fmt.Fprintf(stderr, "normalize current schema list: %v\n", err)
+		fmt.Fprintf(stderr, "normalize current Schema contract: %v\n", err)
 		return 2
 	}
 
@@ -83,13 +83,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		failures := checkCompatibility(baseline, current)
 		if len(failures) > 0 {
-			fmt.Fprintln(stderr, "schema list backwards-compatibility check failed:")
+			fmt.Fprintln(stderr, "Schema backwards-compatibility check failed:")
 			for _, failure := range failures {
 				fmt.Fprintf(stderr, "  - %s\n", failure)
 			}
 			return 1
 		}
-		fmt.Fprintf(stdout, "schema list compatibility check: ok (%d historical products; additions allowed)\n", len(baseline.Products))
+		fmt.Fprintf(stdout, "Schema compatibility check: ok (%d historical products; additions allowed)\n", len(baseline.Products))
 	case mergePath != "":
 		baseline, err := readContract(mergePath)
 		if err != nil {
@@ -177,14 +177,24 @@ func normalizeTool(raw json.RawMessage) (string, toolSchema, error) {
 		return "", toolSchema{}, fmt.Errorf("tool without canonical_path/name/cli_name")
 	}
 	parameters := map[string]string{}
+	requiredParameters := append([]string(nil), tool.Required...)
 	for name, rawSchema := range tool.Parameters {
 		var schema map[string]any
 		if err := json.Unmarshal(rawSchema, &schema); err != nil {
 			return "", toolSchema{}, fmt.Errorf("parameter %s: %w", name, err)
 		}
 		parameters[name] = schemaType(schema)
+		if value, exists := schema["required"]; exists {
+			required, ok := value.(bool)
+			if !ok {
+				return "", toolSchema{}, fmt.Errorf("parameter %s: required must be a boolean", name)
+			}
+			if required {
+				requiredParameters = append(requiredParameters, name)
+			}
+		}
 	}
-	required := uniqueSorted(tool.Required)
+	required := uniqueSorted(requiredParameters)
 	return id, toolSchema{Parameters: parameters, Required: required}, nil
 }
 
