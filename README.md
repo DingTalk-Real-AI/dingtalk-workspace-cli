@@ -57,6 +57,18 @@
 curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install.sh | sh
 ```
 
+The command above keeps installing the latest release. To install a specific release instead (the leading `v` is optional):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install.sh | sh -s -- --version v1.0.51
+```
+
+The existing environment-variable form remains supported:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install.sh | DWS_VERSION=v1.0.51 sh
+```
+
 **Windows (PowerShell):**
 
 ```powershell

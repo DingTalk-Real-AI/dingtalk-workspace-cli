@@ -3,6 +3,7 @@ package scripts_test
 import (
 	"archive/tar"
 	"archive/zip"
+	"bytes"
 	"compress/gzip"
 	"os"
 	"os/exec"
@@ -137,6 +138,73 @@ done
 		if _, err := os.Stat(skillPath); err != nil {
 			t.Fatalf("Stat(%s) error = %v\noutput:\n%s", skillPath, err, string(output))
 		}
+	}
+}
+
+func TestInstallScriptStreamSelectsRequestedRelease(t *testing.T) {
+	t.Parallel()
+	requireInstallScriptPlatform(t)
+
+	tests := []struct {
+		name          string
+		args          []string
+		envVersion    string
+		latestVersion string
+		wantVersion   string
+	}{
+		{"space form overrides env and adds v", []string{"--version", "1.0.51"}, "v1.0.50", "", "v1.0.51"},
+		{"equals form accepts suffix", []string{"--version=v1.0.52-beta.4"}, "", "", "v1.0.52-beta.4"},
+		{"future release prefix passes through", []string{"--version", "release-2026.07"}, "", "", "release-2026.07"},
+		{"two-part v tag passes through", []string{"--version", "v2026.07"}, "", "", "v2026.07"},
+		{"underscore suffix passes through", []string{"--version", "v1.0.51_hotfix1"}, "", "", "v1.0.51_hotfix1"},
+		{"DWS_VERSION numeric tag remains exact", nil, "1.0.51", "", "1.0.51"},
+		{"DWS_VERSION future tag remains exact", nil, "release-2026.07", "", "release-2026.07"},
+		{"no version still resolves latest", nil, "", "v1.0.51", "v1.0.51"},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			curlLog := runStreamedInstall(t, tc.args, tc.envVersion, tc.latestVersion)
+			asset := "dws-" + runtime.GOOS + "-" + runtime.GOARCH + ".tar.gz"
+			want := "/releases/download/" + tc.wantVersion + "/" + asset
+			if !strings.Contains(curlLog, want) {
+				t.Fatalf("curl log missing requested release path %q:\n%s", want, curlLog)
+			}
+		})
+	}
+}
+
+func TestInstallScriptVersionInputHandling(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		args       []string
+		envVersion string
+		wantError  string
+	}{
+		{"help", []string{"--help"}, "", ""},
+		{"reject path input", []string{"--version", "../v1.0.51"}, "", "Invalid version"},
+		{"validate DWS_VERSION", nil, "v1.0.51?bad", "Invalid version"},
+		{"reject control input", []string{"--version", "v1.0.51\nnext"}, "", "Invalid version"},
+		{"reject unknown option", []string{"--channel", "beta"}, "", "Unknown argument '--channel'"},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			output, err := runStreamedInput(t, tc.args, tc.envVersion)
+			if tc.wantError == "" {
+				if err != nil || !strings.Contains(output, "sh -s -- --version <version>") {
+					t.Fatalf("--help failed: %v\n%s", err, output)
+				}
+			} else if err == nil || !strings.Contains(output, tc.wantError) {
+				t.Fatalf("want error %q, got %v:\n%s", tc.wantError, err, output)
+			}
+		})
 	}
 }
 
@@ -731,6 +799,111 @@ done
 	}
 }
 
+func requireInstallScriptPlatform(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" || (runtime.GOOS != "darwin" && runtime.GOOS != "linux") {
+		t.Skipf("POSIX installer test is unsupported on %s", runtime.GOOS)
+	}
+	if runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64" {
+		t.Skipf("POSIX installer test is unsupported on %s", runtime.GOARCH)
+	}
+}
+
+func readInstallScript(t *testing.T) []byte {
+	t.Helper()
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatalf("Abs(install.sh) error = %v", err)
+	}
+	script, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", scriptPath, err)
+	}
+	return script
+}
+
+func runStreamedInstall(t *testing.T, args []string, envVersion, latestVersion string) string {
+	t.Helper()
+
+	root := t.TempDir()
+	releaseDir := filepath.Join(root, "release")
+	stubRoot := filepath.Join(root, "stubs")
+	curlLogPath := filepath.Join(root, "curl.log")
+	assetName := "dws-" + runtime.GOOS + "-" + runtime.GOARCH + ".tar.gz"
+
+	writeTarGz(t, filepath.Join(releaseDir, assetName), map[string]string{
+		"dws": "versioned-install-binary\n",
+	})
+	writeFakeCurl(t, filepath.Join(stubRoot, "curl"))
+
+	shellArgs := append([]string{"-s", "--"}, args...)
+	cmd := exec.Command("sh", shellArgs...)
+	cmd.Stdin = bytes.NewReader(readInstallScript(t))
+	cmd.Env = []string{
+		"HOME=" + filepath.Join(root, "home"),
+		"PATH=" + stubRoot + ":" + os.Getenv("PATH"),
+		"DWS_INSTALL_DIR=" + filepath.Join(root, "bin"),
+		"DWS_NO_SKILLS=1",
+		"DWS_NO_FALLBACK=1",
+		"FAKE_RELEASE_DIR=" + releaseDir,
+		"FAKE_ASSET_NAME=" + assetName,
+		"FAKE_CURL_LOG=" + curlLogPath,
+		"FAKE_LATEST_VERSION=" + latestVersion,
+	}
+	if envVersion != "" {
+		cmd.Env = append(cmd.Env, "DWS_VERSION="+envVersion)
+	}
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("streamed install.sh error = %v\noutput:\n%s", err, string(output))
+	}
+	curlLog, err := os.ReadFile(curlLogPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", curlLogPath, err)
+	}
+
+	return string(curlLog)
+}
+
+func runStreamedInput(t *testing.T, args []string, envVersion string) (string, error) {
+	t.Helper()
+	root := t.TempDir()
+	stubRoot := filepath.Join(root, "stubs")
+	marker := filepath.Join(root, "curl-called")
+	installDir := filepath.Join(root, "bin")
+	writeNetworkMarkerCurl(t, filepath.Join(stubRoot, "curl"))
+
+	cmd := exec.Command("sh", append([]string{"-s", "--"}, args...)...)
+	cmd.Stdin = bytes.NewReader(readInstallScript(t))
+	cmd.Env = []string{
+		"HOME=" + filepath.Join(root, "home"),
+		"PATH=" + stubRoot + ":" + os.Getenv("PATH"),
+		"DWS_INSTALL_DIR=" + installDir,
+		"DWS_VERSION=" + envVersion,
+		"FAKE_CURL_MARKER=" + marker,
+	}
+	output, runErr := cmd.CombinedOutput()
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("input handling accessed the network, marker stat error = %v", err)
+	}
+	if _, err := os.Stat(installDir); !os.IsNotExist(err) {
+		t.Fatalf("input handling mutated install dir, stat error = %v", err)
+	}
+	return string(output), runErr
+}
+
+func writeNetworkMarkerCurl(t *testing.T, path string) {
+	t.Helper()
+	const script = `#!/bin/sh
+set -eu
+: > "$FAKE_CURL_MARKER"
+echo "network should not be called" >&2
+exit 99
+`
+	mustWriteFile(t, path, []byte(script), 0o755)
+}
+
 func writeTarGz(t *testing.T, path string, files map[string]string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -806,7 +979,17 @@ while [ "$#" -gt 0 ]; do
     *) url="$1"; shift ;;
   esac
 done
-[ -n "$out" ] || { echo "fake curl: missing -o" >&2; exit 1; }
+[ -z "${FAKE_CURL_LOG:-}" ] || printf '%s\n' "$url" >> "$FAKE_CURL_LOG"
+if [ -z "$out" ]; then
+  case "$url" in
+    */releases/latest)
+      printf 'HTTP/2 302\r\nlocation: https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/tag/%s\r\n\r\n' "${FAKE_LATEST_VERSION:-}"
+      exit 0
+      ;;
+  esac
+  echo "fake curl: missing -o" >&2
+  exit 1
+fi
 case "$url" in
   *"/${FAKE_ASSET_NAME}") cp "$FAKE_RELEASE_DIR/$FAKE_ASSET_NAME" "$out" ;;
   *"/dws-skills.zip") cp "$FAKE_RELEASE_DIR/dws-skills.zip" "$out" ;;

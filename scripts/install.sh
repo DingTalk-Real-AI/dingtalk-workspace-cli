@@ -8,6 +8,7 @@
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install.sh | sh -s -- --version v1.0.51
 #
 # Environment variables (all optional):
 #   DWS_INSTALL_DIR   — where to put the binary       (default: ~/.local/bin)
@@ -36,6 +37,7 @@ GITEE_FALLBACK_REPO="${DWS_GITEE_FALLBACK_REPO:-DingTalk-Real-AI/dingtalk-worksp
 INSTALL_DIR="${DWS_INSTALL_DIR:-$HOME/.local/bin}"
 INSTALL_NAME="${DWS_INSTALL_NAME:-$BIN_NAME}"
 VERSION="${DWS_VERSION:-latest}"
+VERSION_FROM_CLI=0
 NO_SKILLS="${DWS_NO_SKILLS:-0}"
 SKILLS_ONLY="${DWS_SKILLS_ONLY:-0}"
 SKILL_NAME="dws"
@@ -50,6 +52,73 @@ say() {
 err() {
   printf '  ❌ %s\n' "$@" >&2
   exit 1
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install.sh | sh
+  curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install.sh | sh -s -- --version <version>
+  curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install.sh | DWS_VERSION=<version> sh
+  ./scripts/install.sh [--version <version>]
+
+Options:
+  --version <version>  Install a release tag such as v1.0.51 (the leading v is optional).
+  -h, --help           Show this help message.
+
+Without --version or DWS_VERSION, the installer keeps the existing behavior and installs latest.
+EOF
+}
+
+normalize_version() {
+  [ "$VERSION" = "latest" ] && return 0
+
+  # Preserve the existing DWS_VERSION contract and future release tag formats:
+  # safe tag names pass through unchanged. Only the CLI convenience form
+  # X.Y.Z with an optional safe suffix gains a leading v.
+  case "$VERSION" in
+    [0-9A-Za-z]*)
+      case "$VERSION" in
+        *[!0-9A-Za-z._+-]*) err "Invalid version '${VERSION}'. Use a release tag such as v1.0.51." ;;
+      esac
+      ;;
+    *) err "Invalid version '${VERSION}'. Use a release tag such as v1.0.51." ;;
+  esac
+
+  if [ "$VERSION_FROM_CLI" = "1" ] && printf '%s\n' "$VERSION" \
+    | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([._+-][0-9A-Za-z][0-9A-Za-z._+-]*)?$'; then
+    VERSION="v${VERSION}"
+  fi
+}
+
+parse_args() {
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --version)
+        if [ "$#" -lt 2 ] || [ -z "$2" ]; then
+          err "--version requires a release tag, for example: --version v1.0.51"
+        fi
+        VERSION="$2"
+        VERSION_FROM_CLI=1
+        shift 2
+        ;;
+      --version=*)
+        VERSION="${1#--version=}"
+        [ -n "$VERSION" ] || err "--version requires a release tag, for example: --version v1.0.51"
+        VERSION_FROM_CLI=1
+        shift
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        err "Unknown argument '$1'. Run with --help for usage."
+        ;;
+    esac
+  done
+
+  normalize_version
 }
 
 need_cmd() {
@@ -687,4 +756,5 @@ main() {
   printf '\n'
 }
 
+parse_args "$@"
 main

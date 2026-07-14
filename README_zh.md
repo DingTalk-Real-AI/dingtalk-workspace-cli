@@ -57,6 +57,18 @@
 curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install.sh | sh
 ```
 
+上面的命令仍然安装最新版本。要安装指定版本（版本号开头的 `v` 可省略）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install.sh | sh -s -- --version v1.0.51
+```
+
+原有的环境变量方式继续支持：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install.sh | DWS_VERSION=v1.0.51 sh
+```
+
 **Windows（PowerShell）：**
 
 ```powershell
