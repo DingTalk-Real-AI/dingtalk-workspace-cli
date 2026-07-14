@@ -62,6 +62,23 @@ make lint
 git diff --check
 ```
 
+## Homebrew Formula PR Automation
+
+Official tag releases require the repository Actions secret
+`HOMEBREW_PR_TOKEN`. Use a fine-grained personal access token owned by a
+maintainer or release-bot account, limited to this repository, with these
+repository permissions:
+
+- Contents: Read and write
+- Pull requests: Read and write
+
+Set an expiry and rotate the token before it expires. The Release workflow uses
+this dedicated token only to push an `automation/homebrew-*` branch and open the
+stable or beta Formula PR. It does not push Formula changes directly to `main`.
+Using the built-in `GITHUB_TOKEN` is insufficient when organization policy
+prevents Actions from creating pull requests, and its generated PR events may
+require separate workflow approval.
+
 ## Handoff Checklist
 
 Before handoff, include:

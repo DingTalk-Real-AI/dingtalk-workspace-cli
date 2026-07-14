@@ -787,6 +787,15 @@ func TestReleaseWorkflowOpensHomebrewPROnlyForOfficialStableTags(t *testing.T) {
 	if !strings.Contains(workflow, "pull-requests: write") {
 		t.Fatal("release workflow must grant pull-request write permission for Formula updates")
 	}
+	for _, required := range []string{
+		"Check Homebrew PR automation token",
+		"secrets.HOMEBREW_PR_TOKEN",
+		"HOMEBREW_PR_TOKEN is required to open Formula PRs from official releases",
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Errorf("release workflow is missing Homebrew PR token preflight %q", required)
+		}
+	}
 
 	start := strings.Index(workflow, "- name: Open stable Homebrew formula PR")
 	if start == -1 {
@@ -801,13 +810,16 @@ func TestReleaseWorkflowOpensHomebrewPROnlyForOfficialStableTags(t *testing.T) {
 		"github.repository_owner == 'DingTalk-Real-AI'",
 		"!contains(github.ref_name, '-')",
 		"./scripts/release/publish-homebrew-formula.sh",
-		"secrets.GITHUB_TOKEN",
+		"secrets.HOMEBREW_PR_TOKEN",
 		"DWS_TAP_PR_REPOSITORY",
 		"automation/homebrew-${{ github.ref_name }}",
 	} {
 		if !strings.Contains(section, required) {
 			t.Errorf("Homebrew publication step is missing %q", required)
 		}
+	}
+	if strings.Contains(section, "secrets.GITHUB_TOKEN") {
+		t.Error("Homebrew Formula PRs must use the dedicated token so their CI is triggered")
 	}
 	stableNPM := strings.Index(workflow, "- name: Publish stable to npm")
 	if stableNPM == -1 || start > stableNPM {
@@ -842,11 +854,15 @@ func TestReleaseWorkflowOpensVersionedHomebrewPRForBetaTags(t *testing.T) {
 		"contains(github.ref_name, '-')",
 		"dist/homebrew/dingtalk-workspace-cli-beta.rb",
 		"Formula/dingtalk-workspace-cli-beta.rb",
+		"secrets.HOMEBREW_PR_TOKEN",
 		"automation/homebrew-beta-${{ github.ref_name }}",
 	} {
 		if !strings.Contains(section, required) {
 			t.Errorf("beta Homebrew PR step is missing %q", required)
 		}
+	}
+	if strings.Contains(section, "secrets.GITHUB_TOKEN") {
+		t.Error("Homebrew beta Formula PRs must use the dedicated token so their CI is triggered")
 	}
 }
 
